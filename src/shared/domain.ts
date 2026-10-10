@@ -73,6 +73,9 @@ export interface Status {
   kind?: string;      // είδος ποινής / άδειας / ΕΑ-ΕΥ
   note?: string;
   pending?: boolean;  // ποινή που αιτείται στην ΗΚΑΙ (Κ-19)
+  by?: string;        // ποινή: ποιος τιμώρησε
+  reason?: string;    // ποινή: «διότι …»
+  on?: ISODate;       // ποινή: ημερομηνία τιμωρίας (αλλιώς η έναρξη)
 }
 
 // ---------------------------------------------------------------------------
@@ -207,12 +210,19 @@ export interface AppState {
   printed: Record<ISODate, string>;
   baseline: Record<number, Baseline>;    // υπηρεσίες πριν από την εφαρμογή (χωρίς ημερομηνία)
   hkaiManual: Record<ISODate, HkaiManual>;
+  cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
+  cadreAbs: CadreAbs[];                  // απουσίες στελεχών
 }
+// Στελέχη (από την εφαρμογή του άλλου γραφέα): ονόματα, θέση, απουσίες, που ταΐζουν και την ΗΚΑΙ
+export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; phone?: string; role?: string; active: boolean }
+export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
+// είδος απουσίας στελέχους → στήλη της ΗΚΑΙ (κενό = μόνο στη λίστα)
+export const CADRE_ABS: [string, string, string][] = [['ka', 'Κανονική άδεια', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['fp', 'Φύλλο πορείας', 'fp'], ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']];
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: []
 });

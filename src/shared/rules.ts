@@ -1,7 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dates';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
+  TYPES, TYPE_KEYS, RECORD_CATS, CADRE_ABS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   type AppState, type Baseline, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
@@ -313,7 +313,7 @@ export function whyText(s: AppState, date: ISODate, k: string): string {
 }
 
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate }
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
@@ -386,7 +386,16 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const cols: Record<string, Person[]> = {};
   [...HK_K, ...HK_A].forEach(([k]) => (cols[k] = []));
   const rank: Record<string, HkaiRow> = {};
-  [...HK_OFFICERS, ...HK_NCO].forEach(r => (rank[r] = { n: s.settings.cadre[r] || 0, attached: 0, c: {} }));
+  // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
+  const cl = (s.cadreList || []).filter(c => c.active);
+  [...HK_OFFICERS, ...HK_NCO].forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
+  let cadreAway = 0;
+  for (const c of cl) {
+    const r = rank[c.hk] ? c.hk : 'Λοχίες'; rank[r].n++;
+    const a = (s.cadreAbs || []).find(x => x.cid === c.id && x.from <= date && date <= x.to);
+    const col = a && CADRE_ABS.find(k => k[0] === a.kind)?.[2];
+    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; cadreAway++; }
+  }
   let soldiers = 0;
   for (const p of activePeople(s)) {
     soldiers++;
@@ -397,7 +406,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const col = abs ? TYPES[abs.type].hkai! : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : p.post ? 'os' : null;
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
-  let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0), apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0);
+  let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0), apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
   // ό,τι γράφει ο χρήστης με το χέρι (σιδηρουργείο, πρατήριο, φυλάκια, αποσπασμένοι…, μισθοτροφοδοτηθέντες «ab»)
   const man = s.hkaiManual?.[date]?.cells || {};
   for (const r of Object.keys(man)) {
@@ -408,6 +417,6 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
       if (HK_K.some(x => x[0] === k)) kol += v; else if (HK_A.some(x => x[0] === k)) apo += v;
     }
   }
-  const cadre = Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
+  const cadre = cl.length || Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
   return { cols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
 }

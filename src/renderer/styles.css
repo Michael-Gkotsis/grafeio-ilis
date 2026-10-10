@@ -428,3 +428,4 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 
 .fixedline{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted-fg);padding:8px 2px 0}
 .fixedline b{color:var(--foreground)}
+.puntext{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--card);font-family:'Times New Roman',serif;font-size:15px;line-height:1.5;user-select:text}

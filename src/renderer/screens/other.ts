@@ -11,6 +11,7 @@ import { AddBlockDialog } from './guard';
 import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, hkaiCounts, isRecordExpiredOn, personMap, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm } from '../../shared/text';
+import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 type P = any;
 
@@ -75,33 +76,69 @@ export function RecordsScreen() {
   const { state, run, today, undo } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   const tab = nav.params.recTab || 'med';
+  const [pq, setPq] = useState('');
   const y = addDays(today, -1);
   const isMed = (s: Status) => ['med', 'other'].includes(TYPES[s.type].cat);
   const list = useMemo(() => {
     const ok = (s: Status) => pm.has(s.pid);
+    if (tab === 'allpun') { const qq = norm(pq); return state.statuses.filter(s => ok(s) && s.type === 'PUN' && (!qq || norm(fullName(pm.get(s.pid)!) + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq))).sort((a, b) => b.from.localeCompare(a.from)); }
     if (tab === 'expired') return state.statuses.filter(s => ok(s) && RECORD_CATS.includes(TYPES[s.type].cat) && !s.pending && s.to < today && s.to >= addDays(today, -14)).sort((a, b) => b.to.localeCompare(a.to));
     return state.statuses.filter(s => ok(s) && s.to >= today && (tab === 'med' ? isMed(s) : s.type === 'PUN')).sort((a, b) => Number(!!b.pending) - Number(!!a.pending) || a.to.localeCompare(b.to));
-  }, [state.statuses, tab, today]);
+  }, [state.statuses, tab, today, pq]);
   const nMed = state.statuses.filter(s => s.to >= today && isMed(s)).length;
   const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN').length;
   const left = (s: Status) => { const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
   const [stop, setStop] = useState<Status | null>(null);
+  const [txt, setTxt] = useState<Status | null>(null);
   const act = (fn: () => Promise<boolean>, text: string) => async () => { if (await fn()) toast({ text, actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); };
   return html`<div>
     <${PageHeader} title="Ιατρικά και ποινές" sub="Όταν λήξει ένα ιατρικό ή μια ποινή, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Οι ποινές αιτούνται στην ΗΚΑΙ και ισχύουν όταν εγκριθούν.">
       <${Button} variant="outline" onClick=${() => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><${Button} variant="outline" onClick=${() => nav.declare({ type: 'PUN', from: addDays(today, 1), to: addDays(today, 5) })}>+ Ποινή<//><//>
-    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Ιατρικά (' + nMed + ')' }, { value: 'pun', label: 'Ποινές (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }]}/></div>
+    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Ιατρικά (' + nMed + ')' }, { value: 'pun', label: 'Ποινές (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }, { value: 'allpun', label: 'Όλες οι ποινές' }]}/></div>
+    ${tab === 'allpun' && html`<div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στις ποινές" placeholder="Όνομα, ποιος τιμώρησε ή λόγος…" value=${pq} onChange=${(e: any) => setPq(e.target.value)}/></div>`}
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${s.type === 'PUN' ? s.kind : t.label}<//>
-        <small>${dow(s.from)} ${dm(s.from)} – ${dow(s.to)} ${dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}</small></div>
+        <small>${dow(s.from)} ${dm(s.from)} – ${dow(s.to)} ${dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}</small></div>
+      ${s.type === 'PUN' && html`<${Button} size="sm" variant="outline" onClick=${() => setTxt(s)} data-tip="Έτοιμο κείμενο για το Word, με «Αντιγραφή»" data-tip-side="left">Κείμενο<//>`}
       ${s.pending ? html`<${Badge} tone="warn" data-tip="Γράφεται στην ΗΚΑΙ (Αποφάσεις Διοικητή, 4. Ποινές). Ισχύει μόλις εγκριθεί" data-tip-side="left">Αιτείται στην ΗΚΑΙ<//><${Button} size="sm" onClick=${act(() => run({ t: 'approvePun', id: s.id }, false), 'Εγκρίθηκε η ποινή του ' + shortName(p) + '. Ισχύει από ' + dayName(s.from, today).toLowerCase() + ' (δεν βγαίνει έξοδο).')}>Εγκρίθηκε<//><${Button} size="sm" variant="ghost" onClick=${act(() => run({ t: 'deleteStatus', id: s.id }, false), 'Διαγράφηκε η αίτηση ποινής του ' + shortName(p))}>Δεν εγκρίθηκε<//>` :
-        tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setStop(s)} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Σταμάτησε νωρίτερα…<//>`}
+        tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : tab === 'allpun' || s.to < today ? html`<${Badge} tone=${s.to < today ? 'outline' : 'warn'}>${s.to < today ? 'Έληξε' : 'Ισχύει'}<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setStop(s)} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Σταμάτησε νωρίτερα…<//>`}
     </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : 'Καμία ενεργή καταχώρηση.'}</div>`}</div>
     ${stop && (() => { const t = TYPES[stop.type]; const p = pm.get(stop.pid)!; const what = (stop.type === 'PUN' ? 'Η ποινή' : t.label) + ' του ' + shortName(p); return html`<${Dialog} role="alertdialog" title="Σταμάτησε νωρίτερα;" description=${what + ' · ' + dm(stop.from) + '–' + dm(stop.to)} onClose=${() => setStop(null)}
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setStop(null)}>Όχι, να λήξει κανονικά<//><${Button} onClick=${async () => { const x = stop; setStop(null); await act(() => run({ t: 'endStatus', id: x.id }, false), what + ': σταμάτησε, από σήμερα δεν ισχύει')(); }}>Ναι, από σήμερα δεν ισχύει<//>`}>
       <p style=${{ margin: 0 }}>${what} θα έληγε <b>${dayName(stop.to, today).toLowerCase()} ${dm(stop.to)}</b>. Αν πατήσεις «Ναι», σταματά τώρα: από σήμερα ${t.noDuty ? 'ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'ξαναμπαίνει και σε ένοπλες θέσεις' : t.noOut ? 'μπορεί να βγει έξοδο' : 'δεν ισχύει'}.</p><//>`; })()}
+    ${txt && html`<${PunTextDialog} st=${txt} onClose=${() => setTxt(null)}/>`}
     ${tab === 'med' && html`<p className="note" style=${{ marginTop: '8px' }}>ΕΟ = ελεύθερος ορθοστασίας, ΕΑ = ελεύθερος ασκήσεων, ΕΥ = ελεύθερος υπηρεσίας. ΣΤΕΠ = εισαγωγή ΣΤΕΠ.</p>`}
   </div>`;
+}
+
+// Κείμενο ποινής για το Word: η διάρκεια υπογραμμισμένη, αντιγραφή με μορφοποίηση
+function copyRich(htmlStr: string, plain: string): boolean {
+  const div = document.createElement('div'); div.contentEditable = 'true'; div.innerHTML = htmlStr;
+  div.style.cssText = 'position:fixed;left:-9999px;top:0;white-space:pre-wrap'; document.body.appendChild(div);
+  const r = document.createRange(); r.selectNodeContents(div); const sel = window.getSelection()!; sel.removeAllRanges(); sel.addRange(r);
+  let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; }
+  sel.removeAllRanges(); div.remove();
+  if (!ok && navigator.clipboard) { navigator.clipboard.writeText(plain).catch(() => undefined); ok = true; }
+  return ok;
+}
+function PunTextDialog({ st, onClose }: P) {
+  const { state, run } = useStore(); const toast = useToast();
+  const p = personMap(state.people).get(st.pid)!;
+  const [f, setF] = useState({ by: st.by || '', reason: st.reason || '', on: st.on || st.from });
+  const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
+  const t = punText(p, { ...st, by: f.by.trim() || undefined, reason: f.reason.trim() || undefined, on: f.on });
+  const max = overMax(st.kind, punDays(st));
+  const dirty = f.by !== (st.by || '') || f.reason !== (st.reason || '') || f.on !== (st.on || st.from);
+  const save = async () => (dirty ? run({ t: 'setPunInfo', id: st.id, by: f.by, reason: f.reason, on: f.on }, false) : true);
+  return html`<${Dialog} title="Κείμενο ποινής" description=${fullName(p) + ' · ' + st.kind + ' ' + dm(st.from) + '–' + dm(st.to)} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//>${dirty && html`<${Button} variant="outline" onClick=${async () => { if (await save()) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ποινής' }); }}>Αποθήκευση<//>`}<${Button} onClick=${async () => { if (!(await save())) return; toast({ text: copyRich(t.html, t.plain) ? 'Αντιγράφηκε. Στο Word πάτα Ctrl+V.' : 'Δεν έγινε αντιγραφή. Επίλεξε το κείμενο και πάτα Ctrl+C.' }); }}>Αντιγραφή<//>`}>
+    <div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="pt-by">Ποιος τιμώρησε</label><input id="pt-by" className="ui-input" list="pt-by-l" value=${f.by} onChange=${(e: any) => setF({ ...f, by: e.target.value })}/><datalist id="pt-by-l">${byList.map((x: string) => html`<option key=${x} value=${x}/>`)}</datalist></div>
+      <div className="field"><label className="field__label" htmlFor="pt-on">Ημερομηνία τιμωρίας</label><input id="pt-on" type="date" className="ui-input" value=${f.on} onChange=${(e: any) => e.target.value && setF({ ...f, on: e.target.value })}/></div></div>
+    <div className="field"><label className="field__label" htmlFor="pt-r">Λόγος (διότι…)</label><textarea id="pt-r" className="ui-input" rows="2" value=${f.reason} onChange=${(e: any) => setF({ ...f, reason: e.target.value })}></textarea></div>
+    ${max > 0 && html`<${Alert} tone="warn"><span>${st.kind} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
+    <div className="puntext" aria-label="Προεπισκόπηση">${t.before}<u>${t.dur}</u>${t.after}</div>
+  <//>`;
 }
 
 export function StrengthScreen() {
@@ -127,7 +164,7 @@ export function HkaiScreen() {
   const back = useMemo(() => hkaiBack(state, date), [state, date]);
   const src = [...HK_K, ...HK_A].filter(([k]) => h.cols[k].length);
   const fn = 'ΗΚΑΙ ' + dm(date).replace('/', '.') + '.' + date.slice(2, 4) + '.xlsx';
-  const cadre = Object.values(state.settings.cadre).reduce((a, b) => a + (b || 0), 0);
+  const cadre = state.cadreList.filter(c => c.active).length || Object.values(state.settings.cadre).reduce((a, b) => a + (b || 0), 0);
   const sum = html`<div><${Card} title="Από πού βγαίνει κάθε αριθμός">
     <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${h.total}</span><span className="tile__l">Δύναμη</span></div><div className="tile"><span className="tile__n">${h.kol}</span><span className="tile__l">Κωλυόμενοι</span></div><div className="tile"><span className="tile__n">${h.apo}</span><span className="tile__l">Απόντες</span></div><div className="tile"><span className="tile__n">${h.avail}</span><span className="tile__l">Διαθέσιμοι</span></div></div>
     <ul className="hk-src">${src.map(([k, , full]) => html`<li key=${k}><b>${full}</b>: <span className="num">${h.cols[k].length}</span><div className="cat__names">${h.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div></li>`)}</ul>
@@ -147,13 +184,19 @@ export function HkaiScreen() {
 
 // Στελέχη ανά βαθμό, μέσα στην ΗΚΑΙ (γραφέας, 10/10: «δεν έχει κάπου να τους προσθέσω»)
 function CadreCard({ warn }: { warn: boolean }) {
-  const { state, run } = useStore(); const toast = useToast();
+  const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
   const [c, setC] = useState(() => ({ ...state.settings.cadre }));
   const [open, setOpen] = useState(warn);
   const ranks = [...HK_OFFICERS, ...HK_NCO.slice(0, 2)];
   const dirty = ranks.some(r => (c[r] || 0) !== (state.settings.cadre[r] || 0));
+  const list = state.cadreList.filter(x => x.active);
+  if (list.length) {
+    const by = new Map<string, number>(); list.forEach(x => by.set(x.hk, (by.get(x.hk) || 0) + 1));
+    return html`<${Card} title="Στελέχη ανά βαθμό" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('people', { peopleTab: 'cadre' })}>Στελέχη<//>`}>
+      <p className="note" style=${{ margin: 0 }}>${[...by].map(([r, n]) => r + ' ' + n).join(' · ')}. Βγαίνουν από τη λίστα στελεχών, μαζί με τις απουσίες τους.</p><//>`;
+  }
   return html`<${Card} title="Στελέχη ανά βαθμό" actions=${!open && html`<${Button} size="sm" variant="outline" onClick=${() => setOpen(true)}>Άλλαξε<//>`}>
-    ${warn && html`<${Alert} tone="warn"><span>Δεν έχουν μπει ακόμα. Γράψε πόσοι είναι σε κάθε βαθμό και πάτα «Αποθήκευση».</span><//>`}
+    ${warn && html`<${Alert} tone="warn"><span>Δεν έχουν μπει ακόμα. Γράψε πόσοι είναι σε κάθε βαθμό και πάτα «Αποθήκευση», ή πέρασε τα στελέχη με ονόματα στο <button type="button" className="linkish" onClick=${() => nav.go('people', { peopleTab: 'cadre' })}>Προσωπικό › Στελέχη</button>.</span><//>`}
     ${open ? html`<div className="settings-grid">${ranks.map(r => html`<label key=${r} className="field"><span className="field__help">${r}</span><input className="ui-input" type="number" min="0" value=${c[r] || ''} placeholder="0" onChange=${(e: any) => setC({ ...c, [r]: Math.max(0, +e.target.value || 0) })}/></label>`)}</div>
       <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setSettings', settings: { cadre: c }, text: 'στελέχη ΗΚΑΙ' }, false)) { toast({ text: 'Αποθηκεύτηκαν τα στελέχη. Ισχύουν για κάθε μέρα.' }); setOpen(false); } }}>Αποθήκευση<//><span className="note">Λοχίες, δεκανείς και στρατιώτες μετρώνται από το προσωπικό.</span></div>`
     : html`<p className="note" style=${{ margin: 0 }}>${ranks.filter(r => state.settings.cadre[r]).map(r => r + ' ' + state.settings.cadre[r]).join(' · ') || 'Κανένα'}. Ισχύουν για κάθε μέρα.</p>`}
