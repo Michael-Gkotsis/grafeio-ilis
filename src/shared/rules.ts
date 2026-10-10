@@ -65,7 +65,8 @@ export function strengthOf(s: AppState, date: ISODate): Strength {
 
 // --------------------------- Δυνατότητα υπηρεσιών (Κ-15) ---------------------------
 export function defaultCaps(p: Person): Partial<Record<DutyKind, string>> {
-  if (p.post) return { th: 'Πόστο: ' + p.post, op: 'Πόστο: ' + p.post, mg: 'Πόστο: ' + p.post, sk: 'Πόστο: ' + p.post };
+  // όποιος έχει πόστο εξαιρείται από όλες τις υπηρεσίες εκτός από Λ/Υ και Δ/Υ
+  if (p.post) return Object.fromEntries(CAP_KINDS.map(([k]) => [k, 'Πόστο: ' + p.post]));
   const si = (p.si || '').toUpperCase();
   if (si.includes('ΑΟΠΛ') || si.startsWith('Ι4')) return { op: 'Σ.Ι. ' + p.si, sk: 'Σ.Ι. ' + p.si };
   return {};
@@ -238,7 +239,6 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
   const idx = new Map<number, Set<ISODate>>();
   dutyIndex(s.guards).forEach((v, id) => idx.set(id, new Set(v)));
-  const h = isHol(s.settings, date);
   let n = 0; const empty: string[] = []; const warn: string[] = [];
   const posts = postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
@@ -252,11 +252,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const fixed = fixedIds(s);
   for (const x of posts) {
     if (g[x.k]) continue;
-    const unarmedFirst = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
-    const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) ? 1 : 0);
-    const cmp = fairCompare(h, x.kind, date);
-    const cand = people.filter(p => !fixed.has(p.id) && !guardUnavailable(work, date, p.id, x.k, idx))
-      .sort((p, q) => last(p) - last(q) || unarmedFirst(p) - unarmedFirst(q) || cmp(fair.get(p.id)!, fair.get(q.id)!))[0];
+    const cand = candidates(work, date, x, people, fair, idx, fixed)[0];
     if (!cand) { empty.push(x.k); continue; }
     const lr = lastResort(s.statuses, date, cand.id, x); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
@@ -264,6 +260,38 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
   }
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
+}
+// Όσοι επιτρέπονται σε μια θέση, με τη σειρά που θα τους διάλεγε η αυτόματη συμπλήρωση
+function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>): Person[] {
+  const h = isHol(s.settings, date);
+  const unarmedFirst = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
+  const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) ? 1 : 0);
+  // ΣΚ/αργία: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει έξοδο εκείνη τη μέρα
+  const rooms = h ? outRoomsOn(s.rules, date) : null;
+  const home = (p: Person) => (h ? (p.dn ? 1 : 0) + (rooms && p.room != null && rooms.includes(p.room) ? 1 : 0) : 0);
+  const cmp = fairCompare(h, x.kind, date);
+  return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
+    .sort((p, q) => last(p) - last(q) || unarmedFirst(p) - unarmedFirst(q) || home(p) - home(q) || cmp(fair.get(p.id)!, fair.get(q.id)!));
+}
+// «Επόμενος στη σειρά» για μια θέση: ο πρώτος που επιτρέπεται, εκτός από όσους ήδη προτάθηκαν (skip)
+export function nextFor(s: AppState, date: ISODate, k: string, skip: number[]): number | null {
+  const x = postsOf(s.settings).find(p => p.k === k) || postBy(s, k); if (!x) return null;
+  const g = { ...(s.guards[date] || {}) }; delete g[k];
+  const work: AppState = { ...s, guards: { ...s.guards, [date]: g } };
+  const people = activePeople(s);
+  const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
+  const idx = new Map<number, Set<ISODate>>(); dutyIndex(work.guards).forEach((v, id) => idx.set(id, v));
+  return candidates(work, date, x, people, fair, idx, fixedIds(s)).find(p => !skip.includes(p.id))?.id ?? null;
+}
+// Ανταλλαγή δύο ατόμων που έχουν ήδη υπηρεσία την ίδια μέρα: τι εμποδίζει τον καθένα στη θέση του άλλου
+export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { hard: string | null; soft: string | null } {
+  const g = s.guards[date] || {}; const pa = g[a], pb = g[b]; const A = postBy(s, a), B = postBy(s, b);
+  if (!pa || !pb || !A || !B) return { hard: 'Η ανταλλαγή θέλει δύο κατειλημμένες θέσεις', soft: null };
+  const work: AppState = { ...s, guards: { ...s.guards, [date]: { ...g, [a]: pb, [b]: pa } } };
+  const pm = personMap(s.people); const nm = (id: number) => (pm.get(id) ? shortName(pm.get(id)!) : '?');
+  const hard = (dutyBlock(s.statuses, date, pb, A) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A)) || (dutyBlock(s.statuses, date, pa, B) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B)) || null;
+  const sa = capBlock(s, pb, A) || ruleBlock(work, date, pb, undefined, a), sb = capBlock(s, pa, B) || ruleBlock(work, date, pa, undefined, b);
+  return { hard, soft: (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
 }
 // «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
 export function whyText(s: AppState, date: ISODate, k: string): string {

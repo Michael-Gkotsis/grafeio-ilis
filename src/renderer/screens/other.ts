@@ -22,6 +22,7 @@ export function TodayScreen() {
   const c = useMemo(() => strengthOf(state, today), [state, today]);
   const empty = frouraEmpty(state, tomorrow);
   const ending = state.statuses.filter(s => s.to === today && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat)) && pm.has(s.pid));
+  const endTom = state.statuses.filter(s => s.to === tomorrow && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat) || s.type === 'PUN') && pm.has(s.pid));
   const expired = state.statuses.filter(s => isRecordExpiredOn(s, today) && !s.pending && pm.has(s.pid));
   const pending = state.statuses.filter(s => s.pending && pm.has(s.pid));
   const nRec = state.statuses.filter(s => s.from <= today && s.to >= today && RECORD_CATS.includes(TYPES[s.type].cat)).length;
@@ -56,6 +57,7 @@ export function TodayScreen() {
           ${pending.length > 0 && html`<li><div><b>${pending.length} ${pending.length === 1 ? 'ποινή αιτείται' : 'ποινές αιτούνται'} στην ΗΚΑΙ</b><small>${pending.map(s => shortName(pm.get(s.pid)!)).join(', ')} · πάτα «Εγκρίθηκε» όταν υπογράψει ο Διοικητής</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records', { recTab: 'pun' })}>Άνοιξε<//></li>`}
           ${expired.length > 0 && html`<li className="is-ok"><div><b>Αφαιρέθηκαν αυτόματα σήμερα (έληξαν χθες)</b><small>${expired.map(s => what(s) + ' του ' + shortName(pm.get(s.pid)!)).join(' · ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records', { recTab: 'expired' })}>Δες<//></li>`}
           ${ending.map(s => html`<li key=${s.id}><div><b>Λήγει σήμερα: ${what(s)} του ${shortName(pm.get(s.pid)!)}</b><small>${endTxt(s)}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.openPerson(s.pid)}>Άνοιξε<//></li>`)}
+          ${endTom.length > 0 && html`<li className="is-info"><div><b>Λήγουν αύριο (${endTom.length})</b><small>${endTom.map(s => shortName(pm.get(s.pid)!) + ' (' + what(s) + ')').join(', ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records')}>Δες<//></li>`}
           ${dn.length > 0 && html`<li className="is-info"><div><b>${dn.length} με ΔΝ απόψε</b><small>${dn.map(shortName).join(', ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Άνοιξε<//></li>`}
           ${due && html`<li><div><b>${boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο αντίγραφο σε USB' : 'Δεν έχει παρθεί ποτέ αντίγραφο σε USB'}</b><small>Αν χαλάσει ο δίσκος του PC, χάνονται όλα. Βάλε ένα USB και πάτα το κουμπί (κάθε ${USB_DAYS} μέρες).</small></div><${Button} size="sm" variant="outline" onClick=${usb}>Αντίγραφο σε USB<//></li>`}
           ${!due && !empty && !pending.length && !expired.length && !ending.length && !dn.length && html`<li className="is-ok"><div><b>Όλα εντάξει</b><small>Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</small></div></li>`}

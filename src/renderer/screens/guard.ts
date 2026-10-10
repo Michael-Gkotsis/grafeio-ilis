@@ -5,21 +5,22 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyText, fillDay, lastResort, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
+import { whyText, fillDay, lastResort, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, dm, dmy, dow, parseD, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].filter(Boolean).join(', ');
 
-function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, unavailable, onBlocked, pm }: P) {
+function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked }: P) {
   const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x) || ruleWarn);
+  if (locked) return html`<li className=${cx('post', !p && 'is-empty')}><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots[0] : x.hours}</small></div><div className="post__slot"><span className="post__who"><span className="post__name">${p ? fullName(p) : 'ΚΕΝΗ'}</span></span>${r && html`<${Badge} tone="bad">⚠ ${r}<//>`}<span className="duty">${duty}</span></div></li>`;
   if (p && swap) return html`<li className="post"><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots[0] : x.hours}</small></div>
-    <div className="post__slot"><div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gs-' + x.k} autoFocus=${true} placeholder=${'Αντί για ' + fullName(p) + '…'} date=${date} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => { setSwap(false); onBlocked(x.k, q, why); }} onChange=${(id: number) => { setSwap(false); onAssign(x.k, id, p.id); }}/></div>
+    <div className="post__slot"><div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gs-' + x.k} autoFocus=${true} placeholder=${'Αντί για ' + fullName(p) + '… (ή ⇄ ανταλλαγή με άλλη θέση)'} date=${date} unavailable=${(q: Person) => { const r = unavailable(q); return r && r.startsWith('Ήδη ') ? '⇄ Ανταλλαγή: ' + r.slice(5) : r; }} onBlocked=${(q: Person, why: string) => { setSwap(false); onBlocked(x.k, q, why); }} onChange=${(id: number) => { setSwap(false); onAssign(x.k, id, p.id); }}/></div>
     <${Button} variant="ghost" size="sm" onClick=${() => setSwap(false)}>Άκυρο<//></div></li>`;
   return html`<li className=${cx('post', !p && 'is-empty')}><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots.map((t: string, i: number) => html`<span key=${i} className="nw">${(i ? ' · ' : '') + t}</span>`) : x.hours}</small></div>
-    <div className="post__slot">${p ? html`<span className="post__who"><span className="post__name">${fullName(p)}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">Γιατί: ${why}</small>`}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left" onClick=${() => setSwap(true)}>Αλλαγή<//><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
+    <div className="post__slot">${p ? html`<span className="post__who"><span className="post__name">${fullName(p)}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">Γιατί: ${why}</small>`}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left" onClick=${() => setSwap(true)}>Αλλαγή<//><${Button} variant="ghost" size="sm" data-tip="Βάλε τον επόμενο στη σειρά δικαιοσύνης, με τους ίδιους κανόνες. Ξαναπάτα για τον μεθεπόμενο." data-tip-side="left" onClick=${() => onNext(x.k)}>Επόμενος<//><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
     html`<div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => onBlocked(x.k, q, why)} onChange=${(id: number) => onAssign(x.k, id)}/></div>`}</div></li>`;
 }
 
@@ -88,7 +89,12 @@ export function GuardScreen() {
   }, [state.statuses, state.caps, state.people, date]);
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   const undoAct = { label: 'Αναίρεση', fn: () => { undo(); } };
-  const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string } | null>(null);
+  const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string; swapWith?: string } | null>(null);
+  const [skipped, setSkipped] = useState<Record<string, number[]>>({});
+  useEffect(() => setSkipped({}), [date]);
+  // Παλιές μέρες κλειδωμένες, για να μην αλλάξει κατά λάθος ο έλεγχος υπηρεσιών· ξεκλειδώνουν για διόρθωση
+  const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
+  const locked = date < today && !unlocked[date];
   const [addOpen, setAddOpen] = useState(false);
   const [fixedOpen, setFixedOpen] = useState(false);
   const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string) => {
@@ -98,20 +104,41 @@ export function GuardScreen() {
   // Κανόνας που παρακάμπτεται μόνο με αιτιολογία (ανάπαυση, ΣΚ, δυνατότητα)· καταστάσεις και «ήδη σε θέση» ποτέ
   const blocked = useCallback((k: string, p: Person, why: string) => {
     const x = posts.find(q => q.k === k)!;
-    if (dutyBlock(state.statuses, date, p.id, x) || postOf(state, date, p.id, k)) { toast({ text: shortName(p) + ' δεν μπαίνει: ' + why }); return; }
+    const other = postOf(state, date, p.id, k);
+    // ήδη σε άλλη θέση και η θέση μας έχει κάποιον: ανταλλαγή των δύο
+    if (other && g[k] && !dutyBlock(state.statuses, date, p.id, x)) {
+      const chk = swapCheck(state, date, k, other.k);
+      if (chk.hard) { toast({ text: 'Δεν γίνεται ανταλλαγή: ' + chk.hard }); return; }
+      if (chk.soft) { setForce({ k, p, why: chk.soft, reason: '', swapWith: other.k }); return; }
+      swap(k, other.k); return;
+    }
+    if (dutyBlock(state.statuses, date, p.id, x) || other) { toast({ text: shortName(p) + ' δεν μπαίνει: ' + why }); return; }
     setForce({ k, p, why, reason: '' });
   }, [date, state]);
+  const swap = useCallback(async (a: string, b: string, reason?: string) => {
+    const pa = g[a], pb = g[b];
+    if (await run({ t: 'swapPosts', date, a, b, force: reason }, false)) toast({ text: 'Ανταλλαγή: ' + shortName(pm.get(pb)!) + ' σε ' + postTxt(postsOf(state.settings).find(q => q.k === a)!) + ', ' + shortName(pm.get(pa)!) + ' σε ' + postTxt(postsOf(state.settings).find(q => q.k === b)!), actions: [undoAct] });
+  }, [date, state]);
+  // «Επόμενος»: ο επόμενος στη σειρά δικαιοσύνης, με τους ίδιους κανόνες· ξαναπατάς για τον μεθεπόμενο
+  const next = useCallback(async (k: string) => {
+    const cur = g[k]; const skip = [...(skipped[k] || []), ...(cur ? [cur] : [])];
+    const pid = nextFor(state, date, k, skip);
+    if (!pid) { toast({ text: 'Δεν υπάρχει άλλος που να επιτρέπεται σε αυτή τη θέση' }); return; }
+    setSkipped({ ...skipped, [k]: skip });
+    await assign(k, pid, cur);
+  }, [date, state, skipped]);
   const exportX = () => ex('froura', date, 'η κατάσταση υπηρεσιών');
   const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<span key=${p.id} className="na">${shortName(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${TYPES[s.type as TypeKey].long}>${TYPES[s.type as TypeKey].label}<//></span>`)}</div>`;
   const left = html`<div className="guard__left">
+    ${locked && html`<${Alert} tone="info"><span>Περασμένη μέρα: οι θέσεις είναι κλειδωμένες για να μην αλλάξει κατά λάθος ο έλεγχος υπηρεσιών.</span><${Button} size="sm" variant="outline" onClick=${() => setUnlocked({ ...unlocked, [date]: true })}>Ξεκλείδωσε για διόρθωση<//><//>`}
     ${printed && html`<${Alert} tone="info"><span>Βγήκε Excel για αυτή τη μέρα στις <b>${printed}</b>. Αν αλλάξεις κάτι, βγάλ' το ξανά.</span><//>`}
     <div className="guard__bar"><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}
       <span className="guard__rules">${isHol(state.settings, date) && html`<${Badge} tone="warn" data-tip="Μετρά ως αργία στον έλεγχο υπηρεσιών">Αργία: ${holName(state.settings, date)}<//>`}<${Button} size="sm" variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules)}>Κανόνες<//></span>
-      ${Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoAct] }); }}>Καθάρισε<//>`}
-      <${Button} size="sm" disabled=${!empty.length || !people.length} onClick=${async () => { const left = fillDay(state, date).empty.length; if (await run({ t: 'autofill', date }, false)) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoAct] }); }} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες, μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες, ίδιο είδος, κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//></div>
+      ${!locked && Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoAct] }); }}>Καθάρισε<//>`}
+      <${Button} size="sm" disabled=${locked || !empty.length || !people.length} onClick=${async () => { const left = fillDay(state, date).empty.length; if (await run({ t: 'autofill', date }, false)) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoAct] }); }} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες, μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες, ίδιο είδος, κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//></div>
     ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
       return html`<${Card} key=${b.id} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
-        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}<//>`; })}
+        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? whyText(state, date, x.k) : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}<//>`; })}
     <div><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
     <${Card} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
       <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
@@ -131,8 +158,8 @@ export function GuardScreen() {
     ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${xl}</div>` : check)}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
     ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
-    ${force && html`<${Dialog} title=${'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
-      footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//><${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>Βάλ' τον<//>`}>
+    ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
+      footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//><${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); if (f.swapWith) await swap(f.k, f.swapWith, f.reason.trim()); else await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>${force.swapWith ? 'Ανταλλαγή' : 'Βάλ\' τον'}<//>`}>
       <p style=${{ marginTop: 0 }}>Ο κανόνας λέει όχι. Αν έγινε αλλαγή (π.χ. ΣΚ, άλλος αρρώστησε), γράψε γιατί. Γράφεται στο Ιστορικό και η θέση φαίνεται με ⚠.</p>
       <div className="field"><label className="field__label" htmlFor="frc">Αιτία *</label><input id="frc" className="ui-input" data-autofocus="" placeholder="π.χ. αλλαγή με συνάδελφο, εντολή λοχία" value=${force.reason} onChange=${(e: any) => setForce({ ...force, reason: e.target.value })}/></div>
     <//>`}

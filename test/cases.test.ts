@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import JSZip from 'jszip';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { dutyBlock, lastResort, fillDay, guardUnavailable, isHol, outBlock, ruleBlock, statusesOn, whyText, seedRank, fairOf, isRecordExpiredOn } from '../src/shared/rules';
+import { dutyBlock, lastResort, nextFor, swapCheck, fillDay, guardUnavailable, isHol, outBlock, ruleBlock, statusesOn, whyText, seedRank, fairOf, isRecordExpiredOn } from '../src/shared/rules';
 import { preflight, hasErrors } from '../src/shared/preflight';
 import { parseRoster, isPersonRow } from '../src/shared/roster';
 import { addDays, daysBetween, dow, milDate } from '../src/shared/dates';
@@ -375,5 +375,48 @@ describe('Απαντήσεις του λοχία (10/10)', () => {
     s = run(s, { t: 'assign', date: D3, k: 'ly', pid: sub });
     expect(s.guards[D3].ly).toBe(sub);
     expect(fairOf(s, sub, far).total).toBe(before + 1);
+  });
+});
+
+describe('Από την εφαρμογή του άλλου γραφέα', () => {
+  it('«Επόμενος»: ο επόμενος στη σειρά με τους ίδιους κανόνες, και ο μεθεπόμενος', () => {
+    let s = run(fakeState(30), { t: 'autofill', date: D });
+    const cur = s.guards[D].th1;
+    const n1 = nextFor(s, D, 'th1', [cur])!;
+    expect(n1).toBeTruthy(); expect(n1).not.toBe(cur);
+    expect(Object.values(s.guards[D])).not.toContain(n1);
+    expect(guardUnavailable({ ...s, guards: { ...s.guards, [D]: { ...s.guards[D], th1: 0 } } }, D, n1, 'th1')).toBeNull();
+    const n2 = nextFor(s, D, 'th1', [cur, n1])!;
+    expect(n2).not.toBe(n1); expect(n2).not.toBe(cur);
+    s = run(s, { t: 'assign', date: D, k: 'th1', pid: n1 });
+    expect(s.guards[D].th1).toBe(n1);
+  });
+  it('Ανταλλαγή δύο ατόμων με έλεγχο κανόνων και για τους δύο', () => {
+    let s = run(fakeState(30), { t: 'autofill', date: D });
+    const a = s.guards[D].th1, b = s.guards[D].mg1;
+    s = run(s, { t: 'swapPosts', date: D, a: 'th1', b: 'mg1' });
+    expect(s.guards[D].th1).toBe(b); expect(s.guards[D].mg1).toBe(a);
+    // ΕΟ δεν πάει σε μαγειρεία ούτε με ανταλλαγή
+    s = declare(s, 'EO', b, D);
+    expect(swapCheck(s, D, 'th1', 'mg1').hard).toMatch(/Όχι μαγειρεία/);
+    expect(() => run(s, { t: 'swapPosts', date: D, a: 'th1', b: 'mg1', force: 'x' })).toThrow(/ανταλλαγή/);
+  });
+  it('Πόστο: καμία υπηρεσία εκτός από Λ/Υ και Δ/Υ', () => {
+    const s = fakeState(20); // ο 6 έχει πόστο
+    for (const k of ['th1', 'mg1']) expect(guardUnavailable(s, D, 6, k)).toMatch(/Πόστο/);
+    const sp = { ...s, settings: { ...s.settings, phase: 'spen' as const } };
+    expect(guardUnavailable(sp, D, 6, 'tae')).toMatch(/Πόστο/);
+    expect(guardUnavailable(s, D, 6, 'ly')).toBeNull();
+  });
+  it('ΣΚ: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει', () => {
+    const SAT = '2026-10-17';
+    let s = fakeState(40);
+    // Σάββατο βγαίνουν οι θάλαμοι 1-4· με 40 άτομα και 18 θέσεις, κανείς από αυτούς δεν χρειάζεται
+    s = { ...s, people: s.people.map(p => (p.id === 13 ? { ...p, dn: true } : p)) };
+    const r = fillDay(s, SAT);
+    const used = Object.values(r.guards[SAT]);
+    const pm = new Map(s.people.map(p => [p.id, p]));
+    const goingHome = used.filter(id => [1, 2, 3, 4].includes(pm.get(id)!.room!) || pm.get(id)!.dn);
+    expect(goingHome).toEqual([]);
   });
 });

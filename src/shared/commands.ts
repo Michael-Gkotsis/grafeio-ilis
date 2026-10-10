@@ -2,8 +2,8 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
-import { capBlock, dutyBlock, lastResort, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
+import { TYPES, CAP_ACC, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -25,6 +25,7 @@ export type Command =
   | { t: 'setPhase'; phase: Phase }
   | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
+  | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'expire' };
 
 export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
@@ -106,6 +107,15 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       }
       return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
+    case 'swapPosts': {
+      const A = postBy(s, c.a), B = postBy(s, c.b); const g = s.guards[c.date] || {};
+      const chk = swapCheck(s, c.date, c.a, c.b);
+      if (chk.hard) throw new Error('Δεν γίνεται ανταλλαγή: ' + chk.hard);
+      if (chk.soft && !c.force) throw new Error('Δεν γίνεται ανταλλαγή: ' + chk.soft);
+      const pa = g[c.a], pb = g[c.b];
+      const guards = { ...s.guards, [c.date]: { ...g, [c.a]: pb, [c.b]: pa } };
+      return { state: { ...s, guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': ανταλλαγή ' + shortName(pm.get(pa)!) + ' (' + postTxt(A!) + ') ↔ ' + shortName(pm.get(pb)!) + ' (' + postTxt(B!) + ')' + (chk.soft ? ' (παρά τον κανόνα: ' + chk.soft + '. Αιτία: ' + c.force + ')' : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+    }
     case 'autofill': {
       const r = fillDay(s, c.date);
       return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
@@ -118,7 +128,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, rules: c.rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
     case 'setCap': {
       const cur = { ...(s.caps[c.pid] || {}) }; cur[c.kind] = c.allowed ? null : 'Από τον λοχία';
-      const acc: Record<string, string> = { th: 'θαλαμοφύλακα', op: 'οπλοφύλακα', mg: 'μαγειρεία', sk: 'σκοπιά' };
+      const acc: Record<string, string> = CAP_ACC as Record<string, string>;
       return { state: { ...s, caps: { ...s.caps, [c.pid]: cur } }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(pm.get(c.pid)!) + (c.allowed ? ' κάνει ' : ' δεν κάνει ') + (acc[c.kind] || c.kind), files: [] };
     }
     case 'setSettings':
