@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { apply, type Ctx } from '../src/shared/commands';
 import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
-import { Workbook } from '../src/main/xlsx';
+import { Workbook, mergeFirstSheets } from '../src/main/xlsx';
+import { pskDays } from '../src/shared/dates';
 import { fakeState } from './fixtures';
 import { statOf } from '../src/shared/rules';
 
@@ -143,5 +144,31 @@ describe('έλεγχος template', () => {
     zip.file(name, x);
     const broken = await zip.generateAsync({ type: 'nodebuffer' });
     await expect(fillHkai(broken, busyState(), '2026-10-12')).rejects.toThrow(/E20/);
+  });
+});
+
+describe('Φρουρά ΠΣΚ', () => {
+  it('συμπληρώνει Παρ-Σαβ-Κυρ με τους κανόνες ανάμεσά τους και βγάζει ένα Excel με 3 φύλλα', async () => {
+    const days = pskDays('2026-10-17');
+    expect(days).toEqual(['2026-10-16', '2026-10-17', '2026-10-18']);
+    expect(pskDays('2026-10-14')[0]).toBe('2026-10-16');
+    let s = fakeState(90);
+    s = apply(s, { t: 'autofillRange', dates: days }, ctx).state;
+    for (let i = 1; i < 3; i++) {
+      const prev = new Set(Object.values(s.guards[days[i - 1]]));
+      expect(Object.values(s.guards[days[i]]).filter(p => prev.has(p))).toEqual([]);   // ανάπαυση: όχι δύο μέρες στη σειρά
+    }
+    const parts = await Promise.all(days.map(d => fillFroura(T('froura.xlsx'), s, d)));
+    const data = await mergeFirstSheets(parts.map(p => p.data), ['ΠΑΡ 16-10', 'ΣΑΒ 17-10', 'ΚΥΡ 18-10']);
+    save('ΦΡΟΥΡΑ ΠΣΚ.xlsx', data);
+    const wb = await Workbook.open(data);
+    expect(wb.sheetNames()).toEqual(['ΠΑΡ 16-10', 'ΣΑΒ 17-10', 'ΚΥΡ 18-10']);
+    expect((await wb.sheet(1)).get('A5')).toBe('ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ 17 ΟΚΤ 2026');
+    expect((await wb.sheet(2)).get('A5')).toBe('ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ 18 ΟΚΤ 2026');
+    const zip = await (await import('jszip')).default.loadAsync(data);
+    const wbx = await zip.file('xl/workbook.xml')!.async('string');
+    expect(wbx.match(/_xlnm\.Print_Area/g)).toHaveLength(3);
+    expect(wbx).toContain("localSheetId=\"2\">'ΚΥΡ 18-10'!$A$1:$M$");
+    expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('sheet_m3.xml');
   });
 });

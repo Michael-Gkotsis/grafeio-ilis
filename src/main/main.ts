@@ -7,7 +7,8 @@ import { Store, CorruptDbError, listBackups } from './db';
 import { writeXlsx, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, type Command } from '../shared/commands';
-import { nowHM, today, type ISODate } from '../shared/dates';
+import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
+import { mergeFirstSheets } from './xlsx';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
 import { fillFroura, fillHkai, fillOuts, TemplateError, FROURA_FORMS } from './exports';
 import type { ImportRow } from '../shared/commands';
@@ -92,14 +93,23 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
     let r: { name: string; data: Buffer; warnings?: string[] };
     if (kind === 'check') r = await excel().dutyCheck(s, date.slice(0, 7));
-    else {
+    else if (kind === 'frouraPsk' || kind === 'outsPsk') {
+      // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
+      const fr = kind === 'frouraPsk';
+      const file = tplPath(fr ? FROURA_FORMS[s.settings.phase || 'sven'].file : 'exodouxoi.xlsx');
+      if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + path.basename(file) + ' από τον φάκελο templates');
+      const buf = fs.readFileSync(file); const days = pskDays(date);
+      const parts = await Promise.all(days.map(d => (fr ? fillFroura(buf, s, d) : fillOuts(buf, s, d))));
+      const data = await mergeFirstSheets(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')));
+      r = { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: parts.flatMap(x => x.warnings || []) };
+    } else {
       const t = kind === 'froura' ? { file: FROURA_FORMS[s.settings.phase || 'sven'].file } : TPL.find(x => x.id === kind)!; const file = tplPath(t.file);
       if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + t.file + ' από τον φάκελο templates');
       const buf = fs.readFileSync(file);
       r = kind === 'froura' ? await fillFroura(buf, s, date) : kind === 'hkai' ? await fillHkai(buf, s, date) : await fillOuts(buf, s, date);
     }
     const out = await writeXlsx(path.join(outputDir(), date.slice(0, 7)), r.name, r.data);
-    runCmd({ t: 'printed', date, at: nowHM(), files: [path.basename(out)] });
+    for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null);
     if (opts.open) shell.openPath(out);
     return { ok: true, file: out, warnings: r.warnings || [] };
