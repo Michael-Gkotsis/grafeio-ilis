@@ -299,14 +299,29 @@ function SettingsCard() {
 // Υπηρεσίες ανά έντυπο (ΣΒΕΝ/ΣΠΕΝ): ένοπλες ή άοπλες (Κ-Υ1), νέες υπηρεσίες, αφαίρεση όσων δεν χρειάζονται
 function BlocksCard() {
   const { state, run } = useStore();
-  const [phase, setPhase] = useState<Phase>(state.settings.phase || 'sven'); const [add, setAdd] = useState(false);
+  const [phase, setPhase] = useState<Phase>(state.settings.phase || 'sven'); const [add, setAdd] = useState(false); const [ed, setEd] = useState<string | null>(null);
   const list = blocksOf(state.settings, phase) || [];
   return html`<${Card} title="Υπηρεσίες" actions=${html`<${Segmented} small=${true} value=${phase} onChange=${setPhase} items=${[{ value: 'sven', label: 'ΣΒΕΝ' }, { value: 'spen', label: 'ΣΠΕΝ' }]}/>`}>
     <p className="note" style=${{ marginTop: 0 }}>Τώρα ισχύει η <b>ΦΡΟΥΡΑ ${PHASE_NAME[state.settings.phase || 'sven']}</b> (αλλάζει από τις Υπηρεσίες). Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ.</p>
-    ${list.map(b => html`<div key=${b.id} className=${'rule' + (b.hidden ? ' is-off' : '')}><input type="checkbox" className="ui-check" aria-label=${'Ένοπλη: ' + b.name} disabled=${b.hidden || b.kind === 'ly'} checked=${b.armed} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armed: e.target.checked } })}/><span style=${{ flex: 1 }}><b>${b.name}</b><small>${b.posts.length} ${b.posts.length === 1 ? 'θέση' : 'θέσεις'} · ${b.hidden ? 'αφαιρέθηκε' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''}</small></span>
+    ${list.map(b => html`<div key=${b.id} className=${'rule' + (b.hidden ? ' is-off' : '')}><input type="checkbox" className="ui-check" aria-label=${'Ένοπλη: ' + b.name} disabled=${b.hidden || b.kind === 'ly'} checked=${b.armed} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armed: e.target.checked } })}/><span style=${{ flex: 1 }}><b>${b.name}</b><small>${b.posts.filter(x => !x.hidden).length} ${b.posts.filter(x => !x.hidden).length === 1 ? 'θέση' : 'θέσεις'} · ${b.hidden ? 'αφαιρέθηκε' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''}</small></span>
+      ${b.kind !== 'ly' && !b.hidden && html`<${Button} size="sm" variant="ghost" aria-label=${'Πιο πάνω: ' + b.name} data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)" onClick=${() => run({ t: 'editBlock', phase, id: b.id, name: b.name, n: 0, hrs: {}, move: -1 })}>↑<//><${Button} size="sm" variant="ghost" onClick=${() => setEd(b.id)}>Επεξεργασία<//>`}
       ${b.kind !== 'ly' && html`<${Button} size="sm" variant="ghost" onClick=${() => run({ t: 'setBlock', phase, id: b.id, patch: { hidden: !b.hidden } })} data-tip=${b.hidden ? 'Να ξαναφαίνεται στις θέσεις και στο έντυπο' : 'Να μη φαίνεται πια. Το ιστορικό της μένει στον έλεγχο υπηρεσιών.'}>${b.hidden ? 'Επαναφορά' : 'Αφαίρεση'}<//>`}</div>`)}
     <div style=${{ marginTop: '8px' }}><${Button} variant="outline" size="sm" disabled=${phase !== (state.settings.phase || 'sven')} data-tip=${phase !== (state.settings.phase || 'sven') ? 'Πρόσθεσε στο έντυπο που ισχύει τώρα' : undefined} onClick=${() => setAdd(true)}>+ Νέα υπηρεσία<//></div>
     ${add && html`<${AddBlockDialog} onClose=${() => setAdd(false)}/>`}
+    ${ed && html`<${EditBlockDialog} phase=${phase} b=${list.find(x => x.id === ed)} onClose=${() => setEd(null)}/>`}
+  <//>`;
+}
+function EditBlockDialog({ phase, b, onClose }: P) {
+  const { run } = useStore(); const toast = useToast();
+  const [name, setName] = useState(b.name); const [n, setN] = useState(b.posts.filter((x: P) => !x.hidden).length);
+  const [hrs, setHrs] = useState<Record<string, string>>(() => Object.fromEntries(b.posts.filter((x: P) => x.rot == null).map((x: P) => [x.k, x.hrs || ''])));
+  const shown = b.posts.filter((x: P) => !x.hidden && x.rot == null);
+  const save = async () => { if (await run({ t: 'editBlock', phase, id: b.id, name, n, hrs }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.custom ? name : b.name) }); } };
+  return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.custom ? 'Δική σου υπηρεσία: αλλάζουν όνομα, πλήθος και ώρες.' : 'Υπηρεσία του εντύπου: οι θέσεις είναι σταθερές· αλλάζουν οι ώρες όσων θέσεων δεν έχουν βάρδιες.'} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
+    ${b.custom && html`<div className="field-row"><div className="field"><label className="field__label" htmlFor="eb-n">Όνομα</label><input id="eb-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>
+      <div className="field"><label className="field__label" htmlFor="eb-c">Πόσα άτομα</label><input id="eb-c" type="number" min="1" max="10" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, Math.min(10, +e.target.value || 1)))}/><span className="field__help">Όσες θέσεις φύγουν κρατούν το ιστορικό τους.</span></div></div>`}
+    ${shown.length ? shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__label" htmlFor=${'eb-h-' + x.k}>Ώρες: ${x.label}</label><input id=${'eb-h-' + x.k} className="ui-input" placeholder="π.χ. 07:30-08:00 (κενό = όλη μέρα)" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`) : html`<p className="note">Οι ώρες αυτής της υπηρεσίας είναι οι βάρδιες του εντύπου.</p>`}
   <//>`;
 }
 // Αργίες (10 §4β): ΣΚ μετρούν πάντα· εδώ οι επίσημες αργίες που αλλάζουν κάθε χρόνο (π.χ. Πάσχα)

@@ -98,7 +98,7 @@ export const ROT = [
   ['20:00-22:00', '04:00-06:00', '12:00-14:00']
 ];
 
-export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string }
+export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean }
 export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean }
 export type Phase = 'sven' | 'spen';
 export const PHASE_NAME: Record<Phase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };

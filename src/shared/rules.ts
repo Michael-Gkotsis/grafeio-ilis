@@ -19,7 +19,7 @@ const postsIdx = new WeakMap<Settings['blocks'], Post[]>();
 export function postsOf(settings: Settings): Post[] {
   const blocks = blocksOf(settings) || settings.blocks;
   let p = postsIdx.get(blocks);
-  if (!p) { p = buildPosts(blocks.filter(b => !b.hidden)); postsIdx.set(blocks, p); }
+  if (!p) { p = buildPosts(blocks.filter(b => !b.hidden)).filter(x => !x.hidden); postsIdx.set(blocks, p); }
   return p;
 }
 // Όλες οι θέσεις που έχουν υπάρξει (και των δύο εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
