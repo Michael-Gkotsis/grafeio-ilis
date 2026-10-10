@@ -425,3 +425,6 @@ table.legend { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.legend th { text-align: left; font-weight: 600; color: var(--muted-fg); padding: 4px 6px; border-bottom: 1px solid var(--border); }
 table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .rule.is-off { opacity: .6; }
+
+.fixedline{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted-fg);padding:8px 2px 0}
+.fixedline b{color:var(--foreground)}
