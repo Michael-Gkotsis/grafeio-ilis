@@ -2,20 +2,20 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, fullName, shortName, unitOf, roomTxt, postTxt, type Person, type Post, type TypeKey } from '../../shared/domain';
-import { capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
-import { addDays, dayName, dm, dmy, parseD, DOW_GEN, MONTHS } from '../../shared/dates';
+import { whyText, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
+import { addDays, dayName, dm, dmy, dow, parseD, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].join(', ');
 
-function PostRow({ x, pid, date, statuses, duty, ruleWarn, onAssign, unavailable, pm }: P) {
+function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, unavailable, pm }: P) {
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x) || ruleWarn);
   return html`<li className=${cx('post', !p && 'is-empty')}><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots.map((t: string, i: number) => html`<span key=${i} className="nw">${(i ? ' · ' : '') + t}</span>`) : x.hours}</small></div>
-    <div className="post__slot">${p ? html`<span className="post__name">${fullName(p)}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
+    <div className="post__slot">${p ? html`<span className="post__who"><span className="post__name">${fullName(p)}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η αυτόματη συμπλήρωση διαλέγει με αυτή τη σειρά: αργίες → μέρες χωρίς υπηρεσία → λιγότερες υπηρεσίες → κλήρωση">Γιατί: ${why}</small>`}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
     html`<div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} unavailable=${unavailable} onChange=${(id: number) => onAssign(x.k, id)}/></div>`}</div></li>`;
 }
 
@@ -58,7 +58,7 @@ export function GuardScreen() {
   const { state, run, today, tomorrow, undo } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
   const ex = useExport();
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
-  const [tab, setTab] = useState('posts'); const [confirmEmpty, setConfirmEmpty] = useState(false); const [rules, setRules] = useState(false);
+  const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
   const g = state.guards[date] || {};
   const posts = postsOf(state.settings);
   const pm = personMap(state.people);
@@ -89,7 +89,7 @@ export function GuardScreen() {
       <${Button} size="sm" disabled=${!empty.length || !people.length} onClick=${async () => { if (await run({ t: 'autofill', date }, false)) toast({ text: 'Συμπληρώθηκαν οι κενές θέσεις τηρώντας τους κανόνες, με όσους έχουν τις λιγότερες υπηρεσίες', actions: [undoAct] }); }} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπεται: λιγότερες υπηρεσίες πρώτα (στις αργίες, λιγότερες αργίες), με ανάπαυση και χωρίς συνεχόμενα ΣΚ." data-tip-side="left">Αυτόματη συμπλήρωση<//></div>
     ${blocks.map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
       return html`<${Card} key=${b.id} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
-        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid) : null} onAssign=${assign} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul><//>`; })}
+        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul><//>`; })}
     <${Card} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
       <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
       <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
@@ -98,17 +98,15 @@ export function GuardScreen() {
     <//>
   </div>`;
   const xl = html`<div className="guard__right"><${ExcelSheet} model=${model} fileName=${'ΦΡΟΥΡΑ ' + dmy(date).replace(/\//g, '-') + '.xlsx'} sheetName="ΦΡΟΥΡΑ ΣΒΕΝ" meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>
-    <div className="toolbar" style=${{ marginTop: '10px' }}><${Button} onClick=${() => (empty.length ? setConfirmEmpty(true) : exportX())}>Βγάλε το Excel<//></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
+    <div className="toolbar" style=${{ marginTop: '10px' }}><${Button} onClick=${exportX}>Βγάλε το Excel<//></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
   const cur = !mobile && tab === 'xl' ? 'posts' : tab;
   return html`<div>
-    <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Κύκλος 14:00 → 14:00. Όσοι δεν επιτρέπονται σε μια θέση φαίνονται γκρι με τον λόγο."><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))}/><//>
+    <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub=${html`Κύκλος <b>${dow(date)} ${dm(date)} 14:00 → ${dow(addDays(date, 1))} ${dm(addDays(date, 1))} 14:00</b>. Όσοι δεν επιτρέπονται σε μια θέση φαίνονται γκρι με τον λόγο.`}><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))}/><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${xl}</div>` : check)}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
-    ${confirmEmpty && html`<${Dialog} role="alertdialog" title="Υπάρχουν κενές θέσεις" onClose=${() => setConfirmEmpty(false)} footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setConfirmEmpty(false)}>Άκυρο<//><${Button} variant="destructive" onClick=${() => { setConfirmEmpty(false); exportX(); }}>Βγάλε με κενές θέσεις<//>`}>
-      <p style=${{ margin: 0 }}>Η κατάσταση έχει ${empty.length} κενές θέσεις. Θέλεις να βγει το Excel με κενά κελιά σε αυτές;</p><//>`}
   </div>`;
 }
 
@@ -159,9 +157,9 @@ export function OutsScreen() {
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b> · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
       ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">Όλοι όσοι μπορούν: έξοδος<//>`}</div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/></div>
-    <div className="toolbar"><div className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι'], ['can', 'Μπορούν να βγουν'], ['cant', 'Δεν μπορούν'], ['sel', 'Επιλεγμένοι']].map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k)}>${l}</button>`)}</div><span className="toolbar__count">${rows.length} άτομα</span></div>
+    <div className="toolbar"><div className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι'], ['can', 'Μπορούν να βγουν'], ['cant', 'Δεν μπορούν'], ['sel', 'Επιλεγμένοι']].map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k)}>${l}</button>`)}</div><${ActiveFilter} parts=${[filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="toolbar"><${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm" disabled=${changes.length > 0}/>${changes.length > 0 && html`<span className="note">Αποθήκευσε πρώτα τις αλλαγές.</span>`}<${TemplateNote} ids=${['outs']}/></div>
-    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
+    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
     ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
       <ul className="hist">${changes.map(c => html`<li key=${c.pid}><b>${shortName(personMap(state.people).get(c.pid)!)}</b> <span className="muted">${c.from ? TYPES[c.from].label : 'Μένει'} →</span> ${c.to ? html`<${Badge} tone=${TYPES[c.to].tone}>${TYPES[c.to].label}<//>` : 'Μένει'}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>

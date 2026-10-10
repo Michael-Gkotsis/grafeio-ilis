@@ -11,6 +11,10 @@ const api: Api = {
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),
   backup: () => ipcRenderer.invoke('backup'),
   openFolder: which => ipcRenderer.invoke('open', which),
-  chooseOutputDir: () => ipcRenderer.invoke('outputDir:choose')
+  chooseOutputDir: () => ipcRenderer.invoke('outputDir:choose'),
+  listBackups: () => ipcRenderer.invoke('backups:list'),
+  restoreBackup: name => ipcRenderer.invoke('backups:restore', name),
+  diag: () => ipcRenderer.invoke('diag'),
+  setGpu: disable => ipcRenderer.invoke('flags:gpu', disable)
 };
 contextBridge.exposeInMainWorld('api', api);

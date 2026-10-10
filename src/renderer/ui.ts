@@ -81,10 +81,11 @@ export function ToastProvider({ children }: P) {
 }
 
 /* VirtualList: μόνο οι ορατές γραμμές υπάρχουν στη σελίδα */
-export function VirtualList({ items, rowHeight, height, renderRow }: P) {
+// resetKey: πότε γυρνά στην αρχή (αλλαγή φίλτρου/αναζήτησης), όχι σε κάθε αλλαγή δεδομένων
+export function VirtualList({ items, rowHeight, height, renderRow, resetKey }: P) {
   const ref = useRef<HTMLDivElement>(null); const [top, setTop] = useState(0);
   const start = Math.max(0, Math.floor(top / rowHeight) - 6); const end = Math.min(items.length, Math.ceil((top + height) / rowHeight) + 6);
-  useEffect(() => { if (ref.current) { ref.current.scrollTop = 0; setTop(0); } }, [items]);
+  useEffect(() => { if (ref.current) { ref.current.scrollTop = 0; setTop(0); } }, [resetKey === undefined ? items.length : resetKey]);
   return html`<div ref=${ref} className="vlist" style=${{ height: Math.min(height, items.length * rowHeight + 2) }} onScroll=${(e: any) => setTop(e.currentTarget.scrollTop)}>
     <div className="vlist__inner" style=${{ height: items.length * rowHeight }}>
       ${items.slice(start, end).map((it: P, i: number) => renderRow(it, start + i, { position: 'absolute', top: (start + i) * rowHeight, left: 0, right: 0, height: rowHeight }))}

@@ -68,3 +68,12 @@ describe('εξαγωγή Excel', () => {
     expect(pa.get('D89')).toBe('ΑΛΧΙΑΣ ΙΛΗΣ');
   });
 });
+
+// Golden files (έρευνα §4.4): κάθε κελί, merge και ρύθμιση σελίδας του αποτελέσματος συγκρίνεται με το αποθηκευμένο.
+// Αν αλλάξει σκόπιμα ένα έντυπο: npx vitest run -u και έλεγχος του diff στο test/__snapshots__.
+describe('golden files', () => {
+  const golden = async (data: Buffer) => { const wb = await Workbook.open(data); const out: Record<string, unknown> = {}; for (const n of wb.sheetNames()) out[n] = (await wb.sheet(n)).dump(); return out; };
+  it('ΦΡΟΥΡΑ', async () => { expect(await golden((await fillFroura(T('froura.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
+  it('ΗΚΑΙ', async () => { expect(await golden((await fillHkai(T('hkai.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
+  it('Εξοδούχοι', async () => { expect(await golden((await fillOuts(T('exodouxoi.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
+});

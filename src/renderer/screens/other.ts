@@ -1,15 +1,15 @@
 // Σήμερα, ιατρικά/ποινές, δύναμη, ΗΚΑΙ, ιστορικό, templates/εισαγωγή/ρυθμίσεις, αναζήτηση (Ctrl+K)
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { html, Alert, Badge, Button, Card, PageHeader, Tabs, useEscape, useMedia, useToast } from '../ui';
+import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
 import { DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote } from '../common';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type Status } from '../../shared/domain';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, hkaiCounts, isRecordExpiredOn, personMap, strengthOf } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, parseD, DOW_GEN } from '../../shared/dates';
+import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm } from '../../shared/text';
-import type { ImportPreview } from '../../shared/api';
+import type { BackupInfo, ImportPreview } from '../../shared/api';
 type P = any;
 
 export function TodayScreen() {
@@ -81,7 +81,7 @@ export function RecordsScreen() {
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Ιατρικά (' + nMed + ')' }, { value: 'pun', label: 'Ποινές (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }]}/></div>
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${s.type === 'PUN' ? s.kind : t.label}<//>
-        <small>${dm(s.from)} – ${dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}</small></div>
+        <small>${dow(s.from)} ${dm(s.from)} – ${dow(s.to)} ${dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}</small></div>
       ${s.pending ? html`<${Badge} tone="warn" data-tip="Γράφεται στην ΗΚΑΙ (Αποφάσεις Διοικητή, 4. Ποινές). Ισχύει μόλις εγκριθεί" data-tip-side="left">Αιτείται στην ΗΚΑΙ<//><${Button} size="sm" onClick=${act(() => run({ t: 'approvePun', id: s.id }, false), 'Εγκρίθηκε η ποινή του ' + shortName(p) + '. Ισχύει από ' + dayName(s.from, today).toLowerCase() + ' (δεν βγαίνει έξοδο).')}>Εγκρίθηκε<//><${Button} size="sm" variant="ghost" onClick=${act(() => run({ t: 'deleteStatus', id: s.id }, false), 'Διαγράφηκε η αίτηση ποινής του ' + shortName(p))}>Δεν εγκρίθηκε<//>` :
         tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : html`<${Button} size="sm" variant="ghost" onClick=${act(() => run({ t: 'endStatus', id: s.id }, false), 'Τέλος από σήμερα: ' + (s.type === 'PUN' ? 'ποινή' : t.label) + ' του ' + shortName(p))} data-tip="Αν τελείωσε νωρίτερα από το προβλεπόμενο" data-tip-side="left">Τέλος σήμερα<//>`}
     </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : 'Καμία ενεργή καταχώρηση.'}</div>`}</div>
@@ -148,8 +148,8 @@ export function HistoryScreen() {
 
 function ImportCard() {
   const { refresh } = useStore(); const toast = useToast(); const nav = useNav();
-  const [pv, setPv] = useState<ImportPreview | null>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [deact, setDeact] = useState(true);
-  const pick = async () => { setErr(''); setBusy(true); try { const r = await window.api.pickRoster(); if (!r) return; if (!r.ok) setErr(r.error); else setPv(r); } finally { setBusy(false); } };
+  const [pv, setPv] = useState<ImportPreview | null>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [deact, setDeact] = useState(true); const [okd, setOkd] = useState(false);
+  const pick = async () => { setErr(''); setBusy(true); try { const r = await window.api.pickRoster(); if (!r) return; if (!r.ok) setErr(r.error); else { setPv(r); setOkd(false); } } finally { setBusy(false); } };
   const go = async () => {
     if (!pv) return; setBusy(true);
     try { const r = await window.api.applyRoster(pv.token, deact); if (!r.ok) { setErr(r.error); return; } await refresh(); setPv(null); toast({ text: r.text }); nav.go('people'); }
@@ -162,9 +162,13 @@ function ImportCard() {
     ${pv && html`<div style=${{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div><span className="plan__fn">${pv.file}</span>${pv.essos && html` <${Badge} tone="info">ΕΣΣΟ ${pv.essos}<//>`}</div>
       <div className="tiles"><div className="tile tile--main"><span className="tile__n">${pv.active}</span><span className="tile__l">Σε δύναμη</span></div><div className="tile"><span className="tile__n">${pv.added}</span><span className="tile__l">Νέοι</span></div><div className="tile"><span className="tile__n">${pv.updated}</span><span className="tile__l">Ενημερώνονται</span></div><div className="tile"><span className="tile__n">${pv.total - pv.active}</span><span className="tile__l">Εκτός δύναμης</span></div></div>
+      ${pv.declared != null && pv.declared === pv.found && html`<${Alert} tone="ok"><span>✓ Το Δυναμολόγιο γράφει <b>ΣΥΝΟΛΟ ${pv.declared}</b> και βρέθηκαν <b>${pv.found}</b> άτομα. Ταιριάζουν.</span><//>`}
       ${pv.warnings.map(w => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
-      <label className="rule"><input type="checkbox" className="ui-check" checked=${deact} onChange=${(e: any) => setDeact(e.target.checked)}/><span><b>Όσοι δεν είναι στο αρχείο → εκτός δύναμης</b><small>${pv.missing ? pv.missing + ' άτομα της εφαρμογής δεν βρέθηκαν στο αρχείο.' : 'Όλοι της εφαρμογής βρέθηκαν στο αρχείο.'} Δεν σβήνονται, κρατιέται το ιστορικό τους.</small></span></label>
-      <div style=${{ display: 'flex', gap: '8px' }}><${Button} variant="outline" onClick=${() => setPv(null)}>Άκυρο<//><${Button} disabled=${busy} onClick=${go}>Εισαγωγή ${pv.total} ατόμων<//></div>
+      ${pv.skipped.length > 0 && html`<details className="note"><summary>Αγνοήθηκαν ${pv.skipped.length} γραμμές που δεν είναι άτομα (σύνολα, επικεφαλίδες)</summary><p>${[...new Set(pv.skipped)].join(' · ')}</p></details>`}
+      ${pv.suspicious.length > 0 && html`<${Alert} tone="warn"><span>${pv.suspicious.length} γραμμές δεν έχουν ούτε ΑΣΜ, ούτε τηλέφωνο, ούτε θάλαμο. Είναι σίγουρα άτομα; ${pv.suspicious.slice(0, 12).join(' · ')}${pv.suspicious.length > 12 ? ' …' : ''}</span><//>`}
+      ${(pv.declared != null && pv.declared !== pv.found || pv.suspicious.length > 0) && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${okd} onChange=${(e: any) => setOkd(e.target.checked)}/><span><b>Το έλεγξα, συνέχισε</b><small>Χρειάζεται επειδή κάτι δεν ταιριάζει παραπάνω.</small></span></label>`}
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${deact} onChange=${(e: any) => setDeact(e.target.checked)}/><span><b>Όσοι δεν είναι στο αρχείο → εκτός δύναμης</b><small>${pv.missing ? pv.missing + ' άτομα της εφαρμογής δεν βρέθηκαν στο αρχείο.' : 'Όλοι της εφαρμογής βρέθηκαν στο αρχείο.'} Όσοι έχουν ιστορικό κρατιούνται· όσοι δεν έχουν καμία καταχώρηση (π.χ. λάθος γραμμές παλιάς εισαγωγής) σβήνονται.</small></span></label>
+      <div style=${{ display: 'flex', gap: '8px' }}><${Button} variant="outline" onClick=${() => setPv(null)}>Άκυρο<//><${Button} disabled=${busy || ((pv.declared != null && pv.declared !== pv.found || pv.suspicious.length > 0) && !okd)} onClick=${go}>Εισαγωγή ${pv.total} ατόμων<//></div>
       <span className="note">Πριν την εισαγωγή κρατιέται αντίγραφο της βάσης. Αναιρείται από το Ιστορικό.</span>
     </div>`}
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
@@ -172,7 +176,7 @@ function ImportCard() {
 }
 
 function SettingsCard() {
-  const { state, run, boot } = useStore(); const toast = useToast();
+  const { state, run, boot, refresh } = useStore(); const toast = useToast();
   const [s, setS] = useState(() => ({ unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
   const [outRooms, setOutRooms] = useState(() => ({ 6: (state.rules.outRooms[6] || []).join(','), 0: (state.rules.outRooms[0] || []).join(',') }));
   const save = async () => {
@@ -192,10 +196,49 @@ function SettingsCard() {
       <div className="field"><label className="field__label" htmlFor="st-r0">Θάλαμοι εξόδου Κυριακή</label><input id="st-r0" className="ui-input" value=${outRooms[0]} onChange=${(e: any) => setOutRooms({ ...outRooms, 0: e.target.value })}/></div></div>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
     <hr style=${{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }}/>
-    <dl className="kv"><dt>Excel βγαίνουν στο</dt><dd>${state.settings.outputDir || boot.outputDir} <${Button} variant="link" onClick=${async () => { const d = await window.api.chooseOutputDir(); if (d) toast({ text: 'Τα Excel θα βγαίνουν στο ' + d }); }}>Άλλαξε<//> · <${Button} variant="link" onClick=${() => window.api.openFolder('output')}>Άνοιξε<//></dd>
+    <dl className="kv"><dt>Excel βγαίνουν στο</dt><dd>${state.settings.outputDir || boot.outputDir} <${Button} variant="link" onClick=${async () => { const d = await window.api.chooseOutputDir(); if (d) { await refresh(); toast({ text: 'Τα Excel θα βγαίνουν στο ' + d }); } }}>Άλλαξε<//> · <${Button} variant="link" onClick=${() => window.api.openFolder('output')}>Άνοιξε<//></dd>
       <dt>Δεδομένα</dt><dd>${boot.dataDir} <${Button} variant="link" onClick=${() => window.api.openFolder('data')}>Άνοιξε<//></dd>
-      <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα (14 τελευταία + 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
+      <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
       <dt>Έκδοση</dt><dd>${boot.version}</dd></dl>
+  <//>`;
+}
+
+// Ποιες θέσεις είναι ένοπλες (Κ-Υ1, ερ. 2): ρυθμίζεται ανά μπλοκ
+function BlocksCard() {
+  const { state, run } = useStore();
+  const toggle = (id: string, armed: boolean) => {
+    const b = state.settings.blocks.find(x => x.id === id)!;
+    run({ t: 'setSettings', settings: { blocks: state.settings.blocks.map(x => (x.id === id ? { ...x, armed } : x)) }, text: b.name + (armed ? ': ένοπλη' : ': άοπλη') });
+  };
+  return html`<${Card} title="Θέσεις υπηρεσιών: ένοπλες ή άοπλες">
+    <p className="note" style=${{ marginTop: 0 }}>Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ. Σε άοπλη μπαίνουν και όσοι έχουν ΕΑ, ΕΟ ή ΣΤΕΠ (όχι ΕΥ, ΝΟΣ, άδεια).</p>
+    ${state.settings.blocks.map(b => html`<label key=${b.id} className="rule"><input type="checkbox" className="ui-check" checked=${b.armed} onChange=${(e: any) => toggle(b.id, e.target.checked)}/><span><b>${b.name}</b><small>${b.posts.length} ${b.posts.length === 1 ? 'θέση' : 'θέσεις'} · ${b.armed ? 'ένοπλη' : 'άοπλη'}</small></span></label>`)}
+  <//>`;
+}
+// Αργίες (10 §4β): ΣΚ μετρούν πάντα· εδώ οι επίσημες αργίες που αλλάζουν κάθε χρόνο (π.χ. Πάσχα)
+function HolidaysCard() {
+  const { state, run, today } = useStore();
+  const [d, setD] = useState(''); const [n, setN] = useState('');
+  const list = Object.entries(state.settings.holidays).sort(([a], [b]) => a.localeCompare(b));
+  const save = (h: Record<string, string>, text: string) => run({ t: 'setSettings', settings: { holidays: h }, text });
+  return html`<${Card} title="Αργίες">
+    <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Εδώ οι επίσημες αργίες για τον έλεγχο υπηρεσιών και τον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
+    <ul className="hist">${list.map(([k, v]) => html`<li key=${k} className=${k < today ? 'muted' : ''}><span className="nw">${dow(k)} ${dmy(k)}</span> <b>${v}</b> <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + v} onClick=${() => { const h = { ...state.settings.holidays }; delete h[k]; save(h, 'αφαιρέθηκε η αργία ' + v + ' ' + dmy(k)); }}>✕<//></li>`)}</ul>
+    <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><input id="hol-d" type="date" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
+      <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Μεγάλη Παρασκευή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ ...state.settings.holidays, [d]: n.trim() }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
+  <//>`;
+}
+// Επαναφορά από αντίγραφο (έρευνα §4.2): πριν την επαναφορά κρατιέται αντίγραφο της τωρινής βάσης
+function BackupsCard() {
+  const toast = useToast();
+  const [list, setList] = useState<BackupInfo[] | null>(null); const [pick, setPick] = useState<BackupInfo | null>(null);
+  useEffect(() => { window.api.listBackups().then(setList); }, []);
+  return html`<${Card} title="Αντίγραφα ασφαλείας">
+    ${!list ? 'Φόρτωση…' : !list.length ? html`<p className="note">Δεν υπάρχει ακόμα αντίγραφο. Το πρώτο κρατιέται αυτόματα σήμερα.</p>` : html`<ul className="hist">${list.slice(0, 15).map(b => html`<li key=${b.name}><span className="nw">${dow(b.day)} ${dmy(b.day)}</span> ${b.label} <span className="muted">${Math.round(b.size / 1024)} KB</span> <${Button} size="sm" variant="outline" onClick=${() => setPick(b)}>Επαναφορά<//></li>`)}</ul>`}
+    ${pick && html`<${Dialog} role="alertdialog" title="Επαναφορά από αντίγραφο" description=${dmy(pick.day) + ' · ' + pick.label} onClose=${() => setPick(null)}
+      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setPick(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${async () => { const r = await window.api.restoreBackup(pick.name); setPick(null); if (!r.ok) toast({ text: r.error }); }}>Επαναφορά και επανεκκίνηση<//>`}>
+      <p style=${{ margin: 0 }}>Τα δεδομένα θα γυρίσουν όπως ήταν στο αντίγραφο. Ό,τι έγινε μετά χάνεται, αλλά η τωρινή βάση κρατιέται πρώτα ως αντίγραφο «πριν-επαναφορά», οπότε μπορείς να γυρίσεις πίσω.</p><//>`}
   <//>`;
 }
 
@@ -205,7 +248,7 @@ export function TemplatesScreen() {
   return html`<div>
     <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού και οι ρυθμίσεις της Ίλης."/>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
-    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'settings' ? html`<${SettingsCard}/>` : html`<div>
+    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'settings' ? html`<div className="stack"><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.id}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
@@ -228,6 +271,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
+    { t: 'Διάγνωση (μνήμη, ταχύτητα)', k: 'ΔΙΑΓΝΩΣΗ ΜΝΗΜΗ ΤΑΧΥΤΗΤΑ GPU', fn: () => nav.go('diag') },
     { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΣΤΕΛΕΧΗ ΘΑΛΑΜΟΙ', fn: () => nav.go('templates', { tab: 'settings' }) }
   ];
   const n = norm(dq.trim());

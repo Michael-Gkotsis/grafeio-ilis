@@ -51,8 +51,8 @@ describe('κανόνες', () => {
     expect(hk.avail).toBe(18);
     expect(strengthOf(s, '2026-10-12').present).toBe(18);
   });
-  it('εισαγωγή: ταιριάζει με ΑΣΜ και βγάζει εκτός δύναμης όσους λείπουν', () => {
-    const s = fakeState(5);
+  it('εισαγωγή: ταιριάζει με ΑΣΜ και βγάζει εκτός δύναμης όσους λείπουν (και έχουν ιστορικό)', () => {
+    const s = apply(fakeState(5), { t: 'declare', cmd: { type: 'EA', pids: [5], from: '2026-10-01', to: '2026-10-02' } }, ctx).state;
     const rows = s.people.slice(0, 4).map(({ id, active, ...p }) => ({ ...p, phone: '6999999999' }));
     const r = apply(s, { t: 'importPeople', rows, source: 'test.xlsx', deactivateMissing: true }, ctx);
     expect(r.state.people).toHaveLength(5);

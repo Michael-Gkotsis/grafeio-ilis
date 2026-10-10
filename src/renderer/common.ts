@@ -1,12 +1,13 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button } from './ui';
+import { createContext, memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Badge, Button, Dialog } from './ui';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
 import { TYPES, fullName, shortName, unitOf, type Status } from '../shared/domain';
-import { daysBetween, dayName, dm, type ISODate } from '../shared/dates';
+import { daysBetween, dayName, dm, dmy, type ISODate } from '../shared/dates';
 import type { ExportKind } from '../shared/api';
+import type { Check } from '../shared/preflight';
 type P = any;
 
 export const StatusBadge = memo(function StatusBadge({ statuses, pid, date }: { statuses: Status[]; pid: number; date: ISODate }) {
@@ -82,17 +83,41 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
   </div>`;
 });
 
-/* Βγάζει ένα έντυπο από το template και ανοίγει το αρχείο στο Excel */
-export function useExport() {
-  const toast = useToast(); const { refresh } = useStore();
-  return async (kind: ExportKind, date: ISODate, label: string) => {
-    const r = await window.api.exportFile(kind, date, { open: true });
-    if (!r.ok) { toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>` }); return false; }
+/* Βγάζει ένα έντυπο από το template και ανοίγει το αρχείο στο Excel.
+   Πρώτα ο προέλεγχος (έρευνα §3.6): ✕ σταματά με «Δείξε μου», ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό. */
+type Gate = { kind: ExportKind; date: ISODate; label: string; checks: Check[]; resolve: (ok: boolean) => void };
+const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string) => Promise<boolean>>(async () => false);
+const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
+  guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['records', { recTab: 'pun' }],
+  settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}]
+};
+export function ExportProvider({ children }: P) {
+  const toast = useToast(); const { refresh } = useStore(); const nav = useNav();
+  const [gate, setGate] = useState<Gate | null>(null);
+  const exec = useCallback(async (kind: ExportKind, date: ISODate, label: string, ack: boolean): Promise<boolean> => {
+    const r = await window.api.exportFile(kind, date, { open: true, ack });
+    if (!r.ok) {
+      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate({ kind, date, label, checks: r.checks!, resolve }));
+      toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack); } }] : undefined });
+      return false;
+    }
     await refresh();
     toast({ text: html`<span>Βγήκε ${label}: <b>${r.file.split(/[\\/]/).pop()}</b>${r.warnings.length ? html`<br/>⚠ ${r.warnings.join(' · ')}` : ''}</span>`, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('output') }] });
     return true;
-  };
+  }, [toast, refresh]);
+  const start = useCallback((kind: ExportKind, date: ISODate, label: string) => exec(kind, date, label, false), [exec]);
+  const close = (ok: boolean) => { const g = gate; setGate(null); g && g.resolve(ok); };
+  const errs = gate ? gate.checks.filter(c => c.level === 'err') : [];
+  const warns = gate ? gate.checks.filter(c => c.level === 'warn') : [];
+  const show = (c: Check) => { const g = gate!; close(false); if (c.go) { const [v, p] = GO[c.go](g.date); nav.go(v, p); } };
+  return html`<${ExportCtx.Provider} value=${start}>${children}
+    ${gate && html`<${Dialog} role="alertdialog" title=${errs.length ? 'Δεν μπορεί να βγει ' + gate.label : 'Έλεγχος πριν βγει ' + gate.label} description=${dayName(gate.date) + ' ' + dmy(gate.date)} onClose=${() => close(false)}
+      footer=${errs.length ? html`<${Button} data-autofocus="" onClick=${() => close(false)}>Κλείσιμο<//>` : html`<${Button} variant="outline" data-autofocus="" onClick=${() => close(false)}>Άκυρο<//><${Button} onClick=${async () => { const g = gate!; setGate(null); g.resolve(await exec(g.kind, g.date, g.label, true)); }}>Το ξέρω, συνέχισε<//>`}>
+      <ul className="preflight">${[...errs, ...warns].map((c, i) => html`<li key=${i} className=${c.level === 'err' ? 'is-err' : 'is-warn'}><span className="preflight__ic">${c.level === 'err' ? '✕' : '⚠'}</span><span>${c.text}</span>${c.go && html`<${Button} size="sm" variant="link" onClick=${() => show(c)}>Δείξε μου<//>`}</li>`)}</ul>
+      <p className="note" style=${{ margin: 0 }}>${errs.length ? 'Διόρθωσε τα ✕ και ξαναδοκίμασε. Έτσι δεν φεύγει ποτέ λάθος έντυπο.' : 'Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.'}</p>
+    <//>`}<//>`;
 }
+export const useExport = () => useContext(ExportCtx);
 export function ExportButton({ kind, date, label, variant, size, disabled }: P) {
   const ex = useExport(); const [busy, setBusy] = useState(false);
   return html`<${Button} variant=${variant} size=${size} disabled=${busy || disabled} onClick=${async () => { setBusy(true); try { await ex(kind, date, label); } finally { setBusy(false); } }}>${busy ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`;
@@ -103,3 +128,10 @@ export function TemplateNote({ ids }: { ids: string[] }) {
   return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.id}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates')}>Templates<//></span>`;
 }
 type Boot = import('../shared/api').Boot;
+
+/* Ορατό ενεργό φίλτρο με ✕ (έρευνα §3.7) */
+export function ActiveFilter({ parts, onClear }: { parts: (string | false | null | undefined)[]; onClear: () => void }) {
+  const ps = parts.filter(Boolean) as string[];
+  if (!ps.length) return null;
+  return html`<span className="actfilter" role="status">Φίλτρο: <b>${ps.join(' · ')}</b><button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο" onClick=${onClear}>✕</button></span>`;
+}

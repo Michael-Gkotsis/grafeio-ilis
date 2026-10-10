@@ -4,6 +4,7 @@ import { emptyState, type AppState, type AuditEntry, type Person } from '../shar
 import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
 import type { Api, CmdResult } from '../shared/api';
+import { preflight, hasErrors } from '../shared/preflight';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
@@ -46,11 +47,20 @@ export function mockApi(): Api {
       const u = undo.pop(); if (!u) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
       state = u.prev; const e = audit.find(x => x.id === u.id); if (e) e.undone = true; return res('Αναιρέθηκε');
     },
-    exportFile: async (kind, date) => ({ ok: true, file: '(δοκιμή) ' + kind + ' ' + date + '.xlsx', warnings: [] }),
+    exportFile: async (kind, date, opts) => {
+      const checks = preflight(kind, state, date);
+      if (hasErrors(checks)) return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη', checks };
+      if (checks.length && !opts?.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
+      return { ok: true, file: '(δοκιμή) ' + kind + ' ' + date + '.xlsx', warnings: [] };
+    },
     pickRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     applyRoster: async () => ({ ok: false, error: 'δοκιμή' }),
     backup: async () => ({ ok: true, file: '(δοκιμή)' }),
     openFolder: async () => {},
-    chooseOutputDir: async () => null
+    chooseOutputDir: async () => null,
+    listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
+    restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
+    diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1 }),
+    setGpu: async () => {}
   };
 }

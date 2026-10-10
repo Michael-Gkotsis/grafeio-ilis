@@ -1,6 +1,5 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
-import { addDays, dm, isWeekend, parseD, type ISODate } from './dates';
-import { collator } from './text';
+import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dates';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, postTxt, shortName,
   type AppState, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
@@ -144,36 +143,76 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
 }
 export const statOf = (s: AppState, pid: number) => dutyStats(s).get(pid) || emptyStat();
 
-// --------------------------- Αυτόματη συμπλήρωση ---------------------------
-// Μόνο όσοι επιτρέπονται, λιγότερες υπηρεσίες πρώτα. Στις αργίες πρώτα λιγότερες αργίες.
-// Στις άοπλες θέσεις προτιμά όσους δεν μπορούν σε ένοπλη, ώστε να μένουν ένοπλοι για τις ένοπλες.
-export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number } {
+// --------------------------- Αυτόματη συμπλήρωση (σειρά δικαιοσύνης, έρευνα §3.2) ---------------------------
+// 1. Φίλτρο: όλοι οι κανόνες (καταστάσεις, δυνατότητα, ανάπαυση, ΣΚ μετά από ΣΚ).
+// 2. Στις άοπλες θέσεις πρώτα όσοι δεν μπορούν σε ένοπλη, ώστε να μένουν ένοπλοι για τις ένοπλες.
+// 3. Αργία/ΣΚ: λιγότερες αργίες → παλιότερη τελευταία αργία. Καθημερινή: παλιότερη τελευταία υπηρεσία → λιγότερες υπηρεσίες.
+// 4. Λιγότερες φορές στο ίδιο είδος θέσης.
+// 5. Ισοπαλία: κλήρωση με σταθερό σπόρο την ημερομηνία (ίδια μέρα → ίδια πρόταση, όχι αλφαβητικά).
+export function seedRank(date: ISODate, pid: number): number {
+  let h = 2166136261;
+  const str = date + ':' + pid;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+export interface Fair { total: number; hol: number; byKind: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+// Στοιχεία δικαιοσύνης ενός ατόμου για μια ημέρα: μετρά όλες τις υπηρεσίες εκτός από την ίδια την ημέρα
+export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
+  const st = statOf(s, pid);
+  const f: Fair = { total: 0, hol: 0, byKind: {}, lastBefore: '', lastHolBefore: '' };
+  for (const e of st.log) {
+    if (e.d === date) continue;
+    const kind = postBy(s, e.k)?.kind || '';
+    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1;
+    if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
+    if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
+  }
+  return f;
+}
+export function fairCompare(h: boolean, kind: string, date: ISODate) {
+  return (a: Fair & { pid: number }, b: Fair & { pid: number }) =>
+    (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : a.lastBefore.localeCompare(b.lastBefore) || a.total - b.total) ||
+    (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || seedRank(date, a.pid) - seedRank(date, b.pid);
+}
+export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   let work: AppState = { ...s, guards: { ...s.guards, [date]: g } };
-  const st = dutyStats(s);
-  const loc = new Map<number, { byKind: Record<string, number>; hol: number; total: number; last: string }>();
   const people = activePeople(s);
-  people.forEach(p => { const x = st.get(p.id) || emptyStat(); loc.set(p.id, { byKind: { ...x.byKind }, hol: x.hol, total: x.total, last: x.last || '' }); });
+  const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
   const idx = new Map<number, Set<ISODate>>();
   dutyIndex(s.guards).forEach((v, id) => idx.set(id, new Set(v)));
   const h = isHol(s.settings, date);
-  let n = 0;
+  let n = 0; const empty: string[] = [];
   for (const x of postsOf(s.settings)) {
     if (g[x.k]) continue;
-    const unarmedOnly = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
-    const cand = people.filter(p => !guardUnavailable(work, date, p.id, x.k, idx)).sort((p, q) => {
-      const a = loc.get(p.id)!, b = loc.get(q.id)!;
-      return unarmedOnly(p) - unarmedOnly(q) || (h ? a.hol - b.hol : 0) || (a.byKind[x.kind] || 0) - (b.byKind[x.kind] || 0) ||
-        a.total - b.total || a.last.localeCompare(b.last) || collator.compare(p.last, q.last);
-    })[0];
-    if (cand) {
-      g[x.k] = cand.id; n++;
-      work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
-      const l = loc.get(cand.id)!; l.byKind[x.kind] = (l.byKind[x.kind] || 0) + 1; l.total++; if (h) l.hol++; if (date > l.last) l.last = date;
-      if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
-    }
+    const unarmedFirst = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
+    const cmp = fairCompare(h, x.kind, date);
+    const cand = people.filter(p => !guardUnavailable(work, date, p.id, x.k, idx))
+      .sort((p, q) => unarmedFirst(p) - unarmedFirst(q) || cmp(fair.get(p.id)!, fair.get(q.id)!))[0];
+    if (!cand) { empty.push(x.k); continue; }
+    g[x.k] = cand.id; n++;
+    work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
+    if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
   }
-  return { guards: { ...s.guards, [date]: g }, n };
+  return { guards: { ...s.guards, [date]: g }, n, empty };
+}
+// «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
+export function whyText(s: AppState, date: ISODate, k: string): string {
+  const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
+  if (!pid || !post) return '';
+  const f = fairOf(s, pid, date);
+  const ppl = activePeople(s); const avg = (fn: (x: Fair) => number) => { const v = ppl.map(p => fn(fairOf(s, p.id, date))); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
+  const r1 = (x: number) => (Math.round(x * 10) / 10).toString().replace('.', ',');
+  const parts: string[] = [];
+  if (isHol(s.settings, date)) {
+    parts.push(f.hol + (f.hol === 1 ? ' αργία' : ' αργίες') + ' (μ.ό. ' + r1(avg(x => x.hol)) + ')');
+    parts.push(f.lastHolBefore ? 'τελευταία αργία ' + dm(f.lastHolBefore) : 'καμία αργία ως τώρα');
+  } else {
+    parts.push(f.lastBefore ?  (daysBetween(f.lastBefore, date) - 2) + ' μέρες χωρίς υπηρεσία' : 'καμία υπηρεσία ως τώρα');
+    parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
+  }
+  if (post.armed) parts.push('ένοπλος');
+  return parts.join(' · ');
 }
 
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
