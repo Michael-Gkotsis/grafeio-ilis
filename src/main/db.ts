@@ -5,6 +5,38 @@ import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { daysBetween, today } from '../shared/dates';
+
+export class CorruptDbError extends Error {}
+function quickCheck(db: Database): string | null {
+  try {
+    const r = db.exec('PRAGMA quick_check');
+    const v = r.length ? String(r[0].values[0][0]) : 'ok';
+    return v === 'ok' ? null : v;
+  } catch (e) { return String(e instanceof Error ? e.message : e); }
+}
+const sleepSync = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+export interface BackupInfo { name: string; day: string; label: string; size: number }
+export function listBackups(dir: string): BackupInfo[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(f => /^ilh_\d{4}-\d{2}-\d{2}_.*\.db$/.test(f)).sort().reverse()
+    .map(f => ({ name: f, day: f.slice(4, 14), label: f.replace(/^ilh_\d{4}-\d{2}-\d{2}_\d+_?/, '').replace(/\.db$/, ''), size: fs.statSync(path.join(dir, f)).size }));
+}
+// Καθαρή συνάρτηση για να ελέγχεται με τεστ. names: νεότερα πρώτα.
+export function backupsToDelete(names: string[], now: string): string[] {
+  const del: string[] = []; const weeks = new Set<number>(); const months = new Set<string>();
+  for (const f of [...names].sort().reverse()) {
+    const day = f.slice(4, 14); const age = daysBetween(day, now) - 1;
+    if (age < 14) continue;
+    const week = Math.floor(age / 7);
+    if (age < 14 + 56) { if (!weeks.has(week)) { weeks.add(week); continue; } del.push(f); continue; }
+    const m = day.slice(0, 7);
+    if (!months.has(m)) { months.add(m); continue; }
+    del.push(f);
+  }
+  return del;
+}
 
 const SCHEMA_VERSION = 1;
 const MIGRATIONS: string[] = [
@@ -43,9 +75,26 @@ export class Store {
     fs.mkdirSync(this.dataDir, { recursive: true });
     const SQL = await initSqlJs({ locateFile: () => this.wasmPath });
     const exists = fs.existsSync(this.file);
+    this.SQL = SQL;
     this.db = exists ? new SQL.Database(fs.readFileSync(this.file)) : new SQL.Database();
+    // PRAGMA quick_check: αν το αρχείο χάλασε (π.χ. κόπηκε το ρεύμα), το λέμε αμέσως αντί να χαθούν δεδομένα αργότερα
+    const bad = exists ? quickCheck(this.db) : null;
+    if (bad) { this.db.close(); throw new CorruptDbError(bad); }
     this.migrate(exists);
     this.load();
+  }
+  private SQL!: Awaited<ReturnType<typeof initSqlJs>>;
+
+  // Ελέγχει ένα αντίγραφο πριν την επαναφορά: ανοίγει, quick_check, έχει τους πίνακες μας
+  validate(file: string): string | null {
+    try {
+      const db = new this.SQL.Database(fs.readFileSync(file));
+      try {
+        const bad = quickCheck(db); if (bad) return bad;
+        const t = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('person','status','guard','kv','audit')");
+        return Number(t[0].values[0][0]) === 5 ? null : 'Δεν είναι βάση του Γραφείου Ίλης';
+      } finally { db.close(); }
+    } catch (e) { return String(e instanceof Error ? e.message : e); }
   }
 
   private migrate(existed: boolean) {
@@ -141,33 +190,27 @@ export class Store {
     return this.all('SELECT 1 FROM audit WHERE day = \'' + day.replace(/'/g, '') + '\' AND source = \'' + source.replace(/'/g, '') + '\' LIMIT 1').length > 0;
   }
 
-  // Ατομική εγγραφή στον δίσκο
+  // Ατομική εγγραφή στον δίσκο. Στα Windows το antivirus μπορεί να κρατά το αρχείο για λίγο: ξαναδοκιμάζουμε.
   flush(): void {
     const tmp = this.file + '.tmp';
     fs.writeFileSync(tmp, Buffer.from(this.db.export()));
-    fs.renameSync(tmp, this.file);
+    for (let i = 0; ; i++) {
+      try { fs.renameSync(tmp, this.file); return; }
+      catch (e: any) { if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e; sleepSync(50); }
+    }
   }
 
   backup(label: string, dir = path.join(this.dataDir, 'backups')): string {
     fs.mkdirSync(dir, { recursive: true });
     const d = new Date();
-    const stamp = d.toISOString().slice(0, 10) + '_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
+    const stamp = today() + '_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
     const out = path.join(dir, `ilh_${stamp}_${label}.db`);
     fs.writeFileSync(out, Buffer.from(this.db.export()));
     return out;
   }
-  // Κρατά τα τελευταία 14 ημερήσια αντίγραφα + 1 ανά μήνα (08 §3.8)
+  // Κρατά: όλα τα αντίγραφα των 14 τελευταίων ημερών, ένα ανά εβδομάδα για άλλες 8 εβδομάδες, ένα ανά μήνα μετά (έρευνα §4.2)
   pruneBackups(dir = path.join(this.dataDir, 'backups')): void {
-    if (!fs.existsSync(dir)) return;
-    const files = fs.readdirSync(dir).filter(f => /^ilh_\d{4}-\d{2}-\d{2}_.*\.db$/.test(f)).sort().reverse();
-    const keepMonths = new Set<string>(); const keepDays = new Set<string>();
-    for (const f of files) {
-      const day = f.slice(4, 14), month = f.slice(4, 11);
-      if (keepDays.size < 14 && !keepDays.has(day)) { keepDays.add(day); continue; }
-      if (keepDays.has(day) && f.includes('πριν')) continue;
-      if (!keepMonths.has(month)) { keepMonths.add(month); continue; }
-      if (!keepDays.has(day)) fs.unlinkSync(path.join(dir, f));
-    }
+    for (const f of backupsToDelete(listBackups(dir).map(b => b.name), today())) fs.unlinkSync(path.join(dir, f));
   }
   close() { this.flush(); this.db.close(); }
 }

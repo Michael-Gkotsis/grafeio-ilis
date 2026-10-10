@@ -3,7 +3,7 @@
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
 import { TYPES, PUN_KINDS, postTxt, shortName, type AppState, type DutyKind, type Person, type Rules, type Settings, type Status, type TypeKey } from './domain';
-import { fillDay, personMap, planStatusChange, postBy, isRecordExpiredOn, type StatusCmd } from './rules';
+import { capBlock, dutyBlock, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -11,7 +11,7 @@ export type Command =
   | { t: 'endStatus'; id: string }
   | { t: 'deleteStatus'; id: string }
   | { t: 'approvePun'; id: string }
-  | { t: 'assign'; date: ISODate; k: string; pid: number | null }
+  | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string }
   | { t: 'autofill'; date: ISODate }
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
@@ -43,6 +43,9 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   switch (c.t) {
     case 'declare': {
       const { cmd } = c; const plan = planStatusChange(s, cmd); const t = TYPES[cmd.type];
+      if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
+      if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
@@ -59,6 +62,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
     }
     case 'outs': {
+      // Κ-Ε1…Κ-Ε3: ο ίδιος έλεγχος και εδώ, όχι μόνο στην οθόνη
+      for (const x of c.changes) if (x.to) {
+        const r = outBlock(s, c.date, x.pid);
+        if (r) throw new Error(shortName(pm.get(x.pid)!) + ' δεν βγαίνει έξοδο: ' + r);
+      }
       const pids = new Set(c.changes.map(x => x.pid));
       const kept = s.statuses.filter(x => !(pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to));
       const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date }));
@@ -80,11 +88,21 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'assign': {
       const post = postBy(s, c.k); if (!post) throw new Error('Άγνωστη θέση');
-      return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      // Κ-Υ1, Κ-Υ3 και «ήδη σε άλλη θέση» δεν παρακάμπτονται ποτέ· ανάπαυση, ΣΚ και δυνατότητα μόνο με αιτιολογία (ερ. 13)
+      let note = '';
+      if (c.pid) {
+        if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
+        const hard = dutyBlock(s.statuses, c.date, c.pid, post) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
+        if (hard) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + hard);
+        const soft = capBlock(s, c.pid, post) || ruleBlock(s, c.date, c.pid);
+        if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
+        if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
+      }
+      return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'autofill': {
       const r = fillDay(s, c.date);
-      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων', files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'clearDay': {
       const guards = { ...s.guards }; delete guards[c.date];
@@ -134,14 +152,20 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
     if (ex) { seen.add(ex.id); updated.set(ex.id, { ...ex, ...r, id: ex.id, active: r.active ?? true }); }
     else added.push({ ...r, id: nextId++, active: r.active ?? true });
   }
-  let deact = 0;
-  const people = s.people.map(p => {
-    const u = updated.get(p.id); if (u) return u;
-    if (deactivateMissing && p.active) { deact++; return { ...p, active: false }; }
-    return p;
+  // Όσοι λείπουν από το νέο Δυναμολόγιο: αν δεν έχουν καμία καταχώρηση ή υπηρεσία σβήνονται (π.χ. λάθος γραμμές
+  // παλιάς εισαγωγής), αλλιώς γίνονται «εκτός δύναμης» για να μείνει το ιστορικό τους.
+  const used = new Set<number>(s.statuses.map(x => x.pid));
+  Object.values(s.guards).forEach(g => Object.values(g).forEach(id => used.add(id)));
+  let deact = 0, removed = 0;
+  const people = s.people.flatMap(p => {
+    const u = updated.get(p.id); if (u) return [u];
+    if (deactivateMissing && !used.has(p.id)) { removed++; return []; }
+    if (deactivateMissing && p.active) { deact++; return [{ ...p, active: false }]; }
+    return [p];
   }).concat(added);
-  const parts = [added.length + ' νέα', updated.size + ' ενημερώθηκαν'].concat(deact ? [deact + ' εκτός δύναμης'] : []);
-  return { state: { ...s, people }, text: 'Εισαγωγή από ' + source + ': ' + parts.join(', '), files: [source], source: 'import' };
+  const caps = { ...s.caps }; for (const k of Object.keys(caps)) if (!people.some(p => p.id === +k)) delete caps[+k];
+  const parts = [added.length + ' νέα', updated.size + ' ενημερώθηκαν'].concat(deact ? [deact + ' εκτός δύναμης'] : [], removed ? [removed + ' αφαιρέθηκαν'] : []);
+  return { state: { ...s, people, caps }, text: 'Εισαγωγή από ' + source + ': ' + parts.join(', '), files: [source], source: 'import' };
 }
 
 export const describeDay = (d: ISODate, today: ISODate) => dayName(d, today).toLowerCase();

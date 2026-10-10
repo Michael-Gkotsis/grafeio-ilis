@@ -1,12 +1,14 @@
 // Main process: βάση, κανόνες, αρχεία. Το UI ζητά ενέργειες μέσω IPC και παίρνει πίσω τη νέα κατάσταση.
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { Store } from './db';
+import { Store, CorruptDbError, listBackups } from './db';
+import { writeXlsx, LockedError } from './files';
+import { preflight, hasErrors } from '../shared/preflight';
 import { apply, type Command } from '../shared/commands';
 import { nowHM, today, type ISODate } from '../shared/dates';
-import type { Boot, CmdResult, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
+import type { Boot, CmdResult, Diag, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
 import { fillFroura, fillHkai, fillOuts } from './exports';
 import type { ImportRow } from '../shared/commands';
 
@@ -19,6 +21,13 @@ function writableDir(dir: string): boolean {
   try { fs.mkdirSync(dir, { recursive: true }); const t = path.join(dir, '.w'); fs.writeFileSync(t, ''); fs.unlinkSync(t); return true; } catch { return false; }
 }
 const DATA = writableDir(path.join(ROOT, 'data')) ? path.join(ROOT, 'data') : path.join(app.getPath('userData'), 'data');
+const BACKUPS = path.join(DATA, 'backups');
+const T0 = Date.now();
+// Διακόπτης GPU (έρευνα §5.6): σε παλιές κάρτες γραφικών με Windows 7 η επιτάχυνση μπορεί να κοστίζει μνήμη ή να δίνει μαύρη οθόνη.
+// Αλλάζει από την οθόνη «Διάγνωση» και ισχύει στην επόμενη εκκίνηση.
+const FLAGS = path.join(DATA, 'flags.json');
+const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
+if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
 const USER_TPL = path.join(ROOT, 'templates');   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },
@@ -61,23 +70,17 @@ function daily() {
   if (!has) { try { store.backup('ημερήσιο'); store.pruneBackups(); } catch (e) { console.error('backup', e); } }
 }
 
-function safeWrite(dir: string, name: string, data: Buffer): string {
-  fs.mkdirSync(dir, { recursive: true });
-  const ext = path.extname(name), base = name.slice(0, -ext.length);
-  for (let i = 1; i < 50; i++) {
-    const f = path.join(dir, i === 1 ? name : `${base} (${i})${ext}`);
-    try { fs.writeFileSync(f, data); return f; }
-    catch (e: any) { if (e.code !== 'EBUSY' && e.code !== 'EPERM' && e.code !== 'EACCES') throw e; } // ανοιχτό στο Excel: γράφουμε δίπλα
-  }
-  throw new Error('Δεν γράφτηκε το αρχείο. Κλείσε το στο Excel και ξαναδοκίμασε.');
-}
 // το βαρύ ExcelJS φορτώνεται μόνο όταν χρειαστεί
 const nodeRequire: NodeRequire = require;
 const excel = (): typeof import('./excel') => nodeRequire(path.join(__dirname, 'excel.js'));
 
-async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean }): Promise<ExportResult> {
+async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean }): Promise<ExportResult> {
   try {
     const s = store.state;
+    // Προέλεγχος: με ✕ δεν βγαίνει έντυπο, με ⚠ χρειάζεται επιβεβαίωση που γράφεται στο ιστορικό
+    const checks = preflight(kind, s, date);
+    if (hasErrors(checks)) return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη που πρέπει να διορθωθούν πρώτα', checks };
+    if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
     let r: { name: string; data: Buffer; warnings?: string[] };
     if (kind === 'check') r = await excel().dutyCheck(s, date.slice(0, 7));
     else {
@@ -86,11 +89,12 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
       const buf = fs.readFileSync(file);
       r = kind === 'froura' ? await fillFroura(buf, s, date) : kind === 'hkai' ? await fillHkai(buf, s, date) : await fillOuts(buf, s, date);
     }
-    const out = safeWrite(path.join(outputDir(), date.slice(0, 7)), r.name, r.data);
+    const out = await writeXlsx(path.join(outputDir(), date.slice(0, 7)), r.name, r.data);
     runCmd({ t: 'printed', date, at: nowHM(), files: [path.basename(out)] });
+    for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null);
     if (opts.open) shell.openPath(out);
     return { ok: true, file: out, warnings: r.warnings || [] };
-  } catch (e) { return fail(e); }
+  } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
 }
 
 const pending = new Map<string, { rows: ImportRow[]; file: string }>();
@@ -106,8 +110,37 @@ async function pickRoster(): Promise<ImportPreview | { ok: false; error: string 
     const added = sim.people.filter(p => !before.has(p.id)).length;
     const missing = sim.people.filter(p => before.has(p.id) && !p.active && store.state.people.find(q => q.id === p.id)!.active && !r.rows.some(x => x.asm && x.asm === p.asm)).length;
     const token = crypto.randomUUID(); pending.set(token, { rows: r.rows, file });
-    return { ok: true, token, file: path.basename(file), total: r.rows.length, active: r.rows.filter(x => x.active).length, added, updated: r.rows.length - added, missing, warnings: r.warnings, essos: r.essos };
+    return { ok: true, token, file: path.basename(file), total: r.rows.length, active: r.rows.filter(x => x.active).length, added, updated: r.rows.length - added, missing, warnings: r.warnings, essos: r.essos, skipped: r.skipped, declared: r.declared, found: r.found, suspicious: r.suspicious };
   } catch (e) { return fail(e); }
+}
+
+let ready = 0;
+// Χωρίς δίκτυο και χωρίς άδειες (έρευνα §4.3): ό,τι δεν είναι τοπικό αρχείο δεν φορτώνει
+function lockdown() {
+  const ses = session.defaultSession;
+  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  ses.setPermissionCheckHandler(() => false);
+  if (!DEV) ses.webRequest.onBeforeRequest((d, cb) => cb({ cancel: !/^(file|devtools|data|blob):/i.test(d.url) }));
+  app.on('web-contents-created', (_e, wc) => {
+    wc.on('will-attach-webview', ev => ev.preventDefault());
+    wc.on('will-navigate', ev => ev.preventDefault());
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  });
+}
+// Χαλασμένη βάση: προτείνουμε επαναφορά από το πιο πρόσφατο αντίγραφο που περνά τον έλεγχο
+async function recover(reason: string): Promise<boolean> {
+  const good = listBackups(BACKUPS).find(b => !store.validate(path.join(BACKUPS, b.name)));
+  if (!good) return false;
+  const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Ίλης', noLink: true, buttons: ['Επαναφορά', 'Έξοδος'], defaultId: 0, cancelId: 1,
+    message: 'Η βάση δεδομένων φαίνεται χαλασμένη.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΕπαναφορά από το αντίγραφο ' + good.name + ';\nΗ χαλασμένη βάση θα κρατηθεί στον φάκελο backups.' });
+  if (r.response !== 0) return false;
+  const db = path.join(DATA, 'ilh.db');
+  fs.mkdirSync(BACKUPS, { recursive: true });
+  fs.renameSync(db, path.join(BACKUPS, 'χαλασμένη_' + Date.now() + '.db'));
+  fs.copyFileSync(path.join(BACKUPS, good.name), db);
+  await store.open();
+  store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά βάσης από αντίγραφο ' + good.name + ' (η προηγούμενη ήταν χαλασμένη)', files: [], source: 'auto', undoable: false }, null);
+  return true;
 }
 
 function createWindow() {
@@ -129,9 +162,14 @@ else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(DEV ? Menu.buildFromTemplate([{ role: 'viewMenu' }]) : null);
+    lockdown();
     store = new Store(DATA, path.join(__dirname, 'sql-wasm.wasm'));
     try { await store.open(); }
-    catch (e) { dialog.showErrorBox('Γραφείο Ίλης', 'Δεν άνοιξε η βάση δεδομένων:\n' + String(e) + '\n\nΦάκελος: ' + DATA); app.quit(); return; }
+    catch (e) {
+      if (!(e instanceof CorruptDbError) || !(await recover(String(e.message)))) {
+        dialog.showErrorBox('Γραφείο Ίλης', 'Δεν άνοιξε η βάση δεδομένων:\n' + String(e) + '\n\nΦάκελος: ' + DATA); app.quit(); return;
+      }
+    }
     daily(); setInterval(daily, 10 * 60 * 1000);
 
     ipcMain.handle('boot', (): Boot => ({ state: store.state, audit: store.audit(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates() }));
@@ -149,9 +187,27 @@ else {
     ipcMain.handle('roster:apply', (_e, token: string, deactivateMissing: boolean) => {
       const p = pending.get(token); if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
       pending.delete(token);
-      try { store.backup('πριν-εισαγωγή'); } catch { /* συνεχίζουμε */ }
+      try { store.backup('πριν-εισαγωγή'); } catch (e) { return fail('Δεν πάρθηκε αντίγραφο ασφαλείας πριν την εισαγωγή: ' + String(e)); }
       return runCmd({ t: 'importPeople', rows: p.rows, source: path.basename(p.file), deactivateMissing });
     });
+    ipcMain.handle('backups:list', () => listBackups(BACKUPS));
+    ipcMain.handle('backups:restore', (_e, name: string) => {
+      const file = path.join(BACKUPS, path.basename(name));
+      const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
+      if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
+      try { store.backup('πριν-επαναφορά'); store.close(); } catch { /* συνεχίζουμε */ }
+      fs.copyFileSync(file, path.join(DATA, 'ilh.db'));
+      app.relaunch(); app.exit(0);
+      return { ok: true };
+    });
+    ipcMain.handle('diag', (): Diag => ({
+      startupMs: ready - T0,
+      procs: app.getAppMetrics().map(m => ({ type: m.type, kb: m.memory.workingSetSize, cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10 })),
+      gpuDisabled: !!readFlags().disableGpu, versions: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+      dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024), people: store.state.people.length, statuses: store.state.statuses.length, guardDays: Object.keys(store.state.guards).length,
+      dataDir: DATA, backups: listBackups(BACKUPS).length
+    }));
+    ipcMain.handle('flags:gpu', (_e, disable: boolean) => { fs.writeFileSync(FLAGS, JSON.stringify({ ...readFlags(), disableGpu: !!disable })); app.relaunch(); app.exit(0); });
     ipcMain.handle('backup', () => { try { return { ok: true, file: store.backup('χειροκίνητο') }; } catch (e) { return { ok: false, error: String(e) }; } });
     ipcMain.handle('open', (_e, which: string) => {
       const dir = which === 'output' ? outputDir() : which === 'templates' ? USER_TPL : which === 'backups' ? path.join(DATA, 'backups') : DATA;
@@ -164,6 +220,7 @@ else {
       return r.filePaths[0];
     });
     createWindow();
+    ready = Date.now();
   });
   app.on('window-all-closed', () => { try { store?.close(); } catch { /* ήδη κλειστή */ } app.quit(); });
 }

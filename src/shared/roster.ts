@@ -5,7 +5,13 @@ import type { ImportRow } from './commands';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
 export interface RawSheet { name: string; rows: CellValue[][] }
-export interface RosterResult { rows: ImportRow[]; warnings: string[]; main: string; essos: string }
+export interface RosterResult {
+  rows: ImportRow[]; warnings: string[]; main: string; essos: string;
+  skipped: string[];                 // γραμμές που αγνοήθηκαν γιατί δεν είναι άτομα (ΣΥΝΟΛΟ, 1ΟΣ…)
+  declared: number | null;           // το «ΣΥΝΟΛΟ» που γράφει το ίδιο το φύλλο
+  found: number;                     // άτομα που βρέθηκαν στο κύριο φύλλο
+  suspicious: string[];              // πέρασαν, αλλά δεν έχουν ούτε ΑΣΜ ούτε τηλέφωνο ούτε θάλαμο
+}
 
 type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post';
 const HEADERS: [Field, RegExp][] = [
@@ -34,15 +40,28 @@ function headerOf(sheet: RawSheet): { row: number; cols: Partial<Record<Field, n
   return null;
 }
 
+// Το Δυναμολόγιο έχει κάτω από τα ονόματα πίνακες συνόλων (ΣΥΝΟΛΟ, ΘΑΛΑΜΟΙ, 1ΟΣ…8ΟΣ, ΑΔΕΙΕΣ…).
+// Σε συγχωνευμένα κελιά το ίδιο κείμενο έρχεται και στο επώνυμο και στο όνομα, και το «πατρώνυμο» είναι αριθμός.
+const SUMMARY = /^(ΣΥΝΟΛΟ|ΣΥΝΟΛΑ|ΓΕΝΙΚΟ|ΘΑΛΑΜΟΙ|ΘΑΛΑΜΟΣ|ΕΙΣΑΓΩΓΕΣ|ΑΔΕΙΕΣ|ΑΝΑΡ+ΩΤΙΚΕΣ|ΣΤΡΑΤΙΩΤΕΣ|ΠΑΡΟΝΤΕΣ|ΑΠΟΝΤΕΣ|ΔΥΝΑΜΗ|ΕΚΤΟΣ|ΝΟΣΟΚΟΜΕΙΟ|ΟΥΛΑΜΟΣ|ΔΙΑΘΕΣΙΜΟΙ)\b/;
+export function isPersonRow(last: string, first: string, father: string): boolean {
+  const L = norm(last), F = norm(first), P = norm(father);
+  if (/\d/.test(L) || /\d/.test(F)) return false;           // 1ΟΣ, 8ΟΣ…
+  if (L === F) return false;                                  // συγχωνευμένο κελί
+  if (SUMMARY.test(L) || SUMMARY.test(F)) return false;
+  if (P && /^[\d\s.,]+$/.test(P)) return false;              // αριθμός στη θέση του πατρώνυμου
+  return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(F);
+}
+
 interface Rec { rank: string; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string }
-function records(sheet: RawSheet): Rec[] {
+function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
   const h = headerOf(sheet); if (!h) return [];
   const get = (row: CellValue[], f: Field) => (h.cols[f] == null ? '' : txt(row[h.cols[f]!]));
   const out: Rec[] = [];
   for (const row of sheet.rows.slice(h.row + 1)) {
     if (!row) continue;
     const last = get(row, 'last'), first = get(row, 'first');
-    if (!last || !first) continue;
+    if (!last && !first) continue;
+    if (!last || !first || !isPersonRow(last, first, get(row, 'father'))) { skipped.push(norm(last || first)); continue; }
     const roomN = parseInt(get(row, 'room'), 10);
     out.push({
       rank: norm(get(row, 'rank')), spec: norm(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
@@ -64,13 +83,18 @@ export function parseRoster(sheets: RawSheet[]): RosterResult {
   const warnings: string[] = [];
   const byName = (re: RegExp) => sheets.find(s => re.test(norm(s.name)));
   const main = byName(/^ΣΥΝΟΛΙΚΟ/) || sheets.find(s => headerOf(s) && !/ΠΟΣΤΑ|ΕΚΤΟΣ|ΑΔΕΙΕΣ|ΤΙΜΩΡ|IATR|ΙΑΤΡ/.test(norm(s.name)));
-  if (!main) return { rows: [], warnings: ['Δεν βρέθηκε φύλλο με στήλες «Επώνυμο» και «Όνομα».'], main: '', essos: '' };
+  if (!main) return { rows: [], warnings: ['Δεν βρέθηκε φύλλο με στήλες «Επώνυμο» και «Όνομα».'], main: '', essos: '', skipped: [], declared: null, found: 0, suspicious: [] };
   const essos = essosOf(txt((main.rows[0] || [])[0]));
   const posts = new Map<string, string>();
   const postSheet = byName(/^ΠΟΣΤΑ/);
   if (postSheet) for (const r of records(postSheet)) if (r.post) { posts.set(keyOf(r), r.post); if (r.asm) posts.set('#' + r.asm, r.post); }
   const out = new Map<string, Rec>();
-  for (const r of records(main)) {
+  const skipped: string[] = [];
+  let recs = records(main, skipped);
+  // Αν σχεδόν όλοι έχουν βαθμό, όσοι δεν έχουν είναι γραμμές σημειώσεων, όχι άνθρωποι
+  const withRank = recs.filter(r => r.rank).length;
+  if (withRank >= recs.length * 0.8) { const drop = recs.length - withRank; if (drop) warnings.push(drop + ' γραμμές χωρίς βαθμό αγνοήθηκαν (δεν μοιάζουν με άτομα)'); recs.filter(r => !r.rank).forEach(r => skipped.push(r.last + ' ' + r.first)); recs = recs.filter(r => r.rank); }
+  for (const r of recs) {
     const k = r.asm ? '#' + r.asm : keyOf(r);
     if (out.has(k)) { warnings.push('Διπλή εγγραφή: ' + r.last + ' ' + r.first + ' (κρατήθηκε η πρώτη)'); continue; }
     out.set(k, r);
@@ -92,5 +116,19 @@ export function parseRoster(sheets: RawSheet[]): RosterResult {
   if (noRoom) warnings.push(noRoom + ' άτομα χωρίς θάλαμο: δεν θα μπαίνουν στην πρόταση εξόδου ανά θάλαμο.');
   const noAsm = rows.filter(r => !r.asm).length;
   if (noAsm) warnings.push(noAsm + ' άτομα χωρίς ΑΣΜ: ταιριάζουν μόνο με ονοματεπώνυμο και πατρώνυμο.');
-  return { rows, warnings, main: main.name, essos };
+  // Δεύτερη ασφάλεια: το φύλλο γράφει το δικό του «ΣΥΝΟΛΟ». Αν δεν συμφωνεί με όσους βρήκαμε, το λέμε πριν την εισαγωγή.
+  const declared = declaredTotal(main);
+  const found = recs.length;
+  if (declared != null && declared !== found) warnings.unshift('Το Δυναμολόγιο γράφει ΣΥΝΟΛΟ ' + declared + ', αλλά βρέθηκαν ' + found + ' άτομα στο φύλλο ' + main.name + '. Έλεγξε τη λίστα πριν την εισαγωγή.');
+  const suspicious = rows.filter(r => r.active && !r.asm && !r.phone && r.room == null).map(r => r.last + ' ' + r.first);
+  return { rows, warnings, main: main.name, essos, skipped, declared, found, suspicious };
+}
+function declaredTotal(sheet: RawSheet): number | null {
+  for (const row of sheet.rows) {
+    if (!row) continue;
+    const i = row.findIndex(v => /^ΣΥΝΟΛΟ( ΑΤΟΜΩΝ| ΔΥΝΑΜΗΣ)?:?$/.test(up(v)));
+    if (i < 0) continue;
+    for (const v of row.slice(i + 1)) { const t = txt(v); if (/^\d+$/.test(t)) return Number(t); }
+  }
+  return null;
 }

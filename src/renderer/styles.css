@@ -249,7 +249,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .post{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.6fr);gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background)}
 .post.is-empty{border-color:var(--bad);background:var(--bad-bg)}
 .post__pos b{display:block;font-size:14px}
-.post__pos small{color:var(--muted-fg);font-family:var(--f-mono);font-size:12px}
+.post__pos{min-width:0}
+.post__pos small{color:var(--muted-fg);font-family:var(--f-mono);font-size:12px;display:flex;flex-wrap:wrap}
 .post__slot{display:flex;align-items:center;gap:6px;min-width:0}
 .post__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .duty{font-family:var(--f-mono);font-size:12px;color:var(--muted-fg);white-space:nowrap}
@@ -396,3 +397,23 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .onboard ol{padding-left:20px;line-height:1.7}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 12px}
 .err{color:var(--bad)}
+/* προέλεγχος πριν από έντυπο */
+.preflight{list-style:none;margin:0 0 12px;padding:0;border:1px solid var(--border);border-radius:var(--radius)}
+.preflight li{display:flex;gap:10px;align-items:baseline;padding:10px 12px;border-bottom:1px solid var(--border);font-size:14px}
+.preflight li:last-child{border-bottom:0}
+.preflight li > span:nth-child(2){flex:1;min-width:0}
+.preflight__ic{font-weight:700;width:16px;flex:none;text-align:center}
+.preflight .is-err .preflight__ic{color:var(--bad)}.preflight .is-err{background:var(--bad-bg)}
+.preflight .is-warn .preflight__ic{color:var(--warn)}
+/* «Γιατί αυτός;» */
+.post__who{display:flex;flex-direction:column;min-width:0;flex:1}
+.post__why{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ενεργό φίλτρο */
+.actfilter{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:2px 4px 2px 10px;border-radius:999px;background:var(--warn-bg);color:var(--foreground)}
+.actfilter button{border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:999px;color:inherit}
+.actfilter button:hover{background:rgba(0,0,0,.08)}
+.stack{display:flex;flex-direction:column;gap:16px}
+table.kv{width:100%;border-collapse:collapse;font-size:14px}
+table.kv th{text-align:left;font-weight:500;padding:4px 8px 4px 0;color:var(--muted-fg);vertical-align:top}
+table.kv td{padding:4px 8px 4px 0}
+.mono{font-family:Consolas,monospace;font-size:12px;word-break:break-all}

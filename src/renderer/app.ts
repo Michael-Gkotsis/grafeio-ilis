@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { html, Badge, Button, Icon, Kbd, Sheet, ToastProvider, useToast } from './ui';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, TemplatesScreen, CommandPalette } from './screens/other';
+import { DiagScreen } from './screens/diag';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { frouraEmpty } from './sheets';
+import { ExportProvider } from './common';
 import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot } from '../shared/api';
 import type { Command } from '../shared/commands';
@@ -13,7 +15,8 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Προσωπικό', Icon.people, PeopleScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά & ποινές', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Templates & ρυθμίσεις', Icon.gear, TemplatesScreen]
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Templates & ρυθμίσεις', Icon.gear, TemplatesScreen],
+  diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 const NAV_MAIN = ['home', 'people', 'guard', 'outs', 'records', 'strength', 'hkai'], NAV_MORE = ['history', 'templates'];
 const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['records', 'strength', 'hkai', 'history', 'templates'];
@@ -65,14 +68,15 @@ function Shell() {
       if (mod && (k === 'k' || k === 'κ')) { e.preventDefault(); setLayer({ kind: 'palette' }); }
       else if (mod && (k === 'n' || k === 'ν')) { e.preventDefault(); setLayer({ kind: 'declare', data: {} }); }
       else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); undo(); }
+      else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
     };
     document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
-  }, [undo]);
+  }, [undo, go]);
   const Screen = SCREENS[route.view][2];
   const emptyTomorrow = state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0;
   const pending = state.statuses.filter(s => s.pending).length;
   const navItem = (v: string) => html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${SCREENS[v][0]}${v === 'guard' && emptyTomorrow > 0 && html`<${Badge} tone="bad" data-tip="Κενές θέσεις στις υπηρεσίες αύριο" data-tip-side="left">${emptyTomorrow}<//>`}${v === 'records' && pending > 0 && html`<${Badge} tone="warn" data-tip="Ποινές που αιτούνται" data-tip-side="left">${pending}<//>`}</button>`;
-  return html`<${NavCtx.Provider} value=${nav}>
+  return html`<${NavCtx.Provider} value=${nav}><${ExportProvider}>
     <div className="shell">
       <header className="topbar">
         <div className="brand">${Icon.shield}Γραφείο Ίλης <small>${state.settings.unit[2] || ''}</small></div>
@@ -94,7 +98,7 @@ function Shell() {
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'palette' && html`<${CommandPalette} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(navItem)}</div><//>`}
-  <//>`;
+  <//><//>`;
 }
 
 export function App({ boot }: { boot: Boot }) {
