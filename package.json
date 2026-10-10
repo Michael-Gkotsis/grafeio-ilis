@@ -1,0 +1,39 @@
+{
+  "name": "grafeio-ilis",
+  "productName": "Γραφείο Ίλης",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Εφαρμογή γραφείου Ίλης: προσωπικό, υπηρεσίες, εξοδούχοι, ιατρικά, ποινές, ΗΚΑΙ και Excel από templates. Χωρίς internet.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "package:win": "node scripts/package-win.mjs"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "htm": "3.1.1",
+    "jszip": "3.10.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "sql.js": "1.10.3"
+  },
+  "devDependencies": {
+    "@types/node": "18.19.33",
+    "@types/react": "18.3.1",
+    "@types/react-dom": "18.3.0",
+    "@types/sql.js": "1.4.9",
+    "@vitejs/plugin-react": "4.2.1",
+    "electron": "22.3.27",
+    "esbuild": "0.20.2",
+    "typescript": "5.4.5",
+    "vite": "5.2.11",
+    "vitest": "1.6.0"
+  }
+}

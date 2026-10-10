@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+data/
+*.log
+# Πραγματικά αρχεία της μονάδας (προσωπικά δεδομένα): ποτέ στο repo
+samples-private/
+.cache/
+out/
+*.part

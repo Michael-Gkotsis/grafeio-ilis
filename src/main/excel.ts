@@ -1,0 +1,98 @@
+// Ό,τι χρειάζεται τη βιβλιοθήκη ExcelJS (βαριά): ανάγνωση Δυναμολογίου και μηνιαίος έλεγχος υπηρεσιών.
+// Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
+import ExcelJS from 'exceljs';
+import { MONTHS, parseD, type ISODate } from '../shared/dates';
+import { norm, collator } from '../shared/text';
+import { KIND_CODE, TYPES, type AppState } from '../shared/domain';
+import { activePeople, isHol, postBy, statusesOn } from '../shared/rules';
+import { parseRoster, type RawSheet, type CellValue, type RosterResult } from '../shared/roster';
+
+const plain = (v: ExcelJS.CellValue): CellValue => {
+  if (v == null) return null;
+  if (typeof v === 'object' && !(v instanceof Date)) {
+    if ('result' in v) return plain((v as ExcelJS.CellFormulaValue).result as ExcelJS.CellValue);
+    if ('richText' in v) return (v as ExcelJS.CellRichTextValue).richText.map(t => t.text).join('');
+    if ('text' in v) return String((v as ExcelJS.CellHyperlinkValue).text);
+    if ('error' in v) return null;
+  }
+  return v as CellValue;
+};
+
+export async function readRoster(file: string): Promise<RosterResult> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(file);
+  const sheets: RawSheet[] = wb.worksheets.map(ws => {
+    const rows: CellValue[][] = [];
+    const max = Math.min(ws.rowCount, 2000);
+    for (let r = 1; r <= max; r++) {
+      const row = ws.getRow(r); const vals: CellValue[] = [];
+      for (let c = 1; c <= Math.min(ws.columnCount, 40); c++) vals.push(plain(row.getCell(c).value));
+      rows.push(vals);
+    }
+    return { name: ws.name, rows };
+  });
+  return parseRoster(sheets);
+}
+
+// Μηνιαίο πλέγμα «Έλεγχος υπηρεσιών» (δείγμα 03): άτομα × ημέρες με κωδικό θέσης, γκρι ΣΚ/αργίες
+export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string; data: Buffer }> {
+  const [y, m] = ym.split('-').map(Number);
+  const nd = new Date(y, m, 0).getDate();
+  const days: ISODate[] = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
+  const per = new Map<number, Map<ISODate, string>>();
+  for (const d of days) {
+    const g = s.guards[d] || {};
+    for (const k in g) { const p = postBy(s, k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); }
+  }
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Ίλης';
+  const ws = wb.addWorksheet('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
+    views: [{ state: 'frozen', xSplit: 4, ySplit: 3 }]
+  });
+  const FIX = ['Α/Α', 'ΒΑΘΜΟΣ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ'];
+  const TAIL = ['ΘΑΛ.', 'ΣΥΝ.', 'ΑΡΓ.', 'Θ', 'Μ', 'ΛΥ'];
+  const W = FIX.length + nd + TAIL.length;
+  ws.mergeCells(1, 1, 1, W);
+  ws.getCell(1, 1).value = 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y;
+  ws.getCell(1, 1).font = { bold: true, size: 14, underline: true }; ws.getCell(1, 1).alignment = { horizontal: 'center' };
+  const thin = { style: 'thin' as const };
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const gray = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD9D9D9' } };
+  const head = ws.getRow(3);
+  [...FIX, ...days.map(d => String(parseD(d).getDate())), ...TAIL].forEach((t, i) => {
+    const c = head.getCell(i + 1); c.value = t; c.font = { bold: true, size: 9 }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
+    if (i >= FIX.length && i < FIX.length + nd && isHol(s.settings, days[i - FIX.length])) c.fill = gray;
+  });
+  const people = activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last));
+  people.forEach((p, i) => {
+    const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, string>();
+    let hol = 0; const c: Record<string, number> = {};
+    const vals: (string | number)[] = [i + 1, p.rank, p.last, p.first];
+    for (const d of days) {
+      const code = x.get(d);
+      if (code) { if (isHol(s.settings, d)) hol++; c[code] = (c[code] || 0) + 1; vals.push(code); continue; }
+      // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
+      const st = statusesOn(s.statuses, p.id, d).find(t => TYPES[t.type].code);
+      vals.push(st ? TYPES[st.type].code! : '');
+    }
+    vals.push(p.room ?? '', x.size, hol, c['Θ'] || '', c['Μ'] || '', c['ΛΥ'] || '');
+    vals.forEach((v, j) => {
+      const cell = row.getCell(j + 1); cell.value = v; cell.border = border; cell.font = { size: 9 };
+      cell.alignment = { horizontal: j === 2 || j === 3 ? 'left' : 'center', vertical: 'middle' };
+      if (j >= FIX.length && j < FIX.length + nd) {
+        if (isHol(s.settings, days[j - FIX.length])) cell.fill = gray;
+        if (typeof v === 'string' && v.includes('.')) cell.font = { size: 7, italic: true, color: { argb: 'FF666666' } };
+        else if (v) cell.font = { size: 9, bold: true };
+      }
+    });
+  });
+  ws.getColumn(1).width = 4; ws.getColumn(2).width = 7; ws.getColumn(3).width = 18; ws.getColumn(4).width = 13;
+  for (let j = 0; j < nd; j++) ws.getColumn(FIX.length + 1 + j).width = 3.6;
+  for (let j = 0; j < TAIL.length; j++) ws.getColumn(FIX.length + nd + 1 + j).width = 5;
+  const foot = 5 + people.length;
+  ws.getCell(foot, 1).value = 'Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ · γκρι: ΣΚ και αργίες · πλάγια: λόγος απουσίας (Κ.Α άδεια, ΑΝ.ΑΔ αναρρωτική, Ε.Υ, Ε.Α)';
+  ws.getCell(foot, 1).font = { size: 8, italic: true };
+  ws.pageSetup.printTitlesRow = '3:3';
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y + '.xlsx', data };
+}
