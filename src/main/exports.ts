@@ -2,26 +2,21 @@
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { collator, norm } from '../shared/text';
-import { TYPES, type AppState, type Person, type Status } from '../shared/domain';
+import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
+import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine } from '../shared/froura';
+export { FROURA_FORMS };
 
 export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ');
-const withPhone = (p: Person) => who(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '');
-// θαλαμοφύλακες: όνομα και τηλέφωνο σε δύο γραμμές μέσα στο συγχωνευμένο κελί
-const twoLines = (p: Person) => who(p) + (p.phone ? '\nΤΗΛ: ' + p.phone : '');
-const brief = (p: Person) => [p.rank, p.last, p.first].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 const byName = (a: Person, b: Person) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
+export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
 export interface ExportResult { name: string; data: Buffer; warnings: string[] }
 
-// ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01)
-const FROURA_POS: Record<string, string> = {
-  th1: 'C13', th2: 'C16', th3: 'C19', th4: 'C22', th5: 'J13', th6: 'J16', th7: 'J19', th8: 'J22',
-  mg1: 'F27', mg2: 'F28', mg3: 'F29', mg4: 'F30', mg5: 'F31'
-};
-const FROURA_ROWS = 6; // γραμμές 36–41 για τιμωρημένους και απόντες
+// ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)
+const FROURA_ROWS = 6; // γραμμές τιμωρημένων και απόντων στο κενό έντυπο
 export function punishedOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => x.type === 'PUN' && !x.pending && x.from <= d && d <= x.to);
 }
@@ -30,34 +25,35 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && x.from <= d && d <= x.to);
 }
 
-export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {
+export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven'): Promise<ExportResult> {
+  const form = FROURA_FORMS[phase];
   const wb = await Workbook.open(tpl); const ws = await wb.sheet(0); const pm = personMap(s.people);
   const warnings: string[] = [];
   const g = s.guards[d] || {};
   ws.set('L1', s.settings.unit[0]).set('L2', s.settings.unit[1]).set('L3', s.settings.unit[2]);
   ws.set('A5', 'ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ ' + titleDate(d, true));
   const p = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
-  ws.set('A9', 'Λ/Υ: ' + (p('ly') ? withPhone(p('ly')!) : ''));
-  ws.set('A10', 'Δ/Υ: ' + (p('dy') ? withPhone(p('dy')!) : ''));
-  for (const k in g) {
-    if (k === 'ly' || k === 'dy') continue;
-    const at = FROURA_POS[k]; const person = pm.get(g[k]);
-    if (!person) continue;
-    if (!at) { warnings.push('Η θέση ' + (postBy(s, k)?.label || k) + ' δεν έχει κελί στο έντυπο ΦΡΟΥΡΑ'); continue; }
-    ws.set(at, k.startsWith('mg') ? who(person) : twoLines(person));
-  }
+  ws.set('A9', 'Λ/Υ: ' + (p('ly') ? lyLine(p('ly')!) : ''));
+  ws.set('A10', 'Δ/Υ: ' + (p('dy') ? lyLine(p('dy')!) : ''));
+  const lay = frouraLayout(s, d, phase); const extra = lay.extra;
+  for (const k of lay.foreign) warnings.push('Η θέση ' + (postBy(s, k)?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
+  lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
+  if (extra.length) ws.insertRows(form.extra.after, extra.length, form.extra.after, wb);
+  extra.forEach((x, i) => { const r = form.extra.after + 1 + i; ws.set(form.extra.label + r, x.label).set(form.extra.name + r, x.name); });
+  const first = form.list + extra.length;
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const abs = absentOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const rows = Math.max(pun.length, abs.length);
-  if (rows > FROURA_ROWS) ws.insertRows(41, rows - FROURA_ROWS, 41, wb);
+  const last = first + FROURA_ROWS - 1;
+  if (rows > FROURA_ROWS) ws.insertRows(last, rows - FROURA_ROWS, last, wb);
   for (let i = 0; i < Math.max(rows, FROURA_ROWS); i++) {
-    const r = 36 + i;
+    const r = first + i;
     ws.set('A' + r, i + 1).set('H' + r, i + 1);
     const a = pun[i], b = abs[i];
-    if (a) ws.set('B' + r, brief(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, dm(a.x.to)).set('F' + r, a.x.note || '');
-    if (b) ws.set('I' + r, brief(b.p)).set('J' + r, norm((b.x.kind ? b.x.kind + ' ' : '') + TYPES[b.x.type].long)).set('K' + r, dm(b.x.from)).set('L' + r, dm(b.x.to)).set('M' + r, b.x.note || '');
+    if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, dm(a.x.to)).set('F' + r, a.x.note || '');
+    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceText(b.x.kind, TYPES[b.x.type].long)).set('K' + r, dm(b.x.from)).set('L' + r, dm(b.x.to)).set('M' + r, b.x.note || '');
   }
-  return { name: 'ΦΡΟΥΡΑ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
+  return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
 }
 
 // ------------------------------------------------------------------ ΗΚΑΙ (δείγμα 15)
@@ -66,6 +62,7 @@ const HK_COL: Record<string, string> = {
   ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y'
 };
 export class TemplateError extends Error {}
+export const HK_TEXT: Record<string, string> = { egr: 'G8', dia: 'G9', ait: 'G12', loi: 'G19', off: 'A18' };
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
   const pm = personMap(s.people); const warnings: string[] = [];
@@ -80,7 +77,11 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate): Promise<Ex
     const x = hk.rank[rank];
     fr.set('C' + r, x.n - x.attached).set('D' + r, x.attached);
     for (const [k, col] of Object.entries(HK_COL)) fr.set(col + r, x.c[k] || null);
+    if (!fr.hasFormula('AB' + r)) fr.set('AB' + r, x.c.ab || null);
   }
+  // κείμενα που γράφει ο χρήστης στην οθόνη ΗΚΑΙ (πίσω σελίδα)
+  const tx = s.hkaiManual?.[d]?.text || {};
+  for (const [k, ref] of Object.entries(HK_TEXT)) if (tx[k]) bk.set(ref, tx[k]);
   // Πίσω όψη: φρουρές της ημέρας, αποφάσεις Διοικητή, όργανα υπηρεσίας
   const g = s.guards[d] || {};
   let night = 0, day24 = 0;
@@ -108,10 +109,13 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     if (o) { outs.push({ p, st: o }); continue; }
     if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
     const post = postOf(s, d, p.id);
-    const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : TYPES[x.type].label)), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
+    // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
+    const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && x.from <= d && d <= x.to);
+    const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : TYPES[x.type].label)), ...pend.map(x => x.kind || 'ΠΟΙΝΗ'), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
     stay.push({ p, note: norm(note) });
   }
-  outs.sort((a, b) => byName(a.p, b.p)); stay.sort((a, b) => byName(a.p, b.p));
+  // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)
+  outs.sort((a, b) => byRoom(a.p, b.p)); stay.sort((a, b) => byRoom(a.p, b.p));
   return { outs, stay };
 }
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {

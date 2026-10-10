@@ -1,8 +1,8 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dates';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, postTxt, shortName,
-  type AppState, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
+  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
+  type AppState, type Baseline, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -14,13 +14,26 @@ export function personMap(people: Person[]): Map<number, Person> {
 }
 export const activePeople = (s: AppState) => s.people.filter(p => p.active);
 
+// Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ ή ΣΠΕΝ), χωρίς όσες έχουν αφαιρεθεί
 const postsIdx = new WeakMap<Settings['blocks'], Post[]>();
 export function postsOf(settings: Settings): Post[] {
-  let p = postsIdx.get(settings.blocks);
-  if (!p) { p = buildPosts(settings.blocks); postsIdx.set(settings.blocks, p); }
+  const blocks = blocksOf(settings) || settings.blocks;
+  let p = postsIdx.get(blocks);
+  if (!p) { p = buildPosts(blocks.filter(b => !b.hidden)); postsIdx.set(blocks, p); }
   return p;
 }
-export const postBy = (s: AppState, k: string): Post | undefined => postsOf(s.settings).find(p => p.k === k);
+// Όλες οι θέσεις που έχουν υπάρξει (και των δύο εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
+const allIdx = new WeakMap<Settings, Post[]>();
+export function allPosts(settings: Settings): Post[] {
+  let p = allIdx.get(settings);
+  if (!p) {
+    const seen = new Set<string>(); p = [];
+    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])])]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
+    allIdx.set(settings, p);
+  }
+  return p;
+}
+export const postBy = (s: AppState, k: string): Post | undefined => allPosts(s.settings).find(p => p.k === k);
 
 // --------------------------- αργίες ---------------------------
 export const isHol = (settings: Settings, d: ISODate) => isWeekend(d) || !!settings.holidays[d];
@@ -81,7 +94,7 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
   return null;
 }
 export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined =>
-  postsOf(s.settings).find(x => x.k !== exceptKey && (s.guards[date] || {})[x.k] === pid);
+  allPosts(s.settings).find(x => x.k !== exceptKey && (s.guards[date] || {})[x.k] === pid);
 
 // Ημερομηνίες υπηρεσίας ανά άτομο, ώστε οι κανόνες να μη σαρώνουν όλο το ιστορικό
 const idxCache = new WeakMap<Guards, Map<number, Set<ISODate>>>();
@@ -116,7 +129,10 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
   const o = postOf(s, date, pid);
   if (o) return 'Έχει υπηρεσία: ' + o.label;
   const st = statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].noOut);
-  return st ? (st.type === 'PUN' && st.kind ? st.kind : TYPES[st.type].label) + untilTxt(st, date) : null;
+  if (st) return (st.type === 'PUN' && st.kind ? st.kind : TYPES[st.type].label) + untilTxt(st, date);
+  // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
+  const pend = s.statuses.find(x => x.pid === pid && x.type === 'PUN' && x.pending && x.from <= date && date <= x.to);
+  return pend ? (pend.kind || 'Ποινή') + ' (αιτείται)' + untilTxt(pend, date) : null;
 }
 export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.outRooms[parseD(d).getDay()] || null;
 
@@ -126,7 +142,7 @@ const statsCache = new WeakMap<Guards, Map<number, DutyStat>>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
   let st = statsCache.get(s.guards);
-  if (st) return st;
+  if (st) return withBaseline(s, st);
   st = new Map();
   for (const d of Object.keys(s.guards).sort()) {
     const g = s.guards[d]; const h = isHol(s.settings, d);
@@ -139,7 +155,24 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
     }
   }
   statsCache.set(s.guards, st);
-  return st;
+  return withBaseline(s, st);
+}
+// Προηγούμενες υπηρεσίες (χωρίς ημερομηνία) προστίθενται στα σύνολα, όχι στο ημερολόγιο
+const baseCache = new WeakMap<object, { from: Map<number, DutyStat>; out: Map<number, DutyStat> }>();
+export const baseTotal = (b: Baseline | undefined) => (b ? Object.entries(b).reduce((a, [k, n]) => a + (k === 'hol' ? 0 : n || 0), 0) : 0);
+function withBaseline(s: AppState, st: Map<number, DutyStat>): Map<number, DutyStat> {
+  const base = s.baseline; if (!base || !Object.keys(base).length) return st;
+  const c = baseCache.get(base); if (c && c.from === st) return c.out;
+  const out = new Map(st);
+  for (const [id, b] of Object.entries(base)) {
+    const pid = Number(id); const x0 = st.get(pid) || emptyStat();
+    const x: DutyStat = { ...x0, byKind: { ...x0.byKind } };
+    for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) x.byKind[k] = (x.byKind[k] || 0) + n;
+    x.total += baseTotal(b); x.hol += b.hol || 0;
+    out.set(pid, x);
+  }
+  baseCache.set(base, { from: st, out });
+  return out;
 }
 export const statOf = (s: AppState, pid: number) => dutyStats(s).get(pid) || emptyStat();
 
@@ -167,6 +200,8 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
   }
+  const b = s.baseline?.[pid];
+  if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) f.byKind[k] = (f.byKind[k] || 0) + n; f.total += baseTotal(b); f.hol += b.hol || 0; }
   return f;
 }
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
@@ -233,7 +268,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd): StatusPlan {
   const files: PlanFile[] = [];
   const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [];
   const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
-  const posts = postsOf(s.settings);
+  const posts = allPosts(s.settings);
   for (const pid of cmd.pids) {
     const ov = s.statuses.find(x => x.pid === pid && overlapsRange(x, cmd.from, cmd.to) && (TYPES[x.type].cat === t.cat || (!!TYPES[x.type].away && !!t.away)));
     if (ov) overlaps.push({ pid, status: ov });
@@ -278,7 +313,9 @@ export function hkRankOf(rank: string): string {
   if (/ΟΒΑ/.test(r)) return 'ΟΒΑ Στρατιώτης';
   return 'Στρατιώτες';
 }
-export interface HkaiRow { n: number; attached: number; c: Record<string, number> }
+export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
+// Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
+export const HK_MANUAL: [string, string][] = [['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
 export interface Hkai { cols: Record<string, Person[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
@@ -298,7 +335,17 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const col = abs ? TYPES[abs.type].hkai! : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : p.post ? 'os' : null;
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
-  const kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0), apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0);
+  let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0), apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0);
+  // ό,τι γράφει ο χρήστης με το χέρι (σιδηρουργείο, πρατήριο, φυλάκια, αποσπασμένοι…, μισθοτροφοδοτηθέντες «ab»)
+  const man = s.hkaiManual?.[date]?.cells || {};
+  for (const r of Object.keys(man)) {
+    if (!rank[r]) continue;
+    for (const [k, v] of Object.entries(man[r])) {
+      if (!v) continue;
+      rank[r].c[k] = (rank[r].c[k] || 0) + v;
+      if (HK_K.some(x => x[0] === k)) kol += v; else if (HK_A.some(x => x[0] === k)) apo += v;
+    }
+  }
   const cadre = Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
   return { cols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
 }

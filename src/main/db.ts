@@ -61,7 +61,7 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual'] as const;
 
 export class Store {
   private db!: Database;
@@ -126,6 +126,8 @@ export class Store {
     s.rules = { ...DEFAULT_RULES, ...(kv.get('rules') || {}) };
     s.settings = { ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), ...(kv.get('settings') || {}) };
     s.printed = kv.get('printed') || {};
+    s.baseline = kv.get('baseline') || {};
+    s.hkaiManual = kv.get('hkaiManual') || {};
     this.state = s;
   }
 

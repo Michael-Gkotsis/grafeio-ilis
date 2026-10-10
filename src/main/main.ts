@@ -9,7 +9,7 @@ import { preflight, hasErrors } from '../shared/preflight';
 import { apply, type Command } from '../shared/commands';
 import { nowHM, today, type ISODate } from '../shared/dates';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
-import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
+import { fillFroura, fillHkai, fillOuts, TemplateError, FROURA_FORMS } from './exports';
 import type { ImportRow } from '../shared/commands';
 
 const DEV = !app.isPackaged;
@@ -38,6 +38,7 @@ if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disabl
 const USER_TPL = path.join(ROOT, 'templates');   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },
+  { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΠΕΝ)', file: 'froura-spen.xlsx' },
   { id: 'hkai', name: 'ΗΚΑΙ (μπροστινο, πισω)', file: 'hkai.xlsx' },
   { id: 'outs', name: 'Εξοδούχοι / Παραμένοντες', file: 'exodouxoi.xlsx' }
 ];
@@ -92,7 +93,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     let r: { name: string; data: Buffer; warnings?: string[] };
     if (kind === 'check') r = await excel().dutyCheck(s, date.slice(0, 7));
     else {
-      const t = TPL.find(x => x.id === kind)!; const file = tplPath(t.file);
+      const t = kind === 'froura' ? { file: FROURA_FORMS[s.settings.phase || 'sven'].file } : TPL.find(x => x.id === kind)!; const file = tplPath(t.file);
       if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + t.file + ' από τον φάκελο templates');
       const buf = fs.readFileSync(file);
       r = kind === 'froura' ? await fillFroura(buf, s, date) : kind === 'hkai' ? await fillHkai(buf, s, date) : await fillOuts(buf, s, date);

@@ -5,6 +5,7 @@ import { apply, type Ctx } from '../src/shared/commands';
 import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
 import { fakeState } from './fixtures';
+import { statOf } from '../src/shared/rules';
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
 let seq = 0;
@@ -30,9 +31,11 @@ describe('εξαγωγή Excel', () => {
     save(r.name, r.data);
     const ws = await (await Workbook.open(r.data)).sheet(0);
     expect(ws.get('A5')).toBe('ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ 12 ΟΚΤ 2026');
-    expect(ws.get('C13')).toMatch(/^ΣΤΡ|^ΔΝΕΑΣ/);
-    expect(ws.get('F27')).toBeTruthy();
-    expect(ws.get('B36')).toContain('ΣΤΡ');
+    // μόνο επώνυμο και όνομα (γραφέας, 10/10)· ο Λ/Υ με βαθμό και τηλέφωνο
+    expect(ws.get('C13')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
+    expect(ws.get('F27')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
+    expect(ws.get('B36')).not.toMatch(/ΣΤΡ|ΔΝΕΑΣ/);
+    expect(ws.get('A9')).toMatch(/^Λ\/Υ: .+, ΤΗΛ: /);
     // 8 απόντες > 6 γραμμές: οι υπογραφές κατεβαίνουν 2 γραμμές
     expect(ws.get('I43')).toBeTruthy();
     expect(ws.get('B48')).toBe('ΑΛΧΙΑΣ ΙΛΗΣ');
@@ -51,6 +54,25 @@ describe('εξαγωγή Excel', () => {
     expect(fr.formula('AA29')).toBe('E29-Z29');
     expect(bk.get('G11')).toContain('αιτείται κράτηση');
     expect(bk.get('L23')).toBe('Αυλώνας, 12 Οκτ 26');
+  });
+  it('ΗΚΑΙ: ό,τι γράφει ο γραφέας στην οθόνη μπαίνει στο έντυπο και στα αθροίσματα', async () => {
+    let s = busyState();
+    s = apply(s, { t: 'setHkaiManual', date: '2026-10-12', manual: { cells: { 'Στρατιώτες': { sid: 2, fyl: 3, ab: 5 } }, text: { egr: 'ΔΟΚΙΜΑΣΤΙΚΟ ΚΕΙΜΕΝΟ' } } }, ctx).state;
+    const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
+    const wb = await Workbook.open(r.data); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
+    expect(fr.get('L29')).toBe('2');
+    expect(fr.get('V29')).toBe('3');
+    if (!fr.hasFormula('AB29')) expect(fr.get('AB29')).toBe('5');
+    expect(fr.formula('AA29')).toBe('E29-Z29');
+    expect(bk.get('G8')).toBe('ΔΟΚΙΜΑΣΤΙΚΟ ΚΕΙΜΕΝΟ');
+  });
+  it('Προηγούμενες υπηρεσίες: μετράνε στο σύνολο και στη σειρά', () => {
+    let s = fakeState(10);
+    s = apply(s, { t: 'setBaseline', pid: 3, baseline: { th: 4, sk: 2.7 as any, hol: 1 } }, ctx).state;
+    expect(s.baseline[3]).toEqual({ th: 4, sk: 2, hol: 1 });
+    const before = statOf(fakeState(10), 3).total;
+    expect(statOf(s, 3).total).toBe(before + 6);
+    expect(statOf(s, 3).hol).toBe(statOf(fakeState(10), 3).hol + 1);
   });
   it('Εξοδούχοι/Παραμένοντες: λίστες με αρίθμηση και υποσέλιδο κάτω από τη λίστα', async () => {
     const s = busyState();
@@ -71,9 +93,41 @@ describe('εξαγωγή Excel', () => {
 
 // Golden files (έρευνα §4.4): κάθε κελί, merge και ρύθμιση σελίδας του αποτελέσματος συγκρίνεται με το αποθηκευμένο.
 // Αν αλλάξει σκόπιμα ένα έντυπο: npx vitest run -u και έλεγχος του diff στο test/__snapshots__.
+function spenState() {
+  let s = busyState();
+  s = apply(s, { t: 'setPhase', phase: 'spen' }, ctx).state;
+  s = apply(s, { t: 'addBlock', phase: 'spen', name: 'Πύλη', kind: 'other', armed: true, n: 2, hrs: '08:00-20:00' }, ctx).state;
+  s = { ...s, guards: { ...s.guards, '2026-10-12': {} } };
+  const ly = s.people.find(p => p.id === 2)!;
+  s = apply(s, { t: 'updatePerson', person: { ...ly, weapon: 'Ο-0001' } }, ctx).state;
+  s = apply(s, { t: 'autofill', date: '2026-10-12' }, ctx).state;
+  return s;
+}
+describe('ΦΡΟΥΡΑ ΣΠΕΝ', () => {
+  it('οπλοφύλακες, ζεύγη σκοπών, ΤΑΕ και νέα υπηρεσία «Πύλη» σε δική της γραμμή', async () => {
+    const s = spenState(); const g = s.guards['2026-10-12'];
+    expect(Object.keys(g)).toEqual(expect.arrayContaining(['op1', 'op4', 'sk3a', 'sk3b', 'sk4b', 'tae']));
+    const r = await fillFroura(T('froura-spen.xlsx'), s, '2026-10-12');
+    save(r.name, r.data);
+    expect(r.name).toBe('ΦΡΟΥΡΑ ΣΠΕΝ 12-10-2026.xlsx');
+    const ws = await (await Workbook.open(r.data)).sheet(0);
+    expect(ws.get('J12')).toBe('ΟΠΛΟΦΥΛΑΚΕΣ');
+    expect(ws.get('J13')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
+    expect(ws.get('J27')!.split('\n')).toHaveLength(2);
+    expect(ws.get('C33')).toBeTruthy();
+    expect(ws.get('B34')).toBe('ΠΥΛΗ 1ο'); expect(ws.get('B35')).toBe('ΠΥΛΗ 2ο'); expect(ws.get('C35')).toBeTruthy();
+    // οι τιμωρημένοι κατέβηκαν δύο γραμμές για τη «Πύλη»
+    expect(ws.get('A40')).toBe('1');
+    const ly = s.people.find(p => p.id === g.ly)!;
+    expect(ws.get('A9')).toContain(ly.weapon ? 'ΟΠΛΟ: ' + ly.weapon : 'ΤΗΛ:');
+    expect(r.warnings).toEqual([]);
+  });
+});
+
 describe('golden files', () => {
   const golden = async (data: Buffer) => { const wb = await Workbook.open(data); const out: Record<string, unknown> = {}; for (const n of wb.sheetNames()) out[n] = (await wb.sheet(n)).dump(); return out; };
   it('ΦΡΟΥΡΑ', async () => { expect(await golden((await fillFroura(T('froura.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
+  it('ΦΡΟΥΡΑ ΣΠΕΝ', async () => { expect(await golden((await fillFroura(T('froura-spen.xlsx'), spenState(), '2026-10-12')).data)).toMatchSnapshot(); });
   it('ΗΚΑΙ', async () => { expect(await golden((await fillHkai(T('hkai.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
   it('Εξοδούχοι', async () => { expect(await golden((await fillOuts(T('exodouxoi.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
 });

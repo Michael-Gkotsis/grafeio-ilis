@@ -32,6 +32,7 @@ export function mockApi(): Api {
   return {
     boot: async () => ({ state, audit, dataDir: '(δοκιμή)', outputDir: '(δοκιμή)', templatesDir: '(δοκιμή)', version: 'dev', lastUsb: null, seenUntil: 0, sessionStart: audit.length ? audit[0].id : 0, templates: [
       { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx', ok: true, custom: false },
+      { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΠΕΝ)', file: 'froura-spen.xlsx', ok: true, custom: false },
       { id: 'hkai', name: 'ΗΚΑΙ (μπροστινο, πισω)', file: 'hkai.xlsx', ok: true, custom: false },
       { id: 'outs', name: 'Εξοδούχοι / Παραμένοντες', file: 'exodouxoi.xlsx', ok: true, custom: false },
       { id: 'check', name: 'Έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', file: 'δημιουργείται από την εφαρμογή', ok: true, custom: false }] }),
