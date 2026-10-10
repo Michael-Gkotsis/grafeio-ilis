@@ -30,7 +30,7 @@ export function mockApi(): Api {
   let state = seed(); let seq = 0; const audit: AuditEntry[] = []; const undo: { id: number; prev: AppState }[] = [];
   const res = (text: string): CmdResult => ({ ok: true, state, audit: [...audit], text });
   return {
-    boot: async () => ({ state, audit, dataDir: '(δοκιμή)', outputDir: '(δοκιμή)', templatesDir: '(δοκιμή)', version: 'dev', templates: [
+    boot: async () => ({ state, audit, dataDir: '(δοκιμή)', outputDir: '(δοκιμή)', templatesDir: '(δοκιμή)', version: 'dev', lastUsb: null, seenUntil: 0, sessionStart: audit.length ? audit[0].id : 0, templates: [
       { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx', ok: true, custom: false },
       { id: 'hkai', name: 'ΗΚΑΙ (μπροστινο, πισω)', file: 'hkai.xlsx', ok: true, custom: false },
       { id: 'outs', name: 'Εξοδούχοι / Παραμένοντες', file: 'exodouxoi.xlsx', ok: true, custom: false },
@@ -61,6 +61,8 @@ export function mockApi(): Api {
     listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
     restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
     diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1 }),
-    setGpu: async () => {}
+    setGpu: async () => {},
+    usbCopy: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
+    importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' })
   };
 }

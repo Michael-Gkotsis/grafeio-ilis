@@ -4,10 +4,11 @@ import { html, cx, Badge, Button, Dialog } from './ui';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
-import { TYPES, fullName, shortName, unitOf, type Status } from '../shared/domain';
+import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } from '../shared/domain';
 import { daysBetween, dayName, dm, dmy, type ISODate } from '../shared/dates';
 import type { ExportKind } from '../shared/api';
 import type { Check } from '../shared/preflight';
+export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
 type P = any;
 
 export const StatusBadge = memo(function StatusBadge({ statuses, pid, date }: { statuses: Status[]; pid: number; date: ISODate }) {
@@ -134,4 +135,27 @@ export function ActiveFilter({ parts, onClear }: { parts: (string | false | null
   const ps = parts.filter(Boolean) as string[];
   if (!ps.length) return null;
   return html`<span className="actfilter" role="status">Φίλτρο: <b>${ps.join(' · ')}</b><button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο" onClick=${onClear}>✕</button></span>`;
+}
+
+/* Αντίγραφο σε USB (έρευνα §4.2): ένα κουμπί, και υπενθύμιση στο «Σήμερα» αν πέρασαν πάνω από 7 μέρες */
+export function useUsbCopy() {
+  const { refresh } = useStore(); const toast = useToast();
+  return useCallback(async () => {
+    const r = await window.api.usbCopy(); if (!r) return false;
+    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return false; }
+    await refresh();
+    toast({ text: r.warning ? html`<span><b>Πάρθηκε αντίγραφο, αλλά:</b> ${r.warning}</span>` : 'Πάρθηκε αντίγραφο στο ' + r.file + '. Κράτα το USB έξω από το PC.' });
+    return true;
+  }, [refresh, toast]);
+}
+
+/* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
+export function LegendDialog({ onClose }: { onClose: () => void }) {
+  const CAT: Record<string, string> = { med: 'Ιατρικό', other: 'Άλλο', pun: 'Ποινή', abs: 'Απουσία', out: 'Έξοδος' };
+  return html`<${Dialog} size="lg" title="Υπόμνημα κωδικών" description="Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ΗΚΑΙ." onClose=${onClose} footer=${html`<${Button} onClick=${onClose}>Κλείσιμο<//>`}>
+    <table className="legend"><thead><tr><th>Κωδικός</th><th>Σημαίνει</th><th>Τι κάνει</th></tr></thead><tbody>
+      ${TYPE_KEYS.map(k => { const t = TYPES[k]; return html`<tr key=${k}><td><${Badge} tone=${t.tone}>${t.label}<//></td><td>${t.long}<small className="muted"> · ${CAT[t.cat] || t.cat}${t.code ? ' · στο ημερολόγιο: ' + t.code : ''}</small></td><td>${effects(t) || 'Μπαίνει κανονικά σε υπηρεσίες και έξοδο'}${k === 'PUN' ? '. Αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί.' : ''}</td></tr>`; })}
+    </tbody></table>
+    <p className="note" style=${{ margin: '10px 0 0' }}>Στις υπηρεσίες: <b>Ένοπλη</b> θέση = δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ. <b>★</b> = υπηρεσία σε ΣΚ ή αργία. <b>⚠</b> = πέρασε παρά τον κανόνα. Στον έλεγχο υπηρεσιών: Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ.</p>
+  <//>`;
 }

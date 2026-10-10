@@ -65,6 +65,7 @@ const HK_COL: Record<string, string> = {
   yp: 'F', ey: 'G', tim: 'H', bl: 'I', os: 'J', mag: 'K', sid: 'L', kin: 'M',
   ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y'
 };
+export class TemplateError extends Error {}
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
   const pm = personMap(s.people); const warnings: string[] = [];
@@ -72,6 +73,9 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate): Promise<Ex
   fr.set('A4', 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + dmyy(d));
   fr.set('V34', s.settings.place + ', ' + dmyy(d));
   const rowsOf: [string, number][] = [...HK_OFFICERS.map((r, i) => [r, 17 + i] as [string, number]), ...HK_NCO.map((r, i) => [r, 23 + i] as [string, number])];
+  // Προέλεγχος template (έρευνα §3.6): τα αθροίσματα πρέπει να είναι τύποι, όχι γραμμένοι αριθμοί
+  const lost = rowsOf.flatMap(([, r]) => ['E', 'N', 'Z', 'AA'].map(c => c + r)).filter(ref => !fr.hasFormula(ref));
+  if (lost.length) throw new TemplateError('Το template της ΗΚΑΙ έχει χάσει τύπους στα κελιά ' + lost.slice(0, 6).join(', ') + (lost.length > 6 ? ' κ.ά.' : '') + '. Τα αθροίσματα δεν θα ήταν σωστά. Βάλε ξανά τους τύπους ή σβήσε το δικό σου hkai.xlsx από τον φάκελο templates.');
   for (const [rank, r] of rowsOf) {
     const x = hk.rank[rank];
     fr.set('C' + r, x.n - x.attached).set('D' + r, x.attached);
