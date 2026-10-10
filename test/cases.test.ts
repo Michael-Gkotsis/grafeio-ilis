@@ -49,7 +49,7 @@ describe('Κ-Υ1 ένοπλες θέσεις', () => {
 describe('Κ-Υ3 άδεια', () => {
   it('με άδεια δεν μπαίνει σε καμία θέση', () => {
     const s = declare(fakeState(20), 'LEAVE', 3, '2026-10-12', '2026-10-15');
-    expect(guardUnavailable(s, D, 3, 'mg1')).toMatch(/Άδεια/);
+    expect(guardUnavailable(s, D, 3, 'mg1')).toMatch(/^ΚΑ /);
   });
   it('μετά τη λήξη της άδειας μπαίνει ξανά', () => {
     const s = declare(fakeState(20), 'LEAVE', 3, '2026-10-12', '2026-10-15');
@@ -130,9 +130,10 @@ describe('Κ-Ε εξοδούχοι', () => {
     expect(() => outs(s, 5)).toThrow(/Περιορισμός/);
     expect(() => declare(s, 'OUT', 5, D)).toThrow(/δεν βγαίνει/);
   });
-  it('Κ-Ε3: ποινή που ακόμα αιτείται δεν εμποδίζει την έξοδο (Κ-19)', () => {
-    const s = declare(fakeState(20), 'PUN', 5, D, D, { kind: 'Περιορισμός' });
-    expect(outBlock(s, D, 5)).toBeNull();
+  it('Κ-Ε3: ποινή που ακόμα αιτείται (π.χ. κράτηση) κρατά μέσα, αν και δεν μετρά ακόμα στην ΗΚΑΙ (γραφέας, 10/10)', () => {
+    const s = declare(fakeState(20), 'PUN', 5, D, D, { kind: 'Κράτηση' });
+    expect(outBlock(s, D, 5)).toMatch(/Κράτηση \(αιτείται\)/);
+    expect(() => outs(s, 5)).toThrow(/Κράτηση/);
   });
   it('Κ-Ε4: ΔΝ', () => { expect(outs(fakeState(20), 5, 'DN').statuses.find(x => x.pid === 5)!.type).toBe('DN'); });
   it('εξοδούχος δεν μπαίνει σε υπηρεσία την ίδια μέρα', () => {
