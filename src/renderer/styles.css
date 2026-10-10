@@ -417,3 +417,10 @@ table.kv{width:100%;border-collapse:collapse;font-size:14px}
 table.kv th{text-align:left;font-weight:500;padding:4px 8px 4px 0;color:var(--muted-fg);vertical-align:top}
 table.kv td{padding:4px 8px 4px 0}
 .mono{font-family:Consolas,monospace;font-size:12px;word-break:break-all}
+.fairlist { margin: 4px 0 6px; padding-left: 20px; font-size: 13px; display: grid; gap: 3px; }
+.txt-bad { color: var(--bad); }
+.log--compact li { padding: 7px 0; }
+.log--compact .log__time { width: 112px; }
+table.legend { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.legend th { text-align: left; font-weight: 600; color: var(--muted-fg); padding: 4px 6px; border-bottom: 1px solid var(--border); }
+table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }

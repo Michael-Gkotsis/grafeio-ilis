@@ -14,6 +14,7 @@ import { backupsToDelete } from '../src/main/db';
 import { writeXlsx, isLocked, PREV_DIR, KEEP_PREV } from '../src/main/files';
 import type { AppState, TypeKey } from '../src/shared/domain';
 import { fakeState } from './fixtures';
+import { usbDue, usbAge, newsSince, USB_DAYS } from '../src/shared/reminders';
 
 let seq = 0;
 const ctx: Ctx = { today: '2026-10-12', newId: () => 'c' + ++seq };
@@ -295,5 +296,21 @@ describe('ασφαλής εγγραφή Excel', () => {
     await writeXlsx(dir, 'c.xlsx', await xlsx('ok'));
     await expect(writeXlsx(dir, 'c.xlsx', Buffer.from('όχι zip'))).rejects.toThrow();
     expect(fs.readdirSync(dir).sort()).toEqual(['c.xlsx']);
+  });
+});
+
+describe('Υπενθυμίσεις «Σήμερα»', () => {
+  it(`αντίγραφο σε USB: ποτέ ή πάνω από ${USB_DAYS} μέρες → υπενθύμιση`, () => {
+    expect(usbDue(null, '2026-10-12')).toBe(true);
+    expect(usbAge('2026-10-05', '2026-10-12')).toBe(7);
+    expect(usbDue('2026-10-05', '2026-10-12')).toBe(false);
+    expect(usbDue('2026-10-04', '2026-10-12')).toBe(true);
+    expect(usbDue('2026-09-28', '2026-10-01')).toBe(false);   // αλλαγή μήνα
+  });
+  it('τι άλλαξε: μόνο από το προηγούμενο άνοιγμα ως το τωρινό, χωρίς τα αναιρεμένα', () => {
+    const e = (id: number, undone = false) => ({ id, at: '10:00', day: '2026-10-12', text: 't' + id, files: [], source: 'app' as const, undoable: true, undone });
+    const audit = [e(9), e(8), e(7, true), e(6), e(5), e(4)];
+    expect(newsSince(audit, 5, 8).map(x => x.id)).toEqual([8, 6]);
+    expect(newsSince(audit, 9, 9)).toEqual([]);
   });
 });

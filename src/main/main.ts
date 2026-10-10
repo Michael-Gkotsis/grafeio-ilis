@@ -9,7 +9,7 @@ import { preflight, hasErrors } from '../shared/preflight';
 import { apply, type Command } from '../shared/commands';
 import { nowHM, today, type ISODate } from '../shared/dates';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
-import { fillFroura, fillHkai, fillOuts } from './exports';
+import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
 import type { ImportRow } from '../shared/commands';
 
 const DEV = !app.isPackaged;
@@ -27,6 +27,13 @@ const T0 = Date.now();
 // Αλλάζει από την οθόνη «Διάγνωση» και ισχύει στην επόμενη εκκίνηση.
 const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
+// Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
+const META = path.join(DATA, 'meta.json');
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number };
+const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
+const writeMeta = (m: Partial<Meta>) => { try { fs.writeFileSync(META, JSON.stringify({ ...readMeta(), ...m })); } catch (e) { console.error('meta', e); } };
+const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
+const USB_KEEP = 10;
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
 const USER_TPL = path.join(ROOT, 'templates');   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 const TPL: { id: ExportKind; name: string; file: string }[] = [
@@ -41,6 +48,7 @@ const templates = (): TemplateInfo[] => [
 ];
 
 let store: Store;
+let seenUntil = 0, sessionStart = 0;   // «Τι άλλαξε από το προηγούμενο άνοιγμα»: ενέργειες με id σε (seenUntil, sessionStart]
 let win: BrowserWindow | null = null;
 const ctx = () => ({ today: today(), newId: () => crypto.randomUUID() });
 const outputDir = () => store.state.settings.outputDir || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
@@ -94,7 +102,11 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null);
     if (opts.open) shell.openPath(out);
     return { ok: true, file: out, warnings: r.warnings || [] };
-  } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+  } catch (e) {
+    if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
+    if (e instanceof TemplateError) return { ok: false, error: e.message, checks: [{ level: 'err', text: e.message }] };
+    return fail(e);
+  }
 }
 
 const pending = new Map<string, { rows: ImportRow[]; file: string }>();
@@ -171,8 +183,12 @@ else {
       }
     }
     daily(); setInterval(daily, 10 * 60 * 1000);
+    sessionStart = store.audit(1)[0]?.id || 0;
+    const meta = readMeta();
+    seenUntil = typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart;
+    writeMeta({ seenAudit: sessionStart });
 
-    ipcMain.handle('boot', (): Boot => ({ state: store.state, audit: store.audit(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates() }));
+    ipcMain.handle('boot', (): Boot => ({ state: store.state, audit: store.audit(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates(), lastUsb: readMeta().lastUsb || null, seenUntil, sessionStart }));
     ipcMain.handle('cmd', (_e, cmd: Command) => runCmd(cmd));
     ipcMain.handle('undo', (): CmdResult => {
       const last = store.lastUndoable(); if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
@@ -208,6 +224,35 @@ else {
       dataDir: DATA, backups: listBackups(BACKUPS).length
     }));
     ipcMain.handle('flags:gpu', (_e, disable: boolean) => { fs.writeFileSync(FLAGS, JSON.stringify({ ...readFlags(), disableGpu: !!disable })); app.relaunch(); app.exit(0); });
+    // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
+    ipcMain.handle('usb:copy', async () => {
+      const m = readMeta();
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε το USB (ή φάκελο σε άλλο δίσκο)', defaultPath: m.usbDir && fs.existsSync(m.usbDir) ? m.usbDir : undefined, properties: ['openDirectory', 'createDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const chosen = r.filePaths[0]; const dir = path.join(chosen, USB_DIR);
+      try {
+        const file = store.backup('usb', dir);
+        const bad = store.validate(file);
+        if (bad) { fs.rmSync(file, { force: true }); return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' }; }
+        listBackups(dir).slice(USB_KEEP).forEach(b => fs.rmSync(path.join(dir, b.name), { force: true }));
+        const day = today(); writeMeta({ lastUsb: day, usbDir: chosen });
+        store.addAudit({ at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false }, null);
+        const same = path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
+        return { ok: true, file, day, warning: same ? 'Ο φάκελος είναι στον ίδιο δίσκο με την εφαρμογή. Αν χαλάσει ο δίσκος, χάνεται και το αντίγραφο. Προτίμησε USB.' : undefined };
+      } catch (e) { return fail('Δεν γράφτηκε στο ' + chosen + ': ' + (e instanceof Error ? e.message : String(e))); }
+    });
+    // Φέρνει ένα αντίγραφο από USB στη λίστα αντιγράφων, για να γίνει επαναφορά από εκεί (π.χ. σε καινούργιο PC)
+    ipcMain.handle('backups:import', async () => {
+      const m = readMeta();
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε αντίγραφο (ilh_….db)', defaultPath: m.usbDir ? path.join(m.usbDir, USB_DIR) : undefined, filters: [{ name: 'Αντίγραφο Γραφείου Ίλης', extensions: ['db'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const src = r.filePaths[0];
+      const bad = store.validate(src);
+      if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
+      const d = new Date(); const name = 'ilh_' + today() + '_' + [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
+      fs.mkdirSync(BACKUPS, { recursive: true }); fs.copyFileSync(src, path.join(BACKUPS, name));
+      return { ok: true, name };
+    });
     ipcMain.handle('backup', () => { try { return { ok: true, file: store.backup('χειροκίνητο') }; } catch (e) { return { ok: false, error: String(e) }; } });
     ipcMain.handle('open', (_e, which: string) => {
       const dir = which === 'output' ? outputDir() : which === 'templates' ? USER_TPL : which === 'backups' ? path.join(DATA, 'backups') : DATA;

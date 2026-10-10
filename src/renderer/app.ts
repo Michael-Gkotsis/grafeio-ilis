@@ -7,7 +7,7 @@ import { DiagScreen } from './screens/diag';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { frouraEmpty } from './sheets';
-import { ExportProvider } from './common';
+import { ExportProvider, LegendDialog } from './common';
 import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot } from '../shared/api';
 import type { Command } from '../shared/commands';
@@ -69,6 +69,7 @@ function Shell() {
       else if (mod && (k === 'n' || k === 'ν')) { e.preventDefault(); setLayer({ kind: 'declare', data: {} }); }
       else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); undo(); }
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
+      else if (e.key === 'F1') { e.preventDefault(); setLayer({ kind: 'legend' }); }
     };
     document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
   }, [undo, go]);
@@ -83,6 +84,7 @@ function Shell() {
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setLayer({ kind: 'palette' })}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         <div className="topbar__right">
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
+          <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setLayer({ kind: 'legend' })}>Υπόμνημα<//>
           <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
           <span className="today-lbl">Σήμερα: <b>${dow(today)} ${dmy(today)}</b></span>
         </div>
@@ -96,6 +98,7 @@ function Shell() {
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} onClose=${() => setPersonId(null)}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
+    ${layer && layer.kind === 'legend' && html`<${LegendDialog} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'palette' && html`<${CommandPalette} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(navItem)}</div><//>`}
   <//><//>`;

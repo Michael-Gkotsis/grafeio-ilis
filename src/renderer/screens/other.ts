@@ -3,7 +3,8 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote } from '../common';
+import { DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote, useUsbCopy } from '../common';
+import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type Status } from '../../shared/domain';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, hkaiCounts, isRecordExpiredOn, personMap, strengthOf } from '../../shared/rules';
@@ -13,7 +14,9 @@ import type { BackupInfo, ImportPreview } from '../../shared/api';
 type P = any;
 
 export function TodayScreen() {
-  const { state, today, tomorrow } = useStore(); const nav = useNav();
+  const { state, today, tomorrow, boot, audit } = useStore(); const nav = useNav(); const usb = useUsbCopy();
+  const due = usbDue(boot.lastUsb, today);
+  const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
   const pm = personMap(state.people);
   const c = useMemo(() => strengthOf(state, today), [state, today]);
   const empty = frouraEmpty(state, tomorrow);
@@ -53,10 +56,15 @@ export function TodayScreen() {
           ${expired.length > 0 && html`<li className="is-ok"><div><b>Αφαιρέθηκαν αυτόματα σήμερα (έληξαν χθες)</b><small>${expired.map(s => what(s) + ' του ' + shortName(pm.get(s.pid)!)).join(' · ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records', { recTab: 'expired' })}>Δες<//></li>`}
           ${ending.map(s => html`<li key=${s.id}><div><b>Λήγει σήμερα: ${what(s)} του ${shortName(pm.get(s.pid)!)}</b><small>${endTxt(s)}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.openPerson(s.pid)}>Άνοιξε<//></li>`)}
           ${dn.length > 0 && html`<li className="is-info"><div><b>${dn.length} με ΔΝ απόψε</b><small>${dn.map(shortName).join(', ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Άνοιξε<//></li>`}
-          ${!empty && !pending.length && !expired.length && !ending.length && !dn.length && html`<li className="is-ok"><div><b>Όλα εντάξει</b><small>Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</small></div></li>`}
+          ${due && html`<li><div><b>${boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο αντίγραφο σε USB' : 'Δεν έχει παρθεί ποτέ αντίγραφο σε USB'}</b><small>Αν χαλάσει ο δίσκος του PC, χάνονται όλα. Βάλε ένα USB και πάτα το κουμπί (κάθε ${USB_DAYS} μέρες).</small></div><${Button} size="sm" variant="outline" onClick=${usb}>Αντίγραφο σε USB<//></li>`}
+          ${!due && !empty && !pending.length && !expired.length && !ending.length && !dn.length && html`<li className="is-ok"><div><b>Όλα εντάξει</b><small>Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</small></div></li>`}
         </ul>
       <//>
     </div>
+    ${news.length > 0 && html`<${Card} title="Τι άλλαξε από το προηγούμενο άνοιγμα" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('history')}>Όλο το ιστορικό<//>`}>
+      <ul className="log log--compact">${news.slice(0, 10).map(e => html`<li key=${e.id}><span className="log__time">${e.day === today ? 'Σήμερα' : dow(e.day) + ' ' + dm(e.day)} ${e.at}</span><div>${e.text} <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//></div></li>`)}</ul>
+      ${news.length > 10 && html`<p className="note" style=${{ margin: '8px 0 0' }}>Και άλλες ${news.length - 10} ενέργειες στο Ιστορικό.</p>`}
+    <//>`}
   </div>`;
 }
 
@@ -231,10 +239,15 @@ function HolidaysCard() {
 }
 // Επαναφορά από αντίγραφο (έρευνα §4.2): πριν την επαναφορά κρατιέται αντίγραφο της τωρινής βάσης
 function BackupsCard() {
-  const toast = useToast();
+  const toast = useToast(); const usb = useUsbCopy(); const { boot, today } = useStore();
   const [list, setList] = useState<BackupInfo[] | null>(null); const [pick, setPick] = useState<BackupInfo | null>(null);
-  useEffect(() => { window.api.listBackups().then(setList); }, []);
+  const load = () => window.api.listBackups().then(setList);
+  useEffect(() => { load(); }, []);
+  const imp = async () => { const r = await window.api.importBackup(); if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } await load(); toast({ text: 'Το αντίγραφο μπήκε στη λίστα. Πάτα «Επαναφορά» δίπλα του.' }); };
   return html`<${Card} title="Αντίγραφα ασφαλείας">
+    <p style=${{ marginTop: 0 }}>Αυτόματα: ένα κάθε μέρα και πριν από κάθε εισαγωγή, στον φάκελο data\\backups. Επειδή είναι στον ίδιο δίσκο, πάρε και <b>αντίγραφο σε USB</b> κάθε ${USB_DAYS} μέρες.
+      Τελευταίο σε USB: <b className=${usbDue(boot.lastUsb, today) ? 'txt-bad' : ''}>${boot.lastUsb ? dow(boot.lastUsb) + ' ' + dmy(boot.lastUsb) : 'ποτέ'}</b>.</p>
+    <div className="toolbar"><${Button} onClick=${async () => { if (await usb()) load(); }}>Αντίγραφο σε USB…<//><${Button} variant="outline" onClick=${imp} data-tip="Για καινούργιο PC ή αν χάλασε η βάση: διάλεξε ένα ilh_….db από το USB και μετά «Επαναφορά»">Φέρε αντίγραφο από USB…<//><${Button} variant="ghost" onClick=${() => window.api.openFolder('backups')}>Άνοιξε τον φάκελο<//></div>
     ${!list ? 'Φόρτωση…' : !list.length ? html`<p className="note">Δεν υπάρχει ακόμα αντίγραφο. Το πρώτο κρατιέται αυτόματα σήμερα.</p>` : html`<ul className="hist">${list.slice(0, 15).map(b => html`<li key=${b.name}><span className="nw">${dow(b.day)} ${dmy(b.day)}</span> ${b.label} <span className="muted">${Math.round(b.size / 1024)} KB</span> <${Button} size="sm" variant="outline" onClick=${() => setPick(b)}>Επαναφορά<//></li>`)}</ul>`}
     ${pick && html`<${Dialog} role="alertdialog" title="Επαναφορά από αντίγραφο" description=${dmy(pick.day) + ' · ' + pick.label} onClose=${() => setPick(null)}
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setPick(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${async () => { const r = await window.api.restoreBackup(pick.name); setPick(null); if (!r.ok) toast({ text: r.error }); }}>Επαναφορά και επανεκκίνηση<//>`}>
@@ -258,7 +271,7 @@ export function TemplatesScreen() {
 }
 
 export function CommandPalette({ onClose }: P) {
-  const { state, today, tomorrow } = useStore(); const nav = useNav();
+  const { state, today, tomorrow } = useStore(); const nav = useNav(); const usb = useUsbCopy();
   const [q, setQ] = useState(''); const [sel, setSel] = useState(0); const dq = useDeferredValue(q);
   const ACTIONS = [
     { t: 'Εξοδούχοι σήμερα', k: 'ΕΞΟΔΟΥΧΟΙ ΕΞΟΔΟΣ ΔΝ ΔΙΑΝΥΚΤΕΡΕΥΣΗ ΠΑΡΑΜΕΝΟΝΤΕΣ', fn: () => nav.go('outs', { outDate: today }) },
@@ -271,6 +284,8 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
+    { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
+    { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'settings' }) },
     { t: 'Διάγνωση (μνήμη, ταχύτητα)', k: 'ΔΙΑΓΝΩΣΗ ΜΝΗΜΗ ΤΑΧΥΤΗΤΑ GPU', fn: () => nav.go('diag') },
     { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΣΤΕΛΕΧΗ ΘΑΛΑΜΟΙ', fn: () => nav.go('templates', { tab: 'settings' }) }
   ];

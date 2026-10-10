@@ -77,3 +77,17 @@ describe('golden files', () => {
   it('ΗΚΑΙ', async () => { expect(await golden((await fillHkai(T('hkai.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
   it('Εξοδούχοι', async () => { expect(await golden((await fillOuts(T('exodouxoi.xlsx'), busyState(), '2026-10-12')).data)).toMatchSnapshot(); });
 });
+
+describe('έλεγχος template', () => {
+  it('ΗΚΑΙ: αν σβηστεί ένας τύπος αθροίσματος, το έντυπο δεν βγαίνει', async () => {
+    const wb = await Workbook.open(T('hkai.xlsx')); const fr = await wb.sheet(0);
+    const xml = (fr as any).toXml ? null : null; void xml;
+    // σβήνουμε τον τύπο του E20 γράφοντας αριθμό στη θέση του, όπως θα έκανε κάποιος στο Excel
+    const zip = await (await import('jszip')).default.loadAsync(T('hkai.xlsx'));
+    const name = Object.keys(zip.files).find(f => /xl\/worksheets\/sheet1\.xml$/.test(f))!;
+    const x = (await zip.file(name)!.async('string')).replace(/(<c r="E20"[^>]*>)<f>[^<]*<\/f>(<v>[^<]*<\/v>)?/, '$1<v>5</v>');
+    zip.file(name, x);
+    const broken = await zip.generateAsync({ type: 'nodebuffer' });
+    await expect(fillHkai(broken, busyState(), '2026-10-12')).rejects.toThrow(/E20/);
+  });
+});

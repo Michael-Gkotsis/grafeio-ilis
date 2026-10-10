@@ -15,6 +15,8 @@ const api: Api = {
   listBackups: () => ipcRenderer.invoke('backups:list'),
   restoreBackup: name => ipcRenderer.invoke('backups:restore', name),
   diag: () => ipcRenderer.invoke('diag'),
-  setGpu: disable => ipcRenderer.invoke('flags:gpu', disable)
+  setGpu: disable => ipcRenderer.invoke('flags:gpu', disable),
+  usbCopy: () => ipcRenderer.invoke('usb:copy'),
+  importBackup: () => ipcRenderer.invoke('backups:import')
 };
 contextBridge.exposeInMainWorld('api', api);
