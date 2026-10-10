@@ -4,19 +4,23 @@ import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segment
 import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
-import { TYPES, CAP_KINDS, KIND_LBL, fullName, shortName, unitOf, roomTxt, postTxt, type Person, type Post, type TypeKey } from '../../shared/domain';
-import { whyText, fillDay, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
+import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
+import { whyText, fillDay, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, dm, dmy, dow, parseD, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].join(', ');
 
-function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, unavailable, pm }: P) {
+function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, unavailable, onBlocked, pm }: P) {
+  const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x) || ruleWarn);
+  if (p && swap) return html`<li className="post"><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots[0] : x.hours}</small></div>
+    <div className="post__slot"><div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gs-' + x.k} autoFocus=${true} placeholder=${'Αντί για ' + fullName(p) + '…'} date=${date} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => { setSwap(false); onBlocked(x.k, q, why); }} onChange=${(id: number) => { setSwap(false); onAssign(x.k, id, p.id); }}/></div>
+    <${Button} variant="ghost" size="sm" onClick=${() => setSwap(false)}>Άκυρο<//></div></li>`;
   return html`<li className=${cx('post', !p && 'is-empty')}><div className="post__pos"><b>${x.short}</b><small>${x.slots ? x.slots.map((t: string, i: number) => html`<span key=${i} className="nw">${(i ? ' · ' : '') + t}</span>`) : x.hours}</small></div>
-    <div className="post__slot">${p ? html`<span className="post__who"><span className="post__name">${fullName(p)}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">Γιατί: ${why}</small>`}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
-    html`<div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} unavailable=${unavailable} onChange=${(id: number) => onAssign(x.k, id)}/></div>`}</div></li>`;
+    <div className="post__slot">${p ? html`<span className="post__who"><span className="post__name">${fullName(p)}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">Γιατί: ${why}</small>`}</span>${r && html`<${Badge} tone="bad" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}<span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span><${Button} variant="ghost" size="sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left" onClick=${() => setSwap(true)}>Αλλαγή<//><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//>` :
+    html`<div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => onBlocked(x.k, q, why)} onChange=${(id: number) => onAssign(x.k, id)}/></div>`}</div></li>`;
 }
 
 function DutyCheck({ onOpen }: P) {
@@ -70,7 +74,7 @@ export function GuardScreen() {
   const g = state.guards[date] || {};
   const posts = postsOf(state.settings);
   const pm = personMap(state.people);
-  const blocks = state.settings.blocks;
+  const blocks = blocksOf(state.settings) || state.settings.blocks; const phase = state.settings.phase || 'sven';
   const empty = posts.filter(x => !g[x.k]);
   const printed = state.printed[date];
   const st = dutyStats(state);
@@ -83,21 +87,30 @@ export function GuardScreen() {
   }, [state.statuses, state.caps, state.people, date]);
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   const undoAct = { label: 'Αναίρεση', fn: () => { undo(); } };
-  const assign = useCallback(async (k: string, pid: number | null) => {
+  const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string) => {
     const x = posts.find(q => q.k === k)!;
-    if (await run({ t: 'assign', date, k, pid }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoAct] });
+    if (await run({ t: 'assign', date, k, pid, force: reason }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + (instead ? ' αντί για ' + shortName(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoAct] });
   }, [date, printed, state]);
+  // Κανόνας που παρακάμπτεται μόνο με αιτιολογία (ανάπαυση, ΣΚ, δυνατότητα)· καταστάσεις και «ήδη σε θέση» ποτέ
+  const blocked = useCallback((k: string, p: Person, why: string) => {
+    const x = posts.find(q => q.k === k)!;
+    if (dutyBlock(state.statuses, date, p.id, x) || postOf(state, date, p.id, k)) { toast({ text: shortName(p) + ' δεν μπαίνει: ' + why }); return; }
+    setForce({ k, p, why, reason: '' });
+  }, [date, state]);
   const exportX = () => ex('froura', date, 'η κατάσταση υπηρεσιών');
   const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<span key=${p.id} className="na">${shortName(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${TYPES[s.type as TypeKey].long}>${TYPES[s.type as TypeKey].label}<//></span>`)}</div>`;
   const left = html`<div className="guard__left">
     ${printed && html`<${Alert} tone="info"><span>Βγήκε Excel για αυτή τη μέρα στις <b>${printed}</b>. Αν αλλάξεις κάτι, βγάλ' το ξανά.</span><//>`}
-    <div className="guard__bar">${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}
+    <div className="guard__bar"><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}
       <span className="guard__rules">${isHol(state.settings, date) && html`<${Badge} tone="warn" data-tip="Μετρά ως αργία στον έλεγχο υπηρεσιών">Αργία: ${holName(state.settings, date)}<//>`}<${Button} size="sm" variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules)}>Κανόνες<//></span>
       ${Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoAct] }); }}>Καθάρισε<//>`}
       <${Button} size="sm" disabled=${!empty.length || !people.length} onClick=${async () => { const left = fillDay(state, date).empty.length; if (await run({ t: 'autofill', date }, false)) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoAct] }); }} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες, μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες, ίδιο είδος, κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//></div>
-    ${blocks.map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
+    ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
       return html`<${Card} key=${b.id} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
-        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul><//>`; })}
+        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul><//>`; })}
+    <div><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
     <${Card} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
       <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
       <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
@@ -105,7 +118,7 @@ export function GuardScreen() {
       <p className="note" style=${{ margin: '10px 0 0' }}>Βγαίνει από τα ιατρικά, τις άδειες και τις εξόδους. Όταν λήξει ένα ιατρικό, ο άνθρωπος ξαναμπαίνει μόνος του.</p>
     <//>
   </div>`;
-  const xl = html`<div className="guard__right"><${ExcelSheet} model=${model} fileName=${'ΦΡΟΥΡΑ ' + dmy(date).replace(/\//g, '-') + '.xlsx'} sheetName="ΦΡΟΥΡΑ ΣΒΕΝ" meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>
+  const xl = html`<div className="guard__right"><${ExcelSheet} model=${model} fileName=${'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(date).replace(/\//g, '-') + '.xlsx'} sheetName=${phase === 'spen' ? 'ΦΡΟΥΡΑ ΣΠΕΝ' : 'ΦΡΟΥΡΑ ΣΒΕΝ'} meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>
     <div className="toolbar" style=${{ marginTop: '10px' }}><${Button} onClick=${exportX}>Βγάλε το Excel<//></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
@@ -115,17 +128,41 @@ export function GuardScreen() {
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${xl}</div>` : check)}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
+    ${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
+    ${force && html`<${Dialog} title=${'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
+      footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//><${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>Βάλ' τον<//>`}>
+      <p style=${{ marginTop: 0 }}>Ο κανόνας λέει όχι. Αν έγινε αλλαγή (π.χ. ΣΚ, άλλος αρρώστησε), γράψε γιατί. Γράφεται στο Ιστορικό και η θέση φαίνεται με ⚠.</p>
+      <div className="field"><label className="field__label" htmlFor="frc">Αιτία *</label><input id="frc" className="ui-input" data-autofocus="" placeholder="π.χ. αλλαγή με συνάδελφο, εντολή λοχία" value=${force.reason} onChange=${(e: any) => setForce({ ...force, reason: e.target.value })}/></div>
+    <//>`}
   </div>`;
+}
+
+// Νέα υπηρεσία (γραφέας, 10/10): σκοπιά, πύλη, ΤΑΕ ή ό,τι άλλο. Μπαίνει στο έντυπο που ισχύει, σε δική της γραμμή.
+export function AddBlockDialog({ onClose }: P) {
+  const { state, run } = useStore(); const toast = useToast();
+  const phase: Phase = state.settings.phase || 'sven';
+  const [f, setF] = useState({ name: '', kind: 'other' as DutyKind, armed: false, n: 1, hrs: '' });
+  const save = async () => { if (await run({ t: 'addBlock', phase, ...f }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + '. Τη βλέπεις στις θέσεις και στο έντυπο.' }); } };
+  return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + PHASE_NAME[phase] + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim()} onClick=${save}>Προσθήκη<//>`}>
+    <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
+    <div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="nb-k">Είδος (για τη δυνατότητα και τον έλεγχο)</label><select id="nb-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value, armed: e.target.value === 'op' || e.target.value === 'sk' ? true : f.armed })}>${(['other', 'sk', 'op', 'th', 'tae', 'mg'] as DutyKind[]).map(k => html`<option key=${k} value=${k}>${KIND_NAME[k]}</option>`)}</select></div>
+      <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
+    </div>
+    <div className="field"><label className="field__label" htmlFor="nb-h">Ώρες</label><input id="nb-h" className="ui-input" placeholder="π.χ. 08:00-20:00 (κενό = όλη μέρα)" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/></div>
+    <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ</small></span></label>
+  <//>`;
 }
 
 /* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
 const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
 const roomsTxt = (rs: number[]) => rs[0] + '–' + rs[rs.length - 1];
-const OutRow = memo(function OutRow({ p, style, reason, value, changed, onSet, onOpen }: P) {
+const OutRow = memo(function OutRow({ p, style, reason, value, changed, onSet, onOpen, noDn }: P) {
   return html`<div className=${cx('orow', changed && 'is-changed', reason && 'is-blocked')} style=${style}>
-    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${unitOf(p)} · ${roomTxt(p)}</small></div>
+    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unitOf(p)}${p.dn ? ' · δικαίωμα ΔΝ' : ''}</small></div>
     ${reason ? html`<${Badge} tone="outline" data-tip="Δεν βγαίνει έξοδο σύμφωνα με τους κανόνες">✕ ${reason}<//>` :
-    html`<div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${OUT_OPTS.map(o => html`<button key=${o.value} type="button" aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}</button>`)}</div>`}
+    html`<div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${OUT_OPTS.map(o => { const off = o.value === 'DN' && noDn && value !== 'DN'; return html`<button key=${o.value} type="button" disabled=${off} data-tip=${off ? 'Δεν έχει δικαίωμα ΔΝ (ορίζεται στην καρτέλα του)' : undefined} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}</button>`; })}</div>`}
   </div>`;
 });
 export function OutsScreen() {
@@ -139,8 +176,14 @@ export function OutsScreen() {
   const [draft, setDraft] = useState(saved);
   useEffect(() => setDraft(saved), [saved]);
   const [filter, setFilter] = useState('all'); const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [confirm, setConfirm] = useState(false);
+  const [room, setRoom] = useState<number | null>(null); const [sort, setSort] = useState('room');
+  const roomList = useMemo(() => [...new Set(people.map(p => p.room).filter((r): r is number => r != null))].sort((a, b) => a - b), [people]);
+  const dnSet = people.some(p => p.dn);   // μόλις οριστεί σε κάποιον, ΔΝ μόνο όσοι έχουν δικαίωμα
   const reasons = useMemo(() => { const m: Record<number, string | null> = {}; people.forEach(p => { m[p.id] = outBlock(state, date, p.id); }); return m; }, [state, date]);
-  const rows = useMemo(() => searchPeople(state.people, dq).filter(p => filter === 'all' || (filter === 'can' ? !reasons[p.id] : filter === 'cant' ? !!reasons[p.id] : !!draft[p.id])), [dq, filter, reasons, draft, state.people]);
+  const rows = useMemo(() => {
+    const r = searchPeople(state.people, dq).filter(p => p.active && (room == null || p.room === room) && (filter === 'all' || (filter === 'can' ? !reasons[p.id] : filter === 'cant' ? !!reasons[p.id] : !!draft[p.id])));
+    return sort === 'room' && !dq ? [...r].sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) : r;
+  }, [dq, filter, reasons, draft, state.people, room, sort]);
   const changes = useMemo(() => people.filter(p => (saved[p.id] || null) !== (draft[p.id] || null)).map(p => ({ pid: p.id, from: saved[p.id] || null, to: draft[p.id] || null })), [saved, draft, people]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
   const blockedN = people.filter(p => reasons[p.id]).length;
@@ -153,7 +196,7 @@ export function OutsScreen() {
     const kept = people.filter(p => p.room != null && rooms.includes(p.room) && reasons[p.id]).length;
     toast({ text: 'Πρόταση: θάλαμοι ' + roomsTxt(rooms) + ' έξω (' + Object.keys(n).length + '). ' + kept + ' από αυτούς μένουν λόγω κανόνων και μπαίνουν στους Παραμένοντες.' });
   };
-  const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !n[p.id]) n[p.id] = 'OUT'; }); return n; });
+  const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
   const height = useViewportHeight(mobile ? 380 : 330);
   const c0 = strengthOf(state, date);
   const awayDelta = changes.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
@@ -163,11 +206,13 @@ export function OutsScreen() {
     <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή δεν επιλέγονται."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><//>
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b> · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
-      ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">Όλοι όσοι μπορούν: έξοδος<//>`}</div>
+      ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}</div>
+    <div className="toolbar"><div className="chips" role="group" aria-label="Θάλαμος"><button type="button" className="ui-chip" aria-pressed=${room == null} onClick=${() => setRoom(null)}>Όλοι οι θάλαμοι</button>${roomList.map(r => { const n = people.filter(p => p.room === r); const out = n.filter(p => draft[p.id]).length; return html`<button key=${r} type="button" className="ui-chip" aria-pressed=${room === r} onClick=${() => setRoom(room === r ? null : r)} data-tip=${out + ' από ' + n.length + ' βγαίνουν'}>Θ${r} <span className="muted">${out}/${n.length}</span></button>`; })}</div>
+      <${Segmented} small=${true} value=${sort} onChange=${setSort} items=${[{ value: 'room', label: 'Ανά θάλαμο' }, { value: 'name', label: 'Αλφαβητικά' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/></div>
-    <div className="toolbar"><div className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι'], ['can', 'Μπορούν να βγουν'], ['cant', 'Δεν μπορούν'], ['sel', 'Επιλεγμένοι']].map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k)}>${l}</button>`)}</div><${ActiveFilter} parts=${[filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
+    <div className="toolbar"><div className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι'], ['can', 'Μπορούν να βγουν'], ['cant', 'Δεν μπορούν'], ['sel', 'Επιλεγμένοι']].map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k)}>${l}</button>`)}</div><${ActiveFilter} parts=${[room != null && 'Θάλαμος ' + room, filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); setRoom(null); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="toolbar"><${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm" disabled=${changes.length > 0}/>${changes.length > 0 && html`<span className="note">Αποθήκευσε πρώτα τις αλλαγές.</span>`}<${TemplateNote} ids=${['outs']}/></div>
-    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
+    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date + '|' + room + '|' + sort} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open} noDn=${dnSet && !p.dn}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
     ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
       <ul className="hist">${changes.map(c => html`<li key=${c.pid}><b>${shortName(personMap(state.people).get(c.pid)!)}</b> <span className="muted">${c.from ? TYPES[c.from].label : 'Μένει'} →</span> ${c.to ? html`<${Badge} tone=${TYPES[c.to].tone}>${TYPES[c.to].label}<//>` : 'Μένει'}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>

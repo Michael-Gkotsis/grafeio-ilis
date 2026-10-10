@@ -20,7 +20,7 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date }: { 
 });
 
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
-export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus }: P) {
+export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked }: P) {
   const { state, today } = useStore();
   const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [sel, setSel] = useState(0);
   const dq = useDeferredValue(q);
@@ -28,7 +28,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
   const pm = useMemo(() => new Map(state.people.map(p => [p.id, p])), [state.people]);
   const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).slice(0, 8).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
-  const pick = (i: number) => { const x = items[i]; if (!x || x.na) return; if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
+  const pick = (i: number) => { const x = items[i]; if (!x) return; if (x.na) { if (onBlocked) { setOpen(false); setQ(''); onBlocked(x.p, x.na); } return; } if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
   return html`<div className="picker">
     ${multiple && chosen.length > 0 && html`<div className="picker__chips">${chosen.map(pid => html`<span key=${pid} className="picker__chip">${shortName(pm.get(pid)!)}<button type="button" aria-label=${'Αφαίρεση ' + shortName(pm.get(pid)!)} onClick=${() => onChange(chosen.filter(x => x !== pid))}>✕</button></span>`)}</div>`}
     <input id=${id} className="ui-input" autoComplete="off" role="combobox" aria-expanded=${open} data-autofocus=${autoFocus ? '' : undefined}
@@ -124,9 +124,10 @@ export function ExportButton({ kind, date, label, variant, size, disabled }: P) 
   return html`<${Button} variant=${variant} size=${size} disabled=${busy || disabled} onClick=${async () => { setBusy(true); try { await ex(kind, date, label); } finally { setBusy(false); } }}>${busy ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`;
 }
 export function TemplateNote({ ids }: { ids: string[] }) {
-  const { boot } = useStore(); const nav = useNav();
-  const ts = ids.map(id => boot.templates.find(t => t.id === id)).filter(Boolean) as Boot['templates'];
-  return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.id}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates')}>Templates<//></span>`;
+  const { boot, state } = useStore(); const nav = useNav();
+  const spen = state.settings.phase === 'spen';
+  const ts = ids.map(id => boot.templates.find(t => t.id === id && (id !== 'froura' || (t.file === 'froura-spen.xlsx') === spen))).filter(Boolean) as Boot['templates'];
+  return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.file}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates')}>Templates<//></span>`;
 }
 type Boot = import('../shared/api').Boot;
 

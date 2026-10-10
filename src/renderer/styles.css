@@ -424,3 +424,4 @@ table.kv td{padding:4px 8px 4px 0}
 table.legend { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.legend th { text-align: left; font-weight: 600; color: var(--muted-fg); padding: 4px 6px; border-bottom: 1px solid var(--border); }
 table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.rule.is-off { opacity: .6; }
