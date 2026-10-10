@@ -3,7 +3,7 @@
 import { dm, type ISODate } from './dates';
 import { TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, capBlock, dutyBlock, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, HK_A, HK_K, HK_NCO, HK_OFFICERS
+  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, HK_A, HK_K, HK_NCO, HK_OFFICERS
 } from './rules';
 import type { ExportKind } from './api';
 
@@ -34,7 +34,7 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     const hard = dutyBlock(s.statuses, date, pid, x);
     if (hard) out.push({ level: 'err', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
     else if (outOn(s, pid, date)) out.push({ level: 'err', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
-    const soft = capBlock(s, pid, x) || ruleBlock({ ...s, guards: { ...s.guards, [date]: {} } }, date, pid);
+    const soft = capBlock(s, pid, x) || ruleBlock({ ...s, guards: { ...s.guards, [date]: {} } }, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
   }
   return out;

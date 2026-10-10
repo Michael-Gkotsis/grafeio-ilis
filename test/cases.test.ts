@@ -6,13 +6,13 @@ import os from 'os';
 import path from 'path';
 import JSZip from 'jszip';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { dutyBlock, fillDay, guardUnavailable, isHol, outBlock, ruleBlock, statusesOn, whyText, seedRank, fairOf, isRecordExpiredOn } from '../src/shared/rules';
+import { dutyBlock, lastResort, fillDay, guardUnavailable, isHol, outBlock, ruleBlock, statusesOn, whyText, seedRank, fairOf, isRecordExpiredOn } from '../src/shared/rules';
 import { preflight, hasErrors } from '../src/shared/preflight';
 import { parseRoster, isPersonRow } from '../src/shared/roster';
 import { addDays, daysBetween, dow, milDate } from '../src/shared/dates';
 import { backupsToDelete } from '../src/main/db';
 import { writeXlsx, isLocked, PREV_DIR, KEEP_PREV } from '../src/main/files';
-import type { AppState, TypeKey } from '../src/shared/domain';
+import { DEFAULT_BLOCKS_SPEN, DEFAULT_SETTINGS, migrateSettings, type AppState, type TypeKey } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 import { usbDue, usbAge, newsSince, USB_DAYS } from '../src/shared/reminders';
 
@@ -32,10 +32,12 @@ describe('Κ-Υ1 ένοπλες θέσεις', () => {
       expect(() => run(s, { t: 'assign', date: D, k: 'th1', pid: 2 })).toThrow();
     });
   }
-  it('ΕΑ: επιτρέπεται σε άοπλη θέση (Κ-Υ2)', () => {
+  it('ΕΑ: επιτρέπεται σε άοπλη θέση (Κ-Υ2), αλλά όχι σε μαγειρεία (λοχίας, 10/10)', () => {
     const s = declare(armed(fakeState(20)), 'EA', 2, D);
-    expect(guardUnavailable(s, D, 2, 'mg1')).toBeNull();
-    expect(run(s, { t: 'assign', date: D, k: 'mg1', pid: 2 }).guards[D].mg1).toBe(2);
+    expect(guardUnavailable(s, D, 2, 'th5')).toBeNull();
+    expect(run(s, { t: 'assign', date: D, k: 'th5', pid: 2 }).guards[D].th5).toBe(2);
+    expect(guardUnavailable(s, D, 2, 'mg1')).toMatch(/Όχι μαγειρεία: ΕΑ/);
+    expect(() => run(s, { t: 'assign', date: D, k: 'mg1', pid: 2, force: 'δοκιμή' })).toThrow(/Όχι μαγειρεία/);
   });
   it('ΕΥ: ούτε σε άοπλη', () => {
     const s = declare(fakeState(20), 'EY', 2, D);
@@ -313,5 +315,65 @@ describe('Υπενθυμίσεις «Σήμερα»', () => {
     const audit = [e(9), e(8), e(7, true), e(6), e(5), e(4)];
     expect(newsSince(audit, 5, 8).map(x => x.id)).toEqual([8, 6]);
     expect(newsSince(audit, 9, 9)).toEqual([]);
+  });
+});
+
+describe('Απαντήσεις του λοχία (10/10)', () => {
+  const spen = (s: AppState, blocksSpen = s.settings.blocksSpen): AppState => ({ ...s, settings: { ...s.settings, phase: 'spen' as const, blocksSpen } });
+  it('ΕΟ/ΕΑ σε άοπλη σκοπιά: μόνο αν δεν υπάρχει άλλος, με προειδοποίηση', () => {
+    const sk = { ...DEFAULT_BLOCKS_SPEN.find(b => b.id === 'sk')!, armed: false };
+    const s = declare(spen(fakeState(3), [sk]), 'EO', 1, D);
+    expect(lastResort(s.statuses, D, 1, { kind: 'sk' })).toMatch(/ΕΟ: σκοπιά μόνο αν δεν υπάρχει άλλος/);
+    const r = fillDay(s, D);
+    expect(r.guards[D].sk3a).not.toBe(1); expect(r.guards[D].sk3b).not.toBe(1);
+    expect(r.guards[D].sk4a).toBe(1);
+    expect(r.warn).toHaveLength(1);
+    expect(r.empty).toEqual(['sk4b']);
+  });
+  it('3ο/4ο νούμερο: ξανά στο ίδιο νούμερο μετά από 3 ημέρες, μαζί με την ανάπαυση', () => {
+    let s = spen(fakeState(20));
+    s = run(s, { t: 'assign', date: D, k: 'th3', pid: 2 });
+    const D2 = addDays(D, 2), D3 = addDays(D, 3);
+    expect(guardUnavailable(s, addDays(D, 1), 2, 'th1')).toMatch(/ανάπαυση/);
+    expect(guardUnavailable(s, D2, 2, 'th3')).toMatch(/3ο νούμερο στις 13\/10/);
+    expect(guardUnavailable(s, D2, 2, 'sk3a')).toMatch(/3ο νούμερο/);
+    expect(guardUnavailable(s, D2, 2, 'th4')).toBeNull();
+    expect(guardUnavailable(s, D3, 2, 'th3')).toBeNull();
+    expect(() => run(s, { t: 'assign', date: D2, k: 'th3', pid: 2 })).toThrow(/νούμερο/);
+    expect(run(s, { t: 'assign', date: D2, k: 'th3', pid: 2, force: 'αλλαγή ΣΚ' }).guards[D2].th3).toBe(2);
+    expect(fillDay(s, D2).guards[D2].th3).not.toBe(2);
+    expect(ruleBlock({ ...s, rules: { ...s.rules, numRest: 0 } }, D2, 2, undefined, 'th3')).toBeNull();
+  });
+  it('ΤΑΕ: ένοπλη, χωρίς ώρες· οι παλιές ρυθμίσεις διορθώνονται', () => {
+    const tae = DEFAULT_BLOCKS_SPEN.find(b => b.id === 'tae')!;
+    expect(tae.armed).toBe(true); expect(tae.posts[0].hrs).toBe('');
+    const old = { ...DEFAULT_SETTINGS, rev: 0, blocksSpen: DEFAULT_BLOCKS_SPEN.map(b => (b.id === 'tae' ? { ...b, armed: false, posts: [{ ...b.posts[0], hrs: 'ημέρα' }] } : b)) };
+    const m = migrateSettings(old as any);
+    expect(m.blocksSpen.find(b => b.id === 'tae')).toMatchObject({ armed: true, posts: [{ hrs: '' }] });
+    expect(m.rev).toBe(2);
+    const turnedOff = { ...m, blocksSpen: m.blocksSpen.map(b => (b.id === 'tae' ? { ...b, armed: false } : b)) };
+    expect(migrateSettings(turnedOff).blocksSpen.find(b => b.id === 'tae')!.armed).toBe(false);
+  });
+  it('Μόνιμοι Λ/Υ και Δ/Υ: μπαίνουν κάθε μέρα εκτός σειράς· αν λείπει ένας, η θέση γεμίζει με τη σειρά', () => {
+    let s = fakeState(30); s = { ...s, settings: { ...s.settings, fixed: { ly: 7, dy: 8 } } };
+    for (const d of [D, addDays(D, 1)]) s = run(s, { t: 'autofill', date: d });
+    for (const d of [D, addDays(D, 1)]) {
+      expect(s.guards[d].ly).toBe(7); expect(s.guards[d].dy).toBe(8);
+      expect(Object.entries(s.guards[d]).filter(([, p]) => p === 7 || p === 8)).toHaveLength(2);
+    }
+    expect(preflight('froura', s, addDays(D, 1)).filter(c => c.text.includes('(Λ/Υ') || c.text.includes('(Δ/Υ'))).toEqual([]);
+    const D2 = addDays(D, 2);
+    s = declare(s, 'EY', 7, D2);
+    s = run(s, { t: 'autofill', date: D2 });
+    expect(s.guards[D2].ly).not.toBe(7); expect(s.guards[D2].ly).not.toBe(8); expect(s.guards[D2].ly).toBeTruthy();
+    expect(s.guards[D2].dy).toBe(8);
+    // αλλαγή για μία μέρα: ο αντικαταστάτης μετρά υπηρεσία κανονικά
+    const D3 = addDays(D, 3), far = addDays(D, 10);
+    const busy = new Set([D2, D3, addDays(D, 4)].flatMap(d => Object.values(s.guards[d] || {})));
+    const sub = s.people.find(p => !busy.has(p.id) && p.id !== 7 && p.id !== 8)!.id;
+    const before = fairOf(s, sub, far).total;
+    s = run(s, { t: 'assign', date: D3, k: 'ly', pid: sub });
+    expect(s.guards[D3].ly).toBe(sub);
+    expect(fairOf(s, sub, far).total).toBe(before + 1);
   });
 });

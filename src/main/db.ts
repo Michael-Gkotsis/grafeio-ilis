@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
-import { emptyState, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { emptyState, migrateSettings, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
 
 export class CorruptDbError extends Error {}
@@ -124,7 +124,7 @@ export class Store {
     for (const r of this.all<{ pid: number; data: string }>('SELECT pid, data FROM cap')) s.caps[r.pid] = JSON.parse(r.data);
     const kv = new Map(this.all<{ key: string; value: string }>('SELECT key, value FROM kv').map(r => [r.key, JSON.parse(r.value)]));
     s.rules = { ...DEFAULT_RULES, ...(kv.get('rules') || {}) };
-    s.settings = { ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), ...(kv.get('settings') || {}) };
+    s.settings = migrateSettings({ ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), rev: 0, ...(kv.get('settings') || {}) });
     s.printed = kv.get('printed') || {};
     s.baseline = kv.get('baseline') || {};
     s.hkaiManual = kv.get('hkaiManual') || {};
