@@ -5,12 +5,12 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyText, fillDay, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
+import { whyText, fillDay, lastResort, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, dm, dmy, dow, parseD, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].filter(Boolean).join(', ');
 
 function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, unavailable, onBlocked, pm }: P) {
   const [swap, setSwap] = useState(false);
@@ -53,7 +53,8 @@ function RulesDialog({ onClose }: P) {
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'setRules', rules: r, text: RULE_TXT(r) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(r) }); } }}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13).</small></span></label>
     <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση μετά από υπηρεσία (Κ-14)</label><select id="rrest" className="ui-input" value=${r.restDays} onChange=${(e: any) => setR({ ...r, restDays: +e.target.value })}><option value="0">Χωρίς</option><option value="1">1 ημέρα (όχι δύο μέρες στη σειρά)</option><option value="2">2 ημέρες</option></select></div>
-    <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα.</span></div>
+    <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><select id="rnum" className="ui-input" value=${r.numRest || 0} onChange=${(e: any) => setR({ ...r, numRest: +e.target.value })}><option value="0">Χωρίς περιορισμό</option><option value="3">Ξανά στο ίδιο νούμερο μετά από 3 ημέρες</option><option value="4">Μετά από 4 ημέρες</option></select><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
+    <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>
     <div className="field"><span className="field__label">Πώς διαλέγει η αυτόματη συμπλήρωση</span><ol className="note fairlist">
       <li>Πρώτα κρατά μόνο όσους επιτρέπουν <b>όλοι</b> οι παραπάνω κανόνες. Κανόνας δεν παραβαίνεται ποτέ σιωπηλά: αν δεν βρεθεί κανείς, η θέση μένει κενή και το λέει.</li>
       <li>Σε άοπλη θέση προτιμά όσους δεν μπορούν να πάνε σε ένοπλη, για να μείνουν οι άλλοι για τις ένοπλες.</li>
@@ -89,6 +90,7 @@ export function GuardScreen() {
   const undoAct = { label: 'Αναίρεση', fn: () => { undo(); } };
   const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [fixedOpen, setFixedOpen] = useState(false);
   const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string) => {
     const x = posts.find(q => q.k === k)!;
     if (await run({ t: 'assign', date, k, pid, force: reason }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + (instead ? ' αντί για ' + shortName(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoAct] });
@@ -109,7 +111,7 @@ export function GuardScreen() {
       <${Button} size="sm" disabled=${!empty.length || !people.length} onClick=${async () => { const left = fillDay(state, date).empty.length; if (await run({ t: 'autofill', date }, false)) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoAct] }); }} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες, μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες, ίδιο είδος, κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//></div>
     ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
       return html`<${Card} key=${b.id} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
-        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul><//>`; })}
+        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? whyText(state, date, x.k) : ''} onAssign=${assign} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}<//>`; })}
     <div><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
     <${Card} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
       <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
@@ -128,7 +130,7 @@ export function GuardScreen() {
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${xl}</div>` : check)}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
-    ${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
+    ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
     ${force && html`<${Dialog} title=${'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//><${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>Βάλ' τον<//>`}>
       <p style=${{ marginTop: 0 }}>Ο κανόνας λέει όχι. Αν έγινε αλλαγή (π.χ. ΣΚ, άλλος αρρώστησε), γράψε γιατί. Γράφεται στο Ιστορικό και η θέση φαίνεται με ⚠.</p>
@@ -138,6 +140,28 @@ export function GuardScreen() {
 }
 
 // Νέα υπηρεσία (γραφέας, 10/10): σκοπιά, πύλη, ΤΑΕ ή ό,τι άλλο. Μπαίνει στο έντυπο που ισχύει, σε δική της γραμμή.
+// Μόνιμος Λ/Υ και Δ/Υ (λοχίας, 10/10): μπαίνουν μόνοι τους κάθε μέρα, εκτός σειράς· η αλλαγή για μία μέρα γίνεται με «Αλλαγή»
+function FixedLine({ onEdit }: P) {
+  const { state } = useStore(); const pm = personMap(state.people); const f = state.settings.fixed || {};
+  const nm = (id?: number) => (id && pm.get(id) ? shortName(pm.get(id)!) : '—');
+  return html`<div className="fixedline"><span>Μόνιμοι: Λ/Υ <b>${nm(f.ly)}</b> · Δ/Υ <b>${nm(f.dy)}</b></span><${Button} size="sm" variant="ghost" onClick=${onEdit} data-tip="Μπαίνουν μόνοι τους κάθε μέρα, εκτός σειράς δικαιοσύνης. Για μία μέρα άλλαξέ τους με «Αλλαγή» στη θέση· ο αντικαταστάτης μετρά υπηρεσία κανονικά.">${f.ly || f.dy ? 'Άλλαξε' : 'Όρισε μόνιμους'}<//></div>`;
+}
+export function FixedDialog({ onClose }: P) {
+  const { state, run } = useStore(); const toast = useToast(); const pm = personMap(state.people);
+  const [f, setF] = useState<{ ly?: number; dy?: number }>({ ...(state.settings.fixed || {}) });
+  const row = (k: 'ly' | 'dy', label: string) => html`<div className="field"><label className="field__label" htmlFor=${'fx-' + k}>${label}</label>
+    ${f[k] && pm.get(f[k]!) ? html`<div className="fixedline"><b>${shortName(pm.get(f[k]!)!)}</b><${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, [k]: undefined })}>Κανένας<//></div>` :
+      html`<${PersonPicker} id=${'fx-' + k} value=${null} onChange=${(id: number) => setF({ ...f, [k]: id })} unavailable=${(p: Person) => (!p.active ? 'Εκτός δύναμης' : p.id === f[k === 'ly' ? 'dy' : 'ly'] ? 'Ήδη μόνιμος' : null)}/>`}</div>`;
+  const save = async () => {
+    const fixed: { ly?: number; dy?: number } = {}; if (f.ly) fixed.ly = f.ly; if (f.dy) fixed.dy = f.dy;
+    const txt = 'μόνιμος Λ/Υ ' + (fixed.ly ? shortName(pm.get(fixed.ly)!) : 'κανένας') + ', Δ/Υ ' + (fixed.dy ? shortName(pm.get(fixed.dy)!) : 'κανένας');
+    if (await run({ t: 'setSettings', settings: { fixed }, text: txt }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + txt + '. Μπαίνουν μόνοι τους με την αυτόματη συμπλήρωση.' }); }
+  };
+  return html`<${Dialog} title="Μόνιμοι Λ/Υ και Δ/Υ" description="Μπαίνουν μόνοι τους κάθε μέρα και δεν μπαίνουν στη σειρά για άλλες υπηρεσίες. Αν λείπει κάποιος, η θέση γεμίζει με τη σειρά. Για μία μέρα, άλλαξέ τον με «Αλλαγή» στη θέση." onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
+    ${row('ly', 'Λ/Υ')}${row('dy', 'Δ/Υ')}
+  <//>`;
+}
 export function AddBlockDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const phase: Phase = state.settings.phase || 'sven';

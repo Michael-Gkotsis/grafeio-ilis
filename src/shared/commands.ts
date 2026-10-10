@@ -3,7 +3,7 @@
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
 import { TYPES, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
-import { capBlock, dutyBlock, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
+import { capBlock, dutyBlock, lastResort, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -99,15 +99,16 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
         const hard = dutyBlock(s.statuses, c.date, c.pid, post) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
         if (hard) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + hard);
-        const soft = capBlock(s, c.pid, post) || ruleBlock(s, c.date, c.pid);
+        const soft = capBlock(s, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
+        const lr = lastResort(s.statuses, c.date, c.pid, post); if (lr) note += ' (' + lr + ')';
       }
       return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'autofill': {
       const r = fillDay(s, c.date);
-      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'clearDay': {
       const guards = { ...s.guards }; delete guards[c.date];

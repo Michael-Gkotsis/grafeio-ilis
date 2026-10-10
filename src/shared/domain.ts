@@ -33,19 +33,20 @@ export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 // ---------------------------------------------------------------------------
 // Καταστάσεις (με διάστημα ημερομηνιών). Οι σημαίες ΕΙΝΑΙ ο πίνακας κανόνων του λοχία (10 §2).
 // away: απών · noDuty: καμία υπηρεσία · noArmed: όχι ένοπλη θέση · noOut: δεν βγαίνει έξοδο
+// light: ΕΟ/ΕΑ (λοχίας, 10/10): όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
 // ---------------------------------------------------------------------------
 export type TypeKey = 'EY' | 'EA' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN';
 export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun';
 export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
-  away?: boolean; noDuty?: boolean; noArmed?: boolean; noOut?: boolean;
+  away?: boolean; noDuty?: boolean; noArmed?: boolean; noOut?: boolean; light?: boolean;
   hkai?: string;   // στήλη της ΗΚΑΙ
   code?: string;   // κωδικός στο ημερολόγιο κωλυομένων-απόντων
 }
 export const TYPES: Record<TypeKey, TypeDef> = {
   EY:    { label: 'ΕΥ', long: 'Ελεύθερος Υπηρεσίας', tone: 'ey', cat: 'med', noDuty: true, noOut: true, hkai: 'ey', code: 'Ε.Υ' },
-  EA:    { label: 'ΕΑ', long: 'Ελεύθερος Ασκήσεων', tone: 'ey', cat: 'med', noArmed: true, code: 'Ε.Α' },
-  EO:    { label: 'ΕΟ', long: 'Ελεύθερος Ορθοστασίας', tone: 'ey', cat: 'med', noArmed: true },
+  EA:    { label: 'ΕΑ', long: 'Ελεύθερος Ασκήσεων', tone: 'ey', cat: 'med', noArmed: true, light: true, code: 'Ε.Α' },
+  EO:    { label: 'ΕΟ', long: 'Ελεύθερος Ορθοστασίας', tone: 'ey', cat: 'med', noArmed: true, light: true },
   STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noArmed: true, noOut: true },
   NOS:   { label: 'Νοσοκομείο', long: 'Εισαγωγή σε νοσοκομείο', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'nos' },
   PUN:   { label: 'Ποινή', long: 'Τιμωρημένος', tone: 'bad', cat: 'pun', noOut: true, hkai: 'tim' },
@@ -57,7 +58,7 @@ export const TYPES: Record<TypeKey, TypeDef> = {
 };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef) =>
-  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', t.noOut && 'Δεν βγαίνει έξοδο'].filter(Boolean).join(' · ');
+  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο'].filter(Boolean).join(' · ');
 export const typeTip = (t: TypeDef) => t.long + (effects(t) ? ': ' + effects(t) : '');
 export const RECORD_CATS: Cat[] = ['med', 'other', 'pun'];
 export const PUN_KINDS = ['Περιορισμός', 'Κράτηση', 'Φυλάκιση', 'Στέρηση εξόδου'];
@@ -117,7 +118,8 @@ export const DEFAULT_BLOCKS_SPEN: BlockDef[] = [
   { id: 'op', kind: 'op', name: 'Οπλοφύλακες', armed: true, posts: [0, 1, 2, 3].map(i => ({ k: 'op' + (i + 1), label: 'Οπλοφύλακας ' + (i + 1) + 'ος', short: (i + 1) + 'ος', rot: i })) },
   { id: 'sk', kind: 'sk', name: 'Σκοποί', armed: true, posts: [skPost(3, 'a', 2), skPost(3, 'b', 2), skPost(4, 'a', 3), skPost(4, 'b', 3)] },
   DEFAULT_BLOCKS[3],
-  { id: 'tae', kind: 'tae', name: 'ΤΑΕ', armed: false, posts: [{ k: 'tae', label: 'ΤΑΕ', short: 'ΤΑΕ', hrs: 'ημέρα' }] }
+  // ΤΑΕ: ένοπλη, χωρίς σταθερές ώρες (λοχίας, 10/10)
+  { id: 'tae', kind: 'tae', name: 'ΤΑΕ', armed: true, posts: [{ k: 'tae', label: 'ΤΑΕ', short: 'ΤΑΕ', hrs: '' }] }
 ];
 export const blocksOf = (settings: Settings, phase: Phase = settings.phase) => (phase === 'spen' ? settings.blocksSpen : settings.blocks);
 
@@ -139,9 +141,10 @@ export type Caps = Record<number, Partial<Record<DutyKind, string | null>>>;
 export interface Rules {
   noConsecHol: boolean;                  // Κ-13
   restDays: number;                      // Κ-14
+  numRest: number;                       // 3ο/4ο νούμερο: ξανά στο ίδιο νούμερο μετά από τόσες μέρες (0 = όχι)
   outRooms: Record<number, number[]>;    // Κ-16: ημέρα εβδομάδας → θάλαμοι που βγαίνουν
 }
-export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
+export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
 export interface Settings {
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
@@ -154,6 +157,8 @@ export interface Settings {
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
+  fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
+  rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών
 }
 export const DEFAULT_SETTINGS: Settings = {
   unit: ['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2η ΕΠΧΙΑ Ν/Σ', '4η ΙΛΗ'],
@@ -169,8 +174,17 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   cadre: { 'Επίλαρχοι': 0, 'Ίλαρχοι': 0, 'Ανθυπίλαρχοι-Ανθλγοι': 0, 'Ανθυπασπιστές': 0, 'ΔΕΑ': 0, 'Αρχιλοχίες': 0, 'Επιλοχίες': 0 },
   signers: { sergeant: '', commander: '' },
-  outputDir: ''
+  outputDir: '',
+  fixed: {},
+  rev: 2
 };
+// Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
+export function migrateSettings(st: Settings): Settings {
+  if ((st.rev || 0) >= 2) return st;
+  // rev 2: η ΤΑΕ είναι ένοπλη και χωρίς ώρες (λοχίας, 10/10)
+  const blocksSpen = (st.blocksSpen || DEFAULT_BLOCKS_SPEN).map(b => (b.id === 'tae' ? { ...b, armed: true, posts: b.posts.map(p => ({ ...p, hrs: '' })) } : b));
+  return { ...st, blocksSpen, fixed: st.fixed || {}, rev: 2 };
+}
 
 export interface AuditEntry {
   id: number;

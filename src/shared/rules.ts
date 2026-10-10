@@ -85,14 +85,24 @@ export function capBlock(s: AppState, pid: number, post?: Post | null): string |
 export const capLabel = (k: DutyKind) => CAP_KINDS.find(x => x[0] === k)?.[1] || k;
 
 // Κ-01, Κ-02, Κ-05: γιατί κάποιος ΔΕΝ μπαίνει σε μια θέση (null = μπαίνει). Χωρίς θέση: ελέγχει σαν ένοπλη.
-export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: { armed: boolean } | null): string | null {
+export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: { armed: boolean; kind?: DutyKind } | null): string | null {
   for (const s of statusesOn(statuses, pid, date)) {
     const t = TYPES[s.type];
     if (t.noDuty) return t.label + untilTxt(s, date);
     if (t.noArmed && (!post || post.armed)) return 'Άοπλος: ' + t.label + untilTxt(s, date);
+    if (t.light && post?.kind === 'mg') return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
   }
   return null;
 }
+// ΕΟ/ΕΑ σε (άοπλη) σκοπιά: επιτρέπεται, αλλά μόνο αν δεν υπάρχει άλλος (λοχίας, 10/10)
+export function lastResort(statuses: Status[], date: ISODate, pid: number, post?: { kind?: DutyKind } | null): string | null {
+  if (post?.kind !== 'sk') return null;
+  const st = statusesOn(statuses, pid, date).find(x => TYPES[x.type].light);
+  return st ? TYPES[st.type].label + ': σκοπιά μόνο αν δεν υπάρχει άλλος' : null;
+}
+// Μόνιμος Λ/Υ ή Δ/Υ: μπαίνει μόνος του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης
+export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (k === 'ly' || k === 'dy') && s.settings.fixed?.[k] === pid;
+export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed || {}).filter((x): x is number => !!x));
 export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined =>
   allPosts(s.settings).find(x => x.k !== exceptKey && (s.guards[date] || {})[x.k] === pid);
 
@@ -107,13 +117,25 @@ export function dutyIndex(guards: Guards): Map<number, Set<ISODate>> {
   return m;
 }
 // Κ-13, Κ-14: ανάπαυση μετά από υπηρεσία, όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες
-export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
+export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
+  if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndex(s.guards)).get(pid);
   if (!ds) return null;
   for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';
   if (r.noConsecHol && isHol(s.settings, date))
     for (let i = 3; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
+  return k ? numBlock(s, date, pid, k, ds) : null;
+}
+// 3ο και 4ο νούμερο (οι βάρδιες 18:00/20:00): ξανά στο ίδιο νούμερο μόνο μετά από rules.numRest μέρες (λοχίας, 10/10)
+function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<ISODate>): string | null {
+  const n = s.rules.numRest || 0; const post = postBy(s, k);
+  if (n < 2 || !post || post.rot == null || post.rot < 2) return null;
+  for (let i = 1; i < n; i++) for (const d of [addDays(date, -i), addDays(date, i)]) {
+    if (!ds.has(d)) continue;
+    const g = s.guards[d] || {};
+    for (const kk in g) if (g[kk] === pid && postBy(s, kk)?.rot === post.rot) return (post.rot + 1) + 'ο νούμερο στις ' + dm(d) + ' (ξανά μετά από ' + n + ' μέρες)';
+  }
   return null;
 }
 export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: string | null, idx?: Map<number, Set<ISODate>>): string | null {
@@ -122,7 +144,7 @@ export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: str
   if (r) return r;
   const o = postOf(s, date, pid, k || undefined);
   if (o) return 'Ήδη ' + postTxt(o);
-  return ruleBlock(s, date, pid, idx);
+  return ruleBlock(s, date, pid, idx, k);
 }
 // Κ-06, Κ-07, Κ-08: γιατί κάποιος ΔΕΝ βγαίνει έξοδο (null = βγαίνει)
 export function outBlock(s: AppState, date: ISODate, pid: number): string | null {
@@ -209,7 +231,7 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
     (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : a.lastBefore.localeCompare(b.lastBefore) || a.total - b.total) ||
     (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || seedRank(date, a.pid) - seedRank(date, b.pid);
 }
-export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[] } {
+export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   let work: AppState = { ...s, guards: { ...s.guards, [date]: g } };
   const people = activePeople(s);
@@ -217,19 +239,31 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const idx = new Map<number, Set<ISODate>>();
   dutyIndex(s.guards).forEach((v, id) => idx.set(id, new Set(v)));
   const h = isHol(s.settings, date);
-  let n = 0; const empty: string[] = [];
-  for (const x of postsOf(s.settings)) {
+  let n = 0; const empty: string[] = []; const warn: string[] = [];
+  const posts = postsOf(s.settings);
+  // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
+  for (const x of posts) {
+    const f = (x.k === 'ly' || x.k === 'dy') ? s.settings.fixed?.[x.k] : undefined;
+    if (g[x.k] || !f || !people.some(p => p.id === f) || guardUnavailable(work, date, f, x.k, idx)) continue;
+    g[x.k] = f; n++;
+    work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
+    if (!idx.has(f)) idx.set(f, new Set()); idx.get(f)!.add(date);
+  }
+  const fixed = fixedIds(s);
+  for (const x of posts) {
     if (g[x.k]) continue;
     const unarmedFirst = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
+    const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) ? 1 : 0);
     const cmp = fairCompare(h, x.kind, date);
-    const cand = people.filter(p => !guardUnavailable(work, date, p.id, x.k, idx))
-      .sort((p, q) => unarmedFirst(p) - unarmedFirst(q) || cmp(fair.get(p.id)!, fair.get(q.id)!))[0];
+    const cand = people.filter(p => !fixed.has(p.id) && !guardUnavailable(work, date, p.id, x.k, idx))
+      .sort((p, q) => last(p) - last(q) || unarmedFirst(p) - unarmedFirst(q) || cmp(fair.get(p.id)!, fair.get(q.id)!))[0];
     if (!cand) { empty.push(x.k); continue; }
+    const lr = lastResort(s.statuses, date, cand.id, x); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
     if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
   }
-  return { guards: { ...s.guards, [date]: g }, n, empty };
+  return { guards: { ...s.guards, [date]: g }, n, empty, warn };
 }
 // «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
 export function whyText(s: AppState, date: ISODate, k: string): string {
