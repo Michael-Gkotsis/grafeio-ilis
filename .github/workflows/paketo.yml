@@ -1,0 +1,43 @@
+# Φτιάχνει το πακέτο για Windows 7 και το ανεβάζει στα Releases του GitHub,
+# ώστε να κατεβαίνει από οποιοδήποτε κινητό ή PC: github.com/Michael-Gkotsis/grafeio-ilis/releases/latest
+name: Πακέτο Windows 7
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paketo
+  cancel-in-progress: true
+
+jobs:
+  paketo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run package:win
+      - name: Ανέβασμα στα Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          ZIP="release/GrafeioIlis-win7-x64-$V.zip"
+          NOTES="Πακέτο για Windows 7 64-bit, από το commit ${GITHUB_SHA::7}. Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" "$ZIP" --clobber
+            gh release edit "v$V" --notes "$NOTES"
+          else
+            gh release create "v$V" "$ZIP" --target "$GITHUB_SHA" --title "Γραφείο Ίλης $V (Windows 7)" --notes "$NOTES"
+          fi
