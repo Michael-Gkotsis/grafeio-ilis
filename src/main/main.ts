@@ -84,6 +84,20 @@ function daily() {
 const nodeRequire: NodeRequire = require;
 const excel = (): typeof import('./excel') => nodeRequire(path.join(__dirname, 'excel.js'));
 
+// Μία εξαγωγή τη φορά, και ποτέ ατελείωτη αναμονή: αν κάτι κολλήσει (αργός δίσκος, antivirus), μετά από EXPORT_MAX
+// το κουμπί ξεκλειδώνει με μήνυμα αντί να μένει στο «Δημιουργία…»
+const EXPORT_MAX = 60000;
+let exporting = false;
+async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean }): Promise<ExportResult> {
+  if (exporting) return { ok: false, error: 'Βγαίνει ήδη άλλο έντυπο. Περίμενε να τελειώσει και ξαναπάτα.' };
+  exporting = true;
+  let timer: NodeJS.Timeout | undefined;
+  const slow = new Promise<ExportResult>(res => { timer = setTimeout(() => res({ ok: false, error: 'Η εξαγωγή άργησε πάνω από ένα λεπτό. Δες αν ο φάκελος των Excel είναι σε USB ή δίσκο δικτύου που δεν απαντά (Ρυθμίσεις → Φάκελος για τα Excel) και ξαναπάτα.' }), EXPORT_MAX); });
+  const work = exportFile(kind, date, opts);
+  try { return await Promise.race([work, slow]); }
+  finally { clearTimeout(timer); work.finally(() => { exporting = false; }); }
+}
+
 async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean }): Promise<ExportResult> {
   try {
     const s = store.state;
@@ -98,14 +112,14 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
       const fr = kind === 'frouraPsk';
       const file = tplPath(fr ? FROURA_FORMS[s.settings.phase || 'sven'].file : 'exodouxoi.xlsx');
       if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + path.basename(file) + ' από τον φάκελο templates');
-      const buf = fs.readFileSync(file); const days = pskDays(date);
+      const buf = await fs.promises.readFile(file); const days = pskDays(date);
       const parts = await Promise.all(days.map(d => (fr ? fillFroura(buf, s, d) : fillOuts(buf, s, d))));
       const data = await mergeFirstSheets(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')));
       r = { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: parts.flatMap(x => x.warnings || []) };
     } else {
       const t = kind === 'froura' ? { file: FROURA_FORMS[s.settings.phase || 'sven'].file } : TPL.find(x => x.id === kind)!; const file = tplPath(t.file);
       if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + t.file + ' από τον φάκελο templates');
-      const buf = fs.readFileSync(file);
+      const buf = await fs.promises.readFile(file);
       r = kind === 'froura' ? await fillFroura(buf, s, date) : kind === 'hkai' ? await fillHkai(buf, s, date) : await fillOuts(buf, s, date);
     }
     const out = await writeXlsx(path.join(outputDir(), date.slice(0, 7)), r.name, r.data);
@@ -209,7 +223,7 @@ else {
         return reply('Αναιρέθηκε: ' + last.text);
       } catch (e) { return fail(e); }
     });
-    ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportFile(kind, date, opts || {}));
+    ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
     ipcMain.handle('roster:pick', () => pickRoster());
     ipcMain.handle('roster:apply', (_e, token: string, deactivateMissing: boolean) => {
       const p = pending.get(token); if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
