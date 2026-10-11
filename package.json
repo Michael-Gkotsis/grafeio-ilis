@@ -11,7 +11,8 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "package:win": "node scripts/package-win.mjs"
+    "package:win": "node scripts/package-win.mjs",
+    "bench": "esbuild bench/bench.ts --bundle --platform=node --target=node16 --outfile=dist/bench.js --log-level=warning && node dist/bench.js"
   },
   "engines": {
     "node": ">=16"

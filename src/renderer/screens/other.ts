@@ -8,7 +8,7 @@ import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type Phase, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
-import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, hkaiCounts, isRecordExpiredOn, personMap, strengthOf } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
@@ -22,14 +22,18 @@ export function TodayScreen() {
   const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
   const pm = personMap(state.people);
   const c = useMemo(() => strengthOf(state, today), [state, today]);
+  // Απόντες σήμερα με τον λόγο και ως πότε· η λίστα τελειώνει στους 12, οι υπόλοιποι στη Δύναμη
+  const away = useMemo(() => {
+    const out: { p: Person; s: Status }[] = [];
+    activePeople(state).forEach(p => { const x = statusesOn(state.statuses, p.id, today).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
+    return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
+  }, [state.statuses, state.people, today]);
   const empty = frouraEmpty(state, tomorrow);
   const ending = state.statuses.filter(s => s.to === today && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat)) && pm.has(s.pid));
   const endTom = state.statuses.filter(s => s.to === tomorrow && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat) || s.type === 'PUN') && pm.has(s.pid));
   const expired = state.statuses.filter(s => isRecordExpiredOn(s, today) && !s.pending && pm.has(s.pid));
   const pending = state.statuses.filter(s => s.pending && pm.has(s.pid));
   const nRec = state.statuses.filter(s => s.from <= today && s.to >= today && RECORD_CATS.includes(TYPES[s.type].cat)).length;
-  const dn = c.lists.DN;
-  const hour = new Date().getHours();
   const endTxt = (s: Status) => { const t = TYPES[s.type]; return t.cat === 'abs' ? 'Αναμένεται επιστροφή' : t.noDuty ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'Από αύριο ξαναμπαίνει και σε ένοπλες θέσεις' : 'Από αύριο μπορεί να βγει έξοδο'; };
   const what = (s: Status) => (s.type === 'PUN' ? 'ποινή (' + (s.kind || '').toLowerCase() + ')' : TYPES[s.type].label);
   if (!c.total) return html`<div className="onboard"><${Card} title="Καλώς ήρθες στο Γραφείο Ίλης">
@@ -37,39 +41,45 @@ export function TodayScreen() {
     <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ΗΚΑΙ.</li></ol>
     <${Button} onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
   <//></div>`;
+  // Τι πρέπει να γίνει σήμερα (με αριθμό) και τι απλώς λήγει
+  const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
+  if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις 14:00', urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
+  if (pending.length) tasks.push({ key: 'pun', title: pending.length === 1 ? 'Ποινή που αιτείται' : pending.length + ' ποινές αιτούνται', sub: pending.map(s => shortName(pm.get(s.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('records', { recTab: 'pun' }) });
+  if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
+  const ends = [
+    ...expired.map(s => ({ s, when: 'έληξε, βγήκε μόνο του', tip: 'Αφαιρέθηκε αυτόματα σήμερα' })),
+    ...ending.map(s => ({ s, when: 'λήγει σήμερα', tip: endTxt(s) })),
+    ...endTom.map(s => ({ s, when: 'λήγει αύριο', tip: '' }))
+  ];
+  const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string) => html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
   return html`<div>
-    <${PageHeader} title=${hour < 12 ? 'Καλημέρα' : hour < 18 ? 'Καλησπέρα' : 'Καλό βράδυ'} sub=${DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + ' · ' + state.settings.unit.join(' · ')}/>
-    <div className="quick">
-      <button type="button" onClick=${() => nav.declare({})}><b>Δήλωσε κατάσταση</b><span>Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς</span></button>
-      <button type="button" onClick=${() => nav.go('guard', { guardDate: tomorrow })}><b>Υπηρεσίες αύριο</b><span>${empty ? empty + ' κενές θέσεις' : 'Πλήρης'} · προεπισκόπηση Excel</span></button>
-      <button type="button" onClick=${() => nav.go('outs', { outDate: today })}><b>Εξοδούχοι σήμερα</b><span>${c.counts.OUT} έξοδος · ${c.counts.DN} ΔΝ · με τους κανόνες</span></button>
-      <button type="button" onClick=${() => nav.go('hkai', { hkaiDate: today })}><b>ΗΚΑΙ σήμερα</b><span>Βγαίνει μόνη της · ${pending.length ? pending.length + ' ποινές αιτούνται' : 'καμία ποινή προς αίτηση'}</span></button>
+    <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις 14:00.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
+      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip=${'Βγαίνει μόνη της · ' + (pending.length ? pending.length + ' ποινές αιτούνται' : 'καμία ποινή προς αίτηση')}>ΗΚΑΙ σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
+    <div className="kpis">
+      ${kpi('Δύναμη', c.total, () => nav.go('people', { filter: 'all' }))}
+      ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
+      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, 'Ιατρικά σε ισχύ: ' + nRec)}
+      ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
+      ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
     </div>
     <div className="cols">
-      <${Card} title="Δύναμη σήμερα" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('strength', { strengthDate: today })}>Άνοιξε<//>`}>
-        <div className="tiles">
-          <button type="button" className="tile tile--main" onClick=${() => nav.go('people', { filter: 'all' })}><span className="tile__n">${c.total}</span><span className="tile__l">Σύνολο</span></button>
-          <button type="button" className="tile" onClick=${() => nav.go('people', { filter: 'present' })}><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></button>
-          ${TYPE_KEYS.filter(k => c.counts[k] > 0).map(k => html`<button key=${k} type="button" className="tile" onClick=${() => nav.go('people', { filter: k })}><span className="tile__n">${c.counts[k]}</span><span className="tile__l">${TYPES[k].label}</span></button>`)}
-        </div><p className="note" style=${{ margin: '10px 0 0' }}>Πάτα σε έναν αριθμό για να δεις ποιοι είναι. Ιατρικά σε ισχύ: ${nRec}.</p>
+      <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
+        ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
       <//>
-      <${Card} title="Θέλει προσοχή">
-        <ul className="attn">
-          ${empty > 0 && html`<li className="is-bad"><div><b>${empty} κενές θέσεις στις υπηρεσίες αύριο</b><small>Πρέπει να συμπληρωθούν πριν τις 14:00</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('guard', { guardDate: tomorrow })}>Συμπλήρωσε<//></li>`}
-          ${pending.length > 0 && html`<li><div><b>${pending.length} ${pending.length === 1 ? 'ποινή αιτείται' : 'ποινές αιτούνται'} στην ΗΚΑΙ</b><small>${pending.map(s => shortName(pm.get(s.pid)!)).join(', ')} · πάτα «Εγκρίθηκε» όταν υπογράψει ο Διοικητής</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records', { recTab: 'pun' })}>Άνοιξε<//></li>`}
-          ${expired.length > 0 && html`<li className="is-ok"><div><b>Αφαιρέθηκαν αυτόματα σήμερα (έληξαν χθες)</b><small>${expired.map(s => what(s) + ' του ' + shortName(pm.get(s.pid)!)).join(' · ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records', { recTab: 'expired' })}>Δες<//></li>`}
-          ${ending.map(s => html`<li key=${s.id}><div><b>Λήγει σήμερα: ${what(s)} του ${shortName(pm.get(s.pid)!)}</b><small>${endTxt(s)}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.openPerson(s.pid)}>Άνοιξε<//></li>`)}
-          ${endTom.length > 0 && html`<li className="is-info"><div><b>Λήγουν αύριο (${endTom.length})</b><small>${endTom.map(s => shortName(pm.get(s.pid)!) + ' (' + what(s) + ')').join(', ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('records')}>Δες<//></li>`}
-          ${dn.length > 0 && html`<li className="is-info"><div><b>${dn.length} με ΔΝ απόψε</b><small>${dn.map(shortName).join(', ')}</small></div><${Button} size="sm" variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Άνοιξε<//></li>`}
-          ${due && html`<li><div><b>${boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο αντίγραφο σε USB' : 'Δεν έχει παρθεί ποτέ αντίγραφο σε USB'}</b><small>Αν χαλάσει ο δίσκος του PC, χάνονται όλα. Βάλε ένα USB και πάτα το κουμπί (κάθε ${USB_DAYS} μέρες).</small></div><${Button} size="sm" variant="outline" onClick=${usb}>Αντίγραφο σε USB<//></li>`}
-          ${!due && !empty && !pending.length && !expired.length && !ending.length && !dn.length && html`<li className="is-ok"><div><b>Όλα εντάξει</b><small>Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</small></div></li>`}
-        </ul>
+      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today })}>Δύναμη<//>`}>
+        ${away.length ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${TYPES[s.type].label} ${TYPES[s.type].cat === 'out' ? 'σήμερα' : 'έως ' + dm(s.to)}<//></li>`)}</ul>
+          ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
       <//>
     </div>
-    ${news.length > 0 && html`<${Card} title="Τι άλλαξε από το προηγούμενο άνοιγμα" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('history')}>Όλο το ιστορικό<//>`}>
-      <ul className="log log--compact">${news.slice(0, 10).map(e => html`<li key=${e.id}><span className="log__time">${e.day === today ? 'Σήμερα' : dow(e.day) + ' ' + dm(e.day)} ${e.at}</span><div>${e.text} <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//></div></li>`)}</ul>
-      ${news.length > 10 && html`<p className="note" style=${{ margin: '8px 0 0' }}>Και άλλες ${news.length - 10} ενέργειες στο Ιστορικό.</p>`}
-    <//>`}
+    <div className="cols cols--b">
+      ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
+        <ul className="rows">${ends.map(({ s, when, tip }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(s.pid)}>${shortName(pm.get(s.pid)!)}</button><span className="muted" data-tip=${tip || undefined} data-tip-side="left">${what(s)} · ${when}</span></li>`)}</ul>
+      <//>`}
+      ${news.length > 0 && html`<${Card} flush=${true} title="Από το προηγούμενο άνοιγμα" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('history')}>Όλο το ιστορικό<//>`}>
+        <ul className="log log--compact">${news.slice(0, 10).map(e => html`<li key=${e.id}><span className="log__time">${e.day === today ? '' : dow(e.day) + ' ' + dm(e.day) + ' '}<b>${e.at}</b></span><div>${e.text}</div><span className="log__src">${SRC[e.source][0]}</span></li>`)}</ul>
+        ${news.length > 10 && html`<p className="note" style=${{ margin: '8px 0 0' }}>Και άλλες ${news.length - 10} ενέργειες στο Ιστορικό.</p>`}
+      <//>`}
+    </div>
   </div>`;
 }
 
@@ -93,7 +103,7 @@ export function RecordsScreen() {
   const left = (s: Status) => { const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
   const [stop, setStop] = useState<Status | null>(null);
   const [txt, setTxt] = useState<Status | null>(null);
-  const act = (fn: () => Promise<boolean>, text: string) => async () => { if (await fn()) toast({ text, actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); };
+  const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); };
   return html`<div>
     <${PageHeader} title="Ιατρικά και ποινές" sub="Όταν λήξει ένα ιατρικό ή μια ποινή, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Οι ποινές αιτούνται στην ΗΚΑΙ και ισχύουν όταν εγκριθούν.">
       <${Button} variant="outline" onClick=${() => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><${Button} variant="outline" onClick=${() => nav.declare({ type: 'PUN', from: addDays(today, 1), to: addDays(today, 5) })}>+ Ποινή<//><//>
@@ -229,22 +239,26 @@ function HkaiManualCard({ date }: { date: string }) {
 }
 
 const SRC: Record<string, [string, string]> = { app: ['Εφαρμογή', 'outline'], excel: ['Excel', 'info'], import: ['Εισαγωγή', 'ey'], auto: ['Αυτόματα', 'ok'] };
+const HISTORY_PAGE = 60;
 export function HistoryScreen() {
   const { audit, today, undo } = useStore();
   const last = audit.find(x => x.undoable && !x.undone);
   // αναζήτηση σε ενέργειες και αρχεία (π.χ. ένα επώνυμο), και φίλτρο ανά πηγή
   const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [src, setSrc] = useState('all');
   const list = useMemo(() => { const n = normGreek(dq.trim()); return audit.filter(e => (src === 'all' || e.source === src) && (!n || normGreek(e.text + ' ' + e.files.join(' ')).includes(n))); }, [audit, dq, src]);
+  // 300 γραμμές είναι πάνω από 2.000 στοιχεία στη σελίδα: πρώτα οι 60 πιο πρόσφατες, οι άλλες με κουμπί
+  const [more, setMore] = useState(0); useEffect(() => setMore(0), [dq, src]);
+  const shown = list.slice(0, HISTORY_PAGE * (more + 1));
   return html`<div>
     <${PageHeader} title="Ιστορικό" sub="Κάθε ενέργεια, από πού έγινε και ποια έντυπα αφορά. Η αναίρεση γίνεται από την πιο πρόσφατη προς τα πίσω."/>
     ${audit.length > 0 && html`<div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στο ιστορικό" placeholder="Επώνυμο, ενέργεια ή αρχείο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${src} onChange=${setSrc} items=${[{ value: 'all', label: 'Όλα' }, ...Object.keys(SRC).filter(k => audit.some(e => e.source === k)).map(k => ({ value: k, label: SRC[k][0] }))]}/>
       <${ActiveFilter} parts=${[src !== 'all' && SRC[src][0], dq && '«' + dq + '»']} onClear=${() => { setQ(''); setSrc('all'); }}/><span className="toolbar__count">${list.length} από ${audit.length}</span></div>`}
-    <div className="ui-card">${audit.length && !list.length ? html`<div className="empty">Καμία ενέργεια δεν ταιριάζει.</div>` : audit.length ? html`<ul className="log">${list.map(e => html`<li key=${e.id} className=${e.undone ? 'is-undone' : ''}>
+    <div className="ui-card">${audit.length && !list.length ? html`<div className="empty">Καμία ενέργεια δεν ταιριάζει.</div>` : audit.length ? html`<ul className="log">${shown.map(e => html`<li key=${e.id} className=${e.undone ? 'is-undone' : ''}>
       <span className="log__time">${e.day === today ? 'Σήμερα' : dm(e.day)}<br/>${e.at}</span>
       <div><b>${e.text}</b> <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//>${e.undone && html` <${Badge}>Αναιρέθηκε<//>`}<div className="log__files">${e.files.join(' · ')}</div></div>
       ${e === last ? html`<${Button} size="sm" variant="outline" onClick=${() => undo()}>Αναίρεση<//>` : null}
-    </li>`)}</ul>` : html`<div className="empty">Δεν έχει γίνει ακόμα καμία ενέργεια.</div>`}</div>
+    </li>`)}</ul>${shown.length < list.length && html`<div className="toolbar" style=${{ justifyContent: 'center', margin: '8px 0' }}><${Button} variant="outline" size="sm" onClick=${() => setMore(m => m + 1)}>Δείξε παλιότερες (${list.length - shown.length})<//></div>`}` : html`<div className="empty">Δεν έχει γίνει ακόμα καμία ενέργεια.</div>`}</div>
   </div>`;
 }
 
@@ -285,7 +299,7 @@ function AppearanceCard() {
   return html`<${Card} title="Εμφάνιση (αυτό το PC)">
     ${row('theme', 'Θέμα', 'Στα Windows 7 το «Όπως τα Windows» είναι φωτεινό.', [{ value: 'light', label: 'Φωτεινό' }, { value: 'dark', label: 'Σκοτεινό' }, { value: 'auto', label: 'Όπως τα Windows' }])}
     ${row('density', 'Πυκνότητα', 'Η συμπαγής χωρά περισσότερες γραμμές σε οθόνη 1024×768.', [{ value: 'normal', label: 'Κανονική' }, { value: 'compact', label: 'Συμπαγής' }])}
-    ${row('nav', 'Μενού', 'Αυτόματο: μόνο εικονίδια σε οθόνες κάτω από 1200px. Αλλάζει και με Ctrl+B.', [{ value: 'full', label: 'Πλήρες' }, { value: 'rail', label: 'Μόνο εικονίδια' }, { value: 'auto', label: 'Αυτόματο' }])}
+    ${row('nav', 'Μενού', 'Αυτόματο: στενό μενού σε οθόνες κάτω από 1500px. Αλλάζει και με Ctrl+B.', [{ value: 'full', label: 'Πλήρες' }, { value: 'rail', label: 'Στενό' }, { value: 'auto', label: 'Αυτόματο' }])}
     ${row('xlZoom', 'Προεπισκόπηση Excel', 'Το «Χωρά» μικραίνει το έντυπο για να φαίνεται όλο το πλάτος.', [{ value: 'fit', label: 'Χωρά' }, { value: '100', label: '100%' }])}
   <//>`;
 }

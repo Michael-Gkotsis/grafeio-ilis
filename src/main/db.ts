@@ -173,11 +173,12 @@ export class Store {
     this.commit(next);
   }
 
-  addAudit(e: Omit<AuditEntry, 'id' | 'undone'>, patch: Patch | null): number {
+  // flush=false: ο καλών γράφει μία φορά στο τέλος (π.χ. πολλές γραμμές ιστορικού από μία ενέργεια)
+  addAudit(e: Omit<AuditEntry, 'id' | 'undone'>, patch: Patch | null, flush = true): number {
     this.db.run('INSERT INTO audit (at, day, text, files, source, patch, undoable) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [e.at, e.day, e.text, JSON.stringify(e.files), e.source, patch ? JSON.stringify(patch) : null, e.undoable ? 1 : 0]);
     const id = Number(this.db.exec('SELECT last_insert_rowid()')[0].values[0][0]);
-    this.flush();
+    if (flush) this.flush();
     return id;
   }
   lastUndoable(): { id: number; text: string; patch: Patch } | null {
@@ -186,8 +187,9 @@ export class Store {
     return e ? { id: e.id, text: e.text, patch: JSON.parse(e.patch) } : null;
   }
   markUndone(id: number) { this.db.run('UPDATE audit SET undone = 1 WHERE id = ?', [id]); this.flush(); }
-  audit(limit = 300): AuditEntry[] {
-    return this.all<any>(`SELECT id, at, day, text, files, source, undoable, undone FROM audit ORDER BY id DESC LIMIT ${limit}`)
+  // after: μόνο όσες γραμμές γράφτηκαν μετά από αυτό το id (ό,τι δεν έχει δει ακόμα το UI)
+  audit(limit = 300, after = 0): AuditEntry[] {
+    return this.all<any>(`SELECT id, at, day, text, files, source, undoable, undone FROM audit WHERE id > ${Math.floor(after) || 0} ORDER BY id DESC LIMIT ${Math.floor(limit)}`)
       .map(r => ({ ...r, files: JSON.parse(r.files || '[]'), undoable: !!r.undoable, undone: !!r.undone }));
   }
   hasAuditToday(day: string, source: string): boolean {

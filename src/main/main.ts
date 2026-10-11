@@ -12,6 +12,7 @@ import { mergeFirstSheets } from './xlsx';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, ImportPreview, TemplateInfo } from '../shared/api';
 import { fillFroura, fillHkai, fillOuts, TemplateError, FROURA_FORMS } from './exports';
 import type { ImportRow } from '../shared/commands';
+import type { AppState, AuditEntry } from '../shared/domain';
 
 const DEV = !app.isPackaged;
 const ROOT = DEV ? process.cwd() : path.dirname(process.execPath);
@@ -54,20 +55,38 @@ let seenUntil = 0, sessionStart = 0;   // «Τι άλλαξε από το προ
 let win: BrowserWindow | null = null;
 const ctx = () => ({ today: today(), newId: () => crypto.randomUUID() });
 const outputDir = () => store.state.settings.outputDir || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
-const reply = (text: string): CmdResult => ({ ok: true, state: store.state, audit: store.audit(), text });
+// Τι έχει ήδη το UI: η κατάσταση και η τελευταία γραμμή ιστορικού που του στάλθηκαν. Οι εντολές δεν αλλάζουν
+// αντικείμενα, φτιάχνουν νέα, οπότε ό,τι έχει την ίδια αναφορά με πριν δεν άλλαξε και δεν ξαναστέλνεται.
+let sent: AppState | null = null, sentAudit = 0;
+function snapshot(): { state: AppState; audit: AuditEntry[] } {
+  const audit = store.audit(); sent = store.state; sentAudit = Math.max(sentAudit, audit[0]?.id || 0);
+  return { state: store.state, audit };
+}
+function reply(text: string, fullAudit = false): CmdResult {
+  const s = store.state; const changes: Partial<AppState> = {};
+  for (const k of Object.keys(s) as (keyof AppState)[]) if (!sent || s[k] !== sent[k]) (changes as any)[k] = s[k];
+  sent = s;
+  const newAudit = fullAudit ? [] : store.audit(300, sentAudit);
+  const audit = fullAudit ? store.audit() : undefined;
+  sentAudit = Math.max(sentAudit, (audit || newAudit)[0]?.id || 0);
+  return { ok: true, changes, newAudit, audit, text };
+}
 const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
 
-function runCmd(cmd: Command): CmdResult {
+// Τρέχει μια εντολή και τη γράφει. Ό,τι άλλαξε φτάνει στο UI με την επόμενη απάντηση reply() (και όσα έγιναν χωρίς αυτό, π.χ. λήξεις)
+function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: string } {
   try {
     const r = apply(store.state, cmd, ctx());
-    if (r.state !== store.state) {
+    const changed = r.state !== store.state;
+    if (changed) {
       const patch = store.commit(r.state);
       const undoable = r.undoable !== false;
-      if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable }, undoable ? patch : null);
-      else store.flush();
-    } else if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable: false }, null);
-    for (const t of r.extra || []) store.addAudit({ at: nowHM(), day: today(), text: t, files: [], source: 'auto', undoable: false }, null);
-    return reply(r.text);
+      if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable }, undoable ? patch : null, false);
+    } else if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable: false }, null, false);
+    for (const t of r.extra || []) store.addAudit({ at: nowHM(), day: today(), text: t, files: [], source: 'auto', undoable: false }, null, false);
+    // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού
+    if (changed || r.text || r.extra?.length) store.flush();
+    return { ok: true, text: r.text };
   } catch (e) { return fail(e); }
 }
 
@@ -124,7 +143,8 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     }
     const out = await writeXlsx(path.join(outputDir(), date.slice(0, 7)), r.name, r.data);
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
-    for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null);
+    for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null, false);
+    if (checks.length) store.flush();
     if (opts.open) shell.openPath(out);
     return { ok: true, file: out, warnings: r.warnings || [] };
   } catch (e) {
@@ -215,14 +235,16 @@ else {
     seenUntil = typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart;
     writeMeta({ seenAudit: sessionStart });
 
-    ipcMain.handle('boot', (): Boot => ({ state: store.state, audit: store.audit(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates(), lastUsb: readMeta().lastUsb || null, seenUntil, sessionStart }));
-    ipcMain.handle('cmd', (_e, cmd: Command) => runCmd(cmd));
+    ipcMain.handle('boot', (): Boot => ({ ...snapshot(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates(), lastUsb: readMeta().lastUsb || null, seenUntil, sessionStart }));
+    const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
+    ipcMain.handle('cmd', (_e, cmd: Command) => answer(runCmd(cmd)));
+    ipcMain.handle('sync', () => reply(''));
     ipcMain.handle('undo', (): CmdResult => {
       const last = store.lastUndoable(); if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
       try {
         store.revert(last.patch); store.markUndone(last.id);
         store.addAudit({ at: nowHM(), day: today(), text: 'Αναίρεση: ' + last.text, files: [], source: 'app', undoable: false }, null);
-        return reply('Αναιρέθηκε: ' + last.text);
+        return reply('Αναιρέθηκε: ' + last.text, true);   // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
@@ -231,7 +253,7 @@ else {
       const p = pending.get(token); if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
       pending.delete(token);
       try { store.backup('πριν-εισαγωγή'); } catch (e) { return fail('Δεν πάρθηκε αντίγραφο ασφαλείας πριν την εισαγωγή: ' + String(e)); }
-      return runCmd({ t: 'importPeople', rows: p.rows, source: path.basename(p.file), deactivateMissing });
+      return answer(runCmd({ t: 'importPeople', rows: p.rows, source: path.basename(p.file), deactivateMissing }));
     });
     ipcMain.handle('backups:list', () => listBackups(BACKUPS));
     ipcMain.handle('backups:restore', (_e, name: string) => {

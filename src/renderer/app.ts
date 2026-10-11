@@ -10,7 +10,7 @@ import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
-import type { Boot } from '../shared/api';
+import type { Boot, CmdResult } from '../shared/api';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -32,11 +32,11 @@ function useToday() {
 // Ρυθμίσεις εμφάνισης του PC. Το μενού «auto» είναι στενό σε οθόνες κάτω από 1200px.
 function usePrefsState(): PrefsValue {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
-  const [narrow, setNarrow] = useState(() => window.innerWidth < 1200);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 1500);
   useEffect(() => { applyPrefs(prefs); savePrefs(prefs); }, [prefs]);
   useEffect(() => {
     if (prefs.nav !== 'auto') return;
-    const f = () => setNarrow(window.innerWidth < 1200);
+    const f = () => setNarrow(window.innerWidth < 1500);
     window.addEventListener('resize', f); return () => window.removeEventListener('resize', f);
   }, [prefs.nav]);
   const set = useCallback(<K extends keyof Prefs>(k: K, v: Prefs[K]) => setPrefs(p => ({ ...p, [k]: v })), []);
@@ -55,23 +55,34 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [boot, setBoot] = useState(initial);
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
+  const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
-  const refresh = useCallback(async () => { const b = await window.api.boot(); setBoot(b); setState(b.state); setAudit(b.audit); }, []);
-  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main γράφει τις λήξεις· φέρνουμε τη νέα κατάσταση
-  useEffect(() => { refresh(); }, [today]);
+  const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);
+  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main γράφει τις λήξεις· φέρνουμε τη νέα κατάσταση.
+  // Όχι στο πρώτο άνοιγμα: το boot μόλις ήρθε, και δεύτερο θα έστελνε ξανά όλα τα δεδομένα.
+  const bootDay = useRef(today);
+  useEffect(() => { if (today !== bootDay.current) { bootDay.current = ''; refresh(); } }, [today]);
+  // Ο main στέλνει μόνο ό,τι άλλαξε: τα υπόλοιπα κρατούν την ίδια αναφορά, άρα και τα ευρετήρια (rules.ts) και τα useMemo τους
+  const merge = useCallback((r: Extract<CmdResult, { ok: true }>) => {
+    const state = Object.keys(r.changes).length ? { ...cur.current.state, ...r.changes } : cur.current.state;   // τίποτα δεν άλλαξε: ούτε νέα απόδοση
+    const audit = r.audit || (r.newAudit.length ? [...r.newAudit, ...cur.current.audit].slice(0, 300) : cur.current.audit);
+    cur.current = { state, audit }; setState(state); setAudit(audit);
+    return state;
+  }, []);
   const run = useCallback(async (cmd: Command, okText?: string | false) => {
     const r = await window.api.run(cmd);
-    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return false; }
-    setState(r.state); setAudit(r.audit);
+    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return null; }
+    const next = merge(r);
     if (okText !== false && (okText || r.text)) toast({ text: okText || r.text });
-    return true;
-  }, [toast]);
+    return next;
+  }, [toast, merge]);
   const undo = useCallback(async () => {
     const r = await window.api.undo();
     if (!r.ok) { toast({ text: r.error }); return; }
-    setState(r.state); setAudit(r.audit); toast({ text: r.text });
-  }, [toast]);
-  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, refresh }), [state, audit, boot, today, run, undo, refresh]);
+    merge(r); toast({ text: r.text });
+  }, [toast, merge]);
+  const sync = useCallback(async () => { const r = await window.api.sync(); if (r.ok) merge(r); }, [merge]);
+  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, refresh, sync }), [state, audit, boot, today, run, undo, refresh, sync]);
   return html`<${StoreCtx.Provider} value=${store}><${Shell}/><//>`;
 }
 
@@ -142,17 +153,17 @@ function Shell() {
     <div className=${cx('shell', rail && 'is-rail')}>
       <header className="topbar">
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
-        <div className="brand"><${Logo} size=${30}/><span>Γραφείο Ίλης <small>${state.settings.unit[2] || ''}</small></span></div>
+        <div className="brand"><${Logo} size=${30}/><span>Γραφείο Ίλης<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setLayer({ kind: 'palette' })}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         <div className="topbar__right">
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setLayer({ kind: 'legend' })}>Υπόμνημα<//>
+          <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
-          <span className="today-lbl">Σήμερα: <b>${dow(today)} ${dmy(today)}</b></span>
         </div>
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
-        <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Μόνο εικονίδια, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">Σύμπτυξη μενού</span></button></nav>
+        <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
       <main className="main"><${Screen} key=${route.view}/></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">

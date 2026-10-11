@@ -42,14 +42,14 @@ export const Logo = ({ size = 32 }: P) => html`<svg className="logo" viewBox="0 
 export function Button({ variant = 'default', size, className, children, ...rest }: P) {
   return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} ...${rest}>${children}</button>`;
 }
-export const Badge = ({ tone, children, ...rest }: P) => html`<span className=${cx('ui-badge', tone && 'ui-badge--' + tone)} ...${rest}>${children}</span>`;
+export const Badge = ({ tone, className, children, ...rest }: P) => html`<span className=${cx('ui-badge', tone && 'ui-badge--' + tone, className)} ...${rest}>${children}</span>`;
 export const Kbd = ({ children }: P) => html`<kbd className="ui-kbd">${children}</kbd>`;
 // Card με open/onToggle: κλείνει με κλικ στην επικεφαλίδα· κλειστή δείχνει μόνο τη σύνοψη και δεν φτιάχνει το περιεχόμενο
-export function Card({ title, actions, children, open, onToggle, summary }: P) {
+export function Card({ title, actions, children, open, onToggle, summary, flush }: P) {
   if (onToggle) return html`<section className=${cx('ui-card', 'ui-card--fold', !open && 'is-closed')}>
     <div className="ui-card__head"><h2><button type="button" className="ui-card__toggle" aria-expanded=${!!open} onClick=${onToggle}>${Icon.chev}<span>${title}</span></button></h2>${actions}</div>
     ${open ? html`<div className="ui-card__body">${children}</div>` : summary && html`<div className="ui-card__sum">${summary}</div>`}</section>`;
-  return html`<section className="ui-card">${title && html`<div className="ui-card__head"><h2>${title}</h2>${actions}</div>`}<div className="ui-card__body">${children}</div></section>`;
+  return html`<section className="ui-card">${title && html`<div className="ui-card__head"><h2>${title}</h2>${actions}</div>`}<div className=${cx('ui-card__body', flush && 'ui-card__body--flush')}>${children}</div></section>`;
 }
 export const Alert = ({ tone, children }: P) => html`<div className=${cx('ui-alert', tone && 'ui-alert--' + tone)} role=${tone === 'bad' ? 'alert' : undefined}>${children}</div>`;
 export function Tabs({ value, onChange, items }: P) {
@@ -70,7 +70,7 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
     f && f.focus(); const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; };
   }, []);
   return createPortal(html`<div className="ui-overlay" onMouseDown=${(e: MouseEvent) => { if (e.target === e.currentTarget && closeOnOverlay) onClose(); }}>
-    <div ref=${ref} className=${cx('ui-dialog', size === 'lg' && 'ui-dialog--lg')} role=${role} aria-modal="true" aria-labelledby="dlg-t">
+    <div ref=${ref} className=${cx('ui-dialog', size && 'ui-dialog--' + size)} role=${role} aria-modal="true" aria-labelledby="dlg-t">
       <div className="ui-dialog__head"><div><h2 id="dlg-t">${title}</h2>${description && html`<div className="ui-dialog__desc">${description}</div>`}</div>
         <${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
       <div className="ui-dialog__body">${children}</div>

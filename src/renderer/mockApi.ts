@@ -28,7 +28,7 @@ function seed(): AppState {
 
 export function mockApi(): Api {
   let state = seed(); let seq = 0; const audit: AuditEntry[] = []; const undo: { id: number; prev: AppState }[] = [];
-  const res = (text: string): CmdResult => ({ ok: true, state, audit: [...audit], text });
+  const res = (text: string): CmdResult => ({ ok: true, changes: state, newAudit: [], audit: [...audit], text });
   return {
     boot: async () => ({ state, audit, dataDir: '(δοκιμή)', outputDir: '(δοκιμή)', templatesDir: '(δοκιμή)', version: 'dev', lastUsb: null, seenUntil: 0, sessionStart: audit.length ? audit[0].id : 0, templates: [
       { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx', ok: true, custom: false },
@@ -44,6 +44,7 @@ export function mockApi(): Api {
         return res(r.text);
       } catch (e: any) { return { ok: false, error: e.message }; }
     },
+    sync: async () => res(''),
     undo: async () => {
       const u = undo.pop(); if (!u) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
       state = u.prev; const e = audit.find(x => x.id === u.id); if (e) e.undone = true; return res('Αναιρέθηκε');

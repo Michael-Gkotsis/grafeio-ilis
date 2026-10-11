@@ -27,6 +27,8 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
   if (empty.length === posts.length) out.push({ level: 'warn', text: 'Δεν έχει οριστεί καμία υπηρεσία για ' + dm(date) + '. Θα βγει κενό έντυπο.', go: 'guard' });
   else if (empty.length) out.push({ level: 'warn', text: empty.length + ' κενές θέσεις (θα γραφτεί «ΚΕΝΗ»): ' + empty.map(x => x.label).join(', '), go: 'guard' });
   const seen = new Map<number, string>();
+  // η ίδια μέρα χωρίς αναθέσεις, μία φορά: αλλιώς το ευρετήριο υπηρεσιών ξαναχτίζεται για κάθε θέση
+  const without: AppState = { ...s, guards: { ...s.guards, [date]: {} } };
   for (const x of posts) {
     const pid = g[x.k]; if (!pid) continue;
     const p = pm.get(pid); const name = p ? shortName(p) : 'άγνωστος';
@@ -36,7 +38,7 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     const hard = dutyBlock(s.statuses, date, pid, x);
     if (hard) out.push({ level: 'err', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
     else if (outOn(s, pid, date)) out.push({ level: 'err', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
-    const soft = capBlock(s, pid, x) || ruleBlock({ ...s, guards: { ...s.guards, [date]: {} } }, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x);
+    const soft = capBlock(s, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
   }
   return out;
