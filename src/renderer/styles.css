@@ -653,3 +653,4 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .hkmap__row .ui-input{width:90px;height:30px}
 @media (max-width:760px){.mapper{grid-template-columns:1fr}.mapper__fields{max-height:none}}
 .srcalert{margin-bottom:12px}
+.srcalert__list{margin:4px 0 2px;padding-left:18px}

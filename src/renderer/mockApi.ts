@@ -99,7 +99,7 @@ export function mockApi(): Api {
     srcPick: async () => fakeBook(state),
     srcRead: async () => fakeBook(state),
     srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
-    srcKeys: async () => [],
+    srcKeys: async () => ({ keys: [], base: {} }),
     srcApply: async (kind, b, cmd) => {
       state = { ...state, settings: { ...state.settings, sources: { ...(state.settings.sources || {}), [kind]: b } } };
       const r = apply(state, cmd, { today: today(), newId: () => 'x' + ++seq }); state = r.state; return res(r.text || 'Δεν βρέθηκε κάτι νέο');
