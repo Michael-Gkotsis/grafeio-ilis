@@ -5,10 +5,10 @@
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
 import { PUN_KINDS, TYPES, type AppState, type Person, type Status, type TypeKey } from './domain';
-import type { CellValue, RawSheet } from './roster';
+import { DN_HEAD, DN_WORD, isDnYes, stripDn, type CellValue, type RawSheet } from './roster';
 
-export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'posts' | 'outside';
-export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave';
+export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside';
+export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
 export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
 
 // Πού βρίσκεται ένα είδος: αρχείο, φύλλο, γραμμή επικεφαλίδων (από 0) και στήλη κάθε πεδίου (από 0)
@@ -55,8 +55,9 @@ export interface KindDef {
   types?: TypeKey[]; title: string; write: boolean;
 }
 export const KINDS: KindDef[] = [
-  { id: 'people', label: 'Προσωπικό (Δυναμολόγιο)', help: 'Βαθμός, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος', title: 'ΣΥΝΟΛΙΚΟ', write: false,
-    sheetRe: /ΣΥΝΟΛΙΚΟ|ΔΥΝΑΜΟΛΟΓΙΟ/, fields: [F('si', 'Σ.Ι.', 'Σ.Ι', /^Σ\s*\.?\s*Ι\.?$/), F('remarks', 'Παρατηρήσεις (ρόλος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/)] },
+  { id: 'people', label: 'Προσωπικό (Δυναμολόγιο)', help: 'Βαθμός, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος, δικαίωμα ΔΝ', title: 'ΣΥΝΟΛΙΚΟ', write: false,
+    sheetRe: /ΣΥΝΟΛΙΚΟ|ΔΥΝΑΜΟΛΟΓΙΟ/, fields: [F('si', 'Σ.Ι.', 'Σ.Ι', /^Σ\s*\.?\s*Ι\.?$/), F('remarks', 'Παρατηρήσεις (ρόλος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/),
+      F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', DN_HEAD)] },
   { id: 'punish', label: 'Ποινές (τιμωρημένοι)', help: 'Από, έως, είδος ποινής', title: 'ΤΙΜΩΡΗΜΕΝΟΙ', write: true, types: ['PUN'],
     sheetRe: /ΤΙΜΩΡ|ΠΟΙΝ/, titleRe: /ΤΙΜΩΡ|ΠΟΙΝ/,
     fields: [FROM(), TO(), F('kind', 'Είδος ποινής', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', /ΕΙΔΟΣ ΠΟΙΝΗΣ|^ΠΟΙΝΗ$/), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', /^ΗΜΕΡΕΣ$/),
@@ -71,13 +72,15 @@ export const KINDS: KindDef[] = [
     sheetRe: /IATR|ΙΑΤΡ|ΣΤΕΠ/, titleRe: /ΣΤΕΠ/, fields: [FROM('ΕΙΣ'), TO('ΕΞ'), NOTE] },
   { id: 'leave', label: 'Άδειες', help: 'Είδος άδειας, από, έως', title: 'ΑΔΕΙΕΣ', write: true, types: ['LEAVE', 'HON'],
     sheetRe: /ΑΔΕΙ/, titleRe: /ΑΔΕΙ/, fields: [F('kind', 'Είδος άδειας', 'ΕΙΔΟΣ ΑΔΕΙΑΣ', /ΕΙΔΟΣ ΑΔΕΙΑΣ|^ΑΔΕΙΑ$/), FROM(), TO(), NOTE] },
+  { id: 'dn', label: 'ΔΝ (διανυκτερεύσεις)', help: 'Από, έως', title: 'ΔΝ', write: true, types: ['DN'],
+    sheetRe: /^Δ\s?\.?\s?Ν(?![Α-Ω])|ΔΙΑΝΥΚΤ/, titleRe: /^Δ\s?\.?\s?Ν(?![Α-Ω])|ΔΙΑΝΥΚΤ/, fields: [FROM(), TO(), NOTE] },
   { id: 'posts', label: 'Πόστα', help: 'Μόνιμες αναθέσεις (ΚΨΜ, ιατρείο…)· διαβάζονται μαζί με το προσωπικό', title: 'ΠΟΣΤΑ', write: false,
     sheetRe: /ΠΟΣΤΑ/, titleRe: /ΠΟΣΤΑ/, fields: [F('post', 'Πόστο', 'Πόστο', /^ΠΟΣΤΟ$/, { req: true })] },
   { id: 'outside', label: 'Εκτός δύναμης', help: 'Αναβολές κ.λπ.· διαβάζονται μαζί με το προσωπικό', title: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ', write: false,
     sheetRe: /ΕΚΤΟΣ/, titleRe: /ΕΚΤΟΣ ΔΥΝΑΜ/, fields: [F('remarks', 'Παρατηρήσεις (λόγος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$|^ΑΙΤΙΑ$/)] }
 ];
 export const KIND: Record<ListKind, KindDef> = Object.fromEntries(KINDS.map(k => [k.id, k])) as Record<ListKind, KindDef>;
-export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'step', 'leave'];
+export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'step', 'leave', 'dn'];
 export const isStatusKind = (k: ListKind): k is StatusKind => (STATUS_KINDS as string[]).includes(k);
 // Το προσωπικό δεν έχει «ονοματεπώνυμο σε ένα κελί» (το Δυναμολόγιο τα έχει χωριστά) ούτε Α/Α που να μετράει
 export const fieldsOf = (k: ListKind): FieldDef[] => [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields];
@@ -154,6 +157,7 @@ export function scoreKind(kind: ListKind, sheetName: string, title: string, head
     if (cols.from == null && cols.to == null) s += 2;
     s += person * 0.5;
     if (cols.last == null || cols.first == null) s -= 10;
+    if (/^Δ\s?\.?\s?Ν(?![Α-Ω])|ΔΙΚΑΙΟΥΧΟΙ/.test(normGreek(sheetName))) s -= 12;   // λίστα δικαιούχων ΔΝ: διαβάζεται μαζί με το προσωπικό
   }
   return s;
 }
@@ -279,6 +283,7 @@ export function typeOfValue(kind: StatusKind, raw: string, values?: Record<strin
   switch (kind) {
     case 'punish': return 'PUN';
     case 'step': return 'STEP';
+    case 'dn': return 'DN';
     case 'leave': return /ΤΙΜΗΤ/.test(v) ? 'HON' : 'LEAVE';
     case 'hospital': return /^ΑΝ|ΑΝΑΡ/.test(v) ? 'SICK' : 'NOS';
     case 'medical':
@@ -289,7 +294,7 @@ export function typeOfValue(kind: StatusKind, raw: string, values?: Record<strin
   }
 }
 export const valueKey = vk;
-export const DEFAULT_TYPE: Record<StatusKind, TypeKey> = { punish: 'PUN', medical: 'EA', hospital: 'NOS', step: 'STEP', leave: 'LEAVE' };
+export const DEFAULT_TYPE: Record<StatusKind, TypeKey> = { punish: 'PUN', medical: 'EA', hospital: 'NOS', step: 'STEP', leave: 'LEAVE', dn: 'DN' };
 const punKind = (raw: string) => { const v = vk(raw); return PUN_KINDS.find(k => vk(k) === v || v.startsWith(vk(k).slice(0, 5))) || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : ''); };
 
 export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBinding, people: Person[], today: ISODate): ParseOut {
@@ -534,11 +539,14 @@ export const hkaiMapOf = (cells?: Partial<HkaiMap>): HkaiMap => ({
 // ------------------------------------------------------------------ προσωπικό: διορθώσεις πίσω στο Δυναμολόγιο
 // Γράφονται μόνο όσα άλλαξαν στην εφαρμογή από την τελευταία ανάγνωση/εγγραφή (snap), στη γραμμή του ίδιου ατόμου.
 // Γραμμές δεν προστίθενται ούτε σβήνονται: το Δυναμολόγιο μένει η λίστα του λοχία.
-export const PEOPLE_SYNC = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'remarks'];
+export const PEOPLE_SYNC = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'remarks', 'dn'];
 export type PersonSnap = Record<string, string>;
-export const personVals = (p: Person): PersonSnap => ({
+// Χωρίς στήλη ΔΝ, το δικαίωμα ΔΝ γράφεται ως λέξη στις παρατηρήσεις (όπως το διαβάζει η εισαγωγή)
+const remarksOf = (role: string, dn: boolean, inRemarks: boolean) => [stripDn(role), inRemarks && dn ? 'ΔΝ' : ''].filter(Boolean).join(' ');
+export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   rank: p.rank || '', spec: p.spec || '', last: p.last || '', first: p.first || '', father: p.father || '', asm: p.asm || '',
-  phone: p.phone || '', room: p.room == null ? '' : String(p.room), si: p.si || '', remarks: p.role || ''
+  phone: p.phone || '', room: p.room == null ? '' : String(p.room), si: p.si || '', remarks: remarksOf(p.role || '', !!p.dn, !!b && b.cols.dn == null),
+  dn: p.dn ? 'ΝΑΙ' : ''
 });
 export const snapPeople = (people: Person[]): Record<number, PersonSnap> => Object.fromEntries(people.map(p => [p.id, personVals(p)]));
 export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap> }
@@ -557,14 +565,15 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   };
   for (const p of s.people) {
     const old = snap[p.id]; if (!old) continue;
-    const cur = personVals(p);
-    const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && cur[k] !== '');
+    const cur = personVals(p, b);
+    // κενό δεν σβήνει κελί, εκτός από το ΔΝ και τις παρατηρήσεις (εκεί το «όχι» είναι κενό)
+    const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || ((k === 'dn' || k === 'remarks') && p.active)));
     if (!diff.length) continue;
     const row = find(old) || find(cur);
     if (!row) { plan.notFound.push(p.last + ' ' + p.first); continue; }
     let ch = false;
     for (const k of diff) {
-      const v: WVal = k === 'room' ? Number(cur.room) : k === 'asm' || k === 'phone' ? num(cur[k]) : cur[k];
+      const v: WVal = cur[k] === '' ? null : k === 'room' ? Number(cur.room) : k === 'asm' || k === 'phone' ? num(cur[k]) : cur[k];
       if (!same(row.v[k], v)) { plan.sets.push({ r: row.r, c: b.cols[k], v }); ch = true; }
     }
     if (ch) plan.changed++;
@@ -579,12 +588,14 @@ export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[
   for (const { v } of tableRows(sheet, b.header, b.cols).records) {
     const m = match(v); if (m.pid == null || out[m.pid]) continue;
     const t = (k: string) => (b.cols[k] == null ? null : cellText(v[k]));
-    const p = people.find(x => x.id === m.pid)!; const cur = personVals(p);
+    const p = people.find(x => x.id === m.pid)!; const cur = personVals(p, b);
     const snap: PersonSnap = {};
     for (const k of PEOPLE_SYNC) {
       const x = t(k);
       if (x == null) { snap[k] = cur[k]; continue; }          // η στήλη δεν υπάρχει: τίποτα να γραφτεί
-      snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '') : k === 'remarks' ? norm(x) : norm(x);
+      if (!p.active && (k === 'remarks' || k === 'dn')) { snap[k] = cur[k]; continue; }   // εκτός δύναμης: ο ρόλος δεν περνά στην εφαρμογή
+      snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '')
+        : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null) : norm(x);
     }
     out[m.pid] = snap;
   }

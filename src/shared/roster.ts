@@ -13,11 +13,17 @@ export interface RosterResult {
   suspicious: string[];              // πέρασαν, αλλά δεν έχουν ούτε ΑΣΜ ούτε τηλέφωνο ούτε θάλαμο
 }
 
-export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post';
+// Δικαίωμα ΔΝ: στήλη «ΔΝ» (ΝΑΙ, Χ, ✓…), η λέξη ΔΝ στις παρατηρήσεις, ή φύλλο «ΔΝ» με λίστα ονομάτων
+export const DN_HEAD = /^Δ\s*\.?\s*[ΝN]\s*\.?$|ΔΙΚΑΙΩΜΑ\s*Δ\s*\.?\s*[ΝN]|^ΔΙΑΝΥΚΤΕΡΕΥΣ/;
+export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
+export const isDnYes = (v: string) => { const t = norm(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|NO|N\/A|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
+// Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
+export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
+export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
 const HEADERS: [Field, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
-  ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/]
+  ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD]
 ];
 const txt = (v: CellValue): string => {
   if (v == null) return '';
@@ -58,7 +64,7 @@ export function isPersonRow(last: string, first: string, father: string): boolea
   return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(F);
 }
 
-interface Rec { rank: string; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string }
+interface Rec { rank: string; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null }
 function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
   const h = headerOf(sheet); if (!h) return [];
   const get = (row: CellValue[], f: Field) => (h.cols[f] == null ? '' : txt(row[h.cols[f]!]));
@@ -72,7 +78,8 @@ function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
     out.push({
       rank: norm(get(row, 'rank')), spec: norm(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
       asm: get(row, 'asm').replace(/\s/g, ''), phone: get(row, 'phone').replace(/\s/g, ''),
-      room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: norm(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post'))
+      room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: norm(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
+      dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn'))
     });
   }
   return out;
@@ -110,19 +117,33 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
     if (out.has(k)) { warnings.push('Διπλή εγγραφή: ' + r.last + ' ' + r.first + ' (κρατήθηκε η πρώτη)'); continue; }
     out.set(k, r);
   }
+  // Φύλλο «ΔΝ» / «ΔΙΚΑΙΟΥΧΟΙ ΔΝ» χωρίς ημερομηνίες: όσοι είναι εκεί έχουν δικαίωμα ΔΝ, οι άλλοι όχι.
+  // (Με «ΑΠΟ/ΕΩΣ» είναι διανυκτερεύσεις και διαβάζονται από τα Αρχεία Excel ως είδος «ΔΝ».)
+  const dnSheet = sheets.find(sh => sh !== main && isDnSheet(sh));
+  const dnList = new Set<string>();
+  if (dnSheet) for (const r of records(dnSheet)) { dnList.add(keyOf(r)); if (r.asm) dnList.add('#' + r.asm); }
+  const dnCol = recs.some(r => r.dn != null);
   const outside = named(ov.outside) || byName(/^ΕΚΤΟΣ/);
   const inactive = new Map<string, string>();
   if (outside) for (const r of records(outside)) { inactive.set(r.asm ? '#' + r.asm : keyOf(r), r.remarks); if (!out.has(r.asm ? '#' + r.asm : keyOf(r))) out.set(r.asm ? '#' + r.asm : keyOf(r), r); }
   const rows: ImportRow[] = [...out.entries()].map(([k, r]) => {
     const post = posts.get('#' + r.asm) || posts.get(keyOf(r)) || null;
     const off = inactive.has(k);
-    // Στο ΣΥΝΟΛΙΚΟ οι «ΠΑΡΑΤΗΡΗΣΕΙΣ» είναι ρόλοι (ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…)
-    return {
+    // Στο ΣΥΝΟΛΙΚΟ οι «ΠΑΡΑΤΗΡΗΣΕΙΣ» είναι ρόλοι (ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…)· η λέξη ΔΝ εκεί σημαίνει δικαίωμα ΔΝ
+    const dnWord = !off && DN_WORD.test(norm(r.remarks));
+    const role = !off && r.remarks ? stripDn(r.remarks) || null : null;
+    const row: ImportRow = {
       rank: r.rank || 'ΣΤΡ', spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
-      si: r.si, post, role: !off && r.remarks ? norm(r.remarks) : null, essos, attached: false, notes: off ? 'Εκτός δύναμης' + (r.remarks ? ': ' + r.remarks : '') : '',
+      si: r.si, post, role, essos, attached: false, notes: off ? 'Εκτός δύναμης' + (r.remarks ? ': ' + r.remarks : '') : '',
       active: !off
     };
+    // μόνο όταν το αρχείο λέει κάτι για ΔΝ· αλλιώς μένει ό,τι έχει οριστεί στην εφαρμογή
+    if (dnSheet || dnCol) row.dn = !!r.dn || dnWord || dnList.has('#' + r.asm) || dnList.has(keyOf(r));
+    else if (dnWord) row.dn = true;
+    return row;
   });
+  const nDn = rows.filter(r => r.active && r.dn).length;
+  if (nDn) warnings.push(nDn + ' άτομα με δικαίωμα ΔΝ' + (dnSheet ? ' (φύλλο «' + dnSheet.name + '»)' : dnCol ? ' (στήλη ΔΝ)' : ' (παρατηρήσεις)') + '.');
   const noRoom = rows.filter(r => r.active && r.room == null).length;
   if (noRoom) warnings.push(noRoom + ' άτομα χωρίς θάλαμο: δεν θα μπαίνουν στην πρόταση εξόδου ανά θάλαμο.');
   const noAsm = rows.filter(r => !r.asm).length;
@@ -133,6 +154,11 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
   if (declared != null && declared !== found) warnings.unshift('Το Δυναμολόγιο γράφει ΣΥΝΟΛΟ ' + declared + ', αλλά βρέθηκαν ' + found + ' άτομα στο φύλλο ' + main.name + '. Έλεγξε τη λίστα πριν την εισαγωγή.');
   const suspicious = rows.filter(r => r.active && !r.asm && !r.phone && r.room == null).map(r => r.last + ' ' + r.first);
   return { rows, warnings, main: main.name, essos, skipped, declared, found, suspicious };
+}
+export function isDnSheet(sh: RawSheet): boolean {
+  if (!/^Δ\s?\.?\s?[ΝN](?![Α-ΩA-Z])|ΔΙΚΑΙΟΥΧΟΙ\s*Δ\s?\.?\s?[ΝN]|ΔΙΑΝΥΚΤΕΡΕΥΣ/.test(norm(sh.name))) return false;
+  const h = headerOf(sh); if (!h) return false;
+  return !(sh.rows[h.row] || []).some(v => /^(ΑΠΟ|ΕΩΣ|ΗΜΕΡΟΜΗΝΙΑ|ΗΜΕΡ\/ΝΙΑ)$/.test(up(v)));
 }
 function declaredTotal(sheet: RawSheet): number | null {
   for (const row of sheet.rows) {

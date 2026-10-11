@@ -6,7 +6,7 @@ import path from 'path';
 import JSZip from 'jszip';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import type { AppState, Person } from '../src/shared/domain';
-import type { RawSheet } from '../src/shared/roster';
+import { parseRoster, type RawSheet } from '../src/shared/roster';
 import {
   bestFor, defaultBinding, detectHkai, detectTables, diffStatuses, hkaiMapOf, identity, parseStatuses, planPeopleWrite, planWrite,
   snapFromSheet, tableRows, type SourceBinding
@@ -225,5 +225,65 @@ describe('ΗΚΑΙ: κελιά από τα κείμενα του εντύπου'
     const d = detectHkai({ name: wb.sheetNames()[0], rows: await wb.values(0, 120, 40) });
     expect(d.missing).toEqual([]);
     expect(d.map).toEqual(hkaiMapOf());
+  });
+});
+
+describe('δικαίωμα ΔΝ από το Δυναμολόγιο', () => {
+  const s0 = fakeState(12);
+  const head = [...HEAD, 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
+  const main = (extra: (p: Person, i: number) => (string | null)[] = () => [], h: string[] = head): RawSheet =>
+    ({ name: 'ΣΥΝΟΛΙΚΟ', rows: [['ΔΥΝΑΜΟΛΟΓΙΟ'], ['ΣΥΝΟΛΙΚΟ'], h, ...s0.people.map((p, i) => [...pr(p, i), p.si, ...extra(p, i)])] });
+  const dnOf = (sheets: RawSheet[]) => parseRoster(sheets).rows.map(r => r.dn);
+  it('στήλη «ΔΝ»: ΝΑΙ/Χ = έχει, κενό ή ΟΧΙ = δεν έχει', () => {
+    const v = ['ΝΑΙ', 'Χ', '', 'ΟΧΙ', '✓', null, null, null, null, null, null, null];
+    const r = dnOf([main((_, i) => [null, v[i]], [...head, 'ΔΝ'])]);
+    expect(r.slice(0, 6)).toEqual([true, true, false, false, true, false]);
+  });
+  it('η λέξη ΔΝ στις παρατηρήσεις = δικαίωμα ΔΝ, και ο ρόλος μένει καθαρός· ο ΔΝΕΑΣ δεν μπερδεύεται', () => {
+    const rows = parseRoster([main((_, i) => [i === 1 ? 'ΘΑΛΑΜΑΡΧΗΣ ΔΝ' : i === 2 ? 'Δ.Ν.' : i === 3 ? 'ΔΝΕΑΣ' : null])]).rows;
+    expect(rows.slice(0, 4).map(r => [r.dn, r.role])).toEqual([[undefined, null], [true, 'ΘΑΛΑΜΑΡΧΗΣ'], [true, null], [undefined, 'ΔΝΕΑΣ']]);
+  });
+  it('φύλλο «ΔΝ» με λίστα ονομάτων: αυτοί έχουν, οι άλλοι όχι', () => {
+    const list: RawSheet = { name: 'ΔΝ', rows: [['ΔΙΚΑΙΟΥΧΟΙ ΔΝ'], HEAD, [...pr(s0.people[4], 0)], [...pr(s0.people[7], 1)]] };
+    const r = dnOf([main(), list]);
+    expect(r.map((x, i) => (x ? i : -1)).filter(i => i >= 0)).toEqual([4, 7]);
+    expect(r.every(x => x === true || x === false)).toBe(true);
+    // ο πίνακας δικαιούχων δεν προτείνεται ως δεύτερο «Προσωπικό»
+    expect(detectTables([main(), list]).find(h => h.sheet === 'ΔΝ')?.best).not.toBe('people');
+  });
+  it('χωρίς τίποτα για ΔΝ στο αρχείο, η εισαγωγή κρατά ό,τι έχει οριστεί στην εφαρμογή', () => {
+    let s = { ...s0, people: s0.people.map(p => (p.id === 3 ? { ...p, dn: true } : p)) };
+    s = run(s, { t: 'importPeople', rows: parseRoster([main()]).rows, source: 'x', deactivateMissing: false });
+    expect(s.people.find(p => p.id === 3)!.dn).toBe(true);
+  });
+  it('φύλλο «ΔΝ» με ΑΠΟ/ΕΩΣ = διανυκτερεύσεις: είδος «ΔΝ» στα Αρχεία Excel', () => {
+    const sh: RawSheet = { name: 'ΔΝ', rows: [['ΔΙΑΝΥΚΤΕΡΕΥΣΕΙΣ'], [...HEAD, 'ΑΠΟ', 'ΕΩΣ'], [...pr(s0.people[2], 0), D('2026-10-17'), D('2026-10-18')]] };
+    expect(dnOf([main(), sh]).every(x => x === undefined)).toBe(true);
+    const hit = detectTables([sh])[0];
+    expect(hit.best).toBe('dn');
+    const b: SourceBinding = { file: 'x.xlsx', sheet: 'ΔΝ', header: 1, cols: bestFor('dn', [sh])!.cols, write: true };
+    const d = diffStatuses('dn', s0, parseStatuses('dn', sh, b, s0.people, TODAY), b);
+    expect(d.add).toEqual([{ pid: 3, type: 'DN', from: '2026-10-17', to: '2026-10-18' }]);
+  });
+  it('όποιος είναι εκτός δύναμης δεν χάνει τις παρατηρήσεις του στο ΣΥΝΟΛΙΚΟ', () => {
+    const sh = main((_, i) => [i === 1 ? 'ΓΡΑΦΕΑΣ' : null]);
+    const out: RawSheet = { name: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ', rows: [['ΕΚΤΟΣ'], [...HEAD, 'ΠΑΡΑΤΗΡΗΣΕΙΣ'], [...pr(s0.people[1], 0), 'ΑΝΑΒΟΛΗ']] };
+    const s = run(s0, { t: 'importPeople', rows: parseRoster([sh, out]).rows, source: 'x', deactivateMissing: false });
+    const b: SourceBinding = { file: 'x', sheet: 'ΣΥΝΟΛΙΚΟ', header: 2, cols: bestFor('people', [sh])!.cols, write: true };
+    expect(planPeopleWrite(sh, b, s, snapFromSheet(sh, b, s.people)).sets).toEqual([]);
+  });
+  it('αλλάζεις το δικαίωμα ΔΝ στην εφαρμογή → γράφεται στη στήλη ΔΝ, ή ως λέξη στις παρατηρήσεις αν δεν υπάρχει στήλη', () => {
+    const withCol = main((_, i) => [null, i === 1 ? 'ΝΑΙ' : null], [...head, 'ΔΝ']);
+    const b1: SourceBinding = { file: 'x', sheet: 'ΣΥΝΟΛΙΚΟ', header: 2, cols: bestFor('people', [withCol])!.cols, write: true };
+    expect(b1.cols.dn).toBe(11);
+    const snap1 = snapFromSheet(withCol, b1, s0.people.map(p => (p.id === 2 ? { ...p, dn: true } : p)));
+    const s1 = { ...s0, people: s0.people.map(p => (p.id === 5 ? { ...p, dn: true } : p)) };   // ο 2 χάνει, ο 5 παίρνει
+    expect(planPeopleWrite(withCol, b1, s1, snap1).sets).toEqual([{ r: 4, c: 11, v: null }, { r: 7, c: 11, v: 'ΝΑΙ' }]);
+    const noCol = main((_, i) => [i === 1 ? 'ΘΑΛΑΜΑΡΧΗΣ' : null]);
+    const b2: SourceBinding = { file: 'x', sheet: 'ΣΥΝΟΛΙΚΟ', header: 2, cols: bestFor('people', [noCol])!.cols, write: true };
+    const base = s0.people.map(p => (p.id === 2 ? { ...p, role: 'ΘΑΛΑΜΑΡΧΗΣ' } : p));
+    const snap2 = snapFromSheet(noCol, b2, base);
+    const s2 = { ...s0, people: base.map(p => (p.id === 2 ? { ...p, dn: true } : p)) };
+    expect(planPeopleWrite(noCol, b2, s2, snap2).sets).toEqual([{ r: 4, c: 10, v: 'ΘΑΛΑΜΑΡΧΗΣ ΔΝ' }]);
   });
 });
