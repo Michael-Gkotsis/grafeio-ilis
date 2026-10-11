@@ -20,13 +20,16 @@ export interface Diag { startupMs: number; procs: { type: string; kb: number; cp
 export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[]; changes: { who: string; what: string }[]; same: number }
 
 // Αρχεία Excel: ένα βιβλίο όπως το βλέπει η αντιστοίχιση (τιμές κελιών και πίνακες που αναγνωρίστηκαν)
-export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[] }
+export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[]; binding?: SourceBinding }   // binding: η αντιστοίχιση όπως είναι τώρα στο αρχείο
 export type Fail = { ok: false; error: string; locked?: boolean };
 // Κατάσταση κάθε είδους: αν βρίσκεται το αρχείο, αν άλλαξε εκτός εφαρμογής, αν περιμένει εγγραφή (π.χ. ήταν ανοιχτό)
-export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean }
+export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean;
+  hold?: string;      // δεν γράφει μόνη της μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (και γιατί)
+  month?: string;     // έλεγχος υπηρεσιών: ο μήνας του φύλλου
+}
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[] }
 export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
-export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean }
+export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean; manual?: boolean }
 
 export interface Api {
   boot(): Promise<Boot>;
@@ -48,8 +51,9 @@ export interface Api {
   srcPick(kind: ListKind | null): Promise<SourceBook | Fail | null>;
   srcRead(kind: ListKind): Promise<SourceBook | Fail>;
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
-  srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean): Promise<CmdResult>;
-  srcKeys(kind: StatusKind): Promise<string[]>;
+  // keepApp: εγγραφές που άλλαξαν και στις δύο πλευρές και κρατιέται η τιμή της εφαρμογής (γράφεται μετά στο Excel)
+  srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean, keepApp?: string[]): Promise<CmdResult>;
+  srcKeys(kind: StatusKind): Promise<{ keys: string[]; base: Record<string, string> }>;
   srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;

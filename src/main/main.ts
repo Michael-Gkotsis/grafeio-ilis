@@ -4,16 +4,16 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { writeAll, LockedError } from './files';
+import { writeAll, writeJson, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, readBook, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
+import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { KIND, KINDS, STATUS_KINDS, baseOf, bestFor, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -41,7 +41,7 @@ const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.r
 const META = path.join(DATA, 'meta.json');
 type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number };
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
-const writeMeta = (m: Partial<Meta>) => { try { fs.writeFileSync(META, JSON.stringify({ ...readMeta(), ...m })); } catch (e) { console.error('meta', e); } };
+const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
 const USB_KEEP = 10;
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
@@ -177,7 +177,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null, false);
     if (checks.length) store.flush();
-    rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data) });
+    rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data), vhash: await valuesHash(r.data), ...(stamp(out) || {}) });
     if (opts.open) shell.openPath(out);
     return { ok: true, file: out, warnings: r.warnings || [] };
   } catch (e) {
@@ -190,10 +190,11 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
 // ------------------------------------------------------------------ Excel που έχουν ήδη βγει: ενημερώνονται μόνα τους
 // Κάθε έντυπο που βγήκε για σήμερα ή επόμενη μέρα ξαναγράφεται όταν αλλάξει κάτι στην εφαρμογή (Michael, 11/10).
 // Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
-type OutRec = FormOut & { kind: ExportKind; hash: string };
+// vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
+type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number };
 const OUTS_FILE = path.join(DATA, 'forms.json');
 const readOuts = (): OutRec[] => { try { return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8')); } catch { return []; } };
-const writeOuts = (l: OutRec[]) => { try { fs.writeFileSync(OUTS_FILE, JSON.stringify(l)); } catch (e) { console.error('forms.json', e); } };
+const writeOuts = (l: OutRec[]) => { try { writeJson(OUTS_FILE, l); } catch (e) { console.error('forms.json', e); } };
 const lastDay = (o: { kind: ExportKind; date: ISODate }) => (o.kind === 'frouraPsk' || o.kind === 'outsPsk' ? pskDays(o.date)[2] : o.kind === 'check' ? o.date.slice(0, 7) + '-31' : o.date);
 function rememberOut(o: OutRec) {
   const t = today();
@@ -208,14 +209,21 @@ async function regenForms(): Promise<boolean> {
   const t = today(); const list = readOuts().filter(o => lastDay(o) >= t); let any = false;
   for (const o of list) {
     if (!fs.existsSync(o.file)) { o.error = undefined; o.pending = false; continue; }   // το έσβησε ο χρήστης: δεν το ξαναφτιάχνουμε
+    if (o.manual) continue;
     try {
+      // Το διόρθωσε ο χρήστης με το χέρι στο Excel: δεν το πατάμε. Ξαναβγαίνει μόνο με το κουμπί της εφαρμογής.
+      const st = stamp(o.file);
+      if (st && o.vhash && (st.mtime !== o.mtime || st.size !== o.size)) {
+        if ((await valuesHash(await fs.promises.readFile(o.file))) !== o.vhash) { o.manual = true; o.pending = false; o.error = 'Το άλλαξες με το χέρι στο Excel, οπότε δεν ξαναγράφεται μόνο του. Αν θες τα νέα στοιχεία της εφαρμογής, βγάλ\' το ξανά από την εφαρμογή.'; continue; }
+        o.mtime = st.mtime; o.size = st.size;   // απλώς ανοίχτηκε και σώθηκε: ίδιες τιμές
+      }
       const s = store.state;
       const errs = preflight(o.kind, s, o.date).filter(c => c.level === 'err');
       if (errs.length) { o.pending = true; o.error = 'Ο προέλεγχος βρήκε λάθος: ' + errs[0].text; continue; }
       const r = await produce(o.kind, o.date, s); const h = await zipHash(r.data);
       if (h === o.hash) { o.pending = false; o.error = undefined; continue; }
       await writeAll([{ dir: path.dirname(o.file), name: path.basename(o.file), data: r.data }]);
-      o.hash = h; o.at = nowHM(); o.pending = false; o.error = undefined; any = true;
+      o.hash = h; o.vhash = await valuesHash(r.data); Object.assign(o, stamp(o.file) || {}); o.at = nowHM(); o.pending = false; o.error = undefined; any = true;
       store.addAudit({ at: nowHM(), day: t, text: 'Ενημερώθηκε μόνο του το ' + path.basename(o.file) + ' (άλλαξαν δεδομένα)', files: [path.basename(o.file)], source: 'auto', undoable: false }, null, false);
     } catch (e) { o.pending = true; o.error = e instanceof Error ? e.message : String(e); }
   }
@@ -225,44 +233,74 @@ async function regenForms(): Promise<boolean> {
 }
 
 // ------------------------------------------------------------------ Αρχεία Excel (πηγές ανά είδος)
-let srcMeta: SourceMetaStore;
+const srcMeta = new SourceMetaStore(path.join(DATA, 'sources.json'));
 const bindingOf = (k: ListKind): SourceBinding | undefined => store.state.settings.sources?.[k];
 const stampNow = () => today() + ' ' + nowHM();
 const ovOf = (b?: SourceBinding, file?: string): RosterOverride | undefined => (b && (!file || path.resolve(b.file) === path.resolve(file)) ? { sheet: b.sheet, header: b.header, cols: b.cols } : undefined);
+// Ο πίνακας μετακινήθηκε μέσα στο φύλλο (γραμμές από πάνω, από το Excel ή από εγγραφή της εφαρμογής σε άλλο πίνακα του
+// ίδιου φύλλου): η αντιστοίχιση ακολουθεί. Δεν είναι ενέργεια του χρήστη, οπότε δεν μπαίνει στην αναίρεση.
+function moveBinding(kind: ListKind, b: SourceBinding) {
+  const cur = bindingOf(kind); if (!cur || cur.header === b.header) return;
+  store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header } } } });
+  store.addAudit({ at: nowHM(), day: today(), text: 'Excel ' + KIND[kind].label.toLowerCase() + ': ο πίνακας είναι πια στη γραμμή ' + (b.header + 1) + ' του φύλλου «' + b.sheet + '» (άλλαξαν γραμμές από πάνω)', files: [], source: 'auto', undoable: false }, null);
+}
+const sameTable = (a?: SourceBinding, b?: SourceBinding) => !!a && !!b && path.resolve(a.file) === path.resolve(b.file) && a.sheet === b.sheet && a.header === b.header;
+// Η αντιστοίχιση ενός είδους όπως είναι τώρα στο αρχείο
+async function current(kind: ListKind, b = bindingOf(kind)): Promise<SourceBinding | undefined> {
+  if (!b) return b;
+  const nb = await locateNow(kind, b);
+  if (nb !== b && sameTable(bindingOf(kind), b)) moveBinding(kind, nb);
+  return nb;
+}
+const autoReading = new Set<ListKind>();
 async function sourceStatus(): Promise<SourceStatus[]> {
   const metas = srcMeta.all(); const out: SourceStatus[] = [];
   for (const [kind, b] of Object.entries(store.state.settings.sources || {}) as [ListKind, SourceBinding][]) {
     if (!b) continue;
-    const m = metas[kind]; const t = await tableState(b, m);
+    let m = metas[kind]; let t = await tableState(b, m, kind);
+    if (t.header != null) moveBinding(kind, { ...b, header: t.header });
     if (t.refresh) srcMeta.set(kind, t.refresh);
-    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending });
+    // απλές αλλαγές στο Excel περνούν μόνες τους (με αναίρεση που δεν πειράζει το Excel)
+    if (t.changed && t.exists && isStatusKind(kind) && b.autoRead !== false && m?.at && !m.hold && !autoReading.has(kind)) {
+      autoReading.add(kind);
+      try {
+        const cur = bindingOf(kind) || b;
+        if ((await importStatuses(kind, cur, {}, false, [], true)).ok) { m = srcMeta.get(kind); t = await tableState(cur, m, kind); }
+      } finally { autoReading.delete(kind); }
+    }
+    // έλεγχος υπηρεσιών: ο μήνας του φύλλου, για την υπενθύμιση όταν αλλάζει ο μήνας
+    let month: string | undefined;
+    if (kind === 'duties' && t.exists) { try { const sh = (await bookNow(b.file))?.sheets.find(x => x.name === b.sheet); month = (sh && bindingMonth(sh, bindingOf(kind) || b, today())) || undefined; } catch { /* ξανά αργότερα */ } }
+    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month });
   }
   return out;
 }
-const statusAll = async () => ({ sources: await sourceStatus(), forms: readOuts().filter(o => lastDay(o) >= today()).map(({ form, date, file, at, error, pending }) => ({ form, date, file, at, error, pending })) });
+const statusAll = async () => ({ sources: await sourceStatus(), forms: readOuts().filter(o => lastDay(o) >= today()).map(({ form, date, file, at, error, pending, manual }) => ({ form, date, file, at, error, pending, manual })) });
 const notify = () => { statusAll().then(st => { try { win?.webContents.send('sources', st); } catch { /* παράθυρο κλειστό */ } }, e => console.error('sources status', e)); };
 async function bookOf(file: string): Promise<SourceBook> {
   const r = await readBook(file);
   return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: r.sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000) })), hits: detectTables(r.sheets) };
 }
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
-function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; created: boolean }, b: SourceBinding) {
+function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; created: boolean; rooms?: { n: number; sheet: string } }, b: SourceBinding) {
   const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν'].filter(Boolean).join(', ');
-  return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '');
+  return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '')
+    + (r.rooms ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
 async function syncOut(kind: ListKind, auto: boolean): Promise<{ ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean }> {
-  const b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
+  let b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
   const m = srcMeta.get(kind);
   if (auto) {
-    if (b.write === false || !m?.at) return { ok: true, text: '', file: b.file, unchanged: true };
-    const t = await tableState(b, m);
+    if (b.write === false || !m?.at || m.hold) return { ok: true, text: '', file: b.file, unchanged: true };
+    const t = await tableState(b, m, kind);
+    if (t.header != null) { moveBinding(kind, { ...b, header: t.header }); b = bindingOf(kind)!; }
     if (t.refresh) srcMeta.set(kind, t.refresh);
     if (t.changed) { srcMeta.set(kind, { pending: true, error: 'Το αρχείο άλλαξε εκτός εφαρμογής. Πάτα «Ανανέωση από Excel» και μετά «Ενημέρωση Excel».' }); return { ok: false, error: 'changed' }; }
-  }
+  } else b = (await current(kind, b))!;
   const r = await writeSource(kind, b, store.state, m, today());
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
-  srcMeta.set(kind, { ...r.meta, at: stampNow(), pending: false, error: undefined, locked: false });
+  srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);
   store.addAudit({ at: nowHM(), day: today(), text, files: [path.basename(r.file)], source: 'excel', undoable: false }, null);
@@ -270,16 +308,31 @@ async function syncOut(kind: ListKind, auto: boolean): Promise<{ ok: true; text:
 }
 // Μετά από κάθε αλλαγή: τα είδη που άλλαξαν γράφονται στα Excel τους και τα έντυπα που έχουν βγει ενημερώνονται
 const dirty = new Set<ListKind>(); let formsDirty = false; let autoTimer: NodeJS.Timeout | undefined; let autoBusy = false;
-function scheduleAuto(prev: AppState, next: AppState) {
+// Ποια είδη αφορά μια αλλαγή: ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται σε όλα τα φύλλα όπου υπάρχουν
+function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
+  const out = new Set<ListKind>();
+  if (prev.people !== next.people) KINDS.forEach(k => out.add(k.id));
+  if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => out.add(k));
+  if (prev.caps !== next.caps) out.add('caps');
+  if (prev.guards !== next.guards) out.add('duties');
+  return out;
+}
+// toExcel=false: μόνο τα έντυπα (π.χ. μετά από αναίρεση ανάγνωσης από Excel, που δεν πρέπει να γράψει πίσω στο Excel)
+function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   if (prev === next) return;
-  // ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται σε όλα τα φύλλα όπου υπάρχουν
-  if (prev.people !== next.people) KINDS.forEach(k => dirty.add(k.id));
-  if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => dirty.add(k));
-  if (prev.caps !== next.caps) dirty.add('caps');
-  if (prev.guards !== next.guards) dirty.add('duties');
-  formsDirty = true;
+  if (toExcel) kindsOf(prev, next).forEach(k => dirty.add(k));
+  // τα έντυπα δεν χρησιμοποιούν δυνατότητες ούτε το «βγήκε στις…»: χωρίς αυτά δεν ξαναπαράγονται
+  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && prev[k] !== next[k])) formsDirty = true;
+  if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
+// Είδη που δεν γράφονται μόνα τους μέχρι νέα ανάγνωση ή «Ενημέρωση Excel»: το Excel ξέρει πράγματα που η εφαρμογή έχασε
+const HOLD_UNDO = 'Αναιρέθηκε μια ανάγνωση από αυτό το Excel και το Excel δεν άλλαξε. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
+const HOLD_RESTORE = 'Έγινε επαναφορά της βάσης από αντίγραφο, οπότε το Excel μπορεί να έχει νεότερα στοιχεία. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
+function hold(kinds: Iterable<ListKind>, why: string) {
+  for (const k of kinds) { if (!bindingOf(k) || !srcMeta.get(k)?.at) continue; dirty.delete(k); srcMeta.set(k, { hold: why }); }
+}
+const holdAll = (why: string) => hold(KINDS.map(k => k.id), why);
 async function runAuto() {
   if (autoBusy) { clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1500); return; }
   autoBusy = true;
@@ -328,7 +381,7 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
   const cur = bindingOf('people');
   if (cur && path.resolve(cur.file) !== path.resolve(p.file)) return;
   if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
-  srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false });
+  srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   // πόστα και εκτός δύναμης του ίδιου αρχείου διαβάστηκαν μαζί
   const linked = (['posts', 'outside'] as ListKind[]).filter(k => { const x = bindingOf(k); return x && path.resolve(x.file) === path.resolve(p.file); });
   Promise.all(linked.map(k => markSynced(k, bindingOf(k)!))).then(notify, e => console.error('roster linked', e));
@@ -336,25 +389,30 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
 }
 
 // Διάβασμα ενός είδους από το Excel του (καταστάσεις): νέες εγγραφές και αλλαγές μπαίνουν στην εφαρμογή
-async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved = false): Promise<CmdResult> {
+// auto: από τον έλεγχο αλλαγών, χωρίς προεπισκόπηση. Περνά μόνο αν είναι απλό: νέες εγγραφές ή αλλαγές, όλα τα άτομα
+// γνωστά, τίποτα σβησμένο, διπλό, με άγνωστο είδος ή λάθος ημερομηνία, και τίποτα που άλλαξε και στην εφαρμογή.
+async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved = false, keepApp: string[] = [], auto = false): Promise<CmdResult> {
   try {
     const book = await readBook(b.file); const sheet = sheetOf(book.sheets, b.sheet);
     if (!sheet) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const parsed = parseStatuses(kind, sheet, b, store.state.people, today());
-    const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b));
+    const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b));
+    if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || !(d.add.length + d.update.length))) return fail('όχι απλό');
     saveBinding(kind, b);
-    const r = runCmd({ t: 'importRecords', adds: d.add, updates: d.update.map(u => ({ id: u.id, patch: u.patch })), deletes: keepRemoved ? [] : d.removed.map(x => x.id), source: path.basename(b.file), what: KIND[kind].label.toLowerCase() });
+    // άλλαξαν και στις δύο πλευρές και ο χρήστης κράτησε της εφαρμογής: δεν περνούν, και γράφονται μετά στο Excel
+    const kept = new Set(keepApp);
+    const r = runCmd({ t: 'importRecords', adds: d.add, updates: d.update.filter(u => !kept.has(u.id)).map(u => ({ id: u.id, patch: u.patch })), deletes: keepRemoved ? [] : d.removed.map(x => x.id), source: path.basename(b.file), what: KIND[kind].label.toLowerCase() + (auto ? ' (αυτόματα, χωρίς προεπισκόπηση)' : '') });
     if (!r.ok) return r;
-    srcMeta.set(kind, { keys: d.keys, ...syncStamp(b, book), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false });
-    // ό,τι έχει η εφαρμογή και λείπει από το Excel γράφεται αμέσως μετά (αν το είδος γράφει μόνο του)
-    if (b.write !== false && d.appOnly.length) { dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
+    srcMeta.set(kind, { keys: d.keys, base: baseOf(kind, store.state, d.keys), ...syncStamp(b, book), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
+    // ό,τι έχει η εφαρμογή και λείπει από το Excel (ή κράτησε ο χρήστης από την εφαρμογή) γράφεται αμέσως μετά (αν το είδος γράφει μόνο του)
+    if (b.write !== false && (d.appOnly.length || d.kept.length || kept.size)) { dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
     notify();
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
   } catch (e) { return fail(e); }
 }
 // Μετά από ανάγνωση: πότε, τι αποτύπωμα είχε ο πίνακας και τι στοιχεία είχαν τα άτομα (για να περνούν μετά οι αλλαγές τους)
 async function markSynced(kind: ListKind, b: SourceBinding, extra: Partial<SourceMeta> = {}) {
-  srcMeta.set(kind, { ...(await syncStampNow(b)), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, ...extra });
+  srcMeta.set(kind, { ...(await syncStampNow(b)), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined, ...extra });
 }
 const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = { posts: 'setPeopleFields', outside: 'setPeopleFields', caps: 'importCaps', duties: 'importDuties' };
 async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keep: string[] = []): Promise<CmdResult> {
@@ -370,9 +428,9 @@ async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keep: 
 }
 // οι εγγραφές που είχε το Excel στην προηγούμενη ανάγνωση/εγγραφή (μόνο αν είναι ο ίδιος πίνακας)
 function keysOf(kind: ListKind, b: SourceBinding): string[] {
-  const cur = bindingOf(kind);
-  return cur && path.resolve(cur.file) === path.resolve(b.file) && cur.sheet === b.sheet && cur.header === b.header ? srcMeta.get(kind)?.keys || [] : [];
+  return sameTable(bindingOf(kind), b) ? srcMeta.get(kind)?.keys || [] : [];
 }
+const baseFor = (kind: ListKind, b: SourceBinding): Record<string, string> => (sameTable(bindingOf(kind), b) ? srcMeta.get(kind)?.base || {} : {});
 function saveBinding(kind: ListKind, b: SourceBinding | null) {
   const cur = bindingOf(kind);
   if (JSON.stringify(cur || null) === JSON.stringify(b)) return;
@@ -383,7 +441,7 @@ function saveBinding(kind: ListKind, b: SourceBinding | null) {
   if (!b || !cur || path.resolve(cur.file) !== path.resolve(b.file) || cur.sheet !== b.sheet || cur.header !== b.header) srcMeta.set(kind, null);
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
-  const b = bindingOf(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
+  const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
   try {
     const exists = fs.existsSync(b.file);
     const book = exists ? await readBook(b.file) : null;
@@ -450,6 +508,7 @@ async function recover(reason: string): Promise<boolean> {
   fs.renameSync(db, path.join(BACKUPS, 'χαλασμένη_' + Date.now() + '.db'));
   fs.copyFileSync(path.join(BACKUPS, good.name), db);
   await store.open();
+  holdAll(HOLD_RESTORE);
   store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά βάσης από αντίγραφο ' + good.name + ' (η προηγούμενη ήταν χαλασμένη)', files: [], source: 'auto', undoable: false }, null);
   return true;
 }
@@ -498,9 +557,14 @@ else {
       try {
         const prev = store.state;
         store.revert(last.patch); store.markUndone(last.id);
-        scheduleAuto(prev, store.state);
-        store.addAudit({ at: nowHM(), day: today(), text: 'Αναίρεση: ' + last.text, files: [], source: 'app', undoable: false }, null);
-        return reply('Αναιρέθηκε: ' + last.text, true);   // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
+        // Αναίρεση ανάγνωσης από Excel: η εφαρμογή γυρίζει πίσω, το Excel όχι. Αν γράφαμε τώρα, θα σβήναμε από το Excel
+        // όσα μόλις διαβάστηκαν (ή θα ξαναγράφαμε παλιές τιμές στο Δυναμολόγιο). Τα είδη περιμένουν νέα ανάγνωση.
+        const fromExcel = last.source === 'excel' || last.source === 'import';
+        if (fromExcel) hold(kindsOf(prev, store.state), HOLD_UNDO);
+        scheduleAuto(prev, store.state, !fromExcel);
+        store.addAudit({ at: nowHM(), day: today(), text: 'Αναίρεση: ' + last.text + (fromExcel ? ' (το Excel δεν άλλαξε)' : ''), files: [], source: 'app', undoable: false }, null);
+        if (fromExcel) notify();
+        return reply('Αναιρέθηκε: ' + last.text + (fromExcel ? '. Το Excel δεν άλλαξε.' : ''), true);   // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
@@ -514,13 +578,12 @@ else {
       return answer(r);
     });
     // Αρχεία Excel
-    srcMeta = new SourceMetaStore(path.join(DATA, 'sources.json'));
     const pickXlsx = async (title: string) => { const res = await dialog.showOpenDialog(win!, { title, filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls'] }], properties: ['openFile'] }); return res.canceled ? null : res.filePaths[0] || null; };
     ipcMain.handle('src:pick', async (_e, kind: ListKind | null) => {
       const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel'); if (!file) return null;
       try { return await bookOf(file); } catch (e) { return fail(e instanceof OldFormatError ? e.message : e); }
     });
-    ipcMain.handle('src:read', async (_e, kind: ListKind) => { const b = bindingOf(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); try { return await bookOf(b.file); } catch (e) { return fail(e); } });
+    ipcMain.handle('src:read', async (_e, kind: ListKind) => { try { const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); return { ...(await bookOf(b.file)), binding: b }; } catch (e) { return fail(e); } });
     ipcMain.handle('src:save', async (_e, kind: ListKind, b: SourceBinding | null) => {
       try {
         saveBinding(kind, b);
@@ -533,10 +596,10 @@ else {
         notify(); return reply('');
       } catch (e) { return fail(e); }
     });
-    ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean) => importStatuses(kind, b, choices || {}, !!keepRemoved));
+    ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean, keepApp: string[]) => importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []));
     ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]) => applySheet(kind, b, cmd, Array.isArray(keep) ? keep : []));
-    ipcMain.handle('src:keys', (_e, kind: StatusKind) => srcMeta.get(kind)?.keys || []);
-    ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const r = await rosterPreview(b.file, b); return r; });
+    ipcMain.handle('src:keys', (_e, kind: StatusKind) => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
+    ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
     ipcMain.handle('src:new', async (_e, kind: StatusKind) => {
@@ -567,7 +630,9 @@ else {
       const file = path.join(BACKUPS, path.basename(name));
       const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
       if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
-      try { store.backup('πριν-επαναφορά'); store.close(); } catch { /* συνεχίζουμε */ }
+      try { store.backup('πριν-επαναφορά'); } catch { /* συνεχίζουμε */ }
+      holdAll(HOLD_RESTORE);
+      try { store.close(); } catch { /* συνεχίζουμε */ }
       fs.copyFileSync(file, path.join(DATA, 'ilh.db'));
       app.relaunch(); app.exit(0);
       return { ok: true };
@@ -579,7 +644,7 @@ else {
       dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024), people: store.state.people.length, statuses: store.state.statuses.length, guardDays: Object.keys(store.state.guards).length,
       dataDir: DATA, backups: listBackups(BACKUPS).length
     }));
-    ipcMain.handle('flags:gpu', (_e, disable: boolean) => { fs.writeFileSync(FLAGS, JSON.stringify({ ...readFlags(), disableGpu: !!disable })); app.relaunch(); app.exit(0); });
+    ipcMain.handle('flags:gpu', (_e, disable: boolean) => { writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable }); app.relaunch(); app.exit(0); });
     // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
     ipcMain.handle('usb:copy', async () => {
       const m = readMeta();
@@ -622,6 +687,19 @@ else {
     });
     createWindow();
     ready = Date.now();
+    // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα
+    // Excel και μόνο όπου ο πίνακας δεν άλλαξε στο μεταξύ, όπως σε κάθε αυτόματη εγγραφή.
+    setTimeout(() => { for (const k of KINDS) if (bindingOf(k.id)) dirty.add(k.id); formsDirty = true; runAuto(); }, 4000);
   });
-  app.on('window-all-closed', () => { try { store?.close(); } catch { /* ήδη κλειστή */ } app.quit(); });
+  // Στο κλείσιμο: ό,τι περιμένει να γραφτεί στα Excel και στα έντυπα (το χρονόμετρο των 1,2 δευτ.) γράφεται πριν κλείσει
+  // η εφαρμογή, το πολύ για 10 δευτ. Αλλιώς μια αλλαγή λίγο πριν το κλείσιμο δεν θα έφτανε ποτέ στο Excel.
+  let quitting = false;
+  app.on('before-quit', e => {
+    if (quitting || !store || (!dirty.size && !formsDirty && !autoBusy)) return;
+    e.preventDefault(); quitting = true; clearTimeout(autoTimer);
+    const work = (async () => { while (autoBusy) await new Promise(r => setTimeout(r, 100)); await runAuto(); })();
+    Promise.race([work, new Promise(r => setTimeout(r, 10000))]).catch(err => console.error('quit', err)).finally(() => app.quit());
+  });
+  app.on('window-all-closed', () => app.quit());
+  app.on('will-quit', () => { try { store?.close(); } catch { /* ήδη κλειστή */ } });
 }

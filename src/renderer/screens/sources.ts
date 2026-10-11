@@ -1,11 +1,11 @@
 // Αρχεία Excel: για κάθε είδος από ποιο αρχείο, φύλλο και στήλες διαβάζει η εφαρμογή και πού γράφει τις αλλαγές της.
 // Αναγνώριση μόνη της· ό,τι δεν βρεθεί ο χρήστης το δείχνει με κλικ στο κελί, με την πρόταση σημειωμένη.
 import { useEffect, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Card, Dialog, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { PersonPicker } from '../common';
 import { TYPES, CAP_ACC, KIND_NAME, type DutyKind, type TypeKey } from '../../shared/domain';
-import { addDays, dm } from '../../shared/dates';
+import { MONTHS, addDays, dm } from '../../shared/dates';
 import {
   KINDS, KIND, DEFAULT_TYPE, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutyCode, planCaps, planDuties, planOutside, planPosts, sheetMonth,
@@ -22,27 +22,38 @@ const SHEET_KINDS: ListKind[] = ['posts', 'outside', 'caps', 'duties'];
 
 // Κατάσταση των αρχείων: φρεσκάρεται όταν γράφει ο main, όταν γυρνάς στο παράθυρο και κάθε φορά που ανοίγει η οθόνη
 export function useSourceStatus() {
-  const { state } = useStore();
+  const { state, sync } = useStore();
   const key = JSON.stringify([state.settings.sources || {}, state.settings.forms || {}]);
   const [st, setSt] = useState<{ sources: SourceStatus[]; forms: FormOut[] }>({ sources: [], forms: [] });
   useEffect(() => {
-    let on = true; const load = () => window.api.srcStatus().then(x => { if (on) setSt(x); });
-    load(); const off = window.api.onSources(x => setSt(x)); window.addEventListener('focus', load);
+    let on = true;
+    // ο main μπορεί να άλλαξε και την κατάσταση (π.χ. πίνακας που μετακινήθηκε μέσα στο φύλλο): φέρνουμε ό,τι άλλαξε
+    const load = () => window.api.srcStatus().then(x => { if (on) { setSt(x); sync(); } });
+    load(); const off = window.api.onSources(x => { setSt(x); sync(); }); window.addEventListener('focus', load);
     return () => { on = false; off(); window.removeEventListener('focus', load); };
-  }, [key]);
+  }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   return st;
 }
-// Για το «Σήμερα»: τι θέλει προσοχή στα αρχεία
+// Για το «Σήμερα»: τι θέλει προσοχή στα αρχεία, ανά αρχείο (το Δυναμολόγιο έχει συνήθως πολλά είδη)
 export function SourcesAlert() {
-  const { state } = useStore(); const st = useSourceStatus(); const nav = useNav();
-  const bad = st.sources.filter(x => x.changed || x.error || !x.exists);
-  const forms = st.forms.filter(x => x.error);
+  const { state, today } = useStore(); const st = useSourceStatus(); const nav = useNav();
   const go = () => nav.go('templates', { tab: 'files' });
-  if (!bad.length && !forms.length) return state.people.length && !state.settings.sources?.people
+  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
+  const files = new Map<string, Map<string, string[]>>();
+  for (const x of st.sources) {
+    const w = why(x); if (!w) continue;
+    const f = files.get(x.file) || new Map<string, string[]>(); files.set(x.file, f);
+    f.set(w, [...(f.get(w) || []), KIND[x.kind].label]);
+  }
+  const lines: string[] = [...files].map(([f, m]) => base(f) + ': ' + [...m].map(([w, ks]) => ks.join(', ') + ' · ' + w).join('; '));
+  for (const x of st.forms) if (x.error) lines.push(base(x.file) + ': ' + x.error);
+  // έλεγχος υπηρεσιών: από την 1η του μήνα, αν το φύλλο είναι ακόμα του προηγούμενου
+  const duties = st.sources.find(x => x.kind === 'duties'); const now = today.slice(0, 7);
+  const acc = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1].replace(/ς$/, '');
+  if (duties?.month && duties.month < now) lines.push('Ο έλεγχος υπηρεσιών δείχνει ακόμα ' + acc(duties.month) + '. Όρισε το φύλλο για τον ' + acc(now) + ' (Στήλες… ή Άλλο αρχείο…).');
+  if (!lines.length) return state.people.length && !state.settings.sources?.people
     ? html`<div className="srcalert"><${Alert} tone="info"><span><b>Αρχεία Excel.</b> Οι διορθώσεις στα άτομα δεν γράφονται ακόμα σε κανένα Excel. <${Button} variant="link" onClick=${go}>Όρισε το Δυναμολόγιο<//></span><//></div>` : null;
-  const txt = [...bad.map(x => KIND[x.kind].label + ': ' + (!x.exists ? 'δεν βρέθηκε το ' + base(x.file) : x.changed ? 'το ' + base(x.file) + ' άλλαξε εκτός εφαρμογής' : x.locked ? 'το ' + base(x.file) + ' είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error)),
-    ...forms.map(x => base(x.file) + ': ' + x.error)];
-  return html`<div className="srcalert"><${Alert} tone="warn"><span><b>Αρχεία Excel.</b> ${txt.slice(0, 3).join(' · ')}${txt.length > 3 ? ' …' : ''} <${Button} variant="link" onClick=${go}>Δες τα<//></span><//></div>`;
+  return html`<div className="srcalert"><${Alert} tone="warn"><span><b>Αρχεία Excel.</b> ${lines.length === 1 ? lines[0] : html`<ul className="srcalert__list">${lines.map(l => html`<li key=${l}>${l}</li>`)}</ul>`} <${Button} variant="link" onClick=${go}>Δες τα<//></span><//></div>`;
 }
 
 export function SourcesView() {
@@ -65,13 +76,16 @@ export function SourcesView() {
   };
   const edit = async (kind: ListKind) => {
     const r = await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
-    setLayer({ kind: 'map', list: kind, book: r, b: sources[kind] });
+    setLayer({ kind: 'map', list: kind, book: r, b: r.binding || sources[kind] });
   };
   // fresh: η αντιστοίχιση που μόλις αποθηκεύτηκε (το «sources» αυτής της απόδοσης έχει ακόμα την παλιά)
   const read = async (kind: ListKind, fresh?: SourceBinding, book?: SourceBook) => {
-    const b = fresh || sources[kind]; if (!b) return;
-    if (kind === 'people') { const r = await window.api.srcPeople(b); if (!r.ok) { toast({ text: r.error }); return; } setLayer({ kind: 'people', pv: r }); return; }
+    const b0 = fresh || sources[kind]; if (!b0) return;
+    if (kind === 'people') { const r = await window.api.srcPeople(b0); if (!r.ok) { toast({ text: r.error }); return; } setLayer({ kind: 'people', pv: r }); return; }
     const r = book || await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
+    // ο πίνακας μπορεί να μετακινήθηκε μέσα στο φύλλο: ο main επιστρέφει πού είναι τώρα
+    const b = !fresh && r.binding ? r.binding : b0;
+    if (b.header !== sources[kind]?.header) await refresh();
     setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b });
   };
   const newFile = async (kind: StatusKind) => {
@@ -81,12 +95,13 @@ export function SourcesView() {
   };
   const remove = async (kind: ListKind) => { await window.api.srcSave(kind, null); await refresh(); toast({ text: KIND[kind].label + ': η εφαρμογή δεν διαβάζει ούτε γράφει πια σε Excel. Το αρχείο δεν άλλαξε.' }); };
   const toggleWrite = async (kind: ListKind, on: boolean) => { await window.api.srcSave(kind, { ...sources[kind]!, write: on }); await refresh(); };
+  const toggleAuto = async (kind: ListKind, on: boolean) => { await window.api.srcSave(kind, { ...sources[kind]!, autoRead: on }); await refresh(); };
   return html`<div className="stack">
     <${Card} title="Αρχεία Excel ανά είδος" actions=${html`<${Button} disabled=${!!busy} onClick=${() => pick(null)}>${busy === 'new' ? 'Ανάγνωση…' : 'Εισαγωγή νέου Excel…'}<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Για κάθε είδος: από ποιο Excel, φύλλο και πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές σου. Αλλάζεις κάτι εδώ (π.χ. το Σ.Ι. κάποιου, μια ποινή) και γράφεται στο κελί του στο Excel. Η προηγούμενη έκδοση του αρχείου μένει στο <b>_προηγούμενα</b> δίπλα του.</p>
       <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id}
         onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id as StatusKind)}
-        onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggleWrite(k.id, on)}/>`)}</ul>
+        onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggleWrite(k.id, on)} onAuto=${(on: boolean) => toggleAuto(k.id, on)}/>`)}</ul>
     <//>
     <${FormsCard} outs=${st.forms}/>
     ${layer?.kind === 'match' && html`<${MatchDialog} book=${layer.book} onClose=${close} onMap=${(list: ListKind, b: SourceBinding) => setLayer({ kind: 'map', list, book: layer.book, b, back: layer })}/>`}
@@ -99,10 +114,11 @@ export function SourcesView() {
   </div>`;
 }
 
-function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle }: P) {
+function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind);
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
+    : s.hold ? html`<${Badge} tone="warn" data-tip=${s.hold}>Περιμένει ανανέωση<//>`
     : s.changed ? html`<${Badge} tone="warn" data-tip="Κάποιος το άλλαξε στο Excel. Πάτα «Ανανέωση από Excel» για να περάσουν οι αλλαγές.">Άλλαξε στο Excel<//>`
     : s.locked ? html`<${Badge} tone="warn" data-tip=${s.error}>Ανοιχτό στο Excel · περιμένει<//>`
     : s.error ? html`<${Badge} tone="bad" data-tip=${s.error}>Δεν γράφτηκε<//>`
@@ -122,6 +138,7 @@ function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, 
         <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση: ' + k.label} data-tip="Να μη διαβάζει ούτε να γράφει πια σε αυτό το αρχείο (το αρχείο μένει όπως είναι)" onClick=${onRemove}>✕<//>`}
     </div>
     ${b && canWrite && html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.write !== false} onChange=${(e: any) => onToggle(e.target.checked)}/><span>Γράφει μόνη της κάθε αλλαγή εδώ</span></label>`}
+    ${b && isStatusKind(kind) && html`<label className="srcrow__opt" data-tip="Νέες εγγραφές και αλλαγές ημερομηνιών με γνωστά άτομα περνούν χωρίς κλικ και γράφονται στο Ιστορικό. Ό,τι άλλο (σβησμένα, άγνωστα άτομα, αλλαγές και στις δύο πλευρές) περιμένει την «Ανανέωση από Excel»."><input type="checkbox" className="ui-check" checked=${b.autoRead !== false} onChange=${(e: any) => onAuto(e.target.checked)}/><span>Διαβάζει μόνη της τις απλές αλλαγές του Excel</span></label>`}
   </li>`;
 }
 
@@ -252,26 +269,30 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(true);
   // ποιες εγγραφές είχε το Excel την προηγούμενη φορά (για όσες σβήστηκαν ή άλλαξαν «από» εκεί)
-  const [keys, setKeys] = useState<string[]>([]);
+  // και πώς ήταν οι εγγραφές τότε (base), για όσες άλλαξαν και στις δύο πλευρές
+  const [prev, setPrev] = useState<{ keys: string[]; base: Record<string, string> }>({ keys: [], base: {} });
+  const [keepApp, setKeepApp] = useState<Set<string>>(new Set());
   const cur = state.settings.sources?.[list];
   const same = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
-  useEffect(() => { if (same) window.api.srcKeys(list).then(setKeys); else setKeys([]); }, [list, same]);
+  useEffect(() => { if (same) window.api.srcKeys(list).then(setPrev); else setPrev({ keys: [], base: {} }); }, [list, same]);
   const sheet = book.sheets.find(s => s.name === b.sheet);
   const parsed = useMemo(() => (sheet ? parseStatuses(list, sheet, b, state.people, today) : null), [sheet, b, state.people, today, list]);
-  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, keys) : null), [parsed, state, b, choices, list, keys]);
+  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, prev.keys, prev.base) : null), [parsed, state, b, choices, list, prev]);
   const all = useMemo(() => (parsed ? parsed.cands.filter(c => c.pid == null) : []), [parsed]);
   if (!sheet || !parsed || !d) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const types = KIND[list].types!;
   const go = async () => {
     setBusy(true);
     try {
-      const r = await window.api.srcImport(list, b, choices, !del);
+      const r = await window.api.srcImport(list, b, choices, !del, [...keepApp]);
       if (!r.ok) { toast({ text: r.error }); return; }
       await refresh(); onClose(); toast({ text: r.text });
     } finally { setBusy(false); }
   };
   const pm = new Map(state.people.map(p => [p.id, p]));
-  const n = d.add.length + d.update.length + (del ? d.removed.length : 0);
+  const both = d.update.filter(u => u.conflict); const plain = d.update.filter(u => !u.conflict);
+  const n = d.add.length + d.update.filter(u => !keepApp.has(u.id)).length + (del ? d.removed.length : 0);
+  const toggleKeep = (id: string, on: boolean) => { const x = new Set(keepApp); if (on) x.add(id); else x.delete(id); setKeepApp(x); };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${n ? 'Πέρασε ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
     <div className="tiles"><div className="tile tile--main"><span className="tile__n">${d.add.length}</span><span className="tile__l">Νέες</span></div><div className="tile"><span className="tile__n">${d.update.length}</span><span className="tile__l">Αλλάζουν</span></div>
@@ -288,12 +309,17 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
           <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
           ${c.r in choices ? html`<${Badge}>παραλείπεται<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//>`}</div>`}</div>`)}</div>`}
     ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid)?.last} ${pm.get(a.pid)?.first} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${dm(a.to)}</li>`)}</ul></details>`}
-    ${d.update.length > 0 && html`<details className="note" open=${d.update.length <= 8}><summary>Αλλάζουν (${d.update.length})</summary><ul>${d.update.slice(0, 60).map(u => html`<li key=${u.id}>${u.who}: ${u.what}</li>`)}</ul></details>`}
+    ${both.length > 0 && html`<div className="field"><span className="field__label">Άλλαξαν και στο Excel και στην εφαρμογή (${both.length}): ποιο κρατάς;</span>
+      ${both.map(u => html`<div key=${u.id} className="unm"><span><b>${u.who}</b><small>Excel: ${u.what} · Εφαρμογή: ${u.conflict}</small></span>
+        <${Segmented} small=${true} value=${keepApp.has(u.id) ? 'app' : 'excel'} onChange=${(v: string) => toggleKeep(u.id, v === 'app')} items=${[{ value: 'excel', label: 'Του Excel' }, { value: 'app', label: 'Της εφαρμογής' }]}/></div>`)}
+      <span className="field__help">Ό,τι κρατήσεις από την εφαρμογή γράφεται μετά στο Excel.</span></div>`}
+    ${plain.length > 0 && html`<details className="note" open=${plain.length <= 8}><summary>Αλλάζουν (${plain.length})</summary><ul>${plain.slice(0, 60).map(u => html`<li key=${u.id}>${u.who}: ${u.what}</li>`)}</ul></details>`}
     ${d.removed.length > 0 && html`<div className="field"><span className="field__label">Σβήστηκαν από το Excel (${d.removed.length})</span><ul className="note" style=${{ margin: 0 }}>${d.removed.slice(0, 40).map(x => html`<li key=${x.id}>${pm.get(x.pid)?.last} ${pm.get(x.pid)?.first} · ${TYPES[x.type].label}${x.kind && x.kind !== TYPES[x.type].label ? ' (' + x.kind + ')' : ''} · ${dm(x.from)}–${dm(x.to)}</li>`)}</ul>
       <label className="rule"><input type="checkbox" className="ui-check" checked=${del} onChange=${(e: any) => setDel(e.target.checked)}/><span><b>Σβήσε τες και από την εφαρμογή</b><small>Αλλιώς μένουν στην εφαρμογή και ξαναγράφονται στο Excel.</small></span></label></div>`}
     ${parsed.skipped.length > 0 && html`<details className="note"><summary>Παραλείπονται ${parsed.skipped.length} γραμμές</summary><ul>${parsed.skipped.map(x => html`<li key=${x.r}>Γραμμή ${x.r + 1} · ${x.who}: ${x.why}</li>`)}</ul></details>`}
     ${parsed.cands.some(c => c.noEnd) && html`<p className="note">Όσοι δεν έχουν «έως» μπαίνουν ως σήμερα· αλλάζει από την εφαρμογή.</p>`}
     ${d.appOnly.length > 0 && html`<p className="note">${d.appOnly.length} ${d.appOnly.length === 1 ? 'εγγραφή της εφαρμογής δεν είναι' : 'εγγραφές της εφαρμογής δεν είναι'} στο Excel. Δεν σβήνονται· ${b.write !== false ? 'γράφονται στο Excel μόνες τους μόλις περάσει η ανανέωση' : 'γράφονται στο Excel με την «Ενημέρωση Excel»'}.</p>`}
+    ${d.kept.length > 0 && html`<p className="note">${d.kept.length === 1 ? '1 εγγραφή άλλαξε' : d.kept.length + ' εγγραφές άλλαξαν'} μόνο στην εφαρμογή (το Excel έχει ό,τι είχε): μένουν όπως είναι και γράφονται στο Excel.</p>`}
     ${d.dup.length > 0 && html`<p className="note">${d.dup.length === 1 ? '1 γραμμή είναι διπλή' : d.dup.length + ' γραμμές είναι διπλές'} (ίδιο άτομο, ίδια έναρξη) και κρατήθηκε η πρώτη.</p>`}
   <//>`;
 }
@@ -319,7 +345,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   const [choices, setChoices] = useState<Record<number, number | null>>({});
   const [busy, setBusy] = useState(false);
   const sheet = book.sheets.find(x => x.name === b.sheet);
-  const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || prevMonth(today));
+  const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || b.month || prevMonth(today));
   const res = useMemo(() => {
     if (!sheet) return null;
     if (list === 'posts' || list === 'outside') {
@@ -350,7 +376,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const go = async () => {
     setBusy(true);
-    try { const r = await window.api.srcApply(list, b, res.cmd, 'keep' in res ? res.keep : undefined); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
+    try { const r = await window.api.srcApply(list, list === 'duties' && month !== sheetMonth(sheet!, b.header, today) ? { ...b, month } : b, res.cmd, 'keep' in res ? res.keep : undefined); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
     finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}

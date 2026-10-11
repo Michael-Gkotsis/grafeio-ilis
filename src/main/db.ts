@@ -181,10 +181,10 @@ export class Store {
     if (flush) this.flush();
     return id;
   }
-  lastUndoable(): { id: number; text: string; patch: Patch } | null {
-    const r = this.all<{ id: number; text: string; patch: string; undoable: number; undone: number }>('SELECT id, text, patch, undoable, undone FROM audit WHERE patch IS NOT NULL ORDER BY id DESC LIMIT 50');
+  lastUndoable(): { id: number; text: string; source: string; patch: Patch } | null {
+    const r = this.all<{ id: number; text: string; source: string; patch: string; undoable: number; undone: number }>('SELECT id, text, source, patch, undoable, undone FROM audit WHERE patch IS NOT NULL ORDER BY id DESC LIMIT 50');
     const e = r.find(x => x.undoable && !x.undone);
-    return e ? { id: e.id, text: e.text, patch: JSON.parse(e.patch) } : null;
+    return e ? { id: e.id, text: e.text, source: e.source, patch: JSON.parse(e.patch) } : null;
   }
   markUndone(id: number) { this.db.run('UPDATE audit SET undone = 1 WHERE id = ?', [id]); this.flush(); }
   // after: μόνο όσες γραμμές γράφτηκαν μετά από αυτό το id (ό,τι δεν έχει δει ακόμα το UI)
