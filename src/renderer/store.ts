@@ -31,7 +31,8 @@ const idxCache = new WeakMap<Person[], Indexed[]>();
 function indexOf(people: Person[]): Indexed[] {
   let x = idxCache.get(people);
   if (!x) {
-    x = people.filter(p => p.active).map(p => ({ p, key: normGreek([p.last, p.first, p.father, p.asm, p.room != null ? 'Θ' + p.room : ''].join(' ')), lat: translit(p.last + ' ' + p.first) }));
+    // και βαθμός, ρόλος, πόστο, ειδικότητα, ΕΣΣΟ: «θαλαμαρχ», «ΚΨΜ», «2026 Γ» (για τις αποθηκευμένες λίστες)
+    x = people.filter(p => p.active).map(p => ({ p, key: normGreek([p.last, p.first, p.father, p.asm, p.room != null ? 'Θ' + p.room : '', p.rank, p.role, p.post, p.spec, p.essos].filter(Boolean).join(' ')), lat: translit(p.last + ' ' + p.first) }));
     x.sort((a, b) => collator.compare(a.p.last, b.p.last) || collator.compare(a.p.first, b.p.first));
     idxCache.set(people, x);
   }

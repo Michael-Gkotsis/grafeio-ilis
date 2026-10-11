@@ -8,6 +8,7 @@ import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, 
 import { whyText, fillDay, lastResort, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, dm, dmy, dow, parseD, pskDays, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
+import { useRowH } from '../prefs';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό'].filter(Boolean).join(', ');
@@ -101,6 +102,9 @@ export function GuardScreen() {
   const locked = date < today && !unlocked[date];
   const [addOpen, setAddOpen] = useState(false);
   const [fixedOpen, setFixedOpen] = useState(false);
+  // κάρτες που κλείνουν: πλήρη μπλοκ κλειστά, με κενά ανοιχτά. Ό,τι αλλάξεις με το χέρι μένει όσο δουλεύεις.
+  const [fold, setFold] = useState<Record<string, boolean>>({});
+  const flip = (id: string, open: boolean) => setFold(f => ({ ...f, [id]: !open }));
   const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string) => {
     const x = posts.find(q => q.k === k)!;
     if (await run({ t: 'assign', date, k, pid, force: reason }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + (instead ? ' αντί για ' + shortName(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoAct] });
@@ -147,11 +151,12 @@ export function GuardScreen() {
       <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)) }, false)) toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoAct] }); }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ<//>
       <${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${() => ex('frouraPsk', psk[0], 'η ΦΡΟΥΡΑ του ΠΣΚ')} data-tip="Ένα Excel με τρία φύλλα: Παρ, Σαβ, Κυρ">${xb === 'frouraPsk' ? 'Δημιουργία…' : 'Excel ΠΣΚ'}<//>
       <${Button} size="sm" variant="ghost" disabled=${!!xb} onClick=${() => ex('outsPsk', psk[0], 'οι εξοδούχοι του ΠΣΚ')} data-tip="Εξοδούχοι-παραμένοντες για τις τρεις μέρες, ένα φύλλο ανά μέρα">${xb === 'outsPsk' ? 'Δημιουργία…' : 'Εξοδούχοι ΠΣΚ'}<//></span></div>`}
-    ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length;
-      return html`<${Card} key=${b.id} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
-        <ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? whyText(state, date, x.k) : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}<//>`; })}
+    ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length; const open = fold[b.id] ?? emp > 0;
+      const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
+      return html`<${Card} key=${b.id} open=${open} onToggle=${() => flip(b.id, open)} summary=${emp ? emp + ' ' + (emp === 1 ? 'κενή θέση' : 'κενές θέσεις') + (names ? ' · ' + names : '') : 'Πλήρης · ' + names} title=${html`${b.name} <${Badge} tone=${b.armed ? 'warn' : 'outline'} data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ, ΣΤΕΠ'}>${b.armed ? 'Ένοπλη' : 'Άοπλη'}<//>`} actions=${emp ? html`<${Badge} tone="bad">${emp} ${emp === 1 ? 'κενή' : 'κενές'}<//>` : html`<${Badge} tone="ok">✓<//>`}>
+        ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? whyText(state, date, x.k) : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}<//>`; })}
     <div><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
-    <${Card} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
+    <${Card} open=${!!fold.ex} onToggle=${() => flip('ex', !!fold.ex)} summary=${excluded.noDuty.length + ' σε καμία υπηρεσία · ' + excluded.unarmed.length + ' μόνο σε άοπλες · ' + excluded.capped.length + ' μόνιμα όχι σε κάποιες θέσεις'} title=${'Ποιοι δεν μπαίνουν (' + dayName(date, today).toLowerCase() + ')'}>
       <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
       <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
       <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip=${Object.keys(c).map(k => CAP_KINDS.find(x => x[0] === k)![1] + ': ' + c[k]).join(' · ')}>${shortName(p)} <${Badge} tone="outline">όχι ${Object.keys(c).map(k => (KIND_LBL as P)[k]).join(', ')}<//></button>`)}</div>
@@ -263,7 +268,7 @@ export function OutsScreen() {
   const c0 = strengthOf(state, date);
   const awayDelta = changes.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
   const save = async () => { if (await run({ t: 'outs', date, changes }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + changes.length + ' αλλαγές)', actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); } };
-  const rh = mobile ? 96 : 52;
+  const rh = useRowH(mobile ? 96 : 52, mobile ? 96 : 44);
   return html`<div>
     <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή δεν επιλέγονται."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><//>
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}

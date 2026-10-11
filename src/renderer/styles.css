@@ -458,3 +458,52 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .psk>div{flex:1;min-width:180px;display:flex;flex-direction:column}.psk small{color:var(--muted-fg);font-size:12px}
 .psk__acts{display:flex;gap:6px;flex-wrap:nowrap}
 .chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
+
+/* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
+.backbtn{margin:0 -4px 0 -6px;color:var(--muted-fg)}
+.backbtn:disabled{opacity:.35}
+.ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%}
+.hdsel{border:0;background:transparent;font-weight:600;font-size:13px;cursor:pointer;padding:0;margin:0;max-width:100%}
+.hdsel:hover{text-decoration:underline}
+.actfilter .actfilter__act{font-weight:600;color:var(--info);white-space:nowrap}
+.ui-chip--view{border-style:dashed}
+.ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
+.ui-chip--view[aria-pressed="true"] svg{color:inherit}
+/* κάρτες που κλείνουν (Υπηρεσίες) */
+.ui-card__head h2 .ui-card__toggle{all:unset;display:inline-flex;align-items:center;gap:6px;cursor:pointer;max-width:100%}
+.ui-card__toggle:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+.ui-card__toggle svg{flex:none;color:var(--muted-fg);transition:transform .12s}
+.ui-card__toggle[aria-expanded="true"] svg{transform:rotate(90deg)}
+.ui-card__toggle:hover span{text-decoration:underline;text-underline-offset:3px}
+.ui-card--fold.is-closed .ui-card__head{padding-bottom:2px}
+.ui-card__sum{padding:4px 16px 12px 38px;font-size:13px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ζουμ προεπισκόπησης Excel */
+.xl__zoom{margin-left:8px;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,.55);border-radius:4px;background:transparent;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.xl__zoom:hover{background:rgba(255,255,255,.14)}
+/* Ρυθμίσεις › Εμφάνιση */
+.pref{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)}
+.pref:first-child{border-top:0;padding-top:0}
+.pref > div:first-child{flex:1 1 260px;min-width:0}
+.pref small{display:block;color:var(--muted-fg);font-size:12px;margin-top:2px}
+/* συμπαγής προβολή: λιγότερα περιθώρια, χαμηλότερα στοιχεία (τα ύψη γραμμών των λιστών τα δίνει η VirtualList) */
+[data-density="compact"] body{font-size:14px}
+[data-density="compact"] .main{padding:14px 18px 28px}
+[data-density="compact"] .page-head{margin-bottom:10px}
+[data-density="compact"] .page-head h1{font-size:21px}
+[data-density="compact"] .ui-card__head{padding:10px 12px 0}
+[data-density="compact"] .ui-card__body{padding:10px 12px 12px}
+[data-density="compact"] .ui-card__sum{padding:2px 12px 10px 34px}
+[data-density="compact"] .ui-btn{height:34px;padding:0 12px}
+[data-density="compact"] .ui-btn--sm{height:28px;padding:0 8px}
+[data-density="compact"] .ui-input{height:34px}
+[data-density="compact"] .ui-chip{height:28px;padding:0 10px}
+[data-density="compact"] .navbtn{height:36px}
+[data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
+[data-density="compact"] .ptable__row{font-size:13px}
+[data-density="compact"] .ptable__head > *{padding:6px 10px}
+[data-density="compact"] .post{padding:5px 8px}
+[data-density="compact"] .posts{gap:4px}
+[data-density="compact"] .rec li,[data-density="compact"] .log li{padding:7px 12px}
+[data-density="compact"] .attn li{padding:7px 10px}
+[data-density="compact"] .quick button{min-height:70px;padding:10px 12px}
+[data-density="compact"] .ui-seg--sm button{height:28px}

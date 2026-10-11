@@ -1,6 +1,7 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { createContext, memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Dialog, Strip } from './ui';
+import { html, cx, Badge, Button, Dialog, Kbd, Strip } from './ui';
+import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
@@ -73,9 +74,20 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
   }, [model]);
   useEffect(() => { if (!flash.keys.size) return; const t = setTimeout(() => setFlash(f => ({ keys: new Set(), gen: f.gen })), 1900); return () => clearTimeout(t); }, [flash]);
   const letters = model.cols.map((_, i) => (i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26))));
+  // «Χωρά»: το έντυπο μικραίνει ώστε να φαίνεται όλο το πλάτος (CSS zoom, υπολογίζεται μόνο όταν αλλάζει το πλάτος)
+  const { prefs, set } = usePrefs(); const fit = prefs.xlZoom === 'fit';
+  const box = useRef<HTMLDivElement>(null); const [cw, setCw] = useState(0);
+  useEffect(() => {
+    const el = box.current; if (!el || !fit) return;
+    const ro = new ResizeObserver(() => setCw(el.clientWidth)); ro.observe(el); setCw(el.clientWidth);
+    return () => ro.disconnect();
+  }, [fit]);
+  const natural = 28 + model.cols.reduce((a, w) => a + (w || 64), 0);
+  const z = fit && cw > 0 && natural > cw ? Math.max(0.4, (cw - 2) / natural) : 1;
   return html`<div className="xl" aria-label=${'Προεπισκόπηση ' + fileName}>
-    <div className="xl__bar"><span className="xl__fn">${fileName}</span><span>· φύλλο «${sheetName}»</span><span className="xl__meta">${meta}</span></div>
-    <div className="xl__scroll"><table>
+    <div className="xl__bar"><span className="xl__fn">${fileName}</span><span>· φύλλο «${sheetName}»</span><span className="xl__meta">${meta}</span>
+      <button type="button" className="xl__zoom" aria-pressed=${fit} data-tip=${fit ? 'Σε πραγματικό μέγεθος (100%)' : 'Να χωρά όλο το πλάτος'} data-tip-side="left" onClick=${() => set('xlZoom', fit ? '100' : 'fit')}>${fit ? 'Χωρά' + (z < 1 ? ' · ' + Math.round(z * 100) + '%' : '') : '100%'}</button></div>
+    <div className="xl__scroll" ref=${box}><table style=${z < 1 ? { width: natural + 'px', minWidth: 0, zoom: z } : undefined}>
       <colgroup><col style=${{ width: '28px' }}/>${model.cols.map((w, i) => html`<col key=${i} style=${w ? { width: w + 'px' } : undefined}/>`)}</colgroup>
       <thead><tr><th></th>${model.cols.map((_, i) => html`<th key=${i}>${letters[i]}</th>`)}</tr></thead>
       <tbody>${model.rows.map((r, ri) => html`<tr key=${ri}><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = flash.keys.has(ri + ':' + ci); return html`<td key=${ci + (f ? 'f' + flash.gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.v}</td>`; })}</tr>`)}</tbody>
@@ -141,10 +153,10 @@ export function TemplateNote({ ids }: { ids: string[] }) {
 type Boot = import('../shared/api').Boot;
 
 /* Ορατό ενεργό φίλτρο με ✕ (έρευνα §3.7) */
-export function ActiveFilter({ parts, onClear }: { parts: (string | false | null | undefined)[]; onClear: () => void }) {
+export function ActiveFilter({ parts, onClear, extra }: { parts: (string | false | null | undefined)[]; onClear: () => void; extra?: any }) {
   const ps = parts.filter(Boolean) as string[];
   if (!ps.length) return null;
-  return html`<span className="actfilter" role="status">Φίλτρο: <b>${ps.join(' · ')}</b><button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο" onClick=${onClear}>✕</button></span>`;
+  return html`<span className="actfilter" role="status">Φίλτρο: <b>${ps.join(' · ')}</b>${extra}<button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο" onClick=${onClear}>✕</button></span>`;
 }
 
 /* Αντίγραφο σε USB (έρευνα §4.2): ένα κουμπί, και υπενθύμιση στο «Σήμερα» αν πέρασαν πάνω από 7 μέρες */
@@ -160,6 +172,11 @@ export function useUsbCopy() {
 }
 
 /* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
+const SHORTCUTS: [string, string][] = [
+  ['Ctrl K', 'Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε'], ['Ctrl F', 'Αναζήτηση στη λίστα της οθόνης'], ['Ctrl N', 'Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)'],
+  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Προσωπικό, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ, Ιστορικό, Ρυθμίσεις'],
+  ['Alt ←', 'Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)'], ['Ctrl B', 'Μενού πλήρες ή μόνο εικονίδια'], ['F1', 'Αυτό το υπόμνημα'], ['Esc', 'Κλείσιμο παραθύρου ή καρτέλας']
+];
 export function LegendDialog({ onClose }: { onClose: () => void }) {
   const CAT: Record<string, string> = { med: 'Ιατρικό', other: 'Άλλο', pun: 'Ποινή', abs: 'Απουσία', out: 'Έξοδος' };
   return html`<${Dialog} size="lg" title="Υπόμνημα κωδικών" description="Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ΗΚΑΙ." onClose=${onClose} footer=${html`<${Button} onClick=${onClose}>Κλείσιμο<//>`}>
@@ -167,5 +184,7 @@ export function LegendDialog({ onClose }: { onClose: () => void }) {
       ${TYPE_KEYS.map(k => { const t = TYPES[k]; return html`<tr key=${k}><td><${Badge} tone=${t.tone}>${t.label}<//></td><td>${t.long}<small className="muted"> · ${CAT[t.cat] || t.cat}${t.code ? ' · στο ημερολόγιο: ' + t.code : ''}</small></td><td>${effects(t) || 'Μπαίνει κανονικά σε υπηρεσίες και έξοδο'}${k === 'PUN' ? '. Αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί.' : ''}</td></tr>`; })}
     </tbody></table>
     <p className="note" style=${{ margin: '10px 0 0' }}>Στις υπηρεσίες: <b>Ένοπλη</b> θέση = δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ. <b>★</b> = υπηρεσία σε ΣΚ ή αργία. <b>⚠</b> = πέρασε παρά τον κανόνα. Στον έλεγχο υπηρεσιών: Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ.</p>
+    <h3 style=${{ fontSize: '15px', margin: '14px 0 6px' }}>Συντομεύσεις</h3>
+    <table className="legend"><tbody>${SHORTCUTS.map(([k, t]) => html`<tr key=${k}><td className="nw"><${Kbd}>${k}<//></td><td>${t}</td></tr>`)}</tbody></table>
   <//>`;
 }
