@@ -2,13 +2,18 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
-import { capBlock, dutyBlock, lastResort, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
+import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
   | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[] }
   | { t: 'endStatus'; id: string }
+  | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
+  | { t: 'deleteCadre'; id: string }
+  | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> }
+  | { t: 'deleteCadreAbs'; id: string }
+  | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
   | { t: 'deleteStatus'; id: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string }
@@ -24,7 +29,10 @@ export type Command =
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
   | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
+  | { t: 'autofillRange'; dates: ISODate[] }
+  | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'expire' };
 
 export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
@@ -58,7 +66,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
-          if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; st.pending = true; }
+          if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; st.pending = true; if (cmd.by?.trim()) st.by = cmd.by.trim(); if (cmd.reason?.trim()) st.reason = cmd.reason.trim(); if (cmd.on) st.on = cmd.on; }
           return st;
         })]
       };
@@ -76,6 +84,39 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const kept = s.statuses.filter(x => !(pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to));
       const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date }));
       return { state: { ...s, statuses: [...kept, ...added] }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + c.changes.length + ' αλλαγές', files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
+    }
+    case 'saveCadre': {
+      const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
+      if (!last) throw new Error('Γράψε επώνυμο');
+      const old = c0.id ? s.cadreList.find(x => x.id === c0.id) : undefined;
+      const x: Cadre = { id: old?.id || 's' + ctx.newId(), rank: (c0.rank || '').trim().toUpperCase(), hk: c0.hk, last, first, active: c0.active ?? old?.active ?? true };
+      if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
+      const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : [...s.cadreList, x];
+      return { state: { ...s, cadreList }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first, files: ['ΗΚΑΙ'] };
+    }
+    case 'deleteCadre': {
+      const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + x.rank + ' ' + x.last, files: ['ΗΚΑΙ'] };
+    }
+    case 'addCadreAbs': {
+      const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      if (c.abs.to < c.abs.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const clash = s.cadreAbs.find(a => a.cid === x.id && a.from <= c.abs.to && c.abs.from <= a.to);
+      if (clash) throw new Error(x.last + ' έχει ήδη απουσία ' + dm(clash.from) + '–' + dm(clash.to));
+      const abs: CadreAbs = { ...c.abs, id: 'a' + ctx.newId() }; if (!abs.note) delete abs.note;
+      const lbl = CADRE_ABS.find(k => k[0] === abs.kind)?.[1] || abs.kind;
+      return { state: { ...s, cadreAbs: [...s.cadreAbs, abs] }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to), files: ['ΗΚΑΙ'] };
+    }
+    case 'deleteCadreAbs': {
+      const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η απουσία');
+      const x = s.cadreList.find(y => y.id === a.cid);
+      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε απουσία στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: ['ΗΚΑΙ'] };
+    }
+    case 'setPunInfo': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || st.type !== 'PUN') throw new Error('Δεν βρέθηκε η ποινή');
+      const next: Status = { ...st, on: c.on || undefined, by: c.by.trim() || undefined, reason: c.reason.trim() || undefined };
+      (['on', 'by', 'reason'] as const).forEach(k => { if (next[k] === undefined) delete next[k]; });
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) }, text: 'Στοιχεία ποινής: ' + shortName(pm.get(st.pid)!) + (next.by ? ', από ' + next.by : '') + (next.reason ? ', διότι ' + next.reason : ''), files: [] };
     }
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
@@ -106,6 +147,21 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       }
       return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
+    case 'swapPosts': {
+      const A = postBy(s, c.a), B = postBy(s, c.b); const g = s.guards[c.date] || {};
+      const chk = swapCheck(s, c.date, c.a, c.b);
+      if (chk.hard) throw new Error('Δεν γίνεται ανταλλαγή: ' + chk.hard);
+      if (chk.soft && !c.force) throw new Error('Δεν γίνεται ανταλλαγή: ' + chk.soft);
+      const pa = g[c.a], pb = g[c.b];
+      const guards = { ...s.guards, [c.date]: { ...g, [c.a]: pb, [c.b]: pa } };
+      return { state: { ...s, guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': ανταλλαγή ' + shortName(pm.get(pa)!) + ' (' + postTxt(A!) + ') ↔ ' + shortName(pm.get(pb)!) + ' (' + postTxt(B!) + ')' + (chk.soft ? ' (παρά τον κανόνα: ' + chk.soft + '. Αιτία: ' + c.force + ')' : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+    }
+    case 'autofillRange': {
+      // ΠΣΚ: μία μέρα μετά την άλλη, ώστε οι κανόνες (ανάπαυση, νούμερα, ΣΚ) να ισχύουν και ανάμεσά τους
+      let st = s; const parts: string[] = []; let empty = 0; const warn: string[] = [];
+      for (const d of c.dates) { const r = fillDay(st, d); st = { ...st, guards: r.guards }; parts.push(dayName(d, ctx.today).toLowerCase() + ' ' + r.n); empty += r.empty.length; warn.push(...r.warn); }
+      return { state: st, text: 'Υπηρεσίες ΠΣΚ ' + range(c.dates[0], c.dates[c.dates.length - 1]) + ': αυτόματη συμπλήρωση (' + parts.join(', ') + ')' + (empty ? ', ' + empty + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (warn.length ? '. Χωρίς άλλη επιλογή: ' + warn.join('· ') : ''), files: c.dates.map(d => 'Υπηρεσίες ' + dm(d)).concat('Έλεγχος υπηρεσιών') };
+    }
     case 'autofill': {
       const r = fillDay(s, c.date);
       return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
@@ -118,7 +174,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, rules: c.rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
     case 'setCap': {
       const cur = { ...(s.caps[c.pid] || {}) }; cur[c.kind] = c.allowed ? null : 'Από τον λοχία';
-      const acc: Record<string, string> = { th: 'θαλαμοφύλακα', op: 'οπλοφύλακα', mg: 'μαγειρεία', sk: 'σκοπιά' };
+      const acc: Record<string, string> = CAP_ACC as Record<string, string>;
       return { state: { ...s, caps: { ...s.caps, [c.pid]: cur } }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(pm.get(c.pid)!) + (c.allowed ? ' κάνει ' : ' δεν κάνει ') + (acc[c.kind] || c.kind), files: [] };
     }
     case 'setSettings':
@@ -154,6 +210,28 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       return { state: { ...s, settings: { ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] } }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + ')', files: [] };
+    }
+    case 'editBlock': {
+      // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
+      const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
+      const list = [...blocksOf(s.settings, c.phase)]; const i = list.findIndex(x => x.id === c.id); if (i < 0) throw new Error('Δεν βρέθηκε η υπηρεσία');
+      const b = list[i];
+      if (c.move) {
+        const j = i + c.move; if (j < 0 || j >= list.length || list[j].kind === 'ly' || b.kind === 'ly') return { state: s, text: '', files: [] };
+        [list[i], list[j]] = [list[j], list[i]];
+        return { state: { ...s, settings: { ...s.settings, [key]: list } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': άλλαξε σειρά', files: [] };
+      }
+      const name = (b.custom && c.name.trim()) || b.name;
+      let posts = b.posts.map(p => (p.rot == null && c.hrs[p.k] != null ? { ...p, hrs: c.hrs[p.k].trim() || 'ημέρα' } : p));
+      if (b.custom) {
+        const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
+        // οι θέσεις που περισσεύουν κρύβονται (όχι διαγραφή), για να μη χαθεί το ιστορικό τους
+        for (let j = posts.length; j < n; j++) posts.push({ k: b.id + '_' + (j + 1), label: '', short: '', hrs: posts[0]?.hrs || 'ημέρα' });
+        posts = posts.map((p, j) => ({ ...p, label: name + (n === 1 ? '' : ' ' + (j + 1) + 'ος'), short: n === 1 ? name : (j + 1) + 'ος', hidden: j >= n || undefined }));
+        posts.forEach(p => { if (!p.hidden) delete p.hidden; });
+      }
+      list[i] = { ...b, name, posts };
+      return { state: { ...s, settings: { ...s.settings, [key]: list } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
     }
     case 'setBlock': {
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';

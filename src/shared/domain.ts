@@ -73,6 +73,9 @@ export interface Status {
   kind?: string;      // είδος ποινής / άδειας / ΕΑ-ΕΥ
   note?: string;
   pending?: boolean;  // ποινή που αιτείται στην ΗΚΑΙ (Κ-19)
+  by?: string;        // ποινή: ποιος τιμώρησε
+  reason?: string;    // ποινή: «διότι …»
+  on?: ISODate;       // ποινή: ημερομηνία τιμωρίας (αλλιώς η έναρξη)
 }
 
 // ---------------------------------------------------------------------------
@@ -84,8 +87,8 @@ export const KIND_NAME: Record<DutyKind, string> = { ly: 'Λ/Υ - Δ/Υ', th: '�
 // Κωδικός στον έλεγχο υπηρεσιών (δείγμα 03) και στο ημερολόγιο κωλυομένων (δείγμα 14)
 export const KIND_CODE: Record<DutyKind, string> = { ly: 'ΛΥ', th: 'Θ', op: 'ΟΠ', sk: 'Σ', mg: 'Μ', tae: 'Τ', other: 'Υ' };
 // Είδη που ρυθμίζονται ανά άτομο στη «Δυνατότητα υπηρεσιών» (δείγμα 02)
-export const CAP_KINDS: [DutyKind, string][] = [['th', 'Θαλαμοφύλακας'], ['op', 'Οπλοφύλακας'], ['mg', 'Μαγειρεία'], ['sk', 'Σκοπιά']];
-export const CAP_ACC: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακα', op: 'οπλοφύλακα', mg: 'μαγειρεία', sk: 'σκοπιά' };
+export const CAP_KINDS: [DutyKind, string][] = [['th', 'Θαλαμοφύλακας'], ['op', 'Οπλοφύλακας'], ['mg', 'Μαγειρεία'], ['sk', 'Σκοπιά'], ['tae', 'ΤΑΕ'], ['other', 'Άλλες (πύλη κ.λπ.)']];
+export const CAP_ACC: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακα', op: 'οπλοφύλακα', mg: 'μαγειρεία', sk: 'σκοπιά', tae: 'ΤΑΕ', other: 'άλλη υπηρεσία' };
 
 // Βάρδιες 2 ωρών, κύκλος 14:00 → 14:00 (δείγμα «ΦΡΟΥΡΑ»)
 export const ROT = [
@@ -95,7 +98,7 @@ export const ROT = [
   ['20:00-22:00', '04:00-06:00', '12:00-14:00']
 ];
 
-export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string }
+export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean }
 export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean }
 export type Phase = 'sven' | 'spen';
 export const PHASE_NAME: Record<Phase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
@@ -207,12 +210,19 @@ export interface AppState {
   printed: Record<ISODate, string>;
   baseline: Record<number, Baseline>;    // υπηρεσίες πριν από την εφαρμογή (χωρίς ημερομηνία)
   hkaiManual: Record<ISODate, HkaiManual>;
+  cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
+  cadreAbs: CadreAbs[];                  // απουσίες στελεχών
 }
+// Στελέχη (από την εφαρμογή του άλλου γραφέα): ονόματα, θέση, απουσίες, που ταΐζουν και την ΗΚΑΙ
+export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; phone?: string; role?: string; active: boolean }
+export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
+// είδος απουσίας στελέχους → στήλη της ΗΚΑΙ (κενό = μόνο στη λίστα)
+export const CADRE_ABS: [string, string, string][] = [['ka', 'Κανονική άδεια', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['fp', 'Φύλλο πορείας', 'fp'], ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']];
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: []
 });

@@ -1,6 +1,6 @@
 // Προέλεγχος πριν από κάθε έντυπο (έρευνα §3.6): ✕ μπλοκάρει, ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό.
 // Τρέχει και στο UI (για να δείξει τη λίστα) και στο main (για να μη βγει ποτέ έντυπο με ✕).
-import { dm, type ISODate } from './dates';
+import { dm, dow, pskDays, type ISODate } from './dates';
 import { TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
   activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, statusesOn, HK_A, HK_K, HK_NCO, HK_OFFICERS
@@ -10,6 +10,8 @@ import type { ExportKind } from './api';
 export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' }
 
 export function preflight(kind: ExportKind, s: AppState, date: ISODate): Check[] {
+  // ΠΣΚ: οι έλεγχοι των τριών ημερών, με την ημέρα μπροστά
+  if (kind === 'frouraPsk' || kind === 'outsPsk') return pskDays(date).flatMap(d => preflight(kind === 'frouraPsk' ? 'froura' : 'outs', s, d).map(c => ({ ...c, text: dow(d) + ' ' + dm(d) + ': ' + c.text })));
   if (kind === 'froura') return frouraChecks(s, date);
   if (kind === 'hkai') return hkaiChecks(s, date);
   if (kind === 'outs') return outsChecks(s, date);

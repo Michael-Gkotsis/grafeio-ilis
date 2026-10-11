@@ -24,3 +24,6 @@ export const dayName = (s: ISODate, ref: ISODate = today()): string =>
   s === ref ? 'Σήμερα' : s === addDays(ref, 1) ? 'Αύριο' : s === addDays(ref, -1) ? 'Χθες' : dow(s) + ' ' + dm(s);
 export const nowHM = (): string => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 export const isWeekend = (d: ISODate): boolean => { const w = parseD(d).getDay(); return w === 0 || w === 6; };
+
+// Φρουρά ΠΣΚ: Παρασκευή, Σάββατο, Κυριακή του ΣΚ στο οποίο ανήκει η μέρα (Παρ/Σαβ/Κυρ), αλλιώς του επόμενου
+export const pskDays = (d: ISODate): ISODate[] => { const w = parseD(d).getDay(); const fri = addDays(d, w === 5 ? 0 : w === 6 ? -1 : w === 0 ? -2 : 5 - w); return [fri, addDays(fri, 1), addDays(fri, 2)]; };

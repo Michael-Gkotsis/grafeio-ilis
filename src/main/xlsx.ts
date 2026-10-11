@@ -221,3 +221,53 @@ export class Workbook {
     return this.zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   }
 }
+
+// Ένα αρχείο με πολλά φύλλα από ήδη συμπληρωμένα αρχεία του ίδιου template (π.χ. ΦΡΟΥΡΑ ΠΣΚ: ένα φύλλο ανά ημέρα).
+// Παίρνει το πρώτο φύλλο κάθε αρχείου· στυλ και κοινές συμβολοσειρές είναι ίδια, αφού βγήκαν από το ίδιο template.
+export async function mergeFirstSheets(bufs: Buffer[], names: string[]): Promise<Buffer> {
+  const xmlName = (n: string) => esc(n.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
+  const base = await JSZip.loadAsync(bufs[0]);
+  let wbx = await base.file('xl/workbook.xml')!.async('string');
+  let rels = await base.file('xl/_rels/workbook.xml.rels')!.async('string');
+  let ct = await base.file('[Content_Types].xml')!.async('string');
+  const firstSheet = /<sheet\b[^>]*>/.exec(wbx)![0];
+  const oldName = attr(firstSheet, 'name')!;
+  const printArea = (x: string) => /<definedName\b[^>]*name="_xlnm\.Print_Area"[^>]*>([^<]*)<\/definedName>/.exec(x)?.[1] || null;
+  const areaFor = (body: string | null, name: string) => (body ? body.replace(/^.*!/, "'" + xmlName(name).replace(/'/g, "''") + "'!") : null);
+  // πρώτο φύλλο: νέο όνομα και περιοχή εκτύπωσης
+  wbx = wbx.replace(firstSheet, setAttr(firstSheet, 'name', xmlName(names[0])));
+  const areas: (string | null)[] = [areaFor(printArea(wbx), names[0])];
+  let maxId = Math.max(...[...wbx.matchAll(/sheetId="(\d+)"/g)].map(m => +m[1]));
+  let maxRid = Math.max(...[...rels.matchAll(/Id="rId(\d+)"/g)].map(m => +m[1]));
+  const newSheets: string[] = [];
+  for (let i = 1; i < bufs.length; i++) {
+    const z = await JSZip.loadAsync(bufs[i]);
+    const zw = await z.file('xl/workbook.xml')!.async('string');
+    const zr = await z.file('xl/_rels/workbook.xml.rels')!.async('string');
+    const rid = attr(/<sheet\b[^>]*>/.exec(zw)![0], 'r:id')!;
+    const target = attr([...zr.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid)!, 'Target')!;
+    const src = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+    // αντίγραφο φύλλου χωρίς δικές του σχέσεις (εκτυπωτής, σχέδια): αλλιώς θα έμεναν αναφορές που δεν υπάρχουν
+    let x = (await z.file(src)!.async('string'))
+      .replace(/<drawing\b[^>]*\/>|<legacyDrawing\b[^>]*\/>/g, '').replace(/\sr:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
+    const path = `xl/worksheets/sheet_m${i + 1}.xml`;
+    base.file(path, x);
+    maxId++; maxRid++;
+    newSheets.push(`<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="${xmlName(names[i])}" sheetId="${maxId}" state="visible" r:id="rId${maxRid}"/>`);
+    rels = rels.replace('</Relationships>', `<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}" Id="rId${maxRid}"/></Relationships>`);
+    ct = ct.replace('</Types>', `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+    areas.push(areaFor(printArea(zw), names[i]));
+  }
+  wbx = wbx.replace('</sheets>', newSheets.join('') + '</sheets>');
+  // περιοχές εκτύπωσης όλων των φύλλων
+  const dn = areas.map((a, i) => (a ? `<definedName name="_xlnm.Print_Area" localSheetId="${i}">${a}</definedName>` : '')).join('');
+  wbx = wbx.replace(/<definedName\b[^>]*name="_xlnm\.Print_Area"[^>]*>[^<]*<\/definedName>/g, '');
+  if (/<definedNames>/.test(wbx)) wbx = wbx.replace('<definedNames>', '<definedNames>' + dn);
+  else if (dn) wbx = wbx.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+  wbx = wbx.replace(/<definedNames><\/definedNames>/, '');
+  // άλλα ονόματα που έδειχναν στο παλιό όνομα του πρώτου φύλλου
+  const on = oldName.replace(/&amp;/g, '&'); const nn = "'" + xmlName(names[0]).replace(/'/g, "''") + "'!";
+  wbx = wbx.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, a, b: string, c) => a + b.split("'" + on + "'!").join(nn).split(on + '!').join(nn) + c);
+  base.file('xl/workbook.xml', wbx); base.file('xl/_rels/workbook.xml.rels', rels); base.file('[Content_Types].xml', ct);
+  return base.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}

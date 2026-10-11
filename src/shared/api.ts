@@ -4,7 +4,7 @@ import type { Command } from './commands';
 import type { ISODate } from './dates';
 import type { Check } from './preflight';
 
-export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check';
+export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
 export interface TemplateInfo { id: string; name: string; file: string; ok: boolean; custom: boolean }
 export type CmdResult = { ok: true; state: AppState; audit: AuditEntry[]; text: string } | { ok: false; error: string };
