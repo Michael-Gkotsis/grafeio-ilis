@@ -10,7 +10,7 @@ import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
-import type { Boot } from '../shared/api';
+import type { Boot, CmdResult } from '../shared/api';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -55,23 +55,34 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [boot, setBoot] = useState(initial);
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
+  const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
-  const refresh = useCallback(async () => { const b = await window.api.boot(); setBoot(b); setState(b.state); setAudit(b.audit); }, []);
-  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main γράφει τις λήξεις· φέρνουμε τη νέα κατάσταση
-  useEffect(() => { refresh(); }, [today]);
+  const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);
+  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main γράφει τις λήξεις· φέρνουμε τη νέα κατάσταση.
+  // Όχι στο πρώτο άνοιγμα: το boot μόλις ήρθε, και δεύτερο θα έστελνε ξανά όλα τα δεδομένα.
+  const bootDay = useRef(today);
+  useEffect(() => { if (today !== bootDay.current) { bootDay.current = ''; refresh(); } }, [today]);
+  // Ο main στέλνει μόνο ό,τι άλλαξε: τα υπόλοιπα κρατούν την ίδια αναφορά, άρα και τα ευρετήρια (rules.ts) και τα useMemo τους
+  const merge = useCallback((r: Extract<CmdResult, { ok: true }>) => {
+    const state = Object.keys(r.changes).length ? { ...cur.current.state, ...r.changes } : cur.current.state;   // τίποτα δεν άλλαξε: ούτε νέα απόδοση
+    const audit = r.audit || (r.newAudit.length ? [...r.newAudit, ...cur.current.audit].slice(0, 300) : cur.current.audit);
+    cur.current = { state, audit }; setState(state); setAudit(audit);
+    return state;
+  }, []);
   const run = useCallback(async (cmd: Command, okText?: string | false) => {
     const r = await window.api.run(cmd);
-    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return false; }
-    setState(r.state); setAudit(r.audit);
+    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return null; }
+    const next = merge(r);
     if (okText !== false && (okText || r.text)) toast({ text: okText || r.text });
-    return true;
-  }, [toast]);
+    return next;
+  }, [toast, merge]);
   const undo = useCallback(async () => {
     const r = await window.api.undo();
     if (!r.ok) { toast({ text: r.error }); return; }
-    setState(r.state); setAudit(r.audit); toast({ text: r.text });
-  }, [toast]);
-  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, refresh }), [state, audit, boot, today, run, undo, refresh]);
+    merge(r); toast({ text: r.text });
+  }, [toast, merge]);
+  const sync = useCallback(async () => { const r = await window.api.sync(); if (r.ok) merge(r); }, [merge]);
+  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, refresh, sync }), [state, audit, boot, today, run, undo, refresh, sync]);
   return html`<${StoreCtx.Provider} value=${store}><${Shell}/><//>`;
 }
 

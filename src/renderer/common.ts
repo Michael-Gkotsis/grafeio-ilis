@@ -106,7 +106,7 @@ const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
   settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}]
 };
 export function ExportProvider({ children }: P) {
-  const toast = useToast(); const { refresh } = useStore(); const nav = useNav();
+  const toast = useToast(); const { sync } = useStore(); const nav = useNav();
   const [gate, setGate] = useState<Gate | null>(null);
   // Ποιο έντυπο βγαίνει τώρα: τα κουμπιά δείχνουν «Δημιουργία…» και δεύτερο κλικ δεν ξεκινά δεύτερη εξαγωγή
   const [busy, setBusy] = useState<ExportKind | null>(null); const busyRef = useRef(false);
@@ -122,10 +122,10 @@ export function ExportProvider({ children }: P) {
       toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack); } }] : undefined });
       return false;
     }
-    await refresh();
+    await sync();   // «βγήκε» και ιστορικό: μόνο ό,τι άλλαξε
     toast({ text: html`<span>Βγήκε ${label}: <b>${r.file.split(/[\\/]/).pop()}</b>${r.warnings.length ? html`<br/>⚠ ${r.warnings.join(' · ')}` : ''}</span>`, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('output') }] });
     return true;
-  }, [toast, refresh]);
+  }, [toast, sync]);
   const start = useCallback((kind: ExportKind, date: ISODate, label: string) => exec(kind, date, label, false), [exec]);
   const close = (ok: boolean) => { const g = gate; setGate(null); g && g.resolve(ok); };
   const errs = gate ? gate.checks.filter(c => c.level === 'err') : [];

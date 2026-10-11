@@ -8,9 +8,10 @@ import type { ISODate } from '../shared/dates';
 
 export interface StoreValue {
   state: AppState; audit: AuditEntry[]; boot: Boot; today: ISODate; tomorrow: ISODate;
-  run(cmd: Command, okText?: string | false): Promise<boolean>;
+  run(cmd: Command, okText?: string | false): Promise<AppState | null>;   // η νέα κατάσταση, ή null αν δεν έγινε
   undo(): Promise<void>;
-  refresh(): Promise<void>;
+  refresh(): Promise<void>;   // όλα από την αρχή (νέα μέρα, εισαγωγή)
+  sync(): Promise<void>;      // μόνο ό,τι άλλαξε (μετά από εξαγωγή κ.λπ.)
 }
 export const StoreCtx = createContext<StoreValue>(null as unknown as StoreValue);
 export const useStore = () => useContext(StoreCtx);

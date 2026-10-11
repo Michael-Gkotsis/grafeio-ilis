@@ -6,6 +6,7 @@ const api: Api = {
   boot: () => ipcRenderer.invoke('boot'),
   run: cmd => ipcRenderer.invoke('cmd', cmd),
   undo: () => ipcRenderer.invoke('undo'),
+  sync: () => ipcRenderer.invoke('sync'),
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),

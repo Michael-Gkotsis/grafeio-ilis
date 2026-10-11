@@ -55,9 +55,20 @@ export function statusesOf(statuses: Status[], pid: number): Status[] {
   }
   return m.get(pid) || NONE;
 }
-export const statusesOn = (statuses: Status[], pid: number, date: ISODate): Status[] =>
-  statusesOf(statuses, pid).filter(s => !s.pending && s.from <= date && date <= s.to)
-    .sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type));
+// Ίδια ερώτηση ξανά και ξανά (κάθε υποψήφιος σε κάθε θέση της αυτόματης συμπλήρωσης): κρατιέται ανά πίνακα, μέρα και άτομο.
+// Το αποτέλεσμα είναι μόνο για ανάγνωση.
+const onIdx = new WeakMap<Status[], Map<ISODate, Map<number, Status[]>>>();
+export function statusesOn(statuses: Status[], pid: number, date: ISODate): Status[] {
+  let byDay = onIdx.get(statuses); if (!byDay) { byDay = new Map(); onIdx.set(statuses, byDay); }
+  let byPid = byDay.get(date); if (!byPid) { byPid = new Map(); byDay.set(date, byPid); }
+  let r = byPid.get(pid);
+  if (!r) {
+    r = statusesOf(statuses, pid).filter(s => !s.pending && s.from <= date && date <= s.to);
+    r = r.length ? r.sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type)) : NONE;
+    byPid.set(pid, r);
+  }
+  return r;
+}
 const untilTxt = (s: Status, date: ISODate) => (s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
