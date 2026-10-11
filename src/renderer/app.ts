@@ -32,11 +32,11 @@ function useToday() {
 // Ρυθμίσεις εμφάνισης του PC. Το μενού «auto» είναι στενό σε οθόνες κάτω από 1200px.
 function usePrefsState(): PrefsValue {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
-  const [narrow, setNarrow] = useState(() => window.innerWidth < 1200);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 1500);
   useEffect(() => { applyPrefs(prefs); savePrefs(prefs); }, [prefs]);
   useEffect(() => {
     if (prefs.nav !== 'auto') return;
-    const f = () => setNarrow(window.innerWidth < 1200);
+    const f = () => setNarrow(window.innerWidth < 1500);
     window.addEventListener('resize', f); return () => window.removeEventListener('resize', f);
   }, [prefs.nav]);
   const set = useCallback(<K extends keyof Prefs>(k: K, v: Prefs[K]) => setPrefs(p => ({ ...p, [k]: v })), []);
@@ -153,17 +153,17 @@ function Shell() {
     <div className=${cx('shell', rail && 'is-rail')}>
       <header className="topbar">
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
-        <div className="brand"><${Logo} size=${30}/><span>Γραφείο Ίλης <small>${state.settings.unit[2] || ''}</small></span></div>
+        <div className="brand"><${Logo} size=${30}/><span>Γραφείο Ίλης<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setLayer({ kind: 'palette' })}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         <div className="topbar__right">
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setLayer({ kind: 'legend' })}>Υπόμνημα<//>
+          <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
-          <span className="today-lbl">Σήμερα: <b>${dow(today)} ${dmy(today)}</b></span>
         </div>
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
-        <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Μόνο εικονίδια, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">Σύμπτυξη μενού</span></button></nav>
+        <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
       <main className="main"><${Screen} key=${route.view}/></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">

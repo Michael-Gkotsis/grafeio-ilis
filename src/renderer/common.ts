@@ -6,7 +6,7 @@ import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
 import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } from '../shared/domain';
-import { daysBetween, dayName, dm, dmy, type ISODate } from '../shared/dates';
+import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
 import type { ExportKind } from '../shared/api';
 import type { Check } from '../shared/preflight';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
@@ -55,10 +55,15 @@ export function DateRangeField({ from, to, onChange }: P) {
 export function ChangePlanList({ plan }: P) {
   return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
 }
-export function DateBar({ value, onChange, days }: P) {
+// Κουμπιά ημερών: μέρα από πάνω, ημερομηνία από κάτω· με count (π.χ. κενές θέσεις) δίπλα στην ημερομηνία
+export function DateBar({ value, onChange, days, count }: P) {
   const { state, today, tomorrow } = useStore();
-  return html`<${Strip} className="datebar" role="group" aria-label="Ημερομηνία">${days.map((d: ISODate) => html`<button key=${d} type="button" className=${cx('ui-chip', isHol(state.settings, d) && 'is-hol')} aria-pressed=${value === d} data-tip=${isHol(state.settings, d) ? 'Αργία: ' + holName(state.settings, d) : undefined} onClick=${() => onChange(d)}>${d === today || d === tomorrow ? dayName(d, today) + ' ' + dm(d) : dayName(d, today)}</button>`)}
-    <input type="date" className="ui-input" style=${{ width: '150px', height: '34px' }} aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
+  return html`<${Strip} className="datebar" role="group" aria-label="Ημερομηνία">${days.map((d: ISODate) => {
+    const hol = isHol(state.settings, d); const n: number | null = count ? count(d) : null;
+    const tip = [hol && 'Αργία: ' + holName(state.settings, d), n != null && (n ? n + (n === 1 ? ' κενή θέση' : ' κενές θέσεις') : 'Πλήρης')].filter(Boolean).join(' · ');
+    return html`<button key=${d} type="button" className=${cx('daybtn', hol && 'is-hol')} aria-pressed=${value === d} data-tip=${tip || undefined} onClick=${() => onChange(d)}><span className="daybtn__d">${dow(d)}${d === today ? ' σήμερα' : d === tomorrow ? ' αύριο' : ''}</span><span className="daybtn__n">${dm(d)}${n == null ? '' : n ? html` · <b>${n}</b>` : ' ✓'}</span></button>`;
+  })}
+    <input type="date" className="ui-input datebar__pick" aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
 }
 
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
