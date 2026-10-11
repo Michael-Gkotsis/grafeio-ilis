@@ -13,7 +13,7 @@ export interface RosterResult {
   suspicious: string[];              // πέρασαν, αλλά δεν έχουν ούτε ΑΣΜ ούτε τηλέφωνο ούτε θάλαμο
 }
 
-type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post';
+export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post';
 const HEADERS: [Field, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
@@ -27,7 +27,13 @@ const txt = (v: CellValue): string => {
 };
 const up = (v: CellValue) => norm(txt(v));
 
+// Αντιστοίχιση που διάλεξε ο χρήστης (Αρχεία Excel): φύλλο, γραμμή επικεφαλίδων και στήλες, αντί για την αυτόματη
+export interface RosterOverride { sheet: string; header: number; cols: Partial<Record<Field, number>> }
+export interface RosterOverrides { main?: RosterOverride; posts?: RosterOverride; outside?: RosterOverride }
+let OV: RosterOverride[] = [];
 function headerOf(sheet: RawSheet): { row: number; cols: Partial<Record<Field, number>> } | null {
+  const ov = OV.find(o => o.sheet === sheet.name);
+  if (ov) return { row: ov.header, cols: ov.cols };
   for (let r = 0; r < Math.min(sheet.rows.length, 12); r++) {
     const cols: Partial<Record<Field, number>> = {};
     (sheet.rows[r] || []).forEach((v, c) => {
@@ -79,14 +85,19 @@ export function essosOf(title: string): string {
   return m ? m[2] + ' ' + m[1] + '΄' : '';
 }
 
-export function parseRoster(sheets: RawSheet[]): RosterResult {
+export function parseRoster(sheets: RawSheet[], ov: RosterOverrides = {}): RosterResult {
+  OV = [ov.main, ov.posts, ov.outside].filter((o): o is RosterOverride => !!o && sheets.some(s => s.name === o.sheet));
+  try { return parse(sheets, ov); } finally { OV = []; }
+}
+function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
   const warnings: string[] = [];
+  const named = (o?: RosterOverride) => (o ? sheets.find(s => s.name === o.sheet) : undefined);
   const byName = (re: RegExp) => sheets.find(s => re.test(norm(s.name)));
-  const main = byName(/^ΣΥΝΟΛΙΚΟ/) || sheets.find(s => headerOf(s) && !/ΠΟΣΤΑ|ΕΚΤΟΣ|ΑΔΕΙΕΣ|ΤΙΜΩΡ|IATR|ΙΑΤΡ/.test(norm(s.name)));
+  const main = named(ov.main) || byName(/^ΣΥΝΟΛΙΚΟ/) || sheets.find(s => headerOf(s) && !/ΠΟΣΤΑ|ΕΚΤΟΣ|ΑΔΕΙΕΣ|ΤΙΜΩΡ|IATR|ΙΑΤΡ/.test(norm(s.name)));
   if (!main) return { rows: [], warnings: ['Δεν βρέθηκε φύλλο με στήλες «Επώνυμο» και «Όνομα».'], main: '', essos: '', skipped: [], declared: null, found: 0, suspicious: [] };
   const essos = essosOf(txt((main.rows[0] || [])[0]));
   const posts = new Map<string, string>();
-  const postSheet = byName(/^ΠΟΣΤΑ/);
+  const postSheet = named(ov.posts) || byName(/^ΠΟΣΤΑ/);
   if (postSheet) for (const r of records(postSheet)) if (r.post) { posts.set(keyOf(r), r.post); if (r.asm) posts.set('#' + r.asm, r.post); }
   const out = new Map<string, Rec>();
   const skipped: string[] = [];
@@ -99,7 +110,7 @@ export function parseRoster(sheets: RawSheet[]): RosterResult {
     if (out.has(k)) { warnings.push('Διπλή εγγραφή: ' + r.last + ' ' + r.first + ' (κρατήθηκε η πρώτη)'); continue; }
     out.set(k, r);
   }
-  const outside = byName(/^ΕΚΤΟΣ/);
+  const outside = named(ov.outside) || byName(/^ΕΚΤΟΣ/);
   const inactive = new Map<string, string>();
   if (outside) for (const r of records(outside)) { inactive.set(r.asm ? '#' + r.asm : keyOf(r), r.remarks); if (!out.has(r.asm ? '#' + r.asm : keyOf(r))) out.set(r.asm ? '#' + r.asm : keyOf(r), r); }
   const rows: ImportRow[] = [...out.entries()].map(([k, r]) => {

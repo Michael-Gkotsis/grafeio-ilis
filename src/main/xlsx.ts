@@ -63,6 +63,21 @@ export class Sheet {
     return x;
   }
   hasFormula(ref: string) { return !!this.cell(ref, false)?.inner.includes('<f'); }
+  style(ref: string): number | null { const x = this.cell(ref, false); const v = x && attr(x.attrs, 's'); return v == null ? null : Number(v); }
+  setStyle(ref: string, style: number): this { const x = this.cell(ref)!; x.attrs = setAttr(x.attrs, 's', String(style)); return this; }
+  // Αριθμός με συγκεκριμένο στυλ (π.χ. ημερομηνία ως αριθμός του Excel με μορφή ημερομηνίας)
+  setNumber(ref: string, n: number, style?: number | null): this {
+    this.set(ref, n);
+    if (style != null) { const x = this.cell(ref)!; x.attrs = setAttr(x.attrs, 's', String(style)); }
+    return this;
+  }
+  // Κάθε κελί που υπάρχει στο XML (για ανάγνωση τιμών): γραμμή και στήλη από 1
+  *cells(): Generator<{ r: number; c: number; t: string | null; s: number | null; inner: string }> {
+    for (const row of this.rows) for (const c of row.cells) {
+      const s = attr(c.attrs, 's');
+      yield { r: row.r, c: c.col, t: attr(c.attrs, 't'), s: s == null ? null : Number(s), inner: c.inner };
+    }
+  }
 
   // Γράφει τιμή κρατώντας το στυλ (s="…"). null = άδειασμα.
   set(ref: string, v: string | number | null | undefined): this {
@@ -147,9 +162,23 @@ export class Sheet {
   }
 }
 
+// Ημερομηνίες: αριθμός ημερών από 30/12/1899 (ή 1/1/1904 σε παλιά αρχεία Mac)
+const DAY = 86400000;
+const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1);
+export const toSerial = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - EPOCH) / DAY); };
+// Ενσωματωμένες μορφές ημερομηνίας του Excel και δικές μας με d/y μέσα (όχι μόνο ώρα)
+const DATE_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+const isDateCode = (code: string) => /[dy]/i.test(code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, ''));
+const unesc = (t: string) => t.replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16)))
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+const texts = (xml: string) => [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?\/>|<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(m => unesc(m[1] || '')).join('');
+export type XlValue = string | number | boolean | Date | null;
+
 export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
+  private sst: string[] | null = null;
+  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number> } | null = null;
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -178,6 +207,107 @@ export class Workbook {
     return s;
   }
   sheetNames() { return this.names.map(x => x.name); }
+  hasSheet(name: string) { return this.names.some(x => x.name === name); }
+
+  private async sharedStrings(): Promise<string[]> {
+    if (this.sst) return this.sst;
+    const f = this.zip.file('xl/sharedStrings.xml') || this.zip.file(/sharedStrings\.xml$/i)[0];
+    const xml = f ? await f.async('string') : '';
+    this.sst = [...xml.matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => texts(m[1] || ''));
+    return this.sst;
+  }
+  private async loadStyles() {
+    if (this.styles) return this.styles;
+    const f = this.zip.file('xl/styles.xml');
+    const xml = f ? await f.async('string') : '';
+    const codes = new Map<number, string>();
+    for (const m of xml.matchAll(/<numFmt\b[^>]*>/g)) { const id = attr(m[0], 'numFmtId'), code = attr(m[0], 'formatCode'); if (id) codes.set(Number(id), unesc(code || '')); }
+    const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)?.[1] || '';
+    const fmt = [...xfs.matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(m => Number(attr(m[0].slice(0, m[0].indexOf('>') + 1), 'numFmtId') || 0));
+    this.styles = { xml, fmt, codes, dirty: false, made: new Map() };
+    return this.styles;
+  }
+  async isDateStyle(s: number | null): Promise<boolean> {
+    if (s == null) return false;
+    const st = await this.loadStyles(); const id = st.fmt[s];
+    if (id == null) return false;
+    return DATE_IDS.has(id) || (st.codes.has(id) && isDateCode(st.codes.get(id)!));
+  }
+  // Στυλ με μορφή ημερομηνίας που κρατά πλαίσια και γραμματοσειρά του κελιού (νέο xf με numFmtId 14 = σύντομη ημερομηνία των Windows)
+  async dateStyle(base: number | null): Promise<number> {
+    const b = base ?? 0;
+    if (await this.isDateStyle(b)) return b;
+    const st = await this.loadStyles();
+    if (st.made.has(b)) return st.made.get(b)!;
+    const m = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(st.xml);
+    if (!m) return b;
+    const all = [...m[2].matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(x => x[0]);
+    const src = all[b] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
+    const open = src.slice(0, src.indexOf('>') + 1).replace(/\/>$/, '>').replace(/>$/, '');
+    const rest = src.endsWith('/>') ? '/>' : src.slice(src.indexOf('>'));
+    const xf = setAttr(setAttr(open, 'numFmtId', '14'), 'applyNumberFormat', '1') + rest;
+    const idx = all.length;
+    st.xml = st.xml.replace(m[0], setAttr(m[1].slice(0, -1), 'count', String(idx + 1)) + '>' + m[2] + xf + m[3]);
+    st.fmt.push(14); st.made.set(b, idx); st.dirty = true;
+    return idx;
+  }
+
+  // Οι τιμές του φύλλου ως πίνακας [γραμμή][στήλη] από 0: κείμενο, αριθμός, ημερομηνία (UTC) ή κενό. Οι τύποι δίνουν το αποτέλεσμά τους.
+  async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40): Promise<XlValue[][]> {
+    const ws = await this.sheet(nameOrIndex); const sst = await this.sharedStrings(); await this.loadStyles();
+    const y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml);
+    const out: XlValue[][] = [];
+    for (const x of ws.cells()) {
+      if (x.r > maxRows || x.c > maxCols || !x.inner) continue;
+      let v: XlValue = null;
+      const raw = /<v>([\s\S]*?)<\/v>/.exec(x.inner)?.[1];
+      if (x.t === 's') v = raw != null ? sst[Number(raw)] ?? null : null;
+      else if (x.t === 'inlineStr') v = texts(x.inner);
+      else if (x.t === 'str') v = raw != null ? unesc(raw) : null;
+      else if (x.t === 'b') v = raw === '1';
+      else if (x.t === 'e') v = null;
+      else if (raw != null && raw !== '') {
+        const n = Number(raw);
+        v = Number.isFinite(n) && (await this.isDateStyle(x.s)) ? new Date(Math.round((y1904 ? EPOCH_1904 : EPOCH) + n * DAY)) : n;
+      }
+      if (v === '' || v == null) continue;
+      (out[x.r - 1] ||= [])[x.c - 1] = v;
+    }
+    for (let i = 0; i < out.length; i++) out[i] ||= [];
+    return out;
+  }
+
+  // Νέο κενό φύλλο στο τέλος (π.χ. «ΤΙΜΩΡΗΜΕΝΟΙ» μέσα στο Δυναμολόγιο). Οι μακροεντολές και τα άλλα φύλλα μένουν όπως ήταν.
+  async addSheet(name: string): Promise<Sheet> {
+    const safe = name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
+    if (this.hasSheet(safe)) return this.sheet(safe);
+    let n = this.names.length + 1; while (this.zip.file(`xl/worksheets/sheet_a${n}.xml`)) n++;
+    const path = `xl/worksheets/sheet_a${n}.xml`;
+    this.zip.file(path, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
+    const rp = 'xl/_rels/workbook.xml.rels'; let rels = await this.zip.file(rp)!.async('string');
+    const rid = 'rId' + (Math.max(0, ...[...rels.matchAll(/Id="rId(\d+)"/g)].map(m => +m[1])) + 1);
+    rels = rels.replace('</Relationships>', `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}"/></Relationships>`);
+    this.zip.file(rp, rels);
+    const ct = await this.zip.file('[Content_Types].xml')!.async('string');
+    this.zip.file('[Content_Types].xml', ct.replace('</Types>', `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`));
+    const id = Math.max(0, ...[...this.workbookXml.matchAll(/sheetId="(\d+)"/g)].map(m => +m[1])) + 1;
+    const ns = /xmlns:r=/.test(this.workbookXml.slice(0, this.workbookXml.indexOf('>', this.workbookXml.indexOf('<workbook')))) ? '' : ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    this.workbookXml = this.workbookXml.replace('</sheets>', `<sheet name="${esc(safe)}" sheetId="${id}"${ns} r:id="${rid}"/></sheets>`);
+    this.names.push({ name: safe, path });
+    return this.sheet(safe);
+  }
+
+  // Καινούργιο αρχείο με ένα φύλλο (στυλ 1 = έντονα με πλαίσιο για επικεφαλίδες, 2 = πλαίσιο, 3 = ημερομηνία με πλαίσιο)
+  static async blank(sheetName: string): Promise<Workbook> {
+    const z = new JSZip(); const name = esc(sheetName.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
+    z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+    z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+    z.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${name}" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+    z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+    z.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+    z.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
+    return Workbook.open(await z.generateAsync({ type: 'nodebuffer' }));
+  }
 
   // Περιοχή εκτύπωσης και άλλα ονόματα του φύλλου
   shiftNames(sheet: string, after: number, n: number) {
@@ -193,6 +323,7 @@ export class Workbook {
 
   async save(): Promise<Buffer> {
     for (const [path, s] of this.sheets) this.zip.file(path, s.toXml());
+    if (this.styles?.dirty) this.zip.file('xl/styles.xml', this.styles.xml);
     // πίνακες: η περιοχή τους μεγαλώνει
     for (const ed of this.tableEdits) {
       const relPath = ed.path.replace(/([^/]+)$/, '_rels/$1.rels');
