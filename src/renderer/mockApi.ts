@@ -88,6 +88,7 @@ export function mockApi(): Api {
     srcPick: async () => fakeBook(state),
     srcRead: async () => fakeBook(state),
     srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
+    srcKeys: async () => [],
     srcImport: async (kind, b, choices) => {
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet)!;
       const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today()), b, choices);

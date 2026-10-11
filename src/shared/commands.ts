@@ -33,7 +33,7 @@ export type Command =
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
-  | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; source: string; what: string }
+  | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'expire' };
 
 export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
@@ -188,9 +188,10 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       // Από τα Αρχεία Excel: νέες εγγραφές και αλλαγές σε υπάρχουσες (ίδιο άτομο, ίδιο είδος, ίδια έναρξη)
       const byId = new Map(c.updates.map(u => [u.id, u.patch]));
       const adds = c.adds.filter(a => pm.has(a.pid) && TYPES[a.type] && a.from && a.to && a.to >= a.from);
-      if (!adds.length && !byId.size) return { state: s, text: '', files: [] };
-      const statuses = [...s.statuses.map(x => (byId.has(x.id) ? { ...x, ...byId.get(x.id) } : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
-      const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές')].filter(Boolean).join(', ');
+      const del = new Set((c.deletes || []).filter(id => s.statuses.some(x => x.id === id)));
+      if (!adds.length && !byId.size && !del.size) return { state: s, text: '', files: [] };
+      const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? { ...x, ...byId.get(x.id) } : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
+      const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές'), del.size && del.size + (del.size === 1 ? ' σβήστηκε' : ' σβήστηκαν')].filter(Boolean).join(', ');
       return { state: { ...s, statuses }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + parts, files: [], source: 'excel' };
     }
     case 'updatePerson': {
@@ -290,6 +291,24 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
   const caps = { ...s.caps }; for (const k of Object.keys(caps)) if (!people.some(p => p.id === +k)) delete caps[+k];
   const parts = [added.length + ' νέα', updated.size + ' ενημερώθηκαν'].concat(deact ? [deact + ' εκτός δύναμης'] : [], removed ? [removed + ' αφαιρέθηκαν'] : []);
   return { state: { ...s, people, caps }, text: 'Εισαγωγή από ' + source + ': ' + parts.join(', '), files: [source], source: 'import' };
+}
+
+// Τι αλλάζει στον καθένα με μια εισαγωγή προσωπικού (για την προεπισκόπηση: «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»)
+const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
+  ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη']];
+const rv = (v: unknown) => (v == null || v === '' ? '—' : v === true ? 'ναι' : v === false ? 'όχι' : String(v));
+export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who: string; what: string }[]; same: number } {
+  const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
+  const byName = new Map(s.people.map(p => [personKey(p), p]));
+  const changes: { who: string; what: string }[] = []; let same = 0;
+  for (const r of rows) {
+    const ex = (r.asm && byAsm.get(r.asm)) || byName.get(personKey(r)); if (!ex) continue;
+    const next: Record<string, unknown> = { ...ex, ...r, active: r.active ?? true }; const cur = ex as unknown as Record<string, unknown>;
+    const what = ROSTER_FIELDS.filter(([k]) => r[k] !== undefined && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
+      .map(([k, label]) => label + ' ' + rv(cur[k] ?? (k === 'dn' ? false : null)) + ' → ' + rv(next[k]));
+    if (what.length) changes.push({ who: ex.last + ' ' + ex.first, what: what.join(', ') }); else same++;
+  }
+  return { changes, same };
 }
 
 export const describeDay = (d: ISODate, today: ISODate) => dayName(d, today).toLowerCase();

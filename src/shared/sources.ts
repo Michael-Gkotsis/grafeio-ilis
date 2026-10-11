@@ -351,13 +351,16 @@ const candId = (kind: StatusKind, pid: number, c: Cand) => identity(pid, kind, c
 export interface Diff {
   add: Omit<Status, 'id'>[]; update: { id: string; patch: Partial<Status>; who: string; what: string }[]; same: number;
   unmatched: Cand[]; dup: Cand[]; appOnly: Status[]; keys: string[];
+  removed: Status[];   // ήταν στο Excel στην προηγούμενη ανάγνωση/εγγραφή και σβήστηκαν από εκεί
 }
 // choices: γραμμή → άτομο, για όσους δεν ταίριαξαν μόνοι τους (null = παράλειψη)
-export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}): Diff {
+// synced: ποιες εγγραφές είχε το Excel στην προηγούμενη ανάγνωση/εγγραφή. Όσες λείπουν τώρα σβήστηκαν εκεί· αν στη θέση
+// τους υπάρχει νέα γραμμή του ίδιου ατόμου, είναι η ίδια εγγραφή με άλλη ημερομηνία έναρξης.
+export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}, synced: string[] = []): Diff {
   const types = KIND[kind].types!;
   const mine = s.statuses.filter(x => types.includes(x.type));
   const idx = new Map(mine.map(x => [statusId(kind, x), x]));
-  const d: Diff = { add: [], update: [], same: 0, unmatched: [], dup: [], appOnly: [], keys: [] };
+  const d: Diff = { add: [], update: [], same: 0, unmatched: [], dup: [], appOnly: [], keys: [], removed: [] };
   const seen = new Set<string>(); const pm = new Map(s.people.map(p => [p.id, p]));
   const has = (k: string) => b.cols[k] != null;
   for (const c of parsed.cands) {
@@ -387,6 +390,31 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     else d.same++;
   }
   d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)));
+  const was = new Set(synced);
+  const gone = d.appOnly.filter(x => was.has(statusId(kind, x)));
+  if (gone.length) {
+    d.appOnly = d.appOnly.filter(x => !gone.includes(x));
+    const days = (a: { from: string; to: string }, c: { from: string; to: string }) => Math.max(0, Math.min(Date.parse(a.to), Date.parse(c.to)) - Math.max(Date.parse(a.from), Date.parse(c.from)));
+    for (const x of gone) {
+      // η ίδια εγγραφή με άλλο «από»: νέα γραμμή του ίδιου ατόμου (και του ίδιου είδους στα ιατρικά), όσο πιο κοντά
+      const sub = subOf(kind, x.kind || TYPES[x.type].label);
+      const near = d.add.map((a, i) => ({ a, i })).filter(({ a }) => a.pid === x.pid && subOf(kind, a.kind || TYPES[a.type].label) === sub)
+        .sort((p, q) => days(q.a, x) - days(p.a, x) || Math.abs(Date.parse(p.a.from) - Date.parse(x.from)) - Math.abs(Date.parse(q.a.from) - Date.parse(x.from)))[0];
+      if (!near) {
+        // μια γραμμή που δεν ταίριαξε με άτομο μπορεί να είναι αυτή: δεν σβήνεται μέχρι να διαλέξει ο χρήστης
+        if (!d.unmatched.some(c => c.from === x.from || c.cands.some(p => p.id === x.pid))) d.removed.push(x);
+        else d.appOnly.push(x);
+        continue;
+      }
+      d.add.splice(near.i, 1);
+      const a = near.a; const patch: Partial<Status> = { from: a.from, to: a.to }; const what = ['από ' + a.from.slice(8) + '/' + a.from.slice(5, 7)];
+      if (a.to !== x.to) what.push('έως ' + a.to.slice(8) + '/' + a.to.slice(5, 7));
+      if (a.type !== x.type) { patch.type = a.type; what.push(TYPES[a.type].label); }
+      for (const k of ['kind', 'note', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
+      if (x.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
+      d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', ') });
+    }
+  }
   return d;
 }
 
@@ -505,6 +533,16 @@ export function missingFields(kind: ListKind, cols: Record<string, number>): str
   for (const f of KIND[kind].fields) if (f.req && cols[f.k] == null) out.push(f.label);
   if (kind === 'caps' && !CAP_COLS.some(k => cols[k] != null)) out.push('μία τουλάχιστον στήλη υπηρεσίας (Θαλαμοφύλακας, Μαγειρεία…)');
   return out;
+}
+// Αποτύπωμα του πίνακα ενός είδους: μόνο οι στήλες που διαβάζει η εφαρμογή (και οι μέρες του μηνιαίου πλέγματος), από τις
+// επικεφαλίδες ως το τέλος του πίνακα. Αλλαγή σε άλλο φύλλο ή άλλο πίνακα του ίδιου αρχείου δεν το αλλάζει (Michael, 11/10).
+export function tableHash(sheet: RawSheet | undefined, b: SourceBinding): string {
+  if (!sheet) return '-';
+  const cols = [...new Set([...Object.values(b.cols), ...(b.cols.d1 != null ? dayColumns(sheet.rows[b.header], b.cols.d1) : [])])].sort((a, c) => a - c);
+  const line = (r: number) => cols.map(c => cellText((sheet.rows[r] || [])[c])).join('\t');
+  const text = [line(b.header), ...tableRows(sheet, b.header, b.cols).records.map(x => x.r + ':' + line(x.r))].join('\n');
+  let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16) + ':' + text.length;
 }
 export const bindingText = (b: SourceBinding) => b.file.split(/[\\/]/).pop() + ' › ' + b.sheet + ' · γραμμή ' + (b.header + 1);
 export const addDaysSafe = addDays;
