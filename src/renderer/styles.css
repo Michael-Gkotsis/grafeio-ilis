@@ -13,7 +13,7 @@
   --f-display:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-body:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-mono:Consolas,"Courier New",monospace;
-  --nav-h:62px;
+  --nav-h:62px; --top-h:61px; --side-w:236px; --rail-w:64px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --background:#13160e; --foreground:#e7eadf; --card:#1c2016; --muted:#252a1d; --muted-fg:#a4ab96;
@@ -85,10 +85,22 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .ui-seg button[aria-pressed="true"]{border-color:var(--primary);background:var(--secondary);color:var(--secondary-fg);font-weight:700}
 .ui-chip{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--input);background:var(--card);cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
 .ui-chip[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--primary-fg)}
+.ui-chip .cnt{font-family:var(--f-mono);font-size:12px;margin-left:5px;opacity:.7}
+.ui-chip--sm{height:28px;padding:0 10px;font-size:12px}
+/* Strip: λωρίδα που κυλά οριζόντια· οι άκρες σβήνουν όταν κρύβονται κουμπιά */
+.strip{position:relative;overflow-x:auto;scrollbar-width:thin}
+.strip.fade-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
+.strip.fade-l{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 48px),transparent)}
+.strip.fade-l.fade-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 48px,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,transparent,#000 48px,#000 calc(100% - 48px),transparent)}
+.filters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:10px}
+.filters .strip{flex:1 1 320px;display:flex;gap:6px;padding-bottom:2px}
+.filters .ui-chip{flex:none}
+.ui-chip--gap{margin-left:10px}
 [data-tip]{position:relative}
 @media (hover:hover){
 [data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);background:var(--foreground);color:var(--background);font-size:12px;font-weight:500;line-height:1.35;padding:6px 9px;border-radius:6px;width:max-content;max-width:240px;white-space:normal;text-align:left;z-index:90;pointer-events:none;opacity:0;animation:tipin .1s .4s forwards}
 [data-tip-side="left"]:hover::after,[data-tip-side="left"]:focus-visible::after{left:auto;right:0;transform:none}
+[data-tip-side="right"]:hover::after,[data-tip-side="right"]:focus-visible::after{left:calc(100% + 10px);top:50%;transform:translateY(-50%);white-space:nowrap;max-width:none}
 }
 @keyframes tipin{to{opacity:1}}
 abbr[data-tip]{text-decoration:underline dotted;cursor:help}
@@ -142,13 +154,15 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .plan li.is-warn .plan__ic{color:var(--warn)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted-fg)}
 .page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px}
-.page-head > div{flex:1;min-width:220px}
+.page-head > div{flex:1 1 340px;min-width:220px}
+.page-head > .datebar{flex:0 1 auto;min-width:0}
 .page-head h1{font-size:24px}
 .page-head p{margin:2px 0 0;color:var(--muted-fg)}
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
 .datebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .datebar .ui-chip{height:34px}
+.datebar > *{flex:none}
 
 /* ExcelSheet (στην εφαρμογή: ExcelSheet.module.css) */
 .xl{border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);overflow:hidden;background:var(--card);min-width:0;container-type:inline-size}
@@ -174,9 +188,11 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 @container (max-width:520px){.xl__meta{margin-left:0;flex-basis:100%}}
 
 /* ---------- app shell ---------- */
-.shell{display:grid;grid-template-columns:224px minmax(0,1fr);grid-template-rows:auto auto 1fr;min-height:100vh}
+.shell{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
+.shell.is-rail{--side-w:var(--rail-w)}
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:env(safe-area-inset-top,0px);z-index:40}
-.brand{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-weight:700;font-size:16px;white-space:nowrap}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:700;font-size:16px;white-space:nowrap;height:40px}
+.brand .logo{flex:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
 .brand small{font-family:var(--f-body);font-weight:500;color:var(--muted-fg);font-size:12px}
 .searchbtn{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--muted);color:var(--muted-fg);cursor:pointer;text-align:left;min-width:0}
 .searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -186,12 +202,20 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .today-lbl b{color:var(--foreground)}
 .syncbar{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 16px;background:var(--info-bg);border-bottom:1px solid var(--border);font-size:14px}
 .syncbar > div{flex:1;min-width:200px}
-.sidenav{background:var(--card);border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+/* το μενού μένει ορατό όσο κυλά η σελίδα (π.χ. στις Υπηρεσίες) */
+.sidenav{background:var(--card);border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--top-h);height:calc(100vh - var(--top-h));align-self:start;z-index:30}
 .navbtn{display:flex;align-items:center;gap:10px;height:42px;padding:0 12px;border:0;background:none;border-radius:var(--radius);cursor:pointer;text-align:left;font-weight:500;width:100%}
 .navbtn:hover{background:var(--hover)}
 .navbtn[aria-current="page"]{background:var(--secondary);color:var(--secondary-fg);font-weight:700}
 .navbtn svg{width:18px;height:18px;flex:none}
 .navbtn .ui-badge{margin-left:auto}
+.navbtn__lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidenav__toggle{margin-top:auto;color:var(--muted-fg);font-size:13px}
+.is-rail .sidenav{padding:12px 6px}
+.is-rail .navbtn{justify-content:center;padding:0;position:relative}
+.is-rail .navbtn__lbl{display:none}
+.is-rail .navbtn .ui-badge{position:absolute;top:3px;right:5px;height:16px;min-width:16px;padding:0 4px;font-size:10px;justify-content:center}
+.is-rail .sidenav__sep{margin:8px 6px}
 .sidenav__sep{height:1px;background:var(--border);margin:8px 4px}
 .main{padding:20px 24px 40px;min-width:0}
 .bottomnav{display:none}
@@ -223,7 +247,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .bulkbar span{flex:1;min-width:120px}
 /* PeopleTable (στην εφαρμογή: PeopleTable.module.css) */
 .ptable{border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);background:var(--card);overflow:hidden}
-.ptable__head,.ptable__row{display:grid;grid-template-columns:40px minmax(180px,2fr) minmax(90px,1fr) 90px 80px 70px 64px minmax(150px,1.3fr);align-items:center}
+.ptable__head,.ptable__row{display:grid;grid-template-columns:40px minmax(170px,2fr) minmax(80px,1fr) 100px 84px 72px 60px minmax(150px,1.3fr);align-items:center}
 .ptable__head{background:var(--muted);font-size:13px;font-weight:600;border-bottom:1px solid var(--border)}
 .ptable__head > *{padding:9px 10px;white-space:nowrap;background:none;border:0;text-align:left;font-weight:600;cursor:pointer}
 .ptable__head > span{cursor:default}
@@ -244,7 +268,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 /* Guard */
 .guard{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start}
 .guard__left{display:flex;flex-direction:column;gap:16px;min-width:0}
-.guard__right{position:sticky;top:76px;min-width:0}
+/* η προεπισκόπηση κυλά μόνη της, ώστε το «Βγάλε το Excel» να φαίνεται χωρίς να φτάσεις στο τέλος της σελίδας */
+.guard__right{position:sticky;top:calc(var(--top-h) + 12px);min-width:0;max-height:calc(100vh - var(--top-h) - 24px);overflow:auto;overscroll-behavior:contain}
 .posts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .post{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.6fr);gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background)}
 .post.is-empty{border-color:var(--bad);background:var(--bad-bg)}
@@ -301,7 +326,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .morelist{display:flex;flex-direction:column;gap:4px}
 
 /* ---------- responsive ---------- */
-@media (max-width:1080px){.guard,.strength,.cols{grid-template-columns:minmax(0,1fr)}.guard__right{position:static}}
+@media (max-width:1080px){.guard,.strength,.cols{grid-template-columns:minmax(0,1fr)}.guard__right{position:static;max-height:none;overflow:visible}}
 /* v4: κανόνες λοχία, υπηρεσίες όπως το Excel, εξοδούχοι, ιατρικά/ποινές */
 .nw{white-space:nowrap}
 .ui-chip.is-hol{border-style:dashed;border-color:var(--warn)}
@@ -433,3 +458,52 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .psk>div{flex:1;min-width:180px;display:flex;flex-direction:column}.psk small{color:var(--muted-fg);font-size:12px}
 .psk__acts{display:flex;gap:6px;flex-wrap:nowrap}
 .chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
+
+/* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
+.backbtn{margin:0 -4px 0 -6px;color:var(--muted-fg)}
+.backbtn:disabled{opacity:.35}
+.ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%}
+.hdsel{border:0;background:transparent;font-weight:600;font-size:13px;cursor:pointer;padding:0;margin:0;max-width:100%}
+.hdsel:hover{text-decoration:underline}
+.actfilter .actfilter__act{font-weight:600;color:var(--info);white-space:nowrap}
+.ui-chip--view{border-style:dashed}
+.ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
+.ui-chip--view[aria-pressed="true"] svg{color:inherit}
+/* κάρτες που κλείνουν (Υπηρεσίες) */
+.ui-card__head h2 .ui-card__toggle{all:unset;display:inline-flex;align-items:center;gap:6px;cursor:pointer;max-width:100%}
+.ui-card__toggle:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+.ui-card__toggle svg{flex:none;color:var(--muted-fg);transition:transform .12s}
+.ui-card__toggle[aria-expanded="true"] svg{transform:rotate(90deg)}
+.ui-card__toggle:hover span{text-decoration:underline;text-underline-offset:3px}
+.ui-card--fold.is-closed .ui-card__head{padding-bottom:2px}
+.ui-card__sum{padding:4px 16px 12px 38px;font-size:13px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ζουμ προεπισκόπησης Excel */
+.xl__zoom{margin-left:8px;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,.55);border-radius:4px;background:transparent;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.xl__zoom:hover{background:rgba(255,255,255,.14)}
+/* Ρυθμίσεις › Εμφάνιση */
+.pref{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)}
+.pref:first-child{border-top:0;padding-top:0}
+.pref > div:first-child{flex:1 1 260px;min-width:0}
+.pref small{display:block;color:var(--muted-fg);font-size:12px;margin-top:2px}
+/* συμπαγής προβολή: λιγότερα περιθώρια, χαμηλότερα στοιχεία (τα ύψη γραμμών των λιστών τα δίνει η VirtualList) */
+[data-density="compact"] body{font-size:14px}
+[data-density="compact"] .main{padding:14px 18px 28px}
+[data-density="compact"] .page-head{margin-bottom:10px}
+[data-density="compact"] .page-head h1{font-size:21px}
+[data-density="compact"] .ui-card__head{padding:10px 12px 0}
+[data-density="compact"] .ui-card__body{padding:10px 12px 12px}
+[data-density="compact"] .ui-card__sum{padding:2px 12px 10px 34px}
+[data-density="compact"] .ui-btn{height:34px;padding:0 12px}
+[data-density="compact"] .ui-btn--sm{height:28px;padding:0 8px}
+[data-density="compact"] .ui-input{height:34px}
+[data-density="compact"] .ui-chip{height:28px;padding:0 10px}
+[data-density="compact"] .navbtn{height:36px}
+[data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
+[data-density="compact"] .ptable__row{font-size:13px}
+[data-density="compact"] .ptable__head > *{padding:6px 10px}
+[data-density="compact"] .post{padding:5px 8px}
+[data-density="compact"] .posts{gap:4px}
+[data-density="compact"] .rec li,[data-density="compact"] .log li{padding:7px 12px}
+[data-density="compact"] .attn li{padding:7px 10px}
+[data-density="compact"] .quick button{min-height:70px;padding:10px 12px}
+[data-density="compact"] .ui-seg--sm button{height:28px}

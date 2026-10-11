@@ -42,8 +42,21 @@ export const holName = (settings: Settings, d: ISODate) => settings.holidays[d] 
 // --------------------------- καταστάσεις ---------------------------
 const ORDER = (k: TypeKey) => TYPE_KEYS.indexOf(k);
 // Όλες οι ενεργές καταστάσεις ενός ατόμου μια μέρα. Πρώτα οι απουσίες. Οι ποινές που αιτούνται δεν μετράνε (Κ-19).
+// Ευρετήριο καταστάσεων ανά άτομο: κάθε έξοδος/ΔΝ είναι κατάσταση, οπότε σε έναν χρόνο είναι δεκάδες χιλιάδες.
+// Φτιάχνεται μία φορά για κάθε πίνακα καταστάσεων (οι εντολές φτιάχνουν πάντα νέο πίνακα, δεν τον αλλάζουν).
+const byPidIdx = new WeakMap<Status[], Map<number, Status[]>>();
+const NONE: Status[] = [];
+export function statusesOf(statuses: Status[], pid: number): Status[] {
+  let m = byPidIdx.get(statuses);
+  if (!m) {
+    m = new Map();
+    for (const x of statuses) { const l = m.get(x.pid); if (l) l.push(x); else m.set(x.pid, [x]); }
+    byPidIdx.set(statuses, m);
+  }
+  return m.get(pid) || NONE;
+}
 export const statusesOn = (statuses: Status[], pid: number, date: ISODate): Status[] =>
-  statuses.filter(s => s.pid === pid && !s.pending && s.from <= date && date <= s.to)
+  statusesOf(statuses, pid).filter(s => !s.pending && s.from <= date && date <= s.to)
     .sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type));
 const untilTxt = (s: Status, date: ISODate) => (s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
@@ -154,7 +167,7 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
   const st = statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].noOut);
   if (st) return (st.type === 'PUN' && st.kind ? st.kind : TYPES[st.type].label) + untilTxt(st, date);
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
-  const pend = s.statuses.find(x => x.pid === pid && x.type === 'PUN' && x.pending && x.from <= date && date <= x.to);
+  const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && x.from <= date && date <= x.to);
   return pend ? (pend.kind || 'Ποινή') + ' (αιτείται)' + untilTxt(pend, date) : null;
 }
 export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.outRooms[parseD(d).getDay()] || null;
@@ -270,8 +283,10 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const rooms = h ? outRoomsOn(s.rules, date) : null;
   const home = (p: Person) => (h ? (p.dn ? 1 : 0) + (rooms && p.room != null && rooms.includes(p.room) ? 1 : 0) : 0);
   const cmp = fairCompare(h, x.kind, date);
+  // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
   return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
-    .sort((p, q) => last(p) - last(q) || unarmedFirst(p) - unarmedFirst(q) || home(p) - home(q) || cmp(fair.get(p.id)!, fair.get(q.id)!));
+    .map(p => ({ p, key: last(p) * 100 + unarmedFirst(p) * 10 + home(p), f: fair.get(p.id)! }))
+    .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
 }
 // «Επόμενος στη σειρά» για μια θέση: ο πρώτος που επιτρέπεται, εκτός από όσους ήδη προτάθηκαν (skip)
 export function nextFor(s: AppState, date: ISODate, k: string, skip: number[]): number | null {
@@ -332,7 +347,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd): StatusPlan {
   const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
   for (const pid of cmd.pids) {
-    const ov = s.statuses.find(x => x.pid === pid && overlapsRange(x, cmd.from, cmd.to) && (TYPES[x.type].cat === t.cat || (!!TYPES[x.type].away && !!t.away)));
+    const ov = statusesOf(s.statuses, pid).find(x => overlapsRange(x, cmd.from, cmd.to) && (TYPES[x.type].cat === t.cat || (!!TYPES[x.type].away && !!t.away)));
     if (ov) overlaps.push({ pid, status: ov });
     if (t.cat === 'out') {
       for (let d = cmd.from; d <= cmd.to; d = addDays(d, 1)) { const r = outBlock(s, d, pid); if (r) { blocked.push({ pid, date: d, reason: r }); break; } }

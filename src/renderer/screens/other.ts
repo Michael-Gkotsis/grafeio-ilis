@@ -3,16 +3,17 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote, useUsbCopy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Phase, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type Phase, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
 import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, hkaiCounts, isRecordExpiredOn, personMap, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
-import { norm } from '../../shared/text';
+import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
+import { recentPeople, usePrefs, type Prefs } from '../prefs';
 type P = any;
 
 export function TodayScreen() {
@@ -76,15 +77,17 @@ export function RecordsScreen() {
   const { state, run, today, undo } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   const tab = nav.params.recTab || 'med';
-  const [pq, setPq] = useState('');
+  const [pq, setPq] = useState(''); const dpq = useDeferredValue(pq);
   const y = addDays(today, -1);
   const isMed = (s: Status) => ['med', 'other'].includes(TYPES[s.type].cat);
   const list = useMemo(() => {
-    const ok = (s: Status) => pm.has(s.pid);
-    if (tab === 'allpun') { const qq = norm(pq); return state.statuses.filter(s => ok(s) && s.type === 'PUN' && (!qq || norm(fullName(pm.get(s.pid)!) + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq))).sort((a, b) => b.from.localeCompare(a.from)); }
-    if (tab === 'expired') return state.statuses.filter(s => ok(s) && RECORD_CATS.includes(TYPES[s.type].cat) && !s.pending && s.to < today && s.to >= addDays(today, -14)).sort((a, b) => b.to.localeCompare(a.to));
-    return state.statuses.filter(s => ok(s) && s.to >= today && (tab === 'med' ? isMed(s) : s.type === 'PUN')).sort((a, b) => Number(!!b.pending) - Number(!!a.pending) || a.to.localeCompare(b.to));
-  }, [state.statuses, tab, today, pq]);
+    // αναζήτηση σε όλες τις καρτέλες: όνομα, κωδικός, είδος ποινής, σημείωση, ποιος τιμώρησε, λόγος
+    const qq = normGreek(dpq.trim());
+    const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + TYPES[s.type].label + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '') + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq));
+    if (tab === 'allpun') return state.statuses.filter(s => s.type === 'PUN' && ok(s)).sort((a, b) => b.from.localeCompare(a.from));
+    if (tab === 'expired') return state.statuses.filter(s => RECORD_CATS.includes(TYPES[s.type].cat) && !s.pending && s.to < today && s.to >= addDays(today, -14) && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
+    return state.statuses.filter(s => s.to >= today && (tab === 'med' ? isMed(s) : s.type === 'PUN') && ok(s)).sort((a, b) => Number(!!b.pending) - Number(!!a.pending) || a.to.localeCompare(b.to));
+  }, [state.statuses, tab, today, dpq]);
   const nMed = state.statuses.filter(s => s.to >= today && isMed(s)).length;
   const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN').length;
   const left = (s: Status) => { const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
@@ -95,7 +98,7 @@ export function RecordsScreen() {
     <${PageHeader} title="Ιατρικά και ποινές" sub="Όταν λήξει ένα ιατρικό ή μια ποινή, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Οι ποινές αιτούνται στην ΗΚΑΙ και ισχύουν όταν εγκριθούν.">
       <${Button} variant="outline" onClick=${() => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><${Button} variant="outline" onClick=${() => nav.declare({ type: 'PUN', from: addDays(today, 1), to: addDays(today, 5) })}>+ Ποινή<//><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Ιατρικά (' + nMed + ')' }, { value: 'pun', label: 'Ποινές (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }, { value: 'allpun', label: 'Όλες οι ποινές' }]}/></div>
-    ${tab === 'allpun' && html`<div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στις ποινές" placeholder="Όνομα, ποιος τιμώρησε ή λόγος…" value=${pq} onChange=${(e: any) => setPq(e.target.value)}/></div>`}
+    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${tab === 'med' || tab === 'expired' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${s.type === 'PUN' ? s.kind : t.label}<//>
         <small>${dow(s.from)} ${dm(s.from)} – ${dow(s.to)} ${dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}</small></div>
@@ -165,7 +168,7 @@ export function HkaiScreen() {
   const src = [...HK_K, ...HK_A].filter(([k]) => h.cols[k].length);
   const fn = 'ΗΚΑΙ ' + dm(date).replace('/', '.') + '.' + date.slice(2, 4) + '.xlsx';
   const cadre = state.cadreList.filter(c => c.active).length || Object.values(state.settings.cadre).reduce((a, b) => a + (b || 0), 0);
-  const sum = html`<div><${Card} title="Από πού βγαίνει κάθε αριθμός">
+  const sum = html`<div className="stack"><${Card} title="Από πού βγαίνει κάθε αριθμός">
     <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${h.total}</span><span className="tile__l">Δύναμη</span></div><div className="tile"><span className="tile__n">${h.kol}</span><span className="tile__l">Κωλυόμενοι</span></div><div className="tile"><span className="tile__n">${h.apo}</span><span className="tile__l">Απόντες</span></div><div className="tile"><span className="tile__n">${h.avail}</span><span className="tile__l">Διαθέσιμοι</span></div></div>
     <ul className="hk-src">${src.map(([k, , full]) => html`<li key=${k}><b>${full}</b>: <span className="num">${h.cols[k].length}</span><div className="cat__names">${h.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div></li>`)}</ul>
     <p className="note" style=${{ margin: '8px 0 0' }}>Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.</p>
@@ -229,9 +232,15 @@ const SRC: Record<string, [string, string]> = { app: ['Εφαρμογή', 'outli
 export function HistoryScreen() {
   const { audit, today, undo } = useStore();
   const last = audit.find(x => x.undoable && !x.undone);
+  // αναζήτηση σε ενέργειες και αρχεία (π.χ. ένα επώνυμο), και φίλτρο ανά πηγή
+  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [src, setSrc] = useState('all');
+  const list = useMemo(() => { const n = normGreek(dq.trim()); return audit.filter(e => (src === 'all' || e.source === src) && (!n || normGreek(e.text + ' ' + e.files.join(' ')).includes(n))); }, [audit, dq, src]);
   return html`<div>
     <${PageHeader} title="Ιστορικό" sub="Κάθε ενέργεια, από πού έγινε και ποια έντυπα αφορά. Η αναίρεση γίνεται από την πιο πρόσφατη προς τα πίσω."/>
-    <div className="ui-card">${audit.length ? html`<ul className="log">${audit.map(e => html`<li key=${e.id} className=${e.undone ? 'is-undone' : ''}>
+    ${audit.length > 0 && html`<div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στο ιστορικό" placeholder="Επώνυμο, ενέργεια ή αρχείο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
+      <${Segmented} small=${true} value=${src} onChange=${setSrc} items=${[{ value: 'all', label: 'Όλα' }, ...Object.keys(SRC).filter(k => audit.some(e => e.source === k)).map(k => ({ value: k, label: SRC[k][0] }))]}/>
+      <${ActiveFilter} parts=${[src !== 'all' && SRC[src][0], dq && '«' + dq + '»']} onClear=${() => { setQ(''); setSrc('all'); }}/><span className="toolbar__count">${list.length} από ${audit.length}</span></div>`}
+    <div className="ui-card">${audit.length && !list.length ? html`<div className="empty">Καμία ενέργεια δεν ταιριάζει.</div>` : audit.length ? html`<ul className="log">${list.map(e => html`<li key=${e.id} className=${e.undone ? 'is-undone' : ''}>
       <span className="log__time">${e.day === today ? 'Σήμερα' : dm(e.day)}<br/>${e.at}</span>
       <div><b>${e.text}</b> <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//>${e.undone && html` <${Badge}>Αναιρέθηκε<//>`}<div className="log__files">${e.files.join(' · ')}</div></div>
       ${e === last ? html`<${Button} size="sm" variant="outline" onClick=${() => undo()}>Αναίρεση<//>` : null}
@@ -265,6 +274,19 @@ function ImportCard() {
       <span className="note">Πριν την εισαγωγή κρατιέται αντίγραφο της βάσης. Αναιρείται από το Ιστορικό.</span>
     </div>`}
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
+  <//>`;
+}
+
+// Ρυθμίσεις του PC (όχι της βάσης): ισχύουν αμέσως, χωρίς επανεκκίνηση
+function AppearanceCard() {
+  const { prefs, set } = usePrefs();
+  const row = <K extends keyof Prefs>(k: K, label: string, help: string, items: { value: Prefs[K]; label: string }[]) => html`<div className="pref" key=${k}>
+    <div><b>${label}</b><small>${help}</small></div><${Segmented} small=${true} value=${prefs[k]} onChange=${(v: Prefs[K]) => set(k, v)} items=${items}/></div>`;
+  return html`<${Card} title="Εμφάνιση (αυτό το PC)">
+    ${row('theme', 'Θέμα', 'Στα Windows 7 το «Όπως τα Windows» είναι φωτεινό.', [{ value: 'light', label: 'Φωτεινό' }, { value: 'dark', label: 'Σκοτεινό' }, { value: 'auto', label: 'Όπως τα Windows' }])}
+    ${row('density', 'Πυκνότητα', 'Η συμπαγής χωρά περισσότερες γραμμές σε οθόνη 1024×768.', [{ value: 'normal', label: 'Κανονική' }, { value: 'compact', label: 'Συμπαγής' }])}
+    ${row('nav', 'Μενού', 'Αυτόματο: μόνο εικονίδια σε οθόνες κάτω από 1200px. Αλλάζει και με Ctrl+B.', [{ value: 'full', label: 'Πλήρες' }, { value: 'rail', label: 'Μόνο εικονίδια' }, { value: 'auto', label: 'Αυτόματο' }])}
+    ${row('xlZoom', 'Προεπισκόπηση Excel', 'Το «Χωρά» μικραίνει το έντυπο για να φαίνεται όλο το πλάτος.', [{ value: 'fit', label: 'Χωρά' }, { value: '100', label: '100%' }])}
   <//>`;
 }
 
@@ -362,7 +384,7 @@ export function TemplatesScreen() {
   return html`<div>
     <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού και οι ρυθμίσεις της Ίλης."/>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
-    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'settings' ? html`<div className="stack"><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
+    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
@@ -393,7 +415,11 @@ export function CommandPalette({ onClose }: P) {
   const n = norm(dq.trim());
   const acts = ACTIONS.filter(a => !n || a.k.includes(n) || norm(a.t).includes(n));
   const ppl = n ? searchPeople(state.people, dq).slice(0, 6) : [];
-  const items: P[] = [...acts.map(a => ({ a })), ...ppl.map(p => ({ p }))];
+  // με άδειο πεδίο: πρώτα οι 5 τελευταίοι που άνοιξες
+  const pm = personMap(state.people);
+  const rec = useMemo(() => recentPeople().map(id => pm.get(id)).filter((p): p is Person => !!p && p.active), [pm]);
+  const recent = n ? [] : rec;
+  const items: P[] = [...recent.map(p => ({ p })), ...acts.map(a => ({ a })), ...ppl.map(p => ({ p }))];
   useEffect(() => setSel(0), [dq]);
   const runI = (i: number) => { const x = items[i]; if (!x) return; onClose(); if (x.a) x.a.fn(); else nav.openPerson(x.p.id); };
   useEscape(onClose);
@@ -402,6 +428,8 @@ export function CommandPalette({ onClose }: P) {
     <input className="ui-input" autoFocus=${true} placeholder="Γράψε επώνυμο ή τι θέλεις να κάνεις (π.χ. «δν», «ποινη»)" value=${q} onChange=${(e: any) => setQ(e.target.value)}
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); runI(sel); } }}/>
     <ul className="picker__list" role="listbox">
+      ${recent.length > 0 && html`<li className="picker__hd">Πρόσφατα</li>`}
+      ${recent.map(p => { i++; const j = i; return html`<li key=${'r' + p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today}/></li>`; })}
       ${acts.length > 0 && html`<li className="picker__hd">Ενέργειες</li>`}
       ${acts.map(a => { i++; const j = i; return html`<li key=${a.t} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${a.t}</b></div></li>`; })}
       ${ppl.length > 0 && html`<li className="picker__hd">Πρόσωπα</li>`}

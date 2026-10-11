@@ -59,4 +59,12 @@ describe('κανόνες', () => {
     expect(r.state.people[0].phone).toBe('6999999999');
     expect(r.state.people[4].active).toBe(false);
   });
+  it('το ευρετήριο ανά άτομο δίνει ό,τι και η πλήρης αναζήτηση', () => {
+    const st: any[] = []; let n = 0;
+    for (let i = 0; i < 400; i++) st.push({ id: 'z' + n++, pid: (i * 7) % 13 + 1, type: ['OUT', 'DN', 'EA', 'LEAVE', 'PUN'][i % 5], from: '2026-10-' + String(1 + (i % 20)).padStart(2, '0'), to: '2026-10-' + String(3 + (i % 20)).padStart(2, '0'), pending: i % 11 === 0 });
+    for (let pid = 1; pid <= 14; pid++) for (const d of ['2026-10-01', '2026-10-05', '2026-10-15', '2026-10-30']) {
+      const brute = st.filter(x => x.pid === pid && !x.pending && x.from <= d && d <= x.to).map(x => x.id).sort();
+      expect(statusesOn(st, pid, d).map(x => x.id).sort()).toEqual(brute);
+    }
+  });
 });

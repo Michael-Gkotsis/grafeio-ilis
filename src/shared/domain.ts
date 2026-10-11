@@ -162,7 +162,10 @@ export interface Settings {
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
   fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών
+  views?: SavedView[];                   // αποθηκευμένες λίστες στο Προσωπικό (π.χ. «Θαλαμάρχες»)
 }
+// Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
+export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
 export const DEFAULT_SETTINGS: Settings = {
   unit: ['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2η ΕΠΧΙΑ Ν/Σ', '4η ΙΛΗ'],
   unitName: '4ης ΙΛΗΣ',
