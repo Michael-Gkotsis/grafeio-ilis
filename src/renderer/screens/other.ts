@@ -102,7 +102,9 @@ export function RecordsScreen() {
   }, [state.statuses, tab, today, dpq]);
   const nMed = state.statuses.filter(s => s.to >= today && isMed(s)).length;
   const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN').length;
-  const left = (s: Status) => { const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
+  const left = (s: Status) => {
+    if (s.to < today) { const d = daysBetween(s.to, today) - 1; return d === 1 ? 'έληξε χθες' : 'έληξε πριν από ' + d + ' ημ.'; }
+    const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
   const [stop, setStop] = useState<Status | null>(null);
   const [txt, setTxt] = useState<Status | null>(null);
   const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); };
