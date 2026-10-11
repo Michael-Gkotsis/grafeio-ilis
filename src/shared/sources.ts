@@ -564,3 +564,43 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   }
   return plan;
 }
+// Οι τιμές του Excel για κάθε άτομο που βρέθηκε, όπως θα τις έγραφε η εισαγωγή: αφετηρία για το τι άλλαξε στην εφαρμογή.
+// Ό,τι διαφέρει στην εφαρμογή (π.χ. διόρθωση πριν οριστεί το αρχείο) θα γραφτεί στην επόμενη ενημέρωση.
+export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[]): Record<number, PersonSnap> {
+  const match = makeMatcher(people); const out: Record<number, PersonSnap> = {};
+  for (const { v } of tableRows(sheet, b.header, b.cols).records) {
+    const m = match(v); if (m.pid == null || out[m.pid]) continue;
+    const t = (k: string) => (b.cols[k] == null ? null : cellText(v[k]));
+    const p = people.find(x => x.id === m.pid)!; const cur = personVals(p);
+    const snap: PersonSnap = {};
+    for (const k of PEOPLE_SYNC) {
+      const x = t(k);
+      if (x == null) { snap[k] = cur[k]; continue; }          // η στήλη δεν υπάρχει: τίποτα να γραφτεί
+      snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '') : k === 'remarks' ? norm(x) : norm(x);
+    }
+    out[m.pid] = snap;
+  }
+  return out;
+}
+// Γραμμές για την προεπισκόπηση μιας εγγραφής: «Γραμμή 14 · ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»
+export interface PlanLine { r: number; who: string; text: string }
+const fmtW = (v: WVal) => (v == null ? '(κενό)' : typeof v === 'object' ? v.date.slice(8) + '/' + v.date.slice(5, 7) + '/' + v.date.slice(0, 4) : String(v));
+export function describeSets(kind: ListKind, sheet: RawSheet, b: SourceBinding, sets: { r: number; c: number; v: WVal }[], newRows: Set<number> = new Set()): PlanLine[] {
+  const label = new Map<number, string>(); const defs = fieldsOf(kind);
+  for (const [k, c] of Object.entries(b.cols)) label.set(c, defs.find(f => f.k === k)?.label.replace(/ \(.*\)$/, '') || k);
+  const byRow = new Map<number, { c: number; v: WVal }[]>();
+  for (const x of sets) { const l = byRow.get(x.r) || []; l.push(x); byRow.set(x.r, l); }
+  const out: PlanLine[] = [];
+  for (const [r, l] of [...byRow].sort((a, c) => a[0] - c[0])) {
+    const row = sheet.rows[r] || [];
+    const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = row[b.cols[k]];
+    if (newRows.has(r) || !rowName(v).trim() || rowName(v) === '(χωρίς όνομα)') {
+      const nv: Record<string, CellValue> = {}; for (const x of l) for (const k in b.cols) if (b.cols[k] === x.c) nv[k] = typeof x.v === 'object' && x.v ? x.v.date : x.v;
+      out.push({ r, who: rowName(nv), text: 'νέα εγγραφή' + (nv.from ? ' ' + fmtW({ date: String(nv.from) }) + (nv.to ? '–' + fmtW({ date: String(nv.to) }) : '') : '') });
+      continue;
+    }
+    if (l.every(x => x.v == null)) { out.push({ r, who: rowName(v), text: 'σβήνεται (δεν υπάρχει πια στην εφαρμογή)' }); continue; }
+    out.push({ r, who: rowName(v), text: l.filter(x => x.c !== b.cols.aa).map(x => (label.get(x.c) || colLetter(x.c)) + ': ' + (row[x.c] instanceof Date ? fmtW({ date: cellText(row[x.c]) }) : cellText(row[x.c]) || '(κενό)') + ' → ' + fmtW(x.v)).join(' · ') });
+  }
+  return out;
+}

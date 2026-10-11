@@ -355,13 +355,15 @@ export class Workbook {
 
 // Ένα αρχείο με πολλά φύλλα από ήδη συμπληρωμένα αρχεία του ίδιου template (π.χ. ΦΡΟΥΡΑ ΠΣΚ: ένα φύλλο ανά ημέρα).
 // Παίρνει το πρώτο φύλλο κάθε αρχείου· στυλ και κοινές συμβολοσειρές είναι ίδια, αφού βγήκαν από το ίδιο template.
-export async function mergeFirstSheets(bufs: Buffer[], names: string[]): Promise<Buffer> {
+// pick: όνομα του φύλλου που κρατιέται (όταν το έντυπο δεν είναι το πρώτο φύλλο του template)
+export async function mergeFirstSheets(bufs: Buffer[], names: string[], pick?: string): Promise<Buffer> {
+  const sheetTag = (x: string) => [...x.matchAll(/<sheet\b[^>]*>/g)].map(m => m[0]).find(t => pick && attr(t, 'name')!.replace(/&amp;/g, '&') === pick) || /<sheet\b[^>]*>/.exec(x)![0];
   const xmlName = (n: string) => esc(n.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
   const base = await JSZip.loadAsync(bufs[0]);
   let wbx = await base.file('xl/workbook.xml')!.async('string');
   let rels = await base.file('xl/_rels/workbook.xml.rels')!.async('string');
   let ct = await base.file('[Content_Types].xml')!.async('string');
-  const firstSheet = /<sheet\b[^>]*>/.exec(wbx)![0];
+  const firstSheet = sheetTag(wbx);
   const oldName = attr(firstSheet, 'name')!;
   const printArea = (x: string) => /<definedName\b[^>]*name="_xlnm\.Print_Area"[^>]*>([^<]*)<\/definedName>/.exec(x)?.[1] || null;
   const areaFor = (body: string | null, name: string) => (body ? body.replace(/^.*!/, "'" + xmlName(name).replace(/'/g, "''") + "'!") : null);
@@ -375,7 +377,7 @@ export async function mergeFirstSheets(bufs: Buffer[], names: string[]): Promise
     const z = await JSZip.loadAsync(bufs[i]);
     const zw = await z.file('xl/workbook.xml')!.async('string');
     const zr = await z.file('xl/_rels/workbook.xml.rels')!.async('string');
-    const rid = attr(/<sheet\b[^>]*>/.exec(zw)![0], 'r:id')!;
+    const rid = attr(sheetTag(zw), 'r:id')!;
     const target = attr([...zr.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid)!, 'Target')!;
     const src = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
     // αντίγραφο φύλλου χωρίς δικές του σχέσεις (εκτυπωτής, σχέδια): αλλιώς θα έμεναν αναφορές που δεν υπάρχουν

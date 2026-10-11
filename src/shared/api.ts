@@ -3,6 +3,8 @@ import type { AppState, AuditEntry } from './domain';
 import type { Command } from './commands';
 import type { ISODate } from './dates';
 import type { Check } from './preflight';
+import type { RawSheet } from './roster';
+import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
@@ -16,6 +18,15 @@ export type UsbResult = { ok: true; file: string; day: string; warning?: string 
 export interface BackupInfo { name: string; day: string; label: string; size: number }
 export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number }
 export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[] }
+
+// Αρχεία Excel: ένα βιβλίο όπως το βλέπει η αντιστοίχιση (τιμές κελιών και πίνακες που αναγνωρίστηκαν)
+export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[] }
+export type Fail = { ok: false; error: string; locked?: boolean };
+// Κατάσταση κάθε είδους: αν βρίσκεται το αρχείο, αν άλλαξε εκτός εφαρμογής, αν περιμένει εγγραφή (π.χ. ήταν ανοιχτό)
+export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean }
+export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[] }
+export interface FormInfo { ok: true; file: string; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
+export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean }
 
 export interface Api {
   boot(): Promise<Boot>;
@@ -34,5 +45,20 @@ export interface Api {
   setGpu(disable: boolean): Promise<void>;
   usbCopy(): Promise<UsbResult>;
   importBackup(): Promise<{ ok: boolean; error?: string; name?: string } | null>;
+  srcPick(kind: ListKind | null): Promise<SourceBook | Fail | null>;
+  srcRead(kind: ListKind): Promise<SourceBook | Fail>;
+  srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
+  srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>): Promise<CmdResult>;
+  srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
+  srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
+  srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;
+  srcNewFile(kind: StatusKind): Promise<{ ok: true; file: string } | Fail | null>;
+  srcStatus(): Promise<{ sources: SourceStatus[]; forms: FormOut[] }>;
+  onSources(cb: (st: { sources: SourceStatus[]; forms: FormOut[] }) => void): () => void;
+  formPick(form: FormKind): Promise<FormInfo | Fail | null>;
+  formInfo(form: FormKind): Promise<FormInfo | Fail>;
+  formSave(form: FormKind, b: FormBinding | null): Promise<CmdResult>;
+  formDir(form: FormKind): Promise<string | null>;
+  openPath(file: string): Promise<void>;
 }
 declare global { interface Window { api: Api } }
