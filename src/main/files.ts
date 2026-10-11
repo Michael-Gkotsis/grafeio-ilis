@@ -45,8 +45,18 @@ export function prunePrev(dir: string, base: string, keep = KEEP_PREV) {
   mine.slice(keep).forEach(f => fs.unlinkSync(path.join(pdir, f)));
 }
 
-// Γράφει όλα τα αρχεία ή κανένα: πρώτα όλα τα .tmp, μετά οι μετονομασίες
-export async function writeAll(items: { dir: string; name: string; data: Buffer }[]): Promise<string[]> {
+// Πότε κρατήθηκε το νεότερο αντίγραφο ενός αρχείου στα «_προηγούμενα» (από το όνομα «όνομα @ ΕΕΕΕ-ΜΜ-ΗΗ ωωλλδδ.xlsx»)
+export function lastPrev(dir: string, base: string): number | null {
+  const pdir = path.join(dir, PREV_DIR); if (!fs.existsSync(pdir)) return null;
+  const ext = path.extname(base), stem = base.slice(0, -ext.length);
+  const newest = fs.readdirSync(pdir).filter(f => f.startsWith(stem + ' @ ') && f.endsWith(ext)).sort().pop();
+  const m = newest && /@ (\d{4})-(\d{2})-(\d{2}) (\d{2})(\d{2})(\d{2})/.exec(newest);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;
+}
+// Γράφει όλα τα αρχεία ή κανένα: πρώτα όλα τα .tmp, μετά οι μετονομασίες.
+// prevEvery: αντίγραφο στα «_προηγούμενα» μόνο αν το προηγούμενο είναι παλιότερο από τόσα ms. Οι αυτόματες εγγραφές στο
+// ίδιο Δυναμολόγιο (μία ανά είδος, πολλές στη σειρά) αλλιώς θα έσπρωχναν έξω τις 10 εκδόσεις μέσα σε λίγα λεπτά.
+export async function writeAll(items: { dir: string; name: string; data: Buffer }[], opts: { prevEvery?: number } = {}): Promise<string[]> {
   const plan = items.map(x => ({ ...x, file: path.join(x.dir, x.name), tmp: path.join(x.dir, x.name + '.tmp') }));
   for (const x of plan) { if (isLocked(x.file)) throw new LockedError(x.file); }
   try {
@@ -55,7 +65,8 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
   } catch (e) { plan.forEach(x => fs.rmSync(x.tmp, { force: true })); throw e; }
   const done: string[] = [];
   for (const x of plan) {
-    if (fs.existsSync(x.file)) {
+    const recent = opts.prevEvery ? lastPrev(x.dir, x.name) : null;
+    if (fs.existsSync(x.file) && !(recent != null && Date.now() - recent < opts.prevEvery!)) {
       const pdir = path.join(x.dir, PREV_DIR); fs.mkdirSync(pdir, { recursive: true });
       const ext = path.extname(x.name);
       await fsp.copyFile(x.file, path.join(pdir, x.name.slice(0, -ext.length) + ' @ ' + stamp() + ext));
@@ -69,5 +80,14 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
     }
   }
   return done;
+}
+// Μικρά αρχεία ρυθμίσεων (sources.json, forms.json…): πρώτα .tmp και μετονομασία, ώστε ένα κόψιμο ρεύματος να μην τα αφήνει μισά
+export function writeJson(file: string, data: unknown) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data));
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(tmp, file); return; }
+    catch (e: any) { if (i >= 4 || !BUSY.includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; } Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+  }
 }
 export const writeXlsx = async (dir: string, name: string, data: Buffer) => (await writeAll([{ dir, name, data }]))[0];

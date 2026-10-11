@@ -4,7 +4,7 @@ import { norm } from './text';
 import type { ImportRow } from './commands';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
-export interface RawSheet { name: string; rows: CellValue[][] }
+export interface RawSheet { name: string; rows: CellValue[][]; fx?: Set<string> }   // fx: κελιά με τύπο («γραμμή:στήλη» από 0)
 export interface RosterResult {
   rows: ImportRow[]; warnings: string[]; main: string; essos: string;
   skipped: string[];                 // γραμμές που αγνοήθηκαν γιατί δεν είναι άτομα (ΣΥΝΟΛΟ, 1ΟΣ…)

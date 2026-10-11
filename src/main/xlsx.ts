@@ -25,6 +25,26 @@ const setAttr = (attrs: string, name: string, v: string | null) => {
 // Μετακίνηση αναφοράς γραμμής: κάθε γραμμή > after πηγαίνει +n
 const shiftRef = (ref: string, after: number, n: number) => ref.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (_m, d1, c, d2, r) => d1 + c + d2 + (Number(r) > after ? Number(r) + n : Number(r)));
 
+// Το ίδιο μέσα σε τύπο: μόνο οι αναφορές στο φύλλο που άλλαξε. Στο ίδιο του το φύλλο (own) μετρούν και όσες δεν
+// γράφουν φύλλο· στα άλλα φύλλα μόνο όσες γράφουν το όνομά του. Κείμενα σε εισαγωγικά και ονόματα συναρτήσεων μένουν όπως είναι.
+const REF_RE = /(?<![\p{L}\p{N}_.$])((?:'(?:[^']|'')+'|[\p{L}\p{N}_.]+)!)?(\$?[A-Z]{1,3}\$?\d+)(?::(\$?[A-Z]{1,3}\$?\d+))?(?![\p{L}\p{N}_(!])/gu;
+const sheetOf = (q: string) => (q.startsWith("'") ? q.slice(1, -2).replace(/''/g, "'") : q.slice(0, -1)).toLowerCase();
+export function shiftFormula(f: string, sheet: string, own: boolean, after: number, n: number): string {
+  const name = sheet.toLowerCase();
+  const plain = unesc(f);
+  const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
+    if (q ? sheetOf(q) !== name : !own) return m;
+    return (q || '') + shiftRef(a, after, n) + (b ? ':' + shiftRef(b, after, n) : '');
+  })).join('');
+  return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// Οι τύποι ενός κελιού (και η περιοχή των κοινών τύπων/πινάκων τύπων, ref="…")
+const shiftCellFormulas = (inner: string, sheet: string, own: boolean, after: number, n: number) =>
+  inner.replace(/<f(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/f>)/g, (_m, fa = '', body: string | undefined) => {
+    const a = own ? fa.replace(/\sref="([^"]+)"/, (_x: string, r: string) => ` ref="${shiftRef(r, after, n)}"`) : fa;
+    return body == null ? `<f${a}/>` : `<f${a}>${shiftFormula(body, sheet, own, after, n)}</f>`;
+  });
+
 export class Sheet {
   private head = ''; private tail = ''; private rows: Row[] = [];
   constructor(public name: string, public path: string, xml: string) {
@@ -117,7 +137,7 @@ export class Sheet {
       if (moved) { row.r += n; row.attrs = setAttr(row.attrs, 'r', String(row.r)); }
       for (const c of row.cells) {
         if (moved) c.attrs = setAttr(c.attrs, 'r', colName(c.col) + row.r);
-        c.inner = c.inner.replace(/<f([^>]*)>([\s\S]*?)<\/f>/g, (_m, fa, f) => `<f${fa}>${shiftRef(f, after, n)}</f>`);
+        if (c.inner.includes('<f')) c.inner = shiftCellFormulas(c.inner, this.name, true, after, n);
       }
     }
     const fresh: Row[] = [];
@@ -143,13 +163,20 @@ export class Sheet {
     }
     this.tail = this.shiftXmlRefs(this.tail, after, n);
     wb.shiftNames(this.name, after, n);
+    wb.shiftForeign(this, after, n);
     wb.shiftTables(this, after, n);
+  }
+  // Τύποι σε αυτό το φύλλο που δείχνουν σε γραμμές ενός άλλου φύλλου που μετακινήθηκαν
+  shiftForeign(sheet: string, after: number, n: number) {
+    for (const row of this.rows) for (const c of row.cells) if (c.inner.includes('<f')) c.inner = shiftCellFormulas(c.inner, sheet, false, after, n);
   }
   private shiftXmlRefs(xml: string, after: number, n: number) {
     return xml
       .replace(/<dimension ref="([^"]+)"/, (_m, r) => `<dimension ref="${shiftRef(r, after, n)}"`)
       .replace(/(<conditionalFormatting[^>]*sqref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
       .replace(/(<dataValidation[^>]*sqref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
+      .replace(/(<hyperlink\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
+      .replace(/(<autoFilter\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
       .replace(/<brk id="(\d+)"/g, (_m, r) => `<brk id="${Number(r) > after ? Number(r) + n : r}"`);
   }
 
@@ -203,8 +230,17 @@ export class Workbook {
     const e = typeof nameOrIndex === 'number' ? this.names[nameOrIndex] : this.names.find(x => x.name === nameOrIndex);
     if (!e) throw new Error('Δεν υπάρχει φύλλο ' + nameOrIndex + ' στο template');
     let s = this.sheets.get(e.path);
-    if (!s) { s = new Sheet(e.name, e.path, await this.zip.file(e.path)!.async('string')); this.sheets.set(e.path, s); }
+    if (!s) {
+      s = new Sheet(e.name, e.path, await this.zip.file(e.path)!.async('string')); this.sheets.set(e.path, s);
+      for (const x of this.moved) if (x.sheet !== e.name) s.shiftForeign(x.sheet, x.after, x.n);
+    }
     return s;
+  }
+  // Γραμμές που μπήκαν σε φύλλα: οι τύποι των άλλων φύλλων που δείχνουν εκεί ακολουθούν (και όσων φορτωθούν αργότερα)
+  private moved: { sheet: string; after: number; n: number }[] = [];
+  shiftForeign(from: Sheet, after: number, n: number) {
+    this.moved.push({ sheet: from.name, after, n });
+    for (const s of this.sheets.values()) if (s !== from) s.shiftForeign(from.name, after, n);
   }
   sheetNames() { return this.names.map(x => x.name); }
   hasSheet(name: string) { return this.names.some(x => x.name === name); }
@@ -253,12 +289,14 @@ export class Workbook {
   }
 
   // Οι τιμές του φύλλου ως πίνακας [γραμμή][στήλη] από 0: κείμενο, αριθμός, ημερομηνία (UTC) ή κενό. Οι τύποι δίνουν το αποτέλεσμά τους.
-  async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40): Promise<XlValue[][]> {
+  // fx: εδώ μπαίνουν τα κελιά με τύπο («γραμμή:στήλη» από 0)
+  async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40, fx?: Set<string>): Promise<XlValue[][]> {
     const ws = await this.sheet(nameOrIndex); const sst = await this.sharedStrings(); await this.loadStyles();
     const y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml);
     const out: XlValue[][] = [];
     for (const x of ws.cells()) {
       if (x.r > maxRows || x.c > maxCols || !x.inner) continue;
+      if (fx && x.inner.includes('<f')) fx.add((x.r - 1) + ':' + (x.c - 1));
       let v: XlValue = null;
       const raw = /<v>([\s\S]*?)<\/v>/.exec(x.inner)?.[1];
       if (x.t === 's') v = raw != null ? sst[Number(raw)] ?? null : null;
@@ -313,8 +351,8 @@ export class Workbook {
   shiftNames(sheet: string, after: number, n: number) {
     this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, a, body: string, c) => {
       const plain = body.replace(/&apos;/g, "'");
-      if (!plain.includes(sheet + '!') && !plain.includes("'" + sheet + "'!")) return a + body + c;
-      return a + shiftRef(body, after, n) + c;
+      if (!plain.includes(sheet + '!') && !plain.includes(sheet.replace(/'/g, "''") + "'!")) return a + body + c;
+      return a + shiftFormula(body, sheet, false, after, n).replace(/'/g, '&apos;') + c;
     });
   }
   // Πίνακες του Excel (ListObject) στο φύλλο
@@ -322,6 +360,13 @@ export class Workbook {
   shiftTables(sheet: Sheet, after: number, n: number) { this.tableEdits.push({ path: sheet.path, after, n }); }
 
   async save(): Promise<Buffer> {
+    // φύλλα που δεν άνοιξαν αλλά έχουν τύπους προς φύλλο όπου μπήκαν γραμμές
+    if (this.moved.length) for (const e of this.names) {
+      if (this.sheets.has(e.path)) continue;
+      const xml = await this.zip.file(e.path)?.async('string'); if (!xml || !xml.includes('<f')) continue;
+      const plain = unesc(xml);
+      if (this.moved.some(x => plain.includes(x.sheet + '!') || plain.includes(x.sheet.replace(/'/g, "''") + "'!"))) await this.sheet(e.name);
+    }
     for (const [path, s] of this.sheets) this.zip.file(path, s.toXml());
     if (this.styles?.dirty) this.zip.file('xl/styles.xml', this.styles.xml);
     // πίνακες: η περιοχή τους μεγαλώνει
