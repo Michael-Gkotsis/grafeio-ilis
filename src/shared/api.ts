@@ -25,7 +25,7 @@ export type Fail = { ok: false; error: string; locked?: boolean };
 // Κατάσταση κάθε είδους: αν βρίσκεται το αρχείο, αν άλλαξε εκτός εφαρμογής, αν περιμένει εγγραφή (π.χ. ήταν ανοιχτό)
 export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean }
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[] }
-export interface FormInfo { ok: true; file: string; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
+export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
 export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean }
 
 export interface Api {

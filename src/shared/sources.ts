@@ -220,6 +220,9 @@ export function tableRows(sheet: RawSheet, header: number, cols: Record<string, 
     free.push(r); last = Math.max(last, r);
     if (++empty > 60) break;
   }
+  // κενές γραμμές ακριβώς πριν από τον επόμενο τίτλο χωρίζουν τους πίνακες: δεν είναι ελεύθερες θέσεις
+  if (r < max) while (free.length && free[free.length - 1] > (records.length ? records[records.length - 1].r : header) && !(sheet.rows[free[free.length - 1]] || []).some(v => cellText(v))) free.pop();
+  if (r < max) last = Math.max(records.length ? records[records.length - 1].r : header, free.length ? free[free.length - 1] : header);
   return { records, free, end: last, open: r >= max, width };
 }
 
@@ -314,8 +317,12 @@ export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBindin
   return out;
 }
 
-// Ταυτότητα εγγραφής για σύγκριση Excel ↔ εφαρμογή: άτομο, ομάδα ειδών και ημερομηνία έναρξης
-export const identity = (pid: number, kind: StatusKind, from: ISODate) => pid + '|' + kind + '|' + from;
+// Ταυτότητα εγγραφής για σύγκριση Excel ↔ εφαρμογή: άτομο, ομάδα ειδών και ημερομηνία έναρξης. Στα ιατρικά και το
+// είδος, γιατί ο ίδιος μπορεί να έχει την ίδια μέρα και ΕΑ και ΕΟ (ή «ΕΛ ΑΡΒ») σε χωριστές γραμμές.
+export const identity = (pid: number, kind: StatusKind, from: ISODate, sub = '') => pid + '|' + kind + '|' + from + (sub ? '|' + sub : '');
+const subOf = (kind: StatusKind, text: string) => (kind === 'medical' ? vk(text) : '');
+const statusId = (kind: StatusKind, x: Status) => identity(x.pid, kind, x.from, subOf(kind, x.kind || TYPES[x.type].label));
+const candId = (kind: StatusKind, pid: number, c: Cand) => identity(pid, kind, c.from, subOf(kind, c.raw || TYPES[c.type || DEFAULT_TYPE[kind]].label));
 export interface Diff {
   add: Omit<Status, 'id'>[]; update: { id: string; patch: Partial<Status>; who: string; what: string }[]; same: number;
   unmatched: Cand[]; dup: Cand[]; appOnly: Status[]; keys: string[];
@@ -324,14 +331,14 @@ export interface Diff {
 export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}): Diff {
   const types = KIND[kind].types!;
   const mine = s.statuses.filter(x => types.includes(x.type));
-  const idx = new Map(mine.map(x => [identity(x.pid, kind, x.from), x]));
+  const idx = new Map(mine.map(x => [statusId(kind, x), x]));
   const d: Diff = { add: [], update: [], same: 0, unmatched: [], dup: [], appOnly: [], keys: [] };
   const seen = new Set<string>(); const pm = new Map(s.people.map(p => [p.id, p]));
   const has = (k: string) => b.cols[k] != null;
   for (const c of parsed.cands) {
     const pid = c.pid ?? (c.r in choices ? choices[c.r] : null);
     if (pid == null) { if (!(c.r in choices)) d.unmatched.push(c); continue; }
-    const id = identity(pid, kind, c.from);
+    const id = candId(kind, pid, c);
     if (seen.has(id)) { d.dup.push(c); continue; }
     seen.add(id); d.keys.push(id);
     const type = c.type || DEFAULT_TYPE[kind];
@@ -354,7 +361,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (what.length) d.update.push({ id: cur.id, patch, who: pm.get(pid) ? pm.get(pid)!.last + ' ' + pm.get(pid)!.first : c.who, what: what.join(', ') });
     else d.same++;
   }
-  d.appOnly = mine.filter(x => !seen.has(identity(x.pid, kind, x.from)));
+  d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)));
   return d;
 }
 
@@ -418,7 +425,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   }
   const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number] };
   const match = makeMatcher(s.people);
-  const byId = new Map(want.map(x => [identity(x.pid, kind, x.from), x]));
+  const byId = new Map(want.map(x => [statusId(kind, x), x]));
   const syncedSet = new Set(synced); const placed = new Set<string>();
   const free = [...scan.free];
   const clearRow = (r: number) => {
@@ -427,7 +434,8 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   };
   for (const { r, v } of scan.records) {
     const m = match(v); const from = parseDate(v.from);
-    const id = m.pid != null && from ? identity(m.pid, kind, from) : null;
+    const raw = cellText(v.kind); const type = typeOfValue(kind, raw, b.values) || DEFAULT_TYPE[kind];
+    const id = m.pid != null && from ? identity(m.pid, kind, from, subOf(kind, raw || TYPES[type].label)) : null;
     const st = id ? byId.get(id) : undefined;
     if (st && !placed.has(id!)) {
       placed.add(id!); plan.keys.push(id!);
@@ -438,23 +446,23 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
         if (!same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
       }
       if (ch) plan.changed++;
-    } else if (id && (syncedSet.has(id) || placed.has(id))) { clearRow(r); free.push(r); plan.cleared++; }
+    } else if (id && syncedSet.has(id) && !byId.has(id)) { clearRow(r); free.push(r); plan.cleared++; }   // την είχε γράψει η εφαρμογή και σβήστηκε
     else plan.foreign++;
   }
   free.sort((a, c) => a - c);
-  const fresh = want.filter(x => !placed.has(identity(x.pid, kind, x.from)));
+  const fresh = want.filter(x => !placed.has(statusId(kind, x)));
   const put = (r: number, st: Status) => { for (const k of fields) { const val = fieldValue(k, kind, st, pm.get(st.pid)); if (val != null) plan.sets.push({ r, c: b.cols[k], v: val }); } };
   // Α/Α: ο αύξων αριθμός στις γραμμές που δεν τον έχουν
   const aa = (r: number, n: number) => { if (b.cols.aa != null && cellText((rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: n }); };
   let n = scan.records.length - plan.cleared;
   let i = 0;
-  for (; i < fresh.length && i < free.length; i++) { put(free[i], fresh[i]); aa(free[i], ++n); plan.keys.push(identity(fresh[i].pid, kind, fresh[i].from)); }
+  for (; i < fresh.length && i < free.length; i++) { put(free[i], fresh[i]); aa(free[i], ++n); plan.keys.push(statusId(kind, fresh[i])); }
   const rest = fresh.slice(i);
   if (rest.length) {
     const after = Math.max(scan.end, b.header);
     const tpl = scan.records.length ? scan.records[scan.records.length - 1].r : scan.free.length ? scan.free[0] : b.header;
     plan.insert = { after, n: rest.length, tpl };
-    rest.forEach((st, j) => { const r = after + 1 + j; put(r, st); if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: ++n }); plan.keys.push(identity(st.pid, kind, st.from)); });
+    rest.forEach((st, j) => { const r = after + 1 + j; put(r, st); if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: ++n }); plan.keys.push(statusId(kind, st)); });
   }
   plan.added = fresh.length;
   return plan;

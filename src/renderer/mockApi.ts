@@ -5,7 +5,7 @@ import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
 import type { Api, CmdResult, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
-import { describeSets, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planWrite, snapFromSheet, type ListKind, type SourceBinding } from '../shared/sources';
+import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planWrite, snapFromSheet, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
@@ -92,7 +92,7 @@ export function mockApi(): Api {
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet)!;
       const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today()), b, choices);
       state = { ...state, settings: { ...state.settings, sources: { ...(state.settings.sources || {}), [kind]: b } } };
-      const r = apply(state, { t: 'importRecords', adds: d.add, updates: d.update, source: book.name, what: kind }, { today: today(), newId: () => 'x' + ++seq });
+      const r = apply(state, { t: 'importRecords', adds: d.add, updates: d.update, source: book.name, what: KIND[kind].label.toLowerCase() }, { today: today(), newId: () => 'x' + ++seq });
       state = r.state; return res(r.text || 'Δεν βρέθηκε κάτι νέο');
     },
     srcPeople: async () => ({ ok: false, error: 'Στη δοκιμή στον browser η εισαγωγή προσωπικού δεν γίνεται.' }),
@@ -109,7 +109,7 @@ export function mockApi(): Api {
     srcStatus: async () => ({ sources: (Object.entries(state.settings.sources || {}) as [ListKind, SourceBinding][]).map(([kind, b]) => ({ kind, file: b.file, exists: true, changed: kind === 'medical', synced: true, at: today() + ' 09:12' })), forms: [] }),
     onSources: () => () => {},
     formPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
-    formInfo: async f => ({ ok: true, file: f + '.xlsx', sheets: f === 'hkai' ? ['μπροστινο', 'πισω'] : f === 'outs' ? ['ΕΞΟΔΟΥΧΟΙ', 'ΠΑΡΑΜΕΝΟΝΤΕΣ'] : ['ΦΡΟΥΡΑ ΣΒΕΝ'], sheet: f === 'hkai' ? 'μπροστινο' : f === 'outs' ? 'ΕΞΟΔΟΥΧΟΙ' : 'ΦΡΟΥΡΑ ΣΒΕΝ', sheet2: f === 'hkai' ? 'πισω' : f === 'outs' ? 'ΠΑΡΑΜΕΝΟΝΤΕΣ' : undefined, hkai: f === 'hkai' ? { map: hkaiMapOf(), found: 40, total: 40, missing: [] } : undefined }),
+    formInfo: async f => ({ ok: true, file: f + '.xlsx', custom: false, sheets: f === 'hkai' ? ['μπροστινο', 'πισω'] : f === 'outs' ? ['ΕΞΟΔΟΥΧΟΙ', 'ΠΑΡΑΜΕΝΟΝΤΕΣ'] : ['ΦΡΟΥΡΑ ΣΒΕΝ'], sheet: f === 'hkai' ? 'μπροστινο' : f === 'outs' ? 'ΕΞΟΔΟΥΧΟΙ' : 'ΦΡΟΥΡΑ ΣΒΕΝ', sheet2: f === 'hkai' ? 'πισω' : f === 'outs' ? 'ΠΑΡΑΜΕΝΟΝΤΕΣ' : undefined, hkai: f === 'hkai' ? { map: hkaiMapOf(), found: 40, total: 40, missing: [] } : undefined }),
     formSave: async (f, b) => { const forms = { ...(state.settings.forms || {}) }; if (b) forms[f] = b; else delete forms[f]; state = { ...state, settings: { ...state.settings, forms } }; return res(''); },
     formDir: async () => null,
     openPath: async () => {}
