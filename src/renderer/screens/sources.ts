@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, useToast } from '../ui';
 import { useNav, useStore } from '../store';
-import { PersonPicker } from '../common';
+import { PersonPicker, usePrintFile } from '../common';
 import { TYPES, CAP_ACC, KIND_NAME, type DutyKind, type TypeKey } from '../../shared/domain';
 import { addDays, dm } from '../../shared/dates';
 import {
@@ -100,7 +100,7 @@ export function SourcesView() {
 }
 
 function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle }: P) {
-  const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind);
+  const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
     : s.changed ? html`<${Badge} tone="warn" data-tip="Κάποιος το άλλαξε στο Excel. Πάτα «Ανανέωση από Excel» για να περάσουν οι αλλαγές.">Άλλαξε στο Excel<//>`
@@ -118,7 +118,7 @@ function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, 
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
         <${Button} size="sm" variant="ghost" onClick=${onEdit}>Στήλες…<//>
         <${Button} size="sm" variant="ghost" onClick=${onPick}>Άλλο αρχείο…<//>
-        ${s?.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(b.file)}>Άνοιξε<//>`}
+        ${s?.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(b.file)}>Άνοιξε<//><${Button} size="sm" variant="ghost" data-tip=${'Προεπισκόπηση και εκτύπωση του φύλλου «' + b.sheet + '» χωρίς Excel (τσεκάρεις κι άλλα φύλλα αν θέλεις)'} onClick=${() => printFile(b.file, b.sheet)}>Εκτύπωση<//>`}
         <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση: ' + k.label} data-tip="Να μη διαβάζει ούτε να γράφει πια σε αυτό το αρχείο (το αρχείο μένει όπως είναι)" onClick=${onRemove}>✕<//>`}
     </div>
     ${b && canWrite && html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.write !== false} onChange=${(e: any) => onToggle(e.target.checked)}/><span>Γράφει μόνη της κάθε αλλαγή εδώ</span></label>`}
@@ -421,7 +421,7 @@ export function RosterPreview({ pv, onDone, onCancel }: { pv: ImportPreview; onD
 // ------------------------------------------------------------------ έντυπα: template, φύλλο, φάκελος
 const FORMS: [FormKind, string][] = [['froura', 'ΦΡΟΥΡΑ ΣΒΕΝ'], ['frouraSpen', 'ΦΡΟΥΡΑ ΣΠΕΝ'], ['hkai', 'ΗΚΑΙ'], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
 function FormsCard({ outs }: { outs: FormOut[] }) {
-  const { state, boot, refresh } = useStore(); const toast = useToast();
+  const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
   const forms = state.settings.forms || {};
   const save = async (f: FormKind, b: FormBinding | null, text: string) => { const r = await window.api.formSave(f, b); if (!r.ok) { toast({ text: r.error }); return false; } await refresh(); toast({ text }); return true; };
@@ -435,7 +435,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
       return html`<li key=${f} className="srcrow">
         <div className="srcrow__main"><b>${label}</b>${b.file && html` <${Badge} tone="info">δικό σου<//>`}
           <small>${f === 'check' ? 'Φτιάχνεται από την εφαρμογή' : b.file ? html`<span className="plan__fn" title=${b.file}>${base(b.file)}${b.sheet ? ' › ' + b.sheet : ''}</span>` : 'Template της εφαρμογής'} · φάκελος: ${b.dir ? b.dir + (b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ') : (state.settings.outputDir || boot.outputDir) + '\\ΕΕΕΕ-ΜΜ'}</small>
-          ${out.map(o => html`<small key=${o.file} className=${o.error ? 'txt-bad' : ''}>${base(o.file)}: ${o.error ? o.error : o.pending ? 'περιμένει (ανοιχτό στο Excel)' : 'ενημερωμένο ' + o.at}</small>`)}</div>
+          ${out.map(o => html`<small key=${o.file} className=${o.error ? 'txt-bad' : ''}>${base(o.file)}: ${o.error ? o.error : o.pending ? 'περιμένει (ανοιχτό στο Excel)' : 'ενημερωμένο ' + o.at} · <${Button} size="sm" variant="link" onClick=${() => printFile(o.file)}>Εκτύπωση<//></small>`)}</div>
         <div className="srcrow__act">
           ${f !== 'check' && html`<${Button} size="sm" variant="outline" onClick=${() => pickTpl(f)}>Template…<//>`}
           ${f !== 'check' && (b.file || f === 'hkai' || f === 'outs') && html`<${Button} size="sm" variant="ghost" onClick=${() => editTpl(f)}>${f === 'hkai' ? 'Κελιά…' : 'Φύλλα…'}<//>`}

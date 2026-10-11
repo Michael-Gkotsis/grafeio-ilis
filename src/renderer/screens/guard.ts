@@ -2,7 +2,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, TemplateNote, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, useExport, useExportBusy } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
 import { whyText, lastResort, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, strengthOf, activePeople } from '../../shared/rules';
@@ -192,10 +192,11 @@ export function GuardScreen() {
       <p><span className="mono">${fileName}</span> · A4 οριζόντιο. ${empty.length ? 'Με ' + empty.length + (empty.length === 1 ? ' κενή γράφεται' : ' κενές γράφεται') + ' «ΚΕΝΗ».' : 'Πλήρες.'}</p>
       <${Button} variant="outline" onClick=${() => setPreview(true)}>Προεπισκόπηση<//>
       <${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
+      <${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/>
       <${TemplateNote} ids=${['froura', 'check']}/>
     </section>
   </div>`;
-  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
+  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
   const cur = !mobile && tab === 'xl' ? 'posts' : tab;
@@ -207,7 +208,7 @@ export function GuardScreen() {
     <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Ό,τι βλέπεις εδώ βγαίνει ίδιο στο Excel." onClose=${() => setPreview(false)}
-      footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
+      footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
     ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
     ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}

@@ -17,6 +17,7 @@ import { KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detec
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
+import { previewHtml, renderBook } from './print';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
 
@@ -130,7 +131,7 @@ const excel = (): typeof import('./excel') => nodeRequire(path.join(__dirname, '
 // το κουμπί ξεκλειδώνει με μήνυμα αντί να μένει στο «Δημιουργία…»
 const EXPORT_MAX = 60000;
 let exporting = false;
-async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean }): Promise<ExportResult> {
+async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult> {
   if (exporting) return { ok: false, error: 'Βγαίνει ήδη άλλο έντυπο. Περίμενε να τελειώσει και ξαναπάτα.' };
   exporting = true;
   let timer: NodeJS.Timeout | undefined;
@@ -165,7 +166,7 @@ async function hkaiMap(buf: Buffer, b: FormBinding) {
   return { title: b.cells?.title || det.title, date: b.cells?.date || det.date, rows: { ...det.rows, ...(b.cells?.rows || {}) }, cols: { ...det.cols, ...(b.cells?.cols || {}) } };
 }
 
-async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean }): Promise<ExportResult> {
+async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult> {
   try {
     const s = store.state;
     // Προέλεγχος: με ✕ δεν βγαίνει έντυπο, με ⚠ χρειάζεται επιβεβαίωση που γράφεται στο ιστορικό
@@ -178,8 +179,11 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null, false);
     if (checks.length) store.flush();
     rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data) });
-    if (opts.open) shell.openPath(out);
-    return { ok: true, file: out, warnings: r.warnings || [] };
+    const warnings = r.warnings || [];
+    // «Εκτύπωση»: το Excel γράφεται όπως πάντα και ανοίγει η προεπισκόπηση εκτύπωσης αντί για τον Excel
+    if (opts.print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); }
+    else if (opts.open) shell.openPath(out);
+    return { ok: true, file: out, warnings };
   } catch (e) {
     if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
     if (e instanceof TemplateError) return { ok: false, error: e.message, checks: [{ level: 'err', text: e.message }] };
@@ -425,6 +429,31 @@ function knownPath(file: string): boolean {
   return known.some(k => k === f || path.dirname(k) === f);
 }
 
+// ------------------------------------------------------------------ Εκτύπωση χωρίς Excel (print.ts): προεπισκόπηση και διάλογος εκτυπωτή των Windows
+type PrintJob = { file: string; sheets: string[]; tmp: string };
+const printJobs = new Map<number, PrintJob>();   // ανά παράθυρο προεπισκόπησης (webContents)
+async function printPage(file: string, sheets?: string[]): Promise<{ tmp: string; sheets: string[] }> {
+  const doc = await renderBook(await fs.promises.readFile(file), { file: path.basename(file), sheets });
+  const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
+  await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file)));
+  return { tmp, sheets: doc.sheets.map(x => x.name) };
+}
+async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const p = await printPage(file, sheets);
+    const pw = new BrowserWindow({
+      parent: win || undefined, modal: !!win, width: 1180, height: 860, minWidth: 700, minHeight: 500, show: false, title: 'Εκτύπωση · ' + path.basename(file), backgroundColor: '#5f6368',
+      webPreferences: { preload: path.join(__dirname, '..', 'preload', 'print.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+    });
+    pw.setMenu(null);
+    const id = pw.webContents.id; printJobs.set(id, { file, ...p });
+    pw.once('ready-to-show', () => { if (win && win.isMaximized()) pw.maximize(); pw.show(); });
+    pw.on('closed', () => { const j = printJobs.get(id); if (j) fs.rmSync(j.tmp, { force: true }); printJobs.delete(id); });
+    try { await pw.loadFile(p.tmp); } catch (e) { pw.destroy(); throw e; }
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
 let ready = 0;
 // Χωρίς δίκτυο και χωρίς άδειες (έρευνα §4.3): ό,τι δεν είναι τοπικό αρχείο δεν φορτώνει
 function lockdown() {
@@ -561,6 +590,33 @@ else {
       return r.canceled ? null : r.filePaths[0] || null;
     });
     ipcMain.handle('open:path', (_e, file: string) => { if (knownPath(file) && fs.existsSync(file)) return shell.openPath(file); return 'άγνωστο αρχείο'; });
+    ipcMain.handle('print:file', (_e, file: string, sheet?: string) => {
+      // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
+      const inside = (dir?: string) => !!dir && !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') && !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
+      const known = knownPath(file) || [outputDir(), ...Object.values(store.state.settings.forms || {}).map(b => b?.dir)].some(inside);
+      if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file)) return fail('Δεν βρέθηκε το ' + path.basename(file));
+      if (/\.xls$/i.test(file)) return fail('Το ' + path.basename(file) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.');
+      return printPreview(file, sheet ? [sheet] : undefined);
+    });
+    // από το παράθυρο προεπισκόπησης
+    ipcMain.handle('print:sheets', async (e, names: string[]) => {
+      const job = printJobs.get(e.sender.id); if (!job || !Array.isArray(names)) return fail('Έκλεισε η εκτύπωση');
+      try {
+        const p = await printPage(job.file, names.map(String));
+        fs.rmSync(job.tmp, { force: true }); Object.assign(job, p);
+        await e.sender.loadFile(p.tmp);
+        return { ok: true };
+      } catch (err) { return fail(err); }
+    });
+    ipcMain.handle('print:go', (e, o: { landscape?: boolean; pageSize?: string; part?: string }) => new Promise(res => {
+      const job = printJobs.get(e.sender.id); if (!job) { res(fail('Έκλεισε η εκτύπωση')); return; }
+      const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize)) ? String(o.pageSize) : 'A4';
+      e.sender.print({ silent: false, printBackground: true, landscape: !!o?.landscape, pageSize, margins: { marginType: 'none' } }, (ok, reason) => {
+        if (ok) store.addAudit({ at: nowHM(), day: today(), text: 'Εκτύπωση ' + path.basename(job.file) + (job.sheets.length > 1 || o?.part ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')' : ''), files: [path.basename(job.file)], source: 'app', undoable: false }, null);
+        res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
+      });
+    }));
+    ipcMain.handle('print:close', e => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     setInterval(retryPending, 60 * 1000);
     ipcMain.handle('backups:list', () => listBackups(BACKUPS));
     ipcMain.handle('backups:restore', (_e, name: string) => {
