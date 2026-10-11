@@ -87,6 +87,7 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
 /* Βγάζει ένα έντυπο από το template και ανοίγει το αρχείο στο Excel.
    Πρώτα ο προέλεγχος (έρευνα §3.6): ✕ σταματά με «Δείξε μου», ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό. */
 type Gate = { kind: ExportKind; date: ISODate; label: string; checks: Check[]; resolve: (ok: boolean) => void };
+const ExportBusyCtx = createContext<ExportKind | null>(null);
 const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string) => Promise<boolean>>(async () => false);
 const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
   guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['records', { recTab: 'pun' }],
@@ -95,10 +96,17 @@ const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
 export function ExportProvider({ children }: P) {
   const toast = useToast(); const { refresh } = useStore(); const nav = useNav();
   const [gate, setGate] = useState<Gate | null>(null);
+  // Ποιο έντυπο βγαίνει τώρα: τα κουμπιά δείχνουν «Δημιουργία…» και δεύτερο κλικ δεν ξεκινά δεύτερη εξαγωγή
+  const [busy, setBusy] = useState<ExportKind | null>(null); const busyRef = useRef(false);
   const exec = useCallback(async (kind: ExportKind, date: ISODate, label: string, ack: boolean): Promise<boolean> => {
-    const r = await window.api.exportFile(kind, date, { open: true, ack });
+    if (busyRef.current) return false;
+    busyRef.current = true; setBusy(kind);
+    let r: Awaited<ReturnType<typeof window.api.exportFile>>;
+    try { r = await window.api.exportFile(kind, date, { open: true, ack }); }
+    catch (e) { r = { ok: false, error: String(e) } as typeof r; }
+    finally { busyRef.current = false; setBusy(null); }
     if (!r.ok) {
-      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate({ kind, date, label, checks: r.checks!, resolve }));
+      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate(g => { g && g.resolve(false); return { kind, date, label, checks: r.checks!, resolve }; }));
       toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack); } }] : undefined });
       return false;
     }
@@ -111,17 +119,18 @@ export function ExportProvider({ children }: P) {
   const errs = gate ? gate.checks.filter(c => c.level === 'err') : [];
   const warns = gate ? gate.checks.filter(c => c.level === 'warn') : [];
   const show = (c: Check) => { const g = gate!; close(false); if (c.go) { const [v, p] = GO[c.go](g.date); nav.go(v, p); } };
-  return html`<${ExportCtx.Provider} value=${start}>${children}
+  return html`<${ExportCtx.Provider} value=${start}><${ExportBusyCtx.Provider} value=${busy}>${children}
     ${gate && html`<${Dialog} role="alertdialog" title=${errs.length ? 'Δεν μπορεί να βγει ' + gate.label : 'Έλεγχος πριν βγει ' + gate.label} description=${dayName(gate.date) + ' ' + dmy(gate.date)} onClose=${() => close(false)}
       footer=${errs.length ? html`<${Button} data-autofocus="" onClick=${() => close(false)}>Κλείσιμο<//>` : html`<${Button} variant="outline" data-autofocus="" onClick=${() => close(false)}>Άκυρο<//><${Button} onClick=${async () => { const g = gate!; setGate(null); g.resolve(await exec(g.kind, g.date, g.label, true)); }}>Το ξέρω, συνέχισε<//>`}>
       <ul className="preflight">${[...errs, ...warns].map((c, i) => html`<li key=${i} className=${c.level === 'err' ? 'is-err' : 'is-warn'}><span className="preflight__ic">${c.level === 'err' ? '✕' : '⚠'}</span><span>${c.text}</span>${c.go && html`<${Button} size="sm" variant="link" onClick=${() => show(c)}>Δείξε μου<//>`}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>${errs.length ? 'Διόρθωσε τα ✕ και ξαναδοκίμασε. Έτσι δεν φεύγει ποτέ λάθος έντυπο.' : 'Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.'}</p>
-    <//>`}<//>`;
+    <//>`}<//><//>`;
 }
 export const useExport = () => useContext(ExportCtx);
+export const useExportBusy = () => useContext(ExportBusyCtx);
 export function ExportButton({ kind, date, label, variant, size, disabled }: P) {
-  const ex = useExport(); const [busy, setBusy] = useState(false);
-  return html`<${Button} variant=${variant} size=${size} disabled=${busy || disabled} onClick=${async () => { setBusy(true); try { await ex(kind, date, label); } finally { setBusy(false); } }}>${busy ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`;
+  const ex = useExport(); const busy = useExportBusy();
+  return html`<${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label)}>${busy === kind ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`;
 }
 export function TemplateNote({ ids }: { ids: string[] }) {
   const { boot, state } = useStore(); const nav = useNav();

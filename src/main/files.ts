@@ -2,6 +2,7 @@
 // 1. το template δεν γράφεται ποτέ (διαβάζεται μόνο), 2. πρώτα έλεγχος αν το αρχείο είναι ανοιχτό στο Excel,
 // 3. γράφεται σε .tmp, ξαναδιαβάζεται, και μόνο τότε μετονομάζεται, 4. η προηγούμενη έκδοση κρατιέται στα «_προηγούμενα».
 import fs from 'fs';
+const fsp = fs.promises;
 import path from 'path';
 import JSZip from 'jszip';
 
@@ -26,7 +27,7 @@ export function ownerFile(file: string): boolean {
 }
 
 async function verifyXlsx(file: string) {
-  const zip = await JSZip.loadAsync(fs.readFileSync(file));
+  const zip = await JSZip.loadAsync(await fsp.readFile(file));
   if (!zip.file('xl/workbook.xml') || !zip.file('[Content_Types].xml')) throw new Error('Το αρχείο που γράφτηκε δεν διαβάζεται σωστά');
 }
 const stamp = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); };
@@ -43,14 +44,15 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
   const plan = items.map(x => ({ ...x, file: path.join(x.dir, x.name), tmp: path.join(x.dir, x.name + '.tmp') }));
   for (const x of plan) { if (isLocked(x.file)) throw new LockedError(x.file); }
   try {
-    for (const x of plan) { fs.mkdirSync(x.dir, { recursive: true }); fs.writeFileSync(x.tmp, x.data); await verifyXlsx(x.tmp); }
+    // ασύγχρονα: σε αργό δίσκο ή USB το παράθυρο δεν παγώνει όσο γράφεται το αρχείο
+    for (const x of plan) { await fsp.mkdir(x.dir, { recursive: true }); await fsp.writeFile(x.tmp, x.data); await verifyXlsx(x.tmp); }
   } catch (e) { plan.forEach(x => fs.rmSync(x.tmp, { force: true })); throw e; }
   const done: string[] = [];
   for (const x of plan) {
     if (fs.existsSync(x.file)) {
       const pdir = path.join(x.dir, PREV_DIR); fs.mkdirSync(pdir, { recursive: true });
       const ext = path.extname(x.name);
-      fs.copyFileSync(x.file, path.join(pdir, x.name.slice(0, -ext.length) + ' @ ' + stamp() + ext));
+      await fsp.copyFile(x.file, path.join(pdir, x.name.slice(0, -ext.length) + ' @ ' + stamp() + ext));
       prunePrev(x.dir, x.name);
     }
     try { fs.renameSync(x.tmp, x.file); done.push(x.file); }
