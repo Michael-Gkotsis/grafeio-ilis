@@ -2,7 +2,7 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
 
 export type Command =
@@ -34,6 +34,9 @@ export type Command =
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
+  | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
+  | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
+  | { t: 'importDuties'; guards: Guards; baseline: Record<number, Baseline>; source: string }
   | { t: 'expire' };
 
 export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
@@ -193,6 +196,52 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? { ...x, ...byId.get(x.id) } : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
       const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές'), del.size && del.size + (del.size === 1 ? ' σβήστηκε' : ' σβήστηκαν')].filter(Boolean).join(', ');
       return { state: { ...s, statuses }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + parts, files: [], source: 'excel' };
+    }
+    case 'setPeopleFields': {
+      // Από τα Αρχεία Excel (πόστα, εκτός δύναμης): μόνο αυτά τα πεδία, μόνο σε άτομα που υπάρχουν
+      const by = new Map<number, Partial<Person>>();
+      for (const ch of c.changes) {
+        if (!pm.has(ch.pid)) continue;
+        const pt: Partial<Person> = {};
+        if ('post' in ch.patch) pt.post = ch.patch.post ? String(ch.patch.post) : null;
+        if ('active' in ch.patch) pt.active = !!ch.patch.active;
+        if ('notes' in ch.patch) pt.notes = String(ch.patch.notes ?? '');
+        by.set(ch.pid, { ...(by.get(ch.pid) || {}), ...pt });
+      }
+      if (!by.size) return { state: s, text: '', files: [] };
+      const people = s.people.map(p => (by.has(p.id) ? { ...p, ...by.get(p.id) } : p));
+      return { state: { ...s, people }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + by.size + (by.size === 1 ? ' αλλαγή' : ' αλλαγές'), files: [], source: 'excel' };
+    }
+    case 'importCaps': {
+      const caps = { ...s.caps }; let n = 0;
+      for (const ch of c.changes) {
+        if (!pm.has(ch.pid) || !CAP_ACC[ch.kind]) continue;
+        const cur = { ...(caps[ch.pid] || {}) };
+        if (ch.reason) cur[ch.kind] = ch.reason; else delete cur[ch.kind];
+        caps[ch.pid] = cur; n++;
+      }
+      for (const k of Object.keys(caps)) if (!Object.keys(caps[+k]).length) delete caps[+k];
+      if (!n) return { state: s, text: '', files: [] };
+      return { state: { ...s, caps }, text: 'Από Excel (' + c.source + '), δυνατότητα υπηρεσιών: ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές'), files: [], source: 'excel' };
+    }
+    case 'importDuties': {
+      // μόνο μέρες χωρίς καμία υπηρεσία στην εφαρμογή (ξαναελέγχεται εδώ) και θέσεις που υπάρχουν
+      const guards = { ...s.guards }; let days = 0, n = 0;
+      for (const [d, g] of Object.entries(c.guards)) {
+        if (Object.keys(s.guards[d] || {}).length) continue;
+        const ok = Object.fromEntries(Object.entries(g).filter(([k, pid]) => pm.has(pid) && postBy(s, k)));
+        if (!Object.keys(ok).length) continue;
+        guards[d] = ok; days++; n += Object.keys(ok).length;
+      }
+      const baseline = { ...s.baseline }; let extra = 0;
+      for (const [id, b] of Object.entries(c.baseline)) {
+        const pid = Number(id); if (!pm.has(pid)) continue;
+        const cur: Baseline = { ...(baseline[pid] || {}) };
+        for (const [k, v] of Object.entries(b)) { const x = Math.max(0, Math.floor(Number(v) || 0)); if (!x) continue; (cur as Record<string, number>)[k] = ((cur as Record<string, number>)[k] || 0) + x; if (k !== 'hol') extra += x; }
+        baseline[pid] = cur;
+      }
+      if (!n && !extra) return { state: s, text: '', files: [] };
+      return { state: { ...s, guards, baseline }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + (n + extra) + ' υπηρεσίες σε ' + days + (days === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
     }
     case 'updatePerson': {
       if (!pm.has(c.person.id)) throw new Error('Δεν βρέθηκε το άτομο');

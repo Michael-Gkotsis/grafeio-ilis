@@ -24,6 +24,7 @@ const api: Api = {
   srcSave: (kind, b) => ipcRenderer.invoke('src:save', kind, b),
   srcImport: (kind, b, choices, keepRemoved) => ipcRenderer.invoke('src:import', kind, b, choices, !!keepRemoved),
   srcKeys: kind => ipcRenderer.invoke('src:keys', kind),
+  srcApply: (kind, b, cmd, keep) => ipcRenderer.invoke('src:apply', kind, b, cmd, keep || []),
   srcPeople: b => ipcRenderer.invoke('src:people', b),
   srcPlan: kind => ipcRenderer.invoke('src:plan', kind),
   srcWrite: kind => ipcRenderer.invoke('src:write', kind),

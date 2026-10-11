@@ -11,9 +11,9 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, readBook, syncStamp, tableState, writeSource } from './sources';
+import { SourceMetaStore, OldFormatError, readBook, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { KIND, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planWrite, snapFromSheet,
+import { KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -270,8 +270,11 @@ async function syncOut(kind: ListKind, auto: boolean): Promise<{ ok: true; text:
 const dirty = new Set<ListKind>(); let formsDirty = false; let autoTimer: NodeJS.Timeout | undefined; let autoBusy = false;
 function scheduleAuto(prev: AppState, next: AppState) {
   if (prev === next) return;
-  if (prev.people !== next.people) dirty.add('people');
-  if (prev.statuses !== next.statuses || prev.people !== next.people) STATUS_KINDS.forEach(k => dirty.add(k));
+  // ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται σε όλα τα φύλλα όπου υπάρχουν
+  if (prev.people !== next.people) KINDS.forEach(k => dirty.add(k.id));
+  if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => dirty.add(k));
+  if (prev.caps !== next.caps) dirty.add('caps');
+  if (prev.guards !== next.guards) dirty.add('duties');
   formsDirty = true;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
@@ -324,6 +327,9 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
   if (cur && path.resolve(cur.file) !== path.resolve(p.file)) return;
   if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
   srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false });
+  // πόστα και εκτός δύναμης του ίδιου αρχείου διαβάστηκαν μαζί
+  const linked = (['posts', 'outside'] as ListKind[]).filter(k => { const x = bindingOf(k); return x && path.resolve(x.file) === path.resolve(p.file); });
+  Promise.all(linked.map(k => markSynced(k, bindingOf(k)!))).then(notify, e => console.error('roster linked', e));
   notify();
 }
 
@@ -337,9 +343,25 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
     saveBinding(kind, b);
     const r = runCmd({ t: 'importRecords', adds: d.add, updates: d.update.map(u => ({ id: u.id, patch: u.patch })), deletes: keepRemoved ? [] : d.removed.map(x => x.id), source: path.basename(b.file), what: KIND[kind].label.toLowerCase() });
     if (!r.ok) return r;
-    srcMeta.set(kind, { keys: d.keys, ...syncStamp(b, book), at: stampNow(), pending: false, error: undefined, locked: false });
+    srcMeta.set(kind, { keys: d.keys, ...syncStamp(b, book), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false });
     // ό,τι έχει η εφαρμογή και λείπει από το Excel γράφεται αμέσως μετά (αν το είδος γράφει μόνο του)
     if (b.write !== false && d.appOnly.length) { dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
+    notify();
+    return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
+  } catch (e) { return fail(e); }
+}
+// Μετά από ανάγνωση: πότε, τι αποτύπωμα είχε ο πίνακας και τι στοιχεία είχαν τα άτομα (για να περνούν μετά οι αλλαγές τους)
+async function markSynced(kind: ListKind, b: SourceBinding, extra: Partial<SourceMeta> = {}) {
+  srcMeta.set(kind, { ...(await syncStampNow(b)), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, ...extra });
+}
+const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = { posts: 'setPeopleFields', outside: 'setPeopleFields', caps: 'importCaps', duties: 'importDuties' };
+async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keep: string[] = []): Promise<CmdResult> {
+  if (SHEET_CMDS[kind] !== cmd.t) return fail('Λάθος είδος εισαγωγής');
+  try {
+    saveBinding(kind, b);
+    const r = runCmd(cmd); if (!r.ok) return r;
+    await markSynced(kind, b, kind === 'duties' ? { keep: [...new Set([...(srcMeta.get(kind)?.keep || []), ...keep.map(String)])] } : {});
+    dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
     notify();
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
   } catch (e) { return fail(e); }
@@ -364,17 +386,12 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     const exists = fs.existsSync(b.file);
     const book = exists ? await readBook(b.file) : null;
     const sheet = (book && sheetOf(book.sheets, b.sheet)) || { name: b.sheet, rows: [] };
-    const m = srcMeta.get(kind);
-    if (kind === 'people') {
-      if (!book) return fail('Δεν βρέθηκε το ' + b.file);
-      const p = planPeopleWrite(sheet, b, store.state, m?.snap || snapFromSheet(sheet, b, store.state.people));
-      const lines = describeSets(kind, sheet, b, p.sets);
-      return { ok: true, file: b.file, create: false, lines, total: p.changed, foreign: 0, notFound: p.notFound };
-    }
-    if (!isStatusKind(kind)) return fail(KIND[kind].label + ': διαβάζεται μαζί με το προσωπικό, δεν γράφεται');
-    const plan = planWrite(kind, sheet, b, store.state, m?.keys || [], today());
-    const lines = describeSets(kind, sheet, b, plan.sets);
-    return { ok: true, file: b.file, create: !exists || !book?.sheets.some(x => x.name === b.sheet), lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: [] };
+    if (!book && !isStatusKind(kind)) return fail('Δεν βρέθηκε το ' + b.file);
+    const had = !!book?.sheets.some(x => x.name === b.sheet);
+    if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
+    const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
+    const lines = describeSets(kind, sheet, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : undefined);
+    return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound };
   } catch (e) { return fail(e); }
 }
 // Έντυπο: φύλλα του template και (ΗΚΑΙ) πού βρέθηκαν οι γραμμές και οι στήλες
@@ -515,6 +532,7 @@ else {
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean) => importStatuses(kind, b, choices || {}, !!keepRemoved));
+    ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]) => applySheet(kind, b, cmd, Array.isArray(keep) ? keep : []));
     ipcMain.handle('src:keys', (_e, kind: StatusKind) => srcMeta.get(kind)?.keys || []);
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const r = await rosterPreview(b.file, b); return r; });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));

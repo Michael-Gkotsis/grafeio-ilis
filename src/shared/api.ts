@@ -50,6 +50,7 @@ export interface Api {
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
   srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean): Promise<CmdResult>;
   srcKeys(kind: StatusKind): Promise<string[]>;
+  srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
   srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;

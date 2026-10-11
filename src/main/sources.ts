@@ -8,9 +8,9 @@ import { writeAll, LockedError } from './files';
 import type { RawSheet } from '../shared/roster';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { KIND, isStatusKind, planPeopleWrite, planWrite, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { isStatusKind, planSource, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
-export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean }
+export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean }
 export type Metas = Partial<Record<ListKind, SourceMeta>>;
 
 // Τι ξέρουμε για κάθε αρχείο από την τελευταία ανάγνωση/εγγραφή: ώρα και μέγεθος (για να φαίνεται αν άλλαξε
@@ -83,25 +83,19 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.set(at, v);
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };
-    let res: { added: number; changed: number; cleared: number; foreign: number; notFound: string[]; keys: string[]; snap?: Record<number, PersonSnap> };
-    if (kind === 'people') {
-      const p = planPeopleWrite(sheet, b, s, meta?.snap || {});
-      for (const x of p.sets) await put(x.r, x.c, x.v);
-      res = { added: 0, changed: p.changed, cleared: 0, foreign: 0, notFound: p.notFound, keys: meta?.keys || [], snap: p.snap };
-      if (!p.sets.length) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: { snap: p.snap } };
-    } else if (isStatusKind(kind)) {
-      const plan = planWrite(kind, sheet, b, s, meta?.keys || [], today);
-      const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας απλό στυλ με πλαίσια
-      const blank = !exists;
-      if (!plan.sets.length && !plan.insert && !fresh) return { ok: true, file: b.file, unchanged: true, added: 0, changed: 0, cleared: 0, foreign: plan.foreign, notFound: [], created: false, meta: { keys: plan.keys } };
-      for (const h of plan.header) { ws.set(ref(h.r, h.c), h.v); if (blank) ws.setStyle(ref(h.r, h.c), h.title ? 0 : 1); }
-      if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
-      for (const x of plan.sets) await put(x.r, x.c, x.v, blank ? 2 : undefined);
-      res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: [], keys: plan.keys };
-    } else return { ok: false, error: KIND[kind].label + ': μόνο ανάγνωση' };
+    if (!had && !isStatusKind(kind)) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
+    const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
+    const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας απλό στυλ με πλαίσια
+    const blank = !exists;
+    const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, keys: plan.keys, snap: plan.snap };
+    const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
+    if (!plan.sets.length && !plan.insert && !fresh) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
+    for (const h of plan.header) { ws.set(ref(h.r, h.c), h.v); if (blank) ws.setStyle(ref(h.r, h.c), h.title ? 0 : 1); }
+    if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
+    for (const x of plan.sets) await put(x.r, x.c, x.v, blank ? 2 : undefined);
     const data = await wb.save();
     const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data }]);
-    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, meta: { keys: res.keys, ...(res.snap ? { snap: res.snap } : {}), ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {
     if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

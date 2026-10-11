@@ -130,11 +130,12 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
     const post = posts.get('#' + r.asm) || posts.get(keyOf(r)) || null;
     const off = inactive.has(k);
     // Στο ΣΥΝΟΛΙΚΟ οι «ΠΑΡΑΤΗΡΗΣΕΙΣ» είναι ρόλοι (ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…)· η λέξη ΔΝ εκεί σημαίνει δικαίωμα ΔΝ
+    // ο λόγος για τους εκτός δύναμης είναι οι παρατηρήσεις του φύλλου «ΕΚΤΟΣ ΔΥΝΑΜΗΣ», όχι ο ρόλος του ΣΥΝΟΛΙΚΟΥ
     const dnWord = !off && DN_WORD.test(norm(r.remarks));
     const role = !off && r.remarks ? stripDn(r.remarks) || null : null;
     const row: ImportRow = {
       rank: r.rank || 'ΣΤΡ', spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
-      si: r.si, post, role, essos, attached: false, notes: off ? 'Εκτός δύναμης' + (r.remarks ? ': ' + r.remarks : '') : '',
+      si: r.si, post, role, essos, attached: false, notes: off ? 'Εκτός δύναμης' + (inactive.get(k) ? ': ' + inactive.get(k) : '') : '',
       active: !off
     };
     // μόνο όταν το αρχείο λέει κάτι για ΔΝ· αλλιώς μένει ό,τι έχει οριστεί στην εφαρμογή

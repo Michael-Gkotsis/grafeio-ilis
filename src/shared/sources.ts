@@ -4,7 +4,7 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
-import { PUN_KINDS, TYPES, type AppState, type Baseline, type DutyKind, type Guards, type Person, type Status, type TypeKey } from './domain';
+import { KIND_CODE, PUN_KINDS, TYPES, type AppState, type Baseline, type DutyKind, type Guards, type Person, type Status, type TypeKey } from './domain';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { allPosts, isHol, postsOf } from './rules';
 
@@ -665,7 +665,8 @@ export interface PlanLine { r: number; who: string; text: string }
 const fmtW = (v: WVal) => (v == null ? '(κενό)' : typeof v === 'object' ? v.date.slice(8) + '/' + v.date.slice(5, 7) + '/' + v.date.slice(0, 4) : String(v));
 export function describeSets(kind: ListKind, sheet: RawSheet, b: SourceBinding, sets: { r: number; c: number; v: WVal }[], newRows: Set<number> = new Set()): PlanLine[] {
   const label = new Map<number, string>(); const defs = fieldsOf(kind);
-  for (const [k, c] of Object.entries(b.cols)) label.set(c, defs.find(f => f.k === k)?.label.replace(/ \(.*\)$/, '') || k);
+  if (kind === 'duties') dayColumns(sheet.rows[b.header], b.cols.d1).forEach((c, i) => label.set(c, 'μέρα ' + (i + 1)));
+  for (const [k, c] of Object.entries(b.cols)) if (k !== 'd1') label.set(c, defs.find(f => f.k === k)?.label.replace(/ \(.*\)$/, '') || k);
   const byRow = new Map<number, { c: number; v: WVal }[]>();
   for (const x of sets) { const l = byRow.get(x.r) || []; l.push(x); byRow.set(x.r, l); }
   const out: PlanLine[] = [];
@@ -794,21 +795,23 @@ export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null 
   if (/^(Υ|Π|ΠΥΛΗ)$/.test(t)) return { kind: 'other' };
   return null;
 }
+// κωδικοί απουσίας του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Α/Α, ΓΡ, ΕΣΤ…): δεν είναι υπηρεσία, δεν πειράζονται
+export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
 export interface DutiesPlan {
-  month: string; guards: Guards; base: Record<number, Baseline>;
+  month: string; guards: Guards; base: Record<number, Baseline>; extraCells: string[];
   days: number; entries: number; extra: number; byKind: Partial<Record<DutyKind, number>>;
   busy: ISODate[]; future: number; unknown: string[]; sp: SheetPeople;
 }
 export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}): DutiesPlan {
   const sp = sheetPeople(sheet, b, s.people, choices);
-  const plan: DutiesPlan = { month, guards: {}, base: {}, days: 0, entries: 0, extra: 0, byKind: {}, busy: [], future: 0, unknown: [], sp };
+  const plan: DutiesPlan = { month, guards: {}, base: {}, extraCells: [], days: 0, entries: 0, extra: 0, byKind: {}, busy: [], future: 0, unknown: [], sp };
   const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
   const [y, m] = month.split('-').map(Number); const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const byDay = new Map<ISODate, { pid: number; kind: DutyKind; pref?: string }[]>(); const unk = new Map<string, string>();
   for (const row of sp.rows) cols.forEach((c, i) => {
     if (i >= nDays) return;
     const raw = cellText((sheet.rows[row.r] || [])[c]); if (!raw || /^\d+$/.test(raw)) return;
-    const code = dutyCode(raw); if (!code) { unk.set(normGreek(raw), raw); return; }
+    const code = dutyCode(raw); if (!code) { if (!isAbsCode(raw)) unk.set(normGreek(raw), raw); return; }
     const d = month + '-' + String(i + 1).padStart(2, '0'); const l = byDay.get(d) || []; l.push({ pid: row.pid, ...code }); byDay.set(d, l);
   });
   plan.unknown = [...unk.values()];
@@ -822,10 +825,169 @@ export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month
       const free = order.filter(p => p.kind === e.kind && g[p.k] == null).sort((a, c) => (a.k === e.pref ? -1 : c.k === e.pref ? 1 : 0));
       plan.entries++; plan.byKind[e.kind] = (plan.byKind[e.kind] || 0) + 1;
       if (free.length) { g[free[0].k] = e.pid; continue; }
-      const x = plan.base[e.pid] || (plan.base[e.pid] = {}); x[e.kind] = (x[e.kind] || 0) + 1; if (h) x.hol = (x.hol || 0) + 1; plan.extra++;
+      const x = plan.base[e.pid] || (plan.base[e.pid] = {}); x[e.kind] = (x[e.kind] || 0) + 1; if (h) x.hol = (x.hol || 0) + 1; plan.extra++; plan.extraCells.push(e.pid + '|' + d);
     }
     if (Object.keys(g).length) plan.guards[d] = g;
     plan.days++;
   }
   return plan;
+}
+
+// ------------------------------------------------------------------ εγγραφή πίσω: πόστα, εκτός δύναμης, δυνατότητες, έλεγχος
+const personField = (k: string, p: Person): WVal => fieldValue(k, 'punish', { id: '', pid: p.id, type: 'PUN', from: '', to: '' }, p);
+const PERSON_KEYS = ['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', 'phone', 'room'];
+// Τι θέλει η εφαρμογή σε έναν πίνακα με ένα άτομο ανά γραμμή: upd = κελιά στις γραμμές που υπάρχουν, add = νέες γραμμές
+// (με τα στοιχεία του ατόμου), drop = γραμμές που σβήνονται. Γραμμές που δεν ξέρει δεν τις αγγίζει.
+interface ListWant { upd: Map<number, Record<string, WVal>>; add: Map<number, Record<string, WVal>>; drop: Set<number> }
+export interface SourcePlan extends WritePlan { notFound: string[] }
+function planList(sheet: RawSheet, b: SourceBinding, s: AppState, w: ListWant, eq: (k: string, cell: CellValue, v: WVal) => boolean = (_k, cell, v) => same(cell, v)): SourcePlan {
+  const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
+  const rows = sheet.rows; const scan = tableRows(sheet, b.header, b.cols); const match = makeMatcher(s.people);
+  const pm = new Map(s.people.map(p => [p.id, p])); const placed = new Set<number>(); const free = [...scan.free];
+  let n = 0;
+  for (const { r, v } of scan.records) {
+    if (b.cols.last != null && b.cols.first != null && !isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father))) continue;
+    n++;
+    const pid = match(v).pid;
+    if (pid == null || placed.has(pid)) { plan.foreign++; continue; }
+    placed.add(pid);
+    if (w.drop.has(pid)) {
+      const row = rows[r] || [];
+      for (let c = scan.width[0]; c <= scan.width[1]; c++) if (c !== b.cols.aa && cellText(row[c]) !== '') plan.sets.push({ r, c, v: null });
+      free.push(r); plan.cleared++; continue;
+    }
+    const u = w.upd.get(pid); if (!u) continue;
+    let ch = false;
+    for (const [k, val] of Object.entries(u)) if (b.cols[k] != null && !eq(k, v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
+    if (ch) plan.changed++;
+  }
+  free.sort((a, c) => a - c);
+  const fresh = [...w.add.keys()].filter(pid => !placed.has(pid) && pm.has(pid)).sort((a, c) => collator.compare(pm.get(a)!.last, pm.get(c)!.last) || collator.compare(pm.get(a)!.first, pm.get(c)!.first));
+  const put = (r: number, pid: number) => {
+    const p = pm.get(pid)!; const vals = w.add.get(pid)!;
+    for (const [k, c] of Object.entries(b.cols)) { if (k === 'aa') continue; const val = PERSON_KEYS.includes(k) ? personField(k, p) : vals[k]; if (val != null) plan.sets.push({ r, c, v: val }); }
+  };
+  const aa = (r: number, i: number) => { if (b.cols.aa != null && cellText((rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: i }); };
+  n -= plan.cleared;
+  let i = 0;
+  for (; i < fresh.length && i < free.length; i++) { put(free[i], fresh[i]); aa(free[i], ++n); }
+  const rest = fresh.slice(i);
+  if (rest.length) {
+    const after = Math.max(scan.end, b.header);
+    const tpl = scan.records.length ? scan.records[scan.records.length - 1].r : scan.free.length ? scan.free[0] : b.header;
+    plan.insert = { after, n: rest.length, tpl };
+    rest.forEach((pid, j) => { const r = after + 1 + j; put(r, pid); if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: ++n }); });
+  }
+  plan.added = fresh.length;
+  return plan;
+}
+// Πόστα: ένα άτομο ανά πόστο· όποιος δεν έχει πια πόστο φεύγει από το φύλλο
+export function planPostsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): SourcePlan {
+  const w: ListWant = { upd: new Map(), add: new Map(), drop: new Set() };
+  for (const p of s.people) {
+    if (p.post) { w.upd.set(p.id, { post: p.post }); if (p.active) w.add.set(p.id, { post: p.post }); } else w.drop.add(p.id);
+  }
+  return planList(sheet, b, s, w);
+}
+// Εκτός δύναμης: όσοι βγήκαν εκτός δύναμης με λόγο (από το φύλλο ή την εφαρμογή)· όποιος γύρισε σε δύναμη φεύγει
+export function planOutsideWrite(sheet: RawSheet, b: SourceBinding, s: AppState): SourcePlan {
+  const w: ListWant = { upd: new Map(), add: new Map(), drop: new Set() };
+  for (const p of s.people) {
+    if (!p.active && p.notes.startsWith(OUT_NOTE)) { const why = p.notes.slice(OUT_NOTE.length).replace(/^:\s*/, ''); const v = { remarks: why || null }; w.upd.set(p.id, v); w.add.set(p.id, v); }
+    else if (p.active) w.drop.add(p.id);
+  }
+  return planList(sheet, b, s, w);
+}
+// Δυνατότητα υπηρεσιών: «-» όπου η εφαρμογή λέει «δεν κάνει», κενό όπου λέει ρητά «κάνει». Νέα γραμμή για όποιον
+// απέκτησε εμπόδιο στην εφαρμογή. Τα αυτόματα εμπόδια (πόστο, Σ.Ι.) δεν γράφονται, όπως και στο δικό σου φύλλο.
+export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): SourcePlan {
+  const w: ListWant = { upd: new Map(), add: new Map(), drop: new Set() };
+  const cols = CAP_COLS.filter(k => b.cols[k] != null); const active = new Set(s.people.filter(p => p.active).map(p => p.id));
+  for (const [id, c] of Object.entries(s.caps)) {
+    const pid = Number(id); const u: Record<string, WVal> = {}; let no = false; let why = '';
+    for (const k of cols) if (k in c) { u[k] = typeof c[k] === 'string' ? '-' : null; if (typeof c[k] === 'string') { no = true; why = why || String(c[k]); } }
+    if (!Object.keys(u).length) continue;
+    w.upd.set(pid, u);
+    if (no && active.has(pid)) w.add.set(pid, { ...u, capnote: why.replace(/^Από Excel:?\s*/, '') || null });
+  }
+  return planList(sheet, b, s, w, (k, cell, v) => ((CAP_COLS as string[]).includes(k) ? capNo(cellText(cell)) === (v === '-') : same(cell, v)));
+}
+// Έλεγχος υπηρεσιών (το δικό σου μηνιαίο αρχείο): ο κωδικός της υπηρεσίας στο κελί της μέρας, για όσες μέρες έχει
+// υπηρεσίες η εφαρμογή. Μέρες χωρίς υπηρεσίες στην εφαρμογή και κωδικοί απουσίας (Κ.Α, Ε.Υ…) μένουν όπως είναι.
+// keep: «άτομο|μέρα» που διαβάστηκαν ως προηγούμενες υπηρεσίες (δεν χωρούσαν στις θέσεις): ο κωδικός τους μένει
+export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, today: ISODate, keep: string[] = []): SourcePlan {
+  const kept = new Set(keep);
+  const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
+  const month = sheetMonth(sheet, b.header, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
+  const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
+  const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
+  const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, { kind: DutyKind; code: string; k: string }>>(); const days: number[] = [];
+  for (let i = 0; i < nDays; i++) {
+    const g = s.guards[month + '-' + String(i + 1).padStart(2, '0')] || {}; if (!Object.keys(g).length) continue;
+    days.push(i);
+    for (const [k, pid] of Object.entries(g)) {
+      const post = allPosts(s.settings).find(x => x.k === k); if (!post) continue;
+      const x = want.get(pid) || new Map(); x.set(i, { kind: post.kind, k, code: k === 'dy' ? 'ΔΥ' : KIND_CODE[post.kind] }); want.set(pid, x);
+    }
+  }
+  if (!days.length) return plan;
+  const match = makeMatcher(s.people); const seen = new Set<number>();
+  for (const { r, v } of tableRows(sheet, b.header, b.cols).records) {
+    if (b.cols.last != null && b.cols.first != null && !isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father))) continue;
+    const pid = match(v).pid; if (pid == null || seen.has(pid)) { plan.foreign++; continue; }
+    seen.add(pid);
+    const x = want.get(pid); let ch = false;
+    for (const i of days) {
+      const raw = cellText((sheet.rows[r] || [])[cols[i]]); const cur = dutyCode(raw); const wnt = x?.get(i);
+      if (!wnt && kept.has(pid + '|' + month + '-' + String(i + 1).padStart(2, '0'))) continue;
+      if (wnt ? !cur || cur.kind !== wnt.kind || (wnt.kind === 'ly' && (cur.pref || 'ly') !== (wnt.k === 'dy' ? 'dy' : 'ly')) : !!cur) { plan.sets.push({ r, c: cols[i], v: wnt ? wnt.code : null }); ch = true; }
+    }
+    if (ch) plan.changed++;
+  }
+  for (const pid of want.keys()) if (!seen.has(pid) && pm.has(pid)) plan.notFound.push(nameOf(pm.get(pid)!));
+  return plan;
+}
+
+// Στοιχεία ατόμου (βαθμός, θάλαμος, τηλέφωνο…) που άλλαξαν στην εφαρμογή από την τελευταία ανάγνωση/εγγραφή αυτού του
+// πίνακα: γράφονται και εδώ, στη γραμμή του ίδιου ατόμου, ώστε όλα τα φύλλα να λένε το ίδιο.
+const LINKED = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room'];
+export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap: Record<number, PersonSnap>, taken: Set<string> = new Set()): { sets: { r: number; c: number; v: WVal }[]; changed: number } {
+  const out = { sets: [] as { r: number; c: number; v: WVal }[], changed: 0 };
+  const fields = LINKED.filter(k => b.cols[k] != null); const name = b.cols.name != null;
+  if (!fields.length && !name) return out;
+  const moved = s.people.filter(p => { const o = psnap[p.id]; if (!o) return false; const c = personVals(p); return LINKED.some(k => (c[k] || '') !== (o[k] || '')); });
+  if (!moved.length) return out;
+  // ταίριασμα με τα παλιά στοιχεία (αν άλλαξε το επώνυμο, το φύλλο έχει ακόμα το παλιό)
+  const old = s.people.map(p => (psnap[p.id] ? { ...p, last: psnap[p.id].last, first: psnap[p.id].first, father: psnap[p.id].father, asm: psnap[p.id].asm } : p));
+  const matchOld = makeMatcher(old), matchNew = makeMatcher(s.people); const ids = new Set(moved.map(p => p.id));
+  for (const { r, v } of tableRows(sheet, b.header, b.cols).records) {
+    const pid = matchOld(v).pid ?? matchNew(v).pid; if (pid == null || !ids.has(pid)) continue;
+    const p = s.people.find(x => x.id === pid)!; const o = psnap[pid]; const c = personVals(p); let ch = false;
+    for (const k of fields) {
+      if ((c[k] || '') === (o[k] || '') || taken.has(r + ':' + b.cols[k])) continue;
+      const val: WVal = c[k] === '' ? null : k === 'room' ? Number(c.room) : k === 'asm' || k === 'phone' ? num(c[k]) : c[k];
+      if (!same(v[k], val)) { out.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
+    }
+    if (name && ((c.last !== o.last) || (c.first !== o.first)) && !same(v.name, p.last + ' ' + p.first)) { out.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first }); ch = true; }
+    if (ch) out.changed++;
+  }
+  return out;
+}
+
+// Ένα σχέδιο εγγραφής για κάθε είδος (το χρησιμοποιούν η προεπισκόπηση, η εγγραφή και η δοκιμή στον browser)
+export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[] }
+export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap> }
+export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, meta: SyncMeta | undefined, today: ISODate): FullPlan {
+  const psnap = snapPeople(s.people); const sh = sheet || { name: b.sheet, rows: [] };
+  if (kind === 'people') {
+    const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people));
+    return { sets: p.sets, insert: null, header: [], keys: meta?.keys || [], added: 0, changed: p.changed, cleared: 0, foreign: 0, notFound: p.notFound, snap: p.snap, psnap };
+  }
+  const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
+    : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keep);
+  if (meta?.psnap && sheet) {
+    const ps = personSets(sheet, b, s, meta.psnap, new Set(plan.sets.map(x => x.r + ':' + x.c)));
+    plan.sets.push(...ps.sets); plan.changed += ps.changed;
+  }
+  return { ...plan, psnap };
 }

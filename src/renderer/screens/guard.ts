@@ -38,7 +38,7 @@ function DutyCheck({ onOpen }: P) {
   const [ym, setYm] = useState(today.slice(0, 7));
   const st = dutyStats(state);
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
-  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym) : null), [view, state, ym]);
+  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state, ym, dq]);
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
   const [sk, setSk] = useState<{ k: string; dir: number } | null>(null);
   const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : r.d.byKind[k] || 0);
@@ -47,7 +47,7 @@ function DutyCheck({ onOpen }: P) {
   const mon = MONTHS[+ym.slice(5) - 1];
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
-      ${view === 'grid' && html`<input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => e.target.value && setYm(e.target.value)}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
+      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => e.target.value && setYm(e.target.value)}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(mon) + '.xlsx'} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Λιγότερες συνολικά' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
