@@ -181,8 +181,10 @@ async function recover(reason: string): Promise<boolean> {
 }
 
 function createWindow() {
+  const icon = path.join(__dirname, '..', 'renderer', 'icon.png');   // λογότυπο στη γραμμή εργασιών (στο dev μπορεί να λείπει)
   win = new BrowserWindow({
     width: 1280, height: 820, minWidth: 980, minHeight: 600, show: false, title: 'Γραφείο Ίλης', backgroundColor: '#f4f5f0',
+    ...(fs.existsSync(icon) ? { icon } : {}),
     webPreferences: { preload: path.join(__dirname, '..', 'preload', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
   win.once('ready-to-show', () => { win!.maximize(); win!.show(); });

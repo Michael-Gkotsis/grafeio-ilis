@@ -21,8 +21,20 @@ export const Icon: Record<string, any> = {
   search: svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', '18'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
   x: svg('<path d="M6 6l12 12M18 6L6 18"/>', '16'),
-  shield: svg('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/>', '22')
+  shield: svg('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/>', '22'),
+  collapse: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>'),
+  expand: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>')
 };
+
+/* Λογότυπο: ασπίδα με δύο σιρίτια και αστέρι (γραφείο λοχία). Ίδιο σχέδιο με το public/logo.svg και το εικονίδιο του παραθύρου. */
+const LOGO = '<defs><linearGradient id="lg-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b7f2b"/><stop offset="1" stop-color="#2c4313"/></linearGradient>'
+  + '<linearGradient id="lg-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d77a"/><stop offset="1" stop-color="#c39323"/></linearGradient></defs>'
+  + '<path d="M32 3 L56 11 V30 C56 45 46 55 32 61 C18 55 8 45 8 30 V11 Z" fill="url(#lg-g)"/>'
+  + '<path d="M32 7.2 L52.4 14 V30 C52.4 42.6 44.2 51.4 32 56.9 C19.8 51.4 11.6 42.6 11.6 30 V14 Z" fill="url(#lg-f)"/>'
+  + '<path d="M32 7.2 V56.9 C19.8 51.4 11.6 42.6 11.6 30 V14 Z" fill="#fff" fill-opacity=".07"/>'
+  + '<path d="M32 13.5 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 L32 25.48 l-4.7 2.47 .9-5.23 -3.8-3.7 5.25-.76 Z" fill="url(#lg-g)"/>'
+  + '<path d="M19 37 L32 30 L45 37 V42.5 L32 35.5 L19 42.5 Z" fill="url(#lg-g)"/><path d="M19 45.5 L32 38.5 L45 45.5 V51 L32 44 L19 51 Z" fill="url(#lg-g)"/>';
+export const Logo = ({ size = 32 }: P) => html`<svg className="logo" viewBox="0 0 64 64" width=${size} height=${size} aria-hidden="true" dangerouslySetInnerHTML=${{ __html: LOGO }}></svg>`;
 
 export function Button({ variant = 'default', size, className, children, ...rest }: P) {
   return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} ...${rest}>${children}</button>`;
@@ -100,5 +112,31 @@ export function useViewportHeight(offset: number) {
   const [h, setH] = useState(() => Math.max(320, window.innerHeight - offset));
   useEffect(() => { const f = () => setH(Math.max(320, window.innerHeight - offset)); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, [offset]);
   return h;
+}
+/* Strip: λωρίδα κουμπιών που κυλά οριζόντια. Η ροδέλα του ποντικιού την κυλά (χωρίς Shift), οι άκρες σβήνουν
+   όταν κρύβονται κουμπιά, και το επιλεγμένο κουμπί φαίνεται πάντα. */
+export function Strip({ className, children, ...rest }: P) {
+  const ref = useRef<HTMLDivElement>(null); const shown = useRef<string | null>(null);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const upd = () => { const max = el.scrollWidth - el.clientWidth; el.classList.toggle('fade-l', el.scrollLeft > 2); el.classList.toggle('fade-r', max > 2 && el.scrollLeft < max - 2); };
+    const wheel = (e: WheelEvent) => {
+      if (e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const before = el.scrollLeft; el.scrollLeft += e.deltaY;
+      if (el.scrollLeft !== before) e.preventDefault();
+    };
+    const ro = new ResizeObserver(upd); ro.observe(el);
+    el.addEventListener('scroll', upd, { passive: true }); el.addEventListener('wheel', wheel, { passive: false });
+    return () => { ro.disconnect(); el.removeEventListener('scroll', upd); el.removeEventListener('wheel', wheel); };
+  }, []);
+  useEffect(() => {
+    // μόνο όταν αλλάζει η επιλογή, για να μη γυρνά πίσω ενώ ο χρήστης κυλά
+    const el = ref.current; const on = el && el.querySelector('[aria-pressed="true"]') as HTMLElement | null;
+    if (!el || !on || shown.current === on.textContent) return;
+    shown.current = on.textContent;
+    const l = on.offsetLeft, r = l + on.offsetWidth;   // .strip είναι position:relative
+    if (l < el.scrollLeft) el.scrollLeft = l - 24; else if (r > el.scrollLeft + el.clientWidth) el.scrollLeft = r - el.clientWidth + 24;
+  });
+  return html`<div ref=${ref} className=${cx('strip', className)} ...${rest}>${children}</div>`;
 }
 export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<p>${sub}</p>`}</div>${children}</div>`; }

@@ -1,6 +1,6 @@
 // features/people και features/status: προσωπικό, καρτέλα ατόμου, δήλωση κατάστασης
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, PageHeader, Segmented, Sheet, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
+import { html, cx, Alert, Badge, Button, Dialog, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, DateRangeField, PersonPicker, StatusBadge } from '../common';
 import { TYPES, TYPE_KEYS, PUN_KINDS, LEAVE_KINDS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, effects, fullName, shortName, unitOf, roomTxt, type DutyKind, type Person, type TypeKey, type Status } from '../../shared/domain';
@@ -33,20 +33,37 @@ export function PeopleScreen() {
   const [sort, setSort] = useState({ k: 'last', dir: 1 });
   const [selected, setSelected] = useState(() => new Set<number>());
   const ds = dutyStats(state);
-  const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['1ος Ουλ.', '1ος Ουλ. (Θ1–4)'], ['2ος Ουλ.', '2ος Ουλ. (Θ5–8)'], ['dnright', 'Με δικαίωμα ΔΝ'], ['inactive', 'Εκτός δύναμης']];
+  // Ουλαμός: ξεχωριστό φίλτρο που συνδυάζεται με την κατάσταση (π.χ. «2ος Ουλ.» + «Απόντες»)
+  const unit = nav.params.unit || 'all'; const setUnit = (u: string) => nav.set({ unit: u });
+  const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['dnright', 'Με δικαίωμα ΔΝ'], ['inactive', 'Εκτός δύναμης']];
+  const UNITS = [{ value: 'all', label: 'Όλη η Ίλη' }, { value: '1ος Ουλ.', label: '1ος Ουλ.', tip: 'Θάλαμοι 1–4' }, { value: '2ος Ουλ.', label: '2ος Ουλ.', tip: 'Θάλαμοι 5–8' }];
   const total = state.people.filter(p => p.active).length;
+  // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό), για να φαίνεται πριν πατήσεις
+  const info = useMemo(() => {
+    const ss = new Map<number, Status[]>(); const n: Record<string, number> = { all: 0, present: 0, absent: 0, dnright: 0, inactive: 0 };
+    state.people.forEach(p => {
+      if (unit !== 'all' && unitOf(p) !== unit) return;
+      if (!p.active) { n.inactive++; return; }
+      const s = statusesOn(state.statuses, p.id, today); ss.set(p.id, s); n.all++;
+      if (s.some(x => TYPES[x.type].away)) n.absent++; else n.present++;
+      if (p.dn) n.dnright++;
+      new Set(s.map(x => x.type)).forEach(t => { n[t] = (n[t] || 0) + 1; });
+    });
+    return { ss, n };
+  }, [state.people, state.statuses, today, unit]);
   const rows = useMemo(() => {
     const base = filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, dq);
     let r = base.filter(p => {
+      if (unit !== 'all' && unitOf(p) !== unit) return false;
       if (filter === 'inactive') return true;
-      const ss = statusesOn(state.statuses, p.id, today); const away = ss.some(s => TYPES[s.type].away);
+      const ss = info.ss.get(p.id) || []; const away = ss.some(s => TYPES[s.type].away);
       if (filter === 'all') return true; if (filter === 'present') return !away; if (filter === 'absent') return away; if (filter === 'dnright') return !!p.dn;
       if ((TYPES as any)[filter]) return ss.some(s => s.type === filter); return unitOf(p) === filter;
     });
     const val = (p: Person) => sort.k === 'unit' ? unitOf(p) : sort.k === 'room' ? String(p.room ?? 99).padStart(2, '0') : String((p as any)[sort.k] ?? '');
     if (!dq || sort.k !== 'last' || sort.dir !== 1) r = [...r].sort((a, b) => (sort.k === 'duty' ? (ds.get(a.id)?.total || 0) - (ds.get(b.id)?.total || 0) : collator.compare(val(a), val(b)) || collator.compare(a.first, b.first)) * sort.dir);
     return r;
-  }, [dq, filter, sort, state.statuses, state.people, ds, today]);
+  }, [dq, filter, unit, sort, info, state.people, ds]);
   const toggle = useCallback((id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
   const height = useViewportHeight(mobile ? 330 : 300);
@@ -60,16 +77,18 @@ export function PeopleScreen() {
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
     ${tabs}
-    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Επώνυμο, όνομα, ΑΣΜ ή θάλαμος (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/></div>
-    <div className="toolbar"><div className="chips" role="group" aria-label="Γρήγορα φίλτρα">${FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k)}>${l}</button>`)}</div><${ActiveFilter} parts=${[filter !== 'all' && (FILTERS.find(([k]) => k === filter) || [, filter])[1], dq && '«' + dq + '»']} onClear=${() => { setQ(''); setFilter('all'); }}/><span className="toolbar__count">${rows.length} από ${total}</span></div>
+    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Επώνυμο, όνομα, ΑΣΜ ή θάλαμος (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
+      <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/></div>
+    <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${FILTERS.filter(([k]) => k === filter || k === 'all' || k === 'present' || k === 'absent' || info.n[k] > 0).map(([k, l], i, a) => html`<button key=${k} type="button" className=${cx('ui-chip', i > 0 && a[i - 1][0] === 'absent' && 'ui-chip--gap')} aria-pressed=${filter === k} data-tip=${(TYPES as any)[k] ? TYPES[k as TypeKey].long : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${info.n[k] || 0}</span></button>`)}<//>
+      <${ActiveFilter} parts=${[unit !== 'all' && unit, filter !== 'all' && (FILTERS.find(([k]) => k === filter) || [, filter])[1], dq && '«' + dq + '»']} onClear=${() => { setQ(''); setFilter('all'); setUnit('all'); }}/><span className="toolbar__count">${rows.length} από ${total}</span></div>
     ${selected.size > 0 && html`<div className="bulkbar"><span>${selected.size} επιλεγμένοι</span>
       <${Button} size="sm" onClick=${() => nav.declare({ pids: [...selected], type: 'OUT', from: today, to: today })}>Εξοδούχοι σήμερα<//>
       <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected], type: 'DN', from: today, to: today })} data-tip="Εξοδούχοι με διανυκτέρευση">ΔΝ σήμερα<//>
       <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected] })}>Άλλη δήλωση…<//>
       <${Button} size="sm" variant="ghost" onClick=${() => setSelected(new Set())}>Καθάρισε<//></div>`}
-    ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>Κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${() => { setQ(''); setFilter('all'); }}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
+    ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>Κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${() => { setQ(''); setFilter('all'); setUnit('all'); }}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
     mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} statuses=${state.statuses} today=${today} checked=${selected.has(p.id)} onToggle=${toggle} onOpen=${open}/>`}/></div>` :
-    html`<div className="ptable" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '880px' }}>
+    html`<div className="ptable" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '736px' }}>
       <div className="ptable__head" role="row"><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" checked=${allSel} onChange=${() => setSelected(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span>${H('last', 'Ονοματεπώνυμο')}${H('father', 'Πατρώνυμο')}${H('rank', 'Βαθμός')}${H('unit', 'Ουλαμός')}${H('room', 'Θάλαμος')}${H('duty', 'Υπηρ.')}<span>Σήμερα</span></div>
       <${VirtualList} items=${rows} rowHeight=${40} height=${height} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} odd=${i % 2 === 1} style=${style} statuses=${state.statuses} today=${today} duty=${ds.get(p.id)?.total || 0} checked=${selected.has(p.id)} selected=${nav.params.person === p.id} onToggle=${toggle} onOpen=${open}/>`}/>
     </div></div></div>`}

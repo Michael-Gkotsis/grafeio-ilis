@@ -1,6 +1,6 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { createContext, memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Dialog } from './ui';
+import { html, cx, Badge, Button, Dialog, Strip } from './ui';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
@@ -56,8 +56,8 @@ export function ChangePlanList({ plan }: P) {
 }
 export function DateBar({ value, onChange, days }: P) {
   const { state, today, tomorrow } = useStore();
-  return html`<div className="datebar" role="group" aria-label="Ημερομηνία">${days.map((d: ISODate) => html`<button key=${d} type="button" className=${cx('ui-chip', isHol(state.settings, d) && 'is-hol')} aria-pressed=${value === d} data-tip=${isHol(state.settings, d) ? 'Αργία: ' + holName(state.settings, d) : undefined} onClick=${() => onChange(d)}>${d === today || d === tomorrow ? dayName(d, today) + ' ' + dm(d) : dayName(d, today)}</button>`)}
-    <input type="date" className="ui-input" style=${{ width: '150px', height: '34px' }} aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/></div>`;
+  return html`<${Strip} className="datebar" role="group" aria-label="Ημερομηνία">${days.map((d: ISODate) => html`<button key=${d} type="button" className=${cx('ui-chip', isHol(state.settings, d) && 'is-hol')} aria-pressed=${value === d} data-tip=${isHol(state.settings, d) ? 'Αργία: ' + holName(state.settings, d) : undefined} onClick=${() => onChange(d)}>${d === today || d === tomorrow ? dayName(d, today) + ' ' + dm(d) : dayName(d, today)}</button>`)}
+    <input type="date" className="ui-input" style=${{ width: '150px', height: '34px' }} aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
 }
 
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
