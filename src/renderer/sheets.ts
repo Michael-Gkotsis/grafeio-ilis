@@ -121,16 +121,18 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
 export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetModel {
   const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m, 0).getDate();
   const days = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
+  const hol = days.map(d => isHol(s.settings, d));   // μία φορά ανά μέρα, όχι ανά κελί
+  const codeOf = new Map<string, string | null>();    // κωδικός ανά θέση (Θ, Μ, ΛΥ), όχι αναζήτηση σε κάθε ανάθεση
   const per = new Map<number, Map<string, string>>();
   // όλες οι θέσεις που έχουν υπάρξει (και του άλλου εντύπου): ίδια με την εξαγωγή
-  days.forEach(d => { const g = s.guards[d] || {}; for (const k in g) { const p = postBy(s, k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); } });
+  days.forEach(d => { const g = s.guards[d] || {}; for (const k in g) { let code = codeOf.get(k); if (code === undefined) { const p = postBy(s, k); code = p ? KIND_CODE[p.kind] : null; codeOf.set(k, code); } if (code == null) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, code); } });
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
-    [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map(d => E(parseD(d).getDate(), 'b hdr sm' + (isHol(s.settings, d) ? ' we' : '')))]];
+    [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map((d, j) => E(j + 1, 'b hdr sm' + (hol[j] ? ' we' : '')))]];
   activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
-    const x = per.get(p.id) || new Map(); let hol = 0; const c: Record<string, number> = {};
-    const cells = days.map(d => { const code = x.get(d); if (code) { if (isHol(s.settings, d)) hol++; c[code] = (c[code] || 0) + 1; } return E(code || '', 'b code' + (isHol(s.settings, d) ? ' we' : '')); });
-    rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(hol, 'b c'), E(x.size, 'b c bold'), E(c['Θ'] || '', 'b c'), E(c['Μ'] || '', 'b c'), E(c['ΛΥ'] || '', 'b c'), ...cells]);
+    const x = per.get(p.id); let nh = 0; const c: Record<string, number> = {};
+    const cells = days.map((d, j) => { const code = x && x.get(d); if (code) { if (hol[j]) nh++; c[code] = (c[code] || 0) + 1; } return E(code || '', hol[j] ? 'b code we' : 'b code'); });
+    rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c['Θ'] || '', 'b c'), E(c['Μ'] || '', 'b c'), E(c['ΛΥ'] || '', 'b c'), ...cells]);
   });
   return { cols: [30, 172, 34, 34, 34, 26, 26, 26, ...days.map(() => 24)], rows };
 }
