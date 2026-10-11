@@ -1,5 +1,5 @@
 import type { ISODate } from './dates';
-import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
+import type { FormBinding, FormKind, ListKind, SourceBinding, StatusKind } from './sources';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -166,6 +166,7 @@ export interface Settings {
   views?: SavedView[];                   // αποθηκευμένες λίστες στο Προσωπικό (π.χ. «Θαλαμάρχες»)
   sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
   forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
+  newDirs?: Partial<Record<StatusKind, string>>;         // πού φτιάχνονται τα νέα Excel κάθε είδους (κενό = ο γενικός φάκελος)
 }
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }

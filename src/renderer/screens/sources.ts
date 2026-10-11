@@ -7,11 +7,11 @@ import { PersonPicker } from '../common';
 import { TYPES, CAP_ACC, KIND_NAME, type DutyKind, type TypeKey } from '../../shared/domain';
 import { addDays, dm } from '../../shared/dates';
 import {
-  KINDS, KIND, DEFAULT_TYPE, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
+  KINDS, KIND, STATUS_KINDS, DEFAULT_TYPE, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutyCode, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
-import type { FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
+import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
 type P = any;
 
@@ -418,6 +418,36 @@ export function RosterPreview({ pv, onDone, onCancel }: { pv: ImportPreview; onD
   </div>`;
 }
 
+// ------------------------------------------------------------------ φάκελοι αρχείων (Ρυθμίσεις)
+// Πού φτιάχνει η εφαρμογή τα αρχεία της: ένας γενικός φάκελος, και αν θες δικός του για κάθε έντυπο και για τα νέα Excel κάθε είδους
+export function FoldersCard() {
+  const { state, boot, refresh } = useStore(); const toast = useToast();
+  const st = state.settings; const general = st.outputDir || boot.outputDir; const forms = st.forms || {};
+  const done = async (r: { ok: true } | { ok: false; error: string } | null, text: string) => { if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } await refresh(); toast({ text }); };
+  const choose = async (t: DirTarget, label: string) => { const r = await window.api.dirChoose(t); await done(r, label + ': στον φάκελο που διάλεξες'); };
+  const reset = async (t: DirTarget, label: string) => done(await window.api.dirReset(t), label + (t === 'output' ? ': ξανά ο φάκελος της εφαρμογής' : ': ξανά στον γενικό φάκελο'));
+  const monthly = async (f: FormKind, on: boolean) => { const r = await window.api.formSave(f, { ...(forms[f] || {}), monthly: on }); await done(r, on ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα'); };
+  const row = (key: string, t: DirTarget, label: string, own: string | undefined, extra?: unknown, sub = '') => html`<li key=${key} className="srcrow">
+    <div className="srcrow__main"><b>${label}</b>${own && t !== 'output' && html` <${Badge} tone="info">δικός του<//>`}
+      <small><span className="plan__fn" title=${own || general}>${(own || general) + sub}</span>${!own && t !== 'output' ? ' (ο γενικός)' : ''}</small></div>
+    <div className="srcrow__act">
+      <${Button} size="sm" variant="outline" onClick=${() => choose(t, label)}>Άλλαξε…<//>
+      <${Button} size="sm" variant="ghost" onClick=${() => window.api.dirOpen(t)}>Άνοιξε<//>
+      ${own && html`<${Button} size="sm" variant="ghost" data-tip=${t === 'output' ? 'Ο φάκελος Έγγραφα\\Γραφείο Ίλης' : 'Να πηγαίνει στον γενικό φάκελο'} onClick=${() => reset(t, label)}>${t === 'output' ? 'Προεπιλογή' : 'Στον γενικό'}<//>`}
+    </div>${extra}</li>`;
+  return html`<${Card} title="Φάκελοι αρχείων">
+    <p className="note" style=${{ marginTop: 0 }}>Πού φτιάχνει η εφαρμογή τα αρχεία της. Ό,τι δεν έχει δικό του φάκελο πάει στον <b>γενικό</b>. Τα αρχεία που έχουν ήδη φτιαχτεί μένουν εκεί που είναι· στον νέο φάκελο πηγαίνουν τα επόμενα.</p>
+    <ul className="srclist">${row('output', 'output', 'Γενικός φάκελος', st.outputDir || undefined)}</ul>
+    <h4 className="folders__h">Έντυπα</h4>
+    <ul className="srclist">${FORMS.map(([f, label]) => { const b = forms[f] || {};
+      return row(f, { form: f }, label, b.dir, html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => monthly(f, e.target.checked)}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`, b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ'); })}</ul>
+    <h4 className="folders__h">Νέα Excel ανά είδος</h4>
+    <p className="note" style=${{ marginTop: 0 }}>Όταν πατάς «Νέο αρχείο…» σε ένα είδος στα Αρχεία Excel, το Excel φτιάχνεται κατευθείαν σε αυτόν τον φάκελο.</p>
+    <ul className="srclist">${STATUS_KINDS.map(k => { const file = st.sources?.[k]?.file;
+      return row(k, { kind: k }, KIND[k].label, st.newDirs?.[k], file && html`<small className="srcrow__opt" style=${{ cursor: 'default' }}>Τωρινό αρχείο: <span className="plan__fn" title=${file}>${file}</span></small>`); })}</ul>
+  <//>`;
+}
+
 // ------------------------------------------------------------------ έντυπα: template, φύλλο, φάκελος
 const FORMS: [FormKind, string][] = [['froura', 'ΦΡΟΥΡΑ ΣΒΕΝ'], ['frouraSpen', 'ΦΡΟΥΡΑ ΣΠΕΝ'], ['hkai', 'ΗΚΑΙ'], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
 function FormsCard({ outs }: { outs: FormOut[] }) {
@@ -434,7 +464,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
       const b = forms[f] || {}; const out = outs.filter(o => o.form === f);
       return html`<li key=${f} className="srcrow">
         <div className="srcrow__main"><b>${label}</b>${b.file && html` <${Badge} tone="info">δικό σου<//>`}
-          <small>${f === 'check' ? 'Φτιάχνεται από την εφαρμογή' : b.file ? html`<span className="plan__fn" title=${b.file}>${base(b.file)}${b.sheet ? ' › ' + b.sheet : ''}</span>` : 'Template της εφαρμογής'} · φάκελος: ${b.dir ? b.dir + (b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ') : (state.settings.outputDir || boot.outputDir) + '\\ΕΕΕΕ-ΜΜ'}</small>
+          <small>${f === 'check' ? 'Φτιάχνεται από την εφαρμογή' : b.file ? html`<span className="plan__fn" title=${b.file}>${base(b.file)}${b.sheet ? ' › ' + b.sheet : ''}</span>` : 'Template της εφαρμογής'} · φάκελος: ${(b.dir || state.settings.outputDir || boot.outputDir) + (b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ')}</small>
           ${out.map(o => html`<small key=${o.file} className=${o.error ? 'txt-bad' : ''}>${base(o.file)}: ${o.error ? o.error : o.pending ? 'περιμένει (ανοιχτό στο Excel)' : 'ενημερωμένο ' + o.at}</small>`)}</div>
         <div className="srcrow__act">
           ${f !== 'check' && html`<${Button} size="sm" variant="outline" onClick=${() => pickTpl(f)}>Template…<//>`}
@@ -442,7 +472,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
           <${Button} size="sm" variant="ghost" onClick=${() => pickDir(f)}>Φάκελος…<//>
           ${(b.file || b.dir) && html`<${Button} size="sm" variant="ghost" data-tip="Template και φάκελος της εφαρμογής" onClick=${() => save(f, null, label + ': ξανά με το template και τον φάκελο της εφαρμογής')}>Προεπιλογή<//>`}
         </div>
-        ${b.dir && html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => save(f, { ...b, monthly: e.target.checked }, e.target.checked ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα')}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`}
+        ${html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => save(f, { ...b, monthly: e.target.checked }, e.target.checked ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα')}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`}
       </li>`;
     })}</ul>
     ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS.find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}

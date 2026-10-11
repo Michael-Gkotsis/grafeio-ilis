@@ -11,6 +11,7 @@ import { allPosts, isHol, postsOf } from './rules';
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
 export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
+export const FORM_KINDS: FormKind[] = ['froura', 'frouraSpen', 'hkai', 'outs', 'check'];
 
 // Πού βρίσκεται ένα είδος: αρχείο, φύλλο, γραμμή επικεφαλίδων (από 0) και στήλη κάθε πεδίου (από 0)
 export interface SourceBinding {
@@ -28,7 +29,7 @@ export interface FormBinding {
   sheet?: string;                    // ΗΚΑΙ: μπροστινή σελίδα· Εξοδούχοι: φύλλο εξοδούχων
   sheet2?: string;                   // ΗΚΑΙ: πίσω σελίδα· Εξοδούχοι: φύλλο παραμενόντων
   dir?: string;                      // φάκελος εξόδου (κενό = ο γενικός των Ρυθμίσεων)
-  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι)
+  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι), και στον γενικό φάκελο
   cells?: Partial<HkaiMap>;          // ΗΚΑΙ: κελιά που άλλαξε ο χρήστης
 }
 

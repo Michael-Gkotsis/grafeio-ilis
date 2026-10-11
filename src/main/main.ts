@@ -4,16 +4,16 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { writeAll, LockedError } from './files';
+import { writeAll, freeName, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
-import type { Boot, CmdResult, Diag, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
+import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, readBook, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { FORM_KINDS, KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -64,7 +64,10 @@ function formTpl(f: Exclude<FormKind, 'check'>): string {
   if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + FORM_FILE[f] + ' από τον φάκελο templates');
   return file;
 }
-const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); return b.dir ? (b.monthly === false ? b.dir : path.join(b.dir, date.slice(0, 7))) : path.join(outputDir(), date.slice(0, 7)); };
+const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); const dir = b.dir || outputDir(); return b.monthly === false ? dir : path.join(dir, date.slice(0, 7)); };
+// Νέα Excel ανά είδος: στον φάκελο του είδους (Ρυθμίσεις → Φάκελοι), αλλιώς στον γενικό
+const newDir = (k: StatusKind) => store.state.settings.newDirs?.[k] || outputDir();
+const dirOf = (t: DirTarget) => (t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind));
 const templates = (): TemplateInfo[] => [
   ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = store?.state.settings.forms?.[f];
     return b?.file ? { id: t.id, name: t.name, file: b.file, ok: fs.existsSync(b.file), custom: true } : { id: t.id, name: t.name, file: t.file, ok: fs.existsSync(tplPath(t.file)), custom: fs.existsSync(path.join(USER_TPL, t.file)) }; }),
@@ -540,10 +543,9 @@ else {
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
     ipcMain.handle('src:new', async (_e, kind: StatusKind) => {
-      const res = await dialog.showSaveDialog(win!, { title: 'Νέο Excel για ' + KIND[kind].label, defaultPath: path.join(outputDir(), KIND[kind].title.replace(/[\\/:*?"<>|]/g, '-') + '.xlsx'), filters: [{ name: 'Excel', extensions: ['xlsx'] }] });
-      if (res.canceled || !res.filePath) return null;
-      if (fs.existsSync(res.filePath)) return fail('Υπάρχει ήδη αρχείο με αυτό το όνομα. Για υπάρχον αρχείο πάτα «Διάλεξε Excel…».');
-      saveBinding(kind, defaultBinding(kind, res.filePath));
+      const dir = newDir(kind);
+      if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.');
+      saveBinding(kind, defaultBinding(kind, freeName(dir, KIND[kind].title)));
       const r = await syncOut(kind, false); notify();
       return r.ok ? { ok: true, file: r.file } : r;
     });
@@ -620,6 +622,28 @@ else {
       runCmd({ t: 'setSettings', settings: { outputDir: r.filePaths[0] }, text: 'φάκελος αρχείων ' + r.filePaths[0] });
       return r.filePaths[0];
     });
+    // Φάκελοι αρχείων (Ρυθμίσεις): ο γενικός, ένας ανά έντυπο και ένας ανά είδος για τα νέα Excel. Κενό = ο γενικός.
+    const setDir = (t: DirTarget, dir: string | undefined, what: string) => {
+      if (t === 'output') return runCmd({ t: 'setSettings', settings: { outputDir: dir || '' }, text: 'φάκελος αρχείων ' + what });
+      if ('form' in t) {
+        const forms = { ...(store.state.settings.forms || {}) }; const b = { ...formBinding(t.form), dir };
+        if (Object.values(b).some(v => v !== undefined && v !== '')) forms[t.form] = b; else delete forms[t.form];
+        return runCmd({ t: 'setSettings', settings: { forms }, text: 'φάκελος για το έντυπο ' + t.form + ': ' + what });
+      }
+      const newDirs = { ...(store.state.settings.newDirs || {}) }; if (dir) newDirs[t.kind] = dir; else delete newDirs[t.kind];
+      return runCmd({ t: 'setSettings', settings: { newDirs }, text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what });
+    };
+    const okTarget = (t: DirTarget) => t === 'output' || (!!t && typeof t === 'object' && (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && isStatusKind(t.kind))));
+    ipcMain.handle('dir:choose', async (_e, t: DirTarget) => {
+      if (!okTarget(t)) return fail('άγνωστος φάκελος');
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε φάκελο', defaultPath: dirOf(t), properties: ['openDirectory', 'createDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const dir = r.filePaths[0];
+      if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλον.');
+      const c = setDir(t, dir, dir); return c.ok ? reply(c.text, false) : c;
+    });
+    ipcMain.handle('dir:reset', (_e, t: DirTarget) => { if (!okTarget(t)) return fail('άγνωστος φάκελος'); const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός'); return c.ok ? reply(c.text, false) : c; });
+    ipcMain.handle('dir:open', (_e, t: DirTarget) => { if (!okTarget(t)) return 'άγνωστος φάκελος'; const dir = dirOf(t); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
     createWindow();
     ready = Date.now();
   });
