@@ -9,7 +9,7 @@ import { writeAll, writeJson, LockedError } from './files';
 import type { RawSheet } from '../shared/roster';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, isStatusKind, locateHeader, planSource, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, isStatusKind, locateHeader, planSource, refitCols, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -81,11 +81,13 @@ export async function tableState(b: SourceBinding, m: SourceMeta | undefined, ki
   if (!m.hash || !m.hash.startsWith(HASH_V)) return { exists: true, changed: false, refresh: now, ...moved };   // από παλιότερη έκδοση: αφετηρία από εδώ
   return now.hash === m.hash ? { exists: true, changed: false, refresh: now, ...moved } : { exists: true, changed: true, ...moved };
 }
-// Η αντιστοίχιση όπως είναι τώρα στο αρχείο (ίδια, ή με τις επικεφαλίδες εκεί που μετακινήθηκαν)
+// Η αντιστοίχιση όπως είναι τώρα στο αρχείο: πρώτα η γραμμή των επικεφαλίδων (γραμμές από πάνω), μετά οι στήλες
+// (νέα ή μετακινημένη στήλη, π.χ. «ΔΝ» στο ΣΥΝΟΛΙΚΟ). Ίδια αναφορά αν δεν άλλαξε τίποτα.
 export async function locateNow(kind: ListKind, b: SourceBinding): Promise<SourceBinding> {
   let book; try { book = await bookNow(b.file); } catch { return b; }
   const sh = book?.sheets.find(x => x.name === b.sheet); if (!sh) return b;
-  const h = locateHeader(kind, sh, b); return h === b.header ? b : { ...b, header: h };
+  const h = locateHeader(kind, sh, b); const at = h === b.header ? b : { ...b, header: h };
+  return refitCols(kind, sh, at);
 }
 
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)

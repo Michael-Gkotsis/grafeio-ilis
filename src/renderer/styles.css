@@ -619,6 +619,7 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .srcrow__main .plan__fn{font-size:12px}
 .srcrow__act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .srcrow__act .ui-select{min-width:200px}
+.folders__h{margin:16px 0 6px;font-size:13px;font-weight:600;color:var(--muted-fg)}
 .srcrow__opt{flex-basis:100%;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted-fg);cursor:pointer}
 .mapper{display:grid;grid-template-columns:minmax(240px,310px) minmax(0,1fr);gap:14px;margin-top:12px}
 .mapper__fields{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:62vh;overflow:auto}

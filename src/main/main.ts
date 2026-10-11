@@ -4,16 +4,16 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { writeAll, writeJson, LockedError } from './files';
+import { writeAll, writeJson, freeName, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
-import type { Boot, CmdResult, Diag, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
+import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { KIND, KINDS, STATUS_KINDS, baseOf, bestFor, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { FORM_KINDS, KIND, KINDS, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -64,7 +64,10 @@ function formTpl(f: Exclude<FormKind, 'check'>): string {
   if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + FORM_FILE[f] + ' από τον φάκελο templates');
   return file;
 }
-const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); return b.dir ? (b.monthly === false ? b.dir : path.join(b.dir, date.slice(0, 7))) : path.join(outputDir(), date.slice(0, 7)); };
+const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); const dir = b.dir || outputDir(); return b.monthly === false ? dir : path.join(dir, date.slice(0, 7)); };
+// Νέα Excel ανά είδος: στον φάκελο του είδους (Ρυθμίσεις → Φάκελοι), αλλιώς στον γενικό
+const newDir = (k: StatusKind) => store.state.settings.newDirs?.[k] || outputDir();
+const dirOf = (t: DirTarget) => (t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind));
 const templates = (): TemplateInfo[] => [
   ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = store?.state.settings.forms?.[f];
     return b?.file ? { id: t.id, name: t.name, file: b.file, ok: fs.existsSync(b.file), custom: true } : { id: t.id, name: t.name, file: t.file, ok: fs.existsSync(tplPath(t.file)), custom: fs.existsSync(path.join(USER_TPL, t.file)) }; }),
@@ -239,10 +242,15 @@ const stampNow = () => today() + ' ' + nowHM();
 const ovOf = (b?: SourceBinding, file?: string): RosterOverride | undefined => (b && (!file || path.resolve(b.file) === path.resolve(file)) ? { sheet: b.sheet, header: b.header, cols: b.cols } : undefined);
 // Ο πίνακας μετακινήθηκε μέσα στο φύλλο (γραμμές από πάνω, από το Excel ή από εγγραφή της εφαρμογής σε άλλο πίνακα του
 // ίδιου φύλλου): η αντιστοίχιση ακολουθεί. Δεν είναι ενέργεια του χρήστη, οπότε δεν μπαίνει στην αναίρεση.
+// Το ίδιο για στήλες που μετακινήθηκαν ή προστέθηκαν (b.cols, από το refitCols).
 function moveBinding(kind: ListKind, b: SourceBinding) {
-  const cur = bindingOf(kind); if (!cur || cur.header === b.header) return;
-  store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header } } } });
-  store.addAudit({ at: nowHM(), day: today(), text: 'Excel ' + KIND[kind].label.toLowerCase() + ': ο πίνακας είναι πια στη γραμμή ' + (b.header + 1) + ' του φύλλου «' + b.sheet + '» (άλλαξαν γραμμές από πάνω)', files: [], source: 'auto', undoable: false }, null);
+  const cur = bindingOf(kind); if (!cur) return;
+  const row = cur.header !== b.header, cols = !!b.cols && JSON.stringify(cur.cols) !== JSON.stringify(b.cols);
+  if (!row && !cols) return;
+  store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header, cols: cols ? b.cols : cur.cols } } } });
+  const lbl = 'Excel ' + KIND[kind].label.toLowerCase() + ': ';
+  if (row) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'ο πίνακας είναι πια στη γραμμή ' + (b.header + 1) + ' του φύλλου «' + b.sheet + '» (άλλαξαν γραμμές από πάνω)', files: [], source: 'auto', undoable: false }, null);
+  if (cols) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'οι στήλες ακολούθησαν τις επικεφαλίδες τους στο φύλλο «' + b.sheet + '» (μπήκε ή μετακινήθηκε στήλη)', files: [], source: 'auto', undoable: false }, null);
 }
 const sameTable = (a?: SourceBinding, b?: SourceBinding) => !!a && !!b && path.resolve(a.file) === path.resolve(b.file) && a.sheet === b.sheet && a.header === b.header;
 // Η αντιστοίχιση ενός είδους όπως είναι τώρα στο αρχείο
@@ -355,6 +363,7 @@ const pending = new Map<string, { rows: ImportRow[]; file: string; binding: Sour
 async function rosterPreview(file: string, b: SourceBinding | null): Promise<ImportPreview | { ok: false; error: string }> {
   try {
     const book = await readBook(file);
+    if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
     const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) });
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
@@ -380,7 +389,7 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
   if (!p.binding || !p.sheet) return;
   const cur = bindingOf('people');
   if (cur && path.resolve(cur.file) !== path.resolve(p.file)) return;
-  if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
+  if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header || JSON.stringify(cur.cols) !== JSON.stringify(p.binding.cols)) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
   srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   // πόστα και εκτός δύναμης του ίδιου αρχείου διαβάστηκαν μαζί
   const linked = (['posts', 'outside'] as ListKind[]).filter(k => { const x = bindingOf(k); return x && path.resolve(x.file) === path.resolve(p.file); });
@@ -603,10 +612,9 @@ else {
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
     ipcMain.handle('src:new', async (_e, kind: StatusKind) => {
-      const res = await dialog.showSaveDialog(win!, { title: 'Νέο Excel για ' + KIND[kind].label, defaultPath: path.join(outputDir(), KIND[kind].title.replace(/[\\/:*?"<>|]/g, '-') + '.xlsx'), filters: [{ name: 'Excel', extensions: ['xlsx'] }] });
-      if (res.canceled || !res.filePath) return null;
-      if (fs.existsSync(res.filePath)) return fail('Υπάρχει ήδη αρχείο με αυτό το όνομα. Για υπάρχον αρχείο πάτα «Διάλεξε Excel…».');
-      saveBinding(kind, defaultBinding(kind, res.filePath));
+      const dir = newDir(kind);
+      if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.');
+      saveBinding(kind, defaultBinding(kind, freeName(dir, KIND[kind].title)));
       const r = await syncOut(kind, false); notify();
       return r.ok ? { ok: true, file: r.file } : r;
     });
@@ -685,6 +693,28 @@ else {
       runCmd({ t: 'setSettings', settings: { outputDir: r.filePaths[0] }, text: 'φάκελος αρχείων ' + r.filePaths[0] });
       return r.filePaths[0];
     });
+    // Φάκελοι αρχείων (Ρυθμίσεις): ο γενικός, ένας ανά έντυπο και ένας ανά είδος για τα νέα Excel. Κενό = ο γενικός.
+    const setDir = (t: DirTarget, dir: string | undefined, what: string) => {
+      if (t === 'output') return runCmd({ t: 'setSettings', settings: { outputDir: dir || '' }, text: 'φάκελος αρχείων ' + what });
+      if ('form' in t) {
+        const forms = { ...(store.state.settings.forms || {}) }; const b = { ...formBinding(t.form), dir };
+        if (Object.values(b).some(v => v !== undefined && v !== '')) forms[t.form] = b; else delete forms[t.form];
+        return runCmd({ t: 'setSettings', settings: { forms }, text: 'φάκελος για το έντυπο ' + t.form + ': ' + what });
+      }
+      const newDirs = { ...(store.state.settings.newDirs || {}) }; if (dir) newDirs[t.kind] = dir; else delete newDirs[t.kind];
+      return runCmd({ t: 'setSettings', settings: { newDirs }, text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what });
+    };
+    const okTarget = (t: DirTarget) => t === 'output' || (!!t && typeof t === 'object' && (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && isStatusKind(t.kind))));
+    ipcMain.handle('dir:choose', async (_e, t: DirTarget) => {
+      if (!okTarget(t)) return fail('άγνωστος φάκελος');
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε φάκελο', defaultPath: dirOf(t), properties: ['openDirectory', 'createDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const dir = r.filePaths[0];
+      if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλον.');
+      const c = setDir(t, dir, dir); return c.ok ? reply(c.text, false) : c;
+    });
+    ipcMain.handle('dir:reset', (_e, t: DirTarget) => { if (!okTarget(t)) return fail('άγνωστος φάκελος'); const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός'); return c.ok ? reply(c.text, false) : c; });
+    ipcMain.handle('dir:open', (_e, t: DirTarget) => { if (!okTarget(t)) return 'άγνωστος φάκελος'; const dir = dirOf(t); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
     createWindow();
     ready = Date.now();
     // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα

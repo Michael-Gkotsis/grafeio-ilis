@@ -7,6 +7,8 @@ import type { RawSheet } from './roster';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
+// Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
+export type DirTarget = 'output' | { form: FormKind } | { kind: StatusKind };
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
 export interface TemplateInfo { id: string; name: string; file: string; ok: boolean; custom: boolean }
 // Μετά από κάθε ενέργεια ο main στέλνει μόνο τα κομμάτια της κατάστασης που άλλαξαν (changes) και τις νέες γραμμές
@@ -42,6 +44,9 @@ export interface Api {
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;
   openFolder(which: 'output' | 'templates' | 'data' | 'backups'): Promise<void>;
   chooseOutputDir(): Promise<string | null>;
+  dirChoose(t: DirTarget): Promise<CmdResult | null>;
+  dirReset(t: DirTarget): Promise<CmdResult>;
+  dirOpen(t: DirTarget): Promise<string>;
   listBackups(): Promise<BackupInfo[]>;
   restoreBackup(name: string): Promise<{ ok: boolean; error?: string }>;
   diag(): Promise<Diag>;

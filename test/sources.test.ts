@@ -9,7 +9,7 @@ import type { AppState, Person } from '../src/shared/domain';
 import { parseRoster, type RawSheet } from '../src/shared/roster';
 import {
   bestFor, defaultBinding, detectHkai, detectTables, diffStatuses, hkaiMapOf, identity, parseStatuses, planPeopleWrite, planWrite,
-  snapFromSheet, tableRows, type SourceBinding
+  refitCols, snapFromSheet, tableRows, type SourceBinding
 } from '../src/shared/sources';
 import { Workbook } from '../src/main/xlsx';
 import { readBook, writeSource } from '../src/main/sources';
@@ -264,6 +264,38 @@ describe('δικαίωμα ΔΝ από το Δυναμολόγιο', () => {
     const b: SourceBinding = { file: 'x.xlsx', sheet: 'ΔΝ', header: 1, cols: bestFor('dn', [sh])!.cols, write: true };
     const d = diffStatuses('dn', s0, parseStatuses('dn', sh, b, s0.people, TODAY), b);
     expect(d.add).toEqual([{ pid: 3, type: 'DN', from: '2026-10-17', to: '2026-10-18' }]);
+  });
+  // Michael (11/10): «το ΔΝ είναι column στο δυναμολόγιο». Η στήλη μπαίνει μετά την πρώτη αντιστοίχιση.
+  const withDn = (at: number, h = head) => { const sh = main(); const v = ['ΝΑΙ', '', 'Χ'];
+    sh.rows = sh.rows.map((r, i) => { const x = [...r]; x.splice(at, 0, i === 2 ? 'ΔΝ' : i > 2 ? (v[i - 3] ?? null) : null); return x; }); sh.rows[2] = [...h.slice(0, at), 'ΔΝ', ...h.slice(at)]; return sh; };
+  it('νέα στήλη «ΔΝ» μετά την αντιστοίχιση: οι στήλες ακολουθούν και το ΔΝ διαβάζεται', () => {
+    const b: SourceBinding = { file: 'x.xlsx', sheet: 'ΣΥΝΟΛΙΚΟ', header: 2, cols: bestFor('people', [main()])!.cols, write: true };
+    expect(b.cols.dn).toBeUndefined();
+    const sh = withDn(7);   // ανάμεσα στο ΑΣΜ (6) και στο τηλέφωνο (7)
+    const nb = refitCols('people', sh, b);
+    expect(nb.cols).toEqual({ ...b.cols, dn: 7, phone: 8, room: 9, si: 10, remarks: 11 });
+    const rows = parseRoster([sh], { main: { sheet: nb.sheet, header: nb.header, cols: nb.cols } }).rows;
+    expect(rows.slice(0, 3).map(r => r.dn)).toEqual([true, false, true]);
+    expect(rows[0].phone).toBe(s0.people[0].phone);
+    // η εγγραφή πίσω πάει στη στήλη ΔΝ, όχι στις παρατηρήσεις
+    const read = { ...s0, people: s0.people.map((p, i) => ({ ...p, dn: !!rows.find(r => r.asm === p.asm)?.dn })) };
+    const s = { ...read, people: read.people.map(p => (p.id === s0.people[1].id ? { ...p, dn: true } : p)) };
+    const plan = planPeopleWrite(sh, nb, s, snapFromSheet(sh, nb, read.people));
+    expect(plan.sets.filter(x => x.c === 7).map(x => [x.r, x.v])).toEqual([[4, 'ΝΑΙ']]);
+    expect(plan.sets.some(x => x.c === 11)).toBe(false);
+    // ίδιο αρχείο χωρίς αλλαγή: η αντιστοίχιση μένει ίδια
+    expect(refitCols('people', sh, nb)).toBe(nb);
+  });
+  it('δική σου στήλη (χωρίς γνωστή επικεφαλίδα) δεν αλλάζει, εκτός αν μετακινήθηκαν όλες μαζί', () => {
+    const h = [...HEAD, 'Σ.Ι', 'ΡΟΛΟΣ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
+    const sh = main(() => [null, null], h);
+    const b: SourceBinding = { file: 'x.xlsx', sheet: 'ΣΥΝΟΛΙΚΟ', header: 2, cols: { ...bestFor('people', [sh])!.cols, remarks: 10 }, write: true };
+    expect(refitCols('people', sh, b)).toBe(b);   // ο χρήστης διάλεξε «ΡΟΛΟΣ» για τις παρατηρήσεις
+    const moved = refitCols('people', withDn(2, h), b);   // νέα στήλη πριν από όλες: όλα +1, και το «ΡΟΛΟΣ» μαζί
+    expect(moved.cols).toEqual({ ...Object.fromEntries(Object.entries(b.cols).map(([k, c]) => [k, c >= 2 ? c + 1 : c])), dn: 2 });
+  });
+  it('επικεφαλίδες ΔΝ: «Δ/Ν», «ΔΙΚΑΙΟΥΧΟΣ ΔΝ», «ΔΝ (ΝΑΙ/ΟΧΙ)»', () => {
+    for (const t of ['Δ/Ν', 'ΔΙΚΑΙΟΥΧΟΣ ΔΝ', 'ΔΝ (ΝΑΙ/ΟΧΙ)', 'Δ.Ν.']) expect(dnOf([main((_, i) => [null, i === 0 ? 'ΝΑΙ' : null], [...head, t])])[0]).toBe(true);
   });
   it('όποιος είναι εκτός δύναμης δεν χάνει τις παρατηρήσεις του στο ΣΥΝΟΛΙΚΟ', () => {
     const sh = main((_, i) => [i === 1 ? 'ΓΡΑΦΕΑΣ' : null]);

@@ -3,7 +3,7 @@ import { apply, type Command } from '../shared/commands';
 import { emptyState, type AppState, type AuditEntry, type Person } from '../shared/domain';
 import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
-import type { Api, CmdResult, SourceBook } from '../shared/api';
+import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
@@ -57,6 +57,12 @@ function fakeBook(s: AppState): SourceBook {
 
 export function mockApi(): Api {
   let state = seed(); let seq = 0; const audit: AuditEntry[] = []; const undo: { id: number; prev: AppState }[] = [];
+  const setDirMock = (t: DirTarget, d: string | undefined) => {
+    const st = state.settings;
+    if (t === 'output') state = { ...state, settings: { ...st, outputDir: d || '' } };
+    else if ('form' in t) state = { ...state, settings: { ...st, forms: { ...(st.forms || {}), [t.form]: { ...(st.forms?.[t.form] || {}), dir: d } } } };
+    else { const n = { ...(st.newDirs || {}) }; if (d) n[t.kind] = d; else delete n[t.kind]; state = { ...state, settings: { ...st, newDirs: n } }; }
+  };
   const res = (text: string): CmdResult => ({ ok: true, changes: state, newAudit: [], audit: [...audit], text });
   return {
     boot: async () => ({ state, audit, dataDir: '(δοκιμή)', outputDir: '(δοκιμή)', templatesDir: '(δοκιμή)', version: 'dev', lastUsb: null, seenUntil: 0, sessionStart: audit.length ? audit[0].id : 0, templates: [
@@ -89,6 +95,9 @@ export function mockApi(): Api {
     backup: async () => ({ ok: true, file: '(δοκιμή)' }),
     openFolder: async () => {},
     chooseOutputDir: async () => null,
+    dirChoose: async t => { const d = 'D:\\Δοκιμή\\' + (t === 'output' ? 'Γενικός' : 'form' in t ? t.form : t.kind); setDirMock(t, d); return res(''); },
+    dirReset: async t => { setDirMock(t, undefined); return res(''); },
+    dirOpen: async () => '',
     listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
     restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
     diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1 }),

@@ -9,6 +9,12 @@ import JSZip from 'jszip';
 export const PREV_DIR = '_προηγούμενα';
 export const KEEP_PREV = 10;
 
+// Ελεύθερο όνομα στον φάκελο: «Τίτλος.xlsx», αλλιώς «Τίτλος (2).xlsx» κ.ο.κ.
+export function freeName(dir: string, title: string): string {
+  const stem = title.replace(/[\\/:*?"<>|]/g, '-');
+  for (let i = 1; ; i++) { const f = path.join(dir, stem + (i > 1 ? ' (' + i + ')' : '') + '.xlsx'); if (!fs.existsSync(f)) return f; }
+}
+
 export class LockedError extends Error {
   constructor(public file: string) { super('Το αρχείο «' + path.basename(file) + '» είναι ανοιχτό στο Excel. Κλείσ\' το και πάτα «Ξανά». Δεν άλλαξε τίποτα.'); }
 }

@@ -11,6 +11,7 @@ import { allPosts, isHol, postsOf } from './rules';
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
 export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
+export const FORM_KINDS: FormKind[] = ['froura', 'frouraSpen', 'hkai', 'outs', 'check'];
 
 // Πού βρίσκεται ένα είδος: αρχείο, φύλλο, γραμμή επικεφαλίδων (από 0) και στήλη κάθε πεδίου (από 0)
 export interface SourceBinding {
@@ -32,7 +33,7 @@ export interface FormBinding {
   sheet?: string;                    // ΗΚΑΙ: μπροστινή σελίδα· Εξοδούχοι: φύλλο εξοδούχων
   sheet2?: string;                   // ΗΚΑΙ: πίσω σελίδα· Εξοδούχοι: φύλλο παραμενόντων
   dir?: string;                      // φάκελος εξόδου (κενό = ο γενικός των Ρυθμίσεων)
-  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι)
+  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι), και στον γενικό φάκελο
   cells?: Partial<HkaiMap>;          // ΗΚΑΙ: κελιά που άλλαξε ο χρήστης
 }
 
@@ -137,6 +138,35 @@ export function mapColumns(row: CellValue[] | undefined, fields: FieldDef[]): Re
     if (f) cols[f.k] = c;
   });
   return cols;
+}
+// Στήλες που μετακινήθηκαν ή προστέθηκαν στο Excel μετά την αντιστοίχιση (π.χ. νέα στήλη «ΔΝ» στο ΣΥΝΟΛΙΚΟ).
+// Οι στήλες μετακινούνται όσο μετακινήθηκαν οι περισσότερες με γνωστή επικεφαλίδα (και όσες έχουν δική σου επικεφαλίδα μαζί τους).
+// Μία μόνη δική σου στήλη που δεν ταιριάζει δεν αρκεί για αλλαγή. Γνωστές στήλες που δεν είχαν οριστεί προστίθενται.
+export function refitCols(kind: ListKind, sheet: RawSheet | undefined, b: SourceBinding): SourceBinding {
+  const row = sheet?.rows[b.header]; if (!row) return b;
+  const fields = fieldsOf(kind); const found = mapColumns(row, fields);
+  const h = (c: number) => headText(row[c]);
+  const ok = (k: string, c: number | undefined) => c != null && !!fields.find(f => f.k === k)?.re.test(h(c));
+  const known = (c: number) => !h(c) || ALL_FIELDS.some(f => f.re.test(h(c)));
+  const cand = Object.entries(b.cols).filter(([k, c]) => !ok(k, c) && found[k] != null && found[k] !== c).map(([k, c]) => ({ k, c, d: found[k] - c, sure: known(c) }));
+  // η μετακίνηση που έκαναν οι περισσότερες στήλες (μπήκε ή βγήκε στήλη)
+  const mode = (l: typeof cand) => { const n = new Map<number, number>(); l.forEach(x => n.set(x.d, (n.get(x.d) || 0) + 1)); return [...n].sort((x, y) => y[1] - x[1] || Math.abs(x[0]) - Math.abs(y[0]))[0]; };
+  const sure = cand.filter(x => x.sure); const m = sure.length ? mode(sure) : cand.length > 1 ? mode(cand) : undefined;
+  const D = m && (sure.length || m[1] > 1) ? m[0] : null;
+  const cols: Record<string, number> = { ...b.cols };
+  if (D != null) {
+    const from = Math.min(...cand.filter(x => x.d === D).map(x => x.c));
+    for (const [k, c] of Object.entries(b.cols)) {
+      if (ok(k, c) || c < from) continue;
+      const to = c + D;
+      // στη νέα θέση άλλη γνωστή επικεφαλίδα: η στήλη πήγε αλλού (π.χ. δεύτερη νέα στήλη), ακολουθεί την επικεφαλίδα της
+      cols[k] = ok(k, to) || !h(to) || !ALL_FIELDS.some(f => f.re.test(h(to))) || found[k] == null ? to : found[k];
+    }
+  }
+  for (const f of fields) if (cols[f.k] == null && found[f.k] != null && !Object.values(cols).includes(found[f.k])) cols[f.k] = found[f.k];
+  // δύο πεδία στην ίδια στήλη: κάτι δεν πήγε καλά, μένει η αντιστοίχιση όπως ήταν
+  const used = Object.values(cols); if (new Set(used).size !== used.length || used.some(c => c < 0)) return b;
+  return JSON.stringify(cols) === JSON.stringify(b.cols) ? b : { ...b, cols };
 }
 const ALL_FIELDS = [...PERSON_FIELDS, ...KINDS.flatMap(k => k.fields)];
 const IDENT = ['last', 'name', 'asm'];
