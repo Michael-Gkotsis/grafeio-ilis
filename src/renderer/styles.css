@@ -335,20 +335,21 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .guard__days{margin:-4px 0 14px}
 .mono-lg{font-family:var(--f-mono);font-size:16px;color:var(--foreground);text-transform:uppercase}
 .gtable{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.post{display:grid;grid-template-columns:64px 168px minmax(0,1fr) 68px 236px;gap:0 12px;align-items:center;padding:7px 14px;min-height:52px;border-bottom:1px solid var(--border)}
+.post{display:grid;grid-template-columns:166px minmax(0,1fr) 64px 232px;gap:0 12px;align-items:center;padding:7px 14px;min-height:52px;border-bottom:1px solid var(--border)}
 .gtable__head{min-height:0;padding:9px 14px;background:var(--thead);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
 .posts{list-style:none;margin:0;padding:0}
 .post.is-empty{background:var(--empty-row)}
-.post__pos{font-size:16px;font-weight:700;white-space:nowrap}
-.post__hrs{font-family:var(--f-mono);font-size:13px;color:var(--muted-fg);display:flex;flex-wrap:wrap}
+.post__pos{min-width:0}
+.post__pos b{display:block;font-size:16px;font-weight:700;white-space:nowrap}
+.post__hrs{font-family:var(--f-mono);font-size:12px;color:var(--muted-fg);display:flex;flex-wrap:wrap;column-gap:.6em;line-height:1.35}
 .post__who{display:flex;flex-direction:column;justify-content:center;min-width:0}
 .post__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:15px}
 .post__name .ui-badge{vertical-align:1px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .post__acts{display:flex;align-items:center;gap:2px;justify-content:flex-start}
 .post__acts .ui-btn--sm{padding:0 9px;font-size:14px;font-weight:500}
-.post__pick{grid-column:4/-1;min-width:0}
+.post__pick{grid-column:3/-1;min-width:0}
 .post__pick .ui-input,.post__wide .ui-input{height:34px}
-.post__wide{grid-column:3/-1;display:flex;align-items:center;gap:6px;min-width:0}
+.post__wide{grid-column:2/-1;display:flex;align-items:center;gap:6px;min-width:0}
 .kenh-tag{align-self:flex-start;display:inline-block;font-family:var(--f-mono);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--bad);background:var(--bad-bg);border:1px dashed var(--bad-line);border-radius:2px;padding:1px 7px}
 .duty{font-family:var(--f-mono);font-size:13px;color:var(--muted-fg);white-space:nowrap}
 .gblock__hd{display:flex;align-items:center;gap:12px;background:var(--band);color:var(--band-fg);font-family:var(--f-body);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;min-height:38px;padding:0 14px 0 8px}
@@ -424,7 +425,9 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .morelist{display:flex;flex-direction:column;gap:4px}
 
 /* ---------- responsive ---------- */
-@media (max-width:1080px){.guard,.strength,.cols{grid-template-columns:minmax(0,1fr)}.guard__right{position:static}}
+@media (max-width:1080px){.strength,.cols{grid-template-columns:minmax(0,1fr)}}
+/* οι Υπηρεσίες θέλουν πλάτος για το όνομα και το «Γιατί»· σε μικρότερες οθόνες το «Δεν μπαίνουν» και το Excel πάνε από κάτω */
+@media (max-width:1240px){.guard{grid-template-columns:minmax(0,1fr)}.guard__right{position:static;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));align-items:start}}
 /* v4: κανόνες λοχία, υπηρεσίες όπως το Excel, εξοδούχοι, ιατρικά/ποινές */
 .nw{white-space:nowrap}
 .datebar{flex-wrap:nowrap;overflow-x:auto;max-width:100%;padding-bottom:2px}
@@ -509,7 +512,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
   .ui-dialog__foot .ui-btn{flex:1}
   .ui-sheet{top:auto;left:0;width:100%;max-height:88vh;border-left:0;border-top:1px solid var(--border);border-radius:16px 16px 0 0;animation:slideup .18s ease-out}
   .ui-toasts{left:16px;right:16px;width:auto;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px))}
-  .post{grid-template-columns:auto minmax(0,1fr);gap:4px 10px}.gtable__head{display:none}.post__who,.post__pick,.post__acts,.post__wide{grid-column:1/-1}.post .duty{grid-column:1/-1}
+  .post{grid-template-columns:minmax(0,1fr);gap:4px}.gtable__head{display:none}.post__who,.post__pick,.post__acts,.post__wide{grid-column:1/-1}.post .duty{grid-column:1/-1}
   .palette{border-radius:16px 16px 0 0;align-self:stretch;margin-top:8vh}
 }
 @media (max-width:479px){.brand > span{display:none}}
@@ -529,7 +532,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .preflight .is-err .preflight__ic{color:var(--bad)}.preflight .is-err{background:var(--bad-bg)}
 .preflight .is-warn .preflight__ic{color:var(--warn)}
 /* «Γιατί αυτός;» */
-.post__why{font-size:13px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post__why{font-size:13px;color:var(--muted-fg);line-height:1.35}
 /* ενεργό φίλτρο */
 .actfilter{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:2px 4px 2px 10px;border-radius:999px;background:var(--warn-bg);color:var(--foreground)}
 .actfilter button{border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:999px;color:inherit}

@@ -24,6 +24,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # Κάθε πακέτο παίρνει δικό του αριθμό (0.1.<αριθμός run>), ώστε το zip να έχει άλλο όνομα από το προηγούμενο
+      # και να μη μπερδεύεται με παλιό κατέβασμα· ο αριθμός φαίνεται και μέσα στην εφαρμογή
+      - run: npm version "0.1.${{ github.run_number }}" --no-git-tag-version
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -34,7 +37,7 @@ jobs:
         run: |
           V=$(node -p "require('./package.json').version")
           ZIP="release/GrafeioIlis-win7-x64-$V.zip"
-          NOTES="Πακέτο για Windows 7 64-bit, από το commit ${GITHUB_SHA::7}. Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
+          NOTES="Γραφείο Ίλης $V για Windows 7 64-bit, από το commit ${GITHUB_SHA::7}. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Ίλης». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
           if gh release view "v$V" >/dev/null 2>&1; then
             gh release upload "v$V" "$ZIP" --clobber
             gh release edit "v$V" --notes "$NOTES"
