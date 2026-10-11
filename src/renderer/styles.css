@@ -608,3 +608,48 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 [data-density="compact"] .attn li{padding:7px 10px}
 [data-density="compact"] .quick button{min-height:70px;padding:10px 12px}
 [data-density="compact"] .ui-seg--sm button{height:28px}
+/* Αρχεία Excel: λίστα ειδών, αντιστοίχιση στηλών με κλικ σε κελί, άτομα που δεν βρέθηκαν, κελιά ΗΚΑΙ */
+.srclist{list-style:none;margin:0;padding:0}
+.srcrow{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)}
+.srcrow:first-child{border-top:0;padding-top:0}
+.srcrow__main{flex:1 1 280px;min-width:0}
+.srcrow__main small{display:block;color:var(--muted-fg);font-size:12px;margin-top:2px}
+.srcrow__main small.txt-bad{color:var(--bad)}
+.srcrow__main .plan__fn{font-size:12px}
+.srcrow__act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.srcrow__act .ui-select{min-width:200px}
+.srcrow__opt{flex-basis:100%;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted-fg);cursor:pointer}
+.mapper{display:grid;grid-template-columns:minmax(240px,310px) minmax(0,1fr);gap:14px;margin-top:12px}
+.mapper__fields{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:62vh;overflow:auto}
+.mapper__f{display:flex;flex-direction:column;gap:4px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius)}
+.mapper__f.is-active{border-color:var(--ring);box-shadow:0 0 0 2px var(--ring)}
+.mapper__fb{display:flex;gap:6px;align-items:center;justify-content:space-between;background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.mapper__f .ui-select{height:30px;font-size:13px}
+.mapper__grid{min-width:0;display:flex;flex-direction:column;gap:8px}
+.mapper__hint{padding:6px 10px;background:var(--info-bg);color:var(--info);border-radius:var(--radius);font-size:13px;font-weight:600}
+.mapper__scroll{border:1px solid var(--xl-grid)}
+.mapper__sample{font-size:13px}
+.mapper__sample ul{margin:4px 0 0;padding-left:18px}
+.mapgrid{border-collapse:collapse;font-size:12px;color:var(--xl-fg);background:var(--xl-bg)}
+.mapgrid th,.mapgrid td{border:1px solid var(--xl-grid);padding:3px 6px;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.mapgrid thead th{position:sticky;top:0;background:var(--xl-head);font-weight:600;vertical-align:top;z-index:1}
+.mapgrid tbody th{background:var(--xl-head);padding:0}
+.mapgrid__rn{width:100%;min-width:34px;height:100%;padding:3px 6px;background:none;border:0;color:inherit;font:inherit;cursor:pointer}
+.mapgrid__rn:hover{background:var(--hover)}
+.mapgrid__tag{display:block;font-weight:600;color:var(--ok);font-size:11px}
+.mapgrid thead th.is-mapped,.mapgrid tr.is-head td.is-mapped{background:var(--ok-bg)}
+.mapgrid tr.is-head td{font-weight:700;background:var(--xl-hdr)}
+.mapgrid td.is-col,.mapgrid tr.is-head td.is-col{background:var(--info-bg)}
+.mapgrid td.is-pick{cursor:crosshair}
+.mapgrid td.is-pick:hover{outline:2px solid var(--ring);outline-offset:-2px}
+.unm{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border)}
+.unm > span:first-child{flex:1 1 200px}
+.unm small{display:block;color:var(--muted-fg);font-size:12px}
+.unm__pick{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hkmap{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:12px}
+.hkmap h3{font-size:14px;margin:10px 0 6px}
+.hkmap h3:first-child{margin-top:0}
+.hkmap__row{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:2px 0;font-size:13px}
+.hkmap__row .ui-input{width:90px;height:30px}
+@media (max-width:760px){.mapper{grid-template-columns:1fr}.mapper__fields{max-height:none}}
+.srcalert{margin-bottom:12px}

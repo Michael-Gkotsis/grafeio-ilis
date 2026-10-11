@@ -14,6 +14,7 @@ import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { recentPeople, usePrefs, type Prefs } from '../prefs';
+import { RosterPreview, SourcesAlert, SourcesView } from './sources';
 type P = any;
 
 export function TodayScreen() {
@@ -55,6 +56,7 @@ export function TodayScreen() {
   return html`<div>
     <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις 14:00.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip=${'Βγαίνει μόνη της · ' + (pending.length ? pending.length + ' ποινές αιτούνται' : 'καμία ποινή προς αίτηση')}>ΗΚΑΙ σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
+    <${SourcesAlert}/>
     <div className="kpis">
       ${kpi('Δύναμη', c.total, () => nav.go('people', { filter: 'all' }))}
       ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
@@ -263,30 +265,14 @@ export function HistoryScreen() {
 }
 
 function ImportCard() {
-  const { refresh } = useStore(); const toast = useToast(); const nav = useNav();
-  const [pv, setPv] = useState<ImportPreview | null>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [deact, setDeact] = useState(true); const [okd, setOkd] = useState(false);
-  const pick = async () => { setErr(''); setBusy(true); try { const r = await window.api.pickRoster(); if (!r) return; if (!r.ok) setErr(r.error); else { setPv(r); setOkd(false); } } finally { setBusy(false); } };
-  const go = async () => {
-    if (!pv) return; setBusy(true);
-    try { const r = await window.api.applyRoster(pv.token, deact); if (!r.ok) { setErr(r.error); return; } await refresh(); setPv(null); toast({ text: r.text }); nav.go('people'); }
-    finally { setBusy(false); }
-  };
+  const nav = useNav();
+  const [pv, setPv] = useState<ImportPreview | null>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const pick = async () => { setErr(''); setBusy(true); try { const r = await window.api.pickRoster(); if (!r) return; if (!r.ok) setErr(r.error); else setPv(r); } finally { setBusy(false); } };
   return html`<${Card} title="Εισαγωγή από το Δυναμολόγιο">
-    <p style=${{ marginTop: 0 }}>Διαβάζει το φύλλο <b>ΣΥΝΟΛΙΚΟ</b> (βαθμός, Ο/Σ, ονοματεπώνυμο, πατρώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος), τα <b>ΠΟΣΤΑ</b> και το <b>ΕΚΤΟΣ ΔΥΝΑΜΗΣ</b>. Οι στήλες βρίσκονται από τις επικεφαλίδες. Το αρχείο δεν αλλάζει.</p>
-    <p className="note">Όσοι υπάρχουν ήδη ενημερώνονται (ταίριασμα με ΑΣΜ, αλλιώς ονοματεπώνυμο και πατρώνυμο). Οι υπηρεσίες, τα ιατρικά και οι ποινές τους μένουν.</p>
+    <p style=${{ marginTop: 0 }}>Διαβάζει το φύλλο <b>ΣΥΝΟΛΙΚΟ</b> (βαθμός, Ο/Σ, ονοματεπώνυμο, πατρώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος), τα <b>ΠΟΣΤΑ</b> και το <b>ΕΚΤΟΣ ΔΥΝΑΜΗΣ</b>. Οι στήλες βρίσκονται από τις επικεφαλίδες· αν κάτι δεν βρεθεί σωστά, το δείχνεις στα <${Button} variant="link" onClick=${() => nav.set({ tab: 'files' })}>Αρχεία Excel<//>.</p>
+    <p className="note">Όσοι υπάρχουν ήδη ενημερώνονται (ταίριασμα με ΑΣΜ, αλλιώς ονοματεπώνυμο και πατρώνυμο). Οι υπηρεσίες, τα ιατρικά και οι ποινές τους μένουν. Μετά την εισαγωγή, όταν διορθώνεις στοιχεία ατόμου στην εφαρμογή (π.χ. Σ.Ι., τηλέφωνο), η διόρθωση γράφεται και στο κελί του στο Δυναμολόγιο.</p>
     ${!pv && html`<${Button} disabled=${busy} onClick=${pick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε αρχείο Δυναμολογίου…'}<//>`}
-    ${pv && html`<div style=${{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div><span className="plan__fn">${pv.file}</span>${pv.essos && html` <${Badge} tone="info">ΕΣΣΟ ${pv.essos}<//>`}</div>
-      <div className="tiles"><div className="tile tile--main"><span className="tile__n">${pv.active}</span><span className="tile__l">Σε δύναμη</span></div><div className="tile"><span className="tile__n">${pv.added}</span><span className="tile__l">Νέοι</span></div><div className="tile"><span className="tile__n">${pv.updated}</span><span className="tile__l">Ενημερώνονται</span></div><div className="tile"><span className="tile__n">${pv.total - pv.active}</span><span className="tile__l">Εκτός δύναμης</span></div></div>
-      ${pv.declared != null && pv.declared === pv.found && html`<${Alert} tone="ok"><span>✓ Το Δυναμολόγιο γράφει <b>ΣΥΝΟΛΟ ${pv.declared}</b> και βρέθηκαν <b>${pv.found}</b> άτομα. Ταιριάζουν.</span><//>`}
-      ${pv.warnings.map(w => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
-      ${pv.skipped.length > 0 && html`<details className="note"><summary>Αγνοήθηκαν ${pv.skipped.length} γραμμές που δεν είναι άτομα (σύνολα, επικεφαλίδες)</summary><p>${[...new Set(pv.skipped)].join(' · ')}</p></details>`}
-      ${pv.suspicious.length > 0 && html`<${Alert} tone="warn"><span>${pv.suspicious.length} γραμμές δεν έχουν ούτε ΑΣΜ, ούτε τηλέφωνο, ούτε θάλαμο. Είναι σίγουρα άτομα; ${pv.suspicious.slice(0, 12).join(' · ')}${pv.suspicious.length > 12 ? ' …' : ''}</span><//>`}
-      ${(pv.declared != null && pv.declared !== pv.found || pv.suspicious.length > 0) && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${okd} onChange=${(e: any) => setOkd(e.target.checked)}/><span><b>Το έλεγξα, συνέχισε</b><small>Χρειάζεται επειδή κάτι δεν ταιριάζει παραπάνω.</small></span></label>`}
-      <label className="rule"><input type="checkbox" className="ui-check" checked=${deact} onChange=${(e: any) => setDeact(e.target.checked)}/><span><b>Όσοι δεν είναι στο αρχείο → εκτός δύναμης</b><small>${pv.missing ? pv.missing + ' άτομα της εφαρμογής δεν βρέθηκαν στο αρχείο.' : 'Όλοι της εφαρμογής βρέθηκαν στο αρχείο.'} Όσοι έχουν ιστορικό κρατιούνται· όσοι δεν έχουν καμία καταχώρηση (π.χ. λάθος γραμμές παλιάς εισαγωγής) σβήνονται.</small></span></label>
-      <div style=${{ display: 'flex', gap: '8px' }}><${Button} variant="outline" onClick=${() => setPv(null)}>Άκυρο<//><${Button} disabled=${busy || ((pv.declared != null && pv.declared !== pv.found || pv.suspicious.length > 0) && !okd)} onClick=${go}>Εισαγωγή ${pv.total} ατόμων<//></div>
-      <span className="note">Πριν την εισαγωγή κρατιέται αντίγραφο της βάσης. Αναιρείται από το Ιστορικό.</span>
-    </div>`}
+    ${pv && html`<${RosterPreview} pv=${pv} onDone=${() => { setPv(null); nav.go('people'); }} onCancel=${() => setPv(null)}/>`}
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
@@ -396,9 +382,9 @@ export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const tab = nav.params.tab || 'templates';
   return html`<div>
-    <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού και οι ρυθμίσεις της Ίλης."/>
-    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
-    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
+    <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού, τα αρχεία Excel που διαβάζει και ενημερώνει, και οι ρυθμίσεις της Ίλης."/>
+    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'files', label: 'Αρχεία Excel' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
+    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<${SourcesView}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
@@ -420,6 +406,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Δώσε άδεια', k: 'ΑΔΕΙΑ', fn: () => nav.declare({ type: 'LEAVE' }) },
     { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
+    { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
     { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'settings' }) },
