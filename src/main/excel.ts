@@ -1,38 +1,11 @@
-// Ό,τι χρειάζεται τη βιβλιοθήκη ExcelJS (βαριά): ανάγνωση Δυναμολογίου και μηνιαίος έλεγχος υπηρεσιών.
+// Ό,τι χρειάζεται τη βιβλιοθήκη ExcelJS (βαριά): ο μηνιαίος έλεγχος υπηρεσιών (νέο αρχείο από την αρχή).
+// Η ανάγνωση των Excel (Δυναμολόγιο, Αρχεία Excel) γίνεται πια με το ελαφρύ xlsx.ts.
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
 import { MONTHS, parseD, type ISODate } from '../shared/dates';
 import { norm, collator } from '../shared/text';
 import { KIND_CODE, TYPES, type AppState } from '../shared/domain';
 import { activePeople, isHol, postBy, statusesOn } from '../shared/rules';
-import { parseRoster, type RawSheet, type CellValue, type RosterResult } from '../shared/roster';
-
-const plain = (v: ExcelJS.CellValue): CellValue => {
-  if (v == null) return null;
-  if (typeof v === 'object' && !(v instanceof Date)) {
-    if ('result' in v) return plain((v as ExcelJS.CellFormulaValue).result as ExcelJS.CellValue);
-    if ('richText' in v) return (v as ExcelJS.CellRichTextValue).richText.map(t => t.text).join('');
-    if ('text' in v) return String((v as ExcelJS.CellHyperlinkValue).text);
-    if ('error' in v) return null;
-  }
-  return v as CellValue;
-};
-
-export async function readRoster(file: string): Promise<RosterResult> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(file);
-  const sheets: RawSheet[] = wb.worksheets.map(ws => {
-    const rows: CellValue[][] = [];
-    const max = Math.min(ws.rowCount, 2000);
-    for (let r = 1; r <= max; r++) {
-      const row = ws.getRow(r); const vals: CellValue[] = [];
-      for (let c = 1; c <= Math.min(ws.columnCount, 40); c++) vals.push(plain(row.getCell(c).value));
-      rows.push(vals);
-    }
-    return { name: ws.name, rows };
-  });
-  return parseRoster(sheets);
-}
 
 // Μηνιαίο πλέγμα «Έλεγχος υπηρεσιών» (δείγμα 03): άτομα × ημέρες με κωδικό θέσης, γκρι ΣΚ/αργίες
 export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string; data: Buffer }> {

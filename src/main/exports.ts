@@ -5,6 +5,7 @@ import { collator, norm } from '../shared/text';
 import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
+import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine } from '../shared/froura';
 export { FROURA_FORMS };
 
@@ -25,9 +26,10 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && x.from <= d && d <= x.to);
 }
 
-export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven'): Promise<ExportResult> {
+// sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
+export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string): Promise<ExportResult> {
   const form = FROURA_FORMS[phase];
-  const wb = await Workbook.open(tpl); const ws = await wb.sheet(0); const pm = personMap(s.people);
+  const wb = await Workbook.open(tpl); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = personMap(s.people);
   const warnings: string[] = [];
   const g = s.guards[d] || {};
   ws.set('L1', s.settings.unit[0]).set('L2', s.settings.unit[1]).set('L3', s.settings.unit[2]);
@@ -57,27 +59,29 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
 }
 
 // ------------------------------------------------------------------ ΗΚΑΙ (δείγμα 15)
-const HK_COL: Record<string, string> = {
-  yp: 'F', ey: 'G', tim: 'H', bl: 'I', os: 'J', mag: 'K', sid: 'L', kin: 'M',
-  ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y'
-};
+// στήλες ανά είδος κωλυομένων/απόντων (τα κλειδιά του hkaiCounts)
+const HK_KEYS = ['yp', 'ey', 'tim', 'bl', 'os', 'mag', 'sid', 'kin', 'ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fp', 'fyl', 'apal', 'ekp', 'allh'];
 export class TemplateError extends Error {}
 export const HK_TEXT: Record<string, string> = { egr: 'G8', dia: 'G9', ait: 'G12', loi: 'G19', off: 'A18' };
-export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {
-  const wb = await Workbook.open(tpl); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
+// front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
+export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap } = {}): Promise<ExportResult> {
+  const wb = await Workbook.open(tpl);
+  const pick = (n: string | undefined, i: number) => (n && wb.hasSheet(n) ? n : i);
+  const fr = await wb.sheet(pick(opts.front, 0)); const bk = await wb.sheet(pick(opts.back, 1));
+  const m = opts.map || hkaiMapOf();
   const pm = personMap(s.people); const warnings: string[] = [];
   const hk = hkaiCounts(s, d);
-  fr.set('A4', 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + dmyy(d));
-  fr.set('V34', s.settings.place + ', ' + dmyy(d));
-  const rowsOf: [string, number][] = [...HK_OFFICERS.map((r, i) => [r, 17 + i] as [string, number]), ...HK_NCO.map((r, i) => [r, 23 + i] as [string, number])];
+  fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + dmyy(d));
+  fr.set(m.date, s.settings.place + ', ' + dmyy(d));
+  const rowsOf: [string, number][] = [...HK_OFFICERS, ...HK_NCO].map(r => [r, m.rows[r]] as [string, number]).filter(([, r]) => r > 0);
   // Προέλεγχος template (έρευνα §3.6): τα αθροίσματα πρέπει να είναι τύποι, όχι γραμμένοι αριθμοί
-  const lost = rowsOf.flatMap(([, r]) => ['E', 'N', 'Z', 'AA'].map(c => c + r)).filter(ref => !fr.hasFormula(ref));
-  if (lost.length) throw new TemplateError('Το template της ΗΚΑΙ έχει χάσει τύπους στα κελιά ' + lost.slice(0, 6).join(', ') + (lost.length > 6 ? ' κ.ά.' : '') + '. Τα αθροίσματα δεν θα ήταν σωστά. Βάλε ξανά τους τύπους ή σβήσε το δικό σου hkai.xlsx από τον φάκελο templates.');
+  const lost = rowsOf.flatMap(([, r]) => [m.cols.sum, m.cols.sumK, m.cols.sumA, m.cols.avail].filter(Boolean).map(c => c + r)).filter(ref => !fr.hasFormula(ref));
+  if (lost.length) throw new TemplateError('Το template της ΗΚΑΙ έχει χάσει τύπους στα κελιά ' + lost.slice(0, 6).join(', ') + (lost.length > 6 ? ' κ.ά.' : '') + '. Τα αθροίσματα δεν θα ήταν σωστά. Βάλε ξανά τους τύπους ή σβήσε το δικό σου hkai.xlsx από τον φάκελο templates (ή διάλεξε άλλο template στα Αρχεία Excel).');
   for (const [rank, r] of rowsOf) {
     const x = hk.rank[rank];
-    fr.set('C' + r, x.n - x.attached).set('D' + r, x.attached);
-    for (const [k, col] of Object.entries(HK_COL)) fr.set(col + r, x.c[k] || null);
-    if (!fr.hasFormula('AB' + r)) fr.set('AB' + r, x.c.ab || null);
+    fr.set(m.cols.placed + r, x.n - x.attached).set(m.cols.attached + r, x.attached);
+    for (const k of HK_KEYS) if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null);
+    if (m.cols.ab && !fr.hasFormula(m.cols.ab + r)) fr.set(m.cols.ab + r, x.c.ab || null);
   }
   // κείμενα που γράφει ο χρήστης στην οθόνη ΗΚΑΙ (πίσω σελίδα)
   const tx = s.hkaiManual?.[d]?.text || {};
@@ -118,15 +122,16 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
   outs.sort((a, b) => byRoom(a.p, b.p)); stay.sort((a, b) => byRoom(a.p, b.p));
   return { outs, stay };
 }
-export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate): Promise<ExportResult> {
+// sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)
+export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl);
   const { outs, stay } = outsAndStay(s, d);
-  const lists: [string, { p: Person; note: string }[]][] = [
-    ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: x.st.type === 'DN' ? 'ΔΝ' : '' }))],
-    ['ΠΑΡΑΜΕΝΟΝΤΕΣ', stay]
+  const lists: [string, { p: Person; note: string }[], string | undefined][] = [
+    ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: x.st.type === 'DN' ? 'ΔΝ' : '' })), sheets.outs],
+    ['ΠΑΡΑΜΕΝΟΝΤΕΣ', stay, sheets.stay]
   ];
-  for (const [title, list] of lists) {
-    const ws = await wb.sheet(title);
+  for (const [title, list, name] of lists) {
+    const ws = await wb.sheet(name && wb.hasSheet(name) ? name : title);
     ws.set('H1', s.settings.unit[0]).set('H2', s.settings.unit[1]).set('H3', s.settings.unit[2]);
     ws.set('A5', title + ' ΤΗΣ ' + titleDate(d, false));
     if (list.length > 1) ws.insertRows(7, list.length - 1, 7, wb);

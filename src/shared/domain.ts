@@ -1,4 +1,5 @@
 import type { ISODate } from './dates';
+import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -163,6 +164,8 @@ export interface Settings {
   fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών
   views?: SavedView[];                   // αποθηκευμένες λίστες στο Προσωπικό (π.χ. «Θαλαμάρχες»)
+  sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
+  forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
 }
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }

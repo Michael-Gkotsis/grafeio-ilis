@@ -3,7 +3,9 @@ import { apply, type Command } from '../shared/commands';
 import { emptyState, type AppState, type AuditEntry, type Person } from '../shared/domain';
 import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
-import type { Api, CmdResult } from '../shared/api';
+import type { Api, CmdResult, SourceBook } from '../shared/api';
+import type { RawSheet } from '../shared/roster';
+import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planWrite, snapFromSheet, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
@@ -24,6 +26,22 @@ function seed(): AppState {
     st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true }), st(23, 'OUT', 0, 0), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1)];
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   return s;
+}
+
+// Φανταστικό βιβλίο με τη δομή του Δυναμολογίου (ΣΥΝΟΛΙΚΟ, ΤΙΜΩΡΗΜΕΝΟΙ, IATRIKA με 3 πίνακες): μόνο ψεύτικα ονόματα
+function fakeBook(s: AppState): SourceBook {
+  const head = ['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος'];
+  const pr = (p: AppState['people'][number], i: number) => [i + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm || null, p.phone || null, p.room];
+  const D = (iso: string) => new Date(iso + 'T00:00:00Z');
+  const ppl = s.people.slice(0, 60);
+  const sheets: RawSheet[] = [
+    { name: 'ΣΥΝΟΛΙΚΟ', rows: [['ΔΥΝΑΜΟΛΟΓΙΟ Β\' ΕΣΣΟ 2026'], ['ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ 4ης ΙΛΗΣ'], [...head, 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'], ...ppl.map((p, i) => [...pr(p, i), i % 9 === 0 ? 'Ι3 ΑΟΠΛΟ' : 'Ι1', p.role || null])] },
+    { name: 'ΤΙΜΩΡΗΜΕΝΟΙ', rows: [['ΤΙΜΩΡΗΜΕΝΟΙ'], [...head, 'ΑΠΌ', 'ΕΩΣ', 'ΕΙΔΟΣ\nΠΟΙΝΗΣ'], [...pr(ppl[3], 0), D(addDays(today(), -1)), D(addDays(today(), 2)), 'ΠΕΡΙΟΡΙΣΜΟΣ'], [2], [3]] },
+    { name: 'IATRIKA', rows: [['ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.'], [...head, 'Εισαγωγή', 'ΕΙΣ', 'ΕΞ', 'Παρατηρήσεις'], [1, 'ΣΤΡ'], [], ['ΕΙΣΑΓΩΓΕΣ ΣΤΕΠ'], [...head, 'ΕΙΣ', 'ΕΞ', 'Παρατηρήσεις'], [...pr(ppl[7], 0), D(addDays(today(), -2)), D(addDays(today(), -1))], [], [], ['ΕΑ-ΕΥ'],
+      [...head, 'ΕΑ-ΕΥ', 'ΑΠΌ', 'ΕΩΣ', 'Παρατηρήσεις'], [...pr(ppl[10], 0), 'ΕΑ', D(addDays(today(), -3)), D(addDays(today(), 4)), 'ΓΟΝΑΤΟ'], [...pr(ppl[11], 1), 'ΕΛ ΑΡΒ', D(addDays(today(), -1)), D(addDays(today(), 6)), ''],
+      [2, 'ΣΤΡ', 'ΠΖ', 'ΚΑΝΕΝΑΣ', 'ΑΓΝΩΣΤΟΣ', '', null, null, 3, 'ΕΥ', D(today()), D(addDays(today(), 1)), '']] }
+  ];
+  return { ok: true, file: 'C:\\Γραφείο\\ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', name: 'ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', mtime: 0, size: 0, sheets, hits: detectTables(sheets) };
 }
 
 export function mockApi(): Api {
@@ -65,6 +83,35 @@ export function mockApi(): Api {
     diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1 }),
     setGpu: async () => {},
     usbCopy: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
-    importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' })
+    importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    // Αρχεία Excel: ένα φανταστικό Δυναμολόγιο από τα ψεύτικα άτομα, για να δοκιμάζεται η αντιστοίχιση στον browser
+    srcPick: async () => fakeBook(state),
+    srcRead: async () => fakeBook(state),
+    srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
+    srcImport: async (kind, b, choices) => {
+      const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet)!;
+      const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today()), b, choices);
+      state = { ...state, settings: { ...state.settings, sources: { ...(state.settings.sources || {}), [kind]: b } } };
+      const r = apply(state, { t: 'importRecords', adds: d.add, updates: d.update, source: book.name, what: KIND[kind].label.toLowerCase() }, { today: today(), newId: () => 'x' + ++seq });
+      state = r.state; return res(r.text || 'Δεν βρέθηκε κάτι νέο');
+    },
+    srcPeople: async () => ({ ok: false, error: 'Στη δοκιμή στον browser η εισαγωγή προσωπικού δεν γίνεται.' }),
+    srcPlan: async kind => {
+      const b = state.settings.sources?.[kind]; if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο' };
+      const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet) || { name: b.sheet, rows: [] };
+      if (kind === 'people') { const p = planPeopleWrite(sh, b, state, snapFromSheet(sh, b, state.people)); return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, p.sets), total: p.changed, foreign: 0, notFound: p.notFound }; }
+      if (!isStatusKind(kind)) return { ok: false, error: 'μόνο ανάγνωση' };
+      const plan = planWrite(kind, sh, b, state, [], today());
+      return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, plan.sets), total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: [] };
+    },
+    srcWrite: async kind => ({ ok: true, text: 'Δοκιμή: δεν γράφτηκε αρχείο (' + kind + ')', file: '(δοκιμή)' }),
+    srcNewFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
+    srcStatus: async () => ({ sources: (Object.entries(state.settings.sources || {}) as [ListKind, SourceBinding][]).map(([kind, b]) => ({ kind, file: b.file, exists: true, changed: kind === 'medical', synced: true, at: today() + ' 09:12' })), forms: [] }),
+    onSources: () => () => {},
+    formPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    formInfo: async f => ({ ok: true, file: f + '.xlsx', custom: false, sheets: f === 'hkai' ? ['μπροστινο', 'πισω'] : f === 'outs' ? ['ΕΞΟΔΟΥΧΟΙ', 'ΠΑΡΑΜΕΝΟΝΤΕΣ'] : ['ΦΡΟΥΡΑ ΣΒΕΝ'], sheet: f === 'hkai' ? 'μπροστινο' : f === 'outs' ? 'ΕΞΟΔΟΥΧΟΙ' : 'ΦΡΟΥΡΑ ΣΒΕΝ', sheet2: f === 'hkai' ? 'πισω' : f === 'outs' ? 'ΠΑΡΑΜΕΝΟΝΤΕΣ' : undefined, hkai: f === 'hkai' ? { map: hkaiMapOf(), found: 40, total: 40, missing: [] } : undefined }),
+    formSave: async (f, b) => { const forms = { ...(state.settings.forms || {}) }; if (b) forms[f] = b; else delete forms[f]; state = { ...state, settings: { ...state.settings, forms } }; return res(''); },
+    formDir: async () => null,
+    openPath: async () => {}
   };
 }

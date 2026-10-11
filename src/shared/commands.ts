@@ -33,6 +33,7 @@ export type Command =
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
+  | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; source: string; what: string }
   | { t: 'expire' };
 
 export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
@@ -183,6 +184,15 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };
     case 'importPeople':
       return importPeople(s, c.rows, c.source, c.deactivateMissing);
+    case 'importRecords': {
+      // Από τα Αρχεία Excel: νέες εγγραφές και αλλαγές σε υπάρχουσες (ίδιο άτομο, ίδιο είδος, ίδια έναρξη)
+      const byId = new Map(c.updates.map(u => [u.id, u.patch]));
+      const adds = c.adds.filter(a => pm.has(a.pid) && TYPES[a.type] && a.from && a.to && a.to >= a.from);
+      if (!adds.length && !byId.size) return { state: s, text: '', files: [] };
+      const statuses = [...s.statuses.map(x => (byId.has(x.id) ? { ...x, ...byId.get(x.id) } : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
+      const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές')].filter(Boolean).join(', ');
+      return { state: { ...s, statuses }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + parts, files: [], source: 'excel' };
+    }
     case 'updatePerson': {
       if (!pm.has(c.person.id)) throw new Error('Δεν βρέθηκε το άτομο');
       return { state: { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)) }, text: 'Άλλαξαν τα στοιχεία: ' + shortName(c.person), files: [] };
