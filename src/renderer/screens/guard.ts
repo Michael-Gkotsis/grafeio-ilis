@@ -38,7 +38,8 @@ function DutyCheck({ onOpen }: P) {
   const [ym, setYm] = useState(today.slice(0, 7));
   const st = dutyStats(state);
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
-  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state, ym, dq]);
+  // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
+  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.people, state.settings, ym, dq]);
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
   const [sk, setSk] = useState<{ k: string; dir: number } | null>(null);
   const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : r.d.byKind[k] || 0);
