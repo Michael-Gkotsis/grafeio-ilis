@@ -5,7 +5,7 @@ import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
 import type { Api, CmdResult, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
-import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planWrite, snapFromSheet, type ListKind, type SourceBinding } from '../shared/sources';
+import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
@@ -39,7 +39,18 @@ function fakeBook(s: AppState): SourceBook {
     { name: 'ΤΙΜΩΡΗΜΕΝΟΙ', rows: [['ΤΙΜΩΡΗΜΕΝΟΙ'], [...head, 'ΑΠΌ', 'ΕΩΣ', 'ΕΙΔΟΣ\nΠΟΙΝΗΣ'], [...pr(ppl[3], 0), D(addDays(today(), -1)), D(addDays(today(), 2)), 'ΠΕΡΙΟΡΙΣΜΟΣ'], [2], [3]] },
     { name: 'IATRIKA', rows: [['ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.'], [...head, 'Εισαγωγή', 'ΕΙΣ', 'ΕΞ', 'Παρατηρήσεις'], [1, 'ΣΤΡ'], [], ['ΕΙΣΑΓΩΓΕΣ ΣΤΕΠ'], [...head, 'ΕΙΣ', 'ΕΞ', 'Παρατηρήσεις'], [...pr(ppl[7], 0), D(addDays(today(), -2)), D(addDays(today(), -1))], [], [], ['ΕΑ-ΕΥ'],
       [...head, 'ΕΑ-ΕΥ', 'ΑΠΌ', 'ΕΩΣ', 'Παρατηρήσεις'], [...pr(ppl[10], 0), 'ΕΑ', D(addDays(today(), -3)), D(addDays(today(), 4)), 'ΓΟΝΑΤΟ'], [...pr(ppl[11], 1), 'ΕΛ ΑΡΒ', D(addDays(today(), -1)), D(addDays(today(), 6)), ''],
-      [2, 'ΣΤΡ', 'ΠΖ', 'ΚΑΝΕΝΑΣ', 'ΑΓΝΩΣΤΟΣ', '', null, null, 3, 'ΕΥ', D(today()), D(addDays(today(), 1)), '']] }
+      [2, 'ΣΤΡ', 'ΠΖ', 'ΚΑΝΕΝΑΣ', 'ΑΓΝΩΣΤΟΣ', '', null, null, 3, 'ΕΥ', D(today()), D(addDays(today(), 1)), '']] },
+    { name: 'ΠΟΣΤΑ', rows: [['ΠΟΣΤΑ'], [...head, 'Πόστο'], [...pr(ppl[20], 0), 'ΚΨΜ'], [...pr(ppl[21], 1), 'ΙΑΤΡΟΣ ΣΤΕΠ'], [...pr(ppl[22], 2), 'ΓΡΑΦΕΙΟ']] },
+    { name: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ', rows: [['ΕΚΤΟΣ ΔΥΝΑΜΗΣ'], [...head, 'ΠΑΡΑΤΗΡΗΣΕΙΣ'], [...pr(ppl[30], 0), 'ΑΝΑΒΟΛΗ'], [...pr(ppl[31], 1), 'ΑΠΟΣΠΑΣΗ']] },
+    { name: 'ΔΥΝΑΤΟΤΗΤΑ', rows: [['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΙΑ', 'ΣΚΟΠΙΑ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'],
+      ...ppl.slice(40, 46).map((p, i) => [p.last, p.first, p.father, null, i === 2 ? '-' : null, i % 2 ? '-' : null, '-', i < 3 ? 'ΛΟΓΩ Ι' : null])] },
+    (() => {
+      const prev = addDays(today().slice(0, 8) + '01', -1); const ym = prev.slice(0, 7); const nd = +prev.slice(8);
+      const mon = ['ΙΑΝΟΥΑΡΙΟΥ', 'ΦΕΒΡΟΥΑΡΙΟΥ', 'ΜΑΡΤΙΟΥ', 'ΑΠΡΙΛΙΟΥ', 'ΜΑΪΟΥ', 'ΙΟΥΝΙΟΥ', 'ΙΟΥΛΙΟΥ', 'ΑΥΓΟΥΣΤΟΥ', 'ΣΕΠΤΕΜΒΡΙΟΥ', 'ΟΚΤΩΒΡΙΟΥ', 'ΝΟΕΜΒΡΙΟΥ', 'ΔΕΚΕΜΒΡΙΟΥ'][+ym.slice(5) - 1];
+      const days = Array.from({ length: nd }, (_, i) => i + 1);
+      return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', rows: [['ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + mon + ' ' + ym.slice(0, 4)], ['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΕΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', ...days.map(String)],
+        ...ppl.map((p, i) => [i + 1, p.rank, p.spec, p.last, p.first, p.room, null, null, null, ...days.map(d => ((d * 7 + i) % 13 === 0 ? 'Θ' : (d * 5 + i) % 17 === 0 ? 'Μ' : null))])] };
+    })()
   ];
   return { ok: true, file: 'C:\\Γραφείο\\ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', name: 'ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', mtime: 0, size: 0, sheets, hits: detectTables(sheets) };
 }
@@ -88,6 +99,11 @@ export function mockApi(): Api {
     srcPick: async () => fakeBook(state),
     srcRead: async () => fakeBook(state),
     srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
+    srcKeys: async () => [],
+    srcApply: async (kind, b, cmd) => {
+      state = { ...state, settings: { ...state.settings, sources: { ...(state.settings.sources || {}), [kind]: b } } };
+      const r = apply(state, cmd, { today: today(), newId: () => 'x' + ++seq }); state = r.state; return res(r.text || 'Δεν βρέθηκε κάτι νέο');
+    },
     srcImport: async (kind, b, choices) => {
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet)!;
       const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today()), b, choices);
@@ -99,10 +115,8 @@ export function mockApi(): Api {
     srcPlan: async kind => {
       const b = state.settings.sources?.[kind]; if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο' };
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet) || { name: b.sheet, rows: [] };
-      if (kind === 'people') { const p = planPeopleWrite(sh, b, state, snapFromSheet(sh, b, state.people)); return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, p.sets), total: p.changed, foreign: 0, notFound: p.notFound }; }
-      if (!isStatusKind(kind)) return { ok: false, error: 'μόνο ανάγνωση' };
-      const plan = planWrite(kind, sh, b, state, [], today());
-      return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, plan.sets), total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: [] };
+      const plan = planSource(kind, sh, b, state, undefined, today());
+      return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, plan.sets), total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound };
     },
     srcWrite: async kind => ({ ok: true, text: 'Δοκιμή: δεν γράφτηκε αρχείο (' + kind + ')', file: '(δοκιμή)' }),
     srcNewFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),

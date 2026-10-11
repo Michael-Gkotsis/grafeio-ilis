@@ -1,7 +1,7 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
 import { ROT, TYPES, KIND_CODE, type AppState, type Person } from '../shared/domain';
-import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
 import { norm, collator } from '../shared/text';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
@@ -117,16 +117,17 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
 }
 
 // Έλεγχος υπηρεσιών: μηνιαίο πλέγμα όπως το δείγμα 03
-export function checkSheet(s: AppState, ym: string): SheetModel {
+// only: μόνο αυτά τα άτομα (αναζήτηση στο πλέγμα)
+export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetModel {
   const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m, 0).getDate();
   const days = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
-  const posts = postsOf(s.settings);
   const per = new Map<number, Map<string, string>>();
-  days.forEach(d => { const g = s.guards[d] || {}; for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); } });
+  // όλες οι θέσεις που έχουν υπάρξει (και του άλλου εντύπου): ίδια με την εξαγωγή
+  days.forEach(d => { const g = s.guards[d] || {}; for (const k in g) { const p = postBy(s, k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); } });
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
     [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map(d => E(parseD(d).getDate(), 'b hdr sm' + (isHol(s.settings, d) ? ' we' : '')))]];
-  activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
+  activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
     const x = per.get(p.id) || new Map(); let hol = 0; const c: Record<string, number> = {};
     const cells = days.map(d => { const code = x.get(d); if (code) { if (isHol(s.settings, d)) hol++; c[code] = (c[code] || 0) + 1; } return E(code || '', 'b code' + (isHol(s.settings, d) ? ' we' : '')); });
     rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(hol, 'b c'), E(x.size, 'b c bold'), E(c['Θ'] || '', 'b c'), E(c['Μ'] || '', 'b c'), E(c['ΛΥ'] || '', 'b c'), ...cells]);

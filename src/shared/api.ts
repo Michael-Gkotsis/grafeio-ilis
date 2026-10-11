@@ -17,7 +17,7 @@ export type ExportResult = { ok: true; file: string; warnings: string[] } | { ok
 export type UsbResult = { ok: true; file: string; day: string; warning?: string } | { ok: false; error: string } | null;
 export interface BackupInfo { name: string; day: string; label: string; size: number }
 export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number }
-export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[] }
+export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[]; changes: { who: string; what: string }[]; same: number }
 
 // Αρχεία Excel: ένα βιβλίο όπως το βλέπει η αντιστοίχιση (τιμές κελιών και πίνακες που αναγνωρίστηκαν)
 export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[] }
@@ -48,7 +48,9 @@ export interface Api {
   srcPick(kind: ListKind | null): Promise<SourceBook | Fail | null>;
   srcRead(kind: ListKind): Promise<SourceBook | Fail>;
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
-  srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>): Promise<CmdResult>;
+  srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean): Promise<CmdResult>;
+  srcKeys(kind: StatusKind): Promise<string[]>;
+  srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
   srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;

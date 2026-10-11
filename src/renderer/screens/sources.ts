@@ -4,17 +4,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { PersonPicker } from '../common';
-import { TYPES, type TypeKey } from '../../shared/domain';
-import { dm } from '../../shared/dates';
+import { TYPES, CAP_ACC, KIND_NAME, type DutyKind, type TypeKey } from '../../shared/domain';
+import { addDays, dm } from '../../shared/dates';
 import {
   KINDS, KIND, DEFAULT_TYPE, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
-  parseStatuses, suggestCols, tableRows, rowName, valueKey, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
+  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutyCode, planCaps, planDuties, planOutside, planPosts, sheetMonth,
+  type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
+import type { Command } from '../../shared/commands';
 type P = any;
 
 const base = (f: string) => f.split(/[\\/]/).pop() || f;
-const READ_WITH_PEOPLE: ListKind[] = ['posts', 'outside'];
+// Διαβάζονται και μαζί με το προσωπικό (από το ίδιο Δυναμολόγιο), αλλά και μόνα τους με δική τους προεπισκόπηση
+const WITH_PEOPLE: ListKind[] = ['posts', 'outside'];
+const SHEET_KINDS: ListKind[] = ['posts', 'outside', 'caps', 'duties'];
 
 // Κατάσταση των αρχείων: φρεσκάρεται όταν γράφει ο main, όταν γυρνάς στο παράθυρο και κάθε φορά που ανοίγει η οθόνη
 export function useSourceStatus() {
@@ -55,7 +59,7 @@ export function SourcesView() {
       if (!r.ok) { toast({ text: r.error }); return; }
       if (kind) {
         const best = bestFor(kind, r.sheets);
-        setLayer({ kind: 'map', list: kind, book: r, b: best ? { file: r.file, sheet: best.sheet, header: best.header, cols: best.cols, write: KIND[kind].write || kind === 'people', scope: 'all' } : defaultBinding(kind, r.file, r.sheets[0]?.name) });
+        setLayer({ kind: 'map', list: kind, book: r, b: best ? { file: r.file, sheet: best.sheet, header: best.header, cols: best.cols, write: true, scope: 'all' } : defaultBinding(kind, r.file, r.sheets[0]?.name) });
       } else setLayer({ kind: 'match', book: r });
     } finally { setBusy(''); }
   };
@@ -63,12 +67,12 @@ export function SourcesView() {
     const r = await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
     setLayer({ kind: 'map', list: kind, book: r, b: sources[kind] });
   };
-  const read = async (kind: ListKind) => {
-    const k: ListKind = READ_WITH_PEOPLE.includes(kind) ? 'people' : kind;
-    const b = sources[k]; if (!b) { toast({ text: 'Όρισε πρώτα το αρχείο του προσωπικού' }); return; }
-    if (k === 'people') { const r = await window.api.srcPeople(b); if (!r.ok) { toast({ text: r.error }); return; } setLayer({ kind: 'people', pv: r }); return; }
-    const r = await window.api.srcRead(k); if (!r.ok) { toast({ text: r.error }); return; }
-    setLayer({ kind: 'import', list: k, book: r, b });
+  // fresh: η αντιστοίχιση που μόλις αποθηκεύτηκε (το «sources» αυτής της απόδοσης έχει ακόμα την παλιά)
+  const read = async (kind: ListKind, fresh?: SourceBinding, book?: SourceBook) => {
+    const b = fresh || sources[kind]; if (!b) return;
+    if (kind === 'people') { const r = await window.api.srcPeople(b); if (!r.ok) { toast({ text: r.error }); return; } setLayer({ kind: 'people', pv: r }); return; }
+    const r = book || await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
+    setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b });
   };
   const newFile = async (kind: StatusKind) => {
     const r = await window.api.srcNewFile(kind); if (!r) return;
@@ -87,15 +91,16 @@ export function SourcesView() {
     <${FormsCard} outs=${st.forms}/>
     ${layer?.kind === 'match' && html`<${MatchDialog} book=${layer.book} onClose=${close} onMap=${(list: ListKind, b: SourceBinding) => setLayer({ kind: 'map', list, book: layer.book, b, back: layer })}/>`}
     ${layer?.kind === 'map' && html`<${MapDialog} list=${layer.list} book=${layer.book} initial=${layer.b} onClose=${() => setLayer(layer.back || null)}
-      onSaved=${(b: SourceBinding, andRead: boolean) => { if (andRead) { if (layer.list === 'people' || READ_WITH_PEOPLE.includes(layer.list)) read(layer.list); else setLayer({ kind: 'import', list: layer.list, book: layer.book, b }); } else if (layer.list === 'people' && !layer.back) setLayer({ kind: 'write', list: 'people' }); else setLayer(layer.back || null); }}/>`}
+      onSaved=${(b: SourceBinding, andRead: boolean) => { if (andRead) read(layer.list, b, layer.list === 'people' ? undefined : layer.book); else if (layer.list === 'people' && !layer.back) setLayer({ kind: 'write', list: 'people' }); else setLayer(layer.back || null); }}/>`}
     ${layer?.kind === 'import' && html`<${ImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
+    ${layer?.kind === 'sheet' && html`<${SheetImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
     ${layer?.kind === 'people' && html`<${Dialog} size="lg" title="Ανάγνωση προσωπικού από το Excel" onClose=${close}><${RosterPreview} pv=${layer.pv} onDone=${close} onCancel=${close}/><//>`}
     ${layer?.kind === 'write' && html`<${WriteDialog} list=${layer.list} onClose=${close}/>`}
   </div>`;
 }
 
 function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle }: P) {
-  const k = KIND[kind as ListKind]; const canWrite = isStatusKind(kind) || kind === 'people'; const withPeople = READ_WITH_PEOPLE.includes(kind);
+  const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind);
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
     : s.changed ? html`<${Badge} tone="warn" data-tip="Κάποιος το άλλαξε στο Excel. Πάτα «Ανανέωση από Excel» για να περάσουν οι αλλαγές.">Άλλαξε στο Excel<//>`
@@ -105,11 +110,11 @@ function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, 
     : html`<${Badge} tone="info" data-tip=${canWrite ? 'Δεν γράφει ακόμα μόνη της: πάτα μία φορά «Ενημέρωση Excel» για να δεις τι θα γραφτεί, ή «Ανανέωση από Excel»' : 'Δεν έχει διαβαστεί ακόμα'}>Νέο<//>`;
   return html`<li className="srcrow">
     <div className="srcrow__main"><b>${k.label}</b> ${badge}
-      <small>${b ? html`<span className="plan__fn" title=${b.file}>${bindingText(b)}</span>${!canWrite ? ' · μόνο ανάγνωση' : b.write === false ? ' · δεν γράφει μόνη της' : ''}` : withPeople ? k.help : k.help + ' · δεν έχει οριστεί αρχείο'}</small>
+      <small>${b ? html`<span className="plan__fn" title=${b.file}>${bindingText(b)}</span>${b.write === false ? ' · δεν γράφει μόνη της' : ''}` : k.help + ' · δεν έχει οριστεί αρχείο'}</small>
       ${s?.error && !s.locked && html`<small className="txt-bad">${s.error}</small>`}</div>
     <div className="srcrow__act">
       ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${isStatusKind(kind) && html`<${Button} size="sm" variant="ghost" data-tip="Η εφαρμογή φτιάχνει καινούργιο Excel με τις εγγραφές της και το κρατά ενημερωμένο" onClick=${onNew}>Νέο αρχείο…<//>`}`
-      : html`<${Button} size="sm" variant=${s?.changed ? 'default' : 'outline'} onClick=${onRead} data-tip=${withPeople ? 'Διαβάζεται μαζί με το προσωπικό' : 'Διάβασε το Excel και δες τι αλλάζει πριν περάσει στην εφαρμογή'}>Ανανέωση από Excel<//>
+      : html`<${Button} size="sm" variant=${s?.changed ? 'default' : 'outline'} onClick=${onRead} data-tip=${'Διάβασε το Excel και δες τι αλλάζει πριν περάσει στην εφαρμογή' + (withPeople ? ' (διαβάζεται και μαζί με το προσωπικό)' : '')}>Ανανέωση από Excel<//>
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
         <${Button} size="sm" variant="ghost" onClick=${onEdit}>Στήλες…<//>
         <${Button} size="sm" variant="ghost" onClick=${onPick}>Άλλο αρχείο…<//>
@@ -128,7 +133,7 @@ function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () =
   const dupe = chosen.map(([, k]) => k).find((k, i, a) => a.indexOf(k) !== i);
   const bindingFor = (i: number, k: ListKind): SourceBinding => {
     const h = book.hits[i]; const sh = book.sheets.find(s => s.name === h.sheet);
-    return { file: book.file, sheet: h.sheet, header: h.header, cols: suggestCols(k, sh, h.header), write: KIND[k].write || k === 'people', scope: 'all' };
+    return { file: book.file, sheet: h.sheet, header: h.header, cols: suggestCols(k, sh, h.header), write: true, scope: 'all' };
   };
   const save = async () => {
     for (const [i, k] of chosen) await window.api.srcSave(k, bindingFor(+i, k));
@@ -185,7 +190,9 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
   const sample = useMemo(() => {
     if (isNew || miss.length) return [];
     if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
-    return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : ''));
+    if (list === 'duties') { const cols = dayColumns(sheet.rows[b.header], b.cols.d1); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => dutyCode(x)).join(' ') || '—')]; }
+    if (list === 'caps') return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (CAP_COLS.filter(k => b.cols[k] != null && capNo(cellText(r.v[k]))).map(k => 'όχι ' + CAP_ACC[k]).join(', ') || 'κάνει όλες'));
+    return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : list === 'outside' && cellText(r.v.remarks) ? ' · ' + cellText(r.v.remarks) : ''));
   }, [b, sheet, list, isNew, miss.length]);
   const count = useMemo(() => (isNew ? 0 : tableRows(sheet, b.header, b.cols).records.length), [b, sheet, isNew]);
   const save = async (andRead: boolean) => {
@@ -243,22 +250,28 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   const [b, setB] = useState<SourceBinding>(initial);
   const [choices, setChoices] = useState<Record<number, number | null>>({});
   const [busy, setBusy] = useState(false);
+  const [del, setDel] = useState(true);
+  // ποιες εγγραφές είχε το Excel την προηγούμενη φορά (για όσες σβήστηκαν ή άλλαξαν «από» εκεί)
+  const [keys, setKeys] = useState<string[]>([]);
+  const cur = state.settings.sources?.[list];
+  const same = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
+  useEffect(() => { if (same) window.api.srcKeys(list).then(setKeys); else setKeys([]); }, [list, same]);
   const sheet = book.sheets.find(s => s.name === b.sheet);
   const parsed = useMemo(() => (sheet ? parseStatuses(list, sheet, b, state.people, today) : null), [sheet, b, state.people, today, list]);
-  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices) : null), [parsed, state, b, choices, list]);
+  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, keys) : null), [parsed, state, b, choices, list, keys]);
   const all = useMemo(() => (parsed ? parsed.cands.filter(c => c.pid == null) : []), [parsed]);
   if (!sheet || !parsed || !d) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const types = KIND[list].types!;
   const go = async () => {
     setBusy(true);
     try {
-      const r = await window.api.srcImport(list, b, choices);
+      const r = await window.api.srcImport(list, b, choices, !del);
       if (!r.ok) { toast({ text: r.error }); return; }
       await refresh(); onClose(); toast({ text: r.text });
     } finally { setBusy(false); }
   };
   const pm = new Map(state.people.map(p => [p.id, p]));
-  const n = d.add.length + d.update.length;
+  const n = d.add.length + d.update.length + (del ? d.removed.length : 0);
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${n ? 'Πέρασε ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
     <div className="tiles"><div className="tile tile--main"><span className="tile__n">${d.add.length}</span><span className="tile__l">Νέες</span></div><div className="tile"><span className="tile__n">${d.update.length}</span><span className="tile__l">Αλλάζουν</span></div>
@@ -276,10 +289,80 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
           ${c.r in choices ? html`<${Badge}>παραλείπεται<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//>`}</div>`}</div>`)}</div>`}
     ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid)?.last} ${pm.get(a.pid)?.first} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${dm(a.to)}</li>`)}</ul></details>`}
     ${d.update.length > 0 && html`<details className="note" open=${d.update.length <= 8}><summary>Αλλάζουν (${d.update.length})</summary><ul>${d.update.slice(0, 60).map(u => html`<li key=${u.id}>${u.who}: ${u.what}</li>`)}</ul></details>`}
+    ${d.removed.length > 0 && html`<div className="field"><span className="field__label">Σβήστηκαν από το Excel (${d.removed.length})</span><ul className="note" style=${{ margin: 0 }}>${d.removed.slice(0, 40).map(x => html`<li key=${x.id}>${pm.get(x.pid)?.last} ${pm.get(x.pid)?.first} · ${TYPES[x.type].label}${x.kind && x.kind !== TYPES[x.type].label ? ' (' + x.kind + ')' : ''} · ${dm(x.from)}–${dm(x.to)}</li>`)}</ul>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${del} onChange=${(e: any) => setDel(e.target.checked)}/><span><b>Σβήσε τες και από την εφαρμογή</b><small>Αλλιώς μένουν στην εφαρμογή και ξαναγράφονται στο Excel.</small></span></label></div>`}
     ${parsed.skipped.length > 0 && html`<details className="note"><summary>Παραλείπονται ${parsed.skipped.length} γραμμές</summary><ul>${parsed.skipped.map(x => html`<li key=${x.r}>Γραμμή ${x.r + 1} · ${x.who}: ${x.why}</li>`)}</ul></details>`}
     ${parsed.cands.some(c => c.noEnd) && html`<p className="note">Όσοι δεν έχουν «έως» μπαίνουν ως σήμερα· αλλάζει από την εφαρμογή.</p>`}
     ${d.appOnly.length > 0 && html`<p className="note">${d.appOnly.length} ${d.appOnly.length === 1 ? 'εγγραφή της εφαρμογής δεν είναι' : 'εγγραφές της εφαρμογής δεν είναι'} στο Excel. Δεν σβήνονται· ${b.write !== false ? 'γράφονται στο Excel μόνες τους μόλις περάσει η ανανέωση' : 'γράφονται στο Excel με την «Ενημέρωση Excel»'}.</p>`}
     ${d.dup.length > 0 && html`<p className="note">${d.dup.length === 1 ? '1 γραμμή είναι διπλή' : d.dup.length + ' γραμμές είναι διπλές'} (ίδιο άτομο, ίδια έναρξη) και κρατήθηκε η πρώτη.</p>`}
+  <//>`;
+}
+
+// Γραμμές που δεν ταίριαξαν με άτομο: ποιος είναι (ή παράλειψη)
+function Unmatched({ rows, choices, setChoices, detail }: { rows: SheetPerson[]; choices: Record<number, number | null>; setChoices: (c: Record<number, number | null>) => void; detail?: (r: SheetPerson) => string }) {
+  const { state } = useStore(); const pm = new Map(state.people.map(p => [p.id, p]));
+  if (!rows.length) return null;
+  return html`<div className="field"><span className="field__label">Δεν βρέθηκαν στην εφαρμογή: ποιος είναι;</span>
+    ${rows.map(c => html`<div key=${c.r} className="unm"><span><b>${c.who}</b><small>γραμμή ${c.r + 1}${detail ? ' · ' + detail(c) : ''}</small></span>
+      ${choices[c.r] != null ? html`<span>${pm.get(choices[c.r]!)?.last} ${pm.get(choices[c.r]!)?.first} <${Button} size="sm" variant="ghost" onClick=${() => { const x = { ...choices }; delete x[c.r]; setChoices(x); }}>Αλλαγή<//></span>`
+      : html`<div className="unm__pick">${c.cands.map(p => html`<${Button} key=${p.id} size="sm" variant="outline" onClick=${() => setChoices({ ...choices, [c.r]: p.id })}>${p.last} ${p.first}${p.father ? ' του ' + p.father : ''}<//>`)}
+        <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
+        <${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//></div>`}</div>`)}</div>`;
+}
+const Tiles = ({ items }: { items: [number, string][] }) => html`<div className="tiles">${items.map(([n, l], i) => html`<div key=${l} className=${cx('tile', i === 0 && 'tile--main')}><span className="tile__n">${n}</span><span className="tile__l">${l}</span></div>`)}</div>`;
+const List = ({ title, items, open }: { title: string; items: string[]; open?: boolean }) => (items.length ? html`<details className="note" open=${open ?? items.length <= 10}><summary>${title} (${items.length})</summary><ul>${items.slice(0, 150).map((t, i) => html`<li key=${i}>${t}</li>`)}</ul>${items.length > 150 && html`<p>… και ${items.length - 150} ακόμα</p>`}</details>` : null);
+const prevMonth = (today: string) => addDays(today.slice(0, 8) + '01', -1).slice(0, 7);
+
+// Πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών: τι διαβάζεται από αυτό το φύλλο, με τα δικά του νούμερα
+function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: SourceBook; b: SourceBinding; onClose: () => void }) {
+  const { state, today, refresh } = useStore(); const toast = useToast();
+  const [choices, setChoices] = useState<Record<number, number | null>>({});
+  const [busy, setBusy] = useState(false);
+  const sheet = book.sheets.find(x => x.name === b.sheet);
+  const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || prevMonth(today));
+  const res = useMemo(() => {
+    if (!sheet) return null;
+    if (list === 'posts' || list === 'outside') {
+      const p = (list === 'posts' ? planPosts : planOutside)(sheet, b, state, choices);
+      const cmd: Command = { t: 'setPeopleFields', changes: p.changes.map(c => ({ pid: c.pid, patch: c.patch })), source: book.name, what: KIND[list].label.toLowerCase() };
+      return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλάζουν'], [p.same, 'Ίδιοι'], [p.listed, 'Στο φύλλο'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
+        lists: [{ title: 'Τι αλλάζει', items: p.changes.map(c => c.who + ': ' + c.what) }], notes: [] as string[] };
+    }
+    if (list === 'caps') {
+      const p = planCaps(sheet, b, state, choices);
+      const cmd: Command = { t: 'importCaps', changes: p.changes.map(c => ({ pid: c.pid, kind: c.kind, reason: c.reason })), source: book.name };
+      const by = new Map<string, string[]>(); for (const c of p.changes) by.set(c.who, [...(by.get(c.who) || []), (c.reason ? 'δεν κάνει ' : 'κάνει ') + CAP_ACC[c.kind] + (c.reason && c.reason !== 'Από Excel' ? ' (' + c.reason.replace(/^Από Excel:\s*/, '') + ')' : '')]);
+      return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλαγές'], [p.listed, 'Στο φύλλο'], [p.same, 'Ίδιοι'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
+        lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
+    }
+    const p = planDuties(sheet, b, state, month, today, choices);
+    const cmd: Command = { t: 'importDuties', guards: p.guards, baseline: p.base, source: book.name };
+    const notes = [
+      p.busy.length ? 'Δεν περνούν ' + p.busy.length + (p.busy.length === 1 ? ' μέρα που έχει' : ' μέρες που έχουν') + ' ήδη υπηρεσίες στην εφαρμογή (' + p.busy.map(dm).join(', ') + '): εκεί κρατιέται ό,τι έχει η εφαρμογή και γράφεται στο Excel.' : '',
+      p.future ? p.future + (p.future === 1 ? ' μέρα είναι' : ' μέρες είναι') + ' μετά από σήμερα και δεν περνούν.' : '',
+      p.extra ? p.extra + ' υπηρεσίες δεν χωρούσαν στις θέσεις της μέρας και μετρούν στις «προηγούμενες υπηρεσίες» του καθενός.' : '',
+      p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '.' : ''
+    ].filter(Boolean);
+    const kinds = (Object.entries(p.byKind) as [DutyKind, number][]).map(([k, n]) => KIND_NAME[k] + ' ' + n);
+    return { sp: p.sp, n: p.entries, cmd, keep: p.extraCells, tiles: [[p.entries, 'Υπηρεσίες'], [p.days, 'Μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
+      lists: [{ title: 'Ανά είδος', items: kinds }], notes };
+  }, [sheet, list, b, state, choices, month, today, book.name]);
+  if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
+  const go = async () => {
+    setBusy(true);
+    try { const r = await window.api.srcApply(list, b, res.cmd, 'keep' in res ? res.keep : undefined); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
+    finally { setBusy(false); }
+  };
+  return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (list === 'duties' ? (res.n === 1 ? ' υπηρεσία' : ' υπηρεσίες') : res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
+    ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><input id="sd-m" type="month" className="ui-input" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
+    <${Tiles} items=${res.tiles}/>
+    ${!res.n && !res.sp.unmatched.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
+    <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
+    ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
+    ${res.notes.map(t => html`<p key=${t} className="note">${t}</p>`)}
+    ${res.sp.dup > 0 && html`<p className="note">${res.sp.dup === 1 ? '1 άτομο είναι' : res.sp.dup + ' άτομα είναι'} δύο φορές στο φύλλο· κρατήθηκε η πρώτη γραμμή.</p>`}
+    <p className="note">Από εκεί και πέρα ό,τι αλλάζεις στην εφαρμογή γράφεται και σε αυτό το φύλλο${b.write === false ? ' με την «Ενημέρωση Excel»' : ''}.</p>
   <//>`;
 }
 
@@ -320,8 +403,10 @@ export function RosterPreview({ pv, onDone, onCancel }: { pv: ImportPreview; onD
   };
   return html`<div style=${{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
     <div><span className="plan__fn">${pv.file}</span>${pv.essos && html` <${Badge} tone="info">ΕΣΣΟ ${pv.essos}<//>`}</div>
-    <div className="tiles"><div className="tile tile--main"><span className="tile__n">${pv.active}</span><span className="tile__l">Σε δύναμη</span></div><div className="tile"><span className="tile__n">${pv.added}</span><span className="tile__l">Νέοι</span></div><div className="tile"><span className="tile__n">${pv.updated}</span><span className="tile__l">Ενημερώνονται</span></div><div className="tile"><span className="tile__n">${pv.total - pv.active}</span><span className="tile__l">Εκτός δύναμης</span></div></div>
+    <div className="tiles"><div className="tile tile--main"><span className="tile__n">${pv.active}</span><span className="tile__l">Σε δύναμη</span></div><div className="tile"><span className="tile__n">${pv.added}</span><span className="tile__l">Νέοι</span></div><div className="tile"><span className="tile__n">${pv.changes.length}</span><span className="tile__l">Αλλάζουν</span></div><div className="tile"><span className="tile__n">${pv.same}</span><span className="tile__l">Ίδιοι</span></div><div className="tile"><span className="tile__n">${pv.total - pv.active}</span><span className="tile__l">Εκτός δύναμης</span></div></div>
     ${pv.declared != null && pv.declared === pv.found && html`<${Alert} tone="ok"><span>✓ Το Δυναμολόγιο γράφει <b>ΣΥΝΟΛΟ ${pv.declared}</b> και βρέθηκαν <b>${pv.found}</b> άτομα. Ταιριάζουν.</span><//>`}
+    ${pv.changes.length > 0 && html`<details className="note" open=${pv.changes.length <= 12}><summary>Τι αλλάζει (${pv.changes.length})</summary><ul>${pv.changes.slice(0, 120).map((c, i) => html`<li key=${i}><b>${c.who}</b>: ${c.what}</li>`)}</ul>${pv.changes.length > 120 && html`<p>… και ${pv.changes.length - 120} ακόμα</p>`}</details>`}
+    ${!pv.changes.length && !pv.added && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει το Excel για όσους υπάρχουν.</span><//>`}
     ${pv.warnings.map(w => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
     ${pv.skipped.length > 0 && html`<details className="note"><summary>Αγνοήθηκαν ${pv.skipped.length} γραμμές που δεν είναι άτομα (σύνολα, επικεφαλίδες)</summary><p>${[...new Set(pv.skipped)].join(' · ')}</p></details>`}
     ${pv.suspicious.length > 0 && html`<${Alert} tone="warn"><span>${pv.suspicious.length} γραμμές δεν έχουν ούτε ΑΣΜ, ούτε τηλέφωνο, ούτε θάλαμο. Είναι σίγουρα άτομα; ${pv.suspicious.slice(0, 12).join(' · ')}${pv.suspicious.length > 12 ? ' …' : ''}</span><//>`}
