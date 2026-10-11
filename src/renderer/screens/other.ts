@@ -37,7 +37,7 @@ export function TodayScreen() {
   const nRec = state.statuses.filter(s => s.from <= today && s.to >= today && RECORD_CATS.includes(TYPES[s.type].cat)).length;
   const endTxt = (s: Status) => { const t = TYPES[s.type]; return t.cat === 'abs' ? 'Αναμένεται επιστροφή' : t.noDuty ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'Από αύριο ξαναμπαίνει και σε ένοπλες θέσεις' : 'Από αύριο μπορεί να βγει έξοδο'; };
   const what = (s: Status) => (s.type === 'PUN' ? 'ποινή (' + (s.kind || '').toLowerCase() + ')' : TYPES[s.type].label);
-  if (!c.total) return html`<div className="onboard"><${Card} title="Καλώς ήρθες στο Γραφείο Ίλης">
+  if (!c.total) return html`<div className="onboard"><${Card} title="Καλώς ήρθες στο Γραφείο Λοχία">
     <p style=${{ marginTop: 0 }}>Για να ξεκινήσεις χρειάζεται το προσωπικό της Ίλης. Πάρ' το από το Δυναμολόγιο (το αρχείο .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»).</p>
     <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ΗΚΑΙ.</li></ol>
     <${Button} onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>

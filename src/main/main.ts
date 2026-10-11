@@ -28,6 +28,8 @@ const BUNDLED = DEV ? process.cwd() : path.join(process.resourcesPath, 'app');
 function writableDir(dir: string): boolean {
   try { fs.mkdirSync(dir, { recursive: true }); const t = path.join(dir, '.w'); fs.writeFileSync(t, ''); fs.unlinkSync(t); return true; } catch { return false; }
 }
+// Το όνομα άλλαξε σε «Γραφείο Λοχία» (11/10). Το προφίλ μένει στον παλιό φάκελο για να βρίσκει τα δεδομένα και τις προτιμήσεις.
+app.setPath('userData', path.join(app.getPath('appData'), 'Γραφείο Ίλης'));
 const DATA = writableDir(path.join(ROOT, 'data')) ? path.join(ROOT, 'data') : path.join(app.getPath('userData'), 'data');
 const BACKUPS = path.join(DATA, 'backups');
 const T0 = Date.now();
@@ -414,7 +416,7 @@ function lockdown() {
 async function recover(reason: string): Promise<boolean> {
   const good = listBackups(BACKUPS).find(b => !store.validate(path.join(BACKUPS, b.name)));
   if (!good) return false;
-  const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Ίλης', noLink: true, buttons: ['Επαναφορά', 'Έξοδος'], defaultId: 0, cancelId: 1,
+  const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Λοχία', noLink: true, buttons: ['Επαναφορά', 'Έξοδος'], defaultId: 0, cancelId: 1,
     message: 'Η βάση δεδομένων φαίνεται χαλασμένη.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΕπαναφορά από το αντίγραφο ' + good.name + ';\nΗ χαλασμένη βάση θα κρατηθεί στον φάκελο backups.' });
   if (r.response !== 0) return false;
   const db = path.join(DATA, 'ilh.db');
@@ -429,7 +431,7 @@ async function recover(reason: string): Promise<boolean> {
 function createWindow() {
   const icon = path.join(__dirname, '..', 'renderer', 'icon.png');   // λογότυπο στη γραμμή εργασιών (στο dev μπορεί να λείπει)
   win = new BrowserWindow({
-    width: 1280, height: 820, minWidth: 980, minHeight: 600, show: false, title: 'Γραφείο Ίλης', backgroundColor: '#f4f5f0',
+    width: 1280, height: 820, minWidth: 980, minHeight: 600, show: false, title: 'Γραφείο Λοχία', backgroundColor: '#f4f5f0',
     ...(fs.existsSync(icon) ? { icon } : {}),
     webPreferences: { preload: path.join(__dirname, '..', 'preload', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
@@ -452,7 +454,7 @@ else {
     try { await store.open(); }
     catch (e) {
       if (!(e instanceof CorruptDbError) || !(await recover(String(e.message)))) {
-        dialog.showErrorBox('Γραφείο Ίλης', 'Δεν άνοιξε η βάση δεδομένων:\n' + String(e) + '\n\nΦάκελος: ' + DATA); app.quit(); return;
+        dialog.showErrorBox('Γραφείο Λοχία', 'Δεν άνοιξε η βάση δεδομένων:\n' + String(e) + '\n\nΦάκελος: ' + DATA); app.quit(); return;
       }
     }
     daily(); setInterval(daily, 10 * 60 * 1000);

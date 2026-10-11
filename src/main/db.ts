@@ -92,7 +92,7 @@ export class Store {
       try {
         const bad = quickCheck(db); if (bad) return bad;
         const t = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('person','status','guard','kv','audit')");
-        return Number(t[0].values[0][0]) === 5 ? null : 'Δεν είναι βάση του Γραφείου Ίλης';
+        return Number(t[0].values[0][0]) === 5 ? null : 'Δεν είναι βάση του Γραφείου Λοχία';
       } finally { db.close(); }
     } catch (e) { return String(e instanceof Error ? e.message : e); }
   }

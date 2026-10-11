@@ -72,7 +72,7 @@ fs.cpSync('dist', path.join(app, 'dist'), { recursive: true });
 fs.cpSync('templates', path.join(app, 'templates'), { recursive: true });
 
 fs.writeFileSync(path.join(OUT, 'ΔΙΑΒΑΣΕ ΜΕ.txt'), [
-  'Γραφείο Ίλης ' + pkg.version,
+  'Γραφείο Λοχία ' + pkg.version,
   '',
   'Εκκίνηση: διπλό κλικ στο GrafeioIlis.exe. Δεν χρειάζεται internet ούτε εγκατάσταση.',
   'Δεδομένα: φάκελος data\\ δίπλα στο exe (αντίγραφα ασφαλείας στο data\\backups\\).',
