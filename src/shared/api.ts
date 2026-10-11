@@ -22,7 +22,7 @@ export interface Diag { startupMs: number; procs: { type: string; kb: number; cp
 export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[]; changes: { who: string; what: string }[]; same: number }
 
 // Αρχεία Excel: ένα βιβλίο όπως το βλέπει η αντιστοίχιση (τιμές κελιών και πίνακες που αναγνωρίστηκαν)
-export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[] }
+export interface SourceBook { ok: true; file: string; name: string; mtime: number; size: number; sheets: RawSheet[]; hits: TableHit[]; binding?: SourceBinding }   // binding: η αντιστοίχιση του είδους, αν ακολούθησε στήλες που μετακινήθηκαν
 export type Fail = { ok: false; error: string; locked?: boolean };
 // Κατάσταση κάθε είδους: αν βρίσκεται το αρχείο, αν άλλαξε εκτός εφαρμογής, αν περιμένει εγγραφή (π.χ. ήταν ανοιχτό)
 export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean }

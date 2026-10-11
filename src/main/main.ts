@@ -11,9 +11,9 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, readBook, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
+import { SourceMetaStore, OldFormatError, bookNow, readBook, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, STATUS_KINDS, bestFor, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { FORM_KINDS, KIND, KINDS, STATUS_KINDS, bestFor, refitCols, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -249,13 +249,21 @@ async function bookOf(file: string): Promise<SourceBook> {
   return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: r.sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000) })), hits: detectTables(r.sheets) };
 }
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
+// Αν άλλαξαν θέση οι στήλες στο Excel (π.χ. μπήκε νέα στήλη «ΔΝ»), η αντιστοίχιση ακολουθεί πριν διαβάσει ή γράψει
+async function fitBinding(kind: ListKind): Promise<SourceBinding | undefined> {
+  const b = bindingOf(kind); if (!b) return b;
+  let book; try { book = await bookNow(b.file); } catch { return b; }
+  const nb = book ? refitCols(kind, sheetOf(book.sheets, b.sheet), b) : b;
+  if (nb !== b) saveBinding(kind, nb);
+  return nb;
+}
 function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; created: boolean }, b: SourceBinding) {
   const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν'].filter(Boolean).join(', ');
   return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
 async function syncOut(kind: ListKind, auto: boolean): Promise<{ ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean }> {
-  const b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
+  const b = await fitBinding(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
   const m = srcMeta.get(kind);
   if (auto) {
     if (b.write === false || !m?.at) return { ok: true, text: '', file: b.file, unchanged: true };
@@ -305,6 +313,7 @@ const pending = new Map<string, { rows: ImportRow[]; file: string; binding: Sour
 async function rosterPreview(file: string, b: SourceBinding | null): Promise<ImportPreview | { ok: false; error: string }> {
   try {
     const book = await readBook(file);
+    if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
     const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) });
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
@@ -330,7 +339,7 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
   if (!p.binding || !p.sheet) return;
   const cur = bindingOf('people');
   if (cur && path.resolve(cur.file) !== path.resolve(p.file)) return;
-  if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
+  if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header || JSON.stringify(cur.cols) !== JSON.stringify(p.binding.cols)) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
   srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false });
   // πόστα και εκτός δύναμης του ίδιου αρχείου διαβάστηκαν μαζί
   const linked = (['posts', 'outside'] as ListKind[]).filter(k => { const x = bindingOf(k); return x && path.resolve(x.file) === path.resolve(p.file); });
@@ -386,7 +395,7 @@ function saveBinding(kind: ListKind, b: SourceBinding | null) {
   if (!b || !cur || path.resolve(cur.file) !== path.resolve(b.file) || cur.sheet !== b.sheet || cur.header !== b.header) srcMeta.set(kind, null);
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
-  const b = bindingOf(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
+  const b = await fitBinding(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
   try {
     const exists = fs.existsSync(b.file);
     const book = exists ? await readBook(b.file) : null;
@@ -523,7 +532,7 @@ else {
       const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel'); if (!file) return null;
       try { return await bookOf(file); } catch (e) { return fail(e instanceof OldFormatError ? e.message : e); }
     });
-    ipcMain.handle('src:read', async (_e, kind: ListKind) => { const b = bindingOf(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); try { return await bookOf(b.file); } catch (e) { return fail(e); } });
+    ipcMain.handle('src:read', async (_e, kind: ListKind) => { const b = await fitBinding(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); try { return { ...(await bookOf(b.file)), binding: b }; } catch (e) { return fail(e); } });
     ipcMain.handle('src:save', async (_e, kind: ListKind, b: SourceBinding | null) => {
       try {
         saveBinding(kind, b);

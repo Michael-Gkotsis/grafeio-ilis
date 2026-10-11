@@ -65,14 +65,14 @@ export function SourcesView() {
   };
   const edit = async (kind: ListKind) => {
     const r = await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
-    setLayer({ kind: 'map', list: kind, book: r, b: sources[kind] });
+    setLayer({ kind: 'map', list: kind, book: r, b: r.binding || sources[kind] });
   };
   // fresh: η αντιστοίχιση που μόλις αποθηκεύτηκε (το «sources» αυτής της απόδοσης έχει ακόμα την παλιά)
   const read = async (kind: ListKind, fresh?: SourceBinding, book?: SourceBook) => {
     const b = fresh || sources[kind]; if (!b) return;
     if (kind === 'people') { const r = await window.api.srcPeople(b); if (!r.ok) { toast({ text: r.error }); return; } setLayer({ kind: 'people', pv: r }); return; }
     const r = book || await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
-    setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b });
+    setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b: (!fresh && r.binding) || b });
   };
   const newFile = async (kind: StatusKind) => {
     const r = await window.api.srcNewFile(kind); if (!r) return;
