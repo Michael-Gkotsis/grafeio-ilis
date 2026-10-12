@@ -2,7 +2,8 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChangePlanList, DateRangeField, PersonPicker, StatusBadge } from '../common';
+import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge } from '../common';
+import { SOLDIER_RANKS, SPECS, optionsOf } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, PUN_KINDS, LEAVE_KINDS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, effects, fullName, shortName, unitOf, roomTxt, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChange, postBy, postsOf, statusesOn } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
@@ -207,12 +208,14 @@ export function BaselineReviewDialog({ onClose }: P) {
 }
 
 function EditPersonDialog({ p, onClose }: P) {
-  const { run } = useStore(); const toast = useToast();
+  const { run, state } = useStore(); const toast = useToast();
+  const ranks = useMemo(() => optionsOf(SOLDIER_RANKS, state.people.map((y: Person) => y.rank)), [state.people]);
+  const specs = useMemo(() => optionsOf(SPECS, state.people.map((y: Person) => y.spec)), [state.people]);
   const [x, setX] = useState<Person>({ ...p });
   const F = (k: keyof Person, label: string, opts: P = {}) => html`<div className="field"><label className="field__label" htmlFor=${'ep-' + k}>${label}</label><input id=${'ep-' + k} className="ui-input" type=${opts.type || 'text'} value=${(x as any)[k] ?? ''} onChange=${(e: any) => setX({ ...x, [k]: opts.num ? (e.target.value ? Number(e.target.value) : null) : opts.nullable ? (e.target.value || null) : e.target.value })}/></div>`;
   return html`<${Dialog} title="Διόρθωση στοιχείων" description="Αλλάζει μόνο στην εφαρμογή. Στην επόμενη εισαγωγή Δυναμολογίου θα πάρει τις τιμές του αρχείου." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'updatePerson', person: x }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + shortName(x) }); } }}>Αποθήκευση<//>`}>
-    <div className="field-row">${F('rank', 'Βαθμός')}${F('spec', 'Ειδικότητα')}</div>
+    <div className="field-row"><${ChoiceField} id="ep-rank" label="Βαθμός" value=${x.rank} options=${ranks} placeholder="π.χ. ΣΤΡ" onChange=${(v: string) => setX({ ...x, rank: v })}/><${ChoiceField} id="ep-spec" label="Ο/Σ (όπλο/σώμα)" value=${x.spec} options=${specs} placeholder="π.χ. ΠΖ" onChange=${(v: string) => setX({ ...x, spec: v })}/></div>
     <div className="field-row">${F('last', 'Επώνυμο')}${F('first', 'Όνομα')}${F('father', 'Πατρώνυμο')}</div>
     <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}${F('room', 'Θάλαμος', { type: 'number', num: true })}</div>
     <div className="field-row">${F('si', 'Σ.Ι.')}${F('post', 'Πόστο', { nullable: true })}${F('role', 'Ρόλος', { nullable: true })}</div>
