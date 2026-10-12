@@ -179,6 +179,35 @@ describe('προσθήκη γραμμών και τύποι (Μ3)', () => {
     const z2 = await JSZip.loadAsync(out); const lx2 = await z2.file(listPath)!.async('string');
     expect(lx2).toContain('<autoFilter ref="A1:B7"'); expect(lx2).toContain('<hyperlink ref="B7"');
   });
+  it('πίνακας του Excel πιο κάτω από τις νέες γραμμές κατεβαίνει ολόκληρος, αυτός που τις περιέχει μεγαλώνει', async () => {
+    const wb = await Workbook.blank('ΛΙΣΤΑ'); const a = await wb.sheet('ΛΙΣΤΑ');
+    for (let r = 1; r <= 10; r++) a.set('B' + r, r);
+    const JSZip = (await import('jszip')).default; const z = await JSZip.loadAsync(await wb.save());
+    const sp = Object.keys(z.files).find(f => /worksheets\/[^/]+\.xml$/.test(f))!;
+    z.file(sp.replace(/([^/]+)$/, '_rels/$1.rels'), '<Relationships><Relationship Id="rId1" Target="../tables/table1.xml"/><Relationship Id="rId2" Target="../tables/table2.xml"/></Relationships>');
+    z.file('xl/tables/table1.xml', '<table id="1" ref="A1:B5"><autoFilter ref="A1:B5"/></table>');
+    z.file('xl/tables/table2.xml', '<table id="2" ref="A8:B10"><autoFilter ref="A8:B10"/></table>');
+    const w2 = await Workbook.open(await z.generateAsync({ type: 'nodebuffer' }));
+    (await w2.sheet('ΛΙΣΤΑ')).insertRows(3, 2, 3, w2);
+    const z2 = await JSZip.loadAsync(await w2.save());
+    expect(await z2.file('xl/tables/table1.xml')!.async('string')).toBe('<table id="1" ref="A1:B7"><autoFilter ref="A1:B7"/></table>');
+    expect(await z2.file('xl/tables/table2.xml')!.async('string')).toBe('<table id="2" ref="A10:B12"><autoFilter ref="A10:B12"/></table>');
+  });
+  it('ημερομηνίες σε κάθε εγγραφή: το ίδιο στυλ ημερομηνίας ξαναχρησιμοποιείται, το styles.xml δεν μεγαλώνει', async () => {
+    let buf = await (await Workbook.blank('Α')).save(); const idx: number[] = []; const xfs: number[] = [];
+    const JSZip = (await import('jszip')).default;
+    for (let i = 0; i < 3; i++) {
+      const wb = await Workbook.open(buf); const ws = await wb.sheet('Α');
+      const st = await wb.dateStyle(1); idx.push(st); ws.setNumber('C' + (i + 1), 46000 + i, st);
+      buf = await wb.save();
+      const sx = await (await JSZip.loadAsync(buf)).file('xl/styles.xml')!.async('string');
+      xfs.push(Number(/<cellXfs count="(\d+)"/.exec(sx)![1]));
+    }
+    expect(new Set(idx).size).toBe(1); expect(new Set(xfs).size).toBe(1);
+    const f = path.join(tmp(), 'd.xlsx'); fs.writeFileSync(f, buf);
+    const sh = (await readBook(f)).sheets[0];
+    expect(sh.rows[2][2]).toBeInstanceOf(Date);
+  });
 });
 
 describe('θάλαμοι (Μ4) και μήνας ελέγχου υπηρεσιών (Σ4)', () => {

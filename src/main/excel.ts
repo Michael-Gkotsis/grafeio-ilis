@@ -18,6 +18,9 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
     for (const k in g) { const p = postBy(s, k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); }
   }
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
+  // Σταθερή ημερομηνία στις ιδιότητες του αρχείου: με τα ίδια δεδομένα βγαίνει το ίδιο αρχείο, οπότε η αυτόματη
+  // ενημέρωση δεν το ξαναγράφει σε κάθε αλλαγή της εφαρμογής (αλλιώς άλλαζε μόνο το docProps/core.xml)
+  wb.created = wb.modified = new Date(Date.UTC(y, m - 1, 1));
   const ws = wb.addWorksheet('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
     views: [{ state: 'frozen', xSplit: 4, ySplit: 3 }]

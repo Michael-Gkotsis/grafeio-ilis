@@ -282,6 +282,9 @@ export class Workbook {
     const open = src.slice(0, src.indexOf('>') + 1).replace(/\/>$/, '>').replace(/>$/, '');
     const rest = src.endsWith('/>') ? '/>' : src.slice(src.indexOf('>'));
     const xf = setAttr(setAttr(open, 'numFmtId', '14'), 'applyNumberFormat', '1') + rest;
+    // το ίδιο στυλ το έφτιαξε ήδη προηγούμενη εγγραφή: ξαναχρησιμοποιείται, αλλιώς το styles.xml μεγάλωνε σε κάθε εγγραφή
+    const had = all.indexOf(xf);
+    if (had >= 0) { st.made.set(b, had); return had; }
     const idx = all.length;
     st.xml = st.xml.replace(m[0], setAttr(m[1].slice(0, -1), 'count', String(idx + 1)) + '>' + m[2] + xf + m[3]);
     st.fmt.push(14); st.made.set(b, idx); st.dirty = true;
@@ -369,15 +372,16 @@ export class Workbook {
     }
     for (const [path, s] of this.sheets) this.zip.file(path, s.toXml());
     if (this.styles?.dirty) this.zip.file('xl/styles.xml', this.styles.xml);
-    // πίνακες: η περιοχή τους μεγαλώνει
+    // πίνακες: όσοι περιέχουν τη γραμμή μεγαλώνουν, όσοι είναι πιο κάτω κατεβαίνουν ολόκληροι
     for (const ed of this.tableEdits) {
       const relPath = ed.path.replace(/([^/]+)$/, '_rels/$1.rels');
       const rel = this.zip.file(relPath); if (!rel) continue;
       for (const m of (await rel.async('string')).matchAll(/Target="(?:\.\.\/|\/xl\/)tables\/([^"]+)"/g)) {
         const tp = 'xl/tables/' + m[1]; const f = this.zip.file(tp); if (!f) continue;
         const x = (await f.async('string')).replace(/\sref="([^"]+)"/g, (_m2, r: string) => {
-          const [a, b] = r.split(':'); const rb = splitRef(b).r;
-          return ` ref="${a}:${b.replace(/\d+$/, String(rb >= ed.after ? rb + ed.n : rb))}"`;
+          const [a, b] = r.split(':'); if (!b) return _m2;
+          const ra = splitRef(a).r, rb = splitRef(b).r;
+          return ` ref="${a.replace(/\d+$/, String(ra > ed.after ? ra + ed.n : ra))}:${b.replace(/\d+$/, String(rb >= ed.after ? rb + ed.n : rb))}"`;
         }).replace(/<sortState[\s\S]*?<\/sortState>/, '');
         this.zip.file(tp, x);
       }

@@ -30,13 +30,16 @@ export class SourceMetaStore {
 }
 export const stamp = (file: string): { mtime: number; size: number } | null => { try { const st = fs.statSync(file); return { mtime: Math.round(st.mtimeMs), size: st.size }; } catch { return null; } };
 
+// Πόσες στήλες διαβάζουμε από κάθε φύλλο: ο έλεγχος υπηρεσιών έχει 12 στήλες στοιχείων + 31 μέρες (ως AQ)
+export const MAX_COLS = 64;
+
 // Αποτύπωμα των τιμών ενός Excel (όχι των bytes): το ίδιο αν ο χρήστης απλώς το άνοιξε και πάτησε «Αποθήκευση».
 // Τα κελιά με τύπο δεν μετράνε, γιατί το Excel τα ξαναϋπολογίζει.
 export async function valuesHash(buf: Buffer | Uint8Array): Promise<string> {
   const wb = await Workbook.open(buf); const h = crypto.createHash('sha1');
   for (const name of wb.sheetNames()) {
     const fx = new Set<string>(); let rows: unknown[][];
-    try { rows = await wb.values(name, 2000, 64, fx); } catch { continue; }
+    try { rows = await wb.values(name, 2000, MAX_COLS, fx); } catch { continue; }
     h.update(name + '\u0001');
     rows.forEach((row, r) => (row || []).forEach((v, c) => { if (v == null || fx.has(r + ':' + c)) return; h.update(r + ':' + c + '=' + (v instanceof Date ? v.toISOString().slice(0, 10) : String(v)) + '\u0002'); }));
   }
@@ -44,7 +47,7 @@ export async function valuesHash(buf: Buffer | Uint8Array): Promise<string> {
 }
 
 export class OldFormatError extends Error {}
-export async function readBook(file: string, maxRows = 2000, maxCols = 64): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
+export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
   if (/\.xls$/i.test(file)) throw new OldFormatError('Το «' + path.basename(file) + '» είναι παλιό .xls. Άνοιξέ το στο Excel και κάνε «Αποθήκευση ως» .xlsx (ή .xlsm αν έχει μακροεντολές).');
   const buf = await fs.promises.readFile(file);
   const st = fs.statSync(file);
@@ -104,7 +107,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
     const had = wb.hasSheet(b.sheet);
     const ws = had ? await wb.sheet(b.sheet) : await wb.addSheet(b.sheet);
-    const sheet: RawSheet = { name: b.sheet, rows: had ? await wb.values(b.sheet) : [] };
+    const sheet: RawSheet = { name: b.sheet, rows: had ? await wb.values(b.sheet, 2000, MAX_COLS) : [] };
     const ref = (r: number, c: number) => colName(c + 1) + (r + 1);
     const put = async (r: number, c: number, v: WVal, plain?: number) => {
       const at = ref(r, c);
