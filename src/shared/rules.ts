@@ -285,10 +285,14 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     if (!idx.has(f)) idx.set(f, new Set()); idx.get(f)!.add(date);
   }
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
-  for (const x of posts) {
+  // «Αυστηρά Άοπλοι»: πρώτα οι θέσεις όπου μπαίνουν οι άοπλοι (μαγειρεία, 2ο-3ο, 1ο-4ο νούμερο), μετά όλες οι άλλες
+  const strict = !!s.rules.strictUnarmed;
+  const order = strict ? [...posts].sort((a, b) => strictTier(a) - strictTier(b)) : posts;
+  for (const x of order) {
     if (g[x.k]) continue;
-    const cand = candidates(work, date, x, people, fair, idx, fixed, memo)[0];
-    if (!cand) { empty.push(x.k); continue; }
+    const list = candidates(work, date, x, people, fair, idx, fixed, memo);
+    const cand = strict ? strictPick(work, date, x, list, people, idx, fixed, memo) : list[0];
+    if (!cand) { empty.push(x.k); if (strict && x.kind === 'sk' && list.length) warn.push(x.label + ': ' + STRICT_SK); continue; }
     const lr = lastResort(s.statuses, date, cand.id, x); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
@@ -296,6 +300,37 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   }
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
 }
+// --------------------------- «Αυστηρά Άοπλοι» (λοχίας, 11/10· κλείνει/ανοίγει στους Κανόνες) ---------------------------
+// Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. Ι3 ΑΟΠΛΟ ή Ι4, ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
+export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
+  if (statusesOn(s.statuses, pid, date).some(x => TYPES[x.type].noArmed)) return true;
+  const p = personMap(s.people).get(pid); if (!p) return false;
+  const si = normGreek(p.si); if (si.includes('ΑΟΠΛ') || si.startsWith('Ι4')) return true;
+  const kinds = [...new Set(postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly').map(x => x.kind))];
+  const c = s.caps[pid] || {};
+  return kinds.length > 0 && kinds.every(k => !!c[k]);
+}
+// 1 μαγειρεία · 2 θαλαμοφύλακας (και άοπλος οπλοφύλακας) 2ο-3ο νούμερο · 3 το ίδιο 1ο-4ο · 4 όλες οι άλλες
+export function strictTier(x: Post): number {
+  if (x.kind === 'mg') return 1;
+  if ((x.kind === 'th' || (x.kind === 'op' && !x.armed)) && x.rot != null) return x.rot === 1 || x.rot === 2 ? 2 : 3;
+  return 4;
+}
+export const STRICT_SK = 'Αυστηρά Άοπλοι: σκοπιά μόνο ένοπλοι';
+const TIER_TXT: Record<number, string> = { 1: 'μαγειρεία', 2: '2ο-3ο νούμερο', 3: '1ο-4ο νούμερο' };
+// Η σειρά με «Αυστηρά Άοπλοι»: σε θέση 1-3 πρώτα οι άοπλοι (με τη σειρά δικαιοσύνης μεταξύ τους), αλλιώς η κανονική σειρά.
+// Άοπλος που χρειάζεται για να γεμίσει ένοπλη θέση της μέρας (π.χ. ΤΑΕ) δεν παίρνει προτεραιότητα, ώστε να μη μείνει κενή.
+// Σε σκοπιά κανένας άοπλος, ούτε ως τελευταία λύση.
+function strictOrder(s: AppState, date: ISODate, x: Post, list: Person[], people: Person[], idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person[] {
+  if (x.kind === 'sk') return list.filter(p => !isUnarmed(s, date, p.id));
+  if (strictTier(x) > 3) return list;
+  const need = armedLeft(s, date, x.k);
+  const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
+  const first = list.filter(p => isUnarmed(s, date, p.id) && !keep?.has(p.id));
+  return [...first, ...list.filter(p => !first.includes(p))];
+}
+const strictPick = (s: AppState, date: ISODate, x: Post, list: Person[], people: Person[], idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person | undefined =>
+  strictOrder(s, date, x, list, people, idx, fixed, memo)[0];
 // Όσοι επιτρέπονται σε μια θέση, με τη σειρά που θα τους διάλεγε η αυτόματη συμπλήρωση
 function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person[] {
   const h = isHol(s.settings, date);
@@ -351,7 +386,8 @@ export function nextFor(s: AppState, date: ISODate, k: string, skip: number[]): 
   const people = activePeople(s);
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
   const idx = new Map<number, Set<ISODate>>(); dutyIndex(work.guards).forEach((v, id) => idx.set(id, v));
-  return candidates(work, date, x, people, fair, idx, fixedIds(s)).find(p => !skip.includes(p.id))?.id ?? null;
+  const list = candidates(work, date, x, people, fair, idx, fixedIds(s));
+  return (s.rules.strictUnarmed ? strictOrder(work, date, x, list, people, idx, fixedIds(s)) : list).find(p => !skip.includes(p.id))?.id ?? null;
 }
 // Ανταλλαγή δύο ατόμων που έχουν ήδη υπηρεσία την ίδια μέρα: τι εμποδίζει τον καθένα στη θέση του άλλου
 export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { hard: string | null; soft: string | null } {
@@ -391,6 +427,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
   if (post.armed) parts.push('ένοπλος');
+  if (s.rules.strictUnarmed && strictTier(post) <= 3 && isUnarmed(s, date, pid)) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + TIER_TXT[strictTier(post)]);
   return parts.join(' · ');
 }
 
