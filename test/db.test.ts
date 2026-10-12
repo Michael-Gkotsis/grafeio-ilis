@@ -6,6 +6,8 @@ import path from 'path';
 import { Store, CorruptDbError } from '../src/main/db';
 import { apply } from '../src/shared/commands';
 import { fakePeople } from './fixtures';
+import { writeDurable, writeJson } from '../src/main/files';
+import initSqlJs from 'sql.js';
 
 const WASM = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
 const ctx = { today: '2026-10-12', newId: () => Math.random().toString(36).slice(2) };
@@ -35,5 +37,60 @@ describe('βάση δεδομένων', () => {
     await expect(bad.open()).rejects.toBeInstanceOf(CorruptDbError);
     expect(bad.validate(bk)).toBeNull();
     expect(bad.validate(file)).toBeTruthy();
+  });
+  it('άδειο αρχείο (0 bytes) ή βάση χωρίς τους πίνακές μας: χαλασμένη, όχι νέα κενή βάση', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
+    const file = path.join(dir, 'ilh.db');
+    fs.writeFileSync(file, Buffer.alloc(0));
+    const err = await new Store(dir, WASM).open().catch(e => e);
+    expect(err).toBeInstanceOf(CorruptDbError); expect(err.empty).toBe(true);
+    expect(fs.statSync(file).size).toBe(0);                    // δεν γράφτηκε τίποτα από πάνω
+    expect(fs.existsSync(path.join(dir, 'backups'))).toBe(false);   // ούτε «αντίγραφο» του άδειου
+    const SQL = await initSqlJs({ locateFile: () => WASM }); const other = new SQL.Database(); other.run('CREATE TABLE x (a)');
+    fs.writeFileSync(file, Buffer.from(other.export()));
+    const err2 = await new Store(dir, WASM).open().catch(e => e);
+    expect(err2).toBeInstanceOf(CorruptDbError); expect(err2.empty).toBe(true);
+    // ένα άδειο αντίγραφο δεν περνά τον έλεγχο της επαναφοράς
+    const st = new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-')), WASM); await st.open();
+    const empty = path.join(dir, 'empty.db'); fs.writeFileSync(empty, Buffer.alloc(0));
+    expect(st.validate(empty)).toBeTruthy();
+    st.close();
+  });
+  it('η αναίρεση κρατά στοιχεία μόνο για τις 50 τελευταίες ενέργειες· οι παλιές σβήνονται και η βάση μικραίνει', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
+    let st = new Store(dir, WASM); await st.open();
+    st.commit(apply(st.state, { t: 'importPeople', rows: fakePeople(5).map(({ id, active, ...p }) => p), source: 't', deactivateMissing: false }, ctx).state);
+    const big = 'Χ'.repeat(4000);
+    const save = (i: number) => {
+      const r = apply(st.state, { t: 'setHkaiManual', date: '2026-10-' + String(1 + (i % 28)).padStart(2, '0'), manual: { cells: {}, text: { loi: big + i } } }, ctx);
+      st.addAudit({ at: '10:00', day: '2026-10-12', text: r.text, files: [], source: 'app', undoable: true }, st.commit(r.state), false);
+    };
+    for (let i = 0; i < 120; i++) save(i);
+    st.flush();
+    const count = (s: Store) => (s as any).db.exec('SELECT count(*) FROM audit WHERE patch IS NOT NULL')[0].values[0][0];
+    expect(count(st)).toBe(50);
+    // η αναίρεση δουλεύει όπως πριν: η τελευταία ενέργεια
+    const last = st.lastUndoable()!; expect(last.text).toContain('ΗΚΑΙ');
+    st.revert(last.patch); st.markUndone(last.id);
+    expect(st.state.hkaiManual['2026-10-08'].text.loi).toBe(big + 91);
+    st.close();
+    // βάση από παλιότερη έκδοση: όλες οι γραμμές με στοιχεία αναίρεσης. Στο άνοιγμα καθαρίζονται μία φορά και μικραίνει.
+    const SQL = await initSqlJs({ locateFile: () => WASM }); const db = new SQL.Database(fs.readFileSync(path.join(dir, 'ilh.db')));
+    const patch = JSON.stringify({ person: { put: [], del: [] }, status: { put: [], del: [] }, guard: { put: [], del: [] }, cap: { put: [], del: [] }, kv: { put: [['hkaiManual', { x: big.repeat(5) }]], del: [] } });
+    for (let i = 0; i < 200; i++) db.run("INSERT INTO audit (at, day, text, files, source, patch, undoable) VALUES ('09:00', '2026-10-01', 'παλιά', '[]', 'app', ?, 1)", [patch]);
+    fs.writeFileSync(path.join(dir, 'ilh.db'), Buffer.from(db.export()));
+    const before = fs.statSync(path.join(dir, 'ilh.db')).size;
+    st = new Store(dir, WASM); await st.open();
+    expect(count(st)).toBe(50);
+    expect(fs.statSync(path.join(dir, 'ilh.db')).size).toBeLessThan(before / 3);
+    expect(st.state.people).toHaveLength(5);
+    st.close();
+  });
+  it('ασφαλής εγγραφή: γράφει όλο το αρχείο και δεν αφήνει .tmp', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
+    const f = path.join(dir, 'a.bin'); const buf = Buffer.alloc(3 * 1024 * 1024, 7);
+    writeDurable(f, buf); expect(fs.readFileSync(f).equals(buf)).toBe(true);
+    writeJson(path.join(dir, 'b.json'), { a: 'Α' }); expect(JSON.parse(fs.readFileSync(path.join(dir, 'b.json'), 'utf8'))).toEqual({ a: 'Α' });
+    expect(fs.readdirSync(dir).filter(x => x.endsWith('.tmp'))).toEqual([]);
   });
 });
