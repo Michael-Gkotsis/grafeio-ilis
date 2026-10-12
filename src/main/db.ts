@@ -66,10 +66,11 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
-const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids' };
+// dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel)· η παλιά έκδοση της εφαρμογής απλώς δεν το διαβάζει
+const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', dutyLog: 'obj' };
 const entriesOf = (k: string, v: unknown): Map<string, unknown> =>
   KV_ENTRIES[k] === 'ids' ? new Map(((v as { id: string }[]) || []).map(x => [x.id, x])) : new Map(Object.entries((v as Record<string, unknown>) || {}));
 
@@ -150,6 +151,7 @@ export class Store {
     s.hkaiManual = kv.get('hkaiManual') || {};
     s.cadreList = kv.get('cadreList') || [];
     s.cadreAbs = kv.get('cadreAbs') || [];
+    s.dutyLog = kv.get('dutyLog') || {};
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
     this.state = s;
   }

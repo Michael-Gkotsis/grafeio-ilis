@@ -42,7 +42,7 @@ function DutyCheck({ onOpen }: P) {
   const st = dutyStats(state);
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
   // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
-  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.people, state.settings, ym, dq]);
+  const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.dutyLog, state.people, state.settings, ym, dq]);
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
   const [sk, setSk] = useState<{ k: string; dir: number } | null>(null);
   const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : r.d.byKind[k] || 0);
@@ -90,7 +90,7 @@ export function GuardScreen() {
   const ex = useExport(); const xb = useExportBusy();
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
   const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
-  const g = state.guards[date] || {};
+  const g = state.guards[date] || {}; const seatless = state.dutyLog?.[date] || [];
   const posts = postsOf(state.settings);
   const pm = personMap(state.people);
   const blocks = blocksOf(state.settings) || state.settings.blocks; const phase = state.settings.phase || 'sven';
@@ -177,6 +177,11 @@ export function GuardScreen() {
           ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} x=${x} pid=${pid} pm=${pm} date=${date} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
+    ${seatless.length > 0 && html`<section className="ui-card seatless" aria-label="Υπηρεσίες χωρίς θέση">
+      <h2 className="minihd">Υπηρεσίες χωρίς θέση (από Excel) · ${seatless.length}</h2>
+      <p className="note" style=${{ margin: '0 0 6px' }}>Σκέτο «Θ», «Μ», «Σ» στον έλεγχο υπηρεσιών: μετρούν στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου. Όταν μπει ο ίδιος σε θέση του ίδιου είδους, φεύγει από εδώ.</p>
+      <ul className="hist">${seatless.map((e: P) => html`<li key=${e.pid + e.kind}><span>${pm.get(e.pid) ? shortName(pm.get(e.pid)!) : '?'}</span> <span className="muted">${KIND_NAME[e.kind as DutyKind]}</span> <${Button} size="sm" variant="ghost" aria-label=${'Βγάλε ' + (pm.get(e.pid) ? shortName(pm.get(e.pid)!) : '') + ' από τις υπηρεσίες χωρίς θέση'} data-tip="Δεν έκανε αυτή την υπηρεσία" onClick=${async () => { if (await run({ t: 'removeDutyLog', date, pid: e.pid, kind: e.kind }, false)) toast({ text: 'Βγήκε από τις υπηρεσίες ' + dm(date), actions: [undoMark()] }); }}>✕<//></li>`)}</ul>
+    </section>`}
   </div>`;
   const side = html`<div className="guard__right">
     <section className="ui-card side">

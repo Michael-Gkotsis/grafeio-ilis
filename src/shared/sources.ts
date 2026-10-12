@@ -4,9 +4,11 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
-import { KIND_CODE, OUT_NOTE, PUN_KINDS, TYPES, type AppState, type Baseline, type DutyKind, type Guards, type Person, type Status, type TypeKey } from './domain';
+import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, type AppState, type DutyKind, type DutyLog, type Guards, type Person, type Status, type TypeKey } from './domain';
+import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
+import { dm } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
-import { allPosts, isHol, postsOf } from './rules';
+import { allPosts, postBy } from './rules';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -883,9 +885,10 @@ export function planCaps(sheet: RawSheet, b: SourceBinding, s: AppState, choices
   return plan;
 }
 
-// Έλεγχος υπηρεσιών (δείγμα 03): μηνιαίο πλέγμα, μία στήλη ανά μέρα με τον κωδικό της υπηρεσίας (Θ, Μ, Σ, ΟΠ, ΛΥ…).
-// Περνούν μόνο μέρες ως σήμερα που η εφαρμογή δεν έχει καμία υπηρεσία: κάθε άτομο μπαίνει σε θέση του είδους του·
-// όσοι περισσεύουν από τις θέσεις μετρούν στις «προηγούμενες υπηρεσίες».
+// Έλεγχος υπηρεσιών (δείγμα 03): μηνιαίο πλέγμα, μία στήλη ανά μέρα με τον κωδικό της υπηρεσίας. Κωδικός θέσης
+// (Θ1α, Μ2, ΛΥ) → η θέση· σκέτο γράμμα (Θ, Μ, Σ) → υπηρεσία χωρίς θέση με ημερομηνία (δεν μαντεύουμε θέση).
+// Περνά μόνο ό,τι λείπει από την εφαρμογή, για μέρες ως σήμερα: ό,τι έχει ήδη η εφαρμογή για ένα άτομο εκείνη τη μέρα
+// κρατιέται (και γράφεται μετά στο Excel). Ξανά η ίδια ανάγνωση δεν προσθέτει τίποτα.
 const MONTHS = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΙ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
 // «ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΣΕΠΤΕΜΒΡΙΟΥ 2026» → 2026-09· χωρίς έτος: ο πιο πρόσφατος τέτοιος μήνας ως σήμερα
 export function monthOf(text: string, today: ISODate): string | null {
@@ -899,54 +902,67 @@ export function sheetMonth(sheet: RawSheet, header: number, today: ISODate): str
   for (let r = header - 1; r >= Math.max(0, header - 4); r--) for (const v of sheet.rows[r] || []) { const m = monthOf(cellText(v), today); if (m) return m; }
   return monthOf(sheet.name, today);
 }
-// κωδικός κελιού → είδος υπηρεσίας (και θέση που προτιμά: Λ/Υ ή Δ/Υ)
-export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null {
-  const t = normGreek(raw).replace(/[^Α-ΩA-Z]/g, '');
-  if (!t) return null;
-  if (/^(Θ|ΘΑΛ\w*)$/.test(t)) return { kind: 'th' };
-  if (/^(Μ|ΜΑΓ\w*)$/.test(t)) return { kind: 'mg' };
-  if (/^(Σ|ΣΚ|ΣΚΟΠ\w*)$/.test(t)) return { kind: 'sk' };
-  if (/^(ΟΠ|Ο|ΟΠΛ\w*)$/.test(t)) return { kind: 'op' };
-  if (/^(ΛΥ|Λ)$/.test(t)) return { kind: 'ly', pref: 'ly' };
-  if (/^(ΔΥ|Δ)$/.test(t)) return { kind: 'ly', pref: 'dy' };
-  if (/^(Τ|ΤΑΕ)$/.test(t)) return { kind: 'tae' };
-  if (/^(Υ|Π|ΠΥΛΗ)$/.test(t)) return { kind: 'other' };
-  return null;
-}
-// κωδικοί απουσίας του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Α/Α, ΓΡ, ΕΣΤ…): δεν είναι υπηρεσία, δεν πειράζονται
-export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ|ΕΑΡΒ|ΕΛΑΡΒ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
+export { dutyCode, isAbsCode } from './codes';
+export interface DutyAdd { date: ISODate; pid: number; k?: string; kind: DutyKind; busy: boolean }   // busy: η εφαρμογή είχε ήδη υπηρεσίες εκείνη τη μέρα
+export interface DutyDiffer { date: ISODate; pid: number; excel: string; app: string }
 export interface DutiesPlan {
-  month: string; guards: Guards; base: Record<number, Baseline>; extraCells: string[];
-  days: number; entries: number; extra: number; byKind: Partial<Record<DutyKind, number>>;
-  busy: ISODate[]; future: number; unknown: string[]; sp: SheetPeople;
+  month: string; add: DutyAdd[];
+  fresh: ISODate[]; same: number; differ: DutyDiffer[]; clash: string[]; twice: string[];
+  future: number; unknown: string[]; sp: SheetPeople;
 }
+export const dutiesCmd = (p: DutiesPlan, busy = true) => {
+  const guards: Guards = {}; const log: DutyLog = {};
+  for (const a of p.add) {
+    if (a.busy && !busy) continue;
+    if (a.k) (guards[a.date] = guards[a.date] || {})[a.k] = a.pid; else (log[a.date] = log[a.date] || []).push({ pid: a.pid, kind: a.kind });
+  }
+  return { guards, log };
+};
 export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}): DutiesPlan {
-  const sp = sheetPeople(sheet, b, s.people, choices);
-  const plan: DutiesPlan = { month, guards: {}, base: {}, extraCells: [], days: 0, entries: 0, extra: 0, byKind: {}, busy: [], future: 0, unknown: [], sp };
+  const sp = sheetPeople(sheet, b, s.people, choices); const pm = new Map(s.people.map(p => [p.id, p]));
+  const plan: DutiesPlan = { month, add: [], fresh: [], same: 0, differ: [], clash: [], twice: [], future: 0, unknown: [], sp };
   const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
   const [y, m] = month.split('-').map(Number); const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const byDay = new Map<ISODate, { pid: number; kind: DutyKind; pref?: string }[]>(); const unk = new Map<string, string>();
+  const byDay = new Map<ISODate, (CellDuty & { pid: number; raw: string })[]>(); const unk = new Map<string, string>();
   for (const row of sp.rows) cols.forEach((c, i) => {
     if (i >= nDays) return;
-    const raw = cellText((sheet.rows[row.r] || [])[c]); if (!raw || /^\d+$/.test(raw)) return;
-    const code = dutyCode(raw); if (!code) { if (!isAbsCode(raw)) unk.set(normGreek(raw), raw); return; }
-    const d = month + '-' + String(i + 1).padStart(2, '0'); const l = byDay.get(d) || []; l.push({ pid: row.pid, ...code }); byDay.set(d, l);
+    const raw = cellText((sheet.rows[row.r] || [])[c]); const x = readDuty(raw, s.settings);
+    if (x === 'unknown') { unk.set(normGreek(raw), raw); return; }
+    if (!x || x === 'abs') return;
+    const d = month + '-' + String(i + 1).padStart(2, '0'); const l = byDay.get(d) || []; l.push({ pid: row.pid, ...x, raw: raw.trim() }); byDay.set(d, l);
   });
   plan.unknown = [...unk.values()];
-  // θέσεις ανά είδος: πρώτα του εντύπου που ισχύει, μετά όσες έχουν υπάρξει
-  const order = [...postsOf(s.settings), ...allPosts(s.settings)].filter((p, i, a) => a.findIndex(x => x.k === p.k) === i);
+  const who = (pid: number) => (pm.get(pid) ? nameOf(pm.get(pid)!) : '?');
+  const label = (k: string | undefined, kind: DutyKind) => (k && allPosts(s.settings).find(x => x.k === k)?.label) || KIND_NAME[kind] + ' χωρίς θέση';
   for (const d of [...byDay.keys()].sort()) {
     if (d > today) { plan.future++; continue; }
-    if (Object.keys(s.guards[d] || {}).length) { plan.busy.push(d); continue; }
-    const g: Record<string, number> = {}; const h = isHol(s.settings, d);
-    for (const e of byDay.get(d)!) {
-      const free = order.filter(p => p.kind === e.kind && g[p.k] == null).sort((a, c) => (a.k === e.pref ? -1 : c.k === e.pref ? 1 : 0));
-      plan.entries++; plan.byKind[e.kind] = (plan.byKind[e.kind] || 0) + 1;
-      if (free.length) { g[free[0].k] = e.pid; continue; }
-      const x = plan.base[e.pid] || (plan.base[e.pid] = {}); x[e.kind] = (x[e.kind] || 0) + 1; if (h) x.hol = (x.hol || 0) + 1; plan.extra++; plan.extraCells.push(e.pid + '|' + d);
+    const g = s.guards[d] || {}; const log = s.dutyLog?.[d] || [];
+    const busy = Object.keys(g).length > 0 || log.length > 0;
+    const seatsOf = (pid: number) => Object.keys(g).filter(k => g[k] === pid);
+    const list = byDay.get(d)!;
+    // ίδια θέση σε δύο άτομα: κανείς δεν παίρνει τη θέση, μετρούν και οι δύο χωρίς θέση
+    const n = new Map<string, number>(); for (const e of list) if (e.k) n.set(e.k, (n.get(e.k) || 0) + 1);
+    for (const [k, c] of n) if (c > 1) plan.clash.push(list.find(e => e.k === k)!.raw + ' δύο φορές στις ' + dm(d) + ': ' + list.filter(e => e.k === k).map(e => who(e.pid)).join(', ') + ' (μετρούν χωρίς θέση)');
+    const taken = new Set(Object.keys(g)); const mine = new Set<number>(); let added = 0, differ = 0;
+    for (const e of list) {
+      const k = e.k && n.get(e.k) === 1 ? e.k : undefined;
+      if (mine.has(e.pid)) plan.twice.push(who(e.pid) + ': δύο υπηρεσίες στις ' + dm(d));
+      else {
+        const seats = seatsOf(e.pid); const sl = log.filter(x => x.pid === e.pid);
+        if (seats.length || sl.length) {
+          const same = k ? seats.includes(k) || (!seats.length && sl.some(x => x.kind === e.kind)) : seats.some(x => postBy(s, x)?.kind === e.kind) || sl.some(x => x.kind === e.kind);
+          // η εφαρμογή τον έχει χωρίς θέση και το Excel λέει τη θέση (ελεύθερη): παίρνει τη θέση
+          if (same && k && !seats.includes(k) && !taken.has(k)) { plan.add.push({ date: d, pid: e.pid, k, kind: e.kind, busy }); taken.add(k); added++; }
+          else if (!same) { plan.differ.push({ date: d, pid: e.pid, excel: e.raw, app: [...seats.map(x => label(x, postBy(s, x)?.kind || 'other')), ...sl.map(x => label(undefined, x.kind))].join(', ') }); differ++; }
+          mine.add(e.pid); continue;
+        }
+      }
+      mine.add(e.pid);
+      const seat = k && !taken.has(k) ? k : undefined; if (seat) taken.add(seat);
+      plan.add.push({ date: d, pid: e.pid, k: seat, kind: e.kind, busy }); added++;
     }
-    if (Object.keys(g).length) plan.guards[d] = g;
-    plan.days++;
+    if (!busy && added) plan.fresh.push(d);
+    else if (busy && !added && !differ) plan.same++;
   }
   return plan;
 }
@@ -957,7 +973,7 @@ const PERSON_KEYS = ['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', '
 // Τι θέλει η εφαρμογή σε έναν πίνακα με ένα άτομο ανά γραμμή: upd = κελιά στις γραμμές που υπάρχουν, add = νέες γραμμές
 // (με τα στοιχεία του ατόμου), drop = γραμμές που σβήνονται. Γραμμές που δεν ξέρει δεν τις αγγίζει.
 interface ListWant { upd: Map<number, Record<string, WVal>>; add: Map<number, Record<string, WVal>>; drop: Set<number> }
-export interface SourcePlan extends WritePlan { notFound: string[] }
+export interface SourcePlan extends WritePlan { notFound: string[]; warn?: string[] }
 function planList(sheet: RawSheet, b: SourceBinding, s: AppState, w: ListWant, eq: (k: string, cell: CellValue, v: WVal) => boolean = (_k, cell, v) => same(cell, v)): SourcePlan {
   const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
   const rows = sheet.rows; const scan = tableRows(sheet, b.header, b.cols); const match = makeMatcher(s.people);
@@ -1037,25 +1053,35 @@ export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): S
   }
   return planList(sheet, b, s, w, (k, cell, v) => ((CAP_COLS as string[]).includes(k) ? capNo(cellText(cell)) === (v === '-') : same(cell, v)));
 }
-// Έλεγχος υπηρεσιών (το δικό σου μηνιαίο αρχείο): ο κωδικός της υπηρεσίας στο κελί της μέρας, για όσες μέρες έχει
-// υπηρεσίες η εφαρμογή. Μέρες χωρίς υπηρεσίες στην εφαρμογή και κωδικοί απουσίας (Κ.Α, Ε.Υ…) μένουν όπως είναι.
-// keep: «άτομο|μέρα» που διαβάστηκαν ως προηγούμενες υπηρεσίες (δεν χωρούσαν στις θέσεις): ο κωδικός τους μένει
+// Έλεγχος υπηρεσιών (το δικό σου μηνιαίο αρχείο): ο κωδικός της θέσης (Θ1α, Μ2…) στο κελί της μέρας, για όσες μέρες
+// έχει υπηρεσίες η εφαρμογή· για υπηρεσία χωρίς θέση το σκέτο γράμμα. Αν το φύλλο μετρά με COUNTIF(…, "Θ"), γράφεται
+// το σκέτο γράμμα (αλλιώς τα σύνολά του θα έβγαιναν 0) μέχρι οι τύποι να γίνουν "Θ*". Κελί που λέει ήδη τη σωστή θέση
+// (και με τον κωδικό του άλλου εντύπου) δεν ξαναγράφεται. Μέρες χωρίς υπηρεσίες στην εφαρμογή και κωδικοί απουσίας
+// (Κ.Α, Ε.Υ…) μένουν όπως είναι. keep: «άτομο|μέρα» που διάβαζε παλιότερα η εφαρμογή ως προηγούμενες υπηρεσίες.
 export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, today: ISODate, keep: string[] = []): SourcePlan {
   const kept = new Set(keep);
   const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
   const month = bindingMonth(sheet, b, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
+  const exact = !sheet.countif?.length;
+  if (!exact) plan.warn = ['Το φύλλο μετρά με COUNTIF σκέτο γράμμα (' + countifTxt(sheet.countif!) + '): γράφεται «Θ», «Μ»… αντί για τον κωδικό της θέσης. Άλλαξε στους τύπους το "Θ" σε "Θ*" (και το "Μ" σε "Μ*", το "Σ" σε "Σ*") για να γράφονται οι κωδικοί.'];
   const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
   const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
-  const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, { kind: DutyKind; code: string; k: string }>>(); const days: number[] = [];
+  type Want = { k?: string; kind: DutyKind; code: string };
+  const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, Want>>(); const days: number[] = [];
+  const put = (pid: number, i: number, w: Want) => { const x = want.get(pid) || new Map<number, Want>(); if (!x.get(i)?.k) x.set(i, w); want.set(pid, x); };
   for (let i = 0; i < nDays; i++) {
-    const g = s.guards[month + '-' + String(i + 1).padStart(2, '0')] || {}; if (!Object.keys(g).length) continue;
+    const d = month + '-' + String(i + 1).padStart(2, '0'); const g = s.guards[d] || {}; const log = s.dutyLog?.[d] || [];
+    if (!Object.keys(g).length && !log.length) continue;
     days.push(i);
+    for (const e of log) put(e.pid, i, { kind: e.kind, code: bareOf(undefined, e.kind) });
     for (const [k, pid] of Object.entries(g)) {
-      const post = allPosts(s.settings).find(x => x.k === k); if (!post) continue;
-      const x = want.get(pid) || new Map(); x.set(i, { kind: post.kind, k, code: k === 'dy' ? 'ΔΥ' : KIND_CODE[post.kind] }); want.set(pid, x);
+      const post = postBy(s, k); if (!post) continue;
+      put(pid, i, { k, kind: post.kind, code: exact ? codeOf(s.settings, k, post.kind) : bareOf(k, post.kind) });
     }
   }
   if (!days.length) return plan;
+  // το κελί λέει ήδη αυτό που θέλει η εφαρμογή; (σκέτο γράμμα: αρκεί το είδος· θέση: η ίδια θέση, και σκέτο γράμμα όταν γράφουμε γράμματα)
+  const ok = (cur: CellDuty, w: Want) => cur.kind === w.kind && (!w.k || cur.k === w.k || (!exact && !cur.k));
   const match = makeMatcher(s.people); const seen = new Set<number>();
   const recs = tableRows(sheet, b.header, b.cols).records.filter(({ v }) => b.cols.last == null || b.cols.first == null || isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father)))
     .map(x => ({ ...x, m: match(x.v) }));
@@ -1068,15 +1094,17 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     seen.add(pid);
     const x = want.get(pid); let ch = false;
     for (const i of days) {
-      const raw = cellText((sheet.rows[r] || [])[cols[i]]); const cur = dutyCode(raw); const wnt = x?.get(i);
+      const raw = cellText((sheet.rows[r] || [])[cols[i]]); const cur = readDuty(raw, s.settings); const wnt = x?.get(i);
+      const duty = cur && typeof cur === 'object' ? cur : null;
       if (!wnt && kept.has(pid + '|' + month + '-' + String(i + 1).padStart(2, '0'))) continue;
-      if (wnt ? !cur || cur.kind !== wnt.kind || (wnt.kind === 'ly' && (cur.pref || 'ly') !== (wnt.k === 'dy' ? 'dy' : 'ly')) : !!cur) { plan.sets.push({ r, c: cols[i], v: wnt ? wnt.code : null }); ch = true; }
+      if (wnt ? !duty || !ok(duty, wnt) : !!duty) { plan.sets.push({ r, c: cols[i], v: wnt ? wnt.code : null }); ch = true; }
     }
     if (ch) plan.changed++;
   }
   for (const pid of want.keys()) if (!seen.has(pid) && pm.has(pid)) plan.notFound.push(nameOf(pm.get(pid)!));
   return plan;
 }
+const countifTxt = (refs: string[]) => refs.slice(0, 3).join(', ') + (refs.length > 3 ? ' κ.ά.' : '');
 
 // Στοιχεία ατόμου (βαθμός, θάλαμος, τηλέφωνο…) που άλλαξαν στην εφαρμογή από την τελευταία ανάγνωση/εγγραφή αυτού του
 // πίνακα: γράφονται και εδώ, στη γραμμή του ίδιου ατόμου, ώστε όλα τα φύλλα να λένε το ίδιο.

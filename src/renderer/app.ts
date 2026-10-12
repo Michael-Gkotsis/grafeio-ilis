@@ -4,7 +4,7 @@ import { html, cx, Badge, Button, Icon, Kbd, Logo, Sheet, ToastProvider, useToas
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, TemplatesScreen, CommandPalette } from './screens/other';
 import { DiagScreen } from './screens/diag';
-import { PeopleScreen, PersonSheet, DeclareStatusDialog } from './screens/people';
+import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
@@ -102,6 +102,7 @@ function Shell() {
   // Υπόμνημα (F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
+  const [baseLater, setBaseLater] = useState(false);
   const prefsV = usePrefsState(); const { rail } = prefsV;
   const toggleRail = useCallback(() => prefsV.set('nav', rail ? 'full' : 'rail'), [prefsV.set, rail]);
   // μνήμη ανά οθόνη (§1) και ιστορικό για το «Πίσω» (§2)
@@ -184,6 +185,7 @@ function Shell() {
     ${personId != null && html`<${PersonSheet} pid=${personId} onClose=${() => setPersonId(null)}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
+    ${!baseLater && !layer && state && needsBaselineReview(state) && html`<${BaselineReviewDialog} onClose=${() => setBaseLater(true)}/>`}
     ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}
     ${over === 'palette' && html`<${CommandPalette} onClose=${() => setOver(null)}/>`}
   <//><//><//>`;

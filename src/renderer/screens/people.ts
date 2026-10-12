@@ -147,7 +147,7 @@ export function PersonSheet({ pid, onClose }: P) {
   const posts = postsOf(state.settings);
   const hist = state.statuses.filter(s => s.pid === pid).sort((a, b) => b.from.localeCompare(a.from));
   const dd = dutyStats(state).get(pid) || emptyStat();
-  const duties = dd.log.slice().reverse().slice(0, 12).map(e => ({ d: e.d, x: posts.find(q => q.k === e.k) || postBy(state, e.k), h: e.h }));
+  const duties = dd.log.slice().reverse().slice(0, 12).map(e => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h }));
   const base = state.baseline[pid]; const nBase = baseTotal(base);
   const caps = capsOf(state, pid);
   const ob = outBlock(state, today, pid);
@@ -161,7 +161,7 @@ export function PersonSheet({ pid, onClose }: P) {
       <div className="capgrid">${CAP_KINDS.map(([k, l]) => { const off = caps[k]; return html`<label key=${k} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει: ' + off : 'Κάνει ' + CAP_ACC[k]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const allowed = e.target.checked; if (await run({ t: 'setCap', pid, kind: k, allowed }, false)) toast({ text: shortName(p) + (allowed ? ' κάνει ' : ' δεν κάνει ') + CAP_ACC[k] + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' }); }}/>${l}</label>`; })}</div>
       <label className="rule" style=${{ marginTop: '8px' }}><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span><b>Δικαίωμα ΔΝ</b><small>Μόνιμο. Μόλις οριστεί σε έναν, στους Εξοδούχους το ΔΝ επιτρέπεται μόνο σε όσους το έχουν.</small></span></label>
       <p className="note" style=${{ margin: '6px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ι3 άοπλος, Ι4: όχι σκοπιά και οπλοφύλακας) και το πόστο.</p></section>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, h }) => html`<li key=${d + (x?.k || '')}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : '—'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
+    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${s.type === 'PUN' ? s.kind : TYPES[s.type].label}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.)</span>${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${r.text}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>ΗΚΑΙ<//></li>`)}</ul></section>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
@@ -179,6 +179,29 @@ function BaselineDialog({ p, onClose }: P) {
   return html`<${Dialog} title=${'Προηγούμενες υπηρεσίες: ' + fullName(p)} description="Όσες έκανε πριν μπουν στην εφαρμογή. Μόνο αριθμός, χωρίς ημερομηνία. Προστίθενται στον έλεγχο υπηρεσιών και στη σειρά δικαιοσύνης." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'setBaseline', pid: p.id, baseline: b }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκαν οι προηγούμενες υπηρεσίες του ' + shortName(p) }); } }}>Αποθήκευση<//>`}>
     <div className="settings-grid">${BASE_KINDS.map(k => num(k, KIND_NAME[k]))}${num('hol', 'Από αυτές σε ΣΚ ή αργία')}</div>
+  <//>`;
+}
+
+// Μία φορά μετά την αναβάθμιση στους κωδικούς θέσεων: οι παλιές «προηγούμενες υπηρεσίες» μπορεί να είναι διπλομετρημένες,
+// γιατί κάθε ανάγνωση του ελέγχου υπηρεσιών πρόσθετε εκεί όσους δεν χωρούσαν σε θέση
+export const needsBaselineReview = (state: any) => !state.settings.baselineReviewed && Object.values(state.baseline || {}).some((b: any) => baseTotal(b) > 0 || (b?.hol || 0) > 0);
+export function BaselineReviewDialog({ onClose }: P) {
+  const { state, run } = useStore(); const toast = useToast();
+  const pm = personMap(state.people);
+  const ids = useMemo(() => Object.keys(state.baseline).map(Number).filter(id => { const b = state.baseline[id]; return baseTotal(b) > 0 || (b?.hol || 0) > 0; })
+    .sort((a, b) => collator.compare(pm.get(a)?.last || '', pm.get(b)?.last || '')), []);
+  const [rows, setRows] = useState<Record<number, Record<string, number>>>(() => Object.fromEntries(ids.map(id => [id, { ...(state.baseline[id] || {}) } as Record<string, number>])));
+  const cols = [...BASE_KINDS.filter(k => ids.some(id => (state.baseline[id] as any)?.[k])), 'hol'];
+  const set = (id: number, k: string, v: number) => setRows({ ...rows, [id]: { ...rows[id], [k]: Math.max(0, v || 0) } });
+  const save = async (baselines: Record<number, Record<string, number>>, text: string) => { if (await run({ t: 'setBaselines', baselines }, false)) { onClose(); toast({ text }); } };
+  return html`<${Dialog} size="lg" title="Έλεγχος προηγούμενων υπηρεσιών" onClose=${onClose}
+    description="Μέχρι τώρα η ανάγνωση του ελέγχου υπηρεσιών πρόσθετε εδώ όσους δεν χωρούσαν σε θέση, και κάθε ξαναδιάβασμα τους ξαναπρόσθετε. Τώρα αυτές οι υπηρεσίες μπαίνουν με την ημερομηνία τους. Αν δεν τις έγραψες με το χέρι, μηδένισέ τες και ξαναδιάβασε τους μήνες από τα Αρχεία Excel."
+    footer=${html`<${Button} variant="outline" onClick=${() => save(Object.fromEntries(ids.map(id => [id, state.baseline[id] as any])), 'Οι προηγούμενες υπηρεσίες έμειναν όπως ήταν')}>Κράτα όπως είναι<//><${Button} variant="outline" onClick=${() => setRows(Object.fromEntries(ids.map(id => [id, {}])))}>Μηδένισε όλες<//><${Button} onClick=${() => save(rows, 'Αποθηκεύτηκαν οι προηγούμενες υπηρεσίες')}>Αποθήκευση<//>`}>
+    <div className="xl__scroll" style=${{ maxHeight: '52vh' }}><table className="mapgrid basegrid">
+      <thead><tr><th>Άτομο</th>${cols.map(k => html`<th key=${k}>${k === 'hol' ? 'ΣΚ/αργ.' : KIND_LBL[k as DutyKind]}</th>`)}</tr></thead>
+      <tbody>${ids.map(id => { const p = pm.get(id); return html`<tr key=${id}><td>${p ? shortName(p) : 'Άτομο ' + id}</td>${cols.map(k => html`<td key=${k}><input className="ui-input" type="number" min="0" aria-label=${(p ? shortName(p) : '') + ' ' + (k === 'hol' ? 'ΣΚ/αργία' : KIND_NAME[k as DutyKind])} value=${rows[id]?.[k] || ''} placeholder="0" onChange=${(e: any) => set(id, k, +e.target.value)}/></td>`)}</tr>`; })}</tbody>
+    </table></div>
+    <p className="muted" style=${{ fontSize: '13px', marginTop: '8px' }}>Αν κλείσεις το παράθυρο, θα ξαναβγεί την επόμενη φορά.</p>
   <//>`;
 }
 

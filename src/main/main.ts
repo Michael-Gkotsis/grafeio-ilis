@@ -308,9 +308,10 @@ async function bookOf(file: string): Promise<SourceBook> {
   return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: r.sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000) })), hits: detectTables(r.sheets) };
 }
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
-function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; created: boolean; rooms?: { n: number; sheet: string } }, b: SourceBinding) {
+function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; sheet: string } }, b: SourceBinding) {
   const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν'].filter(Boolean).join(', ');
   return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '')
+    + (r.warn?.length ? '. ' + r.warn.join(' ') : '')
     + (r.rooms ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
@@ -342,7 +343,7 @@ function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
   if (prev.people !== next.people) KINDS.forEach(k => out.add(k.id));
   if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => out.add(k));
   if (prev.caps !== next.caps) out.add('caps');
-  if (prev.guards !== next.guards) out.add('duties');
+  if (prev.guards !== next.guards || prev.dutyLog !== next.dutyLog) out.add('duties');
   return out;
 }
 // toExcel=false: μόνο τα έντυπα (π.χ. μετά από αναίρεση ανάγνωσης από Excel, που δεν πρέπει να γράψει πίσω στο Excel)
@@ -484,7 +485,7 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
     const lines = describeSets(kind, sheet, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : undefined);
-    return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous) };
+    return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous), warn: plan.warn };
   } catch (e) { return fail(e); }
 }
 // Έντυπο: φύλλα του template και (ΗΚΑΙ) πού βρέθηκαν οι γραμμές και οι στήλες
