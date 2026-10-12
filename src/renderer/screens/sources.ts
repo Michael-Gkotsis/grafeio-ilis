@@ -422,11 +422,12 @@ function WriteDialog({ list, onClose }: { list: ListKind; onClose: () => void })
     } finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ενημέρωση Excel'} description=${pv && pv.ok ? base(pv.file) : ''} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${busy || !pv || !pv.ok || (!pv.total && !pv.create)} onClick=${go}>${busy ? 'Γράφεται…' : 'Γράψε στο Excel'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${busy || !pv || !pv.ok || (!pv.total && !pv.create && !pv.tidy?.length)} onClick=${go}>${busy ? 'Γράφεται…' : 'Γράψε στο Excel'}<//>`}>
     ${!pv ? html`<p>Ανάγνωση…</p>` : !pv.ok ? html`<${Alert} tone="bad"><span>${pv.error}</span><//>` : html`<div>
       ${pv.create && html`<${Alert} tone="info"><span>Δεν υπάρχει ακόμα· θα φτιαχτεί με τίτλο και επικεφαλίδες στο ${base(pv.file)}.</span><//>`}
       ${!pv.total && !pv.create ? html`<${Alert} tone="ok"><span>✓ Το Excel έχει ήδη ό,τι έχει η εφαρμογή.</span><//>` : html`<p style=${{ marginTop: 0 }}><b>${pv.total}</b> ${pv.total === 1 ? 'αλλαγή θα γραφτεί' : 'αλλαγές θα γραφτούν'}. Η προηγούμενη έκδοση μένει στο _προηγούμενα.</p>
         <ul className="hist">${pv.lines.slice(0, 80).map((l, i) => html`<li key=${i}><span className="nw">Γρ. ${l.r + 1}</span> <b>${l.who}</b> ${l.text}</li>`)}</ul>${pv.lines.length > 80 && html`<p className="note">… και ${pv.lines.length - 80} ακόμα</p>`}`}
+      ${!!pv.tidy?.length && html`<details className="note" open><summary>Μορφή που λείπει από το φύλλο (μπαίνει μαζί)</summary><ul>${pv.tidy.map(t => html`<li key=${t}>${t}</li>`)}</ul></details>`}
       ${pv.foreign > 0 && html`<p className="note">${pv.foreign === 1 ? '1 γραμμή του Excel δεν είναι' : pv.foreign + ' γραμμές του Excel δεν είναι'} στην εφαρμογή (γράφτηκαν με το χέρι): δεν αγγίζονται. Πάτα «Ανανέωση από Excel» για να περάσουν.</p>`}
       ${!!pv.ambiguous?.length && html`<${Alert} tone="warn"><span>${pv.ambiguous.slice(0, 10).map(l => 'Γρ. ' + (l.r + 1) + ' ' + l.who).join(', ')}${pv.ambiguous.length > 10 ? ' …' : ''}: αμφίσημη γραμμή (συνονόματοι χωρίς ΑΣΜ), δεν αγγίζεται. Βάλε ΑΣΜ ή πατρώνυμο για να ξεχωρίζουν.</span><//>`}
       ${(pv.warn || []).map(t => html`<${Alert} key=${t} tone="warn"><span>${t}</span><//>`)}
