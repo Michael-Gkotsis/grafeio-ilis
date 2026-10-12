@@ -41,7 +41,7 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     else if (outOn(s, pid, date)) out.push({ level: 'err', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
     const sl = seatlessOn(s, date, pid);
     if (sl) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): την ίδια μέρα και ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel), δύο υπηρεσίες', go: 'guard' });
-    const soft = capBlock(s, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x);
+    const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
   }
   return out;

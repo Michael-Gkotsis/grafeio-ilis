@@ -24,6 +24,7 @@ export interface Person {
   notes: string;
   dn?: boolean;          // έχει δικαίωμα ΔΝ (μόνιμο, από τον λοχία)
   weapon?: string;       // αριθμός όπλου: γράφεται μόνο δίπλα στον Λ/Υ και τον Δ/Υ στο έντυπο υπηρεσιών
+  offDays?: number[];    // μέρες της εβδομάδας χωρίς υπηρεσία (0 = Κυριακή … 6 = Σάββατο), μόνιμα μέχρι να αλλάξουν
 }
 
 // Αρχή των σημειώσεων όσων βγήκαν εκτός δύναμης από φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» (όχι με το χέρι)
@@ -32,6 +33,8 @@ export const fullName = (p: Person) => p.last + ' ' + p.first;
 export const shortName = (p: Person) => p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '');
 // Ουλαμός από θάλαμο (Κ-18): 1–4 → 1ος, 5–8 → 2ος
 export const unitOf = (p: Person) => (p.room == null ? '—' : p.room <= 4 ? '1ος Ουλ.' : '2ος Ουλ.');
+// Σειρά των ημερών στην κάρτα: Δευτέρα πρώτη
+export const WEEK: number[] = [1, 2, 3, 4, 5, 6, 0];
 export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 
 // ---------------------------------------------------------------------------

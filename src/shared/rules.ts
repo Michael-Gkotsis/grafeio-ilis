@@ -1,5 +1,5 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
-import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dates';
+import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { normGreek } from './text';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CADRE_ABS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
@@ -109,7 +109,16 @@ export function capsOf(s: AppState, pid: number): Partial<Record<DutyKind, strin
   (Object.keys(c) as DutyKind[]).forEach(k => { if (c[k]) out[k] = c[k] as string; });
   return out;
 }
-export function capBlock(s: AppState, pid: number, post?: Post | null): string | null {
+// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος 14:00 → 14:00)
+export function offDayBlock(s: AppState, date: ISODate, pid: number): string | null {
+  const w = personMap(s.people).get(pid)?.offDays;
+  if (!w || !w.length) return null;
+  const d = weekday(date);
+  return w.includes(d) ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : null;
+}
+// Όπως η δυνατότητα υπηρεσιών: η αυτόματη συμπλήρωση δεν τον βάζει, με το χέρι μπαίνει μόνο με αιτία
+export function capBlock(s: AppState, date: ISODate, pid: number, post?: Post | null): string | null {
+  const off = offDayBlock(s, date, pid); if (off) return off;
   if (!post) return null;
   const c = capsOf(s, pid)[post.kind];
   return c ? 'Δεν κάνει ' + (CAP_ACC[post.kind] || post.kind) + ' (' + c + ')' : null;
@@ -180,7 +189,7 @@ function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<IS
 }
 export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: string | null, idx?: Map<number, Set<ISODate>>): string | null {
   const post = k ? postBy(s, k) : null;
-  const r = dutyBlock(s.statuses, date, pid, post) || capBlock(s, pid, post);
+  const r = dutyBlock(s.statuses, date, pid, post) || capBlock(s, date, pid, post);
   if (r) return r;
   const o = postOf(s, date, pid, k || undefined);
   if (o) return 'Ήδη ' + postTxt(o);
@@ -407,7 +416,7 @@ export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { h
   const work: AppState = { ...s, guards: { ...s.guards, [date]: { ...g, [a]: pb, [b]: pa } } };
   const pm = personMap(s.people); const nm = (id: number) => (pm.get(id) ? shortName(pm.get(id)!) : '?');
   const hard = (dutyBlock(s.statuses, date, pb, A) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A)) || (dutyBlock(s.statuses, date, pa, B) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B)) || null;
-  const sa = capBlock(s, pb, A) || ruleBlock(work, date, pb, undefined, a), sb = capBlock(s, pa, B) || ruleBlock(work, date, pa, undefined, b);
+  const sa = capBlock(s, date, pb, A) || ruleBlock(work, date, pb, undefined, a), sb = capBlock(s, date, pa, B) || ruleBlock(work, date, pa, undefined, b);
   return { hard, soft: (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
 }
 // «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
