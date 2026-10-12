@@ -11,6 +11,7 @@ import { allPosts, isHol, postsOf } from './rules';
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
 export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
+export const FORM_KINDS: FormKind[] = ['froura', 'frouraSpen', 'hkai', 'outs', 'check'];
 
 // Πού βρίσκεται ένα είδος: αρχείο, φύλλο, γραμμή επικεφαλίδων (από 0) και στήλη κάθε πεδίου (από 0)
 export interface SourceBinding {
@@ -21,14 +22,18 @@ export interface SourceBinding {
   write?: boolean;                   // η εφαρμογή γράφει εδώ τις αλλαγές της (μόνο για καταστάσεις)
   scope?: 'all' | 'active';          // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά
   values?: Record<string, TypeKey>;  // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
+  month?: string;                    // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
+  autoRead?: boolean;                // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
 }
+// Ο μήνας ενός φύλλου ελέγχου υπηρεσιών: από τον τίτλο, αλλιώς αυτός που διάλεξε ο χρήστης στην ανάγνωση
+export const bindingMonth = (sheet: RawSheet, b: SourceBinding, today: ISODate) => sheetMonth(sheet, b.header, today) || b.month || null;
 // Έντυπο: ποιο template (αρχείο και φύλλο) και πού βγαίνει. Κενό = προεπιλογή της εφαρμογής.
 export interface FormBinding {
   file?: string;
   sheet?: string;                    // ΗΚΑΙ: μπροστινή σελίδα· Εξοδούχοι: φύλλο εξοδούχων
   sheet2?: string;                   // ΗΚΑΙ: πίσω σελίδα· Εξοδούχοι: φύλλο παραμενόντων
   dir?: string;                      // φάκελος εξόδου (κενό = ο γενικός των Ρυθμίσεων)
-  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι)
+  monthly?: boolean;                 // υποφάκελος ανά μήνα (προεπιλογή ναι), και στον γενικό φάκελο
   cells?: Partial<HkaiMap>;          // ΗΚΑΙ: κελιά που άλλαξε ο χρήστης
 }
 
@@ -134,6 +139,35 @@ export function mapColumns(row: CellValue[] | undefined, fields: FieldDef[]): Re
   });
   return cols;
 }
+// Στήλες που μετακινήθηκαν ή προστέθηκαν στο Excel μετά την αντιστοίχιση (π.χ. νέα στήλη «ΔΝ» στο ΣΥΝΟΛΙΚΟ).
+// Οι στήλες μετακινούνται όσο μετακινήθηκαν οι περισσότερες με γνωστή επικεφαλίδα (και όσες έχουν δική σου επικεφαλίδα μαζί τους).
+// Μία μόνη δική σου στήλη που δεν ταιριάζει δεν αρκεί για αλλαγή. Γνωστές στήλες που δεν είχαν οριστεί προστίθενται.
+export function refitCols(kind: ListKind, sheet: RawSheet | undefined, b: SourceBinding): SourceBinding {
+  const row = sheet?.rows[b.header]; if (!row) return b;
+  const fields = fieldsOf(kind); const found = mapColumns(row, fields);
+  const h = (c: number) => headText(row[c]);
+  const ok = (k: string, c: number | undefined) => c != null && !!fields.find(f => f.k === k)?.re.test(h(c));
+  const known = (c: number) => !h(c) || ALL_FIELDS.some(f => f.re.test(h(c)));
+  const cand = Object.entries(b.cols).filter(([k, c]) => !ok(k, c) && found[k] != null && found[k] !== c).map(([k, c]) => ({ k, c, d: found[k] - c, sure: known(c) }));
+  // η μετακίνηση που έκαναν οι περισσότερες στήλες (μπήκε ή βγήκε στήλη)
+  const mode = (l: typeof cand) => { const n = new Map<number, number>(); l.forEach(x => n.set(x.d, (n.get(x.d) || 0) + 1)); return [...n].sort((x, y) => y[1] - x[1] || Math.abs(x[0]) - Math.abs(y[0]))[0]; };
+  const sure = cand.filter(x => x.sure); const m = sure.length ? mode(sure) : cand.length > 1 ? mode(cand) : undefined;
+  const D = m && (sure.length || m[1] > 1) ? m[0] : null;
+  const cols: Record<string, number> = { ...b.cols };
+  if (D != null) {
+    const from = Math.min(...cand.filter(x => x.d === D).map(x => x.c));
+    for (const [k, c] of Object.entries(b.cols)) {
+      if (ok(k, c) || c < from) continue;
+      const to = c + D;
+      // στη νέα θέση άλλη γνωστή επικεφαλίδα: η στήλη πήγε αλλού (π.χ. δεύτερη νέα στήλη), ακολουθεί την επικεφαλίδα της
+      cols[k] = ok(k, to) || !h(to) || !ALL_FIELDS.some(f => f.re.test(h(to))) || found[k] == null ? to : found[k];
+    }
+  }
+  for (const f of fields) if (cols[f.k] == null && found[f.k] != null && !Object.values(cols).includes(found[f.k])) cols[f.k] = found[f.k];
+  // δύο πεδία στην ίδια στήλη: κάτι δεν πήγε καλά, μένει η αντιστοίχιση όπως ήταν
+  const used = Object.values(cols); if (new Set(used).size !== used.length || used.some(c => c < 0)) return b;
+  return JSON.stringify(cols) === JSON.stringify(b.cols) ? b : { ...b, cols };
+}
 const ALL_FIELDS = [...PERSON_FIELDS, ...KINDS.flatMap(k => k.fields)];
 const IDENT = ['last', 'name', 'asm'];
 // Γραμμή επικεφαλίδων: τουλάχιστον 3 γνωστές επικεφαλίδες, μία από τις οποίες δείχνει άτομο
@@ -212,6 +246,20 @@ export function bestFor(kind: ListKind, sheets: RawSheet[]): { sheet: string; he
     if (!best || v > best.v) best = { sheet: sh.name, header: r, cols: mapColumns(sh.rows[r], fieldsOf(kind)), v };
   }
   return best && { sheet: best.sheet, header: best.header, cols: best.cols };
+}
+// Πού είναι τώρα οι επικεφαλίδες ενός πίνακα: αν μπήκαν γραμμές από πάνω (από το Excel ή από την εφαρμογή σε άλλο
+// πίνακα του ίδιου φύλλου), ο πίνακας έχει κατέβει. Βαθμός = πόσα πεδία της αντιστοίχισης βρίσκονται στην ίδια στήλη.
+// Μένει στη γραμμή του αν εκεί ταιριάζει όσο καλά όσο πουθενά αλλού· αλλιώς πάει στην πιο κοντινή με τον μεγαλύτερο βαθμό.
+export function locateHeader(kind: ListKind, sheet: RawSheet, b: SourceBinding): number {
+  const fields = fieldsOf(kind); const keys = Object.keys(b.cols);
+  const score = (r: number) => { const m = mapColumns(sheet.rows[r], fields); return keys.filter(k => m[k] != null && m[k] === b.cols[k]).length; };
+  const s0 = score(b.header); let best = s0, at = b.header;
+  for (let r = 0; r < Math.min(sheet.rows.length, 2000); r++) {
+    if (r === b.header || !isHeaderRow(sheet.rows[r])) continue;
+    const v = score(r);
+    if (v > best || (v === best && v > s0 && Math.abs(r - b.header) < Math.abs(at - b.header))) { best = v; at = r; }
+  }
+  return best > s0 && best >= 3 ? at : b.header;
 }
 // Προτεινόμενη στήλη για ένα πεδίο, από τις επικεφαλίδες (για το «προτείνεται» στην αντιστοίχιση)
 export const suggestCols = (kind: ListKind, sheet: RawSheet | undefined, header: number) => mapColumns(sheet?.rows[header], fieldsOf(kind));
@@ -348,21 +396,42 @@ export const identity = (pid: number, kind: StatusKind, from: ISODate, sub = '')
 const subOf = (kind: StatusKind, text: string) => (kind === 'medical' ? vk(text) : '');
 const statusId = (kind: StatusKind, x: Status) => identity(x.pid, kind, x.from, subOf(kind, x.kind || TYPES[x.type].label));
 const candId = (kind: StatusKind, pid: number, c: Cand) => identity(pid, kind, c.from, subOf(kind, c.raw || TYPES[c.type || DEFAULT_TYPE[kind]].label));
+// Μια εγγραφή όπως τη γράφει και τη διαβάζει το Excel: για να φαίνεται τι άλλαξε στην εφαρμογή από την τελευταία
+// ανάγνωση/εγγραφή (base), ώστε στην ανάγνωση να ξεχωρίζουν όσες άλλαξαν και στις δύο πλευρές
+export const recVal = (x: Pick<Status, 'to' | 'type' | 'kind' | 'note' | 'by' | 'reason'>) => [x.to, x.type, x.kind || '', x.note || '', x.by || '', x.reason || ''].join('\u0001');
+export function baseOf(kind: StatusKind, s: AppState, keys: string[]): Record<string, string> {
+  const want = new Set(keys); const out: Record<string, string> = {}; const types = KIND[kind].types!;
+  for (const x of s.statuses) if (types.includes(x.type)) { const id = statusId(kind, x); if (want.has(id)) out[id] = recVal(x); }
+  return out;
+}
+const appText = (x: Status) => 'έως ' + x.to.slice(8) + '/' + x.to.slice(5, 7) + (x.kind ? ', ' + x.kind : '') + (x.note ? ', «' + x.note + '»' : '');
+export interface DiffUpdate { id: string; patch: Partial<Status>; who: string; what: string; conflict?: string }   // conflict: τι έχει η εφαρμογή (άλλαξε και εκεί)
 export interface Diff {
-  add: Omit<Status, 'id'>[]; update: { id: string; patch: Partial<Status>; who: string; what: string }[]; same: number;
+  add: Omit<Status, 'id'>[]; update: DiffUpdate[]; same: number;
   unmatched: Cand[]; dup: Cand[]; appOnly: Status[]; keys: string[];
   removed: Status[];   // ήταν στο Excel στην προηγούμενη ανάγνωση/εγγραφή και σβήστηκαν από εκεί
+  kept: string[];      // άλλαξαν μόνο στην εφαρμογή (το Excel έχει ό,τι είχε): μένουν και γράφονται στο Excel
 }
 // choices: γραμμή → άτομο, για όσους δεν ταίριαξαν μόνοι τους (null = παράλειψη)
 // synced: ποιες εγγραφές είχε το Excel στην προηγούμενη ανάγνωση/εγγραφή. Όσες λείπουν τώρα σβήστηκαν εκεί· αν στη θέση
 // τους υπάρχει νέα γραμμή του ίδιου ατόμου, είναι η ίδια εγγραφή με άλλη ημερομηνία έναρξης.
-export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}, synced: string[] = []): Diff {
+// base: οι εγγραφές όπως ήταν στην τελευταία ανάγνωση/εγγραφή (recVal ανά ταυτότητα)
+export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}, synced: string[] = [], base: Record<string, string> = {}): Diff {
+  const changedInApp = (x: Status) => { const v = base[statusId(kind, x)]; return v != null && v !== recVal(x); };
   const types = KIND[kind].types!;
   const mine = s.statuses.filter(x => types.includes(x.type));
   const idx = new Map(mine.map(x => [statusId(kind, x), x]));
-  const d: Diff = { add: [], update: [], same: 0, unmatched: [], dup: [], appOnly: [], keys: [], removed: [] };
+  const d: Diff = { add: [], update: [], same: 0, unmatched: [], dup: [], appOnly: [], keys: [], removed: [], kept: [] };
   const seen = new Set<string>(); const pm = new Map(s.people.map(p => [p.id, p]));
   const has = (k: string) => b.cols[k] != null;
+  // Άλλαξε το Excel αυτή την εγγραφή από την τελευταία ανάγνωση/εγγραφή; Ό,τι δεν έχει στήλη μετρά όπως ήταν.
+  const cols = { to: has('to'), type: has('kind') || has('where'), kind: has('kind') || has('where'), note: has('note'), by: has('by'), reason: has('reason') };
+  const excelMoved = (cur: Status, patch: Partial<Status>) => {
+    const v = base[statusId(kind, cur)]; if (v == null) return true;
+    const [to, type, k, note, by, reason] = v.split('\u0001'); const was: Record<keyof typeof cols, string> = { to, type, kind: k, note, by, reason };
+    const now = { ...was }; for (const f of Object.keys(cols) as (keyof typeof cols)[]) if (cols[f]) now[f] = String(patch[f] ?? cur[f] ?? '');
+    return recVal(now as unknown as Status) !== v;
+  };
   for (const c of parsed.cands) {
     const pid = c.pid ?? (c.r in choices ? choices[c.r] : null);
     if (pid == null) { if (!(c.r in choices)) d.unmatched.push(c); continue; }
@@ -386,7 +455,13 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (kind === 'punish' && has('by') && c.by && c.by !== (cur.by || '')) { patch.by = c.by; what.push('ποιος την επέβαλε'); }
     if (kind === 'punish' && has('reason') && c.reason && c.reason !== (cur.reason || '')) { patch.reason = c.reason; what.push('αιτία'); }
     if (cur.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
-    if (what.length) d.update.push({ id: cur.id, patch, who: pm.get(pid) ? pm.get(pid)!.last + ' ' + pm.get(pid)!.first : c.who, what: what.join(', ') });
+    const who = pm.get(pid) ? pm.get(pid)!.last + ' ' + pm.get(pid)!.first : c.who;
+    if (what.length && changedInApp(cur) && !excelMoved(cur, patch)) {
+      // το άλλαξες μόνο στην εφαρμογή: κρατιέται (και γράφεται στο Excel)· η έγκριση ποινής περνά
+      d.kept.push(cur.id);
+      if (patch.pending === false) d.update.push({ id: cur.id, patch: { pending: false }, who, what: 'εγκρίθηκε' });
+      else d.same++;
+    } else if (what.length) d.update.push({ id: cur.id, patch, who, what: what.join(', '), ...(changedInApp(cur) ? { conflict: appText(cur) } : {}) });
     else d.same++;
   }
   d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)));
@@ -412,7 +487,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       if (a.type !== x.type) { patch.type = a.type; what.push(TYPES[a.type].label); }
       for (const k of ['kind', 'note', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
       if (x.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
-      d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', ') });
+      d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', '), ...(changedInApp(x) ? { conflict: appText(x) } : {}) });
     }
   }
   return d;
@@ -536,14 +611,18 @@ export function missingFields(kind: ListKind, cols: Record<string, number>): str
 }
 // Αποτύπωμα του πίνακα ενός είδους: μόνο οι στήλες που διαβάζει η εφαρμογή (και οι μέρες του μηνιαίου πλέγματος), από τις
 // επικεφαλίδες ως το τέλος του πίνακα. Αλλαγή σε άλλο φύλλο ή άλλο πίνακα του ίδιου αρχείου δεν το αλλάζει (Michael, 11/10).
+// Η θέση κάθε γραμμής μετράει από τις επικεφαλίδες, ώστε ο ίδιος πίνακας λίγο πιο κάτω (γραμμές από πάνω) να μη φαίνεται
+// «αλλαγμένος». Τα κελιά με τύπο δεν μετράνε: το Excel τα ξαναϋπολογίζει στο άνοιγμα (π.χ. σύνολα θαλάμων κάτω από το
+// ΣΥΝΟΛΙΚΟ) και θα έδειχναν «Άλλαξε στο Excel» χωρίς να άλλαξε τίποτα.
 export function tableHash(sheet: RawSheet | undefined, b: SourceBinding): string {
   if (!sheet) return '-';
   const cols = [...new Set([...Object.values(b.cols), ...(b.cols.d1 != null ? dayColumns(sheet.rows[b.header], b.cols.d1) : [])])].sort((a, c) => a - c);
-  const line = (r: number) => cols.map(c => cellText((sheet.rows[r] || [])[c])).join('\t');
-  const text = [line(b.header), ...tableRows(sheet, b.header, b.cols).records.map(x => x.r + ':' + line(x.r))].join('\n');
+  const line = (r: number) => cols.map(c => (sheet.fx?.has(r + ':' + c) ? '' : cellText((sheet.rows[r] || [])[c]))).join('\t');
+  const text = [line(b.header), ...tableRows(sheet, b.header, b.cols).records.map(x => x.r - b.header + ':' + line(x.r))].join('\n');
   let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-  return (h >>> 0).toString(16) + ':' + text.length;
+  return HASH_V + (h >>> 0).toString(16) + ':' + text.length;
 }
+export const HASH_V = 'v2:';
 export const bindingText = (b: SourceBinding) => b.file.split(/[\\/]/).pop() + ' › ' + b.sheet + ' · γραμμή ' + (b.header + 1);
 export const addDaysSafe = addDays;
 
@@ -918,7 +997,7 @@ export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): S
 export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, today: ISODate, keep: string[] = []): SourcePlan {
   const kept = new Set(keep);
   const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
-  const month = sheetMonth(sheet, b.header, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
+  const month = bindingMonth(sheet, b, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
   const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
   const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
   const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, { kind: DutyKind; code: string; k: string }>>(); const days: number[] = [];

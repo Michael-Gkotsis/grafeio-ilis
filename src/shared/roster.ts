@@ -4,7 +4,7 @@ import { norm } from './text';
 import type { ImportRow } from './commands';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
-export interface RawSheet { name: string; rows: CellValue[][] }
+export interface RawSheet { name: string; rows: CellValue[][]; fx?: Set<string> }   // fx: κελιά με τύπο («γραμμή:στήλη» από 0)
 export interface RosterResult {
   rows: ImportRow[]; warnings: string[]; main: string; essos: string;
   skipped: string[];                 // γραμμές που αγνοήθηκαν γιατί δεν είναι άτομα (ΣΥΝΟΛΟ, 1ΟΣ…)
@@ -14,7 +14,7 @@ export interface RosterResult {
 }
 
 // Δικαίωμα ΔΝ: στήλη «ΔΝ» (ΝΑΙ, Χ, ✓…), η λέξη ΔΝ στις παρατηρήσεις, ή φύλλο «ΔΝ» με λίστα ονομάτων
-export const DN_HEAD = /^Δ\s*\.?\s*[ΝN]\s*\.?$|ΔΙΚΑΙΩΜΑ\s*Δ\s*\.?\s*[ΝN]|^ΔΙΑΝΥΚΤΕΡΕΥΣ/;
+export const DN_HEAD = /^Δ\s*[./]?\s*[ΝN]\s*\.?(\s*\(.*\))?$|ΔΙΚΑΙΩΜΑ\s*Δ\s*[./]?\s*[ΝN]|ΔΙΚΑΙΟΥΧ\S*\s*Δ\s*[./]?\s*[ΝN]|^ΔΙΑΝΥΚΤΕΡΕΥΣ/;
 export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
 export const isDnYes = (v: string) => { const t = norm(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|NO|N\/A|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)

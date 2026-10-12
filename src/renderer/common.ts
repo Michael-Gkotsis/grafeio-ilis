@@ -1,5 +1,5 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, Kbd, Strip } from './ui';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
@@ -70,14 +70,40 @@ export function DateBar({ value, onChange, days, count }: P) {
 export interface Cell { v: string; s: string; cs: number; rs: number }
 export interface SheetModel { cols: number[]; rows: (Cell | null)[][] }
 export const E = (v: unknown, s?: string, cs?: number, rs?: number): Cell => ({ v: v == null ? '' : String(v), s: s || '', cs: cs || 1, rs: rs || 1 });
+// Γραμμή του φύλλου: ξαναζωγραφίζεται μόνο όταν άλλαξε κελί της ή η επισήμανσή της
+const sameCell = (a: Cell | null, b: Cell | null) => a === b || (!!a && !!b && a.v === b.v && a.s === b.s && a.cs === b.cs && a.rs === b.rs);
+const sameRow = (a: (Cell | null)[], b: (Cell | null)[]) => a === b || (a.length === b.length && a.every((c, i) => sameCell(c, b[i])));
+const XlRow = memo(function XlRow({ r, ri, fl, gen }: { r: (Cell | null)[]; ri: number; fl?: Set<number>; gen: number }) {
+  return html`<tr><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = !!fl && fl.has(ci); return html`<td key=${ci + (f ? 'f' + gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.v}</td>`; })}</tr>`;
+}, (a, b) => a.ri === b.ri && a.fl === b.fl && (!a.fl || a.gen === b.gen) && sameRow(a.r, b.r));
+
+// Μεγάλα φύλλα (μηνιαίο πλέγμα: 150 άτομα × 31 μέρες ≈ 6.000 κελιά) σε κομμάτια των 20 γραμμών:
+// ζωγραφίζονται μόνο όσα είναι κοντά στην οθόνη, τα άλλα κρατούν μόνο το ύψος τους. Όχι όταν υπάρχουν
+// κελιά σε πολλές γραμμές (rowSpan), γιατί δεν κόβονται σε κομμάτια.
+const CHUNK = 20, ROW_H = 29;
+const chunked = (m: SheetModel) => m.rows.length > CHUNK * 3 && m.rows.every(r => r.every(c => !c || c.rs === 1));
+function XlChunk({ i, rows, start, show, h, span, flash, gen, io, heights }: P) {
+  const ref = useRef<HTMLTableSectionElement>(null);
+  useEffect(() => { const el = ref.current!; io.observe(el); return () => io.unobserve(el); }, [io]);
+  useLayoutEffect(() => { if (show) heights.current[i] = ref.current!.offsetHeight; });
+  return html`<tbody ref=${ref} data-chunk=${i}>${show ? rows.map((r: (Cell | null)[], k: number) => html`<${XlRow} key=${start + k} r=${r} ri=${start + k} fl=${flash.get(start + k)} gen=${gen}/>`)
+    : html`<tr className="xl__gap" style=${{ height: h + 'px' }}><td colSpan=${span}></td></tr>`}</tbody>`;
+}
+
 export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName, meta, footer }: { model: SheetModel; fileName: string; sheetName: string; meta?: string; footer?: string }) {
-  const prev = useRef<SheetModel | null>(null); const [flash, setFlash] = useState({ keys: new Set<string>(), gen: 0 });
+  // Επισήμανση μόνο όταν αλλάζουν κελιά του ίδιου εντύπου (π.χ. ανάθεση)· όχι σε άλλη μέρα/μήνα ή αναζήτηση,
+  // όπου αλλάζουν όλα και η επισήμανση χιλιάδων κελιών θα κόλλαγε την οθόνη χωρίς να λέει κάτι
+  const prev = useRef<{ model: SheetModel; doc: string } | null>(null); const [flash, setFlash] = useState({ rows: new Map<number, Set<number>>(), gen: 0 });
   useEffect(() => {
-    const p = prev.current;
-    if (p && p !== model) { const ch = new Set<string>(); model.rows.forEach((r, ri) => r.forEach((c, ci) => { if (!c) return; const o = p.rows[ri] && p.rows[ri][ci]; if (!o || o.v !== c.v || o.s !== c.s) ch.add(ri + ':' + ci); })); if (ch.size) setFlash(f => ({ keys: ch, gen: f.gen + 1 })); }
-    prev.current = model;
+    const p = prev.current; const doc = fileName + '|' + sheetName;
+    if (p && p.model !== model && p.doc === doc && p.model.rows.length === model.rows.length && p.model.cols.length === model.cols.length) {
+      const ch = new Map<number, Set<number>>();
+      model.rows.forEach((r, ri) => { const o = p.model.rows[ri]; if (o === r) return; r.forEach((c, ci) => { if (c && !sameCell(c, o[ci])) { let x = ch.get(ri); if (!x) ch.set(ri, x = new Set()); x.add(ci); } }); });
+      if (ch.size) setFlash(f => ({ rows: ch, gen: f.gen + 1 }));
+    }
+    prev.current = { model, doc };
   }, [model]);
-  useEffect(() => { if (!flash.keys.size) return; const t = setTimeout(() => setFlash(f => ({ keys: new Set(), gen: f.gen })), 1900); return () => clearTimeout(t); }, [flash]);
+  useEffect(() => { if (!flash.rows.size) return; const t = setTimeout(() => setFlash(f => ({ rows: new Map(), gen: f.gen })), 1900); return () => clearTimeout(t); }, [flash]);
   const letters = model.cols.map((_, i) => (i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26))));
   // «Χωρά»: το έντυπο μικραίνει ώστε να φαίνεται όλο το πλάτος (CSS zoom, υπολογίζεται μόνο όταν αλλάζει το πλάτος)
   const { prefs, set } = usePrefs(); const fit = prefs.xlZoom === 'fit';
@@ -89,13 +115,28 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
   }, [fit]);
   const natural = 28 + model.cols.reduce((a, w) => a + (w || 64), 0);
   const z = fit && cw > 0 && natural > cw ? Math.max(0.4, (cw - 2) / natural) : 1;
+  // ποια κομμάτια είναι κοντά στην οθόνη (με περιθώριο, για να μη φαίνεται κενό στο γρήγορο κύλισμα)
+  const [vis, setVis] = useState(() => new Set([0, 1]));
+  const heights = useRef<number[]>([]);
+  const [io] = useState(() => new IntersectionObserver(es => setVis(v => {
+    const n = new Set(v); es.forEach(e => { const i = +(e.target as HTMLElement).dataset.chunk!; if (e.isIntersecting) n.add(i); else n.delete(i); });
+    return n.size === v.size && [...n].every(i => v.has(i)) ? v : n;
+  }), { rootMargin: '600px 0px' }));
+  useEffect(() => () => io.disconnect(), [io]);
+  const big = useMemo(() => chunked(model), [model]);
+  const nc = Math.ceil(model.rows.length / CHUNK);
+  const rowH = () => { let h = 0, n = 0; heights.current.forEach((x, i) => { if (x && i < nc) { h += x; n += Math.min(CHUNK, model.rows.length - i * CHUNK); } }); return n ? h / n : ROW_H; };
+  const body = big ? Array.from({ length: nc }, (_, i) => {
+    const rows = model.rows.slice(i * CHUNK, (i + 1) * CHUNK);
+    return html`<${XlChunk} key=${i} i=${i} rows=${rows} start=${i * CHUNK} show=${vis.has(i)} h=${Math.round(rows.length * rowH())} span=${model.cols.length + 1} flash=${flash.rows} gen=${flash.gen} io=${io} heights=${heights}/>`;
+  }) : html`<tbody>${model.rows.map((r, ri) => html`<${XlRow} key=${ri} r=${r} ri=${ri} fl=${flash.rows.get(ri)} gen=${flash.gen}/>`)}</tbody>`;
   return html`<div className="xl" aria-label=${'Προεπισκόπηση ' + fileName}>
     <div className="xl__bar"><span className="xl__fn">${fileName}</span><span>· φύλλο «${sheetName}»</span><span className="xl__meta">${meta}</span>
       <button type="button" className="xl__zoom" aria-pressed=${fit} data-tip=${fit ? 'Σε πραγματικό μέγεθος (100%)' : 'Να χωρά όλο το πλάτος'} data-tip-side="left" onClick=${() => set('xlZoom', fit ? '100' : 'fit')}>${fit ? 'Χωρά' + (z < 1 ? ' · ' + Math.round(z * 100) + '%' : '') : '100%'}</button></div>
     <div className="xl__scroll" ref=${box}><table style=${z < 1 ? { width: natural + 'px', minWidth: 0, zoom: z } : undefined}>
       <colgroup><col style=${{ width: '28px' }}/>${model.cols.map((w, i) => html`<col key=${i} style=${w ? { width: w + 'px' } : undefined}/>`)}</colgroup>
       <thead><tr><th></th>${model.cols.map((_, i) => html`<th key=${i}>${letters[i]}</th>`)}</tr></thead>
-      <tbody>${model.rows.map((r, ri) => html`<tr key=${ri}><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = flash.keys.has(ri + ':' + ci); return html`<td key=${ci + (f ? 'f' + flash.gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.v}</td>`; })}</tr>`)}</tbody>
+      ${body}
     </table></div>
     ${footer && html`<div className="xl__foot">${footer}</div>`}
   </div>`;

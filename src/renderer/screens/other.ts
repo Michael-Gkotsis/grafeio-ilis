@@ -14,7 +14,7 @@ import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { recentPeople, usePrefs, type Prefs } from '../prefs';
-import { RosterPreview, SourcesAlert, SourcesView } from './sources';
+import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources';
 type P = any;
 
 export function TodayScreen() {
@@ -293,7 +293,7 @@ function AppearanceCard() {
 }
 
 function SettingsCard() {
-  const { state, run, boot, refresh } = useStore(); const toast = useToast();
+  const { state, run, boot } = useStore(); const toast = useToast();
   const [s, setS] = useState(() => ({ unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
   const [outRooms, setOutRooms] = useState(() => ({ 6: (state.rules.outRooms[6] || []).join(','), 0: (state.rules.outRooms[0] || []).join(',') }));
   const save = async () => {
@@ -313,7 +313,7 @@ function SettingsCard() {
       <div className="field"><label className="field__label" htmlFor="st-r0">Θάλαμοι εξόδου Κυριακή</label><input id="st-r0" className="ui-input" value=${outRooms[0]} onChange=${(e: any) => setOutRooms({ ...outRooms, 0: e.target.value })}/></div></div>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
     <hr style=${{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }}/>
-    <dl className="kv"><dt>Excel βγαίνουν στο</dt><dd>${state.settings.outputDir || boot.outputDir} <${Button} variant="link" onClick=${async () => { const d = await window.api.chooseOutputDir(); if (d) { await refresh(); toast({ text: 'Τα Excel θα βγαίνουν στο ' + d }); } }}>Άλλαξε<//> · <${Button} variant="link" onClick=${() => window.api.openFolder('output')}>Άνοιξε<//></dd>
+    <dl className="kv"><dt>Αρχεία</dt><dd>Στο ${state.settings.outputDir || boot.outputDir}, εκτός αν διάλεξες άλλο στους <b>Φακέλους αρχείων</b> παρακάτω.</dd>
       <dt>Δεδομένα</dt><dd>${boot.dataDir} <${Button} variant="link" onClick=${() => window.api.openFolder('data')}>Άνοιξε<//></dd>
       <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
       <dt>Έκδοση</dt><dd>${boot.version}</dd></dl>
@@ -386,7 +386,7 @@ export function TemplatesScreen() {
   return html`<div>
     <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού, τα αρχεία Excel που διαβάζει και ενημερώνει, και οι ρυθμίσεις της Ίλης."/>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'files', label: 'Αρχεία Excel' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
-    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<${SourcesView}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
+    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<${SourcesView}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${FoldersCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
