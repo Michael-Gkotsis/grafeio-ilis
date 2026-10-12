@@ -38,6 +38,7 @@ const api: Api = {
   formInfo: form => ipcRenderer.invoke('form:info', form),
   formSave: (form, b) => ipcRenderer.invoke('form:save', form, b),
   formDir: form => ipcRenderer.invoke('form:dir', form),
-  openPath: file => ipcRenderer.invoke('open:path', file)
+  openPath: file => ipcRenderer.invoke('open:path', file),
+  printFile: (file, sheet) => ipcRenderer.invoke('print:file', file, sheet)
 };
 contextBridge.exposeInMainWorld('api', api);

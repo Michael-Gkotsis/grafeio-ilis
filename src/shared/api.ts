@@ -38,7 +38,7 @@ export interface Api {
   run(cmd: Command): Promise<CmdResult>;
   undo(): Promise<CmdResult>;
   sync(): Promise<CmdResult>;   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
-  exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean }): Promise<ExportResult>;
+  exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult>;   // print: προεπισκόπηση εκτύπωσης αντί για Excel
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;
@@ -71,5 +71,6 @@ export interface Api {
   formSave(form: FormKind, b: FormBinding | null): Promise<CmdResult>;
   formDir(form: FormKind): Promise<string | null>;
   openPath(file: string): Promise<void>;
+  printFile(file: string, sheet?: string): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: το φύλλο που τσεκάρεται)
 }
 declare global { interface Window { api: Api } }

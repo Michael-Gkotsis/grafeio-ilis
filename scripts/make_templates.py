@@ -80,6 +80,7 @@ for ws in list(wb.worksheets):
     ws['G9'] = 'Αυλώνας, '
     ws['D10'] = 'Ο'; ws['G10'] = 'Ο'; ws['D11'] = 'ΑΛΧΙΑΣ ΙΛΗΣ'; ws['G11'] = 'ΔΚΤΗΣ ΙΛΗΣ'
     ws.print_area = 'A1:H11'
+    ws.page_setup.fitToWidth = None   # μία σελίδα πλάτος: το «αυτόματο» του πρωτοτύπου με λίγα ονόματα τύπωνε σε δύο σελίδες
     for t in ws.tables.values():   # ο πίνακας του Excel: μόνο η γραμμή-πρότυπο, χωρίς την παλιά ταξινόμηση
         t.ref = 'A6:H7'; t.autoFilter.ref = 'A6:H7'; t.sortState = None
 scrub_props(wb)

@@ -375,6 +375,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .xlcard .mono{font-size:13px;word-break:normal}
 .xlcard .ui-btn--outline{background:var(--bar-fg);color:var(--bar);border-color:var(--bar-fg);width:100%}
 .xlcard .ui-btn--outline + .ui-btn--outline{background:transparent;color:var(--bar-fg)}
+.xlcard .ui-btn--ghost{color:var(--bar-fg);border-color:var(--bar-muted);width:100%}
+.xlcard .ui-btn--ghost:hover{background:var(--bar-field)}
 .xlcard .tplnote{display:block;color:var(--bar-muted);margin:0}
 .xlcard .tplnote .ui-btn--link{color:var(--bar-fg)}
 .ui-dialog--xl{width:min(1240px,100%)}
