@@ -11,6 +11,7 @@ import {
   bestFor, defaultBinding, detectHkai, detectTables, diffStatuses, hkaiMapOf, identity, parseStatuses, planPeopleWrite, planWrite,
   refitCols, snapFromSheet, tableRows, type SourceBinding
 } from '../src/shared/sources';
+import { dutyBlock } from '../src/shared/rules';
 import { Workbook } from '../src/main/xlsx';
 import { readBook, writeSource } from '../src/main/sources';
 import { fakeState } from './fixtures';
@@ -82,15 +83,26 @@ describe('ανάγνωση καταστάσεων', () => {
   const s0 = fakeState(30);
   const sh = book(s0)[2];
   const b: SourceBinding = { file: 'x.xlsx', sheet: 'IATRIKA', header: 6, cols: bestFor('medical', [sh])!.cols, write: true };
+  it('ΕΑΡΒ («ΕΛ ΑΡΒ»): δικό του είδος, ακόμα κι αν παλιότερα είχε διαλεχτεί ΕΑ', () => {
+    for (const values of [undefined, { ΕΛΑΡΒ: 'EA' as const }]) {
+      const p = parseStatuses('medical', sh, { ...b, values }, s0.people, TODAY);
+      expect(p.unknown).toEqual([]);
+      expect(diffStatuses('medical', s0, p, b).add.map(a => [a.pid, a.type, a.kind])).toEqual([[11, 'EA', undefined], [12, 'EARV', 'ΕΛ ΑΡΒ']]);
+    }
+    // χωρίς περιορισμούς: μπαίνει και σε ένοπλη θέση και σε μαγειρεία
+    const st = [{ id: 'r', pid: 12, type: 'EARV' as const, from: TODAY, to: TODAY }];
+    expect(dutyBlock(st, TODAY, 12, { armed: true, kind: 'sk' })).toBeNull(); expect(dutyBlock(st, TODAY, 12, { armed: false, kind: 'mg' })).toBeNull();
+  });
   it('άγνωστο είδος και άγνωστο άτομο: ρωτά, δεν μαντεύει', () => {
+    const sh: RawSheet = { name: 'IATRIKA', rows: book(s0)[2].rows.map(r => r.map(v => (v === 'ΕΛ ΑΡΒ' ? 'ΕΛ ΠΟΔ' : v))) };
     const p = parseStatuses('medical', sh, b, s0.people, TODAY);
-    expect(p.unknown).toEqual(['ΕΛ ΑΡΒ']);
+    expect(p.unknown).toEqual(['ΕΛ ΠΟΔ']);
     expect(p.cands.find(c => c.who.includes('ΚΑΝΕΝΑΣ'))!.pid).toBeNull();
     const d = diffStatuses('medical', s0, p, b);
-    expect(d.add.map(a => [a.pid, a.type, a.kind])).toEqual([[11, 'EA', undefined], [12, 'EA', 'ΕΛ ΑΡΒ']]);
+    expect(d.add.map(a => [a.pid, a.type, a.kind])).toEqual([[11, 'EA', undefined], [12, 'EA', 'ΕΛ ΠΟΔ']]);
     expect(d.unmatched).toHaveLength(1);
-    // ο χρήστης λέει ότι το «ΕΛ ΑΡΒ» είναι ΕΥ και ποιος είναι ο άγνωστος
-    const b2 = { ...b, values: { ΕΛΑΡΒ: 'EY' as const } };
+    // ο χρήστης λέει ότι το «ΕΛ ΠΟΔ» είναι ΕΥ και ποιος είναι ο άγνωστος
+    const b2 = { ...b, values: { ΕΛΠΟΔ: 'EY' as const } };
     const d2 = diffStatuses('medical', s0, parseStatuses('medical', sh, b2, s0.people, TODAY), b2, { 9: 5 });
     expect(d2.add.map(a => [a.pid, a.type])).toEqual([[11, 'EA'], [12, 'EY'], [5, 'EY']]);
   });

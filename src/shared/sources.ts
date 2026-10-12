@@ -69,7 +69,7 @@ export const KINDS: KindDef[] = [
     sheetRe: /ΤΙΜΩΡ|ΠΟΙΝ/, titleRe: /ΤΙΜΩΡ|ΠΟΙΝ/,
     fields: [FROM(), TO(), F('kind', 'Είδος ποινής', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', /ΕΙΔΟΣ ΠΟΙΝΗΣ|^ΠΟΙΝΗ$/), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', /^ΗΜΕΡΕΣ$/),
       F('by', 'Ποιος την επέβαλε', 'ΕΠΕΒΑΛΕ', /ΕΠΕΒΑΛΕ|ΕΠΙΒΛΗΘΗΚΕ|ΤΙΜΩΡΗΣΕ|ΑΠΟ ΠΟΙΟΝ|ΔΙΑΤΑΚΤΗΣ/), F('reason', 'Αιτία (διότι…)', 'ΑΙΤΙΑ', /ΑΙΤΙΑ|ΑΙΤΙΟΛΟΓΙΑ|^ΔΙΟΤΙ|ΠΑΡΑΠΤΩΜΑ/), NOTE] },
-  { id: 'medical', label: 'ΕΑ / ΕΥ / ΕΟ', help: 'Είδος (ΕΑ, ΕΥ, ΕΟ, ΕΛ ΑΡΒ…), από, έως', title: 'ΕΑ-ΕΥ', write: true, types: ['EA', 'EY', 'EO'],
+  { id: 'medical', label: 'ΕΑ / ΕΥ / ΕΟ', help: 'Είδος (ΕΑ, ΕΥ, ΕΟ, ΕΑΡΒ…), από, έως', title: 'ΕΑ-ΕΥ', write: true, types: ['EA', 'EARV', 'EY', 'EO'],
     sheetRe: /IATR|ΙΑΤΡ|ΕΑ.?ΕΥ/, titleRe: /ΕΑ\s*[-–/]?\s*ΕΥ|ΕΛΕΥΘΕΡ/,
     fields: [F('kind', 'Είδος (ΕΑ, ΕΥ, ΕΟ…)', 'ΕΑ-ΕΥ', /^ΕΑ\s*[-–/]\s*ΕΥ|^ΕΙΔΟΣ|ΕΞΑΙΡΕΣΗ/, { req: true }), FROM(), TO(), NOTE] },
   { id: 'hospital', label: 'Νοσοκομείο / αναρρωτικές', help: 'Πού (νοσοκομείο ή ΑΝ.ΑΔ), είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.', write: true, types: ['NOS', 'SICK'],
@@ -355,6 +355,8 @@ const vk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z0-9]/g, '');
 // Τιμή στη στήλη «είδος» → είδος κατάστασης. null = άγνωστο (το διαλέγει ο χρήστης· ως τότε μπαίνει η προεπιλογή του είδους).
 export function typeOfValue(kind: StatusKind, raw: string, values?: Record<string, TypeKey>): TypeKey | null {
   const v = vk(raw);
+  // ΕΑΡΒ / «ΕΛ ΑΡΒ»: δικό του είδος (πριν υπάρξει διαβαζόταν ως ΕΑ, ή όπως το είχες διαλέξει)
+  if (kind === 'medical' && /^(ΕΑΡΒ|ΕΛΑΡΒ)|ΑΡΒΥΛ/.test(v)) return 'EARV';
   if (values && v && values[v]) return values[v];
   switch (kind) {
     case 'punish': return 'PUN';
@@ -912,7 +914,7 @@ export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null 
   return null;
 }
 // κωδικοί απουσίας του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Α/Α, ΓΡ, ΕΣΤ…): δεν είναι υπηρεσία, δεν πειράζονται
-export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
+export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ|ΕΑΡΒ|ΕΛΑΡΒ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
 export interface DutiesPlan {
   month: string; guards: Guards; base: Record<number, Baseline>; extraCells: string[];
   days: number; entries: number; extra: number; byKind: Partial<Record<DutyKind, number>>;

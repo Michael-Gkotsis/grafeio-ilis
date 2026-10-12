@@ -201,10 +201,10 @@ function EditPersonDialog({ p, onClose }: P) {
 
 /* features/status/DeclareStatusDialog · 1 ή πολλά άτομα, 2 βήματα */
 export function DeclareStatusDialog({ initial, onClose }: P) {
-  const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
+  const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   const [step, setStep] = useState(1);
-  const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || tomorrow, to: initial.to || initial.from || tomorrow, note: '', kind: initial.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0], by: '', reason: '', on: today }));
+  const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: '', kind: initial.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0], by: '', reason: '', on: today }));
   const [err, setErr] = useState<any>(null);
   const set = (patch: P) => { setCmd(c => ({ ...c, ...patch, ...(patch.type ? { kind: patch.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0] } : {}) })); setErr(null); };
   const t = TYPES[cmd.type];

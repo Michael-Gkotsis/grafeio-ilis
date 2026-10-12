@@ -113,7 +113,7 @@ export function RecordsScreen() {
   const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [undoMark()] }); };
   return html`<div>
     <${PageHeader} title="Ιατρικά και ποινές" sub="Όταν λήξει ένα ιατρικό ή μια ποινή, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Οι ποινές αιτούνται στην ΗΚΑΙ και ισχύουν όταν εγκριθούν.">
-      <${Button} variant="outline" onClick=${() => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><${Button} variant="outline" onClick=${() => nav.declare({ type: 'PUN', from: addDays(today, 1), to: addDays(today, 5) })}>+ Ποινή<//><//>
+      <${Button} variant="outline" onClick=${() => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><${Button} variant="outline" onClick=${() => nav.declare({ type: 'PUN', from: today, to: addDays(today, 4) })}>+ Ποινή<//><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Ιατρικά (' + nMed + ')' }, { value: 'pun', label: 'Ποινές (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }, { value: 'allpun', label: 'Όλες οι ποινές' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${tab === 'med' || tab === 'expired' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
@@ -443,8 +443,8 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Εξοδούχοι σήμερα', k: 'ΕΞΟΔΟΥΧΟΙ ΕΞΟΔΟΣ ΔΝ ΔΙΑΝΥΚΤΕΡΕΥΣΗ ΠΑΡΑΜΕΝΟΝΤΕΣ', fn: () => nav.go('outs', { outDate: today }) },
     { t: 'Υπηρεσίες αύριο', k: 'ΥΠΗΡΕΣΙΕΣ ΦΡΟΥΡΑ ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΜΑΓΕΙΡΕΙΑ ΛΥ', fn: () => nav.go('guard', { guardDate: tomorrow }) },
     { t: 'ΗΚΑΙ σήμερα', k: 'ΗΚΑΙ ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('hkai', { hkaiDate: today }) },
-    { t: 'Δήλωσε ιατρικό (ΕΑ, ΕΥ, ΕΟ, ΝΟΣ)', k: 'ΙΑΤΡΙΚΑ ΕΑ ΕΥ ΕΟ ΝΟΣ', fn: () => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) }) },
-    { t: 'Νέα ποινή (αίτηση στην ΗΚΑΙ)', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ type: 'PUN', from: addDays(today, 1), to: addDays(today, 5) }) },
+    { t: 'Δήλωσε ιατρικό (ΕΑ, ΕΑΡΒ, ΕΥ, ΕΟ, ΝΟΣ)', k: 'ΙΑΤΡΙΚΑ ΕΑ ΕΑΡΒ ΑΡΒΥΛΩΝ ΕΥ ΕΟ ΝΟΣ', fn: () => nav.declare({ type: 'EA', from: today, to: addDays(today, 2) }) },
+    { t: 'Νέα ποινή (αίτηση στην ΗΚΑΙ)', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ type: 'PUN', from: today, to: addDays(today, 4) }) },
     { t: 'Ιατρικά και ποινές', k: 'ΙΑΤΡΙΚΑ ΠΟΙΝΕΣ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'med' }) },
     { t: 'Δώσε άδεια', k: 'ΑΔΕΙΑ', fn: () => nav.declare({ type: 'LEAVE' }) },
     { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
