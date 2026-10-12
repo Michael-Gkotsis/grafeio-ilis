@@ -3,7 +3,7 @@
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
 import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
-import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, type StatusCmd } from './rules';
+import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -59,14 +59,14 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = personMap(s.people);
   switch (c.t) {
     case 'declare': {
-      const { cmd } = c; const plan = planStatusChange(s, cmd); const t = TYPES[cmd.type];
+      const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today); const t = TYPES[cmd.type];
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
       if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
-        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...cmd.pids.map(pid => {
+        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, cmd.to, ctx.newId)), ...cmd.pids.map(pid => {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
@@ -85,7 +85,9 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         if (r) throw new Error(shortName(pm.get(x.pid)!) + ' δεν βγαίνει έξοδο: ' + r);
       }
       const pids = new Set(c.changes.map(x => x.pid));
-      const kept = s.statuses.filter(x => !(pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to));
+      // έξοδος/ΔΝ πολλών ημερών: αλλάζει μόνο αυτή η μέρα, οι άλλες μένουν
+      const hit = (x: Status) => pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to;
+      const kept = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
       const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date }));
       return { state: { ...s, statuses: [...kept, ...added] }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + c.changes.length + ' αλλαγές', files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
     }
