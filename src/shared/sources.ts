@@ -69,7 +69,7 @@ export const KINDS: KindDef[] = [
     sheetRe: /ΤΙΜΩΡ|ΠΟΙΝ/, titleRe: /ΤΙΜΩΡ|ΠΟΙΝ/,
     fields: [FROM(), TO(), F('kind', 'Είδος ποινής', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', /ΕΙΔΟΣ ΠΟΙΝΗΣ|^ΠΟΙΝΗ$/), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', /^ΗΜΕΡΕΣ$/),
       F('by', 'Ποιος την επέβαλε', 'ΕΠΕΒΑΛΕ', /ΕΠΕΒΑΛΕ|ΕΠΙΒΛΗΘΗΚΕ|ΤΙΜΩΡΗΣΕ|ΑΠΟ ΠΟΙΟΝ|ΔΙΑΤΑΚΤΗΣ/), F('reason', 'Αιτία (διότι…)', 'ΑΙΤΙΑ', /ΑΙΤΙΑ|ΑΙΤΙΟΛΟΓΙΑ|^ΔΙΟΤΙ|ΠΑΡΑΠΤΩΜΑ/), NOTE] },
-  { id: 'medical', label: 'ΕΑ / ΕΥ / ΕΟ', help: 'Είδος (ΕΑ, ΕΥ, ΕΟ, ΕΛ ΑΡΒ…), από, έως', title: 'ΕΑ-ΕΥ', write: true, types: ['EA', 'EY', 'EO'],
+  { id: 'medical', label: 'ΕΑ / ΕΥ / ΕΟ', help: 'Είδος (ΕΑ, ΕΥ, ΕΟ, ΕΑΡΒ…), από, έως', title: 'ΕΑ-ΕΥ', write: true, types: ['EA', 'EARV', 'EY', 'EO'],
     sheetRe: /IATR|ΙΑΤΡ|ΕΑ.?ΕΥ/, titleRe: /ΕΑ\s*[-–/]?\s*ΕΥ|ΕΛΕΥΘΕΡ/,
     fields: [F('kind', 'Είδος (ΕΑ, ΕΥ, ΕΟ…)', 'ΕΑ-ΕΥ', /^ΕΑ\s*[-–/]\s*ΕΥ|^ΕΙΔΟΣ|ΕΞΑΙΡΕΣΗ/, { req: true }), FROM(), TO(), NOTE] },
   { id: 'hospital', label: 'Νοσοκομείο / αναρρωτικές', help: 'Πού (νοσοκομείο ή ΑΝ.ΑΔ), είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.', write: true, types: ['NOS', 'SICK'],
@@ -355,6 +355,8 @@ const vk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z0-9]/g, '');
 // Τιμή στη στήλη «είδος» → είδος κατάστασης. null = άγνωστο (το διαλέγει ο χρήστης· ως τότε μπαίνει η προεπιλογή του είδους).
 export function typeOfValue(kind: StatusKind, raw: string, values?: Record<string, TypeKey>): TypeKey | null {
   const v = vk(raw);
+  // ΕΑΡΒ / «ΕΛ ΑΡΒ»: δικό του είδος (πριν υπάρξει διαβαζόταν ως ΕΑ, ή όπως το είχες διαλέξει)
+  if (kind === 'medical' && /^(ΕΑΡΒ|ΕΛΑΡΒ)|ΑΡΒΥΛ/.test(v)) return 'EARV';
   if (values && v && values[v]) return values[v];
   switch (kind) {
     case 'punish': return 'PUN';
@@ -406,7 +408,8 @@ const statusId = (kind: StatusKind, x: Status) => identity(x.pid, kind, x.from, 
 const candId = (kind: StatusKind, pid: number, c: Cand) => identity(pid, kind, c.from, subOf(kind, c.raw || TYPES[c.type || DEFAULT_TYPE[kind]].label));
 // Μια εγγραφή όπως τη γράφει και τη διαβάζει το Excel: για να φαίνεται τι άλλαξε στην εφαρμογή από την τελευταία
 // ανάγνωση/εγγραφή (base), ώστε στην ανάγνωση να ξεχωρίζουν όσες άλλαξαν και στις δύο πλευρές
-export const recVal = (x: Pick<Status, 'to' | 'type' | 'kind' | 'note' | 'by' | 'reason'>) => [x.to, x.type, x.kind || '', x.note || '', x.by || '', x.reason || ''].join('\u0001');
+// χωρίς λήξη: «open» αντί για ημερομηνία, ώστε η καθημερινή επέκταση να μη μετρά ως αλλαγή στην εφαρμογή
+export const recVal = (x: Pick<Status, 'to' | 'type' | 'kind' | 'note' | 'by' | 'reason' | 'open'>) => [x.open ? 'open' : x.to, x.type, x.kind || '', x.note || '', x.by || '', x.reason || ''].join('\u0001');
 export function baseOf(kind: StatusKind, s: AppState, keys: string[]): Record<string, string> {
   const want = new Set(keys); const out: Record<string, string> = {}; const types = KIND[kind].types!;
   for (const x of s.statuses) if (types.includes(x.type)) { const id = statusId(kind, x); if (want.has(id)) out[id] = recVal(x); }
@@ -438,7 +441,8 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     const v = base[statusId(kind, cur)]; if (v == null) return true;
     const [to, type, k, note, by, reason] = v.split('\u0001'); const was: Record<keyof typeof cols, string> = { to, type, kind: k, note, by, reason };
     const now = { ...was }; for (const f of Object.keys(cols) as (keyof typeof cols)[]) if (cols[f]) now[f] = String(patch[f] ?? cur[f] ?? '');
-    return recVal(now as unknown as Status) !== v;
+    if (cols.to) { const open = 'open' in patch ? patch.open : cur.open; now.to = open ? 'open' : String(patch.to ?? cur.to); }
+    return [now.to, now.type, now.kind, now.note, now.by, now.reason].join('\u0001') !== v;
   };
   for (const c of parsed.cands) {
     const pid = c.pid ?? (c.r in choices ? choices[c.r] : null);
@@ -450,13 +454,16 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     const cur = idx.get(id);
     if (!cur) {
       const st: Omit<Status, 'id'> = { pid, type, from: c.from, to: c.to };
+      if (c.noEnd && has('to')) st.open = true;   // χωρίς στήλη «έως» δεν είναι «χωρίς λήξη»: μένει μίας μέρας, όπως πριν
       if (c.kind) st.kind = c.kind; if (c.note) st.note = c.note;
       if (kind === 'punish') { st.kind = c.kind || PUN_KINDS[0]; if (c.by) st.by = c.by; if (c.reason) st.reason = c.reason; }
       d.add.push(st); continue;
     }
     // αλλάζει μόνο ό,τι υπάρχει ως στήλη στο Excel· ό,τι δεν υπάρχει μένει όπως είναι στην εφαρμογή
     const patch: Partial<Status> = {}; const what: string[] = [];
-    if (has('to') && !c.noEnd && cur.to !== c.to) { patch.to = c.to; what.push('έως ' + c.to.slice(8) + '/' + c.to.slice(5, 7)); }
+    // κενό «έως» στο Excel σε εγγραφή που είχε λήξη: από εδώ και πέρα χωρίς λήξη (η εφαρμογή δεν ξαναγράφει ημερομηνία)
+    if (has('to') && c.noEnd && !cur.open) { patch.open = true; what.push('χωρίς λήξη'); }
+    if (has('to') && !c.noEnd && (cur.to !== c.to || cur.open)) { patch.to = c.to; if (cur.open) patch.open = false; what.push('έως ' + c.to.slice(8) + '/' + c.to.slice(5, 7)); }
     if ((has('kind') || has('where')) && c.raw && cur.type !== type) { patch.type = type; what.push(TYPES[type].label); }
     if ((has('kind') || has('where')) && (c.kind || '') !== (cur.kind || '') && c.kind) { patch.kind = c.kind; what.push(c.kind); }
     if (has('note') && (c.note || '') !== (cur.note || '')) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
@@ -493,7 +500,8 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       }
       d.add.splice(near.i, 1);
       const a = near.a; const patch: Partial<Status> = { from: a.from, to: a.to }; const what = ['από ' + a.from.slice(8) + '/' + a.from.slice(5, 7)];
-      if (a.to !== x.to) what.push('έως ' + a.to.slice(8) + '/' + a.to.slice(5, 7));
+      if (!!a.open !== !!x.open) patch.open = !!a.open;
+      if (a.open && !x.open) what.push('χωρίς λήξη'); else if (!a.open && (a.to !== x.to || x.open)) what.push('έως ' + a.to.slice(8) + '/' + a.to.slice(5, 7));
       if (a.type !== x.type) { patch.type = a.type; what.push(TYPES[a.type].label); }
       // όπως στις αλλαγές πιο πάνω: οι παρατηρήσεις περνούν όπως είναι στη νέα γραμμή, και κενές (αλλιώς θα έμενε η παλιά)
       for (const k of ['kind', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
@@ -528,8 +536,8 @@ export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | 
     case 'phone': return p?.phone ? num(p.phone) : null;
     case 'room': return p?.room ?? null;
     case 'from': return { date: st.from };
-    case 'to': return { date: st.to };
-    case 'days': return Math.round((Date.parse(st.to) - Date.parse(st.from)) / 86400000) + 1;
+    case 'to': return st.open ? null : { date: st.to };
+    case 'days': return st.open ? null : Math.round((Date.parse(st.to) - Date.parse(st.from)) / 86400000) + 1;
     case 'kind': return kind === 'medical' ? (st.kind || TYPES[st.type].label) : kind === 'leave' ? (st.kind || (st.type === 'HON' ? 'ΤΙΜΗΤΙΚΗ' : 'ΚΑΝΟΝΙΚΗ')) : (st.kind || null);
     case 'where': return st.kind || (st.type === 'SICK' ? 'ΑΝ.ΑΔ' : 'ΝΟΣΟΚΟΜΕΙΟ');
     case 'note': return st.note || null;
@@ -592,6 +600,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
       let ch = false;
       for (const k of fields) {
         if (['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', 'phone', 'room'].includes(k)) continue;   // τα στοιχεία του ατόμου τα κρατά το Excel
+        if (st.open && (k === 'to' || k === 'days')) continue;   // χωρίς λήξη: το «έως» του Excel δεν το αγγίζει η εφαρμογή
         const val = fieldValue(k, kind, st, pm.get(st.pid));
         if (!same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
       }
@@ -905,7 +914,7 @@ export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null 
   return null;
 }
 // κωδικοί απουσίας του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Α/Α, ΓΡ, ΕΣΤ…): δεν είναι υπηρεσία, δεν πειράζονται
-export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
+export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) || /^(ΓΡ|ΑΓ|ΕΣΤ|ΚΑ|ΑΝΑΔ|ΕΥ|ΕΑ|ΕΟ|ΕΑΡΒ|ΕΛΑΡΒ)$/.test(normGreek(raw).replace(/[^Α-ΩA-Z]/g, ''));
 export interface DutiesPlan {
   month: string; guards: Guards; base: Record<number, Baseline>; extraCells: string[];
   days: number; entries: number; extra: number; byKind: Partial<Record<DutyKind, number>>;

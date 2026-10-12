@@ -17,8 +17,8 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date }: { 
   const ss = statusesOn(statuses, pid, date);
   if (!ss.length) return html`<${Badge} tone="ok">Παρών<//>`;
   const s = ss[0], t = TYPES[s.type];
-  const until = s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);
-  return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${(s.type === 'PUN' ? s.kind || t.label : t.label) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => TYPES[x.type].long + ' έως ' + dm(x.to)).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
+  const until = s.open ? ' χωρίς λήξη' : s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);
+  return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${(s.type === 'PUN' ? s.kind || t.label : t.label) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => TYPES[x.type].long + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
 });
 
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */

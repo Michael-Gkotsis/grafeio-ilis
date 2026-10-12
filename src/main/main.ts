@@ -122,6 +122,7 @@ function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: 
 // Κάθε μέρα: όσα ιατρικά/ποινές έληξαν χθες γράφονται στο ιστορικό (Κ-04, Κ-10), και ένα αντίγραφο της βάσης
 function daily() {
   const d = today();
+  if (store.state.statuses.some(x => x.open && x.to < d)) runCmd({ t: 'extendOpen' });
   if (!store.hasAuditToday(d, 'auto')) runCmd({ t: 'expire' });
   const dir = path.join(DATA, 'backups');
   const has = fs.existsSync(dir) && fs.readdirSync(dir).some(f => f.startsWith('ilh_' + d));
@@ -426,7 +427,7 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
     if (!sheet) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const parsed = parseStatuses(kind, sheet, b, store.state.people, today());
     const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b));
-    if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || !(d.add.length + d.update.length))) return fail('όχι απλό');
+    if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || d.add.some(a => a.open) || d.update.some(u => u.patch.open) || !(d.add.length + d.update.length))) return fail('όχι απλό');
     saveBinding(kind, b);
     // άλλαξαν και στις δύο πλευρές και ο χρήστης κράτησε της εφαρμογής: δεν περνούν, και γράφονται μετά στο Excel
     const kept = new Set(keepApp);
@@ -710,14 +711,22 @@ else {
         return { ok: true };
       } catch (err) { return fail(err); }
     });
-    ipcMain.handle('print:go', (e, o: { landscape?: boolean; pageSize?: string; part?: string }) => new Promise(res => {
-      const job = printJobs.get(e.sender.id); if (!job) { res(fail('Έκλεισε η εκτύπωση')); return; }
+    ipcMain.handle('print:printers', async e => {
+      try { return (await e.sender.getPrintersAsync()).map(p => ({ name: p.name, label: p.displayName || p.name, def: !!p.isDefault })); } catch { return []; }
+    });
+    // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
+    // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
+    ipcMain.handle('print:go', async (e, o: { landscape?: boolean; pageSize?: string; part?: string; device?: string; copies?: number }) => {
+      const job = printJobs.get(e.sender.id); if (!job) return fail('Έκλεισε η εκτύπωση');
       const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize)) ? String(o.pageSize) : 'A4';
-      e.sender.print({ silent: false, printBackground: true, landscape: !!o?.landscape, pageSize, margins: { marginType: 'none' } }, (ok, reason) => {
+      let device = typeof o?.device === 'string' && o.device ? o.device : '';
+      if (device) { try { if (!(await e.sender.getPrintersAsync()).some(p => p.name === device)) device = ''; } catch { device = ''; } }
+      const copies = Math.min(99, Math.max(1, Math.floor(Number(o?.copies) || 1)));
+      return new Promise(res => e.sender.print({ silent: !!device, ...(device ? { deviceName: device, copies } : {}), printBackground: true, landscape: !!o?.landscape, pageSize, margins: { marginType: 'none' } }, (ok, reason) => {
         if (ok) store.addAudit({ at: nowHM(), day: today(), text: 'Εκτύπωση ' + path.basename(job.file) + (job.sheets.length > 1 || o?.part ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')' : ''), files: [path.basename(job.file)], source: 'app', undoable: false }, null);
         res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
-      });
-    }));
+      }));
+    });
     ipcMain.handle('print:close', e => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     setInterval(retryPending, 60 * 1000);
     ipcMain.handle('backups:list', () => listBackups(BACKUPS));

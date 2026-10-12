@@ -38,7 +38,7 @@ export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 // away: απών · noDuty: καμία υπηρεσία · noArmed: όχι ένοπλη θέση · noOut: δεν βγαίνει έξοδο
 // light: ΕΟ/ΕΑ (λοχίας, 10/10): όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
 // ---------------------------------------------------------------------------
-export type TypeKey = 'EY' | 'EA' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN';
+export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN';
 export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun';
 export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
@@ -49,6 +49,7 @@ export interface TypeDef {
 export const TYPES: Record<TypeKey, TypeDef> = {
   EY:    { label: 'ΕΥ', long: 'Ελεύθερος Υπηρεσίας', tone: 'ey', cat: 'med', noDuty: true, noOut: true, hkai: 'ey', code: 'Ε.Υ' },
   EA:    { label: 'ΕΑ', long: 'Ελεύθερος Ασκήσεων', tone: 'ey', cat: 'med', noArmed: true, light: true, code: 'Ε.Α' },
+  EARV:  { label: 'ΕΑΡΒ', long: 'Ελεύθερος Αρβύλων', tone: 'ey', cat: 'med' },   // χωρίς περιορισμούς σε υπηρεσίες και έξοδο (λοχίας, 12/10)
   EO:    { label: 'ΕΟ', long: 'Ελεύθερος Ορθοστασίας', tone: 'ey', cat: 'med', noArmed: true, light: true },
   STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noArmed: true, noOut: true },
   NOS:   { label: 'Νοσοκομείο', long: 'Εισαγωγή σε νοσοκομείο', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'nos' },
@@ -79,6 +80,7 @@ export interface Status {
   by?: string;        // ποινή: ποιος τιμώρησε
   reason?: string;    // ποινή: «διότι …»
   on?: ISODate;       // ποινή: ημερομηνία τιμωρίας (αλλιώς η έναρξη)
+  open?: boolean;     // χωρίς λήξη: στο Excel το «έως» είναι κενό· το «to» πάει μαζί με τη σημερινή μέρα (X4)
 }
 
 // ---------------------------------------------------------------------------
