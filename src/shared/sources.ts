@@ -4,9 +4,10 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
-import { KIND_CODE, PUN_KINDS, TYPES, type AppState, type Baseline, type DutyKind, type Guards, type Person, type Status, type TypeKey } from './domain';
+import { KIND_CODE, OUT_NOTE, PUN_KINDS, TYPES, type AppState, type Baseline, type DutyKind, type Guards, type Person, type Status, type TypeKey } from './domain';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { allPosts, isHol, postsOf } from './rules';
+export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
@@ -266,16 +267,18 @@ export const suggestCols = (kind: ListKind, sheet: RawSheet | undefined, header:
 
 // ------------------------------------------------------------------ γραμμές πίνακα
 export interface TableRow { r: number; v: Record<string, CellValue> }
-export interface TableScan { records: TableRow[]; free: number[]; end: number; open: boolean; width: [number, number] }
+export interface TableScan { records: TableRow[]; free: number[]; end: number; open: boolean; width: [number, number]; partial: number[] }
 // Από κάτω από τις επικεφαλίδες ως τον επόμενο τίτλο ή πίνακα: εγγραφές (με άτομο), ελεύθερες γραμμές
-// (κενές ή μόνο με Α/Α και προσυμπληρωμένο βαθμό) και πού τελειώνει ο πίνακας. open = ως το τέλος του φύλλου.
+// (κενές ή μόνο με Α/Α και προσυμπληρωμένο βαθμό/ειδικότητα ή τύπο) και πού τελειώνει ο πίνακας. open = ως το τέλος του φύλλου.
+// partial: γραμμές μισογραμμένες χωρίς όνομα (π.χ. μόνο ημερομηνίες): δεν είναι ελεύθερες, δεν γράφεται τίποτα πάνω τους.
 export function tableRows(sheet: RawSheet, header: number, cols: Record<string, number>): TableScan {
   const head = sheet.rows[header] || [];
   const used = Object.values(cols);
   const hcols = head.map((v, i) => (cellText(v) ? i : -1)).filter(i => i >= 0);
   const width: [number, number] = [Math.min(...hcols, ...used, 99), Math.max(...hcols, ...used, 0)];
   const mapped = new Set(used); const aa = cols.aa;
-  const records: TableRow[] = []; const free: number[] = [];
+  const records: TableRow[] = []; const free: number[] = []; const partial: number[] = [];
+  const blankOk = new Set(['aa', 'rank', 'spec', 'days']);
   let empty = 0, r = header + 1, last = header;
   const max = sheet.rows.length;
   for (; r < max; r++) {
@@ -289,17 +292,21 @@ export function tableRows(sheet: RawSheet, header: number, cols: Record<string, 
     // τίτλος επόμενου πίνακα ή σύνολα: κείμενο σε στήλη χωρίς πεδίο, ή κείμενο στη στήλη Α/Α
     const stop = row.some((v, c) => { const t = cellText(v); if (!t) return false; return (c === aa && !/^\d+$/.test(t)) || (!mapped.has(c) && /[Α-ΩA-Zα-ωa-z]/.test(t)); });
     if (stop) break;
+    if (Object.entries(cols).some(([k, c]) => !blankOk.has(k) && !sheet.fx?.has(r + ':' + c) && cellText(row[c]) !== '')) { partial.push(r); empty = 0; last = r; continue; }
     free.push(r); last = Math.max(last, r);
     if (++empty > 60) break;
   }
   // κενές γραμμές ακριβώς πριν από τον επόμενο τίτλο χωρίζουν τους πίνακες: δεν είναι ελεύθερες θέσεις
-  if (r < max) while (free.length && free[free.length - 1] > (records.length ? records[records.length - 1].r : header) && !(sheet.rows[free[free.length - 1]] || []).some(v => cellText(v))) free.pop();
-  if (r < max) last = Math.max(records.length ? records[records.length - 1].r : header, free.length ? free[free.length - 1] : header);
-  return { records, free, end: last, open: r >= max, width };
+  const lastUsed = Math.max(records.length ? records[records.length - 1].r : header, partial.length ? partial[partial.length - 1] : header);
+  if (r < max) while (free.length && free[free.length - 1] > lastUsed && !(sheet.rows[free[free.length - 1]] || []).some(v => cellText(v))) free.pop();
+  if (r < max) last = Math.max(lastUsed, free.length ? free[free.length - 1] : header);
+  return { records, free, end: last, open: r >= max, width, partial };
 }
 
 // ------------------------------------------------------------------ άτομα
-export interface Matcher { (v: Record<string, CellValue>): { pid: number | null; cands: Person[] } }
+// alts: συνονόματοι που ταιριάζουν όλοι (ίδιο ονοματεπώνυμο και πατρώνυμο, χωρίς ΑΣΜ), πριν διαλεχτεί ο ενεργός.
+// Για την ανάγνωση αρκεί ο ενεργός· η εγγραφή όμως δεν πρέπει να γράψει στη γραμμή του άλλου (X2).
+export interface Matcher { (v: Record<string, CellValue>): { pid: number | null; cands: Person[]; alts?: Person[] } }
 const key2 = (a: string, b: string) => normGreek(a).replace(/[^Α-ΩA-Z0-9]/g, '') + '|' + normGreek(b).replace(/[^Α-ΩA-Z0-9]/g, '');
 function lev(a: string, b: string): number {
   if (a === b) return 0; const m = a.length, n = b.length; if (!m || !n) return m + n;
@@ -322,8 +329,9 @@ export function makeMatcher(people: Person[]): Matcher {
     if (last) {
       let l = byName.get(key2(last, first)) || [];
       if (l.length > 1 && v.father != null) { const f = normGreek(cellText(v.father)); const x = l.filter(p => normGreek(p.father) === f); if (x.length) l = x; }
+      const all = l;
       if (l.length > 1) { const act = l.filter(p => p.active); if (act.length) l = act; }
-      if (l.length === 1) return { pid: l[0].id, cands: [] };
+      if (l.length === 1) return all.length > 1 ? { pid: l[0].id, cands: [], alts: all } : { pid: l[0].id, cands: [] };
       if (l.length > 1) return { pid: null, cands: l.slice(0, 4) };
       // «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.»: επώνυμο και αρχικό
       if (/^[Α-ΩA-Z]\.?$/.test(normGreek(first))) {
@@ -471,9 +479,11 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     d.appOnly = d.appOnly.filter(x => !gone.includes(x));
     const days = (a: { from: string; to: string }, c: { from: string; to: string }) => Math.max(0, Math.min(Date.parse(a.to), Date.parse(c.to)) - Math.max(Date.parse(a.from), Date.parse(c.from)));
     for (const x of gone) {
-      // η ίδια εγγραφή με άλλο «από»: νέα γραμμή του ίδιου ατόμου (και του ίδιου είδους στα ιατρικά), όσο πιο κοντά
+      // η ίδια εγγραφή με άλλο «από»: νέα γραμμή του ίδιου ατόμου (και του ίδιου είδους στα ιατρικά), όσο πιο κοντά.
+      // Μόνο αν οι μέρες πέφτουν μαζί ή απέχουν το πολύ μία μέρα· αλλιώς είναι άλλη εγγραφή (σβήστηκε η μία, γράφτηκε άλλη)
       const sub = subOf(kind, x.kind || TYPES[x.type].label);
-      const near = d.add.map((a, i) => ({ a, i })).filter(({ a }) => a.pid === x.pid && subOf(kind, a.kind || TYPES[a.type].label) === sub)
+      const gap = (a: { from: string; to: string }) => Math.max(Date.parse(a.from) - Date.parse(x.to), Date.parse(x.from) - Date.parse(a.to));
+      const near = d.add.map((a, i) => ({ a, i })).filter(({ a }) => a.pid === x.pid && subOf(kind, a.kind || TYPES[a.type].label) === sub && gap(a) <= 86400000)
         .sort((p, q) => days(q.a, x) - days(p.a, x) || Math.abs(Date.parse(p.a.from) - Date.parse(x.from)) - Math.abs(Date.parse(q.a.from) - Date.parse(x.from)))[0];
       if (!near) {
         // μια γραμμή που δεν ταίριαξε με άτομο μπορεί να είναι αυτή: δεν σβήνεται μέχρι να διαλέξει ο χρήστης
@@ -485,7 +495,9 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       const a = near.a; const patch: Partial<Status> = { from: a.from, to: a.to }; const what = ['από ' + a.from.slice(8) + '/' + a.from.slice(5, 7)];
       if (a.to !== x.to) what.push('έως ' + a.to.slice(8) + '/' + a.to.slice(5, 7));
       if (a.type !== x.type) { patch.type = a.type; what.push(TYPES[a.type].label); }
-      for (const k of ['kind', 'note', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
+      // όπως στις αλλαγές πιο πάνω: οι παρατηρήσεις περνούν όπως είναι στη νέα γραμμή, και κενές (αλλιώς θα έμενε η παλιά)
+      for (const k of ['kind', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
+      if (has('note') && (a.note || '') !== (x.note || '')) patch.note = a.note || '';
       if (x.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
       d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', '), ...(changedInApp(x) ? { conflict: appText(x) } : {}) });
     }
@@ -500,6 +512,7 @@ export interface WritePlan {
   insert: { after: number; n: number; tpl: number } | null;   // νέες γραμμές μετά από αυτή, με τη μορφή της tpl
   header: { r: number; c: number; v: string; title?: boolean }[]; // καινούργιος πίνακας: τίτλος και επικεφαλίδες
   keys: string[]; added: number; changed: number; cleared: number; foreign: number;
+  ambiguous?: number[];   // γραμμές συνονόματων που δεν ξέρουμε σε ποιον ανήκουν: δεν αγγίζονται
 }
 const num = (s: string): string | number => (/^[1-9]\d{0,14}$/.test(s) ? Number(s) : s);
 // Τιμές ενός πεδίου για μια κατάσταση της εφαρμογής
@@ -551,7 +564,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
     for (const [k, c] of Object.entries(b.cols)) plan.header.push({ r: b.header, c, v: defs.find(f => f.k === k)?.head || k });
     if (b.header > 0 && !(rows[b.header - 1] || []).some(v => cellText(v))) plan.header.push({ r: b.header - 1, c: Math.min(...Object.values(b.cols)), v: KIND[kind].title, title: true });
   }
-  const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number] };
+  const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number], partial: [] };
   const match = makeMatcher(s.people);
   const byId = new Map(want.map(x => [statusId(kind, x), x]));
   const syncedSet = new Set(synced); const placed = new Set<string>();
@@ -563,7 +576,16 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   for (const { r, v } of scan.records) {
     const m = match(v); const from = parseDate(v.from);
     const raw = cellText(v.kind); const type = typeOfValue(kind, raw, b.values) || DEFAULT_TYPE[kind];
-    const id = m.pid != null && from ? identity(m.pid, kind, from, subOf(kind, raw || TYPES[type].label)) : null;
+    const idOf = (pid: number) => identity(pid, kind, from!, subOf(kind, raw || TYPES[type].label));
+    let id = m.pid != null && from ? idOf(m.pid) : null;
+    // συνονόματοι: η γραμμή είναι αυτού που έχει εγγραφή με την ίδια έναρξη. Αν την έχουν περισσότεροι, δεν ξέρουμε
+    // ποιανού είναι: δεν γράφεται, και δεν ξαναμπαίνει ως νέα για κανέναν τους
+    if (m.alts && from) {
+      const hits = m.alts.map(p => idOf(p.id)).filter(x => byId.has(x) && !placed.has(x));
+      if (hits.length > 1) { hits.forEach(x => { placed.add(x); plan.keys.push(x); }); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
+      if (hits.length === 1) id = hits[0];
+      else id = m.alts.map(p => idOf(p.id)).find(x => syncedSet.has(x) && !byId.has(x)) || id;
+    }
     const st = id ? byId.get(id) : undefined;
     if (st && !placed.has(id!)) {
       placed.add(id!); plan.keys.push(id!);
@@ -618,7 +640,10 @@ export function tableHash(sheet: RawSheet | undefined, b: SourceBinding): string
   if (!sheet) return '-';
   const cols = [...new Set([...Object.values(b.cols), ...(b.cols.d1 != null ? dayColumns(sheet.rows[b.header], b.cols.d1) : [])])].sort((a, c) => a - c);
   const line = (r: number) => cols.map(c => (sheet.fx?.has(r + ':' + c) ? '' : cellText((sheet.rows[r] || [])[c]))).join('\t');
-  const text = [line(b.header), ...tableRows(sheet, b.header, b.cols).records.map(x => x.r - b.header + ':' + line(x.r))].join('\n');
+  const scan = tableRows(sheet, b.header, b.cols);
+  // και οι μισογραμμένες γραμμές: όταν συμπληρωθούν (ή σβηστούν) ο πίνακας άλλαξε
+  const rows = [...scan.records.map(x => x.r), ...scan.partial].sort((a, c) => a - c);
+  const text = [line(b.header), ...rows.map(r => r - b.header + ':' + line(r))].join('\n');
   let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return HASH_V + (h >>> 0).toString(16) + ':' + text.length;
 }
@@ -733,7 +758,8 @@ export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[
       if (x == null) { snap[k] = cur[k]; continue; }          // η στήλη δεν υπάρχει: τίποτα να γραφτεί
       if (!p.active && (k === 'remarks' || k === 'dn')) { snap[k] = cur[k]; continue; }   // εκτός δύναμης: ο ρόλος δεν περνά στην εφαρμογή
       snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '')
-        : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null) : norm(x);
+        : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null)
+        : k === 'rank' || k === 'spec' || k === 'si' ? normGreek(x) : norm(x);   // όπως τα διαβάζει το Δυναμολόγιο (roster.ts)
     }
     out[m.pid] = snap;
   }
@@ -741,6 +767,11 @@ export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[
 }
 // Γραμμές για την προεπισκόπηση μιας εγγραφής: «Γραμμή 14 · ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»
 export interface PlanLine { r: number; who: string; text: string }
+// Γραμμές συνονόματων που δεν αγγίζονται (X2)
+export const ambiguousLines = (sheet: RawSheet, b: SourceBinding, rows: number[] = []): PlanLine[] => rows.map(r => {
+  const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = (sheet.rows[r] || [])[b.cols[k]];
+  return { r, who: rowName(v), text: 'αμφίσημη γραμμή: ίδιο ονοματεπώνυμο με άλλον χωρίς ΑΣΜ, δεν αγγίζεται' };
+});
 const fmtW = (v: WVal) => (v == null ? '(κενό)' : typeof v === 'object' ? v.date.slice(8) + '/' + v.date.slice(5, 7) + '/' + v.date.slice(0, 4) : String(v));
 export function describeSets(kind: ListKind, sheet: RawSheet, b: SourceBinding, sets: { r: number; c: number; v: WVal }[], newRows: Set<number> = new Set()): PlanLine[] {
   const label = new Map<number, string>(); const defs = fieldsOf(kind);
@@ -803,7 +834,6 @@ export function planPosts(sheet: RawSheet, b: SourceBinding, s: AppState, choice
   for (const p of s.people) if (p.post && !has.has(p.id) && !maybe.has(p.id)) plan.changes.push({ pid: p.id, patch: { post: null }, who: nameOf(p), what: 'χωρίς πόστο (δεν είναι στο φύλλο)' });
   return plan;
 }
-export const OUT_NOTE = 'Εκτός δύναμης';
 // Εκτός δύναμης: όσοι είναι στο φύλλο βγαίνουν εκτός δύναμης με τον λόγο τους· όσοι είχαν βγει έτσι και δεν είναι πια
 // στο φύλλο επιστρέφουν σε δύναμη
 export function planOutside(sheet: RawSheet, b: SourceBinding, s: AppState, choices: Record<number, number | null> = {}): FieldsPlan {
@@ -927,7 +957,14 @@ function planList(sheet: RawSheet, b: SourceBinding, s: AppState, w: ListWant, e
   for (const { r, v } of scan.records) {
     if (b.cols.last != null && b.cols.first != null && !isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father))) continue;
     n++;
-    const pid = match(v).pid;
+    const m = match(v); let pid = m.pid;
+    // Συνονόματοι: η γραμμή είναι αυτού που ανήκει σε αυτή τη λίστα (π.χ. ο μόνος με πόστο). Αν ανήκουν περισσότεροι,
+    // δεν ξέρουμε ποιανού είναι: δεν αγγίζεται και κανείς τους δεν ξαναγράφεται ως νέος. Αν δεν ανήκει κανείς, σβήνεται.
+    if (m.alts) {
+      const mine = m.alts.filter(p => w.upd.has(p.id) && !w.drop.has(p.id) && !placed.has(p.id));
+      if (mine.length === 1) pid = mine[0].id;
+      else if (mine.length || !m.alts.every(p => w.drop.has(p.id))) { m.alts.forEach(p => placed.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
+    }
     if (pid == null || placed.has(pid)) { plan.foreign++; continue; }
     placed.add(pid);
     if (w.drop.has(pid)) {
@@ -1011,9 +1048,14 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   }
   if (!days.length) return plan;
   const match = makeMatcher(s.people); const seen = new Set<number>();
-  for (const { r, v } of tableRows(sheet, b.header, b.cols).records) {
-    if (b.cols.last != null && b.cols.first != null && !isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father))) continue;
-    const pid = match(v).pid; if (pid == null || seen.has(pid)) { plan.foreign++; continue; }
+  const recs = tableRows(sheet, b.header, b.cols).records.filter(({ v }) => b.cols.last == null || b.cols.first == null || isPersonRow(cellText(v.last), cellText(v.first), cellText(v.father)))
+    .map(x => ({ ...x, m: match(x.v) }));
+  // συνονόματοι με δική του γραμμή ο καθένας: δεν ξέρουμε ποια είναι ποιανού, δεν γράφονται (μία μόνο γραμμή πάει στον ενεργό)
+  const group = (m: { alts?: Person[] }) => (m.alts ? m.alts.map(p => p.id).sort((a, c) => a - c).join(',') : '');
+  const nGroup = new Map<string, number>(); for (const { m } of recs) if (m.alts) nGroup.set(group(m), (nGroup.get(group(m)) || 0) + 1);
+  for (const { r, m } of recs) {
+    if (m.alts && nGroup.get(group(m))! > 1) { m.alts.forEach(p => seen.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
+    const pid = m.pid; if (pid == null || seen.has(pid)) { plan.foreign++; continue; }
     seen.add(pid);
     const x = want.get(pid); let ch = false;
     for (const i of days) {
@@ -1040,7 +1082,8 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
   const old = s.people.map(p => (psnap[p.id] ? { ...p, last: psnap[p.id].last, first: psnap[p.id].first, father: psnap[p.id].father, asm: psnap[p.id].asm } : p));
   const matchOld = makeMatcher(old), matchNew = makeMatcher(s.people); const ids = new Set(moved.map(p => p.id));
   for (const { r, v } of tableRows(sheet, b.header, b.cols).records) {
-    const pid = matchOld(v).pid ?? matchNew(v).pid; if (pid == null || !ids.has(pid)) continue;
+    const mo = matchOld(v), mn = matchNew(v); if (mo.alts || (mo.pid == null && mn.alts)) continue;   // συνονόματοι: όχι στη γραμμή του άλλου
+    const pid = mo.pid ?? mn.pid; if (pid == null || !ids.has(pid)) continue;
     const p = s.people.find(x => x.id === pid)!; const o = psnap[pid]; const c = personVals(p); let ch = false;
     for (const k of fields) {
       if ((c[k] || '') === (o[k] || '') || taken.has(r + ':' + b.cols[k])) continue;
