@@ -94,14 +94,18 @@ export function SourcesView() {
     await refresh(); toast({ text: 'Φτιάχτηκε το ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.', actions: [{ label: 'Άνοιξε', fn: () => window.api.openPath(r.file) }] });
   };
   const remove = async (kind: ListKind) => { await window.api.srcSave(kind, null); await refresh(); toast({ text: KIND[kind].label + ': η εφαρμογή δεν διαβάζει ούτε γράφει πια σε Excel. Το αρχείο δεν άλλαξε.' }); };
-  const toggleWrite = async (kind: ListKind, on: boolean) => { await window.api.srcSave(kind, { ...sources[kind]!, write: on }); await refresh(); };
-  const toggleAuto = async (kind: ListKind, on: boolean) => { await window.api.srcSave(kind, { ...sources[kind]!, autoRead: on }); await refresh(); };
+  // ένα κουτάκι τη φορά: το δεύτερο κλικ πριν φρεσκάρει η κατάσταση θα έγραφε την παλιά τιμή του πρώτου
+  const [saving, setSaving] = useState<ListKind | null>(null);
+  const toggle = async (kind: ListKind, patch: Partial<SourceBinding>) => {
+    if (saving) return; setSaving(kind);
+    try { await window.api.srcSave(kind, { ...sources[kind]!, ...patch }); await refresh(); } finally { setSaving(null); }
+  };
   return html`<div className="stack">
     <${Card} title="Αρχεία Excel ανά είδος" actions=${html`<${Button} disabled=${!!busy} onClick=${() => pick(null)}>${busy === 'new' ? 'Ανάγνωση…' : 'Εισαγωγή νέου Excel…'}<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Για κάθε είδος: από ποιο Excel, φύλλο και πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές σου. Αλλάζεις κάτι εδώ (π.χ. το Σ.Ι. κάποιου, μια ποινή) και γράφεται στο κελί του στο Excel. Η προηγούμενη έκδοση του αρχείου μένει στο <b>_προηγούμενα</b> δίπλα του.</p>
-      <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id}
+      <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id} saving=${!!saving}
         onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id as StatusKind)}
-        onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggleWrite(k.id, on)} onAuto=${(on: boolean) => toggleAuto(k.id, on)}/>`)}</ul>
+        onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggle(k.id, { write: on })} onAuto=${(on: boolean) => toggle(k.id, { autoRead: on })}/>`)}</ul>
     <//>
     <${FormsCard} outs=${st.forms}/>
     ${layer?.kind === 'match' && html`<${MatchDialog} book=${layer.book} onClose=${close} onMap=${(list: ListKind, b: SourceBinding) => setLayer({ kind: 'map', list, book: layer.book, b, back: layer })}/>`}
@@ -114,7 +118,7 @@ export function SourcesView() {
   </div>`;
 }
 
-function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
+function SourceRow({ kind, b, st, busy, saving, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
@@ -137,8 +141,8 @@ function SourceRow({ kind, b, st, busy, onPick, onEdit, onRead, onWrite, onNew, 
         ${s?.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(b.file)}>Άνοιξε<//><${Button} size="sm" variant="ghost" data-tip=${'Προεπισκόπηση και εκτύπωση του φύλλου «' + b.sheet + '» χωρίς Excel (τσεκάρεις κι άλλα φύλλα αν θέλεις)'} onClick=${() => printFile(b.file, b.sheet)}>Εκτύπωση<//>`}
         <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση: ' + k.label} data-tip="Να μη διαβάζει ούτε να γράφει πια σε αυτό το αρχείο (το αρχείο μένει όπως είναι)" onClick=${onRemove}>✕<//>`}
     </div>
-    ${b && canWrite && html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.write !== false} onChange=${(e: any) => onToggle(e.target.checked)}/><span>Γράφει μόνη της κάθε αλλαγή εδώ</span></label>`}
-    ${b && isStatusKind(kind) && html`<label className="srcrow__opt" data-tip="Νέες εγγραφές και αλλαγές ημερομηνιών με γνωστά άτομα περνούν χωρίς κλικ και γράφονται στο Ιστορικό. Ό,τι άλλο (σβησμένα, άγνωστα άτομα, αλλαγές και στις δύο πλευρές) περιμένει την «Ανανέωση από Excel»."><input type="checkbox" className="ui-check" checked=${b.autoRead !== false} onChange=${(e: any) => onAuto(e.target.checked)}/><span>Διαβάζει μόνη της τις απλές αλλαγές του Excel</span></label>`}
+    ${b && canWrite && html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.write !== false} disabled=${saving} onChange=${(e: any) => onToggle(e.target.checked)}/><span>Γράφει μόνη της κάθε αλλαγή εδώ</span></label>`}
+    ${b && isStatusKind(kind) && html`<label className="srcrow__opt" data-tip="Νέες εγγραφές και αλλαγές ημερομηνιών με γνωστά άτομα περνούν χωρίς κλικ και γράφονται στο Ιστορικό. Ό,τι άλλο (σβησμένα, άγνωστα άτομα, αλλαγές και στις δύο πλευρές) περιμένει την «Ανανέωση από Excel»."><input type="checkbox" className="ui-check" checked=${b.autoRead !== false} disabled=${saving} onChange=${(e: any) => onAuto(e.target.checked)}/><span>Διαβάζει μόνη της τις απλές αλλαγές του Excel</span></label>`}
   </li>`;
 }
 

@@ -617,8 +617,10 @@ else {
     const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
     ipcMain.handle('cmd', (_e, cmd: Command) => answer(runCmd(cmd)));
     ipcMain.handle('sync', () => reply(''));
-    ipcMain.handle('undo', (): CmdResult => {
+    ipcMain.handle('undo', (_e, id?: number): CmdResult => {
       const last = store.lastUndoable(); if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
+      // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
+      if (typeof id === 'number' && last.id !== id) return { ok: false, error: 'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ. Η τελευταία ήταν: «' + last.text + '». Δες το Ιστορικό.' };
       try {
         const prev = store.state;
         store.revert(last.patch); store.markUndone(last.id);

@@ -63,6 +63,9 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
       if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
+      // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
+      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to);
+      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : TYPES[cmd.type].label) + ' ' + range(cmd.from, cmd.to));
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,

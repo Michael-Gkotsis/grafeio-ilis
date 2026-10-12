@@ -5,7 +5,7 @@ import type { Api } from '../shared/api';
 const api: Api = {
   boot: () => ipcRenderer.invoke('boot'),
   run: cmd => ipcRenderer.invoke('cmd', cmd),
-  undo: () => ipcRenderer.invoke('undo'),
+  undo: id => ipcRenderer.invoke('undo', id),
   sync: () => ipcRenderer.invoke('sync'),
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),

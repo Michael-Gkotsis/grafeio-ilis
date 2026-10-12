@@ -33,7 +33,13 @@ export function allPosts(settings: Settings): Post[] {
   }
   return p;
 }
-export const postBy = (s: AppState, k: string): Post | undefined => allPosts(s.settings).find(p => p.k === k);
+// θέση από το κλειδί της: με ευρετήριο, γιατί καλείται για κάθε υπηρεσία του ημερολογίου (σύνολα, «Γιατί αυτός;»)
+const postKeyIdx = new WeakMap<Settings, Map<string, Post>>();
+export const postBy = (s: AppState, k: string): Post | undefined => {
+  let m = postKeyIdx.get(s.settings);
+  if (!m) { m = new Map(allPosts(s.settings).map(p => [p.k, p])); postKeyIdx.set(s.settings, m); }
+  return m.get(k);
+};
 
 // --------------------------- αργίες ---------------------------
 export const isHol = (settings: Settings, d: ISODate) => isWeekend(d) || !!settings.holidays[d];
@@ -357,11 +363,23 @@ export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { h
   return { hard, soft: (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
 }
 // «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
-export function whyText(s: AppState, date: ISODate, k: string): string {
+// Μέσοι όροι αργιών και υπηρεσιών όλων για μια μέρα: μία φορά για όλες τις θέσεις της μέρας, όχι μία ανά θέση
+export function fairAvg(s: AppState, date: ISODate): { hol: number; total: number } {
+  const v = activePeople(s).map(p => fairOf(s, p.id, date)); const n = v.length || 1;
+  return { hol: v.reduce((a, x) => a + x.hol, 0) / n, total: v.reduce((a, x) => a + x.total, 0) / n };
+}
+// «Γιατί αυτός;» για κάθε κατειλημμένη θέση μιας μέρας
+export function whyAll(s: AppState, date: ISODate): Record<string, string> {
+  const g = s.guards[date] || {}; const keys = Object.keys(g); if (!keys.length) return {};
+  const a = fairAvg(s, date); const out: Record<string, string> = {};
+  for (const k of keys) out[k] = whyText(s, date, k, a);
+  return out;
+}
+export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number }): string {
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
   const f = fairOf(s, pid, date);
-  const ppl = activePeople(s); const avg = (fn: (x: Fair) => number) => { const v = ppl.map(p => fn(fairOf(s, p.id, date))); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
+  const av = avgs || fairAvg(s, date); const avg = (fn: (x: { hol: number; total: number }) => number) => fn(av);
   const r1 = (x: number) => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const parts: string[] = [];
   if (isHol(s.settings, date)) {
