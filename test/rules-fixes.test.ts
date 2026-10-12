@@ -2,7 +2,7 @@
 // αργίες στα σύνολα, ποινή που αιτείται, δέσμευση άοπλων μόνο όταν χρειάζεται, έξοδοι πολλών ημερών. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { dutyStats, fillDay, planStatusChange, postsOf, ruleBlock } from '../src/shared/rules';
+import { dutyStats, fillDay, planStatusChange, postsOf, ruleBlock, whyAll, whyText } from '../src/shared/rules';
 import { addDays } from '../src/shared/dates';
 import type { AppState, TypeKey } from '../src/shared/domain';
 import { fakeState } from './fixtures';
@@ -94,5 +94,20 @@ describe('άοπλοι στις άοπλες θέσεις', () => {
     const s: AppState = { ...s0, people: s0.people.map((p, i) => ({ ...p, si: i < armed ? 'Ι1' : 'Ι3 ΑΟΠΛΟ' })) };
     const r = fillDay(s, D);
     expect(r.empty.filter(k => postsOf(s.settings).find(p => p.k === k)!.armed)).toEqual([]);
+  });
+});
+
+describe('οθόνη υπηρεσιών και δηλώσεις', () => {
+  it('«Γιατί αυτός;» για όλες τις θέσεις μαζί: ίδιο κείμενο με τον υπολογισμό ανά θέση', () => {
+    let s = fakeState(40);
+    for (let d = '2026-10-01'; d <= '2026-10-14'; d = addDays(d, 1)) s = { ...s, guards: fillDay(s, d).guards };
+    const all = whyAll(s, '2026-10-14');
+    expect(Object.keys(all).length).toBe(Object.keys(s.guards['2026-10-14']).length);
+    for (const k of Object.keys(all)) expect(all[k]).toBe(whyText(s, '2026-10-14', k));
+  });
+  it('η ίδια δήλωση δεύτερη φορά (διπλό κλικ) δεν γράφεται διπλή', () => {
+    const s = declare(fakeState(10), 'EY', 2, '2026-10-14', '2026-10-15');
+    expect(() => declare(s, 'EY', 2, '2026-10-14', '2026-10-15')).toThrow(/έχει ήδη ΕΥ/);
+    expect(declare(s, 'EY', 2, '2026-10-16').statuses.filter(x => x.pid === 2)).toHaveLength(2);
   });
 });

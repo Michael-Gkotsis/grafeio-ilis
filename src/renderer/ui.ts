@@ -40,8 +40,20 @@ const LOGO = '<defs><linearGradient id="lg-f" x1="0" y1="0" x2="0" y2="1"><stop 
   + '<path d="M19 37 L32 30 L45 37 V42.5 L32 35.5 L19 42.5 Z" fill="url(#lg-g)"/><path d="M19 45.5 L32 38.5 L45 45.5 V51 L32 44 L19 51 Z" fill="url(#lg-g)"/>';
 export const Logo = ({ size = 32 }: P) => html`<svg className="logo" viewBox="0 0 64 64" width=${size} height=${size} aria-hidden="true" dangerouslySetInnerHTML=${{ __html: LOGO }}></svg>`;
 
-export function Button({ variant = 'default', size, className, children, ...rest }: P) {
-  return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} ...${rest}>${children}</button>`;
+// Όσο τρέχει ό,τι ξεκίνησε το κλικ (onClick που επιστρέφει Promise), το κουμπί δεν ξαναπατιέται:
+// διπλό κλικ στην «Αποθήκευση» δεν γράφει δύο φορές
+export function Button({ variant = 'default', size, className, children, onClick, disabled, ...rest }: P) {
+  const [busy, setBusy] = useState(false); const running = useRef(false); const live = useRef(true);
+  useEffect(() => () => { live.current = false; }, []);
+  const click = onClick && ((e: any) => {
+    if (running.current) return;
+    const r = onClick(e);
+    if (!r || typeof r.then !== 'function') return;
+    running.current = true; setBusy(true);
+    const done = () => { running.current = false; if (live.current) setBusy(false); };
+    r.then(done, (err: unknown) => { done(); console.error(err); });
+  });
+  return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} disabled=${disabled || busy} aria-busy=${busy || undefined} onClick=${click} ...${rest}>${children}</button>`;
 }
 export const Badge = ({ tone, className, children, ...rest }: P) => html`<span className=${cx('ui-badge', tone && 'ui-badge--' + tone, className)} ...${rest}>${children}</span>`;
 export const Kbd = ({ children }: P) => html`<kbd className="ui-kbd">${children}</kbd>`;
@@ -59,9 +71,16 @@ export function Tabs({ value, onChange, items }: P) {
 export function Segmented({ value, onChange, items, small }: P) {
   return html`<div className=${cx('ui-seg', small && 'ui-seg--sm')} role="group">${items.map((it: P) => html`<button key=${it.value} type="button" aria-pressed=${value === it.value} data-tip=${it.tip} onClick=${() => onChange(it.value)}>${it.label}</button>`)}</div>`;
 }
+// Esc κλείνει μόνο το πάνω πάνω παράθυρο (π.χ. το Υπόμνημα πάνω από μια δήλωση), όχι όλα μαζί
+const escStack: { current: () => void }[] = [];
+const onEsc = (e: KeyboardEvent) => { if (e.key !== 'Escape' || !escStack.length) return; e.stopPropagation(); escStack[escStack.length - 1].current(); };
 export function useEscape(fn: () => void) {
   const ref = useRef(fn); ref.current = fn;
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); ref.current(); } }; document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h); }, []);
+  useEffect(() => {
+    if (!escStack.length) document.addEventListener('keydown', onEsc);
+    escStack.push(ref);
+    return () => { const i = escStack.lastIndexOf(ref); if (i >= 0) escStack.splice(i, 1); if (!escStack.length) document.removeEventListener('keydown', onEsc); };
+  }, []);
 }
 export function Dialog({ title, description, onClose, children, footer, size, closeOnOverlay = true, role = 'dialog' }: P) {
   const ref = useRef<HTMLDivElement>(null);

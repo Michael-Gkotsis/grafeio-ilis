@@ -25,7 +25,7 @@ function guessHk(rank: string): string {
 }
 
 export function CadreView({ tabs }: P) {
-  const { state, run, today, undo } = useStore(); const toast = useToast();
+  const { state, run, today, undoMark } = useStore(); const toast = useToast();
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
   const [absFor, setAbsFor] = useState<Cadre | null>(null);
   const [del, setDel] = useState<Cadre | null>(null);
@@ -33,7 +33,6 @@ export function CadreView({ tabs }: P) {
   const list = useMemo(() => [...state.cadreList].sort((a, b) => order(a) - order(b) || collator.compare(a.last, b.last)), [state.cadreList]);
   const absOf = useMemo(() => { const m = new Map<string, CadreAbs[]>(); state.cadreAbs.filter(a => a.to >= today).sort((a, b) => a.from.localeCompare(b.from)).forEach(a => m.set(a.cid, [...(m.get(a.cid) || []), a])); return m; }, [state.cadreAbs, today]);
   const awayToday = list.filter(c => (absOf.get(c.id) || []).some(a => a.from <= today)).length;
-  const undoAct = [{ label: 'Αναίρεση', fn: () => { undo(); } }];
   return html`<div>
     <${PageHeader} title="Προσωπικό" sub=${'Στελέχη: ' + list.length + (list.length ? ' · απόντες σήμερα: ' + awayToday : '') + '. Με τη λίστα, η ΗΚΑΙ βγάζει μόνη της στελέχη ανά βαθμό και απουσίες.'}>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
@@ -41,13 +40,13 @@ export function CadreView({ tabs }: P) {
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(c => { const ab = absOf.get(c.id) || []; const now = ab.find(a => a.from <= today); return html`<li key=${c.id}>
       <div><b>${c.rank} ${c.last} ${c.first}</b> ${now ? html`<${Badge} tone="warn">${absLbl(now.kind)} έως ${dm(now.to)}<//>` : html`<${Badge} tone="ok">Παρών<//>`}
         <small>${[c.hk, c.role, c.phone && 'ΤΗΛ ' + c.phone].filter(Boolean).join(' · ')}${ab.filter(a => a !== now).map(a => ' · ' + absLbl(a.kind).toLowerCase() + ' ' + dow(a.from) + ' ' + dm(a.from) + '–' + dm(a.to)).join('')}</small>
-        ${ab.length > 0 && html`<div className="chips" style=${{ marginTop: "6px" }}>${ab.map(a => html`<button key=${a.id} type="button" className="ui-chip" data-tip="Διαγραφή της απουσίας" onClick=${async () => { if (await run({ t: 'deleteCadreAbs', id: a.id }, false)) toast({ text: 'Διαγράφηκε η απουσία', actions: undoAct }); }}>${absLbl(a.kind)} ${dm(a.from)}–${dm(a.to)} ✕</button>`)}</div>`}</div>
+        ${ab.length > 0 && html`<div className="chips" style=${{ marginTop: "6px" }}>${ab.map(a => html`<button key=${a.id} type="button" className="ui-chip" data-tip="Διαγραφή της απουσίας" onClick=${async () => { if (await run({ t: 'deleteCadreAbs', id: a.id }, false)) toast({ text: 'Διαγράφηκε η απουσία', actions: [undoMark()] }); }}>${absLbl(a.kind)} ${dm(a.from)}–${dm(a.to)} ✕</button>`)}</div>`}</div>
       <${Button} size="sm" variant="outline" onClick=${() => setAbsFor(c)}>Απουσία<//><${Button} size="sm" variant="ghost" onClick=${() => setEdit(c)}>Στοιχεία<//><${Button} size="sm" variant="ghost" onClick=${() => setDel(c)}>Διαγραφή<//>
     </li>`; })}</ul>` : html`<div className="empty">Δεν έχουν μπει στελέχη. Αν δεν τα περάσεις, η ΗΚΑΙ παίρνει τους αριθμούς ανά βαθμό που γράφεις στην οθόνη της.</div>`}</div>
     ${edit && html`<${CadreDialog} c=${edit} onClose=${() => setEdit(null)}/>`}
     ${absFor && html`<${AbsDialog} c=${absFor} onClose=${() => setAbsFor(null)}/>`}
     ${del && html`<${Dialog} role="alertdialog" title=${'Διαγραφή: ' + del.rank + ' ' + del.last + ';'} description="Φεύγει από τη λίστα και από την ΗΚΑΙ, μαζί με τις απουσίες του." onClose=${() => setDel(null)}
-      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(null)}>Άκυρο<//><${Button} onClick=${async () => { const x = del; setDel(null); if (await run({ t: 'deleteCadre', id: x.id }, false)) toast({ text: 'Διαγράφηκε: ' + x.rank + ' ' + x.last, actions: undoAct }); }}>Διαγραφή<//>`}><//>`}
+      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(null)}>Άκυρο<//><${Button} onClick=${async () => { const x = del; setDel(null); if (await run({ t: 'deleteCadre', id: x.id }, false)) toast({ text: 'Διαγράφηκε: ' + x.rank + ' ' + x.last, actions: [undoMark()] }); }}>Διαγραφή<//>`}><//>`}
   </div>`;
 }
 

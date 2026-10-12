@@ -80,8 +80,10 @@ export function mockApi(): Api {
       } catch (e: any) { return { ok: false, error: e.message }; }
     },
     sync: async () => res(''),
-    undo: async () => {
-      const u = undo.pop(); if (!u) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
+    undo: async id => {
+      const u = undo[undo.length - 1]; if (!u) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
+      if (typeof id === 'number' && u.id !== id) return { ok: false, error: 'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ.' };
+      undo.pop();
       state = u.prev; const e = audit.find(x => x.id === u.id); if (e) e.undone = true; return res('Αναιρέθηκε');
     },
     exportFile: async (kind, date, opts) => {

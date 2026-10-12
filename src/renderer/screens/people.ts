@@ -30,7 +30,7 @@ const PersonCard = memo(function PersonCard({ p, style, statuses, today, checked
 type Filt = { unit: string; room: number | null; filter: string };
 const DEF_SORT = { k: 'last', dir: 1 };
 export function PeopleScreen() {
-  const { state, today, run, undo } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
+  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   // φίλτρα στα params της οθόνης, ώστε να τα θυμάται όταν γυρνάς (Shell)
   const filter: string = nav.params.filter || 'all'; const unit: string = nav.params.unit || 'all'; const room: number | null = nav.params.room ?? null;
@@ -88,7 +88,7 @@ export function PeopleScreen() {
   const allSel = rows.length > 0 && rows.every(p => selected.has(p.id));
   const clear = () => { setQ(''); nav.set({ filter: 'all', unit: 'all', room: null, pdate: undefined }); };
   const applyView = (v: SavedView) => { if (curView === v) { clear(); return; } setQ(v.q); nav.set({ unit: v.unit, room: v.room, filter: v.filter }); };
-  const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [{ label: 'Αναίρεση', fn: () => { undo(); } }] }); };
+  const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [undoMark()] }); };
   const dateLbl = date === today ? '' : dayName(date, today);
   const filtered = unit !== 'all' || room != null || filter !== 'all' || !!dq.trim();
   const ptab = nav.params.peopleTab || 'soldiers';
@@ -197,7 +197,7 @@ function EditPersonDialog({ p, onClose }: P) {
 
 /* features/status/DeclareStatusDialog · 1 ή πολλά άτομα, 2 βήματα */
 export function DeclareStatusDialog({ initial, onClose }: P) {
-  const { state, run, today, tomorrow, undo } = useStore(); const toast = useToast(); const nav = useNav();
+  const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   const [step, setStep] = useState(1);
   const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || tomorrow, to: initial.to || initial.from || tomorrow, note: '', kind: initial.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0], by: '', reason: '', on: today }));
@@ -221,7 +221,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     if (!(await run({ t: 'declare', cmd: full }, false))) return;
     onClose();
     const w = cmd.pids.length === 1 ? shortName(pm.get(cmd.pids[0])!) : cmd.pids.length + ' άτομα';
-    const acts = [{ label: 'Αναίρεση', fn: () => { undo(); } }];
+    const acts = [undoMark()];
     if (plan && plan.conflicts.length) acts.unshift({ label: 'Βρες αντικαταστάτη', fn: () => nav.go('guard', { guardDate: plan.conflicts[0].date }) });
     toast({ text: (cmd.type === 'PUN' ? 'Αιτείται ποινή: ' : 'Δηλώθηκε ' + t.label + ': ') + w, actions: acts });
   };

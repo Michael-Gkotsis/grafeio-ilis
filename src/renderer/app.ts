@@ -76,13 +76,22 @@ function Root({ boot: initial }: { boot: Boot }) {
     if (okText !== false && (okText || r.text)) toast({ text: okText || r.text });
     return next;
   }, [toast, merge]);
-  const undo = useCallback(async () => {
-    const r = await window.api.undo();
-    if (!r.ok) { toast({ text: r.error }); return; }
-    merge(r); toast({ text: r.text });
+  // μία αναίρεση τη φορά (διπλό κλικ ή κρατημένο Ctrl+Z δεν αναιρούν δύο ενέργειες)
+  const undoing = useRef(false);
+  const undo = useCallback(async (id?: number) => {
+    if (undoing.current) return; undoing.current = true;
+    try {
+      const r = await window.api.undo(id);
+      if (!r.ok) { toast({ text: r.error }); return; }
+      merge(r); toast({ text: r.text });
+    } finally { undoing.current = false; }
   }, [toast, merge]);
+  const undoMark = useCallback(() => {
+    const id = cur.current.audit.find(a => a.undoable && !a.undone)?.id ?? -1;
+    return { label: 'Αναίρεση', fn: () => { undo(id); } };
+  }, [undo]);
   const sync = useCallback(async () => { const r = await window.api.sync(); if (r.ok) merge(r); }, [merge]);
-  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, refresh, sync }), [state, audit, boot, today, run, undo, refresh, sync]);
+  const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, undoMark, refresh, sync }), [state, audit, boot, today, run, undo, undoMark, refresh, sync]);
   return html`<${StoreCtx.Provider} value=${store}><${Shell}/><//>`;
 }
 
@@ -90,6 +99,8 @@ function Shell() {
   const { state, today, tomorrow, undo, boot } = useStore();
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
   const [layer, setLayer] = useState<any>(null);
+  // Υπόμνημα (F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
+  const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
   const prefsV = usePrefsState(); const { rail } = prefsV;
   const toggleRail = useCallback(() => prefsV.set('nav', rail ? 'full' : 'rail'), [prefsV.set, rail]);
@@ -102,7 +113,7 @@ function Shell() {
   const moveTo = useCallback((next: Route, push: boolean) => {
     const r = cur.current.route;
     if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
-    setRoute(next); setLayer(null); setPersonId(null); window.scrollTo(0, 0);
+    setRoute(next); setLayer(null); setOver(null); setPersonId(null); window.scrollTo(0, 0);
   }, []);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.
   const go = useCallback((view: string, params?: Record<string, any>) => {
@@ -120,18 +131,18 @@ function Shell() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase(); const mod = e.ctrlKey || e.metaKey; const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName || '');
-      if (mod && (k === 'k' || k === 'κ')) { e.preventDefault(); setLayer({ kind: 'palette' }); }
+      if (mod && (k === 'k' || k === 'κ')) { e.preventDefault(); setOver('palette'); }
       else if (mod && (k === 'n' || k === 'ν')) { e.preventDefault(); setLayer({ kind: 'declare', data: {} }); }
-      else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); undo(); }
+      else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); if (!e.repeat) undo(); }
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
       else if (mod && (k === 'b' || k === 'β')) { e.preventDefault(); toggleRail(); }
       else if (e.altKey && !mod && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
       else if (e.altKey && !mod && /^Digit[1-9]$/.test(e.code)) { e.preventDefault(); go(NAV_ALL[+e.code.slice(5) - 1]); }
       else if (mod && (k === 'f' || k === 'φ')) {   // αναζήτηση στη λίστα της οθόνης, αλλιώς η γενική
         e.preventDefault(); const el = document.querySelector('.main input[type="search"]') as HTMLInputElement | null;
-        if (el) { el.focus(); el.select(); } else setLayer({ kind: 'palette' });
+        if (el) { el.focus(); el.select(); } else setOver('palette');
       }
-      else if (e.key === 'F1') { e.preventDefault(); setLayer({ kind: 'legend' }); }
+      else if (e.key === 'F1') { e.preventDefault(); setOver('legend'); }
     };
     // πλαϊνό κουμπί «πίσω» του ποντικιού
     const m = (e: MouseEvent) => { if (e.button === 3) { e.preventDefault(); goBack(); } };
@@ -154,10 +165,10 @@ function Shell() {
       <header className="topbar">
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
         <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30}/><span>Γραφείο Λοχία<small>${state.settings.unit[2] || ''}</small></span></div>
-        <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setLayer({ kind: 'palette' })}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
+        <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         <div className="topbar__right">
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
-          <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setLayer({ kind: 'legend' })}>Υπόμνημα<//>
+          <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
@@ -172,9 +183,9 @@ function Shell() {
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} onClose=${() => setPersonId(null)}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
-    ${layer && layer.kind === 'legend' && html`<${LegendDialog} onClose=${() => setLayer(null)}/>`}
-    ${layer && layer.kind === 'palette' && html`<${CommandPalette} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
+    ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}
+    ${over === 'palette' && html`<${CommandPalette} onClose=${() => setOver(null)}/>`}
   <//><//><//>`;
 }
 
