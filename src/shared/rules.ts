@@ -148,8 +148,9 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
   const ds = (idx || dutyIndex(s.guards)).get(pid);
   if (!ds) return null;
   for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';
+  // από 2 μέρες: Παρασκευή αργία και Κυριακή είναι δύο αργίες στη σειρά (η 1 μέρα είναι ήδη ανάπαυση)
   if (r.noConsecHol && isHol(s.settings, date))
-    for (let i = 3; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
+    for (let i = 2; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
   return k ? numBlock(s, date, pid, k, ds) : null;
 }
 // 3ο και 4ο νούμερο (οι βάρδιες 18:00/20:00): ξανά στο ίδιο νούμερο μόνο μετά από rules.numRest μέρες (λοχίας, 10/10)
@@ -185,12 +186,13 @@ export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.o
 
 // --------------------------- Έλεγχος υπηρεσιών (από το ημερολόγιο υπηρεσιών) ---------------------------
 export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; h: boolean }[] }
-const statsCache = new WeakMap<Guards, Map<number, DutyStat>>();
+// ανά ημερολόγιο υπηρεσιών και ανά λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
+const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
-  let st = statsCache.get(s.guards);
-  if (st) return withBaseline(s, st);
-  st = new Map();
+  const c = statsCache.get(s.guards);
+  if (c && c.hol === s.settings.holidays) return withBaseline(s, c.st);
+  const st = new Map<number, DutyStat>();
   for (const d of Object.keys(s.guards).sort()) {
     const g = s.guards[d]; const h = isHol(s.settings, d);
     for (const k in g) {
@@ -201,7 +203,7 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
       x.last = d; x.log.push({ d, k, h });
     }
   }
-  statsCache.set(s.guards, st);
+  statsCache.set(s.guards, { hol: s.settings.holidays, st });
   return withBaseline(s, st);
 }
 // Προηγούμενες υπηρεσίες (χωρίς ημερομηνία) προστίθενται στα σύνολα, όχι στο ημερολόγιο
@@ -225,7 +227,9 @@ export const statOf = (s: AppState, pid: number) => dutyStats(s).get(pid) || emp
 
 // --------------------------- Αυτόματη συμπλήρωση (σειρά δικαιοσύνης, έρευνα §3.2) ---------------------------
 // 1. Φίλτρο: όλοι οι κανόνες (καταστάσεις, δυνατότητα, ανάπαυση, ΣΚ μετά από ΣΚ).
-// 2. Στις άοπλες θέσεις πρώτα όσοι δεν μπορούν σε ένοπλη, ώστε να μένουν ένοπλοι για τις ένοπλες.
+// 2. Στις άοπλες θέσεις πηγαίνουν τελευταίοι όσοι χρειάζονται για να γεμίσουν οι κενές ένοπλες θέσεις της μέρας
+//    (χωρίς αυτούς κάποια ένοπλη θα έμενε κενή). Όταν οι ένοπλοι περισσεύουν, ισχύει για όλους η σειρά δικαιοσύνης,
+//    και ο ΕΑ/ΕΟ δεν μπαίνει πρώτος σε κάθε άοπλη θέση (ΣΒΕΝ, σχέδιο 11/10).
 // 3. Αργία/ΣΚ: λιγότερες αργίες → παλιότερη τελευταία αργία. Καθημερινή: παλιότερη τελευταία υπηρεσία → λιγότερες υπηρεσίες.
 // 4. Λιγότερες φορές στο ίδιο είδος θέσης.
 // 5. Ισοπαλία: κλήρωση με σταθερό σπόρο την ημερομηνία (ίδια μέρα → ίδια πρόταση, όχι αλφαβητικά).
@@ -273,10 +277,10 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
     if (!idx.has(f)) idx.set(f, new Set()); idx.get(f)!.add(date);
   }
-  const fixed = fixedIds(s);
+  const fixed = fixedIds(s); const memo = new Map<string, number[]>();
   for (const x of posts) {
     if (g[x.k]) continue;
-    const cand = candidates(work, date, x, people, fair, idx, fixed)[0];
+    const cand = candidates(work, date, x, people, fair, idx, fixed, memo)[0];
     if (!cand) { empty.push(x.k); continue; }
     const lr = lastResort(s.statuses, date, cand.id, x); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
@@ -286,9 +290,11 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
 }
 // Όσοι επιτρέπονται σε μια θέση, με τη σειρά που θα τους διάλεγε η αυτόματη συμπλήρωση
-function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>): Person[] {
+function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person[] {
   const h = isHol(s.settings, date);
-  const unarmedFirst = (p: Person) => (!x.armed && statusesOn(s.statuses, p.id, date).some(t => TYPES[t.type].noArmed) ? 0 : 1);
+  const need = x.armed ? [] : armedLeft(s, date, x.k);
+  const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
+  const reserve = (p: Person) => (keep?.has(p.id) ? 1 : 0);
   const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) ? 1 : 0);
   // ΣΚ/αργία: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει έξοδο εκείνη τη μέρα
   const rooms = h ? outRoomsOn(s.rules, date) : null;
@@ -296,8 +302,39 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const cmp = fairCompare(h, x.kind, date);
   // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
   return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
-    .map(p => ({ p, key: last(p) * 100 + unarmedFirst(p) * 10 + home(p), f: fair.get(p.id)! }))
+    .map(p => ({ p, key: last(p) * 100 + reserve(p) * 10 + home(p), f: fair.get(p.id)! }))
     .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
+}
+// Οι κενές ένοπλες θέσεις της μέρας (εκτός από την except)
+const armedLeft = (s: AppState, date: ISODate, except: string) => { const g = s.guards[date] || {}; return postsOf(s.settings).filter(y => y.armed && y.k !== except && !g[y.k]); };
+// Ποιοι χρειάζονται για τις ένοπλες θέσεις: όσοι, αν πάνε αλλού, γεμίζουν λιγότερες ένοπλες (μέγιστη αντιστοίχιση
+// ατόμων σε θέσεις· για καθέναν από την αντιστοίχιση δοκιμάζεται αν τη θέση του την παίρνει άλλος)
+// memo: ποιοι περνούν τους κανόνες κάθε θέσης, μία φορά ανά μέρα (αλλάζει μόνο για όποιον μπήκε ήδη σε θέση εκείνη τη μέρα)
+function armedNeeded(s: AppState, date: ISODate, seats: Post[], people: Person[], idx: Map<number, Set<ISODate>>, memo?: Map<string, number[]>): Set<number> {
+  const busy = new Set(Object.values(s.guards[date] || {}));
+  const ok = (y: Post) => {
+    let l = memo?.get(y.k);
+    if (!l) { l = people.filter(p => !guardUnavailable(s, date, p.id, y.k, idx)).map(p => p.id); memo?.set(y.k, l); }
+    return l.filter(pid => !busy.has(pid));
+  };
+  const adj = seats.map(ok);
+  const bySeat: (number | undefined)[] = []; const byPid = new Map<number, number>();
+  const aug = (si: number, seen: Set<number>, ban: number, bs: (number | undefined)[], bp: Map<number, number>): boolean => {
+    for (const pid of adj[si]) {
+      if (pid === ban || seen.has(pid)) continue;
+      seen.add(pid);
+      const o = bp.get(pid);
+      if (o === undefined || aug(o, seen, ban, bs, bp)) { bp.set(pid, si); bs[si] = pid; return true; }
+    }
+    return false;
+  };
+  seats.forEach((_, si) => aug(si, new Set(), -1, bySeat, byPid));
+  const out = new Set<number>();
+  for (const [pid, si] of byPid) {
+    const bs = [...bySeat]; const bp = new Map(byPid); bs[si] = undefined; bp.delete(pid);
+    if (!aug(si, new Set(), pid, bs, bp)) out.add(pid);
+  }
+  return out;
 }
 // «Επόμενος στη σειρά» για μια θέση: ο πρώτος που επιτρέπεται, εκτός από όσους ήδη προτάθηκαν (skip)
 export function nextFor(s: AppState, date: ISODate, k: string, skip: number[]): number | null {
@@ -345,16 +382,27 @@ export interface StatusPlan {
   files: PlanFile[];
   overlaps: { pid: number; status: Status }[];
   conflicts: { pid: number; date: ISODate; k: string }[];
+  past: { pid: number; date: ISODate; k: string }[];   // υπηρεσίες πριν από σήμερα: έγιναν, μένουν
   blocked: { pid: number; date: ISODate; reason: string }[];
   cancels: Status[];
 }
 const overlapsRange = (s: Status, from: ISODate, to: ISODate) => !(to < s.from || from > s.to);
-export function planStatusChange(s: AppState, cmd: StatusCmd): StatusPlan {
+// Έξοδος/ΔΝ πολλών ημερών που ακυρώνεται μόνο για from–to: μένουν οι μέρες πριν και μετά.
+// Το πρώτο κομμάτι κρατά το id (ίδια γραμμή στο Excel), το δεύτερο παίρνει νέο.
+export function splitOut(st: Status, from: ISODate, to: ISODate, newId: () => string): Status[] {
+  const out: Status[] = [];
+  if (st.from < from) out.push({ ...st, to: addDays(from, -1) });
+  if (st.to > to) out.push({ ...st, id: out.length ? newId() : st.id, from: addDays(to, 1) });
+  return out;
+}
+const rangeTxt = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
+// today: οι υπηρεσίες πριν από σήμερα δεν σβήνονται (έγιναν), μόνο αναφέρονται
+export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): StatusPlan {
   const t = TYPES[cmd.type];
   const n = cmd.pids.length;
   const pm = personMap(s.people);
   const files: PlanFile[] = [];
-  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [];
+  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [];
   const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
   for (const pid of cmd.pids) {
@@ -363,11 +411,14 @@ export function planStatusChange(s: AppState, cmd: StatusCmd): StatusPlan {
     if (t.cat === 'out') {
       for (let d = cmd.from; d <= cmd.to; d = addDays(d, 1)) { const r = outBlock(s, d, pid); if (r) { blocked.push({ pid, date: d, reason: r }); break; } }
     } else if (cmd.type !== 'PUN') {
+      // οι ίδιοι κανόνες με τις υπηρεσίες (dutyBlock): καμία υπηρεσία, όχι ένοπλη, ΕΟ/ΕΑ όχι μαγειρεία
+      const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to };
       dates.forEach(date => posts.forEach(x => {
-        if (s.guards[date][x.k] === pid && (t.noDuty || (t.noArmed && x.armed))) conflicts.push({ pid, date, k: x.k });
+        if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
       }));
     }
-    if (t.noOut && !t.away && cmd.type !== 'PUN')
+    // και η ποινή που ακόμα αιτείται κρατά τον στρατιώτη μέσα (outBlock)
+    if (t.noOut && !t.away)
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && overlapsRange(x, cmd.from, cmd.to)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
@@ -375,13 +426,17 @@ export function planStatusChange(s: AppState, cmd: StatusCmd): StatusPlan {
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (t.cat === 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
-  if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + dm(x.from) + ')').join(', ') + '. ' + t.label + ' δεν βγαίνει έξοδο.' });
+  const keep = (x: Status) => splitOut(x, cmd.from, cmd.to, () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
+  if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   dates.forEach(date => {
     const cs = conflicts.filter(x => x.date === date);
     if (!cs.length) return;
     files.push({ fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: cs.map(x => shortName(pm.get(x.pid)!) + ' βγαίνει από ' + postTxt(posts.find(p => p.k === x.k)!)).join(' · ') + '. ' + (cs.length > 1 ? 'Οι θέσεις μένουν' : 'Η θέση μένει') + ' ΚΕΝΗ.' });
   });
-  return { files, overlaps, conflicts, blocked, cancels };
+  [...new Set(past.map(x => x.date))].forEach(date => {
+    files.push({ fn: 'Υπηρεσίες ' + dm(date), desc: past.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': υπηρεσία που έγινε, μένει.' });
+  });
+  return { files, overlaps, conflicts, past, blocked, cancels };
 }
 
 // --------------------------- ΗΚΑΙ (Κ-17) ---------------------------

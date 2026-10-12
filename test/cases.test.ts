@@ -221,7 +221,8 @@ describe('προέλεγχος', () => {
   });
   it('Εξοδούχοι: τιμωρημένος εξοδούχος = ✕', () => {
     let s = run(fakeState(20), { t: 'outs', date: D, changes: [{ pid: 5, from: null, to: 'OUT' }] });
-    s = declare(s, 'PUN', 5, D, D, { kind: 'Κράτηση' }); s = run(s, { t: 'approvePun', id: s.statuses.find(x => x.type === 'PUN')!.id });
+    // η δήλωση ποινής ακυρώνει μόνη της την έξοδο· εδώ η ποινή ήρθε αλλιώς (π.χ. από το Excel)
+    s = { ...s, statuses: [...s.statuses, { id: 'pun5', pid: 5, type: 'PUN', from: D, to: D, kind: 'Κράτηση' }] };
     expect(hasErrors(preflight('outs', s, D))).toBe(true);
   });
   it('ΗΚΑΙ: τα αθροίσματα συμφωνούν και κανείς δεν μετριέται δύο φορές', () => {

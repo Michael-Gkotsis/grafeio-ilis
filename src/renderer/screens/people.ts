@@ -209,10 +209,10 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   const full = { ...cmd, kind: hasKind ? cmd.kind : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined };
   const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
   const max = isPun ? overMax(cmd.kind, daysBetween(cmd.from, cmd.to)) : 0;
-  const plan = useMemo(() => (step === 2 ? planStatusChange(state, full) : null), [step, state, cmd]);
+  const plan = useMemo(() => (step === 2 ? planStatusChange(state, full, today) : null), [step, state, cmd, today]);
   const next = () => {
     if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; }
-    const p = planStatusChange(state, full);
+    const p = planStatusChange(state, full, today);
     if (p.overlaps.length) { const o = p.overlaps[0]; setErr(shortName(pm.get(o.pid)!) + ' έχει ήδη ' + TYPES[o.status.type].label + ' ' + dm(o.status.from) + '–' + dm(o.status.to) + '. Βγάλ\' τον από τη λίστα ή άλλαξε τις ημερομηνίες.'); return; }
     if (p.blocked.length) { setErr(html`Δεν βγαίνουν έξοδο: ${p.blocked.map(b => html`<span key=${b.pid}><br/><b>${shortName(pm.get(b.pid)!)}</b> (${dayName(b.date, today).toLowerCase()}): ${b.reason}</span>`)}<br/>Βγάλ' τους από τη λίστα.`); return; }
     setStep(2);
