@@ -1,5 +1,6 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dates';
+import { normGreek } from './text';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CADRE_ABS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   type AppState, type Baseline, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
@@ -97,7 +98,7 @@ export function strengthOf(s: AppState, date: ISODate): Strength {
 export function defaultCaps(p: Person): Partial<Record<DutyKind, string>> {
   // όποιος έχει πόστο εξαιρείται από όλες τις υπηρεσίες εκτός από Λ/Υ και Δ/Υ
   if (p.post) return Object.fromEntries(CAP_KINDS.map(([k]) => [k, 'Πόστο: ' + p.post]));
-  const si = (p.si || '').toUpperCase();
+  const si = normGreek(p.si);   // και «άοπλος», «I4» με λατινικό I
   if (si.includes('ΑΟΠΛ') || si.startsWith('Ι4')) return { op: 'Σ.Ι. ' + p.si, sk: 'Σ.Ι. ' + p.si };
   return {};
 }

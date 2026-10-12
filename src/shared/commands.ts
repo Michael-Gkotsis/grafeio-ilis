@@ -2,7 +2,7 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
 
 export type Command =
@@ -42,7 +42,8 @@ export type Command =
   | { t: 'importDuties'; guards: Guards; baseline: Record<number, Baseline>; source: string }
   | { t: 'expire' };
 
-export interface ImportRow extends Omit<Person, 'id' | 'active'> { active?: boolean }
+// Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
+export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
 
 export interface Ctx { today: ISODate; newId: () => string }
 export interface Result { state: AppState; text: string; files: string[]; source?: 'app' | 'auto' | 'import' | 'excel'; undoable?: boolean; extra?: string[] }
@@ -341,6 +342,17 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
 
 // Εισαγωγή/ενημέρωση από το Δυναμολόγιο: ταίριασμα με ΑΣΜ, αλλιώς με ονοματεπώνυμο + πατρώνυμο.
 export const personKey = (p: { last: string; first: string; father: string }) => normGreek(p.last + '|' + p.first + '|' + p.father);
+// Το άτομο μετά την εισαγωγή: αλλάζουν μόνο τα πεδία που έφερε η γραμμή. Χωρίς «σε δύναμη» στη γραμμή (το αρχείο δεν έχει
+// φύλλο ΕΚΤΟΣ), όποιος είναι στο Δυναμολόγιο ξαναμπαίνει σε δύναμη, εκτός αν τον έβγαλε φύλλο ΕΚΤΟΣ ΔΥΝΑΜΗΣ (άλλο αρχείο).
+// Όποιος ξαναμπαίνει σε δύναμη χάνει τη σημείωση «Εκτός δύναμης…» που είχε γράψει η εφαρμογή.
+function mergeRow(ex: Person, r: ImportRow): Person {
+  const auto = ex.notes.startsWith(OUT_NOTE);
+  const active = r.active ?? (ex.active || !auto);
+  const next: Person = { ...ex, ...r, id: ex.id, active };
+  if (active && r.notes === undefined && auto) next.notes = '';
+  return next;
+}
+const newPerson = (r: ImportRow, id: number): Person => ({ post: null, attached: false, notes: '', ...r, id, active: r.active ?? true });
 function importPeople(s: AppState, rows: ImportRow[], source: string, deactivateMissing: boolean): Result {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
   const byName = new Map(s.people.map(p => [personKey(p), p]));
@@ -350,8 +362,8 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
   const added: Person[] = [];
   for (const r of rows) {
     const ex = (r.asm && byAsm.get(r.asm)) || byName.get(personKey(r));
-    if (ex) { seen.add(ex.id); updated.set(ex.id, { ...ex, ...r, id: ex.id, active: r.active ?? true }); }
-    else added.push({ ...r, id: nextId++, active: r.active ?? true });
+    if (ex) { seen.add(ex.id); updated.set(ex.id, mergeRow(ex, r)); }
+    else added.push(newPerson(r, nextId++));
   }
   // Όσοι λείπουν από το νέο Δυναμολόγιο: αν δεν έχουν καμία καταχώρηση ή υπηρεσία σβήνονται (π.χ. λάθος γραμμές
   // παλιάς εισαγωγής), αλλιώς γίνονται «εκτός δύναμης» για να μείνει το ιστορικό τους.
@@ -379,8 +391,8 @@ export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who:
   const changes: { who: string; what: string }[] = []; let same = 0;
   for (const r of rows) {
     const ex = (r.asm && byAsm.get(r.asm)) || byName.get(personKey(r)); if (!ex) continue;
-    const next: Record<string, unknown> = { ...ex, ...r, active: r.active ?? true }; const cur = ex as unknown as Record<string, unknown>;
-    const what = ROSTER_FIELDS.filter(([k]) => r[k] !== undefined && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
+    const next = mergeRow(ex, r) as unknown as Record<string, unknown>; const cur = ex as unknown as Record<string, unknown>;
+    const what = ROSTER_FIELDS.filter(([k]) => (r[k] !== undefined || k === 'active') && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
       .map(([k, label]) => label + ' ' + rv(cur[k] ?? (k === 'dn' ? false : null)) + ' → ' + rv(next[k]));
     if (what.length) changes.push({ who: ex.last + ' ' + ex.first, what: what.join(', ') }); else same++;
   }

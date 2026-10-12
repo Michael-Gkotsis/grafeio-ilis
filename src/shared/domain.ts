@@ -25,6 +25,8 @@ export interface Person {
   weapon?: string;       // αριθμός όπλου: γράφεται μόνο δίπλα στον Λ/Υ και τον Δ/Υ στο έντυπο υπηρεσιών
 }
 
+// Αρχή των σημειώσεων όσων βγήκαν εκτός δύναμης από φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» (όχι με το χέρι)
+export const OUT_NOTE = 'Εκτός δύναμης';
 export const fullName = (p: Person) => p.last + ' ' + p.first;
 export const shortName = (p: Person) => p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '');
 // Ουλαμός από θάλαμο (Κ-18): 1–4 → 1ος, 5–8 → 2ος

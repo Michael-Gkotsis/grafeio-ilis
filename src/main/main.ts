@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { FORM_KINDS, KIND, KINDS, ambiguousLines, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -393,7 +393,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
     const token = crypto.randomUUID();
     pending.clear();   // μία προεπισκόπηση τη φορά: όσες ακυρώθηκαν δεν κρατούν το φύλλο στη μνήμη
     pending.set(token, { rows: r.rows, file, binding: det, stamp: { mtime: book.mtime, size: book.size }, sheet: det ? sheetOf(book.sheets, det.sheet) || null : null });
-    return { ok: true, token, file: path.basename(file), total: r.rows.length, active: r.rows.filter(x => x.active).length, added, updated: r.rows.length - added, missing, warnings: r.warnings, essos: r.essos, skipped: r.skipped, declared: r.declared, found: r.found, suspicious: r.suspicious, ...rosterChanges(store.state, r.rows) };
+    return { ok: true, token, file: path.basename(file), total: r.rows.length, active: r.rows.filter(x => x.active !== false).length, added, updated: r.rows.length - added, missing, warnings: r.warnings, essos: r.essos, skipped: r.skipped, declared: r.declared, found: r.found, suspicious: r.suspicious, ...rosterChanges(store.state, r.rows) };
   } catch (e) { return fail(e); }
 }
 async function pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null> {
@@ -481,7 +481,7 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
     const lines = describeSets(kind, sheet, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : undefined);
-    return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound };
+    return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous) };
   } catch (e) { return fail(e); }
 }
 // Έντυπο: φύλλα του template και (ΗΚΑΙ) πού βρέθηκαν οι γραμμές και οι στήλες

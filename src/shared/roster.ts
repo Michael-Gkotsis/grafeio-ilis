@@ -1,6 +1,7 @@
 // Ανάγνωση Δυναμολογίου (δείγμα 12): βρίσκει τις στήλες από τις επικεφαλίδες, όχι από θέσεις κελιών,
 // ώστε να δουλεύει και όταν ο λοχίας προσθέσει/μετακινήσει στήλη.
-import { norm } from './text';
+import { norm, normGreek } from './text';
+import { OUT_NOTE } from './domain';
 import type { ImportRow } from './commands';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
@@ -16,7 +17,8 @@ export interface RosterResult {
 // Δικαίωμα ΔΝ: στήλη «ΔΝ» (ΝΑΙ, Χ, ✓…), η λέξη ΔΝ στις παρατηρήσεις, ή φύλλο «ΔΝ» με λίστα ονομάτων
 export const DN_HEAD = /^Δ\s*[./]?\s*[ΝN]\s*\.?(\s*\(.*\))?$|ΔΙΚΑΙΩΜΑ\s*Δ\s*[./]?\s*[ΝN]|ΔΙΚΑΙΟΥΧ\S*\s*Δ\s*[./]?\s*[ΝN]|^ΔΙΑΝΥΚΤΕΡΕΥΣ/;
 export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
-export const isDnYes = (v: string) => { const t = norm(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|NO|N\/A|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
+// normGreek: λατινικά που μοιάζουν (OXI, NO, N/A) γίνονται ελληνικά, ώστε το «OXI» να μη δίνει ΔΝ
+export const isDnYes = (v: string) => { const t = normGreek(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|ΝΟ|Ν\/Α|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
 export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
 export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
@@ -76,15 +78,37 @@ function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
     if (!last || !first || !isPersonRow(last, first, get(row, 'father'))) { skipped.push(norm(last || first)); continue; }
     const roomN = parseInt(get(row, 'room'), 10);
     out.push({
-      rank: norm(get(row, 'rank')), spec: norm(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
+      // βαθμός, Ο/Σ και Σ.Ι. με λατινικά που μοιάζουν (I4, AOΠΛΟ) γράφονται ελληνικά· τα ονόματα μένουν όπως ήταν για να ταιριάζουν με τα υπάρχοντα
+      rank: normGreek(get(row, 'rank')), spec: normGreek(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
       asm: get(row, 'asm').replace(/\s/g, ''), phone: get(row, 'phone').replace(/\s/g, ''),
-      room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: norm(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
+      room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: normGreek(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
       dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn'))
     });
   }
   return out;
 }
 const keyOf = (r: { last: string; first: string; father: string }) => r.last + '|' + r.first + '|' + r.father;
+const key2 = (r: { last: string; first: string }) => r.last + '|' + r.first;
+// Πόστο κάθε ατόμου από το φύλλο ΠΟΣΤΑ: με ΑΣΜ, αλλιώς ονοματεπώνυμο + πατρώνυμο, αλλιώς ονοματεπώνυμο αν είναι μοναδικό
+// και στα δύο φύλλα (το ΠΟΣΤΑ συχνά δεν έχει στήλη πατρώνυμου)
+function postJoin(list: Rec[]): (r: Rec, all: Rec[]) => string | null {
+  const byAsm = new Map<string, Rec>(), byKey = new Map<string, Rec>(), by2 = new Map<string, Rec[]>();
+  for (const x of list) {
+    if (x.asm && !byAsm.has(x.asm)) byAsm.set(x.asm, x);
+    if (x.father && !byKey.has(keyOf(x))) byKey.set(keyOf(x), x);
+    by2.set(key2(x), [...(by2.get(key2(x)) || []), x]);
+  }
+  let count: Map<string, number> | null = null;
+  // άλλο ΑΣΜ στα δύο φύλλα = άλλος άνθρωπος, ό,τι κι αν λέει το όνομα
+  const ok = (x: Rec | undefined, r: Rec) => !!x && !(x.asm && r.asm && x.asm !== r.asm);
+  return (r, all) => {
+    if (r.asm && byAsm.has(r.asm)) return byAsm.get(r.asm)!.post;
+    const k = byKey.get(keyOf(r)); if (ok(k, r)) return k!.post;
+    const l = by2.get(key2(r)); if (!l || l.length !== 1 || !ok(l[0], r) || (l[0].father && r.father)) return null;
+    if (!count) { count = new Map(); for (const x of all) count.set(key2(x), (count.get(key2(x)) || 0) + 1); }
+    return count.get(key2(r)) === 1 ? l[0].post : null;
+  };
+}
 
 // π.χ. «ΔΥΝΑΜΟΛΟΓΙΟ Β' ΕΣΣΟ 2026» → «2026 Β΄»
 export function essosOf(title: string): string {
@@ -103,15 +127,21 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
   const main = named(ov.main) || byName(/^ΣΥΝΟΛΙΚΟ/) || sheets.find(s => headerOf(s) && !/ΠΟΣΤΑ|ΕΚΤΟΣ|ΑΔΕΙΕΣ|ΤΙΜΩΡ|IATR|ΙΑΤΡ/.test(norm(s.name)));
   if (!main) return { rows: [], warnings: ['Δεν βρέθηκε φύλλο με στήλες «Επώνυμο» και «Όνομα».'], main: '', essos: '', skipped: [], declared: null, found: 0, suspicious: [] };
   const essos = essosOf(txt((main.rows[0] || [])[0]));
-  const posts = new Map<string, string>();
   const postSheet = named(ov.posts) || byName(/^ΠΟΣΤΑ/);
-  if (postSheet) for (const r of records(postSheet)) if (r.post) { posts.set(keyOf(r), r.post); if (r.asm) posts.set('#' + r.asm, r.post); }
+  const postOf = postSheet ? postJoin(records(postSheet).filter(r => r.post)) : null;
   const out = new Map<string, Rec>();
   const skipped: string[] = [];
   let recs = records(main, skipped);
   // Αν σχεδόν όλοι έχουν βαθμό, όσοι δεν έχουν είναι γραμμές σημειώσεων, όχι άνθρωποι
   const withRank = recs.filter(r => r.rank).length;
-  if (withRank >= recs.length * 0.8) { const drop = recs.length - withRank; if (drop) warnings.push(drop + ' γραμμές χωρίς βαθμό αγνοήθηκαν (δεν μοιάζουν με άτομα)'); recs.filter(r => !r.rank).forEach(r => skipped.push(r.last + ' ' + r.first)); recs = recs.filter(r => r.rank); }
+  // (όσοι όμως έχουν ΑΣΜ, τηλέφωνο ή θάλαμο είναι άνθρωποι που απλώς δεν γράφτηκε ο βαθμός τους: περνούν ως ΣΤΡ)
+  if (withRank >= recs.length * 0.8) {
+    const note = (r: Rec) => !r.rank && !r.asm && !r.phone && r.room == null;
+    const drop = recs.filter(note), kept = recs.length - withRank - drop.length;
+    if (drop.length) warnings.push(drop.length + ' γραμμές χωρίς βαθμό αγνοήθηκαν (δεν μοιάζουν με άτομα)');
+    if (kept) warnings.push(kept + ' άτομα χωρίς βαθμό πέρασαν ως ΣΤΡ (έχουν ΑΣΜ, τηλέφωνο ή θάλαμο).');
+    drop.forEach(r => skipped.push(r.last + ' ' + r.first)); recs = recs.filter(r => !note(r));
+  }
   for (const r of recs) {
     const k = r.asm ? '#' + r.asm : keyOf(r);
     if (out.has(k)) { warnings.push('Διπλή εγγραφή: ' + r.last + ' ' + r.first + ' (κρατήθηκε η πρώτη)'); continue; }
@@ -126,8 +156,8 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
   const outside = named(ov.outside) || byName(/^ΕΚΤΟΣ/);
   const inactive = new Map<string, string>();
   if (outside) for (const r of records(outside)) { inactive.set(r.asm ? '#' + r.asm : keyOf(r), r.remarks); if (!out.has(r.asm ? '#' + r.asm : keyOf(r))) out.set(r.asm ? '#' + r.asm : keyOf(r), r); }
+  const all = [...out.values()];
   const rows: ImportRow[] = [...out.entries()].map(([k, r]) => {
-    const post = posts.get('#' + r.asm) || posts.get(keyOf(r)) || null;
     const off = inactive.has(k);
     // Στο ΣΥΝΟΛΙΚΟ οι «ΠΑΡΑΤΗΡΗΣΕΙΣ» είναι ρόλοι (ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…)· η λέξη ΔΝ εκεί σημαίνει δικαίωμα ΔΝ
     // ο λόγος για τους εκτός δύναμης είναι οι παρατηρήσεις του φύλλου «ΕΚΤΟΣ ΔΥΝΑΜΗΣ», όχι ο ρόλος του ΣΥΝΟΛΙΚΟΥ
@@ -135,17 +165,22 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
     const role = !off && r.remarks ? stripDn(r.remarks) || null : null;
     const row: ImportRow = {
       rank: r.rank || 'ΣΤΡ', spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
-      si: r.si, post, role, essos, attached: false, notes: off ? 'Εκτός δύναμης' + (inactive.get(k) ? ': ' + inactive.get(k) : '') : '',
-      active: !off
+      si: r.si, role, essos
     };
+    // Πόστο, προσκολλημένος και σημειώσεις μόνο όταν το αρχείο τα γράφει: αλλιώς μένει ό,τι έχει η εφαρμογή
+    // (π.χ. πόστα από άλλο αρχείο). Όσοι λείπουν από το φύλλο ΠΟΣΤΑ χάνουν το πόστο τους.
+    if (postOf) row.post = postOf(r, all);
+    if (off) row.notes = OUT_NOTE + (inactive.get(k) ? ': ' + inactive.get(k) : '');
+    // με φύλλο ΕΚΤΟΣ στο αρχείο ξέρουμε ποιος είναι σε δύναμη· χωρίς αυτό αποφασίζει η εισαγωγή (commands.ts)
+    if (outside) row.active = !off;
     // μόνο όταν το αρχείο λέει κάτι για ΔΝ· αλλιώς μένει ό,τι έχει οριστεί στην εφαρμογή
     if (dnSheet || dnCol) row.dn = !!r.dn || dnWord || dnList.has('#' + r.asm) || dnList.has(keyOf(r));
     else if (dnWord) row.dn = true;
     return row;
   });
-  const nDn = rows.filter(r => r.active && r.dn).length;
+  const nDn = rows.filter(r => r.active !== false && r.dn).length;
   if (nDn) warnings.push(nDn + ' άτομα με δικαίωμα ΔΝ' + (dnSheet ? ' (φύλλο «' + dnSheet.name + '»)' : dnCol ? ' (στήλη ΔΝ)' : ' (παρατηρήσεις)') + '.');
-  const noRoom = rows.filter(r => r.active && r.room == null).length;
+  const noRoom = rows.filter(r => r.active !== false && r.room == null).length;
   if (noRoom) warnings.push(noRoom + ' άτομα χωρίς θάλαμο: δεν θα μπαίνουν στην πρόταση εξόδου ανά θάλαμο.');
   const noAsm = rows.filter(r => !r.asm).length;
   if (noAsm) warnings.push(noAsm + ' άτομα χωρίς ΑΣΜ: ταιριάζουν μόνο με ονοματεπώνυμο και πατρώνυμο.');
@@ -153,7 +188,7 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
   const declared = declaredTotal(main);
   const found = recs.length;
   if (declared != null && declared !== found) warnings.unshift('Το Δυναμολόγιο γράφει ΣΥΝΟΛΟ ' + declared + ', αλλά βρέθηκαν ' + found + ' άτομα στο φύλλο ' + main.name + '. Έλεγξε τη λίστα πριν την εισαγωγή.');
-  const suspicious = rows.filter(r => r.active && !r.asm && !r.phone && r.room == null).map(r => r.last + ' ' + r.first);
+  const suspicious = rows.filter(r => r.active !== false && !r.asm && !r.phone && r.room == null).map(r => r.last + ' ' + r.first);
   return { rows, warnings, main: main.name, essos, skipped, declared, found, suspicious };
 }
 export function isDnSheet(sh: RawSheet): boolean {

@@ -416,6 +416,7 @@ function WriteDialog({ list, onClose }: { list: ListKind; onClose: () => void })
       ${!pv.total && !pv.create ? html`<${Alert} tone="ok"><span>✓ Το Excel έχει ήδη ό,τι έχει η εφαρμογή.</span><//>` : html`<p style=${{ marginTop: 0 }}><b>${pv.total}</b> ${pv.total === 1 ? 'αλλαγή θα γραφτεί' : 'αλλαγές θα γραφτούν'}. Η προηγούμενη έκδοση μένει στο _προηγούμενα.</p>
         <ul className="hist">${pv.lines.slice(0, 80).map((l, i) => html`<li key=${i}><span className="nw">Γρ. ${l.r + 1}</span> <b>${l.who}</b> ${l.text}</li>`)}</ul>${pv.lines.length > 80 && html`<p className="note">… και ${pv.lines.length - 80} ακόμα</p>`}`}
       ${pv.foreign > 0 && html`<p className="note">${pv.foreign === 1 ? '1 γραμμή του Excel δεν είναι' : pv.foreign + ' γραμμές του Excel δεν είναι'} στην εφαρμογή (γράφτηκαν με το χέρι): δεν αγγίζονται. Πάτα «Ανανέωση από Excel» για να περάσουν.</p>`}
+      ${!!pv.ambiguous?.length && html`<${Alert} tone="warn"><span>${pv.ambiguous.slice(0, 10).map(l => 'Γρ. ' + (l.r + 1) + ' ' + l.who).join(', ')}${pv.ambiguous.length > 10 ? ' …' : ''}: αμφίσημη γραμμή (συνονόματοι χωρίς ΑΣΜ), δεν αγγίζεται. Βάλε ΑΣΜ ή πατρώνυμο για να ξεχωρίζουν.</span><//>`}
       ${pv.notFound.length > 0 && html`<${Alert} tone="warn"><span>Δεν βρέθηκαν στο φύλλο: ${pv.notFound.slice(0, 10).join(', ')}${pv.notFound.length > 10 ? ' …' : ''}</span><//>`}
     </div>`}
   <//>`;

@@ -5,7 +5,7 @@ import { addDays, nowHM, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
 import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
-import { KIND, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
+import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
@@ -128,7 +128,7 @@ export function mockApi(): Api {
       const b = state.settings.sources?.[kind]; if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο' };
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet) || { name: b.sheet, rows: [] };
       const plan = planSource(kind, sh, b, state, undefined, today());
-      return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, plan.sets), total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound };
+      return { ok: true, file: b.file, create: false, lines: describeSets(kind, sh, b, plan.sets), total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sh, b, plan.ambiguous) };
     },
     srcWrite: async kind => ({ ok: true, text: 'Δοκιμή: δεν γράφτηκε αρχείο (' + kind + ')', file: '(δοκιμή)' }),
     srcNewFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
