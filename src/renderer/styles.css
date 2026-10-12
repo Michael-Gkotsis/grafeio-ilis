@@ -464,6 +464,11 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .hk-src li{border-top:1px solid var(--border);padding:8px 0;font-size:13px}
 .hk-src li:first-child{border-top:0}
 .hk-src .cat__names{margin-top:2px}
+.hk-req{margin:0;padding-left:22px}
+.hk-req li{border-top:1px solid var(--border);padding:6px 0;font-size:13px}
+.hk-req__row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.hk-req li:first-child{border-top:0}
+.hk-req__acts{display:flex;gap:4px}
 
 .chk{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);margin-top:10px}
 .chk__in{min-width:540px}

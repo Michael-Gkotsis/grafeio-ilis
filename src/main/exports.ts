@@ -1,7 +1,8 @@
 // Συμπλήρωση των εντύπων της Ίλης από την κατάσταση της εφαρμογής (06, 11).
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
-import { collator, norm } from '../shared/text';
+import { norm } from '../shared/text';
+import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
@@ -11,7 +12,6 @@ export { FROURA_FORMS };
 
 export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
-const byName = (a: Person, b: Person) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
 export interface ExportResult { name: string; data: Buffer; warnings: string[] }
@@ -62,7 +62,8 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
 // στήλες ανά είδος κωλυομένων/απόντων (τα κλειδιά του hkaiCounts)
 const HK_KEYS = ['yp', 'ey', 'tim', 'bl', 'os', 'mag', 'sid', 'kin', 'ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fp', 'fyl', 'apal', 'ekp', 'allh'];
 export class TemplateError extends Error {}
-export const HK_TEXT: Record<string, string> = { egr: 'G8', dia: 'G9', ait: 'G12', loi: 'G19', off: 'A18' };
+// 5. ΑΙΤΗΣΕΙΣ (G12): το ελεύθερο κείμενο γράφεται μαζί με τις αριθμημένες αιτήσεις, στο τέλος
+export const HK_TEXT: Record<string, string> = { egr: 'G8', dia: 'G9', loi: 'G19', off: 'A18' };
 // front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap } = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl);
@@ -93,14 +94,15 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   bk.set('D5', night || null).set('D8', day24 || null);
   const line = (x: Status) => who(pm.get(x.pid)!) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + dm(x.from) + (x.to !== x.from ? '–' + dm(x.to) : '');
   const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === d && pm.has(x.pid));
-  const puns = s.statuses.filter(x => x.type === 'PUN' && x.pending && pm.has(x.pid));
   if (leaves.length) bk.set('G10', leaves.map(line).join('· '));
-  if (puns.length) bk.set('G11', puns.map(x => who(pm.get(x.pid)!) + ': αιτείται ' + (x.kind || 'ποινή').toLowerCase() + ' ' + dm(x.from) + '–' + dm(x.to) + (x.note ? ' (' + x.note + ')' : '')).join('· '));
+  // 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες, μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
+  const puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
+  if (puns.length) await wb.setRich(bk, 'G11', puns);
+  if (reqs.length) await wb.setRich(bk, 'G12', reqs);
   const ly = g.ly && pm.get(g.ly), dy = g.dy && pm.get(g.dy);
   if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
   if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
   bk.set('L23', s.settings.place + ', ' + milDate(d));
-  if (puns.length > 3) warnings.push('Πολλές ποινές προς αίτηση (' + puns.length + '): έλεγξε ότι χωράνε στο κελί 4. ΠΟΙΝΕΣ');
   return { name: 'ΗΚΑΙ ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings };
 }
 

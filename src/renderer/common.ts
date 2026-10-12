@@ -9,6 +9,7 @@ import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } f
 import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
 import type { ExportKind } from '../shared/api';
 import type { Check } from '../shared/preflight';
+import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
 type P = any;
 
@@ -67,14 +68,15 @@ export function DateBar({ value, onChange, days, count }: P) {
 }
 
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
-export interface Cell { v: string; s: string; cs: number; rs: number }
+// rich: γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ, ποινές)· το v κρατά το ίδιο κείμενο απλό
+export interface Cell { v: string; s: string; cs: number; rs: number; rich?: Line[] }
 export interface SheetModel { cols: number[]; rows: (Cell | null)[][] }
 export const E = (v: unknown, s?: string, cs?: number, rs?: number): Cell => ({ v: v == null ? '' : String(v), s: s || '', cs: cs || 1, rs: rs || 1 });
 // Γραμμή του φύλλου: ξαναζωγραφίζεται μόνο όταν άλλαξε κελί της ή η επισήμανσή της
 const sameCell = (a: Cell | null, b: Cell | null) => a === b || (!!a && !!b && a.v === b.v && a.s === b.s && a.cs === b.cs && a.rs === b.rs);
 const sameRow = (a: (Cell | null)[], b: (Cell | null)[]) => a === b || (a.length === b.length && a.every((c, i) => sameCell(c, b[i])));
 const XlRow = memo(function XlRow({ r, ri, fl, gen }: { r: (Cell | null)[]; ri: number; fl?: Set<number>; gen: number }) {
-  return html`<tr><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = !!fl && fl.has(ci); return html`<td key=${ci + (f ? 'f' + gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.v}</td>`; })}</tr>`;
+  return html`<tr><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = !!fl && fl.has(ci); return html`<td key=${ci + (f ? 'f' + gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.rich ? c.rich.map((l, i) => html`<${Fragment} key=${i}>${i > 0 && html`<br/>`}${l.map((r, j) => (r.u ? html`<u key=${j}>${r.t}</u>` : r.t))}<//>`) : c.v}</td>`; })}</tr>`;
 }, (a, b) => a.ri === b.ri && a.fl === b.fl && (!a.fl || a.gen === b.gen) && sameRow(a.r, b.r));
 
 // Μεγάλα φύλλα (μηνιαίο πλέγμα: 150 άτομα × 31 μέρες ≈ 6.000 κελιά) σε κομμάτια των 20 γραμμών:

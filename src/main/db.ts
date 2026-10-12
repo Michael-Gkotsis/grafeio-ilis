@@ -39,7 +39,7 @@ export function backupsToDelete(names: string[], now: string): string[] {
   return del;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const UNDO_KEEP = 50;
 const MIGRATIONS: string[] = [
   `CREATE TABLE person (id INTEGER PRIMARY KEY, data TEXT NOT NULL);
@@ -49,13 +49,16 @@ const MIGRATIONS: string[] = [
    CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
    CREATE TABLE audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, day TEXT, text TEXT, files TEXT, source TEXT,
                        patch TEXT, undoable INTEGER, undone INTEGER DEFAULT 0);
-   CREATE INDEX audit_day ON audit(day);`
+   CREATE INDEX audit_day ON audit(day);`,
+  // 2: αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)· η παλιά έκδοση της εφαρμογής απλώς δεν τον διαβάζει
+  `CREATE TABLE request (id TEXT PRIMARY KEY, data TEXT NOT NULL);`
 ];
 
 // Διαφορά για αναίρεση: για κάθε πίνακα, οι προηγούμενες τιμές όσων άλλαξαν/σβήστηκαν (put) και τα κλειδιά όσων προστέθηκαν (del)
+// request και kvd λείπουν από τα patch που γράφτηκαν πριν την αναβάθμιση: η αναίρεσή τους δουλεύει και χωρίς αυτά
 type Rows<K> = { put: [K, unknown][]; del: K[] };
-export interface Patch { person: Rows<number>; status: Rows<string>; guard: Rows<string>; cap: Rows<number>; kv: Rows<string> }
-const emptyPatch = (): Patch => ({ person: { put: [], del: [] }, status: { put: [], del: [] }, guard: { put: [], del: [] }, cap: { put: [], del: [] }, kv: { put: [], del: [] } });
+export interface Patch { person: Rows<number>; status: Rows<string>; guard: Rows<string>; cap: Rows<number>; kv: Rows<string>; request?: Rows<string>; kvd?: (Rows<string> & { key: string })[] }
+const emptyPatch = (): Patch => ({ person: { put: [], del: [] }, status: { put: [], del: [] }, guard: { put: [], del: [] }, cap: { put: [], del: [] }, kv: { put: [], del: [] }, request: { put: [], del: [] }, kvd: [] });
 
 function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed: K[]; removed: K[]; added: K[] } {
   const changed: K[] = [], removed: K[] = [], added: K[] = [];
@@ -64,6 +67,11 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   return { changed, removed, added };
 }
 const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs'] as const;
+// Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
+// obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
+const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids' };
+const entriesOf = (k: string, v: unknown): Map<string, unknown> =>
+  KV_ENTRIES[k] === 'ids' ? new Map(((v as { id: string }[]) || []).map(x => [x.id, x])) : new Map(Object.entries((v as Record<string, unknown>) || {}));
 
 export class Store {
   private db!: Database;
@@ -142,15 +150,17 @@ export class Store {
     s.hkaiManual = kv.get('hkaiManual') || {};
     s.cadreList = kv.get('cadreList') || [];
     s.cadreAbs = kv.get('cadreAbs') || [];
+    s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
     this.state = s;
   }
 
   // Γράφει τη νέα κατάσταση: μόνο ό,τι άλλαξε, και επιστρέφει το patch για αναίρεση
   commit(next: AppState): Patch {
     const prev = this.state; const patch = emptyPatch();
-    const tables: [keyof Patch, Map<any, unknown>, Map<any, unknown>, string, string][] = [
+    const tables: ['person' | 'status' | 'request' | 'guard' | 'cap', Map<any, unknown>, Map<any, unknown>, string, string][] = [
       ['person', new Map(prev.people.map(p => [p.id, p])), new Map(next.people.map(p => [p.id, p])), 'person', 'id'],
       ['status', new Map(prev.statuses.map(p => [p.id, p])), new Map(next.statuses.map(p => [p.id, p])), 'status', 'id'],
+      ['request', new Map(prev.requests.map(p => [p.id, p])), new Map(next.requests.map(p => [p.id, p])), 'request', 'id'],
       ['guard', new Map(Object.entries(prev.guards)), new Map(Object.entries(next.guards)), 'guard', 'date'],
       ['cap', new Map(Object.entries(prev.caps).map(([k, v]) => [Number(k), v])), new Map(Object.entries(next.caps).map(([k, v]) => [Number(k), v])), 'cap', 'pid']
     ];
@@ -158,13 +168,16 @@ export class Store {
     try {
       for (const [name, b, a, table, key] of tables) {
         const d = diffMap(b, a);
-        for (const k of [...d.changed, ...d.removed]) (patch[name].put as [unknown, unknown][]).push([k, b.get(k)]);
-        for (const k of d.added) (patch[name].del as unknown[]).push(k);
+        for (const k of [...d.changed, ...d.removed]) (patch[name]!.put as [unknown, unknown][]).push([k, b.get(k)]);
+        for (const k of d.added) (patch[name]!.del as unknown[]).push(k);
         for (const k of [...d.changed, ...d.added]) this.db.run(`INSERT OR REPLACE INTO ${table} (${key}, data) VALUES (?, ?)`, [k as any, JSON.stringify(a.get(k))]);
         for (const k of d.removed) this.db.run(`DELETE FROM ${table} WHERE ${key} = ?`, [k as any]);
       }
       for (const k of KV_KEYS) if (prev[k] !== next[k]) {
-        patch.kv.put.push([k, prev[k]]);
+        if (KV_ENTRIES[k]) {
+          const b = entriesOf(k, prev[k]), d = diffMap(b, entriesOf(k, next[k]));
+          if (d.changed.length || d.removed.length || d.added.length) patch.kvd!.push({ key: k, put: [...d.changed, ...d.removed].map(x => [x, b.get(x)]), del: d.added });
+        } else patch.kv.put.push([k, prev[k]]);
         this.db.run('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [k, JSON.stringify(next[k])]);
       }
       this.db.run('COMMIT');
@@ -180,8 +193,13 @@ export class Store {
     const statuses = new Map(s.statuses.map(p => [p.id, p])); patch.status.del.forEach(k => statuses.delete(k)); patch.status.put.forEach(([k, v]) => statuses.set(k, v as any));
     const guards = { ...s.guards }; patch.guard.del.forEach(k => delete guards[k]); patch.guard.put.forEach(([k, v]) => (guards[k] = v as any));
     const caps = { ...s.caps }; patch.cap.del.forEach(k => delete caps[k]); patch.cap.put.forEach(([k, v]) => (caps[k] = v as any));
-    const next: AppState = { ...s, people: [...people.values()].sort((a, b) => a.id - b.id), statuses: [...statuses.values()], guards, caps };
+    const requests = new Map(s.requests.map(p => [p.id, p])); patch.request?.del.forEach(k => requests.delete(k)); patch.request?.put.forEach(([k, v]) => requests.set(k, v as any));
+    const next: AppState = { ...s, people: [...people.values()].sort((a, b) => a.id - b.id), statuses: [...statuses.values()], guards, caps, requests: [...requests.values()] };
     patch.kv.put.forEach(([k, v]) => { (next as any)[k] = v; });
+    for (const e of patch.kvd || []) {
+      const m = entriesOf(e.key, (next as any)[e.key]); e.del.forEach(k => m.delete(k)); e.put.forEach(([k, v]) => m.set(k, v));
+      (next as any)[e.key] = KV_ENTRIES[e.key] === 'ids' ? [...m.values()] : Object.fromEntries(m);
+    }
     this.commit(next);
   }
 
