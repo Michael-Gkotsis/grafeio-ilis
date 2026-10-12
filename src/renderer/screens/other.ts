@@ -3,15 +3,17 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, StatusBadge, TemplateNote, useUsbCopy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type Phase, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type PersonRequest, type Phase, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
 import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punText } from '../../shared/punish';
+import { byName } from '../../shared/hkaiText';
+import { reqText } from '../../shared/commands';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { recentPeople, usePrefs, type Prefs } from '../prefs';
 import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources';
@@ -188,6 +190,7 @@ export function HkaiScreen() {
     <p className="note" style=${{ margin: '8px 0 0' }}>Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.</p>
   <//>
   <${CadreCard} warn=${!cadre}/>
+  <${RequestsCard} date=${date}/>
   <${HkaiManualCard} date=${date}/></div>`;
   const sheets = html`<div>
     ${!mobile && html`<div style=${{ marginBottom: '8px' }}><${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>`}
@@ -220,7 +223,7 @@ function CadreCard({ warn }: { warn: boolean }) {
   <//>`;
 }
 // Ό,τι στην ΗΚΑΙ δεν το ξέρει η εφαρμογή: αριθμοί ανά βαθμό και κείμενα της πίσω σελίδας, για τη συγκεκριμένη μέρα
-const HK_TEXT_FIELDS: [string, string, string][] = [['egr', '1. Εγγραφές', ''], ['dia', '2. Διαγραφές', ''], ['ait', '5. Αιτήσεις', ''], ['loi', '6. Λοιπά', ''], ['off', 'Αξιωματικός υπηρεσίας', 'π.χ. ΑΝΘΛΓΟΣ …']];
+const HK_TEXT_FIELDS: [string, string, string][] = [['egr', '1. Εγγραφές', ''], ['dia', '2. Διαγραφές', ''], ['ait', '5. Αιτήσεις (ελεύθερο κείμενο, μετά τις αριθμημένες)', ''], ['loi', '6. Λοιπά', ''], ['off', 'Αξιωματικός υπηρεσίας', 'π.χ. ΑΝΘΛΓΟΣ …']];
 function HkaiManualCard({ date }: { date: string }) {
   const { state, run, today } = useStore(); const toast = useToast();
   const cur = state.hkaiManual[date] || { cells: {}, text: {} };
@@ -237,8 +240,45 @@ function HkaiManualCard({ date }: { date: string }) {
       <div className="settings-grid" style=${{ marginTop: '6px' }}>${HK_MANUAL.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${m.cells[rk]?.[k] || ''} onChange=${(e: any) => setCell(rk, k, Math.max(0, +e.target.value || 0))}/></label>`)}</div>
       ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => u.r + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
     ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><input id=${'hk-' + k} className="ui-input" placeholder=${ph} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></div>`)}
-    <p className="note">Οι αποφάσεις 3 (άδειες που ξεκινούν) και 4 (ποινές που αιτούνται) γράφονται μόνες τους. Οχήματα και ατυχήματα συμπληρώνονται στο Excel.</p>
+    <p className="note">Οι αποφάσεις 3 (άδειες που ξεκινούν) και 4 (ποινές που επιβλήθηκαν τη μέρα) γράφονται μόνες τους, όπως και οι αριθμημένες αιτήσεις του 5. Οχήματα και ατυχήματα συμπληρώνονται στο Excel.</p>
     <div className="toolbar"><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setHkaiManual', date, manual: m }, false)) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ΗΚΑΙ ' + dm(date) }); }}>Αποθήκευση<//>${dirty && html`<${Button} variant="ghost" onClick=${() => setM(cur)}>Ακύρωση<//>`}</div>
+  <//>`;
+}
+
+// 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ
+function RequestsCard({ date }: { date: string }) {
+  const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
+  const [edit, setEdit] = useState<Partial<PersonRequest> | null>(null);
+  const pm = useMemo(() => personMap(state.people), [state.people]);
+  const list = useMemo(() => state.requests.filter(r => r.date === date && pm.has(r.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!) || a.id.localeCompare(b.id)), [state.requests, pm, date]);
+  const del = async (r: PersonRequest) => { if (await run({ t: 'deleteRequest', id: r.id }, false)) toast({ text: 'Διαγράφηκε η αίτηση του ' + shortName(pm.get(r.pid)!), actions: [undoMark()] }); };
+  return html`<${Card} title=${'5. Αιτήσεις (' + (date === today ? 'σήμερα' : dm(date)) + ')'} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => setEdit({ date })}>+ Νέα αίτηση<//>`}>
+    ${list.length ? html`<ol className="hk-req">${list.map(r => { const p = pm.get(r.pid)!; return html`<li key=${r.id}><div className="hk-req__row">
+      <span><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${r.text}.</span>
+      <span className="hk-req__acts"><${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//><${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; })}</ol>`
+      : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ΗΚΑΙ ως «1) Ο ΣΤΡ … αιτείται …».</p>`}
+    ${edit && html`<${RequestDialog} req=${edit} onClose=${() => setEdit(null)}/>`}
+  <//>`;
+}
+// Νέα αίτηση ή αλλαγή: από την ΗΚΑΙ ή από την καρτέλα του ατόμου (req.pid)
+export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; onClose: () => void }) {
+  const { state, run, today, undoMark } = useStore(); const toast = useToast();
+  const [f, setF] = useState({ pid: req.pid ?? null as number | null, date: req.date || today, text: req.text || '' });
+  const p = f.pid != null ? personMap(state.people).get(f.pid) : undefined;
+  const text = reqText(f.text);
+  const save = async () => {
+    if (!p || !text) return;
+    const cmd = req.id ? { t: 'updateRequest' as const, req: { id: req.id, pid: p.id, date: f.date, text } } : { t: 'addRequest' as const, req: { pid: p.id, date: f.date, text } };
+    if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ΗΚΑΙ ' + dm(f.date) + ': ') + shortName(p), actions: [undoMark()] }); }
+  };
+  return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : 'Νέα αίτηση'} description="Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!p || !text} onClick=${save}>Αποθήκευση<//>`}>
+    <div className="field"><label className="field__label" htmlFor="rq-p">Ποιος</label>
+      ${p ? html`<div className="field-row"><b>${fullName(p)}</b>${!req.pid && html`<${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, pid: null })}>Άλλος<//>`}</div>`
+        : html`<${PersonPicker} id="rq-p" autoFocus=${true} onChange=${(pid: number) => setF({ ...f, pid })}/>`}</div>
+    <div className="field"><label className="field__label" htmlFor="rq-d">Ημερομηνία ΗΚΑΙ</label><input id="rq-d" type="date" className="ui-input" value=${f.date} onChange=${(e: any) => e.target.value && setF({ ...f, date: e.target.value })}/></div>
+    <div className="field"><label className="field__label" htmlFor="rq-t">Αιτείται</label><input id="rq-t" className="ui-input" placeholder="π.χ. μετάθεση στην 2η ΕΠΧΙΑ" value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
+      <span className="field__help">${p && text ? 'Στην ΗΚΑΙ: «Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + p.last + ' ' + p.first + ' αιτείται ' + text + '.»' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.'}</span></div>
   <//>`;
 }
 

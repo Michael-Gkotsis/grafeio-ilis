@@ -2,7 +2,7 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, CAP_ACC, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
 
 export type Command =
@@ -14,6 +14,9 @@ export type Command =
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> }
   | { t: 'deleteCadreAbs'; id: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
+  | { t: 'addRequest'; req: Omit<PersonRequest, 'id'> }
+  | { t: 'updateRequest'; req: PersonRequest }
+  | { t: 'deleteRequest'; id: string }
   | { t: 'deleteStatus'; id: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string }
@@ -53,6 +56,8 @@ const setGuard = (s: AppState, date: ISODate, k: string, pid: number | null): Ap
   if (pid) g[k] = pid; else delete g[k];
   return { ...s, guards: { ...s.guards, [date]: g } };
 };
+// «αιτείται μετάθεση.» → «μετάθεση»: η πρόταση της ΗΚΑΙ βάζει μόνη της το «αιτείται» και την τελεία
+export const reqText = (t: string) => t.trim().replace(/^αιτ[εέ][ιί]ται\s+/i, '').replace(/[.\s]+$/, '').trim();
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
@@ -120,6 +125,23 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η απουσία');
       const x = s.cadreList.find(y => y.id === a.cid);
       return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε απουσία στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: ['ΗΚΑΙ'] };
+    }
+    case 'addRequest': case 'updateRequest': {
+      const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const text = reqText(c.req.text); if (!text) throw new Error('Γράψε τι αιτείται');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c.req.date || '')) throw new Error('Διάλεξε ημερομηνία για την αίτηση');
+      const old = c.t === 'updateRequest' ? s.requests.find(x => x.id === c.req.id) : undefined;
+      if (c.t === 'updateRequest' && !old) throw new Error('Δεν βρέθηκε η αίτηση');
+      const req: PersonRequest = { id: old?.id || 'r' + ctx.newId(), pid: p.id, date: c.req.date, text };
+      // διπλό κλικ στην αποθήκευση: η ίδια αίτηση δεν γράφεται δεύτερη φορά
+      if (!old && s.requests.some(x => x.pid === req.pid && x.date === req.date && x.text === req.text)) throw new Error(shortName(p) + ' έχει ήδη αυτή την αίτηση στις ' + dm(req.date));
+      const requests = old ? s.requests.map(x => (x === old ? req : x)) : [...s.requests, req];
+      return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + text + ' (' + dm(req.date) + ')', files: ['ΗΚΑΙ'] };
+    }
+    case 'deleteRequest': {
+      const r = s.requests.find(x => x.id === c.id); if (!r) throw new Error('Δεν βρέθηκε η αίτηση');
+      const p = pm.get(r.pid);
+      return { state: { ...s, requests: s.requests.filter(x => x !== r) }, text: 'Διαγράφηκε αίτηση' + (p ? ': ' + shortName(p) : '') + ' – ' + r.text, files: ['ΗΚΑΙ'] };
     }
     case 'setPunInfo': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || st.type !== 'PUN') throw new Error('Δεν βρέθηκε η ποινή');

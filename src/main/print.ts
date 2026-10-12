@@ -254,7 +254,21 @@ function crit(c: Val): (v: Val) => boolean {
 }
 
 // ------------------------------------------------------------------ φύλλα
-interface XCell { v: Val; f?: string; s: number | null }
+// rich: κείμενο με μορφή ανά κομμάτι (π.χ. η υπογραμμισμένη διάρκεια ποινής στην ΗΚΑΙ)
+interface XCell { v: Val; f?: string; s: number | null; rich?: Rich }
+type Rich = { t: string; u: boolean; b: boolean; i: boolean }[];
+// Τα κομμάτια <r> ενός κειμένου· null αν δεν έχει (απλό κείμενο)
+function richOf(xml: string): Rich | null {
+  if (!xml.includes('<r>') && !xml.includes('<r ')) return null;
+  const out: Rich = [];
+  for (const m of xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<r\b[^>]*>([\s\S]*?)<\/r>/g)) {
+    const pr = /<rPr\b[^>]*>([\s\S]*?)<\/rPr>/.exec(m[1])?.[1] || '';
+    const u = /<u\b([^>]*)\/?>/.exec(pr);
+    out.push({ t: texts(m[1]), u: !!u && !/val="none"/.test(u[1]), b: on(pr, 'b'), i: on(pr, 'i') });
+  }
+  return out.some(r => r.u || r.b || r.i) ? out : null;
+}
+const richHtml = (r: Rich) => r.map(x => { let h = esc(x.t); if (x.u) h = '<u>' + h + '</u>'; if (x.b) h = '<b>' + h + '</b>'; if (x.i) h = '<i>' + h + '</i>'; return h; }).join('');
 interface ParsedSheet {
   name: string; cells: Map<number, XCell>; rows: Map<number, { ht?: number; hidden: boolean; s?: number }>; cols: { min: number; max: number; w?: number; hidden: boolean; s?: number }[];
   merges: { r1: number; c1: number; r2: number; c2: number }[]; maxR: number; maxC: number; xml: string; defH: number; defW: number;
@@ -266,7 +280,7 @@ class Book {
   private parsed = new Map<string, ParsedSheet>();
   private memo = new Map<string, Map<number, Val>>();
   private busy = new Set<string>();
-  sst: string[] = []; styles!: Styles; y1904 = false;
+  sst: string[] = []; sstRich: (Rich | null)[] = []; styles!: Styles; y1904 = false;
   sheets: { name: string; path: string; hidden: boolean }[] = []; wbXml = ''; activeTab = 0;
   constructor(private zip: JSZip) {}
   static async open(buf: Buffer | Uint8Array): Promise<Book> {
@@ -279,7 +293,7 @@ class Book {
     for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) { const id = attr(m[0], 'Id'), t = attr(m[0], 'Target'); if (id && t) rel.set(id, t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, '')); }
     for (const m of wbx.matchAll(/<sheet\b[^>]*>/g)) { const p = rel.get(attr(m[0], 'r:id') || ''); if (p && zip.file(p)) b.sheets.push({ name: attr(m[0], 'name') || '', path: p, hidden: /state="(hidden|veryHidden)"/.test(m[0]) }); }
     const sst = zip.file('xl/sharedStrings.xml') || zip.file(/sharedStrings\.xml$/i)[0];
-    if (sst) b.sst = [...(await sst.async('string')).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => texts(m[1] || ''));
+    if (sst) { const si = [...(await sst.async('string')).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => m[1] || ''); b.sst = si.map(texts); b.sstRich = si.map(richOf); }
     const th = zip.file(/theme\d*\.xml$/i)[0];
     b.styles = parseStyles((await zip.file('xl/styles.xml')?.async('string')) || '', themeColors(th ? await th.async('string') : ''));
     return b;
@@ -288,7 +302,7 @@ class Book {
     if (this.parsed.has(name)) return this.parsed.get(name)!;
     const e = this.sheets.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!e) return null;
     const xml = await this.zip.file(e.path)!.async('string');
-    const sh = parseSheet(e.name, xml, this.sst);
+    const sh = parseSheet(e.name, xml, this.sst, this.sstRich);
     this.parsed.set(e.name, sh); if (e.name !== name) this.parsed.set(name, sh);
     return sh;
   }
@@ -400,7 +414,7 @@ class Book {
 }
 const isRange = (a: Arg): a is { range: Val[]; r: number; c: number } => !!a && typeof a === 'object' && 'range' in a;
 
-function parseSheet(name: string, xml: string, sst: string[]): ParsedSheet {
+function parseSheet(name: string, xml: string, sst: string[], sstRich: (Rich | null)[] = []): ParsedSheet {
   const cells = new Map<number, XCell>(); const rows = new Map<number, { ht?: number; hidden: boolean; s?: number }>();
   const fmt = /<sheetFormatPr\b[^>]*>/.exec(xml)?.[0] || '';
   const defH = num(fmt, 'defaultRowHeight', 15);
@@ -417,9 +431,9 @@ function parseSheet(name: string, xml: string, sst: string[]): ParsedSheet {
       const ref = attr(k[1], 'r'); const c = ref ? colNum(ref.replace(/\d+/g, '')) : lastC + 1; lastC = c;
       const t = attr(k[1], 't'); const inner = k[2] || ''; const s = attr(k[1], 's') != null ? num(k[1], 's', 0) : null;
       const raw = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1];
-      let v: Val = null;
-      if (t === 's') v = raw != null ? sst[+raw] ?? null : null;
-      else if (t === 'inlineStr') v = texts(inner);
+      let v: Val = null; let rich: Rich | null = null;
+      if (t === 's') { v = raw != null ? sst[+raw] ?? null : null; rich = raw != null ? sstRich[+raw] ?? null : null; }
+      else if (t === 'inlineStr') { v = texts(inner); rich = richOf(inner); }
       else if (t === 'str') v = raw != null ? unesc(raw) : null;
       else if (t === 'b') v = raw === '1';
       else if (t === 'e') v = raw ? new XErr(unesc(raw)) : null;
@@ -436,7 +450,7 @@ function parseSheet(name: string, xml: string, sst: string[]): ParsedSheet {
         if (body && attr(fm[1], 't') !== 'array') f = body;
       }
       if (v === null && !f && s == null) continue;
-      cells.set(key(r, c), { v, f, s });
+      cells.set(key(r, c), rich && !f ? { v, f, s, rich } : { v, f, s });
       if (v !== null || f) { if (r > maxR) maxR = r; if (c > maxC) maxC = c; }
     }
   }
@@ -610,6 +624,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
         const s = styleOf(ar, ac); used.add(s);
         const xf = st.xfs[s] || st.xfs[0];
         const v = isAnchor ? shown(ar, ac) : '';
+        const rich = isAnchor ? cellOf(ar, ac)?.rich : undefined;
         const txt = typeof v === 'number' ? formatValue(v, xf.fmt, st.codes, book.y1904) : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : v == null ? '' : String(v);
         // πλαίσια: από τις άκρες της συγχώνευσης
         const lastR = rs > 1 ? rows[rowIx.get(r)! + rs - 1] : r, lastC = cs > 1 ? cp[colIx.get(c)! + cs - 1] : c;
@@ -628,7 +643,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
           const just = hal === 'left' ? 'flex-start' : hal === 'right' ? 'flex-end' : 'center';
           const pad = xf.indent ? `padding-${hal === 'right' ? 'right' : 'left'}:${xf.indent * 9 + 2}px;` : '';
           const rot = xf.rot === 90 || xf.rot === 180 || xf.rot === 255 ? 'writing-mode:vertical-rl;' + (xf.rot === 90 ? 'transform:rotate(180deg);' : '') : '';
-          inner = `<div class="x${xf.wrap ? ' w' : ''}${spill ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span>${esc(txt)}</span></div>`;
+          inner = `<div class="x${xf.wrap ? ' w' : ''}${spill ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span>${rich ? richHtml(rich) : esc(txt)}</span></div>`;
         }
         tr += `<td class="s${s}"${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
       }

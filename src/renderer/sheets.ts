@@ -1,12 +1,12 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, KIND_CODE, type AppState, type Person } from '../shared/domain';
+import { ROT, TYPES, KIND_CODE, type AppState } from '../shared/domain';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
-import { norm, collator } from '../shared/text';
+import { norm } from '../shared/text';
+import { byName, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
-const byName = (a: Person, b: Person) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
 
 // ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα): ίδια διάταξη με το template που θα βγει
 export function frouraSheet(s: AppState, date: ISODate): SheetModel {
@@ -93,10 +93,11 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ') : '?'; };
   const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === date).map(x => name(x.pid) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + dm(x.from) + (x.to !== x.from ? '–' + dm(x.to) : ''));
-  const puns = s.statuses.filter(x => x.type === 'PUN' && x.pending).map(x => name(x.pid) + ': αιτείται ' + (x.kind || 'ποινή').toLowerCase() + ' ' + dm(x.from) + '–' + dm(x.to));
+  const puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
   const N = (v: number) => E(v || '', 'b c');
   const tx = s.hkaiManual?.[date]?.text || {};
-  const L = (n: number, lbl: string, v: string) => [E('', '', 6), E(n + '. ' + lbl + ':', 'bold', 2), E(v || '', 'w', 6)];
+  // όργανα υπηρεσίας (6 στήλες) αριστερά, απόφαση δεξιά: τίτλος 2 στήλες, κείμενο 6
+  const L = (n: number, lbl: string, v: string | Line[]) => [E(n + '. ' + lbl + ':', 'bold', 2), typeof v === 'string' ? E(v || '', 'w', 6) : { ...E(linesText(v), 'w', 6), rich: v }];
   const rows: (Cell | null)[][] = [[E('ΧΟΡΗΓΟΥΜΕΝΕΣ ΦΡΟΥΡΕΣ', 'b hdr', 5), E(''), E('ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ', 'b hdr', 4), E(''), E('ΑΤΥΧΗΜΑΤΑ', 'b hdr', 3)],
     [...['Είδος', 'Αξκοί', 'Υπξκοι', 'Στρατιώτες', 'Σύνολο'].map(x => E(x, 'b hdr sm')), E(''), ...['Είδος', 'Προβλ.', 'Σε κίνηση', 'Επισκευή'].map(x => E(x, 'b hdr sm')), E(''), ...['Οχήματα', 'Ζημιές', 'Άνδρες'].map(x => E(x, 'b hdr sm'))],
     [E('Νυκτοφρουρές', 'b'), N(0), N(0), N(night), N(night), E(''), E('1/4 τόνων', 'b'), E('', 'b c'), E('', 'b c'), E('', 'b c'), E(''), E('Ø', 'b c'), E('Ø', 'b c'), E('Ø', 'b c')],
@@ -108,8 +109,8 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
     [E('Αξιωματικοί:', '', 6), ...L(1, 'ΕΓΓΡΑΦΕΣ', tx.egr || '')],
     [E(tx.off || '', 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', tx.dia || '')],
     [E('Υπαξιωματικοί:', '', 6), ...L(3, 'ΑΔΕΙΕΣ', leaves.join('· '))],
-    [E(g.ly ? 'Λ/Υ: ' + name(g.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns.join('· '))],
-    [E(g.dy ? 'Δ/Υ: ' + name(g.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', tx.ait || '')],
+    [E(g.ly ? 'Λ/Υ: ' + name(g.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns)],
+    [E(g.dy ? 'Δ/Υ: ' + name(g.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],
     [E('', '', 6), ...L(6, 'ΛΟΙΠΑ', tx.loi || '')],
     [E('', '', 14)], [E('', '', 6), E('ΑΝΑΦΕΡΕΤΑΙ ΠΛΗΡΟΤΗΤΑ ΟΠΛΙΣΜΟΥ ΚΑΙ ΛΟΙΠΩΝ ΕΛΚΥΣΤΙΚΩΝ ΥΛΙΚΩΝ', 'bold', 8)], [E('', '', 9), E(s.settings.place + ', ' + milDate(date), 'c', 5)],
     [E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 4), E('', '', 3), E('ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ', 'ttl', 5)]];

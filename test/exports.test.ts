@@ -42,7 +42,7 @@ describe('εξαγωγή Excel', () => {
     expect(ws.get('B48')).toBe('ΑΛΧΙΑΣ ΙΛΗΣ');
     expect(r.warnings).toEqual([]);
   });
-  it('ΗΚΑΙ: αριθμοί ανά βαθμό, οι τύποι μένουν, η ποινή αιτείται στις αποφάσεις', async () => {
+  it('ΗΚΑΙ: αριθμοί ανά βαθμό, οι τύποι μένουν, οι ποινές της μέρας στις αποφάσεις', async () => {
     const s = busyState();
     const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
     save(r.name, r.data);
@@ -53,7 +53,7 @@ describe('εξαγωγή Excel', () => {
     expect(fr.get('O29')).toBe('8');
     expect(fr.formula('E29')).toBe('SUM(C29:D29)');
     expect(fr.formula('AA29')).toBe('E29-Z29');
-    expect(bk.get('G11')).toContain('αιτείται κράτηση');
+    expect(bk.get('G11')).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) .* τιμωρήθηκε την 12\/10\/2026 .* με πέντε \(05\) ημέρες κράτηση, διότι ……\.$/);   // η ποινή της 11/10 όχι
     expect(bk.get('L23')).toBe('Αυλώνας, 12 Οκτ 26');
   });
   it('ΗΚΑΙ: ό,τι γράφει ο γραφέας στην οθόνη μπαίνει στο έντυπο και στα αθροίσματα', async () => {

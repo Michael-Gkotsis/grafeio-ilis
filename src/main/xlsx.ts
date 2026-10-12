@@ -109,9 +109,40 @@ export class Sheet {
     else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(clean(v))}</t></is>`; }
     x.selfClose = false; return this;
   }
+  // Κείμενο με μορφή ανά κομμάτι (π.χ. υπογραμμισμένη διάρκεια ποινής): runs έτοιμα <r>…</r>. Κρατά το στυλ του κελιού.
+  setRuns(ref: string, runs: string): this {
+    const x = this.cell(ref)!;
+    if (x.inner.includes('<f')) throw new Error(`Το κελί ${this.name}!${ref} έχει τύπο και δεν αλλάζει`);
+    x.attrs = setAttr(x.attrs, 't', 'inlineStr'); x.inner = `<is>${runs}</is>`; x.selfClose = false; return this;
+  }
+  // Συγχώνευση που ξεκινά από το κελί (π.χ. G11:K11)
+  mergeAt(ref: string): { c1: number; r1: number; c2: number; r2: number } | null {
+    const { c, r } = splitRef(ref);
+    for (const m of this.tail.matchAll(/<mergeCell ref="([^"]+)"\/>/g)) {
+      const [a, b] = m[1].split(':'); const A = splitRef(a), B = splitRef(b || a);
+      if (A.c === c && A.r === r) return { c1: A.c, r1: A.r, c2: B.c, r2: B.r };
+    }
+    return null;
+  }
+  // Πλάτος στήλης σε χαρακτήρες του Excel (<cols>, αλλιώς το προεπιλεγμένο του φύλλου)
+  colWidth(c: number): number {
+    for (const m of this.head.matchAll(/<col\b[^>]*>/g)) {
+      const min = Number(attr(m[0], 'min')), max = Number(attr(m[0], 'max')), w = attr(m[0], 'width');
+      if (c >= min && c <= max && w != null) return attr(m[0], 'hidden') === '1' ? 0 : Number(w);
+    }
+    const f = /<sheetFormatPr\b[^>]*>/.exec(this.head)?.[0] || '';
+    return Number(attr(f, 'defaultColWidth') || 8.43);
+  }
+  rowHeight(r: number): number {
+    const ht = attr(this.row(r, false)?.attrs || '', 'ht');
+    return Number(ht ?? attr(/<sheetFormatPr\b[^>]*>/.exec(this.head)?.[0] || '', 'defaultRowHeight') ?? 15);
+  }
+  setRowHeight(r: number, ht: number): this { const x = this.row(r)!; x.attrs = setAttr(setAttr(x.attrs, 'ht', String(ht)), 'customHeight', '1'); return this; }
+
   // Αναγνώσιμη τιμή (για τεστ): inline string ή αριθμός
   get(ref: string): string | null {
     const x = this.cell(ref, false); if (!x || !x.inner) return null;
+    if (x.inner.startsWith('<is>')) return texts(x.inner);
     const t = /<t[^>]*>([\s\S]*?)<\/t>/.exec(x.inner) || /<v>([\s\S]*?)<\/v>/.exec(x.inner);
     return t ? t[1].replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&') : null;
   }
@@ -200,12 +231,14 @@ export const unesc = (t: string) => t.replace(/&#(\d+);/g, (_m, n) => String.fro
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 export const texts = (xml: string) => [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?\/>|<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(m => unesc(m[1] || '')).join('');
 export type XlValue = string | number | boolean | Date | null;
+// Σειρά των ιδιοτήτων μέσα στο <rPr>, όπως τις γράφει ο Excel
+const RPR_ORDER = ['b', 'i', 'strike', 'condense', 'extend', 'outline', 'shadow', 'u', 'vertAlign', 'sz', 'color', 'rFont', 'family', 'charset', 'scheme'];
 
 export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
   private sst: string[] | null = null;
-  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number> } | null = null;
+  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number> } | null = null;
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -260,7 +293,7 @@ export class Workbook {
     for (const m of xml.matchAll(/<numFmt\b[^>]*>/g)) { const id = attr(m[0], 'numFmtId'), code = attr(m[0], 'formatCode'); if (id) codes.set(Number(id), unesc(code || '')); }
     const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)?.[1] || '';
     const fmt = [...xfs.matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(m => Number(attr(m[0].slice(0, m[0].indexOf('>') + 1), 'numFmtId') || 0));
-    this.styles = { xml, fmt, codes, dirty: false, made: new Map() };
+    this.styles = { xml, fmt, codes, dirty: false, made: new Map(), wrapped: new Map() };
     return this.styles;
   }
   async isDateStyle(s: number | null): Promise<boolean> {
@@ -274,21 +307,67 @@ export class Workbook {
     const b = base ?? 0;
     if (await this.isDateStyle(b)) return b;
     const st = await this.loadStyles();
-    if (st.made.has(b)) return st.made.get(b)!;
+    return this.xfLike(b, st.made, src => {
+      const open = src.slice(0, src.indexOf('>') + 1).replace(/\/>$/, '>').replace(/>$/, '');
+      const rest = src.endsWith('/>') ? '/>' : src.slice(src.indexOf('>'));
+      return setAttr(setAttr(open, 'numFmtId', '14'), 'applyNumberFormat', '1') + rest;
+    });
+  }
+  private xfList(xml: string): string[] {
+    const m = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml);
+    return m ? [...m[1].matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(x => x[0]) : [];
+  }
+  // Στυλ όπως το b με μία αλλαγή (edit)· cache: ήδη φτιαγμένα ανά b
+  private async xfLike(b: number, cache: Map<number, number>, edit: (xf: string) => string): Promise<number> {
+    const st = await this.loadStyles();
+    if (cache.has(b)) return cache.get(b)!;
     const m = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(st.xml);
     if (!m) return b;
-    const all = [...m[2].matchAll(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(x => x[0]);
-    const src = all[b] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
-    const open = src.slice(0, src.indexOf('>') + 1).replace(/\/>$/, '>').replace(/>$/, '');
-    const rest = src.endsWith('/>') ? '/>' : src.slice(src.indexOf('>'));
-    const xf = setAttr(setAttr(open, 'numFmtId', '14'), 'applyNumberFormat', '1') + rest;
+    const all = this.xfList(st.xml);
+    const xf = edit(all[b] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>');
     // το ίδιο στυλ το έφτιαξε ήδη προηγούμενη εγγραφή: ξαναχρησιμοποιείται, αλλιώς το styles.xml μεγάλωνε σε κάθε εγγραφή
     const had = all.indexOf(xf);
-    if (had >= 0) { st.made.set(b, had); return had; }
+    if (had >= 0) { cache.set(b, had); return had; }
     const idx = all.length;
     st.xml = st.xml.replace(m[0], setAttr(m[1].slice(0, -1), 'count', String(idx + 1)) + '>' + m[2] + xf + m[3]);
-    st.fmt.push(14); st.made.set(b, idx); st.dirty = true;
+    st.fmt.push(Number(attr(xf.slice(0, xf.indexOf('>') + 1), 'numFmtId') || 0)); cache.set(b, idx); st.dirty = true;
     return idx;
+  }
+
+  // Κείμενο σε γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ: 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ). Κρατά πλαίσιο και γραμματοσειρά του κελιού:
+  // κάθε κομμάτι παίρνει τη γραμματοσειρά του κελιού (αλλιώς ο Excel βάζει την προεπιλεγμένη του βιβλίου), αναδιπλώνεται,
+  // και η γραμμή ψηλώνει όσο χρειάζεται (ο Excel δεν το κάνει μόνος του σε συγχωνευμένα κελιά). Άδειο = σβήνει το κελί.
+  async setRich(ws: Sheet, ref: string, lines: { t: string; u?: boolean }[][]): Promise<void> {
+    lines = lines.filter(l => l.some(r => r.t));
+    if (!lines.length) { ws.set(ref, null); return; }
+    const st = await this.loadStyles();
+    const base = ws.style(ref) ?? 0;
+    const xfs = this.xfList(st.xml); const src = xfs[base] || '';
+    const fonts = [.../<fonts\b[^>]*>([\s\S]*?)<\/fonts>/.exec(st.xml)?.[1].matchAll(/<font\b[^>]*?(?:\/>|>[\s\S]*?<\/font>)/g) || []].map(x => x[0]);
+    const font = fonts[Number(attr(src.slice(0, src.indexOf('>') + 1), 'fontId') || 0)] || '';
+    const parts = new Map<string, string>();
+    for (const m of font.replace(/^<font\b[^>]*>/, '').matchAll(/<(\w+)\b[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g)) parts.set(m[1], m[0]);
+    if (parts.has('name')) parts.set('rFont', parts.get('name')!.replace(/^<name\b/, '<rFont'));
+    const sz = Number(attr(parts.get('sz') || '', 'val') || 11);
+    const rPr = (u?: boolean) => '<rPr>' + RPR_ORDER.map(k => (k === 'u' && u && !parts.has('u') ? '<u/>' : parts.get(k) || '')).join('') + '</rPr>';
+    const runs = lines.flatMap((l, i) => l.filter(r => r.t).map((r, j) => ({ t: (i && !j ? '\n' : '') + r.t, u: r.u })))
+      .map(r => `<r>${rPr(r.u)}<t xml:space="preserve">${esc(clean(r.t))}</t></r>`).join('');
+    ws.setRuns(ref, runs);
+    if (!/<alignment\b[^>]*wrapText="(1|true)"/.test(src)) ws.setStyle(ref, await this.xfLike(base, st.wrapped, x => {
+      const open = x.slice(0, x.indexOf('>') + 1).replace(/\/>$/, '>');
+      const body = x.endsWith('/>') ? '' : x.slice(x.indexOf('>') + 1, x.lastIndexOf('</xf>'));
+      const al = /<alignment\b[^>]*?\/?>(?:<\/alignment>)?/.exec(body)?.[0];
+      const fixed = al ? setAttr(al.replace(/\/?>(<\/alignment>)?$/, ''), 'wrapText', '1') + '/>' : '<alignment wrapText="1" vertical="top"/>';
+      return setAttr(open.slice(0, -1), 'applyAlignment', '1') + '>' + (al ? body.replace(al, fixed) : fixed + body) + '</xf>';
+    }));
+    // πόσες γραμμές πιάνει στο χαρτί: πλάτος της συγχώνευσης σε χαρακτήρες (≈7px το καθένα) προς το πλάτος ενός γράμματος της γραμματοσειράς
+    const { c, r } = splitRef(ref); const mg = ws.mergeAt(ref) || { c1: c, r1: r, c2: c, r2: r };
+    let w = 0; for (let k = mg.c1; k <= mg.c2; k++) w += ws.colWidth(k);
+    const perLine = Math.max(10, Math.floor((w * 7) / (sz * (96 / 72) * 0.6)));
+    const n = lines.reduce((a, l) => a + Math.max(1, Math.ceil(l.map(x => x.t).join('').length / perLine)), 0);
+    let have = 0; for (let k = mg.r1; k <= mg.r2; k++) have += ws.rowHeight(k);
+    const need = Math.ceil(n * sz * 1.35 * 10) / 10;
+    if (need > have) ws.setRowHeight(mg.r1, Math.round((ws.rowHeight(mg.r1) + need - have) * 10) / 10);   // ποτέ δεν μικραίνει
   }
 
   // Οι τιμές του φύλλου ως πίνακας [γραμμή][στήλη] από 0: κείμενο, αριθμός, ημερομηνία (UTC) ή κενό. Οι τύποι δίνουν το αποτέλεσμά τους.
