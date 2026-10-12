@@ -45,6 +45,19 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     </ul>`}
   </div>`;
 }
+// Λίστα επιλογής που δέχεται και τιμή γραμμένη με το χέρι («Άλλο…»): βαθμός, Ο/Σ
+const OTHER = '\u0001other';
+export function ChoiceField({ id, label, value, options, onChange, placeholder, autoFocus }: P) {
+  const known = !value || options.includes(value);
+  const [typing, setTyping] = useState(!known);
+  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
+    <select id=${id} className="ui-input" value=${typing ? OTHER : value || ''} data-autofocus=${autoFocus ? '' : undefined}
+      onChange=${(e: any) => { const v = e.target.value; setTyping(v === OTHER); onChange(v === OTHER ? (known ? '' : value) : v); }}>
+      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER}>Άλλο (γράψε το)…</option>
+    </select>
+    ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label=${label + ' με το χέρι'} placeholder=${placeholder || ''} value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value)}/>`}
+  </div>`;
+}
 export function DateRangeField({ from, to, onChange }: P) {
   const { today } = useStore();
   const n = daysBetween(from, to);

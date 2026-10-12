@@ -2,7 +2,8 @@
 import { useMemo, useState } from 'react';
 import { html, Badge, Button, Dialog, PageHeader, useToast } from '../ui';
 import { useStore } from '../store';
-import { DateRangeField } from '../common';
+import { ChoiceField, DateRangeField } from '../common';
+import { CADRE_RANKS, guessHk, optionsOf } from '../../shared/ranks';
 import { CADRE_ABS, type Cadre, type CadreAbs } from '../../shared/domain';
 import { HK_NCO, HK_OFFICERS } from '../../shared/rules';
 import { addDays, dm, dow } from '../../shared/dates';
@@ -11,19 +12,6 @@ type P = any;
 
 const HK_CADRE = [...HK_OFFICERS, ...HK_NCO.slice(0, 3)];
 const absLbl = (k: string) => CADRE_ABS.find(x => x[0] === k)?.[1] || k;
-// Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό που γράφει ο χρήστης
-function guessHk(rank: string): string {
-  const r = rank.toUpperCase().replace(/[.\s]/g, '');
-  if (/ΕΠΧ|ΕΠΙΛΑΡΧ|ΤΧΗΣ/.test(r)) return 'Επίλαρχοι';
-  if (/ΑΝΘΥΠΑΣ|ΑΝΘΣΤ/.test(r)) return 'Ανθυπασπιστές';
-  if (/ΑΝΘΛΧ|ΑΝΘΥΠΙΛ|ΑΝΘΛΓ|ΥΠΛΓ/.test(r)) return 'Ανθυπίλαρχοι-Ανθλγοι';
-  if (/ΙΛΧ|ΙΛΑΡΧ|ΛΓΟΣ/.test(r)) return 'Ίλαρχοι';
-  if (/ΔΕΑ/.test(r)) return 'ΔΕΑ';
-  if (/ΑΡΧΙΛ/.test(r)) return 'Αρχιλοχίες';
-  if (/ΕΠΙΛ/.test(r)) return 'Επιλοχίες';
-  return 'Λοχίες';
-}
-
 export function CadreView({ tabs }: P) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast();
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
@@ -51,14 +39,15 @@ export function CadreView({ tabs }: P) {
 }
 
 function CadreDialog({ c, onClose }: P) {
-  const { run } = useStore(); const toast = useToast();
+  const { run, state } = useStore(); const toast = useToast();
+  const ranks = useMemo(() => optionsOf(CADRE_RANKS, state.cadreList.map(x => x.rank)), [state.cadreList]);
   const [f, setF] = useState({ rank: c.rank || '', hk: c.hk || 'Λοχίες', last: c.last || '', first: c.first || '', phone: c.phone || '', role: c.role || '' });
   const [hkTouched, setHkTouched] = useState(!!c.id);
   const save = async () => { if (await run({ t: 'saveCadre', cadre: { ...f, id: c.id } }, false)) { onClose(); toast({ text: (c.id ? 'Αποθηκεύτηκε: ' : 'Προστέθηκε: ') + f.rank.toUpperCase() + ' ' + f.last.toUpperCase() }); } };
   const fld = (k: string, label: string, ph = '', extra: P = {}) => html`<div className="field"><label className="field__label" htmlFor=${'cd-' + k}>${label}</label><input id=${'cd-' + k} className="ui-input" placeholder=${ph} value=${(f as P)[k]} onChange=${(e: any) => setF({ ...f, [k]: e.target.value, ...(k === 'rank' && !hkTouched ? { hk: guessHk(e.target.value) } : {}) })} ...${extra}/></div>`;
   return html`<${Dialog} title=${c.id ? 'Στοιχεία στελέχους' : 'Νέο στέλεχος'} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.last.trim()} onClick=${save}>Αποθήκευση<//>`}>
-    <div className="field-row">${fld('rank', 'Βαθμός', 'π.χ. ΛΧΙΑΣ', { 'data-autofocus': '' })}
+    <div className="field-row"><${ChoiceField} id="cd-rank" label="Βαθμός" value=${f.rank} options=${ranks} placeholder="π.χ. ΛΧΙΑΣ" autoFocus onChange=${(v: string) => setF({ ...f, rank: v, ...(!hkTouched ? { hk: guessHk(v) } : {}) })}/>
       <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ΗΚΑΙ</label><select id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${HK_CADRE.map(r => html`<option key=${r}>${r}</option>`)}</select></div></div>
     <div className="field-row">${fld('last', 'Επώνυμο *')}${fld('first', 'Όνομα')}</div>
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής Ίλης')}${fld('phone', 'Τηλέφωνο')}</div>
