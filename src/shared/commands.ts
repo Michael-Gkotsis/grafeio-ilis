@@ -1,8 +1,8 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
-import { addDays, dayName, dm, type ISODate } from './dates';
+import { addDays, dayName, dm, DOW_FULL, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, WEEK, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
 
@@ -25,6 +25,7 @@ export type Command =
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
   | { t: 'setCap'; pid: number; kind: DutyKind; allowed: boolean }
+  | { t: 'setOffDays'; pid: number; days: number[] }
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
@@ -187,7 +188,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
         const hard = dutyBlock(s.statuses, c.date, c.pid, post) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
         if (hard) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + hard);
-        const soft = capBlock(s, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
+        const soft = capBlock(s, c.date, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
         const lr = lastResort(s.statuses, c.date, c.pid, post); if (lr) note += ' (' + lr + ')';
@@ -227,6 +228,12 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const cur = { ...(s.caps[c.pid] || {}) }; cur[c.kind] = c.allowed ? null : 'Από τον λοχία';
       const acc: Record<string, string> = CAP_ACC as Record<string, string>;
       return { state: { ...s, caps: { ...s.caps, [c.pid]: cur } }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(pm.get(c.pid)!) + (c.allowed ? ' κάνει ' : ' δεν κάνει ') + (acc[c.kind] || c.kind), files: [] };
+    }
+    case 'setOffDays': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const days = WEEK.filter(d => c.days.includes(d));
+      const next: Person = { ...p }; if (days.length) next.offDays = days; else delete next.offDays;
+      return { state: { ...s, people: s.people.map(x => (x.id === p.id ? next : x)) }, text: 'Μέρες υπηρεσίας: ' + shortName(p) + (days.length ? ' όχι ' + days.map(d => DOW_FULL[d]).join(', ') : ' όλες τις μέρες'), files: [] };
     }
     case 'setSettings':
       return { state: { ...s, settings: { ...s.settings, ...c.settings } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
