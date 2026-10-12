@@ -1,6 +1,7 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, KIND_CODE, type AppState } from '../shared/domain';
+import { ROT, TYPES, type AppState, type DutyKind } from '../shared/domain';
+import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
@@ -123,17 +124,22 @@ export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetMo
   const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m, 0).getDate();
   const days = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
   const hol = days.map(d => isHol(s.settings, d));   // μία φορά ανά μέρα, όχι ανά κελί
-  const codeOf = new Map<string, string | null>();    // κωδικός ανά θέση (Θ, Μ, ΛΥ), όχι αναζήτηση σε κάθε ανάθεση
-  const per = new Map<number, Map<string, string>>();
-  // όλες οι θέσεις που έχουν υπάρξει (και του άλλου εντύπου): ίδια με την εξαγωγή
-  days.forEach(d => { const g = s.guards[d] || {}; for (const k in g) { let code = codeOf.get(k); if (code === undefined) { const p = postBy(s, k); code = p ? KIND_CODE[p.kind] : null; codeOf.set(k, code); } if (code == null) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, code); } });
+  const codes = new Map<string, { code: string; kind: DutyKind } | null>();    // κωδικός ανά θέση (Θ1α, Μ2, ΛΥ), όχι αναζήτηση σε κάθε ανάθεση
+  const per = new Map<number, Map<string, { code: string; kind: DutyKind }>>();
+  const set = (pid: number, d: string, v: { code: string; kind: DutyKind }) => { if (!per.has(pid)) per.set(pid, new Map()); per.get(pid)!.set(d, v); };
+  // όλες οι θέσεις που έχουν υπάρξει (και του άλλου εντύπου), και οι υπηρεσίες χωρίς θέση (σκέτο γράμμα): ίδια με την εξαγωγή
+  days.forEach(d => {
+    for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
+    const g = s.guards[d] || {};
+    for (const k in g) { let v = codes.get(k); if (v === undefined) { const p = postBy(s, k); v = p ? { code: codeOf(s.settings, k, p.kind), kind: p.kind } : null; codes.set(k, v); } if (v) set(g[k], d, v); }
+  });
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
     [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map((d, j) => E(j + 1, 'b hdr sm' + (hol[j] ? ' we' : '')))]];
   activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
     const x = per.get(p.id); let nh = 0; const c: Record<string, number> = {};
-    const cells = days.map((d, j) => { const code = x && x.get(d); if (code) { if (hol[j]) nh++; c[code] = (c[code] || 0) + 1; } return E(code || '', hol[j] ? 'b code we' : 'b code'); });
-    rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c['Θ'] || '', 'b c'), E(c['Μ'] || '', 'b c'), E(c['ΛΥ'] || '', 'b c'), ...cells]);
+    const cells = days.map((d, j) => { const v = x && x.get(d); if (v) { if (hol[j]) nh++; c[v.kind] = (c[v.kind] || 0) + 1; } return E(v ? v.code : '', hol[j] ? 'b code we' : 'b code'); });
+    rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
   });
   return { cols: [30, 172, 34, 34, 34, 26, 26, 26, ...days.map(() => 24)], rows };
 }

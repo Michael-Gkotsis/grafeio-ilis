@@ -1,4 +1,5 @@
 import type { ISODate } from './dates';
+import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding, StatusKind } from './sources';
 
 // ---------------------------------------------------------------------------
@@ -103,7 +104,8 @@ export const ROT = [
   ['20:00-22:00', '04:00-06:00', '12:00-14:00']
 ];
 
-export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean }
+// code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
+export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
 export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean }
 export type Phase = 'sven' | 'spen';
 export const PHASE_NAME: Record<Phase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
@@ -112,22 +114,22 @@ export interface Post extends PostDef { block: string; kind: DutyKind; armed: bo
 // Προεπιλογή = το πραγματικό έντυπο «ΦΡΟΥΡΑ ΣΒΕΝ» (δείγμα 01): Λ/Υ, Δ/Υ, 2 μπλοκ θαλαμοφυλάκων 4×3, μαγειρεία ×5.
 // Ποιες θέσεις είναι ένοπλες θέλει επιβεβαίωση από τον λοχία: ρυθμίζεται.
 export const DEFAULT_BLOCKS: BlockDef[] = [
-  { id: 'ly', kind: 'ly', name: 'Λ/Υ και Δ/Υ', armed: false, posts: [{ k: 'ly', label: 'Λ/Υ', short: 'Λ/Υ', hrs: '14:00 → 14:00' }, { k: 'dy', label: 'Δ/Υ', short: 'Δ/Υ', hrs: '14:00 → 14:00' }] },
-  { id: 'th', kind: 'th', name: 'Θαλαμοφύλακες (α΄ πίνακας)', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 1), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος (α΄)', short: (i + 1) + 'ος', rot: i })) },
-  { id: 'th2', kind: 'th', name: 'Θαλαμοφύλακες (β΄ πίνακας)', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 5), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος (β΄)', short: (i + 1) + 'ος', rot: i })) },
-  { id: 'mg', kind: 'mg', name: 'Μαγειρεία', armed: false, posts: [1, 2, 3, 4, 5].map(i => ({ k: 'mg' + i, label: 'Μαγειρεία ' + i + 'ος', short: i + 'ος', hrs: 'ημέρα' })) }
+  { id: 'ly', kind: 'ly', name: 'Λ/Υ και Δ/Υ', armed: false, posts: [{ k: 'ly', label: 'Λ/Υ', short: 'Λ/Υ', hrs: '14:00 → 14:00', code: 'ΛΥ' }, { k: 'dy', label: 'Δ/Υ', short: 'Δ/Υ', hrs: '14:00 → 14:00', code: 'ΔΥ' }] },
+  { id: 'th', kind: 'th', name: 'Θαλαμοφύλακες (α΄ πίνακας)', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 1), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος (α΄)', short: (i + 1) + 'ος', rot: i, code: 'Θ' + (i + 1) + 'α' })) },
+  { id: 'th2', kind: 'th', name: 'Θαλαμοφύλακες (β΄ πίνακας)', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 5), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος (β΄)', short: (i + 1) + 'ος', rot: i, code: 'Θ' + (i + 1) + 'β' })) },
+  { id: 'mg', kind: 'mg', name: 'Μαγειρεία', armed: false, posts: [1, 2, 3, 4, 5].map(i => ({ k: 'mg' + i, label: 'Μαγειρεία ' + i + 'ος', short: i + 'ος', hrs: 'ημέρα', code: 'Μ' + i })) }
 ];
 // «ΦΡΟΥΡΑ ΣΠΕΝ» (φωτογραφία του γραφέα, 10/10): θαλαμοφύλακες, οπλοφύλακες, μαγειρεία ×5, ΤΑΕ, σκοποί 3ης και 4ης σκοπιάς σε ζεύγη.
 // Οπλοφύλακες και σκοποί είναι προεπιλεγμένα ένοπλοι· αλλάζει στις Ρυθμίσεις.
-const skPost = (n: number, ab: string, rot: number): PostDef => ({ k: 'sk' + n + ab, label: 'Σκοπός ' + n + 'ης σκοπιάς (' + (ab === 'a' ? 'α' : 'β') + ')', short: n + 'η ' + (ab === 'a' ? 'α' : 'β'), rot });
+const skPost = (n: number, ab: string, rot: number): PostDef => ({ k: 'sk' + n + ab, label: 'Σκοπός ' + n + 'ης σκοπιάς (' + (ab === 'a' ? 'α' : 'β') + ')', short: n + 'η ' + (ab === 'a' ? 'α' : 'β'), rot, code: 'Σ' + n + (ab === 'a' ? 'α' : 'β') });
 export const DEFAULT_BLOCKS_SPEN: BlockDef[] = [
   DEFAULT_BLOCKS[0],
-  { id: 'th', kind: 'th', name: 'Θαλαμοφύλακες', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 1), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος', short: (i + 1) + 'ος', rot: i })) },
-  { id: 'op', kind: 'op', name: 'Οπλοφύλακες', armed: true, posts: [0, 1, 2, 3].map(i => ({ k: 'op' + (i + 1), label: 'Οπλοφύλακας ' + (i + 1) + 'ος', short: (i + 1) + 'ος', rot: i })) },
+  { id: 'th', kind: 'th', name: 'Θαλαμοφύλακες', armed: false, posts: [0, 1, 2, 3].map(i => ({ k: 'th' + (i + 1), label: 'Θαλαμοφύλακας ' + (i + 1) + 'ος', short: (i + 1) + 'ος', rot: i, code: 'Θ' + (i + 1) })) },
+  { id: 'op', kind: 'op', name: 'Οπλοφύλακες', armed: true, posts: [0, 1, 2, 3].map(i => ({ k: 'op' + (i + 1), label: 'Οπλοφύλακας ' + (i + 1) + 'ος', short: (i + 1) + 'ος', rot: i, code: 'ΟΠ' + (i + 1) })) },
   { id: 'sk', kind: 'sk', name: 'Σκοποί', armed: true, posts: [skPost(3, 'a', 2), skPost(3, 'b', 2), skPost(4, 'a', 3), skPost(4, 'b', 3)] },
   DEFAULT_BLOCKS[3],
   // ΤΑΕ: ένοπλη, χωρίς σταθερές ώρες (λοχίας, 10/10)
-  { id: 'tae', kind: 'tae', name: 'ΤΑΕ', armed: true, posts: [{ k: 'tae', label: 'ΤΑΕ', short: 'ΤΑΕ', hrs: '' }] }
+  { id: 'tae', kind: 'tae', name: 'ΤΑΕ', armed: true, posts: [{ k: 'tae', label: 'ΤΑΕ', short: 'ΤΑΕ', hrs: '', code: 'ΤΑΕ' }] }
 ];
 export const blocksOf = (settings: Settings, phase: Phase = settings.phase) => (phase === 'spen' ? settings.blocksSpen : settings.blocks);
 
@@ -172,6 +174,7 @@ export interface Settings {
   sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
   forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
   newDirs?: Partial<Record<StatusKind, string>>;         // πού φτιάχνονται τα νέα Excel κάθε είδους (κενό = ο γενικός φάκελος)
+  baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
 }
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
@@ -191,15 +194,38 @@ export const DEFAULT_SETTINGS: Settings = {
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 2
+  rev: 3
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
-  if ((st.rev || 0) >= 2) return st;
-  // rev 2: η ΤΑΕ είναι ένοπλη και χωρίς ώρες (λοχίας, 10/10)
-  const blocksSpen = (st.blocksSpen || DEFAULT_BLOCKS_SPEN).map(b => (b.id === 'tae' ? { ...b, armed: true, posts: b.posts.map(p => ({ ...p, hrs: '' })) } : b));
-  return { ...st, blocksSpen, fixed: st.fixed || {}, rev: 2 };
+  if ((st.rev || 0) < 2) {
+    // rev 2: η ΤΑΕ είναι ένοπλη και χωρίς ώρες (λοχίας, 10/10)
+    const blocksSpen = (st.blocksSpen || DEFAULT_BLOCKS_SPEN).map(b => (b.id === 'tae' ? { ...b, armed: true, posts: b.posts.map(p => ({ ...p, hrs: '' })) } : b));
+    st = { ...st, blocksSpen, fixed: st.fixed || {}, rev: 2 };
+  }
+  if ((st.rev || 0) < 3) st = withCodes({ ...st, rev: 3 });
+  return st;
 }
+// Κωδικοί θέσεων (rev 3): όσες θέσεις δεν έχουν κωδικό παίρνουν τον προεπιλεγμένο του εντύπου (Θ1α…Θ4β στη ΣΒΕΝ,
+// Θ1…Θ4, ΟΠ1…ΟΠ4, Σ3α… στη ΣΠΕΝ, Μ1…Μ5, ΛΥ, ΔΥ, ΤΑΕ)· οι δικές σου υπηρεσίες γράμμα + αριθμό (Υ1, Υ2…), χωρίς να
+// πέφτουν πάνω σε κωδικό που υπάρχει ήδη
+export function withCodes(st: Settings): Settings {
+  const def = new Map<string, string>();
+  for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) def.set(ph + '|' + b.id + '|' + p.k, p.code);
+  const owner = new Map<string, string>();   // κλειδί κωδικού → θέση που τον έχει
+  for (const b of [...(st.blocks || []), ...(st.blocksSpen || [])]) for (const p of b.posts) if (p.code) owner.set(codeKey(p.code), p.k);
+  const free = (c: string, k: string) => { const o = owner.get(codeKey(c)); return o == null || o === k; };
+  const fill = (ph: Phase, list: BlockDef[] | undefined) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
+    if (p.code) return p;
+    let c = def.get(ph + '|' + b.id + '|' + p.k);
+    if (!c || !free(c, p.k)) { let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
+    owner.set(codeKey(c), p.k);
+    return { ...p, code: c };
+  }) }));
+  return { ...st, blocks: fill('sven', st.blocks), blocksSpen: fill('spen', st.blocksSpen) };
+}
+// Κλειδί σύγκρισης κωδικών: κεφαλαία, χωρίς τόνους, λατινικά που μοιάζουν → ελληνικά, χωρίς κενά και παύλες
+export const codeKey = (raw: unknown) => normGreek(raw).replace(/[\s\-–—]+/g, '');
 
 export interface AuditEntry {
   id: number;
@@ -225,7 +251,11 @@ export interface AppState {
   cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
+  dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
 }
+// Υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες· όχι στον κανόνα του ίδιου νούμερου
+export interface SeatlessDuty { pid: number; kind: DutyKind }
+export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // Αίτηση στρατιώτη για την ΗΚΑΙ: «Ο ΣΤΡ … αιτείται {text}.»
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string }
 // Στελέχη (από την εφαρμογή του άλλου γραφέα): ονόματα, θέση, απουσίες, που ταΐζουν και την ΗΚΑΙ
@@ -239,5 +269,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: []
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}
 });

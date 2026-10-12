@@ -3,7 +3,7 @@ import { addDays, daysBetween, dm, isWeekend, parseD, type ISODate } from './dat
 import { normGreek } from './text';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CADRE_ABS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
-  type AppState, type Baseline, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
+  KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -138,21 +138,28 @@ export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed 
 export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined =>
   allPosts(s.settings).find(x => x.k !== exceptKey && (s.guards[date] || {})[x.k] === pid);
 
-// Ημερομηνίες υπηρεσίας ανά άτομο, ώστε οι κανόνες να μη σαρώνουν όλο το ιστορικό
-const idxCache = new WeakMap<Guards, Map<number, Set<ISODate>>>();
-export function dutyIndex(guards: Guards): Map<number, Set<ISODate>> {
-  let m = idxCache.get(guards);
+// Ημερομηνίες υπηρεσίας ανά άτομο, ώστε οι κανόνες να μη σαρώνουν όλο το ιστορικό. Μαζί και οι υπηρεσίες χωρίς θέση
+// (από Excel), για την ανάπαυση και τις αργίες.
+const idxCache = new WeakMap<Guards, WeakMap<DutyLog, Map<number, Set<ISODate>>>>();
+const NO_LOG: DutyLog = {};
+export function dutyIndex(guards: Guards, log: DutyLog = NO_LOG): Map<number, Set<ISODate>> {
+  let byLog = idxCache.get(guards); if (!byLog) { byLog = new WeakMap(); idxCache.set(guards, byLog); }
+  let m = byLog.get(log);
   if (m) return m;
   m = new Map();
-  for (const d in guards) for (const k in guards[d]) { const id = guards[d][k]; if (!m.has(id)) m.set(id, new Set()); m.get(id)!.add(d); }
-  idxCache.set(guards, m);
+  const add = (id: number, d: ISODate) => { if (!m!.has(id)) m!.set(id, new Set()); m!.get(id)!.add(d); };
+  for (const d in guards) for (const k in guards[d]) add(guards[d][k], d);
+  for (const d in log) for (const e of log[d]) add(e.pid, d);
+  byLog.set(log, m);
   return m;
 }
+export const dutyIndexOf = (s: AppState) => dutyIndex(s.guards, s.dutyLog || NO_LOG);
+export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLog?.[date] || []).find(e => e.pid === pid);
 // Κ-13, Κ-14: ανάπαυση μετά από υπηρεσία, όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
   if (isFixed(s, pid, k)) return null;
-  const ds = (idx || dutyIndex(s.guards)).get(pid);
+  const ds = (idx || dutyIndexOf(s)).get(pid);
   if (!ds) return null;
   for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';
   // από 2 μέρες: Παρασκευή αργία και Κυριακή είναι δύο αργίες στη σειρά (η 1 μέρα είναι ήδη ανάπαυση)
@@ -177,6 +184,8 @@ export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: str
   if (r) return r;
   const o = postOf(s, date, pid, k || undefined);
   if (o) return 'Ήδη ' + postTxt(o);
+  const sl = seatlessOn(s, date, pid);
+  if (sl) return 'Ήδη ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel)';
   return ruleBlock(s, date, pid, idx, k);
 }
 // Κ-06, Κ-07, Κ-08: γιατί κάποιος ΔΕΝ βγαίνει έξοδο (null = βγαίνει)
@@ -192,25 +201,27 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
 export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.outRooms[parseD(d).getDay()] || null;
 
 // --------------------------- Έλεγχος υπηρεσιών (από το ημερολόγιο υπηρεσιών) ---------------------------
-export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; h: boolean }[] }
-// ανά ημερολόγιο υπηρεσιών και ανά λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
-const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; st: Map<number, DutyStat> }>();
+// log: k = θέση, κενό για υπηρεσία χωρίς θέση (από Excel)· kind = είδος
+export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean }[] }
+// ανά ημερολόγιο υπηρεσιών, υπηρεσίες χωρίς θέση και λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
+const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; log: DutyLog; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
-  const c = statsCache.get(s.guards);
-  if (c && c.hol === s.settings.holidays) return withBaseline(s, c.st);
+  const c = statsCache.get(s.guards); const log = s.dutyLog || NO_LOG;
+  if (c && c.hol === s.settings.holidays && c.log === log) return withBaseline(s, c.st);
   const st = new Map<number, DutyStat>();
-  for (const d of Object.keys(s.guards).sort()) {
-    const g = s.guards[d]; const h = isHol(s.settings, d);
-    for (const k in g) {
-      const post = postBy(s, k); if (!post) continue;
-      let x = st.get(g[k]); if (!x) { x = emptyStat(); st.set(g[k], x); }
-      x.byKind[post.kind] = (x.byKind[post.kind] || 0) + 1; x.total++;
-      if (h) { x.hol++; x.lastHol = d; }
-      x.last = d; x.log.push({ d, k, h });
-    }
+  const one = (pid: number, d: ISODate, k: string, kind: DutyKind, h: boolean) => {
+    let x = st.get(pid); if (!x) { x = emptyStat(); st.set(pid, x); }
+    x.byKind[kind] = (x.byKind[kind] || 0) + 1; x.total++;
+    if (h) { x.hol++; x.lastHol = d; }
+    x.last = d; x.log.push({ d, k, kind, h });
+  };
+  for (const d of [...new Set([...Object.keys(s.guards), ...Object.keys(log)])].sort()) {
+    const g = s.guards[d] || {}; const h = isHol(s.settings, d);
+    for (const k in g) { const post = postBy(s, k); if (post) one(g[k], d, k, post.kind, h); }
+    for (const e of log[d] || []) one(e.pid, d, '', e.kind, h);
   }
-  statsCache.set(s.guards, { hol: s.settings.holidays, st });
+  statsCache.set(s.guards, { hol: s.settings.holidays, log, st });
   return withBaseline(s, st);
 }
 // Προηγούμενες υπηρεσίες (χωρίς ημερομηνία) προστίθενται στα σύνολα, όχι στο ημερολόγιο
@@ -253,7 +264,7 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   const f: Fair = { total: 0, hol: 0, byKind: {}, lastBefore: '', lastHolBefore: '' };
   for (const e of st.log) {
     if (e.d === date) continue;
-    const kind = postBy(s, e.k)?.kind || '';
+    const kind = e.kind;
     f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1;
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
@@ -273,7 +284,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const people = activePeople(s);
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
   const idx = new Map<number, Set<ISODate>>();
-  dutyIndex(s.guards).forEach((v, id) => idx.set(id, new Set(v)));
+  dutyIndexOf(s).forEach((v, id) => idx.set(id, new Set(v)));
   let n = 0; const empty: string[] = []; const warn: string[] = [];
   const posts = postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
@@ -385,7 +396,7 @@ export function nextFor(s: AppState, date: ISODate, k: string, skip: number[]): 
   const work: AppState = { ...s, guards: { ...s.guards, [date]: g } };
   const people = activePeople(s);
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
-  const idx = new Map<number, Set<ISODate>>(); dutyIndex(work.guards).forEach((v, id) => idx.set(id, v));
+  const idx = new Map<number, Set<ISODate>>(); dutyIndexOf(work).forEach((v, id) => idx.set(id, v));
   const list = candidates(work, date, x, people, fair, idx, fixedIds(s));
   return (s.rules.strictUnarmed ? strictOrder(work, date, x, list, people, idx, fixedIds(s)) : list).find(p => !skip.includes(p.id))?.id ?? null;
 }

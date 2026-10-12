@@ -7,6 +7,7 @@ import path from 'path';
 import { Workbook, colName, toSerial } from './xlsx';
 import { writeAll, writeJson, LockedError } from './files';
 import type { RawSheet } from '../shared/roster';
+import { exactCountif } from '../shared/codes';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, isStatusKind, locateHeader, planSource, refitCols, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
@@ -46,6 +47,20 @@ export async function valuesHash(buf: Buffer | Uint8Array): Promise<string> {
   return h.digest('hex');
 }
 
+// Κελιά με COUNTIF που μετρά σκέτο γράμμα υπηρεσίας (π.χ. COUNTIF(M3:AO3, "Θ")): εκεί δεν γράφονται κωδικοί θέσεων
+async function countifOf(wb: Workbook, name: string): Promise<string[]> {
+  // κοινόχρηστος τύπος (Excel «σύρσιμο»): μόνο το πρώτο κελί έχει το κείμενο, τα άλλα <f t="shared" si="0"/>
+  const ws = await wb.sheet(name); const out: string[] = []; const si = new Set<string>(); const kids: { ref: string; si: string }[] = [];
+  for (const c of ws.cells()) {
+    if (!c.inner.includes('<f')) continue;
+    const ref = colName(c.c) + c.r; const f = /<f([^>]*?)(?:\/>|>([\s\S]*?)<\/f>)/.exec(c.inner); if (!f) continue;
+    const id = /\bt="shared"/.test(f[1]) ? /\bsi="(\d+)"/.exec(f[1])?.[1] : undefined;
+    if (f[2] && exactCountif(f[2])) { out.push(ref); if (id != null) si.add(id); }
+    else if (!f[2] && id != null) kids.push({ ref, si: id });
+  }
+  for (const k of kids) if (si.has(k.si)) out.push(k.ref);
+  return out;
+}
 export class OldFormatError extends Error {}
 export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
   if (/\.xls$/i.test(file)) throw new OldFormatError('Το «' + path.basename(file) + '» είναι παλιό .xls. Άνοιξέ το στο Excel και κάνε «Αποθήκευση ως» .xlsx (ή .xlsm αν έχει μακροεντολές).');
@@ -54,7 +69,10 @@ export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS)
   let wb: Workbook;
   try { wb = await Workbook.open(buf); } catch { throw new Error('Το «' + path.basename(file) + '» δεν διαβάζεται ως Excel (.xlsx/.xlsm).'); }
   const sheets: RawSheet[] = [];
-  for (const name of wb.sheetNames()) { const fx = new Set<string>(); try { sheets.push({ name, rows: await wb.values(name, maxRows, maxCols, fx), fx }); } catch { sheets.push({ name, rows: [] }); } }
+  for (const name of wb.sheetNames()) {
+    const fx = new Set<string>();
+    try { const rows = await wb.values(name, maxRows, maxCols, fx); const countif = fx.size ? await countifOf(wb, name) : []; sheets.push({ name, rows, fx, ...(countif.length ? { countif } : {}) }); } catch { sheets.push({ name, rows: [] }); }
+  }
   return { sheets, mtime: Math.round(st.mtimeMs), size: st.size };
 }
 
@@ -96,7 +114,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)
 export const PREV_EVERY = 10 * 60 * 1000;
 export type WriteOutcome =
-  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; sheet: string } }
+  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; sheet: string } }
   | { ok: false; error: string; locked?: boolean };
 
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
@@ -107,7 +125,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
     const had = wb.hasSheet(b.sheet);
     const ws = had ? await wb.sheet(b.sheet) : await wb.addSheet(b.sheet);
-    const sheet: RawSheet = { name: b.sheet, rows: had ? await wb.values(b.sheet, 2000, MAX_COLS) : [] };
+    const countif = had && kind === 'duties' ? await countifOf(wb, b.sheet) : [];
+    const sheet: RawSheet = { name: b.sheet, rows: had ? await wb.values(b.sheet, 2000, MAX_COLS) : [], ...(countif.length ? { countif } : {}) };
     const ref = (r: number, c: number) => colName(c + 1) + (r + 1);
     const put = async (r: number, c: number, v: WVal, plain?: number) => {
       const at = ref(r, c);
@@ -120,7 +139,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας απλό στυλ με πλαίσια
     const blank = !exists;
-    const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, keys: plan.keys, snap: plan.snap };
+    const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn, keys: plan.keys, snap: plan.snap };
     const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
     if (!plan.sets.length && !plan.insert && !fresh) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
     for (const h of plan.header) { ws.set(ref(h.r, h.c), h.v); if (blank) ws.setStyle(ref(h.r, h.c), h.title ? 0 : 1); }

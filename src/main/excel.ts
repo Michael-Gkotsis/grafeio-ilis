@@ -4,7 +4,8 @@
 import ExcelJS from 'exceljs';
 import { MONTHS, parseD, type ISODate } from '../shared/dates';
 import { norm, collator } from '../shared/text';
-import { KIND_CODE, TYPES, type AppState } from '../shared/domain';
+import { TYPES, type AppState, type DutyKind } from '../shared/domain';
+import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesOn } from '../shared/rules';
 
 // Μηνιαίο πλέγμα «Έλεγχος υπηρεσιών» (δείγμα 03): άτομα × ημέρες με κωδικό θέσης, γκρι ΣΚ/αργίες
@@ -12,10 +13,13 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   const [y, m] = ym.split('-').map(Number);
   const nd = new Date(y, m, 0).getDate();
   const days: ISODate[] = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
-  const per = new Map<number, Map<ISODate, string>>();
+  // ο κωδικός της θέσης (Θ1α, Μ2…) και το είδος της, για τα σύνολα· υπηρεσία χωρίς θέση (από Excel): το σκέτο γράμμα
+  const per = new Map<number, Map<ISODate, { code: string; kind: DutyKind }>>();
+  const set = (pid: number, d: ISODate, v: { code: string; kind: DutyKind }) => { if (!per.has(pid)) per.set(pid, new Map()); per.get(pid)!.set(d, v); };
   for (const d of days) {
+    for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
     const g = s.guards[d] || {};
-    for (const k in g) { const p = postBy(s, k); if (!p) continue; if (!per.has(g[k])) per.set(g[k], new Map()); per.get(g[k])!.set(d, KIND_CODE[p.kind]); }
+    for (const k in g) { const p = postBy(s, k); if (p) set(g[k], d, { code: codeOf(s.settings, k, p.kind), kind: p.kind }); }
   }
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   // Σταθερή ημερομηνία στις ιδιότητες του αρχείου: με τα ίδια δεδομένα βγαίνει το ίδιο αρχείο, οπότε η αυτόματη
@@ -41,17 +45,17 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   });
   const people = activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last));
   people.forEach((p, i) => {
-    const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, string>();
+    const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, { code: string; kind: DutyKind }>();
     let hol = 0; const c: Record<string, number> = {};
     const vals: (string | number)[] = [i + 1, p.rank, p.last, p.first];
     for (const d of days) {
-      const code = x.get(d);
-      if (code) { if (isHol(s.settings, d)) hol++; c[code] = (c[code] || 0) + 1; vals.push(code); continue; }
+      const v = x.get(d);
+      if (v) { if (isHol(s.settings, d)) hol++; c[v.kind] = (c[v.kind] || 0) + 1; vals.push(v.code); continue; }
       // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
       const st = statusesOn(s.statuses, p.id, d).find(t => TYPES[t.type].code);
       vals.push(st ? TYPES[st.type].code! : '');
     }
-    vals.push(p.room ?? '', x.size, hol, c['Θ'] || '', c['Μ'] || '', c['ΛΥ'] || '');
+    vals.push(p.room ?? '', x.size, hol, c.th || '', c.mg || '', c.ly || '');
     vals.forEach((v, j) => {
       const cell = row.getCell(j + 1); cell.value = v; cell.border = border; cell.font = { size: 9 };
       cell.alignment = { horizontal: j === 2 || j === 3 ? 'left' : 'center', vertical: 'middle' };
@@ -66,7 +70,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   for (let j = 0; j < nd; j++) ws.getColumn(FIX.length + 1 + j).width = 3.6;
   for (let j = 0; j < TAIL.length; j++) ws.getColumn(FIX.length + nd + 1 + j).width = 5;
   const foot = 5 + people.length;
-  ws.getCell(foot, 1).value = 'Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ · γκρι: ΣΚ και αργίες · πλάγια: λόγος απουσίας (Κ.Α άδεια, ΑΝ.ΑΔ αναρρωτική, Ε.Υ, Ε.Α)';
+  ws.getCell(foot, 1).value = 'Θ1α… θαλαμοφύλακας (θέση) · Μ1… μαγειρεία · ΛΥ / ΔΥ · σκέτο γράμμα: χωρίς θέση · γκρι: ΣΚ και αργίες · πλάγια: λόγος απουσίας (Κ.Α άδεια, ΑΝ.ΑΔ αναρρωτική, Ε.Υ, Ε.Α)';
   ws.getCell(foot, 1).font = { size: 8, italic: true };
   ws.pageSetup.printTitlesRow = '3:3';
   const data = Buffer.from(await wb.xlsx.writeBuffer());

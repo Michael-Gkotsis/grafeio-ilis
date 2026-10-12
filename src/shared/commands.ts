@@ -2,7 +2,8 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, type ISODate } from './dates';
 import { normGreek } from './text';
-import { TYPES, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
 
 export type Command =
@@ -29,17 +30,19 @@ export type Command =
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
   | { t: 'setBaseline'; pid: number; baseline: Baseline }
+  | { t: 'setBaselines'; baselines: Record<number, Baseline> }
+  | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
   | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string }
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string> }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
   | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
-  | { t: 'importDuties'; guards: Guards; baseline: Record<number, Baseline>; source: string }
+  | { t: 'importDuties'; guards: Guards; log: DutyLog; source: string }
   | { t: 'expire' }
   | { t: 'extendOpen' };
 
@@ -53,6 +56,17 @@ const who = (s: AppState, pids: number[]) => {
   const pm = personMap(s.people);
   return pids.length === 1 ? shortName(pm.get(pids[0])!) : pids.length + ' άτομα';
 };
+// θέσεις μιας υπηρεσίας χωρίς κωδικό (νέες, ή σβησμένος κωδικός): ο επόμενος ελεύθερος (Υ1, Υ2…)
+function fillCodes(settings: Settings, phase: Phase, id: string): Settings {
+  const key = phase === 'spen' ? 'blocksSpen' : 'blocks';
+  let st = settings;
+  for (;;) {
+    const list = blocksOf(st, phase); const i = list.findIndex(x => x.id === id); const b = list[i];
+    const j = b ? b.posts.findIndex(p => !p.code) : -1; if (j < 0) return st;
+    const posts = b.posts.map((p, q) => (q === j ? { ...p, code: freeCode(st, b.kind, j + 1) } : p));
+    st = { ...st, [key]: list.map((x, q) => (q === i ? { ...b, posts } : x)) };
+  }
+}
 const setGuard = (s: AppState, date: ISODate, k: string, pid: number | null): AppState => {
   const g = { ...(s.guards[date] || {}) };
   if (pid) g[k] = pid; else delete g[k];
@@ -178,7 +192,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
         const lr = lastResort(s.statuses, c.date, c.pid, post); if (lr) note += ' (' + lr + ')';
       }
-      return { state: setGuard(s, c.date, c.k, c.pid), text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      let next = setGuard(s, c.date, c.k, c.pid);
+      // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση
+      const sl = c.pid ? (s.dutyLog[c.date] || []).filter(e => !(e.pid === c.pid && e.kind === post.kind)) : null;
+      if (sl && sl.length !== (s.dutyLog[c.date] || []).length) { const dutyLog = { ...s.dutyLog, [c.date]: sl }; if (!sl.length) delete dutyLog[c.date]; next = { ...next, dutyLog }; }
+      return { state: next, text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'swapPosts': {
       const A = postBy(s, c.a), B = postBy(s, c.b); const g = s.guards[c.date] || {};
@@ -254,23 +272,49 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, caps }, text: 'Από Excel (' + c.source + '), δυνατότητα υπηρεσιών: ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές'), files: [], source: 'excel' };
     }
     case 'importDuties': {
-      // μόνο μέρες χωρίς καμία υπηρεσία στην εφαρμογή (ξαναελέγχεται εδώ) και θέσεις που υπάρχουν
-      const guards = { ...s.guards }; let days = 0, n = 0;
-      for (const [d, g] of Object.entries(c.guards)) {
-        if (Object.keys(s.guards[d] || {}).length) continue;
-        const ok = Object.fromEntries(Object.entries(g).filter(([k, pid]) => pm.has(pid) && postBy(s, k)));
-        if (!Object.keys(ok).length) continue;
-        guards[d] = ok; days++; n += Object.keys(ok).length;
+      // Μόνο ό,τι λείπει (ξαναελέγχεται εδώ): θέση που είναι ελεύθερη, σε άτομο χωρίς θέση εκείνη τη μέρα (αν ήταν
+      // χωρίς θέση στο ίδιο είδος, παίρνει τώρα τη θέση)· υπηρεσία χωρίς θέση σε άτομο χωρίς καμία υπηρεσία εκείνη τη μέρα
+      const guards = { ...s.guards }; const dutyLog = { ...s.dutyLog }; const days = new Set<string>(); let n = 0;
+      for (const [d, g] of Object.entries(c.guards || {})) {
+        const cur = { ...(guards[d] || {}) }; let log = dutyLog[d] || [];
+        for (const [k, pid] of Object.entries(g)) {
+          const post = postBy(s, k);
+          if (!pm.has(pid) || !post || cur[k] != null || Object.values(cur).includes(pid)) continue;
+          cur[k] = pid; log = log.filter(e => !(e.pid === pid && e.kind === post.kind)); days.add(d); n++;
+        }
+        guards[d] = cur; if (log.length) dutyLog[d] = log; else delete dutyLog[d];
+        if (!Object.keys(cur).length) delete guards[d];
       }
-      const baseline = { ...s.baseline }; let extra = 0;
-      for (const [id, b] of Object.entries(c.baseline)) {
-        const pid = Number(id); if (!pm.has(pid)) continue;
-        const cur: Baseline = { ...(baseline[pid] || {}) };
-        for (const [k, v] of Object.entries(b)) { const x = Math.max(0, Math.floor(Number(v) || 0)); if (!x) continue; (cur as Record<string, number>)[k] = ((cur as Record<string, number>)[k] || 0) + x; if (k !== 'hol') extra += x; }
-        baseline[pid] = cur;
+      for (const [d, list] of Object.entries(c.log || {})) {
+        const g = guards[d] || {}; const log = [...(dutyLog[d] || [])];
+        for (const e of list) {
+          if (!pm.has(e.pid) || !KIND_NAME[e.kind] || Object.values(g).includes(e.pid) || log.some(x => x.pid === e.pid)) continue;
+          log.push({ pid: e.pid, kind: e.kind }); days.add(d); n++;
+        }
+        if (log.length) dutyLog[d] = log;
       }
-      if (!n && !extra) return { state: s, text: '', files: [] };
-      return { state: { ...s, guards, baseline }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + (n + extra) + ' υπηρεσίες σε ' + days + (days === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
+      if (!n) return { state: s, text: '', files: [] };
+      return { state: { ...s, guards, dutyLog }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + n + (n === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' σε ' + days.size + (days.size === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
+    }
+    case 'removeDutyLog': {
+      const p = pm.get(c.pid); const list = s.dutyLog[c.date] || []; const i = list.findIndex(e => e.pid === c.pid && e.kind === c.kind);
+      if (i < 0) return { state: s, text: '', files: [] };
+      const dutyLog = { ...s.dutyLog, [c.date]: list.filter((_, j) => j !== i) }; if (!dutyLog[c.date].length) delete dutyLog[c.date];
+      return { state: { ...s, dutyLog }, text: 'Υπηρεσίες ' + dm(c.date) + ': βγήκε ' + (p ? shortName(p) : 'άτομο') + ' (' + KIND_NAME[c.kind].toLowerCase() + ' χωρίς θέση, από Excel)', files: ['Έλεγχος υπηρεσιών'] };
+    }
+    case 'setBaselines': {
+      // ο έλεγχος των προηγούμενων υπηρεσιών μετά την αναβάθμιση: όλα μαζί, μία αναίρεση
+      const baseline = { ...s.baseline }; let n = 0;
+      for (const [id, b] of Object.entries(c.baselines)) {
+        const pid = Number(id); if (!pm.has(pid) && !baseline[pid]) continue;
+        const clean: Baseline = {}; for (const [k, v] of Object.entries(b || {})) { const x = Math.max(0, Math.floor(Number(v) || 0)); if (x) (clean as Record<string, number>)[k] = x; }
+        if (JSON.stringify(clean) === JSON.stringify(baseline[pid] || {})) continue;
+        if (Object.keys(clean).length) baseline[pid] = clean; else delete baseline[pid];
+        n++;
+      }
+      const settings = s.settings.baselineReviewed ? s.settings : { ...s.settings, baselineReviewed: true };
+      if (!n && settings === s.settings) return { state: s, text: '', files: [] };
+      return { state: { ...s, baseline: n ? baseline : s.baseline, settings }, text: n ? 'Προηγούμενες υπηρεσίες: άλλαξαν σε ' + n + (n === 1 ? ' άτομο' : ' άτομα') : 'Προηγούμενες υπηρεσίες: έμειναν όπως ήταν', files: n ? ['Έλεγχος υπηρεσιών'] : [] };
     }
     case 'updatePerson': {
       if (!pm.has(c.person.id)) throw new Error('Δεν βρέθηκε το άτομο');
@@ -298,7 +342,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
       const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
-      return { state: { ...s, settings: { ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] } }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + ')', files: [] };
+      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + ')', files: [] };
     }
     case 'editBlock': {
       // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
@@ -319,8 +363,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         posts = posts.map((p, j) => ({ ...p, label: name + (n === 1 ? '' : ' ' + (j + 1) + 'ος'), short: n === 1 ? name : (j + 1) + 'ος', hidden: j >= n || undefined }));
         posts.forEach(p => { if (!p.hidden) delete p.hidden; });
       }
+      if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
       list[i] = { ...b, name, posts };
-      return { state: { ...s, settings: { ...s.settings, [key]: list } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
+      const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
+      const errs = codeErrors(settings); if (errs.length) throw new Error(errs[0]);
+      return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
     }
     case 'setBlock': {
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';

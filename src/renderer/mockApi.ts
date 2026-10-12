@@ -26,6 +26,9 @@ function seed(): AppState {
     st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true, on: t, by: 'ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ', reason: 'απουσίασε από το προσκλητήριο' }), st(23, 'OUT', 0, 0), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1)];
   s.requests = [{ id: id(), pid: 33, date: t, text: 'μετάθεση στην 2η ΕΠΧΙΑ' }, { id: id(), pid: 61, date: t, text: 'ολιγοήμερη άδεια για οικογενειακούς λόγους' }];
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
+  // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
+  s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
+  s.baseline = { 7: { th: 3, mg: 1, hol: 1 }, 19: { th: 2 } };
   return s;
 }
 
@@ -50,7 +53,7 @@ function fakeBook(s: AppState): SourceBook {
       const mon = ['ΙΑΝΟΥΑΡΙΟΥ', 'ΦΕΒΡΟΥΑΡΙΟΥ', 'ΜΑΡΤΙΟΥ', 'ΑΠΡΙΛΙΟΥ', 'ΜΑΪΟΥ', 'ΙΟΥΝΙΟΥ', 'ΙΟΥΛΙΟΥ', 'ΑΥΓΟΥΣΤΟΥ', 'ΣΕΠΤΕΜΒΡΙΟΥ', 'ΟΚΤΩΒΡΙΟΥ', 'ΝΟΕΜΒΡΙΟΥ', 'ΔΕΚΕΜΒΡΙΟΥ'][+ym.slice(5) - 1];
       const days = Array.from({ length: nd }, (_, i) => i + 1);
       return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', rows: [['ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + mon + ' ' + ym.slice(0, 4)], ['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΕΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', ...days.map(String)],
-        ...ppl.map((p, i) => [i + 1, p.rank, p.spec, p.last, p.first, p.room, null, null, null, ...days.map(d => ((d * 7 + i) % 13 === 0 ? 'Θ' : (d * 5 + i) % 17 === 0 ? 'Μ' : null))])] };
+        ...ppl.map((p, i) => [i + 1, p.rank, p.spec, p.last, p.first, p.room, null, null, null, ...days.map(d => ((d * 7 + i) % 13 === 0 ? (i % 3 ? 'Θ' + ((d + i) % 4 + 1) + 'α' : 'Θ') : (d * 5 + i) % 17 === 0 ? (i % 2 ? 'Μ' + ((d + i) % 5 + 1) : 'Μ') : null))])] };
     })()
   ];
   return { ok: true, file: 'C:\\Γραφείο\\ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', name: 'ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', mtime: 0, size: 0, sheets, hits: detectTables(sheets) };
