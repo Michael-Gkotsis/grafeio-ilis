@@ -81,13 +81,20 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
   }
   return done;
 }
-// Μικρά αρχεία ρυθμίσεων (sources.json, forms.json…): πρώτα .tmp και μετονομασία, ώστε ένα κόψιμο ρεύματος να μην τα αφήνει μισά
-export function writeJson(file: string, data: unknown) {
+// Ασφαλής εγγραφή στον δίσκο: .tmp, fsync (τα δεδομένα φτάνουν στον δίσκο πριν από τη μετονομασία, αλλιώς μετά από
+// κόψιμο ρεύματος το NTFS μπορεί να κρατήσει τη μετονομασία με αρχείο γεμάτο μηδενικά) και μετονομασία. Στα Windows το
+// antivirus μπορεί να κρατά το αρχείο για λίγο: ξαναδοκιμάζουμε.
+export function writeDurable(file: string, data: string | Uint8Array, retries = 20) {
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data));
+  const fd = fs.openSync(tmp, 'w');
+  try { const buf = typeof data === 'string' ? Buffer.from(data) : data; for (let o = 0; o < buf.length;) o += fs.writeSync(fd, buf, o, buf.length - o); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   for (let i = 0; ; i++) {
-    try { fs.renameSync(tmp, file); return; }
-    catch (e: any) { if (i >= 4 || !BUSY.includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; } Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+    try { fs.renameSync(tmp, file); break; }
+    catch (e: any) { if (i >= retries || !BUSY.includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; } Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
   }
+  // και ο φάκελος, για να μείνει η μετονομασία (στα Windows δεν γίνεται για φάκελο: αγνοείται)
+  try { const d = fs.openSync(path.dirname(file), 'r'); try { fs.fsyncSync(d); } finally { fs.closeSync(d); } } catch { /* Windows */ }
 }
+// Μικρά αρχεία ρυθμίσεων (sources.json, forms.json…): ώστε ένα κόψιμο ρεύματος να μην τα αφήνει μισά
+export const writeJson = (file: string, data: unknown) => writeDurable(file, JSON.stringify(data), 4);
 export const writeXlsx = async (dir: string, name: string, data: Buffer) => (await writeAll([{ dir, name, data }]))[0];

@@ -6,8 +6,10 @@ import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, migrateSettings, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
+import { writeDurable } from './files';
 
-export class CorruptDbError extends Error {}
+// empty: το αρχείο είναι άδειο (0 bytes) ή δεν έχει τους πίνακές μας (κόψιμο ρεύματος, μισή αντιγραφή φακέλου)
+export class CorruptDbError extends Error { constructor(msg: string, public empty = false) { super(msg); } }
 function quickCheck(db: Database): string | null {
   try {
     const r = db.exec('PRAGMA quick_check');
@@ -15,7 +17,6 @@ function quickCheck(db: Database): string | null {
     return v === 'ok' ? null : v;
   } catch (e) { return String(e instanceof Error ? e.message : e); }
 }
-const sleepSync = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 export interface BackupInfo { name: string; day: string; label: string; size: number }
 export function listBackups(dir: string): BackupInfo[] {
@@ -39,6 +40,7 @@ export function backupsToDelete(names: string[], now: string): string[] {
 }
 
 const SCHEMA_VERSION = 1;
+const UNDO_KEEP = 50;
 const MIGRATIONS: string[] = [
   `CREATE TABLE person (id INTEGER PRIMARY KEY, data TEXT NOT NULL);
    CREATE TABLE status (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -76,14 +78,23 @@ export class Store {
     const SQL = await initSqlJs({ locateFile: () => this.wasmPath });
     const exists = fs.existsSync(this.file);
     this.SQL = SQL;
-    this.db = exists ? new SQL.Database(fs.readFileSync(this.file)) : new SQL.Database();
+    const buf = exists ? fs.readFileSync(this.file) : null;
+    // Άδειο αρχείο: το sql.js θα το άνοιγε ως καινούργια κενή βάση και θα έγραφε από πάνω. Είναι χαλασμένο, όχι νέο.
+    if (buf && !buf.length) throw new CorruptDbError('Το αρχείο της βάσης είναι άδειο (0 bytes)', true);
+    this.db = buf ? new SQL.Database(buf) : new SQL.Database();
     // PRAGMA quick_check: αν το αρχείο χάλασε (π.χ. κόπηκε το ρεύμα), το λέμε αμέσως αντί να χαθούν δεδομένα αργότερα
     const bad = exists ? quickCheck(this.db) : null;
     if (bad) { this.db.close(); throw new CorruptDbError(bad); }
+    if (exists && !this.hasTables()) { this.db.close(); throw new CorruptDbError('Το αρχείο δεν έχει τους πίνακες της εφαρμογής', true); }
     this.migrate(exists);
     this.load();
   }
   private SQL!: Awaited<ReturnType<typeof initSqlJs>>;
+  // Βάση που έχει ήδη στηθεί: έχει τους πίνακές μας (ο ίδιος έλεγχος με το validate)
+  private hasTables(db: Database = this.db): boolean {
+    const t = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('person','status','guard','kv','audit')");
+    return Number(t[0].values[0][0]) === 5;
+  }
 
   // Ελέγχει ένα αντίγραφο πριν την επαναφορά: ανοίγει, quick_check, έχει τους πίνακες μας
   validate(file: string): string | null {
@@ -91,8 +102,7 @@ export class Store {
       const db = new this.SQL.Database(fs.readFileSync(file));
       try {
         const bad = quickCheck(db); if (bad) return bad;
-        const t = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('person','status','guard','kv','audit')");
-        return Number(t[0].values[0][0]) === 5 ? null : 'Δεν είναι βάση του Γραφείου Λοχία';
+        return this.hasTables(db) ? null : 'Δεν είναι βάση του Γραφείου Λοχία';
       } finally { db.close(); }
     } catch (e) { return String(e instanceof Error ? e.message : e); }
   }
@@ -106,6 +116,8 @@ export class Store {
       this.db.run('BEGIN'); this.db.run(MIGRATIONS[v]); v++;
       this.db.run("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", [String(v)]); this.db.run('COMMIT');
     }
+    // Μία φορά: τα στοιχεία αναίρεσης που δεν φτάνει πια η αναίρεση σβήνονται και η βάση ξαναγράφεται μικρότερη
+    if (this.pruneUndo(-1)) this.db.run('VACUUM');
     this.flush();
   }
 
@@ -178,11 +190,19 @@ export class Store {
     this.db.run('INSERT INTO audit (at, day, text, files, source, patch, undoable) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [e.at, e.day, e.text, JSON.stringify(e.files), e.source, patch ? JSON.stringify(patch) : null, e.undoable ? 1 : 0]);
     const id = Number(this.db.exec('SELECT last_insert_rowid()')[0].values[0][0]);
+    if (patch) this.pruneUndo(5);
     if (flush) this.flush();
     return id;
   }
+  // Η αναίρεση κοιτά μόνο τις UNDO_KEEP πιο πρόσφατες γραμμές με στοιχεία αναίρεσης (lastUndoable). Των παλιότερων τα
+  // στοιχεία δεν χρησιμοποιούνται ποτέ, αλλά μεγάλωναν τη βάση (π.χ. κάθε αποθήκευση της ΗΚΑΙ κρατούσε όλες τις μέρες).
+  // n: πόσες παλιότερες να καθαριστούν (-1 = όλες, στο άνοιγμα· μετά από κάθε νέα γραμμή περισσεύει το πολύ μία).
+  private pruneUndo(n: number): number {
+    this.db.run(`UPDATE audit SET patch = NULL WHERE id IN (SELECT id FROM audit WHERE patch IS NOT NULL ORDER BY id DESC LIMIT ${Math.floor(n)} OFFSET ${UNDO_KEEP})`);
+    return this.db.getRowsModified();
+  }
   lastUndoable(): { id: number; text: string; source: string; patch: Patch } | null {
-    const r = this.all<{ id: number; text: string; source: string; patch: string; undoable: number; undone: number }>('SELECT id, text, source, patch, undoable, undone FROM audit WHERE patch IS NOT NULL ORDER BY id DESC LIMIT 50');
+    const r = this.all<{ id: number; text: string; source: string; patch: string; undoable: number; undone: number }>('SELECT id, text, source, patch, undoable, undone FROM audit WHERE patch IS NOT NULL ORDER BY id DESC LIMIT ' + UNDO_KEEP);
     const e = r.find(x => x.undoable && !x.undone);
     return e ? { id: e.id, text: e.text, source: e.source, patch: JSON.parse(e.patch) } : null;
   }
@@ -197,21 +217,14 @@ export class Store {
   }
 
   // Ατομική εγγραφή στον δίσκο. Στα Windows το antivirus μπορεί να κρατά το αρχείο για λίγο: ξαναδοκιμάζουμε.
-  flush(): void {
-    const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, Buffer.from(this.db.export()));
-    for (let i = 0; ; i++) {
-      try { fs.renameSync(tmp, this.file); return; }
-      catch (e: any) { if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e; sleepSync(50); }
-    }
-  }
+  flush(): void { writeDurable(this.file, this.db.export()); }
 
   backup(label: string, dir = path.join(this.dataDir, 'backups')): string {
     fs.mkdirSync(dir, { recursive: true });
     const d = new Date();
     const stamp = today() + '_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
     const out = path.join(dir, `ilh_${stamp}_${label}.db`);
-    fs.writeFileSync(out, Buffer.from(this.db.export()));
+    writeDurable(out, this.db.export());
     return out;
   }
   // Κρατά: όλα τα αντίγραφα των 14 τελευταίων ημερών, ένα ανά εβδομάδα για άλλες 8 εβδομάδες, ένα ανά μήνα μετά (έρευνα §4.2)

@@ -378,6 +378,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
     const added = sim.people.filter(p => !before.has(p.id)).length;
     const missing = sim.people.filter(p => before.has(p.id) && !p.active && store.state.people.find(q => q.id === p.id)!.active && !r.rows.some(x => x.asm && x.asm === p.asm)).length;
     const token = crypto.randomUUID();
+    pending.clear();   // μία προεπισκόπηση τη φορά: όσες ακυρώθηκαν δεν κρατούν το φύλλο στη μνήμη
     pending.set(token, { rows: r.rows, file, binding: det, stamp: { mtime: book.mtime, size: book.size }, sheet: det ? sheetOf(book.sheets, det.sheet) || null : null });
     return { ok: true, token, file: path.basename(file), total: r.rows.length, active: r.rows.filter(x => x.active).length, added, updated: r.rows.length - added, missing, warnings: r.warnings, essos: r.essos, skipped: r.skipped, declared: r.declared, found: r.found, suspicious: r.suspicious, ...rosterChanges(store.state, r.rows) };
   } catch (e) { return fail(e); }
@@ -535,19 +536,29 @@ function lockdown() {
   });
 }
 // Χαλασμένη βάση: προτείνουμε επαναφορά από το πιο πρόσφατο αντίγραφο που περνά τον έλεγχο
-async function recover(reason: string): Promise<boolean> {
+async function recover(reason: string, empty = false): Promise<boolean> {
   const good = listBackups(BACKUPS).find(b => !store.validate(path.join(BACKUPS, b.name)));
-  if (!good) return false;
-  const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Λοχία', noLink: true, buttons: ['Επαναφορά', 'Έξοδος'], defaultId: 0, cancelId: 1,
-    message: 'Η βάση δεδομένων φαίνεται χαλασμένη.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΕπαναφορά από το αντίγραφο ' + good.name + ';\nΗ χαλασμένη βάση θα κρατηθεί στον φάκελο backups.' });
-  if (r.response !== 0) return false;
   const db = path.join(DATA, 'ilh.db');
-  fs.mkdirSync(BACKUPS, { recursive: true });
-  fs.renameSync(db, path.join(BACKUPS, 'χαλασμένη_' + Date.now() + '.db'));
+  const aside = () => { fs.mkdirSync(BACKUPS, { recursive: true }); fs.renameSync(db, path.join(BACKUPS, 'χαλασμένη_' + Date.now() + '.db')); };
+  if (!good) {
+    // άδειο αρχείο χωρίς κανένα αντίγραφο: αλλιώς η εφαρμογή δεν θα άνοιγε ποτέ ξανά. Ξεκινά κενή, και από εκεί
+    // γίνεται επαναφορά από USB.
+    if (!empty) return false;
+    const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Λοχία', noLink: true, buttons: ['Ξεκίνα με κενή βάση', 'Έξοδος'], defaultId: 1, cancelId: 1,
+      message: 'Η βάση δεδομένων είναι άδεια και δεν βρέθηκε αντίγραφο ασφαλείας.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΑν έχεις αντίγραφο σε USB, ξεκίνα με κενή βάση και κάνε επαναφορά από εκεί (Ρυθμίσεις → Αντίγραφα ασφαλείας → «Φέρε αντίγραφο από USB…»).\nΤο άδειο αρχείο θα κρατηθεί στον φάκελο backups.' });
+    if (r.response !== 0) return false;
+    aside(); await store.open();
+    store.addAudit({ at: nowHM(), day: today(), text: 'Η βάση ήταν άδεια χωρίς αντίγραφο: ξεκίνησε κενή (' + reason + ')', files: [], source: 'auto', undoable: false }, null);
+    return true;
+  }
+  const r = await dialog.showMessageBox({ type: 'warning', title: 'Γραφείο Λοχία', noLink: true, buttons: ['Επαναφορά', 'Έξοδος'], defaultId: 0, cancelId: 1,
+    message: empty ? 'Η βάση δεδομένων είναι άδεια (π.χ. κόπηκε το ρεύμα την ώρα που γραφόταν).' : 'Η βάση δεδομένων φαίνεται χαλασμένη.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΕπαναφορά από το αντίγραφο ' + good.name + ';\nΗ χαλασμένη βάση θα κρατηθεί στον φάκελο backups.' });
+  if (r.response !== 0) return false;
+  aside();
   fs.copyFileSync(path.join(BACKUPS, good.name), db);
   await store.open();
   holdAll(HOLD_RESTORE);
-  store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά βάσης από αντίγραφο ' + good.name + ' (η προηγούμενη ήταν χαλασμένη)', files: [], source: 'auto', undoable: false }, null);
+  store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά βάσης από αντίγραφο ' + good.name + ' (η προηγούμενη ήταν ' + (empty ? 'άδεια' : 'χαλασμένη') + ')', files: [], source: 'auto', undoable: false }, null);
   return true;
 }
 
@@ -576,7 +587,7 @@ else {
     store = new Store(DATA, path.join(__dirname, 'sql-wasm.wasm'));
     try { await store.open(); }
     catch (e) {
-      if (!(e instanceof CorruptDbError) || !(await recover(String(e.message)))) {
+      if (!(e instanceof CorruptDbError) || !(await recover(String(e.message), e.empty))) {
         dialog.showErrorBox('Γραφείο Λοχία', 'Δεν άνοιξε η βάση δεδομένων:\n' + String(e) + '\n\nΦάκελος: ' + DATA); app.quit(); return;
       }
     }
@@ -690,14 +701,28 @@ else {
     ipcMain.handle('print:close', e => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     setInterval(retryPending, 60 * 1000);
     ipcMain.handle('backups:list', () => listBackups(BACKUPS));
-    ipcMain.handle('backups:restore', (_e, name: string) => {
+    ipcMain.handle('backups:restore', async (_e, name: string) => {
       const file = path.join(BACKUPS, path.basename(name));
       const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
       if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
+      // πρώτα αντίγραφο δίπλα στη βάση και έλεγχος· η τωρινή βάση κλείνει μόνο αν αυτό πέτυχε
+      const db = path.join(DATA, 'ilh.db'), tmp = db + '.restore.tmp';
+      try { fs.copyFileSync(file, tmp); const b2 = store.validate(tmp); if (b2) throw new Error(b2); }
+      catch (e) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e))); }
       try { store.backup('πριν-επαναφορά'); } catch { /* συνεχίζουμε */ }
-      holdAll(HOLD_RESTORE);
       try { store.close(); } catch { /* συνεχίζουμε */ }
-      fs.copyFileSync(file, path.join(DATA, 'ilh.db'));
+      try {
+        for (let i = 0; ; i++) {
+          try { fs.renameSync(tmp, db); break; }
+          catch (e: any) { if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+        }
+      } catch (e) {
+        // η βάση ξανανοίγει όπως ήταν, ώστε η εφαρμογή να συνεχίσει να δουλεύει
+        fs.rmSync(tmp, { force: true });
+        try { await store.open(); } catch (e2) { dialog.showErrorBox('Γραφείο Λοχία', 'Δεν ξανάνοιξε η βάση: ' + String(e2)); app.exit(1); }
+        return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)));
+      }
+      holdAll(HOLD_RESTORE);
       app.relaunch(); app.exit(0);
       return { ok: true };
     });
@@ -776,6 +801,10 @@ else {
     // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα
     // Excel και μόνο όπου ο πίνακας δεν άλλαξε στο μεταξύ, όπως σε κάθε αυτόματη εγγραφή.
     setTimeout(() => { for (const k of KINDS) if (bindingOf(k.id)) dirty.add(k.id); formsDirty = true; runAuto(); }, 4000);
+  }).catch(e => {
+    // λάθος στην εκκίνηση (π.χ. στην επαναφορά): μήνυμα και κλείσιμο, όχι διεργασία χωρίς παράθυρο που κρατά την εφαρμογή «ανοιχτή»
+    console.error('startup', e);
+    try { dialog.showErrorBox('Γραφείο Λοχία', 'Η εφαρμογή δεν ξεκίνησε:\n' + (e instanceof Error ? e.message : String(e)) + '\n\nΦάκελος: ' + DATA); } finally { app.exit(1); }
   });
   // Στο κλείσιμο: ό,τι περιμένει να γραφτεί στα Excel και στα έντυπα (το χρονόμετρο των 1,2 δευτ.) γράφεται πριν κλείσει
   // η εφαρμογή, το πολύ για 10 δευτ. Αλλιώς μια αλλαγή λίγο πριν το κλείσιμο δεν θα έφτανε ποτέ στο Excel.
