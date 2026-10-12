@@ -122,6 +122,7 @@ function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: 
 // Κάθε μέρα: όσα ιατρικά/ποινές έληξαν χθες γράφονται στο ιστορικό (Κ-04, Κ-10), και ένα αντίγραφο της βάσης
 function daily() {
   const d = today();
+  if (store.state.statuses.some(x => x.open && x.to < d)) runCmd({ t: 'extendOpen' });
   if (!store.hasAuditToday(d, 'auto')) runCmd({ t: 'expire' });
   const dir = path.join(DATA, 'backups');
   const has = fs.existsSync(dir) && fs.readdirSync(dir).some(f => f.startsWith('ilh_' + d));
@@ -426,7 +427,7 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
     if (!sheet) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const parsed = parseStatuses(kind, sheet, b, store.state.people, today());
     const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b));
-    if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || !(d.add.length + d.update.length))) return fail('όχι απλό');
+    if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || d.add.some(a => a.open) || d.update.some(u => u.patch.open) || !(d.add.length + d.update.length))) return fail('όχι απλό');
     saveBinding(kind, b);
     // άλλαξαν και στις δύο πλευρές και ο χρήστης κράτησε της εφαρμογής: δεν περνούν, και γράφονται μετά στο Excel
     const kept = new Set(keepApp);

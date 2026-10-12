@@ -52,8 +52,8 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     const r = first + i;
     ws.set('A' + r, i + 1).set('H' + r, i + 1);
     const a = pun[i], b = abs[i];
-    if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, dm(a.x.to)).set('F' + r, a.x.note || '');
-    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceText(b.x.kind, TYPES[b.x.type].long)).set('K' + r, dm(b.x.from)).set('L' + r, dm(b.x.to)).set('M' + r, b.x.note || '');
+    if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
+    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceText(b.x.kind, TYPES[b.x.type].long)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
   }
   return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
 }

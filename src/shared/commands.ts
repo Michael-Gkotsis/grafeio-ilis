@@ -40,7 +40,8 @@ export type Command =
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
   | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
   | { t: 'importDuties'; guards: Guards; baseline: Record<number, Baseline>; source: string }
-  | { t: 'expire' };
+  | { t: 'expire' }
+  | { t: 'extendOpen' };
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -153,7 +154,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const y = addDays(ctx.today, -1);
-      const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => (x === st ? { ...x, to: y } : x));
+      const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => { if (x !== st) return x; const n = { ...x, to: y }; delete n.open; return n; });
       return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : TYPES[st.type].label) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'] };
     }
     case 'deleteStatus': {
@@ -326,6 +327,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const list = blocksOf(s.settings, c.phase); const b = list.find(x => x.id === c.id); if (!b) throw new Error('Δεν βρέθηκε η υπηρεσία');
       const what = c.patch.hidden != null ? (c.patch.hidden ? 'αφαιρέθηκε' : 'ξαναμπήκε') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
       return { state: { ...s, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
+    }
+    case 'extendOpen': {
+      // Εγγραφές χωρίς λήξη (κενό «έως» στο Excel): ισχύουν και σήμερα. Χωρίς γραμμή ιστορικού, δεν αναιρείται.
+      const statuses = s.statuses.map(x => (x.open && x.to < ctx.today ? { ...x, to: ctx.today } : x));
+      return { state: statuses.some((x, i) => x !== s.statuses[i]) ? { ...s, statuses } : s, text: '', files: [], source: 'auto', undoable: false };
     }
     case 'expire': {
       // Τα ιατρικά και οι ποινές που έληξαν χθες «αφαιρούνται» (Κ-04, Κ-10): δεν αλλάζει κάτι στα δεδομένα,

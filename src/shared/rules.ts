@@ -76,8 +76,8 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
   }
   return r;
 }
-const untilTxt = (s: Status, date: ISODate) => (s.to === date ? '' : ' έως ' + dm(s.to));
-export const isRecordExpiredOn = (s: Status, date: ISODate) => RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
+const untilTxt = (s: Status, date: ISODate) => (s.open ? ' (χωρίς λήξη)' : s.to === date ? '' : ' έως ' + dm(s.to));
+export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
 export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]> }
 export function strengthOf(s: AppState, date: ISODate): Strength {

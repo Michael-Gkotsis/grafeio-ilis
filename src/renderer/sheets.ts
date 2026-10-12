@@ -55,8 +55,8 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   rows.push([...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ'), E(''), ...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΑΠΟΥΣΙΑΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ')]);
   for (let i = 0; i < Math.max(6, pun.length, abs.length); i++) {
     const a = pun[i], b = abs[i];
-    rows.push([E(i + 1, 'b c'), E(a ? dutyName(pm.get(a.pid)!) : '', 'b'), E(a ? norm(a.kind || 'Ποινή') : '', 'b c'), E(a ? dm(a.from) : '', 'b c'), E(a ? dm(a.to) : '', 'b c'), E(a?.note || '', 'b'), E(''),
-      E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceText(b.kind, TYPES[b.type].long) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
+    rows.push([E(i + 1, 'b c'), E(a ? dutyName(pm.get(a.pid)!) : '', 'b'), E(a ? norm(a.kind || 'Ποινή') : '', 'b c'), E(a ? dm(a.from) : '', 'b c'), E(a && !a.open ? dm(a.to) : '', 'b c'), E(a?.note || '', 'b'), E(''),
+      E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceText(b.kind, TYPES[b.type].long) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b && !b.open ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
   }
   rows.push([E('', '', W)], [E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 2), E('ΔΚΤΗΣ ΙΛΗΣ', 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E('ΔΚΤΗΣ ΕΠΧΙΑΣ', 'ttl', 3)]);
   return { cols: [30, 34, 150, 78, 54, 8, 8, 8, 34, 150, 78, 54, 30], rows };
