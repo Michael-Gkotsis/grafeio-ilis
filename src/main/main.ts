@@ -46,6 +46,8 @@ const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(),
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
 const USB_KEEP = 10;
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
+// Ελληνικά για το Chromium: τα πεδία ημερομηνίας δείχνουν ημέρα/μήνα/έτος και σε Windows με αγγλικές ρυθμίσεις (αλλιώς μήνας/ημέρα)
+app.commandLine.appendSwitch('lang', 'el');
 const USER_TPL = path.join(ROOT, 'templates');   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },

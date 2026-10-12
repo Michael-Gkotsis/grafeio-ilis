@@ -302,16 +302,34 @@ export class Workbook {
     if (id == null) return false;
     return DATE_IDS.has(id) || (st.codes.has(id) && isDateCode(st.codes.get(id)!));
   }
-  // Στυλ με μορφή ημερομηνίας που κρατά πλαίσια και γραμματοσειρά του κελιού (νέο xf με numFmtId 14 = σύντομη ημερομηνία των Windows)
+  // Στυλ με μορφή ημερομηνίας ημέρα/μήνας/έτος που κρατά πλαίσια και γραμματοσειρά του κελιού. Η «σύντομη ημερομηνία
+  // των Windows» (numFmtId 14) δεν αρκεί: σε Windows με αγγλικές ρυθμίσεις φαίνεται μήνας/ημέρα. Δική σου άλλη μορφή
+  // ημερομηνίας στο κελί (π.χ. «d/m/yy») μένει όπως είναι.
   async dateStyle(base: number | null): Promise<number> {
     const b = base ?? 0;
-    if (await this.isDateStyle(b)) return b;
     const st = await this.loadStyles();
+    if (await this.isDateStyle(b) && st.fmt[b] !== 14) return b;
+    const id = String(this.dmyFmt());
     return this.xfLike(b, st.made, src => {
       const open = src.slice(0, src.indexOf('>') + 1).replace(/\/>$/, '>').replace(/>$/, '');
       const rest = src.endsWith('/>') ? '/>' : src.slice(src.indexOf('>'));
-      return setAttr(setAttr(open, 'numFmtId', '14'), 'applyNumberFormat', '1') + rest;
+      return setAttr(setAttr(open, 'numFmtId', id), 'applyNumberFormat', '1') + rest;
     });
+  }
+  // Η μορφή «dd/mm/yyyy» στο styles.xml: η υπάρχουσα αν την έχει ήδη το βιβλίο, αλλιώς νέα (από 164, όπως ο Excel)
+  private dmyFmt(): number {
+    const st = this.styles!;
+    for (const [id, code] of st.codes) if (/^dd\/mm\/yyyy(;@)?$/i.test(code)) return id;
+    const id = Math.max(163, ...st.codes.keys()) + 1;
+    const nf = '<numFmt numFmtId="' + id + '" formatCode="dd/mm/yyyy"/>';
+    const m = /<numFmts\b[^>]*?(\/>|>)/.exec(st.xml);
+    if (m) {
+      const n = (st.xml.match(/<numFmt\b/g) || []).length + 1;
+      const open = setAttr(m[0].replace(/\/?>$/, ''), 'count', String(n)) + '>';
+      st.xml = st.xml.replace(m[0], m[1] === '/>' ? open + nf + '</numFmts>' : open + nf);
+    } else st.xml = st.xml.replace(/(<styleSheet\b[^>]*>)/, '$1<numFmts count="1">' + nf + '</numFmts>');
+    st.codes.set(id, 'dd/mm/yyyy'); st.dirty = true;
+    return id;
   }
   private xfList(xml: string): string[] {
     const m = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml);
@@ -424,7 +442,7 @@ export class Workbook {
     z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
     z.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${name}" sheetId="1" r:id="rId1"/></sheets></workbook>`);
     z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
-    z.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+    z.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
     z.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
     return Workbook.open(await z.generateAsync({ type: 'nodebuffer' }));
   }
