@@ -273,6 +273,20 @@ describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () =
     expect(w.sets.some(x => x.r === 7)).toBe(false);   // Κ.Α του 6ου μένει
     expect(w.notFound).toEqual([]);
   });
+  it('γράφει στο αρχείο και τις μέρες 29 και 30 (στήλες AO, AP)', async () => {
+    const s = fakeState(12); const dir = tmp(); const file = path.join(dir, 'e.xlsx');
+    await toFile([checkSheet(s, { '0:1': 'Θ' })], file);
+    const sh = await sheetOf(file, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ  ΙΛΗΣ');
+    expect(dayColumns(sh.rows[1], 12)).toHaveLength(30);
+    const b = bind('duties', sh, file);
+    let s2 = run(s, { t: 'importDuties', guards: planDuties(sh, b, s, '2026-09', TODAY).guards, baseline: {}, source: 'x' });
+    s2 = run(s2, { t: 'assign', date: '2026-09-29', k: 'th1', pid: 2, force: 'δοκιμή' });
+    s2 = run(s2, { t: 'assign', date: '2026-09-30', k: 'mg1', pid: 3, force: 'δοκιμή' });
+    const w = await writeSource('duties', b, s2, { keys: [], at: 'x', mtime: 0, size: 0 }, TODAY);
+    expect(w.ok && w.changed).toBe(2);
+    const rows = (await sheetOf(file, sh.name)).rows;
+    expect([rows[3][40], rows[4][41]]).toEqual(['Θ', 'Μ']);
+  });
 });
 
 describe('στοιχεία ατόμου σε όλα τα φύλλα', () => {

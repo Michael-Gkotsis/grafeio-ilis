@@ -169,6 +169,13 @@ async function hkaiMap(buf: Buffer, b: FormBinding) {
   return { title: b.cells?.title || det.title, date: b.cells?.date || det.date, rows: { ...det.rows, ...(b.cells?.rows || {}) }, cols: { ...det.cols, ...(b.cells?.cols || {}) } };
 }
 
+// Ένα γράψιμο αρχείων τη φορά: η αυτόματη ενημέρωση, το «Ενημέρωση Excel» και η εξαγωγή εντύπου δεν διαβάζουν και
+// γράφουν το ίδιο Excel ή το forms.json ταυτόχρονα (αλλιώς χάνεται ό,τι έγραψε ο ένας)
+let ioChain: Promise<unknown> = Promise.resolve();
+function serial<T>(f: () => Promise<T>): Promise<T> {
+  const p = ioChain.then(f, f); ioChain = p.catch(() => undefined); return p;
+}
+
 async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult> {
   try {
     const s = store.state;
@@ -176,12 +183,15 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     const checks = preflight(kind, s, date);
     if (hasErrors(checks)) return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη που πρέπει να διορθωθούν πρώτα', checks };
     if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
-    const r = await produce(kind, date, s);
-    const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
+    const { r, out } = await serial(async () => {
+      const r = await produce(kind, date, s);
+      const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
+      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data), vhash: await valuesHash(r.data), ...(stamp(out) || {}) });
+      return { r, out };
+    });
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null, false);
     if (checks.length) store.flush();
-    rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data), vhash: await valuesHash(r.data), ...(stamp(out) || {}) });
     const warnings = r.warnings || [];
     // «Εκτύπωση»: το Excel γράφεται όπως πάντα και ανοίγει η προεπισκόπηση εκτύπωσης αντί για τον Excel
     if (opts.print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); }
@@ -212,7 +222,8 @@ async function zipHash(buf: Buffer): Promise<string> {
   for (const n of Object.keys(z.files).sort()) { if (z.files[n].dir) continue; h.update(n); h.update(await z.files[n].async('nodebuffer')); }
   return h.digest('hex');
 }
-async function regenForms(): Promise<boolean> {
+const regenForms = () => serial(regenFormsNow);
+async function regenFormsNow(): Promise<boolean> {
   const t = today(); const list = readOuts().filter(o => lastDay(o) >= t); let any = false;
   for (const o of list) {
     if (!fs.existsSync(o.file)) { o.error = undefined; o.pending = false; continue; }   // το έσβησε ο χρήστης: δεν το ξαναφτιάχνουμε
@@ -300,7 +311,9 @@ function writeText(kind: ListKind, file: string, r: { added: number; changed: nu
     + (r.rooms ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
-async function syncOut(kind: ListKind, auto: boolean): Promise<{ ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean }> {
+type SyncOut = { ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean };
+const syncOut = (kind: ListKind, auto: boolean): Promise<SyncOut> => serial(() => syncOutNow(kind, auto));
+async function syncOutNow(kind: ListKind, auto: boolean): Promise<SyncOut> {
   let b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
   const m = srcMeta.get(kind);
   if (auto) {
@@ -421,6 +434,9 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
     // ό,τι έχει η εφαρμογή και λείπει από το Excel (ή κράτησε ο χρήστης από την εφαρμογή) γράφεται αμέσως μετά (αν το είδος γράφει μόνο του)
     if (b.write !== false && (d.appOnly.length || d.kept.length || kept.size)) { dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
     notify();
+    // αυτόματα (από τον έλεγχο αλλαγών): η απάντηση δεν φτάνει στο UI, οπότε δεν σημειώνουμε τις αλλαγές ως σταλμένες.
+    // Τις φέρνει το sync() που κάνει το UI μόλις πάρει την κατάσταση των αρχείων.
+    if (auto) return { ok: true, changes: {}, newAudit: [], text: r.text || '' };
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
   } catch (e) { return fail(e); }
 }

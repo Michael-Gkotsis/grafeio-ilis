@@ -78,6 +78,15 @@ describe('εκτύπωση: έντυπα της εφαρμογής', () => {
     expect(cells(pages[0])).toContain('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΟΚΤΩΒΡΙΟΣ 2026');
     expect(cells(pages[1])).not.toContain('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΟΚΤΩΒΡΙΟΣ 2026');
   });
+  it('Έλεγχος υπηρεσιών: ίδια δεδομένα, ίδιο αρχείο (δεν ξαναγράφεται μόνο του χωρίς λόγο)', async () => {
+    let s = fakeState(20);
+    s = apply(s, { t: 'autofill', date: '2026-10-01' }, ctx).state;
+    const a = await dutyCheck(s, '2026-10');
+    await new Promise(r => setTimeout(r, 1100));   // άλλο δευτερόλεπτο στο ρολόι
+    const b = await dutyCheck(s, '2026-10');
+    const z = async (buf: Buffer) => { const x = await JSZip.loadAsync(buf); return Promise.all(Object.keys(x.files).sort().map(async n => n + (await x.files[n].async('string')))); };
+    expect(await z(b.data)).toEqual(await z(a.data));
+  });
 });
 
 describe('εκτύπωση: τύποι και διάταξη', () => {
