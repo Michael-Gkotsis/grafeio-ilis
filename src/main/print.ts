@@ -678,11 +678,12 @@ body{background:#5f6368;font:14px "Segoe UI",Tahoma,Arial,sans-serif;color:#2021
 .bar b{font-size:15px}.bar .meta{color:#5f6368}
 .sheets{display:flex;flex-wrap:wrap;gap:6px}.sheets label{display:inline-flex;gap:5px;align-items:center;padding:3px 9px;border:1px solid #c4c7c5;border-radius:14px;cursor:pointer}
 .sheets small{color:#5f6368}.sheets input:checked+*{font-weight:600}
-.acts{margin-left:auto;display:flex;gap:8px}
+.acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.prn{display:inline-flex;gap:6px;align-items:center;color:#5f6368}.prn[hidden]{display:none}.prn select,.prn input{font:inherit;padding:6px 8px;border:1px solid #c4c7c5;border-radius:6px;background:#fff;color:#202124}.prn select{max-width:260px}.prn input{width:64px}
 button{font:inherit;padding:7px 16px;border-radius:6px;border:1px solid #c4c7c5;background:#fff;cursor:pointer}
 button.pri{background:#2e5e3a;border-color:#2e5e3a;color:#fff;font-weight:600}button:disabled{opacity:.6;cursor:default}
 button:focus-visible,.sheets label:focus-within{outline:2px solid #1a73e8;outline-offset:2px}
-.msg{width:100%;color:#b3261e}.msg:empty{display:none}
+.msg{width:100%;color:#b3261e}.msg.ok{color:#2e5e3a}.msg:empty{display:none}
 main{padding:20px 0 40px}
 section h2{margin:8px auto;color:#fff;font-size:13px;font-weight:600;text-align:center}
 .pg{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden}
@@ -698,13 +699,21 @@ ${doc.css}
 @media print{body{background:none}.bar,section h2{display:none}main{padding:0}.pg{margin:0;box-shadow:none;break-after:page}section.skip{display:none}}
 </style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body>
 <div class="bar"><b>${esc(file)}</b><span class="meta">${pages} ${pages === 1 ? 'σελίδα' : 'σελίδες'}${info}</span>${chips}
-<span class="acts"><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="close">Κλείσιμο</button></span><div class="msg" id="msg" role="status"></div></div>
+<span class="acts"><label class="prn" hidden>Εκτυπωτής <select id="prn"></select></label><label class="prn" hidden>Αντίτυπα <input id="copies" type="number" min="1" max="99" value="1"></label><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="dlg" hidden title="Ο διάλογος των Windows παίρνει τον προσανατολισμό του εκτυπωτή: διάλεξε εκεί «Οριζόντιο» για τα οριζόντια φύλλα">Διάλογος των Windows…</button><button type="button" id="close">Κλείσιμο</button></span><div class="msg" id="msg" role="status"></div></div>
 <main>${sections || '<p style="color:#fff;text-align:center">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>'}</main>
 <script>
 (function(){
-  var api = window.printer, go = document.getElementById('go'), msg = document.getElementById('msg'), pageCss = document.getElementById('page');
+  var api = window.printer, go = document.getElementById('go'), dlg = document.getElementById('dlg'), msg = document.getElementById('msg'), pageCss = document.getElementById('page');
+  var prn = document.getElementById('prn'), copies = document.getElementById('copies');
+  // εκτυπωτές για εκτύπωση χωρίς τον διάλογο των Windows (κρατά χαρτί και προσανατολισμό)· χωρίς λίστα: ο διάλογος
+  if (api && api.printers) api.printers().then(function(list){
+    if (!list || !list.length) return;
+    list.forEach(function(p){ var o = document.createElement('option'); o.value = p.name; o.textContent = p.label; if (p.def) o.selected = true; prn.appendChild(o); });
+    [].forEach.call(document.querySelectorAll('.prn'), function(l){ l.hidden = false; });
+    go.textContent = 'Εκτύπωση'; dlg.hidden = false;
+  });
   var secs = [].slice.call(document.querySelectorAll('main section'));
-  if (!secs.length) go.disabled = true;
+  if (!secs.length) go.disabled = dlg.disabled = true;
   document.getElementById('close').onclick = function(){ api && api.close(); };
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') api && api.close(); if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); go.click(); } });
   [].forEach.call(document.querySelectorAll('.sheets input'), function(i){ i.onchange = function(){
@@ -712,20 +721,24 @@ ${doc.css}
     msg.textContent = 'Ετοιμάζεται…'; api && api.sheets(names);
   }; });
   // ένα «τύπωμα» για κάθε συνδυασμό χαρτιού και προσανατολισμού (ο διάλογος των Windows έχει έναν για όλη τη δουλειά)
-  go.onclick = async function(){
+  async function printAll(useDialog){
     var groups = [];
     secs.forEach(function(s){ var k = s.dataset.paper + '|' + s.dataset.land; var g = groups.filter(function(x){ return x.k === k; })[0]; if (!g) groups.push(g = { k: k, paper: s.dataset.paper, land: s.dataset.land === '1', list: [] }); g.list.push(s); });
-    go.disabled = true; msg.textContent = '';
+    go.disabled = dlg.disabled = true; msg.textContent = ''; msg.classList.remove('ok');
+    var device = useDialog || !prn.value ? '' : prn.value;
     try {
       for (var i = 0; i < groups.length; i++) {
         var g = groups[i];
         secs.forEach(function(s){ s.classList.toggle('skip', g.list.indexOf(s) < 0); });
         pageCss.textContent = '@page{size:' + g.paper + ' ' + (g.land ? 'landscape' : 'portrait') + ';margin:0}';
-        var r = await api.print({ landscape: g.land, pageSize: g.paper, part: groups.length > 1 ? (i + 1) + '/' + groups.length : '' });
+        var r = await api.print({ landscape: g.land, pageSize: g.paper, part: groups.length > 1 ? (i + 1) + '/' + groups.length : '', device: device, copies: +copies.value || 1 });
         if (!r.ok) { if (r.error) msg.textContent = r.error; break; }
       }
-    } finally { secs.forEach(function(s){ s.classList.remove('skip'); }); go.disabled = false; }
-  };
+      if (r && r.ok && device) { msg.classList.add('ok'); msg.textContent = 'Στάλθηκε στον εκτυπωτή ' + prn.options[prn.selectedIndex].text + '.'; }
+    } finally { secs.forEach(function(s){ s.classList.remove('skip'); }); go.disabled = dlg.disabled = !secs.length; }
+  }
+  go.onclick = function(){ printAll(false); };
+  dlg.onclick = function(){ printAll(true); };
 })();
 </script></body></html>`;
 }
