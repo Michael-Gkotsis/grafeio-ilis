@@ -4,13 +4,13 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { Workbook, colName, toSerial } from './xlsx';
+import { Workbook, colName, toSerial, type Sheet } from './xlsx';
 import { writeAll, writeJson, LockedError } from './files';
 import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, isStatusKind, locateHeader, planSource, refitCols, tableHash, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planSource, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -114,11 +114,43 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)
 export const PREV_EVERY = 10 * 60 * 1000;
 export type WriteOutcome =
-  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; sheet: string } }
+  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; sheet: string }; tidy?: string[] }
   | { ok: false; error: string; locked?: boolean };
 
+// Μορφή που λείπει από φύλλο που ήδη υπάρχει: τίτλος που δεν είναι στο κέντρο σε συγχωνευμένα κελιά, και λίστες
+// επιλογής για βαθμό και Ο/Σ όπου το φύλλο δεν έχει ήδη δικές του. Τα δικά σου στυλ, συγχωνεύσεις και λίστες μένουν.
+export interface Tidy { titles: { r: number; c1: number; c2: number }[]; lists: { c: number; r1: number; r2: number; items: string[]; what: string }[] }
+export function tidyOf(kind: ListKind, b: SourceBinding, ws: Sheet, sheet: RawSheet): Tidy {
+  const merges = ws.merges();
+  return {
+    titles: titleSpans(kind, sheet, b).filter(t => !merges.some(m => m.r1 <= t.r + 1 && t.r + 1 <= m.r2 && m.c1 <= t.c2 + 1 && t.c1 + 1 <= m.c2)),
+    lists: listColumns(kind, sheet, b).filter(l => !ws.hasValidation(l.c + 1, l.r1 + 1, l.r2 + 1))
+  };
+}
+export const tidyText = (t: Tidy): string[] => [
+  ...t.titles.map(x => 'Ο τίτλος της γραμμής ' + (x.r + 1) + ' μπαίνει στο κέντρο, σε συγχωνευμένα κελιά ' + colName(x.c1 + 1) + (x.r + 1) + ':' + colName(x.c2 + 1) + (x.r + 1)),
+  ...t.lists.map(l => 'Λίστα επιλογής στη στήλη «' + l.what + '» (' + colName(l.c + 1) + '): ' + l.items.slice(0, 8).join(', ') + (l.items.length > 8 ? '…' : '') + '· δέχεται και ό,τι άλλο γραφτεί με το χέρι')
+];
+async function applyTidy(wb: Workbook, ws: Sheet, t: Tidy) {
+  for (const x of t.titles) {
+    const at = colName(x.c1 + 1) + (x.r + 1);
+    ws.addMerge(at + ':' + colName(x.c2 + 1) + (x.r + 1)).setStyle(at, await wb.centered(ws.style(at)));
+  }
+  for (const l of t.lists) { const L = colName(l.c + 1); ws.addListValidation(L + (l.r1 + 1) + ':' + L + (l.r2 + 1), l.items); }
+}
+
+// Για την προεπισκόπηση της «Ενημέρωσης Excel»: ποια μορφή λείπει από το φύλλο (κενό για νέο φύλλο ή πίνακα)
+export async function tidyPreview(kind: ListKind, b: SourceBinding): Promise<string[]> {
+  if (!fs.existsSync(b.file)) return [];
+  const wb = await Workbook.open(await fs.promises.readFile(b.file)); if (!wb.hasSheet(b.sheet)) return [];
+  const sheet: RawSheet = { name: b.sheet, rows: await wb.values(b.sheet, 2000, MAX_COLS) };
+  if (!(sheet.rows[b.header] || []).some(v => cellText(v))) return [];
+  return tidyText(tidyOf(kind, b, await wb.sheet(b.sheet), sheet));
+}
+
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
-export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate): Promise<WriteOutcome> {
+// tidy: γράφει και μόνο για τη μορφή που λείπει (με την «Ενημέρωση Excel»)· αλλιώς η μορφή μπαίνει όταν γράφεται κάτι.
+export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean } = {}): Promise<WriteOutcome> {
   try {
     const exists = fs.existsSync(b.file);
     if (!exists && !isStatusKind(kind)) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
@@ -137,22 +169,50 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     };
     if (!had && !isStatusKind(kind)) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
-    const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας απλό στυλ με πλαίσια
-    const blank = !exists;
+    const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
+    const tidy = tidyOf(kind, b, ws, sheet); if (fresh) tidy.titles = [];
+    const tidied = tidyText(tidy);
     const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn, keys: plan.keys, snap: plan.snap };
     const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
-    if (!plan.sets.length && !plan.insert && !fresh) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
-    for (const h of plan.header) { ws.set(ref(h.r, h.c), h.v); if (blank) ws.setStyle(ref(h.r, h.c), h.title ? 0 : 1); }
+    if (!plan.sets.length && !plan.insert && !fresh && !(opts.tidy && tidied.length)) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
+    await applyTidy(wb, ws, tidy);
+    const data = fresh ? await wb.tableStyle('data') : undefined;
+    if (fresh) {
+      const head = await wb.tableStyle('head'), title = await wb.tableStyle('title');
+      const c2 = Math.max(...Object.values(b.cols));
+      const wide: Record<number, number> = {};
+      const fit = (c: number, v: unknown) => { const n = v != null && typeof v === 'object' ? 10 : String(v ?? '').length; wide[c + 1] = Math.min(32, Math.max(wide[c + 1] || 6, n + 2)); };
+      for (const h of plan.header) {
+        ws.set(ref(h.r, h.c), h.v).setStyle(ref(h.r, h.c), h.title ? title : head);
+        if (h.title && c2 > h.c) ws.addMerge(ref(h.r, h.c) + ':' + ref(h.r, c2)); else if (!h.title) fit(h.c, h.v);
+      }
+      for (const x of plan.sets) fit(x.c, x.v);
+      ws.setColWidths(wide);
+    }
     if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
-    for (const x of plan.sets) await put(x.r, x.c, x.v, blank ? 2 : undefined);
+    // Ελεύθερες γραμμές που γράφονται τώρα: παίρνουν πλαίσια και στοίχιση από τη γραμμή του πίνακα από πάνω
+    // (ή το στυλ του νέου πίνακα) σε όσα κελιά δεν έχουν δικό τους στυλ. Οι γραμμές που μπήκαν με insertRows τα έχουν ήδη.
+    const scan = tableRows(sheet, b.header, b.cols); const span = scan.width; const recs = new Set(scan.records.map(x => x.r));
+    const inserted = (r: number) => !!plan.insert && !fresh && r > plan.insert.after && r <= plan.insert.after + plan.insert.n;
+    const rowsOut = [...new Set(plan.sets.map(x => x.r))].filter(r => r > b.header && !inserted(r) && !recs.has(r)).sort((a, c) => a - c);
+    const styled = (k: number) => { for (let c = span[0]; c <= span[1]; c++) if (ws.style(ref(k, c)) != null) return true; return false; };
+    for (const r of rowsOut) {
+      let tpl = r - 1; while (!fresh && tpl > b.header && !styled(tpl)) tpl--;
+      if (tpl <= b.header) tpl = -1;
+      for (let c = span[0]; c <= span[1]; c++) {
+        if (ws.style(ref(r, c)) != null) continue;
+        const st = fresh ? data! : tpl >= 0 ? ws.style(ref(tpl, c)) : null;
+        if (st != null) ws.setStyle(ref(r, c), st);
+      }
+    }
+    for (const x of plan.sets) await put(x.r, x.c, x.v, data);
     // Θάλαμοι: το φύλλο ΘΑΛΑΜΟΙ δεν συνδέεται, οπότε όταν αλλάζει θάλαμος θυμίζουμε να μετακινηθεί και εκεί ο στρατιώτης
     const rc = kind === 'people' ? b.cols.room : undefined;
     const roomSheet = rc != null ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
     const roomRows = roomSheet ? new Set(plan.sets.filter(x => x.c === rc && x.r > b.header).map(x => x.r)).size : 0;
     const rooms = roomRows ? { n: roomRows, sheet: roomSheet! } : undefined;
-    const data = await wb.save();
-    const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data }], { prevEvery: PREV_EVERY });
-    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+    const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
+    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {
     if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

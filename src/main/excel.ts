@@ -58,7 +58,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
     vals.push(p.room ?? '', x.size, hol, c.th || '', c.mg || '', c.ly || '');
     vals.forEach((v, j) => {
       const cell = row.getCell(j + 1); cell.value = v; cell.border = border; cell.font = { size: 9 };
-      cell.alignment = { horizontal: j === 2 || j === 3 ? 'left' : 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
       if (j >= FIX.length && j < FIX.length + nd) {
         if (isHol(s.settings, days[j - FIX.length])) cell.fill = gray;
         if (typeof v === 'string' && v.includes('.')) cell.font = { size: 7, italic: true, color: { argb: 'FF666666' } };
