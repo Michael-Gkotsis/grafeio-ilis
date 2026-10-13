@@ -492,7 +492,7 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     const lines = describeSets(kind, sheet2, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : stepRows(steps));
     for (const d of plan.deletes || []) { const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = (sheet2.rows[d] || [])[b.cols[k]]; lines.push({ r: d, who: rowName(v), text: 'η γραμμή σβήνεται (αναιρέθηκε στην εφαρμογή)' }); }
     lines.sort((x, y) => x.r - y.r);
-    const tidy = had && book ? await tidyPreview(kind, b) : [];
+    const tidy = had && book ? await tidyPreview(kind, b, store.state.settings.lists) : [];
     return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous), warn: plan.warn, ...(tidy.length ? { tidy } : {}) };
   } catch (e) { return fail(e); }
 }

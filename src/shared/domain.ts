@@ -1,6 +1,7 @@
 import type { ISODate } from './dates';
 import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding, StatusKind } from './sources';
+import type { UserLists } from './ranks';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -179,6 +180,7 @@ export interface Settings {
   forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
   newDirs?: Partial<Record<StatusKind, string>>;         // πού φτιάχνονται τα νέα Excel κάθε είδους (κενό = ο γενικός φάκελος)
   baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
+  lists?: UserLists;                     // ό,τι πρόσθεσες ή έκρυψες στις λίστες (βαθμοί, Ο/Σ)· οι βασικές είναι στο ranks.ts
 }
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }

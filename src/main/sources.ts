@@ -8,6 +8,7 @@ import { Workbook, colName, toSerial, type Sheet } from './xlsx';
 import { writeAll, writeJson, LockedError } from './files';
 import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
+import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
@@ -119,16 +120,29 @@ export type WriteOutcome =
 
 // Μορφή που λείπει από φύλλο που ήδη υπάρχει: τίτλος που δεν είναι στο κέντρο σε συγχωνευμένα κελιά, και λίστες
 // επιλογής για βαθμό και Ο/Σ όπου το φύλλο δεν έχει ήδη δικές του. Τα δικά σου στυλ, συγχωνεύσεις και λίστες μένουν.
-export interface Tidy { titles: { r: number; c1: number; c2: number }[]; lists: { c: number; r1: number; r2: number; items: string[]; what: string }[] }
-export function tidyOf(kind: ListKind, b: SourceBinding, ws: Sheet, sheet: RawSheet): Tidy {
-  const merges = ws.merges();
+// Λίστα που έβαλε η ίδια η εφαρμογή παλιότερα συμπληρώνεται στο τέλος με ό,τι πρόσθεσες στις Λίστες· οι τιμές που
+// έχει ήδη μένουν (και όσες έκρυψες: κάποιος μπορεί να τις έχει).
+export interface Tidy { titles: { r: number; c1: number; c2: number }[]; lists: { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[]; grow: { sqref: string; items: string[]; what: string; added: string[] }[] }
+export function tidyOf(kind: ListKind, b: SourceBinding, ws: Sheet, sheet: RawSheet, lists?: UserLists): Tidy {
+  const merges = ws.merges(); const cols = listColumns(kind, sheet, b, lists);
+  const grow: Tidy['grow'] = [];
+  for (const l of cols) {
+    const own = ws.ownList(l.c + 1, l.r1 + 1, l.r2 + 1); if (!own) continue;
+    const have = new Set(own.items.map(itemKey));
+    // μόνο ό,τι είναι στις Λίστες (όχι τιμές που απλώς γράφτηκαν στη στήλη μετά): χωρίς προσθήκες, τίποτα δεν αλλάζει
+    const mine = new Set(l.base.map(itemKey)); const added = l.items.filter(v => mine.has(itemKey(v)) && !have.has(itemKey(v)));
+    if (!added.length || [...own.items, ...added].join(',').length > 250) continue;
+    grow.push({ sqref: own.sqref, items: [...own.items, ...added], what: l.what, added });
+  }
   return {
     titles: titleSpans(kind, sheet, b).filter(t => !merges.some(m => m.r1 <= t.r + 1 && t.r + 1 <= m.r2 && m.c1 <= t.c2 + 1 && t.c1 + 1 <= m.c2)),
-    lists: listColumns(kind, sheet, b).filter(l => !ws.hasValidation(l.c + 1, l.r1 + 1, l.r2 + 1))
+    lists: cols.filter(l => !ws.hasValidation(l.c + 1, l.r1 + 1, l.r2 + 1)),
+    grow
   };
 }
 export const tidyText = (t: Tidy): string[] => [
   ...t.titles.map(x => 'Ο τίτλος της γραμμής ' + (x.r + 1) + ' μπαίνει στο κέντρο, σε συγχωνευμένα κελιά ' + colName(x.c1 + 1) + (x.r + 1) + ':' + colName(x.c2 + 1) + (x.r + 1)),
+  ...t.grow.map(l => 'Στη λίστα επιλογής της στήλης «' + l.what + '» μπαίνουν και: ' + l.added.join(', ')),
   ...t.lists.map(l => 'Λίστα επιλογής στη στήλη «' + l.what + '» (' + colName(l.c + 1) + '): ' + l.items.slice(0, 8).join(', ') + (l.items.length > 8 ? '…' : '') + '· δέχεται και ό,τι άλλο γραφτεί με το χέρι')
 ];
 async function applyTidy(wb: Workbook, ws: Sheet, t: Tidy) {
@@ -137,15 +151,16 @@ async function applyTidy(wb: Workbook, ws: Sheet, t: Tidy) {
     ws.addMerge(at + ':' + colName(x.c2 + 1) + (x.r + 1)).setStyle(at, await wb.centered(ws.style(at)));
   }
   for (const l of t.lists) { const L = colName(l.c + 1); ws.addListValidation(L + (l.r1 + 1) + ':' + L + (l.r2 + 1), l.items); }
+  for (const l of t.grow) ws.setListItems(l.sqref, l.items);
 }
 
 // Για την προεπισκόπηση της «Ενημέρωσης Excel»: ποια μορφή λείπει από το φύλλο (κενό για νέο φύλλο ή πίνακα)
-export async function tidyPreview(kind: ListKind, b: SourceBinding): Promise<string[]> {
+export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: UserLists): Promise<string[]> {
   if (!fs.existsSync(b.file)) return [];
   const wb = await Workbook.open(await fs.promises.readFile(b.file)); if (!wb.hasSheet(b.sheet)) return [];
   const sheet: RawSheet = { name: b.sheet, rows: await wb.values(b.sheet, 2000, MAX_COLS) };
   if (!(sheet.rows[b.header] || []).some(v => cellText(v))) return [];
-  return tidyText(tidyOf(kind, b, await wb.sheet(b.sheet), sheet));
+  return tidyText(tidyOf(kind, b, await wb.sheet(b.sheet), sheet, lists));
 }
 
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
@@ -170,7 +185,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     if (!had && !isStatusKind(kind)) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
-    const tidy = tidyOf(kind, b, ws, sheet); if (fresh) tidy.titles = [];
+    const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];
     const tidied = tidyText(tidy);
     const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn, keys: plan.keys, snap: plan.snap };
     const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };

@@ -9,7 +9,7 @@ import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
 import { dm } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { allPosts, postBy } from './rules';
-import { SOLDIER_RANKS, SPECS, optionsOf } from './ranks';
+import { listOf, optionsOf, type ListId, type UserLists } from './ranks';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -648,20 +648,21 @@ export function titleSpans(kind: ListKind, sheet: RawSheet, b: SourceBinding): {
 }
 // Λίστες επιλογής (dropdown) για βαθμό και Ο/Σ στις γραμμές του πίνακα και στις κενές από κάτω του (ως τον επόμενο
 // πίνακα ή 200 γραμμές). Η βασική λίστα και όσες άλλες τιμές έχει ήδη η στήλη· ο Excel δέχεται και άλλη τιμή.
-export const LIST_FIELDS: [string, readonly string[], string][] = [['rank', SOLDIER_RANKS, 'Βαθμός'], ['spec', SPECS, 'Ο/Σ']];
-export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding): { c: number; r1: number; r2: number; items: string[]; what: string }[] {
+// Με τις Λίστες των Ρυθμίσεων (lists): ό,τι πρόσθεσες μπαίνει και στο dropdown, ό,τι έκρυψες όχι
+export const LIST_FIELDS: [string, ListId, string][] = [['rank', 'soldierRanks', 'Βαθμός'], ['spec', 'specs', 'Ο/Σ']];
+export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, lists?: UserLists): { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] {
   if (kind === 'duties') return [];
   const scan = tableRows(sheet, b.header, b.cols);
   let r = scan.end + 1; while (r < sheet.rows.length && !(sheet.rows[r] || []).some(v => cellText(v))) r++;
   const r1 = b.header + 1, r2 = r < sheet.rows.length ? r - 1 : Math.max(scan.end, b.header) + 200;
   if (r2 < r1) return [];
-  const out: { c: number; r1: number; r2: number; items: string[]; what: string }[] = [];
-  for (const [k, base, what] of LIST_FIELDS) {
+  const out: { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] = [];
+  for (const [k, id, what] of LIST_FIELDS) {
     const c = b.cols[k]; if (c == null) continue;
     const seen = scan.records.map(x => cellText(x.v[k])).filter(v => !/[,"]/.test(v));
     // ο Excel δέχεται ως 255 χαρακτήρες στη λίστα: οι σπάνιες τιμές από το τέλος φεύγουν
-    const items = optionsOf(base, seen); while (items.join(',').length > 250) items.pop();
-    out.push({ c, r1, r2, items, what });
+    const base = listOf(lists, id); const items = optionsOf(base, seen); while (items.join(',').length > 250) items.pop();
+    out.push({ c, r1, r2, items, what, base });
   }
   return out;
 }
