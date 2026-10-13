@@ -1,10 +1,11 @@
 // Ρυθμίσεις › Λίστες: βαθμοί στρατιωτών, βαθμοί στελεχών και Ο/Σ που πρόσθεσε ή έκρυψε ο χρήστης.
 // Χωρίς προσθήκες όλα ίδια με πριν. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
-import { CADRE_RANKS, SOLDIER_RANKS, SPECS, cadreAbsKinds, cadreAbsOf, guessHk, hkOfRank, leaveCol, listOf, listRows, type UserLists } from '../src/shared/ranks';
+import { CADRE_RANKS, SOLDIER_RANKS, SPECS, absCode, cadreAbsKinds, cadreAbsOf, guessHk, hkOfRank, leaveCol, listOf, listRows, medKinds, statusLbl, type UserLists } from '../src/shared/ranks';
 import { LEAVE_KINDS, PUN_KINDS, CADRE_ABS } from '../src/shared/domain';
 import { overMax, punText } from '../src/shared/punish';
-import { hkRankOf, hkaiCounts } from '../src/shared/rules';
+import { dutyBlock, hkRankOf, hkaiCounts, outBlock } from '../src/shared/rules';
+import { typeOfValue } from '../src/shared/sources';
 import { listColumns, type SourceBinding } from '../src/shared/sources';
 import { apply } from '../src/shared/commands';
 import type { RawSheet } from '../src/shared/roster';
@@ -99,5 +100,25 @@ describe('λίστες', () => {
     const h0 = hkaiCounts({ ...r.state, cadreAbs: [{ ...r.state.cadreAbs[0], kind: 'Υπηρεσιακή' }] }, D);
     expect(h0.rank['Ίλαρχοι'].c.ekp).toBeUndefined();
     expect(h.apo).toBe(h0.apo + 1);
+  });
+  it('ιατρικά: δικό σου είδος συμπεριφέρεται σαν τον βασικό του, με δικό του όνομα και κωδικό· χωρίς προσθήκες όπως πριν', () => {
+    const l: UserLists = { medKinds: { add: [{ name: 'ΕΛ ΓΥΜΝ', like: 'EY', code: 'Ε.Γ' }, { name: 'ΕΛ ΒΑΔ', like: 'EA' }, { name: 'ΚΑΚΟ', like: 'PUN' }] } };
+    expect(listOf(undefined, 'medKinds')).toEqual(['ΕΑ', 'ΕΥ', 'ΕΟ', 'ΕΑΡΒ']);
+    // μόνο ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ ως βάση
+    expect(medKinds(l).map(x => x.name)).toEqual(['ΕΛ ΓΥΜΝ', 'ΕΛ ΒΑΔ']);
+    expect(typeOfValue('medical', 'ελ. γυμν', undefined, l)).toBe('EY');
+    expect(typeOfValue('medical', 'ΕΛ ΒΑΔ')).toBeNull();   // χωρίς τη λίστα: άγνωστο, ρωτά όπως πριν
+    expect(typeOfValue('medical', 'ΕΛ ΒΑΔ', undefined, l)).toBe('EA');
+    expect(typeOfValue('medical', 'ΚΑΚΟ', undefined, l)).toBeNull();
+    const own = { type: 'EY' as const, kind: 'ΕΛ ΓΥΜΝ' }, plain = { type: 'EY' as const, kind: 'ΕΥ 3 ΗΜΕΡΩΝ' };
+    expect([statusLbl(own, l), statusLbl(own), statusLbl(plain, l)]).toEqual(['ΕΛ ΓΥΜΝ', 'ΕΥ', 'ΕΥ']);
+    expect([absCode(own, l), absCode(own), absCode({ type: 'EA', kind: 'ΕΛ ΒΑΔ' }, l), absCode({ type: 'EO', kind: 'x' }, l)]).toEqual(['Ε.Γ', 'Ε.Υ', 'Ε.Α', undefined]);
+    // κανόνες ίδιοι με του βασικού: ΕΥ = καμία υπηρεσία, όχι έξοδο (με το δικό του όνομα στον λόγο)
+    const s0 = fakeState(10); const pid = s0.people[0].id;
+    const st = [{ id: 'm', pid, from: D, to: D, ...own }];
+    const s = { ...s0, statuses: st, settings: { ...s0.settings, lists: l } };
+    expect(dutyBlock(st, D, pid, { armed: false, kind: 'mg' })).toBe(dutyBlock([{ id: 'b', pid, type: 'EY', from: D, to: D }], D, pid, { armed: false, kind: 'mg' }));
+    expect(outBlock(s, D, pid)).toMatch(/^ΕΛ ΓΥΜΝ/);
+    expect(hkaiCounts(s, D)).toEqual(hkaiCounts({ ...s, statuses: [{ ...st[0], kind: undefined }] }, D));
   });
 });

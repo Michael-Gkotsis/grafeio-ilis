@@ -1,7 +1,7 @@
 // Λίστες επιλογής για βαθμό και Ο/Σ (όπλο/σώμα): στις φόρμες της εφαρμογής και ως dropdown στα Excel.
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
 import { collator, normGreek } from './text';
-import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS } from './domain';
+import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type Status, type TypeKey } from './domain';
 
 // Βαθμοί στρατιωτών (Δυναμολόγιο)
 export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΟΠ ΣΤΡ', 'ΕΠΟΠ ΔΝΕΑΣ', 'ΕΠΟΠ ΛΧΙΑΣ', 'ΔΕΑ'];
@@ -26,21 +26,23 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
-export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number }
+// like: ιατρικό που συμπεριφέρεται σαν ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
+export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 export type UserLists = Partial<Record<ListId, UserList>>;
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
-  cadreAbs: CADRE_ABS.map(x => x[1])   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
+  cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
+  medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label)
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Απουσίες στελεχών' };
+export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Απουσίες στελεχών', medKinds: 'Ιατρικά' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
-// βαθμοί και Ο/Σ με κεφαλαία, όπως στο Δυναμολόγιο· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
-const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs'];
+// βαθμοί, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
+const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds'];
 export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
@@ -81,6 +83,31 @@ export function cadreAbsKinds(lists?: UserLists, all = false): [string, string, 
   return rows.map(r => (r.builtin ? CADRE_ABS.find(x => x[1] === r.name)! : [r.name, r.name, r.col || ''] as [string, string, string]));
 }
 export const cadreAbsOf = (kind: string, lists?: UserLists) => cadreAbsKinds(lists, true).find(x => x[0] === kind);
+
+// Ιατρικά (Michael, 13/10): κάθε δικό σου είναι ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ για τους κανόνες και την ΗΚΑΙ, με δικό του όνομα.
+// Αποθηκεύεται στο «είδος» της κατάστασης, όπως το γράφει και το διαβάζει το Excel ΕΑ-ΕΥ.
+export const MED_LIKE: TypeKey[] = ['EA', 'EY', 'EO', 'EARV'];
+// χωρίς κενά και σημεία: «ΕΛ.ΓΥΜΝ», «Ελ γυμν» και «ΕΛ ΓΥΜΝ» είναι το ίδιο (όπως διαβάζει το Excel)
+const medKey = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
+const ownMed = (lists: UserLists | undefined, kind: string | undefined) => {
+  const k = medKey(kind || ''); if (!k) return undefined;
+  return (lists?.medKinds?.add || []).find(x => x.like && MED_LIKE.includes(x.like) && medKey(x.name) === k);
+};
+// τιμή του Excel (ή είδος) → βασικός τύπος, αν είναι δικό σου ιατρικό· οι βασικοί αναγνωρίζονται όπως πριν
+export const medTypeOf = (raw: string | undefined, lists?: UserLists): TypeKey | undefined => ownMed(lists, raw)?.like;
+// δικά σου ιατρικά που προτείνονται στη δήλωση (όχι όσα έκρυψες)
+export const medKinds = (lists?: UserLists): ListItem[] => listRows(lists, 'medKinds').filter(r => !r.builtin && !r.hidden && r.like && MED_LIKE.includes(r.like));
+// Όνομα κατάστασης σε σήματα και λίστες: η ποινή με το είδος της, το δικό σου ιατρικό με το όνομά του
+export function statusLbl(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string {
+  if (s.type === 'PUN') return s.kind || TYPES.PUN.label;
+  const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
+  return m ? m.name : TYPES[s.type].label;
+}
+// Κωδικός στο ημερολόγιο (Κ.Α, Ε.Υ…): ό,τι όρισες για το δικό σου ιατρικό, αλλιώς του βασικού τύπου
+export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string | undefined {
+  const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
+  return m?.code || TYPES[s.type].code;
+}
 
 // Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό που γράφει ο χρήστης· πρώτα ό,τι όρισες στις Λίστες
 export function guessHk(rank: string, lists?: UserLists): string {

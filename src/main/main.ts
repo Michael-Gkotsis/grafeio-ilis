@@ -430,7 +430,7 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
   try {
     const book = await readBook(b.file); const sheet = sheetOf(book.sheets, b.sheet);
     if (!sheet) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
-    const parsed = parseStatuses(kind, sheet, b, store.state.people, today());
+    const parsed = parseStatuses(kind, sheet, b, store.state.people, today(), store.state.settings.lists);
     const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b));
     if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || d.add.some(a => a.open) || d.update.some(u => u.patch.open) || !(d.add.length + d.update.length))) return fail('όχι απλό');
     saveBinding(kind, b);

@@ -5,7 +5,7 @@ import { norm, normGreek } from './text';
 import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
-import { cadreAbsOf } from './ranks';
+import { cadreAbsOf, statusLbl } from './ranks';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -86,13 +86,13 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = personMap(s.people);
   switch (c.t) {
     case 'declare': {
-      const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today); const t = TYPES[cmd.type];
+      const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
       if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
       const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to);
-      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : TYPES[cmd.type].label) + ' ' + range(cmd.from, cmd.to));
+      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + range(cmd.from, cmd.to));
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
@@ -105,7 +105,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         })]
       };
       plan.conflicts.forEach(x => { next = setGuard(next, x.date, x.k, null); });
-      const verb = cmd.type === 'PUN' ? 'Αιτείται ποινή (' + (cmd.kind || PUN_KINDS[0]).toLowerCase() + ')' : 'Δηλώθηκε ' + t.label;
+      const verb = cmd.type === 'PUN' ? 'Αιτείται ποινή (' + (cmd.kind || PUN_KINDS[0]).toLowerCase() + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
       return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
     }
     case 'outs': {
@@ -175,11 +175,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const y = addDays(ctx.today, -1);
       const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => { if (x !== st) return x; const n = { ...x, to: y }; delete n.open; return n; });
-      return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : TYPES[st.type].label) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'] };
+      return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'] };
     }
     case 'deleteStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
-      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : TYPES[st.type].label) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
     }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');
@@ -417,7 +417,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return {
         state: s, source: 'auto', undoable: false, files: [],
         text: ex.length ? 'Έληξαν και αφαιρέθηκαν ' + ex.length + ' καταχωρήσεις' : '',
-        extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + (x.kind || '').toLowerCase() + ')' : TYPES[x.type].label) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
+        extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + (x.kind || '').toLowerCase() + ')' : statusLbl(x, s.settings.lists)) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
       };
     }
   }
