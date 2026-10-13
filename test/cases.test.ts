@@ -421,6 +421,19 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
     const goingHome = used.filter(id => [1, 2, 3, 4].includes(pm.get(id)!.room!) || pm.get(id)!.dn);
     expect(goingHome).toEqual([]);
   });
+  it('ΣΚ: οι λιγότερες αργίες μετρούν πριν από το ΔΝ (Michael, 13/10)', () => {
+    const SAT = '2026-10-17';
+    let s = fakeState(40);
+    // όλοι όσοι δεν έχουν ΔΝ έκαναν ήδη μία αργία· όσοι έχουν ΔΝ καμία: τώρα μπαίνουν πρώτοι οι ΔΝ
+    const dn = new Set([2, 3, 4, 7, 8]);
+    s = { ...s, people: s.people.map(p => (dn.has(p.id) ? { ...p, dn: true, room: 6 } : p)), baseline: Object.fromEntries(s.people.filter(p => !dn.has(p.id)).map(p => [p.id, { hol: 1 }])) };
+    const used = new Set(Object.values(fillDay(s, SAT).guards[SAT]));
+    for (const id of dn) expect(used.has(id)).toBe(true);
+  });
+  it('ΣΤΕΠ: σε καμία υπηρεσία, ούτε άοπλη (Michael, 13/10)', () => {
+    const s = declare(fakeState(20), 'STEP', 2, D);
+    for (const k of ['th5', 'mg1']) expect(guardUnavailable(s, D, 2, k)).toMatch(/ΣΤΕΠ/);
+  });
 });
 
 describe('Κείμενο ποινής', () => {

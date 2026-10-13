@@ -71,7 +71,7 @@ export const TYPES: Record<TypeKey, TypeDef> = {
   EA:    { label: 'ΕΑ', long: 'Ελεύθερος Ασκήσεων', tone: 'ey', cat: 'med', noArmed: true, light: true, code: 'Ε.Α' },
   EARV:  { label: 'ΕΑΡΒ', long: 'Ελεύθερος Αρβύλων', tone: 'ey', cat: 'med' },   // χωρίς περιορισμούς σε υπηρεσίες και έξοδο (λοχίας, 12/10)
   EO:    { label: 'ΕΟ', long: 'Ελεύθερος Ορθοστασίας', tone: 'ey', cat: 'med', noArmed: true, light: true },
-  STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noArmed: true, noOut: true },
+  STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noDuty: true, noArmed: true, noOut: true },   // σε καμία υπηρεσία (Michael, 13/10)
   NOS:   { label: 'Νοσοκομείο', long: 'Εισαγωγή σε νοσοκομείο', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'nos' },
   PUN:   { label: 'Ποινή', long: 'Τιμωρημένος', tone: 'bad', cat: 'pun', noOut: true, hkai: 'tim' },
   LEAVE: { label: 'ΚΑ', long: 'Κανονική άδεια', tone: 'info', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'ka', code: 'Κ.Α' },
