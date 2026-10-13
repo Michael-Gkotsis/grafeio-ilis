@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, NEW_KINDS, ambiguousLines, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -494,8 +494,23 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
       return { b: { ...defaultBinding(kind, ros.file, name), write: true }, inRoster: true };
     } catch { /* δεν διαβάζεται (ανοιχτό, παλιό .xls): χωριστό αρχείο */ }
   }
+  // έλεγχος υπηρεσιών: φύλλο του τρέχοντος μήνα, στο ίδιο αρχείο με τους προηγούμενους μήνες αν υπάρχει
+  if (kind === 'duties') {
+    const ym = today().slice(0, 7); const cur = bindingOf('duties');
+    if (cur && /\.xls[xm]$/i.test(cur.file) && fs.existsSync(cur.file)) {
+      try {
+        const book = await readBook(cur.file);
+        const mine = book.sheets.find(x => { const h = bestFor('duties', [x]); return h && bindingMonth(x, { ...cur, header: h.header }, today()) === ym; });
+        if (mine) { const h = bestFor('duties', [mine])!; return { b: { ...cur, sheet: mine.name, header: h.header, cols: h.cols, month: ym }, found: true }; }
+        const names = new Set(book.sheets.map(x => normGreek(x.name))); let name = dutiesSheet(ym);
+        for (let i = 2; names.has(normGreek(name)); i++) name = dutiesSheet(ym) + ' ' + i;
+        return { b: dutiesBinding(cur.file, ym, name), inRoster: true };
+      } catch { /* δεν διαβάζεται: νέο αρχείο */ }
+    }
+  }
   const dir = newDir(kind);
   if (!writableDir(dir)) return { error: 'Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.' };
+  if (kind === 'duties') return { b: dutiesBinding(freeName(dir, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + today().slice(0, 4)), today().slice(0, 7)) };
   const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + (store.state.settings.unitName || '')).trim() : KIND[kind].title;
   return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
 }

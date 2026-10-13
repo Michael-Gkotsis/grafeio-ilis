@@ -6,9 +6,9 @@ import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
 import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, type AppState, type DutyKind, type DutyLog, type Guards, type Person, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
-import { dm } from './dates';
+import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
-import { allPosts, postBy } from './rules';
+import { allPosts, isHol, postBy } from './rules';
 import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
 export { OUT_NOTE };
 
@@ -100,7 +100,7 @@ export const KIND: Record<ListKind, KindDef> = Object.fromEntries(KINDS.map(k =>
 export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'step', 'leave', 'dn'];
 export const isStatusKind = (k: ListKind): k is StatusKind => (STATUS_KINDS as string[]).includes(k);
 // Είδη που η εφαρμογή φτιάχνει από την αρχή («Νέο αρχείο…»): τίτλος, επικεφαλίδες και ό,τι έχει η ίδια
-export const NEW_KINDS: ListKind[] = ['people', ...STATUS_KINDS, 'posts', 'outside', 'caps'];
+export const NEW_KINDS: ListKind[] = ['people', ...STATUS_KINDS, 'posts', 'outside', 'caps', 'duties'];
 export const canCreate = (k: ListKind) => NEW_KINDS.includes(k);
 // Μπαίνουν ως φύλλα στο Δυναμολόγιο, όπως στο αρχείο της Ίλης (ΑΔΕΙΕΣ, ΤΙΜΩΡΗΜΕΝΟΙ, ΠΟΣΤΑ…)
 export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !== 'duties';
@@ -1388,6 +1388,59 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   }
   for (const pid of want.keys()) if (!seen.has(pid) && pm.has(pid)) plan.notFound.push(nameOf(pm.get(pid)!));
   return plan;
+}
+// ------------------------------------------------------------------ νέος έλεγχος υπηρεσιών (όπως το δείγμα 03)
+// Ένα φύλλο ανά μήνα: τίτλος «ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΟΚΤΩΒΡΙΟΥ 2026», μία γραμμή ανά ενεργό (ανά θάλαμο και αλφαβητικά),
+// μετρητές ανά είδος και μία στήλη ανά μέρα. Οι μετρητές μετράνε με «Θ*», «Μ*»… ώστε να μετράνε και τους κωδικούς
+// θέσεων (Θ1α, Μ2)· οι ΣΚ και οι αργίες βγαίνουν από το ημερολόγιο της εφαρμογής (γκρι, και στη στήλη ΑΡΓΙΑ).
+export const DUTY_HEAD = ['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', 'ΣΚΟΠΙΑ', 'ΜΑΓΕΙΡΕΙΑ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'Λ/Υ-Δ/Υ'];
+const DUTY_COUNT: [number, string[]][] = [[9, ['Σ*']], [10, ['Μ*']], [11, ['Θ*']], [12, ['ΟΠ*']], [13, ['ΛΥ*', 'ΔΥ*']]];
+const ANY_DUTY = ['Θ*', 'Μ*', 'Σ*', 'ΟΠ*', 'ΛΥ*', 'ΔΥ*', 'Τ*', 'Υ*'];
+const monthUp = (ym: string) => norm(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]);
+export const dutiesTitle = (ym: string) => 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + monthUp(ym).replace(/ΟΣ$/, 'ΟΥ') + ' ' + ym.slice(0, 4);
+export const dutiesSheet = (ym: string) => monthUp(ym) + ' ' + ym.slice(0, 4);
+export const dutiesBinding = (file: string, ym: string, sheet = dutiesSheet(ym)): SourceBinding =>
+  ({ file, sheet, header: 1, cols: { aa: 0, rank: 1, spec: 2, last: 3, first: 4, room: 5, d1: DUTY_HEAD.length }, write: true, scope: 'all', month: ym });
+export interface NewCell { r: number; c: number; v?: WVal; f?: string; st: 'title' | 'head' | 'data' | 'code'; gray?: boolean }
+export function planDutiesNew(b: SourceBinding, s: AppState, today: ISODate): { cells: NewCell[]; merges: Span[]; widths: Record<number, number>; rows: number; filled: number } {
+  const ym = b.month!; const [y, m] = ym.split('-').map(Number); const nd = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const d1 = b.cols.d1; const days = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0') as ISODate);
+  const hol = days.map(d => isHol(s.settings, d));
+  const people = s.people.filter(p => p.active).sort(byRoom);
+  const cells: NewCell[] = []; const last = d1 + nd - 1; const L = colLetter;
+  cells.push({ r: 0, c: 0, v: dutiesTitle(ym), st: 'title' });
+  DUTY_HEAD.forEach((h, c) => cells.push({ r: 1, c, v: h, st: 'head' }));
+  days.forEach((_, i) => cells.push({ r: 1, c: d1 + i, v: i + 1, st: 'head', gray: hol[i] }));
+  const any = (rng: string) => 'SUM(COUNTIF(' + rng + ',{' + ANY_DUTY.map(x => '"' + x + '"').join(',') + '}))';
+  // συνεχόμενες μέρες ΣΚ/αργιών: μία περιοχή η καθεμία
+  const runs: [number, number][] = []; hol.forEach((h, i) => { if (!h) return; const l = runs[runs.length - 1]; if (l && l[1] === i - 1) l[1] = i; else runs.push([i, i]); });
+  const raw: CellValue[][] = [[dutiesTitle(ym)], [...DUTY_HEAD, ...days.map((_, i) => i + 1)]];
+  people.forEach((p, i) => {
+    const r = 2 + i, R = r + 1; const row = L(d1) + R + ':' + L(last) + R;
+    const vals: WVal[] = [i + 1, p.rank || null, p.spec || null, p.last, p.first, p.room ?? null];
+    vals.forEach((v, c) => cells.push({ r, c, v, st: 'data' }));
+    raw.push(vals.map(v => (v != null && typeof v === 'object' ? null : v)));
+    cells.push({ r, c: 6, f: runs.length ? runs.map(([a, z]) => any(L(d1 + a) + R + ':' + L(d1 + z) + R)).join('+') : '0', st: 'data' });
+    cells.push({ r, c: 7, f: L(8) + R + '-' + L(6) + R, st: 'data' });
+    cells.push({ r, c: 8, f: any(row), st: 'data' });
+    for (const [c, codes] of DUTY_COUNT) cells.push({ r, c, f: codes.map(x => 'COUNTIF(' + row + ',"' + x + '")').join('+'), st: 'data' });
+    days.forEach((_, j) => cells.push({ r, c: d1 + j, st: 'code', gray: hol[j] }));
+  });
+  // ΣΥΝΟΛΑ: ανά στήλη μετρητή και ανά μέρα (όπως στο δείγμα, στη στήλη του ονόματος)
+  const tr = 2 + people.length, TR = tr + 1;
+  if (people.length) {
+    cells.push({ r: tr, c: 4, v: 'ΣΥΝΟΛΑ', st: 'head' });
+    for (let c = 6; c < DUTY_HEAD.length; c++) cells.push({ r: tr, c, f: 'SUM(' + L(c) + '3:' + L(c) + (TR - 1) + ')', st: 'head' });
+    days.forEach((_, j) => cells.push({ r: tr, c: d1 + j, f: any(L(d1 + j) + '3:' + L(d1 + j) + (TR - 1)), st: 'head', gray: hol[j] }));
+  }
+  // οι υπηρεσίες που έχει ήδη η εφαρμογή για τον μήνα, όπως τις γράφει και στο δικό σου αρχείο
+  const plan = planDutiesWrite({ name: b.sheet, rows: raw }, b, s, today);
+  const at = new Map(cells.map(x => [x.r + ':' + x.c, x]));
+  for (const x of plan.sets) { const c = at.get(x.r + ':' + x.c); if (c) c.v = x.v; }
+  const widths: Record<number, number> = { 1: 5, 2: 7, 3: 7, 4: 18, 5: 14, 6: 6 };
+  for (let c = 6; c < DUTY_HEAD.length; c++) widths[c + 1] = 8;
+  for (let j = 0; j < nd; j++) widths[d1 + j + 1] = 4.5;
+  return { cells, merges: [{ r: 0, c1: 0, c2: last }], widths, rows: people.length, filled: plan.changed };
 }
 const countifTxt = (refs: string[]) => refs.slice(0, 3).join(', ') + (refs.length > 3 ? ' κ.ά.' : '');
 

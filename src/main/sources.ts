@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -163,6 +163,24 @@ export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: User
   return tidyText(tidyOf(kind, b, await wb.sheet(b.sheet), sheet, lists));
 }
 
+// Νέος μήνας στον έλεγχο υπηρεσιών: φύλλο με όλη τη δομή (planDutiesNew), σε νέο ή στο ίδιο αρχείο με τους άλλους μήνες
+async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppState, today: ISODate): Promise<WriteOutcome> {
+  if (!b.month) return { ok: false, error: 'Δεν ορίστηκε ο μήνας του ελέγχου υπηρεσιών' };
+  const lay = planDutiesNew(b, s, today);
+  const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: await wb.tableStyle('data'), code: 0 };
+  st.code = st.data;
+  const gray = new Map<number, number>(); const grayOf = async (x: number) => { if (!gray.has(x)) gray.set(x, await wb.grayed(x)); return gray.get(x)!; };
+  for (const x of lay.cells) {
+    const at = colName(x.c + 1) + (x.r + 1);
+    if (x.f) ws.setFormula(at, x.f); else if (x.v != null && typeof x.v !== 'object') ws.set(at, x.v);
+    if (x.st === 'title') { ws.setStyle(at, st.title); continue; }
+    ws.setStyle(at, x.gray ? await grayOf(st[x.st]) : st[x.st]);
+  }
+  for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
+  ws.setColWidths(lay.widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
+  const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
+  return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: [], ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+}
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
 // tidy: γράφει και μόνο για τη μορφή που λείπει (με την «Ενημέρωση Excel»)· αλλιώς η μορφή μπαίνει όταν γράφεται κάτι.
 // create: φτιάχνει το αρχείο ή το φύλλο και για τα άλλα είδη («Νέο αρχείο…»)· οι καταστάσεις φτιάχνονται πάντα.
@@ -185,6 +203,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };
     if (!had && !create) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
+    if (kind === 'duties' && (!had || !exists)) return await newDutiesSheet(wb, ws, b, s, today);
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];

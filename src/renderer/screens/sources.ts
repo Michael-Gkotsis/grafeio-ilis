@@ -52,7 +52,7 @@ export function SourcesAlert() {
   // έλεγχος υπηρεσιών: από την 1η του μήνα, αν το φύλλο είναι ακόμα του προηγούμενου
   const duties = st.sources.find(x => x.kind === 'duties'); const now = today.slice(0, 7);
   const acc = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1].replace(/ς$/, '');
-  if (duties?.month && duties.month < now) lines.push('Ο έλεγχος υπηρεσιών δείχνει ακόμα ' + acc(duties.month) + '. Όρισε το φύλλο για τον ' + acc(now) + ' (Στήλες… ή Άλλο αρχείο…).');
+  if (duties?.month && duties.month < now) lines.push('Ο έλεγχος υπηρεσιών δείχνει ακόμα ' + acc(duties.month) + '. Πάτα «Νέος μήνας» για να μπει φύλλο για τον ' + acc(now) + ' στο ίδιο αρχείο (ή Στήλες… / Άλλο αρχείο… αν το έχεις ήδη).');
   if (!lines.length) return state.people.length && !state.settings.sources?.people
     ? html`<div className="srcalert"><${Alert} tone="info"><span><b>Αρχεία Excel.</b> Οι διορθώσεις στα άτομα δεν γράφονται ακόμα σε κανένα Excel. <${Button} variant="link" onClick=${go}>Όρισε το Δυναμολόγιο<//></span><//></div>` : null;
   return html`<div className="srcalert"><${Alert} tone="warn"><span><b>Αρχεία Excel.</b> ${lines.length === 1 ? lines[0] : html`<ul className="srcalert__list">${lines.map(l => html`<li key=${l}>${l}</li>`)}</ul>`} <${Button} variant="link" onClick=${go}>Δες τα<//></span><//></div>`;
@@ -126,6 +126,7 @@ export function SourcesView() {
 }
 
 function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
+  const { today } = useStore();
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
@@ -143,6 +144,7 @@ function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, 
       ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${canCreate(kind) && html`<${Button} size="sm" variant="ghost" data-tip=${roster && inRoster(kind) ? 'Η εφαρμογή προσθέτει φύλλο «' + k.title + '» στο Δυναμολόγιο με ό,τι έχει και το κρατά ενημερωμένο' : 'Η εφαρμογή φτιάχνει καινούργιο Excel με ό,τι έχει και το κρατά ενημερωμένο'} onClick=${onNew}>${roster && inRoster(kind) ? 'Νέο φύλλο…' : 'Νέο αρχείο…'}<//>`}`
       : html`<${Button} size="sm" variant=${s?.changed ? 'default' : 'outline'} onClick=${onRead} data-tip=${'Διάβασε το Excel και δες τι αλλάζει πριν περάσει στην εφαρμογή' + (withPeople ? ' (διαβάζεται και μαζί με το προσωπικό)' : '')}>Ανανέωση από Excel<//>
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
+        ${kind === 'duties' && s?.month && s.month < today.slice(0, 7) && html`<${Button} size="sm" data-tip="Νέο φύλλο για τον τρέχοντα μήνα στο ίδιο αρχείο, με όλους τους ενεργούς, τους μετρητές και τις ΣΚ/αργίες· οι προηγούμενοι μήνες μένουν όπως είναι" onClick=${onNew}>Νέος μήνας<//>`}
         <${Button} size="sm" variant="ghost" onClick=${onEdit}>Στήλες…<//>
         <${Button} size="sm" variant="ghost" onClick=${onPick}>Άλλο αρχείο…<//>
         ${s?.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(b.file)}>Άνοιξε<//><${Button} size="sm" variant="ghost" data-tip=${'Προεπισκόπηση και εκτύπωση του φύλλου «' + b.sheet + '» χωρίς Excel (τσεκάρεις κι άλλα φύλλα αν θέλεις)'} onClick=${() => printFile(b.file, b.sheet)}>Εκτύπωση<//>`}

@@ -9,7 +9,8 @@ import JSZip from 'jszip';
 import { OUT_NOTE, type AppState } from '../src/shared/domain';
 import { apply, type Command, type NewPerson } from '../src/shared/commands';
 import { parseRoster } from '../src/shared/roster';
-import { NEW_KINDS, bestFor, canCreate, defaultBinding, detectTables, inRoster, planCaps, planOutside, planPosts, planSource, roomBlocks, type ListKind } from '../src/shared/sources';
+import { NEW_KINDS, bestFor, bindingMonth, canCreate, defaultBinding, detectTables, dutiesBinding, inRoster, planCaps, planDuties, planDutiesWrite, planOutside, planPosts, planSource, roomBlocks, type ListKind } from '../src/shared/sources';
+import { exactCountif } from '../src/shared/codes';
 import { Workbook, type Sheet } from '../src/main/xlsx';
 import { readBook, writeSource, type SourceMeta } from '../src/main/sources';
 import { fakeState } from './fixtures';
@@ -37,8 +38,8 @@ async function roundTrip(kind: ListKind, s: AppState) {
 
 describe('νέα αρχεία για πόστα, εκτός δύναμης και δυνατότητες', () => {
   it('τα είδη που φτιάχνει η εφαρμογή· τα πόστα κ.λπ. πάνε στο Δυναμολόγιο', () => {
-    for (const k of ['people', 'punish', 'medical', 'hospital', 'step', 'leave', 'dn', 'posts', 'outside', 'caps'] as ListKind[]) expect(canCreate(k), k).toBe(true);
-    expect(NEW_KINDS.filter(k => !inRoster(k))).toEqual(['people']);
+    for (const k of ['people', 'punish', 'medical', 'hospital', 'step', 'leave', 'dn', 'posts', 'outside', 'caps', 'duties'] as ListKind[]) expect(canCreate(k), k).toBe(true);
+    expect(NEW_KINDS.filter(k => !inRoster(k))).toEqual(['people', 'duties']);   // ο έλεγχος υπηρεσιών: δικό του αρχείο
   });
 
   it('πόστα: τίτλος ΠΟΣΤΑ, επικεφαλίδες του Δυναμολογίου και στήλη «Πόστο»· ξαναδιαβάζεται χωρίς αλλαγές', async () => {
@@ -190,6 +191,99 @@ describe('νέο Δυναμολόγιο', () => {
   it('χωρίς «Νέο αρχείο»: Δυναμολόγιο που λείπει δεν φτιάχνεται μόνο του', async () => {
     const file = path.join(tmp(), 'λείπει.xlsx');
     const w = await writeSource('people', defaultBinding('people', file, 'ΣΥΝΟΛΙΚΟ'), state(), undefined, TODAY);
+    expect(w.ok).toBe(false); expect(fs.existsSync(file)).toBe(false);
+  });
+});
+
+describe('νέος Έλεγχος υπηρεσιών', () => {
+  const YM = '2026-10';
+  function seeded() {
+    const s = state();
+    s.guards = { '2026-10-05': { th1: 1, mg1: 2 } };
+    s.dutyLog = { '2026-10-06': [{ pid: 4, kind: 'th' }] };
+    return s;
+  }
+  async function make(file = path.join(tmp(), 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ 2026.xlsx'), ym = YM, s = seeded()) {
+    const b = dutiesBinding(file, ym);
+    const w = await writeSource('duties', b, s, undefined, TODAY, { create: true });
+    expect(w.ok && w.created, JSON.stringify(w)).toBe(true);
+    const { sheets } = await readBook(file);
+    return { s, b, w, file, sheets, sheet: sheets.find(x => x.name === b.sheet)! };
+  }
+  const nameRow = (rows: unknown[][], last: string) => rows.findIndex(r => r[3] === last);
+
+  it('φύλλο «ΟΚΤΩΒΡΙΟΣ 2026» με τίτλο, επικεφαλίδες και μία στήλη ανά μέρα· το αναγνωρίζει ως έλεγχο υπηρεσιών', async () => {
+    const { s, b, sheet, sheets, w } = await make();
+    expect(sheet.name).toBe('ΟΚΤΩΒΡΙΟΣ 2026');
+    expect(sheet.rows[0][0]).toBe('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΟΚΤΩΒΡΙΟΥ 2026');
+    expect(sheet.rows[1].slice(0, 14)).toEqual(['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', 'ΣΚΟΠΙΑ', 'ΜΑΓΕΙΡΕΙΑ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'Λ/Υ-Δ/Υ']);
+    expect(sheet.rows[1].slice(14, 45)).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
+    expect(detectTables(sheets).find(h => h.sheet === b.sheet)?.best).toBe('duties');
+    const found = bestFor('duties', sheets)!;
+    expect(found.header).toBe(1); expect(found.cols.d1).toBe(14); expect(found.cols.last).toBe(3);
+    expect(bindingMonth(sheet, { ...b, month: undefined }, TODAY)).toBe(YM);
+    const act = s.people.filter(p => p.active);
+    expect(w.ok && w.added).toBe(act.length);
+    expect(sheet.rows[2 + act.length][4]).toBe('ΣΥΝΟΛΑ');
+  });
+
+  it('οι υπηρεσίες της εφαρμογής γράφονται με τους κωδικούς τους· ξαναδιαβάζεται χωρίς αλλαγές και χωρίς προειδοποίηση COUNTIF', async () => {
+    const { s, b, sheet, w } = await make();
+    expect(w.ok && w.changed).toBe(3);
+    const p = (id: number) => s.people.find(x => x.id === id)!.last;
+    expect(sheet.rows[nameRow(sheet.rows, p(1))][14 + 4]).toBe('Θ1α');
+    expect(sheet.rows[nameRow(sheet.rows, p(2))][14 + 4]).toBe('Μ1');
+    expect(sheet.rows[nameRow(sheet.rows, p(4))][14 + 5]).toBe('Θ');
+    expect(sheet.countif).toBeUndefined();
+    const wp = planDutiesWrite(sheet, b, s, TODAY);
+    expect(wp.sets).toEqual([]); expect(wp.warn).toBeUndefined();
+    const imp = planDuties(sheet, b, s, YM, TODAY);
+    expect(imp.add).toEqual([]); expect(imp.differ).toEqual([]); expect(imp.sp.unmatched).toEqual([]);
+    const again = await writeSource('duties', b, s, undefined, TODAY);
+    expect(again.ok && again.unchanged).toBe(true);
+  });
+
+  it('τύποι: μετράνε με «Θ*», «Μ*»… (και τους κωδικούς θέσεων)· ΑΡΓΙΑ = ΣΚ και αργίες, γκρι', async () => {
+    const { s, file } = await make();
+    const wb = await Workbook.open(fs.readFileSync(file)); const ws = await wb.sheet('ΟΚΤΩΒΡΙΟΣ 2026');
+    const any = (rng: string) => `SUM(COUNTIF(${rng},{"Θ*","Μ*","Σ*","ΟΠ*","ΛΥ*","ΔΥ*","Τ*","Υ*"}))`;
+    // Οκτώβριος 2026: ΣΚ 3-4, 10-11, 17-18, 24-25, 31 και η 28η (Τετάρτη)· η 1η μέρα στη στήλη O
+    expect(fx(ws, 'G3')).toBe(['Q3:R3', 'X3:Y3', 'AE3:AF3', 'AL3:AM3', 'AP3:AP3', 'AS3:AS3'].map(any).join('+'));
+    expect(fx(ws, 'H3')).toBe('I3-G3');
+    expect(fx(ws, 'I3')).toBe(any('O3:AS3'));
+    expect(fx(ws, 'J3')).toBe('COUNTIF(O3:AS3,"Σ*")');
+    expect(fx(ws, 'L3')).toBe('COUNTIF(O3:AS3,"Θ*")');
+    expect(fx(ws, 'N3')).toBe('COUNTIF(O3:AS3,"ΛΥ*")+COUNTIF(O3:AS3,"ΔΥ*")');
+    for (const r of [3, 4]) for (const c of ['G', 'I', 'J', 'K', 'L', 'M', 'N']) expect(exactCountif(fx(ws, c + r)!), c + r).toBeNull();
+    const n = s.people.filter(p => p.active).length; const tr = 3 + n;
+    expect(fx(ws, 'I' + tr)).toBe(`SUM(I3:I${tr - 1})`);
+    expect(fx(ws, 'O' + tr)).toBe(any(`O3:O${tr - 1}`));
+    // ΣΚ/αργία γκρι, καθημερινή όχι
+    const xml = await sheetXml(file, 1);
+    const styleOf = (ref: string) => Number(xml.match(new RegExp(`<c r="${ref}"[^>]*?s="(\\d+)"`))?.[1]);
+    expect(styleOf('Q2')).not.toBe(styleOf('O2'));    // 3/10 Σάββατο
+    expect(styleOf('AP3')).toBe(styleOf('Q3'));       // 28/10
+    expect(styleOf('P3')).toBe(styleOf('O3'));
+    expect(xml).toContain('<mergeCell ref="A1:AS1"/>');
+    expect(xml).toMatch(/<pane xSplit="14" ySplit="2"/);
+  });
+
+  it('νέος μήνας: νέο φύλλο στο ίδιο αρχείο, ο προηγούμενος μένει όπως ήταν', async () => {
+    const { file } = await make();
+    const before = await sheetXml(file, 1);
+    const b2 = dutiesBinding(file, '2026-11');
+    const w = await writeSource('duties', b2, seeded(), undefined, TODAY, { create: true });
+    expect(w.ok && w.created).toBe(true);
+    const { sheets } = await readBook(file);
+    expect(sheets.map(x => x.name)).toEqual(['ΟΚΤΩΒΡΙΟΣ 2026', 'ΝΟΕΜΒΡΙΟΣ 2026']);
+    expect(sheets[1].rows[0][0]).toBe('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΝΟΕΜΒΡΙΟΥ 2026');
+    expect(sheets[1].rows[1].length).toBe(14 + 30);
+    expect(await sheetXml(file, 1)).toBe(before);
+  });
+
+  it('χωρίς «Νέο αρχείο»: έλεγχος υπηρεσιών που λείπει δεν φτιάχνεται μόνος του', async () => {
+    const file = path.join(tmp(), 'λείπει.xlsx');
+    const w = await writeSource('duties', dutiesBinding(file, YM), seeded(), undefined, TODAY);
     expect(w.ok).toBe(false); expect(fs.existsSync(file)).toBe(false);
   });
 });
