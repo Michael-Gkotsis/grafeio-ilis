@@ -345,7 +345,12 @@ export function makeMatcher(people: Person[]): Matcher {
     if (tou) { first = tou[1]; if (!father) father = tou[2]; }
     if (last) {
       let l = byName.get(key2(last, first)) || [];
+      // «ΝΙΚΟΛΑΟΣ/ΛΟΥΚΑΣ»: διπλό όνομα με «/», ταιριάζει με όποιο από τα δύο έχει η εφαρμογή
+      if (!l.length && first.includes('/')) l = [...new Set(first.split('/').flatMap(f => byName.get(key2(last, f)) || []))];
       if (l.length > 1 && father != null) { const f = normGreek(father); const x = l.filter(p => normGreek(p.father) === f); if (x.length) l = x; }
+      // συνονόματοι σε άλλο θάλαμο: η στήλη ΘΑΛΑΜΟΣ του φύλλου λέει ποιος είναι (μόνο αν δείχνει έναν)
+      const room = v.room != null ? parseInt(cellText(v.room), 10) : NaN;
+      if (l.length > 1 && room > 0) { const x = l.filter(p => p.room === room); if (x.length === 1) return { pid: x[0].id, cands: [] }; }
       const all = l;
       if (l.length > 1) { const act = l.filter(p => p.active); if (act.length) l = act; }
       if (l.length === 1) return all.length > 1 ? { pid: l[0].id, cands: [], alts: all } : { pid: l[0].id, cands: [] };

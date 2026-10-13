@@ -265,6 +265,24 @@ describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () =
     expect(run(s2, { t: 'importDuties', ...dutiesCmd(p2), source: 'x' })).toEqual(s2);
     expect(run(s2, { t: 'importDuties', guards, log, source: 'x' })).toEqual(s2);
   });
+  it('συνονόματοι σε άλλο θάλαμο και διπλό όνομα με «/»: ο θάλαμος του φύλλου λέει ποιος είναι', () => {
+    const s = fakeState(12);
+    s.people[3] = { ...s.people[3], last: 'ΔΟΚΙΜΙΟΣ', first: 'ΑΛΦΑΣ' };   // ο 1ος (θάλαμος 1) και ο 4ος (θάλαμος 4)
+    const sh = checkSheet(s, { '0:3': 'Θ', '0:9': 'Μ', '3:5': 'Μ' });
+    sh.rows[2][4] = 'ΑΛΦΑΣ/ΩΜΕΓΑΣ';
+    const b = bind('duties', sh); const p = planDuties(sh, b, s, '2026-09', TODAY);
+    expect(p.sp.unmatched).toHaveLength(0);
+    const { log } = dutiesCmd(p);
+    expect(log['2026-09-03']).toEqual([{ pid: 1, kind: 'th' }]); expect(log['2026-09-09']).toEqual([{ pid: 1, kind: 'mg' }]);
+    expect(log['2026-09-05']).toEqual([{ pid: 4, kind: 'mg' }]);
+    // πίσω στο Excel: ο καθένας στη γραμμή του, τίποτα «χωρίς σίγουρο άτομο»
+    const s2 = run(s, { t: 'importDuties', ...dutiesCmd(p), source: 'x' });
+    const w = planDutiesWrite(sh, b, run(s2, { t: 'assign', date: '2026-09-10', k: 'ly', pid: 4, force: 'δοκιμή' }), TODAY);
+    expect(w.sets).toEqual([{ r: 5, c: 21, v: 'ΛΥ' }]); expect(w.ambiguous).toBeUndefined();
+    // χωρίς στήλη θαλάμου (ή θάλαμος που δεν δείχνει έναν): μένει στο «Χωρίς άτομο» όπως πριν
+    sh.rows[2][5] = 7;
+    expect(planDuties(sh, b, s, '2026-09', TODAY).sp.unmatched.map(u => u.cands.map(c => c.id).sort())).toEqual([[1, 4]]);
+  });
   it('μέρα που η εφαρμογή έχει ήδη υπηρεσίες: κρατά τις δικές της, προσθέτει όσους λείπουν, δείχνει τις διαφορές', () => {
     const s = { ...fakeState(12), guards: { '2026-09-01': { th1: 1, mg1: 2 } } };
     const sh = checkSheet(s, { '0:1': 'Θ1α', '1:1': 'Θ2α', '2:1': 'Μ', '3:1': 'Θ1α' });
