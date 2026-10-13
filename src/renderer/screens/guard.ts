@@ -5,7 +5,7 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, useExport, useExportBusy } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -38,8 +38,12 @@ function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, onNext
 function DutyCheck({ onOpen }: P) {
   const { state, today } = useStore();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list');
-  const [ym, setYm] = useState(today.slice(0, 7));
-  const st = dutyStats(state);
+  // ένας μήνας για λίστα και πλέγμα· η λίστα έχει και «Όλοι οι μήνες» (με τις προηγούμενες υπηρεσίες)
+  const [ym, setYm] = useState(today.slice(0, 7)); const [allM, setAllM] = useState(false);
+  const all = dutyStats(state);
+  const st = useMemo(() => (allM ? all : monthStats(all, ym)), [all, allM, ym]);
+  const months = useMemo(() => [...new Set([today.slice(0, 7), ym, ...dutyMonths(state)])].sort().reverse(), [state.guards, state.dutyLog, today, ym]);
+  const monLbl = (m: string) => MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4);
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
   // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
   const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.dutyLog, state.people, state.settings, ym, dq]);
@@ -51,15 +55,16 @@ function DutyCheck({ onOpen }: P) {
   const mon = MONTHS[+ym.slice(5) - 1];
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
-      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => e.target.value && setYm(e.target.value)}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
+      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(mon) + '.xlsx'} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
+      <select className="ui-input" style=${{ flex: '0 0 190px', width: '190px' }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${allM ? '' : ym} onChange=${(e: any) => { const v = e.target.value; setAllM(!v); if (v) setYm(v); }}><option value="">Όλοι οι μήνες</option>${months.map(m => html`<option key=${m} value=${m}>${monLbl(m)}</option>`)}</select>
       <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Λιγότερες συνολικά' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="chk"><div className="chk__in">
       <div className="chk__head" style=${{ gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px' }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, KIND_LBL[k])}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}</div>
       <${VirtualList} items=${rows} rowHeight=${36} height=${380} renderRow=${(r: P, _i: number, style: P) => html`<div key=${r.p.id} className="chk__row" style=${{ ...style, gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px' }} role="button" tabIndex="0" onClick=${() => onOpen(r.p.id)}><span>${shortName(r.p)}</span>${kinds.map(k => html`<span key=${k} className="num">${r.d.byKind[k] || '·'}</span>`)}<span className="num tot">${r.d.total}</span><span className="num hol">${r.d.hol}</span><span className="num last">${r.d.last ? dm(r.d.last) : '—'}${r.d.last && isHol(state.settings, r.d.last) ? ' ★' : ''}</span></div>`}/>
     </div></div></div>`}
-    <p className="note" style=${{ margin: '8px 0 0' }}>Κάθε υπηρεσία κρατιέται με την ημερομηνία της (★ = ΣΚ ή αργία). Πάτα σε άτομο για όλο το ημερολόγιο.</p>
+    <p className="note" style=${{ margin: '8px 0 0' }}>${view === 'list' && !allM ? monLbl(ym) + ': μετρούν μόνο οι υπηρεσίες του μήνα, χωρίς τις προηγούμενες. ' : ''}Κάθε υπηρεσία κρατιέται με την ημερομηνία της (★ = ΣΚ ή αργία). Πάτα σε άτομο για όλο το ημερολόγιο.</p>
   <//>`;
 }
 

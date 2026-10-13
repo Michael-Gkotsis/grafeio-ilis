@@ -306,6 +306,23 @@ function withBaseline(s: AppState, st: Map<number, DutyStat>): Map<number, DutyS
   return out;
 }
 export const statOf = (s: AppState, pid: number) => dutyStats(s).get(pid) || emptyStat();
+// Έλεγχος υπηρεσιών ανά μήνα (ym = 'YYYY-MM'): μόνο οι υπηρεσίες με ημερομηνία μέσα στον μήνα, χωρίς τις προηγούμενες (baseline)
+export function monthStats(st: Map<number, DutyStat>, ym: string): Map<number, DutyStat> {
+  const out = new Map<number, DutyStat>();
+  for (const [pid, x] of st) {
+    let m: DutyStat | null = null;
+    for (const e of x.log) {
+      if (e.d.slice(0, 7) !== ym) continue;
+      if (!m) { m = emptyStat(); out.set(pid, m); }
+      m.byKind[e.kind] = (m.byKind[e.kind] || 0) + 1; m.total++;
+      if (e.h) { m.hol++; m.lastHol = e.d; }
+      m.last = e.d; m.log.push(e);
+    }
+  }
+  return out;
+}
+// Μήνες με υπηρεσίες (νεότερος πρώτος)
+export const dutyMonths = (s: AppState): string[] => [...new Set([...Object.keys(s.guards).filter(d => Object.keys(s.guards[d] || {}).length), ...Object.keys(s.dutyLog || {}).filter(d => (s.dutyLog![d] || []).length)].map(d => d.slice(0, 7)))].sort().reverse();
 
 // --------------------------- Αυτόματη συμπλήρωση (σειρά δικαιοσύνης, έρευνα §3.2) ---------------------------
 // 1. Φίλτρο: όλοι οι κανόνες (καταστάσεις, δυνατότητα, ανάπαυση, ΣΚ μετά από ΣΚ).

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { apply, type Ctx } from '../src/shared/commands';
-import { statusesOn, guardUnavailable, fillDay, hkaiCounts, outRoomsOn, capsOf, strengthOf } from '../src/shared/rules';
+import { statusesOn, guardUnavailable, fillDay, hkaiCounts, outRoomsOn, capsOf, strengthOf, dutyStats, monthStats, dutyMonths } from '../src/shared/rules';
 import { unitOf } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 
@@ -66,5 +66,18 @@ describe('κανόνες', () => {
       const brute = st.filter(x => x.pid === pid && !x.pending && x.from <= d && d <= x.to).map(x => x.id).sort();
       expect(statusesOn(st, pid, d).map(x => x.id).sort()).toEqual(brute);
     }
+  });
+  it('έλεγχος υπηρεσιών ανά μήνα: μόνο οι υπηρεσίες του μήνα, χωρίς τις προηγούμενες', () => {
+    let s = fakeState(10);
+    s = apply(s, { t: 'assign', date: '2026-09-30', k: 'th1', pid: 2 }, ctx).state;
+    s = apply(s, { t: 'assign', date: '2026-10-03', k: 'th1', pid: 2 }, ctx).state;
+    s = apply(s, { t: 'assign', date: '2026-10-05', k: 'th1', pid: 3 }, ctx).state;
+    s = { ...s, baseline: { 2: { th: 4 } } };
+    expect(dutyStats(s).get(2)!.total).toBe(6);
+    const oct = monthStats(dutyStats(s), '2026-10');
+    expect(oct.get(2)).toMatchObject({ total: 1, hol: 1, last: '2026-10-03' });
+    expect(oct.get(3)!.total).toBe(1);
+    expect(monthStats(dutyStats(s), '2026-08').size).toBe(0);
+    expect(dutyMonths(s)).toEqual(['2026-10', '2026-09']);
   });
 });
