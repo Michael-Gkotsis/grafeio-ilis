@@ -4,7 +4,7 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator } from './text';
-import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, type AppState, type DutyKind, type DutyLog, type Guards, type Person, type Status, type TypeKey } from './domain';
+import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, fatherTxt, fullName, type AppState, type DutyKind, type DutyLog, type Guards, type Person, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
@@ -339,9 +339,13 @@ export function makeMatcher(people: Person[]): Matcher {
     if (asm && byAsm.has(asm)) return { pid: byAsm.get(asm)!.id, cands: [] };
     let last = cellText(v.last), first = cellText(v.first);
     if (!last && v.name != null) { const parts = cellText(v.name).split(' '); last = parts[0] || ''; first = parts.slice(1).join(' '); }
+    // «ΓΕΩΡΓΙΟΣ του ΙΩΑΝΝΗ»: έτσι γράφει η εφαρμογή τους συνονόματους όταν δεν υπάρχει στήλη πατρώνυμου
+    let father = v.father != null ? cellText(v.father) : null;
+    const tou = /^(.*?)\s+ΤΟΥ\s+(.+)$/.exec(normGreek(first));
+    if (tou) { first = tou[1]; if (!father) father = tou[2]; }
     if (last) {
       let l = byName.get(key2(last, first)) || [];
-      if (l.length > 1 && v.father != null) { const f = normGreek(cellText(v.father)); const x = l.filter(p => normGreek(p.father) === f); if (x.length) l = x; }
+      if (l.length > 1 && father != null) { const f = normGreek(father); const x = l.filter(p => normGreek(p.father) === f); if (x.length) l = x; }
       const all = l;
       if (l.length > 1) { const act = l.filter(p => p.active); if (act.length) l = act; }
       if (l.length === 1) return all.length > 1 ? { pid: l[0].id, cands: [], alts: all } : { pid: l[0].id, cands: [] };
@@ -491,7 +495,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (kind === 'punish' && has('by') && c.by && c.by !== (cur.by || '')) { patch.by = c.by; what.push('ποιος την επέβαλε'); }
     if (kind === 'punish' && has('reason') && c.reason && c.reason !== (cur.reason || '')) { patch.reason = c.reason; what.push('αιτία'); }
     if (cur.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
-    const who = pm.get(pid) ? pm.get(pid)!.last + ' ' + pm.get(pid)!.first : c.who;
+    const who = pm.get(pid) ? fullName(pm.get(pid)!) : c.who;
     if (what.length && changedInApp(cur) && !excelMoved(cur, patch)) {
       // το άλλαξες μόνο στην εφαρμογή: κρατιέται (και γράφεται στο Excel)· η έγκριση ποινής περνά
       d.kept.push(cur.id);
@@ -530,7 +534,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       if (has('tout') && (a.fromTime || '') !== (x.fromTime || '')) patch.fromTime = a.fromTime || '';
       if (has('tin') && (a.toTime || '') !== (x.toTime || '')) patch.toTime = a.toTime || '';
       if (x.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
-      d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', '), ...(changedInApp(x) ? { conflict: appText(x) } : {}) });
+      d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? fullName(pm.get(x.pid)!) : '', what: what.join(', '), ...(changedInApp(x) ? { conflict: appText(x) } : {}) });
     }
   }
   return d;
@@ -546,14 +550,17 @@ export interface WritePlan {
   ambiguous?: number[];   // γραμμές συνονόματων που δεν ξέρουμε σε ποιον ανήκουν: δεν αγγίζονται
 }
 const num = (s: string): string | number => (/^[1-9]\d{0,14}$/.test(s) ? Number(s) : s);
+// Στήλη «Ονοματεπώνυμο» (ή «Όνομα» χωρίς αυτήν): στους συνονόματους και «του <πατρώνυμο>», αν ο πίνακας δεν έχει δική
+// του στήλη πατρώνυμου, όπως στον Έλεγχο υπηρεσιών και στους Εξοδούχους (το makeMatcher το ξεχωρίζει στην ανάγνωση)
+const nameCell = (p: Person, b?: { cols: Record<string, number> }) => p.last + ' ' + p.first + (b && b.cols.father != null ? '' : fatherTxt(p));
 // Τιμές ενός πεδίου για μια κατάσταση της εφαρμογής
-export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | undefined): WVal {
+export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | undefined, b?: { cols: Record<string, number> }): WVal {
   switch (k) {
     case 'rank': return p?.rank || null;
     case 'spec': return p?.spec || null;
     case 'last': return p?.last || null;
-    case 'first': return p?.first || null;
-    case 'name': return p ? p.last + ' ' + p.first : null;
+    case 'first': return p ? p.first + (b && b.cols.father == null && b.cols.name == null ? fatherTxt(p) : '') || null : null;
+    case 'name': return p ? nameCell(p, b) : null;
     case 'father': return p?.father || null;
     case 'asm': return p?.asm ? num(p.asm) : null;
     case 'phone': return p?.phone ? num(p.phone) : null;
@@ -629,7 +636,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
       for (const k of fields) {
         if (['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', 'phone', 'room'].includes(k)) continue;   // τα στοιχεία του ατόμου τα κρατά το Excel
         if (st.open && (k === 'to' || k === 'days' || k === 'tin')) continue;   // χωρίς λήξη: το «έως» του Excel δεν το αγγίζει η εφαρμογή
-        const val = fieldValue(k, kind, st, pm.get(st.pid));
+        const val = fieldValue(k, kind, st, pm.get(st.pid), b);
         if (TIME_FIELDS.includes(k) ? cellTime(v[k]) !== val : !same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
       }
       if (ch) plan.changed++;
@@ -638,7 +645,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   }
   free.sort((a, c) => a - c);
   const fresh = want.filter(x => !placed.has(statusId(kind, x)));
-  const put = (r: number, st: Status) => { for (const k of fields) { const val = fieldValue(k, kind, st, pm.get(st.pid)); if (val != null) plan.sets.push({ r, c: b.cols[k], v: val }); } };
+  const put = (r: number, st: Status) => { for (const k of fields) { const val = fieldValue(k, kind, st, pm.get(st.pid), b); if (val != null) plan.sets.push({ r, c: b.cols[k], v: val }); } };
   // Α/Α: ο αύξων αριθμός στις γραμμές που δεν τον έχουν
   const aa = (r: number, n: number) => { if (b.cols.aa != null && cellText((rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: n }); };
   let n = scan.records.length - plan.cleared;
@@ -885,7 +892,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || ((k === 'dn' || k === 'remarks') && p.active)));
     if (!diff.length) continue;
     const row = find(old) || find(cur);
-    if (!row) { plan.notFound.push(p.last + ' ' + p.first); continue; }
+    if (!row) { plan.notFound.push(fullName(p)); continue; }
     let ch = false;
     for (const k of diff) {
       const v = snapVal(k, cur[k]);
@@ -944,7 +951,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const put = (r: number, p: Person, aa: number | null) => {
     const cur = personVals(p, b);
     for (const f of PEOPLE_SYNC) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: snapVal(f, cur[f]) });
-    if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first });
+    if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: nameCell(p, b) });
     if (aa != null) plan.sets.push({ r, c: aaCol!, v: aa });
     plan.snap[p.id] = cur; plan.keys.push(String(p.id)); plan.fresh.push(p.id); k++;
   };
@@ -1147,7 +1154,7 @@ export function sheetPeople(sheet: RawSheet, b: SourceBinding, people: Person[],
 }
 // όσοι μπορεί να είναι κάποια γραμμή που δεν ταίριαξε: δεν τους αλλάζει τίποτα «επειδή λείπουν από το φύλλο»
 const maybeIn = (sp: SheetPeople) => new Set(sp.unmatched.flatMap(u => u.cands.map(p => p.id)));
-const nameOf = (p: Person) => p.last + ' ' + p.first;
+const nameOf = fullName;
 
 export type PeoplePatch = Partial<Pick<Person, 'post' | 'active' | 'notes'>>;
 export interface PeopleChange { pid: number; patch: PeoplePatch; who: string; what: string }
@@ -1289,7 +1296,7 @@ export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month
 }
 
 // ------------------------------------------------------------------ εγγραφή πίσω: πόστα, εκτός δύναμης, δυνατότητες, έλεγχος
-const personField = (k: string, p: Person): WVal => fieldValue(k, 'punish', { id: '', pid: p.id, type: 'PUN', from: '', to: '' }, p);
+const personField = (k: string, p: Person, b: SourceBinding): WVal => fieldValue(k, 'punish', { id: '', pid: p.id, type: 'PUN', from: '', to: '' }, p, b);
 const PERSON_KEYS = ['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', 'phone', 'room'];
 // Τι θέλει η εφαρμογή σε έναν πίνακα με ένα άτομο ανά γραμμή: upd = κελιά στις γραμμές που υπάρχουν, add = νέες γραμμές
 // (με τα στοιχεία του ατόμου), drop = γραμμές που σβήνονται. Γραμμές που δεν ξέρει δεν τις αγγίζει.
@@ -1327,7 +1334,7 @@ function planList(sheet: RawSheet, b: SourceBinding, s: AppState, w: ListWant, e
   const fresh = [...w.add.keys()].filter(pid => !placed.has(pid) && pm.has(pid)).sort((a, c) => collator.compare(pm.get(a)!.last, pm.get(c)!.last) || collator.compare(pm.get(a)!.first, pm.get(c)!.first));
   const put = (r: number, pid: number) => {
     const p = pm.get(pid)!; const vals = w.add.get(pid)!;
-    for (const [k, c] of Object.entries(b.cols)) { if (k === 'aa') continue; const val = PERSON_KEYS.includes(k) ? personField(k, p) : vals[k]; if (val != null) plan.sets.push({ r, c, v: val }); }
+    for (const [k, c] of Object.entries(b.cols)) { if (k === 'aa') continue; const val = PERSON_KEYS.includes(k) ? personField(k, p, b) : vals[k]; if (val != null) plan.sets.push({ r, c, v: val }); }
   };
   const aa = (r: number, i: number) => { if (b.cols.aa != null && cellText((rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: i }); };
   n -= plan.cleared;
@@ -1501,7 +1508,7 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
       const val: WVal = c[k] === '' ? null : k === 'room' ? Number(c.room) : k === 'asm' || k === 'phone' ? num(c[k]) : c[k];
       if (!same(v[k], val)) { out.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
     }
-    if (name && ((c.last !== o.last) || (c.first !== o.first)) && !same(v.name, p.last + ' ' + p.first)) { out.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first }); ch = true; }
+    if (name && ((c.last !== o.last) || (c.first !== o.first)) && !same(v.name, nameCell(p, b))) { out.sets.push({ r, c: b.cols.name, v: nameCell(p, b) }); ch = true; }
     if (ch) out.changed++;
   }
   return out;

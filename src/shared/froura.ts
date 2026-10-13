@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { blocksOf, type AppState, type Person, type Phase } from './domain';
+import { blocksOf, fullName, type AppState, type Person, type Phase } from './domain';
 import { personMap, postsOf } from './rules';
 
 export interface FrouraForm {
@@ -26,9 +26,9 @@ export const FROURA_FORMS: Record<Phase, FrouraForm> = {
 };
 export const phaseOf = (s: AppState): Phase => s.settings.phase || 'sven';
 
-export const rankName = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ');
+export const rankName = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 // Στο έντυπο υπηρεσιών: μόνο επώνυμο και όνομα. Λ/Υ και Δ/Υ: βαθμός, όνομα, κινητό και όπλο (γραφέας, 10/10).
-export const dutyName = (p: Person) => p.last + ' ' + p.first;
+export const dutyName = (p: Person) => fullName(p);
 export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '') + (p.weapon ? ', ΟΠΛΟ: ' + p.weapon : '');
 
 export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; name: string }[]; foreign: string[] }

@@ -1,7 +1,7 @@
 // ΗΚΑΙ, πίσω σελίδα: «4. ΠΟΙΝΕΣ» και «5. ΑΙΤΗΣΕΙΣ» ως αριθμημένες προτάσεις, μία ανά γραμμή.
 // Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import type { ISODate } from './dates';
-import type { AppState, Person } from './domain';
+import { fullName, type AppState, type Person } from './domain';
 import { personMap } from './rules';
 import { punText } from './punish';
 import { collator } from './text';
@@ -26,7 +26,7 @@ export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
   const out: Line[] = s.requests.filter(x => x.date === d && pm.has(x.pid))
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-    .map(({ x, p }, i) => [{ t: (i + 1) + ') Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + p.last + ' ' + p.first + ' αιτείται ' + x.text + '.' }]);
+    .map(({ x, p }, i) => [{ t: (i + 1) + ') Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p) + ' αιτείται ' + x.text + '.' }]);
   const free = s.hkaiManual?.[d]?.text?.ait?.trim();
   if (free) out.push([{ t: free }]);
   return out;

@@ -3,7 +3,7 @@
 import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
 import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
 import { rangeHm } from '../shared/hours';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
@@ -12,7 +12,7 @@ import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine } from '../shared/froura';
 export { FROURA_FORMS };
 
-export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ');
+export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
@@ -141,7 +141,7 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
     if (list.length > 1) ws.insertRows(7, list.length - 1, 7, wb);
     list.forEach(({ p, note }, i) => {
       const r = 7 + i;
-      ws.set('B' + r, p.rank).set('C' + r, p.spec).set('D' + r, p.last).set('E' + r, p.first)
+      ws.set('B' + r, p.rank).set('C' + r, p.spec).set('D' + r, p.last).set('E' + r, p.first + fatherTxt(p))
         .set('F' + r, p.room ?? '').set('G' + r, p.phone).set('H' + r, note);
     });
     const foot = 9 + Math.max(list.length - 1, 0);

@@ -4,7 +4,7 @@
 import ExcelJS from 'exceljs';
 import { MONTHS, parseD, type ISODate } from '../shared/dates';
 import { norm, collator } from '../shared/text';
-import { type AppState, type DutyKind } from '../shared/domain';
+import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesOn } from '../shared/rules';
@@ -48,7 +48,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   people.forEach((p, i) => {
     const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, { code: string; kind: DutyKind }>();
     let hol = 0; const c: Record<string, number> = {};
-    const vals: (string | number)[] = [i + 1, p.rank, p.last, p.first];
+    const vals: (string | number)[] = [i + 1, p.rank, p.last, p.first + fatherTxt(p)];
     for (const d of days) {
       const v = x.get(d);
       if (v) { if (isHol(s.settings, d)) hol++; c[v.kind] = (c[v.kind] || 0) + 1; vals.push(v.code); continue; }
