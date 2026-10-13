@@ -35,15 +35,23 @@ function PostRow({ x, pid, date, statuses, duty, ruleWarn, why, onAssign, onNext
     <span className="post__acts"><${Button} variant="ghost" size="sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left" onClick=${() => setSwap(true)}>Αλλαγή<//><${Button} variant="ghost" size="sm" data-tip="Βάλε τον επόμενο στη σειρά δικαιοσύνης, με τους ίδιους κανόνες. Ξαναπάτα για τον μεθεπόμενο." data-tip-side="left" onClick=${() => onNext(x.k)}>Επόμενος<//><${Button} variant="ghost" size="icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left" onClick=${() => onAssign(x.k, null)}>${Icon.x}<//></span></li>`;
 }
 
-function DutyCheck({ onOpen }: P) {
+// Μήνας για τις μετρήσεις υπηρεσιών: κοινός για Θέσεις, λίστα ελέγχου και πλέγμα. «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες.
+const monLbl = (m: string) => MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4);
+function useDutyMonth() {
   const { state, today } = useStore();
-  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list');
-  // ένας μήνας για λίστα και πλέγμα· η λίστα έχει και «Όλοι οι μήνες» (με τις προηγούμενες υπηρεσίες)
   const [ym, setYm] = useState(today.slice(0, 7)); const [allM, setAllM] = useState(false);
   const all = dutyStats(state);
   const st = useMemo(() => (allM ? all : monthStats(all, ym)), [all, allM, ym]);
   const months = useMemo(() => [...new Set([today.slice(0, 7), ym, ...dutyMonths(state)])].sort().reverse(), [state.guards, state.dutyLog, today, ym]);
-  const monLbl = (m: string) => MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4);
+  return { ym, setYm, allM, setAllM, st, months };
+}
+type DutyMonth = ReturnType<typeof useDutyMonth>;
+const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: string; small?: boolean }) => html`<select className="ui-input" style=${{ flex: '0 0 ' + width, width, ...(small ? { height: '32px', fontSize: '13px' } : {}) }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${m.allM ? '' : m.ym} onChange=${(e: any) => { const v = e.target.value; m.setAllM(!v); if (v) m.setYm(v); }}><option value="">Όλοι οι μήνες</option>${m.months.map(x => html`<option key=${x} value=${x}>${monLbl(x)}</option>`)}</select>`;
+
+function DutyCheck({ onOpen, m }: P) {
+  const { state } = useStore();
+  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list');
+  const { ym, setYm, allM, setAllM, st } = m as DutyMonth;
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
   // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
   const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.dutyLog, state.people, state.settings, ym, dq]);
@@ -58,7 +66,7 @@ function DutyCheck({ onOpen }: P) {
       ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(mon) + '.xlsx'} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
-      <select className="ui-input" style=${{ flex: '0 0 190px', width: '190px' }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${allM ? '' : ym} onChange=${(e: any) => { const v = e.target.value; setAllM(!v); if (v) setYm(v); }}><option value="">Όλοι οι μήνες</option>${months.map(m => html`<option key=${m} value=${m}>${monLbl(m)}</option>`)}</select>
+      <${MonthSelect} m=${m}/>
       <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Λιγότερες συνολικά' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="chk"><div className="chk__in">
       <div className="chk__head" style=${{ gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px' }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, KIND_LBL[k])}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}</div>
@@ -101,7 +109,7 @@ export function GuardScreen() {
   const blocks = blocksOf(state.settings) || state.settings.blocks; const phase = state.settings.phase || 'sven';
   const empty = posts.filter(x => !g[x.k]);
   const printed = state.printed[date];
-  const st = dutyStats(state);
+  const mon = useDutyMonth(); const st = mon.st;
   const people = activePeople(state);
   const excluded = useMemo(() => {
     const noDuty: P[] = [], unarmed: P[] = [];
@@ -171,13 +179,13 @@ export function GuardScreen() {
     <div className="guard__bar"><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}
       <span className="guard__rules">${isHol(state.settings, date) && html`<${Badge} tone="warn" data-tip="Μετρά ως αργία στον έλεγχο υπηρεσιών">Αργία: ${holName(state.settings, date)}<//>`}</span>
       ${!locked && Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoMark()] }); }}>Καθάρισε<//>`}
-      <${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
+      <${MonthSelect} m=${mon} width="160px" small=${true}/><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
     ${psk && html`<div className="psk"><div><b>Φρουρά ΠΣΚ</b><small>${psk.map(d => dow(d) + ' ' + dm(d) + ': ' + (pskEmpty(d) ? pskEmpty(d) + ' κενές' : 'πλήρης')).join(' · ')}</small></div>
       <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)) }, false)) toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ<//>
       <${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${() => ex('frouraPsk', psk[0], 'η ΦΡΟΥΡΑ του ΠΣΚ')} data-tip="Ένα Excel με τρία φύλλα: Παρ, Σαβ, Κυρ">${xb === 'frouraPsk' ? 'Δημιουργία…' : 'Excel ΠΣΚ'}<//>
       <${Button} size="sm" variant="ghost" disabled=${!!xb} onClick=${() => ex('outsPsk', psk[0], 'οι εξοδούχοι του ΠΣΚ')} data-tip="Εξοδούχοι-παραμένοντες για τις τρεις μέρες, ένα φύλλο ανά μέρα">${xb === 'outsPsk' ? 'Δημιουργία…' : 'Εξοδούχοι ΠΣΚ'}<//></span></div>`}
     <div className="gtable">
-      <div className="gtable__head post" aria-hidden="true"><span>Θέση · ώρες</span><span>Ποιος</span><span data-tip="Υπηρεσίες αυτού του είδους / σύνολο">Είδ./Σύν.</span><span></span></div>
+      <div className="gtable__head post" aria-hidden="true"><span>Θέση · ώρες</span><span>Ποιος</span><span data-tip=${'Υπηρεσίες αυτού του είδους / σύνολο · ' + (mon.allM ? 'όλοι οι μήνες, μαζί με τις προηγούμενες' : monLbl(mon.ym)) + ' (αλλάζει από τον μήνα πάνω δεξιά)'}>Είδ./Σύν.</span><span></span></div>
       ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length; const open = fold[b.id] ?? emp > 0;
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
@@ -220,7 +228,7 @@ export function GuardScreen() {
     </section>
   </div>`;
   const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
-  const check = html`<${DutyCheck} onOpen=${nav.openPerson}/>`;
+  const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
   const cur = !mobile && tab === 'xl' ? 'posts' : tab;
   const emptyOn = (d: string) => { const gd = state.guards[d] || {}; let n = 0; for (const x of posts) if (!gd[x.k]) n++; return n; };
