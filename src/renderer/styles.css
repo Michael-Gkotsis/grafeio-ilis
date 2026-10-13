@@ -145,6 +145,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .picker__opt > div{flex:1;min-width:0}
 .picker__opt small{display:block;color:var(--muted-fg);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .picker__opt[aria-selected="true"]{background:var(--secondary)}
+.picker__opt > .ui-badge,.picker__opt > .badges{flex:0 1 auto;max-width:50%;overflow:hidden;text-overflow:ellipsis;display:block;line-height:22px}
 .picker__opt--na{opacity:.55;cursor:not-allowed}
 .picker__hd{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-fg);padding:6px 9px 2px}
 .picker__chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
@@ -462,7 +463,13 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .typegrid{display:flex;flex-direction:column;gap:8px}
 .typegrid__row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;align-items:center}
 .typegrid__lbl{font-size:12px;font-weight:600;color:var(--muted-fg)}
-.guard__bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.guard__bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;position:sticky;top:var(--top-h);z-index:20;background:var(--background);padding:6px 0;margin:-6px 0}
+/* όταν κολλά πάνω: μέρα, κενές, «Επόμενη κενή», αυτόματη συμπλήρωση, Excel */
+.guard__bar .gb-stuck{display:none}
+.guard__bar.is-stuck{box-shadow:0 8px 12px -10px rgba(0,0,0,.35)}
+.guard__bar.is-stuck > :not(.gb-stuck):not(.gb-keep):not(.ui-badge){display:none}
+.guard__bar.is-stuck .gb-stuck{display:flex;gap:8px;align-items:center}
+.guard__bar.is-stuck > .gb-stuck:last-child{margin-left:auto}
 .minihd{font-size:13px;margin:4px 0 8px;color:var(--muted-fg)}
 .minihd + .avail{margin-bottom:12px}
 .xl td.pl{white-space:pre-line;line-height:1.35}
