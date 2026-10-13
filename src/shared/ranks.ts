@@ -2,6 +2,7 @@
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
 import { collator, normGreek, upper } from './text';
 import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type Status, type TypeKey } from './domain';
+import type { SiConfig } from './si';
 
 // Βαθμοί στρατιωτών (Δυναμολόγιο)
 export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΟΠ ΣΤΡ', 'ΕΠΟΠ ΔΝΕΑΣ', 'ΕΠΟΠ ΛΧΙΑΣ', 'ΔΕΑ'];
@@ -33,7 +34,8 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'lea
 // warn: ιατρικό χωρίς περιορισμούς που βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
 export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
-export type UserLists = Partial<Record<ListId, UserList>>;
+// si: ο πίνακας Σ.Ι. (si.ts), ό,τι άλλαξες εκεί
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους

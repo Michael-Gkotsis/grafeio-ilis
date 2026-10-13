@@ -327,7 +327,7 @@ export function AddBlockDialog({ onClose }: P) {
       <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
     </div>
     <div className="field"><label className="field__label" htmlFor="nb-h">Ώρες</label><input id="nb-h" className="ui-input" placeholder="π.χ. 08:00-20:00 (κενό = όλη μέρα)" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/></div>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ</small></span></label>
+    <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις Ρυθμίσεις › Σ.Ι.</small></span></label>
   <//>`;
 }
 

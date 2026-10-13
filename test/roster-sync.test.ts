@@ -73,8 +73,9 @@ describe('λατινικά γράμματα που μοιάζουν (X6)', () =>
     const r = parseRoster([{ name: 'ΣΥΝΟΛΙΚΟ', rows: [HEAD, ['ΣTP', 'ΠΖ', p[0].last, p[0].first, 'Π', '900001', '', 1, 'I4'], ['ΣΤΡ', 'ΠΖ', p[1].last, p[1].first, 'Π', '900002', '', 1, 'Ι3 άοπλος'], ['ΣΤΡ', 'ΠΖ', p[2].last, p[2].first, 'Π', '900003', '', 1, 'I1']] }]);
     expect(r.rows.map(x => [x.rank, x.si])).toEqual([['ΣΤΡ', 'Ι4'], ['ΣΤΡ', 'Ι3 ΑΟΠΛΟΣ'], ['ΣΤΡ', 'Ι1']]);
     const caps = (si: string) => Object.keys(defaultCaps({ ...p[0], post: null, si }));
-    expect(caps('I4')).toEqual(['op', 'sk']);            // ήδη αποθηκευμένο με λατινικό I
-    expect(caps('Ι3 άοπλος')).toEqual(['op', 'sk']);
+    // άοπλος: όχι σε ένοπλη υπηρεσία (οπλοφύλακας, σκοπιά, ΤΑΕ της ΣΠΕΝ)
+    expect(caps('I4')).toEqual(['op', 'sk', 'tae']);            // ήδη αποθηκευμένο με λατινικό I
+    expect(caps('Ι3 άοπλος')).toEqual(['op', 'sk', 'tae']);
     expect(caps('Ι1')).toEqual([]);
   });
   it('ΔΝ: «OXI», «NO», «N/A» με λατινικά = όχι· «NAI», «X» = ναι', () => {
