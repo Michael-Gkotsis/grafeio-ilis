@@ -480,6 +480,9 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .capgrid{display:flex;flex-wrap:wrap;gap:6px}
 .capgrid label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
 .capgrid label.is-off{background:var(--muted);color:var(--muted-fg);text-decoration:line-through}
+.does__txt{margin:0 0 8px;font-weight:600}
+.does__presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.does__presets .ui-btn--link{margin-left:4px;font-size:13px}
 .hk-src{list-style:none;margin:0;padding:0}
 .hk-src li{border-top:1px solid var(--border);padding:8px 0;font-size:13px}
 .hk-src li:first-child{border-top:0}

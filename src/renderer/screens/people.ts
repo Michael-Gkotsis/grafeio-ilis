@@ -142,11 +142,54 @@ function SaveViewDialog({ onClose, onSave }: P) {
   <//>`;
 }
 
+// «Τι κάνει»: μία γραμμή με το αποτέλεσμα και συντομεύσεις που γράφουν στα ίδια κουτάκια (δυνατότητα και μέρες), με μία αναίρεση
+const ALL_KINDS = CAP_KINDS.map(([k]) => k);
+const SERGEANT = 'Από τον λοχία';
+function doesText(p: Person, caps: Partial<Record<DutyKind, string>>): string {
+  const off = ALL_KINDS.filter(k => caps[k]);
+  const why = [...new Set(off.map(k => caps[k]!))].filter(r => r !== SERGEANT);
+  const whyTxt = why.length ? ' (' + why.join(', ') + ')' : '';
+  const kinds = !off.length ? 'Όλες τις υπηρεσίες' : off.length === ALL_KINDS.length ? 'Καμία υπηρεσία' + whyTxt
+    : off.length > ALL_KINDS.length / 2 ? 'Μόνο ' + ALL_KINDS.filter(k => !caps[k]).map(k => CAP_ACC[k]).join(', ') + whyTxt
+    : 'Όλες εκτός από ' + off.map(k => CAP_ACC[k]).join(', ') + whyTxt;
+  const days = p.offDays || [];
+  const dayTxt = !days.length ? '' : days.length === 2 && days.includes(6) && days.includes(0) ? ' · όχι ΣΚ' : ' · όχι ' + days.map(d => DOW_FULL[d]).join(', ');
+  return kinds + dayTxt;
+}
+function DutyProfile({ p, caps, open, onMore }: P) {
+  const { state, run } = useStore(); const toast = useToast();
+  const days: number[] = p.offDays || []; const own = state.caps[p.id] || {};
+  const offK = (ks: DutyKind[]) => ks.every(k => caps[k]);
+  const hasOwn = Object.values(own).some(Boolean) || days.length > 0;
+  const go = async (cmd: { off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean }, text: string) => {
+    if (await run({ t: 'setDutyProfile', pid: p.id, ...cmd, text }, false)) toast({ text: shortName(p) + ': ' + text + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' });
+  };
+  const toggleDays = (ds: number[], label: string) => {
+    const on = ds.every(d => days.includes(d));
+    return { on, fn: () => go({ days: on ? days.filter(d => !ds.includes(d)) : [...new Set([...days, ...ds])] }, on ? 'ξανά υπηρεσία ' + label : 'όχι υπηρεσία ' + label) };
+  };
+  const sat = toggleDays([6], 'Σάββατο'), we = toggleDays([6, 0], 'ΣΚ');
+  const armedK: DutyKind[] = ['op', 'sk'], restK = ALL_KINDS.filter(k => k !== 'mg');
+  const unarmed = offK(armedK), onlyMg = offK(restK) && !caps.mg;
+  const presets = [
+    { lbl: 'Όχι Σάββατο', on: sat.on, fn: sat.fn, tip: 'Καμία υπηρεσία που ξεκινά Σάββατο' },
+    { lbl: 'Όχι ΣΚ', on: we.on, fn: we.fn, tip: 'Καμία υπηρεσία που ξεκινά Σάββατο ή Κυριακή' },
+    { lbl: 'Όχι σκοπιά/οπλοφύλακα', on: unarmed, fn: () => go(unarmed ? { on: armedK } : { off: armedK }, unarmed ? 'ξανά σκοπιά και οπλοφύλακας' : 'όχι σκοπιά και οπλοφύλακας'), tip: unarmed && armedK.some(k => caps[k] !== SERGEANT) ? 'Το ορίζει ' + caps.sk + ': αλλάζει από τη Σ.Ι.' : 'Μόνο θαλαμοφύλακας, μαγειρεία, ΤΑΕ, άλλες' },
+    { lbl: 'Μόνο μαγειρεία', on: onlyMg, fn: () => go(onlyMg ? { on: restK } : { off: restK, on: ['mg'] }, onlyMg ? 'ξανά όλες οι υπηρεσίες' : 'μόνο μαγειρεία'), tip: 'Μπαίνει μόνο στα μαγειρεία' }
+  ];
+  return html`<div className="does">
+    <p className="does__txt">${doesText(p, caps)}</p>
+    <div className="does__presets" role="group" aria-label="Συντομεύσεις">${presets.map(x => html`<button key=${x.lbl} type="button" className="ui-chip ui-chip--sm" aria-pressed=${x.on} data-tip=${x.tip} onClick=${x.fn}>${x.lbl}<//>`)}
+      ${hasOwn && html`<button type="button" className="ui-chip ui-chip--sm ui-chip--view" data-tip="Σβήνει ό,τι όρισες με το χέρι· μένουν μόνο όσα βγαίνουν από τη Σ.Ι. και το πόστο" onClick=${() => go({ reset: true }, 'χωρίς εξαιρέσεις από τον λοχία')}>Καμία εξαίρεση<//>`}
+      <${Button} variant="link" onClick=${onMore}>${open ? 'Λιγότερα' : 'Λεπτομέρειες…'}<//></div>
+  </div>`;
+}
+
 export function PersonSheet({ pid, onClose }: P) {
   const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
   const p = personMap(state.people).get(pid);
   const [edit, setEdit] = useState(false); const [baseOpen, setBaseOpen] = useState(false); const [req, setReq] = useState(false);
-  const [times, setTimes] = useState<Status | null>(null);
+  const [times, setTimes] = useState<Status | null>(null); const [capMore, setCapMore] = useState(false);
   if (!p) return null;
   const reqs = state.requests.filter(r => r.pid === pid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const posts = postsOf(state.settings);
@@ -162,11 +205,14 @@ export function PersonSheet({ pid, onClose }: P) {
     <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => nav.declare({ pids: [pid], type: 'DN', from: today, to: today })}>ΔΝ σήμερα<//><${Button} variant="ghost" onClick=${() => setReq(true)}>Νέα αίτηση<//><${Button} variant="ghost" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
     <dl className="kv"><dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt><abbr data-tip="Έτος/Σειρά Στρατεύσιμων Οπλιτών">ΕΣΣΟ</abbr></dt><dd>${p.essos || '—'}</dd><dt>Ειδικότητα</dt><dd>${p.spec || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p)})</span></dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${p.si || '—'}</dd>${p.post && html`<dt>Πόστο</dt><dd>${p.post}</dd>`}${p.role && html`<dt>Ρόλος</dt><dd>${p.role}</dd>`}<dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd>${p.weapon && html`<dt>Όπλο</dt><dd className="num">${p.weapon}</dd>`}
       <dt>Υπηρεσίες</dt><dd><span className="num">${dd.total}</span> <span className="muted" style=${{ fontSize: '12px' }}>(${(Object.keys(dd.byKind).length ? Object.keys(dd.byKind) : ['th', 'mg']).map(k => (KIND_LBL as P)[k] + ' ' + (dd.byKind[k] || 0)).join(' · ')}${nBase ? ' · από αυτές ' + nBase + ' πριν την εφαρμογή' : ''})</span> <${Button} variant="link" onClick=${() => setBaseOpen(true)}>Προηγούμενες…<//></dd><dt>Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd>${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}</dl>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Δυνατότητα υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(μόνιμα, όχι με ημερομηνίες)</span></h3>
+    <section><h3 style=${{ fontSize: '15px', marginBottom: '6px' }}>Τι κάνει <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(μόνιμα, όχι με ημερομηνίες)</span></h3>
+      <${DutyProfile} p=${p} caps=${caps} open=${capMore} onMore=${() => setCapMore(!capMore)}/>
+      ${capMore && html`<div style=${{ marginTop: '10px' }}>
       <div className="capgrid">${CAP_KINDS.map(([k, l]) => { const off = caps[k]; return html`<label key=${k} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει: ' + off : 'Κάνει ' + CAP_ACC[k]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const allowed = e.target.checked; if (await run({ t: 'setCap', pid, kind: k, allowed }, false)) toast({ text: shortName(p) + (allowed ? ' κάνει ' : ' δεν κάνει ') + CAP_ACC[k] + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' }); }}/>${l}</label>`; })}</div>
       <div className="capgrid" role="group" aria-label="Μέρες που κάνει υπηρεσία" style=${{ marginTop: '8px' }}><span className="muted" style=${{ fontSize: '13px', alignSelf: 'center' }}>Μέρες:</span>${WEEK.map(d => { const off = (p.offDays || []).includes(d); return html`<label key=${d} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : 'Κάνει υπηρεσία ' + DOW_FULL[d]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const on = e.target.checked; const days = on ? (p.offDays || []).filter(x => x !== d) : [...(p.offDays || []), d]; if (await run({ t: 'setOffDays', pid, days }, false)) toast({ text: shortName(p) + (on ? ' κάνει ξανά υπηρεσία ' : ' δεν κάνει υπηρεσία ') + DOW_FULL[d] + '. Η αυτόματη συμπλήρωση δεν τον βάζει εκείνες τις μέρες· με το χέρι μπαίνει μόνο με αιτία.' }); }}/>${DOW[d]}</label>`; })}</div>
+      </div>`}
       <label className="rule" style=${{ marginTop: '8px' }}><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span><b>Δικαίωμα ΔΝ</b><small>Μόνιμο. Μόλις οριστεί σε έναν, στους Εξοδούχους το ΔΝ επιτρέπεται μόνο σε όσους το έχουν.</small></span></label>
-      <p className="note" style=${{ margin: '6px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ι3 άοπλος, Ι4: όχι σκοπιά και οπλοφύλακας) και το πόστο. Οι μέρες: ξετσέκαρε όσες δεν κάνει καμία υπηρεσία (μετρά η μέρα που ξεκινά η υπηρεσία, 14:00).</p></section>
+      ${capMore && html`<p className="note" style=${{ margin: '6px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ι3 άοπλος, Ι4: όχι σκοπιά και οπλοφύλακας) και το πόστο. Οι μέρες: ξετσέκαρε όσες δεν κάνει καμία υπηρεσία (μετρά η μέρα που ξεκινά η υπηρεσία, 14:00).</p>`}</section>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip="Ώρα αναχώρησης την πρώτη μέρα και ώρα επιστροφής την τελευταία">Ώρες…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${r.text}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>ΗΚΑΙ<//></li>`)}</ul></section>`}
