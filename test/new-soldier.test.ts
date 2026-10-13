@@ -238,10 +238,10 @@ describe('εγγραφή στον θάλαμό του', () => {
     const w = await writeSource('people', b, s, META, TODAY); if (!w.ok) throw new Error(w.error);
     expect(w.rooms).toEqual({ n: 0, added: 1, placed: 1, sheet: 'ΘΑΛΑΜΟΙ' });   // ο θάλαμος 3 δεν έχει πίνακα
     const rows = (await readBook(file)).sheets.find(x => x.name === 'ΘΑΛΑΜΟΙ')!.rows;
-    expect(rows.map(r => cellOf(r, 3))).toEqual(['', 'Επώνυμο', 'ΤΥΧΑΙΟΣ', 'ΔΟΚΙΜΙΟΣ', 'ΚΑΙΝΟΥΡΓΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', '', '', 'Επώνυμο', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΦΑΝΤΑΣΙΟΣ']);
+    expect(rows.map(r => cellOf(r, 3))).toEqual(['', 'ΕΠΩΝΥΜΟ', 'ΤΥΧΑΙΟΣ', 'ΔΟΚΙΜΙΟΣ', 'ΚΑΙΝΟΥΡΓΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', '', '', 'ΕΠΩΝΥΜΟ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΦΑΝΤΑΣΙΟΣ']);
     expect(rows[4].slice(0, 8)).toEqual([3, 'ΣΤΡ', 'ΠΖ', 'ΚΑΙΝΟΥΡΓΙΟΣ', 'ΝΕΟΣ', 'ΠΑΤΕΡΑΣ', 910001, 6900000999]);
     expect(rows.slice(2, 7).map(r => r[0])).toEqual([1, 2, 3, 4, 5]); expect(rows.slice(10, 12).map(r => r[0])).toEqual([1, 2]);
-    expect(rows[8][0]).toBe('ΔΥΝΑΜΟΛΟΓΙΟ 2ου ΘΑΛΑΜΟΥ');
+    expect(rows[8][0]).toBe('ΔΥΝΑΜΟΛΟΓΙΟ 2ΟΥ ΘΑΛΑΜΟΥ');
     const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΘΑΛΑΜΟΙ'); expect(ws.style('D5')).toBe(ws.style('D6'));
     const w2 = await writeSource('people', b, s0, { ...META, ...w.meta } as SourceMeta, TODAY); if (!w2.ok) throw new Error(w2.error);
     expect((await readBook(file)).sheets.find(x => x.name === 'ΘΑΛΑΜΟΙ')!.rows).toEqual(thBefore);

@@ -47,14 +47,14 @@ describe('εξαγωγή Excel', () => {
     const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
     save(r.name, r.data);
     const wb = await Workbook.open(r.data); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
-    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ης ΙΛΗΣ ΤΗΣ 12/10/26');
+    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ΗΣ ΙΛΗΣ ΤΗΣ 12/10/26');
     expect(fr.get('C29')).toBe('89');
     expect(fr.get('C26')).toBe('1');
     expect(fr.get('O29')).toBe('8');
     expect(fr.formula('E29')).toBe('SUM(C29:D29)');
     expect(fr.formula('AA29')).toBe('E29-Z29');
     expect(bk.get('G11')).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) .* ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12\/10\/2026 .* ΜΕ ΠΕΝΤΕ \(05\) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ……\.$/);   // η ποινή της 11/10 όχι
-    expect(bk.get('L23')).toBe('Αυλώνας, 12 Οκτ 26');
+    expect(bk.get('L23')).toBe('ΑΥΛΩΝΑΣ, 12 ΟΚΤ 26');
   });
   it('ΗΚΑΙ: ό,τι γράφει ο γραφέας στην οθόνη μπαίνει στο έντυπο και στα αθροίσματα', async () => {
     let s = busyState();
@@ -83,11 +83,11 @@ describe('εξαγωγή Excel', () => {
     const ex = await wb.sheet('ΕΞΟΔΟΥΧΟΙ'); const pa = await wb.sheet('ΠΑΡΑΜΕΝΟΝΤΕΣ');
     expect(ex.get('A5')).toBe('ΕΞΟΔΟΥΧΟΙ ΤΗΣ 12 ΟΚΤ 26');
     expect(ex.get('D9')).toBeTruthy();
-    expect(ex.get('G11')).toBe('Αυλώνας, 12-10-2026');
+    expect(ex.get('G11')).toBe('ΑΥΛΩΝΑΣ, 12-10-2026');
     expect(ex.formula('A9')).toBe('ROW()-6');
     // 90 − 8 σε άδεια − 3 εξοδούχοι = 79 παραμένοντες → υποσέλιδο στη γραμμή 9+78
     expect(pa.get('D85')).toBeTruthy();
-    expect(pa.get('G87')).toBe('Αυλώνας, 12-10-2026');
+    expect(pa.get('G87')).toBe('ΑΥΛΩΝΑΣ, 12-10-2026');
     expect(pa.get('D89')).toBe('ΑΛΧΙΑΣ ΙΛΗΣ');
   });
 });
@@ -116,7 +116,7 @@ describe('ΦΡΟΥΡΑ ΣΠΕΝ', () => {
     expect(ws.get('J13')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
     expect(ws.get('J27')!.split('\n')).toHaveLength(2);
     expect(ws.get('C33')).toBeTruthy();
-    expect(ws.get('B34')).toBe('ΠΥΛΗ 1ο'); expect(ws.get('B35')).toBe('ΠΥΛΗ 2ο'); expect(ws.get('C35')).toBeTruthy();
+    expect(ws.get('B34')).toBe('ΠΥΛΗ 1Ο'); expect(ws.get('B35')).toBe('ΠΥΛΗ 2Ο'); expect(ws.get('C35')).toBeTruthy();
     // οι τιμωρημένοι κατέβηκαν δύο γραμμές για τη «Πύλη»
     expect(ws.get('A40')).toBe('1');
     const ly = s.people.find(p => p.id === g.ly)!;

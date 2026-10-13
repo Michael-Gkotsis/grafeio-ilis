@@ -3,10 +3,14 @@
 // Δεν γράφουμε ποτέ πάνω σε κελί με τύπο. Για λίστες που ξεπερνούν τις γραμμές του εντύπου,
 // αντιγράφουμε μια γραμμή-πρότυπο και σπρώχνουμε ό,τι είναι από κάτω (υπογραφές κ.λπ.).
 import JSZip from 'jszip';
+import { upper } from '../shared/text';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+// Ό,τι γράφει η εφαρμογή στο Excel μπαίνει με κεφαλαία χωρίς τόνους (Michael, 13/10): κείμενα κελιών, κείμενο με μορφή και λίστες επιλογής.
+// Οι τύποι και οι αριθμοί μένουν όπως είναι.
+const text = (s: string) => clean(upper(s));
 
 export const colNum = (c: string) => c.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
 export const colName = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -134,7 +138,7 @@ export class Sheet {
     let a = setAttr(x.attrs, 't', null);
     if (v == null || v === '') { x.attrs = a; x.inner = ''; x.selfClose = true; return this; }
     if (typeof v === 'number') { x.attrs = a; x.inner = `<v>${v}</v>`; }
-    else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(clean(v))}</t></is>`; }
+    else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(text(v))}</t></is>`; }
     x.selfClose = false; return this;
   }
   // Τύπος σε καινούργιο κελί (χωρίς «=»): ο Excel τον υπολογίζει στο άνοιγμα (fullCalcOnLoad στο save)
@@ -188,12 +192,12 @@ export class Sheet {
   // Νέες τιμές στη λίστα που έβαλε η εφαρμογή (ownList)
   setListItems(sqref: string, items: string[]): this {
     const re = new RegExp('(<dataValidation\\b[^>]*\\ssqref="' + sqref.replace(/[$]/g, '\\$&') + '"[^>]*>\\s*<formula1>)[^<]*(</formula1>)');
-    this.tail = this.tail.replace(re, (_m, p1: string, p2: string) => p1 + esc('"' + items.join(',') + '"') + p2);
+    this.tail = this.tail.replace(re, (_m, p1: string, p2: string) => p1 + esc('"' + items.map(upper).join(',') + '"') + p2);
     return this;
   }
   // Λίστα επιλογής (dropdown) που δέχεται και ό,τι άλλο γράψει ο χρήστης (χωρίς μήνυμα λάθους)
   addListValidation(sqref: string, items: string[]): this {
-    const dv = `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="${sqref}"><formula1>${esc('"' + items.join(',') + '"')}</formula1></dataValidation>`;
+    const dv = `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="${sqref}"><formula1>${esc('"' + items.map(upper).join(',') + '"')}</formula1></dataValidation>`;
     if (/<dataValidations\b[^>]*>/.test(this.tail)) {
       const n = (this.tail.match(/<dataValidation\b/g) || []).length + 1;
       this.tail = this.tail.replace(/<dataValidations\b([^>]*)>/, (_m, a: string) => `<dataValidations${setAttr(a, 'count', String(n))}>`).replace('</dataValidations>', dv + '</dataValidations>');
@@ -579,7 +583,7 @@ export class Workbook {
     const sz = Number(attr(parts.get('sz') || '', 'val') || 11);
     const rPr = (u?: boolean) => '<rPr>' + RPR_ORDER.map(k => (k === 'u' && u && !parts.has('u') ? '<u/>' : parts.get(k) || '')).join('') + '</rPr>';
     const runs = lines.flatMap((l, i) => l.filter(r => r.t).map((r, j) => ({ t: (i && !j ? '\n' : '') + r.t, u: r.u })))
-      .map(r => `<r>${rPr(r.u)}<t xml:space="preserve">${esc(clean(r.t))}</t></r>`).join('');
+      .map(r => `<r>${rPr(r.u)}<t xml:space="preserve">${esc(text(r.t))}</t></r>`).join('');
     ws.setRuns(ref, runs);
     if (!/<alignment\b[^>]*wrapText="(1|true)"/.test(src)) ws.setStyle(ref, await this.xfLike(base, st.wrapped, x => withAlign(x, { wrapText: '1' }, { vertical: 'top' })));
     // πόσες γραμμές πιάνει στο χαρτί: πλάτος της συγχώνευσης σε χαρακτήρες (≈7px το καθένα) προς το πλάτος ενός γράμματος της γραμματοσειράς

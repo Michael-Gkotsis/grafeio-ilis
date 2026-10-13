@@ -1,6 +1,7 @@
 // «Νέο αρχείο…» / «Νέο φύλλο…» για πόστα, εκτός δύναμης και δυνατότητες: η εφαρμογή φτιάχνει τον πίνακα από την αρχή
 // με τη δομή του Δυναμολογίου (τίτλος, Α/Α, Βαθμός, Ο/Σ, Επώνυμο… και οι στήλες του είδους), και ό,τι φτιάχνει το
 // ξαναδιαβάζει χωρίς αλλαγές. Μόνο ψεύτικα ονόματα.
+import { upper } from '../src/shared/text';
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
@@ -46,7 +47,7 @@ describe('νέα αρχεία για πόστα, εκτός δύναμης κα�
     const s = state(); const { found, sheet, sheets, file, b } = await roundTrip('posts', s);
     expect(sheet.name).toBe('ΠΟΣΤΑ');
     expect(sheet.rows[0][0]).toBe('ΠΟΣΤΑ');
-    expect(sheet.rows[1].slice(0, 10)).toEqual(['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος', 'Πόστο']);
+    expect(sheet.rows[1].slice(0, 10)).toEqual(['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΑΛΑΜΟΣ', 'ΠΟΣΤΟ']);
     expect(found).toEqual({ sheet: 'ΠΟΣΤΑ', header: 1, cols: b.cols });
     expect(detectTables(sheets).find(h => h.sheet === 'ΠΟΣΤΑ')?.best).toBe('posts');
     // οι δύο με πόστο, αλφαβητικά (ΤΥΧΑΙΟΣ, ΥΠΟΘΕΤΙΔΗΣ), με Α/Α
@@ -128,8 +129,8 @@ describe('νέο Δυναμολόγιο', () => {
     const { s, sheets, b } = await make();
     expect(sheets.map(x => x.name)).toEqual(['ΣΥΝΟΛΙΚΟ', 'ΘΑΛΑΜΟΙ']);
     const sh = sheets[0];
-    expect(sh.rows[0][0]).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + s.settings.unitName);
-    expect(sh.rows[1]).toEqual(['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος', 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΔΝ']);
+    expect(sh.rows[0][0]).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + upper(s.settings.unitName));
+    expect(sh.rows[1]).toEqual(['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΔΝ']);
     const act = s.people.filter(p => p.active);
     const rows = sh.rows.slice(2, 2 + act.length);
     expect(rows.map(r => r[0])).toEqual(act.map((_, i) => i + 1));
@@ -148,7 +149,7 @@ describe('νέο Δυναμολόγιο', () => {
     const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ');
     const n = s.people.filter(p => p.active).length; const r = 3 + n + 1;   // κενή γραμμή, μετά «ΘΑΛΑΜΟΙ»
     expect([ws.get('D' + r), ws.get('F' + r)]).toEqual(['ΘΑΛΑΜΟΙ', 'ΣΤΡΑΤΙΩΤΕΣ']);
-    expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ος', `COUNTIF(I3:I${2 + n},"1")`]);
+    expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ΟΣ', `COUNTIF(I3:I${2 + n},"1")`]);
     const k = new Set(s.people.filter(p => p.active && p.room != null).map(p => p.room)).size;   // 7: ο 7ος θάλαμος δεν έχει κανέναν
     expect(ws.get('D' + (r + k + 1))).toBe('ΣΥΝΟΛΟ');
     expect(fx(ws, 'F' + (r + k + 1))).toBe(`SUM(F${r + 1}:F${r + k})`);
@@ -231,7 +232,7 @@ describe('νέος Έλεγχος υπηρεσιών', () => {
     const { s, b, sheet, w } = await make();
     expect(w.ok && w.changed).toBe(3);
     const p = (id: number) => s.people.find(x => x.id === id)!.last;
-    expect(sheet.rows[nameRow(sheet.rows, p(1))][14 + 4]).toBe('Θ1α');
+    expect(sheet.rows[nameRow(sheet.rows, p(1))][14 + 4]).toBe('Θ1Α');
     expect(sheet.rows[nameRow(sheet.rows, p(2))][14 + 4]).toBe('Μ1');
     expect(sheet.rows[nameRow(sheet.rows, p(4))][14 + 5]).toBe('Θ');
     expect(sheet.countif).toBeUndefined();

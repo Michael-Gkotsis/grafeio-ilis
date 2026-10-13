@@ -443,6 +443,7 @@ export function baseOf(kind: StatusKind, s: AppState, keys: string[]): Record<st
   for (const x of s.statuses) if (types.includes(x.type)) { const id = statusId(kind, x); if (want.has(id)) out[id] = recVal(x); }
   return out;
 }
+const sameText = (a: string | undefined, b: string | undefined) => normGreek(a || '') === normGreek(b || '');
 const appText = (x: Status) => 'έως ' + x.to.slice(8) + '/' + x.to.slice(5, 7) + (x.kind ? ', ' + x.kind : '') + (x.note ? ', «' + x.note + '»' : '');
 export interface DiffUpdate { id: string; patch: Partial<Status>; who: string; what: string; conflict?: string }   // conflict: τι έχει η εφαρμογή (άλλαξε και εκεί)
 export interface Diff {
@@ -494,13 +495,13 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (has('to') && c.noEnd && !cur.open) { patch.open = true; what.push('χωρίς λήξη'); }
     if (has('to') && !c.noEnd && (cur.to !== c.to || cur.open)) { patch.to = c.to; if (cur.open) patch.open = false; what.push('έως ' + c.to.slice(8) + '/' + c.to.slice(5, 7)); }
     if ((has('kind') || has('where')) && c.raw && cur.type !== type) { patch.type = type; what.push(TYPES[type].label); }
-    // η ποινή γράφεται με κεφαλαία στο Excel: ίδιο είδος όσο ταιριάζουν τα γράμματα
-    if ((has('kind') || has('where')) && c.kind && (kind === 'punish' ? vk(c.kind) !== vk(cur.kind || '') : c.kind !== (cur.kind || ''))) { patch.kind = c.kind; what.push(c.kind); }
-    if (has('note') && (c.note || '') !== (cur.note || '')) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
+    // η εφαρμογή γράφει στο Excel με κεφαλαία: ίδιο κείμενο όσο ταιριάζουν τα γράμματα (χωρίς πεζά/κεφαλαία και τόνους)
+    if ((has('kind') || has('where')) && c.kind && !sameText(c.kind, cur.kind)) { patch.kind = c.kind; what.push(c.kind); }
+    if (has('note') && !sameText(c.note, cur.note)) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
     if (kind === 'leave' && has('tout') && (c.fromTime || '') !== (cur.fromTime || '')) { patch.fromTime = c.fromTime || ''; what.push(c.fromTime ? 'αναχώρηση ' + c.fromTime : 'χωρίς ώρα αναχώρησης'); }
     if (kind === 'leave' && has('tin') && !c.noEnd && (c.toTime || '') !== (cur.toTime || '')) { patch.toTime = c.toTime || ''; what.push(c.toTime ? 'επιστροφή ' + c.toTime : 'χωρίς ώρα επιστροφής'); }
-    if (kind === 'punish' && has('by') && c.by && c.by !== (cur.by || '')) { patch.by = c.by; what.push('ποιος την επέβαλε'); }
-    if (kind === 'punish' && has('reason') && c.reason && c.reason !== (cur.reason || '')) { patch.reason = c.reason; what.push('αιτία'); }
+    if (kind === 'punish' && has('by') && c.by && !sameText(c.by, cur.by)) { patch.by = c.by; what.push('ποιος την επέβαλε'); }
+    if (kind === 'punish' && has('reason') && c.reason && !sameText(c.reason, cur.reason)) { patch.reason = c.reason; what.push('αιτία'); }
     if (cur.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
     const who = pm.get(pid) ? fullName(pm.get(pid)!) : c.who;
     if (what.length && changedInApp(cur) && !excelMoved(cur, patch)) {
