@@ -4,7 +4,7 @@ import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sh
 import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge } from '../common';
 import { listOf, optionsOf } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, PUN_KINDS, LEAVE_KINDS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, effects, fullName, shortName, unitOf, roomTxt, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, effects, fullName, shortName, unitOf, roomTxt, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChange, postBy, postsOf, statusesOn } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
 import { overMax, punBySuggestions } from '../../shared/punish';
@@ -267,15 +267,16 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   const [step, setStep] = useState(1);
-  const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: '', kind: initial.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0], by: '', reason: '', on: today }));
+  const punKinds = listOf(state.settings.lists, 'punKinds'), leaveKinds = listOf(state.settings.lists, 'leaveKinds');
+  const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: '', kind: initial.type === 'LEAVE' ? leaveKinds[0] : punKinds[0], by: '', reason: '', on: today }));
   const [err, setErr] = useState<any>(null);
-  const set = (patch: P) => { setCmd(c => ({ ...c, ...patch, ...(patch.type ? { kind: patch.type === 'LEAVE' ? LEAVE_KINDS[0] : PUN_KINDS[0] } : {}) })); setErr(null); };
+  const set = (patch: P) => { setCmd(c => ({ ...c, ...patch, ...(patch.type ? { kind: patch.type === 'LEAVE' ? leaveKinds[0] : punKinds[0] } : {}) })); setErr(null); };
   const t = TYPES[cmd.type];
   const hasKind = cmd.type === 'PUN' || cmd.type === 'LEAVE';
   const isPun = cmd.type === 'PUN';
   const full = { ...cmd, kind: hasKind ? cmd.kind : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined };
   const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
-  const max = isPun ? overMax(cmd.kind, daysBetween(cmd.from, cmd.to)) : 0;
+  const max = isPun ? overMax(cmd.kind, daysBetween(cmd.from, cmd.to), state.settings.lists) : 0;
   const plan = useMemo(() => (step === 2 ? planStatusChange(state, full, today) : null), [step, state, cmd, today]);
   const next = () => {
     if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; }
@@ -299,7 +300,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     <div className="field"><span className="field__label">Τι δηλώνεις *</span>
       <div className="typegrid">${CATS.map(([c, l]) => html`<div key=${c} className="typegrid__row"><span className="typegrid__lbl">${l}</span><${Segmented} value=${cmd.type} onChange=${(k: TypeKey) => set({ type: k })} items=${TYPE_KEYS.filter(k => TYPES[k].cat === c).map(k => ({ value: k, label: TYPES[k].label, tip: TYPES[k].long }))}/></div>`)}</div>
       <span className="field__help"><b>${t.long}</b>${effects(t) ? ': ' + effects(t) : ''}${cmd.type === 'PUN' ? ' · αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί' : ''}</span></div>
-    ${hasKind && html`<div className="field"><label className="field__label" htmlFor="dpk">${cmd.type === 'PUN' ? 'Είδος ποινής *' : 'Είδος άδειας'}</label><select id="dpk" className="ui-input" value=${cmd.kind} onChange=${(e: any) => setCmd(c => ({ ...c, kind: e.target.value }))}>${(cmd.type === 'PUN' ? PUN_KINDS : LEAVE_KINDS).map(k => html`<option key=${k}>${k}</option>`)}</select></div>`}
+    ${hasKind && html`<div className="field"><label className="field__label" htmlFor="dpk">${cmd.type === 'PUN' ? 'Είδος ποινής *' : 'Είδος άδειας'}</label><select id="dpk" className="ui-input" value=${cmd.kind} onChange=${(e: any) => setCmd(c => ({ ...c, kind: e.target.value }))}>${(cmd.type === 'PUN' ? punKinds : leaveKinds).map(k => html`<option key=${k}>${k}</option>`)}</select></div>`}
     <div className="field"><label className="field__label" htmlFor="dsp">Ποιοι * <span className="muted" style=${{ fontWeight: 400 }}>(ένας ή περισσότεροι)</span></label>
       <${PersonPicker} id="dsp" multiple=${true} value=${cmd.pids} onChange=${(pids: number[]) => set({ pids })} date=${cmd.from} unavailable=${t.cat === 'out' ? outPick : undefined} autoFocus=${!cmd.pids.length}/></div>
     <${DateRangeField} from=${cmd.from} to=${cmd.to} onChange=${(from: string, to: string) => set({ from, to })}/>

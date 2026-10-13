@@ -1,73 +1,115 @@
-// Ρυθμίσεις › Λίστες (Michael, 13/10): βαθμοί στρατιωτών, βαθμοί στελεχών και Ο/Σ που προτείνουν οι φόρμες και τα
-// dropdown του Excel. Τα βασικά κρύβονται αλλά δεν σβήνονται· τα δικά σου σβήνονται μόνο αν δεν τα έχει κανείς.
+// Ρυθμίσεις › Λίστες (Michael, 13/10): βαθμοί, Ο/Σ, είδη ποινής, άδειας και απουσίας στελεχών που προτείνουν οι φόρμες
+// και τα dropdown του Excel. Τα βασικά κρύβονται αλλά δεν σβήνονται· τα δικά σου σβήνονται μόνο αν δεν τα έχει κανείς.
+// Κάθε δικό σου στοιχείο λέει ρητά πώς μετρά (γραμμή ή στήλη της ΗΚΑΙ, κείμενο ποινής): τίποτα δεν μαντεύεται.
 import { useMemo, useState } from 'react';
-import { html, Alert, Badge, Button, Card, Segmented, useToast } from '../ui';
+import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { useStore } from '../store';
-import { LIST_NAME, guessHk, itemKey, itemName, listRows, type ListId, type ListRow, type UserLists } from '../../shared/ranks';
-import { HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
+import { CADRE_ABS } from '../../shared/domain';
+import { LEAVE_COLS, LIST_NAME, guessHk, itemKey, itemName, leaveCol, listRows, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { HK_A, HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
+import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs'];
-const SHORT: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ' };
-// γραμμές της ΗΚΑΙ που ταιριάζουν σε κάθε λίστα βαθμών
-const HK_ROWS: Partial<Record<ListId, string[]>> = { soldierRanks: HK_NCO, cadreRanks: [...HK_OFFICERS, ...HK_NCO.slice(0, 3)] };
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'punKinds', 'leaveKinds', 'cadreAbs'];
 const HELP: Record<ListId, string> = {
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ΗΚΑΙ μετρά.',
   cadreRanks: 'Στη φόρμα «Νέο στέλεχος». Ο βαθμός διαλέγει μόνος του τη γραμμή της ΗΚΑΙ (αλλάζει και στη φόρμα).',
-  specs: 'Στη φόρμα στρατιώτη και στο dropdown «Ο/Σ» του Δυναμολογίου.'
+  specs: 'Στη φόρμα στρατιώτη και στο dropdown «Ο/Σ» του Δυναμολογίου.',
+  punKinds: 'Στη δήλωση ποινής. Κάθε ποινή κόβει την έξοδο, μετρά στη στήλη «Τιμ.» και αιτείται στην ΗΚΑΙ. Το «κείμενο» μπαίνει στην πρόταση «με δύο (02) ημέρες …».',
+  leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ΗΚΑΙ.',
+  cadreAbs: 'Στην «Απουσία» στελέχους. Η στήλη λέει πού μετρά στην ΗΚΑΙ· «μόνο στη λίστα» δεν μετρά.'
 };
-const guess = (id: ListId, name: string) => (id === 'soldierRanks' ? hkRankOf(name) : id === 'cadreRanks' ? guessHk(name) : '');
+// επιλογή που έχει κάθε δικό σου στοιχείο: [πεδίο, τίτλος, επιλογές [τιμή, όνομα]]
+type Pick = { f: 'hk' | 'col'; label: string; opts: [string, string][] };
+const rowsOf = (l: string[]): [string, string][] => l.map(x => [x, x]);
+const HK_COLS: [string, string][] = HK_A.map(([k, , full]) => [k, full]);
+const PICK: Partial<Record<ListId, Pick>> = {
+  soldierRanks: { f: 'hk', label: 'Γραμμή στην ΗΚΑΙ', opts: rowsOf(HK_NCO) },
+  cadreRanks: { f: 'hk', label: 'Γραμμή στην ΗΚΑΙ', opts: rowsOf([...HK_OFFICERS, ...HK_NCO.slice(0, 3)]) },
+  leaveKinds: { f: 'col', label: 'Στήλη στην ΗΚΑΙ', opts: LEAVE_COLS },
+  cadreAbs: { f: 'col', label: 'Στήλη στην ΗΚΑΙ', opts: [['', 'Μόνο στη λίστα (δεν μετρά)'], ...HK_COLS] }
+};
+// τι ισχύει για ένα στοιχείο (βασικό ή δικό σου), όπως το βλέπει η εφαρμογή
+function current(id: ListId, r: ListItem, lists: UserLists): string {
+  switch (id) {
+    case 'soldierRanks': return r.hk || hkRankOf(r.name);
+    case 'cadreRanks': return r.hk || guessHk(r.name);
+    case 'leaveKinds': return leaveCol(r.name, lists);
+    case 'cadreAbs': return CADRE_ABS.find(x => x[1] === r.name)?.[2] ?? (r.col || '');
+    default: return '';
+  }
+}
+const optLbl = (p: Pick, v: string) => p.opts.find(o => o[0] === v)?.[1] || v;
 
 export function ListsCard() {
   const { state, run } = useStore(); const toast = useToast();
   const [id, setId] = useState<ListId>('soldierRanks');
-  const [name, setName] = useState(''); const [hk, setHk] = useState<string | null>(null); const [err, setErr] = useState<string | null>(null);
+  const [name, setName] = useState(''); const [choice, setChoice] = useState<string | null>(null);
+  const [acc, setAcc] = useState(''); const [max, setMax] = useState('');
+  const [err, setErr] = useState<string | null>(null);
   const lists: UserLists = state.settings.lists || {};
   const rows = listRows(lists, id);
-  const hkRows = HK_ROWS[id];
+  const pick = PICK[id];
   // ποιες τιμές έχει ήδη κάποιος (αυτές δεν σβήνονται, μόνο κρύβονται)
   const used = useMemo(() => {
-    const vals = id === 'cadreRanks' ? state.cadreList.map(c => c.rank) : state.people.map(p => (id === 'specs' ? p.spec : p.rank));
+    const vals = id === 'cadreRanks' ? state.cadreList.map(c => c.rank)
+      : id === 'cadreAbs' ? state.cadreAbs.map(a => a.kind)
+      : id === 'punKinds' ? state.statuses.filter(x => x.type === 'PUN').map(x => x.kind || '')
+      : id === 'leaveKinds' ? state.statuses.filter(x => x.type === 'LEAVE').map(x => x.kind || '')
+      : state.people.map(p => (id === 'specs' ? p.spec : p.rank));
     return new Set(vals.filter(Boolean).map(itemKey));
-  }, [id, state.people, state.cadreList]);
+  }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses]);
   const save = (next: UserLists, text: string) => run({ t: 'setSettings', settings: { lists: next }, text: 'λίστα ' + LIST_NAME[id] + ': ' + text }, false);
-  const withList = (fn: (u: { add: { name: string; hk?: string }[]; hide: string[] }) => void): UserLists => {
+  const withList = (fn: (u: { add: ListItem[]; hide: string[] }) => void): UserLists => {
     const u = { add: [...(lists[id]?.add || [])], hide: [...(lists[id]?.hide || [])] }; fn(u);
     return { ...lists, [id]: u };
   };
-  const pick = (v: ListId) => { setId(v); setName(''); setHk(null); setErr(null); };
-  const curHk = hkRows ? hk || guess(id, name) : '';
+  const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setErr(null); };
+  const select = (v: ListId) => { setId(v); reset(); };
+  const n = itemName(name, id);
+  const curChoice = pick ? choice ?? (pick.f === 'hk' ? current(id, { name: n }, lists) : pick.opts[0][0]) : '';
   const add = async () => {
-    const n = itemName(name); if (!n) return;
+    if (!n) return;
     if (/[,"]/.test(n)) { setErr('Χωρίς κόμμα ή εισαγωγικά: το Excel τα χρησιμοποιεί για να χωρίζει τις τιμές της λίστας.'); return; }
     const k = itemKey(n); const same = rows.find(r => itemKey(r.name) === k);
     if (same && !same.hidden) { setErr('Το «' + same.name + '» υπάρχει ήδη στη λίστα.'); return; }
-    // κρυμμένο: ξαναφαίνεται (κι αν είναι δικό σου, με τη γραμμή ΗΚΑΙ που διάλεξες τώρα)
+    const m = Math.floor(+max); if (max.trim() && !(m > 0)) { setErr('Οι ανώτατες ημέρες θέλουν αριθμό πάνω από 0 (ή άφησέ το κενό).'); return; }
+    const item: ListItem = { name: n, ...(pick && curChoice ? { [pick.f]: curChoice } : {}), ...(id === 'punKinds' && acc.trim() ? { acc: acc.trim() } : {}), ...(id === 'punKinds' && m > 0 ? { max: m } : {}) };
+    // κρυμμένο: ξαναφαίνεται (κι αν είναι δικό σου, με ό,τι διάλεξες τώρα)
     const next = withList(u => {
       u.hide = u.hide.filter(x => itemKey(x) !== k);
-      if (!same?.builtin) { u.add = u.add.filter(x => itemKey(x.name) !== k); u.add.push({ name: n, ...(curHk ? { hk: curHk } : {}) }); }
+      if (!same?.builtin) { u.add = u.add.filter(x => itemKey(x.name) !== k); u.add.push(item); }
     });
-    if (await save(next, '+ ' + n + (curHk ? ' (ΗΚΑΙ: ' + curHk + ')' : ''))) { toast({ text: 'Μπήκε στη λίστα: ' + n }); setName(''); setHk(null); setErr(null); }
+    const what = pick && curChoice ? ' (ΗΚΑΙ: ' + optLbl(pick, curChoice) + ')' : id === 'punKinds' ? ' (κείμενο «' + punAcc(n, next) + '»' + (m > 0 ? ', ως ' + m + ' ημ.' : '') + ')' : '';
+    if (await save(next, '+ ' + n + what)) { toast({ text: 'Μπήκε στη λίστα: ' + n }); reset(); }
   };
   const toggle = (r: ListRow) => save(withList(u => { u.hide = r.hidden ? u.hide.filter(x => itemKey(x) !== itemKey(r.name)) : [...u.hide, r.name]; }), (r.hidden ? 'ξανά το ' : 'κρυφό το ') + r.name);
   const remove = (r: ListRow) => save(withList(u => { u.add = u.add.filter(x => itemKey(x.name) !== itemKey(r.name)); u.hide = u.hide.filter(x => itemKey(x) !== itemKey(r.name)); }), 'σβήστηκε το ' + r.name);
-  const setRowHk = (r: ListRow, v: string) => save(withList(u => { u.add = u.add.map(x => (itemKey(x.name) === itemKey(r.name) ? { ...x, hk: v } : x)); }), r.name + ' στην ΗΚΑΙ: ' + v);
+  const setRow = (r: ListRow, f: 'hk' | 'col', v: string) => save(withList(u => { u.add = u.add.map(x => (itemKey(x.name) === itemKey(r.name) ? { ...x, [f]: v } : x)); }), r.name + ' στην ΗΚΑΙ: ' + optLbl(pick!, v));
+  const info = (r: ListRow) => {
+    if (id === 'punKinds') { const mx = punMax(r.name, lists); return 'κείμενο: «' + punAcc(r.name, lists) + '»' + (mx ? ' · ως ' + mx + ' ημ.' : ''); }
+    return pick ? 'ΗΚΑΙ: ' + optLbl(pick, current(id, r, lists)) : '';
+  };
 
-  return html`<${Card} title="Λίστες" actions=${html`<${Segmented} small=${true} value=${id} onChange=${pick} items=${IDS.map(v => ({ value: v, label: SHORT[v] }))}/>`}>
-    <p className="note" style=${{ marginTop: 0 }}>${HELP[id]} Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν. Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».</p>
+  return html`<${Card} title="Λίστες" actions=${html`<select className="ui-select" aria-label="Ποια λίστα" value=${id} onChange=${(e: any) => select(e.target.value)}>${IDS.map(v => html`<option key=${v} value=${v}>${LIST_NAME[v]}</option>`)}</select>`}>
+    <p className="note" style=${{ marginTop: 0 }}>${HELP[id]} Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.${id === 'soldierRanks' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
     <ul className="hist">${rows.map(r => html`<li key=${r.name} className=${r.hidden ? 'muted' : ''}>
       <b style=${r.hidden ? { textDecoration: 'line-through' } : undefined}>${r.name}</b>
       ${r.builtin ? html`<${Badge} tone="outline">βασικό<//>` : html`<${Badge} tone="info">δικό σου<//>`}
-      ${hkRows && (r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>ΗΚΑΙ: ${guess(id, r.name)}</span>`
-        : html`<select className="ui-select" aria-label=${'Γραμμή ΗΚΑΙ για ' + r.name} value=${r.hk || guess(id, r.name)} onChange=${(e: any) => setRowHk(r, e.target.value)}>${hkRows.map(x => html`<option key=${x}>${x}</option>`)}</select>`)}
+      ${pick && !r.builtin
+        ? html`<select className="ui-select" aria-label=${pick.label + ': ' + r.name} value=${current(id, r, lists)} onChange=${(e: any) => setRow(r, pick.f, e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}</select>`
+        : html`<span className="muted" style=${{ fontSize: '12px' }}>${info(r)}</span>`}
       <span style=${{ flex: 1 }}></span>
       ${r.builtin || used.has(itemKey(r.name))
-        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες και στο Excel'}>${r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
+        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'specs' ? ' και στο Excel' : '')}>${r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + r.name} onClick=${() => remove(r)}>✕<//>`}
     </li>`)}</ul>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
-      <div className="field"><label className="field__label" htmlFor="ls-n">Νέο: ${SHORT[id].toLowerCase()}</label><input id="ls-n" className="ui-input" placeholder=${id === 'specs' ? 'π.χ. ΠΝ' : 'π.χ. ΚΛΗΡ'} value=${name} onChange=${(e: any) => { setName(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>
-      ${hkRows && html`<div className="field"><label className="field__label" htmlFor="ls-hk">Γραμμή στην ΗΚΑΙ</label><select id="ls-hk" className="ui-input" value=${curHk} onChange=${(e: any) => setHk(e.target.value)}>${hkRows.map(x => html`<option key=${x}>${x}</option>`)}</select></div>`}
+      <div className="field"><label className="field__label" htmlFor="ls-n">Νέο: ${LIST_NAME[id].toLowerCase()}</label><input id="ls-n" className="ui-input" placeholder=${PH[id]} value=${name} onChange=${(e: any) => { setName(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>
+      ${pick && html`<div className="field"><label className="field__label" htmlFor="ls-c">${pick.label}</label><select id="ls-c" className="ui-input" value=${curChoice} onChange=${(e: any) => setChoice(e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}</select></div>`}
+      ${id === 'punKinds' && html`<div className="field"><label className="field__label" htmlFor="ls-a">Κείμενο ποινής</label><input id="ls-a" className="ui-input" placeholder=${n ? n.toLowerCase() : 'π.χ. επίπληξη'} value=${acc} onChange=${(e: any) => setAcc(e.target.value)}/></div>
+        <div className="field" style=${{ maxWidth: '130px' }}><label className="field__label" htmlFor="ls-m">Ως ημέρες</label><input id="ls-m" className="ui-input" type="number" min="1" placeholder="χωρίς όριο" value=${max} onChange=${(e: any) => setMax(e.target.value)}/></div>`}
       <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!name.trim()} onClick=${add}>Πρόσθεσε<//></div></div>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο' };

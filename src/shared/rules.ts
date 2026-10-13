@@ -1,9 +1,9 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { normGreek } from './text';
-import { hkOfRank, type UserLists } from './ranks';
+import { cadreAbsOf, hkOfRank, leaveCol, type UserLists } from './ranks';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, CADRE_ABS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
+  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
@@ -553,7 +553,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   for (const c of cl) {
     const r = rank[c.hk] ? c.hk : 'Λοχίες'; rank[r].n++;
     const a = (s.cadreAbs || []).find(x => x.cid === c.id && x.from <= date && date <= x.to);
-    const col = a && CADRE_ABS.find(k => k[0] === a.kind)?.[2];
+    const col = a && cadreAbsOf(a.kind, s.settings.lists)?.[2];
     if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; cadreAway++; }
   }
   let soldiers = 0;
@@ -563,7 +563,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const ss = statusesOn(s.statuses, p.id, date);
     const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
     const duty = onDuty.get(p.id);
-    const col = abs ? TYPES[abs.type].hkai! : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+    const col = abs ? (abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!) : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
   let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0), apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;

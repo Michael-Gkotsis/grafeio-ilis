@@ -2,9 +2,10 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { TYPES, WEEK, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
+import { cadreAbsOf } from './ranks';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -139,7 +140,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const clash = s.cadreAbs.find(a => a.cid === x.id && a.from <= c.abs.to && c.abs.from <= a.to);
       if (clash) throw new Error(x.last + ' έχει ήδη απουσία ' + dm(clash.from) + '–' + dm(clash.to));
       const abs: CadreAbs = { ...c.abs, id: 'a' + ctx.newId() }; if (!abs.note) delete abs.note;
-      const lbl = CADRE_ABS.find(k => k[0] === abs.kind)?.[1] || abs.kind;
+      const lbl = cadreAbsOf(abs.kind, s.settings.lists)?.[1] || abs.kind;
       return { state: { ...s, cadreAbs: [...s.cadreAbs, abs] }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to), files: ['ΗΚΑΙ'] };
     }
     case 'deleteCadreAbs': {

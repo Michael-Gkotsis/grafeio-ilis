@@ -148,8 +148,8 @@ function PunTextDialog({ st, onClose }: P) {
   const p = personMap(state.people).get(st.pid)!;
   const [f, setF] = useState({ by: st.by || '', reason: st.reason || '', on: st.on || st.from });
   const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
-  const t = punText(p, { ...st, by: f.by.trim() || undefined, reason: f.reason.trim() || undefined, on: f.on });
-  const max = overMax(st.kind, punDays(st));
+  const t = punText(p, { ...st, by: f.by.trim() || undefined, reason: f.reason.trim() || undefined, on: f.on }, state.settings.lists);
+  const max = overMax(st.kind, punDays(st), state.settings.lists);
   const dirty = f.by !== (st.by || '') || f.reason !== (st.reason || '') || f.on !== (st.on || st.from);
   const save = async () => (dirty ? run({ t: 'setPunInfo', id: st.id, by: f.by, reason: f.reason, on: f.on }, false) : true);
   return html`<${Dialog} title="Κείμενο ποινής" description=${fullName(p) + ' · ' + st.kind + ' ' + dm(st.from) + '–' + dm(st.to)} onClose=${onClose}

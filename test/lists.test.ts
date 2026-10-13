@@ -1,12 +1,15 @@
 // Ρυθμίσεις › Λίστες: βαθμοί στρατιωτών, βαθμοί στελεχών και Ο/Σ που πρόσθεσε ή έκρυψε ο χρήστης.
 // Χωρίς προσθήκες όλα ίδια με πριν. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
-import { CADRE_RANKS, SOLDIER_RANKS, SPECS, guessHk, hkOfRank, listOf, listRows, type UserLists } from '../src/shared/ranks';
+import { CADRE_RANKS, SOLDIER_RANKS, SPECS, cadreAbsKinds, cadreAbsOf, guessHk, hkOfRank, leaveCol, listOf, listRows, type UserLists } from '../src/shared/ranks';
+import { LEAVE_KINDS, PUN_KINDS, CADRE_ABS } from '../src/shared/domain';
+import { overMax, punText } from '../src/shared/punish';
 import { hkRankOf, hkaiCounts } from '../src/shared/rules';
 import { listColumns, type SourceBinding } from '../src/shared/sources';
 import { apply } from '../src/shared/commands';
 import type { RawSheet } from '../src/shared/roster';
 import { fakeState } from './fixtures';
+import type { AppState } from '../src/shared/domain';
 
 const D = '2026-10-12';
 
@@ -55,5 +58,46 @@ describe('λίστες', () => {
     const r = apply(s, { t: 'setSettings', settings: { lists: { specs: { add: [{ name: 'ΠΝ' }] } } }, text: 'λίστα' }, { today: D, newId: () => 'x' });
     expect(listOf(r.state.settings.lists, 'specs')).toContain('ΠΝ');
     expect(r.undoable).not.toBe(false);
+  });
+
+  it('ποινές: δικό σου είδος με δικό του κείμενο και ανώτατες ημέρες· τα βασικά όπως πριν', () => {
+    expect(listOf(undefined, 'punKinds')).toEqual(PUN_KINDS);
+    const l: UserLists = { punKinds: { add: [{ name: 'Επίπληξη', acc: 'επίπληξη (προφορική)', max: 2 }, { name: 'Αγγαρεία' }] } };
+    const s = fakeState(3); const p = s.people[0];
+    const st = { id: 'x', pid: p.id, type: 'PUN' as const, from: D, to: '2026-10-14', kind: 'ΕΠΙΠΛΗΞΗ' };
+    expect(punText(p, st, l).dur).toBe('τρεις (03) ημέρες επίπληξη (προφορική)');
+    expect(punText(p, { ...st, kind: 'Αγγαρεία' }, l).dur).toBe('τρεις (03) ημέρες αγγαρεία');
+    expect(overMax('Επίπληξη', 3, l)).toBe(2); expect(overMax('Επίπληξη', 2, l)).toBe(0); expect(overMax('Αγγαρεία', 30, l)).toBe(0);
+    expect(punText(p, { ...st, kind: 'Κράτηση' }, l).dur).toBe('τρεις (03) ημέρες κράτηση');
+    expect(overMax('Κράτηση', 9, l)).toBe(8); expect(overMax('Κράτηση', 9)).toBe(8);
+  });
+  it('άδειες: η «Ειδική» μετρά στις Ειδικές της ΗΚΑΙ, οι άλλες βασικές στις Κανονικές, οι δικές σου όπου όρισες', () => {
+    expect(listOf(undefined, 'leaveKinds')).toEqual(LEAVE_KINDS);
+    const l: UserLists = { leaveKinds: { add: [{ name: 'Γονική', col: 'eid' }, { name: 'Φοιτητική' }, { name: 'Λάθος', col: 'nos' }] } };
+    expect(['Κανονική', 'ΑΜΔ', 'ΥΕΘΑ', undefined].map(k => leaveCol(k))).toEqual(['ka', 'ka', 'ka', 'ka']);
+    expect(leaveCol('ΕΙΔΙΚΗ')).toBe('eid'); expect(leaveCol('Ειδική', l)).toBe('eid');
+    expect([leaveCol('γονική', l), leaveCol('Φοιτητική', l), leaveCol('Λάθος', l)]).toEqual(['eid', 'ka', 'ka']);
+    const s0 = fakeState(10); const pid = s0.people[2].id;
+    const s = (kind: string) => ({ ...s0, statuses: [{ id: 'l', pid, type: 'LEAVE' as const, from: D, to: D, kind }] });
+    const h1 = hkaiCounts(s('Κανονική'), D), h2 = hkaiCounts(s('Ειδική'), D);
+    expect(h1.cols.ka.map(p => p.id)).toEqual([pid]); expect(h1.cols.eid).toEqual([]);
+    expect(h2.cols.eid.map(p => p.id)).toEqual([pid]); expect(h2.cols.ka).toEqual([]);
+    expect(h2.apo).toBe(h1.apo);
+  });
+  it('απουσίες στελεχών: δικό σου είδος μετρά στη στήλη που όρισες· κρυμμένο βασικό διαβάζεται ακόμα', () => {
+    expect(cadreAbsKinds()).toEqual(CADRE_ABS);
+    const l: UserLists = { cadreAbs: { add: [{ name: 'Σχολείο', col: 'ekp' }, { name: 'Υπηρεσιακή' }], hide: ['Φύλλο πορείας'] } };
+    expect(cadreAbsKinds(l).map(x => x[0])).toEqual(['ka', 'an', 'eid', 'nos', 'ekp', 'allh', 'other', 'Σχολείο', 'Υπηρεσιακή']);
+    expect(cadreAbsOf('fp', l)).toEqual(['fp', 'Φύλλο πορείας', 'fp']);
+    expect(cadreAbsOf('Σχολείο', l)).toEqual(['Σχολείο', 'Σχολείο', 'ekp']);
+    const s0 = fakeState(4); let s: AppState = { ...s0, settings: { ...s0.settings, lists: l } };
+    s = apply(s, { t: 'saveCadre', cadre: { rank: 'ΙΛΧΟΣ', hk: 'Ίλαρχοι', last: 'ΥΠΟΘΕΤΙΚΟΣ', first: 'Α' } }, { today: D, newId: () => 'c1' }).state;
+    const r = apply(s, { t: 'addCadreAbs', abs: { cid: s.cadreList[0].id, kind: 'Σχολείο', from: D, to: D } }, { today: D, newId: () => 'a1' });
+    expect(r.text).toContain('σχολείο');
+    const h = hkaiCounts(r.state, D);
+    expect(h.rank['Ίλαρχοι'].c.ekp).toBe(1);
+    const h0 = hkaiCounts({ ...r.state, cadreAbs: [{ ...r.state.cadreAbs[0], kind: 'Υπηρεσιακή' }] }, D);
+    expect(h0.rank['Ίλαρχοι'].c.ekp).toBeUndefined();
+    expect(h.apo).toBe(h0.apo + 1);
   });
 });
