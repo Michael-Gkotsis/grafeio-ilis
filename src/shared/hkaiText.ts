@@ -18,7 +18,7 @@ export function hkaiPunLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
   return s.statuses.filter(x => x.type === 'PUN' && (x.on || x.from) === d && pm.has(x.pid))
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p))
-    .map(({ x, p }, i) => { const t = punText(p, x); return [{ t: (i + 1) + ') ' + t.before }, { t: t.dur, u: true }, { t: t.after }]; });
+    .map(({ x, p }, i) => { const t = punText(p, x, s.settings.lists); return [{ t: (i + 1) + ') ' + t.before }, { t: t.dur, u: true }, { t: t.after }]; });
 }
 
 // 5. ΑΙΤΗΣΕΙΣ: οι αιτήσεις της μέρας αριθμημένες, και στο τέλος ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ
