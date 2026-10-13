@@ -30,6 +30,9 @@ export type Command =
   | { t: 'setRules'; rules: Rules; text: string }
   | { t: 'setCap'; pid: number; kind: DutyKind; allowed: boolean }
   | { t: 'setOffDays'; pid: number; days: number[] }
+  // συντομεύσεις της καρτέλας (π.χ. «Όχι ΣΚ», «Μόνο μαγειρεία»): ίδια δεδομένα με τα κουτάκια, μία αναίρεση.
+  // off: είδη που δεν κάνει (από τον λοχία)· on: είδη που ξανακάνει (φεύγει η εξαίρεση του λοχία)· reset: χωρίς καμία εξαίρεση του λοχία
+  | { t: 'setDutyProfile'; pid: number; off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean; text: string }
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
@@ -275,6 +278,21 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const days = WEEK.filter(d => c.days.includes(d));
       const next: Person = { ...p }; if (days.length) next.offDays = days; else delete next.offDays;
       return { state: { ...s, people: s.people.map(x => (x.id === p.id ? next : x)) }, text: 'Μέρες υπηρεσίας: ' + shortName(p) + (days.length ? ' όχι ' + days.map(d => DOW_FULL[d]).join(', ') : ' όλες τις μέρες'), files: [] };
+    }
+    case 'setDutyProfile': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const cur: Partial<Record<DutyKind, string | null>> = c.reset ? {} : { ...(s.caps[c.pid] || {}) };
+      (c.on || []).forEach(k => { if (cur[k]) delete cur[k]; });
+      (c.off || []).forEach(k => { cur[k] = 'Από τον λοχία'; });
+      const caps = { ...s.caps }; if (Object.keys(cur).length) caps[c.pid] = cur as any; else delete caps[c.pid];
+      const dset = c.reset ? [] : c.days;
+      let people = s.people;
+      if (dset) {
+        const days = WEEK.filter(d => dset.includes(d)); const next: Person = { ...p };
+        if (days.length) next.offDays = days; else delete next.offDays;
+        people = s.people.map(x => (x.id === p.id ? next : x));
+      }
+      return { state: { ...s, caps, people }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(p) + ' · ' + c.text, files: [] };
     }
     case 'setSettings':
       return { state: { ...s, settings: { ...s.settings, ...c.settings } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
