@@ -74,7 +74,7 @@ export function TodayScreen() {
     <div className="kpis">
       ${kpi('Δύναμη', c.total, () => nav.go('people', { filter: 'all' }))}
       ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
-      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, 'Ιατρικά σε ισχύ: ' + nRec)}
+      ${kpi('Απόντες', c.absent, () => nav.go('hkai', { hkaiDate: today, hkaiTab: 'state' }), undefined, 'Ιατρικά σε ισχύ: ' + nRec)}
       ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
       ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
     </div>
@@ -82,9 +82,9 @@ export function TodayScreen() {
       <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
         ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
       <//>
-      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today })}>Δύναμη<//>`}>
+      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('hkai', { hkaiTab: 'state', hkaiDate: today })}>Δύναμη<//>`}>
         ${away.length ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? 'σήμερα' : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}</ul>
-          ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
+          ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στην ΗΚΑΙ › Δύναμη ανά κατάσταση.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
       <//>
     </div>
     <div className="cols cols--b">
@@ -175,23 +175,20 @@ function PunTextDialog({ st, onClose }: P) {
   <//>`;
 }
 
-export function StrengthScreen() {
-  const { state, today, tomorrow } = useStore(); const nav = useNav();
-  const date = nav.params.strengthDate || today;
+// Δύναμη ανά κατάσταση: καρτέλα μέσα στην ΗΚΑΙ (τα ίδια άτομα, ομαδοποιημένα ανά ιατρικό/άδεια/ποινή)
+function StrengthByType({ date }: { date: string }) {
+  const { state } = useStore(); const nav = useNav();
   const c = useMemo(() => strengthOf(state, date), [state, date]);
-  return html`<div>
-    <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει αυτόματα από τα ιατρικά, τις άδειες, τις εξόδους και τις ποινές. Απόντες: άδεια, αναρρωτική, νοσοκομείο, εξοδούχοι."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
-    <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>ΗΚΑΙ<//>`}>
+  return html`<${Card} title="Ανά κατάσταση">
       <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Οργανική</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
       ${TYPE_KEYS.map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${c.counts[k]}</span></div>
         ${c.counts[k] > 0 && html`<div className="cat__names">${c.lists[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
-    <//>
-  </div>`;
+    <//>`;
 }
 
 export function HkaiScreen() {
   const { state, today } = useStore(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
-  const date = nav.params.hkaiDate || today;
+  const date = nav.params.hkaiDate || today; const tab = nav.params.hkaiTab === 'state' ? 'state' : 'hkai';
   const [side, setSide] = useState(mobile ? 'sum' : 'front');
   const h = useMemo(() => hkaiCounts(state, date), [state, date]);
   const front = useMemo(() => hkaiFront(state, date, h), [state, date, h]);
@@ -213,7 +210,8 @@ export function HkaiScreen() {
     <div className="toolbar" style=${{ marginTop: '10px' }}><${ExportButton} kind="hkai" date=${date} label="η ΗΚΑΙ"/></div><${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
     <${PageHeader} title=${'ΗΚΑΙ της ' + dmy(date)} sub="Κατάσταση Ημερήσιας Αναφοράς. Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ hkaiDate: d })} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
-    ${mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
+    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkaiTab: v })} items=${[{ value: 'hkai', label: 'Έντυπο ΗΚΑΙ' }, { value: 'state', label: 'Δύναμη ανά κατάσταση' }]}/></div>
+    ${tab === 'state' ? html`<${StrengthByType} date=${date}/>` : mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
   </div>`;
 }
 
@@ -472,7 +470,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Νέα ποινή (αίτηση στην ΗΚΑΙ)', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ type: 'PUN', from: today, to: addDays(today, 4) }) },
     { t: 'Ιατρικά και ποινές', k: 'ΙΑΤΡΙΚΑ ΠΟΙΝΕΣ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'med' }) },
     { t: 'Δώσε άδεια', k: 'ΑΔΕΙΑ', fn: () => nav.declare({ type: 'LEAVE' }) },
-    { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
+    { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('hkai', { hkaiTab: 'state', hkaiDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },

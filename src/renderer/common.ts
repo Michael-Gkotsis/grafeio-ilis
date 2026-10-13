@@ -35,7 +35,7 @@ function useFloat(ref: { current: HTMLElement | null }, open: boolean) {
       const r = el.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 12, above = r.top - 12;
       const up = below < 220 && above > below;
       const maxHeight = Math.max(120, Math.min(320, up ? above : below));
-      const vw = document.documentElement.clientWidth, width = Math.min(Math.max(r.width, 360), vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
+      const vw = document.documentElement.clientWidth, width = Math.min(Math.max(r.width, 420), vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
       setPos(up ? { left, width, bottom: vh - r.top + 4, maxHeight } : { left, width, top: r.bottom + 4, maxHeight });
     };
     upd();
@@ -286,7 +286,7 @@ export function useUsbCopy() {
 /* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
 const SHORTCUTS: [string, string][] = [
   ['Ctrl K', 'Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε'], ['Ctrl F', 'Αναζήτηση στη λίστα της οθόνης'], ['Ctrl N', 'Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)'],
-  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Προσωπικό, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ, Ιστορικό, Ρυθμίσεις'],
+  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 8', 'Σήμερα, Προσωπικό, Υπηρεσίες, Εξοδούχοι, Ιατρικά, ΗΚΑΙ (και δύναμη), Ιστορικό, Ρυθμίσεις'],
   ['Alt ←', 'Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)'], ['Ctrl B', 'Μενού πλήρες ή μόνο εικονίδια'], ['F1', 'Αυτό το υπόμνημα'], ['Esc', 'Κλείσιμο παραθύρου ή καρτέλας']
 ];
 export function LegendDialog({ onClose }: { onClose: () => void }) {

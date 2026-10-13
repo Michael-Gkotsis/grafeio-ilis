@@ -172,12 +172,52 @@ export function GuardScreen() {
   const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<span key=${p.id} className="na">${shortName(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${TYPES[s.type as TypeKey].long}>${TYPES[s.type as TypeKey].label}<//></span>`)}</div>`;
   const autofill = async () => { const ns = await run({ t: 'autofill', date }, false); const left = ns ? postsOf(ns.settings).filter(x => !(ns.guards[date] || {})[x.k]).length : 0; if (ns) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoMark()] }); };
   const [preview, setPreview] = useState(false);
+  // «Επόμενη κενή» (κουμπί ή πλήκτρο Ν): πάει στην επόμενη κενή θέση, ανοίγει την ομάδα της και την επιλογή ατόμου
+  // Συνεχίζει μετά την τελευταία θέση που πήγες (ή που γράφεις τώρα), αλλιώς από όσα φαίνονται στην οθόνη
+  const [goK, setGoK] = useState<string | null>(null); const lastK = useRef<string | null>(null);
+  useEffect(() => { lastK.current = null; }, [date]);
+  const nextEmpty = useCallback(() => {
+    const shown = new Set(blocks.filter(b => !b.hidden).map(b => b.id));
+    const vis = posts.filter(x => shown.has(x.block));
+    const ks = vis.filter(x => !g[x.k]).map(x => x.k);
+    if (!ks.length) { toast({ text: 'Δεν έμεινε κενή θέση' }); return; }
+    const id = (document.activeElement as HTMLElement | null)?.id || '';
+    const from = id.startsWith('gp-') ? id.slice(3) : lastK.current;
+    const at = from ? vis.findIndex(x => x.k === from) : -1;
+    let k = at >= 0 ? (vis.slice(at + 1).find(x => !g[x.k]) || vis.find(x => !g[x.k]))!.k : '';
+    if (!k) { const top = (document.querySelector('.topbar') as HTMLElement | null)?.offsetHeight || 60; k = ks.find(q => { const el = document.getElementById('gp-' + q); return !el || el.getBoundingClientRect().top > top + 60; }) || ks[0]; }
+    const b = posts.find(x => x.k === k)!.block;
+    lastK.current = k; setFold(f => ({ ...f, [b]: true })); setGoK(k);
+  }, [posts, blocks, g]);
+  useEffect(() => {
+    if (!goK) return; setGoK(null);
+    const el = document.getElementById('gp-' + goK) as HTMLInputElement | null;
+    if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
+  }, [goK]);
+  useEffect(() => {
+    if (locked || tab !== 'posts') return;
+    const h = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName || '') || document.querySelector('.ui-overlay,.ui-sheet')) return;
+      if (e.key === 'n' || e.key === 'N' || e.key === 'ν' || e.key === 'Ν') { e.preventDefault(); nextEmpty(); }
+    };
+    document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
+  }, [locked, tab, nextEmpty]);
+  // η μπάρα των θέσεων μένει πάνω όταν κυλάς, με τα βασικά κουμπιά της σελίδας
+  const sentinel = useRef<HTMLDivElement>(null); const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinel.current; if (!el) return;
+    const top = (document.querySelector('.topbar') as HTMLElement | null)?.offsetHeight || 60;
+    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting && e.boundingClientRect.top < top + 1), { rootMargin: '-' + (top + 1) + 'px 0px 0px 0px' });
+    io.observe(el); return () => io.disconnect();
+  }, [tab, mobile]);
   const fileName = 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(date).replace(/\//g, '-') + '.xlsx';
   const sheet = () => html`<${ExcelSheet} model=${model} fileName=${fileName} sheetName=${phase === 'spen' ? 'ΦΡΟΥΡΑ ΣΠΕΝ' : 'ΦΡΟΥΡΑ ΣΒΕΝ'} meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>`;
   const left = html`<div className="guard__left">
     ${locked && html`<${Alert} tone="info"><span>Περασμένη μέρα: οι θέσεις είναι κλειδωμένες για να μην αλλάξει κατά λάθος ο έλεγχος υπηρεσιών.</span><${Button} size="sm" variant="outline" onClick=${() => setUnlocked({ ...unlocked, [date]: true })}>Ξεκλείδωσε για διόρθωση<//><//>`}
     ${printed && html`<${Alert} tone="info"><span>Βγήκε Excel για αυτή τη μέρα στις <b>${printed}</b>. Αν αλλάξεις κάτι, βγάλ' το ξανά.</span><//>`}
-    <div className="guard__bar"><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}
+    <div ref=${sentinel} aria-hidden="true"></div>
+    <div className=${cx('guard__bar', stuck && 'is-stuck')}><span className="gb-stuck"><b>${dow(date)} ${dm(date)}</b></span><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}${!locked && empty.length > 0 && html`<${Button} size="sm" variant="outline" className="gb-keep" onClick=${nextEmpty} data-tip="Πάει στην επόμενη κενή θέση και ανοίγει την επιλογή ατόμου (πλήκτρο Ν)">Επόμενη κενή<//>`}
+      <span className="gb-stuck"><${Button} size="sm" disabled=${locked || !empty.length || !people.length} onClick=${autofill}>Αυτόματη συμπλήρωση<//><${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//></span>
       <span className="guard__rules">${isHol(state.settings, date) && html`<${Badge} tone="warn" data-tip="Μετρά ως αργία στον έλεγχο υπηρεσιών">Αργία: ${holName(state.settings, date)}<//>`}</span>
       ${!locked && Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoMark()] }); }}>Καθάρισε<//>`}
       <${MonthSelect} m=${mon} width="160px" small=${true}/><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
