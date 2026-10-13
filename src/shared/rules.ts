@@ -3,7 +3,7 @@ import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type IS
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, siUnarmed, statusLbl, type UserLists } from './ranks';
 import { hasTimes, mins } from './hours';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
@@ -72,7 +72,7 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
   let byPid = byDay.get(date); if (!byPid) { byPid = new Map(); byDay.set(date, byPid); }
   let r = byPid.get(pid);
   if (!r) {
-    r = statusesOf(statuses, pid).filter(s => !s.pending && s.from <= date && date <= s.to);
+    r = statusesOf(statuses, pid).filter(s => !s.pending && coversDay(s, date));
     r = r.length ? r.sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type)) : NONE;
     byPid.set(pid, r);
   }
@@ -259,7 +259,7 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
   const st = statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].noOut);
   if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date);
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
-  const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && x.from <= date && date <= x.to);
+  const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && coversDay(x, date));
   return pend ? (pend.kind || 'Ποινή') + ' (αιτείται)' + untilTxt(pend, date) : null;
 }
 export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.outRooms[parseD(d).getDay()] || null;
@@ -535,7 +535,7 @@ export interface StatusPlan {
   cancels: Status[];
   alongside: { pid: number; status: Status }[];   // άλλο ιατρικό στις ίδιες μέρες: ισχύουν και τα δύο
 }
-const overlapsRange = (s: Status, from: ISODate, to: ISODate) => !(to < s.from || from > s.to);
+const overlapsRange = (s: Status, from: ISODate, to: ISODate) => !(to < s.from || (!s.open && from > s.to));
 // Ιατρικά (Michael, 13/10): ένας στρατιώτης μπορεί να έχει μαζί π.χ. ΕΑ και ΕΥ. Ίδιο ιατρικό = ίδιο όνομα
 // (ΕΑ με ΕΑ, «ΕΛ ΠΟΔ» με «ΕΛ ΠΟΔ»)· διαφορετικά ιατρικά ισχύουν μαζί και μετρά ο πιο αυστηρός περιορισμός.
 export const sameMed = (a: Pick<Status, 'type' | 'kind'>, b: Pick<Status, 'type' | 'kind'>, lists?: UserLists) =>

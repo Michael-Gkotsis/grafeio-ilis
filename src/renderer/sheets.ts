@@ -1,6 +1,6 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, fullName, type AppState, type DutyKind } from '../shared/domain';
+import { ROT, TYPES, coversDay, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
@@ -50,7 +50,7 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   }
   lay.extra.forEach(x => rows.push(ext(x)));
   rows.push([E('', '', W)]);
-  const on = (x: { from: string; to: string }) => x.from <= date && date <= x.to;
+  const on = (x: Status) => coversDay(x, date);
   const pun = s.statuses.filter(x => x.type === 'PUN' && !x.pending && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   const abs = s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   rows.push([E('ΤΙΜΩΡΗΜΕΝΟΙ', 'b hdr', 6), E(''), E('ΑΠΟΝΤΕΣ', 'b hdr', 6)]);
