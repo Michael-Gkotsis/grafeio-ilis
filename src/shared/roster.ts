@@ -63,7 +63,8 @@ export function isPersonRow(last: string, first: string, father: string): boolea
   if (L === F) return false;                                  // συγχωνευμένο κελί
   if (SUMMARY.test(L) || SUMMARY.test(F)) return false;
   if (P && /^[\d\s.,]+$/.test(P)) return false;              // αριθμός στη θέση του πατρώνυμου
-  return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-.]*$/.test(F);
+  // «/» για διπλό όνομα (ΝΙΚΟΛΑΟΣ/ΛΟΥΚΑΣ): αλλιώς η γραμμή χανόταν σιωπηλά, ούτε στο «Χωρίς άτομο»
+  return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(F);
 }
 
 interface Rec { rank: string; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null }
