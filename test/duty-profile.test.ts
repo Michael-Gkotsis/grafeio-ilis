@@ -26,7 +26,7 @@ describe('setDutyProfile', () => {
   it('δεν παρακάμπτει τη Σ.Ι.: το «on» σβήνει μόνο την εξαίρεση του λοχία', () => {
     const s0 = fakeState(10);   // ο 10ος είναι Ι3 ΑΟΠΛΟ
     const s1 = apply(s0, { t: 'setDutyProfile', pid: 10, on: ['op', 'sk'], text: 'ξανά' }, ctx).state;
-    expect(Object.keys(capsOf(s1, 10)).sort()).toEqual(['op', 'sk']);
+    expect(Object.keys(capsOf(s1, 10)).sort()).toEqual(['op', 'sk', 'tae']);   // ο άοπλος ούτε σε ΤΑΕ (ένοπλη)
   });
   it('«Καμία εξαίρεση» σβήνει δυνατότητα και μέρες του λοχία', () => {
     let s = apply(fakeState(5), { t: 'setDutyProfile', pid: 3, off: ['sk'], days: [6], text: 'x' }, ctx).state;
