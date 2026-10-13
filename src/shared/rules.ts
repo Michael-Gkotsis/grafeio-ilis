@@ -1,6 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, hkOfRank, leaveCol, medWarns, siUnarmed, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
+import { siDeny, siIsUnarmed } from './si';
 import { hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName, noteNamesakes,
@@ -100,9 +101,8 @@ export function strengthOf(s: AppState, date: ISODate): Strength {
 export function defaultCaps(p: Person, lists?: UserLists): Partial<Record<DutyKind, string>> {
   // όποιος έχει πόστο εξαιρείται από όλες τις υπηρεσίες εκτός από Λ/Υ και Δ/Υ
   if (p.post) return Object.fromEntries(CAP_KINDS.map(([k]) => [k, 'Πόστο: ' + p.post]));
-  // και «άοπλος», «I4» με λατινικό I· και όσα Σ.Ι. όρισες στις Λίστες
-  if (siUnarmed(p.si, lists)) return { op: 'Σ.Ι. ' + p.si, sk: 'Σ.Ι. ' + p.si };
-  return {};
+  // Σ.Ι.: ό,τι λέει ο πίνακας Σ.Ι. (si.ts)· χωρίς αλλαγές, Ι3 ΑΟΠΛΟ και Ι4 όχι οπλοφύλακας και σκοπιά, όπως πριν
+  return Object.fromEntries(siDeny(p.si, lists).map(k => [k, 'Σ.Ι. ' + p.si]));
 }
 export function capsOf(s: AppState, pid: number): Partial<Record<DutyKind, string>> {
   const p = personMap(s.people).get(pid);
@@ -393,11 +393,11 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
 }
 // --------------------------- «Αυστηρά Άοπλοι» (λοχίας, 11/10· κλείνει/ανοίγει στους Κανόνες) ---------------------------
-// Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. άοπλου (Ι3 ΑΟΠΛΟ, Ι4, ή όσα όρισες στις Λίστες), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
+// Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
 export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   if (statusesOn(s.statuses, pid, date).some(x => TYPES[x.type].noArmed)) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
-  if (siUnarmed(p.si, s.settings.lists)) return true;
+  if (siIsUnarmed(p.si, s.settings.lists)) return true;
   const kinds = [...new Set(postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly').map(x => x.kind))];
   const c = s.caps[pid] || {};
   return kinds.length > 0 && kinds.every(k => !!c[k]);

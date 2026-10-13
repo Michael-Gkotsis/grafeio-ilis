@@ -57,6 +57,8 @@ const optLbl = (p: Pick, v: string) => p.opts.find(o => o[0] === v)?.[1] || v;
 export function ListsCard() {
   const { state, run } = useStore(); const toast = useToast();
   const [id, setId] = useState<ListId>('soldierRanks');
+  // η λίστα «Σ.Ι. άοπλων» έγινε ο πίνακας Σ.Ι. (κάρτα «Σ.Ι.»): φαίνεται μόνο σε όποιον έχει ήδη αλλάξει κάτι εκεί
+  const ids = IDS.filter(v => v !== 'siUnarmed' || !!(state.settings.lists?.siUnarmed?.add?.length || state.settings.lists?.siUnarmed?.hide?.length));
   const [name, setName] = useState(''); const [choice, setChoice] = useState<string | null>(null);
   const [acc, setAcc] = useState(''); const [max, setMax] = useState(''); const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export function ListsCard() {
     return pick ? 'ΗΚΑΙ: ' + optLbl(pick, current(id, r, lists)) : '';
   };
 
-  return html`<${Card} title="Λίστες" actions=${html`<select className="ui-select" aria-label="Ποια λίστα" value=${id} onChange=${(e: any) => select(e.target.value)}>${IDS.map(v => html`<option key=${v} value=${v}>${LIST_NAME[v]}</option>`)}</select>`}>
+  return html`<${Card} title="Λίστες" actions=${html`<select className="ui-select" aria-label="Ποια λίστα" value=${id} onChange=${(e: any) => select(e.target.value)}>${ids.map(v => html`<option key=${v} value=${v}>${LIST_NAME[v]}</option>`)}</select>`}>
     <p className="note" style=${{ marginTop: 0 }}>${HELP[id]}${id === 'siUnarmed' ? ' Όποιο βασικό απενεργοποιήσεις δεν ισχύει πια.' : ' Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.'}${id === 'soldierRanks' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
     <ul className="hist">${rows.map(r => html`<li key=${r.name} className=${r.hidden ? 'muted' : ''}>
       <b style=${r.hidden ? { textDecoration: 'line-through' } : undefined}>${r.name}</b>

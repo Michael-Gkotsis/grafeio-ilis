@@ -477,6 +477,11 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .xl td.sm{font-size:10px;line-height:1.15;white-space:normal;padding:2px;vertical-align:middle}
 .xl td.we{background:var(--xl-hdr)}
 .xl td.code{text-align:center;font-weight:700;padding:2px}
+.sigrid{border-collapse:collapse;width:100%;font-size:13px}
+.sigrid th,.sigrid td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}
+.sigrid th:first-child,.sigrid td:first-child{text-align:left}
+.sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px}
+.sigrid tr.is-sub td:first-child{padding-left:22px}
 .capgrid{display:flex;flex-wrap:wrap;gap:6px}
 .capgrid label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
 .capgrid label.is-off{background:var(--muted);color:var(--muted-fg);text-decoration:line-through}
