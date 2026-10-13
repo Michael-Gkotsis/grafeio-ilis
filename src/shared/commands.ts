@@ -1,7 +1,7 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, dm, DOW_FULL, type ISODate } from './dates';
-import { normGreek } from './text';
+import { norm, normGreek } from './text';
 import { TYPES, WEEK, CAP_ACC, OUT_NOTE, CADRE_ABS, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, splitOut, type StatusCmd } from './rules';
@@ -30,6 +30,7 @@ export type Command =
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
+  | { t: 'addPerson'; person: NewPerson }
   | { t: 'setBaseline'; pid: number; baseline: Baseline }
   | { t: 'setBaselines'; baselines: Record<number, Baseline> }
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
@@ -49,6 +50,9 @@ export type Command =
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
+
+// Νέος στρατιώτης από την εφαρμογή: ό,τι γράφει η φόρμα (το id, το «σε δύναμη» και το «νέος» τα βάζει η εντολή)
+export type NewPerson = Omit<Person, 'id' | 'active' | 'added'>;
 
 export interface Ctx { today: ISODate; newId: () => string }
 export interface Result { state: AppState; text: string; files: string[]; source?: 'app' | 'auto' | 'import' | 'excel'; undoable?: boolean; extra?: string[] }
@@ -327,6 +331,24 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       if (!pm.has(c.person.id)) throw new Error('Δεν βρέθηκε το άτομο');
       return { state: { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)) }, text: 'Άλλαξαν τα στοιχεία: ' + shortName(c.person), files: [] };
     }
+    case 'addPerson': {
+      const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
+      const p: Person = {
+        ...x, id: s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1, active: true, added: true,
+        // όπως τα γράφει η εισαγωγή του Δυναμολογίου (roster.ts), ώστε να ταιριάζουν μετά
+        rank: normGreek(t(x.rank)), spec: normGreek(t(x.spec)), last: norm(t(x.last)), first: norm(t(x.first)), father: norm(t(x.father)),
+        asm: t(x.asm).replace(/\s/g, ''), phone: t(x.phone).replace(/\s/g, ''), si: normGreek(t(x.si)), essos: t(x.essos),
+        room: x.room != null && x.room > 0 ? Math.floor(x.room) : null, post: t(x.post) ? norm(t(x.post)) : null, role: t(x.role) ? norm(t(x.role)) : null,
+        attached: !!x.attached, notes: t(x.notes)
+      };
+      if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
+      if (!p.dn) delete p.dn;
+      if (!p.offDays?.length) delete p.offDays;
+      if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
+      const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
+      if (twin) throw new Error('Υπάρχει ήδη ' + (twin.asm && twin.asm === p.asm ? 'άτομο με ΑΣΜ ' + p.asm + ': ' : 'ο ') + twin.rank + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)'));
+      return { state: { ...s, people: [...s.people, p] }, text: 'Νέος στρατιώτης: ' + (p.rank ? p.rank + ' ' : '') + p.last + ' ' + p.first, files: [] };
+    }
     case 'setBaseline': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       const clean: Baseline = {}; let any = false;
@@ -409,6 +431,7 @@ function mergeRow(ex: Person, r: ImportRow): Person {
   const auto = ex.notes.startsWith(OUT_NOTE);
   const active = r.active ?? (ex.active || !auto);
   const next: Person = { ...ex, ...r, id: ex.id, active };
+  delete next.added;
   if (active && r.notes === undefined && auto) next.notes = '';
   return next;
 }
@@ -433,7 +456,8 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
   const people = s.people.flatMap(p => {
     const u = updated.get(p.id); if (u) return [u];
     if (deactivateMissing && !used.has(p.id)) { removed++; return []; }
-    if (deactivateMissing && p.active) { deact++; return [{ ...p, active: false }]; }
+    // νέος από την εφαρμογή που δεν είναι στο Δυναμολόγιο: τον έσβησε ο λοχίας, δεν ξαναγράφεται εκεί
+    if (deactivateMissing && p.active) { deact++; const q = { ...p, active: false }; delete q.added; return [q]; }
     return [p];
   }).concat(added);
   const caps = { ...s.caps }; for (const k of Object.keys(caps)) if (!people.some(p => p.id === +k)) delete caps[+k];

@@ -221,7 +221,7 @@ describe('θάλαμοι (Μ4) και μήνας ελέγχου υπηρεσιώ
     const b = bindAll((await readBook(file)).sheets, file, ['people']).people;
     const s2: AppState = { ...s, people: s.people.map(p => (p.id === s.people[2].id ? { ...p, room: 9 } : p)) };
     const w = await writeSource('people', b, s2, { keys: [], at: 'x', mtime: 0, size: 0 }, TODAY);
-    expect(w.ok && w.rooms).toEqual({ n: 1, sheet: 'ΘΑΛΑΜΟΙ' });
+    expect(w.ok && w.rooms).toEqual({ n: 1, added: 0, sheet: 'ΘΑΛΑΜΟΙ' });
   });
   it('ο μήνας που όρισε ο χρήστης ισχύει όταν ο τίτλος του φύλλου δεν έχει μήνα', () => {
     const sh: RawSheet = { name: 'ΕΛΕΓΧΟΣ', rows: [['ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ'], ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 1, 2, 3]] };
