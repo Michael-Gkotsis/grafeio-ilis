@@ -4,8 +4,10 @@ import { html } from './ui';
 import { App } from './app';
 import { mockApi } from './mockApi';
 import { applyPrefs, loadPrefs } from './prefs';
+import { installTips } from './tips';
 
-applyPrefs(loadPrefs());   // θέμα και πυκνότητα πριν από την πρώτη εικόνα, χωρίς αναβόσβημα
+applyPrefs(loadPrefs());
+installTips();   // θέμα και πυκνότητα πριν από την πρώτη εικόνα, χωρίς αναβόσβημα
 
 // Στον browser (ανάπτυξη χωρίς Electron) δουλεύουμε με δεδομένα στη μνήμη
 if (!window.api) (window as any).api = mockApi();

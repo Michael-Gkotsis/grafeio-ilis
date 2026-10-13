@@ -1,6 +1,7 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, Kbd, Strip } from './ui';
+import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
@@ -24,6 +25,25 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
   return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => (MED_LIKE.includes(x.type) && statusLbl(x, lists) !== TYPES[x.type].label ? statusLbl(x, lists) : TYPES[x.type].long) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
 });
 
+// Λίστα που «επιπλέει» κάτω από το πεδίο (ή από πάνω, αν δεν χωρά): δεν κόβεται από παράθυρα, κάρτες ή το κάτω μέρος της οθόνης
+function useFloat(ref: { current: HTMLElement | null }, open: boolean) {
+  const [pos, setPos] = useState<Record<string, number> | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const upd = () => {
+      const el = ref.current; if (!el) return;
+      const r = el.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 12, above = r.top - 12;
+      const up = below < 220 && above > below;
+      const maxHeight = Math.max(120, Math.min(320, up ? above : below));
+      const vw = document.documentElement.clientWidth, width = Math.min(Math.max(r.width, 360), vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
+      setPos(up ? { left, width, bottom: vh - r.top + 4, maxHeight } : { left, width, top: r.bottom + 4, maxHeight });
+    };
+    upd();
+    window.addEventListener('scroll', upd, true); window.addEventListener('resize', upd);
+    return () => { window.removeEventListener('scroll', upd, true); window.removeEventListener('resize', upd); };
+  }, [open]);
+  return pos;
+}
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
 export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked }: P) {
   const { state, today } = useStore();
@@ -33,19 +53,20 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
   const pm = useMemo(() => new Map(state.people.map(p => [p.id, p])), [state.people]);
   const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).slice(0, 8).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
+  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open);
   const pick = (i: number) => { const x = items[i]; if (!x) return; if (x.na) { if (onBlocked) { setOpen(false); setQ(''); onBlocked(x.p, x.na); } return; } if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
   return html`<div className="picker">
     ${multiple && chosen.length > 0 && html`<div className="picker__chips">${chosen.map(pid => html`<span key=${pid} className="picker__chip">${shortName(pm.get(pid)!)}<button type="button" aria-label=${'Αφαίρεση ' + shortName(pm.get(pid)!)} onClick=${() => onChange(chosen.filter(x => x !== pid))}>✕</button></span>`)}</div>`}
-    <input id=${id} className="ui-input" autoComplete="off" role="combobox" aria-expanded=${open} data-autofocus=${autoFocus ? '' : undefined}
+    <input ref=${box} id=${id} className="ui-input" autoComplete="off" role="combobox" aria-expanded=${open} data-autofocus=${autoFocus ? '' : undefined}
       placeholder=${placeholder || (multiple && chosen.length ? 'Πρόσθεσε κι άλλον…' : 'Επώνυμο, όνομα ή ΑΣΜ…')} value=${q}
       onChange=${(e: any) => { setQ(e.target.value); setOpen(true); }} onFocus=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); pick(sel); } else if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } else if (e.key === 'Backspace' && !q && multiple && chosen.length) { onChange(chosen.slice(0, -1)); } }}/>
-    ${open && html`<ul className="picker__list" role="listbox">
+    ${open && pos && createPortal(html`<ul className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
         <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p)}${x.p.room != null ? ' · Θ' + x.p.room : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
-    </ul>`}
+    </ul>`, document.body)}
   </div>`;
 }
 // Λίστα επιλογής που δέχεται και τιμή γραμμένη με το χέρι («Άλλο…»): βαθμός, Ο/Σ
