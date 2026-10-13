@@ -103,6 +103,7 @@ export interface Status {
   open?: boolean;     // χωρίς λήξη: στο Excel το «έως» είναι κενό· το «to» πάει μαζί με τη σημερινή μέρα (X4)
   fromTime?: string;  // άδεια: ώρα αναχώρησης την πρώτη μέρα (ΩΩ:ΛΛ), shared/hours.ts
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
+  days?: number;      // στέρηση εξόδου: ημέρες ποινής· το «to» μετακινείται για κάθε μέρα με υπηρεσία ή βραδινή εκπαίδευση (shared/punish.ts)
 }
 // Ισχύει τη μέρα d; Η «χωρίς λήξη» ισχύει και κάθε επόμενη μέρα: το «to» της φτάνει μόνο ως σήμερα, αλλά οι υπηρεσίες
 // και οι έξοδοι γίνονται για αύριο και μετά (Χορβάτ, ΣΤΕΠ χωρίς λήξη, 13/10)
@@ -277,6 +278,7 @@ export interface AppState {
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
+  nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
 }
 // Υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες· όχι στον κανόνα του ίδιου νούμερου
 export interface SeatlessDuty { pid: number; kind: DutyKind }
@@ -294,5 +296,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}
 });

@@ -46,8 +46,8 @@ describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
     expect(lines).toHaveLength(3);
     expect(lines.map(l => l.slice(0, 3))).toEqual(['1) ', '2) ', '3) ']);
     // ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ (2), ΠΛΑΣΜΑΤΙΚΟΣ (5), ΥΠΟΘΕΤΙΔΗΣ (3) με αλφαβητική σειρά
-    expect(lines[0]).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ .* με μία \(01\) ημέρα στέρηση εξόδου, διότι ……\.$/);
-    expect(lines[2]).toBe('3) Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ τιμωρήθηκε την 12/10/2026 από τον ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ με δύο (02) ημέρες κράτηση, διότι απουσίασε από το προσκλητήριο.');
+    expect(lines[0]).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ .* ΜΕ ΜΙΑ \(01\) ΗΜΕΡΑ ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ, ΔΙΟΤΙ ……\.$/);
+    expect(lines[2]).toBe('3) Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12/10/2026 ΑΠΟ ΤΟΝ ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΠΟΥΣΙΑΣΕ ΑΠΟ ΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
     expect(hkaiPunLines(s, '2026-10-11')).toHaveLength(1);
   });
   it('στο Excel: μία γραμμή ανά ποινή, υπογραμμισμένη μόνο η διάρκεια, με τη γραμματοσειρά του κελιού', async () => {
@@ -61,7 +61,7 @@ describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
     const runs = [...c.matchAll(/<r><rPr>([\s\S]*?)<\/rPr><t xml:space="preserve">([\s\S]*?)<\/t><\/r>/g)];
     const under = runs.filter(m => m[1].includes('<u/>')).map(m => m[2]);
     const pm = new Map(s.people.map(p => [p.id, p]));
-    expect(under).toEqual(['μία (01) ημέρα στέρηση εξόδου', 'δύο (02) ημέρες κράτηση', punText(pm.get(5)!, s.statuses.find(x => x.pid === 5)!).dur]);
+    expect(under).toEqual(['ΜΙΑ (01) ΗΜΕΡΑ ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ', 'ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ', punText(pm.get(5)!, s.statuses.find(x => x.pid === 5)!).dur]);
     for (const m of runs) { expect(m[1]).toContain('<rFont val="Arial"/>'); expect(m[1]).toContain('<sz val="12"/>'); }
   });
   it('η γραμμή ψηλώνει για να χωρέσουν όλες, ποτέ δεν μικραίνει', async () => {
@@ -76,7 +76,7 @@ describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
     const s = punState();
     const doc = await renderBook((await fillHkai(T('hkai.xlsx'), s, D)).data, { file: 'ΗΚΑΙ.xlsx' });
     const back = doc.sheets.find(x => x.name === 'πισω')!.html;
-    expect(back).toContain('<u>δύο (02) ημέρες κράτηση</u>');
+    expect(back).toContain('<u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>');
     expect(back).toContain('1) Ο ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ');
   });
 });

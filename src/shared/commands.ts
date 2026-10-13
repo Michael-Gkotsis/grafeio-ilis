@@ -1,12 +1,13 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
-import { addDays, dayName, dm, DOW_FULL, type ISODate } from './dates';
+import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
 import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, statusLbl } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
+import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -49,7 +50,8 @@ export type Command =
   | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
   | { t: 'importDuties'; guards: Guards; log: DutyLog; source: string }
   | { t: 'expire' }
-  | { t: 'extendOpen' };
+  | { t: 'extendOpen' }
+  | { t: 'setNightTraining'; date: ISODate; on: boolean };
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -94,7 +96,13 @@ function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: s
   return { ...(f ? { fromTime: f } : {}), ...(t ? { toTime: t } : {}) };
 }
 
+// Μετά από κάθε ενέργεια: η λήξη κάθε στέρησης εξόδου ξαναβγαίνει από τις ημέρες της (υπηρεσίες, βραδινή εκπαίδευση)
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
+  const r = run(s, c, ctx);
+  const state = fitDeprivations(r.state);
+  return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
+}
+function run(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = personMap(s.people);
   switch (c.t) {
     case 'declare': {
@@ -115,11 +123,12 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
           if (cmd.kind) st.kind = cmd.kind;
           Object.assign(st, tm);
           if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; st.pending = true; if (cmd.by?.trim()) st.by = cmd.by.trim(); if (cmd.reason?.trim()) st.reason = cmd.reason.trim(); if (cmd.on) st.on = cmd.on; }
+          if (isDeprivation(st)) st.days = daysBetween(cmd.from, cmd.to);   // οι ημέρες της ποινής· το «έως» μετακινείται στο apply
           return st;
         })]
       };
       plan.conflicts.forEach(x => { next = setGuard(next, x.date, x.k, null); });
-      const verb = cmd.type === 'PUN' ? 'Αιτείται ποινή (' + (cmd.kind || PUN_KINDS[0]).toLowerCase() + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
+      const verb = cmd.type === 'PUN' ? 'Αιτείται ποινή (' + punLbl(cmd.kind || PUN_KINDS[0]) + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
       return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
     }
     case 'outs': {
@@ -201,7 +210,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const y = addDays(ctx.today, -1);
-      const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => { if (x !== st) return x; const n = { ...x, to: y }; delete n.open; return n; });
+      const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => { if (x !== st) return x; const n = { ...x, to: y }; delete n.open; delete n.days; return n; });
       return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'] };
     }
     case 'deleteStatus': {
@@ -210,7 +219,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');
-      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? { ...x, pending: false } : x)) }, text: 'Εγκρίθηκε από τον Διοικητή η ποινή (' + (st.kind || 'ποινή').toLowerCase() + ') του ' + shortName(pm.get(st.pid)!), files: ['ΗΚΑΙ', 'Ποινές'] };
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? { ...x, pending: false } : x)) }, text: 'Εγκρίθηκε από τον Διοικητή η ποινή (' + punLbl(st.kind) + ') του ' + shortName(pm.get(st.pid)!), files: ['ΗΚΑΙ', 'Ποινές'] };
     }
     case 'assign': {
       const post = postBy(s, c.k); if (!post) throw new Error('Άγνωστη θέση');
@@ -281,7 +290,11 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       if (!adds.length && !byId.size && !del.size) return { state: s, text: '', files: [] };
       // ώρα άδειας που σβήστηκε στο Excel: έρχεται κενή και φεύγει από την εγγραφή
       const tidy = (x: Status) => { if (x.fromTime === '') delete x.fromTime; if (x.toTime === '') delete x.toTime; return x; };
-      const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? tidy({ ...x, ...byId.get(x.id) }) : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
+      // στέρηση εξόδου από Excel: η λήξη του Excel μένει όπως είναι, και μετακινείται μόνο για όσες υπηρεσίες ή βραδινές
+      // εκπαιδεύσεις μπουν αργότερα μέσα στο διάστημα (οι ημέρες = όσες μετράνε τώρα από το «από» ως το «έως»)
+      const days = (x: Status) => { if (!isDeprivation(x) || x.open) { delete x.days; return x; } const n = servedDays(s, x.pid, x.from, x.to); if (n > 0) x.days = n; else delete x.days; return x; };
+      const moved = (x: Status, p: Partial<Status>) => p.to !== undefined || p.from !== undefined || p.open !== undefined || p.kind !== undefined;
+      const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? (moved(x, byId.get(x.id)!) ? days(tidy({ ...x, ...byId.get(x.id) })) : tidy({ ...x, ...byId.get(x.id) })) : x)), ...adds.map(a => days({ ...a, id: ctx.newId() }))];
       const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές'), del.size && del.size + (del.size === 1 ? ' σβήστηκε' : ' σβήστηκαν')].filter(Boolean).join(', ');
       return { state: { ...s, statuses }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + parts, files: [], source: 'excel' };
     }
@@ -434,6 +447,12 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const what = c.patch.hidden != null ? (c.patch.hidden ? 'αφαιρέθηκε' : 'ξαναμπήκε') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
       return { state: { ...s, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
     }
+    case 'setNightTraining': {
+      const nightTraining = { ...(s.nightTraining || {}) };
+      if (c.on === !!nightTraining[c.date]) return { state: s, text: '', files: [] };
+      if (c.on) nightTraining[c.date] = true; else delete nightTraining[c.date];
+      return { state: { ...s, nightTraining }, text: (c.on ? 'Βραδινή εκπαίδευση ' : 'Βγήκε η βραδινή εκπαίδευση ') + dayName(c.date, ctx.today).toLowerCase() + ' ' + dm(c.date) + (c.on ? ' (δεν μετρά στη στέρηση εξόδου)' : ''), files: [] };
+    }
     case 'extendOpen': {
       // Εγγραφές χωρίς λήξη (κενό «έως» στο Excel): ισχύουν και σήμερα. Χωρίς γραμμή ιστορικού, δεν αναιρείται.
       const statuses = s.statuses.map(x => (x.open && x.to < ctx.today ? { ...x, to: ctx.today } : x));
@@ -446,7 +465,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       return {
         state: s, source: 'auto', undoable: false, files: [],
         text: ex.length ? 'Έληξαν και αφαιρέθηκαν ' + ex.length + ' καταχωρήσεις' : '',
-        extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + (x.kind || '').toLowerCase() + ')' : statusLbl(x, s.settings.lists)) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
+        extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + punLbl(x.kind) + ')' : statusLbl(x, s.settings.lists)) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
       };
     }
   }

@@ -9,6 +9,7 @@ import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBloc
 import { addDays, dayName, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
+import { isDeprivation } from '../../shared/punish';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : ''].filter(Boolean).join(', ');
@@ -350,8 +351,18 @@ export function OutsScreen() {
   const awayDelta = changes.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
   const save = async () => { if (await run({ t: 'outs', date, changes }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + changes.length + ' αλλαγές)', actions: [undoMark()] }); } };
   const rh = useRowH(mobile ? 96 : 52, mobile ? 96 : 44);
+  // Βραδινή εκπαίδευση (Michael, 13/10): η μέρα δεν μετρά στη στέρηση εξόδου κανενός· η λήξη τους μετακινείται μόνη της
+  const night = !!state.nightTraining?.[date];
+  const setNight = async (on: boolean) => {
+    const before = new Map(state.statuses.filter(isDeprivation).map(x => [x.id, x.to]));
+    const next = await run({ t: 'setNightTraining', date, on }, false); if (!next) return;
+    const pm = personMap(next.people);
+    const moved = next.statuses.filter(x => before.has(x.id) && before.get(x.id) !== x.to).map(x => shortName(pm.get(x.pid)!) + ' ως ' + dm(x.to));
+    toast({ text: (on ? 'Βραδινή εκπαίδευση ' : 'Χωρίς βραδινή εκπαίδευση ') + dayName(date, today).toLowerCase() + ' ' + dm(date) + '. ' + (moved.length ? 'Στέρηση εξόδου: ' + moved.join(', ') + '.' : on ? 'Δεν μετρά στη στέρηση εξόδου.' : ''), actions: [undoMark()] });
+  };
+  const NIGHT_TIP = 'Όταν έχει βραδινή εκπαίδευση, η μέρα δεν μετρά στη στέρηση εξόδου (όπως και οι μέρες με υπηρεσία): η λήξη μετακινείται μία μέρα. Δεν αλλάζει τους εξοδούχους.';
   return html`<div>
-    <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή δεν επιλέγονται."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><//>
+    <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή δεν επιλέγονται."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b> · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
       ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}</div>

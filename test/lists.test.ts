@@ -66,10 +66,10 @@ describe('λίστες', () => {
     const l: UserLists = { punKinds: { add: [{ name: 'Επίπληξη', acc: 'επίπληξη (προφορική)', max: 2 }, { name: 'Αγγαρεία' }] } };
     const s = fakeState(3); const p = s.people[0];
     const st = { id: 'x', pid: p.id, type: 'PUN' as const, from: D, to: '2026-10-14', kind: 'ΕΠΙΠΛΗΞΗ' };
-    expect(punText(p, st, l).dur).toBe('τρεις (03) ημέρες επίπληξη (προφορική)');
-    expect(punText(p, { ...st, kind: 'Αγγαρεία' }, l).dur).toBe('τρεις (03) ημέρες αγγαρεία');
+    expect(punText(p, st, l).dur).toBe('ΤΡΕΙΣ (03) ΗΜΕΡΕΣ ΕΠΙΠΛΗΞΗ (ΠΡΟΦΟΡΙΚΗ)');
+    expect(punText(p, { ...st, kind: 'Αγγαρεία' }, l).dur).toBe('ΤΡΕΙΣ (03) ΗΜΕΡΕΣ ΑΓΓΑΡΕΙΑ');
     expect(overMax('Επίπληξη', 3, l)).toBe(2); expect(overMax('Επίπληξη', 2, l)).toBe(0); expect(overMax('Αγγαρεία', 30, l)).toBe(0);
-    expect(punText(p, { ...st, kind: 'Κράτηση' }, l).dur).toBe('τρεις (03) ημέρες κράτηση');
+    expect(punText(p, { ...st, kind: 'Κράτηση' }, l).dur).toBe('ΤΡΕΙΣ (03) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ');
     expect(overMax('Κράτηση', 9, l)).toBe(8); expect(overMax('Κράτηση', 9)).toBe(8);
   });
   it('άδειες: η «Ειδική» μετρά στις Ειδικές της ΗΚΑΙ, οι άλλες βασικές στις Κανονικές, οι δικές σου όπου όρισες', () => {

@@ -3,7 +3,7 @@
 // Αναγνώριση από τις επικεφαλίδες (06 §3.2)· ό,τι δεν βρεθεί το διαλέγει ο χρήστης με κλικ, με πρόταση όπου υπάρχει.
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
-import { norm, normGreek, collator } from './text';
+import { norm, normGreek, collator, upper } from './text';
 import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, fatherTxt, fullName, type AppState, type DutyKind, type DutyLog, type Guards, type Person, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
@@ -397,7 +397,8 @@ export function typeOfValue(kind: StatusKind, raw: string, values?: Record<strin
 }
 export const valueKey = vk;
 export const DEFAULT_TYPE: Record<StatusKind, TypeKey> = { punish: 'PUN', medical: 'EA', hospital: 'NOS', step: 'STEP', leave: 'LEAVE', dn: 'DN' };
-const punKind = (raw: string) => { const v = vk(raw); return PUN_KINDS.find(k => vk(k) === v || v.startsWith(vk(k).slice(0, 5))) || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : ''); };
+// και τα δικά σου είδη (Λίστες): το Excel τα έχει με κεφαλαία, η εφαρμογή κρατά το όνομα όπως το έγραψες
+const punKind = (raw: string, lists?: UserLists) => { const v = vk(raw); return PUN_KINDS.find(k => vk(k) === v || v.startsWith(vk(k).slice(0, 5))) || listOf(lists, 'punKinds').find(k => vk(k) === v) || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : ''); };
 
 export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBinding, people: Person[], today: ISODate, lists?: UserLists): ParseOut {
   const scan = tableRows(sheet, b.header, b.cols); const match = makeMatcher(people);
@@ -414,7 +415,7 @@ export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBindin
     if (!type && raw && !unk.has(vk(raw))) unk.set(vk(raw), raw);
     const m = match(v);
     const c: Cand = { r, who, pid: m.pid, cands: m.cands, type, raw, from, to, noEnd };
-    if (kind === 'punish') { if (raw) c.kind = punKind(raw); if (cellText(v.by)) c.by = cellText(v.by); if (cellText(v.reason)) c.reason = cellText(v.reason); }
+    if (kind === 'punish') { if (raw) c.kind = punKind(raw, lists); if (cellText(v.by)) c.by = cellText(v.by); if (cellText(v.reason)) c.reason = cellText(v.reason); }
     else if (kind === 'medical' || kind === 'leave') { if (raw && !(kind === 'medical' && TYPES[type || 'EA'].label === norm(raw))) c.kind = raw; }
     else if (kind === 'hospital' && raw) c.kind = raw;
     if (cellText(v.note)) c.note = cellText(v.note);
@@ -493,7 +494,8 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (has('to') && c.noEnd && !cur.open) { patch.open = true; what.push('χωρίς λήξη'); }
     if (has('to') && !c.noEnd && (cur.to !== c.to || cur.open)) { patch.to = c.to; if (cur.open) patch.open = false; what.push('έως ' + c.to.slice(8) + '/' + c.to.slice(5, 7)); }
     if ((has('kind') || has('where')) && c.raw && cur.type !== type) { patch.type = type; what.push(TYPES[type].label); }
-    if ((has('kind') || has('where')) && (c.kind || '') !== (cur.kind || '') && c.kind) { patch.kind = c.kind; what.push(c.kind); }
+    // η ποινή γράφεται με κεφαλαία στο Excel: ίδιο είδος όσο ταιριάζουν τα γράμματα
+    if ((has('kind') || has('where')) && c.kind && (kind === 'punish' ? vk(c.kind) !== vk(cur.kind || '') : c.kind !== (cur.kind || ''))) { patch.kind = c.kind; what.push(c.kind); }
     if (has('note') && (c.note || '') !== (cur.note || '')) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
     if (kind === 'leave' && has('tout') && (c.fromTime || '') !== (cur.fromTime || '')) { patch.fromTime = c.fromTime || ''; what.push(c.fromTime ? 'αναχώρηση ' + c.fromTime : 'χωρίς ώρα αναχώρησης'); }
     if (kind === 'leave' && has('tin') && !c.noEnd && (c.toTime || '') !== (cur.toTime || '')) { patch.toTime = c.toTime || ''; what.push(c.toTime ? 'επιστροφή ' + c.toTime : 'χωρίς ώρα επιστροφής'); }
@@ -572,8 +574,8 @@ export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | 
     case 'room': return p?.room ?? null;
     case 'from': return { date: st.from };
     case 'to': return st.open ? null : { date: st.to };
-    case 'days': return st.open ? null : Math.round((Date.parse(st.to) - Date.parse(st.from)) / 86400000) + 1;
-    case 'kind': return kind === 'medical' ? (st.kind || TYPES[st.type].label) : kind === 'leave' ? (st.kind || (st.type === 'HON' ? 'ΤΙΜΗΤΙΚΗ' : 'ΚΑΝΟΝΙΚΗ')) : (st.kind || null);
+    case 'days': return st.open ? null : st.days || Math.round((Date.parse(st.to) - Date.parse(st.from)) / 86400000) + 1;   // στέρηση εξόδου: οι ημέρες της ποινής
+    case 'kind': return kind === 'medical' ? (st.kind || TYPES[st.type].label) : kind === 'leave' ? (st.kind || (st.type === 'HON' ? 'ΤΙΜΗΤΙΚΗ' : 'ΚΑΝΟΝΙΚΗ')) : kind === 'punish' ? (st.kind ? upper(st.kind) : null) : (st.kind || null);
     case 'where': return st.kind || (st.type === 'SICK' ? 'ΑΝ.ΑΔ' : 'ΝΟΣΟΚΟΜΕΙΟ');
     case 'note': return st.note || null;
     case 'tout': return st.fromTime || null;
