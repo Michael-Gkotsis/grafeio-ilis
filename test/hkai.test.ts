@@ -194,3 +194,26 @@ describe('βάση: αιτήσεις και αναίρεση', () => {
     st = new Store(dir, WASM); await st.open(); expect(st.state.requests).toHaveLength(1); st.close();
   });
 });
+
+// Πόστα (Michael, 13/10): δεν μετρούν στη στήλη Ο/Σ της ΗΚΑΙ· η στήλη γράφεται με το χέρι
+describe('ΗΚΑΙ χωρίς πόστα', () => {
+  it('όποιος έχει πόστο δεν μπαίνει στο Ο/Σ, ούτε στους κωλυόμενους', async () => {
+    const { hkaiCounts } = await import('../src/shared/rules');
+    const s = fakeState(20);
+    const p = s.people.find(x => x.post)!;
+    expect(p.post).toBe('ΚΨΜ');
+    const h = hkaiCounts(s, D);
+    expect(h.cols.os).toEqual([]);
+    expect(Object.values(h.rank).some(r => r.c.os)).toBe(false);
+    expect(Object.values(h.cols).flat().map(x => x.id)).not.toContain(p.id);
+  });
+  it('το Ο/Σ με το χέρι μετρά στη γραμμή του βαθμού και στους κωλυόμενους', async () => {
+    const { hkaiCounts, HK_MANUAL } = await import('../src/shared/rules');
+    expect(HK_MANUAL.map(x => x[0])).toContain('os');
+    const s0 = fakeState(20); const before = hkaiCounts(s0, D).kol;
+    const s = { ...s0, hkaiManual: { [D]: { cells: { 'Στρατιώτες': { os: 2 } }, text: {} } } };
+    const h = hkaiCounts(s, D);
+    expect(h.rank['Στρατιώτες'].c.os).toBe(2);
+    expect(h.kol).toBe(before + 2);
+  });
+});

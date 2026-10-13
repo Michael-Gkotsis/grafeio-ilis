@@ -19,13 +19,13 @@ const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσ
 const PersonRow = memo(function PersonRow({ p, odd, style, statuses, today, duty, checked, selected, onToggle, onOpen }: P) {
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${style} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
     <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
-    <span><b>${fullName(p)}</b></span><span>${p.father}</span><span>${p.rank}</span><span>${unitOf(p)}</span><span>${roomTxt(p)}</span><span className="num">${duty}</span>
+    <span><b>${fullName(p)}</b>${p.post && html` <${Badge} tone="outline" data-tip="Πόστο: δεν μπαίνει σε υπηρεσίες εκτός από Λ/Υ και Δ/Υ">${p.post}<//>`}</span><span>${p.father}</span><span>${p.rank}</span><span>${unitOf(p)}</span><span>${roomTxt(p)}</span><span className="num">${duty}</span>
     <span><${StatusBadge} statuses=${statuses} pid=${p.id} date=${today}/></span></div>`;
 });
 const PersonCard = memo(function PersonCard({ p, style, statuses, today, checked, onToggle, onOpen }: P) {
   return html`<div className="pcard" style=${style} onClick=${() => onOpen(p.id)}>
     <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
-    <div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)} · ${roomTxt(p)}</small></div>
+    <div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)} · ${roomTxt(p)}${p.post ? ' · πόστο ' + p.post : ''}</small></div>
     <${StatusBadge} statuses=${statuses} pid=${p.id} date=${today}/></div>`;
 });
 
@@ -43,7 +43,7 @@ export function PeopleScreen() {
   const [selected, setSelected] = useState(() => new Set<number>());
   const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false);
   const ds = dutyStats(state);
-  const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['dnright', 'Με δικαίωμα ΔΝ'], ['inactive', 'Εκτός δύναμης']];
+  const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['dnright', 'Με δικαίωμα ΔΝ'], ['post', 'Με πόστο'], ['inactive', 'Εκτός δύναμης']];
   const UNITS = [{ value: 'all', label: 'Όλη η Ίλη' }, { value: '1ος Ουλ.', label: '1ος Ουλ.', tip: 'Θάλαμοι 1–4' }, { value: '2ος Ουλ.', label: '2ος Ουλ.', tip: 'Θάλαμοι 5–8' }];
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const active = useMemo(() => state.people.filter(p => p.active), [state.people]);
@@ -56,19 +56,19 @@ export function PeopleScreen() {
     if (!place(p, f)) return false;
     if (f.filter === 'inactive') return true;
     const ss = ssOf.get(p.id) || []; const away = ss.some(s => TYPES[s.type].away);
-    if (f.filter === 'all') return true; if (f.filter === 'present') return !away; if (f.filter === 'absent') return away; if (f.filter === 'dnright') return !!p.dn;
+    if (f.filter === 'all') return true; if (f.filter === 'present') return !away; if (f.filter === 'absent') return away; if (f.filter === 'dnright') return !!p.dn; if (f.filter === 'post') return !!p.post;
     if ((TYPES as any)[f.filter]) return ss.some(s => s.type === f.filter); return unitOf(p) === f.filter;
   }, [ssOf]);
   const listFor = useCallback((f: Filt, text: string) => (f.filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, text)).filter(p => matches(p, f)), [state.people, matches]);
   // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό/θάλαμο), για να φαίνεται πριν πατήσεις
   const counts = useMemo(() => {
-    const n: Record<string, number> = { all: 0, present: 0, absent: 0, dnright: 0, inactive: 0 };
+    const n: Record<string, number> = { all: 0, present: 0, absent: 0, dnright: 0, post: 0, inactive: 0 };
     state.people.forEach(p => {
       if (!place(p, { unit, room, filter: 'all' })) return;
       if (!p.active) { n.inactive++; return; }
       const s = ssOf.get(p.id) || []; n.all++;
       if (s.some(x => TYPES[x.type].away)) n.absent++; else n.present++;
-      if (p.dn) n.dnright++;
+      if (p.dn) n.dnright++; if (p.post) n.post++;
       new Set(s.map(x => x.type)).forEach(t => { n[t] = (n[t] || 0) + 1; });
     });
     return n;
