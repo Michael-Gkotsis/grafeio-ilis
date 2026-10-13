@@ -30,7 +30,8 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'lea
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: ιατρικό που συμπεριφέρεται σαν ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
-export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string }
+// warn: ιατρικό χωρίς περιορισμούς που βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
+export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 export type UserLists = Partial<Record<ListId, UserList>>;
 export const LIST_BASE: Record<ListId, readonly string[]> = {
@@ -98,6 +99,8 @@ const ownMed = (lists: UserLists | undefined, kind: string | undefined) => {
 export const medTypeOf = (raw: string | undefined, lists?: UserLists): TypeKey | undefined => ownMed(lists, raw)?.like;
 // δικά σου ιατρικά που προτείνονται στη δήλωση (όχι όσα έκρυψες)
 export const medKinds = (lists?: UserLists): ListItem[] => listRows(lists, 'medKinds').filter(r => !r.builtin && !r.hidden && r.like && MED_LIKE.includes(r.like));
+// Δικό σου ιατρικό «μόνο προειδοποίηση» (Michael, 13/10): μπαίνει σε υπηρεσία, αλλά με προειδοποίηση
+export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.warn;
 // Όνομα κατάστασης σε σήματα και λίστες: η ποινή με το είδος της, το δικό σου ιατρικό με το όνομά του
 export function statusLbl(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string {
   if (s.type === 'PUN') return s.kind || TYPES.PUN.label;

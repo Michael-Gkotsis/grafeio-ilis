@@ -1,6 +1,6 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, hkOfRank, leaveCol, siUnarmed, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, hkOfRank, leaveCol, medWarns, siUnarmed, statusLbl, type UserLists } from './ranks';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
@@ -140,6 +140,12 @@ export function lastResort(statuses: Status[], date: ISODate, pid: number, post?
   if (post?.kind !== 'sk') return null;
   const st = statusesOn(statuses, pid, date).find(x => TYPES[x.type].light);
   return st ? TYPES[st.type].label + ': σκοπιά μόνο αν δεν υπάρχει άλλος' : null;
+}
+// Ιατρικό «μόνο προειδοποίηση» (π.χ. παραπεμπτικό για 401): μπαίνει σε υπηρεσία, με προειδοποίηση· η αυτόματη
+// συμπλήρωση τον βάζει μόνο αν δεν υπάρχει άλλος
+export function statusWarn(s: AppState, date: ISODate, pid: number): string | null {
+  const st = statusesOn(s.statuses, pid, date).find(x => medWarns(x, s.settings.lists));
+  return st ? statusLbl(st, s.settings.lists) + untilTxt(st, date) + ': έλεγξε αν μπορεί να κάνει υπηρεσία' : null;
 }
 // Μόνιμος Λ/Υ ή Δ/Υ: μπαίνει μόνος του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης
 export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (k === 'ly' || k === 'dy') && s.settings.fixed?.[k] === pid;
@@ -313,7 +319,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     const list = candidates(work, date, x, people, fair, idx, fixed, memo);
     const cand = strict ? strictPick(work, date, x, list, people, idx, fixed, memo) : list[0];
     if (!cand) { empty.push(x.k); if (strict && x.kind === 'sk' && list.length) warn.push(x.label + ': ' + STRICT_SK); continue; }
-    const lr = lastResort(s.statuses, date, cand.id, x); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
+    const lr = lastResort(s.statuses, date, cand.id, x) || statusWarn(s, date, cand.id); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
     if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
@@ -357,7 +363,7 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const need = x.armed ? [] : armedLeft(s, date, x.k);
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
   const reserve = (p: Person) => (keep?.has(p.id) ? 1 : 0);
-  const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) ? 1 : 0);
+  const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) || statusWarn(s, date, p.id) ? 1 : 0);
   // ΣΚ/αργία: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει έξοδο εκείνη τη μέρα
   const rooms = h ? outRoomsOn(s.rules, date) : null;
   const home = (p: Person) => (h ? (p.dn ? 1 : 0) + (rooms && p.room != null && rooms.includes(p.room) ? 1 : 0) : 0);
@@ -483,7 +489,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   const n = cmd.pids.length;
   const pm = personMap(s.people);
   const files: PlanFile[] = [];
-  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [];
+  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [], warned: StatusPlan['conflicts'] = [];
   const lists = s.settings.lists;
   const clash = (x: Status) => (t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away);
   const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
@@ -502,6 +508,8 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
         if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
       }));
     }
+    // ιατρικό «μόνο προειδοποίηση»: οι υπηρεσίες μένουν, με προειδοποίηση
+    if (medWarns(cmd, lists) && !(today && cmd.to < today)) dates.forEach(date => posts.forEach(x => { if ((!today || date >= today) && s.guards[date][x.k] === pid) warned.push({ pid, date, k: x.k }); }));
     // και η ποινή που ακόμα αιτείται κρατά τον στρατιώτη μέσα (outBlock)
     if (t.noOut && !t.away)
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && overlapsRange(x, cmd.from, cmd.to)) cancels.push(x); });
@@ -517,6 +525,9 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
     const cs = conflicts.filter(x => x.date === date);
     if (!cs.length) return;
     files.push({ fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: cs.map(x => shortName(pm.get(x.pid)!) + ' βγαίνει από ' + postTxt(posts.find(p => p.k === x.k)!)).join(' · ') + '. ' + (cs.length > 1 ? 'Οι θέσεις μένουν' : 'Η θέση μένει') + ' ΚΕΝΗ.' });
+  });
+  [...new Set(warned.map(x => x.date))].forEach(date => {
+    files.push({ fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: warned.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': έχει υπηρεσία. Μένει· έλεγξε αν μπορεί να την κάνει.' });
   });
   [...new Set(past.map(x => x.date))].forEach(date => {
     files.push({ fn: 'Υπηρεσίες ' + dm(date), desc: past.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': υπηρεσία που έγινε, μένει.' });

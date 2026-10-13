@@ -4,7 +4,7 @@ import { addDays, dayName, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
 import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
-import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, type StatusCmd } from './rules';
+import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, statusLbl } from './ranks';
 
 export type Command =
@@ -196,7 +196,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
         const soft = capBlock(s, c.date, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
-        const lr = lastResort(s.statuses, c.date, c.pid, post); if (lr) note += ' (' + lr + ')';
+        const lr = lastResort(s.statuses, c.date, c.pid, post) || statusWarn(s, c.date, c.pid); if (lr) note += ' (' + lr + ')';
       }
       let next = setGuard(s, c.date, c.k, c.pid);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση

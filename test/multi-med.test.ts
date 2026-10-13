@@ -1,7 +1,8 @@
 // Πολλά ιατρικά μαζί στον ίδιο στρατιώτη (Michael, 13/10): π.χ. ΕΑ και ΕΥ. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { dutyBlock, hkaiCounts, outBlock, planStatusChange } from '../src/shared/rules';
+import { dutyBlock, fillDay, hkaiCounts, outBlock, planStatusChange, statusWarn } from '../src/shared/rules';
+import { frouraChecks } from '../src/shared/preflight';
 import { planWrite, defaultBinding, type SourceBinding } from '../src/shared/sources';
 import type { AppState, TypeKey } from '../src/shared/domain';
 import { fakeState } from './fixtures';
@@ -65,5 +66,40 @@ describe('πολλά ιατρικά μαζί', () => {
     expect(plan.added).toBe(2);
     expect(plan.keys).toHaveLength(2);
     expect(plan.sets.filter(x => x.c === b.cols.kind).map(x => x.v)).toEqual(['ΕΑ', 'ΕΥ']);
+  });
+});
+
+describe('ιατρικό «μόνο προειδοποίηση» (π.χ. παραπεμπτικό για 401)', () => {
+  const ref = { medKinds: { add: [{ name: 'ΠΑΡΑΠΕΜΠΤΙΚΟ 401', like: 'EARV' as const, warn: true }] } };
+  const base = (): AppState => { const f = fakeState(40); return { ...f, settings: { ...f.settings, lists: ref } }; };
+  it('δεν κόβει υπηρεσία ούτε έξοδο, αλλά βγάζει προειδοποίηση στη χειροκίνητη ανάθεση', () => {
+    const s = declare(base(), 'EARV', 3, TODAY, TODAY, 'ΠΑΡΑΠΕΜΠΤΙΚΟ 401');
+    expect(dutyBlock(s.statuses, TODAY, 3, { armed: true, kind: 'sk' })).toBeNull();
+    expect(outBlock(s, TODAY, 3)).toBeNull();
+    expect(statusWarn(s, TODAY, 3)).toMatch(/^ΠΑΡΑΠΕΜΠΤΙΚΟ 401: έλεγξε/);
+    expect(statusWarn(s, '2026-10-14', 3)).toBeNull();
+    const r = apply(s, { t: 'assign', date: TODAY, k: 'th1', pid: 3 }, ctx);
+    expect(r.state.guards[TODAY].th1).toBe(3);
+    expect(r.text).toMatch(/ΠΑΡΑΠΕΜΠΤΙΚΟ 401: έλεγξε/);
+    expect(frouraChecks(r.state, TODAY).some(c => /ΠΑΡΑΠΕΜΠΤΙΚΟ 401/.test(c.text))).toBe(true);
+  });
+  it('η αυτόματη συμπλήρωση τον βάζει μόνο αν δεν υπάρχει άλλος', () => {
+    // 18 άτομα για 15 θέσεις: χωρίς το παραπεμπτικό ο 3 μπαίνει
+    const f = fakeState(18); const s0: AppState = { ...f, settings: { ...f.settings, lists: ref } };
+    expect(Object.values(fillDay(s0, TODAY).guards[TODAY])).toContain(3);
+    const r = fillDay(declare(s0, 'EARV', 3, TODAY, TODAY, 'ΠΑΡΑΠΕΜΠΤΙΚΟ 401'), TODAY);
+    expect(Object.values(r.guards[TODAY])).not.toContain(3);
+    expect(r.warn).toEqual([]);
+  });
+  it('δήλωση πάνω σε υπηρεσία: η υπηρεσία μένει, με προειδοποίηση στο «Τι θα αλλάξει»', () => {
+    const s0: AppState = { ...base(), guards: { [TODAY]: { th1: 3 } } };
+    const plan = planStatusChange(s0, { type: 'EARV', kind: 'ΠΑΡΑΠΕΜΠΤΙΚΟ 401', pids: [3], from: TODAY, to: TODAY }, TODAY);
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.files.find(f => f.fn === 'Υπηρεσίες 13/10')).toMatchObject({ warn: true, desc: expect.stringMatching(/Μένει/) });
+    expect(declare(s0, 'EARV', 3, TODAY, TODAY, 'ΠΑΡΑΠΕΜΠΤΙΚΟ 401').guards[TODAY].th1).toBe(3);
+  });
+  it('το απλό ΕΑΡΒ δεν βγάζει προειδοποίηση', () => {
+    const s = declare(base(), 'EARV', 3, TODAY);
+    expect(statusWarn(s, TODAY, 3)).toBeNull();
   });
 });
