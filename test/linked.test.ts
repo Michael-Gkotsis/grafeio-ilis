@@ -330,7 +330,7 @@ describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () =
     const w = await writeSource('duties', b, s2, { keys: [], at: 'x', mtime: 0, size: 0 }, TODAY);
     expect(w.ok && w.changed).toBe(2);
     const rows = (await sheetOf(file, sh.name)).rows;
-    expect([rows[3][40], rows[4][41]]).toEqual(['Θ1α', 'Μ1']);
+    expect([rows[3][40], rows[4][41]]).toEqual(['Θ1Α', 'Μ1']);
   });
 });
 

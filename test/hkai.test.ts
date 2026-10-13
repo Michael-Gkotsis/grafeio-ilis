@@ -1,5 +1,6 @@
 // ΗΚΑΙ πίσω σελίδα: αριθμημένες ποινές με υπογραμμισμένη διάρκεια, αιτήσεις, εκτύπωση, και η βάση (πίνακας αιτήσεων,
 // αναίρεση που κρατά μόνο τη μέρα που άλλαξε). Μόνο ψεύτικα ονόματα.
+import { upper } from '../src/shared/text';
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
@@ -90,7 +91,7 @@ describe('ΗΚΑΙ: 5. ΑΙΤΗΣΕΙΣ', () => {
     s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { ait: 'ΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ' } } });
     expect(linesText(hkaiReqLines(s, D))).toBe('1) Ο ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ αιτείται ολιγοήμερη άδεια.\n2) Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ αιτείται μετάθεση στην 2η ΕΠΧΙΑ.\nΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ');
     const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
-    expect(bk.get('G12')).toBe(linesText(hkaiReqLines(s, D)));
+    expect(bk.get('G12')).toBe(upper(linesText(hkaiReqLines(s, D))));
     // μόνο ελεύθερο κείμενο, όπως πριν
     const only = run(fakeState(5), { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { ait: 'ΜΟΝΟ ΑΥΤΟ' } } });
     expect((await (await Workbook.open((await fillHkai(T('hkai.xlsx'), only, D)).data)).sheet(1)).get('G12')).toBe('ΜΟΝΟ ΑΥΤΟ');
@@ -127,7 +128,7 @@ describe('Excel: κείμενο με υπογράμμιση σε κελί χωρ
     const again = await Workbook.open(data); const w2 = await again.sheet(0);
     w2.setStyle('A3', 2); await again.setRich(w2, 'A3', [[{ t: 'ε', u: true }]]);
     expect(await xfCount(await again.save())).toBe(5);
-    expect(w2.get('A1')).toBe('α β\nγ');
+    expect(w2.get('A1')).toBe('Α Β\nΓ');
     await again.setRich(w2, 'A1', []); expect(w2.get('A1')).toBeNull();
   });
 });

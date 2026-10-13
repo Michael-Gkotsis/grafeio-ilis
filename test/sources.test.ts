@@ -235,7 +235,7 @@ describe('εγγραφή σε αρχείο', () => {
     expect(r1.ok && r1.created).toBe(true);
     let rows = (await readBook(file)).sheets[0].rows;
     expect(rows[0][0]).toBe('ΕΑ-ΕΥ');
-    expect(rows[1].slice(0, 4)).toEqual(['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο']);
+    expect(rows[1].slice(0, 4)).toEqual(['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΩΝΥΜΟ']);
     expect(rows[2][3]).toBe(s.people[2].last);
     expect(rows[2][b.cols.from]).toEqual(D('2026-10-12'));
     // η εφαρμογή αλλάζει το «έως» και προσθέτει κι άλλο: το ίδιο αρχείο ενημερώνεται
