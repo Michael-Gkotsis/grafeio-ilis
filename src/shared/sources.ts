@@ -99,6 +99,11 @@ export const KINDS: KindDef[] = [
 export const KIND: Record<ListKind, KindDef> = Object.fromEntries(KINDS.map(k => [k.id, k])) as Record<ListKind, KindDef>;
 export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'step', 'leave', 'dn'];
 export const isStatusKind = (k: ListKind): k is StatusKind => (STATUS_KINDS as string[]).includes(k);
+// Είδη που η εφαρμογή φτιάχνει από την αρχή («Νέο αρχείο…»): τίτλος, επικεφαλίδες και ό,τι έχει η ίδια
+export const NEW_KINDS: ListKind[] = [...STATUS_KINDS, 'posts', 'outside', 'caps'];
+export const canCreate = (k: ListKind) => NEW_KINDS.includes(k);
+// Μπαίνουν ως φύλλα στο Δυναμολόγιο, όπως στο αρχείο της Ίλης (ΑΔΕΙΕΣ, ΤΙΜΩΡΗΜΕΝΟΙ, ΠΟΣΤΑ…)
+export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !== 'duties';
 // Το προσωπικό δεν έχει «ονοματεπώνυμο σε ένα κελί» (το Δυναμολόγιο τα έχει χωριστά) ούτε Α/Α που να μετράει
 export const fieldsOf = (k: ListKind): FieldDef[] => [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields];
 export const kindOfType = (t: TypeKey): StatusKind | null => (STATUS_KINDS.find(k => KIND[k].types!.includes(t)) || null);
@@ -563,6 +568,14 @@ export function wanted(kind: StatusKind, s: AppState, b: SourceBinding, today: I
   return s.statuses.filter(x => types.includes(x.type) && pm.has(x.pid) && !x.pending && (b.scope !== 'active' || x.to >= today))
     .sort((a, b2) => a.from.localeCompare(b2.from) || collator.compare(pm.get(a.pid)!.last, pm.get(b2.pid)!.last));
 }
+// Καινούργιος πίνακας: επικεφαλίδες (και τίτλος από πάνω) αν η γραμμή είναι κενή
+export function newHeader(kind: ListKind, rows: CellValue[][], b: SourceBinding): WritePlan['header'] {
+  if ((rows[b.header] || []).some(v => cellText(v))) return [];
+  const defs = fieldsOf(kind); const out: WritePlan['header'] = [];
+  for (const [k, c] of Object.entries(b.cols)) out.push({ r: b.header, c, v: defs.find(f => f.k === k)?.head || k });
+  if (b.header > 0 && !(rows[b.header - 1] || []).some(v => cellText(v))) out.push({ r: b.header - 1, c: Math.min(...Object.values(b.cols)), v: KIND[kind].title, title: true });
+  return out;
+}
 // Τι αλλάζει στο φύλλο ώστε να έχει ό,τι έχει η εφαρμογή. Δεν αγγίζει γραμμές που δεν ξέρει (γράφτηκαν με το χέρι
 // και δεν έχουν περάσει ακόμα στην εφαρμογή): μόνο όσες ταιριάζουν με εγγραφή της ή όσες έγραψε η ίδια παλιότερα (synced).
 export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, synced: string[], today: ISODate): WritePlan {
@@ -571,12 +584,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   const want = wanted(kind, s, b, today);
   const rows = sheet?.rows || [];
   const fields = Object.keys(b.cols).filter(k => k !== 'aa');
-  // καινούργιος πίνακας: επικεφαλίδες (και τίτλος από πάνω) αν η γραμμή είναι κενή
-  if (!(rows[b.header] || []).some(v => cellText(v))) {
-    const defs = fieldsOf(kind);
-    for (const [k, c] of Object.entries(b.cols)) plan.header.push({ r: b.header, c, v: defs.find(f => f.k === k)?.head || k });
-    if (b.header > 0 && !(rows[b.header - 1] || []).some(v => cellText(v))) plan.header.push({ r: b.header - 1, c: Math.min(...Object.values(b.cols)), v: KIND[kind].title, title: true });
-  }
+  plan.header = newHeader(kind, rows, b);
   const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number], partial: [] };
   const match = makeMatcher(s.people);
   const byId = new Map(want.map(x => [statusId(kind, x), x]));
@@ -1365,6 +1373,7 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
   }
   const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
     : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keep);
+  if (!isStatusKind(kind) && canCreate(kind)) plan.header = newHeader(kind, sh.rows, b);
   if (meta?.psnap && sheet) {
     const ps = personSets(sheet, b, s, meta.psnap, new Set(plan.sets.map(x => x.r + ':' + x.c)));
     plan.sets.push(...ps.sets); plan.changed += ps.changed;

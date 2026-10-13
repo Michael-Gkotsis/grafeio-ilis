@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, ambiguousLines, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, ambiguousLines, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -69,7 +69,7 @@ function formTpl(f: Exclude<FormKind, 'check'>): string {
 }
 const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); const dir = b.dir || outputDir(); return b.monthly === false ? dir : path.join(dir, date.slice(0, 7)); };
 // Νέα Excel ανά είδος: στον φάκελο του είδους (Ρυθμίσεις → Φάκελοι), αλλιώς στον γενικό
-const newDir = (k: StatusKind) => store.state.settings.newDirs?.[k] || outputDir();
+const newDir = (k: ListKind) => store.state.settings.newDirs?.[k] || outputDir();
 const dirOf = (t: DirTarget) => (t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind));
 const templates = (): TemplateInfo[] => [
   ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = store?.state.settings.forms?.[f];
@@ -320,8 +320,8 @@ function writeText(kind: ListKind, file: string, r: { added: number; changed: nu
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
 type SyncOut = { ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean };
-const syncOut = (kind: ListKind, auto: boolean): Promise<SyncOut> => serial(() => syncOutNow(kind, auto));
-async function syncOutNow(kind: ListKind, auto: boolean): Promise<SyncOut> {
+const syncOut = (kind: ListKind, auto: boolean, create = false): Promise<SyncOut> => serial(() => syncOutNow(kind, auto, create));
+async function syncOutNow(kind: ListKind, auto: boolean, create = false): Promise<SyncOut> {
   let b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
   const m = srcMeta.get(kind);
   if (auto) {
@@ -331,7 +331,7 @@ async function syncOutNow(kind: ListKind, auto: boolean): Promise<SyncOut> {
     if (t.refresh) srcMeta.set(kind, t.refresh);
     if (t.changed) { srcMeta.set(kind, { pending: true, error: 'Το αρχείο άλλαξε εκτός εφαρμογής. Πάτα «Ανανέωση από Excel» και μετά «Ενημέρωση Excel».' }); return { ok: false, error: 'changed' }; }
   } else b = (await current(kind, b))!;
-  const r = await writeSource(kind, b, store.state, m, today(), { tidy: !auto });
+  const r = await writeSource(kind, b, store.state, m, today(), { tidy: !auto, create });
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
@@ -477,6 +477,26 @@ function saveBinding(kind: ListKind, b: SourceBinding | null) {
   runCmd({ t: 'setSettings', settings: { sources }, text: b ? 'Excel για ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(b.file) + ' › ' + b.sheet : 'χωρίς Excel για ' + KIND[kind].label.toLowerCase() });
   // άλλο αρχείο ή άλλος πίνακας: ό,τι ξέραμε για το παλιό δεν ισχύει
   if (!b || !cur || path.resolve(cur.file) !== path.resolve(b.file) || cur.sheet !== b.sheet || cur.header !== b.header) srcMeta.set(kind, null);
+}
+// Πού φτιάχνεται ένα νέο είδος: ως φύλλο στο Δυναμολόγιο (όπως στο αρχείο της Ίλης), αν έχει οριστεί, υπάρχει και η
+// εφαρμογή γράφει εκεί· αλλιώς χωριστό αρχείο στον φάκελο του είδους. Αν το Δυναμολόγιο έχει ήδη πίνακα αυτού του
+// είδους, ορίζεται αυτός (found) αντί να φτιαχτεί δεύτερος. Υπάρχον φύλλο ή αρχείο δεν γράφεται ποτέ από πάνω.
+async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boolean; inRoster?: boolean } | { error: string }> {
+  const ros = bindingOf('people');
+  if (inRoster(kind) && ros && ros.write !== false && /\.xls[xm]$/i.test(ros.file) && fs.existsSync(ros.file)) {
+    try {
+      const book = await readBook(ros.file);
+      const hit = detectTables(book.sheets).find(h => h.best === kind);
+      if (hit) return { b: { file: ros.file, sheet: hit.sheet, header: hit.header, cols: hit.cols, write: true, scope: 'all' }, found: true };
+      const names = new Set(book.sheets.map(x => normGreek(x.name)));
+      const title = KIND[kind].title.slice(0, 28); let name = title;
+      for (let i = 2; names.has(normGreek(name)); i++) name = title + ' ' + i;
+      return { b: { ...defaultBinding(kind, ros.file, name), write: true }, inRoster: true };
+    } catch { /* δεν διαβάζεται (ανοιχτό, παλιό .xls): χωριστό αρχείο */ }
+  }
+  const dir = newDir(kind);
+  if (!writableDir(dir)) return { error: 'Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.' };
+  return { b: { ...defaultBinding(kind, freeName(dir, KIND[kind].title)), write: true } };
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
   const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
@@ -681,12 +701,17 @@ else {
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
-    ipcMain.handle('src:new', async (_e, kind: StatusKind) => {
-      const dir = newDir(kind);
-      if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.');
-      saveBinding(kind, defaultBinding(kind, freeName(dir, KIND[kind].title)));
-      const r = await syncOut(kind, false); notify();
-      return r.ok ? { ok: true, file: r.file } : r;
+    ipcMain.handle('src:new', async (_e, kind: ListKind) => {
+      if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
+      const prev = bindingOf(kind);
+      const at = await newPlace(kind); if ('error' in at) return fail(at.error);
+      if (at.found) { saveBinding(kind, at.b); notify(); return { ok: true, file: at.b.file, sheet: at.b.sheet, found: true }; }
+      saveBinding(kind, at.b);
+      const r = await syncOut(kind, false, true);
+      // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει)
+      if (!r.ok) saveBinding(kind, prev || null);
+      notify();
+      return r.ok ? { ok: true, file: r.file, sheet: at.b.sheet, inRoster: at.inRoster } : r;
     });
     ipcMain.handle('src:status', async () => { retryPending(); return statusAll(); });
     ipcMain.handle('form:pick', async (_e, f: FormKind) => { const file = await pickXlsx('Template για ' + f); if (!file) return null; return formInfo(f, file); });
@@ -823,7 +848,7 @@ else {
       const newDirs = { ...(store.state.settings.newDirs || {}) }; if (dir) newDirs[t.kind] = dir; else delete newDirs[t.kind];
       return runCmd({ t: 'setSettings', settings: { newDirs }, text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what });
     };
-    const okTarget = (t: DirTarget) => t === 'output' || (!!t && typeof t === 'object' && (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && isStatusKind(t.kind))));
+    const okTarget = (t: DirTarget) => t === 'output' || (!!t && typeof t === 'object' && (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && canCreate(t.kind))));
     ipcMain.handle('dir:choose', async (_e, t: DirTarget) => {
       if (!okTarget(t)) return fail('άγνωστος φάκελος');
       const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε φάκελο', defaultPath: dirOf(t), properties: ['openDirectory', 'createDirectory'] });

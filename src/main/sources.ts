@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, canCreate, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -165,10 +165,12 @@ export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: User
 
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
 // tidy: γράφει και μόνο για τη μορφή που λείπει (με την «Ενημέρωση Excel»)· αλλιώς η μορφή μπαίνει όταν γράφεται κάτι.
-export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean } = {}): Promise<WriteOutcome> {
+// create: φτιάχνει το αρχείο ή το φύλλο και για τα άλλα είδη («Νέο αρχείο…»)· οι καταστάσεις φτιάχνονται πάντα.
+export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean; create?: boolean } = {}): Promise<WriteOutcome> {
   try {
     const exists = fs.existsSync(b.file);
-    if (!exists && !isStatusKind(kind)) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
+    const create = isStatusKind(kind) || (!!opts.create && canCreate(kind));
+    if (!exists && !create) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
     const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
     const had = wb.hasSheet(b.sheet);
     const ws = had ? await wb.sheet(b.sheet) : await wb.addSheet(b.sheet);
@@ -182,7 +184,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.set(at, v);
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };
-    if (!had && !isStatusKind(kind)) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
+    if (!had && !create) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];

@@ -9,7 +9,7 @@ import { personMap, postBy } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { MONTHS, addDays, dm } from '../../shared/dates';
 import {
-  KINDS, KIND, STATUS_KINDS, DEFAULT_TYPE, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
+  KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
@@ -90,10 +90,14 @@ export function SourcesView() {
     if (b.header !== sources[kind]?.header || JSON.stringify(b.cols) !== JSON.stringify(sources[kind]?.cols)) await refresh();
     setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b });
   };
-  const newFile = async (kind: StatusKind) => {
+  const newFile = async (kind: ListKind) => {
     const r = await window.api.srcNewFile(kind); if (!r) return;
     if (!r.ok) { toast({ text: r.error }); return; }
-    await refresh(); toast({ text: 'Φτιάχτηκε το ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.', actions: [{ label: 'Άνοιξε', fn: () => window.api.openPath(r.file) }] });
+    await refresh();
+    const text = r.found ? 'Το ' + base(r.file) + ' έχει ήδη φύλλο «' + r.sheet + '» με ' + KIND[kind].label.toLowerCase() + ': ορίστηκε αυτό. Πάτα «Ανανέωση από Excel» για να διαβαστεί.'
+      : r.inRoster ? 'Μπήκε φύλλο «' + r.sheet + '» στο ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.'
+      : 'Φτιάχτηκε το ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.';
+    toast({ text, actions: [{ label: 'Άνοιξε', fn: () => window.api.openPath(r.file) }] });
   };
   const remove = async (kind: ListKind) => { await window.api.srcSave(kind, null); await refresh(); toast({ text: KIND[kind].label + ': η εφαρμογή δεν διαβάζει ούτε γράφει πια σε Excel. Το αρχείο δεν άλλαξε.' }); };
   // ένα κουτάκι τη φορά: το δεύτερο κλικ πριν φρεσκάρει η κατάσταση θα έγραφε την παλιά τιμή του πρώτου
@@ -106,7 +110,7 @@ export function SourcesView() {
     <${Card} title="Αρχεία Excel ανά είδος" actions=${html`<${Button} disabled=${!!busy} onClick=${() => pick(null)}>${busy === 'new' ? 'Ανάγνωση…' : 'Εισαγωγή νέου Excel…'}<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Για κάθε είδος: από ποιο Excel, φύλλο και πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές σου. Αλλάζεις κάτι εδώ (π.χ. το Σ.Ι. κάποιου, μια ποινή) και γράφεται στο κελί του στο Excel. Η προηγούμενη έκδοση του αρχείου μένει στο <b>_προηγούμενα</b> δίπλα του.</p>
       <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id} saving=${!!saving}
-        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id as StatusKind)}
+        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id)} roster=${!!sources.people}
         onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggle(k.id, { write: on })} onAuto=${(on: boolean) => toggle(k.id, { autoRead: on })}/>`)}</ul>
     <//>
     <${FormsCard} outs=${st.forms}/>
@@ -120,7 +124,7 @@ export function SourcesView() {
   </div>`;
 }
 
-function SourceRow({ kind, b, st, busy, saving, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
+function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
@@ -135,7 +139,7 @@ function SourceRow({ kind, b, st, busy, saving, onPick, onEdit, onRead, onWrite,
       <small>${b ? html`<span className="plan__fn" title=${b.file}>${bindingText(b)}</span>${b.write === false ? ' · δεν γράφει μόνη της' : ''}` : k.help + ' · δεν έχει οριστεί αρχείο'}</small>
       ${s?.error && !s.locked && html`<small className="txt-bad">${s.error}</small>`}</div>
     <div className="srcrow__act">
-      ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${isStatusKind(kind) && html`<${Button} size="sm" variant="ghost" data-tip="Η εφαρμογή φτιάχνει καινούργιο Excel με τις εγγραφές της και το κρατά ενημερωμένο" onClick=${onNew}>Νέο αρχείο…<//>`}`
+      ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${canCreate(kind) && html`<${Button} size="sm" variant="ghost" data-tip=${roster && inRoster(kind) ? 'Η εφαρμογή προσθέτει φύλλο «' + k.title + '» στο Δυναμολόγιο με ό,τι έχει και το κρατά ενημερωμένο' : 'Η εφαρμογή φτιάχνει καινούργιο Excel με ό,τι έχει και το κρατά ενημερωμένο'} onClick=${onNew}>${roster && inRoster(kind) ? 'Νέο φύλλο…' : 'Νέο αρχείο…'}<//>`}`
       : html`<${Button} size="sm" variant=${s?.changed ? 'default' : 'outline'} onClick=${onRead} data-tip=${'Διάβασε το Excel και δες τι αλλάζει πριν περάσει στην εφαρμογή' + (withPeople ? ' (διαβάζεται και μαζί με το προσωπικό)' : '')}>Ανανέωση από Excel<//>
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
         <${Button} size="sm" variant="ghost" onClick=${onEdit}>Στήλες…<//>
@@ -487,8 +491,8 @@ export function FoldersCard() {
     <ul className="srclist">${FORMS.map(([f, label]) => { const b = forms[f] || {};
       return row(f, { form: f }, label, b.dir, html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => monthly(f, e.target.checked)}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`, b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ'); })}</ul>
     <h4 className="folders__h">Νέα Excel ανά είδος</h4>
-    <p className="note" style=${{ marginTop: 0 }}>Όταν πατάς «Νέο αρχείο…» σε ένα είδος στα Αρχεία Excel, το Excel φτιάχνεται κατευθείαν σε αυτόν τον φάκελο.</p>
-    <ul className="srclist">${STATUS_KINDS.map(k => { const file = st.sources?.[k]?.file;
+    <p className="note" style=${{ marginTop: 0 }}>Όταν πατάς «Νέο αρχείο…» σε ένα είδος στα Αρχεία Excel, το Excel φτιάχνεται κατευθείαν σε αυτόν τον φάκελο. Όταν έχει οριστεί Δυναμολόγιο, οι καταστάσεις, τα πόστα, τα εκτός δύναμης και οι δυνατότητες μπαίνουν ως νέο φύλλο εκεί («Νέο φύλλο…»).</p>
+    <ul className="srclist">${NEW_KINDS.map(k => { const file = st.sources?.[k]?.file;
       return row(k, { kind: k }, KIND[k].label, st.newDirs?.[k], file && html`<small className="srcrow__opt" style=${{ cursor: 'default' }}>Τωρινό αρχείο: <span className="plan__fn" title=${file}>${file}</span></small>`); })}</ul>
   <//>`;
 }
