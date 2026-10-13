@@ -750,7 +750,9 @@ export const hkaiMapOf = (cells?: Partial<HkaiMap>): HkaiMap => ({
 
 // ------------------------------------------------------------------ προσωπικό: διορθώσεις πίσω στο Δυναμολόγιο
 // Γράφονται μόνο όσα άλλαξαν στην εφαρμογή από την τελευταία ανάγνωση/εγγραφή (snap), στη γραμμή του ίδιου ατόμου.
-// Γραμμές δεν προστίθενται ούτε σβήνονται: το Δυναμολόγιο μένει η λίστα του λοχία.
+// Γραμμές δεν σβήνονται: το Δυναμολόγιο μένει η λίστα του λοχία. Μόνη εξαίρεση ο «Νέος στρατιώτης» της εφαρμογής:
+// μπαίνει σε νέα γραμμή κάτω από τον τελευταίο (added = οι γραμμές που έβαλε η εφαρμογή), και αν αναιρεθεί, η γραμμή
+// του αδειάζει.
 export const PEOPLE_SYNC = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'remarks', 'dn'];
 export type PersonSnap = Record<string, string>;
 // Χωρίς στήλη ΔΝ, το δικαίωμα ΔΝ γράφεται ως λέξη στις παρατηρήσεις (όπως το διαβάζει η εισαγωγή)
@@ -761,9 +763,13 @@ export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   dn: p.dn ? 'ΝΑΙ' : ''
 });
 export const snapPeople = (people: Person[]): Record<number, PersonSnap> => Object.fromEntries(people.map(p => [p.id, personVals(p)]));
-export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap> }
-export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, snap: Record<number, PersonSnap>): PeoplePlan {
-  const plan: PeoplePlan = { sets: [], changed: 0, notFound: [], snap: { ...snap } };
+// grow: οι νέοι μπήκαν ακριβώς κάτω από τον τελευταίο (γραμμή last, από 1) ως τη γραμμή to· οι περιοχές των τύπων που
+// σταματούν στον τελευταίο (π.χ. COUNTIF(I4:I158, "1") στα σύνολα θαλάμων) μεγαλώνουν ως εκεί, όπως θα έκανε το Excel
+export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap>;
+  insert: { after: number; n: number; tpl: number } | null; added: number; cleared: number; keys: string[]; grow: { from: number; last: number; to: number } | null }
+const snapVal = (k: string, v: string): WVal => (v === '' ? null : k === 'room' ? Number(v) : k === 'asm' || k === 'phone' ? num(v) : v);
+export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, snap: Record<number, PersonSnap>, keys: string[] = []): PeoplePlan {
+  const plan: PeoplePlan = { sets: [], changed: 0, notFound: [], snap: { ...snap }, insert: null, added: 0, cleared: 0, keys: [], grow: null };
   const scan = tableRows(sheet, b.header, b.cols);
   const byAsm = new Map<string, TableRow>(), byName = new Map<string, TableRow[]>();
   for (const row of scan.records) {
@@ -775,6 +781,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     const l = byName.get(key2(v.last, v.first)) || [];
     return l.length === 1 ? l[0] : l.find(x => normGreek(cellText(x.v.father)) === normGreek(v.father));
   };
+  const pm = new Map(s.people.map(p => [p.id, p]));
   for (const p of s.people) {
     const old = snap[p.id]; if (!old) continue;
     const cur = personVals(p, b);
@@ -785,12 +792,52 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     if (!row) { plan.notFound.push(p.last + ' ' + p.first); continue; }
     let ch = false;
     for (const k of diff) {
-      const v: WVal = cur[k] === '' ? null : k === 'room' ? Number(cur.room) : k === 'asm' || k === 'phone' ? num(cur[k]) : cur[k];
+      const v = snapVal(k, cur[k]);
       if (!same(row.v[k], v)) { plan.sets.push({ r: row.r, c: b.cols[k], v }); ch = true; }
     }
     if (ch) plan.changed++;
     plan.snap[p.id] = cur;
   }
+  // νέος που αναιρέθηκε (δεν υπάρχει πια στην εφαρμογή): η γραμμή που του έβαλε η εφαρμογή αδειάζει
+  const mine = new Set(keys.map(Number));
+  for (const id of mine) {
+    if (pm.has(id)) { plan.keys.push(String(id)); continue; }
+    const row = snap[id] && find(snap[id]); delete plan.snap[id];
+    if (!row) continue;
+    for (let c = scan.width[0]; c <= scan.width[1]; c++) if (c !== b.cols.aa && cellText((sheet.rows[row.r] || [])[c]) !== '') plan.sets.push({ r: row.r, c, v: null });
+    plan.cleared++;
+  }
+  // νέοι από την εφαρμογή που δεν είναι ακόμα στο φύλλο
+  // (ίδιος μόνο με ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο χωρίς άλλο ΑΣΜ: όχι στη γραμμή συνονόματου)
+  const written = (v: PersonSnap) => (v.asm && byAsm.get(v.asm)) || (byName.get(key2(v.last, v.first)) || []).find(x => normGreek(cellText(x.v.father)) === normGreek(v.father) && (!v.asm || !cellText(x.v.asm)));
+  const fresh = s.people.filter(p => p.added && p.active && !plan.snap[p.id]).filter(p => {
+    const cur = personVals(p, b); if (!written(cur)) return true;
+    plan.snap[p.id] = cur; plan.keys.push(String(p.id)); return false;   // τον έγραψε ήδη ο λοχίας με το χέρι
+  });
+  if (!fresh.length) return plan;
+  const people = scan.records.filter(x => b.cols.last == null || b.cols.first == null || isPersonRow(cellText(x.v.last), cellText(x.v.first), cellText(x.v.father)));
+  const last = people.length ? people[people.length - 1].r : b.header;
+  // ελεύθερες γραμμές κάτω από τον τελευταίο· μία κενή μένει πριν από ό,τι ακολουθεί (σύνολα, άλλος πίνακας)
+  const next = scan.records.find(x => x.r > last)?.r ?? Infinity;
+  const free = scan.free.filter(r => r > last && r < next - 1);
+  const rows: number[] = [];
+  const put = (r: number, p: Person) => {
+    const cur = personVals(p, b);
+    for (const k of PEOPLE_SYNC) if (b.cols[k] != null && cur[k] !== '') plan.sets.push({ r, c: b.cols[k], v: snapVal(k, cur[k]) });
+    if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first });
+    if (b.cols.aa != null && cellText((sheet.rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: people.length + rows.length + 1 });
+    rows.push(r); plan.snap[p.id] = cur; plan.keys.push(String(p.id));
+  };
+  let i = 0;
+  for (; i < fresh.length && i < free.length; i++) put(free[i], fresh[i]);
+  const rest = fresh.slice(i);
+  if (rest.length) {
+    const after = i ? free[i - 1] : last;
+    plan.insert = { after, n: rest.length, tpl: people.length ? last : after };
+    rest.forEach((p, j) => put(after + 1 + j, p));
+  }
+  plan.added = fresh.length;
+  if (people.length && rows.every((r, j) => r === last + 1 + j)) plan.grow = { from: b.header + 1, last: last + 1, to: last + 1 + rows.length };
   return plan;
 }
 // Οι τιμές του Excel για κάθε άτομο που βρέθηκε, όπως θα τις έγραφε η εισαγωγή: αφετηρία για το τι άλλαξε στην εφαρμογή.
@@ -1173,12 +1220,12 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
 
 // Ένα σχέδιο εγγραφής για κάθε είδος (το χρησιμοποιούν η προεπισκόπηση, η εγγραφή και η δοκιμή στον browser)
 export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[] }
-export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap> }
+export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap>; grow?: PeoplePlan['grow'] }
 export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, meta: SyncMeta | undefined, today: ISODate): FullPlan {
   const psnap = snapPeople(s.people); const sh = sheet || { name: b.sheet, rows: [] };
   if (kind === 'people') {
-    const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people));
-    return { sets: p.sets, insert: null, header: [], keys: meta?.keys || [], added: 0, changed: p.changed, cleared: 0, foreign: 0, notFound: p.notFound, snap: p.snap, psnap };
+    const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people), meta?.keys);
+    return { sets: p.sets, insert: p.insert, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow };
   }
   const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
     : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keep);

@@ -41,7 +41,7 @@ export function PeopleScreen() {
   const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room } as Person) !== u ? null : room });
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r } as Person) !== unit ? 'all' : unit });
   const [selected, setSelected] = useState(() => new Set<number>());
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false);
   const ds = dutyStats(state);
   const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['dnright', 'Με δικαίωμα ΔΝ'], ['inactive', 'Εκτός δύναμης']];
   const UNITS = [{ value: 'all', label: 'Όλη η Ίλη' }, { value: '1ος Ουλ.', label: '1ος Ουλ.', tip: 'Θάλαμοι 1–4' }, { value: '2ος Ουλ.', label: '2ος Ουλ.', tip: 'Θάλαμοι 5–8' }];
@@ -99,6 +99,7 @@ export function PeopleScreen() {
   const dateSel = html`<select className="hdsel" aria-label="Κατάσταση στην ημερομηνία" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
   return html`<div>
     <${PageHeader} title="Προσωπικό" sub=${'Δύναμη Ίλης: ' + total + ' άτομα. Πάτα σε γραμμή για στοιχεία, ή επίλεξε πολλούς για μαζική δήλωση.'}>
+      <${Button} variant="outline" onClick=${() => setAdding(true)} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">+ Νέος στρατιώτης<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
     ${tabs}
@@ -123,6 +124,7 @@ export function PeopleScreen() {
       <div className="ptable__head" role="row"><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" checked=${allSel} onChange=${() => setSelected(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span>${H('last', 'Ονοματεπώνυμο')}${H('father', 'Πατρώνυμο')}${H('rank', 'Βαθμός')}${H('unit', 'Ουλαμός')}${H('room', 'Θάλαμος')}${H('duty', 'Υπηρ.')}<span>${dateSel}</span></div>
       <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} odd=${i % 2 === 1} style=${style} statuses=${state.statuses} today=${date} duty=${ds.get(p.id)?.total || 0} checked=${selected.has(p.id)} selected=${nav.params.person === p.id} onToggle=${toggle} onOpen=${open}/>`}/>
     </div></div></div>`}
+    ${adding && html`<${NewPersonDialog} onClose=${() => setAdding(false)}/>`}
     ${saving && html`<${SaveViewDialog} onClose=${() => setSaving(false)} onSave=${async (name: string) => {
       const v: SavedView = { id: Date.now().toString(36), name, unit, room, filter, q: dq.trim() };
       if (await run({ t: 'setSettings', settings: { views: [...views, v] }, text: 'αποθηκευμένη λίστα «' + name + '»' }, false)) { setSaving(false); toast({ text: 'Αποθηκεύτηκε η λίστα «' + name + '». Τη βρίσκεις στη γραμμή φίλτρων.' }); }
@@ -207,22 +209,56 @@ export function BaselineReviewDialog({ onClose }: P) {
   <//>`;
 }
 
-function EditPersonDialog({ p, onClose }: P) {
-  const { run, state } = useStore(); const toast = useToast();
+// Πού πάει μια αλλαγή στοιχείων: και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel και η εφαρμογή γράφει εκεί
+function rosterNote(state: P, isNew: boolean): string {
+  const b = state.settings.sources?.people;
+  if (!b || b.write === false) return isNew ? 'Μένει μόνο στην εφαρμογή: δεν έχει οριστεί Δυναμολόγιο στα Αρχεία Excel για να γραφτεί και εκεί.' : 'Αλλάζει μόνο στην εφαρμογή. Στην επόμενη εισαγωγή Δυναμολογίου θα πάρει τις τιμές του αρχείου.';
+  const at = b.file.split(/[\\/]/).pop() + ' › ' + b.sheet;
+  return isNew ? 'Γράφεται και στο Δυναμολόγιο (' + at + '), σε νέα γραμμή κάτω από τον τελευταίο.' : 'Βαθμός, Ο/Σ, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι. και ρόλος γράφονται και στο Δυναμολόγιο (' + at + ').';
+}
+// Τα πεδία ενός στρατιώτη: ίδια στη διόρθωση και στον νέο
+function PersonFields({ x, setX, id, isNew }: P) {
+  const { state } = useStore();
   const ranks = useMemo(() => optionsOf(SOLDIER_RANKS, state.people.map((y: Person) => y.rank)), [state.people]);
   const specs = useMemo(() => optionsOf(SPECS, state.people.map((y: Person) => y.spec)), [state.people]);
-  const [x, setX] = useState<Person>({ ...p });
-  const F = (k: keyof Person, label: string, opts: P = {}) => html`<div className="field"><label className="field__label" htmlFor=${'ep-' + k}>${label}</label><input id=${'ep-' + k} className="ui-input" type=${opts.type || 'text'} value=${(x as any)[k] ?? ''} onChange=${(e: any) => setX({ ...x, [k]: opts.num ? (e.target.value ? Number(e.target.value) : null) : opts.nullable ? (e.target.value || null) : e.target.value })}/></div>`;
-  return html`<${Dialog} title="Διόρθωση στοιχείων" description="Αλλάζει μόνο στην εφαρμογή. Στην επόμενη εισαγωγή Δυναμολογίου θα πάρει τις τιμές του αρχείου." onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'updatePerson', person: x }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + shortName(x) }); } }}>Αποθήκευση<//>`}>
-    <div className="field-row"><${ChoiceField} id="ep-rank" label="Βαθμός" value=${x.rank} options=${ranks} placeholder="π.χ. ΣΤΡ" onChange=${(v: string) => setX({ ...x, rank: v })}/><${ChoiceField} id="ep-spec" label="Ο/Σ (όπλο/σώμα)" value=${x.spec} options=${specs} placeholder="π.χ. ΠΖ" onChange=${(v: string) => setX({ ...x, spec: v })}/></div>
-    <div className="field-row">${F('last', 'Επώνυμο')}${F('first', 'Όνομα')}${F('father', 'Πατρώνυμο')}</div>
+  const F = (k: keyof Person, label: string, opts: P = {}) => html`<div className="field"><label className="field__label" htmlFor=${id + '-' + k}>${label}</label><input id=${id + '-' + k} className="ui-input" type=${opts.type || 'text'} value=${(x as any)[k] ?? ''} placeholder=${opts.placeholder || ''} data-autofocus=${opts.focus ? '' : undefined} onChange=${(e: any) => setX({ ...x, [k]: opts.num ? (e.target.value ? Number(e.target.value) : null) : opts.nullable ? (e.target.value || null) : e.target.value })}/></div>`;
+  return html`
+    <div className="field-row"><${ChoiceField} id=${id + '-rank'} label="Βαθμός" value=${x.rank} options=${ranks} placeholder="π.χ. ΣΤΡ" onChange=${(v: string) => setX({ ...x, rank: v })}/><${ChoiceField} id=${id + '-spec'} label="Ο/Σ (όπλο/σώμα)" value=${x.spec} options=${specs} placeholder="π.χ. ΠΖ" onChange=${(v: string) => setX({ ...x, spec: v })}/></div>
+    <div className="field-row">${F('last', isNew ? 'Επώνυμο *' : 'Επώνυμο', { focus: isNew })}${F('first', isNew ? 'Όνομα *' : 'Όνομα')}${F('father', 'Πατρώνυμο')}</div>
     <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}${F('room', 'Θάλαμος', { type: 'number', num: true })}</div>
-    <div className="field-row">${F('si', 'Σ.Ι.')}${F('post', 'Πόστο', { nullable: true })}${F('role', 'Ρόλος', { nullable: true })}</div>
-    <div className="field-row">${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
+    <div className="field-row">${F('si', 'Σ.Ι.', { placeholder: 'π.χ. Ι1' })}${F('post', 'Πόστο', { nullable: true })}${F('role', 'Ρόλος', { nullable: true })}</div>
+    <div className="field-row">${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.</small></span></label>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Δεν εμφανίζεται στις λίστες, στις υπηρεσίες και στην ΗΚΑΙ.</small></span></label>
-    ${F('notes', 'Σημειώσεις')}
+    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Δεν εμφανίζεται στις λίστες, στις υπηρεσίες και στην ΗΚΑΙ.</small></span></label>`}
+    ${F('notes', 'Σημειώσεις')}`;
+}
+
+function EditPersonDialog({ p, onClose }: P) {
+  const { run, state } = useStore(); const toast = useToast();
+  const [x, setX] = useState<Person>({ ...p });
+  return html`<${Dialog} title="Διόρθωση στοιχείων" description=${rosterNote(state, false)} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'updatePerson', person: x }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + shortName(x) }); } }}>Αποθήκευση<//>`}>
+    <${PersonFields} x=${x} setX=${setX} id="ep"/>
+  <//>`;
+}
+
+// Νέος στρατιώτης (π.χ. ήρθε μετάθεση): μπαίνει στην εφαρμογή και σε νέα γραμμή στο Δυναμολόγιο
+function NewPersonDialog({ onClose }: P) {
+  const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
+  // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
+  const essos = useMemo(() => { const n = new Map<string, number>(); state.people.forEach((y: Person) => { if (y.active && y.essos) n.set(y.essos, (n.get(y.essos) || 0) + 1); }); return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] || ''; }, [state.people]);
+  const [x, setX] = useState<P>({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '' });
+  const ok = !!x.last.trim() && !!x.first.trim();
+  const save = async () => {
+    if (!ok) return;
+    const next = await run({ t: 'addPerson', person: x }, false); if (!next) return;
+    onClose(); nav.openPerson(next.people.reduce((a: number, y: Person) => Math.max(a, y.id), 0));   // ο νέος έχει τον μεγαλύτερο αριθμό
+    const b = state.settings.sources?.people;
+    toast({ text: 'Προστέθηκε ο ' + x.last.trim().toUpperCase() + ' ' + x.first.trim().toUpperCase() + (b && b.write !== false ? '. Γράφεται και στο Δυναμολόγιο.' : '.'), actions: [undoMark()] });
+  };
+  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${onClose} closeOnOverlay=${!x.last && !x.first}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Προσθήκη<//>`}>
+    <${PersonFields} x=${x} setX=${setX} id="np" isNew=${true}/>
   <//>`;
 }
 

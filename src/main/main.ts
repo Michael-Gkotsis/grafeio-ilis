@@ -310,11 +310,12 @@ async function bookOf(file: string): Promise<SourceBook> {
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
 // Η μορφή που μπήκε, σύντομα (για το Ιστορικό)
 const tidyWhat = (t: string[]) => [t.some(x => x.startsWith('Ο τίτλος')) && 'τίτλος στο κέντρο', t.some(x => x.startsWith('Λίστα')) && 'λίστες επιλογής'].filter(Boolean).join(' και ');
-function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; sheet: string }; tidy?: string[] }, b: SourceBinding) {
-  const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν', r.tidy?.length && 'μορφή: ' + tidyWhat(r.tidy)].filter(Boolean).join(', ');
+function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; added: number; sheet: string }; tidy?: string[] }, b: SourceBinding) {
+  const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (kind === 'people' ? (r.added === 1 ? ' νέος στρατιώτης' : ' νέοι στρατιώτες') : r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν', r.tidy?.length && 'μορφή: ' + tidyWhat(r.tidy)].filter(Boolean).join(', ');
   return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '')
     + (r.warn?.length ? '. ' + r.warn.join(' ') : '')
-    + (r.rooms ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '');
+    + (r.rooms?.n ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '')
+    + (r.rooms?.added ? '. ' + (r.rooms.added === 1 ? 'Νέος στρατιώτης: γράψ\' τον' : r.rooms.added + ' νέοι στρατιώτες: γράψ\' τους') + ' και στο φύλλο ' + r.rooms.sheet + ', στον θάλαμό ' + (r.rooms.added === 1 ? 'του' : 'τους') + ' (δεν ενημερώνεται μόνο του)' : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
 type SyncOut = { ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean };

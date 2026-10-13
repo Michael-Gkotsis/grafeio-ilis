@@ -114,7 +114,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)
 export const PREV_EVERY = 10 * 60 * 1000;
 export type WriteOutcome =
-  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; sheet: string }; tidy?: string[] }
+  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; added: number; sheet: string }; tidy?: string[] }
   | { ok: false; error: string; locked?: boolean };
 
 // Μορφή που λείπει από φύλλο που ήδη υπάρχει: τίτλος που δεν είναι στο κέντρο σε συγχωνευμένα κελιά, και λίστες
@@ -190,6 +190,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.setColWidths(wide);
     }
     if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
+    // νέοι στρατιώτες κάτω από τον τελευταίο: τα σύνολα που μετράνε ως τον τελευταίο τους μετράνε κι αυτούς
+    if (plan.grow) await wb.growRanges(ws, plan.grow.from, plan.grow.last, plan.grow.to);
     // Ελεύθερες γραμμές που γράφονται τώρα: παίρνουν πλαίσια και στοίχιση από τη γραμμή του πίνακα από πάνω
     // (ή το στυλ του νέου πίνακα) σε όσα κελιά δεν έχουν δικό τους στυλ. Οι γραμμές που μπήκαν με insertRows τα έχουν ήδη.
     const scan = tableRows(sheet, b.header, b.cols); const span = scan.width; const recs = new Set(scan.records.map(x => x.r));
@@ -209,8 +211,9 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     // Θάλαμοι: το φύλλο ΘΑΛΑΜΟΙ δεν συνδέεται, οπότε όταν αλλάζει θάλαμος θυμίζουμε να μετακινηθεί και εκεί ο στρατιώτης
     const rc = kind === 'people' ? b.cols.room : undefined;
     const roomSheet = rc != null ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
-    const roomRows = roomSheet ? new Set(plan.sets.filter(x => x.c === rc && x.r > b.header).map(x => x.r)).size : 0;
-    const rooms = roomRows ? { n: roomRows, sheet: roomSheet! } : undefined;
+    const roomSets = roomSheet ? plan.sets.filter(x => x.c === rc && x.r > b.header) : [];
+    const roomRows = new Set(roomSets.filter(x => recs.has(x.r)).map(x => x.r)).size, roomNew = new Set(roomSets.filter(x => !recs.has(x.r)).map(x => x.r)).size;
+    const rooms = roomRows || roomNew ? { n: roomRows, added: roomNew, sheet: roomSheet! } : undefined;
     const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
     return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {

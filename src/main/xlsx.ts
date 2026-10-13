@@ -38,6 +38,18 @@ export function shiftFormula(f: string, sheet: string, own: boolean, after: numb
   })).join('');
   return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+// Νέες γραμμές ακριβώς κάτω από το τέλος μιας λίστας: οι περιοχές που ξεκινούν από την αρχή της (γραμμή from ή from+1)
+// και σταματούν στη γραμμή last φτάνουν ως τη γραμμή to, π.χ. COUNTIF(I4:I158, "1") → COUNTIF(I4:I159, "1")
+export function growFormula(f: string, sheet: string, own: boolean, from: number, last: number, to: number): string {
+  const name = sheet.toLowerCase();
+  const plain = unesc(f);
+  const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
+    if (!b || (q ? sheetOf(q) !== name : !own)) return m;
+    const ra = splitRef(a).r, rb = splitRef(b).r;
+    return ra >= from && ra <= from + 1 && rb === last ? (q || '') + a + ':' + b.replace(/\d+$/, String(to)) : m;
+  })).join('');
+  return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 // Οι τύποι ενός κελιού (και η περιοχή των κοινών τύπων/πινάκων τύπων, ref="…")
 const shiftCellFormulas = (inner: string, sheet: string, own: boolean, after: number, n: number) =>
   inner.replace(/<f(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/f>)/g, (_m, fa = '', body: string | undefined) => {
@@ -238,6 +250,16 @@ export class Sheet {
     wb.shiftForeign(this, after, n);
     wb.shiftTables(this, after, n);
   }
+  // Περιοχές τύπων προς το φύλλο sheet που μεγαλώνουν (growFormula)
+  growFormulas(sheet: string, from: number, last: number, to: number): number {
+    let n = 0;
+    for (const row of this.rows) for (const c of row.cells) {
+      if (!c.inner.includes('<f')) continue;
+      const inner = c.inner.replace(/(<f(?:\s[^>]*)?>)([\s\S]*?)(<\/f>)/g, (_m, o: string, body: string, e: string) => o + growFormula(body, sheet, sheet === this.name, from, last, to) + e);
+      if (inner !== c.inner) { c.inner = inner; n++; }   // η τιμή ξαναϋπολογίζεται στο άνοιγμα (fullCalcOnLoad)
+    }
+    return n;
+  }
   // Τύποι σε αυτό το φύλλο που δείχνουν σε γραμμές ενός άλλου φύλλου που μετακινήθηκαν
   shiftForeign(sheet: string, after: number, n: number) {
     for (const row of this.rows) for (const c of row.cells) if (c.inner.includes('<f')) c.inner = shiftCellFormulas(c.inner, sheet, false, after, n);
@@ -324,6 +346,20 @@ export class Workbook {
   shiftForeign(from: Sheet, after: number, n: number) {
     this.moved.push({ sheet: from.name, after, n });
     for (const s of this.sheets.values()) if (s !== from) s.shiftForeign(from.name, after, n);
+  }
+  // Νέες γραμμές στο τέλος της λίστας του φύλλου ws: οι τύποι (σε αυτό και στα άλλα φύλλα) που μετράνε ως τον
+  // τελευταίο της λίστας μετράνε και τους νέους. Πόσοι τύποι άλλαξαν.
+  async growRanges(ws: Sheet, from: number, last: number, to: number): Promise<number> {
+    let n = ws.growFormulas(ws.name, from, last, to);
+    for (const e of this.names) {
+      if (e.name === ws.name) continue;
+      if (!this.sheets.has(e.path)) {
+        const xml = await this.zip.file(e.path)?.async('string'); if (!xml || !xml.includes('<f')) continue;
+        const plain = unesc(xml); if (!plain.includes(ws.name + '!') && !plain.includes(ws.name.replace(/'/g, "''") + "'!")) continue;
+      }
+      n += (await this.sheet(e.name)).growFormulas(ws.name, from, last, to);
+    }
+    return n;
   }
   sheetNames() { return this.names.map(x => x.name); }
   hasSheet(name: string) { return this.names.some(x => x.name === name); }
