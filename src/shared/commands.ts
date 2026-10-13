@@ -403,6 +403,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         attached: !!x.attached, notes: t(x.notes)
       };
       if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
+      if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
       if (!p.dn) delete p.dn;
       if (!p.offDays?.length) delete p.offDays;
       if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');

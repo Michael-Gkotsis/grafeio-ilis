@@ -128,7 +128,7 @@ describe('λίστες', () => {
     expect(['Ι5', 'Ι 5 ΧΩΡΙΣ', 'Ι.5', 'Ι4', 'Ι3 ΑΟΠΛΟ', 'Ι1'].map(si => siUnarmed(si, l))).toEqual([true, true, true, false, true, false]);
     const s0 = fakeState(10); const p = s0.people[0];
     const s = { ...s0, people: s0.people.map((x, i) => (i === 0 ? { ...x, si: 'Ι5', post: null } : x)), settings: { ...s0.settings, lists: l } };
-    expect(Object.keys(capsOf(s, p.id)).sort()).toEqual(['op', 'sk']);
+    expect(Object.keys(capsOf(s, p.id)).sort()).toEqual(['op', 'sk', 'tae']);
     expect(isUnarmed(s, D, p.id)).toBe(true);
     expect(capsOf({ ...s, settings: s0.settings }, p.id)).toEqual(capsOf({ ...s0, people: s.people }, p.id));
     expect(isUnarmed({ ...s, settings: s0.settings }, D, p.id)).toBe(false);

@@ -91,7 +91,7 @@ describe('άοπλοι στις άοπλες θέσεις', () => {
     const s0 = spen(fakeState(20)); const D = '2026-10-14';
     const armed = postsOf(s0.settings).filter(p => p.armed).length;
     // όσοι μπορούν σε ένοπλη είναι ακριβώς όσες οι ένοπλες θέσεις
-    const s: AppState = { ...s0, people: s0.people.map((p, i) => ({ ...p, si: i < armed ? 'Ι1' : 'Ι3 ΑΟΠΛΟ' })) };
+    const s: AppState = { ...s0, people: s0.people.map((p, i) => ({ ...p, post: null, si: i < armed ? 'Ι1' : 'Ι3 ΑΟΠΛΟ' })) };
     const r = fillDay(s, D);
     expect(r.empty.filter(k => postsOf(s.settings).find(p => p.k === k)!.armed)).toEqual([]);
   });

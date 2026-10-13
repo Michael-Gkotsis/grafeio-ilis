@@ -1,35 +1,45 @@
-// Σ.Ι. (σωματική ικανότητα), Michael 13/10: βασική κατηγορία (Ι1–Ι4 και όσες προσθέσεις) και, για Ι3 και Ι4,
-// κατηγορία «ΜΕ ΟΠΛΟ» ή «ΑΟΠΛΟ». Για κάθε συνδυασμό ορίζεις ποιες υπηρεσίες κάνει (Ρυθμίσεις › Σ.Ι.).
-// Στις ρυθμίσεις μένουν μόνο οι αλλαγές σου (στις Λίστες, lists.si): χωρίς αλλαγές ισχύει ό,τι και πριν
-// (άοπλος = περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4», ranks.ts siUnarmed: όχι οπλοφύλακας, όχι σκοπιά).
+// Σ.Ι. (σωματική ικανότητα), Michael 13/10: βασική (Ι1–Ι4 και όσες προσθέσεις), για το Ι3 «ΜΕ ΟΠΛΟ» ή «ΑΟΠΛΟ»
+// (το Ι4 είναι πάντα άοπλο), και για Ι3/Ι4 κατηγορία πάθησης (ΟΡΘΟΠΑΙΔΙΚΟ, ΠΑΘΟΛΟΓΙΚΟ…, όπως οι ενότητες του Γενικού
+// Πίνακα Νοσημάτων του π.δ. 11/2014). Για κάθε Σ.Ι. ορίζεις σε ποιες υπηρεσίες μπαίνει (Ρυθμίσεις › Σ.Ι.), ανά υπηρεσία.
+// Στις ρυθμίσεις μένουν μόνο οι αλλαγές σου (lists.si). Προεπιλογή: ο άοπλος (περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4», όπως
+// πριν, ranks.ts siUnarmed) δεν μπαίνει σε ένοπλη υπηρεσία· όλοι οι άλλοι παντού.
 import { normGreek } from './text';
-import type { DutyKind } from './domain';
+import type { BlockDef } from './domain';
 import { siUnarmed, type UserLists } from './ranks';
 
-// add: δικές σου βασικές (π.χ. Ι5) · subs: δικές σου κατηγορίες ανά βασική · deny: ανά συνδυασμό, ποιες υπηρεσίες ΔΕΝ κάνει
-export interface SiConfig { add?: string[]; subs?: Record<string, string[]>; deny?: Record<string, DutyKind[]> }
+// add: δικές σου βασικές (π.χ. Ι5) · cats: δικές σου ή κρυμμένες κατηγορίες πάθησης
+// cells: γραμμή του πίνακα («Ι3 ΑΟΠΛΟ» ή «Ι3 ΑΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ») → υπηρεσία (id μπλοκ) → μπαίνει ή όχι
+export interface SiConfig { add?: string[]; cats?: { add?: string[]; hide?: string[] }; cells?: Record<string, Record<string, boolean>> }
 export const SI_BASES = ['Ι1', 'Ι2', 'Ι3', 'Ι4'];
-export const SI_SUBS: Record<string, string[]> = { 'Ι3': ['ΜΕ ΟΠΛΟ', 'ΑΟΠΛΟ'], 'Ι4': ['ΜΕ ΟΠΛΟ', 'ΑΟΠΛΟ'] };
+export const SI_SUBS: Record<string, string[]> = { 'Ι3': ['ΜΕ ΟΠΛΟ', 'ΑΟΠΛΟ'] };
+// Σ.Ι. που παίρνουν κατηγορία πάθησης
+export const SI_CAT_BASES = ['Ι3', 'Ι4'];
+export const SI_CATS = ['ΠΑΘΟΛΟΓΙΚΟ', 'ΟΡΘΟΠΑΙΔΙΚΟ', 'ΧΕΙΡΟΥΡΓΙΚΟ', 'ΚΑΡΔΙΟΛΟΓΙΚΟ', 'ΠΝΕΥΜΟΝΟΛΟΓΙΚΟ', 'ΝΕΥΡΟΛΟΓΙΚΟ', 'ΨΥΧΙΑΤΡΙΚΟ',
+  'ΟΦΘΑΛΜΟΛΟΓΙΚΟ', 'ΩΡΛ', 'ΔΕΡΜΑΤΟΛΟΓΙΚΟ', 'ΟΥΡΟΛΟΓΙΚΟ', 'ΑΛΛΕΡΓΙΟΛΟΓΙΚΟ', 'ΑΙΜΑΤΟΛΟΓΙΚΟ', 'ΕΝΔΟΚΡΙΝΟΛΟΓΙΚΟ'];
 // ό,τι γράφεται αλλιώς στο Δυναμολόγιο: «ΑΟΠΛΟΣ», «ΧΩΡΙΣ ΟΠΛΟ», «ΕΝΟΠΛΟΣ» (χωρίς κενά και σημεία)
 const SYN: [RegExp, string][] = [[/^(ΑΟΠΛ|ΧΩΡΙΣΟΠΛ)/, 'ΑΟΠΛΟ'], [/^(ΜΕΟΠΛ|ΕΝΟΠΛ)/, 'ΜΕ ΟΠΛΟ']];
 // χωρίς κενά, τελείες, κάθετους: «Ι/3», «Ι 3», «I3» (λατινικό) είναι το ίδιο
 const key = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
 export const siName = (v: string) => normGreek(v).replace(/\s+/g, ' ').trim();
 export const siLabel = (base: string, sub: string) => base + (sub ? ' ' + sub : '');
+export const siRowKey = (label: string, cat?: string) => (cat ? label + ' · ' + cat : label);
 
 export const siBases = (cfg?: SiConfig): string[] => {
   const out = [...SI_BASES]; const have = new Set(out.map(key));
   for (const b of cfg?.add || []) { const k = key(b); if (k && !have.has(k)) { have.add(k); out.push(siName(b)); } }
   return out;
 };
-export const siSubs = (base: string, cfg?: SiConfig): string[] => {
-  const out = [...(SI_SUBS[base] || [])]; const have = new Set(out.map(key));
-  for (const s of cfg?.subs?.[base] || []) { const k = key(s); if (k && !have.has(k)) { have.add(k); out.push(siName(s)); } }
+export const siSubs = (base: string): string[] => SI_SUBS[base] || [];
+// Κατηγορίες πάθησης: οι βασικές που δεν έκρυψες και οι δικές σου (all: και οι κρυμμένες)
+export function siCats(cfg?: SiConfig, all = false): string[] {
+  const hide = new Set((cfg?.cats?.hide || []).map(key)); const have = new Set(SI_CATS.map(key));
+  const out = SI_CATS.filter(c => all || !hide.has(key(c)));
+  for (const c of cfg?.cats?.add || []) { const k = key(c); if (k && !have.has(k)) { have.add(k); if (all || !hide.has(k)) out.push(siName(c)); } }
   return out;
-};
+}
 
 // Τιμή του Excel ή της φόρμας → βασική και κατηγορία. ok = false: η κατηγορία δεν είναι γνωστή για αυτή τη βασική
-// (π.χ. «Ι2 ΑΟΠΛΟ» ή «Ι3 ΧΩΡΙΣ ΝΥΧΤΕΡΙΝΗ» πριν την προσθέσεις). null: δεν αναγνωρίζεται καν η βασική.
+// (π.χ. «Ι2 ΑΟΠΛΟ»): ισχύει ο παλιός κανόνας. null: δεν αναγνωρίζεται καν η βασική.
 export interface SiParts { base: string; sub: string; ok: boolean }
 export function parseSi(raw: string | undefined, cfg?: SiConfig): SiParts | null {
   const k = key(raw || ''); if (!k) return null;
@@ -38,40 +48,52 @@ export function parseSi(raw: string | undefined, cfg?: SiConfig): SiParts | null
   if (!base) { const m = /^Ι(\d)/.exec(k); if (!m) return null; base = 'Ι' + m[1]; }
   const rest = k.slice(key(base).length);
   if (!rest) return { base, sub: '', ok: true };
-  const subs = siSubs(base, cfg);
-  const own = subs.filter(s => rest.startsWith(key(s))).sort((a, b) => key(b).length - key(a).length)[0];
-  if (own) return { base, sub: own, ok: true };
   const syn = SYN.find(([re]) => re.test(rest))?.[1];
-  if (syn && subs.includes(syn)) return { base, sub: syn, ok: true };
-  return { base, sub: '', ok: false };
+  // το Ι4 είναι πάντα άοπλο: «Ι4 ΑΟΠΛΟ» (και «Ι4 ΜΕ ΟΠΛΟ», που μετρούσε πάντα άοπλο) είναι απλώς Ι4
+  if (base === 'Ι4' && syn) return { base, sub: '', ok: true };
+  const sub = siSubs(base).find(s => rest.startsWith(key(s))) || (syn && siSubs(base).includes(syn) ? syn : undefined);
+  return sub ? { base, sub, ok: true } : { base, sub: '', ok: false };
 }
 
-// Όλοι οι συνδυασμοί για τον πίνακα και τα dropdown: κάθε βασική και από κάτω οι κατηγορίες της
-export const siCombos = (cfg?: SiConfig): string[] => siBases(cfg).flatMap(b => [b, ...siSubs(b, cfg).map(s => siLabel(b, s))]);
+// Οι Σ.Ι. του πίνακα και του dropdown του Excel: κάθε βασική και από κάτω οι κατηγορίες της (ΜΕ ΟΠΛΟ/ΑΟΠΛΟ)
+export const siCombos = (cfg?: SiConfig): string[] => siBases(cfg).flatMap(b => [b, ...siSubs(b).map(s => siLabel(b, s))]);
 
-// Προεπιλογή ενός συνδυασμού, όπως πριν από τον πίνακα. Εξαίρεση: «Ι4 ΜΕ ΟΠΛΟ» κάνει ό,τι και το «Ι3 ΜΕ ΟΠΛΟ»
-// (πριν μετρούσε άοπλος, γιατί άοπλος ήταν κάθε Ι4).
-const UNARMED: DutyKind[] = ['op', 'sk'];
-export function siDefaultDeny(label: string, lists?: UserLists): DutyKind[] {
-  if (label === 'Ι4 ΜΕ ΟΠΛΟ') return [];
-  return siUnarmed(label, lists) ? [...UNARMED] : [];
-}
-export const siCustom = (label: string, lists?: UserLists): boolean => !!lists?.si?.deny && Object.prototype.hasOwnProperty.call(lists.si.deny, label);
-export const siDenyOf = (label: string, lists?: UserLists): DutyKind[] => (siCustom(label, lists) ? lists!.si!.deny![label] : siDefaultDeny(label, lists));
-
-// Τι δεν κάνει κάποιος λόγω Σ.Ι.: από τον πίνακα, αν η Σ.Ι. αναγνωρίζεται· αλλιώς όπως πριν (ΑΟΠΛ ή Ι4 → άοπλος)
-// Ρωτιέται για κάθε υποψήφιο σε κάθε θέση της αυτόματης συμπλήρωσης: κρατιέται ανά ρυθμίσεις Λιστών και τιμή Σ.Ι.
-const denyIdx = new WeakMap<object, Map<string, DutyKind[]>>();
+// Η Σ.Ι. ενός ατόμου: γραμμή του πίνακα και κατηγορία πάθησης. known = false: ισχύει ο παλιός κανόνας
+export interface SiOf { label: string; cat: string; known: boolean; text: string }
+// ρωτιέται για κάθε υποψήφιο σε κάθε θέση της αυτόματης συμπλήρωσης: κρατιέται ανά ρυθμίσεις Λιστών, Σ.Ι. και κατηγορία
+const ofIdx = new WeakMap<object, Map<string, SiOf>>();
 const NO_LISTS = {};
-export function siDeny(si: string | undefined, lists?: UserLists): DutyKind[] {
-  let m = denyIdx.get(lists || NO_LISTS); if (!m) { m = new Map(); denyIdx.set(lists || NO_LISTS, m); }
-  const v = si || ''; let d = m.get(v);
-  if (!d) {
-    const p = parseSi(v, lists?.si);
-    d = p && p.ok ? siDenyOf(siLabel(p.base, p.sub), lists) : siUnarmed(v, lists) ? [...UNARMED] : [];
-    m.set(v, d);
-  }
-  return d;
+export function siOf(p: { si?: string; siCat?: string }, lists?: UserLists): SiOf {
+  let m = ofIdx.get(lists || NO_LISTS); if (!m) { m = new Map(); ofIdx.set(lists || NO_LISTS, m); }
+  const k = (p.si || '') + '\u0001' + (p.siCat || ''); let r = m.get(k);
+  if (!r) { r = siOfRaw(p, lists); m.set(k, r); }
+  return r;
 }
-// Άοπλος λόγω Σ.Ι. (για τα «Αυστηρά Άοπλοι»): δεν κάνει ούτε οπλοφύλακα ούτε σκοπιά
-export const siIsUnarmed = (si: string | undefined, lists?: UserLists): boolean => { const d = siDeny(si, lists); return UNARMED.every(k => d.includes(k)); };
+function siOfRaw(p: { si?: string; siCat?: string }, lists?: UserLists): SiOf {
+  const x = parseSi(p.si, lists?.si);
+  if (!x || !x.ok) return { label: p.si || '', cat: '', known: false, text: p.si || '' };
+  const label = siLabel(x.base, x.sub);
+  const cat = SI_CAT_BASES.includes(x.base) && p.siCat ? siName(p.siCat) : '';
+  return { label, cat, known: true, text: label + (cat ? ' ' + cat : '') };
+}
+type Blk = Pick<BlockDef, 'id' | 'armed'>;
+// Μπαίνει σε αυτή την υπηρεσία; Πρώτα η κατηγορία πάθησης (αν την άλλαξες), μετά η Σ.Ι., μετά η προεπιλογή
+// (άοπλος όπως πριν: ΑΟΠΛ ή Ι4, και όσα όρισες στη λίστα «Σ.Ι. άοπλων»· όχι σε ένοπλη υπηρεσία)
+export function siCellOf(lists: UserLists | undefined, label: string, cat: string, b: Blk): { ok: boolean; from: 'cat' | 'row' | 'def' } {
+  const c = lists?.si?.cells;
+  const vc = cat ? c?.[siRowKey(label, cat)]?.[b.id] : undefined; if (vc != null) return { ok: vc, from: 'cat' };
+  const vr = c?.[label]?.[b.id]; if (vr != null) return { ok: vr, from: 'row' };
+  return { ok: !(b.armed && siUnarmed(label, lists)), from: 'def' };
+}
+export function siAllows(p: { si?: string; siCat?: string }, b: Blk, lists?: UserLists): boolean {
+  const s = siOf(p, lists);
+  if (!s.known) return !(b.armed && siUnarmed(p.si, lists));
+  return siCellOf(lists, s.label, s.cat, b).ok;
+}
+// Άοπλος λόγω Σ.Ι. (για τα «Αυστηρά Άοπλοι»): δεν μπαίνει σε καμία ένοπλη υπηρεσία του εντύπου.
+// Έντυπο χωρίς ένοπλες υπηρεσίες (ΣΒΕΝ): όπως πριν, από τη Σ.Ι.
+export function siIsUnarmed(p: { si?: string; siCat?: string }, blocks: Blk[], lists?: UserLists): boolean {
+  const armed = blocks.filter(b => b.armed);
+  if (!armed.length) { const s = siOf(p, lists); return siUnarmed(s.known ? s.label : p.si, lists); }
+  return armed.every(b => !siAllows(p, b, lists));
+}

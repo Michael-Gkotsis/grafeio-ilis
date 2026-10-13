@@ -482,6 +482,9 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .sigrid th:first-child,.sigrid td:first-child{text-align:left}
 .sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px}
 .sigrid tr.is-sub td:first-child{padding-left:22px}
+.sigrid tr.is-cat td:first-child{padding-left:40px;font-size:12px}
+.sigrid td.is-set{background:var(--hover)}
+.sigrid__tag{display:block;font-weight:400;font-size:11px}
 .capgrid{display:flex;flex-wrap:wrap;gap:6px}
 .capgrid label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
 .capgrid label.is-off{background:var(--muted);color:var(--muted-fg);text-decoration:line-through}

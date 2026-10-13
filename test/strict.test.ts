@@ -62,10 +62,11 @@ describe('Αυστηρά Άοπλοι', () => {
     expect(Object.keys(r.guards[D]).some(k => k.startsWith('sk'))).toBe(false);
     expect(r.warn.some(w => /Αυστηρά Άοπλοι: σκοπιά μόνο ένοπλοι/.test(w))).toBe(true);
     expect(nextFor(s, D, 'sk3a', [])).toBeNull();
-    // κλειστό: ο ΕΑ μπαίνει σε σκοπιά ως τελευταία λύση, όπως πριν
+    // κλειστό: η σκοπιά είναι άοπλη, οπότε μπαίνουν και οι Ι3 ΑΟΠΛΟ (Σ.Ι. ανά υπηρεσία, 13/10)· ο ΕΑ μόνο ως τελευταία λύση
     const off = { ...s, rules: { ...s.rules, strictUnarmed: false } };
-    expect(Object.values(fillDay(off, D).guards[D]).includes(EA)).toBe(true);
-    expect(nextFor(off, D, 'sk3a', [])).toBe(EA);
+    const sk = Object.entries(fillDay(off, D).guards[D]).filter(([k]) => k.startsWith('sk')).map(([, v]) => v);
+    expect(sk.length).toBe(3); expect(sk.filter(x => x !== EA).every(x => AOPLO.includes(x))).toBe(true);
+    expect(AOPLO).toContain(nextFor(off, D, 'sk3a', []));
   });
   it('«Επόμενος» σε μαγειρεία προτείνει πρώτα άοπλο', () => {
     const s = base();

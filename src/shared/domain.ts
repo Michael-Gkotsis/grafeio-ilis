@@ -17,6 +17,7 @@ export interface Person {
   phone: string;
   room: number | null;   // θάλαμος 1–8
   si: string;            // Σ.Ι.: Ι1, Ι2, Ι3 ΜΕ ΟΠΛΟ, Ι3 ΑΟΠΛΟ, Ι4
+  siCat?: string;        // κατηγορία πάθησης για Ι3/Ι4 (ΟΡΘΟΠΑΙΔΙΚΟ…): μόνο στην εφαρμογή, όχι στο Excel (si.ts)
   post: string | null;   // πόστο (ΚΨΜ, ΙΑΤΡΟΣ ΣΤΕΠ…)
   role: string | null;   // ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…
   essos: string;         // π.χ. 2026 Γ΄
