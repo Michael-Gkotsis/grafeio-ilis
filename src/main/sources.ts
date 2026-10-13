@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -163,12 +163,32 @@ export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: User
   return tidyText(tidyOf(kind, b, await wb.sheet(b.sheet), sheet, lists));
 }
 
+// Νέος μήνας στον έλεγχο υπηρεσιών: φύλλο με όλη τη δομή (planDutiesNew), σε νέο ή στο ίδιο αρχείο με τους άλλους μήνες
+async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppState, today: ISODate): Promise<WriteOutcome> {
+  if (!b.month) return { ok: false, error: 'Δεν ορίστηκε ο μήνας του ελέγχου υπηρεσιών' };
+  const lay = planDutiesNew(b, s, today);
+  const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: await wb.tableStyle('data'), code: 0 };
+  st.code = st.data;
+  const gray = new Map<number, number>(); const grayOf = async (x: number) => { if (!gray.has(x)) gray.set(x, await wb.grayed(x)); return gray.get(x)!; };
+  for (const x of lay.cells) {
+    const at = colName(x.c + 1) + (x.r + 1);
+    if (x.f) ws.setFormula(at, x.f); else if (x.v != null && typeof x.v !== 'object') ws.set(at, x.v);
+    if (x.st === 'title') { ws.setStyle(at, st.title); continue; }
+    ws.setStyle(at, x.gray ? await grayOf(st[x.st]) : st[x.st]);
+  }
+  for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
+  ws.setColWidths(lay.widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
+  const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
+  return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: [], ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+}
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
 // tidy: γράφει και μόνο για τη μορφή που λείπει (με την «Ενημέρωση Excel»)· αλλιώς η μορφή μπαίνει όταν γράφεται κάτι.
-export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean } = {}): Promise<WriteOutcome> {
+// create: φτιάχνει το αρχείο ή το φύλλο και για τα άλλα είδη («Νέο αρχείο…»)· οι καταστάσεις φτιάχνονται πάντα.
+export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean; create?: boolean } = {}): Promise<WriteOutcome> {
   try {
     const exists = fs.existsSync(b.file);
-    if (!exists && !isStatusKind(kind)) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
+    const create = isStatusKind(kind) || (!!opts.create && canCreate(kind));
+    if (!exists && !create) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
     const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
     const had = wb.hasSheet(b.sheet);
     const ws = had ? await wb.sheet(b.sheet) : await wb.addSheet(b.sheet);
@@ -182,7 +202,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.set(at, v);
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };
-    if (!had && !isStatusKind(kind)) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
+    if (!had && !create) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
+    if (kind === 'duties' && (!had || !exists)) return await newDutiesSheet(wb, ws, b, s, today);
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];
@@ -204,6 +225,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       }
       for (const x of plan.sets) fit(x.c, x.v);
       ws.setColWidths(wide);
+      ws.setPrintFit(c2 >= 10);
     }
     if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
     // νέοι στρατιώτες μέσα στον πίνακα (στον θάλαμό τους): γραμμές με το στυλ του διπλανού, οι τύποι από κάτω κατεβαίνουν
@@ -227,6 +249,23 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       }
     }
     for (const x of plan.sets) await put(x.r, x.c, x.v, data);
+    // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα και το φύλλο ΘΑΛΑΜΟΙ (αν δεν υπάρχει ήδη)
+    if (fresh && plan.extra?.length) {
+      const head = await wb.tableStyle('head');
+      for (const x of plan.extra) { const at = ref(x.r, x.c); if (x.f) ws.setFormula(at, x.f); else ws.set(at, x.v ?? null); ws.setStyle(at, x.head ? head : data!); }
+      for (const m of plan.merges || []) ws.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
+    }
+    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x))) {
+      const rs = roomSheetNew(s.people);
+      if (rs.cells.length) {
+        const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: data! };
+        const ws2 = await wb.addSheet('ΘΑΛΑΜΟΙ');
+        for (const x of rs.cells) { const at = ref(x.r, x.c); if (x.v != null) ws2.set(at, typeof x.v === 'object' ? null : x.v); ws2.setStyle(at, st[x.st]); }
+        for (const m of rs.merges) ws2.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
+        ws2.setPrintFit(true);
+        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(32, Math.max(8, h.length + 2, ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => String(x.v ?? '').length + 2)))])));
+      }
+    }
     // νέος που αναιρέθηκε: η γραμμή του φεύγει (σε φύλλο με πίνακα του Excel απλώς αδειάζει)
     for (const d of plan.deletes || []) if (!ws.deleteRow(d + 1, wb)) for (let c = span[0]; c <= span[1]; c++) await put(d, c, null);
     // Θάλαμοι: στο φύλλο ΘΑΛΑΜΟΙ (ένας πίνακας ανά θάλαμο) ο νέος μπαίνει στο τέλος του θαλάμου του και ο αναιρεμένος φεύγει.

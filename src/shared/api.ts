@@ -8,7 +8,7 @@ import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding,
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 // Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
-export type DirTarget = 'output' | { form: FormKind } | { kind: StatusKind };
+export type DirTarget = 'output' | { form: FormKind } | { kind: ListKind };
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
 export interface TemplateInfo { id: string; name: string; file: string; ok: boolean; custom: boolean }
 // Μετά από κάθε ενέργεια ο main στέλνει μόνο τα κομμάτια της κατάστασης που άλλαξαν (changes) και τις νέες γραμμές
@@ -63,7 +63,8 @@ export interface Api {
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
   srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;
-  srcNewFile(kind: StatusKind): Promise<{ ok: true; file: string } | Fail | null>;
+  // sheet: το φύλλο που φτιάχτηκε· inRoster: μπήκε ως φύλλο στο Δυναμολόγιο· found: το Δυναμολόγιο είχε ήδη τέτοιο πίνακα
+  srcNewFile(kind: ListKind): Promise<{ ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | Fail | null>;   // sheets: τα φύλλα που μπήκαν μαζί στο νέο Δυναμολόγιο
   srcStatus(): Promise<{ sources: SourceStatus[]; forms: FormOut[] }>;
   onSources(cb: (st: { sources: SourceStatus[]; forms: FormOut[] }) => void): () => void;
   formPick(form: FormKind): Promise<FormInfo | Fail | null>;

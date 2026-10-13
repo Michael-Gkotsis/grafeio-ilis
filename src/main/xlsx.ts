@@ -137,6 +137,10 @@ export class Sheet {
     else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(clean(v))}</t></is>`; }
     x.selfClose = false; return this;
   }
+  // Τύπος σε καινούργιο κελί (χωρίς «=»): ο Excel τον υπολογίζει στο άνοιγμα (fullCalcOnLoad στο save)
+  setFormula(ref: string, f: string): this {
+    const x = this.cell(ref)!; x.attrs = setAttr(x.attrs, 't', null); x.inner = `<f>${esc(f)}</f>`; x.selfClose = false; return this;
+  }
   // Κείμενο με μορφή ανά κομμάτι (π.χ. υπογραμμισμένη διάρκεια ποινής): runs έτοιμα <r>…</r>. Κρατά το στυλ του κελιού.
   setRuns(ref: string, runs: string): this {
     const x = this.cell(ref)!;
@@ -194,6 +198,22 @@ export class Sheet {
       const n = (this.tail.match(/<dataValidation\b/g) || []).length + 1;
       this.tail = this.tail.replace(/<dataValidations\b([^>]*)>/, (_m, a: string) => `<dataValidations${setAttr(a, 'count', String(n))}>`).replace('</dataValidations>', dv + '</dataValidations>');
     } else this.tail = tailInsert(this.tail, 'dataValidations', `<dataValidations count="1">${dv}</dataValidations>`);
+    return this;
+  }
+  // Εκτύπωση για καινούργιο φύλλο: Α4, σε πλάτος μιας σελίδας (όσες σελίδες χρειαστεί σε ύψος), οριζόντια αν είναι φαρδύ.
+  // Φύλλο που έχει ήδη δικές του ρυθμίσεις εκτύπωσης δεν αλλάζει.
+  setPrintFit(landscape: boolean): this {
+    if (/<pageSetup\b/.test(this.tail) || /<sheetPr\b/.test(this.head)) return this;
+    this.head = this.head.replace(/<worksheet\b[^>]*>/, m => m + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+    this.tail = tailInsert(this.tail, 'pageMargins', '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>');
+    this.tail = tailInsert(this.tail, 'pageSetup', `<pageSetup paperSize="9" orientation="${landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0"/>`);
+    return this;
+  }
+  // Σταθερές γραμμές/στήλες (πάγωμα παραθύρου) για καινούργιο φύλλο
+  setFreeze(cols: number, rows: number): this {
+    if (/<sheetViews\b/.test(this.head)) return this;
+    const pane = `<sheetViews><sheetView workbookViewId="0"><pane xSplit="${cols}" ySplit="${rows}" topLeftCell="${colName(cols + 1)}${rows + 1}" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>`;
+    this.head = this.head.replace(/(<sheetFormatPr\b|<cols>|<sheetData\b)/, m => pane + m);
     return this;
   }
   // Πλάτη στηλών για καινούργιο φύλλο (μόνο αν το φύλλο δεν έχει ήδη δικά του)
@@ -363,7 +383,7 @@ export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
   private sst: string[] | null = null;
-  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number> } | null = null;
+  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number> } | null = null;
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -496,7 +516,7 @@ export class Workbook {
     return idx;
   }
   // Στοιχεία ενός πίνακα του styles.xml (fonts, borders…): η λίστα και πού βρίσκεται
-  private part(tag: 'fonts' | 'borders'): { items: string[]; add: (x: string) => number } {
+  private part(tag: 'fonts' | 'fills' | 'borders'): { items: string[]; add: (x: string) => number } {
     const st = this.styles!; const one = tag.slice(0, -1);
     const m = new RegExp('(<' + tag + '\\b[^>]*>)([\\s\\S]*?)(</' + tag + '>)').exec(st.xml);
     const items = m ? [...m[2].matchAll(new RegExp('<' + one + '\\b[^>]*?(?:/>|>[\\s\\S]*?</' + one + '>)', 'g'))].map(x => x[0]) : [];
@@ -528,6 +548,13 @@ export class Workbook {
     const font = kind === 'data' ? 0 : this.boldFont(kind === 'title' ? 14 : undefined);
     const border = kind === 'title' ? 0 : this.thinBorder();
     return this.addXf(`<xf numFmtId="0" fontId="${font}" fillId="0" borderId="${border}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"${kind === 'head' ? ' wrapText="1"' : ''}/></xf>`);
+  }
+  // Στυλ όπως το base, με γκρι φόντο (ΣΚ και αργίες στον έλεγχο υπηρεσιών)
+  async grayed(base: number): Promise<number> {
+    const st = await this.loadStyles();
+    const fill = this.part('fills').add('<fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill>');
+    st.grayed = st.grayed || new Map();
+    return this.xfLike(base, st.grayed, x => x.replace(/^<xf\b[^>]*?(?=\/?>)/, a => setAttr(setAttr(a, 'fillId', String(fill)), 'applyFill', '1')));
   }
   // Στυλ όπως το base, στο κέντρο (οριζόντια): για τίτλο που συγχωνεύεται πάνω από τον πίνακα
   async centered(base: number | null): Promise<number> {
