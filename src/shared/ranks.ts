@@ -26,7 +26,7 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: ιατρικό που συμπεριφέρεται σαν ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
@@ -36,13 +36,14 @@ export type UserLists = Partial<Record<ListId, UserList>>;
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
-  medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label)
+  medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label),
+  siUnarmed: ['ΑΟΠΛ', 'Ι4']   // Σ.Ι. που περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4» (όπως πριν τις Λίστες)
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Απουσίες στελεχών', medKinds: 'Ιατρικά' };
+export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Απουσίες στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
 // βαθμοί, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
-const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds'];
+const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'siUnarmed'];
 export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
@@ -107,6 +108,18 @@ export function statusLbl(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): 
 export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string | undefined {
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m?.code || TYPES[s.type].code;
+}
+
+// Σ.Ι. → άοπλος (όχι οπλοφύλακας, όχι σκοπός). Τα βασικά ακριβώς όπως πριν: περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4».
+// Τα δικά σου: το Σ.Ι. αρχίζει από αυτό, χωρίς κενά και τελείες («Ι5» πιάνει και «Ι 5», «Ι5 ΧΩΡΙΣ ΟΠΛΟ»). Όσα έκρυψες δεν μετρούν.
+const siKey = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
+export function siUnarmed(si: string | undefined, lists?: UserLists): boolean {
+  const v = normGreek(si || ''); if (!v) return false;
+  const u = lists?.siUnarmed; const hide = new Set((u?.hide || []).map(itemKey));
+  if (!hide.has('ΑΟΠΛ') && v.includes('ΑΟΠΛ')) return true;
+  if (!hide.has('Ι4') && v.startsWith('Ι4')) return true;
+  const k = siKey(v);
+  return (u?.add || []).some(x => { const a = siKey(x.name || ''); return !!a && !hide.has(itemKey(x.name)) && k.startsWith(a); });
 }
 
 // Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό που γράφει ο χρήστης· πρώτα ό,τι όρισες στις Λίστες
