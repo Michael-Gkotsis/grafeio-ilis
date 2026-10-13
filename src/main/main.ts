@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -261,14 +261,15 @@ const ovOf = (b?: SourceBinding, file?: string): RosterOverride | undefined => (
 // Ο πίνακας μετακινήθηκε μέσα στο φύλλο (γραμμές από πάνω, από το Excel ή από εγγραφή της εφαρμογής σε άλλο πίνακα του
 // ίδιου φύλλου): η αντιστοίχιση ακολουθεί. Δεν είναι ενέργεια του χρήστη, οπότε δεν μπαίνει στην αναίρεση.
 // Το ίδιο για στήλες που μετακινήθηκαν ή προστέθηκαν (b.cols, από το refitCols).
-function moveBinding(kind: ListKind, b: SourceBinding) {
+function moveBinding(kind: ListKind, b: SourceBinding, colsText?: string) {
   const cur = bindingOf(kind); if (!cur) return;
   const row = cur.header !== b.header, cols = !!b.cols && JSON.stringify(cur.cols) !== JSON.stringify(b.cols);
   if (!row && !cols) return;
   store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header, cols: cols ? b.cols : cur.cols } } } });
   const lbl = 'Excel ' + KIND[kind].label.toLowerCase() + ': ';
   if (row) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'ο πίνακας είναι πια στη γραμμή ' + (b.header + 1) + ' του φύλλου «' + b.sheet + '» (άλλαξαν γραμμές από πάνω)', files: [], source: 'auto', undoable: false }, null);
-  if (cols) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'οι στήλες ακολούθησαν τις επικεφαλίδες τους στο φύλλο «' + b.sheet + '» (μπήκε ή μετακινήθηκε στήλη)', files: [], source: 'auto', undoable: false }, null);
+  if (cols && colsText) store.addAudit({ at: nowHM(), day: today(), text: lbl + colsText, files: [], source: 'auto', undoable: false }, null);
+  else if (cols) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'οι στήλες ακολούθησαν τις επικεφαλίδες τους στο φύλλο «' + b.sheet + '» (μπήκε ή μετακινήθηκε στήλη)', files: [], source: 'auto', undoable: false }, null);
 }
 const sameTable = (a?: SourceBinding, b?: SourceBinding) => !!a && !!b && path.resolve(a.file) === path.resolve(b.file) && a.sheet === b.sheet && a.header === b.header;
 // Η αντιστοίχιση ενός είδους όπως είναι τώρα στο αρχείο
@@ -333,6 +334,7 @@ async function syncOutNow(kind: ListKind, auto: boolean, create = false): Promis
   } else b = (await current(kind, b))!;
   const r = await writeSource(kind, b, store.state, m, today(), { tidy: !auto, create });
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
+  if (r.binding) { moveBinding(kind, r.binding, 'μπήκαν στήλες «ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ» και «ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ» στο φύλλο «' + b.sheet + '» (άδειες με ώρα)'); b = bindingOf(kind) || r.binding; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);
@@ -515,7 +517,8 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
-  const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
+  const b0 = await current(kind); if (!b0) return fail('Δεν έχει οριστεί αρχείο');
+  let b: SourceBinding = b0;
   try {
     const exists = fs.existsSync(b.file);
     const book = exists ? await readBook(b.file) : null;
@@ -523,12 +526,13 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     if (!book && !isStatusKind(kind)) return fail('Δεν βρέθηκε το ' + b.file);
     const had = !!book?.sheets.some(x => x.name === b.sheet);
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
+    const tc = timeCols(kind, had ? sheet : null, b, store.state, today()); b = tc.b;
     const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
     const steps = plan.inserts || [], sheet2 = steps.length ? withRows(sheet, steps) : sheet;
     const lines = describeSets(kind, sheet2, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : stepRows(steps));
     for (const d of plan.deletes || []) { const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = (sheet2.rows[d] || [])[b.cols[k]]; lines.push({ r: d, who: rowName(v), text: 'η γραμμή σβήνεται (αναιρέθηκε στην εφαρμογή)' }); }
     lines.sort((x, y) => x.r - y.r);
-    const tidy = had && book ? await tidyPreview(kind, b, store.state.settings.lists) : [];
+    const tidy = [...tc.head.map(h => 'Νέα στήλη «' + h.v + '» (' + colLetter(h.c) + ') στο τέλος του πίνακα, για τις ώρες των αδειών'), ...(had && book ? await tidyPreview(kind, b, store.state.settings.lists) : [])];
     return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous), warn: plan.warn, ...(tidy.length ? { tidy } : {}) };
   } catch (e) { return fail(e); }
 }

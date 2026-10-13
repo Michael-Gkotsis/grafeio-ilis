@@ -1,6 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, siUnarmed, statusLbl, type UserLists } from './ranks';
+import { hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
@@ -126,14 +127,61 @@ export function capBlock(s: AppState, date: ISODate, pid: number, post?: Post | 
 export const capLabel = (k: DutyKind) => CAP_KINDS.find(x => x[0] === k)?.[1] || k;
 
 // Κ-01, Κ-02, Κ-05: γιατί κάποιος ΔΕΝ μπαίνει σε μια θέση (null = μπαίνει). Χωρίς θέση: ελέγχει σαν ένοπλη.
-export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: { armed: boolean; kind?: DutyKind } | null): string | null {
+type DutyPost = { armed: boolean; kind?: DutyKind; slots?: string[] | null; hrs?: string };
+export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
   for (const s of statusesOn(statuses, pid, date)) {
+    if (backBefore(s, date, post)) continue;
     const t = TYPES[s.type];
     if (t.noDuty) return t.label + untilTxt(s, date);
     if (t.noArmed && (!post || post.armed)) return 'Άοπλος: ' + t.label + untilTxt(s, date);
     if (t.light && post?.kind === 'mg') return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
   }
-  return null;
+  return leavesBefore(statuses, date, pid, post);
+}
+// --------------------------- ώρες στις άδειες (Michael, 13/10) ---------------------------
+// Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
+// της υπηρεσίας: από τις βάρδιες (14:00-16:00, 22:00-00:00, 06:00-08:00 → 14:00 ως 08:00 της επόμενης) ή από τις ώρες
+// της θέσης («14:00 → 14:00»). null = δεν ξέρουμε (μαγειρεία «ημέρα», ΤΑΕ χωρίς ώρες).
+const spanIdx = new WeakMap<object, { start: number | null; end: number | null }>();
+export function postSpan(post: DutyPost): { start: number | null; end: number | null } {
+  let r = spanIdx.get(post);
+  if (r) return r;
+  const re = /(\d{1,2}):(\d{2})/g;
+  const times = (txt: string) => [...txt.matchAll(re)].map(m => +m[1] * 60 + +m[2]);
+  r = { start: null, end: null };
+  if (post.slots && post.slots.length) {
+    let day = 0, prev = -1;
+    for (const sl of post.slots) {
+      const [a, b] = times(sl); if (a == null) continue;
+      if (a < prev) day += 1440;
+      prev = a;
+      if (r.start == null) r.start = a + day;
+      if (b != null) r.end = b + day + (b <= a ? 1440 : 0);
+    }
+  } else if (post.hrs) {
+    const [a, b] = times(post.hrs);
+    if (a != null) { r.start = a; if (b != null) r.end = b + (b <= a ? 1440 : 0); }
+  }
+  spanIdx.set(post, r);
+  return r;
+}
+// Γύρισε από την άδεια την τελευταία μέρα πριν ξεκινήσει η θέση (π.χ. επιστροφή 12:00, υπηρεσία από 14:00): μπαίνει.
+// Χωρίς θέση ή με θέση χωρίς γνωστή ώρα έναρξης μετρά όλη η μέρα, όπως πριν.
+function backBefore(s: Status, date: ISODate, post?: DutyPost | null): boolean {
+  if (!s.toTime || s.open || s.to !== date || !hasTimes(s.type) || !post) return false;
+  const st = postSpan(post).start;
+  return st != null && mins(s.toTime) <= st;
+}
+// Φεύγει για άδεια την επόμενη μέρα πριν τελειώσει η υπηρεσία που ξεκινά σήμερα (π.χ. αναχώρηση 10:00, η υπηρεσία
+// τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει 14:00 της επόμενης· η μαγειρεία είναι της ημέρας.
+function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
+  if (!post) return null;
+  const next = addDays(date, 1);
+  const s = statusesOf(statuses, pid).find(x => x.from === next && x.fromTime && !x.pending && hasTimes(x.type));
+  if (!s) return null;
+  const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + 14 * 60);
+  if (end == null || 1440 + mins(s.fromTime!) >= end) return null;
+  return 'Φεύγει ' + TYPES[s.type].label + ' ' + dm(next) + ' στις ' + s.fromTime;
 }
 // ΕΟ/ΕΑ σε (άοπλη) σκοπιά: επιτρέπεται, αλλά μόνο αν δεν υπάρχει άλλος (λοχίας, 10/10)
 export function lastResort(statuses: Status[], date: ISODate, pid: number, post?: { kind?: DutyKind } | null): string | null {
@@ -458,7 +506,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 }
 
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string }
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
@@ -492,7 +540,9 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [], warned: StatusPlan['conflicts'] = [];
   const lists = s.settings.lists;
   const clash = (x: Status) => (t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away);
-  const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
+  // με ώρα αναχώρησης μετρά και η υπηρεσία της προηγούμενης μέρας (τελειώνει το μεσημέρι της πρώτης μέρας της άδειας)
+  const first = cmd.fromTime && hasTimes(cmd.type) ? addDays(cmd.from, -1) : cmd.from;
+  const dates = Object.keys(s.guards).filter(d => d >= first && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
   for (const pid of cmd.pids) {
     const mine = statusesOf(s.statuses, pid).filter(x => overlapsRange(x, cmd.from, cmd.to));
@@ -503,7 +553,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
       for (let d = cmd.from; d <= cmd.to; d = addDays(d, 1)) { const r = outBlock(s, d, pid); if (r) { blocked.push({ pid, date: d, reason: r }); break; } }
     } else if (cmd.type !== 'PUN') {
       // οι ίδιοι κανόνες με τις υπηρεσίες (dutyBlock): καμία υπηρεσία, όχι ένοπλη, ΕΟ/ΕΑ όχι μαγειρεία
-      const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to };
+      const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to, ...(cmd.fromTime ? { fromTime: cmd.fromTime } : {}), ...(cmd.toTime ? { toTime: cmd.toTime } : {}) };
       dates.forEach(date => posts.forEach(x => {
         if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
       }));

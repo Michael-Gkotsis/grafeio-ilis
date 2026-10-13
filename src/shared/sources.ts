@@ -10,6 +10,7 @@ import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { allPosts, isHol, postBy } from './rules';
 import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
+import { cellTime } from './hours';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -59,6 +60,10 @@ export const PERSON_FIELDS: FieldDef[] = [
 const FROM = (head = 'ΑΠΟ') => F('from', 'Από (ημερομηνία)', head, /^ΑΠΟ$|^ΕΝΑΡΞΗ|^ΕΙΣ$|^ΕΙΣΟΔΟΣ$|^ΗΜ\w* ΕΙΣ/, { req: true, date: true });
 const TO = (head = 'ΕΩΣ') => F('to', 'Έως (ημερομηνία)', head, /^ΕΩΣ$|^ΛΗΞΗ|^ΕΞ$|^ΕΞΟΔΟΣ$|^ΗΜ\w* ΕΞ/, { date: true });
 const NOTE = F('note', 'Παρατηρήσεις', 'Παρατηρήσεις', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$|^ΣΗΜΕΙΩΣΕΙΣ$/);
+// Ώρες άδειας (Michael, 13/10): προαιρετικές στήλες· όταν λείπουν και μια άδεια έχει ώρα, η εφαρμογή τις προσθέτει (timeCols)
+const TOUT = F('tout', 'Ώρα αναχώρησης', 'ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ', /^ΩΡΑ ΑΝΑΧ|^ΩΡΑ ΑΠΟ$|^ΩΡΑ ΕΝΑΡΞ|^ΩΡΑ ΕΞΟΔ/);
+const TIN = F('tin', 'Ώρα επιστροφής', 'ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ', /^ΩΡΑ ΕΠΙΣΤΡ|^ΩΡΑ ΕΩΣ$|^ΩΡΑ ΛΗΞ|^ΩΡΑ ΕΠΑΝ/);
+export const TIME_FIELDS = ['tout', 'tin'];
 
 export interface KindDef {
   id: ListKind; label: string; help: string; fields: FieldDef[]; sheetRe: RegExp; titleRe?: RegExp;
@@ -81,7 +86,7 @@ export const KINDS: KindDef[] = [
   { id: 'step', label: 'Εισαγωγές ΣΤΕΠ', help: 'Είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΣΤΕΠ', write: true, types: ['STEP'],
     sheetRe: /IATR|ΙΑΤΡ|ΣΤΕΠ/, titleRe: /ΣΤΕΠ/, fields: [FROM('ΕΙΣ'), TO('ΕΞ'), NOTE] },
   { id: 'leave', label: 'Άδειες', help: 'Είδος άδειας, από, έως', title: 'ΑΔΕΙΕΣ', write: true, types: ['LEAVE', 'HON'],
-    sheetRe: /ΑΔΕΙ/, titleRe: /ΑΔΕΙ/, fields: [F('kind', 'Είδος άδειας', 'ΕΙΔΟΣ ΑΔΕΙΑΣ', /ΕΙΔΟΣ ΑΔΕΙΑΣ|^ΑΔΕΙΑ$/), FROM(), TO(), NOTE] },
+    sheetRe: /ΑΔΕΙ/, titleRe: /ΑΔΕΙ/, fields: [F('kind', 'Είδος άδειας', 'ΕΙΔΟΣ ΑΔΕΙΑΣ', /ΕΙΔΟΣ ΑΔΕΙΑΣ|^ΑΔΕΙΑ$/), FROM(), TOUT, TO(), TIN, NOTE] },
   { id: 'dn', label: 'ΔΝ (διανυκτερεύσεις)', help: 'Από, έως', title: 'ΔΝ', write: true, types: ['DN'],
     sheetRe: /^Δ\s?\.?\s?Ν(?![Α-Ω])|ΔΙΑΝΥΚΤ/, titleRe: /^Δ\s?\.?\s?Ν(?![Α-Ω])|ΔΙΑΝΥΚΤ/, fields: [FROM(), TO(), NOTE] },
   { id: 'posts', label: 'Πόστα', help: 'Μόνιμες αναθέσεις (ΚΨΜ, ιατρείο…)· διαβάζονται μαζί με το προσωπικό', title: 'ΠΟΣΤΑ', write: false,
@@ -357,7 +362,7 @@ export function makeMatcher(people: Person[]): Matcher {
 export const rowName = (v: Record<string, CellValue>) => (cellText(v.name) || [cellText(v.rank), cellText(v.last), cellText(v.first)].filter(Boolean).join(' ')) || '(χωρίς όνομα)';
 
 // ------------------------------------------------------------------ καταστάσεις από Excel
-export interface Cand { r: number; who: string; pid: number | null; cands: Person[]; type: TypeKey | null; raw: string; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; noEnd?: boolean }
+export interface Cand { r: number; who: string; pid: number | null; cands: Person[]; type: TypeKey | null; raw: string; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; noEnd?: boolean; fromTime?: string; toTime?: string }
 export interface ParseOut { cands: Cand[]; skipped: { r: number; who: string; why: string }[]; unknown: string[] }
 const vk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z0-9]/g, '');
 // Τιμή στη στήλη «είδος» → είδος κατάστασης. null = άγνωστο (το διαλέγει ο χρήστης· ως τότε μπαίνει η προεπιλογή του είδους).
@@ -404,6 +409,7 @@ export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBindin
     else if (kind === 'medical' || kind === 'leave') { if (raw && !(kind === 'medical' && TYPES[type || 'EA'].label === norm(raw))) c.kind = raw; }
     else if (kind === 'hospital' && raw) c.kind = raw;
     if (cellText(v.note)) c.note = cellText(v.note);
+    if (kind === 'leave') { const f = cellTime(v.tout), t = cellTime(v.tin); if (f) c.fromTime = f; if (t && !noEnd) c.toTime = t; }
     out.cands.push(c);
   }
   out.unknown = [...unk.values()];
@@ -419,7 +425,9 @@ const candId = (kind: StatusKind, pid: number, c: Cand) => identity(pid, kind, c
 // Μια εγγραφή όπως τη γράφει και τη διαβάζει το Excel: για να φαίνεται τι άλλαξε στην εφαρμογή από την τελευταία
 // ανάγνωση/εγγραφή (base), ώστε στην ανάγνωση να ξεχωρίζουν όσες άλλαξαν και στις δύο πλευρές
 // χωρίς λήξη: «open» αντί για ημερομηνία, ώστε η καθημερινή επέκταση να μη μετρά ως αλλαγή στην εφαρμογή
-export const recVal = (x: Pick<Status, 'to' | 'type' | 'kind' | 'note' | 'by' | 'reason' | 'open'>) => [x.open ? 'open' : x.to, x.type, x.kind || '', x.note || '', x.by || '', x.reason || ''].join('\u0001');
+// οι ώρες της άδειας μπαίνουν στο τέλος μόνο όταν υπάρχουν: χωρίς ώρες η τιμή μένει ίδια με των παλιότερων εκδόσεων
+export const recVal = (x: Pick<Status, 'to' | 'type' | 'kind' | 'note' | 'by' | 'reason' | 'open' | 'fromTime' | 'toTime'>) =>
+  [x.open ? 'open' : x.to, x.type, x.kind || '', x.note || '', x.by || '', x.reason || '', ...(x.fromTime || x.toTime ? [x.fromTime || '', x.toTime || ''] : [])].join('\u0001');
 export function baseOf(kind: StatusKind, s: AppState, keys: string[]): Record<string, string> {
   const want = new Set(keys); const out: Record<string, string> = {}; const types = KIND[kind].types!;
   for (const x of s.statuses) if (types.includes(x.type)) { const id = statusId(kind, x); if (want.has(id)) out[id] = recVal(x); }
@@ -446,13 +454,13 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
   const seen = new Set<string>(); const pm = new Map(s.people.map(p => [p.id, p]));
   const has = (k: string) => b.cols[k] != null;
   // Άλλαξε το Excel αυτή την εγγραφή από την τελευταία ανάγνωση/εγγραφή; Ό,τι δεν έχει στήλη μετρά όπως ήταν.
-  const cols = { to: has('to'), type: has('kind') || has('where'), kind: has('kind') || has('where'), note: has('note'), by: has('by'), reason: has('reason') };
+  const cols = { to: has('to'), type: has('kind') || has('where'), kind: has('kind') || has('where'), note: has('note'), by: has('by'), reason: has('reason'), fromTime: has('tout'), toTime: has('tin') };
   const excelMoved = (cur: Status, patch: Partial<Status>) => {
     const v = base[statusId(kind, cur)]; if (v == null) return true;
-    const [to, type, k, note, by, reason] = v.split('\u0001'); const was: Record<keyof typeof cols, string> = { to, type, kind: k, note, by, reason };
-    const now = { ...was }; for (const f of Object.keys(cols) as (keyof typeof cols)[]) if (cols[f]) now[f] = String(patch[f] ?? cur[f] ?? '');
+    const [to, type, k, note, by, reason, fromTime = '', toTime = ''] = v.split('\u0001'); const was: Record<keyof typeof cols, string> = { to, type, kind: k, note, by, reason, fromTime, toTime };
+    const now = { ...was }; for (const f of Object.keys(cols) as (keyof typeof cols)[]) if (cols[f]) now[f] = String(((f === 'fromTime' || f === 'toTime') && f in patch ? patch[f] : patch[f] ?? cur[f]) ?? '');
     if (cols.to) { const open = 'open' in patch ? patch.open : cur.open; now.to = open ? 'open' : String(patch.to ?? cur.to); }
-    return [now.to, now.type, now.kind, now.note, now.by, now.reason].join('\u0001') !== v;
+    return recVal({ ...now, type: now.type as TypeKey, open: now.to === 'open' }) !== v;
   };
   for (const c of parsed.cands) {
     const pid = c.pid ?? (c.r in choices ? choices[c.r] : null);
@@ -466,6 +474,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       const st: Omit<Status, 'id'> = { pid, type, from: c.from, to: c.to };
       if (c.noEnd && has('to')) st.open = true;   // χωρίς στήλη «έως» δεν είναι «χωρίς λήξη»: μένει μίας μέρας, όπως πριν
       if (c.kind) st.kind = c.kind; if (c.note) st.note = c.note;
+      if (c.fromTime) st.fromTime = c.fromTime; if (c.toTime) st.toTime = c.toTime;
       if (kind === 'punish') { st.kind = c.kind || PUN_KINDS[0]; if (c.by) st.by = c.by; if (c.reason) st.reason = c.reason; }
       d.add.push(st); continue;
     }
@@ -477,6 +486,8 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if ((has('kind') || has('where')) && c.raw && cur.type !== type) { patch.type = type; what.push(TYPES[type].label); }
     if ((has('kind') || has('where')) && (c.kind || '') !== (cur.kind || '') && c.kind) { patch.kind = c.kind; what.push(c.kind); }
     if (has('note') && (c.note || '') !== (cur.note || '')) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
+    if (kind === 'leave' && has('tout') && (c.fromTime || '') !== (cur.fromTime || '')) { patch.fromTime = c.fromTime || ''; what.push(c.fromTime ? 'αναχώρηση ' + c.fromTime : 'χωρίς ώρα αναχώρησης'); }
+    if (kind === 'leave' && has('tin') && !c.noEnd && (c.toTime || '') !== (cur.toTime || '')) { patch.toTime = c.toTime || ''; what.push(c.toTime ? 'επιστροφή ' + c.toTime : 'χωρίς ώρα επιστροφής'); }
     if (kind === 'punish' && has('by') && c.by && c.by !== (cur.by || '')) { patch.by = c.by; what.push('ποιος την επέβαλε'); }
     if (kind === 'punish' && has('reason') && c.reason && c.reason !== (cur.reason || '')) { patch.reason = c.reason; what.push('αιτία'); }
     if (cur.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
@@ -516,6 +527,8 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
       // όπως στις αλλαγές πιο πάνω: οι παρατηρήσεις περνούν όπως είναι στη νέα γραμμή, και κενές (αλλιώς θα έμενε η παλιά)
       for (const k of ['kind', 'by', 'reason'] as const) if (a[k] && a[k] !== x[k]) patch[k] = a[k];
       if (has('note') && (a.note || '') !== (x.note || '')) patch.note = a.note || '';
+      if (has('tout') && (a.fromTime || '') !== (x.fromTime || '')) patch.fromTime = a.fromTime || '';
+      if (has('tin') && (a.toTime || '') !== (x.toTime || '')) patch.toTime = a.toTime || '';
       if (x.pending && kind === 'punish') { patch.pending = false; what.push('εγκρίθηκε'); }
       d.update.push({ id: x.id, patch, who: pm.get(x.pid) ? pm.get(x.pid)!.last + ' ' + pm.get(x.pid)!.first : '', what: what.join(', '), ...(changedInApp(x) ? { conflict: appText(x) } : {}) });
     }
@@ -551,6 +564,8 @@ export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | 
     case 'kind': return kind === 'medical' ? (st.kind || TYPES[st.type].label) : kind === 'leave' ? (st.kind || (st.type === 'HON' ? 'ΤΙΜΗΤΙΚΗ' : 'ΚΑΝΟΝΙΚΗ')) : (st.kind || null);
     case 'where': return st.kind || (st.type === 'SICK' ? 'ΑΝ.ΑΔ' : 'ΝΟΣΟΚΟΜΕΙΟ');
     case 'note': return st.note || null;
+    case 'tout': return st.fromTime || null;
+    case 'tin': return st.open ? null : st.toTime || null;
     case 'by': return st.by || null;
     case 'reason': return st.reason || null;
     default: return null;
@@ -613,9 +628,9 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
       let ch = false;
       for (const k of fields) {
         if (['rank', 'spec', 'last', 'first', 'name', 'father', 'asm', 'phone', 'room'].includes(k)) continue;   // τα στοιχεία του ατόμου τα κρατά το Excel
-        if (st.open && (k === 'to' || k === 'days')) continue;   // χωρίς λήξη: το «έως» του Excel δεν το αγγίζει η εφαρμογή
+        if (st.open && (k === 'to' || k === 'days' || k === 'tin')) continue;   // χωρίς λήξη: το «έως» του Excel δεν το αγγίζει η εφαρμογή
         const val = fieldValue(k, kind, st, pm.get(st.pid));
-        if (!same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
+        if (TIME_FIELDS.includes(k) ? cellTime(v[k]) !== val : !same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
       }
       if (ch) plan.changed++;
     } else if (id && syncedSet.has(id) && !byId.has(id)) { clearRow(r); free.push(r); plan.cleared++; }   // την είχε γράψει η εφαρμογή και σβήστηκε
@@ -638,6 +653,27 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   }
   plan.added = fresh.length;
   return plan;
+}
+// Στήλες για τις ώρες της άδειας σε πίνακα που δεν τις έχει: μπαίνουν μόνο όταν κάποια άδεια έχει ώρα, στο τέλος του
+// πίνακα (στις πρώτες στήλες που είναι κενές από τις επικεφαλίδες ως κάτω), ώστε να μη μετακινηθεί καμία δική σου στήλη.
+// head: οι επικεφαλίδες που γράφονται (σε καινούργιο πίνακα τις γράφει το planWrite με τις υπόλοιπες).
+export function timeCols(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, today: ISODate): { b: SourceBinding; head: { r: number; c: number; v: string }[] } {
+  const need = kind === 'leave' ? TIME_FIELDS.filter(k => b.cols[k] == null) : [];
+  if (kind !== 'leave' || !need.length || !wanted(kind, s, b, today).some(x => x.fromTime || (x.toTime && !x.open))) return { b, head: [] };
+  const rows = sheet?.rows || [];
+  const fresh = !(rows[b.header] || []).some(v => cellText(v));
+  const scan = sheet && !fresh ? tableRows(sheet, b.header, b.cols) : null;
+  const last = scan ? Math.max(scan.end, b.header) : b.header;
+  const empty = (c: number) => { for (let r = b.header; r <= last; r++) if (cellText((rows[r] || [])[c]) !== '') return false; return true; };
+  const cols = { ...b.cols }; const head: { r: number; c: number; v: string }[] = [];
+  let c = Math.max(scan ? scan.width[1] : 0, ...Object.values(b.cols)) + 1;
+  for (const k of need) {
+    while (Object.values(cols).includes(c) || !empty(c)) c++;
+    cols[k] = c;
+    if (!fresh) head.push({ r: b.header, c, v: KIND[kind].fields.find(f => f.k === k)!.head });
+    c++;
+  }
+  return { b: { ...b, cols }, head };
 }
 // ------------------------------------------------------------------ μορφή των φύλλων που γράφει η εφαρμογή
 // Τίτλοι πάνω από τον πίνακα (κείμενο μόνο στην πρώτη στήλη του, ως 3 γραμμές πάνω από τις επικεφαλίδες): στο κέντρο,
