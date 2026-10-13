@@ -101,9 +101,11 @@ export function GuardScreen() {
   const excluded = useMemo(() => {
     const noDuty: P[] = [], unarmed: P[] = [];
     people.forEach(p => { const ss = statusesOn(state.statuses, p.id, date); const a = ss.find(s => TYPES[s.type].noDuty); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => TYPES[s.type].noArmed); if (b) unarmed.push({ p, s: b }); });
-    const capped = people.filter(p => Object.keys(capsOf(state, p.id)).length).map(p => ({ p, c: capsOf(state, p.id) }));
+    // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
+    const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
+    const capped = people.filter(p => !p.post && Object.keys(capsOf(state, p.id)).length).map(p => ({ p, c: capsOf(state, p.id) }));
     const offDay = people.filter(p => !noDuty.some(x => x.p === p) && offDayBlock(state, date, p.id)).map(p => ({ p }));
-    return { noDuty, unarmed, capped, offDay };
+    return { noDuty, unarmed, posted, capped, offDay };
   }, [state.statuses, state.caps, state.people, date]);
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
@@ -190,12 +192,14 @@ export function GuardScreen() {
       <ul className="side__sum">
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.noDuty.length}</b> σε καμία υπηρεσία</button></li>
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.unarmed.length}</b> μόνο σε άοπλες</button></li>
+        ${excluded.posted.length > 0 && html`<li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.posted.length}</b> με πόστο</button></li>`}
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.capped.length}</b> μόνιμα όχι σε κάποιες θέσεις</button></li>
         ${excluded.offDay.length > 0 && html`<li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.offDay.length}</b> όχι υπηρεσία ${DOW_FULL[weekday(date)]}</button></li>`}
       </ul>
       ${fold.ex ? html`<div className="side__more">
         <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
         <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
+        ${excluded.posted.length > 0 && html`<h3 className="minihd">Με πόστο, μόνο Λ/Υ και Δ/Υ (${excluded.posted.length})</h3><div className="avail">${excluded.posted.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από το φύλλο ΠΟΣΤΑ (Αρχεία Excel)">${shortName(p)} <${Badge} tone="outline">${p.post}<//></button>`)}</div>`}
         <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip=${Object.keys(c).map(k => CAP_KINDS.find(x => x[0] === k)![1] + ': ' + c[k]).join(' · ')}>${shortName(p)} <${Badge} tone="outline">όχι ${Object.keys(c).map(k => (KIND_LBL as P)[k]).join(', ')}<//></button>`)}</div>
         ${excluded.offDay.length > 0 && html`<h3 className="minihd">Όχι υπηρεσία ${DOW_FULL[weekday(date)]} (${excluded.offDay.length})</h3><div className="avail">${excluded.offDay.map(({ p }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από την κάρτα του, «Μέρες»">${shortName(p)}</button>`)}</div>`}
         <p className="note" style=${{ margin: '10px 0 0' }}>Βγαίνει από τα ιατρικά, τις άδειες και τις εξόδους. Όταν λήξει ένα ιατρικό, ο άνθρωπος ξαναμπαίνει μόνος του.</p>
