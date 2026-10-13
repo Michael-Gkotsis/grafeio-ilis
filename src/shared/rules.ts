@@ -430,14 +430,15 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
   const reserve = (p: Person) => (keep?.has(p.id) ? 1 : 0);
   const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) || statusWarn(s, date, p.id) ? 1 : 0);
-  // ΣΚ/αργία: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει έξοδο εκείνη τη μέρα
+  // ΣΚ/αργία: πρώτα οι λιγότερες αργίες· σε ισοπαλία, πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει
+  // έξοδο εκείνη τη μέρα (Michael, 13/10: πριν, το ΔΝ μετρούσε πριν από τις αργίες και όσοι είχαν ΔΝ δεν έκαναν ποτέ ΣΚ)
   const rooms = h ? outRoomsOn(s.rules, date) : null;
   const home = (p: Person) => (h ? (p.dn ? 1 : 0) + (rooms && p.room != null && rooms.includes(p.room) ? 1 : 0) : 0);
   const cmp = fairCompare(h, x.kind, date);
   // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
   return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
-    .map(p => ({ p, key: last(p) * 100 + reserve(p) * 10 + home(p), f: fair.get(p.id)! }))
-    .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
+    .map(p => ({ p, key: last(p) * 10 + reserve(p), home: home(p), f: fair.get(p.id)! }))
+    .sort((a, b) => a.key - b.key || (h ? a.f.hol - b.f.hol || a.home - b.home : 0) || cmp(a.f, b.f)).map(c => c.p);
 }
 // Οι κενές ένοπλες θέσεις της μέρας (εκτός από την except)
 const armedLeft = (s: AppState, date: ISODate, except: string) => { const g = s.guards[date] || {}; return postsOf(s.settings).filter(y => y.armed && y.k !== except && !g[y.k]); };
