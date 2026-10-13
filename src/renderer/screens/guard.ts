@@ -119,10 +119,10 @@ export function GuardScreen() {
     const capped = people.filter(p => !p.post && Object.keys(capsOf(state, p.id)).length).map(p => ({ p, c: capsOf(state, p.id) }));
     const offDay = people.filter(p => !noDuty.some(x => x.p === p) && offDayBlock(state, date, p.id)).map(p => ({ p }));
     return { noDuty, unarmed, posted, capped, offDay };
-  }, [state.statuses, state.caps, state.people, date]);
+  }, [state.statuses, state.caps, state.people, state.settings, date]);
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
-  const why = useMemo(() => whyAll(state, date), [state.guards, state.people, state.settings, state.baseline, date]);
+  const why = useMemo(() => whyAll(state, date), [state.guards, state.dutyLog, state.people, state.settings, state.baseline, state.statuses, state.caps, state.rules, date]);
   const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string; swapWith?: string } | null>(null);
   const [skipped, setSkipped] = useState<Record<string, number[]>>({});
   useEffect(() => setSkipped({}), [date]);

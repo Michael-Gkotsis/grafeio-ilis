@@ -3,7 +3,7 @@
 import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
 import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, coversDay, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
 import { rangeHm } from '../shared/hours';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
@@ -21,11 +21,11 @@ export interface ExportResult { name: string; data: Buffer; warnings: string[] }
 // ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)
 const FROURA_ROWS = 6; // γραμμές τιμωρημένων και απόντων στο κενό έντυπο
 export function punishedOn(s: AppState, d: ISODate): Status[] {
-  return s.statuses.filter(x => x.type === 'PUN' && !x.pending && x.from <= d && d <= x.to);
+  return s.statuses.filter(x => x.type === 'PUN' && !x.pending && coversDay(x, d));
 }
 export function absentOn(s: AppState, d: ISODate): Status[] {
   // απόντες του εντύπου υπηρεσιών: άδειες, αναρρωτικές, νοσοκομείο (όχι οι εξοδούχοι)
-  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && x.from <= d && d <= x.to);
+  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d));
 }
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
@@ -118,7 +118,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
     const post = postOf(s, d, p.id);
     // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
-    const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && x.from <= d && d <= x.to);
+    const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
     const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : statusLbl(x, s.settings.lists))), ...pend.map(x => x.kind || 'ΠΟΙΝΗ'), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
     stay.push({ p, note: norm(note) });
   }
