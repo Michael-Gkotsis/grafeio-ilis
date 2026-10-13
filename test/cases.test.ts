@@ -112,7 +112,7 @@ describe('Κ-Ι1, Κ-Τ1 αυτόματη λήξη', () => {
   it('εγκεκριμένη ποινή λήγει μόνη της', () => {
     let s = declare(fakeState(10), 'PUN', 2, '2026-10-05', '2026-10-11', { kind: 'Περιορισμός' });
     s = run(s, { t: 'approvePun', id: s.statuses[0].id });
-    expect(outBlock(s, '2026-10-11', 2)).toMatch(/Περιορισμός/);
+    expect(outBlock(s, '2026-10-11', 2)).toMatch(/ΠΕΡΙΟΡΙΣΜΟΣ/);
     expect(outBlock(s, '2026-10-12', 2)).toBeNull();
   });
 });
@@ -130,7 +130,7 @@ describe('Κ-Ε εξοδούχοι', () => {
   it('Κ-Ε3: τιμωρημένος δεν βγαίνει, και ούτε με «δήλωση» εξόδου', () => {
     let s = declare(fakeState(20), 'PUN', 5, D, D, { kind: 'Περιορισμός' });
     s = run(s, { t: 'approvePun', id: s.statuses[0].id });
-    expect(() => outs(s, 5)).toThrow(/Περιορισμός/);
+    expect(() => outs(s, 5)).toThrow(/ΠΕΡΙΟΡΙΣΜΟΣ/);
     expect(() => declare(s, 'OUT', 5, D)).toThrow(/δεν βγαίνει/);
   });
   it('Κ-Ε3: ποινή που ακόμα αιτείται (π.χ. κράτηση) κρατά μέσα, αν και δεν μετρά ακόμα στην ΗΚΑΙ (γραφέας, 10/10)', () => {
@@ -443,13 +443,13 @@ describe('Κείμενο ποινής', () => {
     const st = s.statuses.find(x => x.type === 'PUN')!;
     expect(st).toMatchObject({ by: 'ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ', on: '2026-10-12' });
     const t = punText(s.people[1], st);
-    expect(t.plain).toBe('Ο ΣΤΡ (ΠΖ) ' + s.people[1].last + ' ' + s.people[1].first + ' τιμωρήθηκε την 12/10/2026 από τον ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ με δύο (02) ημέρες κράτηση, διότι άργησε στο προσκλητήριο.');
-    expect(t.html).toContain('<u>δύο (02) ημέρες κράτηση</u>');
+    expect(t.plain).toBe('Ο ΣΤΡ (ΠΖ) ' + s.people[1].last + ' ' + s.people[1].first + ' ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12/10/2026 ΑΠΟ ΤΟΝ ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΡΓΗΣΕ ΣΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
+    expect(t.html).toContain('<u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>');
     expect(daysWord(1) + '|' + daysWord(14) + '|' + daysWord(23)).toBe('μία|δεκατέσσερις|είκοσι τρεις');
     expect(overMax('Κράτηση', 9)).toBe(8); expect(overMax('Στέρηση εξόδου', 4)).toBe(0);
     s = run(s, { t: 'setPunInfo', id: st.id, by: '', reason: 'άλλος λόγος', on: '2026-10-12' });
     const st2 = s.statuses.find(x => x.id === st.id)!;
-    expect(st2.by).toBeUndefined(); expect(punText(s.people[1], st2).plain).toContain('από τον …… με');
+    expect(st2.by).toBeUndefined(); expect(punText(s.people[1], st2).plain).toContain('ΑΠΟ ΤΟΝ …… ΜΕ');
   });
   it('στελέχη: απουσίες μετρούν στην ΗΚΑΙ στη σωστή στήλη και βαθμό', () => {
     let s = fakeState(10);

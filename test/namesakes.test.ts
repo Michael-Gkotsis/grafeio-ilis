@@ -32,7 +32,7 @@ describe('συνονόματοι', () => {
     expect(fullName(s0.people[0])).toBe(s0.people[0].last + ' ' + s0.people[0].first);
     const s = twins(); personMap(s.people);
     expect(fullName(s.people[0])).toContain(' του ');
-    expect(punText(s.people[3], { id: 'x', pid: 4, type: 'PUN', from: '2026-10-12', to: '2026-10-14', kind: 'ΚΡΑΤΗΣΗ' }, s.settings.lists).before).toContain('ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ του ΙΩΑΝΝΗΣ');
+    expect(punText(s.people[3], { id: 'x', pid: 4, type: 'PUN', from: '2026-10-12', to: '2026-10-14', kind: 'ΚΡΑΤΗΣΗ' }, s.settings.lists).before).toContain('ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ ΤΟΥ ΙΩΑΝΝΗΣ');
   });
   it('στο Excel: πατρώνυμο στο ονοματεπώνυμο μόνο αν δεν έχει δική του στήλη, και ξαναδιαβάζεται', () => {
     const s = twins(); noteNamesakes(s.people);

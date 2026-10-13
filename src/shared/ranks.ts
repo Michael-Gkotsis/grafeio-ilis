@@ -1,6 +1,6 @@
 // Λίστες επιλογής για βαθμό και Ο/Σ (όπλο/σώμα): στις φόρμες της εφαρμογής και ως dropdown στα Excel.
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
-import { collator, normGreek } from './text';
+import { collator, normGreek, upper } from './text';
 import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type Status, type TypeKey } from './domain';
 
 // Βαθμοί στρατιωτών (Δυναμολόγιο)
@@ -103,7 +103,7 @@ export const medKinds = (lists?: UserLists): ListItem[] => listRows(lists, 'medK
 export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.warn;
 // Όνομα κατάστασης σε σήματα και λίστες: η ποινή με το είδος της, το δικό σου ιατρικό με το όνομά του
 export function statusLbl(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string {
-  if (s.type === 'PUN') return s.kind || TYPES.PUN.label;
+  if (s.type === 'PUN') return upper(s.kind || TYPES.PUN.label);   // οι ποινές με κεφαλαία παντού (Michael, 13/10)
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m ? m.name : TYPES[s.type].label;
 }

@@ -119,7 +119,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     const post = postOf(s, d, p.id);
     // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
     const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
-    const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : statusLbl(x, s.settings.lists))), ...pend.map(x => x.kind || 'ΠΟΙΝΗ'), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
+    const note = [...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
     stay.push({ p, note: norm(note) });
   }
   // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)

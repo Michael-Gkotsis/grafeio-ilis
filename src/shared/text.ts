@@ -6,3 +6,5 @@ export const norm = (s: unknown): string => String(s ?? '').normalize('NFD').rep
 export const normGreek = (s: unknown): string => norm(s).split('').map(c => LOOKALIKE[c] || c).join('');
 export const translit = (s: unknown): string => norm(s).split('').map(c => GR2LAT[c] || c).join('');
 export const collator = new Intl.Collator('el', { sensitivity: 'base' });
+// Κεφαλαία χωρίς τόνους, όπως γράφονται στα έγγραφα (τα διαλυτικά μένουν): «Στέρηση εξόδου» → «ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ»
+export const upper = (s: unknown): string => String(s ?? '').toUpperCase().normalize('NFD').replace(/́/g, '').normalize('NFC');
