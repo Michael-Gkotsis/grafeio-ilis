@@ -260,7 +260,7 @@ export function TemplateNote({ ids }: { ids: string[] }) {
   const { boot, state } = useStore(); const nav = useNav();
   const spen = state.settings.phase === 'spen';
   const ts = ids.map(id => boot.templates.find(t => t.id === id && (id !== 'froura' || (t.file === 'froura-spen.xlsx') === spen))).filter(Boolean) as Boot['templates'];
-  return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.file}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates')}>Templates<//></span>`;
+  return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.file}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'templates' })}>Templates<//></span>`;
 }
 type Boot = import('../shared/api').Boot;
 

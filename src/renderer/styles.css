@@ -698,3 +698,11 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .basegrid td{padding:2px 4px}
 .basegrid .ui-input{width:64px;height:28px;padding:2px 6px}
 .seatless{padding:14px 16px}
+/* Ρυθμίσεις: υπο-μενού αριστερά */
+.setgrid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px;align-items:start}
+.setnav{display:flex;flex-direction:column;gap:2px;position:sticky;top:calc(var(--top-h) + 16px)}
+.setnav button{height:38px;padding:0 12px;border:0;border-radius:var(--radius);background:none;text-align:left;font-weight:600;font-size:14px;color:var(--muted-fg);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setnav button:hover{background:var(--hover);color:var(--foreground)}
+.setnav button[aria-current="page"]{background:var(--card);color:var(--foreground);box-shadow:var(--shadow-sm),inset 3px 0 0 var(--primary)}
+.setbody{min-width:0}
+@media (max-width:900px){.setgrid{grid-template-columns:minmax(0,1fr)}.setnav{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}.setnav button{flex:none}}
