@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, ambiguousLines, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, NEW_KINDS, ambiguousLines, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -496,7 +496,8 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   }
   const dir = newDir(kind);
   if (!writableDir(dir)) return { error: 'Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.' };
-  return { b: { ...defaultBinding(kind, freeName(dir, KIND[kind].title)), write: true } };
+  const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + (store.state.settings.unitName || '')).trim() : KIND[kind].title;
+  return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
   const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο');
@@ -709,9 +710,16 @@ else {
       saveBinding(kind, at.b);
       const r = await syncOut(kind, false, true);
       // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει)
-      if (!r.ok) saveBinding(kind, prev || null);
+      if (!r.ok) { saveBinding(kind, prev || null); notify(); return r; }
+      // νέο Δυναμολόγιο: και τα φύλλα του (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) για όσα είδη δεν έχουν ακόμα αρχείο
+      const sheets: string[] = [];
+      if (kind === 'people') for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) {
+        const at2 = await newPlace(k); if ('error' in at2 || !at2.inRoster) continue;
+        saveBinding(k, at2.b);
+        if ((await syncOut(k, false, true)).ok) sheets.push(at2.b.sheet); else saveBinding(k, null);
+      }
       notify();
-      return r.ok ? { ok: true, file: r.file, sheet: at.b.sheet, inRoster: at.inRoster } : r;
+      return { ok: true, file: r.file, sheet: at.b.sheet, inRoster: at.inRoster, ...(sheets.length ? { sheets } : {}) };
     });
     ipcMain.handle('src:status', async () => { retryPending(); return statusAll(); });
     ipcMain.handle('form:pick', async (_e, f: FormKind) => { const file = await pickXlsx('Template για ' + f); if (!file) return null; return formInfo(f, file); });

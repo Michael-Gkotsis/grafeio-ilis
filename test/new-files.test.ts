@@ -7,12 +7,15 @@ import os from 'os';
 import path from 'path';
 import JSZip from 'jszip';
 import { OUT_NOTE, type AppState } from '../src/shared/domain';
-import { NEW_KINDS, bestFor, canCreate, defaultBinding, detectTables, inRoster, planCaps, planOutside, planPosts, type ListKind } from '../src/shared/sources';
-import { Workbook } from '../src/main/xlsx';
-import { readBook, writeSource } from '../src/main/sources';
+import { apply, type Command, type NewPerson } from '../src/shared/commands';
+import { parseRoster } from '../src/shared/roster';
+import { NEW_KINDS, bestFor, canCreate, defaultBinding, detectTables, inRoster, planCaps, planOutside, planPosts, planSource, roomBlocks, type ListKind } from '../src/shared/sources';
+import { Workbook, type Sheet } from '../src/main/xlsx';
+import { readBook, writeSource, type SourceMeta } from '../src/main/sources';
 import { fakeState } from './fixtures';
 
 const TODAY = '2026-10-13';
+const fx = (ws: Sheet, ref: string) => ws.formula(ref)?.replace(/&quot;/g, '"');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ilis-new-'));
 const sheetXml = async (file: string, n: number) => (await JSZip.loadAsync(fs.readFileSync(file))).file(n === 1 ? 'xl/worksheets/sheet1.xml' : `xl/worksheets/sheet_a${n}.xml`)!.async('string');
 
@@ -34,8 +37,8 @@ async function roundTrip(kind: ListKind, s: AppState) {
 
 describe('νέα αρχεία για πόστα, εκτός δύναμης και δυνατότητες', () => {
   it('τα είδη που φτιάχνει η εφαρμογή· τα πόστα κ.λπ. πάνε στο Δυναμολόγιο', () => {
-    for (const k of ['punish', 'medical', 'hospital', 'step', 'leave', 'dn', 'posts', 'outside', 'caps'] as ListKind[]) expect(canCreate(k), k).toBe(true);
-    expect(NEW_KINDS.every(inRoster)).toBe(true);
+    for (const k of ['people', 'punish', 'medical', 'hospital', 'step', 'leave', 'dn', 'posts', 'outside', 'caps'] as ListKind[]) expect(canCreate(k), k).toBe(true);
+    expect(NEW_KINDS.filter(k => !inRoster(k))).toEqual(['people']);
   });
 
   it('πόστα: τίτλος ΠΟΣΤΑ, επικεφαλίδες του Δυναμολογίου και στήλη «Πόστο»· ξαναδιαβάζεται χωρίς αλλαγές', async () => {
@@ -105,6 +108,88 @@ describe('νέα αρχεία για πόστα, εκτός δύναμης κα�
   it('χωρίς «Νέο»: αρχείο ή φύλλο που λείπει δεν φτιάχνεται μόνο του (π.χ. USB που δεν μπήκε)', async () => {
     const file = path.join(tmp(), 'λείπει.xlsx');
     const w = await writeSource('posts', defaultBinding('posts', file), state(), undefined, TODAY);
+    expect(w.ok).toBe(false); expect(fs.existsSync(file)).toBe(false);
+  });
+});
+
+describe('νέο Δυναμολόγιο', () => {
+  const NEW: NewPerson = { rank: 'ΣΤΡ', spec: 'ΠΖ', last: 'ΑΑΑΚΑΙΝΟΥΡΓΙΟΣ', first: 'ΝΕΟΣ', father: 'ΠΑΤΕΡΑΣ', asm: '910001', phone: '6900000999', room: 2, si: 'Ι1', post: null, role: null, essos: '2026 Γ΄', attached: false, notes: '' };
+  const make = async () => {
+    // επώνυμα χωρίς ψηφία (το «ΔΟΚΙΜΙΟΣ1» των fixtures το Δυναμολόγιο το θεωρεί σύνολο, όχι άτομο)
+    const s = state(); s.people = s.people.map(p => ({ ...p, last: p.last.replace(/\d/g, 'Β') })).map(p => (p.id === 2 ? { ...p, role: 'ΘΑΛΑΜΑΡΧΗΣ', dn: true } : p.id === 11 ? { ...p, room: null } : p));
+    const file = path.join(tmp(), 'ΔΥΝΑΜΟΛΟΓΙΟ.xlsx'); const b = { ...defaultBinding('people', file, 'ΣΥΝΟΛΙΚΟ'), write: true };
+    const w = await writeSource('people', b, s, undefined, TODAY, { create: true });
+    expect(w.ok && w.created, JSON.stringify(w)).toBe(true);
+    return { s, file, b, w: w as Extract<typeof w, { ok: true }>, sheets: (await readBook(file)).sheets };
+  };
+
+  it('ΣΥΝΟΛΙΚΟ: τίτλος με τη μονάδα, όλοι οι ενεργοί ανά θάλαμο και αλφαβητικά, χωρίς θάλαμο στο τέλος', async () => {
+    const { s, sheets, b } = await make();
+    expect(sheets.map(x => x.name)).toEqual(['ΣΥΝΟΛΙΚΟ', 'ΘΑΛΑΜΟΙ']);
+    const sh = sheets[0];
+    expect(sh.rows[0][0]).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + s.settings.unitName);
+    expect(sh.rows[1]).toEqual(['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος', 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΔΝ']);
+    const act = s.people.filter(p => p.active);
+    const rows = sh.rows.slice(2, 2 + act.length);
+    expect(rows.map(r => r[0])).toEqual(act.map((_, i) => i + 1));
+    const rooms = rows.map(r => r[b.cols.room] ?? 99) as number[];
+    expect(rooms).toEqual([...rooms].sort((x, y) => x - y));
+    expect(rows[rows.length - 1][b.cols.room]).toBeUndefined();
+    const r2 = rows.find(r => r[b.cols.asm] === 900001)!;
+    expect(rows[rows.indexOf(r2) - 1][b.cols.room]).toBe(1);   // θαλαμάρχης: πρώτος στον 2ο θάλαμο, πριν από τον αλφαβητικά πρώτο
+    expect([r2[b.cols.remarks], r2[b.cols.dn]]).toEqual(['ΘΑΛΑΜΑΡΧΗΣ', 'ΝΑΙ']);
+    expect(rows.some(r => r[b.cols.asm] === 900006)).toBe(false);   // εκτός δύναμης: όχι στο ΣΥΝΟΛΙΚΟ
+    expect(detectTables(sheets).find(h => h.best === 'people')?.sheet).toBe('ΣΥΝΟΛΙΚΟ');
+  });
+
+  it('σύνολα θαλάμων κάτω από τον πίνακα με COUNTIF, όπως στο δικό σας', async () => {
+    const { file, s } = await make();
+    const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ');
+    const n = s.people.filter(p => p.active).length; const r = 3 + n + 1;   // κενή γραμμή, μετά «ΘΑΛΑΜΟΙ»
+    expect([ws.get('D' + r), ws.get('F' + r)]).toEqual(['ΘΑΛΑΜΟΙ', 'ΣΤΡΑΤΙΩΤΕΣ']);
+    expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ος', `COUNTIF(I3:I${2 + n},"1")`]);
+    const k = new Set(s.people.filter(p => p.active && p.room != null).map(p => p.room)).size;   // 7: ο 7ος θάλαμος δεν έχει κανέναν
+    expect(ws.get('D' + (r + k + 1))).toBe('ΣΥΝΟΛΟ');
+    expect(fx(ws, 'F' + (r + k + 1))).toBe(`SUM(F${r + 1}:F${r + k})`);
+    expect(ws.merges().some(m => m.r1 === r && m.c1 === 4 && m.c2 === 5)).toBe(true);
+  });
+
+  it('η εισαγωγή του Δυναμολογίου το ξαναδιαβάζει όπως είναι: ίδια άτομα, ίδια στοιχεία, κανένα σύνολο ως άτομο', async () => {
+    const { s, sheets } = await make();
+    const r = parseRoster(sheets);
+    const act = s.people.filter(p => p.active);
+    expect(r.rows.length).toBe(act.length);
+    for (const p of act) {
+      const x = r.rows.find(y => y.asm === p.asm)!;
+      expect({ rank: x.rank, spec: x.spec, last: x.last, first: x.first, father: x.father, phone: x.phone, room: x.room, si: x.si }, p.last).toEqual({ rank: p.rank, spec: p.spec, last: p.last, first: p.first, father: p.father, phone: p.phone, room: p.room, si: p.si });
+    }
+    expect(r.rows.find(y => y.asm === '900001')).toMatchObject({ role: 'ΘΑΛΑΜΑΡΧΗΣ', dn: true });
+  });
+
+  it('μετά: τίποτα να γραφτεί· ο νέος στρατιώτης μπαίνει στον θάλαμό του (ΣΥΝΟΛΙΚΟ και ΘΑΛΑΜΟΙ) και τα σύνολα τον μετράνε', async () => {
+    const { s, b, w, file, sheets } = await make();
+    const meta = { ...w.meta, at: 'x' } as SourceMeta;
+    expect(planSource('people', sheets[0], b, s, meta, TODAY).sets).toEqual([]);
+    const blocks = roomBlocks(sheets[1]);
+    expect(blocks.map(x => x.room)).toEqual([1, 2, 3, 4, 5, 6, 8]);   // ο 7ος: μόνο ένας, εκτός δύναμης
+    expect(blocks.reduce((t, x) => t + x.rows.length, 0)).toBe(s.people.filter(p => p.active && p.room != null).length);
+    const s2 = apply(s, { t: 'addPerson', person: NEW } as Command, { today: TODAY, newId: () => 'x' }).state;
+    const w2 = await writeSource('people', b, s2, meta, TODAY);
+    expect(w2.ok && w2.added).toBe(1);
+    const { sheets: after } = await readBook(file);
+    const tot = after[0].rows.slice(2).filter(r => r[b.cols.asm] != null);
+    const at = tot.findIndex(r => r[b.cols.asm] === 910001);
+    // μετά τον θαλαμάρχη του 2ου, αλφαβητικά πρώτος στους υπόλοιπους
+    expect(tot[at - 1][b.cols.asm]).toBe(900001); expect(tot[at + 1][b.cols.room]).toBe(2);
+    expect(roomBlocks(after[1]).find(x => x.room === 2)!.rows.some(x => x.v.asm === 910001)).toBe(true);
+    const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ');
+    const n = s2.people.filter(p => p.active).length;
+    expect(fx(ws, 'F' + (3 + n + 2))).toBe(`COUNTIF(I3:I${2 + n},"1")`);
+  });
+
+  it('χωρίς «Νέο αρχείο»: Δυναμολόγιο που λείπει δεν φτιάχνεται μόνο του', async () => {
+    const file = path.join(tmp(), 'λείπει.xlsx');
+    const w = await writeSource('people', defaultBinding('people', file, 'ΣΥΝΟΛΙΚΟ'), state(), undefined, TODAY);
     expect(w.ok).toBe(false); expect(fs.existsSync(file)).toBe(false);
   });
 });

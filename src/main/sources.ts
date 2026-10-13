@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, canCreate, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -206,6 +206,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       }
       for (const x of plan.sets) fit(x.c, x.v);
       ws.setColWidths(wide);
+      ws.setPrintFit(c2 >= 10);
     }
     if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
     // νέοι στρατιώτες μέσα στον πίνακα (στον θάλαμό τους): γραμμές με το στυλ του διπλανού, οι τύποι από κάτω κατεβαίνουν
@@ -229,6 +230,23 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       }
     }
     for (const x of plan.sets) await put(x.r, x.c, x.v, data);
+    // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα και το φύλλο ΘΑΛΑΜΟΙ (αν δεν υπάρχει ήδη)
+    if (fresh && plan.extra?.length) {
+      const head = await wb.tableStyle('head');
+      for (const x of plan.extra) { const at = ref(x.r, x.c); if (x.f) ws.setFormula(at, x.f); else ws.set(at, x.v ?? null); ws.setStyle(at, x.head ? head : data!); }
+      for (const m of plan.merges || []) ws.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
+    }
+    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x))) {
+      const rs = roomSheetNew(s.people);
+      if (rs.cells.length) {
+        const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: data! };
+        const ws2 = await wb.addSheet('ΘΑΛΑΜΟΙ');
+        for (const x of rs.cells) { const at = ref(x.r, x.c); if (x.v != null) ws2.set(at, typeof x.v === 'object' ? null : x.v); ws2.setStyle(at, st[x.st]); }
+        for (const m of rs.merges) ws2.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
+        ws2.setPrintFit(true);
+        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(32, Math.max(8, h.length + 2, ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => String(x.v ?? '').length + 2)))])));
+      }
+    }
     // νέος που αναιρέθηκε: η γραμμή του φεύγει (σε φύλλο με πίνακα του Excel απλώς αδειάζει)
     for (const d of plan.deletes || []) if (!ws.deleteRow(d + 1, wb)) for (let c = span[0]; c <= span[1]; c++) await put(d, c, null);
     // Θάλαμοι: στο φύλλο ΘΑΛΑΜΟΙ (ένας πίνακας ανά θάλαμο) ο νέος μπαίνει στο τέλος του θαλάμου του και ο αναιρεμένος φεύγει.

@@ -137,6 +137,10 @@ export class Sheet {
     else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(clean(v))}</t></is>`; }
     x.selfClose = false; return this;
   }
+  // Τύπος σε καινούργιο κελί (χωρίς «=»): ο Excel τον υπολογίζει στο άνοιγμα (fullCalcOnLoad στο save)
+  setFormula(ref: string, f: string): this {
+    const x = this.cell(ref)!; x.attrs = setAttr(x.attrs, 't', null); x.inner = `<f>${esc(f)}</f>`; x.selfClose = false; return this;
+  }
   // Κείμενο με μορφή ανά κομμάτι (π.χ. υπογραμμισμένη διάρκεια ποινής): runs έτοιμα <r>…</r>. Κρατά το στυλ του κελιού.
   setRuns(ref: string, runs: string): this {
     const x = this.cell(ref)!;
@@ -194,6 +198,15 @@ export class Sheet {
       const n = (this.tail.match(/<dataValidation\b/g) || []).length + 1;
       this.tail = this.tail.replace(/<dataValidations\b([^>]*)>/, (_m, a: string) => `<dataValidations${setAttr(a, 'count', String(n))}>`).replace('</dataValidations>', dv + '</dataValidations>');
     } else this.tail = tailInsert(this.tail, 'dataValidations', `<dataValidations count="1">${dv}</dataValidations>`);
+    return this;
+  }
+  // Εκτύπωση για καινούργιο φύλλο: Α4, σε πλάτος μιας σελίδας (όσες σελίδες χρειαστεί σε ύψος), οριζόντια αν είναι φαρδύ.
+  // Φύλλο που έχει ήδη δικές του ρυθμίσεις εκτύπωσης δεν αλλάζει.
+  setPrintFit(landscape: boolean): this {
+    if (/<pageSetup\b/.test(this.tail) || /<sheetPr\b/.test(this.head)) return this;
+    this.head = this.head.replace(/<worksheet\b[^>]*>/, m => m + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+    this.tail = tailInsert(this.tail, 'pageMargins', '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>');
+    this.tail = tailInsert(this.tail, 'pageSetup', `<pageSetup paperSize="9" orientation="${landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0"/>`);
     return this;
   }
   // Πλάτη στηλών για καινούργιο φύλλο (μόνο αν το φύλλο δεν έχει ήδη δικά του)

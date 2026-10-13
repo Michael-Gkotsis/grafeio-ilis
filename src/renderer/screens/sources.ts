@@ -96,6 +96,7 @@ export function SourcesView() {
     await refresh();
     const text = r.found ? 'Το ' + base(r.file) + ' έχει ήδη φύλλο «' + r.sheet + '» με ' + KIND[kind].label.toLowerCase() + ': ορίστηκε αυτό. Πάτα «Ανανέωση από Excel» για να διαβαστεί.'
       : r.inRoster ? 'Μπήκε φύλλο «' + r.sheet + '» στο ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.'
+      : kind === 'people' ? 'Φτιάχτηκε το ' + base(r.file) + ' (' + ['ΣΥΝΟΛΙΚΟ', 'ΘΑΛΑΜΟΙ', ...(r.sheets || [])].join(', ') + '). Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.'
       : 'Φτιάχτηκε το ' + base(r.file) + '. Από εδώ και πέρα κάθε αλλαγή γράφεται εκεί.';
     toast({ text, actions: [{ label: 'Άνοιξε', fn: () => window.api.openPath(r.file) }] });
   };
