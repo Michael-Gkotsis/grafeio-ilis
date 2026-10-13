@@ -3,13 +3,14 @@ import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type IS
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, siUnarmed, statusLbl, type UserLists } from './ranks';
 import { hasTimes, mins } from './hours';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
+  TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
 const peopleIdx = new WeakMap<Person[], Map<number, Person>>();
 export function personMap(people: Person[]): Map<number, Person> {
+  noteNamesakes(people);   // συνονόματοι για fullName/shortName (domain.ts)
   let m = peopleIdx.get(people);
   if (!m) { m = new Map(people.map(p => [p.id, p])); peopleIdx.set(people, m); }
   return m;

@@ -291,7 +291,7 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
         : html`<${PersonPicker} id="rq-p" autoFocus=${true} onChange=${(pid: number) => setF({ ...f, pid })}/>`}</div>
     <div className="field"><label className="field__label" htmlFor="rq-d">Ημερομηνία ΗΚΑΙ</label><input id="rq-d" type="date" className="ui-input" value=${f.date} onChange=${(e: any) => e.target.value && setF({ ...f, date: e.target.value })}/></div>
     <div className="field"><label className="field__label" htmlFor="rq-t">Αιτείται</label><input id="rq-t" className="ui-input" placeholder="π.χ. μετάθεση στην 2η ΕΠΧΙΑ" value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
-      <span className="field__help">${p && text ? 'Στην ΗΚΑΙ: «Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + p.last + ' ' + p.first + ' αιτείται ' + text + '.»' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.'}</span></div>
+      <span className="field__help">${p && text ? 'Στην ΗΚΑΙ: «Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p) + ' αιτείται ' + text + '.»' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.'}</span></div>
   <//>`;
 }
 

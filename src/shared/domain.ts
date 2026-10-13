@@ -31,8 +31,22 @@ export interface Person {
 
 // Αρχή των σημειώσεων όσων βγήκαν εκτός δύναμης από φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» (όχι με το χέρι)
 export const OUT_NOTE = 'Εκτός δύναμης';
-export const fullName = (p: Person) => p.last + ' ' + p.first;
-export const shortName = (p: Person) => p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '');
+// Συνονόματοι (ίδιο επώνυμο και όνομα): όπου η εφαρμογή δείχνει ή γράφει όνομα μπαίνει και «του <πατρώνυμο>»
+// (Michael, 13/10). Οι υπόλοιποι μένουν όπως ήταν. Το σύνολο βγαίνει από τα άτομα της τρέχουσας κατάστασης
+// (και τα εκτός δύναμης): το ενημερώνουν η personMap, η βάση στο main και η ρίζα του renderer.
+const nameKey = (p: { last: string; first: string }) => normGreek(p.last).replace(/[^Α-ΩA-Z0-9]/g, '') + '|' + normGreek(p.first).replace(/[^Α-ΩA-Z0-9]/g, '');
+let twinKeys = new Set<string>(); let twinsFrom: Person[] | null = null;
+export function noteNamesakes(people: Person[]): void {
+  if (people === twinsFrom) return;
+  twinsFrom = people; const seen = new Set<string>(); twinKeys = new Set();
+  for (const p of people) { const k = nameKey(p); if (seen.has(k)) twinKeys.add(k); else seen.add(k); }
+}
+export const isNamesake = (p: { last: string; first: string }) => twinKeys.has(nameKey(p));
+export const fatherTxt = (p: Person) => (p.father && isNamesake(p) ? ' του ' + p.father : '');
+// Χωρίς πατρώνυμο: όπου φαίνεται ήδη δίπλα (στήλη ή «του …» από κάτω)
+export const plainName = (p: Person) => p.last + ' ' + p.first;
+export const fullName = (p: Person) => plainName(p) + fatherTxt(p);
+export const shortName = (p: Person) => p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '') + fatherTxt(p);
 // Ουλαμός από θάλαμο (Κ-18): 1–4 → 1ος, 5–8 → 2ος
 export const unitOf = (p: Person) => (p.room == null ? '—' : p.room <= 4 ? '1ος Ουλ.' : '2ος Ουλ.');
 // Σειρά των ημερών στην κάρτα: Δευτέρα πρώτη

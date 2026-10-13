@@ -11,6 +11,7 @@ import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot, CmdResult } from '../shared/api';
+import { noteNamesakes } from '../shared/domain';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -55,6 +56,7 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [boot, setBoot] = useState(initial);
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
+  noteNamesakes(state.people);   // πατρώνυμο στους συνονόματους, πριν αποδοθούν οι οθόνες
   const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
   const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);

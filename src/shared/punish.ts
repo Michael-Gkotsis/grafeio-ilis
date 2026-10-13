@@ -1,6 +1,6 @@
 // Κείμενο ποινής για το Word (από την εφαρμογή του άλλου γραφέα): «Ο ΣΤΡ (ΠΖ) … τιμωρήθηκε την … από τον … με δύο (02) ημέρες κράτηση, διότι …»
 import { daysBetween, dmy } from './dates';
-import type { AppState, Person, Status } from './domain';
+import { fullName, type AppState, type Person, type Status } from './domain';
 import { itemKey, userItem, type UserLists } from './ranks';
 
 // Ανώτατες ημέρες ανά είδος· πάνω από αυτές η εφαρμογή προειδοποιεί (δεν απαγορεύει)
@@ -25,7 +25,7 @@ export interface PunText { before: string; dur: string; after: string; plain: st
 // Η διάρκεια χωριστά, για να μπει υπογραμμισμένη στο Word
 export function punText(p: Person, st: Status, lists?: UserLists): PunText {
   const n = punDays(st);
-  const before = 'Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + p.last + ' ' + p.first + ' τιμωρήθηκε την ' + dmy(st.on || st.from) + ' από τον ' + (st.by || '……') + ' με ';
+  const before = 'Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p) + ' τιμωρήθηκε την ' + dmy(st.on || st.from) + ' από τον ' + (st.by || '……') + ' με ';
   const dur = daysWord(n) + ' (' + String(n).padStart(2, '0') + ') ' + (n === 1 ? 'ημέρα' : 'ημέρες') + ' ' + punAcc(st.kind, lists);
   const after = ', διότι ' + (st.reason ? st.reason.trim().replace(/[.\s]+$/, '') : '……') + '.';
   const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

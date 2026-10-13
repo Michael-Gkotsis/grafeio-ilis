@@ -5,7 +5,7 @@ import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
-import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } from '../shared/domain';
+import { TYPES, TYPE_KEYS, effects, plainName, shortName, unitOf, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
@@ -43,7 +43,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     ${open && html`<ul className="picker__list" role="listbox">
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b>${fullName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p)}${x.p.room != null ? ' · Θ' + x.p.room : ''}</small></div>
+        <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p)}${x.p.room != null ? ' · Θ' + x.p.room : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`}
   </div>`;

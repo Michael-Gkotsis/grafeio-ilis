@@ -1,6 +1,6 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, type AppState, type DutyKind } from '../shared/domain';
+import { ROT, TYPES, fullName, type AppState, type DutyKind } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
@@ -93,7 +93,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   const g = s.guards[date] || {}; const pm = personMap(s.people); const posts = postsOf(s.settings);
   let night = 0, day24 = 0;
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
-  const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ') : '?'; };
+  const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };
   const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === date).map(x => name(x.pid) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + rangeHm(x, dm));
   const puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
   const N = (v: number) => E(v || '', 'b c');
@@ -140,7 +140,7 @@ export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetMo
   activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
     const x = per.get(p.id); let nh = 0; const c: Record<string, number> = {};
     const cells = days.map((d, j) => { const v = x && x.get(d); if (v) { if (hol[j]) nh++; c[v.kind] = (c[v.kind] || 0) + 1; } return E(v ? v.code : '', hol[j] ? 'b code we' : 'b code'); });
-    rows.push([E(i + 1, 'b c'), E(p.last + ' ' + p.first, 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
+    rows.push([E(i + 1, 'b c'), E(fullName(p), 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
   });
   return { cols: [30, 172, 34, 34, 34, 26, 26, 26, ...days.map(() => 24)], rows };
 }

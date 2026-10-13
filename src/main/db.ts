@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
-import { emptyState, migrateSettings, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { emptyState, migrateSettings, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
 import { writeDurable } from './files';
 
@@ -153,7 +153,7 @@ export class Store {
     s.cadreAbs = kv.get('cadreAbs') || [];
     s.dutyLog = kv.get('dutyLog') || {};
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
-    this.state = s;
+    this.state = s; noteNamesakes(s.people);
   }
 
   // Γράφει τη νέα κατάσταση: μόνο ό,τι άλλαξε, και επιστρέφει το patch για αναίρεση
@@ -184,7 +184,7 @@ export class Store {
       }
       this.db.run('COMMIT');
     } catch (e) { this.db.run('ROLLBACK'); throw e; }
-    this.state = next;
+    this.state = next; noteNamesakes(next.people);
     return patch;
   }
 
