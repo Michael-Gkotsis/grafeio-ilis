@@ -359,7 +359,7 @@ function SettingsCard() {
     if (ok && JSON.stringify(nr.outRooms) !== JSON.stringify(state.rules.outRooms)) await run({ t: 'setRules', rules: nr, text: 'θάλαμοι εξόδου ΣΑΒ ' + outRooms[6] + ', ΚΥΡ ' + outRooms[0] }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
   };
-  return html`<${Card} title="Ρυθμίσεις">
+  return html`<${Card} title="Μονάδα και έντυπα">
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
     <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ΗΚΑΙ</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
@@ -447,18 +447,27 @@ function BackupsCard() {
   <//>`;
 }
 
+// Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
-  const tab = nav.params.tab || 'templates';
-  return html`<div>
-    <${PageHeader} title="Templates, εισαγωγή, ρυθμίσεις" sub="Τα έντυπα που συμπληρώνει η εφαρμογή, η εισαγωγή προσωπικού, τα αρχεία Excel που διαβάζει και ενημερώνει, και οι ρυθμίσεις της Ίλης."/>
-    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ tab: v })} items=${[{ value: 'templates', label: 'Templates' }, { value: 'import', label: 'Εισαγωγή Δυναμολογίου' }, { value: 'files', label: 'Αρχεία Excel' }, { value: 'settings', label: 'Ρυθμίσεις' }]}/></div>
-    ${tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<${SourcesView}/>` : tab === 'settings' ? html`<div className="stack"><${AppearanceCard}/><${SettingsCard}/><${ListsCard}/><${SiCard}/><${FoldersCard}/><${BlocksCard}/><${HolidaysCard}/><${BackupsCard}/></div>` : html`<div>
+  const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
+  const tab = SET_SECTIONS.some(([k]) => k === want) ? want : 'unit';
+  const templates = html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
-    </div>`}
+    </div>`;
+  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${HolidaysCard}/></div>`
+    : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
+    : tab === 'look' ? html`<${AppearanceCard}/>` : tab === 'backup' ? html`<${BackupsCard}/>` : templates;
+  return html`<div>
+    <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
+    <div className="setgrid">
+      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => nav.set({ tab: k })}>${l}</button>`)}</nav>
+      <div className="setbody">${body}</div>
+    </div>
   </div>`;
 }
 
@@ -478,9 +487,12 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
-    { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'settings' }) },
+    { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'backup' }) },
     { t: 'Διάγνωση (μνήμη, ταχύτητα)', k: 'ΔΙΑΓΝΩΣΗ ΜΝΗΜΗ ΤΑΧΥΤΗΤΑ GPU', fn: () => nav.go('diag') },
-    { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΣΤΕΛΕΧΗ ΘΑΛΑΜΟΙ', fn: () => nav.go('templates', { tab: 'settings' }) }
+    { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΣΤΕΛΕΧΗ ΘΑΛΑΜΟΙ', fn: () => nav.go('templates', { tab: 'unit' }) },
+    { t: 'Ρυθμίσεις › Υπηρεσίες και αργίες', k: 'ΘΕΣΕΙΣ ΥΠΗΡΕΣΙΕΣ ΑΡΓΙΕΣ ΒΑΡΔΙΕΣ ΣΙ Σ.Ι. ΠΟΙΟΣ ΚΑΝΕΙ ΤΙ', fn: () => nav.go('templates', { tab: 'duty' }) },
+    { t: 'Ρυθμίσεις › Λίστες', k: 'ΛΙΣΤΕΣ ΒΑΘΜΟΙ ΙΑΤΡΙΚΑ ΠΟΙΝΕΣ ΑΔΕΙΕΣ', fn: () => nav.go('templates', { tab: 'lists' }) },
+    { t: 'Ρυθμίσεις › Εμφάνιση', k: 'ΕΜΦΑΝΙΣΗ ΘΕΜΑ ΣΚΟΤΕΙΝΟ ΠΥΚΝΟΤΗΤΑ', fn: () => nav.go('templates', { tab: 'look' }) }
   ];
   const n = norm(dq.trim());
   const acts = ACTIONS.filter(a => !n || a.k.includes(n) || norm(a.t).includes(n));
