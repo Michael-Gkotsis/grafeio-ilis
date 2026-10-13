@@ -461,8 +461,13 @@ export interface StatusPlan {
   past: { pid: number; date: ISODate; k: string }[];   // υπηρεσίες πριν από σήμερα: έγιναν, μένουν
   blocked: { pid: number; date: ISODate; reason: string }[];
   cancels: Status[];
+  alongside: { pid: number; status: Status }[];   // άλλο ιατρικό στις ίδιες μέρες: ισχύουν και τα δύο
 }
 const overlapsRange = (s: Status, from: ISODate, to: ISODate) => !(to < s.from || from > s.to);
+// Ιατρικά (Michael, 13/10): ένας στρατιώτης μπορεί να έχει μαζί π.χ. ΕΑ και ΕΥ. Ίδιο ιατρικό = ίδιο όνομα
+// (ΕΑ με ΕΑ, «ΕΛ ΠΟΔ» με «ΕΛ ΠΟΔ»)· διαφορετικά ιατρικά ισχύουν μαζί και μετρά ο πιο αυστηρός περιορισμός.
+export const sameMed = (a: Pick<Status, 'type' | 'kind'>, b: Pick<Status, 'type' | 'kind'>, lists?: UserLists) =>
+  TYPES[a.type].cat === 'med' && TYPES[b.type].cat === 'med' && a.type === b.type && statusLbl(a, lists) === statusLbl(b, lists);
 // Έξοδος/ΔΝ πολλών ημερών που ακυρώνεται μόνο για from–to: μένουν οι μέρες πριν και μετά.
 // Το πρώτο κομμάτι κρατά το id (ίδια γραμμή στο Excel), το δεύτερο παίρνει νέο.
 export function splitOut(st: Status, from: ISODate, to: ISODate, newId: () => string): Status[] {
@@ -478,12 +483,16 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   const n = cmd.pids.length;
   const pm = personMap(s.people);
   const files: PlanFile[] = [];
-  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [];
+  const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [];
+  const lists = s.settings.lists;
+  const clash = (x: Status) => (t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away);
   const dates = Object.keys(s.guards).filter(d => d >= cmd.from && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
   for (const pid of cmd.pids) {
-    const ov = statusesOf(s.statuses, pid).find(x => overlapsRange(x, cmd.from, cmd.to) && (TYPES[x.type].cat === t.cat || (!!TYPES[x.type].away && !!t.away)));
+    const mine = statusesOf(s.statuses, pid).filter(x => overlapsRange(x, cmd.from, cmd.to));
+    const ov = mine.find(clash);
     if (ov) overlaps.push({ pid, status: ov });
+    else if (t.cat === 'med') mine.filter(x => TYPES[x.type].cat === 'med').forEach(x => alongside.push({ pid, status: x }));
     if (t.cat === 'out') {
       for (let d = cmd.from; d <= cmd.to; d = addDays(d, 1)) { const r = outBlock(s, d, pid); if (r) { blocked.push({ pid, date: d, reason: r }); break; } }
     } else if (cmd.type !== 'PUN') {
@@ -512,7 +521,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   [...new Set(past.map(x => x.date))].forEach(date => {
     files.push({ fn: 'Υπηρεσίες ' + dm(date), desc: past.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': υπηρεσία που έγινε, μένει.' });
   });
-  return { files, overlaps, conflicts, past, blocked, cancels };
+  return { files, overlaps, conflicts, past, blocked, cancels, alongside };
 }
 
 // --------------------------- ΗΚΑΙ (Κ-17) ---------------------------
