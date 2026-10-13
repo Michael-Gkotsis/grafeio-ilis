@@ -1,10 +1,10 @@
 // Ρυθμίσεις › Λίστες: βαθμοί στρατιωτών, βαθμοί στελεχών και Ο/Σ που πρόσθεσε ή έκρυψε ο χρήστης.
 // Χωρίς προσθήκες όλα ίδια με πριν. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
-import { CADRE_RANKS, SOLDIER_RANKS, SPECS, absCode, cadreAbsKinds, cadreAbsOf, guessHk, hkOfRank, leaveCol, listOf, listRows, medKinds, statusLbl, type UserLists } from '../src/shared/ranks';
+import { CADRE_RANKS, SOLDIER_RANKS, SPECS, absCode, cadreAbsKinds, cadreAbsOf, guessHk, hkOfRank, leaveCol, listOf, listRows, medKinds, siUnarmed, statusLbl, type UserLists } from '../src/shared/ranks';
 import { LEAVE_KINDS, PUN_KINDS, CADRE_ABS } from '../src/shared/domain';
 import { overMax, punText } from '../src/shared/punish';
-import { dutyBlock, hkRankOf, hkaiCounts, outBlock } from '../src/shared/rules';
+import { capsOf, dutyBlock, hkRankOf, hkaiCounts, isUnarmed, outBlock } from '../src/shared/rules';
 import { typeOfValue } from '../src/shared/sources';
 import { listColumns, type SourceBinding } from '../src/shared/sources';
 import { apply } from '../src/shared/commands';
@@ -120,5 +120,17 @@ describe('λίστες', () => {
     expect(dutyBlock(st, D, pid, { armed: false, kind: 'mg' })).toBe(dutyBlock([{ id: 'b', pid, type: 'EY', from: D, to: D }], D, pid, { armed: false, kind: 'mg' }));
     expect(outBlock(s, D, pid)).toMatch(/^ΕΛ ΓΥΜΝ/);
     expect(hkaiCounts(s, D)).toEqual(hkaiCounts({ ...s, statuses: [{ ...st[0], kind: undefined }] }, D));
+  });
+  it('Σ.Ι. άοπλων: τα βασικά όπως πριν, τα δικά σου πιάνουν όσα αρχίζουν από αυτά, όσα απενεργοποίησες δεν ισχύουν', () => {
+    for (const si of ['Ι3 ΑΟΠΛΟ', 'άοπλος', 'I4', 'Ι4 ']) expect(siUnarmed(si)).toBe(true);
+    for (const si of ['Ι1', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι5', '', 'Ι 4']) expect(siUnarmed(si)).toBe(false);
+    const l: UserLists = { siUnarmed: { add: [{ name: 'Ι5' }], hide: ['Ι4'] } };
+    expect(['Ι5', 'Ι 5 ΧΩΡΙΣ', 'Ι.5', 'Ι4', 'Ι3 ΑΟΠΛΟ', 'Ι1'].map(si => siUnarmed(si, l))).toEqual([true, true, true, false, true, false]);
+    const s0 = fakeState(10); const p = s0.people[0];
+    const s = { ...s0, people: s0.people.map((x, i) => (i === 0 ? { ...x, si: 'Ι5', post: null } : x)), settings: { ...s0.settings, lists: l } };
+    expect(Object.keys(capsOf(s, p.id)).sort()).toEqual(['op', 'sk']);
+    expect(isUnarmed(s, D, p.id)).toBe(true);
+    expect(capsOf({ ...s, settings: s0.settings }, p.id)).toEqual(capsOf({ ...s0, people: s.people }, p.id));
+    expect(isUnarmed({ ...s, settings: s0.settings }, D, p.id)).toBe(false);
   });
 });

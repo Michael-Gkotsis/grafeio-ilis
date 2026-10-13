@@ -4,12 +4,13 @@
 import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { useStore } from '../store';
+import { normGreek } from '../../shared/text';
 import { CADRE_ABS, TYPES, TYPE_KEYS, effects, type TypeKey } from '../../shared/domain';
-import { LEAVE_COLS, LIST_NAME, MED_LIKE, guessHk, itemKey, itemName, leaveCol, listRows, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, siUnarmed, itemKey, itemName, leaveCol, listRows, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { HK_A, HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'siUnarmed'];
 const HELP: Record<ListId, string> = {
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ΗΚΑΙ μετρά.',
   cadreRanks: 'Στη φόρμα «Νέο στέλεχος». Ο βαθμός διαλέγει μόνος του τη γραμμή της ΗΚΑΙ (αλλάζει και στη φόρμα).',
@@ -17,6 +18,7 @@ const HELP: Record<ListId, string> = {
   punKinds: 'Στη δήλωση ποινής. Κάθε ποινή κόβει την έξοδο, μετρά στη στήλη «Τιμ.» και αιτείται στην ΗΚΑΙ. Το «κείμενο» μπαίνει στην πρόταση «με δύο (02) ημέρες …».',
   leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ΗΚΑΙ.',
   cadreAbs: 'Στην «Απουσία» στελέχους. Η στήλη λέει πού μετρά στην ΗΚΑΙ· «μόνο στη λίστα» δεν μετρά.',
+  siUnarmed: 'Όποιος έχει τέτοιο Σ.Ι. είναι άοπλος: δεν μπαίνει οπλοφύλακας ούτε σκοπός, και μετρά ως άοπλος στα «Αυστηρά Άοπλοι». Ένα δικό σου ισχύει για κάθε Σ.Ι. που αρχίζει από αυτό (χωρίς κενά και τελείες). Η «Δυνατότητα υπηρεσιών» κάθε ατόμου ισχύει όπως πριν.',
   medKinds: 'Στη δήλωση ιατρικού και στη στήλη «είδος» του Excel ΕΑ-ΕΥ. Κάθε δικό σου ιατρικό συμπεριφέρεται σαν ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ: ίδιοι κανόνες σε υπηρεσίες, έξοδο και ΗΚΑΙ, με το δικό του όνομα. Ο κωδικός μπαίνει στις μέρες απουσίας του Excel «Έλεγχος υπηρεσιών» (κενό = του βασικού). Αν κάποιο φύλλο του Excel σου μετράει με τύπο, π.χ. COUNTIF(…;"ΕΑ"), το νέο όνομα δεν μετριέται εκεί.'
 };
 // επιλογή που έχει κάθε δικό σου στοιχείο: [πεδίο, τίτλος, επιλογές [τιμή, όνομα]]
@@ -65,6 +67,7 @@ export function ListsCard() {
       : id === 'punKinds' ? state.statuses.filter(x => x.type === 'PUN').map(x => x.kind || '')
       : id === 'leaveKinds' ? state.statuses.filter(x => x.type === 'LEAVE').map(x => x.kind || '')
       : id === 'medKinds' ? state.statuses.filter(x => MED_LIKE.includes(x.type)).map(x => x.kind || '')
+      : id === 'siUnarmed' ? []
       : state.people.map(p => (id === 'specs' ? p.spec : p.rank));
     return new Set(vals.filter(Boolean).map(keyOf(id)));
   }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses]);
@@ -81,6 +84,7 @@ export function ListsCard() {
   const add = async () => {
     if (!n) return;
     if (/[,"]/.test(n)) { setErr('Χωρίς κόμμα ή εισαγωγικά: το Excel τα χρησιμοποιεί για να χωρίζει τις τιμές της λίστας.'); return; }
+    if (id === 'siUnarmed' && normGreek(n).replace(/[^Α-ΩA-Z0-9]/g, '').length < 2) { setErr('Γράψε ολόκληρο το Σ.Ι. (π.χ. Ι5): ένα γράμμα μόνο θα έκανε άοπλους σχεδόν όλους.'); return; }
     if (id === 'medKinds' && !codeOk(cd)) { setErr('Ο κωδικός θέλει τελεία ή κάθετο, π.χ. Ε.Γ, για να μη μοιάζει με κωδικό υπηρεσίας (ως 8 χαρακτήρες).'); return; }
     const k = itemKey(n); const same = rows.find(r => key(r.name) === key(n));
     if (same && !same.hidden) { setErr('Το «' + same.name + '» υπάρχει ήδη στη λίστα.'); return; }
@@ -101,12 +105,18 @@ export function ListsCard() {
   const setCodeOf = (r: ListRow, v: string) => { const c = v.trim().toUpperCase(); if (c === (r.code || '')) return; if (!codeOk(c)) { setErr('Ο κωδικός του «' + r.name + '» θέλει τελεία ή κάθετο, π.χ. Ε.Γ.'); return; } setErr(null); setRow(r, 'code', c, c ? 'κωδικός ' + c : 'κωδικός του βασικού'); };
   const info = (r: ListRow) => {
     if (id === 'punKinds') { const mx = punMax(r.name, lists); return 'κείμενο: «' + punAcc(r.name, lists) + '»' + (mx ? ' · ως ' + mx + ' ημ.' : ''); }
+    if (id === 'siUnarmed') {
+      // μόνο αυτός ο κανόνας: οι άλλοι κρυφοί, για να μετρηθούν όσοι πιάνει
+      const only: UserLists = { siUnarmed: r.builtin ? { hide: LIST_BASE.siUnarmed.filter(x => x !== r.name) } : { add: [r], hide: [...LIST_BASE.siUnarmed] } };
+      const n = state.people.filter(p => p.active && siUnarmed(p.si, only)).length;
+      return (r.name === 'ΑΟΠΛ' && r.builtin ? 'περιέχει «ΑΟΠΛ»' : 'αρχίζει από «' + r.name + '»') + ' · ' + (n === 1 ? '1 άτομο' : n + ' άτομα') + (r.hidden ? ' (δεν ισχύει)' : '');
+    }
     if (id === 'medKinds') { const t = TYPES[current(id, r, lists) as TypeKey]; return t.long + (effects(t) ? ': ' + effects(t) : ': χωρίς περιορισμούς') + (t.code ? ' · κωδικός ' + t.code : ''); }
     return pick ? 'ΗΚΑΙ: ' + optLbl(pick, current(id, r, lists)) : '';
   };
 
   return html`<${Card} title="Λίστες" actions=${html`<select className="ui-select" aria-label="Ποια λίστα" value=${id} onChange=${(e: any) => select(e.target.value)}>${IDS.map(v => html`<option key=${v} value=${v}>${LIST_NAME[v]}</option>`)}</select>`}>
-    <p className="note" style=${{ marginTop: 0 }}>${HELP[id]} Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.${id === 'soldierRanks' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
+    <p className="note" style=${{ marginTop: 0 }}>${HELP[id]}${id === 'siUnarmed' ? ' Όποιο βασικό απενεργοποιήσεις δεν ισχύει πια.' : ' Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.'}${id === 'soldierRanks' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
     <ul className="hist">${rows.map(r => html`<li key=${r.name} className=${r.hidden ? 'muted' : ''}>
       <b style=${r.hidden ? { textDecoration: 'line-through' } : undefined}>${r.name}</b>
       ${r.builtin ? html`<${Badge} tone="outline">βασικό<//>` : html`<${Badge} tone="info">δικό σου<//>`}
@@ -117,7 +127,7 @@ export function ListsCard() {
       <span style=${{ flex: 1 }}></span>
       ${id === 'medKinds' && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>βασικός τύπος</span>`
         : r.builtin || isUsed(r)
-        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'specs' ? ' και στο Excel' : '')}>${r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
+        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει ξανά' : 'Να μη θεωρείται άοπλος όποιος έχει αυτό το Σ.Ι.') : r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'specs' ? ' και στο Excel' : '')}>${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει' : 'Να μην ισχύει') : r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + r.name} onClick=${() => remove(r)}>✕<//>`}
     </li>`)}</ul>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
@@ -130,4 +140,4 @@ export function ListsCard() {
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5' };
