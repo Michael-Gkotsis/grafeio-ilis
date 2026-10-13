@@ -6,7 +6,7 @@ import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesOn, isHol, holName } from '../shared/rules';
 import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } from '../shared/domain';
-import { statusLbl, type UserLists } from '../shared/ranks';
+import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
 import type { ExportKind } from '../shared/api';
 import type { Check } from '../shared/preflight';
@@ -20,7 +20,7 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
   if (!ss.length) return html`<${Badge} tone="ok">Παρών<//>`;
   const s = ss[0], t = TYPES[s.type];
   const until = s.open ? ' χωρίς λήξη' : s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);
-  return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => TYPES[x.type].long + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
+  return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => (MED_LIKE.includes(x.type) && statusLbl(x, lists) !== TYPES[x.type].label ? statusLbl(x, lists) : TYPES[x.type].long) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
 });
 
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
