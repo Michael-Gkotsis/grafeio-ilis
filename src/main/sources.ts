@@ -10,7 +10,7 @@ import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planSource, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, cellText, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -114,7 +114,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)
 export const PREV_EVERY = 10 * 60 * 1000;
 export type WriteOutcome =
-  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; added: number; sheet: string }; tidy?: string[] }
+  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; added: number; placed?: number; sheet: string }; tidy?: string[] }
   | { ok: false; error: string; locked?: boolean };
 
 // Μορφή που λείπει από φύλλο που ήδη υπάρχει: τίτλος που δεν είναι στο κέντρο σε συγχωνευμένα κελιά, και λίστες
@@ -174,7 +174,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const tidied = tidyText(tidy);
     const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn, keys: plan.keys, snap: plan.snap };
     const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
-    if (!plan.sets.length && !plan.insert && !fresh && !(opts.tidy && tidied.length)) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
+    const steps = plan.inserts || [];
+    if (!plan.sets.length && !plan.insert && !steps.length && !plan.deletes?.length && !fresh && !(opts.tidy && tidied.length)) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
     await applyTidy(wb, ws, tidy);
     const data = fresh ? await wb.tableStyle('data') : undefined;
     if (fresh) {
@@ -190,16 +191,19 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.setColWidths(wide);
     }
     if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
+    // νέοι στρατιώτες μέσα στον πίνακα (στον θάλαμό τους): γραμμές με το στυλ του διπλανού, οι τύποι από κάτω κατεβαίνουν
+    for (const st of steps) ws.insertRows(st.after + 1, st.n, st.tpl + 1, wb);
     // νέοι στρατιώτες κάτω από τον τελευταίο: τα σύνολα που μετράνε ως τον τελευταίο τους μετράνε κι αυτούς
     if (plan.grow) await wb.growRanges(ws, plan.grow.from, plan.grow.last, plan.grow.to);
     // Ελεύθερες γραμμές που γράφονται τώρα: παίρνουν πλαίσια και στοίχιση από τη γραμμή του πίνακα από πάνω
     // (ή το στυλ του νέου πίνακα) σε όσα κελιά δεν έχουν δικό τους στυλ. Οι γραμμές που μπήκαν με insertRows τα έχουν ήδη.
-    const scan = tableRows(sheet, b.header, b.cols); const span = scan.width; const recs = new Set(scan.records.map(x => x.r));
-    const inserted = (r: number) => !!plan.insert && !fresh && r > plan.insert.after && r <= plan.insert.after + plan.insert.n;
+    const fin = stepFin(steps), newRows = stepRows(steps);
+    const scan = tableRows(sheet, b.header, b.cols); const span = scan.width; const recs = new Set(scan.records.map(x => fin(x.r)));
+    const inserted = (r: number) => newRows.has(r) || (!!plan.insert && !fresh && r > plan.insert.after && r <= plan.insert.after + plan.insert.n);
     const rowsOut = [...new Set(plan.sets.map(x => x.r))].filter(r => r > b.header && !inserted(r) && !recs.has(r)).sort((a, c) => a - c);
     const styled = (k: number) => { for (let c = span[0]; c <= span[1]; c++) if (ws.style(ref(k, c)) != null) return true; return false; };
     for (const r of rowsOut) {
-      let tpl = r - 1; while (!fresh && tpl > b.header && !styled(tpl)) tpl--;
+      let tpl = r - 1; while (!fresh && tpl > b.header && (!styled(tpl) || newRows.has(tpl))) tpl--;
       if (tpl <= b.header) tpl = -1;
       for (let c = span[0]; c <= span[1]; c++) {
         if (ws.style(ref(r, c)) != null) continue;
@@ -208,12 +212,27 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       }
     }
     for (const x of plan.sets) await put(x.r, x.c, x.v, data);
-    // Θάλαμοι: το φύλλο ΘΑΛΑΜΟΙ δεν συνδέεται, οπότε όταν αλλάζει θάλαμος θυμίζουμε να μετακινηθεί και εκεί ο στρατιώτης
+    // νέος που αναιρέθηκε: η γραμμή του φεύγει (σε φύλλο με πίνακα του Excel απλώς αδειάζει)
+    for (const d of plan.deletes || []) if (!ws.deleteRow(d + 1, wb)) for (let c = span[0]; c <= span[1]; c++) await put(d, c, null);
+    // Θάλαμοι: στο φύλλο ΘΑΛΑΜΟΙ (ένας πίνακας ανά θάλαμο) ο νέος μπαίνει στο τέλος του θαλάμου του και ο αναιρεμένος φεύγει.
+    // Όταν αλλάζει θάλαμος κάποιου που υπήρχε, ή δεν βρέθηκε πίνακας για τον θάλαμο, θυμίζουμε να γίνει με το χέρι.
     const rc = kind === 'people' ? b.cols.room : undefined;
-    const roomSheet = rc != null ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
-    const roomSets = roomSheet ? plan.sets.filter(x => x.c === rc && x.r > b.header) : [];
-    const roomRows = new Set(roomSets.filter(x => recs.has(x.r)).map(x => x.r)).size, roomNew = new Set(roomSets.filter(x => !recs.has(x.r)).map(x => x.r)).size;
-    const rooms = roomRows || roomNew ? { n: roomRows, added: roomNew, sheet: roomSheet! } : undefined;
+    const roomSheet = kind === 'people' ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
+    const pm = new Map(s.people.map(p => [p.id, p]));
+    const add = (plan.fresh || []).map(id => pm.get(id)!).filter(Boolean);
+    let placed = 0, missing = add.filter(p => p.room != null).length;
+    if (roomSheet && (add.length || plan.gone?.length)) {
+      const rs = await wb.sheet(roomSheet); const fx = new Set<string>();
+      const rsheet: RawSheet = { name: roomSheet, rows: await wb.values(roomSheet, 2000, MAX_COLS, fx), fx };
+      const rp = planRoomSheet(rsheet, add, plan.gone || []);
+      for (const st of rp.inserts) rs.insertRows(st.after + 1, st.n, st.tpl + 1, wb);
+      for (const x of rp.sets) { const at = ref(x.r, x.c); if (rs.hasFormula(at)) continue; if (x.v != null && typeof x.v === 'object') continue; rs.set(at, x.v); }
+      for (const d of rp.deletes) rs.deleteRow(d + 1, wb);
+      placed = add.length - rp.missing.length; missing = rp.missing.filter(p => p.room != null).length;
+    }
+    const roomSets = roomSheet && rc != null ? plan.sets.filter(x => x.c === rc && x.r > b.header && recs.has(x.r)) : [];
+    const roomRows = new Set(roomSets.map(x => x.r)).size;
+    const rooms = roomSheet && (roomRows || missing || placed) ? { n: roomRows, added: missing, placed, sheet: roomSheet } : undefined;
     const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
     return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {

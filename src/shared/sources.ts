@@ -763,13 +763,60 @@ export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   dn: p.dn ? 'ΝΑΙ' : ''
 });
 export const snapPeople = (people: Person[]): Record<number, PersonSnap> => Object.fromEntries(people.map(p => [p.id, personVals(p)]));
+// Γραμμές που μπαίνουν σε ένα φύλλο: after/tpl είναι γραμμές του φύλλου όπως ήταν (από 0), με αύξουσα σειρά. steps: πώς
+// μπαίνουν μία-μία (κάθε βήμα στις θέσεις μετά τα προηγούμενα), fin: πού καταλήγει μια γραμμή του φύλλου, at: η πρώτη
+// καινούργια γραμμή του k.
+export interface RowInsert { after: number; n: number; tpl: number }
+export function placeRows(ins: RowInsert[]): { steps: RowInsert[]; fin: (r: number) => number; at: (k: number) => number } {
+  const fin = (r: number) => r + ins.reduce((t, x) => t + (x.after < r ? x.n : 0), 0);
+  const steps = ins.map((x, k) => ({ after: x.after + ins.slice(0, k).reduce((t, y) => t + y.n, 0), n: x.n, tpl: x.tpl + ins.slice(0, k).reduce((t, y) => t + (y.after < x.tpl ? y.n : 0), 0) }));
+  return { steps, fin, at: k => fin(ins[k].after) + 1 };
+}
+// Ένα φύλλο με τις γραμμές που μπαίνουν κενές (για την προεπισκόπηση: ποιος είναι σε κάθε γραμμή μετά την εγγραφή)
+export function withRows(sheet: RawSheet, steps: RowInsert[]): RawSheet {
+  const rows = [...sheet.rows];
+  for (const x of steps) rows.splice(x.after + 1, 0, ...Array.from({ length: x.n }, () => [] as CellValue[]));
+  return { ...sheet, rows };
+}
 // grow: οι νέοι μπήκαν ακριβώς κάτω από τον τελευταίο (γραμμή last, από 1) ως τη γραμμή to· οι περιοχές των τύπων που
-// σταματούν στον τελευταίο (π.χ. COUNTIF(I4:I158, "1") στα σύνολα θαλάμων) μεγαλώνουν ως εκεί, όπως θα έκανε το Excel
+// σταματούν στον τελευταίο (π.χ. COUNTIF(I4:I158, "1") στα σύνολα θαλάμων) μεγαλώνουν ως εκεί, όπως θα έκανε το Excel.
+// inserts: νέες γραμμές (steps του placeRows)· οι τιμές (sets) είναι στις θέσεις μετά από αυτές. deletes: γραμμές που
+// σβήνονται μετά τις τιμές (από κάτω προς τα πάνω). fresh/gone: όσοι μπήκαν και όσοι έφυγαν (για το φύλλο ΘΑΛΑΜΟΙ).
 export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap>;
-  insert: { after: number; n: number; tpl: number } | null; added: number; cleared: number; keys: string[]; grow: { from: number; last: number; to: number } | null }
+  inserts: RowInsert[]; deletes: number[]; added: number; cleared: number; keys: string[]; grow: { from: number; last: number; to: number } | null;
+  fresh: number[]; gone: PersonSnap[] }
 const snapVal = (k: string, v: string): WVal => (v === '' ? null : k === 'room' ? Number(v) : k === 'asm' || k === 'phone' ? num(v) : v);
+const roomNo = (v: CellValue) => { const n = parseInt(cellText(v), 10); return n > 0 ? n : null; };
+const byNameCmp = (a: { last: string; first: string }, c: { last: string; first: string }) => collator.compare(a.last, c.last) || collator.compare(a.first, c.first);
+const rowName2 = (x: TableRow) => ({ last: cellText(x.v.last), first: cellText(x.v.first) });
+// αλφαβητικά με το επώνυμο (στους συνεπώνυμους το όνομα δεν μετράει: ο λοχίας δεν τους βάζει πάντα με τη σειρά)
+const sortedRows = (l: TableRow[]) => l.every((x, i) => !i || collator.compare(rowName2(l[i - 1]).last, rowName2(x).last) <= 0);
+// Πού μπαίνει ένας νέος στον πίνακα του Δυναμολογίου: όταν τα άτομα είναι ομαδοποιημένα ανά θάλαμο (1, 2, 3…), στον θάλαμό
+// του, αλφαβητικά αν η ομάδα είναι αλφαβητική (ο θαλαμάρχης μένει πρώτος), αλλιώς στο τέλος της ομάδας· θάλαμος χωρίς
+// ομάδα μπαίνει ανάμεσα στους διπλανούς. null: στο τέλος του πίνακα.
+// Μέσα σε μια ομάδα (θάλαμο): αλφαβητικά αν είναι αλφαβητική (ο θαλαμάρχης μένει πρώτος), αλλιώς στο τέλος της
+function groupSlot(m: TableRow[], p: { last: string; first: string }): { after: number; tpl: number } {
+  const lead = m.length > 1 && (/ΘΑΛΑΜΑΡΧ/.test(normGreek(cellText(m[0].v.remarks))) || (!sortedRows(m) && sortedRows(m.slice(1))));
+  const body = lead ? m.slice(1) : m;
+  const i = sortedRows(body) ? body.findIndex(x => byNameCmp(p, rowName2(x)) < 0) : -1;
+  return i < 0 ? { after: m[m.length - 1].r, tpl: body[body.length - 1].r } : { after: body[i].r - 1, tpl: body[i].r };
+}
+function slotOf(people: TableRow[], p: Person, header: number): { after: number; tpl: number } | null {
+  if (p.room == null || !people.length) return null;
+  const runs: { room: number | null; rows: TableRow[] }[] = [];
+  for (const x of people) { const r = roomNo(x.v.room); const l = runs[runs.length - 1]; if (l && l.room === r) l.rows.push(x); else runs.push({ room: r, rows: [x] }); }
+  if (runs.some((g, i) => g.room == null || (i && g.room <= runs[i - 1].room!))) return null;   // όχι ομάδες θαλάμων
+  const last = people[people.length - 1].r;
+  const end = (after: number) => (after === last ? null : after);
+  const g = runs.find(x => x.room === p.room);
+  if (g) { const x = groupSlot(g.rows, p); if (x.after === g.rows[g.rows.length - 1].r && end(x.after) == null) return null; return x; }
+  const prev = runs.filter(x => x.room! < p.room!).pop();
+  if (!prev) return { after: header, tpl: (runs[0].rows[1] || runs[0].rows[0]).r };
+  const a = end(prev.rows[prev.rows.length - 1].r); if (a == null) return null;
+  return { after: a, tpl: (prev.rows.length > 1 ? prev.rows[prev.rows.length - 1] : prev.rows[0]).r };
+}
 export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, snap: Record<number, PersonSnap>, keys: string[] = []): PeoplePlan {
-  const plan: PeoplePlan = { sets: [], changed: 0, notFound: [], snap: { ...snap }, insert: null, added: 0, cleared: 0, keys: [], grow: null };
+  const plan: PeoplePlan = { sets: [], changed: 0, notFound: [], snap: { ...snap }, inserts: [], deletes: [], added: 0, cleared: 0, keys: [], grow: null, fresh: [], gone: [] };
   const scan = tableRows(sheet, b.header, b.cols);
   const byAsm = new Map<string, TableRow>(), byName = new Map<string, TableRow[]>();
   for (const row of scan.records) {
@@ -781,6 +828,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     const l = byName.get(key2(v.last, v.first)) || [];
     return l.length === 1 ? l[0] : l.find(x => normGreek(cellText(x.v.father)) === normGreek(v.father));
   };
+  const orig: { r: number; c: number; v: WVal }[] = [];   // σε γραμμές του φύλλου όπως είναι τώρα
   const pm = new Map(s.people.map(p => [p.id, p]));
   for (const p of s.people) {
     const old = snap[p.id]; if (!old) continue;
@@ -793,18 +841,23 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     let ch = false;
     for (const k of diff) {
       const v = snapVal(k, cur[k]);
-      if (!same(row.v[k], v)) { plan.sets.push({ r: row.r, c: b.cols[k], v }); ch = true; }
+      if (!same(row.v[k], v)) { orig.push({ r: row.r, c: b.cols[k], v }); ch = true; }
     }
     if (ch) plan.changed++;
     plan.snap[p.id] = cur;
   }
-  // νέος που αναιρέθηκε (δεν υπάρχει πια στην εφαρμογή): η γραμμή που του έβαλε η εφαρμογή αδειάζει
-  const mine = new Set(keys.map(Number));
-  for (const id of mine) {
+  const people = scan.records.filter(x => b.cols.last == null || b.cols.first == null || isPersonRow(cellText(x.v.last), cellText(x.v.first), cellText(x.v.father)));
+  const last = people.length ? people[people.length - 1].r : b.header;
+  const blank = (r: number) => !(sheet.rows[r] || []).some(v => cellText(v));
+  // νέος που αναιρέθηκε (δεν υπάρχει πια στην εφαρμογή): η γραμμή που του έβαλε η εφαρμογή φεύγει (στο τέλος του πίνακα
+  // απλώς αδειάζει, για να μείνουν τα σύνολα από κάτω εκεί που ήταν)
+  const dels: number[] = [];
+  for (const id of new Set(keys.map(Number))) {
     if (pm.has(id)) { plan.keys.push(String(id)); continue; }
-    const row = snap[id] && find(snap[id]); delete plan.snap[id];
+    const row = snap[id] && find(snap[id]); if (snap[id]) plan.gone.push(snap[id]); delete plan.snap[id];
     if (!row) continue;
-    for (let c = scan.width[0]; c <= scan.width[1]; c++) if (c !== b.cols.aa && cellText((sheet.rows[row.r] || [])[c]) !== '') plan.sets.push({ r: row.r, c, v: null });
+    if (row.r === last && blank(row.r + 1)) { for (let c = scan.width[0]; c <= scan.width[1]; c++) if (c !== b.cols.aa && cellText((sheet.rows[row.r] || [])[c]) !== '') orig.push({ r: row.r, c, v: null }); }
+    else dels.push(row.r);
     plan.cleared++;
   }
   // νέοι από την εφαρμογή που δεν είναι ακόμα στο φύλλο
@@ -813,32 +866,110 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const fresh = s.people.filter(p => p.added && p.active && !plan.snap[p.id]).filter(p => {
     const cur = personVals(p, b); if (!written(cur)) return true;
     plan.snap[p.id] = cur; plan.keys.push(String(p.id)); return false;   // τον έγραψε ήδη ο λοχίας με το χέρι
-  });
-  if (!fresh.length) return plan;
-  const people = scan.records.filter(x => b.cols.last == null || b.cols.first == null || isPersonRow(cellText(x.v.last), cellText(x.v.first), cellText(x.v.father)));
-  const last = people.length ? people[people.length - 1].r : b.header;
-  // ελεύθερες γραμμές κάτω από τον τελευταίο· μία κενή μένει πριν από ό,τι ακολουθεί (σύνολα, άλλος πίνακας)
+  }).sort(byNameCmp);
+  // θέσεις: μέσα στον πίνακα (στον θάλαμό τους) ή στο τέλος
+  const slots = new Map<number, { tpl: number; ps: Person[] }>(); const atEnd: Person[] = [];
+  for (const p of fresh) { const x = slotOf(people.filter(y => !dels.includes(y.r)), p, b.header); if (!x) { atEnd.push(p); continue; } const sl = slots.get(x.after) || { tpl: x.tpl, ps: [] }; sl.ps.push(p); slots.set(x.after, sl); }
+  // στο τέλος: ελεύθερες γραμμές κάτω από τον τελευταίο· μία κενή μένει πριν από ό,τι ακολουθεί (σύνολα, άλλος πίνακας)
   const next = scan.records.find(x => x.r > last)?.r ?? Infinity;
-  const free = scan.free.filter(r => r > last && r < next - 1);
-  const rows: number[] = [];
-  const put = (r: number, p: Person) => {
-    const cur = personVals(p, b);
-    for (const k of PEOPLE_SYNC) if (b.cols[k] != null && cur[k] !== '') plan.sets.push({ r, c: b.cols[k], v: snapVal(k, cur[k]) });
-    if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first });
-    if (b.cols.aa != null && cellText((sheet.rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: people.length + rows.length + 1 });
-    rows.push(r); plan.snap[p.id] = cur; plan.keys.push(String(p.id));
-  };
-  let i = 0;
-  for (; i < fresh.length && i < free.length; i++) put(free[i], fresh[i]);
-  const rest = fresh.slice(i);
-  if (rest.length) {
-    const after = i ? free[i - 1] : last;
-    plan.insert = { after, n: rest.length, tpl: people.length ? last : after };
-    rest.forEach((p, j) => put(after + 1 + j, p));
+  const free = scan.free.filter(r => r > last && r < next - 1).slice(0, atEnd.length);
+  const rest = atEnd.slice(free.length);
+  const ins: (RowInsert & { ps: Person[] })[] = [...slots].map(([after, x]) => ({ after, n: x.ps.length, tpl: x.tpl, ps: x.ps }));
+  if (rest.length) ins.push({ after: free.length ? free[free.length - 1] : last, n: rest.length, tpl: people.length ? last : b.header, ps: rest });
+  ins.sort((x, y) => x.after - y.after);
+  const { steps, fin, at } = placeRows(ins);
+  plan.inserts = steps;
+  // Α/Α: αν η στήλη μετράει 1, 2, 3… (σχεδόν παντού), οι από κάτω αλλάζουν αριθμό όπως θα τους άλλαζε ο λοχίας
+  const aaCol = b.cols.aa;
+  const aaOf = (r: number) => { if (aaCol == null || sheet.fx?.has(r + ':' + aaCol)) return null; const t = cellText((sheet.rows[r] || [])[aaCol]); return /^\d+$/.test(t) ? Number(t) : null; };
+  const seq = aaCol != null && people.length > 0 && people.filter((x, i) => aaOf(x.r) === i + 1).length >= people.length * 0.8;
+  const newAbove = (r: number) => ins.reduce((t, x) => t + (x.after < r ? x.n : 0), 0) + free.filter(f => f < r).length;
+  const delAbove = (r: number) => dels.filter(d => d < r).length;
+  if (seq) for (const x of people) {
+    if (dels.includes(x.r)) continue;
+    const a = aaOf(x.r); const d = newAbove(x.r) - delAbove(x.r);
+    if (a != null && d) orig.push({ r: x.r, c: aaCol!, v: a + d });
   }
+  plan.sets = orig.map(x => ({ ...x, r: fin(x.r) }));
+  // τα στοιχεία των νέων
+  let k = 0;
+  const put = (r: number, p: Person, aa: number | null) => {
+    const cur = personVals(p, b);
+    for (const f of PEOPLE_SYNC) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: snapVal(f, cur[f]) });
+    if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: p.last + ' ' + p.first });
+    if (aa != null) plan.sets.push({ r, c: aaCol!, v: aa });
+    plan.snap[p.id] = cur; plan.keys.push(String(p.id)); plan.fresh.push(p.id); k++;
+  };
+  // ο αριθμός του j-ού νέου κάτω από τη γραμμή after: όσοι είναι από πάνω του + 1
+  const aaAt = (after: number, j: number) => (aaCol == null ? null : seq ? people.filter(x => x.r <= after && !dels.includes(x.r)).length + ins.reduce((t, x) => t + (x.after < after ? x.n : 0), 0) + free.filter(f => f <= after).length + j + 1 : people.length + k + 1);
+  const endRows: number[] = [];
+  free.forEach((r, j) => { put(fin(r), atEnd[j], aaCol != null && cellText((sheet.rows[r] || [])[aaCol]) === '' ? aaAt(r - 1, 0) : null); endRows.push(fin(r)); });
+  ins.forEach((x, i) => x.ps.forEach((p, j) => { put(at(i) + j, p, aaAt(x.after, j)); if (x.ps === rest) endRows.push(at(i) + j); }));
   plan.added = fresh.length;
-  if (people.length && rows.every((r, j) => r === last + 1 + j)) plan.grow = { from: b.header + 1, last: last + 1, to: last + 1 + rows.length };
+  plan.deletes = dels.map(fin).sort((x, y) => y - x);
+  const l1 = fin(last) + 1;   // ο τελευταίος, από 1
+  if (people.length && endRows.length && endRows.every((r, j) => r === fin(last) + 1 + j)) plan.grow = { from: b.header + 1, last: l1, to: l1 + endRows.length };
   return plan;
+}
+// Μετά από τα βήματα του placeRows: πού πήγε μια γραμμή του φύλλου, και ποιες γραμμές είναι καινούργιες
+export const stepFin = (steps: RowInsert[]) => (r: number) => steps.reduce((x, st) => (x > st.after ? x + st.n : x), r);
+export const stepRows = (steps: RowInsert[]) => new Set(steps.flatMap(st => Array.from({ length: st.n }, (_, i) => st.after + 1 + i)));
+
+// ------------------------------------------------------------------ φύλλο ΘΑΛΑΜΟΙ: ένας πίνακας ανά θάλαμο
+// («ΔΥΝΑΜΟΛΟΓΙΟ 1ου ΘΑΛΑΜΟΥ», επικεφαλίδες, άτομα). Δεν διαβάζεται· ο νέος στρατιώτης μπαίνει στο τέλος του θαλάμου του.
+export interface RoomBlock { room: number; header: number; cols: Record<string, number>; rows: TableRow[] }
+export function roomBlocks(sheet: RawSheet): RoomBlock[] {
+  const out: RoomBlock[] = [];
+  for (let r = 0; r < sheet.rows.length; r++) {
+    const t = (sheet.rows[r] || []).map(cellText).filter(Boolean); if (t.length !== 1) continue;
+    const m = /(\d+)\s*(?:ΟΥ|ΟΣ|Ο)?\s*ΘΑΛΑΜ|ΘΑΛΑΜ\S*\s+(\d+)/.exec(normGreek(t[0])); if (!m) continue;
+    let h = r + 1; while (h <= r + 2 && !isHeaderRow(sheet.rows[h])) h++;
+    if (h > r + 2) continue;
+    const cols = mapColumns(sheet.rows[h], PERSON_FIELDS.filter(f => f.k !== 'name'));
+    if (cols.last == null) continue;
+    out.push({ room: Number(m[1] || m[2]), header: h, cols, rows: tableRows(sheet, h, cols).records });
+    r = h;
+  }
+  return out;
+}
+export interface RoomsPlan { inserts: RowInsert[]; sets: { r: number; c: number; v: WVal }[]; deletes: number[]; missing: Person[] }
+export function planRoomSheet(sheet: RawSheet, add: Person[], gone: PersonSnap[]): RoomsPlan {
+  const blocks = roomBlocks(sheet); const out: RoomsPlan = { inserts: [], sets: [], deletes: [], missing: [] };
+  const same2 = (x: TableRow, v: { asm?: string; last?: string; first?: string; father?: string }) => {
+    const asm = cellText(x.v.asm).replace(/\s/g, '');
+    if (v.asm && asm) return asm === v.asm;
+    return key2(cellText(x.v.last), cellText(x.v.first)) === key2(v.last || '', v.first || '') && normGreek(cellText(x.v.father)) === normGreek(v.father || '');
+  };
+  const aaOf = (bl: RoomBlock, r: number) => { const c = bl.cols.aa; if (c == null || sheet.fx?.has(r + ':' + c)) return null; const t = cellText((sheet.rows[r] || [])[c]); return /^\d+$/.test(t) ? Number(t) : null; };
+  const dels: { bl: RoomBlock; r: number }[] = [];
+  for (const g of gone) for (const bl of blocks) { const x = bl.rows.find(y => same2(y, g)); if (x) { dels.push({ bl, r: x.r }); break; } }
+  const ins: (RowInsert & { bl: RoomBlock; ps: Person[] })[] = [];
+  for (const p of add) {
+    if (p.room == null) continue;
+    const bl = blocks.find(x => x.room === p.room); if (!bl) { out.missing.push(p); continue; }
+    if (bl.rows.some(y => same2(y, p))) continue;
+    const at0 = bl.rows.length ? groupSlot(bl.rows, p) : { after: bl.header, tpl: bl.header };
+    const x = ins.find(y => y.after === at0.after); if (x) { x.n++; x.ps.push(p); continue; }
+    ins.push({ ...at0, n: 1, bl, ps: [p] });
+  }
+  ins.sort((x, y) => x.after - y.after);
+  // Α/Α του θαλάμου: όσοι είναι κάτω από νέο παίρνουν τον επόμενο αριθμό, όσοι είναι κάτω από γραμμή που φεύγει τον προηγούμενο
+  const shift = (bl: RoomBlock, r: number) => ins.reduce((t, x) => t + (x.bl === bl && x.after < r ? x.n : 0), 0) - dels.filter(e => e.bl === bl && e.r < r).length;
+  const { steps, fin, at } = placeRows(ins);
+  out.inserts = steps;
+  const orig: { r: number; c: number; v: WVal }[] = [];
+  for (const bl of blocks) for (const x of bl.rows) { const a = aaOf(bl, x.r); const d = shift(bl, x.r); if (a != null && d && !dels.some(e => e.r === x.r)) orig.push({ r: x.r, c: bl.cols.aa!, v: a + d }); }
+  out.sets = orig.map(x => ({ ...x, r: fin(x.r) }));
+  ins.forEach((x, i) => x.ps.forEach((p, j) => {
+    const r = at(i) + j; const c = x.bl.cols;
+    // ο αριθμός του από πάνω + 1 (ή 1 αν είναι πρώτος)
+    const above = x.bl.rows.filter(y => y.r <= x.after && !dels.some(e => e.r === y.r));
+    const prevAa = above.length ? aaOf(x.bl, above[above.length - 1].r) : 0;
+    const vals: Record<string, WVal> = { aa: prevAa == null ? null : (above.length ? prevAa + shift(x.bl, above[above.length - 1].r) : 0) + 1 + j, rank: p.rank || null, spec: p.spec || null, last: p.last, first: p.first, father: p.father || null, asm: p.asm ? num(p.asm) : null, phone: p.phone ? num(p.phone) : null };
+    for (const [k, v] of Object.entries(vals)) if (c[k] != null && v != null) out.sets.push({ r, c: c[k], v });
+  }));
+  out.deletes = dels.map(d => fin(d.r)).sort((x, y) => y - x);
+  return out;
 }
 // Οι τιμές του Excel για κάθε άτομο που βρέθηκε, όπως θα τις έγραφε η εισαγωγή: αφετηρία για το τι άλλαξε στην εφαρμογή.
 // Ό,τι διαφέρει στην εφαρμογή (π.χ. διόρθωση πριν οριστεί το αρχείο) θα γραφτεί στην επόμενη ενημέρωση.
@@ -885,6 +1016,7 @@ export function describeSets(kind: ListKind, sheet: RawSheet, b: SourceBinding, 
       continue;
     }
     if (l.every(x => x.v == null)) { out.push({ r, who: rowName(v), text: 'σβήνεται (δεν υπάρχει πια στην εφαρμογή)' }); continue; }
+    if (l.every(x => x.c === b.cols.aa)) continue;   // μόνο το Α/Α, επειδή μπήκε ή έφυγε κάποιος από πάνω
     out.push({ r, who: rowName(v), text: l.filter(x => x.c !== b.cols.aa).map(x => (label.get(x.c) || colLetter(x.c)) + ': ' + (row[x.c] instanceof Date ? fmtW({ date: cellText(row[x.c]) }) : cellText(row[x.c]) || '(κενό)') + ' → ' + fmtW(x.v)).join(' · ') });
   }
   return out;
@@ -1220,12 +1352,13 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
 
 // Ένα σχέδιο εγγραφής για κάθε είδος (το χρησιμοποιούν η προεπισκόπηση, η εγγραφή και η δοκιμή στον browser)
 export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[] }
-export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap>; grow?: PeoplePlan['grow'] }
+export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap>; grow?: PeoplePlan['grow'];
+  inserts?: RowInsert[]; deletes?: number[]; fresh?: number[]; gone?: PersonSnap[] }   // μόνο το προσωπικό (planPeopleWrite)
 export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, meta: SyncMeta | undefined, today: ISODate): FullPlan {
   const psnap = snapPeople(s.people); const sh = sheet || { name: b.sheet, rows: [] };
   if (kind === 'people') {
     const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people), meta?.keys);
-    return { sets: p.sets, insert: p.insert, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow };
+    return { sets: p.sets, insert: null, inserts: p.inserts, deletes: p.deletes, fresh: p.fresh, gone: p.gone, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow };
   }
   const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
     : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keep);

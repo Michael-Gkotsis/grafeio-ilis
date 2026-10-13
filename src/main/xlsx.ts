@@ -22,8 +22,15 @@ const setAttr = (attrs: string, name: string, v: string | null) => {
   return re.test(attrs) ? attrs.replace(re, ` ${name}="${v}"`) : attrs + ` ${name}="${v}"`;
 };
 
-// Μετακίνηση αναφοράς γραμμής: κάθε γραμμή > after πηγαίνει +n
-const shiftRef = (ref: string, after: number, n: number) => ref.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (_m, d1, c, d2, r) => d1 + c + d2 + (Number(r) > after ? Number(r) + n : Number(r)));
+// Μετακίνηση αναφοράς γραμμής: κάθε γραμμή > after πηγαίνει +n. Με n < 0 (σβήνονται οι γραμμές μετά την after) η αρχή μιας
+// περιοχής που ήταν στη γραμμή που σβήστηκε μένει εκεί (δείχνει πια την επόμενη) και το τέλος ανεβαίνει, όπως στο Excel.
+const shiftRange = (a: string, b: string | undefined, after: number, n: number) => {
+  const at = (x: string, th: number) => { const m = /^(\$?[A-Z]+\$?)(\d+)$/.exec(x); if (!m) return { s: x, r: 0 }; const r = Number(m[2]) > th ? Number(m[2]) + n : Number(m[2]); return { s: m[1] + r, r, c: m[1] }; };
+  if (b == null) return at(a, after).s;
+  const x = at(a, n < 0 ? after - n : after), y = at(b, after);
+  return x.s + ':' + (y.r < x.r && y.c ? y.c + x.r : y.s);
+};
+const shiftRef = (ref: string, after: number, n: number) => ref.replace(/(\$?[A-Z]+\$?\d+)(?::(\$?[A-Z]+\$?\d+))?/g, (_m, a: string, b: string | undefined) => shiftRange(a, b, after, n));
 
 // Το ίδιο μέσα σε τύπο: μόνο οι αναφορές στο φύλλο που άλλαξε. Στο ίδιο του το φύλλο (own) μετρούν και όσες δεν
 // γράφουν φύλλο· στα άλλα φύλλα μόνο όσες γράφουν το όνομά του. Κείμενα σε εισαγωγικά και ονόματα συναρτήσεων μένουν όπως είναι.
@@ -34,7 +41,7 @@ export function shiftFormula(f: string, sheet: string, own: boolean, after: numb
   const plain = unesc(f);
   const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
     if (q ? sheetOf(q) !== name : !own) return m;
-    return (q || '') + shiftRef(a, after, n) + (b ? ':' + shiftRef(b, after, n) : '');
+    return (q || '') + shiftRange(a, b, after, n);
   })).join('');
   return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -249,6 +256,33 @@ export class Sheet {
     wb.shiftNames(this.name, after, n);
     wb.shiftForeign(this, after, n);
     wb.shiftTables(this, after, n);
+  }
+  // Σβήνει τη γραμμή at (από 1) και ανεβάζει μία ό,τι είναι από κάτω. Οι αναφορές στη γραμμή που σβήστηκε δείχνουν πια τη
+  // γραμμή από πάνω, οπότε το τέλος μιας περιοχής μικραίνει (COUNTIF(I4:I159) → I4:I158). Για να φύγει ξανά μια γραμμή
+  // που είχε βάλει η εφαρμογή (αναίρεση)· όχι σε φύλλο με πίνακα του Excel (false: δεν σβήστηκε).
+  deleteRow(at: number, wb: Workbook): boolean {
+    if (/<tableParts\b/.test(this.tail)) return false;
+    const after = at - 1, n = -1;
+    this.rows = this.rows.filter(r => r.r !== at);
+    for (const row of this.rows) {
+      const moved = row.r > at;
+      if (moved) { row.r += n; row.attrs = setAttr(row.attrs, 'r', String(row.r)); }
+      for (const c of row.cells) {
+        if (moved) c.attrs = setAttr(c.attrs, 'r', colName(c.col) + row.r);
+        if (c.inner.includes('<f')) c.inner = shiftCellFormulas(c.inner, this.name, true, after, n);
+      }
+    }
+    let gone = 0;
+    this.tail = this.tail.replace(/<mergeCell ref="([^"]+)"\/>/g, (_m, ref: string) => {
+      const [a, b] = ref.split(':'); if (splitRef(a).r === at && splitRef(b || a).r === at) { gone++; return ''; }
+      return `<mergeCell ref="${shiftRef(ref, after, n)}"/>`;
+    });
+    if (gone) this.tail = this.tail.replace(/<mergeCells count="(\d+)">/, (_m, c) => `<mergeCells count="${Number(c) - gone}">`).replace(/<mergeCells count="0"><\/mergeCells>/, '');
+    this.head = this.shiftXmlRefs(this.head, after, n);
+    this.tail = this.shiftXmlRefs(this.tail, after, n);
+    wb.shiftNames(this.name, after, n);
+    wb.shiftForeign(this, after, n);
+    return true;
   }
   // Περιοχές τύπων προς το φύλλο sheet που μεγαλώνουν (growFormula)
   growFormulas(sheet: string, from: number, last: number, to: number): number {
