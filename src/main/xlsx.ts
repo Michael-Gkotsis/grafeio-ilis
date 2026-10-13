@@ -168,6 +168,25 @@ export class Sheet {
     const refs = [...this.tail.matchAll(/<(?:x14:)?dataValidation\b[^>]*?\ssqref="([^"]+)"/g), ...this.tail.matchAll(/<xm:sqref>([^<]+)<\/xm:sqref>/g)].flatMap(m => m[1].split(/\s+/));
     return refs.some(ref => { const [a, b] = ref.split(':'); try { const A = splitRef(a), B = splitRef(b || a); return A.c <= c && c <= B.c && A.r <= r2 && r1 <= B.r; } catch { return false; } });
   }
+  // Λίστα που έβαλε η εφαρμογή σε αυτή τη στήλη (σκέτες τιμές, χωρίς μήνυμα λάθους): οι τιμές της, για να συμπληρωθεί
+  // με ό,τι πρόσθεσες στις Λίστες. Δική σου λίστα (με περιοχή κελιών ή με μήνυμα λάθους) δεν επιστρέφεται.
+  ownList(c: number, r1: number, r2: number): { sqref: string; items: string[] } | null {
+    for (const m of this.tail.matchAll(/<dataValidation\b([^>]*)>\s*<formula1>([^<]*)<\/formula1>\s*<\/dataValidation>/g)) {
+      const a = m[1]; const sq = /\ssqref="([^"]+)"/.exec(a)?.[1];
+      if (!sq || !/\stype="list"/.test(a) || !/\sshowErrorMessage="0"/.test(a) || /\s/.test(sq)) continue;
+      const [x, y] = sq.split(':'); let A, B; try { A = splitRef(x); B = splitRef(y || x); } catch { continue; }
+      if (A.c !== c || B.c !== c || A.r > r2 || r1 > B.r) continue;
+      const f = unesc(m[2]); if (!/^"[^"]*"$/.test(f)) return null;
+      return { sqref: sq, items: f.slice(1, -1).split(',') };
+    }
+    return null;
+  }
+  // Νέες τιμές στη λίστα που έβαλε η εφαρμογή (ownList)
+  setListItems(sqref: string, items: string[]): this {
+    const re = new RegExp('(<dataValidation\\b[^>]*\\ssqref="' + sqref.replace(/[$]/g, '\\$&') + '"[^>]*>\\s*<formula1>)[^<]*(</formula1>)');
+    this.tail = this.tail.replace(re, (_m, p1: string, p2: string) => p1 + esc('"' + items.join(',') + '"') + p2);
+    return this;
+  }
   // Λίστα επιλογής (dropdown) που δέχεται και ό,τι άλλο γράψει ο χρήστης (χωρίς μήνυμα λάθους)
   addListValidation(sqref: string, items: string[]): this {
     const dv = `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="${sqref}"><formula1>${esc('"' + items.join(',') + '"')}</formula1></dataValidation>`;

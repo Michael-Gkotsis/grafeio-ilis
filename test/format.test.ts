@@ -113,6 +113,38 @@ describe('υπάρχον φύλλο του λοχία', () => {
     expect(again.ok && again.unchanged).toBe(true);
   });
 
+  it('Λίστες: νέος βαθμός μπαίνει και στο dropdown που έβαλε η εφαρμογή, όχι σε δική σου λίστα', async () => {
+    const s0 = fakeState(6); const file = path.join(tmp(), 'Δ.xlsx');
+    await toFile(dyn(s0), file);
+    const b = await bind(file, 'people');
+    await writeSource('people', b, s0, META, TODAY, { tidy: true });
+    expect(await tidyPreview('people', b)).toEqual([]);
+    const lists = { soldierRanks: { add: [{ name: 'ΚΛΗΡ', hk: 'Στρατιώτες' }], hide: ['ΔΕΑ'] } };
+    const s = { ...s0, settings: { ...s0.settings, lists } };
+    const t = await tidyPreview('people', b, lists);
+    expect(t).toEqual(['Στη λίστα επιλογής της στήλης «Βαθμός» μπαίνουν και: ΚΛΗΡ']);
+    // αυτόματη εγγραφή χωρίς αλλαγές δεν πειράζει το αρχείο· η «Ενημέρωση Excel» ναι
+    const auto = await writeSource('people', b, s, META, TODAY);
+    expect(auto.ok && auto.unchanged).toBe(true);
+    const w = await writeSource('people', b, s, META, TODAY, { tidy: true });
+    expect(w.ok && !w.unchanged).toBe(true);
+    const dv = [...(await sheetXml(file)).matchAll(/<dataValidation [^>]*sqref="([^"]+)"><formula1>([^<]*)<\/formula1>/g)].map(m => m[2]);
+    // το κρυμμένο ΔΕΑ μένει (δεν σβήνεται τιμή από λίστα που υπάρχει), το ΚΛΗΡ μπαίνει στο τέλος
+    expect(dv[0]).toBe('&quot;' + [...SOLDIER_RANKS, 'ΚΛΗΡ'].join(',') + '&quot;');
+    expect(dv[1]).toBe('&quot;' + SPECS.join(',') + '&quot;');
+    expect(await tidyPreview('people', b, lists)).toEqual([]);
+    // τιμή που απλώς γράφτηκε στη στήλη μετά (όχι από τις Λίστες) δεν μπαίνει μόνη της στη λίστα
+    const s2 = { ...s, people: s.people.map((p, i) => (i === 0 ? { ...p, rank: 'ΥΠΟΨ' } : p)) };
+    await writeSource('people', b, s2, META, TODAY);
+    expect(await tidyPreview('people', b, lists)).toEqual([]);
+    // δική σου λίστα (με μήνυμα λάθους): δεν αλλάζει
+    const file2 = path.join(tmp(), 'Δ2.xlsx');
+    const own = '<dataValidations count="1"><dataValidation type="list" sqref="B4:B50"><formula1>"ΣΤΡ,ΔΝΕΑΣ"</formula1></dataValidation></dataValidations>';
+    await toFile(dyn(s0), file2, { extra: async z => { const x = await z.file('xl/worksheets/sheet1.xml')!.async('string'); z.file('xl/worksheets/sheet1.xml', x.replace('</sheetData>', '</sheetData>' + own)); } });
+    const b2 = await bind(file2, 'people');
+    expect((await tidyPreview('people', b2, lists)).some(x => /Βαθμός/.test(x))).toBe(false);
+  });
+
   it('δική σου λίστα στη στήλη ή τίτλος με κι άλλο κείμενο στη γραμμή: δεν αλλάζουν', async () => {
     const s = fakeState(4); const file = path.join(tmp(), 'Δ.xlsx');
     const sheets = dyn(s); sheets[0].rows[0] = ['ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ', null, null, null, null, null, null, 'ΑΥΛΩΝΑΣ'];
