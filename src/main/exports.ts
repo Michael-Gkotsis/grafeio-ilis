@@ -5,6 +5,7 @@ import { norm } from '../shared/text';
 import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
+import { rangeHm } from '../shared/hours';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
@@ -93,7 +94,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   let night = 0, day24 = 0;
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   bk.set('D5', night || null).set('D8', day24 || null);
-  const line = (x: Status) => who(pm.get(x.pid)!) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + dm(x.from) + (x.to !== x.from ? '–' + dm(x.to) : '');
+  const line = (x: Status) => who(pm.get(x.pid)!) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + rangeHm(x, dm);
   const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === d && pm.has(x.pid));
   if (leaves.length) bk.set('G10', leaves.map(line).join('· '));
   // 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες, μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής

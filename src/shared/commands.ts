@@ -6,6 +6,7 @@ import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, block
 import { codeErrors, freeCode } from './codes';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, statusLbl } from './ranks';
+import { hasTimes, mins, normTime, timesTxt } from './hours';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -16,6 +17,7 @@ export type Command =
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> }
   | { t: 'deleteCadreAbs'; id: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
+  | { t: 'setTimes'; id: string; fromTime: string; toTime: string }
   | { t: 'addRequest'; req: Omit<PersonRequest, 'id'> }
   | { t: 'updateRequest'; req: PersonRequest }
   | { t: 'deleteRequest'; id: string }
@@ -82,6 +84,16 @@ const setGuard = (s: AppState, date: ISODate, k: string, pid: number | null): Ap
 export const reqText = (t: string) => t.trim().replace(/^αιτ[εέ][ιί]ται\s+/i, '').replace(/[.\s]+$/, '').trim();
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
+// Ώρες άδειας: μόνο στις άδειες, σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
+function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: string; toTime?: string; open?: boolean }): { fromTime?: string; toTime?: string } {
+  if (!hasTimes(c.type)) return {};
+  const f = normTime(c.fromTime), t = c.open ? '' : normTime(c.toTime);
+  if (f == null) throw new Error('Η ώρα αναχώρησης «' + c.fromTime + '» δεν διαβάζεται. Γράψε π.χ. 14:00.');
+  if (t == null) throw new Error('Η ώρα επιστροφής «' + c.toTime + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+  if (f && t && c.from === c.to && mins(t) <= mins(f)) throw new Error('Την ίδια μέρα η επιστροφή (' + t + ') πρέπει να είναι μετά την αναχώρηση (' + f + ')');
+  return { ...(f ? { fromTime: f } : {}), ...(t ? { toTime: t } : {}) };
+}
+
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = personMap(s.people);
   switch (c.t) {
@@ -89,6 +101,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const tm = checkTimes(cmd);
       if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
       const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
@@ -100,6 +113,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
+          Object.assign(st, tm);
           if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; st.pending = true; if (cmd.by?.trim()) st.by = cmd.by.trim(); if (cmd.reason?.trim()) st.reason = cmd.reason.trim(); if (cmd.on) st.on = cmd.on; }
           return st;
         })]
@@ -170,6 +184,19 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const next: Status = { ...st, on: c.on || undefined, by: c.by.trim() || undefined, reason: c.reason.trim() || undefined };
       (['on', 'by', 'reason'] as const).forEach(k => { if (next[k] === undefined) delete next[k]; });
       return { state: { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) }, text: 'Στοιχεία ποινής: ' + shortName(pm.get(st.pid)!) + (next.by ? ', από ' + next.by : '') + (next.reason ? ', διότι ' + next.reason : ''), files: [] };
+    }
+    case 'setTimes': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      const tm = checkTimes({ ...st, fromTime: c.fromTime, toTime: c.toTime });
+      const next: Status = { ...st, ...tm };
+      if (!tm.fromTime) delete next.fromTime;
+      if (!tm.toTime) delete next.toTime;
+      // υπηρεσίες που δεν γίνονται πια με τις νέες ώρες: η θέση μένει κενή, όπως στη δήλωση
+      const plan = planStatusChange({ ...s, statuses: s.statuses.filter(x => x !== st) }, { type: st.type, pids: [st.pid], from: st.from, to: st.to, ...tm }, ctx.today);
+      let out: AppState = { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) };
+      plan.conflicts.forEach(x => { out = setGuard(out, x.date, x.k, null); });
+      const t = timesTxt(next);
+      return { state: out, text: 'Ώρες άδειας ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: ['Άδειες', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
     }
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
@@ -252,7 +279,9 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
       const adds = c.adds.filter(a => pm.has(a.pid) && TYPES[a.type] && a.from && a.to && a.to >= a.from);
       const del = new Set((c.deletes || []).filter(id => s.statuses.some(x => x.id === id)));
       if (!adds.length && !byId.size && !del.size) return { state: s, text: '', files: [] };
-      const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? { ...x, ...byId.get(x.id) } : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
+      // ώρα άδειας που σβήστηκε στο Excel: έρχεται κενή και φεύγει από την εγγραφή
+      const tidy = (x: Status) => { if (x.fromTime === '') delete x.fromTime; if (x.toTime === '') delete x.toTime; return x; };
+      const statuses = [...s.statuses.filter(x => !del.has(x.id)).map(x => (byId.has(x.id) ? tidy({ ...x, ...byId.get(x.id) }) : x)), ...adds.map(a => ({ ...a, id: ctx.newId() }))];
       const parts = [adds.length && adds.length + (adds.length === 1 ? ' νέα' : ' νέες'), byId.size && byId.size + (byId.size === 1 ? ' αλλαγή' : ' αλλαγές'), del.size && del.size + (del.size === 1 ? ' σβήστηκε' : ' σβήστηκαν')].filter(Boolean).join(', ');
       return { state: { ...s, statuses }, text: 'Από Excel (' + c.source + '), ' + c.what + ': ' + parts, files: [], source: 'excel' };
     }

@@ -8,6 +8,7 @@ import { statusesOn, isHol, holName } from '../shared/rules';
 import { TYPES, TYPE_KEYS, effects, fullName, shortName, unitOf, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
+import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
@@ -68,6 +69,17 @@ export function DateRangeField({ from, to, onChange }: P) {
     <div className="field"><label className="field__label" htmlFor="dr-to">Έως *</label><input id="dr-to" type="date" className="ui-input" min=${from} value=${to} onChange=${(e: any) => { const t = e.target.value; if (t) onChange(from, t < from ? from : t); }}/><span className="field__help">${dayName(to, today)}</span></div>
   </div><span className="field__help">Διάρκεια: ${n} ${n === 1 ? 'ημέρα' : 'ημέρες'} (μετρούν και οι δύο ημερομηνίες)</span></div>`;
 }
+// Ώρα ΩΩ:ΛΛ με λίστα συνηθισμένων ωρών· δέχεται και «14», «1400», «14.00» (γίνεται «14:00» μόλις φύγεις από το πεδίο)
+const COMMON_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '13:00', '14:00', '15:00', '16:00', '18:00', '20:00', '21:00', '22:00', '23:00'];
+export function TimeField({ id, label, value, onChange, help }: P) {
+  const bad = normTime(value) == null;
+  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
+    <input id=${id} className="ui-input" inputMode="numeric" autoComplete="off" list=${id + '-l'} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
+      onChange=${(e: any) => onChange(e.target.value)} onBlur=${() => { const t = normTime(value); if (t != null && t !== value) onChange(t); }}/>
+    <datalist id=${id + '-l'}>${COMMON_TIMES.map(t => html`<option key=${t} value=${t}/>`)}</datalist>
+    <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
+}
+export const TIMES_HELP = 'Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Χωρίς ώρες μετρά όλη η μέρα.';
 export function ChangePlanList({ plan }: P) {
   return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
 }

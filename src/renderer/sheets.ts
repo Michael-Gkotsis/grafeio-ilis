@@ -5,6 +5,7 @@ import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, dmyy, milDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
+import { rangeHm } from '../shared/hours';
 import { byName, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
@@ -93,7 +94,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   let night = 0, day24 = 0;
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first].filter(Boolean).join(' ') : '?'; };
-  const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === date).map(x => name(x.pid) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + dm(x.from) + (x.to !== x.from ? '–' + dm(x.to) : ''));
+  const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === date).map(x => name(x.pid) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + rangeHm(x, dm));
   const puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
   const N = (v: number) => E(v || '', 'b c');
   const tx = s.hkaiManual?.[date]?.text || {};

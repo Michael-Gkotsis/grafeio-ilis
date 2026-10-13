@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -115,7 +115,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)
 export const PREV_EVERY = 10 * 60 * 1000;
 export type WriteOutcome =
-  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; added: number; placed?: number; sheet: string }; tidy?: string[] }
+  | { ok: true; file: string; unchanged: boolean; added: number; changed: number; cleared: number; foreign: number; notFound: string[]; warn?: string[]; created: boolean; meta: Partial<SourceMeta>; rooms?: { n: number; added: number; placed?: number; sheet: string }; tidy?: string[]; binding?: SourceBinding }
   | { ok: false; error: string; locked?: boolean };
 
 // Μορφή που λείπει από φύλλο που ήδη υπάρχει: τίτλος που δεν είναι στο κέντρο σε συγχωνευμένα κελιά, και λίστες
@@ -204,6 +204,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     };
     if (!had && !create) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
     if (kind === 'duties' && (!had || !exists)) return await newDutiesSheet(wb, ws, b, s, today);
+    // άδειες με ώρα σε πίνακα χωρίς στήλες ωρών: οι στήλες μπαίνουν στο τέλος του πίνακα και κρατιούνται στην αντιστοίχιση
+    const tc = timeCols(kind, had ? sheet : null, b, s, today); const grown = tc.b !== b; b = tc.b;
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];
@@ -211,8 +213,11 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn, keys: plan.keys, snap: plan.snap };
     const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
     const steps = plan.inserts || [];
-    if (!plan.sets.length && !plan.insert && !steps.length && !plan.deletes?.length && !fresh && !(opts.tidy && tidied.length)) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
+    if (!plan.sets.length && !plan.insert && !steps.length && !plan.deletes?.length && !fresh && !tc.head.length && !(opts.tidy && tidied.length)) return { ok: true, file: b.file, unchanged: true, ...res, created: false, meta: keep };
     await applyTidy(wb, ws, tidy);
+    // νέες στήλες ωρών: επικεφαλίδα και κελιά με το στυλ της στήλης από αριστερά (πλαίσια, γραμματοσειρά)
+    const newCols = new Set(tc.head.map(h => h.c));
+    for (const h of tc.head) { const at = ref(h.r, h.c); ws.set(at, h.v); const st = ws.style(ref(h.r, h.c - 1)); if (st != null) ws.setStyle(at, st); }
     const data = fresh ? await wb.tableStyle('data') : undefined;
     if (fresh) {
       const head = await wb.tableStyle('head'), title = await wb.tableStyle('title');
@@ -248,6 +253,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
         if (st != null) ws.setStyle(ref(r, c), st);
       }
     }
+    for (const x of plan.sets) if (newCols.has(x.c) && ws.style(ref(x.r, x.c)) == null) { const st = ws.style(ref(x.r, x.c - 1)); if (st != null) ws.setStyle(ref(x.r, x.c), st); }
     for (const x of plan.sets) await put(x.r, x.c, x.v, data);
     // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα και το φύλλο ΘΑΛΑΜΟΙ (αν δεν υπάρχει ήδη)
     if (fresh && plan.extra?.length) {
@@ -288,7 +294,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const roomRows = new Set(roomSets.map(x => x.r)).size;
     const rooms = roomSheet && (roomRows || missing || placed) ? { n: roomRows, added: missing, placed, sheet: roomSheet } : undefined;
     const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
-    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+    return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), ...(grown ? { binding: b } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {
     if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
