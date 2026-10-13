@@ -12,8 +12,8 @@ import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
-import { parseRoster, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, ambiguousLines, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople,
+import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
+import { FORM_KINDS, KIND, KINDS, ambiguousLines, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -310,11 +310,12 @@ async function bookOf(file: string): Promise<SourceBook> {
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
 // Η μορφή που μπήκε, σύντομα (για το Ιστορικό)
 const tidyWhat = (t: string[]) => [t.some(x => x.startsWith('Ο τίτλος')) && 'τίτλος στο κέντρο', t.some(x => x.startsWith('Λίστα')) && 'λίστες επιλογής'].filter(Boolean).join(' και ');
-function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; added: number; sheet: string }; tidy?: string[] }, b: SourceBinding) {
+function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; added: number; placed?: number; sheet: string }; tidy?: string[] }, b: SourceBinding) {
   const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (kind === 'people' ? (r.added === 1 ? ' νέος στρατιώτης' : ' νέοι στρατιώτες') : r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν', r.tidy?.length && 'μορφή: ' + tidyWhat(r.tidy)].filter(Boolean).join(', ');
   return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '')
     + (r.warn?.length ? '. ' + r.warn.join(' ') : '')
     + (r.rooms?.n ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '')
+    + (r.rooms?.placed ? '. ' + (r.rooms.placed === 1 ? 'Ο νέος γράφτηκε' : 'Οι ' + r.rooms.placed + ' νέοι γράφτηκαν') + ' και στο φύλλο ' + r.rooms.sheet + ', στον θάλαμό ' + (r.rooms.placed === 1 ? 'του' : 'τους') : '')
     + (r.rooms?.added ? '. ' + (r.rooms.added === 1 ? 'Νέος στρατιώτης: γράψ\' τον' : r.rooms.added + ' νέοι στρατιώτες: γράψ\' τους') + ' και στο φύλλο ' + r.rooms.sheet + ', στον θάλαμό ' + (r.rooms.added === 1 ? 'του' : 'τους') + ' (δεν ενημερώνεται μόνο του)' : '');
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
@@ -487,7 +488,10 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     const had = !!book?.sheets.some(x => x.name === b.sheet);
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
-    const lines = describeSets(kind, sheet, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : undefined);
+    const steps = plan.inserts || [], sheet2 = steps.length ? withRows(sheet, steps) : sheet;
+    const lines = describeSets(kind, sheet2, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : stepRows(steps));
+    for (const d of plan.deletes || []) { const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = (sheet2.rows[d] || [])[b.cols[k]]; lines.push({ r: d, who: rowName(v), text: 'η γραμμή σβήνεται (αναιρέθηκε στην εφαρμογή)' }); }
+    lines.sort((x, y) => x.r - y.r);
     const tidy = had && book ? await tidyPreview(kind, b) : [];
     return { ok: true, file: b.file, create: !exists || !had, lines, total: plan.added + plan.changed + plan.cleared, foreign: plan.foreign, notFound: plan.notFound, ambiguous: ambiguousLines(sheet, b, plan.ambiguous), warn: plan.warn, ...(tidy.length ? { tidy } : {}) };
   } catch (e) { return fail(e); }
