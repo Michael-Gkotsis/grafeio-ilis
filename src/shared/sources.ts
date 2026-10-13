@@ -9,7 +9,7 @@ import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
 import { dm } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { allPosts, postBy } from './rules';
-import { listOf, optionsOf, type ListId, type UserLists } from './ranks';
+import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -356,8 +356,10 @@ export interface Cand { r: number; who: string; pid: number | null; cands: Perso
 export interface ParseOut { cands: Cand[]; skipped: { r: number; who: string; why: string }[]; unknown: string[] }
 const vk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z0-9]/g, '');
 // Τιμή στη στήλη «είδος» → είδος κατάστασης. null = άγνωστο (το διαλέγει ο χρήστης· ως τότε μπαίνει η προεπιλογή του είδους).
-export function typeOfValue(kind: StatusKind, raw: string, values?: Record<string, TypeKey>): TypeKey | null {
+// lists: τα δικά σου ιατρικά (Ρυθμίσεις › Λίστες) αναγνωρίζονται πρώτα, πριν από τους κανόνες και ό,τι είχες διαλέξει
+export function typeOfValue(kind: StatusKind, raw: string, values?: Record<string, TypeKey>, lists?: UserLists): TypeKey | null {
   const v = vk(raw);
+  if (kind === 'medical') { const own = medTypeOf(raw, lists); if (own) return own; }
   // ΕΑΡΒ / «ΕΛ ΑΡΒ»: δικό του είδος (πριν υπάρξει διαβαζόταν ως ΕΑ, ή όπως το είχες διαλέξει)
   if (kind === 'medical' && /^(ΕΑΡΒ|ΕΛΑΡΒ)|ΑΡΒΥΛ/.test(v)) return 'EARV';
   if (values && v && values[v]) return values[v];
@@ -378,7 +380,7 @@ export const valueKey = vk;
 export const DEFAULT_TYPE: Record<StatusKind, TypeKey> = { punish: 'PUN', medical: 'EA', hospital: 'NOS', step: 'STEP', leave: 'LEAVE', dn: 'DN' };
 const punKind = (raw: string) => { const v = vk(raw); return PUN_KINDS.find(k => vk(k) === v || v.startsWith(vk(k).slice(0, 5))) || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : ''); };
 
-export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBinding, people: Person[], today: ISODate): ParseOut {
+export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBinding, people: Person[], today: ISODate, lists?: UserLists): ParseOut {
   const scan = tableRows(sheet, b.header, b.cols); const match = makeMatcher(people);
   const out: ParseOut = { cands: [], skipped: [], unknown: [] }; const unk = new Map<string, string>();
   for (const { r, v } of scan.records) {
@@ -389,7 +391,7 @@ export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBindin
     if (!to) { to = from > today ? from : today; noEnd = true; }
     if (to < from) { out.skipped.push({ r, who, why: 'το «έως» είναι πριν από το «από»' }); continue; }
     const raw = cellText(kind === 'hospital' ? v.where : v.kind);
-    const type = typeOfValue(kind, raw, b.values);
+    const type = typeOfValue(kind, raw, b.values, lists);
     if (!type && raw && !unk.has(vk(raw))) unk.set(vk(raw), raw);
     const m = match(v);
     const c: Cand = { r, who, pid: m.pid, cands: m.cands, type, raw, from, to, noEnd };
@@ -586,7 +588,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   };
   for (const { r, v } of scan.records) {
     const m = match(v); const from = parseDate(v.from);
-    const raw = cellText(v.kind); const type = typeOfValue(kind, raw, b.values) || DEFAULT_TYPE[kind];
+    const raw = cellText(v.kind); const type = typeOfValue(kind, raw, b.values, s.settings.lists) || DEFAULT_TYPE[kind];
     const idOf = (pid: number) => identity(pid, kind, from!, subOf(kind, raw || TYPES[type].label));
     let id = m.pid != null && from ? idOf(m.pid) : null;
     // συνονόματοι: η γραμμή είναι αυτού που έχει εγγραφή με την ίδια έναρξη. Αν την έχουν περισσότεροι, δεν ξέρουμε

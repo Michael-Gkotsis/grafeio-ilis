@@ -1,7 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { normGreek } from './text';
-import { cadreAbsOf, hkOfRank, leaveCol, type UserLists } from './ranks';
+import { cadreAbsOf, hkOfRank, leaveCol, statusLbl, type UserLists } from './ranks';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, postTxt, shortName,
   KIND_NAME, type AppState, type Baseline, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules
@@ -203,7 +203,7 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
   const o = postOf(s, date, pid);
   if (o) return 'Έχει υπηρεσία: ' + o.label;
   const st = statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].noOut);
-  if (st) return (st.type === 'PUN' && st.kind ? st.kind : TYPES[st.type].label) + untilTxt(st, date);
+  if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date);
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
   const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && x.from <= date && date <= x.to);
   return pend ? (pend.kind || 'Ποινή') + ' (αιτείται)' + untilTxt(pend, date) : null;

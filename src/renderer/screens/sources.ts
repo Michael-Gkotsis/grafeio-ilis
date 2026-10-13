@@ -212,7 +212,7 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
   };
   const sample = useMemo(() => {
     if (isNew || miss.length) return [];
-    if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
+    if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today, state.settings.lists).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
     if (list === 'duties') { const cols = dayColumns(sheet.rows[b.header], b.cols.d1); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
     if (list === 'caps') return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (CAP_COLS.filter(k => b.cols[k] != null && capNo(cellText(r.v[k]))).map(k => 'όχι ' + CAP_ACC[k]).join(', ') || 'κάνει όλες'));
     return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : list === 'outside' && cellText(r.v.remarks) ? ' · ' + cellText(r.v.remarks) : ''));
@@ -282,7 +282,7 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   const same = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
   useEffect(() => { if (same) window.api.srcKeys(list).then(setPrev); else setPrev({ keys: [], base: {} }); }, [list, same]);
   const sheet = book.sheets.find(s => s.name === b.sheet);
-  const parsed = useMemo(() => (sheet ? parseStatuses(list, sheet, b, state.people, today) : null), [sheet, b, state.people, today, list]);
+  const parsed = useMemo(() => (sheet ? parseStatuses(list, sheet, b, state.people, today, state.settings.lists) : null), [sheet, b, state.people, today, list, state.settings.lists]);
   const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, prev.keys, prev.base) : null), [parsed, state, b, choices, list, prev]);
   const all = useMemo(() => (parsed ? parsed.cands.filter(c => c.pid == null) : []), [parsed]);
   if (!sheet || !parsed || !d) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;

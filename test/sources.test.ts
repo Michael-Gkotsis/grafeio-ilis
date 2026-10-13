@@ -106,6 +106,25 @@ describe('ανάγνωση καταστάσεων', () => {
     const d2 = diffStatuses('medical', s0, parseStatuses('medical', sh, b2, s0.people, TODAY), b2, { 9: 5 });
     expect(d2.add.map(a => [a.pid, a.type])).toEqual([[11, 'EA'], [12, 'EY'], [5, 'EY']]);
   });
+  it('δικό σου ιατρικό (Λίστες): αναγνωρίζεται πριν από τους κανόνες, κρατά το όνομά του, ξαναγράφεται ίδιο', () => {
+    const sh: RawSheet = { name: 'IATRIKA', rows: book(s0)[2].rows.map(r => r.map(v => (v === 'ΕΛ ΑΡΒ' ? 'Ελ.Ποδ' : v))) };
+    const lists = { medKinds: { add: [{ name: 'ΕΛ ΠΟΔ', like: 'EY' as const }] } };
+    const s1: AppState = { ...s0, settings: { ...s0.settings, lists } };
+    // και πάνω από ό,τι είχε διαλεχτεί παλιότερα για την ίδια τιμή
+    for (const values of [undefined, { ΕΛΠΟΔ: 'EA' as const }]) {
+      const p = parseStatuses('medical', sh, { ...b, values }, s1.people, TODAY, lists);
+      expect(p.unknown).toEqual([]);
+      expect(diffStatuses('medical', s1, p, b).add.map(a => [a.pid, a.type, a.kind])).toEqual([[11, 'EA', undefined], [12, 'EY', 'Ελ.Ποδ']]);
+    }
+    const d = diffStatuses('medical', s1, parseStatuses('medical', sh, b, s1.people, TODAY, lists), b);
+    const s = run(s1, { t: 'importRecords', adds: d.add, updates: [], source: 'x', what: 'ιατρικά' });
+    expect(planWrite('medical', sh, b, s, d.keys, TODAY).sets).toEqual([]);
+    // συμπεριφέρεται σαν ΕΥ: καμία υπηρεσία
+    expect(dutyBlock(s.statuses, TODAY, 12, { armed: false, kind: 'mg' })).not.toBeNull();
+    // δηλωμένο στην εφαρμογή: γράφεται στο Excel με το όνομά του
+    const s2 = run(s1, { t: 'declare', cmd: { type: 'EY', kind: 'ΕΛ ΠΟΔ', pids: [3], from: TODAY, to: TODAY } });
+    expect(planWrite('medical', sh, b, s2, d.keys, TODAY).sets.map(x => x.v)).toContain('ΕΛ ΠΟΔ');
+  });
   it('ο ίδιος με ΕΑ και ΕΟ την ίδια μέρα: δύο εγγραφές, και η εγγραφή δεν σβήνει καμία γραμμή', () => {
     const sh2: RawSheet = { name: 'IATRIKA', rows: sh.rows.map(r => [...r]) };
     sh2.rows[9] = [...pr(s0.people[10], 2), 'ΕΟ', D('2026-10-09'), D('2026-10-16'), ''];

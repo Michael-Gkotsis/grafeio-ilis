@@ -121,7 +121,7 @@ export function mockApi(): Api {
     },
     srcImport: async (kind, b, choices) => {
       const book = fakeBook(state); const sh = book.sheets.find(x => x.name === b.sheet)!;
-      const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today()), b, choices);
+      const d = diffStatuses(kind, state, parseStatuses(kind, sh, b, state.people, today(), state.settings.lists), b, choices);
       state = { ...state, settings: { ...state.settings, sources: { ...(state.settings.sources || {}), [kind]: b } } };
       const r = apply(state, { t: 'importRecords', adds: d.add, updates: d.update, source: book.name, what: KIND[kind].label.toLowerCase() }, { today: today(), newId: () => 'x' + ++seq });
       state = r.state; return res(r.text || 'Δεν βρέθηκε κάτι νέο');

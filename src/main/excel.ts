@@ -4,7 +4,8 @@
 import ExcelJS from 'exceljs';
 import { MONTHS, parseD, type ISODate } from '../shared/dates';
 import { norm, collator } from '../shared/text';
-import { TYPES, type AppState, type DutyKind } from '../shared/domain';
+import { type AppState, type DutyKind } from '../shared/domain';
+import { absCode } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesOn } from '../shared/rules';
 
@@ -52,8 +53,8 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
       const v = x.get(d);
       if (v) { if (isHol(s.settings, d)) hol++; c[v.kind] = (c[v.kind] || 0) + 1; vals.push(v.code); continue; }
       // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
-      const st = statusesOn(s.statuses, p.id, d).find(t => TYPES[t.type].code);
-      vals.push(st ? TYPES[st.type].code! : '');
+      const st = statusesOn(s.statuses, p.id, d).find(t => absCode(t, s.settings.lists));
+      vals.push(st ? absCode(st, s.settings.lists)! : '');
     }
     vals.push(p.room ?? '', x.size, hol, c.th || '', c.mg || '', c.ly || '');
     vals.forEach((v, j) => {

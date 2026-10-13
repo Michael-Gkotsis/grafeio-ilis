@@ -4,6 +4,7 @@ import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shar
 import { norm } from '../shared/text';
 import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { statusLbl } from '../shared/ranks';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
@@ -117,7 +118,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     const post = postOf(s, d, p.id);
     // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
     const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && x.from <= d && d <= x.to);
-    const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : TYPES[x.type].label)), ...pend.map(x => x.kind || 'ΠΟΙΝΗ'), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
+    const note = [...ss.map(x => (x.type === 'PUN' ? (x.kind || 'ΠΟΙΝΗ') : statusLbl(x, s.settings.lists))), ...pend.map(x => x.kind || 'ΠΟΙΝΗ'), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
     stay.push({ p, note: norm(note) });
   }
   // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)
