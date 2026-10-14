@@ -305,6 +305,9 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   };
   const pm = new Map(state.people.map(p => [p.id, p]));
   const both = d.update.filter(u => u.conflict); const plain = d.update.filter(u => !u.conflict);
+  // ΔΝ σε όποιον δεν έχει δικαίωμα (μόνο αφού έχει σημειωθεί δικαίωμα σε έστω έναν): περνά, αλλά το λέει
+  const noDn = (pid: number) => list === 'dn' && state.people.some(p => p.dn) && !pm.get(pid)?.dn;
+  const noDnN = d.add.filter(a => noDn(a.pid)).length;
   const n = d.add.length + d.update.filter(u => !keepApp.has(u.id)).length + (del ? d.removed.length : 0);
   const toggleKeep = (id: string, on: boolean) => { const x = new Set(keepApp); if (on) x.add(id); else x.delete(id); setKeepApp(x); };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
@@ -322,7 +325,8 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
         : html`<div className="unm__pick">${c.cands.map(p => html`<${Button} key=${p.id} size="sm" variant="outline" onClick=${() => setChoices({ ...choices, [c.r]: p.id })}>${p.last} ${p.first}${p.father ? ' του ' + p.father : ''}<//>`)}
           <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
           ${c.r in choices ? html`<${Badge}>παραλείπεται<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//>`}</div>`}</div>`)}</div>`}
-    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? fullName(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}</li>`)}</ul></details>`}
+    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? fullName(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}${noDn(a.pid) ? ' · ⚠ χωρίς δικαίωμα ΔΝ' : ''}</li>`)}</ul></details>`}
+    ${noDnN > 0 && html`<${Alert} tone="warn"><span>${noDnN === 1 ? '1 ΔΝ είναι' : noDnN + ' ΔΝ είναι'} σε άτομα χωρίς δικαίωμα ΔΝ. Θα βγει ✕ στον προέλεγχο των Εξοδούχων μέχρι να δώσεις το δικαίωμα στην καρτέλα τους ή να γίνουν έξοδος.</span><//>`}
     ${both.length > 0 && html`<div className="field"><span className="field__label">Άλλαξαν και στο Excel και στην εφαρμογή (${both.length}): ποιο κρατάς;</span>
       ${both.map(u => html`<div key=${u.id} className="unm"><span><b>${u.who}</b><small>Excel: ${u.what} · Εφαρμογή: ${u.conflict}</small></span>
         <${Segmented} small=${true} value=${keepApp.has(u.id) ? 'app' : 'excel'} onChange=${(v: string) => toggleKeep(u.id, v === 'app')} items=${[{ value: 'excel', label: 'Του Excel' }, { value: 'app', label: 'Της εφαρμογής' }]}/></div>`)}

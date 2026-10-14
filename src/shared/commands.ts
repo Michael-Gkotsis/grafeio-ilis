@@ -2,7 +2,7 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
@@ -471,11 +471,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: statuses.some((x, i) => x !== s.statuses[i]) ? { ...s, statuses } : s, text: '', files: [], source: 'auto', undoable: false };
     }
     case 'expire': {
-      // Τα ιατρικά και οι ποινές που έληξαν χθες «αφαιρούνται» (Κ-04, Κ-10): δεν αλλάζει κάτι στα δεδομένα,
-      // γράφεται μόνο στο ιστορικό ώστε ο χρήστης να το δει.
-      const ex = s.statuses.filter(x => isRecordExpiredOn(x, ctx.today) && !x.pending);
+      // Τα ιατρικά και οι ποινές που έληξαν «αφαιρούνται» (Κ-04, Κ-10): δεν αλλάζει κάτι στα δεδομένα, γράφεται μόνο στο
+      // ιστορικό ώστε ο χρήστης να το δει. Όσα έληξαν από την προηγούμενη φορά (και όσο η εφαρμογή ήταν κλειστή) ως χθες.
+      const since = s.lastExpire || addDays(ctx.today, -1);   // ίδια μέρα δεύτερη φορά: τίποτα
+      const ex = s.statuses.filter(x => !x.pending && (s.lastExpire ? !x.open && RECORD_CATS.includes(TYPES[x.type].cat) && x.to >= since && x.to < ctx.today : isRecordExpiredOn(x, ctx.today)));
       return {
-        state: s, source: 'auto', undoable: false, files: [],
+        state: s.lastExpire === ctx.today ? s : { ...s, lastExpire: ctx.today }, source: 'auto', undoable: false, files: [],
         text: ex.length ? 'Έληξαν και αφαιρέθηκαν ' + ex.length + ' καταχωρήσεις' : '',
         extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + punLbl(x.kind) + ')' : statusLbl(x, s.settings.lists)) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
       };

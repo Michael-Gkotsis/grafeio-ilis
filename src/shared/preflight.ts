@@ -85,6 +85,8 @@ export function outsChecks(s: AppState, date: ISODate): Check[] {
     const away = statusesOn(s.statuses, p.id, date).find(x => x !== st && TYPES[x.type].away && TYPES[x.type].cat !== 'out');
     if (away) out.push({ level: 'err', text: shortName(p) + ' είναι εξοδούχος και ' + TYPES[away.type].long.toLowerCase(), go: 'outs' });
   }
+  // ΔΝ χωρίς δικαίωμα: μόνο αφού έχει σημειωθεί δικαίωμα ΔΝ σε έστω έναν (όπως στους Εξοδούχους)
+  if (s.people.some(p => p.dn)) for (const { p, st } of outs) if (st!.type === 'DN' && !p.dn) out.push({ level: 'err', text: shortName(p) + ': ΔΝ χωρίς δικαίωμα ΔΝ (βάλ\' το στην καρτέλα του ή άλλαξέ το σε έξοδο)', go: 'outs' });
   const rooms = outRoomsOn(s.rules, date);
   if (rooms) {
     const wrong = outs.filter(x => x.p.room != null && !rooms.includes(x.p.room) && x.st!.type !== ('DN' as TypeKey));

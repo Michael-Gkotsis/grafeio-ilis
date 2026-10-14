@@ -66,7 +66,7 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'lastExpire'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
 // dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
@@ -157,6 +157,7 @@ export class Store {
     s.cadreAbs = kv.get('cadreAbs') || [];
     s.dutyLog = kv.get('dutyLog') || {};
     s.nightTraining = kv.get('nightTraining') || {};
+    s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
     this.state = s; noteNamesakes(s.people);
   }

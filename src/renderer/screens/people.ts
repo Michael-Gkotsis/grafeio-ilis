@@ -346,7 +346,7 @@ function NewPersonDialog({ onClose }: P) {
 export function DeclareStatusDialog({ initial, onClose }: P) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); const [unlock, setUnlock] = useState(false);
   const punKinds = listOf(state.settings.lists, 'punKinds'), leaveKinds = listOf(state.settings.lists, 'leaveKinds');
   const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: '', kind: initial.type === 'LEAVE' ? leaveKinds[0] : punKinds[0], by: '', reason: '', on: today, fromTime: '', toTime: '' }));
   const [err, setErr] = useState<any>(null);
@@ -361,13 +361,13 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   // ώρες: μόνο στις άδειες (κανονική, τιμητική), προαιρετικές
   const timed = hasTimes(cmd.type);
   const tOut = timed ? normTime(cmd.fromTime) : '', tBack = timed ? normTime(cmd.toTime) : '';
-  const full = { ...cmd, kind: hasKind ? cmd.kind : med ? med.name : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined, fromTime: tOut || undefined, toTime: tBack || undefined };
+  const full = { ...cmd, kind: hasKind ? cmd.kind : med ? med.name : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined, fromTime: tOut || undefined, toTime: tBack || undefined, unlockPast: unlock || undefined };
   const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
   const max = isPun ? overMax(cmd.kind, daysBetween(cmd.from, cmd.to), state.settings.lists) : 0;
   // στέρηση εξόδου: πότε λήγει για τον καθένα, αφού δεν μετράνε οι μέρες με υπηρεσία ή βραδινή εκπαίδευση
   const dep = isPun && isDeprivation({ type: 'PUN', kind: cmd.kind });
   const depEnds = dep ? cmd.pids.map(pid => ({ pid, to: deprivationEnd(state, pid, cmd.from, daysBetween(cmd.from, cmd.to)) })).filter(x => x.to !== cmd.to) : [];
-  const plan = useMemo(() => (step === 2 ? planStatusChange(state, full, today) : null), [step, state, cmd, today]);
+  const plan = useMemo(() => (step === 2 ? planStatusChange(state, full, today) : null), [step, state, cmd, today, unlock]);
   const next = () => {
     if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; }
     if (tOut == null || tBack == null) { setErr('Η ώρα ' + (tOut == null ? 'αναχώρησης' : 'επιστροφής') + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
@@ -416,6 +416,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${depEnds.length > 0 && html`<${Alert} tone="info"><span>${depEnds.map((x, i) => html`<span key=${x.pid}>${i > 0 && html`<br/>`}<b>${shortName(pm.get(x.pid)!)}</b> λήγει <b>${dow(x.to)} ${dm(x.to)}</b>, γιατί έχει υπηρεσία ή βραδινή εκπαίδευση μέσα στις μέρες της ποινής.</span>`)}</span><//>`}
     ${plan && plan.files.length > 0 && html`<div className="field"><span className="field__label">Επηρεάζει</span><${ChangePlanList} plan=${plan}/></div>`}
     ${plan && plan.conflicts.length > 0 && html`<${Alert} tone="warn">Μετά την αποθήκευση θα σου προταθεί αντικαταστάτης στις Υπηρεσίες.<//>`}
+    ${plan && (plan.past.length > 0 || unlock) && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${unlock} onChange=${(e: any) => setUnlock(e.target.checked)}/><span><b>Ξεκλείδωσε τις περασμένες μέρες</b><small>Βγαίνει και από υπηρεσίες που έχουν ήδη γίνει (π.χ. διόρθωση λάθους). Αλλιώς αυτές μένουν όπως έγιναν.</small></span></label>`}
     ${plan && plan.alongside.length > 0 && html`<${Alert} tone="info"><span>${plan.alongside.map((a, i) => html`<span key=${i}>${i > 0 && html`<br/>`}<b>${shortName(pm.get(a.pid)!)}</b> έχει ήδη ${statusLbl(a.status, state.settings.lists)} ${a.status.open ? 'χωρίς λήξη' : dm(a.status.from) + '–' + dm(a.status.to)}.</span>`)}<br/>Ισχύουν και τα δύο· στις υπηρεσίες και στην έξοδο μετρά ο πιο αυστηρός περιορισμός.</span><//>`}
     ${RECORD_CATS.includes(t.cat) && cmd.type !== 'PUN' && html`<span className="note">Στις ${dm(addDays(cmd.to, 1))} αφαιρείται αυτόματα και γράφεται στο Ιστορικό.</span>`}
     <span className="note">Μπορείς να το αναιρέσεις αμέσως μετά ή από το Ιστορικό.</span>

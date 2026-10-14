@@ -610,6 +610,18 @@ export function whyAll(s: AppState, date: ISODate): Record<string, string> {
   for (const k of keys) out[k] = whyText(s, date, k, a);
   return out;
 }
+// Τον διάλεξε η κράτηση των ενόπλων (candidates: armedNeeded); Ναι, αν δεν κάνει καμία ένοπλη θέση και κάποιος πριν από
+// αυτόν στη σειρά, που μπορούσε να πάει εδώ, είναι σε ένοπλη θέση που δεν την έπαιρνε κανείς από όσους δεν έχουν θέση σήμερα
+function reservedFor(s: AppState, date: ISODate, post: Post, pid: number): boolean {
+  const g = s.guards[date] || {}; const lists = s.settings.lists; const all = postsOf(s.settings).filter(y => y.armed && y.kind !== 'ly');
+  const no = (q: number, y: Post) => !!(dutyBlock(s.statuses, date, q, y, lists) || capBlock(s, date, q, y));
+  if (!all.length || !all.every(y => no(pid, y))) return false;
+  const can = (q: number, y: Post) => !no(q, y) && !ruleBlock(s, date, q, undefined, y.k);
+  const cmp = fairCompare(isHol(s.settings, date), post.kind, date); const me = { ...fairOf(s, pid, date), pid };
+  const busy = new Set(Object.values(g)); const fixed = fixedIds(s);
+  const free = activePeople(s).filter(p => !busy.has(p.id) && !fixed.has(p.id) && !seatlessOn(s, date, p.id));
+  return all.some(y => { const q = g[y.k]; return q != null && !fixed.has(q) && cmp({ ...fairOf(s, q, date), pid: q }, me) < 0 && can(q, post) && !free.some(f => can(f.id, y)); });
+}
 export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number }): string {
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
@@ -625,12 +637,14 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
   if (post.armed) parts.push('ένοπλος');
+  else if (!s.rules.strictUnarmed && reservedFor(s, date, post, pid)) parts.push('προτιμήθηκε γιατί δεν κάνει ένοπλη και οι ένοπλες θέσεις δεν έφταναν');
   if (s.rules.strictUnarmed && strictTier(post) <= 3 && isUnarmed(s, date, pid)) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + TIER_TXT[strictTier(post)]);
   return parts.join(' · ');
 }
 
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string }
+// unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean }
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
@@ -680,7 +694,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
       // το δικό σου ιατρικό να έχει τους δικούς του κανόνες ανά υπηρεσία
       const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to, ...(cmd.kind ? { kind: cmd.kind } : {}), ...(cmd.fromTime ? { fromTime: cmd.fromTime } : {}), ...(cmd.toTime ? { toTime: cmd.toTime } : {}) };
       dates.forEach(date => posts.forEach(x => {
-        if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x, lists)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
+        if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x, lists)) (today && date < today && !cmd.unlockPast ? past : conflicts).push({ pid, date, k: x.k });
       }));
     }
     // ιατρικό «μόνο προειδοποίηση»: οι υπηρεσίες μένουν, με προειδοποίηση
