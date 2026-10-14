@@ -244,8 +244,14 @@ export function statusWarn(s: AppState, date: ISODate, pid: number): string | nu
 // Μόνιμος Λ/Υ ή Δ/Υ: μπαίνει μόνος του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης
 export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (k === 'ly' || k === 'dy') && s.settings.fixed?.[k] === pid;
 export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed || {}).filter((x): x is number => !!x));
-export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined =>
-  allPosts(s.settings).find(x => x.k !== exceptKey && (s.guards[date] || {})[x.k] === pid);
+// Η θέση κάποιου μια μέρα: ευρετήριο άτομο → θέσεις ανά αντικείμενο μέρας (καλείται για κάθε υποψήφιο σε κάθε θέση)
+const dayIdx = new WeakMap<object, Map<number, string[]>>();
+export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined => {
+  const g = s.guards[date]; if (!g) return undefined;
+  let m = dayIdx.get(g); if (!m) { m = new Map(); for (const k in g) { const l = m.get(g[k]); if (l) l.push(k); else m.set(g[k], [k]); } dayIdx.set(g, m); }
+  const ks = m.get(pid); if (!ks) return undefined;
+  return allPosts(s.settings).find(x => x.k !== exceptKey && ks.includes(x.k));
+};
 
 // Ημερομηνίες υπηρεσίας ανά άτομο, ώστε οι κανόνες να μη σαρώνουν όλο το ιστορικό. Μαζί και οι υπηρεσίες χωρίς θέση
 // (από Excel), για την ανάπαυση και τις αργίες.
@@ -400,26 +406,29 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   return f;
 }
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
+  const seed = new Map<number, number>(); const sr = (pid: number) => { let v = seed.get(pid); if (v === undefined) { v = seedRank(date, pid); seed.set(pid, v); } return v; };
   return (a: Fair & { pid: number }, b: Fair & { pid: number }) =>
     (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : a.lastBefore.localeCompare(b.lastBefore) || a.total - b.total) ||
-    (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || seedRank(date, a.pid) - seedRank(date, b.pid);
+    (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || sr(a.pid) - sr(b.pid);
 }
 export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
-  let work: AppState = { ...s, guards: { ...s.guards, [date]: g } };
+  // ένα δικό της αντίγραφο του ημερολογίου, όπου αλλάζει μόνο η μέρα (όχι νέο αντίγραφο όλου του έτους σε κάθε θέση)
+  const wg: Guards = { ...s.guards, [date]: { ...g } };
+  let work: AppState = { ...s, guards: wg };
+  const setDay = () => { wg[date] = { ...g }; work = { ...work, guards: wg }; };
   const people = activePeople(s);
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
-  const idx = new Map<number, Set<ISODate>>();
-  dutyIndexOf(s).forEach((v, id) => idx.set(id, new Set(v)));
+  // το ευρετήριο της βάσης κοινό (όχι αντίγραφο κάθε συνόλου)· αντίγραφο μόνο για όσους μπαίνουν σήμερα
+  const idx = new Map(dutyIndexOf(s)); const own = new Set<number>();
+  const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };
   let n = 0; const skNone = new Set<string>();
   const posts = postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
   for (const x of posts) {
     const f = (x.k === 'ly' || x.k === 'dy') ? s.settings.fixed?.[x.k] : undefined;
     if (g[x.k] || !f || !people.some(p => p.id === f) || guardUnavailable(work, date, f, x.k, idx)) continue;
-    g[x.k] = f; n++;
-    work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
-    if (!idx.has(f)) idx.set(f, new Set()); idx.get(f)!.add(date);
+    g[x.k] = f; n++; setDay(); mark(f);
   }
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
   const mine = new Set<string>();   // οι θέσεις που γέμισε αυτή η συμπλήρωση (μόνο αυτές μετακινούνται στην επιδιόρθωση)
@@ -431,9 +440,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     const list = candidates(work, date, x, people, fair, idx, fixed, memo);
     const cand = strict ? strictPick(work, date, x, list, people, idx, fixed, memo) : list[0];
     if (!cand) { if (strict && x.kind === 'sk' && list.length) skNone.add(x.k); continue; }
-    g[x.k] = cand.id; n++; mine.add(x.k);
-    work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
-    if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
+    g[x.k] = cand.id; n++; mine.add(x.k); setDay(); mark(cand.id);
   }
   n += repair(s, date, g, mine, order, people, fair, idx, fixed);
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση

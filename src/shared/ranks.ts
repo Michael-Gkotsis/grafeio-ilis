@@ -119,8 +119,16 @@ export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): st
 // Σ.Ι. → άοπλος (όχι οπλοφύλακας, όχι σκοπός). Τα βασικά ακριβώς όπως πριν: περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4».
 // Τα δικά σου: το Σ.Ι. αρχίζει από αυτό, χωρίς κενά και τελείες («Ι5» πιάνει και «Ι 5», «Ι5 ΧΩΡΙΣ ΟΠΛΟ»). Όσα έκρυψες δεν μετρούν.
 const siKey = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
+// ρωτιέται για κάθε υποψήφιο σε κάθε θέση: κρατιέται ανά Λίστες και Σ.Ι.
+const unarmedIdx = new WeakMap<object, Map<string, boolean>>(); const NO_LISTS = {};
 export function siUnarmed(si: string | undefined, lists?: UserLists): boolean {
-  const v = normGreek(si || ''); if (!v) return false;
+  let m = unarmedIdx.get(lists || NO_LISTS); if (!m) { m = new Map(); unarmedIdx.set(lists || NO_LISTS, m); }
+  const key = si || ''; let r = m.get(key);
+  if (r === undefined) { r = siUnarmedRaw(key, lists); m.set(key, r); }
+  return r;
+}
+function siUnarmedRaw(si: string, lists?: UserLists): boolean {
+  const v = normGreek(si); if (!v) return false;
   const u = lists?.siUnarmed; const hide = new Set((u?.hide || []).map(itemKey));
   if (!hide.has('ΑΟΠΛ') && v.includes('ΑΟΠΛ')) return true;
   if (!hide.has('Ι4') && v.startsWith('Ι4')) return true;

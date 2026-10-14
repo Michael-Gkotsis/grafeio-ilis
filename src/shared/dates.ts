@@ -4,17 +4,33 @@ export type ISODate = string;
 export const iso = (dt: Date): ISODate => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
 export const today = (): ISODate => iso(new Date());
 export const parseD = (s: ISODate): Date => new Date(s + 'T12:00:00');
-// Οι κανόνες ρωτούν τις ίδιες γειτονικές μέρες χιλιάδες φορές σε κάθε αυτόματη συμπλήρωση: κρατιούνται, χωρίς νέο Date
-const addMemo = new Map<string, ISODate>();
-export const addDays = (s: ISODate, n: number): ISODate => {
-  const k = s + '|' + n; let r = addMemo.get(k);
+// Οι κανόνες ρωτούν τις ίδιες γειτονικές μέρες χιλιάδες φορές σε κάθε αυτόματη συμπλήρωση: αριθμός ημέρας (από
+// 1/1/1970, με αριθμητική, χωρίς Date) ανά ημερομηνία και ημερομηνία ανά αριθμό, κρατημένα
+const ordMemo = new Map<ISODate, number>(); const isoMemo = new Map<number, ISODate>();
+const ordOf = (s: ISODate): number => {
+  let r = ordMemo.get(s);
   if (r === undefined) {
-    const x = parseD(s); x.setDate(x.getDate() + n); r = iso(x);
-    if (addMemo.size > 50000) addMemo.clear();
-    addMemo.set(k, r);
+    let y = +s.slice(0, 4); const m = +s.slice(5, 7), d = +s.slice(8, 10); y -= m <= 2 ? 1 : 0;
+    const era = Math.floor(y / 400), yoe = y - era * 400, doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+    r = era * 146097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy - 719468;
+    if (ordMemo.size > 50000) ordMemo.clear();
+    ordMemo.set(s, r);
   }
   return r;
 };
+const isoOf = (z: number): ISODate => {
+  let r = isoMemo.get(z);
+  if (r === undefined) {
+    const t = z + 719468, era = Math.floor(t / 146097), doe = t - era * 146097, yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
+    const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100)), mp = Math.floor((5 * doy + 2) / 153);
+    const d = doy - Math.floor((153 * mp + 2) / 5) + 1, m = mp + (mp < 10 ? 3 : -9), y = yoe + era * 400 + (m <= 2 ? 1 : 0);
+    r = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    if (isoMemo.size > 50000) isoMemo.clear();
+    isoMemo.set(z, r);
+  }
+  return r;
+};
+export const addDays = (s: ISODate, n: number): ISODate => isoOf(ordOf(s) + n);
 export const daysBetween = (a: ISODate, b: ISODate): number => Math.round((parseD(b).getTime() - parseD(a).getTime()) / 864e5) + 1;
 
 export const DOW = ['Κυρ', 'Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ'];
