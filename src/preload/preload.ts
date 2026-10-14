@@ -7,6 +7,7 @@ const api: Api = {
   run: cmd => ipcRenderer.invoke('cmd', cmd),
   undo: id => ipcRenderer.invoke('undo', id),
   sync: () => ipcRenderer.invoke('sync'),
+  dayCheck: () => ipcRenderer.invoke('day:check'),
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),

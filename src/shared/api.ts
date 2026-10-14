@@ -38,7 +38,8 @@ export interface Api {
   boot(): Promise<Boot>;
   run(cmd: Command): Promise<CmdResult>;
   undo(id?: number): Promise<CmdResult>;   // id: αναιρεί μόνο αν αυτή είναι ακόμα η τελευταία ενέργεια
-  sync(): Promise<CmdResult>;   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
+  sync(): Promise<CmdResult>;
+  dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
   exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult>;   // print: προεπισκόπηση εκτύπωσης αντί για Excel
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;

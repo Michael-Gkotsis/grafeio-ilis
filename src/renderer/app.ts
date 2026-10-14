@@ -60,10 +60,6 @@ function Root({ boot: initial }: { boot: Boot }) {
   const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
   const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);
-  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main γράφει τις λήξεις· φέρνουμε τη νέα κατάσταση.
-  // Όχι στο πρώτο άνοιγμα: το boot μόλις ήρθε, και δεύτερο θα έστελνε ξανά όλα τα δεδομένα.
-  const bootDay = useRef(today);
-  useEffect(() => { if (today !== bootDay.current) { bootDay.current = ''; refresh(); } }, [today]);
   // Ο main στέλνει μόνο ό,τι άλλαξε: τα υπόλοιπα κρατούν την ίδια αναφορά, άρα και τα ευρετήρια (rules.ts) και τα useMemo τους
   const merge = useCallback((r: Extract<CmdResult, { ok: true }>) => {
     const state = Object.keys(r.changes).length ? { ...cur.current.state, ...r.changes } : cur.current.state;   // τίποτα δεν άλλαξε: ούτε νέα απόδοση
@@ -71,6 +67,10 @@ function Root({ boot: initial }: { boot: Boot }) {
     cur.current = { state, audit }; setState(state); setAudit(audit);
     return state;
   }, []);
+  // όταν αλλάξει η μέρα (εφαρμογή ανοιχτή από χθες) ο main τρέχει τις εργασίες της μέρας (λήξεις, αντίγραφο) και στέλνει
+  // μόνο ό,τι άλλαξε. Όχι στο πρώτο άνοιγμα: το boot μόλις ήρθε.
+  const bootDay = useRef(today);
+  useEffect(() => { if (today !== bootDay.current) { bootDay.current = ''; window.api.dayCheck().then(r => { if (r.ok) merge(r); }, () => refresh()); } }, [today]);   // eslint-disable-line react-hooks/exhaustive-deps
   const run = useCallback(async (cmd: Command, okText?: string | false) => {
     const r = await window.api.run(cmd);
     if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return null; }

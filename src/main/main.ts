@@ -689,6 +689,8 @@ else {
     const MAIN_ONLY = ['sources', 'forms', 'outputDir', 'newDirs'];
     ipcMain.handle('cmd', (_e, cmd: Command) => (cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some(k => MAIN_ONLY.includes(k)) ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους') : answer(runCmd(cmd))));
     ipcMain.handle('sync', () => reply(''));
+    // νέα μέρα με την εφαρμογή ανοιχτή: οι εργασίες της μέρας τώρα (όχι σε ως 10 λεπτά) και μόνο ό,τι άλλαξε
+    ipcMain.handle('day:check', () => { daily(); return reply(''); });
     ipcMain.handle('undo', (_e, id?: number): CmdResult => {
       const last = store.lastUndoable(); if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
       // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
