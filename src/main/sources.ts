@@ -20,19 +20,28 @@ export type Metas = Partial<Record<ListKind, SourceMeta>>;
 
 // Τι ξέρουμε για κάθε αρχείο από την τελευταία ανάγνωση/εγγραφή: ώρα και μέγεθος (για να φαίνεται αν άλλαξε
 // εκτός εφαρμογής) και ποιες εγγραφές έγραψε η εφαρμογή. Δεν μπαίνει στη βάση: δεν είναι δεδομένο της Ίλης.
+// Και τα αρχεία που έδωσαν οι διάλογοι της εφαρμογής (_paths): μόνο σε αυτά δέχεται ο main να διαβάζει και να γράφει (S9).
 export class SourceMetaStore {
   constructor(private file: string) {}
-  all(): Metas { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return {}; } }
+  private raw(): Metas & { _paths?: string[] } { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return {}; } }
+  all(): Metas { const x = this.raw(); delete x._paths; return x; }
+  allowed(file: string): boolean { return (this.raw()._paths || []).includes(path.resolve(file)); }
+  allow(files: string[]) {
+    const all = this.raw(); const had = new Set(all._paths || []); const add = files.filter(Boolean).map(x => path.resolve(x)).filter(x => !had.has(x));
+    if (!add.length) return;
+    all._paths = [...had, ...add];
+    try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); }
+  }
   get(kind: ListKind): SourceMeta | undefined { return this.all()[kind]; }
   set(kind: ListKind, m: Partial<SourceMeta> | null) {
-    const all = this.all();
+    const all = this.raw();
     if (m === null) delete all[kind]; else all[kind] = { ...(all[kind] || { mtime: 0, size: 0, keys: [], at: '' }), ...m };
     try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); }
   }
   // Για να γυρίσει ακριβώς όπως είναι τώρα (π.χ. όταν το «Νέο αρχείο» δεν φτιάχτηκε και η αντιστοίχιση γυρνά στο παλιό)
   keep(kind: ListKind): () => void {
     const was = this.get(kind);
-    return () => { const all = this.all(); if (was) all[kind] = was; else delete all[kind]; try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); } };
+    return () => { const all = this.raw(); if (was) all[kind] = was; else delete all[kind]; try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); } };
   }
 }
 export const stamp = (file: string): { mtime: number; size: number } | null => { try { const st = fs.statSync(file); return { mtime: Math.round(st.mtimeMs), size: st.size }; } catch { return null; } };
@@ -183,7 +192,7 @@ export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: User
 }
 
 // Νέος μήνας στον έλεγχο υπηρεσιών: φύλλο με όλη τη δομή (planDutiesNew), σε νέο ή στο ίδιο αρχείο με τους άλλους μήνες
-async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppState, today: ISODate): Promise<WriteOutcome> {
+async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppState, today: ISODate, expect?: Record<string, { mtime: number; size: number }>): Promise<WriteOutcome> {
   if (!b.month) return { ok: false, error: 'Δεν ορίστηκε ο μήνας του ελέγχου υπηρεσιών' };
   const lay = planDutiesNew(b, s, today);
   const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: await wb.tableStyle('data'), code: 0 };
@@ -197,7 +206,7 @@ async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppS
   }
   for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
   ws.setColWidths(lay.widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
-  const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
+  const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY, expect });
   return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: lay.keys, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
 }
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
@@ -206,6 +215,8 @@ async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppS
 export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState, meta: SourceMeta | undefined, today: ISODate, opts: { tidy?: boolean; create?: boolean } = {}): Promise<WriteOutcome> {
   try {
     const exists = fs.existsSync(b.file);
+    // ώρα και μέγεθος πριν από την ανάγνωση: αν αλλάξουν ως τη μετονομασία (το έσωσε κάποιος), δεν γράφεται (X1)
+    const st0 = exists ? stamp(b.file) : null; const expect = st0 ? { [path.join(path.dirname(b.file), path.basename(b.file))]: st0 } : undefined;
     const create = isStatusKind(kind) || (!!opts.create && canCreate(kind));
     if (!exists && !create) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
     const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
@@ -222,7 +233,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };
     if (!had && !create) return { ok: false, error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
-    if (kind === 'duties' && (!had || !exists)) return await newDutiesSheet(wb, ws, b, s, today);
+    if (kind === 'duties' && (!had || !exists)) return await newDutiesSheet(wb, ws, b, s, today, expect);
     // άδειες με ώρα σε πίνακα χωρίς στήλες ωρών: οι στήλες μπαίνουν στο τέλος του πίνακα και κρατιούνται στην αντιστοίχιση
     const tc = timeCols(kind, had ? sheet : null, b, s, today); const grown = tc.b !== b; b = tc.b;
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
@@ -315,7 +326,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const roomSets = roomSheet && rc != null ? plan.sets.filter(x => x.c === rc && x.r > b.header && recs.has(x.r)) : [];
     const roomRows = new Set(roomSets.map(x => x.r)).size;
     const rooms = roomSheet && (roomRows || missing || placed) ? { n: roomRows, added: missing, placed, sheet: roomSheet } : undefined;
-    const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
+    const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY, expect });
     return { ok: true, file: out[0], unchanged: false, created: !exists || !had, ...res, rooms, ...(tidied.length && !fresh ? { tidy: tidied } : {}), ...(grown ? { binding: b } : {}), meta: { ...keep, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
   } catch (e) {
     if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };

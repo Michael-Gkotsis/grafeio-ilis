@@ -9,7 +9,7 @@ import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding,
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 // Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
 export type DirTarget = 'output' | { form: FormKind } | { kind: ListKind };
-export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
+export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number; dataFallback?: boolean }   // dataFallback: τα δεδομένα είναι στο προφίλ, όχι δίπλα στο exe
 export interface TemplateInfo { id: string; name: string; file: string; ok: boolean; custom: boolean }
 // Μετά από κάθε ενέργεια ο main στέλνει μόνο τα κομμάτια της κατάστασης που άλλαξαν (changes) και τις νέες γραμμές
 // του ιστορικού (newAudit)· όλο το ιστορικό (audit) μόνο όταν άλλαξε κάποια παλιά γραμμή (αναίρεση).

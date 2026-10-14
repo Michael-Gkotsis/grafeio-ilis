@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { writeAll, writeJson, freeName, LockedError } from './files';
+import { copyDurable, dataDirOf, writeAll, writeJson, freeName, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
@@ -31,7 +31,9 @@ function writableDir(dir: string): boolean {
 }
 // Το όνομα άλλαξε σε «Γραφείο Λοχία» (11/10). Το προφίλ μένει στον παλιό φάκελο για να βρίσκει τα δεδομένα και τις προτιμήσεις.
 app.setPath('userData', path.join(app.getPath('appData'), 'Γραφείο Ίλης'));
-const DATA = writableDir(path.join(ROOT, 'data')) ? path.join(ROOT, 'data') : path.join(app.getPath('userData'), 'data');
+// Όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe): μια στιγμιαία αποτυχία του ελέγχου εγγραφής δεν χωρίζει πια τα δεδομένα στα δύο
+const DATA_AT = dataDirOf(path.join(ROOT, 'data'), path.join(app.getPath('userData'), 'data'), writableDir);
+const DATA = DATA_AT.dir;
 const BACKUPS = path.join(DATA, 'backups');
 const T0 = Date.now();
 // Διακόπτης GPU (έρευνα §5.6): σε παλιές κάρτες γραφικών με Windows 7 η επιτάχυνση μπορεί να κοστίζει μνήμη ή να δίνει μαύρη οθόνη.
@@ -419,6 +421,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
 async function pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null> {
   const res = await dialog.showOpenDialog(win!, { title: 'Δυναμολόγιο', filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }], properties: ['openFile'] });
   if (res.canceled || !res.filePaths[0]) return null;
+  srcMeta.allow([res.filePaths[0]]);
   const cur = bindingOf('people');
   return rosterPreview(res.filePaths[0], cur && path.resolve(cur.file) === path.resolve(res.filePaths[0]) ? cur : null);
 }
@@ -484,6 +487,7 @@ function keysOf(kind: ListKind, b: SourceBinding): string[] {
 const baseFor = (kind: ListKind, b: SourceBinding): Record<string, string> => (sameTable(bindingOf(kind), b) ? srcMeta.get(kind)?.base || {} : {});
 function saveBinding(kind: ListKind, b: SourceBinding | null) {
   const cur = bindingOf(kind);
+  if (b) srcMeta.allow([b.file]);   // αρχείο που όρισε ή έφτιαξε ο ίδιος ο main
   if (JSON.stringify(cur || null) === JSON.stringify(b)) return;
   const sources = { ...(store.state.settings.sources || {}) };
   if (b) sources[kind] = b; else delete sources[kind];
@@ -634,7 +638,7 @@ async function recover(reason: string, empty = false): Promise<boolean> {
     message: empty ? 'Η βάση δεδομένων είναι άδεια (π.χ. κόπηκε το ρεύμα την ώρα που γραφόταν).' : 'Η βάση δεδομένων φαίνεται χαλασμένη.', detail: 'Λεπτομέρεια: ' + reason + '\n\nΕπαναφορά από το αντίγραφο ' + good.name + ';\nΗ χαλασμένη βάση θα κρατηθεί στον φάκελο backups.' });
   if (r.response !== 0) return false;
   aside();
-  fs.copyFileSync(path.join(BACKUPS, good.name), db);
+  copyDurable(path.join(BACKUPS, good.name), db);
   await store.open();
   holdAll(HOLD_RESTORE);
   store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά βάσης από αντίγραφο ' + good.name + ' (η προηγούμενη ήταν ' + (empty ? 'άδεια' : 'χαλασμένη') + ')', files: [], source: 'auto', undoable: false }, null);
@@ -671,14 +675,19 @@ else {
       }
     }
     daily(); setInterval(daily, 10 * 60 * 1000);
+    // τα αρχεία που είναι ήδη ορισμένα (από παλιότερη έκδοση) είναι γνωστά
+    const st0 = store.state.settings;
+    srcMeta.allow([...Object.values(st0.sources || {}).map(x => x?.file || ''), ...Object.values(st0.forms || {}).flatMap(x => [x?.file || '', x?.dir || ''])]);
     sessionStart = store.audit(1)[0]?.id || 0;
     const meta = readMeta();
     seenUntil = typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart;
     writeMeta({ seenAudit: sessionStart });
 
-    ipcMain.handle('boot', (): Boot => ({ ...snapshot(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates(), lastUsb: readMeta().lastUsb || null, seenUntil, sessionStart }));
+    ipcMain.handle('boot', (): Boot => ({ ...snapshot(), dataDir: DATA, outputDir: outputDir(), templatesDir: USER_TPL, version: app.getVersion(), templates: templates(), lastUsb: readMeta().lastUsb || null, seenUntil, sessionStart, dataFallback: DATA_AT.fallback }));
     const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
-    ipcMain.handle('cmd', (_e, cmd: Command) => answer(runCmd(cmd)));
+    // αρχεία και φάκελοι αλλάζουν μόνο από τους διαλόγους του main (src:save, form:save, φάκελοι), όχι με εντολή από το UI
+    const MAIN_ONLY = ['sources', 'forms', 'outputDir', 'newDirs'];
+    ipcMain.handle('cmd', (_e, cmd: Command) => (cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some(k => MAIN_ONLY.includes(k)) ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους') : answer(runCmd(cmd))));
     ipcMain.handle('sync', () => reply(''));
     ipcMain.handle('undo', (_e, id?: number): CmdResult => {
       const last = store.lastUndoable(); if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
@@ -708,13 +717,14 @@ else {
       return answer(r);
     });
     // Αρχεία Excel
-    const pickXlsx = async (title: string) => { const res = await dialog.showOpenDialog(win!, { title, filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls'] }], properties: ['openFile'] }); return res.canceled ? null : res.filePaths[0] || null; };
+    const pickXlsx = async (title: string) => { const res = await dialog.showOpenDialog(win!, { title, filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls'] }], properties: ['openFile'] }); const file = res.canceled ? null : res.filePaths[0] || null; if (file) srcMeta.allow([file]); return file; };
     ipcMain.handle('src:pick', async (_e, kind: ListKind | null) => {
       const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel'); if (!file) return null;
       try { return await bookOf(file); } catch (e) { return fail(e instanceof OldFormatError ? e.message : e); }
     });
     ipcMain.handle('src:read', async (_e, kind: ListKind) => { try { const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); return { ...(await bookOf(b.file)), binding: b }; } catch (e) { return fail(e); } });
     ipcMain.handle('src:save', async (_e, kind: ListKind, b: SourceBinding | null) => {
+      if (b && (typeof b.file !== 'string' || !srcMeta.allowed(b.file))) return fail('Άγνωστο αρχείο: διάλεξέ το με το «Διάλεξε Excel…»');
       try {
         saveBinding(kind, b);
         // προσωπικό: αφετηρία για τις διορθώσεις είναι ό,τι γράφει τώρα το Excel
@@ -726,10 +736,11 @@ else {
         notify(); return reply('');
       } catch (e) { return fail(e); }
     });
-    ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean, keepApp: string[]) => importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []));
-    ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) => applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []));
+    const known = (b: SourceBinding | null | undefined) => !!b && typeof b.file === 'string' && srcMeta.allowed(b.file);
+    ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean, keepApp: string[]) => !known(b) ? fail('Άγνωστο αρχείο') : importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []));
+    ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) => !known(b) ? fail('Άγνωστο αρχείο') : applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []));
     ipcMain.handle('src:keys', (_e, kind: StatusKind | 'duties') => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
-    ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
+    ipcMain.handle('src:people', async (_e, b: SourceBinding) => { if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο'); const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
     ipcMain.handle('src:new', async (_e, kind: ListKind) => {
@@ -756,6 +767,9 @@ else {
     ipcMain.handle('form:pick', async (_e, f: FormKind) => { const file = await pickXlsx('Template για ' + f); if (!file) return null; return formInfo(f, file); });
     ipcMain.handle('form:info', (_e, f: FormKind) => formInfo(f));
     ipcMain.handle('form:save', (_e, f: FormKind, b: FormBinding | null) => {
+      const cur = formBinding(f);
+      if (b?.file && b.file !== cur.file && !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
+      if (b?.dir && b.dir !== cur.dir && !srcMeta.allowed(b.dir)) return fail('Άγνωστος φάκελος: διάλεξέ τον με το «Φάκελος…»');
       const forms = { ...(store.state.settings.forms || {}) };
       if (b && Object.values(b).some(v => v !== undefined && v !== '')) forms[f] = b; else delete forms[f];
       const r = runCmd({ t: 'setSettings', settings: { forms }, text: 'έντυπο ' + f + (b?.file ? ': ' + path.basename(b.file) : b?.dir ? ': φάκελος ' + b.dir : ': προεπιλογή') });
@@ -763,9 +777,9 @@ else {
     });
     ipcMain.handle('form:dir', async (_e, f: FormKind) => {
       const r = await dialog.showOpenDialog(win!, { title: 'Φάκελος για το έντυπο', defaultPath: formBinding(f).dir || outputDir(), properties: ['openDirectory', 'createDirectory'] });
-      return r.canceled ? null : r.filePaths[0] || null;
+      const dir = r.canceled ? null : r.filePaths[0] || null; if (dir) srcMeta.allow([dir]); return dir;
     });
-    ipcMain.handle('open:path', (_e, file: string) => { if (knownPath(file) && fs.existsSync(file)) return shell.openPath(file); return 'άγνωστο αρχείο'; });
+    ipcMain.handle('open:path', (_e, file: string) => { if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file)) return shell.openPath(file); return 'άγνωστο αρχείο'; });
     ipcMain.handle('print:file', (_e, file: string, sheet?: string) => {
       // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
       const inside = (dir?: string) => !!dir && !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') && !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
@@ -809,7 +823,7 @@ else {
       if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
       // πρώτα αντίγραφο δίπλα στη βάση και έλεγχος· η τωρινή βάση κλείνει μόνο αν αυτό πέτυχε
       const db = path.join(DATA, 'ilh.db'), tmp = db + '.restore.tmp';
-      try { fs.copyFileSync(file, tmp); const b2 = store.validate(tmp); if (b2) throw new Error(b2); }
+      try { copyDurable(file, tmp); const b2 = store.validate(tmp); if (b2) throw new Error(b2); }
       catch (e) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e))); }
       // χωρίς αντίγραφο της τωρινής βάσης δεν γίνεται επαναφορά: αλλιώς ό,τι έγινε μετά το αντίγραφο θα χανόταν οριστικά
       try { store.backup('πριν-επαναφορά'); }
@@ -864,7 +878,7 @@ else {
       const bad = store.validate(src);
       if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
       const d = new Date(); const name = 'ilh_' + today() + '_' + [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
-      fs.mkdirSync(BACKUPS, { recursive: true }); fs.copyFileSync(src, path.join(BACKUPS, name));
+      fs.mkdirSync(BACKUPS, { recursive: true }); copyDurable(src, path.join(BACKUPS, name));
       return { ok: true, name };
     });
     ipcMain.handle('backup', () => { try { return { ok: true, file: store.backup('χειροκίνητο') }; } catch (e) { return { ok: false, error: String(e) }; } });
