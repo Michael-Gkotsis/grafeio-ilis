@@ -6,7 +6,7 @@ import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker
 import { hasTimes, normTime, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChange, postBy, postsOf, statusesOn } from '../../shared/rules';
+import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChange, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
@@ -196,7 +196,7 @@ export function PersonSheet({ pid, onClose }: P) {
   if (!p) return null;
   const reqs = state.requests.filter(r => r.pid === pid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const posts = postsOf(state.settings);
-  const hist = state.statuses.filter(s => s.pid === pid).sort((a, b) => b.from.localeCompare(a.from));
+  const hist = [...statusesOf(state.statuses, pid)].sort((a, b) => b.from.localeCompare(a.from));
   const dd = dutyStats(state).get(pid) || emptyStat();
   const duties = dd.log.slice().reverse().slice(0, 12).map(e => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h }));
   const base = state.baseline[pid]; const nBase = baseTotal(base);
@@ -204,7 +204,7 @@ export function PersonSheet({ pid, onClose }: P) {
   const ob = outBlock(state, today, pid);
   // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
   const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-  const ssT = statusesOn(state.statuses, pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = state.statuses.filter(x => !STAT_ROWS.includes(x.type));
+  const ssT = statusesOn(state.statuses, pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = statusesOf(state.statuses, pid).filter(x => !STAT_ROWS.includes(x.type));
   const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false });
   const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true });
   const rules = [noDutyT ? 'Καμία υπηρεσία' : unarmedT ? 'Μόνο άοπλες θέσεις' : null, ob ? 'Δεν βγαίνει έξοδο (' + ob + ')' : null].filter(Boolean);

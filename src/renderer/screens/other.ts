@@ -37,11 +37,20 @@ export function TodayScreen() {
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
   }, [state.statuses, state.people, today]);
   const empty = frouraEmpty(state, tomorrow);
-  const ending = state.statuses.filter(s => s.to === today && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat)) && pm.has(s.pid));
-  const endTom = state.statuses.filter(s => s.to === tomorrow && !s.pending && (TYPES[s.type].cat === 'abs' || RECORD_CATS.includes(TYPES[s.type].cat) || s.type === 'PUN') && pm.has(s.pid));
-  const expired = state.statuses.filter(s => isRecordExpiredOn(s, today) && !s.pending && pm.has(s.pid));
-  const pending = state.statuses.filter(s => s.pending && pm.has(s.pid));
-  const nRec = state.statuses.filter(s => s.from <= today && s.to >= today && RECORD_CATS.includes(TYPES[s.type].cat)).length;
+  // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
+  const { ending, endTom, expired, pending, nRec } = useMemo(() => {
+    const o = { ending: [] as Status[], endTom: [] as Status[], expired: [] as Status[], pending: [] as Status[], nRec: 0 };
+    for (const s of state.statuses) {
+      const cat = TYPES[s.type].cat; const rec = RECORD_CATS.includes(cat); const known = pm.has(s.pid);
+      if (s.from <= today && s.to >= today && rec) o.nRec++;
+      if (!known) continue;
+      if (s.pending) { o.pending.push(s); continue; }
+      if (s.to === today && (cat === 'abs' || rec)) o.ending.push(s);
+      if (s.to === tomorrow && (cat === 'abs' || rec || s.type === 'PUN')) o.endTom.push(s);
+      if (isRecordExpiredOn(s, today)) o.expired.push(s);
+    }
+    return o;
+  }, [state.statuses, state.people, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const endTxt = (s: Status) => {
     const t = TYPES[s.type]; if (t.cat === 'abs') return 'Αναμένεται επιστροφή' + (s.toTime ? ' στις ' + s.toTime : '');
     // άλλο ιατρικό που συνεχίζει αύριο: λέει τι μένει, όχι ότι ξαναμπαίνει
