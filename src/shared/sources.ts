@@ -1650,3 +1650,29 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
   }
   return { ...plan, psnap };
 }
+
+// Ποια είδη αφορά μια αλλαγή στα άτομα (P2): μόνο όσα έχουν στήλη για κάποιο πεδίο που άλλαξε (και τα πεδία που
+// διαβάζει το ίδιο το είδος: πόστο, εκτός δύναμης, Σ.Ι., ρόλος…). Νέο ή σβησμένο άτομο αφορά όλα.
+const KIND_PERSON: Partial<Record<ListKind, string[]>> = {
+  people: ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'role', 'dn', 'added', 'active'],
+  posts: ['post', 'active'], outside: ['active', 'notes'], caps: ['active']
+};
+export function kindsForPeople(prev: Person[], next: Person[], sources: Partial<Record<ListKind, SourceBinding>>): Set<ListKind> {
+  const all = new Set((Object.keys(sources) as ListKind[]).filter(k => sources[k]));
+  const was = new Map(prev.map(p => [p.id, p]));
+  if (prev.length !== next.length || next.some(p => !was.has(p.id))) return all;
+  const changed = new Set<string>();
+  for (const p of next) {
+    const o = was.get(p.id)!; if (o === p) continue;
+    for (const k of new Set([...Object.keys(o), ...Object.keys(p)])) if (JSON.stringify((o as unknown as Record<string, unknown>)[k]) !== JSON.stringify((p as unknown as Record<string, unknown>)[k])) changed.add(k);
+  }
+  const out = new Set<ListKind>();
+  for (const k of all) {
+    const cols = new Set(Object.keys(sources[k]!.cols).filter(c => LINKED.includes(c)));
+    // ονοματεπώνυμο σε ένα κελί ή όνομα χωρίς πατρώνυμο: «του <πατρώνυμο>» στους συνονόματους
+    if (sources[k]!.cols.name != null) ['last', 'first', 'father'].forEach(c => cols.add(c));
+    if (sources[k]!.cols.first != null) cols.add('father');
+    if ([...cols, ...(KIND_PERSON[k] || [])].some(c => changed.has(c))) out.add(k);
+  }
+  return out;
+}

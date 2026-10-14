@@ -11,9 +11,9 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, bookNow, locateCheck, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { SourceMetaStore, OldFormatError, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -330,35 +330,53 @@ function writeText(kind: ListKind, file: string, r: { added: number; changed: nu
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
 type SyncOut = { ok: true; text: string; file: string; unchanged: boolean } | { ok: false; error: string; locked?: boolean };
 const syncOut = (kind: ListKind, auto: boolean, create = false): Promise<SyncOut> => serial(() => syncOutNow(kind, auto, create));
-async function syncOutNow(kind: ListKind, auto: boolean, create = false): Promise<SyncOut> {
+// Πριν από αυτόματη εγγραφή: γράφει μόνη της εδώ; πού είναι τώρα ο πίνακας και οι στήλες του· άλλαξε εκτός εφαρμογής;
+// Επιστρέφει την αντιστοίχιση για την εγγραφή, ή το αποτέλεσμα αν δεν γράφεται τώρα.
+async function autoCheck(kind: ListKind): Promise<{ b: SourceBinding; m?: SourceMeta } | SyncOut> {
   let b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
   const m = srcMeta.get(kind);
-  if (auto) {
-    if (b.write === false || !m?.at || m.hold) return { ok: true, text: '', file: b.file, unchanged: true };
-    // οι στήλες όπως είναι τώρα (όπως στην «Ενημέρωση Excel»)· χωρίς σίγουρη αντιστοίχιση δεν γράφει μόνη της
-    const loc = await locateCheck(kind, b);
-    if (loc.b !== b) { moveBinding(kind, loc.b); b = bindingOf(kind) || loc.b; }
-    if (loc.need) return { ok: false, error: 'Περιμένει αντιστοίχιση: ' + loc.need };
-    const t = await tableState(b, m, kind);
-    if (t.header != null) { moveBinding(kind, { ...b, header: t.header }); b = bindingOf(kind)!; }
-    if (t.refresh) srcMeta.set(kind, t.refresh);
-    if (t.changed) { srcMeta.set(kind, { pending: true, error: 'Το αρχείο άλλαξε εκτός εφαρμογής. Πάτα «Ανανέωση από Excel» και μετά «Ενημέρωση Excel».' }); return { ok: false, error: 'changed' }; }
-  } else b = (await current(kind, b))!;
-  const r = await writeSource(kind, b, store.state, m, today(), { tidy: !auto, create });
+  if (b.write === false || !m?.at || m.hold) return { ok: true, text: '', file: b.file, unchanged: true };
+  // οι στήλες όπως είναι τώρα (όπως στην «Ενημέρωση Excel»)· χωρίς σίγουρη αντιστοίχιση δεν γράφει μόνη της
+  const loc = await locateCheck(kind, b);
+  if (loc.b !== b) { moveBinding(kind, loc.b); b = bindingOf(kind) || loc.b; }
+  if (loc.need) return { ok: false, error: 'Περιμένει αντιστοίχιση: ' + loc.need };
+  const t = await tableState(b, m, kind);
+  if (t.header != null) { moveBinding(kind, { ...b, header: t.header }); b = bindingOf(kind)!; }
+  if (t.refresh) srcMeta.set(kind, t.refresh);
+  if (t.changed) { srcMeta.set(kind, { pending: true, error: 'Το αρχείο άλλαξε εκτός εφαρμογής. Πάτα «Ανανέωση από Excel» και μετά «Ενημέρωση Excel».' }); return { ok: false, error: 'changed' }; }
+  return { b, m };
+}
+// Μετά την εγγραφή ενός είδους: νέα αντιστοίχιση (στήλες ωρών, πίνακας που κατέβηκε), τι ξέρουμε για το αρχείο, Ιστορικό
+function afterWrite(kind: ListKind, b: SourceBinding, r: WriteOutcome): SyncOut {
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
-  if (r.binding) { moveBinding(kind, r.binding, 'μπήκαν στήλες «ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ» και «ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ» στο φύλλο «' + b.sheet + '» (άδειες με ώρα)'); b = bindingOf(kind) || r.binding; }
+  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? 'μπήκαν στήλες «ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ» και «ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ» στο φύλλο «' + b.sheet + '» (άδειες με ώρα)' : undefined); b = bindingOf(kind) || r.binding; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);
   store.addAudit({ at: nowHM(), day: today(), text, files: [path.basename(r.file)], source: 'excel', undoable: false }, null);
   return { ok: true, text, file: r.file, unchanged: false };
 }
+async function syncOutNow(kind: ListKind, auto: boolean, create = false): Promise<SyncOut> {
+  let b = bindingOf(kind); if (!b) return { ok: false, error: 'Δεν έχει οριστεί αρχείο για ' + KIND[kind].label };
+  let m = srcMeta.get(kind);
+  if (auto) { const c = await autoCheck(kind); if ('ok' in c) return c; b = c.b; m = c.m; }
+  else b = (await current(kind, b))!;
+  return afterWrite(kind, b, await writeSource(kind, b, store.state, m, today(), { tidy: !auto, create }));
+}
+// Αυτόματη εγγραφή όλων των ειδών ενός αρχείου μαζί (P2): ένα άνοιγμα και μία αποθήκευση, όχι μία ανά είδος
+async function syncFileAuto(kinds: ListKind[]) {
+  const jobs: { kind: ListKind; b: SourceBinding; meta?: SourceMeta }[] = [];
+  for (const k of kinds) { const c = await autoCheck(k); if (!('ok' in c)) jobs.push({ kind: k, b: c.b, meta: c.m }); }
+  if (!jobs.length) return;
+  const rs = await writeGroup(jobs, store.state, today(), { tidy: false });
+  jobs.forEach((j, i) => afterWrite(j.kind, j.b, rs[i]));
+}
 // Μετά από κάθε αλλαγή: τα είδη που άλλαξαν γράφονται στα Excel τους και τα έντυπα που έχουν βγει ενημερώνονται
 const dirty = new Set<ListKind>(); let formsDirty = false; let autoTimer: NodeJS.Timeout | undefined; let autoBusy = false;
-// Ποια είδη αφορά μια αλλαγή: ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται σε όλα τα φύλλα όπου υπάρχουν
+// Ποια είδη αφορά μια αλλαγή: ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται στα φύλλα που έχουν στήλη γι' αυτό
 function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
   const out = new Set<ListKind>();
-  if (prev.people !== next.people) KINDS.forEach(k => out.add(k.id));
+  if (prev.people !== next.people) kindsForPeople(prev.people, next.people, next.settings.sources || {}).forEach(k => out.add(k));
   if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => out.add(k));
   if (prev.caps !== next.caps) out.add('caps');
   if (prev.guards !== next.guards || prev.dutyLog !== next.dutyLog) out.add('duties');
@@ -384,7 +402,10 @@ async function runAuto() {
   if (autoBusy) { clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1500); return; }
   autoBusy = true;
   try {
-    for (const k of [...dirty]) { dirty.delete(k); if (bindingOf(k)) await syncOut(k, true); }
+    // ανά αρχείο: όλα τα είδη του (π.χ. τα φύλλα του Δυναμολογίου) μαζί
+    const byFile = new Map<string, ListKind[]>();
+    for (const k of [...dirty]) { dirty.delete(k); const b = bindingOf(k); if (!b) continue; const f = path.resolve(b.file); byFile.set(f, [...(byFile.get(f) || []), k]); }
+    for (const ks of byFile.values()) await serial(() => syncFileAuto(ks));
     if (formsDirty) { formsDirty = false; await regenForms(); }
   } catch (e) { console.error('auto', e); }
   finally { autoBusy = false; notify(); }
