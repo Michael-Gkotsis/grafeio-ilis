@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -110,6 +110,15 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
   const sh = book?.sheets.find(x => x.name === b.sheet); if (!sh) return b;
   const h = locateHeader(kind, sh, b); const at = h === b.header ? b : { ...b, header: h };
   return refitCols(kind, sh, at);
+}
+
+// Το ίδιο για τις αυτόματες διαδρομές (ανάγνωση απλών αλλαγών, εγγραφή): need = γιατί δεν γίνεται αυτόματα (στήλη που
+// δεν βρίσκεται με σιγουριά)· τότε το είδος περιμένει να δείξει ο χρήστης τις στήλες
+export async function locateCheck(kind: ListKind, b: SourceBinding): Promise<{ b: SourceBinding; need: string | null }> {
+  let book; try { book = await bookNow(b.file); } catch { return { b, need: null }; }
+  const sh = book?.sheets.find(x => x.name === b.sheet); if (!sh) return { b, need: null };
+  const h = locateHeader(kind, sh, b); const nb = refitCols(kind, sh, h === b.header ? b : { ...b, header: h });
+  return { b: nb, need: remapNeed(kind, sh, nb) };
 }
 
 // Αντίγραφο του αρχείου στα «_προηγούμενα» το πολύ ένα ανά 10 λεπτά (κρατά την έκδοση πριν από κάθε σειρά αλλαγών)

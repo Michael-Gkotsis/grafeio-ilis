@@ -28,6 +28,7 @@ export type Fail = { ok: false; error: string; locked?: boolean };
 export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;      // δεν γράφει μόνη της μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (και γιατί)
   month?: string;     // έλεγχος υπηρεσιών: ο μήνας του φύλλου
+  remap?: string;     // δεν διαβάζει ούτε γράφει μόνη της: οι στήλες δεν βρίσκονται με σιγουριά (και γιατί)
 }
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[]; ambiguous?: PlanLine[]; warn?: string[]; tidy?: string[] }   // tidy: μορφή που λείπει (τίτλος, λίστες επιλογής)
 export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }

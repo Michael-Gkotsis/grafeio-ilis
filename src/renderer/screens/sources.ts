@@ -40,7 +40,7 @@ export function useSourceStatus() {
 export function SourcesAlert() {
   const { state, today } = useStore(); const st = useSourceStatus(); const nav = useNav();
   const go = () => nav.go('templates', { tab: 'files' });
-  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
+  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.remap ? 'περιμένει αντιστοίχιση (Στήλες…): ' + x.remap : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
   const files = new Map<string, Map<string, string[]>>();
   for (const x of st.sources) {
     const w = why(x); if (!w) continue;
@@ -130,6 +130,7 @@ function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, 
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
+    : s.remap ? html`<${Badge} tone="warn" data-tip=${'Δεν διαβάζει ούτε γράφει μόνη της μέχρι να δείξεις τις στήλες («Στήλες…»): ' + s.remap}>Περιμένει αντιστοίχιση<//>`
     : s.hold ? html`<${Badge} tone="warn" data-tip=${s.hold}>Περιμένει ανανέωση<//>`
     : s.changed ? html`<${Badge} tone="warn" data-tip="Κάποιος το άλλαξε στο Excel. Πάτα «Ανανέωση από Excel» για να περάσουν οι αλλαγές.">Άλλαξε στο Excel<//>`
     : s.locked ? html`<${Badge} tone="warn" data-tip=${s.error}>Ανοιχτό στο Excel · περιμένει<//>`

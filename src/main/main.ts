@@ -11,7 +11,7 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, bookNow, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { SourceMetaStore, OldFormatError, bookNow, locateCheck, locateNow, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
@@ -282,13 +282,18 @@ async function current(kind: ListKind, b = bindingOf(kind)): Promise<SourceBindi
 const autoReading = new Set<ListKind>();
 async function sourceStatus(): Promise<SourceStatus[]> {
   const metas = srcMeta.all(); const out: SourceStatus[] = [];
-  for (const [kind, b] of Object.entries(store.state.settings.sources || {}) as [ListKind, SourceBinding][]) {
-    if (!b) continue;
+  for (const [kind, b0] of Object.entries(store.state.settings.sources || {}) as [ListKind, SourceBinding][]) {
+    if (!b0) continue;
+    // πρώτα πού είναι τώρα ο πίνακας και οι στήλες του (νέα στήλη στο Excel): αλλιώς η αυτόματη ανάγνωση θα έπαιρνε
+    // τιμές από λάθος στήλες. Αν δεν βρίσκονται με σιγουριά, το είδος περιμένει αντιστοίχιση.
+    const loc = await locateCheck(kind, b0);
+    if (loc.b !== b0) moveBinding(kind, loc.b);
+    const b = bindingOf(kind) || loc.b;
     let m = metas[kind]; let t = await tableState(b, m, kind);
     if (t.header != null) moveBinding(kind, { ...b, header: t.header });
     if (t.refresh) srcMeta.set(kind, t.refresh);
     // απλές αλλαγές στο Excel περνούν μόνες τους (με αναίρεση που δεν πειράζει το Excel)
-    if (t.changed && t.exists && isStatusKind(kind) && b.autoRead !== false && m?.at && !m.hold && !autoReading.has(kind)) {
+    if (t.changed && t.exists && !loc.need && isStatusKind(kind) && b.autoRead !== false && m?.at && !m.hold && !autoReading.has(kind)) {
       autoReading.add(kind);
       try {
         const cur = bindingOf(kind) || b;
@@ -298,7 +303,7 @@ async function sourceStatus(): Promise<SourceStatus[]> {
     // έλεγχος υπηρεσιών: ο μήνας του φύλλου, για την υπενθύμιση όταν αλλάζει ο μήνας
     let month: string | undefined;
     if (kind === 'duties' && t.exists) { try { const sh = (await bookNow(b.file))?.sheets.find(x => x.name === b.sheet); month = (sh && bindingMonth(sh, bindingOf(kind) || b, today())) || undefined; } catch { /* ξανά αργότερα */ } }
-    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month });
+    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month, ...(loc.need ? { remap: loc.need } : {}) });
   }
   return out;
 }
@@ -327,6 +332,10 @@ async function syncOutNow(kind: ListKind, auto: boolean, create = false): Promis
   const m = srcMeta.get(kind);
   if (auto) {
     if (b.write === false || !m?.at || m.hold) return { ok: true, text: '', file: b.file, unchanged: true };
+    // οι στήλες όπως είναι τώρα (όπως στην «Ενημέρωση Excel»)· χωρίς σίγουρη αντιστοίχιση δεν γράφει μόνη της
+    const loc = await locateCheck(kind, b);
+    if (loc.b !== b) { moveBinding(kind, loc.b); b = bindingOf(kind) || loc.b; }
+    if (loc.need) return { ok: false, error: 'Περιμένει αντιστοίχιση: ' + loc.need };
     const t = await tableState(b, m, kind);
     if (t.header != null) { moveBinding(kind, { ...b, header: t.header }); b = bindingOf(kind)!; }
     if (t.refresh) srcMeta.set(kind, t.refresh);

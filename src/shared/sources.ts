@@ -184,6 +184,18 @@ export function refitCols(kind: ListKind, sheet: RawSheet | undefined, b: Source
   return JSON.stringify(cols) === JSON.stringify(b.cols) ? b : { ...b, cols };
 }
 const ALL_FIELDS = [...PERSON_FIELDS, ...KINDS.flatMap(k => k.fields)];
+// Τι εμποδίζει την αυτόματη ανάγνωση/εγγραφή μετά το refitCols: πεδίο που λείπει, ή στήλη που η επικεφαλίδα της λέει
+// πια άλλο γνωστό πεδίο (π.χ. «ΗΜΕΡΕΣ» στη στήλη του είδους). Δική σου επικεφαλίδα που δεν είναι γνωστό πεδίο δεν μετρά.
+export function remapNeed(kind: ListKind, sheet: RawSheet | undefined, b: SourceBinding): string | null {
+  const miss = missingFields(kind, b.cols); if (miss.length) return 'λείπει ' + miss.join(', ');
+  const row = sheet?.rows[b.header]; if (!row) return null;
+  const fields = fieldsOf(kind);
+  for (const [k, c] of Object.entries(b.cols)) {
+    const h = headText(row[c]); const f = fields.find(x => x.k === k); if (!h || !f || f.re.test(h)) continue;
+    if (ALL_FIELDS.some(x => x.re.test(h))) return 'η στήλη ' + colLetter(c) + ' («' + cellText(row[c]) + '») δεν είναι πια ' + f.label.replace(/ \(.*\)$/, '');
+  }
+  return null;
+}
 const IDENT = ['last', 'name', 'asm'];
 // Γραμμή επικεφαλίδων: τουλάχιστον 3 γνωστές επικεφαλίδες, μία από τις οποίες δείχνει άτομο
 export function isHeaderRow(row: CellValue[] | undefined): boolean {
