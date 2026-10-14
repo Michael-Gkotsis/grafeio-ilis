@@ -4,14 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { PersonPicker, usePrintFile } from '../common';
-import { TYPES, CAP_ACC, KIND_NAME, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
-import { personMap, postBy } from '../../shared/rules';
+import { TYPES, CAP_ACC, fullName, shortName, type TypeKey } from '../../shared/domain';
+import { personMap } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
-import { MONTHS, addDays, dm } from '../../shared/dates';
+import { MONTHS, addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
-  type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
+  type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
@@ -359,7 +359,6 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   const [busy, setBusy] = useState(false);
   const sheet = book.sheets.find(x => x.name === b.sheet);
   const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || b.month || prevMonth(today));
-  const [withBusy, setWithBusy] = useState(true);
   const res = useMemo(() => {
     if (!sheet) return null;
     if (list === 'posts' || list === 'outside') {
@@ -376,25 +375,15 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
         lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
     }
     const p = planDuties(sheet, b, state, month, today, choices);
-    const cmd: Command = { t: 'importDuties', ...dutiesCmd(p, withBusy), source: book.name };
-    const pm = personMap(state.people); const nm = (pid: number) => (pm.get(pid) ? shortName(pm.get(pid)!) : '?');
-    const what = (a: { k?: string; kind: DutyKind }) => (a.k ? postBy(state, a.k)?.label || a.k : KIND_NAME[a.kind] + ' χωρίς θέση');
-    const busyAdds = p.add.filter(a => a.busy); const n = p.add.length - (withBusy ? 0 : busyAdds.length);
-    const seatless = p.add.filter(a => !a.k && (withBusy || !a.busy)).length;
+    const cmd: Command = { t: 'importDuties', ...dutiesCmd(p), source: book.name };
     const notes = [
-      seatless ? seatless + (seatless === 1 ? ' υπηρεσία περνά' : ' υπηρεσίες περνούν') + ' χωρίς θέση (σκέτο γράμμα Θ, Μ, Σ…, ίδια θέση σε δύο, ή θέση που έχει ήδη άλλος στην εφαρμογή): μετρούν στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : '',
-      p.differ.length ? 'Σε ' + p.differ.length + (p.differ.length === 1 ? ' περίπτωση' : ' περιπτώσεις') + ' το Excel λέει άλλη υπηρεσία από την εφαρμογή: κρατιέται της εφαρμογής και γράφεται στο Excel.' : '',
-      p.future ? p.future + (p.future === 1 ? ' μέρα είναι' : ' μέρες είναι') + ' μετά από σήμερα και δεν περνούν.' : '',
-      p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.' : ''
+      p.kept ? 'Όσοι δεν έχουν γραμμή σε αυτό το φύλλο (π.χ. νέος στρατιώτης) κρατούν τις υπηρεσίες τους.' : '',
+      p.appOnly.length ? 'Μέρες κενές στο Excel που έχουν υπηρεσίες στην εφαρμογή δεν αλλάζουν και γράφονται στο Excel: ' + p.appOnly.map(dm).join(', ') + '.' : '',
+      p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.' : '',
+      p.days.some(d => d.lines.some(l => l.key.startsWith('sl:') && l.to != null)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…) περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
     ].filter(Boolean);
-    const byKind = new Map<DutyKind, number>(); for (const a of p.add) if (withBusy || !a.busy) byKind.set(a.kind, (byKind.get(a.kind) || 0) + 1);
-    const kinds = [...byKind].map(([k, n]) => KIND_NAME[k] + ' ' + n);
-    return { sp: p.sp, n, cmd, busyAdds: busyAdds.length, tiles: [[n, 'Υπηρεσίες'], [p.fresh.length, 'Νέες μέρες'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
-      lists: [{ title: 'Ανά είδος', items: kinds },
-        { title: 'Λείπουν από μέρες που έχει ήδη η εφαρμογή', items: busyAdds.map(a => dm(a.date) + ' · ' + nm(a.pid) + ': ' + what(a)) },
-        { title: 'Διαφέρουν από την εφαρμογή (κρατιέται της εφαρμογής)', items: p.differ.map(x => dm(x.date) + ' · ' + nm(x.pid) + ': Excel «' + x.excel + '», εφαρμογή ' + x.app) },
-        { title: 'Ίδια θέση σε δύο άτομα', items: p.clash }, { title: 'Δύο υπηρεσίες την ίδια μέρα', items: p.twice }], notes };
-  }, [sheet, list, b, state, choices, month, today, book.name, withBusy]);
+    return { sp: p.sp, n: p.changes, cmd, duties: p, tiles: [[p.changes, 'Αλλαγές'], [p.days.length, 'Μέρες που αλλάζουν'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][], lists: [] as { title: string; items: string[] }[], notes };
+  }, [sheet, list, b, state, choices, month, today, book.name]);
   if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const go = async () => {
     setBusy(true);
@@ -402,17 +391,33 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (list === 'duties' ? (res.n === 1 ? ' υπηρεσία' : ' υπηρεσίες') : res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
     ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><input id="sd-m" type="month" className="ui-input" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
     <${Tiles} items=${res.tiles}/>
-    ${'busyAdds' in res && (res.busyAdds || 0) > 0 && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${withBusy} onChange=${(e: any) => setWithBusy(e.target.checked)}/><span><b>Πρόσθεσε και όσους λείπουν από μέρες που έχει ήδη η εφαρμογή (${res.busyAdds})</b><small>Π.χ. υπηρεσίες που γράφτηκαν με το χέρι στο Excel. Ό,τι έχει η εφαρμογή δεν αλλάζει.</small></span></label>`}
-    ${!res.n && !res.sp.unmatched.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
+    ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
+    ${res.duties && html`<${DutyDays} p=${res.duties}/>`}
     ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
     ${res.notes.map(t => html`<p key=${t} className="note">${t}</p>`)}
     ${res.sp.dup > 0 && html`<p className="note">${res.sp.dup === 1 ? '1 άτομο είναι' : res.sp.dup + ' άτομα είναι'} δύο φορές στο φύλλο· κρατήθηκε η πρώτη γραμμή.</p>`}
     <p className="note">Από εκεί και πέρα ό,τι αλλάζεις στην εφαρμογή γράφεται και σε αυτό το φύλλο${b.write === false ? ' με την «Ενημέρωση Excel»' : ''}.</p>
   <//>`;
+}
+
+// Έλεγχος υπηρεσιών: τι αλλάζει σε κάθε μέρα (πριν → μετά ανά θέση, και όσα έχει μόνο η εφαρμογή ως αφαίρεση), οι μέρες
+// με λάθος στο Excel (δεν περνούν), οι μελλοντικές (δεν περνούν ποτέ) και πόσες είναι ίδιες
+function DutyDays({ p }: { p: DutiesPlan }) {
+  const { state } = useStore(); const pm = personMap(state.people);
+  const nm = (pid: number | null) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
+  return html`<div className="field">
+    ${p.errors.length > 0 && html`<${Alert} tone="bad"><span><b>Δεν περνούν ${p.errors.length === 1 ? '1 μέρα' : p.errors.length + ' μέρες'}: ο ίδιος κωδικός θέσης σε δύο άτομα.</b> Διόρθωσέ το στο Excel και ξαναδιάβασε· ως τότε η εφαρμογή δεν γράφει εκεί.
+      <ul className="srcalert__list">${p.errors.map(e => html`<li key=${e.date}>${dow(e.date)} ${dm(e.date)}: ${e.text}</li>`)}</ul></span><//>`}
+    ${p.days.length > 0 && html`<span className="field__label">Τι αλλάζει ανά μέρα (το Excel κερδίζει)</span>
+      ${p.days.map(d => html`<details key=${d.date} className="note" open=${p.days.length <= 3}><summary>${dow(d.date)} ${dm(d.date)} · ${d.lines.length} ${d.lines.length === 1 ? 'αλλαγή' : 'αλλαγές'}${d.locked ? ' · αλλάζει κλειδωμένη μέρα' : ''}${d.twice.length ? ' · ⚠ δύο υπηρεσίες την ίδια μέρα: ' + d.twice.map(nm).join(', ') : ''}</summary>
+        <ul>${d.lines.map((l, i) => html`<li key=${i}>${l.label}: ${nm(l.from)} → ${nm(l.to)}</li>`)}</ul></details>`)}`}
+    ${p.future.length > 0 && html`<p className="note">Μετά από σήμερα, δεν περνούν: ${p.future.map(dm).join(', ')}.</p>`}
+    ${p.same > 0 && html`<p className="note">${p.same} ${p.same === 1 ? 'μέρα ίδια' : 'μέρες ίδιες'} με την εφαρμογή.</p>`}
+  </div>`;
 }
 
 // Ενημέρωση Excel: τι θα γραφτεί, γραμμή-γραμμή, πριν γραφτεί

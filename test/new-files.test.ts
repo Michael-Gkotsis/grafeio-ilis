@@ -239,7 +239,7 @@ describe('νέος Έλεγχος υπηρεσιών', () => {
     const wp = planDutiesWrite(sheet, b, s, TODAY);
     expect(wp.sets).toEqual([]); expect(wp.warn).toBeUndefined();
     const imp = planDuties(sheet, b, s, YM, TODAY);
-    expect(imp.add).toEqual([]); expect(imp.differ).toEqual([]); expect(imp.sp.unmatched).toEqual([]);
+    expect(imp.days).toEqual([]); expect(imp.errors).toEqual([]); expect(imp.sp.unmatched).toEqual([]);
     const again = await writeSource('duties', b, s, undefined, TODAY);
     expect(again.ok && again.unchanged).toBe(true);
   });

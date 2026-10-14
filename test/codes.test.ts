@@ -86,8 +86,8 @@ describe('υπηρεσίες χωρίς θέση και προηγούμενες
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
     let st = new Store(dir, WASM); await st.open();
     st.commit(apply(st.state, { t: 'importPeople', rows: fakePeople(5).map(({ id, active, ...p }) => p), source: 't', deactivateMissing: false }, ctx).state);
-    st.commit(apply(st.state, { t: 'importDuties', guards: {}, log: { '2026-10-01': [{ pid: 2, kind: 'th' }] }, source: 't' }, ctx).state);
-    const patch = st.commit(apply(st.state, { t: 'importDuties', guards: {}, log: { '2026-10-02': [{ pid: 3, kind: 'mg' }] }, source: 't' }, ctx).state);
+    st.commit(apply(st.state, { t: 'importDuties', days: { '2026-10-01': { seats: {}, seatless: [{ pid: 2, kind: 'th' }] } }, source: 't' }, ctx).state);
+    const patch = st.commit(apply(st.state, { t: 'importDuties', days: { '2026-10-02': { seats: {}, seatless: [{ pid: 3, kind: 'mg' }] } }, source: 't' }, ctx).state);
     st.close();
     st = new Store(dir, WASM); await st.open();
     expect(st.state.dutyLog).toEqual({ '2026-10-01': [{ pid: 2, kind: 'th' }], '2026-10-02': [{ pid: 3, kind: 'mg' }] });
