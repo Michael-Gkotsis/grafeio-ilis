@@ -231,7 +231,18 @@ export class Store {
     const e = r.find(x => x.undoable && !x.undone);
     return e ? { id: e.id, text: e.text, source: e.source, patch: JSON.parse(e.patch) } : null;
   }
-  markUndone(id: number) { this.db.run('UPDATE audit SET undone = 1 WHERE id = ?', [id]); this.flush(); }
+  markUndone(id: number, flush = true, undone = true) { this.db.run('UPDATE audit SET undone = ? WHERE id = ?', [undone ? 1 : 0, id]); if (flush) this.flush(); }
+  // Μία ενέργεια (αλλαγή, γραμμές ιστορικού, αναίρεση) και μία εγγραφή στον δίσκο. Αν ο δίσκος δεν τη δεχτεί (antivirus,
+  // γεμάτος δίσκος), όλα γυρίζουν πίσω και στη μνήμη, ώστε η οθόνη να μη δείχνει κάτι που δεν σώθηκε (και ο χρήστης να
+  // μην το ξανακάνει διπλό). Το λάθος φτάνει στον καλούντα. back: ό,τι άλλο γυρίζει πίσω (π.χ. το «αναιρέθηκε»).
+  transact<T>(fn: () => T, write = true, back?: () => void): T {
+    const prev = this.state; const mark = Number(this.db.exec('SELECT coalesce(max(id), 0) FROM audit')[0].values[0][0]);
+    try { const r = fn(); if (write) this.flush(); return r; }
+    catch (e) {
+      try { this.commit(prev); this.db.run('DELETE FROM audit WHERE id > ?', [mark]); back?.(); } catch (e2) { console.error('transact rollback', e2); }
+      throw e;
+    }
+  }
   // after: μόνο όσες γραμμές γράφτηκαν μετά από αυτό το id (ό,τι δεν έχει δει ακόμα το UI)
   audit(limit = 300, after = 0): AuditEntry[] {
     return this.all<any>(`SELECT id, at, day, text, files, source, undoable, undone FROM audit WHERE id > ${Math.floor(after) || 0} ORDER BY id DESC LIMIT ${Math.floor(limit)}`)

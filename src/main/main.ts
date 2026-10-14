@@ -106,14 +106,15 @@ function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: 
     const prev = store.state;
     const r = apply(store.state, cmd, ctx());
     const changed = r.state !== store.state;
-    if (changed) {
-      const patch = store.commit(r.state);
-      const undoable = r.undoable !== false;
-      if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable }, undoable ? patch : null, false);
-    } else if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable: false }, null, false);
-    for (const t of r.extra || []) store.addAudit({ at: nowHM(), day: today(), text: t, files: [], source: 'auto', undoable: false }, null, false);
-    // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού
-    if (changed || r.text || r.extra?.length) store.flush();
+    // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού· αν δεν γραφτεί, γυρίζουν όλα πίσω
+    store.transact(() => {
+      if (changed) {
+        const patch = store.commit(r.state);
+        const undoable = r.undoable !== false;
+        if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable }, undoable ? patch : null, false);
+      } else if (r.text) store.addAudit({ at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable: false }, null, false);
+      for (const t of r.extra || []) store.addAudit({ at: nowHM(), day: today(), text: t, files: [], source: 'auto', undoable: false }, null, false);
+    }, !!(changed || r.text || r.extra?.length));
     if (changed) scheduleAuto(prev, store.state);
     return { ok: true, text: r.text };
   } catch (e) { return fail(e); }
@@ -685,7 +686,7 @@ else {
       if (typeof id === 'number' && last.id !== id) return { ok: false, error: 'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ. Η τελευταία ήταν: «' + last.text + '». Δες το Ιστορικό.' };
       try {
         const prev = store.state;
-        store.revert(last.patch); store.markUndone(last.id);
+        store.transact(() => { store.revert(last.patch); store.markUndone(last.id, false); }, true, () => store.markUndone(last.id, false, false));
         // Αναίρεση ανάγνωσης από Excel: η εφαρμογή γυρίζει πίσω, το Excel όχι. Αν γράφαμε τώρα, θα σβήναμε από το Excel
         // όσα μόλις διαβάστηκαν (ή θα ξαναγράφαμε παλιές τιμές στο Δυναμολόγιο). Τα είδη περιμένουν νέα ανάγνωση.
         const fromExcel = last.source === 'excel' || last.source === 'import';
@@ -733,13 +734,14 @@ else {
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
     ipcMain.handle('src:new', async (_e, kind: ListKind) => {
       if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
-      const prev = bindingOf(kind);
+      const prev = bindingOf(kind); const prevMeta = srcMeta.keep(kind);
       const at = await newPlace(kind); if ('error' in at) return fail(at.error);
       if (at.found) { saveBinding(kind, at.b); notify(); return { ok: true, file: at.b.file, sheet: at.b.sheet, found: true }; }
       saveBinding(kind, at.b);
       const r = await syncOut(kind, false, true);
-      // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει)
-      if (!r.ok) { saveBinding(kind, prev || null); notify(); return r; }
+      // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει), μαζί με ό,τι ήξερε η εφαρμογή για
+      // το παλιό αρχείο (πότε διαβάστηκε, τι είχε): αλλιώς θα έμενε «Νέο» και δεν θα έγραφε μόνη της
+      if (!r.ok) { saveBinding(kind, prev || null); prevMeta(); notify(); return r; }
       // νέο Δυναμολόγιο: και τα φύλλα του (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) για όσα είδη δεν έχουν ακόμα αρχείο
       const sheets: string[] = [];
       if (kind === 'people') for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) {
@@ -809,7 +811,9 @@ else {
       const db = path.join(DATA, 'ilh.db'), tmp = db + '.restore.tmp';
       try { fs.copyFileSync(file, tmp); const b2 = store.validate(tmp); if (b2) throw new Error(b2); }
       catch (e) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e))); }
-      try { store.backup('πριν-επαναφορά'); } catch { /* συνεχίζουμε */ }
+      // χωρίς αντίγραφο της τωρινής βάσης δεν γίνεται επαναφορά: αλλιώς ό,τι έγινε μετά το αντίγραφο θα χανόταν οριστικά
+      try { store.backup('πριν-επαναφορά'); }
+      catch (e) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά: δεν κρατήθηκε αντίγραφο της τωρινής βάσης πριν από αυτή (' + (e instanceof Error ? e.message : String(e)) + '). Η βάση έμεινε όπως ήταν. Δες αν ο φάκελος data\\backups γράφεται ή αν ο δίσκος είναι γεμάτος.'); }
       try { store.close(); } catch { /* συνεχίζουμε */ }
       try {
         for (let i = 0; ; i++) {

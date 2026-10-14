@@ -87,7 +87,10 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
 export function writeDurable(file: string, data: string | Uint8Array, retries = 20) {
   const tmp = file + '.tmp';
   const fd = fs.openSync(tmp, 'w');
-  try { const buf = typeof data === 'string' ? Buffer.from(data) : data; for (let o = 0; o < buf.length;) o += fs.writeSync(fd, buf, o, buf.length - o); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  // γεμάτος δίσκος κ.λπ.: το μισό .tmp δεν μένει
+  try { const buf = typeof data === 'string' ? Buffer.from(data) : data; for (let o = 0; o < buf.length;) o += fs.writeSync(fd, buf, o, buf.length - o); fs.fsyncSync(fd); }
+  catch (e) { try { fs.closeSync(fd); } catch { /* ήδη κλειστό */ } fs.rmSync(tmp, { force: true }); throw e; }
+  fs.closeSync(fd);
   for (let i = 0; ; i++) {
     try { fs.renameSync(tmp, file); break; }
     catch (e: any) { if (i >= retries || !BUSY.includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; } Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }

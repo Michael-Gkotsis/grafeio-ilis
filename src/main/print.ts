@@ -3,6 +3,7 @@
 // γραμμές τίτλων, κεφαλίδα/υποσέλιδο) και τυπώνεται από το Chromium του Electron με τον διάλογο εκτυπωτή των Windows.
 // Κρατά γραμματοσειρές, πλαίσια, χρώματα, στοίχιση, συγχωνεύσεις και υπολογίζει ξανά τους απλούς τύπους
 // (SUM, ROW()-6, E17-Z17…), γιατί τα αρχεία που γράφει η εφαρμογή έχουν τις παλιές τιμές μέχρι να τα ανοίξει ο Excel.
+import crypto from 'crypto';
 import JSZip from 'jszip';
 import { colName, colNum, texts, unesc } from './xlsx';
 
@@ -507,8 +508,11 @@ function headerFooter(src: string | null, ctx: { page: number; pages: number; sh
 }
 
 const FONT_FALLBACK: Record<string, string> = { calibri: '"Calibri","Carlito",Arial,sans-serif', cambria: '"Cambria","Caladea",serif', arial: 'Arial,"Liberation Sans",sans-serif', 'times new roman': '"Times New Roman","Liberation Serif",serif', 'book antiqua': '"Book Antiqua","Palatino Linotype",Palatino,serif' };
+// Το όνομα γραμματοσειράς έρχεται από το αρχείο: μόνο γράμματα, αριθμοί, κενά και . , _ - (αλλιώς θα μπορούσε να κλείσει
+// το <style> και να βάλει δικό του script στη σελίδα)
 function fontCss(f: Font): string {
-  const fam = FONT_FALLBACK[f.name.toLowerCase()] || `"${f.name.replace(/"/g, '')}",${f.serif ? 'serif' : 'sans-serif'}`;
+  const name = f.name.replace(/[^\p{L}\p{N} _.,-]/gu, '').trim() || 'Calibri';
+  const fam = FONT_FALLBACK[name.toLowerCase()] || `"${name}",${f.serif ? 'serif' : 'sans-serif'}`;
   return `font:${f.i ? 'italic ' : ''}${f.b ? '700 ' : ''}${f.sz}pt ${fam};` + (f.color ? `color:${f.color};` : '') + (f.u || f.strike ? `text-decoration:${f.u ? 'underline' + (/double/.test(f.u) ? ' double' : '') : ''}${f.strike ? ' line-through' : ''};` : '');
 }
 const sideCss = (s?: Side) => (s ? `${s.w}px ${s.style} ${s.color}` : '0');
@@ -660,48 +664,9 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
 // κρυφές γραμμές ανάμεσα σε δύο ορατές (για να συνεχίζει η συγχώνευση από πάνω τους)
 const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let n = 0; for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++; return n; };
 
-// Η σελίδα της προεπισκόπησης: σελίδες όπως θα τυπωθούν, και πάνω μπάρα με τα φύλλα και το κουμπί «Εκτύπωση…»
-export function previewHtml(doc: PrintDoc, file: string): string {
-  const pages = doc.sheets.reduce((a, s) => a + s.pages, 0);
-  const chips = doc.all.length > 1 ? `<div class="sheets" role="group" aria-label="Φύλλα">${doc.all.map(n => { const s = doc.sheets.find(x => x.name === n); return `<label><input type="checkbox" value="${esc(n)}"${s ? ' checked' : ''}> ${esc(n)}${s ? ` <small>${s.pages}</small>` : ''}</label>`; }).join('')}</div>` : '';
-  const sections = doc.sheets.map((s, i) => `<section data-i="${i}" data-paper="${s.paper}" data-land="${s.landscape ? 1 : 0}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)} · ${s.pages} ${s.pages === 1 ? 'σελίδα' : 'σελίδες'} · ${s.paper} ${s.landscape ? 'οριζόντια' : 'κατακόρυφα'} · ${Math.round(s.scale * 100)}%</h2>` : ''}${s.html}</section>`).join('');
-  const one = doc.sheets[0];
-  const info = doc.sheets.length === 1 && one ? ` · ${one.paper} ${one.landscape ? 'οριζόντια' : 'κατακόρυφα'} · κλίμακα ${Math.round(one.scale * 100)}%` : '';
-  return `<!doctype html><html lang="el"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-<title>Εκτύπωση · ${esc(file)}</title>
-<style>
-*{box-sizing:border-box}
-html,body{margin:0}
-body{background:#5f6368;font:14px "Segoe UI",Tahoma,Arial,sans-serif;color:#202124}
-.bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,.2)}
-.bar b{font-size:15px}.bar .meta{color:#5f6368}
-.sheets{display:flex;flex-wrap:wrap;gap:6px}.sheets label{display:inline-flex;gap:5px;align-items:center;padding:3px 9px;border:1px solid #c4c7c5;border-radius:14px;cursor:pointer}
-.sheets small{color:#5f6368}.sheets input:checked+*{font-weight:600}
-.acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.prn{display:inline-flex;gap:6px;align-items:center;color:#5f6368}.prn[hidden]{display:none}.prn select,.prn input{font:inherit;padding:6px 8px;border:1px solid #c4c7c5;border-radius:6px;background:#fff;color:#202124}.prn select{max-width:260px}.prn input{width:64px}
-button{font:inherit;padding:7px 16px;border-radius:6px;border:1px solid #c4c7c5;background:#fff;cursor:pointer}
-button.pri{background:#2e5e3a;border-color:#2e5e3a;color:#fff;font-weight:600}button:disabled{opacity:.6;cursor:default}
-button:focus-visible,.sheets label:focus-within{outline:2px solid #1a73e8;outline-offset:2px}
-.msg{width:100%;color:#b3261e}.msg.ok{color:#2e5e3a}.msg:empty{display:none}
-main{padding:20px 0 40px}
-section h2{margin:8px auto;color:#fff;font-size:13px;font-weight:600;text-align:center}
-.pg{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden}
-.ar{position:absolute;transform-origin:0 0}
-table{border-collapse:collapse;table-layout:fixed;color:#000}
-td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
-table.grid td{outline:0.5px solid #bbb}
-.x{display:flex;padding:0 2px;white-space:pre;overflow:hidden;line-height:1.15}
-.x.o{overflow:visible}
-.x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
-.hf{position:absolute;display:flex;justify-content:space-between;font:10pt Calibri,Carlito,Arial,sans-serif}.hf span{flex:1}.hf span:nth-child(2){text-align:center}.hf span:nth-child(3){text-align:right}
-${doc.css}
-@media print{body{background:none}.bar,section h2{display:none}main{padding:0}.pg{margin:0;box-shadow:none;break-after:page}section.skip{display:none}}
-</style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body>
-<div class="bar"><b>${esc(file)}</b><span class="meta">${pages} ${pages === 1 ? 'σελίδα' : 'σελίδες'}${info}</span>${chips}
-<span class="acts"><label class="prn" hidden>Εκτυπωτής <select id="prn"></select></label><label class="prn" hidden>Αντίτυπα <input id="copies" type="number" min="1" max="99" value="1"></label><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="dlg" hidden title="Ο διάλογος των Windows παίρνει τον προσανατολισμό του εκτυπωτή: διάλεξε εκεί «Οριζόντιο» για τα οριζόντια φύλλα">Διάλογος των Windows…</button><button type="button" id="close">Κλείσιμο</button></span><div class="msg" id="msg" role="status"></div></div>
-<main>${sections || '<p style="color:#fff;text-align:center">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>'}</main>
-<script>
+// Το script της προεπισκόπησης (μπάρα: φύλλα, εκτυπωτής, «Εκτύπωση»). Είναι το μόνο που επιτρέπει το CSP (με το hash του),
+// ώστε ό,τι άλλο βρεθεί μέσα στη σελίδα από το αρχείο να μην τρέχει.
+const PREVIEW_SCRIPT = `
 (function(){
   var api = window.printer, go = document.getElementById('go'), dlg = document.getElementById('dlg'), msg = document.getElementById('msg'), pageCss = document.getElementById('page');
   var prn = document.getElementById('prn'), copies = document.getElementById('copies');
@@ -740,5 +705,48 @@ ${doc.css}
   go.onclick = function(){ printAll(false); };
   dlg.onclick = function(){ printAll(true); };
 })();
-</script></body></html>`;
+`;
+const SCRIPT_HASH = crypto.createHash('sha256').update(PREVIEW_SCRIPT).digest('base64');
+// Η σελίδα της προεπισκόπησης: σελίδες όπως θα τυπωθούν, και πάνω μπάρα με τα φύλλα και το κουμπί «Εκτύπωση…»
+export function previewHtml(doc: PrintDoc, file: string): string {
+  const pages = doc.sheets.reduce((a, s) => a + s.pages, 0);
+  const chips = doc.all.length > 1 ? `<div class="sheets" role="group" aria-label="Φύλλα">${doc.all.map(n => { const s = doc.sheets.find(x => x.name === n); return `<label><input type="checkbox" value="${esc(n)}"${s ? ' checked' : ''}> ${esc(n)}${s ? ` <small>${s.pages}</small>` : ''}</label>`; }).join('')}</div>` : '';
+  const sections = doc.sheets.map((s, i) => `<section data-i="${i}" data-paper="${s.paper}" data-land="${s.landscape ? 1 : 0}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)} · ${s.pages} ${s.pages === 1 ? 'σελίδα' : 'σελίδες'} · ${s.paper} ${s.landscape ? 'οριζόντια' : 'κατακόρυφα'} · ${Math.round(s.scale * 100)}%</h2>` : ''}${s.html}</section>`).join('');
+  const one = doc.sheets[0];
+  const info = doc.sheets.length === 1 && one ? ` · ${one.paper} ${one.landscape ? 'οριζόντια' : 'κατακόρυφα'} · κλίμακα ${Math.round(one.scale * 100)}%` : '';
+  return `<!doctype html><html lang="el"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'">
+<title>Εκτύπωση · ${esc(file)}</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#5f6368;font:14px "Segoe UI",Tahoma,Arial,sans-serif;color:#202124}
+.bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.bar b{font-size:15px}.bar .meta{color:#5f6368}
+.sheets{display:flex;flex-wrap:wrap;gap:6px}.sheets label{display:inline-flex;gap:5px;align-items:center;padding:3px 9px;border:1px solid #c4c7c5;border-radius:14px;cursor:pointer}
+.sheets small{color:#5f6368}.sheets input:checked+*{font-weight:600}
+.acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.prn{display:inline-flex;gap:6px;align-items:center;color:#5f6368}.prn[hidden]{display:none}.prn select,.prn input{font:inherit;padding:6px 8px;border:1px solid #c4c7c5;border-radius:6px;background:#fff;color:#202124}.prn select{max-width:260px}.prn input{width:64px}
+button{font:inherit;padding:7px 16px;border-radius:6px;border:1px solid #c4c7c5;background:#fff;cursor:pointer}
+button.pri{background:#2e5e3a;border-color:#2e5e3a;color:#fff;font-weight:600}button:disabled{opacity:.6;cursor:default}
+button:focus-visible,.sheets label:focus-within{outline:2px solid #1a73e8;outline-offset:2px}
+.msg{width:100%;color:#b3261e}.msg.ok{color:#2e5e3a}.msg:empty{display:none}
+main{padding:20px 0 40px}
+section h2{margin:8px auto;color:#fff;font-size:13px;font-weight:600;text-align:center}
+.pg{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden}
+.ar{position:absolute;transform-origin:0 0}
+table{border-collapse:collapse;table-layout:fixed;color:#000}
+td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
+table.grid td{outline:0.5px solid #bbb}
+.x{display:flex;padding:0 2px;white-space:pre;overflow:hidden;line-height:1.15}
+.x.o{overflow:visible}
+.x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
+.hf{position:absolute;display:flex;justify-content:space-between;font:10pt Calibri,Carlito,Arial,sans-serif}.hf span{flex:1}.hf span:nth-child(2){text-align:center}.hf span:nth-child(3){text-align:right}
+${doc.css}
+@media print{body{background:none}.bar,section h2{display:none}main{padding:0}.pg{margin:0;box-shadow:none;break-after:page}section.skip{display:none}}
+</style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body>
+<div class="bar"><b>${esc(file)}</b><span class="meta">${pages} ${pages === 1 ? 'σελίδα' : 'σελίδες'}${info}</span>${chips}
+<span class="acts"><label class="prn" hidden>Εκτυπωτής <select id="prn"></select></label><label class="prn" hidden>Αντίτυπα <input id="copies" type="number" min="1" max="99" value="1"></label><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="dlg" hidden title="Ο διάλογος των Windows παίρνει τον προσανατολισμό του εκτυπωτή: διάλεξε εκεί «Οριζόντιο» για τα οριζόντια φύλλα">Διάλογος των Windows…</button><button type="button" id="close">Κλείσιμο</button></span><div class="msg" id="msg" role="status"></div></div>
+<main>${sections || '<p style="color:#fff;text-align:center">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>'}</main>
+<script>${PREVIEW_SCRIPT}</script></body></html>`;
 }

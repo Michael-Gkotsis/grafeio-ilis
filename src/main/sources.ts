@@ -29,6 +29,11 @@ export class SourceMetaStore {
     if (m === null) delete all[kind]; else all[kind] = { ...(all[kind] || { mtime: 0, size: 0, keys: [], at: '' }), ...m };
     try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); }
   }
+  // Για να γυρίσει ακριβώς όπως είναι τώρα (π.χ. όταν το «Νέο αρχείο» δεν φτιάχτηκε και η αντιστοίχιση γυρνά στο παλιό)
+  keep(kind: ListKind): () => void {
+    const was = this.get(kind);
+    return () => { const all = this.all(); if (was) all[kind] = was; else delete all[kind]; try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); } };
+  }
 }
 export const stamp = (file: string): { mtime: number; size: number } | null => { try { const st = fs.statSync(file); return { mtime: Math.round(st.mtimeMs), size: st.size }; } catch { return null; } };
 
