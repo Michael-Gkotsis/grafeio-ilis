@@ -7,15 +7,19 @@ export const DEFAULT_PREFS: Prefs = { theme: 'auto', density: 'normal', nav: 'au
 const KEY = 'grafeio.prefs';
 
 export function load<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v ? { ...fallback, ...JSON.parse(v) } : fallback; } catch { return fallback; }
+  // πάντα αντίγραφο: οι προεπιλογές δεν αλλάζουν ποτέ από όποιον αλλάζει το αποτέλεσμα
+  try { const v = localStorage.getItem(key); return v ? { ...fallback, ...JSON.parse(v) } : { ...fallback }; } catch { return { ...fallback }; }
 }
 export function save(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* χωρίς αποθήκευση */ }
 }
 export function loadPrefs(): Prefs {
   const p = load(KEY, DEFAULT_PREFS);
-  // παλιό κλειδί του μενού (πριν από τις ρυθμίσεις εμφάνισης)
-  try { const old = localStorage.getItem('grafeio.nav'); if (old && p.nav === 'auto') p.nav = old === 'rail' ? 'rail' : 'full'; } catch { /* τίποτα */ }
+  // παλιό κλειδί του μενού (πριν από τις ρυθμίσεις εμφάνισης): περνά μία φορά στις ρυθμίσεις και σβήνεται
+  try {
+    const old = localStorage.getItem('grafeio.nav');
+    if (old) { if (p.nav === 'auto') p.nav = old === 'rail' ? 'rail' : 'full'; save(KEY, p); localStorage.removeItem('grafeio.nav'); }
+  } catch { /* τίποτα */ }
   return p;
 }
 export const savePrefs = (p: Prefs) => save(KEY, p);
