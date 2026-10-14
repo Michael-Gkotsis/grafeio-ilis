@@ -9,7 +9,7 @@ import { itemKey, ownMed, type UserLists } from './ranks';
 export type StatCell = 'yes' | 'last' | 'no';
 // cells: γραμμή («EA» ή «EA:ΕΛ ΓΥΜΝ») → υπηρεσία (id μπλοκ) → τιμή · out: γραμμή → βγαίνει έξοδο
 export interface StatConfig { cells?: Record<string, Record<string, StatCell>>; out?: Record<string, boolean> }
-// το ΣΤΕΠ είναι εισαγωγή, όπως το νοσοκομείο: απών, όχι εδώ (Michael, 13/10)
+// το ΣΤΕΠ (εισαγωγή μέσα στο στρατόπεδο) δεν μπαίνει σε καμία υπηρεσία: όχι εδώ (Michael, 13-14/10)
 export const STAT_ROWS: TypeKey[] = ['EY', 'EA', 'EO', 'EARV'];
 export const STAT_TXT: Record<StatCell, string> = { yes: 'μπαίνει', last: 'μόνο αν δεν υπάρχει άλλος', no: 'δεν μπαίνει' };
 export const statRowKey = (type: TypeKey, own?: string) => (own ? type + ':' + itemKey(own) : type);

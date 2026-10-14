@@ -1,7 +1,7 @@
 // Πίνακας καταστάσεων (Michael, 13/10): ΕΥ/ΕΑ/ΕΟ/ΕΑΡΒ και δικά σου ιατρικά, ανά υπηρεσία και έξοδος. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { dutyBlock, fillDay, guardUnavailable, isUnarmed, lastResort, outBlock, postsOf, strengthOf } from '../src/shared/rules';
+import { dutyBlock, fillDay, guardUnavailable, hkaiCounts, isUnarmed, lastResort, outBlock, postsOf, strengthOf } from '../src/shared/rules';
 import { DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, type AppState, type TypeKey } from '../src/shared/domain';
 import type { UserLists } from '../src/shared/ranks';
 import { statCellOf, statNoDuty, STAT_ROWS } from '../src/shared/stat';
@@ -85,10 +85,11 @@ describe('Καταστάσεις: αλλαγές από τις Ρυθμίσει�
   });
 });
 
-describe('ΣΤΕΠ: εισαγωγή, όπως το νοσοκομείο (Michael, 13/10)', () => {
-  it('απών, σε καμία υπηρεσία, δεν βγαίνει έξοδο', () => {
+describe('ΣΤΕΠ: εισαγωγή μέσα στο στρατόπεδο (Michael, 14/10)', () => {
+  it('παρών, σε καμία υπηρεσία, δεν βγαίνει έξοδο, δεν μετρά στην ΗΚΑΙ', () => {
     const s = declare(fakeState(5), 'STEP', 2);
-    expect(strengthOf(s, D).present).toBe(4);
+    expect(strengthOf(s, D).present).toBe(5);
+    const h = hkaiCounts(s, D); expect(h.apo + h.kol).toBe(0);
     expect(guardUnavailable(s, D, 2, 'mg1')).toMatch(/ΣΤΕΠ/);
     expect(outBlock(s, D, 2)).toMatch(/ΣΤΕΠ/);
     expect(statNoDuty(s.statuses.find(x => x.type === 'STEP')!, s.settings.blocks)).toBe(true);
