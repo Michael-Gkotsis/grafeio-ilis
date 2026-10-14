@@ -393,7 +393,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const fair = new Map(people.map(p => [p.id, { ...fairOf(s, p.id, date), pid: p.id }]));
   const idx = new Map<number, Set<ISODate>>();
   dutyIndexOf(s).forEach((v, id) => idx.set(id, new Set(v)));
-  let n = 0; const empty: string[] = []; const warn: string[] = [];
+  let n = 0; const skNone = new Set<string>();
   const posts = postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
   for (const x of posts) {
@@ -404,6 +404,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     if (!idx.has(f)) idx.set(f, new Set()); idx.get(f)!.add(date);
   }
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
+  const mine = new Set<string>();   // οι θέσεις που γέμισε αυτή η συμπλήρωση (μόνο αυτές μετακινούνται στην επιδιόρθωση)
   // «Αυστηρά Άοπλοι»: πρώτα οι θέσεις όπου μπαίνουν οι άοπλοι (μαγειρεία, 2ο-3ο, 1ο-4ο νούμερο), μετά όλες οι άλλες
   const strict = !!s.rules.strictUnarmed;
   const order = strict ? [...posts].sort((a, b) => strictTier(a) - strictTier(b)) : posts;
@@ -411,13 +412,71 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     if (g[x.k]) continue;
     const list = candidates(work, date, x, people, fair, idx, fixed, memo);
     const cand = strict ? strictPick(work, date, x, list, people, idx, fixed, memo) : list[0];
-    if (!cand) { empty.push(x.k); if (strict && x.kind === 'sk' && list.length) warn.push(x.label + ': ' + STRICT_SK); continue; }
-    const lr = lastResort(s.statuses, date, cand.id, x, s.settings.lists) || statusWarn(s, date, cand.id); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
-    g[x.k] = cand.id; n++;
+    if (!cand) { if (strict && x.kind === 'sk' && list.length) skNone.add(x.k); continue; }
+    g[x.k] = cand.id; n++; mine.add(x.k);
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
     if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
   }
+  n += repair(s, date, g, mine, order, people, fair, idx, fixed);
+  // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
+  const pm = personMap(s.people); const empty: string[] = []; const warn: string[] = [];
+  for (const x of order) {
+    const pid = g[x.k];
+    if (!pid) { empty.push(x.k); if (skNone.has(x.k)) warn.push(x.label + ': ' + STRICT_SK); continue; }
+    if (!mine.has(x.k)) continue;
+    const lr = lastResort(s.statuses, date, pid, x, s.settings.lists) || statusWarn(s, date, pid); if (lr) warn.push(shortName(pm.get(pid)!) + ' (' + x.label + '): ' + lr);
+  }
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
+}
+// Επιδιόρθωση μετά την πρώτη σειρά (που κρατά τη σειρά δικαιοσύνης και τα «Αυστηρά Άοπλοι»). Η πρώτη σειρά διαλέγει μία
+// θέση τη φορά και μπορεί να αφήσει θέση κενή, ή να βάλει κάποιον «μόνο αν δεν υπάρχει άλλος», ενώ υπάρχει πλήρης έγκυρη
+// ανάθεση (π.χ. ο Ι1 στη σκοπιά και η ΤΑΕ κενή, ενώ ο Ι3 ΜΕ ΟΠΛΟ που δεν κάνει ΤΑΕ μπορούσε να πάει σκοπιά). Για κάθε
+// τέτοια θέση ψάχνει μια μικρή αλυσίδα (ως 3 άτομα) ανάμεσα σε όσους έβαλε αυτή η συμπλήρωση: κάποιος πάει στη θέση, τη
+// δική του την παίρνει άλλος, και στο τέλος μπαίνει κάποιος χωρίς θέση σήμερα, πάντα με τη σειρά δικαιοσύνης. Κανόνας δεν
+// παραβαίνεται· οι θέσεις που έβαλες με το χέρι και οι μόνιμοι Λ/Υ-Δ/Υ δεν μετακινούνται. Πόσες θέσεις γέμισαν επιπλέον.
+function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set<string>, posts: Post[], people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>): number {
+  const lists = s.settings.lists; const strict = !!s.rules.strictUnarmed; const h = isHol(s.settings, date);
+  const lr = (pid: number, x: Post) => !!(lastResort(s.statuses, date, pid, x, lists) || statusWarn(s, date, pid));
+  const okMemo = new Map<string, boolean>();
+  // μπαίνει στη θέση (χωρίς να μετράμε πού είναι σήμερα: αυτό το ξέρει η αλυσίδα)
+  const ok = (pid: number, x: Post) => {
+    const key = pid + '|' + x.k; let v = okMemo.get(key);
+    if (v == null) { v = !fixed.has(pid) && !dutyBlock(s.statuses, date, pid, x, lists) && !capBlock(s, date, pid, x) && !seatlessOn(s, date, pid) && !ruleBlock(s, date, pid, idx, x.k) && !(strict && x.kind === 'sk' && isUnarmed(s, date, pid)); okMemo.set(key, v); }
+    return v;
+  };
+  const byFair = (x: Post) => { const cmp = fairCompare(h, x.kind, date); return (a: number, b: number) => cmp(fair.get(a)!, fair.get(b)!); };
+  let free = new Map<string, number[]>();   // ανά θέση: όσοι δεν έχουν θέση σήμερα και μπαίνουν, με τη σειρά δικαιοσύνης
+  const freeFor = (x: Post) => {
+    let l = free.get(x.k);
+    if (!l) { const busy = new Set(Object.values(g)); l = people.filter(p => !busy.has(p.id) && ok(p.id, x)).map(p => p.id).sort(byFair(x)); free.set(x.k, l); }
+    return l;
+  };
+  let added = 0;
+  const tryFill = (x: Post, better: boolean): boolean => {
+    const cur = better ? g[x.k] : undefined;
+    // στο τέλος της αλυσίδας: κάποιος χωρίς θέση σήμερα (ή αυτός που φεύγει από τη x, όταν τη θέλουμε για άλλον)
+    const refill = (y: Post, not: number[]) => {
+      const l = [...freeFor(y), ...(cur != null && ok(cur, y) ? [cur] : [])].filter(p => !not.includes(p) && (!better || !lr(p, y)));
+      return l.sort(byFair(y))[0];
+    };
+    const moves = (pid: number, y: Post) => ok(pid, y) && !lr(pid, y);
+    const done = (a: [string, number][]) => { if (!better) added++; for (const [k, p] of a) g[k] = p; mine.add(x.k); free = new Map(); return true; };
+    if (better) { const u = refill(x, cur != null ? [cur] : []); if (u != null) return done([[x.k, u]]); }
+    const mov = posts.filter(y => y.k !== x.k && mine.has(y.k) && g[y.k] != null);
+    const first = mov.filter(y => moves(g[y.k], x)).sort((a, b) => byFair(x)(g[a.k], g[b.k]));
+    for (const y1 of first) {
+      const p1 = g[y1.k];
+      const u = refill(y1, [p1]); if (u != null) return done([[x.k, p1], [y1.k, u]]);
+      for (const y2 of mov) {
+        if (y2.k === y1.k) continue; const p2 = g[y2.k]; if (!moves(p2, y1)) continue;
+        const u2 = refill(y2, [p1, p2]); if (u2 != null) return done([[x.k, p1], [y1.k, p2], [y2.k, u2]]);
+      }
+    }
+    return false;
+  };
+  for (const x of posts) if (!g[x.k]) tryFill(x, false);
+  for (const x of posts) if (mine.has(x.k) && g[x.k] && lr(g[x.k], x)) tryFill(x, true);
+  return added;
 }
 // --------------------------- «Αυστηρά Άοπλοι» (λοχίας, 11/10· κλείνει/ανοίγει στους Κανόνες) ---------------------------
 // Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
