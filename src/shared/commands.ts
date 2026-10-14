@@ -230,12 +230,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       let note = '';
       if (c.pid) {
         if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
-        const hard = dutyBlock(s.statuses, c.date, c.pid, post) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
+        const hard = dutyBlock(s.statuses, c.date, c.pid, post, s.settings.lists) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
         if (hard) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + hard);
         const soft = capBlock(s, c.date, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
-        const lr = lastResort(s.statuses, c.date, c.pid, post) || statusWarn(s, c.date, c.pid); if (lr) note += ' (' + lr + ')';
+        const lr = lastResort(s.statuses, c.date, c.pid, post, s.settings.lists) || statusWarn(s, c.date, c.pid); if (lr) note += ' (' + lr + ')';
       }
       let next = setGuard(s, c.date, c.k, c.pid);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση

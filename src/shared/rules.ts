@@ -2,6 +2,7 @@
 import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
+import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
@@ -147,14 +148,17 @@ export function capBlock(s: AppState, date: ISODate, pid: number, post?: Post | 
 export const capLabel = (k: DutyKind) => CAP_KINDS.find(x => x[0] === k)?.[1] || k;
 
 // Κ-01, Κ-02, Κ-05: γιατί κάποιος ΔΕΝ μπαίνει σε μια θέση (null = μπαίνει). Χωρίς θέση: ελέγχει σαν ένοπλη.
-type DutyPost = { armed: boolean; kind?: DutyKind; slots?: string[] | null; hrs?: string };
-export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
+// lists: ό,τι άλλαξες στον πίνακα καταστάσεων (stat.ts)· χωρίς αυτό ισχύουν οι κανόνες του λοχία όπως πριν
+type DutyPost = { armed: boolean; kind?: DutyKind; block?: string; slots?: string[] | null; hrs?: string };
+export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null, lists?: UserLists): string | null {
   for (const s of statusesOn(statuses, pid, date)) {
     if (backBefore(s, date, post)) continue;
+    const c = statOn(s, post, lists); if (c.v !== 'no') continue;
     const t = TYPES[s.type];
+    if (c.from !== 'def') return statusLbl(s, lists) + ': όχι ' + ((post?.kind && CAP_ACC[post.kind]) || 'σε αυτή την υπηρεσία') + untilTxt(s, date);
     if (t.noDuty) return t.label + untilTxt(s, date);
     if (t.noArmed && (!post || post.armed)) return 'Άοπλος: ' + t.label + untilTxt(s, date);
-    if (t.light && post?.kind === 'mg') return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
+    return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
   }
   return leavesBefore(statuses, date, pid, post);
 }
@@ -203,11 +207,15 @@ function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: Dut
   if (end == null || 1440 + mins(s.fromTime!) >= end) return null;
   return 'Φεύγει ' + TYPES[s.type].label + ' ' + dm(next) + ' στις ' + s.fromTime;
 }
-// ΕΟ/ΕΑ σε (άοπλη) σκοπιά: επιτρέπεται, αλλά μόνο αν δεν υπάρχει άλλος (λοχίας, 10/10)
-export function lastResort(statuses: Status[], date: ISODate, pid: number, post?: { kind?: DutyKind } | null): string | null {
-  if (post?.kind !== 'sk') return null;
-  const st = statusesOn(statuses, pid, date).find(x => TYPES[x.type].light);
-  return st ? TYPES[st.type].label + ': σκοπιά μόνο αν δεν υπάρχει άλλος' : null;
+// ΕΟ/ΕΑ σε (άοπλη) σκοπιά: επιτρέπεται, αλλά μόνο αν δεν υπάρχει άλλος (λοχίας, 10/10)· και ό,τι άλλο όρισες έτσι
+// στον πίνακα καταστάσεων
+export function lastResort(statuses: Status[], date: ISODate, pid: number, post?: { kind?: DutyKind; armed?: boolean; block?: string } | null, lists?: UserLists): string | null {
+  if (!post?.kind) return null;
+  for (const st of statusesOn(statuses, pid, date)) {
+    const c = statOn(st, { ...post, armed: !!post.armed }, lists); if (c.v !== 'last') continue;
+    return (c.from === 'def' ? TYPES[st.type].label : statusLbl(st, lists)) + ': ' + (CAP_ACC[post.kind] || 'υπηρεσία') + ' μόνο αν δεν υπάρχει άλλος';
+  }
+  return null;
 }
 // Ιατρικό «μόνο προειδοποίηση» (π.χ. παραπεμπτικό για 401): μπαίνει σε υπηρεσία, με προειδοποίηση· η αυτόματη
 // συμπλήρωση τον βάζει μόνο αν δεν υπάρχει άλλος
@@ -263,7 +271,7 @@ function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<IS
 }
 export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: string | null, idx?: Map<number, Set<ISODate>>): string | null {
   const post = k ? postBy(s, k) : null;
-  const r = dutyBlock(s.statuses, date, pid, post) || capBlock(s, date, pid, post);
+  const r = dutyBlock(s.statuses, date, pid, post, s.settings.lists) || capBlock(s, date, pid, post);
   if (r) return r;
   const o = postOf(s, date, pid, k || undefined);
   if (o) return 'Ήδη ' + postTxt(o);
@@ -275,7 +283,7 @@ export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: str
 export function outBlock(s: AppState, date: ISODate, pid: number): string | null {
   const o = postOf(s, date, pid);
   if (o) return 'Έχει υπηρεσία: ' + o.label;
-  const st = statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].noOut);
+  const st = statusesOn(s.statuses, pid, date).find(x => statNoOut(x, s.settings.lists));
   if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date);
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
   const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && coversDay(x, date));
@@ -404,7 +412,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
     const list = candidates(work, date, x, people, fair, idx, fixed, memo);
     const cand = strict ? strictPick(work, date, x, list, people, idx, fixed, memo) : list[0];
     if (!cand) { empty.push(x.k); if (strict && x.kind === 'sk' && list.length) warn.push(x.label + ': ' + STRICT_SK); continue; }
-    const lr = lastResort(s.statuses, date, cand.id, x) || statusWarn(s, date, cand.id); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
+    const lr = lastResort(s.statuses, date, cand.id, x, s.settings.lists) || statusWarn(s, date, cand.id); if (lr) warn.push(shortName(cand) + ' (' + x.label + '): ' + lr);
     g[x.k] = cand.id; n++;
     work = { ...work, guards: { ...work.guards, [date]: { ...g } } };
     if (!idx.has(cand.id)) idx.set(cand.id, new Set()); idx.get(cand.id)!.add(date);
@@ -414,9 +422,10 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
 // --------------------------- «Αυστηρά Άοπλοι» (λοχίας, 11/10· κλείνει/ανοίγει στους Κανόνες) ---------------------------
 // Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
 export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
-  if (statusesOn(s.statuses, pid, date).some(x => TYPES[x.type].noArmed)) return true;
+  const blocks = (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly');
+  if (statusesOn(s.statuses, pid, date).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
-  if (siIsUnarmed(p, (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly'), s.settings.lists)) return true;
+  if (siIsUnarmed(p, blocks, s.settings.lists)) return true;
   const kinds = [...new Set(postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly').map(x => x.kind))];
   const c = s.caps[pid] || {};
   return kinds.length > 0 && kinds.every(k => !!c[k]);
@@ -448,7 +457,7 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const need = x.armed ? [] : armedLeft(s, date, x.k);
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
   const reserve = (p: Person) => (keep?.has(p.id) ? 1 : 0);
-  const last = (p: Person) => (lastResort(s.statuses, date, p.id, x) || statusWarn(s, date, p.id) ? 1 : 0);
+  const last = (p: Person) => (lastResort(s.statuses, date, p.id, x, s.settings.lists) || statusWarn(s, date, p.id) ? 1 : 0);
   // ΣΚ/αργία: πρώτα οι λιγότερες αργίες· σε ισοπαλία, πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει
   // έξοδο εκείνη τη μέρα (Michael, 13/10: πριν, το ΔΝ μετρούσε πριν από τις αργίες και όσοι είχαν ΔΝ δεν έκαναν ποτέ ΣΚ)
   const rooms = h ? outRoomsOn(s.rules, date) : null;
@@ -507,7 +516,7 @@ export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { h
   if (!pa || !pb || !A || !B) return { hard: 'Η ανταλλαγή θέλει δύο κατειλημμένες θέσεις', soft: null };
   const work: AppState = { ...s, guards: { ...s.guards, [date]: { ...g, [a]: pb, [b]: pa } } };
   const pm = personMap(s.people); const nm = (id: number) => (pm.get(id) ? shortName(pm.get(id)!) : '?');
-  const hard = (dutyBlock(s.statuses, date, pb, A) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A)) || (dutyBlock(s.statuses, date, pa, B) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B)) || null;
+  const hard = (dutyBlock(s.statuses, date, pb, A, s.settings.lists) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A, s.settings.lists)) || (dutyBlock(s.statuses, date, pa, B, s.settings.lists) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B, s.settings.lists)) || null;
   const sa = capBlock(s, date, pb, A) || ruleBlock(work, date, pb, undefined, a), sb = capBlock(s, date, pa, B) || ruleBlock(work, date, pa, undefined, b);
   return { hard, soft: (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
 }
@@ -593,13 +602,13 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
       // οι ίδιοι κανόνες με τις υπηρεσίες (dutyBlock): καμία υπηρεσία, όχι ένοπλη, ΕΟ/ΕΑ όχι μαγειρεία
       const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to, ...(cmd.fromTime ? { fromTime: cmd.fromTime } : {}), ...(cmd.toTime ? { toTime: cmd.toTime } : {}) };
       dates.forEach(date => posts.forEach(x => {
-        if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
+        if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x, lists)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
       }));
     }
     // ιατρικό «μόνο προειδοποίηση»: οι υπηρεσίες μένουν, με προειδοποίηση
     if (medWarns(cmd, lists) && !(today && cmd.to < today)) dates.forEach(date => posts.forEach(x => { if ((!today || date >= today) && s.guards[date][x.k] === pid) warned.push({ pid, date, k: x.k }); }));
     // και η ποινή που ακόμα αιτείται κρατά τον στρατιώτη μέσα (outBlock)
-    if (t.noOut && !t.away)
+    if (statNoOut(cmd, lists) && !t.away)
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && overlapsRange(x, cmd.from, cmd.to)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
