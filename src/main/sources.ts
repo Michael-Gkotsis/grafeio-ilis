@@ -11,7 +11,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -241,9 +241,11 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       ws.setColWidths(wide);
       ws.setPrintFit(c2 >= 10);
     }
-    if (plan.insert && !fresh) ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb);
+    // Α/Α με τύπο (=A4+1): οι νέες γραμμές μπαίνουν στην αλυσίδα (οι αριθμοί του σχεδίου δεν γράφονται πάνω σε τύπο)
+    const chain = (after: number, n: number) => { if (b.cols.aa != null) ws.chainAa(b.cols.aa + 1, after + 1, n); };
+    if (plan.insert && !fresh) { ws.insertRows(plan.insert.after + 1, plan.insert.n, plan.insert.tpl + 1, wb); chain(plan.insert.after, plan.insert.n); }
     // νέοι στρατιώτες μέσα στον πίνακα (στον θάλαμό τους): γραμμές με το στυλ του διπλανού, οι τύποι από κάτω κατεβαίνουν
-    for (const st of steps) ws.insertRows(st.after + 1, st.n, st.tpl + 1, wb);
+    for (const st of steps) { ws.insertRows(st.after + 1, st.n, st.tpl + 1, wb); chain(st.after, st.n); }
     // νέοι στρατιώτες κάτω από τον τελευταίο: τα σύνολα που μετράνε ως τον τελευταίο τους μετράνε κι αυτούς
     if (plan.grow) await wb.growRanges(ws, plan.grow.from, plan.grow.last, plan.grow.to);
     // Ελεύθερες γραμμές που γράφονται τώρα: παίρνουν πλαίσια και στοίχιση από τη γραμμή του πίνακα από πάνω
@@ -294,7 +296,8 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
       const rs = await wb.sheet(roomSheet); const fx = new Set<string>();
       const rsheet: RawSheet = { name: roomSheet, rows: await wb.values(roomSheet, 2000, MAX_COLS, fx), fx };
       const rp = planRoomSheet(rsheet, add, plan.gone || []);
-      for (const st of rp.inserts) rs.insertRows(st.after + 1, st.n, st.tpl + 1, wb);
+      const aaC = roomBlocks(rsheet).find(x => x.cols.aa != null)?.cols.aa;
+      for (const st of rp.inserts) { rs.insertRows(st.after + 1, st.n, st.tpl + 1, wb); if (aaC != null) rs.chainAa(aaC + 1, st.after + 1, st.n); }
       for (const x of rp.sets) { const at = ref(x.r, x.c); if (rs.hasFormula(at)) continue; if (x.v != null && typeof x.v === 'object') continue; rs.set(at, x.v); }
       for (const d of rp.deletes) rs.deleteRow(d + 1, wb);
       placed = add.length - rp.missing.length; missing = rp.missing.filter(p => p.room != null).length;

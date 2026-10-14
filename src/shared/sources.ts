@@ -569,7 +569,26 @@ export interface WritePlan {
   header: { r: number; c: number; v: string; title?: boolean }[]; // καινούργιος πίνακας: τίτλος και επικεφαλίδες
   keys: string[]; added: number; changed: number; cleared: number; foreign: number;
   ambiguous?: number[];   // γραμμές συνονόματων που δεν ξέρουμε σε ποιον ανήκουν: δεν αγγίζονται
+  warn?: string[];
 }
+// Νέες ολόκληρες γραμμές μετά την after (από 0) σπρώχνουν προς τα κάτω ό,τι είναι από κάτω σε όλες τις στήλες: αν έξω
+// από τις στήλες του πίνακα υπάρχει κάτι δίπλα του (από τις επικεφαλίδες ως την after) που συνεχίζει και πιο κάτω, π.χ.
+// διπλανός πίνακας, θα κοβόταν στα δύο (X12). Πίνακας ολόκληρος πιο κάτω (και πιο φαρδύς) απλώς κατεβαίνει.
+// Οι στήλες του πίνακα: από τις στήλες της αντιστοίχισης, όσο οι επικεφαλίδες συνεχίζουν χωρίς κενό (ο διπλανός
+// πίνακας έχει δικές του επικεφαλίδες, μετά από κενή στήλη)
+export function sideBy(sheet: RawSheet | null | undefined, b: { header: number; cols: Record<string, number> }, after: number): boolean {
+  if (!sheet) return false;
+  const head = sheet.rows[b.header] || []; const used = Object.values(b.cols); if (!used.length) return false;
+  let a = Math.min(...used), z = Math.max(...used);
+  while (a > 0 && cellText(head[a - 1]) !== '') a--;
+  while (z + 1 < head.length && cellText(head[z + 1]) !== '') z++;
+  const out = (r: number) => (sheet.rows[r] || []).some((v, c) => (c < a || c > z) && cellText(v) !== '');
+  let beside = false; for (let r = b.header; r <= after && !beside; r++) beside = out(r);
+  if (!beside) return false;
+  for (let r = after + 1; r < sheet.rows.length; r++) if (out(r)) return true;
+  return false;
+}
+export const noRoomTxt = (sheet: string, who: string[]) => 'Δεν χωράει στο φύλλο «' + sheet + '» χωρίς να κοπεί στα δύο ό,τι είναι δίπλα στον πίνακα (πιο κάτω, σε άλλες στήλες): ' + who.slice(0, 5).join(', ') + (who.length > 5 ? ' κ.ά.' : '') + '. Πρόσθεσε κενές γραμμές στο τέλος του πίνακα ή μετακίνησε τον διπλανό πίνακα· γράφεται μόνο του μόλις χωρέσει.';
 const num = (s: string): string | number => (/^[1-9]\d{0,14}$/.test(s) ? Number(s) : s);
 // Στήλη «Ονοματεπώνυμο» (ή «Όνομα» χωρίς αυτήν): στους συνονόματους και «του <πατρώνυμο>», αν ο πίνακας δεν έχει δική
 // του στήλη πατρώνυμου, όπως στον Έλεγχο υπηρεσιών και στους Εξοδούχους (το makeMatcher το ξεχωρίζει στην ανάγνωση)
@@ -673,13 +692,14 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   let i = 0;
   for (; i < fresh.length && i < free.length; i++) { put(free[i], fresh[i]); aa(free[i], ++n); plan.keys.push(statusId(kind, fresh[i])); }
   const rest = fresh.slice(i);
-  if (rest.length) {
-    const after = Math.max(scan.end, b.header);
+  const after = Math.max(scan.end, b.header);
+  if (rest.length && sideBy(sheet, b, after)) plan.warn = [noRoomTxt(b.sheet, rest.map(st => (pm.get(st.pid) ? fullName(pm.get(st.pid)!) : '?')))];
+  else if (rest.length) {
     const tpl = scan.records.length ? scan.records[scan.records.length - 1].r : scan.free.length ? scan.free[0] : b.header;
     plan.insert = { after, n: rest.length, tpl };
     rest.forEach((st, j) => { const r = after + 1 + j; put(r, st); if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: ++n }); plan.keys.push(statusId(kind, st)); });
   }
-  plan.added = fresh.length;
+  plan.added = fresh.length - (plan.warn ? rest.length : 0);
   return plan;
 }
 // Στήλες για τις ώρες της άδειας σε πίνακα που δεν τις έχει: μπαίνουν μόνο όταν κάποια άδεια έχει ώρα, στο τέλος του
@@ -861,7 +881,7 @@ export function withRows(sheet: RawSheet, steps: RowInsert[]): RawSheet {
 // σβήνονται μετά τις τιμές (από κάτω προς τα πάνω). fresh/gone: όσοι μπήκαν και όσοι έφυγαν (για το φύλλο ΘΑΛΑΜΟΙ).
 export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap>;
   inserts: RowInsert[]; deletes: number[]; added: number; cleared: number; keys: string[]; grow: { from: number; last: number; to: number } | null;
-  fresh: number[]; gone: PersonSnap[] }
+  fresh: number[]; gone: PersonSnap[]; warn?: string[] }
 const snapVal = (k: string, v: string): WVal => (v === '' ? null : k === 'room' ? Number(v) : k === 'asm' || k === 'phone' ? num(v) : v);
 const roomNo = (v: CellValue) => { const n = parseInt(cellText(v), 10); return n > 0 ? n : null; };
 const byNameCmp = (a: { last: string; first: string }, c: { last: string; first: string }) => collator.compare(a.last, c.last) || collator.compare(a.first, c.first);
@@ -947,12 +967,15 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   }).sort(byNameCmp);
   // θέσεις: μέσα στον πίνακα (στον θάλαμό τους) ή στο τέλος
   const slots = new Map<number, { tpl: number; ps: Person[] }>(); const atEnd: Person[] = [];
-  for (const p of fresh) { const x = slotOf(people.filter(y => !dels.includes(y.r)), p, b.header); if (!x) { atEnd.push(p); continue; } const sl = slots.get(x.after) || { tpl: x.tpl, ps: [] }; sl.ps.push(p); slots.set(x.after, sl); }
+  // μέσα στον πίνακα μόνο αν η νέα γραμμή δεν κόβει διπλανό πίνακα (αλλιώς στο τέλος, σε κενή γραμμή αν υπάρχει)
+  const side = (after: number) => sideBy(sheet, b, after);
+  for (const p of fresh) { const x = slotOf(people.filter(y => !dels.includes(y.r)), p, b.header); if (!x || side(x.after)) { atEnd.push(p); continue; } const sl = slots.get(x.after) || { tpl: x.tpl, ps: [] }; sl.ps.push(p); slots.set(x.after, sl); }
   // στο τέλος: ελεύθερες γραμμές κάτω από τον τελευταίο· μία κενή μένει πριν από ό,τι ακολουθεί (σύνολα, άλλος πίνακας)
   const next = scan.records.find(x => x.r > last)?.r ?? Infinity;
   const free = scan.free.filter(r => r > last && r < next - 1).slice(0, atEnd.length);
-  const rest = atEnd.slice(free.length);
+  let rest = atEnd.slice(free.length);
   const ins: (RowInsert & { ps: Person[] })[] = [...slots].map(([after, x]) => ({ after, n: x.ps.length, tpl: x.tpl, ps: x.ps }));
+  if (rest.length && side(free.length ? free[free.length - 1] : last)) { plan.warn = [noRoomTxt(b.sheet, rest.map(fullName))]; rest = []; }
   if (rest.length) ins.push({ after: free.length ? free[free.length - 1] : last, n: rest.length, tpl: people.length ? last : b.header, ps: rest });
   ins.sort((x, y) => x.after - y.after);
   const { steps, fin, at } = placeRows(ins);
@@ -983,7 +1006,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const endRows: number[] = [];
   free.forEach((r, j) => { put(fin(r), atEnd[j], aaCol != null && cellText((sheet.rows[r] || [])[aaCol]) === '' ? aaAt(r - 1, 0) : null); endRows.push(fin(r)); });
   ins.forEach((x, i) => x.ps.forEach((p, j) => { put(at(i) + j, p, aaAt(x.after, j)); if (x.ps === rest) endRows.push(at(i) + j); }));
-  plan.added = fresh.length;
+  plan.added = k;
   plan.deletes = dels.map(fin).sort((x, y) => y - x);
   const l1 = fin(last) + 1;   // ο τελευταίος, από 1
   if (people.length && endRows.length && endRows.every((r, j) => r === fin(last) + 1 + j)) plan.grow = { from: b.header + 1, last: l1, to: l1 + endRows.length };
@@ -1392,13 +1415,14 @@ function planList(sheet: RawSheet, b: SourceBinding, s: AppState, w: ListWant, e
   let i = 0;
   for (; i < fresh.length && i < free.length; i++) { put(free[i], fresh[i]); aa(free[i], ++n); }
   const rest = fresh.slice(i);
-  if (rest.length) {
-    const after = Math.max(scan.end, b.header);
+  const after = Math.max(scan.end, b.header);
+  if (rest.length && sideBy(sheet, b, after)) plan.warn = [noRoomTxt(b.sheet, rest.map(pid => fullName(pm.get(pid)!)))];
+  else if (rest.length) {
     const tpl = scan.records.length ? scan.records[scan.records.length - 1].r : scan.free.length ? scan.free[0] : b.header;
     plan.insert = { after, n: rest.length, tpl };
     rest.forEach((pid, j) => { const r = after + 1 + j; put(r, pid); if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: ++n }); });
   }
-  plan.added = fresh.length;
+  plan.added = fresh.length - (plan.warn ? rest.length : 0);
   return plan;
 }
 // Πόστα: ένα άτομο ανά πόστο· όποιος δεν έχει πια πόστο φεύγει από το φύλλο
@@ -1590,7 +1614,7 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
   if (kind === 'people' && !(sh.rows[b.header] || []).some(v => cellText(v))) return { ...planPeopleNew(b, s), psnap };
   if (kind === 'people') {
     const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people), meta?.keys);
-    return { sets: p.sets, insert: null, inserts: p.inserts, deletes: p.deletes, fresh: p.fresh, gone: p.gone, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow };
+    return { sets: p.sets, insert: null, inserts: p.inserts, deletes: p.deletes, fresh: p.fresh, gone: p.gone, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow, ...(p.warn ? { warn: p.warn } : {}) };
   }
   const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
     : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keys);
