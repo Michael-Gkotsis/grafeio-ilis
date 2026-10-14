@@ -97,6 +97,10 @@ export class Store {
     if (exists && !this.hasTables()) { this.db.close(); throw new CorruptDbError('Το αρχείο δεν έχει τους πίνακες της εφαρμογής', true); }
     this.migrate(exists);
     this.load();
+    // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου
+    // υπηρεσιών, οπότε ο έλεγχος μετά την αναβάθμιση δεν χρειάζεται ποτέ
+    const st = this.state;
+    if (!st.settings.baselineReviewed && !st.people.length && !Object.keys(st.baseline).length) { this.commit({ ...st, settings: { ...st.settings, baselineReviewed: true } }); this.flush(); }
   }
   private SQL!: Awaited<ReturnType<typeof initSqlJs>>;
   // Βάση που έχει ήδη στηθεί: έχει τους πίνακές μας (ο ίδιος έλεγχος με το validate)

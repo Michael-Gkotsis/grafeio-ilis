@@ -409,7 +409,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       for (const [k, n] of Object.entries(c.baseline)) { const v = Math.max(0, Math.floor(Number(n) || 0)); if (v) { (clean as Record<string, number>)[k] = v; any = true; } }
       const baseline = { ...s.baseline }; if (any) baseline[c.pid] = clean; else delete baseline[c.pid];
       const txt = Object.entries(clean).map(([k, n]) => (k === 'hol' ? 'αργίες' : KIND_NAME[k as DutyKind] || k) + ' ' + n).join(', ') || 'καμία';
-      return { state: { ...s, baseline }, text: 'Προηγούμενες υπηρεσίες ' + shortName(p) + ': ' + txt, files: ['Έλεγχος υπηρεσιών'] };
+      // γραμμένες με το χέρι: ο έλεγχος μετά την αναβάθμιση (για όσες έβαζε η παλιά ανάγνωση του Excel) δεν χρειάζεται
+      const settings = s.settings.baselineReviewed ? s.settings : { ...s.settings, baselineReviewed: true };
+      return { state: { ...s, baseline, settings }, text: 'Προηγούμενες υπηρεσίες ' + shortName(p) + ': ' + txt, files: ['Έλεγχος υπηρεσιών'] };
     }
     case 'setHkaiManual': {
       const hkaiManual = { ...s.hkaiManual, [c.date]: c.manual };
@@ -449,7 +451,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
       list[i] = { ...b, name, posts };
       const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
-      const errs = codeErrors(settings); if (errs.length) throw new Error(errs[0]);
+      const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
       return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
     }
     case 'setBlock': {

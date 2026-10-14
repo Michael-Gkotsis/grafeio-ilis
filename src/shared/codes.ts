@@ -1,7 +1,7 @@
 // Κωδικοί υπηρεσιών στον έλεγχο υπηρεσιών (δείγμα 03): κωδικός θέσης (Θ1α, Μ2, ΛΥ…) ή σκέτο γράμμα είδους (Θ, Μ, Σ).
 // Ο κωδικός θέσης λέει ακριβώς ποια θέση· το σκέτο γράμμα μόνο το είδος (υπηρεσία χωρίς θέση).
 import { normGreek } from './text';
-import { KIND_CODE, KIND_NAME, codeKey, blocksOf, type DutyKind, type Settings } from './domain';
+import { KIND_CODE, KIND_NAME, codeKey, blocksOf, defaultCode, type DutyKind, type Phase, type Settings } from './domain';
 
 // σκέτο γράμμα ή λέξη → είδος υπηρεσίας (και θέση, για Λ/Υ και Δ/Υ που είναι πάντα μία)
 export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null {
@@ -53,32 +53,43 @@ export function codeOf(settings: Settings, k: string, kind: DutyKind): string {
 }
 export const bareOf = (k: string | undefined, kind: DutyKind) => (k === 'dy' ? 'ΔΥ' : KIND_CODE[kind]);
 
-// Λάθη στους κωδικούς (για τις Ρυθμίσεις): κενός, ίδιος σε δύο θέσεις, σκέτο γράμμα είδους, κωδικός απουσίας
-export function codeErrors(settings: Settings): string[] {
-  const out: string[] = []; const seen = new Map<string, { k: string; label: string; code: string }>();
-  const all = [...(settings.blocks || []), ...(settings.blocksSpen || [])];
+// Λάθη στους κωδικούς (για τις Ρυθμίσεις): κενός, ίδιος σε δύο θέσεις, σκέτο γράμμα είδους, κωδικός απουσίας.
+// only: μόνο όσα αφορούν μία υπηρεσία (την επεξεργασία της)· παλιό λάθος σε άλλη υπηρεσία δεν την εμποδίζει, φαίνεται
+// ως προειδοποίηση στις Ρυθμίσεις. Ο κωδικός του εντύπου (π.χ. «ΤΑΕ») μένει σωστός και με δεύτερη υπηρεσία του είδους.
+export function codeErrors(settings: Settings, only?: { phase: Phase; id: string }): string[] {
+  const out: string[] = []; const seen = new Map<string, { k: string; label: string; mine: boolean }>();
+  const all = [...(settings.blocks || []).map(b => ['sven', b] as const), ...(settings.blocksSpen || []).map(b => ['spen', b] as const)];
   const perKind = new Map<DutyKind, Set<string>>();
-  for (const b of all) for (const p of b.posts) { if (!perKind.has(b.kind)) perKind.set(b.kind, new Set()); perKind.get(b.kind)!.add(p.k); }
-  for (const b of all) for (const p of b.posts) {
-    const code = (p.code || '').trim(); const lbl = p.label || b.name;
-    if (!code) { if (!p.hidden && !b.hidden) out.push(lbl + ': χωρίς κωδικό'); continue; }
-    if (isAbsCode(code)) { out.push(lbl + ': το «' + code + '» μοιάζει με κωδικό απουσίας (με τελεία ή κάθετο)'); continue; }
-    const bare = dutyCode(code);
-    if (isBareCode(code) && bare && bare.pref !== p.k && !(bare.kind === b.kind && perKind.get(b.kind)!.size === 1))
-      out.push(lbl + ': το «' + code + '» είναι το σκέτο γράμμα για ' + KIND_NAME[bare.kind] + ' (βάλε και αριθμό, π.χ. ' + KIND_CODE[b.kind] + '1)');
-    const key = codeKey(code); const o = seen.get(key);
-    if (o && o.k !== p.k) out.push('Ο κωδικός «' + code + '» είναι και στο ' + o.label + ' και στο ' + lbl);
-    else if (!o) seen.set(key, { k: p.k, label: lbl, code });
+  for (const [, b] of all) for (const p of b.posts) { if (!perKind.has(b.kind)) perKind.set(b.kind, new Set()); perKind.get(b.kind)!.add(p.k); }
+  for (const [ph, b] of all) {
+    const mine = !only || (only.phase === ph && only.id === b.id);
+    const err = (t: string) => { if (mine) out.push(t); };
+    for (const p of b.posts) {
+      const code = (p.code || '').trim(); const lbl = p.label || b.name;
+      if (!code) { if (!p.hidden && !b.hidden) err(lbl + ': χωρίς κωδικό'); continue; }
+      if (isAbsCode(code)) { err(lbl + ': το «' + code + '» μοιάζει με κωδικό απουσίας (με τελεία ή κάθετο)'); continue; }
+      const bare = dutyCode(code); const def = defaultCode(ph, b.id, p.k);
+      if (isBareCode(code) && bare && bare.pref !== p.k && !(def && codeKey(def) === codeKey(code)) && !(bare.kind === b.kind && perKind.get(b.kind)!.size === 1))
+        err(lbl + ': το «' + code + '» είναι το σκέτο γράμμα για ' + KIND_NAME[bare.kind] + ' (βάλε και αριθμό, π.χ. ' + codePrefix(b.kind) + '2)');
+      const key = codeKey(code); const o = seen.get(key);
+      if (o && o.k !== p.k) { if (mine || o.mine) out.push('Ο κωδικός «' + code + '» είναι και στο ' + o.label + ' και στο ' + lbl); }
+      else if (!o) seen.set(key, { k: p.k, label: lbl, mine });
+    }
   }
   return [...new Set(out)];
 }
-// Ένας νέος κωδικός για θέση είδους kind που δεν τον έχει άλλη θέση (Υ1, Υ2…)
+// Αρχή των νέων κωδικών ενός είδους: το γράμμα του (Υ1, Μ6…)· η ΤΑΕ με όλο το όνομα (ΤΑΕ2), γιατί το «Τ» μόνο του
+// γράφεται για ΤΑΕ χωρίς θέση
+const PREFIX: Partial<Record<DutyKind, string>> = { tae: 'ΤΑΕ' };
+export const codePrefix = (kind: DutyKind) => PREFIX[kind] || KIND_CODE[kind];
+// Ένας νέος κωδικός για θέση είδους kind που δεν τον έχει άλλη θέση (Υ1, Υ2…, ΤΑΕ2). Αν ο σκέτος κωδικός (π.χ. «ΤΑΕ»)
+// υπάρχει ήδη, ο επόμενος είναι ο 2ος, όχι ο 1ος.
 export function freeCode(settings: Settings, kind: DutyKind, from = 1): string {
   const used = new Set<string>(); for (const b of [...(settings.blocks || []), ...(settings.blocksSpen || [])]) for (const p of b.posts) if (p.code) used.add(codeKey(p.code));
-  let n = from; let c = KIND_CODE[kind] + n; while (used.has(codeKey(c))) c = KIND_CODE[kind] + ++n;
+  const pre = codePrefix(kind);
+  let n = used.has(codeKey(pre)) ? Math.max(from, 2) : from; let c = pre + n; while (used.has(codeKey(c))) c = pre + ++n;
   return c;
 }
-
 // Τύποι COUNTIF του φύλλου που μετρούν ένα σκέτο γράμμα (π.χ. COUNTIF(M3:AO3, "Θ")): με κωδικούς θέσεων (Θ1α)
 // θα έβγαζαν 0, οπότε σε τέτοιο φύλλο γράφεται το σκέτο γράμμα μέχρι να γίνουν "Θ*"
 export function exactCountif(formula: string): string | null {

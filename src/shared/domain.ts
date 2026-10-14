@@ -235,22 +235,26 @@ export function migrateSettings(st: Settings): Settings {
 }
 // Κωδικοί θέσεων (rev 3): όσες θέσεις δεν έχουν κωδικό παίρνουν τον προεπιλεγμένο του εντύπου (Θ1α…Θ4β στη ΣΒΕΝ,
 // Θ1…Θ4, ΟΠ1…ΟΠ4, Σ3α… στη ΣΠΕΝ, Μ1…Μ5, ΛΥ, ΔΥ, ΤΑΕ)· οι δικές σου υπηρεσίες γράμμα + αριθμό (Υ1, Υ2…), χωρίς να
-// πέφτουν πάνω σε κωδικό που υπάρχει ήδη
+// πέφτουν πάνω σε κωδικό που υπάρχει ήδη. Πρώτα οι κωδικοί του εντύπου και στα δύο έντυπα, μετά οι δικές σου: αλλιώς
+// δική σου υπηρεσία θαλαμοφυλάκων στη ΣΒΕΝ θα έπαιρνε τα Θ1, Θ2 της ΣΠΕΝ και οι θαλαμοφύλακες της ΣΠΕΝ θα γίνονταν Θ3…Θ6
 export function withCodes(st: Settings): Settings {
-  const def = new Map<string, string>();
-  for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) def.set(ph + '|' + b.id + '|' + p.k, p.code);
   const owner = new Map<string, string>();   // κλειδί κωδικού → θέση που τον έχει
   for (const b of [...(st.blocks || []), ...(st.blocksSpen || [])]) for (const p of b.posts) if (p.code) owner.set(codeKey(p.code), p.k);
   const free = (c: string, k: string) => { const o = owner.get(codeKey(c)); return o == null || o === k; };
-  const fill = (ph: Phase, list: BlockDef[] | undefined) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
+  const fill = (ph: Phase, list: BlockDef[] | undefined, own: boolean) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
     if (p.code) return p;
-    let c = def.get(ph + '|' + b.id + '|' + p.k);
-    if (!c || !free(c, p.k)) { let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
+    let c = defaultCode(ph, b.id, p.k);
+    if (!c || !free(c, p.k)) { if (!own) return p; let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
     owner.set(codeKey(c), p.k);
     return { ...p, code: c };
   }) }));
-  return { ...st, blocks: fill('sven', st.blocks), blocksSpen: fill('spen', st.blocksSpen) };
+  const blocks = fill('sven', st.blocks, false), blocksSpen = fill('spen', st.blocksSpen, false);
+  return { ...st, blocks: fill('sven', blocks, true), blocksSpen: fill('spen', blocksSpen, true) };
 }
+// Ο κωδικός του εντύπου για μια θέση (ΣΒΕΝ/ΣΠΕΝ, υπηρεσία, θέση), όπως στις προεπιλογές
+const DEF_CODES = new Map<string, string>();
+for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) DEF_CODES.set(ph + '|' + b.id + '|' + p.k, p.code);
+export const defaultCode = (ph: Phase, block: string, k: string) => DEF_CODES.get(ph + '|' + block + '|' + k);
 // Κλειδί σύγκρισης κωδικών: κεφαλαία, χωρίς τόνους, λατινικά που μοιάζουν → ελληνικά, χωρίς κενά και παύλες
 export const codeKey = (raw: unknown) => normGreek(raw).replace(/[\s\-–—]+/g, '');
 
