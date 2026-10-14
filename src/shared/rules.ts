@@ -1,5 +1,5 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
-import { addDays, daysBetween, dm, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
+import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
@@ -47,8 +47,26 @@ export const postBy = (s: AppState, k: string): Post | undefined => {
 };
 
 // --------------------------- αργίες ---------------------------
-export const isHol = (settings: Settings, d: ISODate) => isWeekend(d) || !!settings.holidays[d];
-export const holName = (settings: Settings, d: ISODate) => settings.holidays[d] || (isWeekend(d) ? 'ΣΚ' : '');
+// Οι επίσημες αργίες βγαίνουν για κάθε χρονιά (σταθερές και από το Πάσχα, dates.ts), μαζί με όσες πρόσθεσες
+// (settings.holidays) και χωρίς όσες αφαίρεσες (settings.holidaysOff). Κρατιούνται ανά λίστες και έτος.
+const holIdx = new WeakMap<object, WeakMap<object, Map<number, Map<ISODate, string>>>>();
+const NO_OFF: ISODate[] = [];
+export function holidaysOf(settings: Settings, year: number): Map<ISODate, string> {
+  const add = settings.holidays || {}, off = settings.holidaysOff || NO_OFF;
+  let a = holIdx.get(add); if (!a) { a = new WeakMap(); holIdx.set(add, a); }
+  let b = a.get(off); if (!b) { b = new Map(); a.set(off, b); }
+  let m = b.get(year);
+  if (!m) {
+    const no = new Set(off); m = new Map();
+    for (const [d, n] of Object.entries(greekHolidays(year))) if (!no.has(d)) m.set(d, n);
+    for (const [d, n] of Object.entries(add)) if (+d.slice(0, 4) === year) m.set(d, n);
+    b.set(year, m);
+  }
+  return m;
+}
+const holOf = (settings: Settings, d: ISODate) => holidaysOf(settings, +d.slice(0, 4)).get(d);
+export const isHol = (settings: Settings, d: ISODate) => isWeekend(d) || holOf(settings, d) != null;
+export const holName = (settings: Settings, d: ISODate) => holOf(settings, d) || (isWeekend(d) ? 'ΣΚ' : '');
 
 // --------------------------- καταστάσεις ---------------------------
 const ORDER = (k: TypeKey) => TYPE_KEYS.indexOf(k);
@@ -295,11 +313,11 @@ export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.o
 // log: k = θέση, κενό για υπηρεσία χωρίς θέση (από Excel)· kind = είδος
 export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean }[] }
 // ανά ημερολόγιο υπηρεσιών, υπηρεσίες χωρίς θέση και λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
-const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; log: DutyLog; st: Map<number, DutyStat> }>();
+const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; off: Settings['holidaysOff']; log: DutyLog; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
   const c = statsCache.get(s.guards); const log = s.dutyLog || NO_LOG;
-  if (c && c.hol === s.settings.holidays && c.log === log) return withBaseline(s, c.st);
+  if (c && c.hol === s.settings.holidays && c.off === s.settings.holidaysOff && c.log === log) return withBaseline(s, c.st);
   const st = new Map<number, DutyStat>();
   const one = (pid: number, d: ISODate, k: string, kind: DutyKind, h: boolean) => {
     let x = st.get(pid); if (!x) { x = emptyStat(); st.set(pid, x); }
@@ -312,7 +330,7 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
     for (const k in g) { const post = postBy(s, k); if (post) one(g[k], d, k, post.kind, h); }
     for (const e of log[d] || []) one(e.pid, d, '', e.kind, h);
   }
-  statsCache.set(s.guards, { hol: s.settings.holidays, log, st });
+  statsCache.set(s.guards, { hol: s.settings.holidays, off: s.settings.holidaysOff, log, st });
   return withBaseline(s, st);
 }
 // Προηγούμενες υπηρεσίες (χωρίς ημερομηνία) προστίθενται στα σύνολα, όχι στο ημερολόγιο

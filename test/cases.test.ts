@@ -352,7 +352,7 @@ describe('Απαντήσεις του λοχία (10/10)', () => {
     const old = { ...DEFAULT_SETTINGS, rev: 0, blocksSpen: DEFAULT_BLOCKS_SPEN.map(b => (b.id === 'tae' ? { ...b, armed: false, posts: [{ ...b.posts[0], hrs: 'ημέρα' }] } : b)) };
     const m = migrateSettings(old as any);
     expect(m.blocksSpen.find(b => b.id === 'tae')).toMatchObject({ armed: true, posts: [{ hrs: '' }] });
-    expect(m.rev).toBe(3);
+    expect(m.rev).toBe(4);
     const turnedOff = { ...m, blocksSpen: m.blocksSpen.map(b => (b.id === 'tae' ? { ...b, armed: false } : b)) };
     expect(migrateSettings(turnedOff).blocksSpen.find(b => b.id === 'tae')!.armed).toBe(false);
   });

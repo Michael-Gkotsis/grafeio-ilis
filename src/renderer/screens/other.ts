@@ -6,10 +6,10 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type PersonRequest, type Phase, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
 import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesOn, strengthOf } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
+import { addDays, daysBetween, dayName, dm, dmy, dow, greekHolidays, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek } from '../../shared/text';
 import { overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName } from '../../shared/hkaiText';
@@ -421,18 +421,27 @@ function EditBlockDialog({ phase, b, onClose }: P) {
     ${shown.length ? shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__label" htmlFor=${'eb-h-' + x.k}>Ώρες: ${x.label}</label><input id=${'eb-h-' + x.k} className="ui-input" placeholder="π.χ. 07:30-08:00 (κενό = όλη μέρα)" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`) : html`<p className="note">Οι ώρες αυτής της υπηρεσίας είναι οι βάρδιες του εντύπου.</p>`}
   <//>`;
 }
-// Αργίες (10 §4β): ΣΚ μετρούν πάντα· εδώ οι επίσημες αργίες που αλλάζουν κάθε χρόνο (π.χ. Πάσχα)
+// Αργίες (10 §4β): ΣΚ μετρούν πάντα· οι επίσημες βγαίνουν μόνες τους κάθε χρονιά (και από το Πάσχα)· εδώ αφαιρείς όποια
+// δεν ισχύει για τη μονάδα και προσθέτεις δικές σου
 function HolidaysCard() {
   const { state, run, today } = useStore();
   const [d, setD] = useState(''); const [n, setN] = useState('');
-  const list = Object.entries(state.settings.holidays).sort(([a], [b]) => a.localeCompare(b));
-  const save = (h: Record<string, string>, text: string) => run({ t: 'setSettings', settings: { holidays: h }, text });
+  const st = state.settings; const off = st.holidaysOff || []; const y = +today.slice(0, 4);
+  const gen = [y, y + 1].flatMap(yy => Object.entries(greekHolidays(yy)));
+  const list = [...gen.filter(([k]) => !off.includes(k) && !st.holidays[k]).map(([k, v]) => ({ k, v, gen: true })), ...Object.entries(st.holidays).map(([k, v]) => ({ k, v, gen: false }))].sort((a, b) => a.k.localeCompare(b.k));
+  const removed = gen.filter(([k]) => off.includes(k));
+  const save = (settings: Partial<Settings>, text: string) => run({ t: 'setSettings', settings, text });
+  const drop = (x: { k: string; v: string; gen: boolean }) => {
+    if (x.gen) return save({ holidaysOff: [...off, x.k] }, 'αφαιρέθηκε η αργία ' + x.v + ' ' + dmy(x.k));
+    const h = { ...st.holidays }; delete h[x.k]; return save({ holidays: h }, 'αφαιρέθηκε η αργία ' + x.v + ' ' + dmy(x.k));
+  };
   return html`<${Card} title="Αργίες">
-    <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Εδώ οι επίσημες αργίες για τον έλεγχο υπηρεσιών και τον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
-    <ul className="hist">${list.map(([k, v]) => html`<li key=${k} className=${k < today ? 'muted' : ''}><span className="nw">${dow(k)} ${dmy(k)}</span> <b>${v}</b> <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + v} onClick=${() => { const h = { ...state.settings.holidays }; delete h[k]; save(h, 'αφαιρέθηκε η αργία ' + v + ' ' + dmy(k)); }}>✕<//></li>`)}</ul>
+    <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Οι επίσημες αργίες (και οι κινητές από το Πάσχα) μπαίνουν μόνες τους κάθε χρονιά· αφαίρεσε όποια δεν ισχύει για τη μονάδα και πρόσθεσε δικές σου. Μετρούν στον έλεγχο υπηρεσιών και στον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
+    <ul className="hist">${list.map(x => html`<li key=${x.k} className=${x.k < today ? 'muted' : ''}><span className="nw">${dow(x.k)} ${dmy(x.k)}</span> <b>${x.v}</b> ${x.gen ? html`<${Badge}>επίσημη<//>` : html`<${Badge} tone="info">δική σου<//>`} <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + x.v} onClick=${() => drop(x)}>✕<//></li>`)}</ul>
+    ${removed.length > 0 && html`<details className="note"><summary>Επίσημες που αφαίρεσες (${removed.length})</summary><ul className="hist">${removed.map(([k, v]) => html`<li key=${k}><span className="nw">${dow(k)} ${dmy(k)}</span> ${v} <${Button} size="sm" variant="ghost" onClick=${() => save({ holidaysOff: off.filter(x => x !== k) }, 'ξανά αργία ' + v + ' ' + dmy(k))}>Επαναφορά<//></li>`)}</ul></details>`}
     <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><input id="hol-d" type="date" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
-      <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Μεγάλη Παρασκευή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ ...state.settings.holidays, [d]: n.trim() }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
+      <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Τοπική εορτή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ holidays: { ...st.holidays, [d]: n.trim() }, holidaysOff: off.filter(x => x !== d) }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
   <//>`;
 }
 // Επαναφορά από αντίγραφο (έρευνα §4.2): πριν την επαναφορά κρατιέται αντίγραφο της τωρινής βάσης

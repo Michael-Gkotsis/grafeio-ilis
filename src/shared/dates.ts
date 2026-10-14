@@ -41,3 +41,19 @@ export const isWeekend = (d: ISODate): boolean => { const w = weekday(d); return
 
 // Φρουρά ΠΣΚ: Παρασκευή, Σάββατο, Κυριακή του ΣΚ στο οποίο ανήκει η μέρα (Παρ/Σαβ/Κυρ), αλλιώς του επόμενου
 export const pskDays = (d: ISODate): ISODate[] => { const w = parseD(d).getDay(); const fri = addDays(d, w === 5 ? 0 : w === 6 ? -1 : w === 0 ? -2 : 5 - w); return [fri, addDays(fri, 1), addDays(fri, 2)]; };
+
+// Ορθόδοξο Πάσχα (Meeus, στο ιουλιανό ημερολόγιο, και +13 μέρες για το γρηγοριανό: σωστό για 1900–2099)
+export function orthodoxEaster(y: number): ISODate {
+  const a = y % 4, b = y % 7, c = y % 19, d = (19 * c + 15) % 30, e = (2 * a + 4 * b - d + 34) % 7;
+  const m = Math.floor((d + e + 114) / 31), day = ((d + e + 114) % 31) + 1;
+  return addDays(y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0'), 13);
+}
+// Οι επίσημες αργίες ενός έτους: σταθερές και κινητές από το Πάσχα
+const FIXED_HOL: [string, string][] = [['01-01', 'Πρωτοχρονιά'], ['01-06', 'Θεοφάνεια'], ['03-25', '25η Μαρτίου'], ['05-01', 'Πρωτομαγιά'], ['08-15', 'Δεκαπενταύγουστος'], ['10-28', '28η Οκτωβρίου'], ['12-25', 'Χριστούγεννα'], ['12-26', 'Σύναξη Θεοτόκου']];
+const EASTER_HOL: [number, string][] = [[-48, 'Καθαρά Δευτέρα'], [-2, 'Μεγάλη Παρασκευή'], [1, 'Δευτέρα του Πάσχα'], [50, 'Αγίου Πνεύματος']];
+export function greekHolidays(y: number): Record<ISODate, string> {
+  const out: Record<ISODate, string> = {};
+  for (const [md, n] of FIXED_HOL) out[y + '-' + md] = n;
+  const e = orthodoxEaster(y); for (const [k, n] of EASTER_HOL) out[addDays(e, k)] = n;
+  return out;
+}

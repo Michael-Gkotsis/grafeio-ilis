@@ -1,4 +1,4 @@
-import type { ISODate } from './dates';
+import { greekHolidays, type ISODate } from './dates';
 import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
@@ -190,7 +190,8 @@ export interface Settings {
   blocks: BlockDef[];                    // ΣΒΕΝ
   blocksSpen: BlockDef[];                // ΣΠΕΝ
   phase: Phase;                          // ποιο έντυπο υπηρεσιών ισχύει τώρα
-  holidays: Record<ISODate, string>;
+  holidays: Record<ISODate, string>;     // αργίες που πρόσθεσες (οι επίσημες βγαίνουν μόνες τους κάθε χρονιά, rules.ts)
+  holidaysOff?: ISODate[];               // επίσημες αργίες που αφαίρεσες
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
@@ -212,16 +213,12 @@ export const DEFAULT_SETTINGS: Settings = {
   blocks: DEFAULT_BLOCKS,
   blocksSpen: DEFAULT_BLOCKS_SPEN,
   phase: 'sven',
-  holidays: {
-    '2026-10-28': '28η Οκτωβρίου', '2026-12-25': 'Χριστούγεννα', '2026-12-26': 'Σύναξη Θεοτόκου',
-    '2027-01-01': 'Πρωτοχρονιά', '2027-01-06': 'Θεοφάνεια', '2027-03-15': 'Καθαρά Δευτέρα', '2027-03-25': '25η Μαρτίου',
-    '2027-04-30': 'Μεγάλη Παρασκευή', '2027-05-01': 'Πρωτομαγιά', '2027-05-03': 'Δευτέρα του Πάσχα', '2027-06-21': 'Αγίου Πνεύματος', '2027-08-15': 'Δεκαπενταύγουστος'
-  },
+  holidays: {},
   cadre: { 'Επίλαρχοι': 0, 'Ίλαρχοι': 0, 'Ανθυπίλαρχοι-Ανθλγοι': 0, 'Ανθυπασπιστές': 0, 'ΔΕΑ': 0, 'Αρχιλοχίες': 0, 'Επιλοχίες': 0 },
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 3
+  rev: 4
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
@@ -231,6 +228,12 @@ export function migrateSettings(st: Settings): Settings {
     st = { ...st, blocksSpen, fixed: st.fixed || {}, rev: 2 };
   }
   if ((st.rev || 0) < 3) st = withCodes({ ...st, rev: 3 });
+  if ((st.rev || 0) < 4) {
+    // rev 4: οι επίσημες αργίες βγαίνουν μόνες τους κάθε χρονιά· όσες ήταν γραμμένες (οι παλιές προεπιλογές ως 15/8/2027)
+    // φεύγουν από τις «δικές σου», ώστε η αφαίρεσή τους να δουλεύει όπως όλων των επίσημων
+    const holidays = Object.fromEntries(Object.entries(st.holidays || {}).filter(([d]) => !greekHolidays(+d.slice(0, 4))[d]));
+    st = { ...st, holidays, rev: 4 };
+  }
   return st;
 }
 // Κωδικοί θέσεων (rev 3): όσες θέσεις δεν έχουν κωδικό παίρνουν τον προεπιλεγμένο του εντύπου (Θ1α…Θ4β στη ΣΒΕΝ,
