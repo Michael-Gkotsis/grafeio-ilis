@@ -36,12 +36,12 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     if (!p || !p.active) { out.push({ level: 'err', text: name + ' είναι εκτός δύναμης αλλά είναι ' + x.label, go: 'guard' }); continue; }
     if (seen.has(pid)) out.push({ level: 'err', text: name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
     seen.set(pid, x.label);
-    const hard = dutyBlock(s.statuses, date, pid, x);
+    const hard = dutyBlock(s.statuses, date, pid, x, s.settings.lists);
     if (hard) out.push({ level: 'err', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
     else if (outOn(s, pid, date)) out.push({ level: 'err', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
     const sl = seatlessOn(s, date, pid);
     if (sl) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): την ίδια μέρα και ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel), δύο υπηρεσίες', go: 'guard' });
-    const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x) || statusWarn(s, date, pid);
+    const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x, s.settings.lists) || statusWarn(s, date, pid);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
   }
   return out;

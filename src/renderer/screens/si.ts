@@ -44,6 +44,19 @@ export function SiField({ id, value, cat, onChange }: P) {
 }
 
 const CAT_SEP = ' · ';
+// Στήλες των πινάκων «ποιος κάνει τι»: οι υπηρεσίες του εντύπου που ισχύει και μετά όσες έχει μόνο το άλλο έντυπο
+// (χωρίς Λ/Υ-Δ/Υ, που ορίζονται με το χέρι, και όσες αφαιρέθηκαν)
+export function useDutyCols(): (BlockDef & { only?: string })[] {
+  const { state } = useStore();
+  return useMemo(() => {
+    const st = state.settings; const other = st.phase === 'spen' ? 'sven' : 'spen';
+    const seen = new Set<string>(); const out: (BlockDef & { only?: string })[] = [];
+    for (const b of blocksOf(st) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push(b); }
+    for (const b of blocksOf(st, other) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push({ ...b, only: PHASE_NAME[other] }); }
+    return out;
+  }, [state.settings]);
+}
+export const colHead = (b: BlockDef & { only?: string }) => html`<th key=${b.id}>${b.name}${b.armed && html`<span className="sigrid__tag">ένοπλη</span>`}${b.only && html`<span className="sigrid__tag">μόνο ${b.only}</span>`}</th>`;
 
 export function SiCard() {
   const { state, run } = useStore(); const toast = useToast();
@@ -53,14 +66,7 @@ export function SiCard() {
   const [nb, setNb] = useState(''); const [nc, setNc] = useState('');
   const [catRow, setCatRow] = useState('Ι3 ΑΟΠΛΟ'); const [catPick, setCatPick] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  // στήλες: οι υπηρεσίες του εντύπου που ισχύει και μετά όσες έχει μόνο το άλλο έντυπο (χωρίς Λ/Υ-Δ/Υ και όσες αφαιρέθηκαν)
-  const cols = useMemo(() => {
-    const st = state.settings; const other = st.phase === 'spen' ? 'sven' : 'spen';
-    const seen = new Set<string>(); const out: (BlockDef & { only?: string })[] = [];
-    for (const b of blocksOf(st) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push(b); }
-    for (const b of blocksOf(st, other) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push({ ...b, only: PHASE_NAME[other] }); }
-    return out;
-  }, [state.settings]);
+  const cols = useDutyCols();
   // πόσοι (σε δύναμη) έχουν κάθε γραμμή, και ποιες τιμές δεν αναγνωρίζονται
   const { count, odd, seenBases } = useMemo(() => {
     const count = new Map<string, number>(); const odd = new Map<string, number>(); const seenBases = new Set<string>();
@@ -123,7 +129,7 @@ export function SiCard() {
   return html`<${Card} title="Σ.Ι.: σε ποιες υπηρεσίες μπαίνει">
     <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία. Αρχικά ο άοπλος (Ι3 ΑΟΠΛΟ, Ι4) δεν μπαίνει σε ένοπλη υπηρεσία και όλοι οι άλλοι μπαίνουν παντού· αν κάνεις μια υπηρεσία ένοπλη ή άοπλη (κάρτα Υπηρεσίες), αλλάζει και εδώ. Ό,τι ξετσεκάρεις, η αυτόματη συμπλήρωση δεν τον βάζει· με το χέρι μπαίνει μόνο με αιτία. Η «Δυνατότητα υπηρεσιών» στην κάρτα κάθε ατόμου ισχύει από πάνω. Λ/Υ και Δ/Υ ορίζονται με το χέρι, όπως πριν.</p>
     <div style=${{ overflowX: 'auto' }}><table className="sigrid">
-      <thead><tr><th>Σ.Ι.</th><th>Άτομα</th>${cols.map(b => html`<th key=${b.id}>${b.name}${b.armed && html`<span className="sigrid__tag">ένοπλη</span>`}${b.only && html`<span className="sigrid__tag">μόνο ${b.only}</span>`}</th>`)}<th></th></tr></thead>
+      <thead><tr><th>Σ.Ι.</th><th>Άτομα</th>${cols.map(colHead)}<th></th></tr></thead>
       <tbody>${rows.map(({ label, cat }) => {
         const k = siRowKey(label, cat); const n = count.get(k) || 0; const custom = !!cells[k] && Object.keys(cells[k]).length > 0;
         const sub = !!parseSi(label, cfg)?.sub;

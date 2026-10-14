@@ -3,6 +3,7 @@
 import { collator, normGreek, upper } from './text';
 import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type Status, type TypeKey } from './domain';
 import type { SiConfig } from './si';
+import type { StatConfig } from './stat';
 
 // Βαθμοί στρατιωτών (Δυναμολόγιο)
 export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΟΠ ΣΤΡ', 'ΕΠΟΠ ΔΝΕΑΣ', 'ΕΠΟΠ ΛΧΙΑΣ', 'ΔΕΑ'];
@@ -34,8 +35,8 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'lea
 // warn: ιατρικό χωρίς περιορισμούς που βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
 export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
-// si: ο πίνακας Σ.Ι. (si.ts), ό,τι άλλαξες εκεί
-export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig };
+// si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
@@ -93,7 +94,7 @@ export const cadreAbsOf = (kind: string, lists?: UserLists) => cadreAbsKinds(lis
 export const MED_LIKE: TypeKey[] = ['EA', 'EY', 'EO', 'EARV'];
 // χωρίς κενά και σημεία: «ΕΛ.ΓΥΜΝ», «Ελ γυμν» και «ΕΛ ΓΥΜΝ» είναι το ίδιο (όπως διαβάζει το Excel)
 const medKey = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
-const ownMed = (lists: UserLists | undefined, kind: string | undefined) => {
+export const ownMed = (lists: UserLists | undefined, kind: string | undefined) => {
   const k = medKey(kind || ''); if (!k) return undefined;
   return (lists?.medKinds?.add || []).find(x => x.like && MED_LIKE.includes(x.like) && medKey(x.name) === k);
 };

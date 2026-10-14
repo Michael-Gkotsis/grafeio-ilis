@@ -20,6 +20,7 @@ import { recentPeople, usePrefs, type Prefs } from '../prefs';
 import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources';
 import { ListsCard } from './lists';
 import { SiCard } from './si';
+import { StatCard } from './stat';
 import { statusLbl } from '../../shared/ranks';
 type P = any;
 
@@ -459,7 +460,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${HolidaysCard}/></div>`
+  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'look' ? html`<${AppearanceCard}/>` : tab === 'backup' ? html`<${BackupsCard}/>` : templates;
   return html`<div>
