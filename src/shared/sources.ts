@@ -330,8 +330,9 @@ export function tableRows(sheet: RawSheet, header: number, cols: Record<string, 
 }
 
 // ------------------------------------------------------------------ άτομα
-// alts: συνονόματοι που ταιριάζουν όλοι (ίδιο ονοματεπώνυμο και πατρώνυμο, χωρίς ΑΣΜ), πριν διαλεχτεί ο ενεργός.
-// Για την ανάγνωση αρκεί ο ενεργός· η εγγραφή όμως δεν πρέπει να γράψει στη γραμμή του άλλου (X2).
+// alts: συνονόματοι που ταιριάζουν όλοι (ίδιο ονοματεπώνυμο και πατρώνυμο, χωρίς ΑΣΜ), πριν διαλεχτεί ο ενεργός, ή
+// και όταν δεν διαλέγεται κανείς (πολλοί ενεργοί: pid null). Για την ανάγνωση αρκεί ο ενεργός· η εγγραφή όμως δεν πρέπει
+// να γράψει στη γραμμή του άλλου, ούτε να ξαναγράψει κάποιον τους σε νέα γραμμή (X2).
 export interface Matcher { (v: Record<string, CellValue>): { pid: number | null; cands: Person[]; alts?: Person[] } }
 const key2 = (a: string, b: string) => normGreek(a).replace(/[^Α-ΩA-Z0-9]/g, '') + '|' + normGreek(b).replace(/[^Α-ΩA-Z0-9]/g, '');
 function lev(a: string, b: string): number {
@@ -367,7 +368,7 @@ export function makeMatcher(people: Person[]): Matcher {
       const all = l;
       if (l.length > 1) { const act = l.filter(p => p.active); if (act.length) l = act; }
       if (l.length === 1) return all.length > 1 ? { pid: l[0].id, cands: [], alts: all } : { pid: l[0].id, cands: [] };
-      if (l.length > 1) return { pid: null, cands: l.slice(0, 4) };
+      if (l.length > 1) return { pid: null, cands: l.slice(0, 4), alts: all };   // πολλοί ενεργοί: δεν ξέρουμε ποιος
       // «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.»: επώνυμο και αρχικό
       if (/^[Α-ΩA-Z]\.?$/.test(normGreek(first))) {
         const ini = normGreek(first).charAt(0);
@@ -421,7 +422,9 @@ export function parseStatuses(kind: StatusKind, sheet: RawSheet, b: SourceBindin
     const from = parseDate(v.from); let to = parseDate(v.to);
     if (!from) { out.skipped.push({ r, who, why: cellText(v.from) ? 'η ημερομηνία «' + cellText(v.from) + '» δεν διαβάζεται' : 'χωρίς ημερομηνία έναρξης' }); continue; }
     let noEnd = false;
-    if (!to) { to = from > today ? from : today; noEnd = true; }
+    // κενό «έως» = χωρίς λήξη· χωρίς στήλη «έως» η εγγραφή είναι μίας μέρας
+    if (!to && b.cols.to == null) to = from;
+    else if (!to) { to = from > today ? from : today; noEnd = true; }
     if (to < from) { out.skipped.push({ r, who, why: 'το «έως» είναι πριν από το «από»' }); continue; }
     const raw = cellText(kind === 'hospital' ? v.where : v.kind);
     const type = typeOfValue(kind, raw, b.values, lists);
@@ -650,7 +653,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number], partial: [] };
   const match = makeMatcher(s.people);
   const byId = new Map(want.map(x => [statusId(kind, x), x]));
-  const syncedSet = new Set(synced); const placed = new Set<string>();
+  const syncedSet = new Set(synced); const placed = new Set<string>(); const hold = new Set<number>();
   const free = [...scan.free];
   const clearRow = (r: number) => {
     const row = rows[r] || [];
@@ -668,6 +671,8 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
       if (hits.length > 1) { hits.forEach(x => { placed.add(x); plan.keys.push(x); }); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
       if (hits.length === 1) id = hits[0];
       else id = m.alts.map(p => idOf(p.id)).find(x => syncedSet.has(x) && !byId.has(x)) || id;
+      // πολλοί ενεργοί και καμία εγγραφή τους με αυτή την έναρξη: η γραμμή είναι κάποιου τους, δεν ξέρουμε ποιου
+      if (m.pid == null && !id) { m.alts.forEach(p => hold.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
     }
     const st = id ? byId.get(id) : undefined;
     if (st && !placed.has(id!)) {
@@ -684,7 +689,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
     else plan.foreign++;
   }
   free.sort((a, c) => a - c);
-  const fresh = want.filter(x => !placed.has(statusId(kind, x)));
+  const fresh = want.filter(x => !placed.has(statusId(kind, x)) && !hold.has(x.pid));
   const put = (r: number, st: Status) => { for (const k of fields) { const val = fieldValue(k, kind, st, pm.get(st.pid), b); if (val != null) plan.sets.push({ r, c: b.cols[k], v: val }); } };
   // Α/Α: ο αύξων αριθμός στις γραμμές που δεν τον έχουν
   const aa = (r: number, n: number) => { if (b.cols.aa != null && cellText((rows[r] || [])[b.cols.aa]) === '') plan.sets.push({ r, c: b.cols.aa, v: n }); };
@@ -1505,7 +1510,7 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const nGroup = new Map<string, number>(); for (const { m } of recs) if (m.alts) nGroup.set(group(m), (nGroup.get(group(m)) || 0) + 1);
   let unseen = 0;
   for (const { r, m } of recs) {
-    if (m.alts && nGroup.get(group(m))! > 1) { m.alts.forEach(p => seen.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
+    if (m.alts && (m.pid == null || nGroup.get(group(m))! > 1)) { m.alts.forEach(p => seen.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
     const pid = m.pid; if (pid == null || seen.has(pid)) { plan.foreign++; continue; }
     seen.add(pid);
     const x = want.get(pid); let ch = false;

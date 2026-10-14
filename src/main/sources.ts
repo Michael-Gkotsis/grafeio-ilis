@@ -65,8 +65,13 @@ async function countifOf(wb: Workbook, name: string): Promise<string[]> {
 export class OldFormatError extends Error {}
 export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
   if (/\.xls$/i.test(file)) throw new OldFormatError('Το «' + path.basename(file) + '» είναι παλιό .xls. Άνοιξέ το στο Excel και κάνε «Αποθήκευση ως» .xlsx (ή .xlsm αν έχει μακροεντολές).');
-  const buf = await fs.promises.readFile(file);
-  const st = fs.statSync(file);
+  // ώρα και μέγεθος πριν και μετά την ανάγνωση: αν το έσωσε κάποιος στο μεταξύ, ξανά (αλλιώς θα κρατούσαμε την ώρα
+  // του νέου αρχείου με το περιεχόμενο του παλιού, και η αλλαγή του δεν θα φαινόταν ποτέ)
+  let buf: Buffer, st: fs.Stats;
+  for (let i = 0; ; i++) {
+    const a = fs.statSync(file); buf = await fs.promises.readFile(file); st = fs.statSync(file);
+    if ((a.mtimeMs === st.mtimeMs && a.size === st.size) || i >= 4) break;
+  }
   let wb: Workbook;
   try { wb = await Workbook.open(buf); } catch { throw new Error('Το «' + path.basename(file) + '» δεν διαβάζεται ως Excel (.xlsx/.xlsm).'); }
   const sheets: RawSheet[] = [];
@@ -207,7 +212,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const put = async (r: number, c: number, v: WVal, plain?: number) => {
       const at = ref(r, c);
       if (ws.hasFormula(at)) return;
-      if (v != null && typeof v === 'object') { ws.setNumber(at, toSerial(v.date), await wb.dateStyle(ws.style(at) ?? plain ?? null)); return; }
+      if (v != null && typeof v === 'object') { ws.setNumber(at, toSerial(v.date, wb.date1904), await wb.dateStyle(ws.style(at) ?? plain ?? null)); return; }
       ws.set(at, v);
       if (plain != null && ws.style(at) == null) ws.setStyle(at, plain);
     };

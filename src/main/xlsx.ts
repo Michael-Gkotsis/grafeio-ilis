@@ -385,7 +385,8 @@ export class Sheet {
 // Ημερομηνίες: αριθμός ημερών από 30/12/1899 (ή 1/1/1904 σε παλιά αρχεία Mac)
 const DAY = 86400000;
 const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1);
-export const toSerial = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - EPOCH) / DAY); };
+// y1904: το βιβλίο μετρά από 1/1/1904 (Workbook.date1904), όπως στην ανάγνωση
+export const toSerial = (iso: string, y1904 = false) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - (y1904 ? EPOCH_1904 : EPOCH)) / DAY); };
 // Ενσωματωμένες μορφές ημερομηνίας του Excel και δικές μας με d/y μέσα (όχι μόνο ώρα)
 const DATE_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
 const isDateCode = (code: string) => /[dy]/i.test(code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, ''));
@@ -461,6 +462,7 @@ export class Workbook {
     return n;
   }
   sheetNames() { return this.names.map(x => x.name); }
+  get date1904() { return /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml); }
   hasSheet(name: string) { return this.names.some(x => x.name === name); }
 
   private async sharedStrings(): Promise<string[]> {
@@ -622,7 +624,7 @@ export class Workbook {
   // fx: εδώ μπαίνουν τα κελιά με τύπο («γραμμή:στήλη» από 0)
   async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40, fx?: Set<string>): Promise<XlValue[][]> {
     const ws = await this.sheet(nameOrIndex); const sst = await this.sharedStrings(); await this.loadStyles();
-    const y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml);
+    const y1904 = this.date1904;
     const out: XlValue[][] = [];
     for (const x of ws.cells()) {
       if (x.r > maxRows || x.c > maxCols || !x.inner) continue;
