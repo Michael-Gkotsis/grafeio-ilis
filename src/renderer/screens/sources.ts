@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { PersonPicker, usePrintFile } from '../common';
-import { TYPES, CAP_ACC, fullName, shortName, type TypeKey } from '../../shared/domain';
-import { personMap } from '../../shared/rules';
+import { TYPES, CAP_ACC, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
+import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { MONTHS, addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
-  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
+  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
@@ -221,7 +221,7 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
   const sample = useMemo(() => {
     if (isNew || miss.length) return [];
     if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today, state.settings.lists).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
-    if (list === 'duties') { const cols = dayColumns(sheet.rows[b.header], b.cols.d1); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
+    if (list === 'duties') { const cols = dutyDays(sheet, b); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
     if (list === 'caps') return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (CAP_COLS.filter(k => b.cols[k] != null && capNo(cellText(r.v[k]))).map(k => 'όχι ' + CAP_ACC[k]).join(', ') || 'κάνει όλες'));
     return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : list === 'outside' && cellText(r.v.remarks) ? ' · ' + cellText(r.v.remarks) : ''));
   }, [b, sheet, list, isNew, miss.length]);
@@ -385,7 +385,6 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     const pm = personMap(state.people);
     const notes = [
       p.noRow.length ? 'Δεν έχουν γραμμή σε αυτό το φύλλο, οπότε οι υπηρεσίες τους δεν γράφονται εκεί: ' + p.noRow.map(id => (pm.get(id) ? shortName(pm.get(id)!) : '?')).join(', ') + '.' : '',
-      p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.' : '',
       p.days.some(d => d.adds.some(a => !a.k)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…), ή θέση που έχει ήδη άλλος στην εφαρμογή, περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
     ].filter(Boolean);
     const write = p.days.filter(d => d.extra.length || d.differ.length || d.gone.length).length;
@@ -403,7 +402,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     <${Tiles} items=${res.tiles}/>
     ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && !res.duties?.days.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
-    ${res.duties && html`<${DutyDays} p=${res.duties}/>`}
+    ${res.duties && html`<${DutyAliases} codes=${res.duties.unknown}/><${DutyDays} p=${res.duties}/>`}
     ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
     ${res.notes.map(t => html`<p key=${t} className="note">${t}</p>`)}
     ${res.sp.dup > 0 && html`<p className="note">${res.sp.dup === 1 ? '1 άτομο είναι' : res.sp.dup + ' άτομα είναι'} δύο φορές στο φύλλο· κρατήθηκε η πρώτη γραμμή.</p>`}
@@ -418,6 +417,7 @@ function DutyDays({ p }: { p: DutiesPlan }) {
   const { state } = useStore(); const pm = personMap(state.people);
   const nm = (pid: number | null | undefined) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
   return html`<div className="field">
+    ${(p.warn || []).map(t => html`<${Alert} key=${t} tone="warn"><span>${t}</span><//>`)}
     ${p.errors.length > 0 && html`<${Alert} tone="bad"><span><b>Δεν περνούν ${p.errors.length === 1 ? '1 μέρα' : p.errors.length + ' μέρες'}: ο ίδιος κωδικός θέσης σε δύο άτομα.</b> Διόρθωσέ το στο Excel και ξαναδιάβασε· ως τότε η εφαρμογή δεν γράφει εκεί.
       <ul className="srcalert__list">${p.errors.map(e => html`<li key=${e.date}>${dow(e.date)} ${dm(e.date)}: ${e.text}</li>`)}</ul></span><//>`}
     ${p.days.length > 0 && html`<span className="field__label">Ανά μέρα (κρατιέται της εφαρμογής)</span>
@@ -430,6 +430,23 @@ function DutyDays({ p }: { p: DutiesPlan }) {
     ${p.future.length > 0 && html`<p className="note">Μετά από σήμερα, δεν περνούν: ${p.future.map(dm).join(', ')}.</p>`}
     ${p.same > 0 && html`<p className="note">${p.same} ${p.same === 1 ? 'μέρα ίδια' : 'μέρες ίδιες'} με την εφαρμογή.</p>`}
   </div>`;
+}
+
+// Άγνωστοι κωδικοί στον έλεγχο υπηρεσιών: τι σημαίνει ο καθένας (θέση, είδος χωρίς θέση ή «δεν είναι υπηρεσία»).
+// Η επιλογή κρατιέται στις ρυθμίσεις και ισχύει και στις επόμενες αναγνώσεις.
+function DutyAliases({ codes }: { codes: string[] }) {
+  const { state, run } = useStore();
+  if (!codes.length) return null;
+  const posts = postsOf(state.settings);
+  const save = (raw: string, v: string) => { if (!v) return; run({ t: 'setSettings', settings: { dutyCodeAliases: { ...(state.settings.dutyCodeAliases || {}), [codeKey(raw)]: v } }, text: 'ο κωδικός «' + raw + '» στον έλεγχο υπηρεσιών σημαίνει ' + (v === 'ignore' ? '«δεν είναι υπηρεσία»' : v.startsWith('kind:') ? KIND_NAME[v.slice(5) as DutyKind].toLowerCase() + ' χωρίς θέση' : postBy(state, v)?.label || v) }, false); };
+  return html`<div className="field"><span className="field__label">Κωδικοί που δεν αναγνωρίστηκαν: τι σημαίνει ο καθένας;</span>
+    ${codes.map(u => html`<div key=${u} className="field-row" style=${{ alignItems: 'center' }}><span className="plan__fn" style=${{ minWidth: '120px' }}>${u}</span>
+      <select className="ui-select" aria-label=${'Τι σημαίνει ο κωδικός ' + u} value="" onChange=${(e: any) => save(u, e.target.value)}>
+        <option value="">Παραλείπεται (διάλεξε…)</option><option value="ignore">Δεν είναι υπηρεσία</option>
+        <optgroup label="Υπηρεσία χωρίς θέση">${(Object.keys(KIND_NAME) as DutyKind[]).map(k => html`<option key=${k} value=${'kind:' + k}>${KIND_NAME[k]}</option>`)}</optgroup>
+        <optgroup label="Θέση">${posts.map(x => html`<option key=${x.k} value=${x.k}>${x.label}${x.code ? ' (' + x.code + ')' : ''}</option>`)}</optgroup>
+      </select></div>`)}
+    <span className="field__help">Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.</span></div>`;
 }
 
 // Ενημέρωση Excel: τι θα γραφτεί, γραμμή-γραμμή, πριν γραφτεί

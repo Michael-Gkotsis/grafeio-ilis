@@ -152,6 +152,8 @@ export function mapColumns(row: CellValue[] | undefined, fields: FieldDef[]): Re
     const f = fields.find(x => cols[x.k] == null && x.re.test(h));
     if (f) cols[f.k] = c;
   });
+  // μέρες γραμμένες ως ημερομηνίες: η 1η του μήνα είναι η πρώτη τους
+  if (cols.d1 == null && fields.some(x => x.k === 'd1')) { const d = dayColumns(row); if (d.length >= 10) cols.d1 = d[0]; }
   return cols;
 }
 // Στήλες που μετακινήθηκαν ή προστέθηκαν στο Excel μετά την αντιστοίχιση (π.χ. νέα στήλη «ΔΝ» στο ΣΥΝΟΛΙΚΟ).
@@ -235,13 +237,25 @@ export function scoreKind(kind: ListKind, sheetName: string, title: string, head
   return s;
 }
 const THRESHOLD = 8;
-// Στήλες ημερών του μηνιαίου πλέγματος: από τη στήλη με «1» και όσες συνεχόμενες έχουν αριθμό (μέρα = θέση, όχι η τιμή:
-// στο δείγμα το 29 είναι γραμμένο δύο φορές)
+// Μέρα του μήνα σε επικεφαλίδα: αριθμός 1–31 (και ως κείμενο) ή ημερομηνία
+export const dayNum = (v: CellValue): number | null => {
+  if (v instanceof Date) return isNaN(+v) ? null : v.getUTCDate();
+  const t = cellText(v); return /^\d{1,2}$/.test(t) && +t >= 1 && +t <= 31 ? +t : null;
+};
+// Στήλες ημερών του μηνιαίου πλέγματος: από τη στήλη της 1ης και όσες συνεχόμενες λένε μέρα (μέρα = θέση, όχι η τιμή:
+// στο δείγμα το 29 είναι γραμμένο δύο φορές)· σταματά στην πρώτη στήλη που δεν λέει μέρα
 export function dayColumns(header: CellValue[] | undefined, from?: number): number[] {
-  const row = header || []; const num = (v: CellValue) => /^\d{1,2}$/.test(cellText(v));
-  const start = from ?? row.findIndex(v => cellText(v) === '1'); if (start < 0) return [];
-  const out: number[] = []; for (let c = start; c < row.length && num(row[c]) && out.length < 31; c++) out.push(c);
+  const row = header || [];
+  const start = from ?? row.findIndex(v => dayNum(v) === 1); if (start < 0) return [];
+  const out: number[] = []; for (let c = start; c < row.length && dayNum(row[c]) != null && out.length < 31; c++) out.push(c);
   return out;
+}
+// Οι μέρες ενός φύλλου ελέγχου υπηρεσιών: στη γραμμή των επικεφαλίδων, αλλιώς στη γραμμή από πάνω ή από κάτω (επικεφαλίδα
+// σε δύο γραμμές)
+export function dutyDays(sheet: RawSheet, b: { header: number; cols: Record<string, number> }): number[] {
+  let best: number[] = [];
+  for (const r of [b.header, b.header - 1, b.header + 1]) { if (r < 0) continue; const c = dayColumns(sheet.rows[r], b.cols.d1); if (c.length > best.length) best = c; if (best.length >= 28) break; }
+  return best;
 }
 // Όλοι οι πίνακες με άτομα σε όλα τα φύλλα, με το είδος που μοιάζουν περισσότερο (ένα είδος ανά αρχείο, το πιο σίγουρο)
 export function detectTables(sheets: RawSheet[]): TableHit[] {
@@ -789,7 +803,7 @@ export function missingFields(kind: ListKind, cols: Record<string, number>): str
 // ΣΥΝΟΛΙΚΟ) και θα έδειχναν «Άλλαξε στο Excel» χωρίς να άλλαξε τίποτα.
 export function tableHash(sheet: RawSheet | undefined, b: SourceBinding): string {
   if (!sheet) return '-';
-  const cols = [...new Set([...Object.values(b.cols), ...(b.cols.d1 != null ? dayColumns(sheet.rows[b.header], b.cols.d1) : [])])].sort((a, c) => a - c);
+  const cols = [...new Set([...Object.values(b.cols), ...(b.cols.d1 != null ? dutyDays(sheet, b) : [])])].sort((a, c) => a - c);
   const line = (r: number) => cols.map(c => (sheet.fx?.has(r + ':' + c) ? '' : cellText((sheet.rows[r] || [])[c]))).join('\t');
   const scan = tableRows(sheet, b.header, b.cols);
   // και οι μισογραμμένες γραμμές: όταν συμπληρωθούν (ή σβηστούν) ο πίνακας άλλαξε
@@ -1164,7 +1178,7 @@ export const ambiguousLines = (sheet: RawSheet, b: SourceBinding, rows: number[]
 const fmtW = (v: WVal) => (v == null ? '(κενό)' : typeof v === 'object' ? v.date.slice(8) + '/' + v.date.slice(5, 7) + '/' + v.date.slice(0, 4) : String(v));
 export function describeSets(kind: ListKind, sheet: RawSheet, b: SourceBinding, sets: { r: number; c: number; v: WVal }[], newRows: Set<number> = new Set()): PlanLine[] {
   const label = new Map<number, string>(); const defs = fieldsOf(kind);
-  if (kind === 'duties') dayColumns(sheet.rows[b.header], b.cols.d1).forEach((c, i) => label.set(c, 'μέρα ' + (i + 1)));
+  if (kind === 'duties') dutyDays(sheet, b).forEach((c, i) => label.set(c, 'μέρα ' + (i + 1)));
   for (const [k, c] of Object.entries(b.cols)) if (k !== 'd1') label.set(c, defs.find(f => f.k === k)?.label.replace(/ \(.*\)$/, '') || k);
   const byRow = new Map<number, { c: number; v: WVal }[]>();
   for (const x of sets) { const l = byRow.get(x.r) || []; l.push(x); byRow.set(x.r, l); }
@@ -1331,6 +1345,7 @@ export interface DutiesPlan {
   future: ISODate[];                            // μετά από σήμερα: δεν περνούν ποτέ
   noRow: number[];                              // άτομα με υπηρεσίες χωρίς γραμμή στο φύλλο: δεν γράφονται εκεί
   keys: string[];                               // «μέρα|άτομο» του Excel που έχει δει πια η εφαρμογή (μετά την ανάγνωση)
+  warn?: string[];                              // στήλες ημερών που δεν ταιριάζουν με τον μήνα
   unknown: string[]; sp: SheetPeople;
 }
 // Η εντολή: ανά μέρα τα κελιά του Excel που περνούν (όχι όσα έσβησες στην εφαρμογή)
@@ -1340,8 +1355,13 @@ export const dutiesCmd = (p: DutiesPlan): { days: Record<ISODate, DutyCell[]> } 
 export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}, synced: string[] = []): DutiesPlan {
   const sp = sheetPeople(sheet, b, s.people, choices); const pm = new Map(s.people.map(p => [p.id, p]));
   const plan: DutiesPlan = { month, days: [], changes: 0, same: 0, errors: [], future: [], noRow: [], keys: [], unknown: [], sp };
-  const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
-  const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
+  const cols = dutyDays(sheet, b);
+  const [y, m] = month.split('-').map(Number); const inMonth = new Date(Date.UTC(y, m, 0)).getUTCDate(); const nDays = Math.min(cols.length, inMonth);
+  const warn: string[] = [];
+  if (cols.length !== inMonth) warn.push('Βρέθηκαν ' + cols.length + ' στήλες ημερών, ενώ ο μήνας έχει ' + inMonth + ': έλεγξε τη στήλη της 1ης («Στήλες…»).');
+  const rowOf = [b.header, b.header - 1, b.header + 1].find(r => r >= 0 && dayColumns(sheet.rows[r], b.cols.d1).length === cols.length) ?? b.header;
+  const off = cols.map((c, i) => [c, i + 1, dayNum((sheet.rows[rowOf] || [])[c])] as const).filter(([, i, v]) => v != null && v !== i);
+  if (off.length) warn.push('Οι στήλες μετρούν με τη σειρά τους: ' + off.slice(0, 3).map(([c, i, v]) => 'η ' + colLetter(c) + ' γράφει ' + v + ' αλλά είναι η ' + i + 'η μέρα').join(', ') + (off.length > 3 ? '…' : '') + '.');
   const byDay = new Map<ISODate, DutyCell[]>(); const unk = new Map<string, string>();
   for (const row of sp.rows) cols.forEach((c, i) => {
     if (i >= nDays) return;
@@ -1370,7 +1390,7 @@ export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month
     plan.days.push({ ...r, date: d, cells, extra, locked: d < today, twice: [...new Set(pids.filter((p, i) => pids.indexOf(p) !== i))] });
     plan.changes += r.adds.length;
   }
-  plan.noRow = [...noRow]; plan.keys = [...keys];
+  plan.noRow = [...noRow]; plan.keys = [...keys]; if (warn.length) plan.warn = warn;
   return plan;
 }
 
@@ -1473,7 +1493,7 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const month = bindingMonth(sheet, b, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
   const exact = !sheet.countif?.length;
   if (!exact) plan.warn = ['Το φύλλο μετρά με COUNTIF σκέτο γράμμα (' + countifTxt(sheet.countif!) + '): γράφεται «Θ», «Μ»… αντί για τον κωδικό της θέσης. Άλλαξε στους τύπους το "Θ" σε "Θ*" (και το "Μ" σε "Μ*", το "Σ" σε "Σ*") για να γράφονται οι κωδικοί.'];
-  const cols = dayColumns(sheet.rows[b.header], b.cols.d1);
+  const cols = dutyDays(sheet, b);
   const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
   const seenBefore = new Set(synced); const dateOf = (i: number) => month + '-' + String(i + 1).padStart(2, '0');
   const seenDays = new Set(synced.map(x => x.split('|')[0]));

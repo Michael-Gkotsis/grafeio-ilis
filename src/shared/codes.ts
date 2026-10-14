@@ -22,15 +22,16 @@ export const isAbsCode = (raw: string) => /[./]|^[-–—]+$/.test(raw.trim()) |
 // σκέτο γράμμα είδους, χωρίς αριθμό ή άλλο γράμμα (Θ, ΜΑΓ, ΣΚ…): δεν λέει θέση
 export const isBareCode = (raw: string) => !!dutyCode(raw) && /^[Α-ΩA-Z]+$/.test(codeKey(raw));
 
-interface CodeIdx { map: Map<string, { k: string; kind: DutyKind }>; cur: Map<string, string>; other: Map<string, string> }
+interface CodeIdx { map: Map<string, { k: string; kind: DutyKind }>; cur: Map<string, string>; other: Map<string, string>; kinds: Map<string, DutyKind> }
 const idxCache = new WeakMap<Settings, CodeIdx>();
 // κωδικοί όλων των θέσεων και των δύο εντύπων (και όσων αφαιρέθηκαν): η ίδια θέση μπορεί να έχει άλλον κωδικό σε κάθε έντυπο
 function codeIdx(settings: Settings): CodeIdx {
   let x = idxCache.get(settings); if (x) return x;
-  x = { map: new Map(), cur: new Map(), other: new Map() };
+  x = { map: new Map(), cur: new Map(), other: new Map(), kinds: new Map() };
   const cur = blocksOf(settings) || settings.blocks || [];
   const other = settings.phase === 'spen' ? settings.blocks || [] : settings.blocksSpen || [];
   for (const [list, into] of [[cur, x.cur], [other, x.other]] as const) for (const b of list) for (const p of b.posts) {
+    if (!x.kinds.has(p.k)) x.kinds.set(p.k, b.kind);
     if (!p.code) continue;
     const key = codeKey(p.code); if (key && !x.map.has(key)) x.map.set(key, { k: p.k, kind: b.kind });
     if (!into.has(p.k)) into.set(p.k, p.code);
@@ -43,7 +44,12 @@ export type CellDuty = { k?: string; kind: DutyKind };
 // 'unknown' = δεν αναγνωρίζεται, null = κενό ή αριθμός
 export function readDuty(raw: string, settings: Settings): CellDuty | 'abs' | 'unknown' | null {
   const t = raw.trim(); if (!t || /^\d+$/.test(t)) return null;
-  const hit = codeIdx(settings).map.get(codeKey(t)); if (hit) return { k: hit.k, kind: hit.kind };
+  const x = codeIdx(settings); const hit = x.map.get(codeKey(t)); if (hit) return { k: hit.k, kind: hit.kind };
+  // ό,τι είπες για έναν άγνωστο κωδικό στην ανάγνωση: θέση, είδος χωρίς θέση, ή «δεν είναι υπηρεσία»
+  const al = settings.dutyCodeAliases?.[codeKey(t)];
+  if (al === 'ignore') return null;
+  if (al && al.startsWith('kind:') && KIND_CODE[al.slice(5) as DutyKind]) return { kind: al.slice(5) as DutyKind };
+  if (al && x.kinds.has(al)) return { k: al, kind: x.kinds.get(al)! };
   const b = dutyCode(t); if (b) return b.pref ? { k: b.pref, kind: 'ly' } : { kind: b.kind };
   return isAbsCode(t) ? 'abs' : 'unknown';
 }
