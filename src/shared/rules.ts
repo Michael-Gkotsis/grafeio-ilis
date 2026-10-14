@@ -599,8 +599,9 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
     if (t.cat === 'out') {
       for (let d = cmd.from; d <= cmd.to; d = addDays(d, 1)) { const r = outBlock(s, d, pid); if (r) { blocked.push({ pid, date: d, reason: r }); break; } }
     } else if (cmd.type !== 'PUN') {
-      // οι ίδιοι κανόνες με τις υπηρεσίες (dutyBlock): καμία υπηρεσία, όχι ένοπλη, ΕΟ/ΕΑ όχι μαγειρεία
-      const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to, ...(cmd.fromTime ? { fromTime: cmd.fromTime } : {}), ...(cmd.toTime ? { toTime: cmd.toTime } : {}) };
+      // οι ίδιοι κανόνες με τις υπηρεσίες (dutyBlock): καμία υπηρεσία, όχι ένοπλη, ΕΟ/ΕΑ όχι μαγειρεία· με το είδος, ώστε
+      // το δικό σου ιατρικό να έχει τους δικούς του κανόνες ανά υπηρεσία
+      const hyp: Status = { id: '', pid, type: cmd.type, from: cmd.from, to: cmd.to, ...(cmd.kind ? { kind: cmd.kind } : {}), ...(cmd.fromTime ? { fromTime: cmd.fromTime } : {}), ...(cmd.toTime ? { toTime: cmd.toTime } : {}) };
       dates.forEach(date => posts.forEach(x => {
         if (s.guards[date][x.k] === pid && dutyBlock([hyp], date, pid, x, lists)) (today && date < today ? past : conflicts).push({ pid, date, k: x.k });
       }));
