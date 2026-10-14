@@ -359,6 +359,11 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   const [busy, setBusy] = useState(false);
   const sheet = book.sheets.find(x => x.name === b.sheet);
   const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || b.month || prevMonth(today));
+  // έλεγχος υπηρεσιών: ποια κελιά είχε ήδη δει η εφαρμογή (ό,τι έσβησες μετά στην εφαρμογή δεν ξαναμπαίνει)
+  const cur = state.settings.sources?.[list];
+  const sameTable = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
+  const [synced, setSynced] = useState<string[]>([]);
+  useEffect(() => { if (list === 'duties' && sameTable) window.api.srcKeys(list).then(x => setSynced(x.keys)); }, [list, sameTable]);
   const res = useMemo(() => {
     if (!sheet) return null;
     if (list === 'posts' || list === 'outside') {
@@ -374,27 +379,28 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
       return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλαγές'], [p.listed, 'Στο φύλλο'], [p.same, 'Ίδιοι'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
         lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
     }
-    const p = planDuties(sheet, b, state, month, today, choices);
+    const p = planDuties(sheet, b, state, month, today, choices, synced);
     const cmd: Command = { t: 'importDuties', ...dutiesCmd(p), source: book.name };
+    const pm = personMap(state.people);
     const notes = [
-      p.kept ? 'Όσοι δεν έχουν γραμμή σε αυτό το φύλλο (π.χ. νέος στρατιώτης) κρατούν τις υπηρεσίες τους.' : '',
-      p.appOnly.length ? 'Μέρες κενές στο Excel που έχουν υπηρεσίες στην εφαρμογή δεν αλλάζουν και γράφονται στο Excel: ' + p.appOnly.map(dm).join(', ') + '.' : '',
+      p.noRow.length ? 'Δεν έχουν γραμμή σε αυτό το φύλλο, οπότε οι υπηρεσίες τους δεν γράφονται εκεί: ' + p.noRow.map(id => (pm.get(id) ? shortName(pm.get(id)!) : '?')).join(', ') + '.' : '',
       p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.' : '',
-      p.days.some(d => d.lines.some(l => l.key.startsWith('sl:') && l.to != null)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…) περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
+      p.days.some(d => d.adds.some(a => !a.k)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…), ή θέση που έχει ήδη άλλος στην εφαρμογή, περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
     ].filter(Boolean);
-    return { sp: p.sp, n: p.changes, cmd, duties: p, tiles: [[p.changes, 'Αλλαγές'], [p.days.length, 'Μέρες που αλλάζουν'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][], lists: [] as { title: string; items: string[] }[], notes };
-  }, [sheet, list, b, state, choices, month, today, book.name]);
+    const write = p.days.filter(d => d.extra.length || d.differ.length || d.gone.length).length;
+    return { sp: p.sp, n: p.changes, cmd, duties: p, keys: p.keys, tiles: [[p.changes, 'Υπηρεσίες που περνούν'], [write, 'Μέρες που γράφονται στο Excel'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][], lists: [] as { title: string; items: string[] }[], notes };
+  }, [sheet, list, b, state, choices, month, today, book.name, synced]);
   if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const go = async () => {
     setBusy(true);
-    try { const r = await window.api.srcApply(list, list === 'duties' && month !== sheetMonth(sheet!, b.header, today) ? { ...b, month } : b, res.cmd); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
+    try { const r = await window.api.srcApply(list, list === 'duties' && month !== sheetMonth(sheet!, b.header, today) ? { ...b, month } : b, res.cmd, res.keys); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
     finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
     ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><input id="sd-m" type="month" className="ui-input" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
     <${Tiles} items=${res.tiles}/>
-    ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
+    ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && !res.duties?.days.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
     ${res.duties && html`<${DutyDays} p=${res.duties}/>`}
     ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
@@ -404,17 +410,22 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   <//>`;
 }
 
-// Έλεγχος υπηρεσιών: τι αλλάζει σε κάθε μέρα (πριν → μετά ανά θέση, και όσα έχει μόνο η εφαρμογή ως αφαίρεση), οι μέρες
-// με λάθος στο Excel (δεν περνούν), οι μελλοντικές (δεν περνούν ποτέ) και πόσες είναι ίδιες
+// Έλεγχος υπηρεσιών ανά μέρα: τι περνά από το Excel, τι διαφέρει (κρατιέται της εφαρμογής), τι έχει μόνο η εφαρμογή
+// (γράφεται στο Excel) και τι έσβησες στην εφαρμογή (σβήνεται και από το Excel)· οι μέρες με λάθος στο Excel (δεν
+// περνούν), οι μελλοντικές (δεν περνούν ποτέ) και πόσες είναι ίδιες
 function DutyDays({ p }: { p: DutiesPlan }) {
   const { state } = useStore(); const pm = personMap(state.people);
-  const nm = (pid: number | null) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
+  const nm = (pid: number | null | undefined) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
   return html`<div className="field">
     ${p.errors.length > 0 && html`<${Alert} tone="bad"><span><b>Δεν περνούν ${p.errors.length === 1 ? '1 μέρα' : p.errors.length + ' μέρες'}: ο ίδιος κωδικός θέσης σε δύο άτομα.</b> Διόρθωσέ το στο Excel και ξαναδιάβασε· ως τότε η εφαρμογή δεν γράφει εκεί.
       <ul className="srcalert__list">${p.errors.map(e => html`<li key=${e.date}>${dow(e.date)} ${dm(e.date)}: ${e.text}</li>`)}</ul></span><//>`}
-    ${p.days.length > 0 && html`<span className="field__label">Τι αλλάζει ανά μέρα (το Excel κερδίζει)</span>
-      ${p.days.map(d => html`<details key=${d.date} className="note" open=${p.days.length <= 3}><summary>${dow(d.date)} ${dm(d.date)} · ${d.lines.length} ${d.lines.length === 1 ? 'αλλαγή' : 'αλλαγές'}${d.locked ? ' · αλλάζει κλειδωμένη μέρα' : ''}${d.twice.length ? ' · ⚠ δύο υπηρεσίες την ίδια μέρα: ' + d.twice.map(nm).join(', ') : ''}</summary>
-        <ul>${d.lines.map((l, i) => html`<li key=${i}>${l.label}: ${nm(l.from)} → ${nm(l.to)}</li>`)}</ul></details>`)}`}
+    ${p.days.length > 0 && html`<span className="field__label">Ανά μέρα (κρατιέται της εφαρμογής)</span>
+      ${p.days.map(d => { const n = d.adds.length + d.differ.length + d.extra.length + d.gone.length;
+        return html`<details key=${d.date} className="note" open=${p.days.length <= 3}><summary>${dow(d.date)} ${dm(d.date)} · ${d.adds.length ? d.adds.length + ' από Excel' : 'τίποτα από Excel'}${d.extra.length + d.differ.length + d.gone.length ? ' · ' + (d.extra.length + d.differ.length + d.gone.length) + ' γράφονται στο Excel' : ''}${d.locked && d.adds.length ? ' · αλλάζει κλειδωμένη μέρα' : ''}${d.twice.length ? ' · ⚠ δύο υπηρεσίες την ίδια μέρα: ' + d.twice.map(nm).join(', ') : ''}</summary>
+        <ul key=${n}>${d.adds.map((a, i) => html`<li key=${'a' + i}>${a.label}: ${nm(a.pid)}${a.by != null ? ' (η θέση είναι ήδη του ' + nm(a.by) + ' στην εφαρμογή)' : ''}</li>`)}
+          ${d.differ.map((x, i) => html`<li key=${'d' + i}>Διαφέρει, κρατιέται της εφαρμογής: ${nm(x.pid)} ${x.app} (Excel: ${x.excel})</li>`)}
+          ${d.extra.map((x, i) => html`<li key=${'e' + i}>Η εφαρμογή έχει επιπλέον: ${nm(x.pid)} ${x.label}· θα γραφτεί στο Excel</li>`)}
+          ${d.gone.map((x, i) => html`<li key=${'g' + i}>Το έσβησες στην εφαρμογή: ${nm(x.pid)} (Excel: ${x.excel})· θα σβηστεί και από το Excel</li>`)}</ul></details>`; })}`}
     ${p.future.length > 0 && html`<p className="note">Μετά από σήμερα, δεν περνούν: ${p.future.map(dm).join(', ')}.</p>`}
     ${p.same > 0 && html`<p className="note">${p.same} ${p.same === 1 ? 'μέρα ίδια' : 'μέρες ίδιες'} με την εφαρμογή.</p>`}
   </div>`;

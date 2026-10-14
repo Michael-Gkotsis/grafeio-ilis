@@ -4,7 +4,7 @@ import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dat
 import { norm, normGreek } from './text';
 import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
-import { dutyDiff, type DutyDay } from './sources';
+import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, statusLbl } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
@@ -52,7 +52,7 @@ export type Command =
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
   | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
-  | { t: 'importDuties'; days: Record<ISODate, DutyDay>; source: string }
+  | { t: 'importDuties'; days: Record<ISODate, DutyCell[]>; source: string }
   | { t: 'expire' }
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean };
@@ -345,20 +345,19 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, caps }, text: 'Από Excel (' + c.source + '), δυνατότητα υπηρεσιών: ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές'), files: [], source: 'excel' };
     }
     case 'importDuties': {
-      // Το Excel κερδίζει: κάθε μέρα γίνεται ίδια με το Excel (θέσεις και υπηρεσίες χωρίς θέση), όπως στην προεπισκόπηση
-      // (planDuties). Μόνο μέρες ως σήμερα· άτομα και θέσεις που δεν υπάρχουν πια φεύγουν. Μία αναίρεση για όλες.
+      // Από τον έλεγχο υπηρεσιών: μπαίνει ό,τι λείπει από την εφαρμογή (mergeDuties, όπως στην προεπισκόπηση), για
+      // μέρες ως σήμερα· ό,τι διαφέρει μένει της εφαρμογής. Μέρα με ίδιο κωδικό θέσης δύο φορές δεν περνά.
       const guards = { ...s.guards }; const dutyLog = { ...s.dutyLog }; let n = 0, days = 0;
-      for (const [d, day] of Object.entries(c.days || {})) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > ctx.today) continue;
-        const g: Record<string, number> = {}; for (const [k, pid] of Object.entries(day.seats || {})) if (pm.has(pid) && postBy(s, k)) g[k] = pid;
-        const log = (day.seatless || []).filter(e => pm.has(e.pid) && KIND_NAME[e.kind]).map(e => ({ pid: e.pid, kind: e.kind }));
-        const ch = dutyDiff(s, d, { seats: g, seatless: log }).length; if (!ch) continue;
-        n += ch; days++;
-        if (Object.keys(g).length) guards[d] = g; else delete guards[d];
-        if (log.length) dutyLog[d] = log; else delete dutyLog[d];
+      for (const [d, cells] of Object.entries(c.days || {})) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > ctx.today || !Array.isArray(cells)) continue;
+        const ok = cells.filter(e => pm.has(e.pid) && KIND_NAME[e.kind]).map(e => (e.k && !postBy(s, e.k) ? { ...e, k: undefined } : e));
+        const r = mergeDuties(s, d, ok); if (r.dup || !r.adds.length) continue;
+        n += r.adds.length; days++;
+        if (Object.keys(r.day.seats).length) guards[d] = r.day.seats; else delete guards[d];
+        if (r.day.seatless.length) dutyLog[d] = r.day.seatless; else delete dutyLog[d];
       }
       if (!n) return { state: s, text: '', files: [] };
-      return { state: { ...s, guards, dutyLog }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές') + ' σε ' + days + (days === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
+      return { state: { ...s, guards, dutyLog }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + n + (n === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' σε ' + days + (days === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
     }
     case 'removeDutyLog': {
       const p = pm.get(c.pid); const list = s.dutyLog[c.date] || []; const i = list.findIndex(e => e.pid === c.pid && e.kind === c.kind);

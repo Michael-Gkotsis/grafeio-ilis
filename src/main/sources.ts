@@ -13,7 +13,7 @@ import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, planRoomSheet, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 
-export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; keep?: string[]; at: string; error?: string; locked?: boolean; pending?: boolean;
+export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
   base?: Record<string, string> }   // οι εγγραφές όπως ήταν στην τελευταία ανάγνωση/εγγραφή (για τη σύγκρουση)
 export type Metas = Partial<Record<ListKind, SourceMeta>>;
@@ -179,7 +179,7 @@ async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppS
   for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
   ws.setColWidths(lay.widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
   const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY });
-  return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: [], ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
+  return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: lay.keys, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
 }
 // Γράφει στο αρχείο ό,τι έχει η εφαρμογή για αυτό το είδος. Αν το αρχείο ή το φύλλο λείπει, το φτιάχνει.
 // tidy: γράφει και μόνο για τη μορφή που λείπει (με την «Ενημέρωση Excel»)· αλλιώς η μορφή μπαίνει όταν γράφεται κάτι.

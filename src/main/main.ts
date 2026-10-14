@@ -455,12 +455,13 @@ async function markSynced(kind: ListKind, b: SourceBinding, extra: Partial<Sourc
   srcMeta.set(kind, { ...(await syncStampNow(b)), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined, ...extra });
 }
 const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = { posts: 'setPeopleFields', outside: 'setPeopleFields', caps: 'importCaps', duties: 'importDuties' };
-async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keep: string[] = []): Promise<CmdResult> {
+// keys (έλεγχος υπηρεσιών): «μέρα|άτομο» του Excel που είδε πια η εφαρμογή· μόνο αυτά σβήνει μετά η εγγραφή
+async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keys: string[] = []): Promise<CmdResult> {
   if (SHEET_CMDS[kind] !== cmd.t) return fail('Λάθος είδος εισαγωγής');
   try {
     saveBinding(kind, b);
     const r = runCmd(cmd); if (!r.ok) return r;
-    await markSynced(kind, b, kind === 'duties' ? { keep: [...new Set([...(srcMeta.get(kind)?.keep || []), ...keep.map(String)])] } : {});
+    await markSynced(kind, b, kind === 'duties' ? { keys: [...new Set(keys.map(String))] } : {});
     dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
     notify();
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
@@ -716,8 +717,8 @@ else {
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean, keepApp: string[]) => importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []));
-    ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]) => applySheet(kind, b, cmd, Array.isArray(keep) ? keep : []));
-    ipcMain.handle('src:keys', (_e, kind: StatusKind) => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
+    ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) => applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []));
+    ipcMain.handle('src:keys', (_e, kind: StatusKind | 'duties') => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });

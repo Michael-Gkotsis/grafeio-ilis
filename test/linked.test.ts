@@ -244,26 +244,24 @@ describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () =
     const b = bind('duties', sh); expect(dayColumns(sh.rows[1], b.cols.d1)).toHaveLength(30);
     const p = planDuties(sh, b, s, '2026-09', TODAY);
     expect(p.sp.rows).toHaveLength(8); expect(p.sp.unmatched).toHaveLength(0);   // η γραμμή ΣΥΝΟΛΑ δεν είναι άτομο
-    const { days } = dutiesCmd(p);
-    expect(days['2026-09-01']).toEqual({ seats: { th1: 1, mg1: 3 }, seatless: [{ pid: 2, kind: 'th' }] });
-    expect(days['2026-09-02']).toEqual({ seats: { ly: 4, dy: 5 }, seatless: [] });
-    expect(days['2026-09-05'].seats).toEqual({}); expect(days['2026-09-05'].seatless).toHaveLength(8);
-    expect(days['2026-09-06']).toBeUndefined(); expect(p.errors).toEqual([expect.objectContaining({ date: '2026-09-06' })]);   // Μ2 δύο φορές
-    expect(days['2026-09-07'].seats).toEqual({ th1: 3 });   // ο κωδικός του άλλου εντύπου (ΣΠΕΝ Θ1) λέει την ίδια θέση
+    const s2 = run(s, { t: 'importDuties', ...dutiesCmd(p), source: 'x' });
+    expect(s2.guards['2026-09-01']).toEqual({ th1: 1, mg1: 3 }); expect(s2.dutyLog['2026-09-01']).toEqual([{ pid: 2, kind: 'th' }]);
+    expect(s2.guards['2026-09-02']).toEqual({ ly: 4, dy: 5 });
+    expect(s2.guards['2026-09-05']).toBeUndefined(); expect(s2.dutyLog['2026-09-05']).toHaveLength(8);
+    expect(s2.dutyLog['2026-09-06']).toBeUndefined(); expect(p.errors.map(e => e.date)).toEqual(['2026-09-06']);   // Μ2 δύο φορές
+    expect(s2.guards['2026-09-07']).toEqual({ th1: 3 });   // ο κωδικός του άλλου εντύπου (ΣΠΕΝ Θ1) λέει την ίδια θέση
     expect(p.unknown).toEqual(['Χ']);   // ο κωδικός απουσίας Κ.Α δεν είναι άγνωστος
     expect(p.days.map(d => d.date)).toEqual(['2026-09-01', '2026-09-02', '2026-09-05', '2026-09-07']);
-    const s2 = run(s, { t: 'importDuties', days, source: 'x' });
-    expect(s2.guards['2026-09-01'].th1).toBe(1); expect(s2.dutyLog['2026-09-05']).toHaveLength(8);
     expect(s2.baseline).toEqual({});   // τίποτα πια στις προηγούμενες υπηρεσίες
     const st = dutyStats(s2); expect(st.get(8)!.byKind.mg).toBe(1); expect(st.get(8)!.hol).toBe(1); expect(st.get(2)!.total).toBe(2);
     expect(guardUnavailable(s2, '2026-09-05', 8, 'mg1', undefined)).toMatch(/χωρίς θέση/);
     // πίσω στο Excel δεν αλλάζει τίποτα (σκέτο γράμμα για τους χωρίς θέση, κωδικοί για τις θέσεις)
-    expect(planDutiesWrite(sh, b, s2, TODAY).sets).toHaveLength(0);
-    // ξανά: οι μέρες είναι πια ίδιες με το Excel, δεν περνά τίποτα δεύτερη φορά
-    const p2 = planDuties(sh, b, s2, '2026-09', TODAY);
+    expect(planDutiesWrite(sh, b, s2, TODAY, p.keys).sets).toHaveLength(0);
+    // ξανά: οι μέρες έχουν πια υπηρεσίες, δεν περνά τίποτα δεύτερη φορά
+    const p2 = planDuties(sh, b, s2, '2026-09', TODAY, {}, p.keys);
     expect(p2.days).toHaveLength(0); expect(p2.same).toBe(4); expect(p2.errors).toHaveLength(1);
     expect(run(s2, { t: 'importDuties', ...dutiesCmd(p2), source: 'x' })).toBe(s2);
-    expect(run(s2, { t: 'importDuties', days, source: 'x' })).toBe(s2);
+    expect(run(s2, { t: 'importDuties', ...dutiesCmd(p), source: 'x' })).toBe(s2);
   });
   it('συνονόματοι σε άλλο θάλαμο και διπλό όνομα με «/»: ο θάλαμος του φύλλου λέει ποιος είναι', () => {
     const s = fakeState(12);
@@ -272,24 +270,24 @@ describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () =
     sh.rows[2][4] = 'ΑΛΦΑΣ/ΩΜΕΓΑΣ';
     const b = bind('duties', sh); const p = planDuties(sh, b, s, '2026-09', TODAY);
     expect(p.sp.unmatched).toHaveLength(0);
-    const { days } = dutiesCmd(p);
-    expect(days['2026-09-03'].seatless).toEqual([{ pid: 1, kind: 'th' }]); expect(days['2026-09-09'].seatless).toEqual([{ pid: 1, kind: 'mg' }]);
-    expect(days['2026-09-05'].seatless).toEqual([{ pid: 4, kind: 'mg' }]);
-    // πίσω στο Excel: ο καθένας στη γραμμή του, τίποτα «χωρίς σίγουρο άτομο»
     const s2 = run(s, { t: 'importDuties', ...dutiesCmd(p), source: 'x' });
+    expect(s2.dutyLog['2026-09-03']).toEqual([{ pid: 1, kind: 'th' }]); expect(s2.dutyLog['2026-09-09']).toEqual([{ pid: 1, kind: 'mg' }]);
+    expect(s2.dutyLog['2026-09-05']).toEqual([{ pid: 4, kind: 'mg' }]);
+    // πίσω στο Excel: ο καθένας στη γραμμή του, τίποτα «χωρίς σίγουρο άτομο»
     const w = planDutiesWrite(sh, b, run(s2, { t: 'assign', date: '2026-09-10', k: 'ly', pid: 4, force: 'δοκιμή' }), TODAY);
     expect(w.sets).toEqual([{ r: 5, c: 21, v: 'ΛΥ' }]); expect(w.ambiguous).toBeUndefined();
     // χωρίς στήλη θαλάμου (ή θάλαμος που δεν δείχνει έναν): μένει στο «Χωρίς άτομο» όπως πριν
     sh.rows[2][5] = 7;
     expect(planDuties(sh, b, s, '2026-09', TODAY).sp.unmatched.map(u => u.cands.map(c => c.id).sort())).toEqual([[1, 4]]);
   });
-  it('μέρα που η εφαρμογή έχει ήδη υπηρεσίες: γίνεται ίδια με το Excel, με τις διαφορές ανά θέση', () => {
+  it('μέρα που η εφαρμογή έχει ήδη υπηρεσίες: κρατά τις δικές της, προσθέτει όσους λείπουν, δείχνει τις διαφορές', () => {
     const s = { ...fakeState(12), guards: { '2026-09-01': { th1: 1, mg1: 2 } } };
     const sh = checkSheet(s, { '0:1': 'Θ1α', '1:1': 'Θ2α', '2:1': 'Μ', '3:1': 'Θ' });
     const b = bind('duties', sh); const p = planDuties(sh, b, s, '2026-09', TODAY);
-    expect(p.days[0].lines.map(l => [l.key, l.from, l.to])).toEqual([['th2', null, 2], ['mg1', 2, null], ['sl:mg', null, 3], ['sl:th', null, 4]]);
+    expect(p.days[0].differ).toEqual([expect.objectContaining({ pid: 2, excel: 'Θ2α' })]);
+    expect(p.days[0].adds.map(a => [a.pid, a.kind, a.k])).toEqual([[3, 'mg', undefined], [4, 'th', undefined]]);
     const s2 = run(s, { t: 'importDuties', ...dutiesCmd(p), source: 'x' });
-    expect(s2.guards['2026-09-01']).toEqual({ th1: 1, th2: 2 }); expect(s2.dutyLog['2026-09-01']).toHaveLength(2);
+    expect(s2.guards['2026-09-01']).toEqual({ th1: 1, mg1: 2 }); expect(s2.dutyLog['2026-09-01']).toHaveLength(2);
     // ο χωρίς θέση παίρνει θέση στην εφαρμογή: βγαίνει από τις υπηρεσίες χωρίς θέση
     const s3 = run(s2, { t: 'assign', date: '2026-09-01', k: 'mg2', pid: 3, force: 'δοκιμή' });
     expect(s3.dutyLog['2026-09-01']).toEqual([{ pid: 4, kind: 'th' }]);
