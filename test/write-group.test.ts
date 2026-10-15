@@ -44,7 +44,7 @@ describe('εγγραφή πολλών ειδών του ίδιου αρχείο�
     expect(rs.every(r => r.ok)).toBe(true);
     expect(await values(file)).toEqual(await values(copy));
     for (const [i, k] of kinds.entries()) { const r = rs[i]; if (!r.ok) throw new Error(r.error); expect((await tableState(b[k], { ...meta[k], ...r.meta } as SourceMeta, k)).changed, k).toBe(false); }
-  });
+  }, 20_000);   // 9 φύλλα Excel στον δίσκο: σε φορτωμένο μηχάνημα περνά τα 5 δευτ. του vitest
 });
 
 describe('ποια είδη αφορά μια αλλαγή σε άτομο', () => {
@@ -97,5 +97,5 @@ describe('εγγραφή ομάδας: πίνακες κάτω από πίνακ
       expect(r.binding?.header ?? bs[k].header, 'γραμμή ' + k).toBe({ medical: 5, hospital: 8, step: 1 }[k]);
       expect((await tableState({ ...bs[k], ...r.binding }, { ...meta[k], ...r.meta } as SourceMeta, k)).changed, 'μετά ' + k).toBe(false);
     }
-  });
+  }, 20_000);
 });
