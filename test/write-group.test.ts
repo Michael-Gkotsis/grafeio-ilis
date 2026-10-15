@@ -7,6 +7,7 @@ import path from 'path';
 import type { AppState, Status } from '../src/shared/domain';
 import { KIND, defaultBinding, kindsForPeople, type ListKind, type SourceBinding } from '../src/shared/sources';
 import { readBook, tableState, writeGroup, writeSource, type SourceMeta } from '../src/main/sources';
+import { Workbook } from '../src/main/xlsx';
 import { fakeState } from './fixtures';
 
 const TODAY = '2026-10-12';
@@ -57,5 +58,44 @@ describe('ποια είδη αφορά μια αλλαγή σε άτομο', () 
     expect([...ch({ si: 'Ι2' })]).toEqual(['people']);
     expect([...ch({ last: 'ΑΛΛΟΣ' })].sort()).toEqual(['duties', 'people', 'posts', 'punish']);
     expect(kindsForPeople(s.people, [...s.people, { ...s.people[0], id: 99 }], src).size).toBe(4);
+  });
+});
+
+// Τρεις πίνακες στο ίδιο φύλλο: ο πάνω μεγαλώνει με εισαγωγή γραμμής ενώ δεν είναι το πρώτο είδος της ομάδας, οπότε οι
+// πίνακες από κάτω (που είχαν ήδη γραφτεί) κατεβαίνουν. Το αποτύπωμά τους πρέπει να είναι από τη νέα τους θέση.
+describe('εγγραφή ομάδας: πίνακες κάτω από πίνακα που μεγάλωσε', () => {
+  const serial = (iso: string) => (Date.parse(iso) - Date.UTC(1899, 11, 30)) / 86400000;
+  it('κανένας πίνακας δεν φαίνεται «αλλαγμένος» μετά την εγγραφή (ούτε στην επόμενη αλλαγή ώρας του αρχείου)', async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gi-grp-')), 'Δ.xlsx');
+    const wb = await Workbook.blank('ΙΑΤΡΙΚΑ'); const ws = await wb.sheet('ΙΑΤΡΙΚΑ');
+    const put = (r: number, vals: (string | number | { d: string })[]) => vals.forEach((v, c) => { const ref = String.fromCharCode(65 + c) + r; if (typeof v === 'object') ws.setNumber(ref, serial(v.d), 3); else ws.set(ref, v); });
+    const s0 = fakeState(6); const [a, b, c] = s0.people;
+    put(1, ['ΕΙΣΑΓΩΓΕΣ ΣΤΕΠ']); put(2, ['Α/Α', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΕΙΣ', 'ΕΞ']); put(3, [1, a.last, a.first, { d: '2026-10-01' }, { d: '2026-10-02' }]);
+    put(4, ['ΕΑ-ΕΥ']); put(5, ['Α/Α', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΕΑ-ΕΥ', 'ΑΠΟ', 'ΕΩΣ']); put(6, [1, b.last, b.first, 'ΕΑ', { d: '2026-10-01' }, { d: '2026-10-09' }]);
+    put(7, ['ΝΟΣΟΚΟΜΕΙΟ']); put(8, ['Α/Α', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΕΙΣΑΓΩΓΗ', 'ΕΙΣ', 'ΕΞ']); put(9, [1, c.last, c.first, 'ΝΟΣΟΚΟΜΕΙΟ', { d: '2026-10-03' }, { d: '2026-10-05' }]);
+    fs.writeFileSync(file, await wb.save());
+    const s: AppState = { ...s0, statuses: [
+      { id: 's1', pid: a.id, type: 'STEP', from: '2026-10-01', to: '2026-10-02' },
+      { id: 'm1', pid: b.id, type: 'EA', from: '2026-10-01', to: '2026-10-09', kind: 'ΕΑ' },
+      { id: 'h1', pid: c.id, type: 'NOS', from: '2026-10-03', to: '2026-10-05' }] };
+    const base = { aa: 0, last: 1, first: 2 };
+    const bs: Record<string, SourceBinding> = {
+      step: { file, sheet: 'ΙΑΤΡΙΚΑ', header: 1, cols: { ...base, from: 3, to: 4 }, write: true },
+      medical: { file, sheet: 'ΙΑΤΡΙΚΑ', header: 4, cols: { ...base, kind: 3, from: 4, to: 5 }, write: true },
+      hospital: { file, sheet: 'ΙΑΤΡΙΚΑ', header: 7, cols: { ...base, where: 3, from: 4, to: 5 }, write: true } };
+    const meta: Record<string, SourceMeta> = {};
+    for (const k of ['step', 'medical', 'hospital'] as const) { const w = await writeSource(k, bs[k], s, undefined, TODAY); if (!w.ok) throw new Error(w.error); meta[k] = { at: 'x', keys: [], ...w.meta } as SourceMeta; }
+    for (const k of Object.keys(bs)) expect((await tableState(bs[k], meta[k], k as ListKind)).changed, 'πριν ' + k).toBe(false);
+    // νέο ΣΤΕΠ: ο πάνω πίνακας δεν έχει ελεύθερη γραμμή, μπαίνει γραμμή και οι άλλοι κατεβαίνουν. Το ΣΤΕΠ είναι τελευταίο στην ομάδα.
+    const d = s0.people[3];
+    const s2 = { ...s, statuses: [...s.statuses, { id: 's2', pid: d.id, type: 'STEP' as const, from: '2026-10-05', to: '2026-10-06' }] };
+    const rs = await writeGroup([{ kind: 'medical', b: bs.medical, meta: meta.medical }, { kind: 'hospital', b: bs.hospital, meta: meta.hospital }, { kind: 'step', b: bs.step, meta: meta.step }], s2, TODAY);
+    rs.forEach(r => expect(r.ok).toBe(true));
+    fs.utimesSync(file, new Date(), new Date(Date.now() + 60000));   // κάποιος έσωσε το αρχείο στο Excel χωρίς να αλλάξει κάτι
+    for (const [i, k] of (['medical', 'hospital', 'step'] as const).entries()) {
+      const r = rs[i]; if (!r.ok) throw new Error(r.error);
+      expect(r.binding?.header ?? bs[k].header, 'γραμμή ' + k).toBe({ medical: 5, hospital: 8, step: 1 }[k]);
+      expect((await tableState({ ...bs[k], ...r.binding }, { ...meta[k], ...r.meta } as SourceMeta, k)).changed, 'μετά ' + k).toBe(false);
+    }
   });
 });

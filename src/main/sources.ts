@@ -260,12 +260,19 @@ export async function writeGroup(jobs: { kind: ListKind; b: SourceBinding; meta?
     }
     const written = touched ? (await writeAll([{ dir: path.dirname(file), name: path.basename(file), data: await wb.save() }], { prevEvery: PREV_EVERY, expect }))[0] : null;
     const st = written ? stamp(written) : null;
-    for (const { j, a, moved } of done) {
-      let meta: Partial<SourceMeta> = a.keep;
-      if (st) { const fx = new Set<string>(); const rows = await wb.values(a.b.sheet, 2000, MAX_COLS, fx); meta = { ...a.keep, mtime: st.mtime, size: st.size, hash: tableHash({ name: a.b.sheet, rows, fx }, a.b), error: undefined, locked: false, pending: false }; }
+    // Είδος που γράφτηκε πριν από άλλο που έβαλε γραμμή πιο πάνω στο φύλλο: ο πίνακάς του κατέβηκε. Το αποτύπωμα και η γραμμή
+    // επικεφαλίδων που κρατιέται πρέπει να είναι από το τελικό βιβλίο, αλλιώς το επόμενο άνοιγμα θα το δείξει «Άλλαξε στο Excel».
+    const lastChanged = done.reduce((m, d, i) => (d.a.unchanged ? m : i), -1);
+    for (const [i, { j, a, moved }] of done.entries()) {
+      let meta: Partial<SourceMeta> = a.keep; let fb = a.b; let down = false;
+      if (st) {
+        const fx = new Set<string>(); const sheet: RawSheet = { name: a.b.sheet, rows: await wb.values(a.b.sheet, 2000, MAX_COLS, fx), fx };
+        if (i < lastChanged) { const h = locateHeader(j.kind, sheet, a.b); if (h !== a.b.header) { fb = { ...a.b, header: h }; down = true; } }
+        meta = { ...a.keep, mtime: st.mtime, size: st.size, hash: tableHash(sheet, fb), error: undefined, locked: false, pending: false };
+      }
       const grown = !a.unchanged && a.grown;
-      out.set(j, a.unchanged ? { ok: true, file, unchanged: true, ...a.res, created: false, meta, ...(moved ? { binding: a.b } : {}) }
-        : { ok: true, file: written!, unchanged: false, created: a.created, ...a.res, rooms: a.rooms, ...(a.tidied.length && !a.fresh ? { tidy: a.tidied } : {}), ...(grown || moved ? { binding: a.b, timeCols: grown } : {}), meta });
+      out.set(j, a.unchanged ? { ok: true, file, unchanged: true, ...a.res, created: false, meta, ...(moved || down ? { binding: fb } : {}) }
+        : { ok: true, file: written!, unchanged: false, created: a.created, ...a.res, rooms: a.rooms, ...(a.tidied.length && !a.fresh ? { tidy: a.tidied } : {}), ...(grown || moved || down ? { binding: fb, timeCols: grown } : {}), meta });
     }
   } catch (e) {
     const r: WriteOutcome = e instanceof LockedError ? { ok: false, error: e.message, locked: true } : { ok: false, error: e instanceof Error ? e.message : String(e) };
