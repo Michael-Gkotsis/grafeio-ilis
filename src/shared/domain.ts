@@ -1,4 +1,4 @@
-import type { ISODate } from './dates';
+import { greekHolidays, type ISODate } from './dates';
 import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
@@ -190,7 +190,8 @@ export interface Settings {
   blocks: BlockDef[];                    // ΣΒΕΝ
   blocksSpen: BlockDef[];                // ΣΠΕΝ
   phase: Phase;                          // ποιο έντυπο υπηρεσιών ισχύει τώρα
-  holidays: Record<ISODate, string>;
+  holidays: Record<ISODate, string>;     // αργίες που πρόσθεσες (οι επίσημες βγαίνουν μόνες τους κάθε χρονιά, rules.ts)
+  holidaysOff?: ISODate[];               // επίσημες αργίες που αφαίρεσες
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
@@ -200,6 +201,7 @@ export interface Settings {
   sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
   forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
   newDirs?: Partial<Record<ListKind, string>>;         // πού φτιάχνονται τα νέα Excel κάθε είδους (κενό = ο γενικός φάκελος)
+  dutyCodeAliases?: Record<string, string>;   // έλεγχος υπηρεσιών: άγνωστος κωδικός (codeKey) → θέση, «kind:<είδος>» χωρίς θέση, ή «ignore»
   baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
   lists?: UserLists;                     // ό,τι πρόσθεσες ή έκρυψες στις λίστες (βαθμοί, Ο/Σ)· οι βασικές είναι στο ranks.ts
 }
@@ -212,16 +214,12 @@ export const DEFAULT_SETTINGS: Settings = {
   blocks: DEFAULT_BLOCKS,
   blocksSpen: DEFAULT_BLOCKS_SPEN,
   phase: 'sven',
-  holidays: {
-    '2026-10-28': '28η Οκτωβρίου', '2026-12-25': 'Χριστούγεννα', '2026-12-26': 'Σύναξη Θεοτόκου',
-    '2027-01-01': 'Πρωτοχρονιά', '2027-01-06': 'Θεοφάνεια', '2027-03-15': 'Καθαρά Δευτέρα', '2027-03-25': '25η Μαρτίου',
-    '2027-04-30': 'Μεγάλη Παρασκευή', '2027-05-01': 'Πρωτομαγιά', '2027-05-03': 'Δευτέρα του Πάσχα', '2027-06-21': 'Αγίου Πνεύματος', '2027-08-15': 'Δεκαπενταύγουστος'
-  },
+  holidays: {},
   cadre: { 'Επίλαρχοι': 0, 'Ίλαρχοι': 0, 'Ανθυπίλαρχοι-Ανθλγοι': 0, 'Ανθυπασπιστές': 0, 'ΔΕΑ': 0, 'Αρχιλοχίες': 0, 'Επιλοχίες': 0 },
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 3
+  rev: 4
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
@@ -231,26 +229,36 @@ export function migrateSettings(st: Settings): Settings {
     st = { ...st, blocksSpen, fixed: st.fixed || {}, rev: 2 };
   }
   if ((st.rev || 0) < 3) st = withCodes({ ...st, rev: 3 });
+  if ((st.rev || 0) < 4) {
+    // rev 4: οι επίσημες αργίες βγαίνουν μόνες τους κάθε χρονιά· όσες ήταν γραμμένες (οι παλιές προεπιλογές ως 15/8/2027)
+    // φεύγουν από τις «δικές σου», ώστε η αφαίρεσή τους να δουλεύει όπως όλων των επίσημων
+    const holidays = Object.fromEntries(Object.entries(st.holidays || {}).filter(([d]) => !greekHolidays(+d.slice(0, 4))[d]));
+    st = { ...st, holidays, rev: 4 };
+  }
   return st;
 }
 // Κωδικοί θέσεων (rev 3): όσες θέσεις δεν έχουν κωδικό παίρνουν τον προεπιλεγμένο του εντύπου (Θ1α…Θ4β στη ΣΒΕΝ,
 // Θ1…Θ4, ΟΠ1…ΟΠ4, Σ3α… στη ΣΠΕΝ, Μ1…Μ5, ΛΥ, ΔΥ, ΤΑΕ)· οι δικές σου υπηρεσίες γράμμα + αριθμό (Υ1, Υ2…), χωρίς να
-// πέφτουν πάνω σε κωδικό που υπάρχει ήδη
+// πέφτουν πάνω σε κωδικό που υπάρχει ήδη. Πρώτα οι κωδικοί του εντύπου και στα δύο έντυπα, μετά οι δικές σου: αλλιώς
+// δική σου υπηρεσία θαλαμοφυλάκων στη ΣΒΕΝ θα έπαιρνε τα Θ1, Θ2 της ΣΠΕΝ και οι θαλαμοφύλακες της ΣΠΕΝ θα γίνονταν Θ3…Θ6
 export function withCodes(st: Settings): Settings {
-  const def = new Map<string, string>();
-  for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) def.set(ph + '|' + b.id + '|' + p.k, p.code);
   const owner = new Map<string, string>();   // κλειδί κωδικού → θέση που τον έχει
   for (const b of [...(st.blocks || []), ...(st.blocksSpen || [])]) for (const p of b.posts) if (p.code) owner.set(codeKey(p.code), p.k);
   const free = (c: string, k: string) => { const o = owner.get(codeKey(c)); return o == null || o === k; };
-  const fill = (ph: Phase, list: BlockDef[] | undefined) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
+  const fill = (ph: Phase, list: BlockDef[] | undefined, own: boolean) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
     if (p.code) return p;
-    let c = def.get(ph + '|' + b.id + '|' + p.k);
-    if (!c || !free(c, p.k)) { let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
+    let c = defaultCode(ph, b.id, p.k);
+    if (!c || !free(c, p.k)) { if (!own) return p; let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
     owner.set(codeKey(c), p.k);
     return { ...p, code: c };
   }) }));
-  return { ...st, blocks: fill('sven', st.blocks), blocksSpen: fill('spen', st.blocksSpen) };
+  const blocks = fill('sven', st.blocks, false), blocksSpen = fill('spen', st.blocksSpen, false);
+  return { ...st, blocks: fill('sven', blocks, true), blocksSpen: fill('spen', blocksSpen, true) };
 }
+// Ο κωδικός του εντύπου για μια θέση (ΣΒΕΝ/ΣΠΕΝ, υπηρεσία, θέση), όπως στις προεπιλογές
+const DEF_CODES = new Map<string, string>();
+for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) DEF_CODES.set(ph + '|' + b.id + '|' + p.k, p.code);
+export const defaultCode = (ph: Phase, block: string, k: string) => DEF_CODES.get(ph + '|' + block + '|' + k);
 // Κλειδί σύγκρισης κωδικών: κεφαλαία, χωρίς τόνους, λατινικά που μοιάζουν → ελληνικά, χωρίς κενά και παύλες
 export const codeKey = (raw: unknown) => normGreek(raw).replace(/[\s\-–—]+/g, '');
 
@@ -280,6 +288,7 @@ export interface AppState {
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
+  lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
 // Υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες· όχι στον κανόνα του ίδιου νούμερου
 export interface SeatlessDuty { pid: number; kind: DutyKind }
@@ -297,5 +306,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, lastExpire: ''
 });

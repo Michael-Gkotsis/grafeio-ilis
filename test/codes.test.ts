@@ -23,7 +23,7 @@ describe('κωδικοί θέσεων', () => {
     const mine = { id: 'c1', kind: 'other', name: 'Πύλη', armed: false, custom: true, posts: [{ k: 'c1a', label: 'Πύλη 1', short: '1' }, { k: 'c1b', label: 'Πύλη 2', short: '2' }] };
     const old = { ...DEFAULT_SETTINGS, rev: 2, blocks: [...noCodes(DEFAULT_SETTINGS.blocks), mine], blocksSpen: noCodes(DEFAULT_SETTINGS.blocksSpen) };
     const m = migrateSettings(old as any);
-    expect(m.rev).toBe(3);
+    expect(m.rev).toBe(4);
     const code = (k: string, list = m.blocks) => list.flatMap(b => b.posts).find(p => p.k === k)!.code;
     expect([code('th1'), code('th5'), code('mg2'), code('ly'), code('dy'), code('c1a'), code('c1b')]).toEqual(['Θ1α', 'Θ1β', 'Μ2', 'ΛΥ', 'ΔΥ', 'Υ1', 'Υ2']);
     expect([code('th1', m.blocksSpen), code('op3', m.blocksSpen), code('tae', m.blocksSpen)]).toEqual(['Θ1', 'ΟΠ3', 'ΤΑΕ']);
@@ -86,8 +86,8 @@ describe('υπηρεσίες χωρίς θέση και προηγούμενες
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
     let st = new Store(dir, WASM); await st.open();
     st.commit(apply(st.state, { t: 'importPeople', rows: fakePeople(5).map(({ id, active, ...p }) => p), source: 't', deactivateMissing: false }, ctx).state);
-    st.commit(apply(st.state, { t: 'importDuties', guards: {}, log: { '2026-10-01': [{ pid: 2, kind: 'th' }] }, source: 't' }, ctx).state);
-    const patch = st.commit(apply(st.state, { t: 'importDuties', guards: {}, log: { '2026-10-02': [{ pid: 3, kind: 'mg' }] }, source: 't' }, ctx).state);
+    st.commit(apply(st.state, { t: 'importDuties', days: { '2026-10-01': [{ pid: 2, kind: 'th', raw: 'Θ' }] }, source: 't' }, ctx).state);
+    const patch = st.commit(apply(st.state, { t: 'importDuties', days: { '2026-10-02': [{ pid: 3, kind: 'mg', raw: 'Μ' }] }, source: 't' }, ctx).state);
     st.close();
     st = new Store(dir, WASM); await st.open();
     expect(st.state.dutyLog).toEqual({ '2026-10-01': [{ pid: 2, kind: 'th' }], '2026-10-02': [{ pid: 3, kind: 'mg' }] });

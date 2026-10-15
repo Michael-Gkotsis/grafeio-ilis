@@ -300,11 +300,32 @@ export class Sheet {
     wb.shiftForeign(this, after, n);
     wb.shiftTables(this, after, n);
   }
+  // Α/Α με τύπο «προηγούμενη + 1» (=A4+1, απλός ή κοινός τύπος από σύρσιμο) στη στήλη col (από 1): οι νέες γραμμές
+  // after+1…after+n (από 1, μετά το insertRows) μπαίνουν στην αλυσίδα και η πρώτη από κάτω δείχνει πια την τελευταία νέα.
+  // Αλλιώς η νέα γραμμή θα έπαιρνε αριθμό και η από κάτω θα συνέχιζε από την από πάνω (1, 2, 9, 3, 4).
+  chainAa(col: number, after: number, n: number): boolean {
+    const L = colName(col);
+    const fOf = (r: number) => { const c = this.cell(L + r, false); return c && c.inner.includes('<f') ? /<f(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/f>)/.exec(c.inner) : null; };
+    const prevPlus = (text: string | undefined, r: number) => !!text && new RegExp('^\\$?' + L + '\\$?' + (r - 1) + '\\s*\\+\\s*1$').test(unesc(text).trim());
+    // κοινός τύπος: ο τύπος του πρώτου κελιού (master) ισχύει σχετικά και για τα άλλα
+    const sharedOk = (attrs: string) => {
+      const si = attr(attrs, 'si'); if (si == null || attr(attrs, 't') !== 'shared') return false;
+      for (const row of this.rows) for (const c of row.cells) { if (c.col !== col) continue; const m = /<f(\s[^>]*)>([\s\S]*?)<\/f>/.exec(c.inner); if (m && attr(m[1], 't') === 'shared' && attr(m[1], 'si') === si) return prevPlus(m[2], row.r); }
+      return false;
+    };
+    const chain = (f: RegExpExecArray | null, r: number) => !!f && (f[2] != null && f[2] !== '' ? prevPlus(f[2], r) : sharedOk(f[1] || ''));
+    const below = fOf(after + n + 1), above = fOf(after);
+    const belowOld = !!below && below[2] != null && below[2] !== '' && prevPlus(below[2], after + 1);   // ακόμα δείχνει τη γραμμή after
+    if (!belowOld && !chain(below, after + n + 1) && !chain(above, after)) return false;
+    for (let r = after + 1; r <= after + n; r++) this.setFormula(L + r, L + (r - 1) + '+1');
+    if (belowOld) { const c = this.cell(L + (after + n + 1))!; c.inner = c.inner.replace(/(<f(?:\s[^>]*)?>)[\s\S]*?(<\/f>)/, '$1' + L + (after + n) + '+1$2').replace(/<v>[^<]*<\/v>/, ''); }
+    return true;
+  }
   // Σβήνει τη γραμμή at (από 1) και ανεβάζει μία ό,τι είναι από κάτω. Οι αναφορές στη γραμμή που σβήστηκε δείχνουν πια τη
   // γραμμή από πάνω, οπότε το τέλος μιας περιοχής μικραίνει (COUNTIF(I4:I159) → I4:I158). Για να φύγει ξανά μια γραμμή
   // που είχε βάλει η εφαρμογή (αναίρεση)· όχι σε φύλλο με πίνακα του Excel (false: δεν σβήστηκε).
   deleteRow(at: number, wb: Workbook): boolean {
-    if (/<tableParts\b/.test(this.tail)) return false;
+    if (/<tableParts\b|<drawing\b|<legacyDrawing\b/.test(this.tail)) return false;   // πίνακες, σχέδια, σχόλια: μόνο άδειασμα
     const after = at - 1, n = -1;
     this.rows = this.rows.filter(r => r.r !== at);
     for (const row of this.rows) {
@@ -348,6 +369,7 @@ export class Sheet {
       .replace(/(<dataValidation[^>]*sqref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
       .replace(/(<hyperlink\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
       .replace(/(<autoFilter\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftRef(r, after, n) + '"')
+      .replace(/(<xm:sqref>)([^<]+)(<\/xm:sqref>)/g, (_m, a, r, b) => a + shiftRef(r, after, n) + b)
       .replace(/<brk id="(\d+)"/g, (_m, r) => `<brk id="${Number(r) > after ? Number(r) + n : r}"`);
   }
 
@@ -363,7 +385,8 @@ export class Sheet {
 // Ημερομηνίες: αριθμός ημερών από 30/12/1899 (ή 1/1/1904 σε παλιά αρχεία Mac)
 const DAY = 86400000;
 const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1);
-export const toSerial = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - EPOCH) / DAY); };
+// y1904: το βιβλίο μετρά από 1/1/1904 (Workbook.date1904), όπως στην ανάγνωση
+export const toSerial = (iso: string, y1904 = false) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - (y1904 ? EPOCH_1904 : EPOCH)) / DAY); };
 // Ενσωματωμένες μορφές ημερομηνίας του Excel και δικές μας με d/y μέσα (όχι μόνο ώρα)
 const DATE_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
 const isDateCode = (code: string) => /[dy]/i.test(code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, ''));
@@ -439,6 +462,7 @@ export class Workbook {
     return n;
   }
   sheetNames() { return this.names.map(x => x.name); }
+  get date1904() { return /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml); }
   hasSheet(name: string) { return this.names.some(x => x.name === name); }
 
   private async sharedStrings(): Promise<string[]> {
@@ -600,7 +624,7 @@ export class Workbook {
   // fx: εδώ μπαίνουν τα κελιά με τύπο («γραμμή:στήλη» από 0)
   async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40, fx?: Set<string>): Promise<XlValue[][]> {
     const ws = await this.sheet(nameOrIndex); const sst = await this.sharedStrings(); await this.loadStyles();
-    const y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml);
+    const y1904 = this.date1904;
     const out: XlValue[][] = [];
     for (const x of ws.cells()) {
       if (x.r > maxRows || x.c > maxCols || !x.inner) continue;
@@ -681,7 +705,22 @@ export class Workbook {
     for (const ed of this.tableEdits) {
       const relPath = ed.path.replace(/([^/]+)$/, '_rels/$1.rels');
       const rel = this.zip.file(relPath); if (!rel) continue;
-      for (const m of (await rel.async('string')).matchAll(/Target="(?:\.\.\/|\/xl\/)tables\/([^"]+)"/g)) {
+      const relXml = await rel.async('string');
+      // σχόλια (και το πλαίσιό τους στο VML) και εικόνες/σχέδια κάτω από τις νέες γραμμές κατεβαίνουν μαζί τους
+      // (στο VML και στα σχέδια οι γραμμές μετράνε από 0)
+      const down = (r0: number) => (r0 >= ed.after ? r0 + ed.n : r0);
+      for (const m of relXml.matchAll(/<Relationship\b[^>]*>/g)) {
+        const target = attr(m[0], 'Target') || ''; const type = attr(m[0], 'Type') || '';
+        const p = target.startsWith('/') ? target.slice(1) : ed.path.replace(/[^/]+$/, '') + target;
+        const part = p.split('/').reduce((a: string[], x) => (x === '..' ? a.slice(0, -1) : x === '.' ? a : [...a, x]), []).join('/');
+        const f = this.zip.file(part); if (!f) continue;
+        if (/\/comments$/.test(type)) this.zip.file(part, (await f.async('string')).replace(/(<comment\b[^>]*\sref=")([^"]+)"/g, (_x, a: string, r: string) => a + shiftRef(r, ed.after, ed.n) + '"'));
+        else if (/\/vmlDrawing$/.test(type)) this.zip.file(part, (await f.async('string'))
+          .replace(/(<x:Row>)(\d+)(<\/x:Row>)/g, (_x, a: string, r: string, b: string) => a + down(+r) + b)
+          .replace(/(<x:Anchor>)([^<]*)(<\/x:Anchor>)/g, (_x, a: string, l: string, b: string) => a + l.split(',').map((v, i) => (i === 2 || i === 6 ? ' '.repeat(i ? 1 : 0) + down(+v) : v)).join(',') + b));
+        else if (/\/drawing$/.test(type)) this.zip.file(part, (await f.async('string')).replace(/(<xdr:row>)(\d+)(<\/xdr:row>)/g, (_x, a: string, r: string, b: string) => a + down(+r) + b));
+      }
+      for (const m of relXml.matchAll(/Target="(?:\.\.\/|\/xl\/)tables\/([^"]+)"/g)) {
         const tp = 'xl/tables/' + m[1]; const f = this.zip.file(tp); if (!f) continue;
         const x = (await f.async('string')).replace(/\sref="([^"]+)"/g, (_m2, r: string) => {
           const [a, b] = r.split(':'); if (!b) return _m2;

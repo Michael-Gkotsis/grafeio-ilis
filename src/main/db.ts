@@ -66,7 +66,7 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'lastExpire'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
 // dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
@@ -97,6 +97,10 @@ export class Store {
     if (exists && !this.hasTables()) { this.db.close(); throw new CorruptDbError('Το αρχείο δεν έχει τους πίνακες της εφαρμογής', true); }
     this.migrate(exists);
     this.load();
+    // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου
+    // υπηρεσιών, οπότε ο έλεγχος μετά την αναβάθμιση δεν χρειάζεται ποτέ
+    const st = this.state;
+    if (!st.settings.baselineReviewed && !st.people.length && !Object.keys(st.baseline).length) { this.commit({ ...st, settings: { ...st.settings, baselineReviewed: true } }); this.flush(); }
   }
   private SQL!: Awaited<ReturnType<typeof initSqlJs>>;
   // Βάση που έχει ήδη στηθεί: έχει τους πίνακές μας (ο ίδιος έλεγχος με το validate)
@@ -153,6 +157,7 @@ export class Store {
     s.cadreAbs = kv.get('cadreAbs') || [];
     s.dutyLog = kv.get('dutyLog') || {};
     s.nightTraining = kv.get('nightTraining') || {};
+    s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
     this.state = s; noteNamesakes(s.people);
   }
@@ -227,7 +232,18 @@ export class Store {
     const e = r.find(x => x.undoable && !x.undone);
     return e ? { id: e.id, text: e.text, source: e.source, patch: JSON.parse(e.patch) } : null;
   }
-  markUndone(id: number) { this.db.run('UPDATE audit SET undone = 1 WHERE id = ?', [id]); this.flush(); }
+  markUndone(id: number, flush = true, undone = true) { this.db.run('UPDATE audit SET undone = ? WHERE id = ?', [undone ? 1 : 0, id]); if (flush) this.flush(); }
+  // Μία ενέργεια (αλλαγή, γραμμές ιστορικού, αναίρεση) και μία εγγραφή στον δίσκο. Αν ο δίσκος δεν τη δεχτεί (antivirus,
+  // γεμάτος δίσκος), όλα γυρίζουν πίσω και στη μνήμη, ώστε η οθόνη να μη δείχνει κάτι που δεν σώθηκε (και ο χρήστης να
+  // μην το ξανακάνει διπλό). Το λάθος φτάνει στον καλούντα. back: ό,τι άλλο γυρίζει πίσω (π.χ. το «αναιρέθηκε»).
+  transact<T>(fn: () => T, write = true, back?: () => void): T {
+    const prev = this.state; const mark = Number(this.db.exec('SELECT coalesce(max(id), 0) FROM audit')[0].values[0][0]);
+    try { const r = fn(); if (write) this.flush(); return r; }
+    catch (e) {
+      try { this.commit(prev); this.db.run('DELETE FROM audit WHERE id > ?', [mark]); back?.(); } catch (e2) { console.error('transact rollback', e2); }
+      throw e;
+    }
+  }
   // after: μόνο όσες γραμμές γράφτηκαν μετά από αυτό το id (ό,τι δεν έχει δει ακόμα το UI)
   audit(limit = 300, after = 0): AuditEntry[] {
     return this.all<any>(`SELECT id, at, day, text, files, source, undoable, undone FROM audit WHERE id > ${Math.floor(after) || 0} ORDER BY id DESC LIMIT ${Math.floor(limit)}`)

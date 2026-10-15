@@ -2,8 +2,9 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { TYPES, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type DutyLog, type Guards, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
+import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, statusLbl } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
@@ -51,7 +52,7 @@ export type Command =
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
   | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
-  | { t: 'importDuties'; guards: Guards; log: DutyLog; source: string }
+  | { t: 'importDuties'; days: Record<ISODate, DutyCell[]>; source: string }
   | { t: 'expire' }
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean };
@@ -344,29 +345,19 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, caps }, text: 'Από Excel (' + c.source + '), δυνατότητα υπηρεσιών: ' + n + (n === 1 ? ' αλλαγή' : ' αλλαγές'), files: [], source: 'excel' };
     }
     case 'importDuties': {
-      // Μόνο ό,τι λείπει (ξαναελέγχεται εδώ): θέση που είναι ελεύθερη, σε άτομο χωρίς θέση εκείνη τη μέρα (αν ήταν
-      // χωρίς θέση στο ίδιο είδος, παίρνει τώρα τη θέση)· υπηρεσία χωρίς θέση σε άτομο χωρίς καμία υπηρεσία εκείνη τη μέρα
-      const guards = { ...s.guards }; const dutyLog = { ...s.dutyLog }; const days = new Set<string>(); let n = 0;
-      for (const [d, g] of Object.entries(c.guards || {})) {
-        const cur = { ...(guards[d] || {}) }; let log = dutyLog[d] || [];
-        for (const [k, pid] of Object.entries(g)) {
-          const post = postBy(s, k);
-          if (!pm.has(pid) || !post || cur[k] != null || Object.values(cur).includes(pid)) continue;
-          cur[k] = pid; log = log.filter(e => !(e.pid === pid && e.kind === post.kind)); days.add(d); n++;
-        }
-        guards[d] = cur; if (log.length) dutyLog[d] = log; else delete dutyLog[d];
-        if (!Object.keys(cur).length) delete guards[d];
-      }
-      for (const [d, list] of Object.entries(c.log || {})) {
-        const g = guards[d] || {}; const log = [...(dutyLog[d] || [])];
-        for (const e of list) {
-          if (!pm.has(e.pid) || !KIND_NAME[e.kind] || Object.values(g).includes(e.pid) || log.some(x => x.pid === e.pid)) continue;
-          log.push({ pid: e.pid, kind: e.kind }); days.add(d); n++;
-        }
-        if (log.length) dutyLog[d] = log;
+      // Από τον έλεγχο υπηρεσιών: μπαίνει ό,τι λείπει από την εφαρμογή (mergeDuties, όπως στην προεπισκόπηση), για
+      // μέρες ως σήμερα· ό,τι διαφέρει μένει της εφαρμογής. Μέρα με ίδιο κωδικό θέσης δύο φορές δεν περνά.
+      const guards = { ...s.guards }; const dutyLog = { ...s.dutyLog }; let n = 0, days = 0;
+      for (const [d, cells] of Object.entries(c.days || {})) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > ctx.today || !Array.isArray(cells)) continue;
+        const ok = cells.filter(e => pm.has(e.pid) && KIND_NAME[e.kind]).map(e => (e.k && !postBy(s, e.k) ? { ...e, k: undefined } : e));
+        const r = mergeDuties(s, d, ok); if (r.dup || !r.adds.length) continue;
+        n += r.adds.length; days++;
+        if (Object.keys(r.day.seats).length) guards[d] = r.day.seats; else delete guards[d];
+        if (r.day.seatless.length) dutyLog[d] = r.day.seatless; else delete dutyLog[d];
       }
       if (!n) return { state: s, text: '', files: [] };
-      return { state: { ...s, guards, dutyLog }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + n + (n === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' σε ' + days.size + (days.size === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
+      return { state: { ...s, guards, dutyLog }, text: 'Από Excel (' + c.source + '), έλεγχος υπηρεσιών: ' + n + (n === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' σε ' + days + (days === 1 ? ' μέρα' : ' μέρες'), files: ['Έλεγχος υπηρεσιών'], source: 'excel' };
     }
     case 'removeDutyLog': {
       const p = pm.get(c.pid); const list = s.dutyLog[c.date] || []; const i = list.findIndex(e => e.pid === c.pid && e.kind === c.kind);
@@ -417,7 +408,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       for (const [k, n] of Object.entries(c.baseline)) { const v = Math.max(0, Math.floor(Number(n) || 0)); if (v) { (clean as Record<string, number>)[k] = v; any = true; } }
       const baseline = { ...s.baseline }; if (any) baseline[c.pid] = clean; else delete baseline[c.pid];
       const txt = Object.entries(clean).map(([k, n]) => (k === 'hol' ? 'αργίες' : KIND_NAME[k as DutyKind] || k) + ' ' + n).join(', ') || 'καμία';
-      return { state: { ...s, baseline }, text: 'Προηγούμενες υπηρεσίες ' + shortName(p) + ': ' + txt, files: ['Έλεγχος υπηρεσιών'] };
+      // γραμμένες με το χέρι: ο έλεγχος μετά την αναβάθμιση (για όσες έβαζε η παλιά ανάγνωση του Excel) δεν χρειάζεται
+      const settings = s.settings.baselineReviewed ? s.settings : { ...s.settings, baselineReviewed: true };
+      return { state: { ...s, baseline, settings }, text: 'Προηγούμενες υπηρεσίες ' + shortName(p) + ': ' + txt, files: ['Έλεγχος υπηρεσιών'] };
     }
     case 'setHkaiManual': {
       const hkaiManual = { ...s.hkaiManual, [c.date]: c.manual };
@@ -457,7 +450,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
       list[i] = { ...b, name, posts };
       const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
-      const errs = codeErrors(settings); if (errs.length) throw new Error(errs[0]);
+      const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
       return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
     }
     case 'setBlock': {
@@ -478,11 +471,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: statuses.some((x, i) => x !== s.statuses[i]) ? { ...s, statuses } : s, text: '', files: [], source: 'auto', undoable: false };
     }
     case 'expire': {
-      // Τα ιατρικά και οι ποινές που έληξαν χθες «αφαιρούνται» (Κ-04, Κ-10): δεν αλλάζει κάτι στα δεδομένα,
-      // γράφεται μόνο στο ιστορικό ώστε ο χρήστης να το δει.
-      const ex = s.statuses.filter(x => isRecordExpiredOn(x, ctx.today) && !x.pending);
+      // Τα ιατρικά και οι ποινές που έληξαν «αφαιρούνται» (Κ-04, Κ-10): δεν αλλάζει κάτι στα δεδομένα, γράφεται μόνο στο
+      // ιστορικό ώστε ο χρήστης να το δει. Όσα έληξαν από την προηγούμενη φορά (και όσο η εφαρμογή ήταν κλειστή) ως χθες.
+      const since = s.lastExpire || addDays(ctx.today, -1);   // ίδια μέρα δεύτερη φορά: τίποτα
+      const ex = s.statuses.filter(x => !x.pending && (s.lastExpire ? !x.open && RECORD_CATS.includes(TYPES[x.type].cat) && x.to >= since && x.to < ctx.today : isRecordExpiredOn(x, ctx.today)));
       return {
-        state: s, source: 'auto', undoable: false, files: [],
+        state: s.lastExpire === ctx.today ? s : { ...s, lastExpire: ctx.today }, source: 'auto', undoable: false, files: [],
         text: ex.length ? 'Έληξαν και αφαιρέθηκαν ' + ex.length + ' καταχωρήσεις' : '',
         extra: ex.map(x => 'Έληξε: ' + (x.type === 'PUN' ? 'ποινή (' + punLbl(x.kind) + ')' : statusLbl(x, s.settings.lists)) + ' του ' + shortName(pm.get(x.pid)!) + ' (έως ' + dm(x.to) + ')')
       };

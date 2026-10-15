@@ -84,6 +84,7 @@ export function mockApi(): Api {
       } catch (e: any) { return { ok: false, error: e.message }; }
     },
     sync: async () => res(''),
+    dayCheck: async () => res(''),
     undo: async id => {
       const u = undo[undo.length - 1]; if (!u) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
       if (typeof id === 'number' && u.id !== id) return { ok: false, error: 'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ.' };

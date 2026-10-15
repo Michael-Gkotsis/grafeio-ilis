@@ -9,7 +9,7 @@ import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding,
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 // Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
 export type DirTarget = 'output' | { form: FormKind } | { kind: ListKind };
-export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number }
+export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number; dataFallback?: boolean }   // dataFallback: τα δεδομένα είναι στο προφίλ, όχι δίπλα στο exe
 export interface TemplateInfo { id: string; name: string; file: string; ok: boolean; custom: boolean }
 // Μετά από κάθε ενέργεια ο main στέλνει μόνο τα κομμάτια της κατάστασης που άλλαξαν (changes) και τις νέες γραμμές
 // του ιστορικού (newAudit)· όλο το ιστορικό (audit) μόνο όταν άλλαξε κάποια παλιά γραμμή (αναίρεση).
@@ -28,6 +28,7 @@ export type Fail = { ok: false; error: string; locked?: boolean };
 export interface SourceStatus { kind: ListKind; file: string; exists: boolean; changed: boolean; synced: boolean; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;      // δεν γράφει μόνη της μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (και γιατί)
   month?: string;     // έλεγχος υπηρεσιών: ο μήνας του φύλλου
+  remap?: string;     // δεν διαβάζει ούτε γράφει μόνη της: οι στήλες δεν βρίσκονται με σιγουριά (και γιατί)
 }
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[]; ambiguous?: PlanLine[]; warn?: string[]; tidy?: string[] }   // tidy: μορφή που λείπει (τίτλος, λίστες επιλογής)
 export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
@@ -37,7 +38,8 @@ export interface Api {
   boot(): Promise<Boot>;
   run(cmd: Command): Promise<CmdResult>;
   undo(id?: number): Promise<CmdResult>;   // id: αναιρεί μόνο αν αυτή είναι ακόμα η τελευταία ενέργεια
-  sync(): Promise<CmdResult>;   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
+  sync(): Promise<CmdResult>;
+  dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
   exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult>;   // print: προεπισκόπηση εκτύπωσης αντί για Excel
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
@@ -58,8 +60,8 @@ export interface Api {
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
   // keepApp: εγγραφές που άλλαξαν και στις δύο πλευρές και κρατιέται η τιμή της εφαρμογής (γράφεται μετά στο Excel)
   srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean, keepApp?: string[]): Promise<CmdResult>;
-  srcKeys(kind: StatusKind): Promise<{ keys: string[]; base: Record<string, string> }>;
-  srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keep?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών
+  srcKeys(kind: StatusKind | 'duties'): Promise<{ keys: string[]; base: Record<string, string> }>;
+  srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών (keys: κελιά που είδε η εφαρμογή)
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
   srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;

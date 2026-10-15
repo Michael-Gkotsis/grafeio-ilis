@@ -4,14 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { PersonPicker, usePrintFile } from '../common';
-import { TYPES, CAP_ACC, KIND_NAME, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
-import { personMap, postBy } from '../../shared/rules';
+import { TYPES, CAP_ACC, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
+import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
-import { MONTHS, addDays, dm } from '../../shared/dates';
+import { MONTHS, addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
-  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dayColumns, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
-  type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
+  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
+  type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
@@ -40,7 +40,7 @@ export function useSourceStatus() {
 export function SourcesAlert() {
   const { state, today } = useStore(); const st = useSourceStatus(); const nav = useNav();
   const go = () => nav.go('templates', { tab: 'files' });
-  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
+  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.remap ? 'περιμένει αντιστοίχιση (Στήλες…): ' + x.remap : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
   const files = new Map<string, Map<string, string[]>>();
   for (const x of st.sources) {
     const w = why(x); if (!w) continue;
@@ -130,6 +130,7 @@ function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, 
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
   const badge = !b ? null : !s ? html`<${Badge}>…<//>` : !s.exists ? (isStatusKind(kind) ? html`<${Badge} tone="warn" data-tip="Θα φτιαχτεί με την πρώτη ενημέρωση">Δεν υπάρχει ακόμα<//>` : html`<${Badge} tone="bad">Δεν βρέθηκε<//>`)
+    : s.remap ? html`<${Badge} tone="warn" data-tip=${'Δεν διαβάζει ούτε γράφει μόνη της μέχρι να δείξεις τις στήλες («Στήλες…»): ' + s.remap}>Περιμένει αντιστοίχιση<//>`
     : s.hold ? html`<${Badge} tone="warn" data-tip=${s.hold}>Περιμένει ανανέωση<//>`
     : s.changed ? html`<${Badge} tone="warn" data-tip="Κάποιος το άλλαξε στο Excel. Πάτα «Ανανέωση από Excel» για να περάσουν οι αλλαγές.">Άλλαξε στο Excel<//>`
     : s.locked ? html`<${Badge} tone="warn" data-tip=${s.error}>Ανοιχτό στο Excel · περιμένει<//>`
@@ -220,7 +221,7 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
   const sample = useMemo(() => {
     if (isNew || miss.length) return [];
     if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today, state.settings.lists).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
-    if (list === 'duties') { const cols = dayColumns(sheet.rows[b.header], b.cols.d1); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
+    if (list === 'duties') { const cols = dutyDays(sheet, b); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
     if (list === 'caps') return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (CAP_COLS.filter(k => b.cols[k] != null && capNo(cellText(r.v[k]))).map(k => 'όχι ' + CAP_ACC[k]).join(', ') || 'κάνει όλες'));
     return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : list === 'outside' && cellText(r.v.remarks) ? ' · ' + cellText(r.v.remarks) : ''));
   }, [b, sheet, list, isNew, miss.length]);
@@ -304,6 +305,9 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   };
   const pm = new Map(state.people.map(p => [p.id, p]));
   const both = d.update.filter(u => u.conflict); const plain = d.update.filter(u => !u.conflict);
+  // ΔΝ σε όποιον δεν έχει δικαίωμα (μόνο αφού έχει σημειωθεί δικαίωμα σε έστω έναν): περνά, αλλά το λέει
+  const noDn = (pid: number) => list === 'dn' && state.people.some(p => p.dn) && !pm.get(pid)?.dn;
+  const noDnN = d.add.filter(a => noDn(a.pid)).length;
   const n = d.add.length + d.update.filter(u => !keepApp.has(u.id)).length + (del ? d.removed.length : 0);
   const toggleKeep = (id: string, on: boolean) => { const x = new Set(keepApp); if (on) x.add(id); else x.delete(id); setKeepApp(x); };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
@@ -321,7 +325,8 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
         : html`<div className="unm__pick">${c.cands.map(p => html`<${Button} key=${p.id} size="sm" variant="outline" onClick=${() => setChoices({ ...choices, [c.r]: p.id })}>${p.last} ${p.first}${p.father ? ' του ' + p.father : ''}<//>`)}
           <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
           ${c.r in choices ? html`<${Badge}>παραλείπεται<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//>`}</div>`}</div>`)}</div>`}
-    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? fullName(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}</li>`)}</ul></details>`}
+    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? fullName(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}${noDn(a.pid) ? ' · ⚠ χωρίς δικαίωμα ΔΝ' : ''}</li>`)}</ul></details>`}
+    ${noDnN > 0 && html`<${Alert} tone="warn"><span>${noDnN === 1 ? '1 ΔΝ είναι' : noDnN + ' ΔΝ είναι'} σε άτομα χωρίς δικαίωμα ΔΝ. Θα βγει ✕ στον προέλεγχο των Εξοδούχων μέχρι να δώσεις το δικαίωμα στην καρτέλα τους ή να γίνουν έξοδος.</span><//>`}
     ${both.length > 0 && html`<div className="field"><span className="field__label">Άλλαξαν και στο Excel και στην εφαρμογή (${both.length}): ποιο κρατάς;</span>
       ${both.map(u => html`<div key=${u.id} className="unm"><span><b>${u.who}</b><small>Excel: ${u.what} · Εφαρμογή: ${u.conflict}</small></span>
         <${Segmented} small=${true} value=${keepApp.has(u.id) ? 'app' : 'excel'} onChange=${(v: string) => toggleKeep(u.id, v === 'app')} items=${[{ value: 'excel', label: 'Του Excel' }, { value: 'app', label: 'Της εφαρμογής' }]}/></div>`)}
@@ -359,7 +364,11 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   const [busy, setBusy] = useState(false);
   const sheet = book.sheets.find(x => x.name === b.sheet);
   const [month, setMonth] = useState(() => (sheet && list === 'duties' && sheetMonth(sheet, b.header, today)) || b.month || prevMonth(today));
-  const [withBusy, setWithBusy] = useState(true);
+  // έλεγχος υπηρεσιών: ποια κελιά είχε ήδη δει η εφαρμογή (ό,τι έσβησες μετά στην εφαρμογή δεν ξαναμπαίνει)
+  const cur = state.settings.sources?.[list];
+  const sameTable = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
+  const [synced, setSynced] = useState<string[]>([]);
+  useEffect(() => { if (list === 'duties' && sameTable) window.api.srcKeys(list).then(x => setSynced(x.keys)); }, [list, sameTable]);
   const res = useMemo(() => {
     if (!sheet) return null;
     if (list === 'posts' || list === 'outside') {
@@ -375,44 +384,73 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
       return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλαγές'], [p.listed, 'Στο φύλλο'], [p.same, 'Ίδιοι'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
         lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
     }
-    const p = planDuties(sheet, b, state, month, today, choices);
-    const cmd: Command = { t: 'importDuties', ...dutiesCmd(p, withBusy), source: book.name };
-    const pm = personMap(state.people); const nm = (pid: number) => (pm.get(pid) ? shortName(pm.get(pid)!) : '?');
-    const what = (a: { k?: string; kind: DutyKind }) => (a.k ? postBy(state, a.k)?.label || a.k : KIND_NAME[a.kind] + ' χωρίς θέση');
-    const busyAdds = p.add.filter(a => a.busy); const n = p.add.length - (withBusy ? 0 : busyAdds.length);
-    const seatless = p.add.filter(a => !a.k && (withBusy || !a.busy)).length;
+    const p = planDuties(sheet, b, state, month, today, choices, synced);
+    const cmd: Command = { t: 'importDuties', ...dutiesCmd(p), source: book.name };
+    const pm = personMap(state.people);
     const notes = [
-      seatless ? seatless + (seatless === 1 ? ' υπηρεσία περνά' : ' υπηρεσίες περνούν') + ' χωρίς θέση (σκέτο γράμμα Θ, Μ, Σ…, ίδια θέση σε δύο, ή θέση που έχει ήδη άλλος στην εφαρμογή): μετρούν στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : '',
-      p.differ.length ? 'Σε ' + p.differ.length + (p.differ.length === 1 ? ' περίπτωση' : ' περιπτώσεις') + ' το Excel λέει άλλη υπηρεσία από την εφαρμογή: κρατιέται της εφαρμογής και γράφεται στο Excel.' : '',
-      p.future ? p.future + (p.future === 1 ? ' μέρα είναι' : ' μέρες είναι') + ' μετά από σήμερα και δεν περνούν.' : '',
-      p.unknown.length ? 'Κωδικοί που δεν αναγνωρίστηκαν και παραλείπονται: ' + p.unknown.join(', ') + '. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.' : ''
+      p.noRow.length ? 'Δεν έχουν γραμμή σε αυτό το φύλλο, οπότε οι υπηρεσίες τους δεν γράφονται εκεί: ' + p.noRow.map(id => (pm.get(id) ? shortName(pm.get(id)!) : '?')).join(', ') + '.' : '',
+      p.days.some(d => d.adds.some(a => !a.k)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…), ή θέση που έχει ήδη άλλος στην εφαρμογή, περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
     ].filter(Boolean);
-    const byKind = new Map<DutyKind, number>(); for (const a of p.add) if (withBusy || !a.busy) byKind.set(a.kind, (byKind.get(a.kind) || 0) + 1);
-    const kinds = [...byKind].map(([k, n]) => KIND_NAME[k] + ' ' + n);
-    return { sp: p.sp, n, cmd, busyAdds: busyAdds.length, tiles: [[n, 'Υπηρεσίες'], [p.fresh.length, 'Νέες μέρες'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
-      lists: [{ title: 'Ανά είδος', items: kinds },
-        { title: 'Λείπουν από μέρες που έχει ήδη η εφαρμογή', items: busyAdds.map(a => dm(a.date) + ' · ' + nm(a.pid) + ': ' + what(a)) },
-        { title: 'Διαφέρουν από την εφαρμογή (κρατιέται της εφαρμογής)', items: p.differ.map(x => dm(x.date) + ' · ' + nm(x.pid) + ': Excel «' + x.excel + '», εφαρμογή ' + x.app) },
-        { title: 'Ίδια θέση σε δύο άτομα', items: p.clash }, { title: 'Δύο υπηρεσίες την ίδια μέρα', items: p.twice }], notes };
-  }, [sheet, list, b, state, choices, month, today, book.name, withBusy]);
+    const write = p.days.filter(d => d.extra.length || d.differ.length || d.gone.length).length;
+    return { sp: p.sp, n: p.changes, cmd, duties: p, keys: p.keys, tiles: [[p.changes, 'Υπηρεσίες που περνούν'], [write, 'Μέρες που γράφονται στο Excel'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][], lists: [] as { title: string; items: string[] }[], notes };
+  }, [sheet, list, b, state, choices, month, today, book.name, synced]);
   if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const go = async () => {
     setBusy(true);
-    try { const r = await window.api.srcApply(list, list === 'duties' && month !== sheetMonth(sheet!, b.header, today) ? { ...b, month } : b, res.cmd); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
+    try { const r = await window.api.srcApply(list, list === 'duties' && month !== sheetMonth(sheet!, b.header, today) ? { ...b, month } : b, res.cmd, res.keys); if (!r.ok) { toast({ text: r.error }); return; } await refresh(); onClose(); toast({ text: r.text }); }
     finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (list === 'duties' ? (res.n === 1 ? ' υπηρεσία' : ' υπηρεσίες') : res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
     ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><input id="sd-m" type="month" className="ui-input" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
     <${Tiles} items=${res.tiles}/>
-    ${'busyAdds' in res && (res.busyAdds || 0) > 0 && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${withBusy} onChange=${(e: any) => setWithBusy(e.target.checked)}/><span><b>Πρόσθεσε και όσους λείπουν από μέρες που έχει ήδη η εφαρμογή (${res.busyAdds})</b><small>Π.χ. υπηρεσίες που γράφτηκαν με το χέρι στο Excel. Ό,τι έχει η εφαρμογή δεν αλλάζει.</small></span></label>`}
-    ${!res.n && !res.sp.unmatched.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
+    ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && !res.duties?.days.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
+    ${res.duties && html`<${DutyAliases} codes=${res.duties.unknown}/><${DutyDays} p=${res.duties}/>`}
     ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
     ${res.notes.map(t => html`<p key=${t} className="note">${t}</p>`)}
     ${res.sp.dup > 0 && html`<p className="note">${res.sp.dup === 1 ? '1 άτομο είναι' : res.sp.dup + ' άτομα είναι'} δύο φορές στο φύλλο· κρατήθηκε η πρώτη γραμμή.</p>`}
     <p className="note">Από εκεί και πέρα ό,τι αλλάζεις στην εφαρμογή γράφεται και σε αυτό το φύλλο${b.write === false ? ' με την «Ενημέρωση Excel»' : ''}.</p>
   <//>`;
+}
+
+// Έλεγχος υπηρεσιών ανά μέρα: τι περνά από το Excel, τι διαφέρει (κρατιέται της εφαρμογής), τι έχει μόνο η εφαρμογή
+// (γράφεται στο Excel) και τι έσβησες στην εφαρμογή (σβήνεται και από το Excel)· οι μέρες με λάθος στο Excel (δεν
+// περνούν), οι μελλοντικές (δεν περνούν ποτέ) και πόσες είναι ίδιες
+function DutyDays({ p }: { p: DutiesPlan }) {
+  const { state } = useStore(); const pm = personMap(state.people);
+  const nm = (pid: number | null | undefined) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
+  return html`<div className="field">
+    ${(p.warn || []).map(t => html`<${Alert} key=${t} tone="warn"><span>${t}</span><//>`)}
+    ${p.errors.length > 0 && html`<${Alert} tone="bad"><span><b>Δεν περνούν ${p.errors.length === 1 ? '1 μέρα' : p.errors.length + ' μέρες'}: ο ίδιος κωδικός θέσης σε δύο άτομα.</b> Διόρθωσέ το στο Excel και ξαναδιάβασε· ως τότε η εφαρμογή δεν γράφει εκεί.
+      <ul className="srcalert__list">${p.errors.map(e => html`<li key=${e.date}>${dow(e.date)} ${dm(e.date)}: ${e.text}</li>`)}</ul></span><//>`}
+    ${p.days.length > 0 && html`<span className="field__label">Ανά μέρα (κρατιέται της εφαρμογής)</span>
+      ${p.days.map(d => { const n = d.adds.length + d.differ.length + d.extra.length + d.gone.length;
+        return html`<details key=${d.date} className="note" open=${p.days.length <= 3}><summary>${dow(d.date)} ${dm(d.date)} · ${d.adds.length ? d.adds.length + ' από Excel' : 'τίποτα από Excel'}${d.extra.length + d.differ.length + d.gone.length ? ' · ' + (d.extra.length + d.differ.length + d.gone.length) + ' γράφονται στο Excel' : ''}${d.locked && d.adds.length ? ' · αλλάζει κλειδωμένη μέρα' : ''}${d.twice.length ? ' · ⚠ δύο υπηρεσίες την ίδια μέρα: ' + d.twice.map(nm).join(', ') : ''}</summary>
+        <ul key=${n}>${d.adds.map((a, i) => html`<li key=${'a' + i}>${a.label}: ${nm(a.pid)}${a.by != null ? ' (η θέση είναι ήδη του ' + nm(a.by) + ' στην εφαρμογή)' : ''}</li>`)}
+          ${d.differ.map((x, i) => html`<li key=${'d' + i}>Διαφέρει, κρατιέται της εφαρμογής: ${nm(x.pid)} ${x.app} (Excel: ${x.excel})</li>`)}
+          ${d.extra.map((x, i) => html`<li key=${'e' + i}>Η εφαρμογή έχει επιπλέον: ${nm(x.pid)} ${x.label}· θα γραφτεί στο Excel</li>`)}
+          ${d.gone.map((x, i) => html`<li key=${'g' + i}>Το έσβησες στην εφαρμογή: ${nm(x.pid)} (Excel: ${x.excel})· θα σβηστεί και από το Excel</li>`)}</ul></details>`; })}`}
+    ${p.future.length > 0 && html`<p className="note">Μετά από σήμερα, δεν περνούν: ${p.future.map(dm).join(', ')}.</p>`}
+    ${p.same > 0 && html`<p className="note">${p.same} ${p.same === 1 ? 'μέρα ίδια' : 'μέρες ίδιες'} με την εφαρμογή.</p>`}
+  </div>`;
+}
+
+// Άγνωστοι κωδικοί στον έλεγχο υπηρεσιών: τι σημαίνει ο καθένας (θέση, είδος χωρίς θέση ή «δεν είναι υπηρεσία»).
+// Η επιλογή κρατιέται στις ρυθμίσεις και ισχύει και στις επόμενες αναγνώσεις.
+function DutyAliases({ codes }: { codes: string[] }) {
+  const { state, run } = useStore();
+  if (!codes.length) return null;
+  const posts = postsOf(state.settings);
+  const save = (raw: string, v: string) => { if (!v) return; run({ t: 'setSettings', settings: { dutyCodeAliases: { ...(state.settings.dutyCodeAliases || {}), [codeKey(raw)]: v } }, text: 'ο κωδικός «' + raw + '» στον έλεγχο υπηρεσιών σημαίνει ' + (v === 'ignore' ? '«δεν είναι υπηρεσία»' : v.startsWith('kind:') ? KIND_NAME[v.slice(5) as DutyKind].toLowerCase() + ' χωρίς θέση' : postBy(state, v)?.label || v) }, false); };
+  return html`<div className="field"><span className="field__label">Κωδικοί που δεν αναγνωρίστηκαν: τι σημαίνει ο καθένας;</span>
+    ${codes.map(u => html`<div key=${u} className="field-row" style=${{ alignItems: 'center' }}><span className="plan__fn" style=${{ minWidth: '120px' }}>${u}</span>
+      <select className="ui-select" aria-label=${'Τι σημαίνει ο κωδικός ' + u} value="" onChange=${(e: any) => save(u, e.target.value)}>
+        <option value="">Παραλείπεται (διάλεξε…)</option><option value="ignore">Δεν είναι υπηρεσία</option>
+        <optgroup label="Υπηρεσία χωρίς θέση">${(Object.keys(KIND_NAME) as DutyKind[]).map(k => html`<option key=${k} value=${'kind:' + k}>${KIND_NAME[k]}</option>`)}</optgroup>
+        <optgroup label="Θέση">${posts.map(x => html`<option key=${x.k} value=${x.k}>${x.label}${x.code ? ' (' + x.code + ')' : ''}</option>`)}</optgroup>
+      </select></div>`)}
+    <span className="field__help">Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.</span></div>`;
 }
 
 // Ενημέρωση Excel: τι θα γραφτεί, γραμμή-γραμμή, πριν γραφτεί

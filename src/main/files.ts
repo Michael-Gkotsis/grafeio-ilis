@@ -15,6 +15,21 @@ export function freeName(dir: string, title: string): string {
   for (let i = 1; ; i++) { const f = path.join(dir, stem + (i > 1 ? ' (' + i + ')' : '') + '.xlsx'); if (!fs.existsSync(f)) return f; }
 }
 
+// Το αρχείο άλλαξε από τότε που το διάβασε η εφαρμογή (το έσωσε κάποιος στο Excel): δεν γράφεται από πάνω
+export class ChangedError extends Error {
+  constructor(public file: string) { super('Το «' + path.basename(file) + '» άλλαξε στο μεταξύ (το έσωσε κάποιος): δεν γράφτηκε, για να μη χαθεί η αλλαγή. Πάτα «Ανανέωση από Excel» και ξανά.'); }
+}
+// Μοναδικό .tmp ανά εγγραφή: δύο εγγραφές του ίδιου αρχείου δεν γράφουν η μία πάνω στο .tmp της άλλης
+let tmpN = 0;
+const tmpOf = (file: string) => file + '.' + process.pid + '.' + ++tmpN + '.tmp';
+// Πού είναι τα δεδομένα: όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe), αλλιώς δίπλα στο exe αν ο φάκελος γράφεται,
+// αλλιώς στο προφίλ του χρήστη. fallback: τρέχει από το προφίλ (το λέει το «Σήμερα»)
+export function dataDirOf(local: string, profile: string, writable: (dir: string) => boolean): { dir: string; fallback: boolean } {
+  const has = (d: string) => fs.existsSync(path.join(d, 'ilh.db'));
+  const dir = has(local) ? local : has(profile) ? profile : writable(local) ? local : profile;
+  return { dir, fallback: dir === profile };
+}
+
 export class LockedError extends Error {
   constructor(public file: string) { super('Το αρχείο «' + path.basename(file) + '» είναι ανοιχτό στο Excel. Κλείσ\' το και πάτα «Ξανά». Δεν άλλαξε τίποτα.'); }
 }
@@ -56,13 +71,19 @@ export function lastPrev(dir: string, base: string): number | null {
 // Γράφει όλα τα αρχεία ή κανένα: πρώτα όλα τα .tmp, μετά οι μετονομασίες.
 // prevEvery: αντίγραφο στα «_προηγούμενα» μόνο αν το προηγούμενο είναι παλιότερο από τόσα ms. Οι αυτόματες εγγραφές στο
 // ίδιο Δυναμολόγιο (μία ανά είδος, πολλές στη σειρά) αλλιώς θα έσπρωχναν έξω τις 10 εκδόσεις μέσα σε λίγα λεπτά.
-export async function writeAll(items: { dir: string; name: string; data: Buffer }[], opts: { prevEvery?: number } = {}): Promise<string[]> {
-  const plan = items.map(x => ({ ...x, file: path.join(x.dir, x.name), tmp: path.join(x.dir, x.name + '.tmp') }));
+// expect: ώρα και μέγεθος που είχε κάθε αρχείο όταν διαβάστηκε· αν άλλαξαν ως τη μετονομασία, δεν γράφεται (ChangedError).
+export async function writeAll(items: { dir: string; name: string; data: Buffer }[], opts: { prevEvery?: number; expect?: Record<string, { mtime: number; size: number } | null> } = {}): Promise<string[]> {
+  const plan = items.map(x => ({ ...x, file: path.join(x.dir, x.name), tmp: tmpOf(path.join(x.dir, x.name)) }));
   for (const x of plan) { if (isLocked(x.file)) throw new LockedError(x.file); }
   try {
     // ασύγχρονα: σε αργό δίσκο ή USB το παράθυρο δεν παγώνει όσο γράφεται το αρχείο
     for (const x of plan) { await fsp.mkdir(x.dir, { recursive: true }); await fsp.writeFile(x.tmp, x.data); await verifyXlsx(x.tmp); }
   } catch (e) { plan.forEach(x => fs.rmSync(x.tmp, { force: true })); throw e; }
+  for (const x of plan) {
+    const e = opts.expect?.[x.file]; if (!e) continue;
+    let st: fs.Stats | null = null; try { st = fs.statSync(x.file); } catch { /* σβήστηκε */ }
+    if (!st || Math.round(st.mtimeMs) !== e.mtime || st.size !== e.size) { plan.forEach(y => fs.rmSync(y.tmp, { force: true })); throw new ChangedError(x.file); }
+  }
   const done: string[] = [];
   for (const x of plan) {
     const recent = opts.prevEvery ? lastPrev(x.dir, x.name) : null;
@@ -85,9 +106,12 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
 // κόψιμο ρεύματος το NTFS μπορεί να κρατήσει τη μετονομασία με αρχείο γεμάτο μηδενικά) και μετονομασία. Στα Windows το
 // antivirus μπορεί να κρατά το αρχείο για λίγο: ξαναδοκιμάζουμε.
 export function writeDurable(file: string, data: string | Uint8Array, retries = 20) {
-  const tmp = file + '.tmp';
+  const tmp = tmpOf(file);
   const fd = fs.openSync(tmp, 'w');
-  try { const buf = typeof data === 'string' ? Buffer.from(data) : data; for (let o = 0; o < buf.length;) o += fs.writeSync(fd, buf, o, buf.length - o); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  // γεμάτος δίσκος κ.λπ.: το μισό .tmp δεν μένει
+  try { const buf = typeof data === 'string' ? Buffer.from(data) : data; for (let o = 0; o < buf.length;) o += fs.writeSync(fd, buf, o, buf.length - o); fs.fsyncSync(fd); }
+  catch (e) { try { fs.closeSync(fd); } catch { /* ήδη κλειστό */ } fs.rmSync(tmp, { force: true }); throw e; }
+  fs.closeSync(fd);
   for (let i = 0; ; i++) {
     try { fs.renameSync(tmp, file); break; }
     catch (e: any) { if (i >= retries || !BUSY.includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; } Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
@@ -95,6 +119,8 @@ export function writeDurable(file: string, data: string | Uint8Array, retries = 
   // και ο φάκελος, για να μείνει η μετονομασία (στα Windows δεν γίνεται για φάκελο: αγνοείται)
   try { const d = fs.openSync(path.dirname(file), 'r'); try { fs.fsyncSync(d); } finally { fs.closeSync(d); } } catch { /* Windows */ }
 }
+// Αντίγραφο αρχείου (επαναφορά βάσης, αντίγραφο από USB) με τον ίδιο τρόπο: δεν μένει μισό μετά από κόψιμο ρεύματος
+export const copyDurable = (src: string, dst: string) => writeDurable(dst, fs.readFileSync(src));
 // Μικρά αρχεία ρυθμίσεων (sources.json, forms.json…): ώστε ένα κόψιμο ρεύματος να μην τα αφήνει μισά
 export const writeJson = (file: string, data: unknown) => writeDurable(file, JSON.stringify(data), 4);
 export const writeXlsx = async (dir: string, name: string, data: Buffer) => (await writeAll([{ dir, name, data }]))[0];
