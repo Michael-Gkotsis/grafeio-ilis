@@ -40,6 +40,25 @@ describe('νέα στήλη στο Excel και αυτόματες διαδρο�
     expect(c.b.cols.kind).toBe(7); expect(c.b.cols.days).toBe(6);
     expect(parseStatuses('punish', sheet, c.b, s.people, TODAY).cands[0].kind).toBe('Κράτηση');
   });
+  // H1: στήλη με δική σου επικεφαλίδα μπροστά από το «ΕΙΔΟΣ ΠΟΙΝΗΣ». Η εφαρμογή θυμάται τις επικεφαλίδες από το πρώτο άνοιγμα.
+  it('«ΣΧΟΛΙΑ» μπροστά από το «ΕΙΔΟΣ ΠΟΙΝΗΣ»: το είδος ακολουθεί την επικεφαλίδα του και δεν διαβάζονται τα σχόλια', async () => {
+    const s = fakeState(6); const p = s.people[1];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gi-x3-')); const file = path.join(dir, 't.xlsx');
+    const row = (...x: (string | number | { d: string })[]) => [1, p.rank, p.last, p.first, { d: '2026-10-05' }, { d: '2026-10-08' }, ...x];
+    await punishFile(file, ['Α/Α', 'Βαθμός', 'Επώνυμο', 'Όνομα', 'ΑΠΟ', 'ΕΩΣ', 'ΕΙΔΟΣ ΠΟΙΝΗΣ'], [row('ΚΡΑΤΗΣΗ')]);
+    const x = bestFor('punish', (await readBook(file)).sheets)!;
+    const first = await locateCheck('punish', { file, sheet: x.sheet, header: x.header, cols: x.cols, write: true });
+    expect(first.need).toBeNull(); expect(first.b.heads).toMatchObject({ from: 'ΑΠΟ', kind: 'ΕΙΔΟΣ ΠΟΙΝΗΣ' });
+    await punishFile(file, ['Α/Α', 'Βαθμός', 'Επώνυμο', 'Όνομα', 'ΑΠΟ', 'ΕΩΣ', 'ΣΧΟΛΙΑ', 'ΕΙΔΟΣ ΠΟΙΝΗΣ'], [row('ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ', 'ΚΡΑΤΗΣΗ')]);
+    const sheet = (await readBook(file)).sheets[0];
+    expect(parseStatuses('punish', sheet, first.b, s.people, TODAY).cands[0].kind).toBe('Στέρηση εξόδου');   // με την παλιά αντιστοίχιση θα διάβαζε τα σχόλια
+    const c = await locateCheck('punish', first.b);
+    expect(c.need).toBeNull(); expect(c.b.cols.kind).toBe(7);
+    expect(parseStatuses('punish', sheet, c.b, s.people, TODAY).cands[0].kind).toBe('Κράτηση');
+    // το «ΕΙΔΟΣ ΠΟΙΝΗΣ» σβήστηκε: το είδος περιμένει αντιστοίχιση αντί να διαβάσει τα «ΣΧΟΛΙΑ»
+    await punishFile(file, ['Α/Α', 'Βαθμός', 'Επώνυμο', 'Όνομα', 'ΑΠΟ', 'ΕΩΣ', 'ΣΧΟΛΙΑ'], [row('ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ')]);
+    expect((await locateCheck('punish', first.b)).need).toMatch(/ΣΧΟΛΙΑ/);
+  });
   it('στήλη που η επικεφαλίδα της λέει πια άλλο πεδίο, χωρίς δική της αλλού: το είδος περιμένει αντιστοίχιση', async () => {
     const s = fakeState(6); const p = s.people[1];
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gi-x3-')); const file = path.join(dir, 't.xlsx');

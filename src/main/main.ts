@@ -13,7 +13,7 @@ import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, holdPatch, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
@@ -266,9 +266,9 @@ const ovOf = (b?: SourceBinding, file?: string): RosterOverride | undefined => (
 // Το ίδιο για στήλες που μετακινήθηκαν ή προστέθηκαν (b.cols, από το refitCols).
 function moveBinding(kind: ListKind, b: SourceBinding, colsText?: string) {
   const cur = bindingOf(kind); if (!cur) return;
-  const row = cur.header !== b.header, cols = !!b.cols && JSON.stringify(cur.cols) !== JSON.stringify(b.cols);
-  if (!row && !cols) return;
-  store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header, cols: cols ? b.cols : cur.cols } } } });
+  const row = cur.header !== b.header, cols = !!b.cols && JSON.stringify(cur.cols) !== JSON.stringify(b.cols), heads = !!b.heads && JSON.stringify(cur.heads || null) !== JSON.stringify(b.heads);
+  if (!row && !cols && !heads) return;
+  store.commit({ ...store.state, settings: { ...store.state.settings, sources: { ...(store.state.settings.sources || {}), [kind]: { ...cur, header: b.header, cols: cols ? b.cols : cur.cols, ...(b.heads ? { heads: b.heads } : {}) } } } });
   const lbl = 'Excel ' + KIND[kind].label.toLowerCase() + ': ';
   if (row) store.addAudit({ at: nowHM(), day: today(), text: lbl + 'ο πίνακας είναι πια στη γραμμή ' + (b.header + 1) + ' του φύλλου «' + b.sheet + '» (άλλαξαν γραμμές από πάνω)', files: [], source: 'auto', undoable: false }, null);
   if (cols && colsText) store.addAudit({ at: nowHM(), day: today(), text: lbl + colsText, files: [], source: 'auto', undoable: false }, null);
@@ -506,8 +506,9 @@ function keysOf(kind: ListKind, b: SourceBinding): string[] {
   return sameTable(bindingOf(kind), b) ? srcMeta.get(kind)?.keys || [] : [];
 }
 const baseFor = (kind: ListKind, b: SourceBinding): Record<string, string> => (sameTable(bindingOf(kind), b) ? srcMeta.get(kind)?.base || {} : {});
-function saveBinding(kind: ListKind, b: SourceBinding | null) {
+function saveBinding(kind: ListKind, b0: SourceBinding | null) {
   const cur = bindingOf(kind);
+  const b = b0 && keepHeads(b0, cur);   // οι επικεφαλίδες των στηλών (heads) μένουν μόνο αν ο πίνακας και οι στήλες δεν άλλαξαν· αλλιώς ξαναμπαίνουν στην επόμενη ανάγνωση
   if (b) srcMeta.allow([b.file]);   // αρχείο που όρισε ή έφτιαξε ο ίδιος ο main
   if (JSON.stringify(cur || null) === JSON.stringify(b)) return;
   const sources = { ...(store.state.settings.sources || {}) };

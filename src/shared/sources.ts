@@ -30,6 +30,7 @@ export interface SourceBinding {
   values?: Record<string, TypeKey>;  // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
   month?: string;                    // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
   autoRead?: boolean;                // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
+  heads?: Record<string, string>;    // επικεφαλίδα (headText) της στήλης κάθε πεδίου όπως ήταν όταν την είδε ο main (stampHeads): ξεχωρίζει «άλλαξε η στήλη του πεδίου» από «πάντα είχε δική σου επικεφαλίδα»
 }
 // Ο μήνας ενός φύλλου ελέγχου υπηρεσιών: από τον τίτλο, αλλιώς αυτός που διάλεξε ο χρήστης στην ανάγνωση
 export const bindingMonth = (sheet: RawSheet, b: SourceBinding, today: ISODate) => sheetMonth(sheet, b.header, today) || b.month || null;
@@ -181,6 +182,13 @@ export function refitCols(kind: ListKind, sheet: RawSheet | undefined, b: Source
     }
   }
   for (const f of fields) if (cols[f.k] == null && found[f.k] != null && !Object.values(cols).includes(found[f.k])) cols[f.k] = found[f.k];
+  // η στήλη ενός πεδίου δεν έχει πια την επικεφαλίδα που είχε (μπήκε μπροστά της στήλη με δική της, άγνωστη επικεφαλίδα):
+  // ακολουθεί την επικεφαλίδα του πεδίου αν βρίσκεται σε μία μόνο άλλη στήλη· αλλιώς μένει και το remapNeed φρενάρει
+  if (b.heads) for (const [k, c] of Object.entries(cols)) {
+    const f = fields.find(x => x.k === k), was = b.heads[k]; if (!f || was == null || headOk(f, was, h(c))) continue;
+    const at = Array.from({ length: row.length }, (_, j) => j).filter(j => j !== c && (f.re.test(was) ? f.re.test(h(j)) : h(j) === was));
+    if (at.length === 1) cols[k] = at[0];
+  }
   // δύο πεδία στην ίδια στήλη: κάτι δεν πήγε καλά, μένει η αντιστοίχιση όπως ήταν
   const used = Object.values(cols); if (new Set(used).size !== used.length || used.some(c => c < 0)) return b;
   return JSON.stringify(cols) === JSON.stringify(b.cols) ? b : { ...b, cols };
@@ -196,7 +204,32 @@ export function remapNeed(kind: ListKind, sheet: RawSheet | undefined, b: Source
     const h = headText(row[c]); const f = fields.find(x => x.k === k); if (!h || !f || f.re.test(h)) continue;
     if (ALL_FIELDS.some(x => x.re.test(h))) return 'η στήλη ' + colLetter(c) + ' («' + cellText(row[c]) + '») δεν είναι πια ' + f.label.replace(/ \(.*\)$/, '');
   }
+  // η στήλη δεν έχει πια την επικεφαλίδα που είχε όταν έγινε η αντιστοίχιση και δεν βρέθηκε αλλού με σιγουριά (refitCols)
+  for (const [k, c] of Object.entries(b.cols)) {
+    const f = fields.find(x => x.k === k), was = b.heads?.[k]; if (!f || was == null || headOk(f, was, headText(row[c]))) continue;
+    return 'η στήλη ' + colLetter(c) + ' («' + (cellText(row[c]) || 'κενή') + '») δεν είναι πια ' + f.label.replace(/ \(.*\)$/, '') + ' («' + was + '»)';
+  }
   return null;
+}
+// Η στήλη του πεδίου έχει ακόμα την επικεφαλίδα της: την ίδια που είχε, ή (αν άλλαξε το κείμενο) μία που ταιριάζει στο πεδίο
+const headOk = (f: FieldDef, was: string, now: string) => now === was || f.re.test(now);
+// Θυμάται τις επικεφαλίδες των στηλών που είναι σίγουρα της επιλογής του χρήστη: όσες ταιριάζουν στο πεδίο, και δική του
+// επικεφαλίδα μόνο όταν δεν υπάρχει αλλού γνωστή επικεφαλίδα του πεδίου ούτε μοιάζει με άλλο πεδίο (αλλιώς δεν ξέρουμε αν η
+// στήλη ήταν επιλογή του ή έχει ήδη μετακινηθεί, και μένει όπως ήταν). Ίδιο αντικείμενο αν δεν προστέθηκε τίποτα.
+export function stampHeads(kind: ListKind, sheet: RawSheet | undefined, b: SourceBinding): SourceBinding {
+  const row = sheet?.rows[b.header]; if (!row) return b;
+  const fields = fieldsOf(kind); const found = mapColumns(row, fields); const heads = { ...b.heads }; let n = 0;
+  for (const [k, c] of Object.entries(b.cols)) {
+    const f = fields.find(x => x.k === k), h = headText(row[c]); if (heads[k] != null || !f || !h) continue;
+    if (f.re.test(h) || (found[k] == null && !ALL_FIELDS.some(x => x.re.test(h)))) { heads[k] = h; n++; }
+  }
+  return n ? { ...b, heads } : b;
+}
+// Αντιστοίχιση που ήρθε από το UI ή από ανίχνευση: οι επικεφαλίδες (heads) τις βάζει μόνο ο main από το ίδιο το αρχείο, οπότε
+// μένουν μόνο όσες ήδη ξέρουμε για τον ίδιο πίνακα και τις ίδιες στήλες· αλλιώς ξαναμπαίνουν στην επόμενη ανάγνωση
+export function keepHeads(b: SourceBinding, cur?: SourceBinding): SourceBinding {
+  const out = { ...b }; delete out.heads;
+  return cur?.heads && cur.sheet === b.sheet && cur.header === b.header && JSON.stringify(cur.cols) === JSON.stringify(b.cols) ? { ...out, heads: cur.heads } : out;
 }
 const IDENT = ['last', 'name', 'asm'];
 // Γραμμή επικεφαλίδων: τουλάχιστον 3 γνωστές επικεφαλίδες, μία από τις οποίες δείχνει άτομο
