@@ -49,6 +49,10 @@ export class SourceMetaStore {
     return () => { const all = this.raw(); if (was) all[kind] = was; else delete all[kind]; try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); } };
   }
 }
+// Τι αλλάζει στο meta όταν ένα είδος μπαίνει σε αναμονή (αναίρεση ανάγνωσης, επαναφορά βάσης). Στον έλεγχο υπηρεσιών οι
+// «γνωστές» εγγραφές (keys) ξεχνιούνται: η εφαρμογή γύρισε πίσω αλλά το Excel όχι, και οι εγγραφές που είχε δει θα
+// φαίνονταν «σβησμένες στην εφαρμογή» και η επόμενη «Ενημέρωση Excel» θα τις έσβηνε. Χωρίς keys δεν σβήνεται ποτέ κελί του Excel.
+export const holdPatch = (kind: ListKind, why: string): Partial<SourceMeta> => (kind === 'duties' ? { hold: why, keys: [] } : { hold: why });
 export const stamp = (file: string): { mtime: number; size: number } | null => { try { const st = fs.statSync(file); return { mtime: Math.round(st.mtimeMs), size: st.size }; } catch { return null; } };
 
 // Πόσες στήλες διαβάζουμε από κάθε φύλλο: ο έλεγχος υπηρεσιών έχει 12 στήλες στοιχείων + 31 μέρες (ως AQ)

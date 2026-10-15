@@ -11,7 +11,7 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
 import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { SourceMetaStore, OldFormatError, holdPatch, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
@@ -395,7 +395,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
 const HOLD_UNDO = 'Αναιρέθηκε μια ανάγνωση από αυτό το Excel και το Excel δεν άλλαξε. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
 const HOLD_RESTORE = 'Έγινε επαναφορά της βάσης από αντίγραφο, οπότε το Excel μπορεί να έχει νεότερα στοιχεία. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
 function hold(kinds: Iterable<ListKind>, why: string) {
-  for (const k of kinds) { if (!bindingOf(k) || !srcMeta.get(k)?.at) continue; dirty.delete(k); srcMeta.set(k, { hold: why }); }
+  for (const k of kinds) { if (!bindingOf(k) || !srcMeta.get(k)?.at) continue; dirty.delete(k); srcMeta.set(k, holdPatch(k, why)); }
 }
 const holdAll = (why: string) => hold(KINDS.map(k => k.id), why);
 async function runAuto() {
