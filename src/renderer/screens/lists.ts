@@ -117,7 +117,7 @@ export function ListsCard() {
       // μόνο αυτός ο κανόνας: οι άλλοι κρυφοί, για να μετρηθούν όσοι πιάνει
       const only: UserLists = { siUnarmed: r.builtin ? { hide: LIST_BASE.siUnarmed.filter(x => x !== r.name) } : { add: [r], hide: [...LIST_BASE.siUnarmed] } };
       const n = state.people.filter(p => p.active && siUnarmed(p.si, only)).length;
-      return (r.name === 'ΑΟΠΛ' && r.builtin ? 'περιέχει «ΑΟΠΛ»' : 'αρχίζει από «' + r.name + '»') + ' · ' + (n === 1 ? '1 άτομο' : n + ' άτομα') + (r.hidden ? ' (δεν ισχύει)' : '');
+      return (r.name === 'ΑΟΠΛ' && r.builtin ? 'περιέχει «ΑΟΠΛ» ή «ΧΩΡΙΣ ΟΠΛΟ»' : 'αρχίζει από «' + r.name + '»') + ' · ' + (n === 1 ? '1 άτομο' : n + ' άτομα') + (r.hidden ? ' (δεν ισχύει)' : '');
     }
     if (id === 'medKinds') { if (r.warn) return 'Χωρίς περιορισμούς· προειδοποίηση όταν μπαίνει σε υπηρεσία'; const t = TYPES[current(id, r, lists) as TypeKey]; return t.long + (effects(t) ? ': ' + effects(t) : ': χωρίς περιορισμούς') + (t.code ? ' · κωδικός ' + t.code : ''); }
     return pick ? 'ΗΚΑΙ: ' + optLbl(pick, current(id, r, lists)) : '';

@@ -134,3 +134,22 @@ describe('λίστες', () => {
     expect(isUnarmed({ ...s, settings: s0.settings }, D, p.id)).toBe(false);
   });
 });
+
+describe('νέος βαθμός από τη φόρμα του στρατιώτη (Michael, 17/10)', () => {
+  const ctx = { today: '2026-10-12', newId: () => 'x' };
+  it('ο βαθμός και το Ο/Σ που γράφτηκαν με το χέρι μένουν στις Λίστες· οι γνωστοί όχι', () => {
+    const s0 = fakeState(3);
+    const s1 = apply(s0, { t: 'addPerson', person: { ...s0.people[0], rank: 'κληρ', spec: 'ΠΖ', last: 'ΝΕΟΣ', first: 'ΑΛΦΑ', asm: '' } as any }, ctx).state;
+    expect(s1.settings.lists?.soldierRanks?.add).toEqual([{ name: 'ΚΛΗΡ' }]);
+    expect(s1.settings.lists?.specs).toBeUndefined();
+    expect(listOf(s1.settings.lists, 'soldierRanks')).toContain('ΚΛΗΡ');
+    // διόρθωση: μόνο αν άλλαξε ο βαθμός
+    const p = s1.people[0];
+    const s2 = apply(s1, { t: 'updatePerson', person: { ...p, rank: 'ΣΤΡ', spec: 'ΠΝ' } }, ctx).state;
+    expect(s2.settings.lists?.specs?.add).toEqual([{ name: 'ΠΝ' }]);
+    expect(s2.settings.lists?.soldierRanks?.add).toEqual([{ name: 'ΚΛΗΡ' }]);
+    const odd = { ...s2, people: s2.people.map(x => (x.id === p.id ? { ...x, rank: 'ΠΑΡΑΞΕΝΟΣ' } : x)) };
+    const s3 = apply(odd, { t: 'updatePerson', person: { ...odd.people[0], phone: '69' } }, ctx).state;
+    expect(s3.settings.lists?.soldierRanks?.add).toEqual([{ name: 'ΚΛΗΡ' }]);
+  });
+});

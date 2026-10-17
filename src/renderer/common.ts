@@ -51,9 +51,12 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
   const dq = useDeferredValue(q);
   const chosen: number[] = multiple ? (value || []) : [];
   const pm = useMemo(() => new Map(state.people.map(p => [p.id, p])), [state.people]);
-  const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).slice(0, 8).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
+  // όλοι όσοι ταιριάζουν, όχι μόνο οι πρώτοι 8 (Michael, 17/10: «να τους βγάζεις όλους στο search»)· η λίστα κυλά
+  const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
-  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open);
+  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open); const list = useRef<HTMLUListElement>(null);
+  // με τα βελάκια η επιλογή μένει μέσα στη λίστα που κυλά
+  useEffect(() => { (list.current?.children[sel] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' }); }, [sel]);
   const pick = (i: number) => { const x = items[i]; if (!x) return; if (x.na) { if (onBlocked) { setOpen(false); setQ(''); onBlocked(x.p, x.na); } return; } if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
   return html`<div className="picker">
     ${multiple && chosen.length > 0 && html`<div className="picker__chips">${chosen.map(pid => html`<span key=${pid} className="picker__chip">${shortName(pm.get(pid)!)}<button type="button" aria-label=${'Αφαίρεση ' + shortName(pm.get(pid)!)} onClick=${() => onChange(chosen.filter(x => x !== pid))}>✕</button></span>`)}</div>`}
@@ -61,7 +64,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
       placeholder=${placeholder || (multiple && chosen.length ? 'Πρόσθεσε κι άλλον…' : 'Επώνυμο, όνομα ή ΑΣΜ…')} value=${q}
       onChange=${(e: any) => { setQ(e.target.value); setOpen(true); }} onFocus=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); pick(sel); } else if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } else if (e.key === 'Backspace' && !q && multiple && chosen.length) { onChange(chosen.slice(0, -1)); } }}/>
-    ${open && pos && createPortal(html`<ul className="picker__list picker__list--float" role="listbox" style=${pos}>
+    ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
         <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p)}${x.p.room != null ? ' · Θ' + x.p.room : ''}</small></div>
@@ -71,15 +74,17 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
 }
 // Λίστα επιλογής που δέχεται και τιμή γραμμένη με το χέρι («Άλλο…»): βαθμός, Ο/Σ
 const OTHER = '\u0001other';
-export function ChoiceField({ id, label, value, options, onChange, placeholder, autoFocus }: P) {
+// otherLabel/otherHelp: π.χ. «Νέος βαθμός…» και ότι μένει στη λίστα για την επόμενη φορά
+export function ChoiceField({ id, label, value, options, onChange, placeholder, autoFocus, otherLabel, otherHelp }: P) {
   const known = !value || options.includes(value);
   const [typing, setTyping] = useState(!known);
   return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
     <select id=${id} className="ui-input" value=${typing ? OTHER : value || ''} data-autofocus=${autoFocus ? '' : undefined}
       onChange=${(e: any) => { const v = e.target.value; setTyping(v === OTHER); onChange(v === OTHER ? (known ? '' : value) : v); }}>
-      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER}>Άλλο (γράψε το)…</option>
+      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER}>${otherLabel || 'Άλλο (γράψε το)…'}</option>
     </select>
     ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label=${label + ' με το χέρι'} placeholder=${placeholder || ''} value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value)}/>`}
+    ${typing && otherHelp && html`<span className="field__help">${otherHelp}</span>`}
   </div>`;
 }
 export function DateRangeField({ from, to, onChange }: P) {

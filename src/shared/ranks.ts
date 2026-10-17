@@ -116,7 +116,8 @@ export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): st
   return m?.code || TYPES[s.type].code;
 }
 
-// Σ.Ι. → άοπλος (όχι οπλοφύλακας, όχι σκοπός). Τα βασικά ακριβώς όπως πριν: περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4».
+// Σ.Ι. → άοπλος (όχι οπλοφύλακας, όχι σκοπός). Τα βασικά όπως πριν: περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4»· και το
+// «ΧΩΡΙΣ ΟΠΛΟ», όπως λέγεται πια το Ι3 ΑΟΠΛΟ (Michael, 17/10), μετρά στο ίδιο βασικό «ΑΟΠΛ».
 // Τα δικά σου: το Σ.Ι. αρχίζει από αυτό, χωρίς κενά και τελείες («Ι5» πιάνει και «Ι 5», «Ι5 ΧΩΡΙΣ ΟΠΛΟ»). Όσα έκρυψες δεν μετρούν.
 const siKey = (v: string) => normGreek(v).replace(/[^Α-ΩA-Z0-9]/g, '');
 // ρωτιέται για κάθε υποψήφιο σε κάθε θέση: κρατιέται ανά Λίστες και Σ.Ι.
@@ -130,9 +131,9 @@ export function siUnarmed(si: string | undefined, lists?: UserLists): boolean {
 function siUnarmedRaw(si: string, lists?: UserLists): boolean {
   const v = normGreek(si); if (!v) return false;
   const u = lists?.siUnarmed; const hide = new Set((u?.hide || []).map(itemKey));
-  if (!hide.has('ΑΟΠΛ') && v.includes('ΑΟΠΛ')) return true;
-  if (!hide.has('Ι4') && v.startsWith('Ι4')) return true;
   const k = siKey(v);
+  if (!hide.has('ΑΟΠΛ') && (v.includes('ΑΟΠΛ') || k.includes('ΧΩΡΙΣΟΠΛ'))) return true;
+  if (!hide.has('Ι4') && v.startsWith('Ι4')) return true;
   return (u?.add || []).some(x => { const a = siKey(x.name || ''); return !!a && !hide.has(itemKey(x.name)) && k.startsWith(a); });
 }
 

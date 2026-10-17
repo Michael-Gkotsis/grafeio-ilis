@@ -6,7 +6,7 @@ import { TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHAS
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, statusLbl } from './ranks';
+import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, type ListId } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 
@@ -101,6 +101,19 @@ function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: s
 }
 
 // Μετά από κάθε ενέργεια: η λήξη κάθε στέρησης εξόδου ξαναβγαίνει από τις ημέρες της (υπηρεσίες, βραδινή εκπαίδευση)
+// Νέος βαθμός ή Ο/Σ γραμμένος με το χέρι στη φόρμα του στρατιώτη μένει στις Λίστες (Ρυθμίσεις › Λίστες), για να
+// προτείνεται από εδώ και πέρα (Michael, 17/10: «έτοιμη η εισαγωγή νέου βαθμού και να την αποθηκεύει»).
+// Στη διόρθωση μόνο αν άλλαξε: όσα ήρθαν από το Δυναμολόγιο προτείνονται έτσι κι αλλιώς.
+function rememberChoices(st: Settings, p: Person, old?: Person): Settings {
+  let lists = st.lists;
+  for (const [id, v, was] of [['soldierRanks', p.rank, old?.rank], ['specs', p.spec, old?.spec]] as [ListId, string, string | undefined][]) {
+    const n = itemName(v || '', id); if (!n || (old && itemKey(n) === itemKey(was || ''))) continue;
+    if (/[,"]/.test(n) || listRows(lists, id).some(r => itemKey(r.name) === itemKey(n))) continue;
+    lists = { ...lists, [id]: { ...(lists?.[id] || {}), add: [...(lists?.[id]?.add || []), { name: n }] } };
+  }
+  return lists === st.lists ? st : { ...st, lists };
+}
+
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const r = run(s, c, ctx);
   const state = fitDeprivations(r.state);
@@ -380,8 +393,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, baseline: n ? baseline : s.baseline, settings }, text: n ? 'Προηγούμενες υπηρεσίες: άλλαξαν σε ' + n + (n === 1 ? ' άτομο' : ' άτομα') : 'Προηγούμενες υπηρεσίες: έμειναν όπως ήταν', files: n ? ['Έλεγχος υπηρεσιών'] : [] };
     }
     case 'updatePerson': {
-      if (!pm.has(c.person.id)) throw new Error('Δεν βρέθηκε το άτομο');
-      return { state: { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)) }, text: 'Άλλαξαν τα στοιχεία: ' + shortName(c.person), files: [] };
+      const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
+      return { state: { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)), settings: rememberChoices(s.settings, c.person, old) }, text: 'Άλλαξαν τα στοιχεία: ' + shortName(c.person), files: [] };
     }
     case 'addPerson': {
       const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
@@ -400,7 +413,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
       const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
       if (twin) throw new Error('Υπάρχει ήδη ' + (twin.asm && twin.asm === p.asm ? 'άτομο με ΑΣΜ ' + p.asm + ': ' : 'ο ') + twin.rank + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)'));
-      return { state: { ...s, people: [...s.people, p] }, text: 'Νέος στρατιώτης: ' + (p.rank ? p.rank + ' ' : '') + p.last + ' ' + p.first, files: [] };
+      return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (p.rank ? p.rank + ' ' : '') + p.last + ' ' + p.first, files: [] };
     }
     case 'setBaseline': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');

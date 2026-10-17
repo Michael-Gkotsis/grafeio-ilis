@@ -16,7 +16,7 @@ export interface Person {
   asm: string;           // ΑΣΜ
   phone: string;
   room: number | null;   // θάλαμος 1–8
-  si: string;            // Σ.Ι.: Ι1, Ι2, Ι3 ΜΕ ΟΠΛΟ, Ι3 ΑΟΠΛΟ, Ι4
+  si: string;            // Σ.Ι.: Ι1, Ι2, Ι3 ΜΕ ΟΠΛΟ, Ι3 ΧΩΡΙΣ ΟΠΛΟ (παλιά «Ι3 ΑΟΠΛΟ»), Ι4
   siCat?: string;        // κατηγορία πάθησης για Ι3/Ι4 (ΟΡΘΟΠΑΙΔΙΚΟ…): μόνο στην εφαρμογή, όχι στο Excel (si.ts)
   post: string | null;   // πόστο (ΚΨΜ, ΙΑΤΡΟΣ ΣΤΕΠ…)
   role: string | null;   // ΘΑΛΑΜΑΡΧΗΣ, ΓΡΑΦΕΑΣ…
@@ -219,7 +219,7 @@ export const DEFAULT_SETTINGS: Settings = {
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 4
+  rev: 5
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
@@ -234,6 +234,13 @@ export function migrateSettings(st: Settings): Settings {
     // φεύγουν από τις «δικές σου», ώστε η αφαίρεσή τους να δουλεύει όπως όλων των επίσημων
     const holidays = Object.fromEntries(Object.entries(st.holidays || {}).filter(([d]) => !greekHolidays(+d.slice(0, 4))[d]));
     st = { ...st, holidays, rev: 4 };
+  }
+  if ((st.rev || 0) < 5) {
+    // rev 5: το «Ι3 ΑΟΠΛΟ» λέγεται «Ι3 ΧΩΡΙΣ ΟΠΛΟ» (Michael, 17/10)· οι γραμμές του πίνακα Σ.Ι. παίρνουν το νέο όνομα
+    const cells = st.lists?.si?.cells;
+    const old = 'Ι3 ΑΟΠΛΟ', now = 'Ι3 ΧΩΡΙΣ ΟΠΛΟ';
+    const ren = (k: string) => (k === old || k.startsWith(old + ' · ') ? now + k.slice(old.length) : k);
+    st = { ...st, rev: 5, ...(cells && Object.keys(cells).some(k => ren(k) !== k) ? { lists: { ...st.lists, si: { ...st.lists!.si, cells: Object.fromEntries(Object.entries(cells).map(([k, v]) => [ren(k), { ...(cells[ren(k)] || {}), ...v }])) } } } : {}) };
   }
   return st;
 }

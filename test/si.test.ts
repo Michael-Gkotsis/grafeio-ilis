@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { siUnarmed, type UserLists } from '../src/shared/ranks';
 import { parseSi, siAllows, siCats, siCombos, siIsUnarmed, siLabel, siOf, SI_CATS } from '../src/shared/si';
 import { capBlock, capsOf, guardUnavailable, isUnarmed, postsOf } from '../src/shared/rules';
-import { DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, type AppState } from '../src/shared/domain';
+import { DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, DEFAULT_SETTINGS, migrateSettings, type AppState } from '../src/shared/domain';
 import { listColumns, type SourceBinding } from '../src/shared/sources';
 import { apply } from '../src/shared/commands';
 import type { RawSheet } from '../src/shared/roster';
@@ -18,8 +18,9 @@ const ALL = [...DEFAULT_BLOCKS, ...DEFAULT_BLOCKS_SPEN];
 
 describe('Σ.Ι.: ανάγνωση', () => {
   it('βασική και ΜΕ ΟΠΛΟ / ΑΟΠΛΟ από ό,τι γράφει το Excel· το Ι4 είναι πάντα σκέτο Ι4', () => {
-    expect(parseSi('Ι3 ΑΟΠΛΟ')).toEqual({ base: 'Ι3', sub: 'ΑΟΠΛΟ', ok: true });
-    expect(parseSi('i3 αοπλος')).toEqual({ base: 'Ι3', sub: 'ΑΟΠΛΟ', ok: true });
+    expect(parseSi('Ι3 ΑΟΠΛΟ')).toEqual({ base: 'Ι3', sub: 'ΧΩΡΙΣ ΟΠΛΟ', ok: true });
+    expect(parseSi('Ι3 χωρίς όπλο')).toEqual({ base: 'Ι3', sub: 'ΧΩΡΙΣ ΟΠΛΟ', ok: true });
+    expect(parseSi('i3 αοπλος')).toEqual({ base: 'Ι3', sub: 'ΧΩΡΙΣ ΟΠΛΟ', ok: true });
     expect(parseSi('Ι/3 ΕΝΟΠΛΟΣ')).toEqual({ base: 'Ι3', sub: 'ΜΕ ΟΠΛΟ', ok: true });
     for (const v of ['I4', 'Ι 4', 'Ι4 ΑΟΠΛΟ', 'Ι4 ΜΕ ΟΠΛΟ']) expect(parseSi(v), v).toEqual({ base: 'Ι4', sub: '', ok: true });
     expect(parseSi('Ι5')).toEqual({ base: 'Ι5', sub: '', ok: true });
@@ -29,10 +30,10 @@ describe('Σ.Ι.: ανάγνωση', () => {
     expect(parseSi('')).toBeNull();
   });
   it('οι Σ.Ι. για τον πίνακα και το dropdown του Excel· κατηγορίες πάθησης μόνο για Ι3 και Ι4', () => {
-    expect(siCombos()).toEqual(['Ι1', 'Ι2', 'Ι3', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι3 ΑΟΠΛΟ', 'Ι4']);
-    expect(siCombos({ add: ['ι5'] })).toEqual(['Ι1', 'Ι2', 'Ι3', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι3 ΑΟΠΛΟ', 'Ι4', 'Ι5']);
+    expect(siCombos()).toEqual(['Ι1', 'Ι2', 'Ι3', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι3 ΧΩΡΙΣ ΟΠΛΟ', 'Ι4']);
+    expect(siCombos({ add: ['ι5'] })).toEqual(['Ι1', 'Ι2', 'Ι3', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι3 ΧΩΡΙΣ ΟΠΛΟ', 'Ι4', 'Ι5']);
     expect(siLabel('Ι3', '')).toBe('Ι3');
-    expect(siOf({ si: 'Ι3 ΑΟΠΛΟ', siCat: 'ορθοπαιδικό' })).toMatchObject({ label: 'Ι3 ΑΟΠΛΟ', cat: 'ΟΡΘΟΠΑΙΔΙΚΟ', known: true, text: 'Ι3 ΑΟΠΛΟ ΟΡΘΟΠΑΙΔΙΚΟ' });
+    expect(siOf({ si: 'Ι3 ΑΟΠΛΟ', siCat: 'ορθοπαιδικό' })).toMatchObject({ label: 'Ι3 ΧΩΡΙΣ ΟΠΛΟ', cat: 'ΟΡΘΟΠΑΙΔΙΚΟ', known: true, text: 'Ι3 ΧΩΡΙΣ ΟΠΛΟ ΟΡΘΟΠΑΙΔΙΚΟ' });
     expect(siOf({ si: 'Ι1', siCat: 'ΟΡΘΟΠΑΙΔΙΚΟ' }).cat).toBe('');
     expect(siCats({ cats: { add: ['γαστρεντερολογικό'], hide: ['ΩΡΛ'] } })).toEqual([...SI_CATS.filter(c => c !== 'ΩΡΛ'), 'ΓΑΣΤΡΕΝΤΕΡΟΛΟΓΙΚΟ']);
   });
@@ -65,9 +66,9 @@ describe('Σ.Ι.: ο πίνακας, ανά υπηρεσία', () => {
   const seat = (s: AppState, kind: string) => postsOf(s.settings).find(p => p.kind === kind)!;
   it('ο Ι3 ΑΟΠΛΟ δεν μπαίνει σε ΤΑΕ (ένοπλη)· μπαίνει αν το τσεκάρεις', () => {
     const s = withSi('Ι3 ΑΟΠΛΟ', {});
-    expect(capBlock(s, D, pid, seat(s, 'tae'))).toBe('Δεν κάνει ΤΑΕ (Σ.Ι. Ι3 ΑΟΠΛΟ)');
+    expect(capBlock(s, D, pid, seat(s, 'tae'))).toBe('Δεν κάνει ΤΑΕ (Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ)');
     expect(capBlock(s, D, pid, seat(s, 'th'))).toBeNull();
-    const s2 = withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΑΟΠΛΟ': { tae: true } } } });
+    const s2 = withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΧΩΡΙΣ ΟΠΛΟ': { tae: true } } } });
     expect(capBlock(s2, D, pid, seat(s2, 'tae'))).toBeNull();
     expect(capBlock(s2, D, pid, seat(s2, 'sk'))).toMatch(/σκοπιά/);
   });
@@ -79,9 +80,9 @@ describe('Σ.Ι.: ο πίνακας, ανά υπηρεσία', () => {
     expect(capBlock(r, D, pid, seat(r, 'other'))).toMatch(/Σ\.Ι\. Ι4/);
   });
   it('κατηγορία πάθησης με δικούς της κανόνες· αλλιώς ό,τι η Σ.Ι.', () => {
-    const lists: UserLists = { si: { cells: { 'Ι3 ΑΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ': { mg: false } } } };
+    const lists: UserLists = { si: { cells: { 'Ι3 ΧΩΡΙΣ ΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ': { mg: false } } } };
     const orth = withSi('Ι3 ΑΟΠΛΟ', lists, 'ΟΡΘΟΠΑΙΔΙΚΟ');
-    expect(capBlock(orth, D, pid, seat(orth, 'mg'))).toBe('Δεν κάνει μαγειρεία (Σ.Ι. Ι3 ΑΟΠΛΟ ΟΡΘΟΠΑΙΔΙΚΟ)');
+    expect(capBlock(orth, D, pid, seat(orth, 'mg'))).toBe('Δεν κάνει μαγειρεία (Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ ΟΡΘΟΠΑΙΔΙΚΟ)');
     expect(capBlock(orth, D, pid, seat(orth, 'sk'))).toMatch(/σκοπιά/);       // από το Ι3 ΑΟΠΛΟ
     const path = withSi('Ι3 ΑΟΠΛΟ', lists, 'ΠΑΘΟΛΟΓΙΚΟ');
     expect(capBlock(path, D, pid, seat(path, 'mg'))).toBeNull();
@@ -97,15 +98,15 @@ describe('Σ.Ι.: ο πίνακας, ανά υπηρεσία', () => {
   });
   it('στην κάρτα του ατόμου: όσα είδη δεν κάνει σε κανένα έντυπο· «Αυστηρά Άοπλοι» από τον πίνακα', () => {
     expect(Object.keys(capsOf(withSi('Ι3 ΑΟΠΛΟ', {}), pid))).toEqual(['op', 'sk', 'tae']);
-    expect(capsOf(withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΑΟΠΛΟ': { op: true, sk: true, tae: true } } } }), pid)).toEqual({});
+    expect(capsOf(withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΧΩΡΙΣ ΟΠΛΟ': { op: true, sk: true, tae: true } } } }), pid)).toEqual({});
     expect(isUnarmed(withSi('Ι3 ΑΟΠΛΟ', {}), D, pid)).toBe(true);
-    expect(isUnarmed(withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΑΟΠΛΟ': { sk: true } } } }), D, pid)).toBe(false);
+    expect(isUnarmed(withSi('Ι3 ΑΟΠΛΟ', { si: { cells: { 'Ι3 ΧΩΡΙΣ ΟΠΛΟ': { sk: true } } } }), D, pid)).toBe(false);
     expect(isUnarmed(withSi('Ι1', { si: { cells: { 'Ι1': { op: false, sk: false, tae: false } } } }), D, pid)).toBe(true);
   });
   it('η αλλαγή γίνεται από τις Ρυθμίσεις και αναιρείται· η κατηγορία πάθησης μπαίνει στον νέο στρατιώτη', () => {
-    const lists: UserLists = { si: { cells: { 'Ι3 ΑΟΠΛΟ': { tae: true } } } };
+    const lists: UserLists = { si: { cells: { 'Ι3 ΧΩΡΙΣ ΟΠΛΟ': { tae: true } } } };
     const s = apply(withSi('Ι3 ΑΟΠΛΟ', {}), { t: 'setSettings', settings: { lists }, text: 'Σ.Ι.' }, { today: D, newId: () => 'x' }).state;
-    expect(capsOf(s, pid)).toEqual({ op: 'Σ.Ι. Ι3 ΑΟΠΛΟ', sk: 'Σ.Ι. Ι3 ΑΟΠΛΟ' });
+    expect(capsOf(s, pid)).toEqual({ op: 'Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ', sk: 'Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ' });
     const p = { ...s0.people[0], id: 0, last: 'ΝΕΟΣ', first: 'ΔΟΚΙΜΙΟΣ', asm: '999999', si: 'Ι4', siCat: 'ορθοπαιδικό ' };
     const r = apply(s0, { t: 'addPerson', person: p }, { today: D, newId: () => 'x' }).state;
     expect(r.people[r.people.length - 1]).toMatchObject({ si: 'Ι4', siCat: 'ΟΡΘΟΠΑΙΔΙΚΟ' });
@@ -120,5 +121,18 @@ describe('Σ.Ι.: λίστα επιλογής στο Excel', () => {
     const si = listColumns('people', sh, b).find(l => l.what === 'Σ.Ι.')!;
     expect(si.c).toBe(5);
     expect(si.items).toEqual([...siCombos(), 'Ι5']);
+  });
+});
+
+describe('Σ.Ι.: «Ι3 ΧΩΡΙΣ ΟΠΛΟ» (Michael, 17/10)', () => {
+  it('άοπλοι μόνο ο Ι3 ΧΩΡΙΣ ΟΠΛΟ (και το παλιό «Ι3 ΑΟΠΛΟ») και ο Ι4', () => {
+    for (const si of ['Ι3 ΧΩΡΙΣ ΟΠΛΟ', 'Ι3 χωρίς όπλο', 'Ι3 ΑΟΠΛΟ', 'Ι4']) expect(siUnarmed(si), si).toBe(true);
+    for (const si of ['Ι1', 'Ι2', 'Ι3 ΜΕ ΟΠΛΟ', 'Ι3']) expect(siUnarmed(si), si).toBe(false);
+    expect(siOf({ si: 'Ι3 ΑΟΠΛΟ' }).label).toBe('Ι3 ΧΩΡΙΣ ΟΠΛΟ');
+  });
+  it('οι παλιές ρυθμίσεις του πίνακα για «Ι3 ΑΟΠΛΟ» περνούν στο «Ι3 ΧΩΡΙΣ ΟΠΛΟ»', () => {
+    const m = migrateSettings({ ...DEFAULT_SETTINGS, rev: 4, lists: { si: { cells: { 'Ι3 ΑΟΠΛΟ': { tae: true }, 'Ι3 ΑΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ': { mg: false }, 'Ι1': { sk: false } } } } });
+    expect(m.lists!.si!.cells).toEqual({ 'Ι3 ΧΩΡΙΣ ΟΠΛΟ': { tae: true }, 'Ι3 ΧΩΡΙΣ ΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ': { mg: false }, 'Ι1': { sk: false } });
+    expect(m.rev).toBe(5);
   });
 });

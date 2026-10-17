@@ -542,15 +542,37 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
   const reserve = (p: Person) => (keep?.has(p.id) ? 1 : 0);
   const last = (p: Person) => (lastResort(s.statuses, date, p.id, x, s.settings.lists) || statusWarn(s, date, p.id) ? 1 : 0);
-  // ΣΚ/αργία: πρώτα οι λιγότερες αργίες· σε ισοπαλία, πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει
-  // έξοδο εκείνη τη μέρα (Michael, 13/10: πριν, το ΔΝ μετρούσε πριν από τις αργίες και όσοι είχαν ΔΝ δεν έκαναν ποτέ ΣΚ)
-  const rooms = h ? outRoomsOn(s.rules, date) : null;
-  const home = (p: Person) => (h ? (p.dn ? 1 : 0) + (rooms && p.room != null && rooms.includes(p.room) ? 1 : 0) : 0);
+  // ΣΚ/αργία: πρώτα οι λιγότερες αργίες, χωρίς να μετρά ΔΝ, έξοδος ή θάλαμος (Michael, 17/10: «όλοι έχουν δικαίωμα
+  // εξόδου»)· η σειρά δικαιοσύνης (fairCompare) το κάνει ήδη. Πριν από ΣΚ/αργία: όσοι χρωστάνε ΣΚ μπαίνουν τελευταίοι.
+  const due = h ? null : weekendDue(s, date, people, fair, fixed, idx);
+  const owes = (p: Person) => (due?.has(p.id) ? 1 : 0);
   const cmp = fairCompare(h, x.kind, date);
   // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
   return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
-    .map(p => ({ p, key: last(p) * 10 + reserve(p), home: home(p), f: fair.get(p.id)! }))
-    .sort((a, b) => a.key - b.key || (h ? a.f.hol - b.f.hol || a.home - b.home : 0) || cmp(a.f, b.f)).map(c => c.p);
+    .map(p => ({ p, key: last(p) * 100 + reserve(p) * 10 + owes(p), f: fair.get(p.id)! }))
+    .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
+}
+// Όσοι «χρωστάνε» το επόμενο ΣΚ/αργία (Michael, 17/10: «να κρατάει όσους δεν έχουν κάνει ΣΚ για το επόμενο και να μην
+// τους βάζει Πέμπτη-Παρασκευή, ώστε να τηρείται η ανάπαυση»): τις μέρες πριν από ΣΚ/αργία (ως 2 μέρες, ή όσες η ανάπαυση
+// αν είναι περισσότερες) κρατιούνται στην άκρη όσοι θα έπαιρναν τις θέσεις της αργίας με τη σειρά δικαιοσύνης, δηλαδή
+// οι λιγότερες αργίες, όσοι χωρούν στις θέσεις όλων των συνεχόμενων ημερών της. Μπαίνουν μόνο αν δεν φτάνουν οι άλλοι.
+// Χωρίς ανάπαυση δεν χρειάζεται. Μία φορά ανά συμπλήρωση (κρατιέται με το fair της).
+const dueCache = new WeakMap<object, Set<number> | null>();
+function weekendDue(s: AppState, date: ISODate, people: Person[], fair: Map<number, Fair & { pid: number }>, fixed: Set<number>, idx: Map<number, Set<ISODate>>): Set<number> | null {
+  if (dueCache.has(fair)) return dueCache.get(fair)!;
+  let out: Set<number> | null = null;
+  const rest = s.rules.restDays || 0;
+  const ahead = rest > 0 ? [1, 2, 3, 4, 5, 6, 7].slice(0, Math.max(2, rest)).map(i => addDays(date, i)).find(d => isHol(s.settings, d)) : undefined;
+  if (ahead) {
+    const days: ISODate[] = []; for (let d = ahead; isHol(s.settings, d) && days.length < 5; d = addDays(d, 1)) days.push(d);
+    const seats = postsOf(s.settings).filter(x => x.kind !== 'ly').length * days.length;
+    const cmp = fairCompare(true, '', ahead);
+    // όσοι μπορούν να μπουν την αργία (καταστάσεις, μέρες χωρίς υπηρεσία, κανόνες), χωρίς τη σημερινή μέρα που κρίνεται τώρα
+    const can = people.filter(p => !fixed.has(p.id) && !p.post && days.some(d => !dutyBlock(s.statuses, d, p.id, null, s.settings.lists) && !offDayBlock(s, d, p.id) && !ruleBlock(s, d, p.id, idx)));
+    out = new Set(can.map(p => fair.get(p.id)!).filter(Boolean).sort(cmp).slice(0, seats).map(f => f.pid));
+  }
+  dueCache.set(fair, out);
+  return out;
 }
 // Οι κενές ένοπλες θέσεις της μέρας (εκτός από την except)
 const armedLeft = (s: AppState, date: ISODate, except: string) => { const g = s.guards[date] || {}; return postsOf(s.settings).filter(y => y.armed && y.k !== except && !g[y.k]); };
