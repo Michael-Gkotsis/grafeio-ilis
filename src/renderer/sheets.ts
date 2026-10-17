@@ -1,11 +1,11 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, coversDay, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
+import { ROT, TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
-import { byName, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
+import { byName, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
 
@@ -72,17 +72,19 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
   const H = (v: string, cs?: number, rs?: number) => E(v, 'b hdr sm', cs, rs);
   rows.push([H('ΒΑΘΜΟΙ', 1, 2), H('Προβλ.', 1, 2), H('ΔΥΝΑΜΗ', 2), H('Σύν.', 1, 2), H('ΚΩΛΥΟΜΕΝΟΙ', nK), H('Σύν. κωλ.', 1, 2), H('ΑΠΟΝΤΕΣ', nA), H('Σύν. απ.', 1, 2), H('Διαθ. εκπ.', 1, 2), H('Μισθοτρ.', 1, 2)]);
   rows.push([null, null, H('Τοπ.'), H('Προσκ.'), null, ...HK_K.map(x => H(x[1])), null, ...HK_A.map(x => H(x[1])), null, null, null]);
-  const line = (label: string, n: number, att: number, c: Record<string, number>, bold: boolean) => {
+  const pv = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
+  const pvOf = (list: string[]) => list.reduce((a, r) => a + (pv[r] || 0), 0);
+  const line = (label: string, n: number, att: number, c: Record<string, number>, bold: boolean, prov = 0) => {
     const k = HK_K.map(([x]) => c[x] || 0), a = HK_A.map(([x]) => c[x] || 0);
     const sk = k.reduce((p, q) => p + q, 0), sa = a.reduce((p, q) => p + q, 0); const st = bold ? 'b c bold' : 'b c';
-    return [E(label, 'b' + (bold ? ' bold' : '')), E('', st), E(n - att, st), E(att, st), E(n, st), ...k.map(v => E(v || '', st)), E(sk, st), ...a.map(v => E(v || '', st)), E(sa, st), E(n - sa, st), E(c.ab || '', st)];
+    return [E(label, 'b' + (bold ? ' bold' : '')), E(prov || '', st), E(n - att, st), E(att, st), E(n, st), ...k.map(v => E(v || '', st)), E(sk, st), ...a.map(v => E(v || '', st)), E(sa, st), E(n - sa, st), E(c.ab || '', st)];
   };
   const sum = (list: string[]) => { const c: Record<string, number> = {}; let n = 0, att = 0; list.forEach(r => { const x = h.rank[r]; n += x.n; att += x.attached; for (const k in x.c) c[k] = (c[k] || 0) + x.c[k]; }); return { n, att, c }; };
-  HK_OFFICERS.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false)));
-  let x = sum(HK_OFFICERS); rows.push(line('ΣΥΝΟΛΟ ΑΞΚΩΝ', x.n, x.att, x.c, true));
-  HK_NCO.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false)));
-  x = sum(HK_NCO); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true));
-  x = sum([...HK_OFFICERS, ...HK_NCO]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true));
+  HK_OFFICERS.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  let x = sum(HK_OFFICERS); rows.push(line('ΣΥΝΟΛΟ ΑΞΚΩΝ', x.n, x.att, x.c, true, pvOf(HK_OFFICERS)));
+  HK_NCO.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  x = sum(HK_NCO); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true, pvOf(HK_NCO)));
+  x = sum([...HK_OFFICERS, ...HK_NCO]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...HK_OFFICERS, ...HK_NCO])));
   rows.push([E('', '', W)], [E('', '', W - 8), E(s.settings.place + ', ' + hkDate(date), 'c', 8)], [E('', '', W)],
     [E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 6), E('', '', W - 16), E('ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ', 'ttl', 8)]);
   return { cols: [132, 40, 34, 34, 34, ...HK_K.map(() => 32), 36, ...HK_A.map(() => 32), 36, 36, 40], rows };
@@ -93,21 +95,25 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   let night = 0, day24 = 0;
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };
-  const leaves = hkaiLeaveLines(s, date), puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
+  const egr = hkaiEgrLines(s, date), dia = hkaiDiaLines(s, date), leaves = hkaiLeaveLines(s, date), puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
+  // ενότητες που η Ίλη έκλεισε: κενές, όπως στο έντυπο
+  const grd = hkOn(s.settings, 'grd'), v = hkOn(s.settings, 'veh') ? s.settings.hkai?.veh : undefined, acc = hkOn(s.settings, 'acc');
+  if (!grd) { night = 0; day24 = 0; }
+  const A = (k: string) => E(acc && tx[k]?.trim() ? tx[k].trim() : 'Ø', 'b c');
   const N = (v: number) => E(v || '', 'b c');
   const tx = s.hkaiManual?.[date]?.text || {};
   // όργανα υπηρεσίας (6 στήλες) αριστερά, απόφαση δεξιά: τίτλος 2 στήλες, κείμενο 6
   const L = (n: number, lbl: string, v: string | Line[]) => [E(n + '. ' + lbl + ':', 'bold', 2), typeof v === 'string' ? E(v || '', 'w', 6) : { ...E(linesText(v), 'w', 6), rich: v }];
   const rows: (Cell | null)[][] = [[E('ΧΟΡΗΓΟΥΜΕΝΕΣ ΦΡΟΥΡΕΣ', 'b hdr', 5), E(''), E('ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ', 'b hdr', 4), E(''), E('ΑΤΥΧΗΜΑΤΑ', 'b hdr', 3)],
     [...['Είδος', 'Αξκοί', 'Υπξκοι', 'Στρατιώτες', 'Σύνολο'].map(x => E(x, 'b hdr sm')), E(''), ...['Είδος', 'Προβλ.', 'Σε κίνηση', 'Επισκευή'].map(x => E(x, 'b hdr sm')), E(''), ...['Οχήματα', 'Ζημιές', 'Άνδρες'].map(x => E(x, 'b hdr sm'))],
-    [E('Νυκτοφρουρές', 'b'), N(0), N(0), N(night), N(night), E(''), E('1/4 τόνων', 'b'), E('', 'b c'), E('', 'b c'), E('', 'b c'), E(''), E('Ø', 'b c'), E('Ø', 'b c'), E('Ø', 'b c')],
+    [E('Νυκτοφρουρές', 'b'), N(0), N(0), N(night), N(night), E(''), E(v?.type || '1/4 τόνων', 'b'), N(v?.prov || 0), N(v?.kin || 0), N((v?.maint || 0) + (v?.dmg || 0)), E(''), A('accT'), A('accP'), A('accM')],
     [E('24ωρες', 'b'), N(0), N(0), N(day24), N(day24), E('', '', 9)],
     [E('Πέραν 24ώρου', 'b'), N(0), N(0), N(0), N(0), E('', '', 9)],
     [E('Σύνολο', 'b bold'), N(0), N(0), N(night + day24), N(night + day24), E('', '', 9)],
     [E('', '', 14)],
     [E('Όργανα υπηρεσίας', 'bold', 6), E('Αποφάσεις Διοικητή', 'ttl', 8)],
-    [E('Αξιωματικοί:', '', 6), ...L(1, 'ΕΓΓΡΑΦΕΣ', tx.egr || '')],
-    [E(tx.off || '', 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', tx.dia || '')],
+    [E('Αξιωματικοί:', '', 6), ...L(1, 'ΕΓΓΡΑΦΕΣ', egr)],
+    [E(tx.off || '', 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', dia)],
     [E('Υπαξιωματικοί:', '', 6), ...L(3, 'ΑΔΕΙΕΣ', leaves)],
     [E(g.ly ? 'Λ/Υ: ' + name(g.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns)],
     [E(g.dy ? 'Δ/Υ: ' + name(g.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],

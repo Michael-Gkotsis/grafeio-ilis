@@ -1,10 +1,11 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { hkDay, type ISODate } from './dates';
-import { TYPES, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { OUT_NOTE, TYPES, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { personMap } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, upper } from './text';
+import { genitive } from './greek';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
 export interface Run { t: string; u?: boolean }
@@ -62,6 +63,24 @@ export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
     .map(({ x, p }) => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }]));
 }
+
+// 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: όσοι μπήκαν στη δύναμη ή βγήκαν εκτός δύναμης τη μέρα, με τα στοιχεία τους από το Δυναμολόγιο,
+// και μετά ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ. «1. ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ ΤΟΥ ΠΑΤΡΩΝΥΜΟΥ, ΑΣΜ …, ΕΣΣΟ …: <λόγος>.»
+export function personLine(p: Person): string {
+  return upper([p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first, p.father ? 'του ' + genitive(p.father) : ''].filter(Boolean).join(' ')
+    + (p.asm ? ', ΑΣΜ ' + p.asm : '') + (p.essos ? ', ΕΣΣΟ ' + p.essos : ''));
+}
+// Ο λόγος της διαγραφής: από το φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» («Εκτός δύναμης: μετάθεση») ή οι σημειώσεις του
+export const outReason = (p: Person) => (p.notes.startsWith(OUT_NOTE) ? p.notes.slice(OUT_NOTE.length).replace(/^[:\s]+/, '') : p.notes).trim();
+export const movesOn = (s: AppState, field: 'inOn' | 'outOn', d: ISODate) => s.people.filter(p => p[field] === d).sort(byName);
+function moveLines(s: AppState, d: ISODate, field: 'inOn' | 'outOn', free: 'egr' | 'dia'): Line[] {
+  const out = numbered(movesOn(s, field, d).map(p => { const why = field === 'outOn' ? outReason(p) : ''; return [{ t: personLine(p) + (why ? ': ' + upper(why.replace(/[.\s]+$/, '')) : '') + '.' }]; }));
+  const t = s.hkaiManual?.[d]?.text?.[free]?.trim();
+  if (t) out.push([{ t }]);
+  return out;
+}
+export const hkaiEgrLines = (s: AppState, d: ISODate) => moveLines(s, d, 'inOn', 'egr');
+export const hkaiDiaLines = (s: AppState, d: ISODate) => moveLines(s, d, 'outOn', 'dia');
 
 export const lineText = (l: Line) => l.map(r => r.t).join('');
 export const linesText = (ls: Line[]) => ls.map(lineText).join('\n');

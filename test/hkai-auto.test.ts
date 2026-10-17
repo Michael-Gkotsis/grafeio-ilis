@@ -6,7 +6,7 @@ import path from 'path';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fillHkai } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
-import { hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
+import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
 import { accusative, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
 import type { AppState } from '../src/shared/domain';
@@ -146,5 +146,51 @@ describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/
     s = ask(s, 3);
     s = run(s, { t: 'decideRequest', id: s.requests[0].id, ok: true });
     expect(s.guards['2026-10-17']?.th1).toBeUndefined();
+  });
+});
+
+describe('1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ από το προσωπικό', () => {
+  it('εκτός δύναμης → 2. ΔΙΑΓΡΑΦΕΣ με τα στοιχεία του και τον λόγο· ξανά σε δύναμη → φεύγει', async () => {
+    let s = fakeState(10);
+    const p = { ...s.people[2], active: false, notes: 'μετάθεση στο 2ο ΣΠ' };
+    s = run(s, { t: 'updatePerson', person: p });
+    expect(s.people[2].outOn).toBe(D);
+    expect(linesText(hkaiDiaLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ ΤΟΥ ΠΑΤΕΡΑ, ΑΣΜ 900002, ΕΣΣΟ 2026 Γ΄: ΜΕΤΑΘΕΣΗ ΣΤΟ 2Ο ΣΠ.');
+    const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
+    expect(bk.get('G9')).toBe(linesText(hkaiDiaLines(s, D)));
+    // «Να μη γραφτεί»
+    expect(hkaiDiaLines(run(s, { t: 'setPersonMove', pid: 3, field: 'outOn', date: null }), D)).toHaveLength(0);
+    s = run(s, { t: 'updatePerson', person: { ...s.people[2], active: true } });
+    expect(s.people[2].outOn).toBeUndefined();
+  });
+  it('από το φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ»: ο λόγος χωρίς το «Εκτός δύναμης:», και το ελεύθερο κείμενο στο τέλος', () => {
+    let s = run(fakeState(10), { t: 'setPeopleFields', changes: [{ pid: 4, patch: { active: false, notes: 'Εκτός δύναμης: απόλυση' } }], source: 'x', what: 'εκτός δύναμης' });
+    s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { dia: 'ΚΑΙ ΚΑΤΙ ΑΚΟΜΑ' } } });
+    expect(linesText(hkaiDiaLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΔΕΛΤΑΣ ΤΟΥ ΠΑΤΕΡΑ, ΑΣΜ 900003, ΕΣΣΟ 2026 Γ΄: ΑΠΟΛΥΣΗ.\nΚΑΙ ΚΑΤΙ ΑΚΟΜΑ');
+  });
+  it('«Νέος στρατιώτης» → 1. ΕΓΓΡΑΦΕΣ· η πρώτη εισαγωγή του Δυναμολογίου όχι', () => {
+    const np = { ...fakeState(1).people[0], rank: 'ΣΤΡ', last: 'ΚΑΙΝΟΥΡΓΙΟΣ', first: 'ΑΛΦΑΣ', father: 'ΙΩΑΝΝΗΣ', asm: '123456' } as any; delete np.id; delete np.active;
+    const s = run(fakeState(10), { t: 'addPerson', person: np });
+    expect(linesText(hkaiEgrLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΚΑΙΝΟΥΡΓΙΟΣ ΑΛΦΑΣ ΤΟΥ ΙΩΑΝΝΗ, ΑΣΜ 123456, ΕΣΣΟ 2026 Γ΄.');
+    const rows = fakeState(5).people.map(p => { const r: any = { ...p }; delete r.id; delete r.active; delete r.post; delete r.attached; delete r.notes; return r; });
+    const first = run({ ...fakeState(0) }, { t: 'importPeople', rows, source: 'x', deactivateMissing: false });
+    expect(first.people).toHaveLength(5);
+    expect(first.people.some(p => p.inOn)).toBe(false);
+  });
+});
+
+describe('ενότητες της ΗΚΑΙ', () => {
+  it('κλειστές φρουρές δεν γράφονται· όχημα, ατυχήματα και «Προβλέπονται» γράφονται όταν είναι ανοιχτά', async () => {
+    let s = run(fakeState(30), { t: 'autofill', date: D });
+    s = run(s, { t: 'setSettings', settings: { hkai: { veh: { type: '1/4 τόνων', prov: 2, kin: 1 }, prov: { 'Στρατιώτες': 150, 'Λοχίες': 2 } } }, text: 'x' });
+    s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { accM: '1' } } });
+    let wb = await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data);
+    let bk = await wb.sheet(1); const fr = await wb.sheet(0);
+    expect(bk.get('D5')).toBeTruthy();
+    expect([bk.get('G5'), bk.get('H5'), bk.get('M5'), bk.get('K5')]).toEqual(['2', '1', '1', 'Ø']);
+    expect([fr.get('B29'), fr.get('B25'), fr.get('B30'), fr.get('B31'), fr.get('B22')]).toEqual(['150', '2', '152', '152', null]);
+    s = run(s, { t: 'setSettings', settings: { hkai: { ...s.settings.hkai, off: ['grd', 'veh', 'acc', 'prov'] } }, text: 'x' });
+    wb = await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data); bk = await wb.sheet(1);
+    expect([bk.get('D5'), bk.get('D8'), bk.get('G5'), bk.get('M5'), (await wb.sheet(0)).get('B29')]).toEqual([null, null, null, 'Ø', null]);
   });
 });

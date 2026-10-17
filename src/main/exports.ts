@@ -2,8 +2,8 @@
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { dm, dmy, dmyy, hkDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
-import { byName, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, coversDay, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { byName, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
+import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
@@ -64,7 +64,10 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
 const HK_KEYS = ['yp', 'ey', 'tim', 'bl', 'os', 'mag', 'sid', 'kin', 'ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fp', 'fyl', 'apal', 'ekp', 'allh'];
 export class TemplateError extends Error {}
 // 5. ΑΙΤΗΣΕΙΣ (G12): το ελεύθερο κείμενο γράφεται μαζί με τις αριθμημένες αιτήσεις, στο τέλος
-export const HK_TEXT: Record<string, string> = { egr: 'G8', dia: 'G9', loi: 'G19', off: 'A18' };
+// 1. ΕΓΓΡΑΦΕΣ και 2. ΔΙΑΓΡΑΦΕΣ (G8, G9): το ελεύθερο κείμενο μετά από όσους μπήκαν ή βγήκαν από τη δύναμη τη μέρα
+export const HK_TEXT: Record<string, string> = { loi: 'G19', off: 'A18' };
+// Ατυχήματα (K5 ολικές ζημιές, L5 μερικές, M5 σε άνδρες): ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς μένει το Ø του εντύπου
+export const HK_ACC: Record<string, string> = { accT: 'K5', accP: 'L5', accM: 'M5' };
 // front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap } = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl);
@@ -79,11 +82,20 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   // Προέλεγχος template (έρευνα §3.6): τα αθροίσματα πρέπει να είναι τύποι, όχι γραμμένοι αριθμοί
   const lost = rowsOf.flatMap(([, r]) => [m.cols.sum, m.cols.sumK, m.cols.sumA, m.cols.avail].filter(Boolean).map(c => c + r)).filter(ref => !fr.hasFormula(ref));
   if (lost.length) throw new TemplateError('Το template της ΗΚΑΙ έχει χάσει τύπους στα κελιά ' + lost.slice(0, 6).join(', ') + (lost.length > 6 ? ' κ.ά.' : '') + '. Τα αθροίσματα δεν θα ήταν σωστά. Βάλε ξανά τους τύπους ή σβήσε το δικό σου hkai.xlsx από τον φάκελο templates (ή διάλεξε άλλο template στα Αρχεία Excel).');
+  const prov = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
   for (const [rank, r] of rowsOf) {
     const x = hk.rank[rank];
+    if (prov[rank] > 0) fr.set((m.cols.prov || 'B') + r, prov[rank]);
     fr.set(m.cols.placed + r, x.n - x.attached).set(m.cols.attached + r, x.attached);
     for (const k of HK_KEYS) if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null);
     if (m.cols.ab && !fr.hasFormula(m.cols.ab + r)) fr.set(m.cols.ab + r, x.c.ab || null);
+  }
+  // «Προβλέπονται» στις γραμμές των συνόλων: το έντυπο δεν έχει τύπο εκεί, οπότε γράφεται το άθροισμα
+  if (Object.values(prov).some(n => n > 0)) {
+    const pc = m.cols.prov || 'B'; const sumOf = (list: string[]) => list.reduce((a, r) => a + (prov[r] || 0), 0);
+    const last = (list: string[]) => Math.max(...list.map(r => m.rows[r] || 0));
+    const tot = (r: number, n: number) => { if (r > 0 && /ΣΥΝΟΛΟ/.test(norm(fr.get('A' + r) || '')) && !fr.hasFormula(pc + r)) fr.set(pc + r, n || null); };
+    tot(last(HK_OFFICERS) + 1, sumOf(HK_OFFICERS)); tot(last(HK_NCO) + 1, sumOf(HK_NCO)); tot(last(HK_NCO) + 2, sumOf([...HK_OFFICERS, ...HK_NCO]));
   }
   // κείμενα που γράφει ο χρήστης στην οθόνη ΗΚΑΙ (πίσω σελίδα)
   const tx = s.hkaiManual?.[d]?.text || {};
@@ -92,9 +104,15 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const g = s.guards[d] || {};
   let night = 0, day24 = 0;
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
-  bk.set('D5', night || null).set('D8', day24 || null);
-  // 3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες («1.»), μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
-  const leaves = hkaiLeaveLines(s, d), puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
+  if (hkOn(s.settings, 'grd')) bk.set('D5', night || null).set('D8', day24 || null);
+  // Κατάσταση οχημάτων (μία γραμμή στο έντυπο) και ατυχήματα, όταν η Ίλη τα χρησιμοποιεί
+  const v = s.settings.hkai?.veh;
+  if (hkOn(s.settings, 'veh') && v) { if (v.type) bk.set('F5', v.type); bk.set('G5', v.prov ?? null).set('H5', v.kin ?? null).set('I5', v.maint ?? null).set('J5', v.dmg ?? null); }
+  if (hkOn(s.settings, 'acc')) for (const [k, ref] of Object.entries(HK_ACC)) if (tx[k]?.trim()) bk.set(ref, tx[k].trim());
+  // 1. ΕΓΓΡΑΦΕΣ, 2. ΔΙΑΓΡΑΦΕΣ, 3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες («1.»), μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
+  const egr = hkaiEgrLines(s, d), dia = hkaiDiaLines(s, d), leaves = hkaiLeaveLines(s, d), puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
+  if (egr.length) await wb.setRich(bk, 'G8', egr);
+  if (dia.length) await wb.setRich(bk, 'G9', dia);
   if (leaves.length) await wb.setRich(bk, 'G10', leaves);
   if (puns.length) await wb.setRich(bk, 'G11', puns);
   if (reqs.length) await wb.setRich(bk, 'G12', reqs);
