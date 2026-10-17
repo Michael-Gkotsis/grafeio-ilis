@@ -50,8 +50,27 @@ export const fatherTxt = (p: Person) => (p.father && isNamesake(p) ? ' του ' 
 export const plainName = (p: Person) => p.last + ' ' + p.first;
 export const fullName = (p: Person) => plainName(p) + fatherTxt(p);
 export const shortName = (p: Person) => p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '') + fatherTxt(p);
-// Ουλαμός από θάλαμο (Κ-18): 1–4 → 1ος, 5–8 → 2ος
-export const unitOf = (p: Person) => (p.room == null ? '—' : p.room <= 4 ? '1ος Ουλ.' : '2ος Ουλ.');
+// Θάλαμοι και ουλαμοί (Ρυθμίσεις › Θάλαμοι και ουλαμοί, Michael 17/10). Προεπιλογή: 8 θάλαμοι, 4 ανά ουλαμό
+// (Κ-18: 1–4 → 1ος, 5–8 → 2ος). Οι ουλαμοί φτιάχνονται από τους δύο αριθμούς· αν άλλαξες ποιοι θάλαμοι ανήκουν
+// πού, κρατιέται η δική σου λίστα (platoons) μέχρι να ξαναφτιάξεις τους ουλαμούς.
+export interface Platoon { name: string; rooms: number[] }
+export interface RoomSettings { n: number; per: number; platoons?: Platoon[] }
+export const DEFAULT_ROOMS: RoomSettings = { n: 8, per: 4 };
+export function makePlatoons(n: number, per: number): Platoon[] {
+  const out: Platoon[] = []; const k = Math.max(1, per);
+  for (let r = 1; r <= n; r += k) out.push({ name: (out.length + 1) + 'ος Ουλαμός', rooms: Array.from({ length: Math.min(k, n - r + 1) }, (_, i) => r + i) });
+  return out;
+}
+export const roomCfg = (st?: Pick<Settings, 'rooms'> | null): RoomSettings => st?.rooms || DEFAULT_ROOMS;
+export const platoonsOf = (st?: Pick<Settings, 'rooms'> | null): Platoon[] => { const c = roomCfg(st); return c.platoons || makePlatoons(c.n, c.per); };
+// «1ος Ουλαμός» → «1ος Ουλ.» (στις λίστες και στα φίλτρα)
+export const platoonShort = (name: string) => name.replace(/Ουλαμός$/, 'Ουλ.');
+// Ουλαμός από θάλαμο: θάλαμος που δεν ανήκει σε κανέναν ουλαμό → «—»
+export const unitOf = (p: Pick<Person, 'room'>, st?: Pick<Settings, 'rooms'> | null) => {
+  if (p.room == null) return '—';
+  const u = platoonsOf(st).find(x => x.rooms.includes(p.room!));
+  return u ? platoonShort(u.name) : '—';
+};
 // Σειρά των ημερών στην κάρτα: Δευτέρα πρώτη
 export const WEEK: number[] = [1, 2, 3, 4, 5, 6, 0];
 export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
@@ -214,7 +233,13 @@ export interface Settings {
   baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
   lists?: UserLists;                     // ό,τι πρόσθεσες ή έκρυψες στις λίστες (βαθμοί, Ο/Σ)· οι βασικές είναι στο ranks.ts
   hkai?: HkaiSettings;                   // ΗΚΑΙ: ενότητες που δεν χρησιμοποιεί η Ίλη, οχήματα, «Προβλέπονται»
+  rooms?: RoomSettings;                  // πόσοι θάλαμοι, πόσοι ανά ουλαμό και ποιοι ανήκουν σε κάθε ουλαμό (κενό = 8 και 4)
+  brand?: BrandSettings;                 // τίτλος και λογότυπο της εφαρμογής (κενό = «Γραφείο Λοχία»)
 }
+// Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.
+// rank: βαθμός από τον πίνακα του brand.ts · title: δικός σου τίτλος (κενό = του βαθμού)
+// logo: κενό = του βαθμού, ένα από τα σχέδια (brand.ts) ή εικόνα που ανέβασες (data:image/png…)
+export interface BrandSettings { rank?: string; title?: string; logo?: string }
 // Ενότητες της ΗΚΑΙ που ανοιγοκλείνουν (Michael, 17/10): κλειστή = δεν φαίνεται στην εφαρμογή και δεν γράφεται στο έντυπο
 export const HK_SECTIONS: [HkSection, string, string][] = [
   ['veh', 'Κατάσταση οχημάτων', 'Είδος, προβλέπονται, σε κίνηση, προς επισκευή'],

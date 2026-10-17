@@ -13,6 +13,7 @@ import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot, CmdResult } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
+import { appLogo, appTitle } from '../shared/brand';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -155,6 +156,9 @@ function Shell() {
     return () => { document.removeEventListener('keydown', h); document.removeEventListener('mouseup', m); };
   }, [undo, go, goBack, toggleRail]);
   const Screen = SCREENS[route.view][2];
+  // ο τίτλος (Ρυθμίσεις › Εμφάνιση) και στη γραμμή του παραθύρου
+  const title = appTitle(state.settings);
+  useEffect(() => { document.title = title; }, [title]);
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
   const waiting = useMemo(() => state.requests.filter(r => r.leave && !r.decision && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
   const navItem = (v: string, inRail = false) => {
@@ -169,7 +173,7 @@ function Shell() {
     <div className=${cx('shell', rail && 'is-rail')}>
       <header className="topbar">
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
-        <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30}/><span>Γραφείο Λοχία<small>${state.settings.unit[2] || ''}</small></span></div>
+        <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30} ...${appLogo(state.settings)}/><span>${title}<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         ${essos && html`<span className="essochip" data-tip="ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)" data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">

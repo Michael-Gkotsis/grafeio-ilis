@@ -21,6 +21,8 @@ import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources
 import { ListsCard } from './lists';
 import { SiCard } from './si';
 import { StatCard } from './stat';
+import { BrandCard, RoomsCard } from './units';
+import { appTitle } from '../../shared/brand';
 import { listOf, statusLbl } from '../../shared/ranks';
 type P = any;
 
@@ -61,7 +63,7 @@ export function TodayScreen() {
     return 'Από αύριο μπορεί να βγει έξοδο';
   };
   const what = (s: Status) => (s.type === 'PUN' ? 'ποινή (' + punLbl(s.kind) + ')' : statusLbl(s, state.settings.lists));
-  if (!c.total) return html`<div className="onboard"><${Card} title="Καλώς ήρθες στο Γραφείο Λοχία">
+  if (!c.total) return html`<div className="onboard"><${Card} title=${'Καλώς ήρθες στο ' + appTitle(state.settings)}>
     <p style=${{ marginTop: 0 }}>Για να ξεκινήσεις χρειάζεται το προσωπικό της Ίλης. Πάρ' το από το Δυναμολόγιο (το αρχείο .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»).</p>
     <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ΗΚΑΙ.</li></ol>
     <${Button} onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
@@ -432,12 +434,8 @@ function AppearanceCard() {
 function SettingsCard() {
   const { state, run, boot } = useStore(); const toast = useToast();
   const [s, setS] = useState(() => ({ unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
-  const [outRooms, setOutRooms] = useState(() => ({ 6: (state.rules.outRooms[6] || []).join(','), 0: (state.rules.outRooms[0] || []).join(',') }));
   const save = async () => {
     const ok = await run({ t: 'setSettings', settings: { unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre }, text: 'μονάδα, στελέχη ΗΚΑΙ' }, false);
-    const rooms = (v: string) => v.split(/[,\s]+/).map(Number).filter(n => n > 0 && n < 50);
-    const nr = { ...state.rules, outRooms: { ...state.rules.outRooms, 6: rooms(outRooms[6]), 0: rooms(outRooms[0]) } };
-    if (ok && JSON.stringify(nr.outRooms) !== JSON.stringify(state.rules.outRooms)) await run({ t: 'setRules', rules: nr, text: 'θάλαμοι εξόδου ΣΑΒ ' + outRooms[6] + ', ΚΥΡ ' + outRooms[0] }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
   };
   return html`<${Card} title="Μονάδα και έντυπα">
@@ -446,8 +444,7 @@ function SettingsCard() {
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
     <div className="field"><span className="field__label">Στελέχη ανά βαθμό (ΗΚΑΙ, στήλη «Τοποθετημένοι»)</span><div className="settings-grid">${[...HK_OFFICERS, ...HK_NCO.slice(0, 2)].map(r => html`<label key=${r} className="field"><span className="field__help">${r}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
       <span className="field__help">Οι στρατιώτες, δεκανείς και λοχίες μετρώνται από το προσωπικό της εφαρμογής.</span></div>
-    <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-r6">Θάλαμοι εξόδου Σάββατο (Κ-16)</label><input id="st-r6" className="ui-input" value=${outRooms[6]} onChange=${(e: any) => setOutRooms({ ...outRooms, 6: e.target.value })}/></div>
-      <div className="field"><label className="field__label" htmlFor="st-r0">Θάλαμοι εξόδου Κυριακή</label><input id="st-r0" className="ui-input" value=${outRooms[0]} onChange=${(e: any) => setOutRooms({ ...outRooms, 0: e.target.value })}/></div></div>
+    <p className="note" style=${{ margin: 0 }}>Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους <b>Θαλάμους και ουλαμούς</b>.</p>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
     <hr style=${{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }}/>
     <dl className="kv"><dt>Αρχεία</dt><dd>Στο ${state.settings.outputDir || boot.outputDir}, εκτός αν διάλεξες άλλο στους <b>Φακέλους αρχείων</b> παρακάτω.</dd>
@@ -543,7 +540,7 @@ function BackupsCard() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['backup', 'Αντίγραφα ασφαλείας']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -554,9 +551,9 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
+  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'look' ? html`<${AppearanceCard}/>` : tab === 'backup' ? html`<${BackupsCard}/>` : templates;
+    : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : templates;
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
@@ -584,7 +581,9 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
     { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'backup' }) },
     { t: 'Διάγνωση (μνήμη, ταχύτητα)', k: 'ΔΙΑΓΝΩΣΗ ΜΝΗΜΗ ΤΑΧΥΤΗΤΑ GPU', fn: () => nav.go('diag') },
-    { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΣΤΕΛΕΧΗ ΘΑΛΑΜΟΙ', fn: () => nav.go('templates', { tab: 'unit' }) },
+    { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΣΤΕΛΕΧΗ', fn: () => nav.go('templates', { tab: 'unit' }) },
+    { t: 'Θάλαμοι και ουλαμοί', k: 'ΘΑΛΑΜΟΙ ΟΥΛΑΜΟΙ ΟΥΛΑΜΟΣ ΕΞΟΔΟΣ ΣΑΒΒΑΤΟ ΚΥΡΙΑΚΗ', fn: () => nav.go('templates', { tab: 'rooms' }) },
+    { t: 'Τίτλος και λογότυπο', k: 'ΤΙΤΛΟΣ ΛΟΓΟΤΥΠΟ LOGO ΕΜΦΑΝΙΣΗ ΒΑΘΜΟΣ', fn: () => nav.go('templates', { tab: 'look' }) },
     { t: 'Ρυθμίσεις › Υπηρεσίες και αργίες', k: 'ΘΕΣΕΙΣ ΥΠΗΡΕΣΙΕΣ ΑΡΓΙΕΣ ΒΑΡΔΙΕΣ ΣΙ Σ.Ι. ΠΟΙΟΣ ΚΑΝΕΙ ΤΙ', fn: () => nav.go('templates', { tab: 'duty' }) },
     { t: 'Ρυθμίσεις › Λίστες', k: 'ΛΙΣΤΕΣ ΒΑΘΜΟΙ ΙΑΤΡΙΚΑ ΠΟΙΝΕΣ ΑΔΕΙΕΣ', fn: () => nav.go('templates', { tab: 'lists' }) },
     { t: 'Ρυθμίσεις › Εμφάνιση', k: 'ΕΜΦΑΝΙΣΗ ΘΕΜΑ ΣΚΟΤΕΙΝΟ ΠΥΚΝΟΤΗΤΑ', fn: () => nav.go('templates', { tab: 'look' }) }
@@ -606,11 +605,11 @@ export function CommandPalette({ onClose }: P) {
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); runI(sel); } }}/>
     <ul className="picker__list" role="listbox">
       ${recent.length > 0 && html`<li className="picker__hd">Πρόσφατα</li>`}
-      ${recent.map(p => { i++; const j = i; return html`<li key=${'r' + p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
+      ${recent.map(p => { i++; const j = i; return html`<li key=${'r' + p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
       ${acts.length > 0 && html`<li className="picker__hd">Ενέργειες</li>`}
       ${acts.map(a => { i++; const j = i; return html`<li key=${a.t} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${a.t}</b></div></li>`; })}
       ${ppl.length > 0 && html`<li className="picker__hd">Πρόσωπα</li>`}
-      ${ppl.map(p => { i++; const j = i; return html`<li key=${p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
+      ${ppl.map(p => { i++; const j = i; return html`<li key=${p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
       ${!items.length && html`<li className="picker__hd">Δεν βρέθηκε τίποτα για «${q}».</li>`}
     </ul>
     <div className="note" style=${{ padding: '6px 4px 0' }}>↑↓ επιλογή · Enter άνοιγμα · Esc κλείσιμο · ψάχνει χωρίς τόνους και με λατινικά (π.χ. «papad»)</div>

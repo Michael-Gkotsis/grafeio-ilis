@@ -6,13 +6,14 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, TIMES_HELP, TimeField } from '../common';
 import { hasTimes, normTime, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChange, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
 import { CadreView } from './cadre';
 import { SiField } from './si';
+import { RoomField } from './units';
 import { siOf } from '../../shared/si';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { collator, normGreek, upper } from '../../shared/text';
@@ -69,14 +70,17 @@ export function PeopleScreen() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   // φίλτρα στα params της οθόνης, ώστε να τα θυμάται όταν γυρνάς (Shell)
-  const filter: string = nav.params.filter || 'all'; const unit: string = nav.params.unit || 'all'; const room: number | null = nav.params.room ?? null;
+  const filter: string = nav.params.filter || 'all'; const unitP: string = nav.params.unit || 'all';
+  // ουλαμός που θυμόταν η οθόνη αλλά δεν υπάρχει πια (άλλαξε όνομα στις Ρυθμίσεις): όλη η Ίλη
+  const unit = unitP === 'all' || platoonsOf(state.settings).some(u => platoonShort(u.name) === unitP) ? unitP : 'all'; const room: number | null = nav.params.room ?? null;
   const date: string = nav.params.pdate && nav.params.pdate >= today ? nav.params.pdate : today;
   const sort: { k: string; dir: number } = nav.params.sort || DEF_SORT;
-  const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room } as Person) !== u ? null : room });
-  const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r } as Person) !== unit ? 'all' : unit });
+  const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room });
+  const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit });
   const [selected, setSelected] = useState(() => new Set<number>());
   const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false); const [xl, setXl] = useState(false);
-  const UNITS = [{ value: 'all', label: 'Όλη η Ίλη' }, { value: '1ος Ουλ.', label: '1ος Ουλ.', tip: 'Θάλαμοι 1–4' }, { value: '2ος Ουλ.', label: '2ος Ουλ.', tip: 'Θάλαμοι 5–8' }];
+  // ουλαμοί από τις Ρυθμίσεις › Θάλαμοι και ουλαμοί (προεπιλογή 1–4 → 1ος, 5–8 → 2ος)
+  const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const active = useMemo(() => state.people.filter(p => p.active), [state.people]);
   const total = active.length;
@@ -85,12 +89,12 @@ export function PeopleScreen() {
   const withSt = filter === 'leave' || filter === 'pun';
   // καταστάσεις της ημερομηνίας, μία φορά ανά άτομο (με το ευρετήριο των κανόνων)
   const ssOf = useMemo(() => { const m = new Map<number, Status[]>(); active.forEach(p => m.set(p.id, statusesOn(state.statuses, p.id, date))); return m; }, [active, state.statuses, date]);
-  const place = (p: Person, f: Filt) => (f.unit === 'all' || unitOf(p) === f.unit) && (f.room == null || p.room === f.room);
+  const place = (p: Person, f: Filt) => (f.unit === 'all' || unitOf(p, state.settings) === f.unit) && (f.room == null || p.room === f.room);
   const matches = useCallback((p: Person, f: Filt) => {
     if (!place(p, f)) return false;
     const ss = ssOf.get(p.id) || [];
     return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss);
-  }, [ssOf]);
+  }, [ssOf, state.settings.rooms]);
   const listFor = useCallback((f: Filt, text: string) => (f.filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, text)).filter(p => matches(p, f)), [state.people, matches]);
   // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό/θάλαμο), για να φαίνεται πριν πατήσεις
   const counts = useMemo(() => {
@@ -101,7 +105,7 @@ export function PeopleScreen() {
       for (const [k] of ROSTER_FILTERS) if (rosterMatch(k, p, ss)) n[k] = (n[k] || 0) + 1;
     });
     return n;
-  }, [state.people, ssOf, unit, room]);
+  }, [state.people, ssOf, unit, room, state.settings.rooms]);
   const rooms = useMemo(() => { const m = new Map<number, number>(); active.forEach(p => { if (p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [active]);
   const viewN = useMemo(() => views.map(v => listFor(v, v.q).length), [views, listFor]);
   const curView = views.find(v => v.unit === unit && v.room === room && v.filter === filter && normGreek(v.q) === normGreek(dq.trim()));
@@ -262,11 +266,11 @@ export function PersonSheet({ pid, onClose }: P) {
   const si = p.si ? siOf(p, lists) : null;
   // Η καρτέλα (Michael, 17/10): ό,τι έχει το Δυναμολόγιο για τον στρατιώτη, οι υπηρεσίες του (σύνολο, με τις αργίες/ΣΚ από κάτω),
   // το ημερολόγιο υπηρεσιών και το ιστορικό καταστάσεων. Το «Τι κάνει» είναι πλέον στις Υπηρεσίες, η ΕΣΣΟ πάνω δεξιά.
-  return html`<${Sheet} onClose=${onClose} title=${html`<h2 style=${{ fontSize: '18px' }}>${plainName(p)}</h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${p.rank} · ${unitOf(p)}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
+  return html`<${Sheet} onClose=${onClose} title=${html`<h2 style=${{ fontSize: '18px' }}>${plainName(p)}</h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${p.rank} · ${unitOf(p, state.settings)}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
     ${rules.length > 0 && html`<${Alert} tone="warn"><span><b>Σήμερα:</b> ${rules.join(' · ')}</span><//>`}
     <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
     <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
-      <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p)})</span></dd>
+      <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p, state.settings)})</span></dd>
       <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
@@ -345,7 +349,7 @@ function PersonFields({ x, setX, id, isNew }: P) {
   return html`
     <div className="field-row"><${ChoiceField} id=${id + '-rank'} label="Βαθμός" value=${x.rank} options=${ranks} placeholder="π.χ. ΥΔΝΕΑΣ" otherLabel="+ Νέος βαθμός…" otherHelp="Μένει στη λίστα των βαθμών για την επόμενη φορά (Ρυθμίσεις › Λίστες)." onChange=${(v: string) => setX({ ...x, rank: v })}/><${ChoiceField} id=${id + '-spec'} label="Ο/Σ (όπλο/σώμα)" value=${x.spec} options=${specs} placeholder="π.χ. ΠΖ" otherLabel="+ Νέο Ο/Σ…" otherHelp="Μένει στη λίστα για την επόμενη φορά." onChange=${(v: string) => setX({ ...x, spec: v })}/></div>
     <div className="field-row">${F('last', isNew ? 'Επώνυμο *' : 'Επώνυμο', { focus: isNew })}${F('first', isNew ? 'Όνομα *' : 'Όνομα')}${F('father', 'Πατρώνυμο')}</div>
-    <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}${F('room', 'Θάλαμος', { type: 'number', num: true })}</div>
+    <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}<${RoomField} id=${id + '-room'} value=${x.room} onChange=${(v: number | null) => setX({ ...x, room: v })}/></div>
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.</small></span></label>

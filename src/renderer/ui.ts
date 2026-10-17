@@ -38,7 +38,15 @@ const LOGO = '<defs><linearGradient id="lg-f" x1="0" y1="0" x2="0" y2="1"><stop 
   + '<path d="M32 7.2 V56.9 C19.8 51.4 11.6 42.6 11.6 30 V14 Z" fill="#fff" fill-opacity=".07"/>'
   + '<path d="M32 13.5 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 L32 25.48 l-4.7 2.47 .9-5.23 -3.8-3.7 5.25-.76 Z" fill="url(#lg-g)"/>'
   + '<path d="M19 37 L32 30 L45 37 V42.5 L32 35.5 L19 42.5 Z" fill="url(#lg-g)"/><path d="M19 45.5 L32 38.5 L45 45.5 V51 L32 44 L19 51 Z" fill="url(#lg-g)"/>';
-export const Logo = ({ size = 32 }: P) => html`<svg className="logo" viewBox="0 0 64 64" width=${size} height=${size} aria-hidden="true" dangerouslySetInnerHTML=${{ __html: LOGO }}></svg>`;
+// Ίδια ασπίδα με 1–3 αστέρια (αξιωματικοί, Ρυθμίσεις › Εμφάνιση)
+const LOGO_SHIELD = LOGO.slice(0, LOGO.indexOf('<path d="M32 13.5'));
+const star = (x: number, y: number, r: number) => '<path d="' + Array.from({ length: 10 }, (_, i) => { const a = Math.PI / 5 * i - Math.PI / 2, d = i % 2 ? r * 0.42 : r; return (i ? 'L' : 'M') + (x + d * Math.cos(a)).toFixed(2) + ' ' + (y + d * Math.sin(a)).toFixed(2); }).join(' ') + 'Z" fill="url(#lg-g)"/>';
+const STARS: Record<string, [number, number][]> = { star1: [[32, 32]], star2: [[32, 22], [32, 41]], star3: [[32, 18], [32, 32], [32, 46]] };
+const LOGOS: Record<string, string> = { chev: LOGO, ...Object.fromEntries(Object.entries(STARS).map(([k, xs]) => [k, LOGO_SHIELD + xs.map(([x, y]) => star(x, y, xs.length === 3 ? 6.5 : 8)).join('')])) };
+// kind: σχέδιο (brand.ts) · src: εικόνα που ανέβασε ο χρήστης
+export const Logo = ({ size = 32, kind = 'chev', src }: P) => (src
+  ? html`<img className="logo" src=${src} width=${size} height=${size} alt="" style=${{ objectFit: 'contain' }}/>`
+  : html`<svg className="logo" viewBox="0 0 64 64" width=${size} height=${size} aria-hidden="true" dangerouslySetInnerHTML=${{ __html: LOGOS[kind] || LOGO }}></svg>`);
 
 // Όσο τρέχει ό,τι ξεκίνησε το κλικ (onClick που επιστρέφει Promise), το κουμπί δεν ξαναπατιέται:
 // διπλό κλικ στην «Αποθήκευση» δεν γράφει δύο φορές
