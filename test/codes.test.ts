@@ -23,7 +23,7 @@ describe('κωδικοί θέσεων', () => {
     const mine = { id: 'c1', kind: 'other', name: 'Πύλη', armed: false, custom: true, posts: [{ k: 'c1a', label: 'Πύλη 1', short: '1' }, { k: 'c1b', label: 'Πύλη 2', short: '2' }] };
     const old = { ...DEFAULT_SETTINGS, rev: 2, blocks: [...noCodes(DEFAULT_SETTINGS.blocks), mine], blocksSpen: noCodes(DEFAULT_SETTINGS.blocksSpen) };
     const m = migrateSettings(old as any);
-    expect(m.rev).toBe(4);
+    expect(m.rev).toBe(5);
     const code = (k: string, list = m.blocks) => list.flatMap(b => b.posts).find(p => p.k === k)!.code;
     expect([code('th1'), code('th5'), code('mg2'), code('ly'), code('dy'), code('c1a'), code('c1b')]).toEqual(['Θ1α', 'Θ1β', 'Μ2', 'ΛΥ', 'ΔΥ', 'Υ1', 'Υ2']);
     expect([code('th1', m.blocksSpen), code('op3', m.blocksSpen), code('tae', m.blocksSpen)]).toEqual(['Θ1', 'ΟΠ3', 'ΤΑΕ']);

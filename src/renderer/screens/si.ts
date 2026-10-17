@@ -1,4 +1,4 @@
-// Σ.Ι. (Michael, 13/10): στις φόρμες dropdown Σ.Ι. (Ι1–Ι4), για το Ι3 ΜΕ ΟΠΛΟ / ΑΟΠΛΟ, και για Ι3/Ι4 κατηγορία πάθησης.
+// Σ.Ι. (Michael, 13/10): στις φόρμες dropdown Σ.Ι. (Ι1–Ι4), για το Ι3 ΜΕ ΟΠΛΟ / ΧΩΡΙΣ ΟΠΛΟ, και για Ι3/Ι4 κατηγορία πάθησης.
 // Ρυθμίσεις › Σ.Ι.: για κάθε Σ.Ι. (και, αν θες, ανά κατηγορία πάθησης) σε ποιες υπηρεσίες μπαίνει, μία στήλη ανά υπηρεσία.
 // Η «Δυνατότητα υπηρεσιών» του ατόμου μένει από πάνω.
 import { useMemo, useState } from 'react';
@@ -10,7 +10,7 @@ import { parseSi, siBases, siCats, siCellOf, siCombos, siLabel, siName, siOf, si
 type P = any;
 const OTHER = '\u0001other';
 
-// Σ.Ι., ΜΕ ΟΠΛΟ / ΑΟΠΛΟ και κατηγορία πάθησης. Ό,τι δεν αναγνωρίζεται γράφεται με το χέρι (όπως ο βαθμός).
+// Σ.Ι., ΜΕ ΟΠΛΟ / ΧΩΡΙΣ ΟΠΛΟ και κατηγορία πάθησης. Ό,τι δεν αναγνωρίζεται γράφεται με το χέρι (όπως ο βαθμός).
 export function SiField({ id, value, cat, onChange }: P) {
   const { state } = useStore(); const cfg = state.settings.lists?.si;
   const parts = parseSi(value, cfg);
@@ -39,7 +39,7 @@ export function SiField({ id, value, cat, onChange }: P) {
         <option value="">— πάθηση</option>${cats.map(c => html`<option key=${c} value=${c}>${c}</option>`)}
       </select>`}
     </div>
-    ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label="Σ.Ι. με το χέρι" placeholder="π.χ. Ι3 ΑΟΠΛΟ" value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value, '')}/>`}
+    ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label="Σ.Ι. με το χέρι" placeholder="π.χ. Ι3 ΧΩΡΙΣ ΟΠΛΟ" value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value, '')}/>`}
   </div>`;
 }
 
@@ -64,7 +64,7 @@ export function SiCard() {
   const cfg: SiConfig = lists.si || {};
   const cells = cfg.cells || {};
   const [nb, setNb] = useState(''); const [nc, setNc] = useState('');
-  const [catRow, setCatRow] = useState('Ι3 ΑΟΠΛΟ'); const [catPick, setCatPick] = useState('');
+  const [catRow, setCatRow] = useState('Ι3 ΧΩΡΙΣ ΟΠΛΟ'); const [catPick, setCatPick] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const cols = useDutyCols();
   // πόσοι (σε δύναμη) έχουν κάθε γραμμή, και ποιες τιμές δεν αναγνωρίζονται
@@ -127,7 +127,7 @@ export function SiCard() {
   const ownCats = siCats(cfg).filter(c => !SI_CATS.includes(c));
 
   return html`<${Card} title="Σ.Ι.: σε ποιες υπηρεσίες μπαίνει">
-    <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία. Αρχικά ο άοπλος (Ι3 ΑΟΠΛΟ, Ι4) δεν μπαίνει σε ένοπλη υπηρεσία και όλοι οι άλλοι μπαίνουν παντού· αν κάνεις μια υπηρεσία ένοπλη ή άοπλη (κάρτα Υπηρεσίες), αλλάζει και εδώ. Ό,τι ξετσεκάρεις, η αυτόματη συμπλήρωση δεν τον βάζει· με το χέρι μπαίνει μόνο με αιτία. Η «Δυνατότητα υπηρεσιών» στην κάρτα κάθε ατόμου ισχύει από πάνω. Λ/Υ και Δ/Υ ορίζονται με το χέρι, όπως πριν.</p>
+    <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία. Αρχικά ο άοπλος (Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4) δεν μπαίνει σε ένοπλη υπηρεσία και όλοι οι άλλοι μπαίνουν παντού· αν κάνεις μια υπηρεσία ένοπλη ή άοπλη (κάρτα Υπηρεσίες), αλλάζει και εδώ. Ό,τι ξετσεκάρεις, η αυτόματη συμπλήρωση δεν τον βάζει· με το χέρι μπαίνει μόνο με αιτία. Η «Δυνατότητα υπηρεσιών» στην κάρτα κάθε ατόμου ισχύει από πάνω. Λ/Υ και Δ/Υ ορίζονται με το χέρι, όπως πριν.</p>
     <div style=${{ overflowX: 'auto' }}><table className="sigrid">
       <thead><tr><th>Σ.Ι.</th><th>Άτομα</th>${cols.map(colHead)}<th></th></tr></thead>
       <tbody>${rows.map(({ label, cat }) => {
@@ -141,7 +141,7 @@ export function SiCard() {
         </tr>`;
       })}</tbody>
     </table></div>
-    ${odd.size > 0 && html`<${Alert} tone="warn"><span><b>Σ.Ι. που δεν αναγνωρίζονται:</b> ${[...odd].map(([v, n]) => '«' + v + '» (' + n + ')').join(' · ')}. Για αυτούς ισχύει ο παλιός κανόνας (άοπλος όποιος έχει «ΑΟΠΛ» ή αρχίζει από «Ι4»). Διόρθωσέ τους από τη «Διόρθωση στοιχείων».</span><//>`}
+    ${odd.size > 0 && html`<${Alert} tone="warn"><span><b>Σ.Ι. που δεν αναγνωρίζονται:</b> ${[...odd].map(([v, n]) => '«' + v + '» (' + n + ')').join(' · ')}. Για αυτούς ισχύει ο παλιός κανόνας (άοπλος όποιος έχει «ΑΟΠΛ» ή «ΧΩΡΙΣ ΟΠΛΟ» ή αρχίζει από «Ι4»). Διόρθωσέ τους από τη «Διόρθωση στοιχείων».</span><//>`}
     ${legacy && html`<p className="note">Η λίστα «Σ.Ι. άοπλων» στις Λίστες ισχύει ακόμα για το ποιος είναι αρχικά άοπλος.</p>`}
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
       <div className="field" style=${{ maxWidth: '150px' }}><label className="field__label" htmlFor="si-cr">Δικοί κανόνες για</label><select id="si-cr" className="ui-input" value=${catRow} onChange=${(e: any) => setCatRow(e.target.value)}>${catRows.map(l => html`<option key=${l} value=${l}>${l}</option>`)}</select></div>
@@ -155,7 +155,7 @@ export function SiCard() {
       <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nc.trim()} onClick=${addCat}>Πρόσθεσε<//></div>
     </div>
     ${ownCats.length > 0 && html`<p className="note">Δικές σου κατηγορίες: ${ownCats.map((c, i) => html`<span key=${c}>${i ? ', ' : ''}${c}${!usedCat(c) && html` <${Button} variant="link" aria-label=${'Σβήσε ' + c} onClick=${() => removeCat(c)}>✕<//>`}</span>`)}</p>`}
-    <p className="note">Οι κατηγορίες πάθησης ακολουθούν τις ενότητες του Γενικού Πίνακα Νοσημάτων (π.δ. 11/2014). Μένουν μόνο στην εφαρμογή: στο Excel η Σ.Ι. γράφεται όπως πριν (π.χ. «Ι3 ΑΟΠΛΟ»), για να μη χαλάσει κάποιος τύπος που τη μετράει.</p>
+    <p className="note">Οι κατηγορίες πάθησης ακολουθούν τις ενότητες του Γενικού Πίνακα Νοσημάτων (π.δ. 11/2014). Μένουν μόνο στην εφαρμογή: στο Excel η Σ.Ι. γράφεται χωρίς αυτήν (π.χ. «Ι3 ΧΩΡΙΣ ΟΠΛΟ»), για να μη χαλάσει κάποιος τύπος που τη μετράει.</p>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }

@@ -352,7 +352,7 @@ describe('Απαντήσεις του λοχία (10/10)', () => {
     const old = { ...DEFAULT_SETTINGS, rev: 0, blocksSpen: DEFAULT_BLOCKS_SPEN.map(b => (b.id === 'tae' ? { ...b, armed: false, posts: [{ ...b.posts[0], hrs: 'ημέρα' }] } : b)) };
     const m = migrateSettings(old as any);
     expect(m.blocksSpen.find(b => b.id === 'tae')).toMatchObject({ armed: true, posts: [{ hrs: '' }] });
-    expect(m.rev).toBe(4);
+    expect(m.rev).toBe(5);
     const turnedOff = { ...m, blocksSpen: m.blocksSpen.map(b => (b.id === 'tae' ? { ...b, armed: false } : b)) };
     expect(migrateSettings(turnedOff).blocksSpen.find(b => b.id === 'tae')!.armed).toBe(false);
   });
@@ -421,14 +421,18 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
     const goingHome = used.filter(id => [1, 2, 3, 4].includes(pm.get(id)!.room!) || pm.get(id)!.dn);
     expect(goingHome).toEqual([]);
   });
-  it('ΣΚ: οι λιγότερες αργίες μετρούν πριν από το ΔΝ (Michael, 13/10)', () => {
+  it('ΣΚ: η έξοδος/ΔΝ μετρά πριν από τις αργίες (Michael, 17/10)', () => {
     const SAT = '2026-10-17';
-    let s = fakeState(40);
-    // όλοι όσοι δεν έχουν ΔΝ έκαναν ήδη μία αργία· όσοι έχουν ΔΝ καμία: τώρα μπαίνουν πρώτοι οι ΔΝ
+    let s = fakeState(60);
+    // όλοι όσοι δεν έχουν ΔΝ έκαναν ήδη μία αργία· όσοι έχουν ΔΝ καμία: μπαίνουν πρώτα όσοι δεν βγαίνουν
     const dn = new Set([2, 3, 4, 7, 8]);
     s = { ...s, people: s.people.map(p => (dn.has(p.id) ? { ...p, dn: true, room: 6 } : p)), baseline: Object.fromEntries(s.people.filter(p => !dn.has(p.id)).map(p => [p.id, { hol: 1 }])) };
     const used = new Set(Object.values(fillDay(s, SAT).guards[SAT]));
-    for (const id of dn) expect(used.has(id)).toBe(true);
+    for (const id of dn) expect(used.has(id)).toBe(false);
+    // και όταν δεν φτάνουν όσοι μένουν μέσα, μπαίνουν πρώτοι από όσους βγαίνουν αυτοί με τις λιγότερες αργίες
+    const s2 = { ...s, people: s.people.map(p => (!dn.has(p.id) && p.room! >= 5 ? { ...p, room: 1 } : p)) };
+    const used2 = new Set(Object.values(fillDay(s2, SAT).guards[SAT]));
+    for (const id of dn) expect(used2.has(id)).toBe(true);
   });
   it('ΣΤΕΠ: σε καμία υπηρεσία, ούτε άοπλη (Michael, 13/10)', () => {
     const s = declare(fakeState(20), 'STEP', 2, D);

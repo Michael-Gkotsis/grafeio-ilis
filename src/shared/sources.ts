@@ -10,7 +10,7 @@ import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { isHol, postBy } from './rules';
 import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
-import { siCombos } from './si';
+import { parseSi, siCombos, siLabel } from './si';
 import { cellTime } from './hours';
 export { OUT_NOTE };
 
@@ -795,7 +795,7 @@ export function titleSpans(kind: ListKind, sheet: RawSheet, b: SourceBinding): {
 // Λίστες επιλογής (dropdown) για βαθμό και Ο/Σ στις γραμμές του πίνακα και στις κενές από κάτω του (ως τον επόμενο
 // πίνακα ή 200 γραμμές). Η βασική λίστα και όσες άλλες τιμές έχει ήδη η στήλη· ο Excel δέχεται και άλλη τιμή.
 // Με τις Λίστες των Ρυθμίσεων (lists): ό,τι πρόσθεσες μπαίνει και στο dropdown, ό,τι έκρυψες όχι
-// και για τη Σ.Ι.: οι συνδυασμοί του πίνακα Σ.Ι. (Ι1 … Ι3 ΜΕ ΟΠΛΟ, Ι3 ΑΟΠΛΟ, Ι4 …)
+// και για τη Σ.Ι.: οι συνδυασμοί του πίνακα Σ.Ι. (Ι1 … Ι3 ΜΕ ΟΠΛΟ, Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4 …)
 export const LIST_FIELDS: [string, ListId | 'si', string][] = [['rank', 'soldierRanks', 'Βαθμός'], ['spec', 'specs', 'Ο/Σ'], ['si', 'si', 'Σ.Ι.']];
 const fieldList = (lists: UserLists | undefined, id: ListId | 'si') => (id === 'si' ? siCombos(lists?.si) : listOf(lists, id));
 export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, lists?: UserLists): { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] {
@@ -807,7 +807,9 @@ export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, l
   const out: { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] = [];
   for (const [k, id, what] of LIST_FIELDS) {
     const c = b.cols[k]; if (c == null) continue;
-    const seen = scan.records.map(x => cellText(x.v[k])).filter(v => !/[,"]/.test(v));
+    // Σ.Ι.: ό,τι είναι ήδη στη λίστα με άλλο όνομα (π.χ. το παλιό «Ι3 ΑΟΠΛΟ» = «Ι3 ΧΩΡΙΣ ΟΠΛΟ») δεν μπαίνει δεύτερη φορά
+    const known = (v: string) => { if (id !== 'si') return false; const x = parseSi(v, lists?.si); return !!x?.ok && fieldList(lists, id).includes(siLabel(x.base, x.sub)); };
+    const seen = scan.records.map(x => cellText(x.v[k])).filter(v => !/[,"]/.test(v) && !known(v));
     // ο Excel δέχεται ως 255 χαρακτήρες στη λίστα: οι σπάνιες τιμές από το τέλος φεύγουν
     const base = fieldList(lists, id); const items = optionsOf(base, seen); while (items.join(',').length > 250) items.pop();
     out.push({ c, r1, r2, items, what, base });
