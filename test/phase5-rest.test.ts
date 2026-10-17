@@ -38,14 +38,14 @@ describe('R4: δήλωση με ημερομηνία πριν από σήμερ�
 });
 
 describe('R9: ΔΝ χωρίς δικαίωμα', () => {
-  it('✕ στον προέλεγχο των εξοδούχων, μόνο όταν κάποιος έχει σημειωμένο δικαίωμα', () => {
+  it('⚠ (όχι ✕, Michael 17/10) στον προέλεγχο των εξοδούχων, μόνο όταν κάποιος έχει σημειωμένο δικαίωμα', () => {
     const D = '2026-10-17';
     const st: Status[] = [{ id: 'a', pid: 2, type: 'DN', from: D, to: D }, { id: 'b', pid: 3, type: 'DN', from: D, to: D }];
     const s0 = { ...fakeState(5), statuses: st };
     expect(outsChecks(s0, D).filter(c => /δικαίωμα ΔΝ/.test(c.text))).toEqual([]);
     const s1 = { ...s0, people: s0.people.map(p => (p.id === 2 ? { ...p, dn: true } : p)) };
     const e = outsChecks(s1, D).filter(c => /δικαίωμα ΔΝ/.test(c.text));
-    expect(e).toHaveLength(1); expect(e[0].level).toBe('err'); expect(e[0].text).toMatch(new RegExp(s1.people[2].last));
+    expect(e).toHaveLength(1); expect(e[0].level).toBe('warn'); expect(e[0].text).toMatch(new RegExp(s1.people[2].last));
   });
 });
 

@@ -131,7 +131,7 @@ export function GuardScreen() {
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
   const why = useMemo(() => whyAll(state, date), [state.guards, state.dutyLog, state.people, state.settings, state.baseline, state.statuses, state.caps, state.rules, date]);
-  const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string; swapWith?: string } | null>(null);
+  const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string; swapWith?: string; move?: string } | null>(null);
   const [skipped, setSkipped] = useState<Record<string, number[]>>({});
   useEffect(() => setSkipped({}), [date]);
   // Παλιές μέρες κλειδωμένες, για να μην αλλάξει κατά λάθος ο έλεγχος υπηρεσιών· ξεκλειδώνουν για διόρθωση
@@ -142,22 +142,21 @@ export function GuardScreen() {
   // κάρτες που κλείνουν: πλήρη μπλοκ κλειστά, με κενά ανοιχτά. Ό,τι αλλάξεις με το χέρι μένει όσο δουλεύεις.
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const flip = (id: string, open: boolean) => setFold(f => ({ ...f, [id]: !open }));
-  const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string) => {
+  const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string, move?: string) => {
     const x = posts.find(q => q.k === k)!;
-    if (await run({ t: 'assign', date, k, pid, force: reason }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + (instead ? ' αντί για ' + shortName(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoMark()] });
+    if (await run({ t: 'assign', date, k, pid, force: reason, move }, false)) toast({ text: (pid ? shortName(pm.get(pid)!) + (instead ? ' αντί για ' + shortName(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoMark()] });
   }, [date, printed, state]);
-  // Κανόνας που παρακάμπτεται μόνο με αιτιολογία (ανάπαυση, ΣΚ, δυνατότητα)· καταστάσεις και «ήδη σε θέση» ποτέ
+  // Τίποτα δεν απαγορεύεται πλήρως (Michael, 17/10): κατάσταση (ΕΥ, άδεια…), ανάπαυση, ΣΚ, δυνατότητα περνούν με αιτιολογία.
+  // Ήδη σε άλλη θέση: ανταλλαγή αν η θέση μας έχει κάποιον, αλλιώς μετακίνηση (ή και στις δύο, με αιτία).
   const blocked = useCallback((k: string, p: Person, why: string) => {
-    const x = posts.find(q => q.k === k)!;
     const other = postOf(state, date, p.id, k);
-    // ήδη σε άλλη θέση και η θέση μας έχει κάποιον: ανταλλαγή των δύο
-    if (other && g[k] && !dutyBlock(state.statuses, date, p.id, x, state.settings.lists)) {
+    if (other && g[k]) {
       const chk = swapCheck(state, date, k, other.k);
       if (chk.hard) { toast({ text: 'Δεν γίνεται ανταλλαγή: ' + chk.hard }); return; }
       if (chk.soft) { setForce({ k, p, why: chk.soft, reason: '', swapWith: other.k }); return; }
       swap(k, other.k); return;
     }
-    if (dutyBlock(state.statuses, date, p.id, x, state.settings.lists) || other) { toast({ text: shortName(p) + ' δεν μπαίνει: ' + why }); return; }
+    if (other) { setForce({ k, p, why: 'Είναι ήδη ' + postTxt(other) + '.', reason: '', move: other.k }); return; }
     setForce({ k, p, why, reason: '' });
   }, [date, state]);
   const swap = useCallback(async (a: string, b: string, reason?: string) => {
@@ -292,10 +291,12 @@ export function GuardScreen() {
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
     ${prof != null && html`<${DutyProfileDialog} pid=${prof < 0 ? null : prof} onClose=${() => setProf(null)}/>`}
     ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
-    ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
-      footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//><${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); if (f.swapWith) await swap(f.k, f.swapWith, f.reason.trim()); else await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>${force.swapWith ? 'Ανταλλαγή' : 'Βάλ\' τον'}<//>`}>
-      <p style=${{ marginTop: 0 }}>Ο κανόνας λέει όχι. Αν έγινε αλλαγή (π.χ. ΣΚ, άλλος αρρώστησε), γράψε γιατί. Γράφεται στο Ιστορικό και η θέση φαίνεται με ⚠.</p>
-      <div className="field"><label className="field__label" htmlFor="frc">Αιτία *</label><input id="frc" className="ui-input" data-autofocus="" placeholder="π.χ. αλλαγή με συνάδελφο, εντολή λοχία" value=${force.reason} onChange=${(e: any) => setForce({ ...force, reason: e.target.value })}/></div>
+    ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : force.move ? shortName(force.p) + ' είναι ήδη σε άλλη θέση' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
+      footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//>${force.move
+        ? html`<${Button} variant="outline" disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }} data-tip="Μένει και στην άλλη θέση">Και στις δύο<//><${Button} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim() || undefined, f.move); }}>Μετακίνησέ τον εδώ<//>`
+        : html`<${Button} disabled=${!force.reason.trim()} onClick=${async () => { const f = force; setForce(null); if (f.swapWith) await swap(f.k, f.swapWith, f.reason.trim()); else await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }}>${force.swapWith ? 'Ανταλλαγή' : 'Βάλ\' τον'}<//>`}`}>
+      <p style=${{ marginTop: 0 }}>${force.move ? 'Μετακίνησέ τον εδώ (η άλλη θέση μένει κενή) ή βάλ\' τον και στις δύο, με αιτία.' : 'Ο κανόνας λέει όχι. Αν χρειάζεται (π.χ. ΣΚ, άλλος αρρώστησε), γράψε γιατί. Γράφεται στο Ιστορικό και η θέση φαίνεται με ⚠.'}</p>
+      <div className="field"><label className="field__label" htmlFor="frc">${force.move ? 'Αιτία (μόνο για «Και στις δύο» ή αν ο κανόνας λέει όχι)' : 'Αιτία *'}</label><input id="frc" className="ui-input" data-autofocus="" placeholder="π.χ. αλλαγή με συνάδελφο, εντολή λοχία" value=${force.reason} onChange=${(e: any) => setForce({ ...force, reason: e.target.value })}/></div>
     <//>`}
   </div>`;
 }
@@ -343,11 +344,12 @@ export function AddBlockDialog({ onClose }: P) {
 /* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
 const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
 const roomsTxt = (rs: number[]) => rs[0] + '–' + rs[rs.length - 1];
+// Όποιος δεν βγαίνει σύμφωνα με τους κανόνες (υπηρεσία, ποινή, ΕΥ…) ή δεν έχει δικαίωμα ΔΝ επιλέγεται κι αυτός, με
+// προειδοποίηση· στην αποθήκευση ζητείται επιβεβαίωση (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
 const OutRow = memo(function OutRow({ p, style, reason, value, changed, onSet, onOpen, noDn }: P) {
   return html`<div className=${cx('orow', changed && 'is-changed', reason && 'is-blocked')} style=${style}>
-    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unitOf(p)}${p.dn ? ' · δικαίωμα ΔΝ' : ''}</small></div>
-    ${reason ? html`<${Badge} tone="outline" data-tip="Δεν βγαίνει έξοδο σύμφωνα με τους κανόνες">✕ ${reason}<//>` :
-    html`<div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${OUT_OPTS.map(o => { const off = o.value === 'DN' && noDn && value !== 'DN'; return html`<button key=${o.value} type="button" disabled=${off} data-tip=${off ? 'Δεν έχει δικαίωμα ΔΝ (ορίζεται στην καρτέλα του)' : undefined} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}</button>`; })}</div>`}
+    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unitOf(p)}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${reason && html` · <span className="orow__warn" data-tip="Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">⚠ ${reason}</span>`}</small></div>
+    <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${OUT_OPTS.map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : o.value === 'DN' && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; return html`<button key=${o.value} type="button" className=${warn ? 'is-warn' : undefined} data-tip=${warn} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
   </div>`;
 });
 export function OutsScreen() {
@@ -398,7 +400,10 @@ export function OutsScreen() {
   const height = useViewportHeight(mobile ? 380 : 330);
   const c0 = strengthOf(state, date);
   const awayDelta = changes.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
-  const save = async () => { if (await run({ t: 'outs', date, changes }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + changes.length + ' αλλαγές)', actions: [undoMark()] }); } };
+  // όσοι βγαίνουν παρά τους κανόνες ή με ΔΝ χωρίς δικαίωμα: φαίνονται στο «Τι θα αλλάξει» και η αποθήκευση τους επιβεβαιώνει
+  const pmO = useMemo(() => personMap(state.people), [state.people]);
+  const warns = changes.filter(c => c.to && (reasons[c.pid] || (c.to === 'DN' && dnSet && !pmO.get(c.pid)?.dn))).map(c => ({ pid: c.pid, why: reasons[c.pid] || 'χωρίς δικαίωμα ΔΝ' }));
+  const save = async () => { if (await run({ t: 'outs', date, changes, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + changes.length + ' αλλαγές)', actions: [undoMark()] }); } };
   const rh = useRowH(mobile ? 96 : 52, mobile ? 96 : 44);
   // Βραδινή εκπαίδευση (Michael, 13/10): η μέρα δεν μετρά στη στέρηση εξόδου κανενός· η λήξη τους μετακινείται μόνη της
   const night = !!state.nightTraining?.[date];
@@ -411,7 +416,7 @@ export function OutsScreen() {
   };
   const NIGHT_TIP = 'Όταν έχει βραδινή εκπαίδευση, η μέρα δεν μετρά στη στέρηση εξόδου (όπως και οι μέρες με υπηρεσία): η λήξη μετακινείται μία μέρα. Δεν αλλάζει τους εξοδούχους.';
   return html`<div>
-    <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή δεν επιλέγονται."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
+    <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή έχουν ⚠: βγαίνουν μόνο με επιβεβαίωση."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b> · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
       ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}</div>
@@ -421,7 +426,8 @@ export function OutsScreen() {
     <div className="toolbar"><${Strip} className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι', people.length], ['can', 'Μπορούν να βγουν', people.length - blockedN], ['cant', 'Δεν μπορούν', blockedN], ['sel', 'Επιλεγμένοι', cnt('OUT') + cnt('DN')]].map(([k, l, n]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k as string)}>${l}<span className="cnt">${n}</span></button>`)}<//><${ActiveFilter} parts=${[room != null && 'Θάλαμος ' + room, filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); setRoom(null); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="toolbar"><${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm" disabled=${changes.length > 0}/>${changes.length > 0 && html`<span className="note">Αποθήκευσε πρώτα τις αλλαγές.</span>`}<${TemplateNote} ids=${['outs']}/></div>
     <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date + '|' + room + '|' + sort} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open} noDn=${dnSet && !p.dn}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
-    ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
+    ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>${warns.length ? 'Αποθήκευση παρά τους κανόνες' : 'Αποθήκευση'}<//>`}>
+      ${warns.length > 0 && html`<${Alert} tone="warn"><span><b>Παρά τους κανόνες:</b>${warns.map(w => html`<span key=${w.pid}><br/>${shortName(pmO.get(w.pid)!)}: ${w.why}</span>`)}<br/>Με την αποθήκευση το επιβεβαιώνεις.</span><//>`}
       <ul className="hist">${changes.map(c => html`<li key=${c.pid}><b>${shortName(personMap(state.people).get(c.pid)!)}</b> <span className="muted">${c.from ? TYPES[c.from].label : 'Μένει'} →</span> ${c.to ? html`<${Badge} tone=${TYPES[c.to].tone}>${TYPES[c.to].label}<//>` : 'Μένει'}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>
     <//>`}

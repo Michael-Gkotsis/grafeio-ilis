@@ -38,7 +38,9 @@ describe('Κ-Υ1 ένοπλες θέσεις', () => {
     expect(guardUnavailable(s, D, 2, 'th5')).toBeNull();
     expect(run(s, { t: 'assign', date: D, k: 'th5', pid: 2 }).guards[D].th5).toBe(2);
     expect(guardUnavailable(s, D, 2, 'mg1')).toMatch(/Όχι μαγειρεία: ΕΑ/);
-    expect(() => run(s, { t: 'assign', date: D, k: 'mg1', pid: 2, force: 'δοκιμή' })).toThrow(/Όχι μαγειρεία/);
+    // κανένα πλήρες μπλοκάρισμα (Michael, 17/10): χωρίς αιτία όχι, με αιτία ναι
+    expect(() => run(s, { t: 'assign', date: D, k: 'mg1', pid: 2 })).toThrow(/Όχι μαγειρεία/);
+    expect(run(s, { t: 'assign', date: D, k: 'mg1', pid: 2, force: 'δοκιμή' }).guards[D].mg1).toBe(2);
   });
   it('ΕΥ: ούτε σε άοπλη', () => {
     const s = declare(fakeState(20), 'EY', 2, D);
@@ -91,9 +93,13 @@ describe('Κ-Υ5, Κ-Υ6 ανάπαυση και ΣΚ', () => {
     expect(r.state.guards[addDays(D, 1)].mg2).toBe(4);
     expect(r.text).toMatch(/Αιτία: δεν φτάνει ο κόσμος/);
   });
-  it('διπλοθεσία δεν παρακάμπτεται ποτέ', () => {
+  it('διπλοθεσία μόνο με αιτία· «μετακίνηση» αδειάζει την παλιά θέση', () => {
     const s = run(fakeState(20), { t: 'assign', date: D, k: 'mg1', pid: 4 });
-    expect(() => run(s, { t: 'assign', date: D, k: 'mg2', pid: 4, force: 'x' })).toThrow(/Ήδη/);
+    expect(() => run(s, { t: 'assign', date: D, k: 'mg2', pid: 4 })).toThrow(/ήδη/);
+    const both = run(s, { t: 'assign', date: D, k: 'mg2', pid: 4, force: 'λίγοι διαθέσιμοι' });
+    expect(both.guards[D].mg1).toBe(4); expect(both.guards[D].mg2).toBe(4);
+    const moved = run(s, { t: 'assign', date: D, k: 'mg2', pid: 4, move: 'mg1' });
+    expect(moved.guards[D].mg1).toBeFalsy(); expect(moved.guards[D].mg2).toBe(4);
   });
 });
 
@@ -211,20 +217,23 @@ describe('προέλεγχος', () => {
     const s = fakeState(40); const full = { ...s, guards: fillDay(s, D).guards };
     expect(preflight('froura', full, D)).toEqual([]);
   });
-  it('ΦΡΟΥΡΑ: άτομο σε δύο θέσεις ή με ιατρικό σε ένοπλη = ✕', () => {
+  it('ΦΡΟΥΡΑ: άτομο σε δύο θέσεις ή με ιατρικό σε ένοπλη = ⚠ (μπορεί να μπήκε με αιτία), όχι ✕', () => {
     const s = armed(fakeState(40));
     const twice = { ...s, guards: { [D]: { th1: 2, th2: 2 } } };
-    expect(hasErrors(preflight('froura', twice, D))).toBe(true);
+    expect(hasErrors(preflight('froura', twice, D))).toBe(false);
+    expect(preflight('froura', twice, D).some(c => /δύο θέσεις/.test(c.text))).toBe(true);
     const sick = declare({ ...s, guards: { [D]: { th1: 3 } } }, 'EA', 3, D);
     // η δήλωση ΕΑ το βγάζει μόνη της από τη θέση· αν μπει με το χέρι στη βάση, ο προέλεγχος το πιάνει
     expect(sick.guards[D].th1).toBeUndefined();
-    expect(hasErrors(preflight('froura', { ...sick, guards: { [D]: { th1: 3 } } }, D))).toBe(true);
+    expect(hasErrors(preflight('froura', { ...sick, guards: { [D]: { th1: 3 } } }, D))).toBe(false);
+    expect(preflight('froura', { ...sick, guards: { [D]: { th1: 3 } } }, D).some(c => c.level === 'warn' && /ΕΑ/.test(c.text))).toBe(true);
   });
-  it('Εξοδούχοι: τιμωρημένος εξοδούχος = ✕', () => {
+  it('Εξοδούχοι: τιμωρημένος εξοδούχος = ⚠, όχι ✕', () => {
     let s = run(fakeState(20), { t: 'outs', date: D, changes: [{ pid: 5, from: null, to: 'OUT' }] });
     // η δήλωση ποινής ακυρώνει μόνη της την έξοδο· εδώ η ποινή ήρθε αλλιώς (π.χ. από το Excel)
     s = { ...s, statuses: [...s.statuses, { id: 'pun5', pid: 5, type: 'PUN', from: D, to: D, kind: 'Κράτηση' }] };
-    expect(hasErrors(preflight('outs', s, D))).toBe(true);
+    expect(hasErrors(preflight('outs', s, D))).toBe(false);
+    expect(preflight('outs', s, D).some(c => /δεν βγαίνει/.test(c.text))).toBe(true);
   });
   it('ΗΚΑΙ: τα αθροίσματα συμφωνούν και κανείς δεν μετριέται δύο φορές', () => {
     let s = fakeState(40);
@@ -401,8 +410,9 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
     expect(s.guards[D].th1).toBe(b); expect(s.guards[D].mg1).toBe(a);
     // ΕΟ δεν πάει σε μαγειρεία ούτε με ανταλλαγή
     s = declare(s, 'EO', b, D);
-    expect(swapCheck(s, D, 'th1', 'mg1').hard).toMatch(/Όχι μαγειρεία/);
-    expect(() => run(s, { t: 'swapPosts', date: D, a: 'th1', b: 'mg1', force: 'x' })).toThrow(/ανταλλαγή/);
+    expect(swapCheck(s, D, 'th1', 'mg1').soft).toMatch(/Όχι μαγειρεία/);   // μόνο με αιτιολογία, όχι απαγόρευση (Michael, 17/10)
+    expect(() => run(s, { t: 'swapPosts', date: D, a: 'th1', b: 'mg1' })).toThrow(/ανταλλαγή/);
+    expect(run(s, { t: 'swapPosts', date: D, a: 'th1', b: 'mg1', force: 'εντολή λοχία' }).guards[D].mg1).toBe(b);
   });
   it('Πόστο: καμία υπηρεσία εκτός από Λ/Υ και Δ/Υ', () => {
     const s = fakeState(20); // ο 6 έχει πόστο

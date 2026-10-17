@@ -34,11 +34,12 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     const pid = g[x.k]; if (!pid) continue;
     const p = pm.get(pid); const name = p ? shortName(p) : 'άγνωστος';
     if (!p || !p.active) { out.push({ level: 'err', text: name + ' είναι εκτός δύναμης αλλά είναι ' + x.label, go: 'guard' }); continue; }
-    if (seen.has(pid)) out.push({ level: 'err', text: name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
+    // δύο θέσεις, κατάσταση, έξοδος: ⚠, όχι ✕· μπορεί να το επέλεξε ο χρήστης με αιτιολογία (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
+    if (seen.has(pid)) out.push({ level: 'warn', text: name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
     seen.set(pid, x.label);
     const hard = dutyBlock(s.statuses, date, pid, x, s.settings.lists);
-    if (hard) out.push({ level: 'err', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
-    else if (outOn(s, pid, date)) out.push({ level: 'err', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
+    if (hard) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
+    else if (outOn(s, pid, date)) out.push({ level: 'warn', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
     const sl = seatlessOn(s, date, pid);
     if (sl) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): την ίδια μέρα και ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel), δύο υπηρεσίες', go: 'guard' });
     const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x, s.settings.lists) || statusWarn(s, date, pid);
@@ -79,12 +80,12 @@ export function outsChecks(s: AppState, date: ISODate): Check[] {
   if (!outs.length) out.push({ level: 'warn', text: 'Κανένας εξοδούχος για ' + dm(date) + ': θα βγουν όλοι παραμένοντες.', go: 'outs' });
   for (const { p, st } of outs) {
     const r = outBlock(s, date, p.id);
-    if (r) out.push({ level: 'err', text: shortName(p) + ' είναι εξοδούχος αλλά δεν βγαίνει: ' + r, go: 'outs' });
+    if (r) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος αλλά δεν βγαίνει: ' + r, go: 'outs' });
     const away = statusesOn(s.statuses, p.id, date).find(x => x !== st && TYPES[x.type].away && TYPES[x.type].cat !== 'out');
-    if (away) out.push({ level: 'err', text: shortName(p) + ' είναι εξοδούχος και ' + TYPES[away.type].long.toLowerCase(), go: 'outs' });
+    if (away) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος και ' + TYPES[away.type].long.toLowerCase(), go: 'outs' });
   }
   // ΔΝ χωρίς δικαίωμα: μόνο αφού έχει σημειωθεί δικαίωμα ΔΝ σε έστω έναν (όπως στους Εξοδούχους)
-  if (s.people.some(p => p.dn)) for (const { p, st } of outs) if (st!.type === 'DN' && !p.dn) out.push({ level: 'err', text: shortName(p) + ': ΔΝ χωρίς δικαίωμα ΔΝ (βάλ\' το στην καρτέλα του ή άλλαξέ το σε έξοδο)', go: 'outs' });
+  if (s.people.some(p => p.dn)) for (const { p, st } of outs) if (st!.type === 'DN' && !p.dn) out.push({ level: 'warn', text: shortName(p) + ': ΔΝ χωρίς δικαίωμα ΔΝ (βάλ\' το στην καρτέλα του ή άλλαξέ το σε έξοδο)', go: 'outs' });
   const rooms = outRoomsOn(s.rules, date);
   if (rooms) {
     const wrong = outs.filter(x => x.p.room != null && !rooms.includes(x.p.room) && x.st!.type !== ('DN' as TypeKey));

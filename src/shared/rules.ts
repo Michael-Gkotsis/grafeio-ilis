@@ -622,9 +622,10 @@ export function swapCheck(s: AppState, date: ISODate, a: string, b: string): { h
   if (!pa || !pb || !A || !B) return { hard: 'Η ανταλλαγή θέλει δύο κατειλημμένες θέσεις', soft: null };
   const work: AppState = { ...s, guards: { ...s.guards, [date]: { ...g, [a]: pb, [b]: pa } } };
   const pm = personMap(s.people); const nm = (id: number) => (pm.get(id) ? shortName(pm.get(id)!) : '?');
-  const hard = (dutyBlock(s.statuses, date, pb, A, s.settings.lists) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A, s.settings.lists)) || (dutyBlock(s.statuses, date, pa, B, s.settings.lists) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B, s.settings.lists)) || null;
+  // καμία κατάσταση δεν απαγορεύει πλήρως (Michael, 17/10): ΕΥ, άδεια κ.λπ. περνούν με αιτιολογία, όπως ο κανόνας
+  const st = (dutyBlock(s.statuses, date, pb, A, s.settings.lists) && nm(pb) + ': ' + dutyBlock(s.statuses, date, pb, A, s.settings.lists)) || (dutyBlock(s.statuses, date, pa, B, s.settings.lists) && nm(pa) + ': ' + dutyBlock(s.statuses, date, pa, B, s.settings.lists)) || null;
   const sa = capBlock(s, date, pb, A) || ruleBlock(work, date, pb, undefined, a), sb = capBlock(s, date, pa, B) || ruleBlock(work, date, pa, undefined, b);
-  return { hard, soft: (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
+  return { hard: null, soft: st || (sa && nm(pb) + ': ' + sa) || (sb && nm(pa) + ': ' + sb) || null };
 }
 // «Γιατί αυτός;»: μία γραμμή αιτιολόγησης για όποιον είναι σε μια θέση (έρευνα §3.1)
 // Μέσοι όροι αργιών και υπηρεσιών όλων για μια μέρα: μία φορά για όλες τις θέσεις της μέρας, όχι μία ανά θέση
@@ -673,7 +674,8 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
 // unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean }
+// force: ο χρήστης είδε ότι κάποιος δεν βγαίνει έξοδο (ποινή, υπηρεσία…) και το δήλωσε παρ' όλα αυτά (Michael, 17/10)
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean }
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
