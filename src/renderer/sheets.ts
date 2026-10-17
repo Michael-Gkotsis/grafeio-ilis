@@ -6,6 +6,7 @@ import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
 import { byName, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
+import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
 
@@ -113,7 +114,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
     [E('', '', 14)],
     [E('Όργανα υπηρεσίας', 'bold', 6), E('Αποφάσεις Διοικητή', 'ttl', 8)],
     [E('Αξιωματικοί:', '', 6), ...L(1, 'ΕΓΓΡΑΦΕΣ', egr)],
-    [E(tx.off || '', 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', dia)],
+    [E(hkOffText(s, date), 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', dia)],
     [E('Υπαξιωματικοί:', '', 6), ...L(3, 'ΑΔΕΙΕΣ', leaves)],
     [E(g.ly ? 'Λ/Υ: ' + name(g.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns)],
     [E(g.dy ? 'Δ/Υ: ' + name(g.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],

@@ -4,7 +4,7 @@ import { apply, type Command } from '../src/shared/commands';
 import { hkaiCounts, HK_A, HK_K } from '../src/shared/rules';
 import { CADRE_ABS, type AppState } from '../src/shared/domain';
 import { cadreAbsOf } from '../src/shared/ranks';
-import { cadreClash, cadreMatch, cadreSearch, cadreSheets, cadreStatusOn } from '../src/shared/cadre';
+import { cadreClash, cadreMatch, cadreSearch, cadreSheets, cadreStatusOn, hkOffText } from '../src/shared/cadre';
 import { cadreLists } from '../src/main/excel';
 import { fakeState } from './fixtures';
 import ExcelJS from 'exceljs';
@@ -90,5 +90,19 @@ describe('Στελέχη: καταστάσεις της ΗΚΑΙ', () => {
     const ws = wb.getWorksheet('ΣΤΕΛΕΧΗ')!;
     expect(ws.getRow(4).getCell(8).value).toBe('ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ');
     expect(wb.getWorksheet('ΚΑΤΑΣΤΑΣΕΙΣ')!.getRow(4).getCell(9).value).toBe('ΓΟΝΙΚΗ');
+  });
+});
+
+describe('ΗΚΑΙ: αξιωματικός υπηρεσίας από τα Στελέχη', () => {
+  it('αξιωματικός με «Υπηρεσία» τη μέρα, όχι λοχίας· ό,τι γράφτηκε με το χέρι κερδίζει', () => {
+    let s = withCadre(); const [a, b] = s.cadreList;
+    expect(hkOffText(s, D)).toBe('');
+    s = run(s, { t: 'addCadreAbs', abs: { cid: a.id, kind: 'yp', from: D, to: D } });
+    expect(hkOffText(s, D)).toBe('');
+    s = run(s, { t: 'addCadreAbs', abs: { cid: b.id, kind: 'yp', from: D, to: D } });
+    expect(hkOffText(s, D)).toBe('ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ ΓΙΑΝΝΗΣ');
+    expect(hkOffText(s, '2026-10-18')).toBe('');
+    s = { ...s, hkaiManual: { [D]: { cells: {}, text: { off: 'ΑΝΘΛΓΟΣ ΑΛΛΟΣ' } } } };
+    expect(hkOffText(s, D)).toBe('ΑΝΘΛΓΟΣ ΑΛΛΟΣ');
   });
 });
