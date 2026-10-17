@@ -104,6 +104,7 @@ export interface Status {
   open?: boolean;     // χωρίς λήξη: στο Excel το «έως» είναι κενό· το «to» πάει μαζί με τη σημερινή μέρα (X4)
   fromTime?: string;  // άδεια: ώρα αναχώρησης την πρώτη μέρα (ΩΩ:ΛΛ), shared/hours.ts
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
+  req?: string;       // άδεια που εγκρίθηκε από αίτηση της ΗΚΑΙ (PersonRequest.id)
   days?: number;      // στέρηση εξόδου: ημέρες ποινής· το «to» μετακινείται για κάθε μέρα με υπηρεσία ή βραδινή εκπαίδευση (shared/punish.ts)
 }
 // Οι ποινές ισχύουν αμέσως, χωρίς έγκριση (Michael, 17/10): όσες είχαν μείνει «αιτείται» από παλιότερη έκδοση ισχύουν κι αυτές.
@@ -307,7 +308,11 @@ export interface AppState {
 export interface SeatlessDuty { pid: number; kind: DutyKind }
 export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // Αίτηση στρατιώτη για την ΗΚΑΙ: «Ο ΣΤΡ … αιτείται {text}.»
-export interface PersonRequest { id: string; pid: number; date: ISODate; text: string }
+// Αίτηση στην ΗΚΑΙ (5. ΑΙΤΗΣΕΙΣ). Αίτηση άδειας (leave): ο Διοικητής την εγκρίνει ή την απορρίπτει· με την έγκριση γίνεται άδεια
+// (Status με req = το id της αίτησης) και γράφεται στο 3. ΑΔΕΙΕΣ της ΗΚΑΙ της μέρας της έγκρισης (Michael, 17/10).
+// text: ό,τι αιτείται· στην άδεια η αιτιολόγηση (μπορεί να είναι κενή)
+export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate }
+export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
 // Στελέχη (από την εφαρμογή του άλλου γραφέα): ονόματα, θέση, απουσίες, που ταΐζουν και την ΗΚΑΙ
 export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; phone?: string; role?: string; active: boolean }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }

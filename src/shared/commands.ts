@@ -23,6 +23,8 @@ export type Command =
   | { t: 'addRequest'; req: Omit<PersonRequest, 'id'> }
   | { t: 'updateRequest'; req: PersonRequest }
   | { t: 'deleteRequest'; id: string }
+  // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
+  | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string }
@@ -190,20 +192,50 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
-      const text = reqText(c.req.text); if (!text) throw new Error('Γράψε τι αιτείται');
+      const lv = c.req.leave;
+      const text = reqText(c.req.text || ''); if (!text && !lv) throw new Error('Γράψε τι αιτείται');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(c.req.date || '')) throw new Error('Διάλεξε ημερομηνία για την αίτηση');
+      if (lv && (!/^\d{4}-\d{2}-\d{2}$/.test(lv.from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(lv.to || ''))) throw new Error('Διάλεξε από πότε έως πότε είναι η άδεια');
+      if (lv && lv.to < lv.from) throw new Error('Το «έως» είναι πριν από το «από»');
       const old = c.t === 'updateRequest' ? s.requests.find(x => x.id === c.req.id) : undefined;
       if (c.t === 'updateRequest' && !old) throw new Error('Δεν βρέθηκε η αίτηση');
+      if (old?.decision) throw new Error('Η αίτηση έχει ήδη ' + (old.decision === 'ok' ? 'εγκριθεί' : 'απορριφθεί') + '. Αναίρεσε πρώτα την απόφαση.');
       const req: PersonRequest = { id: old?.id || 'r' + ctx.newId(), pid: p.id, date: c.req.date, text };
+      if (lv) req.leave = { type: lv.type === 'HON' ? 'HON' : 'LEAVE', ...(lv.type !== 'HON' && lv.kind ? { kind: lv.kind } : {}), from: lv.from, to: lv.to };
+      const same = (x: PersonRequest) => x.pid === req.pid && x.date === req.date && x.text === req.text && JSON.stringify(x.leave || null) === JSON.stringify(req.leave || null);
       // διπλό κλικ στην αποθήκευση: η ίδια αίτηση δεν γράφεται δεύτερη φορά
-      if (!old && s.requests.some(x => x.pid === req.pid && x.date === req.date && x.text === req.text)) throw new Error(shortName(p) + ' έχει ήδη αυτή την αίτηση στις ' + dm(req.date));
+      if (!old && s.requests.some(same)) throw new Error(shortName(p) + ' έχει ήδη αυτή την αίτηση στις ' + dm(req.date));
       const requests = old ? s.requests.map(x => (x === old ? req : x)) : [...s.requests, req];
-      return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + text + ' (' + dm(req.date) + ')', files: ['ΗΚΑΙ'] };
+      const what = req.leave ? 'άδεια ' + range(req.leave.from, req.leave.to) + (text ? ', ' + text : '') : text;
+      return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + what + ' (' + dm(req.date) + ')', files: ['ΗΚΑΙ'] };
     }
     case 'deleteRequest': {
       const r = s.requests.find(x => x.id === c.id); if (!r) throw new Error('Δεν βρέθηκε η αίτηση');
       const p = pm.get(r.pid);
-      return { state: { ...s, requests: s.requests.filter(x => x !== r) }, text: 'Διαγράφηκε αίτηση' + (p ? ': ' + shortName(p) : '') + ' – ' + r.text, files: ['ΗΚΑΙ'] };
+      // εγκεκριμένη αίτηση άδειας: φεύγει μαζί και η άδεια που έγινε από αυτή
+      const st = r.sid ? s.statuses.find(x => x.id === r.sid) : undefined;
+      return { state: { ...s, requests: s.requests.filter(x => x !== r), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Διαγράφηκε αίτηση' + (p ? ': ' + shortName(p) : '') + ' – ' + (r.leave ? 'άδεια ' + range(r.leave.from, r.leave.to) : r.text) + (st ? ', μαζί με την άδεια' : ''), files: st ? ['ΗΚΑΙ', 'Άδειες'] : ['ΗΚΑΙ'] };
+    }
+    case 'decideRequest': {
+      const r = s.requests.find(x => x.id === c.id); if (!r || !r.leave) throw new Error('Δεν βρέθηκε η αίτηση άδειας');
+      const p = pm.get(r.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const lv = r.leave;
+      if (c.ok === null) {
+        const st = r.sid ? s.statuses.find(x => x.id === r.sid) : undefined;
+        const nr: PersonRequest = { ...r }; delete nr.decision; delete nr.decided; delete nr.sid;
+        return { state: { ...s, requests: s.requests.map(x => (x === r ? nr : x)), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Αναίρεση απόφασης για την αίτηση άδειας του ' + shortName(p) + (st ? ': η άδεια ' + range(st.from, st.to) + ' βγήκε' : ''), files: st ? ['ΗΚΑΙ', 'Άδειες'] : ['ΗΚΑΙ'] };
+      }
+      if (r.decision) throw new Error('Η αίτηση έχει ήδη ' + (r.decision === 'ok' ? 'εγκριθεί' : 'απορριφθεί'));
+      // η απόφαση γράφεται στην ΗΚΑΙ της μέρας που πατήθηκε (όχι πριν από την ίδια την αίτηση)
+      const decided = r.date > ctx.today ? r.date : ctx.today;
+      if (!c.ok) return { state: { ...s, requests: s.requests.map(x => (x === r ? { ...r, decision: 'no' as const, decided } : x)) }, text: 'Απορρίφθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: ['ΗΚΑΙ'] };
+      // εγκρίθηκε: ίδια δήλωση με το «Δήλωσε κατάσταση» (ίδιοι έλεγχοι, βγαίνει από υπηρεσίες και εξόδους)
+      const d = run(s, { t: 'declare', cmd: { type: lv.type, pids: [p.id], from: lv.from, to: lv.to, ...(lv.kind ? { kind: lv.kind } : {}) } }, ctx);
+      const had = new Set(s.statuses.map(x => x.id));
+      const st = d.state.statuses.find(x => !had.has(x.id) && x.pid === p.id && x.type === lv.type && x.from === lv.from);
+      if (!st) throw new Error('Δεν έγινε η άδεια');
+      const statuses = d.state.statuses.map(x => (x === st ? { ...x, req: r.id } : x));
+      return { ...d, state: { ...d.state, statuses, requests: s.requests.map(x => (x === r ? { ...r, decision: 'ok' as const, decided, sid: st.id } : x)) }, text: 'Εγκρίθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [...new Set(['ΗΚΑΙ', ...d.files])] };
     }
     case 'setPunInfo': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || st.type !== 'PUN') throw new Error('Δεν βρέθηκε η ποινή');

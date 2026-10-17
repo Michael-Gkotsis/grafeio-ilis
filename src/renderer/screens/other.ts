@@ -3,16 +3,16 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
+import { ActiveFilter, DateBar, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
 import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, greekHolidays, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
-import { byName } from '../../shared/hkaiText';
+import { byName, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
 import { codeErrors } from '../../shared/codes';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
@@ -21,7 +21,7 @@ import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources
 import { ListsCard } from './lists';
 import { SiCard } from './si';
 import { StatCard } from './stat';
-import { statusLbl } from '../../shared/ranks';
+import { listOf, statusLbl } from '../../shared/ranks';
 type P = any;
 
 export function TodayScreen() {
@@ -69,6 +69,8 @@ export function TodayScreen() {
   // Τι πρέπει να γίνει σήμερα (με αριθμό) και τι απλώς λήγει
   const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
   if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις 14:00', urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
+  const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
+  if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση άδειας περιμένει απάντηση' : waiting.length + ' αιτήσεις άδειας περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkaiDate: today }) });
   if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
   const ends = [
     ...expired.map(s => ({ s, when: 'έληξε, βγήκε μόνο του', tip: 'Αφαιρέθηκε αυτόματα σήμερα' })),
@@ -269,40 +271,64 @@ function HkaiManualCard({ date }: { date: string }) {
   <//>`;
 }
 
-// 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ
+// 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ. Οι αιτήσεις άδειας περιμένουν
+// «Εγκρίθηκε» ή «Απορρίφθηκε»· με την έγκριση γίνονται άδεια και πάνε στο 3. ΑΔΕΙΕΣ της μέρας της έγκρισης.
+export const reqWaiting = (rs: PersonRequest[]) => rs.filter(r => r.leave && !r.decision);
 function RequestsCard({ date }: { date: string }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const [edit, setEdit] = useState<Partial<PersonRequest> | null>(null);
   const pm = useMemo(() => personMap(state.people), [state.people]);
-  const list = useMemo(() => state.requests.filter(r => r.date === date && pm.has(r.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!) || a.id.localeCompare(b.id)), [state.requests, pm, date]);
+  const sorted = (rs: PersonRequest[]) => rs.filter(r => pm.has(r.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!) || a.id.localeCompare(b.id));
+  const list = useMemo(() => sorted(state.requests.filter(r => r.date === date)), [state.requests, pm, date]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // αιτήσεις άδειας άλλων ημερών που ακόμα δεν απαντήθηκαν
+  const other = useMemo(() => sorted(reqWaiting(state.requests).filter(r => r.date !== date)), [state.requests, pm, date]);   // eslint-disable-line react-hooks/exhaustive-deps
   const del = async (r: PersonRequest) => { if (await run({ t: 'deleteRequest', id: r.id }, false)) toast({ text: 'Διαγράφηκε η αίτηση του ' + shortName(pm.get(r.pid)!), actions: [undoMark()] }); };
-  return html`<${Card} title=${'5. Αιτήσεις (' + (date === today ? 'σήμερα' : dm(date)) + ')'} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => setEdit({ date })}>+ Νέα αίτηση<//>`}>
-    ${list.length ? html`<ol className="hk-req">${list.map(r => { const p = pm.get(r.pid)!; return html`<li key=${r.id}><div className="hk-req__row">
-      <span><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${r.text}.</span>
-      <span className="hk-req__acts"><${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//><${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; })}</ol>`
-      : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ΗΚΑΙ ως «1. ΣΤΡ (ΠΖ) … : ΑΙΤΕΙΤΑΙ …».</p>`}
+  const decide = async (r: PersonRequest, ok: boolean | null) => {
+    if (!(await run({ t: 'decideRequest', id: r.id, ok }, false))) return;
+    const who = shortName(pm.get(r.pid)!); const on = r.date > today ? r.date : today;
+    toast({ text: ok === null ? 'Αναιρέθηκε η απόφαση για την άδεια του ' + who : ok ? 'Εγκρίθηκε η άδεια του ' + who + '. Γράφεται στην ΗΚΑΙ ' + dm(on) + ', 3. ΑΔΕΙΕΣ.' : 'Απορρίφθηκε η αίτηση άδειας του ' + who, actions: [undoMark()] });
+  };
+  const item = (r: PersonRequest, showDate: boolean) => { const p = pm.get(r.pid)!; return html`<li key=${r.id}><div className="hk-req__row">
+    <span>${showDate && html`<span className="num">${dm(r.date)} </span>`}<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${upper(reqWhat(r))}.
+      ${r.decision === 'ok' && html` <${Badge} tone="ok" data-tip=${'Γράφτηκε στο 3. ΑΔΕΙΕΣ της ΗΚΑΙ ' + dm(r.decided!)}>Εγκρίθηκε ${dm(r.decided!)}<//>`}${r.decision === 'no' && html` <${Badge} tone="bad">Απορρίφθηκε ${dm(r.decided!)}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">Περιμένει απάντηση<//>`}</span>
+    <span className="hk-req__acts">${r.leave && !r.decision && html`<${Button} size="sm" onClick=${() => decide(r, true)} data-tip="Γίνεται άδεια και γράφεται στο 3. ΑΔΕΙΕΣ της σημερινής ΗΚΑΙ">Εγκρίθηκε<//><${Button} size="sm" variant="outline" onClick=${() => decide(r, false)}>Απορρίφθηκε<//>`}
+      ${r.decision ? html`<${Button} size="sm" variant="ghost" onClick=${() => decide(r, null)} data-tip=${r.decision === 'ok' ? 'Η αίτηση ξαναπεριμένει απάντηση και η άδεια βγαίνει' : 'Η αίτηση ξαναπεριμένει απάντηση'}>Αναίρεση απόφασης<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; };
+  return html`<${Card} title=${'5. Αιτήσεις (' + (date === today ? 'σήμερα' : dm(date)) + ')'} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => setEdit({ date, leave: { type: 'LEAVE', from: addDays(date, 1), to: addDays(date, 1) } })}>+ Αίτηση άδειας<//><${Button} size="sm" variant="ghost" onClick=${() => setEdit({ date })}>+ Άλλη αίτηση<//>`}>
+    ${list.length ? html`<ol className="hk-req">${list.map(r => item(r, false))}</ol>`
+      : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ΗΚΑΙ ως «1. ΣΤΡ (ΠΖ) … : ΑΙΤΕΙΤΑΙ …». Η άδεια, όταν εγκριθεί, περνά μόνη της στο «3. ΑΔΕΙΕΣ».</p>`}
+    ${other.length > 0 && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Αιτήσεις άδειας άλλων ημερών που περιμένουν απάντηση</span><ul className="hk-req" style=${{ listStyle: 'none', paddingLeft: 0 }}>${other.map(r => item(r, true))}</ul></div>`}
     ${edit && html`<${RequestDialog} req=${edit} onClose=${() => setEdit(null)}/>`}
   <//>`;
 }
-// Νέα αίτηση ή αλλαγή: από την ΗΚΑΙ ή από την καρτέλα του ατόμου (req.pid)
+// Νέα αίτηση ή αλλαγή: από την ΗΚΑΙ ή από την καρτέλα του ατόμου (req.pid). Άδεια: είδος και από πότε έως πότε, με αιτιολόγηση.
+const HON = 'Τιμητική';
 export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; onClose: () => void }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast();
-  const [f, setF] = useState({ pid: req.pid ?? null as number | null, date: req.date || today, text: req.text || '' });
+  const kinds = [...listOf(state.settings.lists, 'leaveKinds'), HON];
+  const lv0 = req.leave; const next = addDays(req.date || today, 1);
+  const [f, setF] = useState({ pid: req.pid ?? null as number | null, date: req.date || today, text: req.text || '', isLeave: !!lv0, kind: lv0?.type === 'HON' ? HON : lv0?.kind || kinds[0], from: lv0?.from || next, to: lv0?.to || next });
   const p = f.pid != null ? personMap(state.people).get(f.pid) : undefined;
   const text = reqText(f.text);
+  const leave: LeaveAsk | undefined = f.isLeave ? { type: f.kind === HON ? 'HON' : 'LEAVE', ...(f.kind === HON ? {} : { kind: f.kind }), from: f.from, to: f.to } : undefined;
+  const ok = !!p && (f.isLeave || !!text);
   const save = async () => {
-    if (!p || !text) return;
-    const cmd = req.id ? { t: 'updateRequest' as const, req: { id: req.id, pid: p.id, date: f.date, text } } : { t: 'addRequest' as const, req: { pid: p.id, date: f.date, text } };
-    if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ΗΚΑΙ ' + dm(f.date) + ': ') + shortName(p), actions: [undoMark()] }); }
+    if (!ok) return;
+    const body = { pid: p!.id, date: f.date, text, ...(leave ? { leave } : {}) };
+    const cmd = req.id ? { t: 'updateRequest' as const, req: { id: req.id, ...body } } : { t: 'addRequest' as const, req: body };
+    if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ΗΚΑΙ ' + dm(f.date) + ': ') + shortName(p!), actions: [undoMark()] }); }
   };
-  return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : 'Νέα αίτηση'} description="Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!p || !text} onClick=${save}>Αποθήκευση<//>`}>
+  const line = p && ok ? 'Στην ΗΚΑΙ: «' + upper(hkWho(p) + ': αιτείται ' + reqWhat({ id: '', pid: p.id, date: f.date, text, leave })) + '.»' : '';
+  return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : f.isLeave ? 'Αίτηση άδειας' : 'Νέα αίτηση'} description="Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Αποθήκευση<//>`}>
+    <div className="field"><span className="field__label">Τι αιτείται</span><${Segmented} value=${f.isLeave ? 'leave' : 'other'} onChange=${(v: string) => setF({ ...f, isLeave: v === 'leave' })} items=${[{ value: 'leave', label: 'Άδεια' }, { value: 'other', label: 'Κάτι άλλο' }]}/></div>
     <div className="field"><label className="field__label" htmlFor="rq-p">Ποιος</label>
       ${p ? html`<div className="field-row"><b>${fullName(p)}</b>${!req.pid && html`<${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, pid: null })}>Άλλος<//>`}</div>`
         : html`<${PersonPicker} id="rq-p" autoFocus=${true} onChange=${(pid: number) => setF({ ...f, pid })}/>`}</div>
     <div className="field"><label className="field__label" htmlFor="rq-d">Ημερομηνία ΗΚΑΙ</label><input id="rq-d" type="date" className="ui-input" value=${f.date} onChange=${(e: any) => e.target.value && setF({ ...f, date: e.target.value })}/></div>
-    <div className="field"><label className="field__label" htmlFor="rq-t">Αιτείται</label><input id="rq-t" className="ui-input" placeholder="π.χ. μετάθεση στην 2η ΕΠΧΙΑ" value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
-      <span className="field__help">${p && text ? 'Στην ΗΚΑΙ: «' + upper(hkWho(p) + ': αιτείται ' + text) + '.»' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.'}</span></div>
+    ${f.isLeave && html`<div className="field"><label className="field__label" htmlFor="rq-k">Είδος άδειας</label><select id="rq-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value })}>${kinds.map(k => html`<option key=${k} value=${k}>${k}</option>`)}</select></div>
+      <${DateRangeField} from=${f.from} to=${f.to} onChange=${(from: string, to: string) => setF({ ...f, from, to })}/>`}
+    <div className="field"><label className="field__label" htmlFor="rq-t">${f.isLeave ? 'Αιτιολόγηση (προαιρετικό)' : 'Αιτείται'}</label><input id="rq-t" className="ui-input" placeholder=${f.isLeave ? 'π.χ. για οικογενειακούς λόγους' : 'π.χ. μετάθεση στην 2η ΕΠΧΙΑ'} value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
+      <span className="field__help">${line || (f.isLeave ? 'Όταν εγκριθεί, γίνεται άδεια και γράφεται στο «3. ΑΔΕΙΕΣ».' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.')}</span></div>
   <//>`;
 }
 

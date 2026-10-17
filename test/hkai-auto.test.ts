@@ -6,7 +6,7 @@ import path from 'path';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fillHkai } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
-import { hkaiLeaveLines, hkaiPunLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
+import { hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
 import { accusative, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
 import type { AppState } from '../src/shared/domain';
@@ -96,5 +96,55 @@ describe('3. ΑΔΕΙΕΣ', () => {
     expect(leaveName({ type: 'SICK' })).toBe('ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ');
     expect(hkRange({ from: D, to: D, fromTime: '08:00', toTime: '14:00' })).toBe('ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 08:00 ΕΩΣ 14:00');
     expect(hkRange({ from: D, to: D, open: true })).toBe('ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 (ΧΩΡΙΣ ΛΗΞΗ)');
+  });
+});
+
+describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/απορρίφθηκε → 3. ΑΔΕΙΕΣ', () => {
+  const ask = (s: AppState, pid: number, extra: Record<string, unknown> = {}) =>
+    run(s, { t: 'addRequest', req: { pid, date: D, text: 'για οικογενειακούς λόγους', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-17', to: '2026-10-17' }, ...extra } as any });
+  it('γράφεται στις αιτήσεις με είδος και ημέρα, και δεν είναι ακόμα άδεια', () => {
+    const s = ask(fakeState(10), 3);
+    expect(linesText(hkaiReqLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΑΙΤΕΙΤΑΙ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΣΑΒ 17 ΟΚΤ 26 ΓΙΑ ΟΙΚΟΓΕΝΕΙΑΚΟΥΣ ΛΟΓΟΥΣ.');
+    expect(s.statuses).toHaveLength(0);
+    expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);
+  });
+  it('εγκρίθηκε: γίνεται άδεια και πάει στο 3. ΑΔΕΙΕΣ της μέρας της έγκρισης, όχι της έναρξης· αναίρεση τη βγάζει', () => {
+    let s = ask(fakeState(10), 3);
+    const id = s.requests[0].id;
+    s = run(s, { t: 'decideRequest', id, ok: true });
+    const st = s.statuses.find(x => x.type === 'LEAVE')!;
+    expect(st).toMatchObject({ pid: 3, from: '2026-10-17', to: '2026-10-17', kind: 'Κανονική', req: id });
+    expect(s.requests[0]).toMatchObject({ decision: 'ok', decided: D, sid: st.id });
+    expect(linesText(hkaiLeaveLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΣΑΒ 17 ΟΚΤ 26.');
+    expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);
+    expect(hkaiReqLines(s, D)).toHaveLength(1);   // η αίτηση μένει στην ΗΚΑΙ της μέρας της
+    expect(() => run(s, { t: 'decideRequest', id, ok: false })).toThrow(/ήδη εγκριθεί/);
+    expect(() => run(s, { t: 'updateRequest', req: { ...s.requests[0], text: 'άλλο' } })).toThrow(/Αναίρεσε πρώτα/);
+    const back = run(s, { t: 'decideRequest', id, ok: null });
+    expect(back.statuses).toHaveLength(0);
+    expect(back.requests[0].decision).toBeUndefined();
+    // διαγραφή εγκεκριμένης: φεύγει και η άδεια
+    expect(run(s, { t: 'deleteRequest', id }).statuses).toHaveLength(0);
+  });
+  it('απορρίφθηκε: δεν γίνεται άδεια', () => {
+    let s = ask(fakeState(10), 3);
+    s = run(s, { t: 'decideRequest', id: s.requests[0].id, ok: false });
+    expect(s.statuses).toHaveLength(0);
+    expect(s.requests[0].decision).toBe('no');
+    expect(hkaiLeaveLines(s, D)).toHaveLength(0);
+  });
+  it('τιμητική πολλών ημερών, χωρίς αιτιολόγηση· το «έως» δεν είναι πριν το «από»', () => {
+    let s = run(fakeState(10), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'HON', from: '2026-10-17', to: '2026-10-19' } } });
+    expect(linesText(hkaiReqLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΙΤΕΙΤΑΙ ΤΙΜΗΤΙΚΗ ΑΔΕΙΑ ΑΠΟ ΣΑΒ 17 ΟΚΤ 26 ΕΩΣ ΔΕΥ 19 ΟΚΤ 26.');
+    s = run(s, { t: 'decideRequest', id: s.requests[0].id, ok: true });
+    expect(s.statuses[0]).toMatchObject({ type: 'HON', from: '2026-10-17', to: '2026-10-19' });
+    expect(() => run(fakeState(5), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-19', to: '2026-10-17' } } })).toThrow(/πριν/);
+    expect(() => run(fakeState(5), { t: 'addRequest', req: { pid: 2, date: D, text: '' } })).toThrow(/Γράψε/);
+  });
+  it('η εγκεκριμένη άδεια βγάζει το άτομο από την υπηρεσία εκείνης της μέρας', () => {
+    let s = run(fakeState(30), { t: 'assign', date: '2026-10-17', k: 'th1', pid: 3 });
+    s = ask(s, 3);
+    s = run(s, { t: 'decideRequest', id: s.requests[0].id, ok: true });
+    expect(s.guards['2026-10-17']?.th1).toBeUndefined();
   });
 });
