@@ -434,8 +434,10 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
     const FRI = '2026-10-16', SAT = '2026-10-17';
     let s = fakeState(80);
     // οι 20 πρώτοι δεν έχουν κάνει καμία αργία, οι άλλοι από μία: την Παρασκευή δεν μπαίνει κανείς από τους 20
-    const owe = new Set(s.people.slice(0, 20).map(p => p.id));
-    s = { ...s, baseline: Object.fromEntries(s.people.filter(p => !owe.has(p.id)).map(p => [p.id, { hol: 1 }])) };
+    // (όσοι έχουν πόστο κάνουν μόνο Λ/Υ και Δ/Υ και δεν «χρωστάνε» ΣΚ: μένουν έξω από τη μέτρηση)
+    const zero = new Set(s.people.slice(0, 20).map(p => p.id));
+    const owe = new Set(s.people.slice(0, 20).filter(p => !p.post).map(p => p.id));
+    s = { ...s, baseline: Object.fromEntries(s.people.filter(p => !zero.has(p.id)).map(p => [p.id, { hol: 1 }])) };
     s = { ...s, guards: fillDay(s, FRI).guards };
     const fri = Object.values(s.guards[FRI]);
     expect(fri.filter(id => owe.has(id))).toEqual([]);
