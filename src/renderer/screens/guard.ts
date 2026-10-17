@@ -6,7 +6,7 @@ import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintBut
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
 import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
-import { addDays, dayName, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
+import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
@@ -52,16 +52,20 @@ type DutyMonth = ReturnType<typeof useDutyMonth>;
 const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: string; small?: boolean }) => html`<select className="ui-input" style=${{ flex: '0 0 ' + width, width, ...(small ? { height: '32px', fontSize: '13px' } : {}) }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${m.allM ? '' : m.ym} onChange=${(e: any) => { const v = e.target.value; m.setAllM(!v); if (v) m.setYm(v); }}><option value="">Όλοι οι μήνες</option>${m.months.map(x => html`<option key=${x} value=${x}>${monLbl(x)}</option>`)}</select>`;
 
 function DutyCheck({ onOpen, m }: P) {
-  const { state } = useStore();
+  const { state, today } = useStore();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list');
+  // μέρες χωρίς υπηρεσία: από την τελευταία υπηρεσία του, όποιου μήνα (όχι μόνο του μήνα που βλέπεις)
+  const allSt = dutyStats(state);
+  const idle = (pid: number): number => { const l = allSt.get(pid)?.last; return l ? Math.max(0, daysBetween(l, today) - 1) : 9999; };
   const { ym, setYm, allM, setAllM, st } = m as DutyMonth;
   const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
   // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
   const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.dutyLog, state.people, state.settings, ym, dq]);
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
   const [sk, setSk] = useState<{ k: string; dir: number } | null>(null);
-  const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : r.d.byKind[k] || 0);
-  const rows = useMemo(() => searchPeople(state.people, dq).map(p => ({ p, d: st.get(p.id) || emptyStat() })).sort((a, b) => { if (sk) { const x = val(a, sk.k), y = val(b, sk.k); const c = typeof x === 'number' ? x - (y as number) : collator.compare(x, y as string); if (c) return c * sk.dir; } return (hol ? a.d.hol - b.d.hol : 0) || a.d.total - b.d.total || collator.compare(a.p.last, b.p.last); }), [dq, st, hol, state.people, sk]);
+  const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : k === 'idle' ? r.idle : r.d.byKind[k] || 0);
+  const rows = useMemo(() => searchPeople(state.people, dq).map(p => ({ p, d: st.get(p.id) || emptyStat(), idle: idle(p.id) })).sort((a, b) => { if (sk) { const x = val(a, sk.k), y = val(b, sk.k); const c = typeof x === 'number' ? x - (y as number) : collator.compare(x, y as string); if (c) return c * sk.dir; } // σειρά δικαιοσύνης (Michael, 17/10): πρώτα όσοι έχουν τις περισσότερες μέρες χωρίς υπηρεσία, μετά οι λιγότερες συνολικά, μετά οι λιγότερες αργίες
+    return (hol ? a.d.hol - b.d.hol : 0) || b.idle - a.idle || a.d.total - b.d.total || a.d.hol - b.d.hol || collator.compare(a.p.last, b.p.last); }), [dq, st, hol, state.people, sk, allSt, today]);
   const H = (k: string, l: string, tip?: string) => html`<button type="button" className="chk__sort" data-tip=${tip} aria-sort=${sk?.k === k ? (sk.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => setSk(sk?.k === k ? { k, dir: -sk.dir } : { k, dir: k === 'name' ? 1 : -1 })}>${l}${sk?.k === k ? (sk.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   const mon = MONTHS[+ym.slice(5) - 1];
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
@@ -70,10 +74,10 @@ function DutyCheck({ onOpen, m }: P) {
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(mon) + '.xlsx'} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${MonthSelect} m=${m}/>
-      <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Λιγότερες συνολικά' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
+      <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Σειρά δικαιοσύνης', tip: 'Περισσότερες μέρες χωρίς υπηρεσία, μετά λιγότερες συνολικά, μετά λιγότερες αργίες' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="chk"><div className="chk__in">
-      <div className="chk__head" style=${{ gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px' }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, KIND_LBL[k])}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}</div>
-      <${VirtualList} items=${rows} rowHeight=${36} height=${380} renderRow=${(r: P, _i: number, style: P) => html`<div key=${r.p.id} className="chk__row" style=${{ ...style, gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px' }} role="button" tabIndex="0" onClick=${() => onOpen(r.p.id)}><span>${shortName(r.p)}</span>${kinds.map(k => html`<span key=${k} className="num">${r.d.byKind[k] || '·'}</span>`)}<span className="num tot">${r.d.total}</span><span className="num hol">${r.d.hol}</span><span className="num last">${r.d.last ? dm(r.d.last) : '—'}${r.d.last && isHol(state.settings, r.d.last) ? ' ★' : ''}</span></div>`}/>
+      <div className="chk__head" style=${{ gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px 56px' }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, KIND_LBL[k])}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}${H('idle', 'Μέρες', 'Μέρες χωρίς υπηρεσία')}</div>
+      <${VirtualList} items=${rows} rowHeight=${36} height=${380} renderRow=${(r: P, _i: number, style: P) => html`<div key=${r.p.id} className="chk__row" style=${{ ...style, gridTemplateColumns: 'minmax(130px,1fr) repeat(' + (kinds.length + 2) + ',52px) 70px 56px' }} role="button" tabIndex="0" onClick=${() => onOpen(r.p.id)}><span>${shortName(r.p)}</span>${kinds.map(k => html`<span key=${k} className="num">${r.d.byKind[k] || '·'}</span>`)}<span className="num tot">${r.d.total}</span><span className="num hol">${r.d.hol}</span><span className="num last">${r.d.last ? dm(r.d.last) : '—'}${r.d.last && isHol(state.settings, r.d.last) ? ' ★' : ''}</span><span className="num">${r.idle === 9999 ? '—' : r.idle}</span></div>`}/>
     </div></div></div>`}
     <p className="note" style=${{ margin: '8px 0 0' }}>${view === 'list' && !allM ? monLbl(ym) + ': μετρούν μόνο οι υπηρεσίες του μήνα, χωρίς τις προηγούμενες. ' : ''}Κάθε υπηρεσία κρατιέται με την ημερομηνία της (★ = ΣΚ ή αργία). Πάτα σε άτομο για όλο το ημερολόγιο.</p>
   <//>`;
@@ -94,7 +98,7 @@ function RulesDialog({ onClose }: P) {
       <li>Σε άοπλη θέση αφήνει τελευταίους όσους χρειάζονται για να γεμίσουν οι ένοπλες θέσεις της μέρας. Όταν οι ένοπλοι φτάνουν, όλοι (και οι ΕΑ/ΕΟ) μπαίνουν με τη σειρά δικαιοσύνης.</li>
       <li>Σε ΣΚ ή αργία: όποιος έχει κάνει τις <b>λιγότερες αργίες</b>, και μετά όποιος έκανε αργία πιο παλιά. ΔΝ, έξοδος και θάλαμος δεν μετράνε. Όποιος έκανε το προηγούμενο ΣΚ δεν μπαίνει στο αμέσως επόμενο (κανόνας πιο πάνω).</li>
       <li>Τις 2 μέρες πριν από ΣΚ ή αργία (Πέμπτη, Παρασκευή): όσοι <b>χρωστάνε ΣΚ</b> (οι λιγότερες αργίες, όσοι χρειάζονται για τις θέσεις του) μπαίνουν τελευταίοι, για να μην τους κόψει η ανάπαυση από το ΣΚ.</li>
-      <li>Σε καθημερινή: όποιος έχει τις <b>περισσότερες μέρες χωρίς υπηρεσία</b>, και μετά τις λιγότερες υπηρεσίες συνολικά.</li>
+      <li>Σε καθημερινή: όποιος έχει τις <b>περισσότερες μέρες χωρίς υπηρεσία</b>, μετά τις λιγότερες υπηρεσίες συνολικά και μετά τις λιγότερες αργίες.</li>
       <li>Μετά: τις λιγότερες υπηρεσίες <b>στο ίδιο είδος</b> θέσης.</li>
       <li>Αν ισοβαθμούν σε όλα: κλήρωση με σπόρο την ημερομηνία, ώστε την ίδια μέρα να βγαίνει πάντα το ίδιο αποτέλεσμα.</li>
     </ol><span className="note">Δίπλα σε κάθε όνομα το «Γιατί:» γράφει ποιο κριτήριο τον έφερε.</span></div>

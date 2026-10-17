@@ -408,7 +408,8 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
   const seed = new Map<number, number>(); const sr = (pid: number) => { let v = seed.get(pid); if (v === undefined) { v = seedRank(date, pid); seed.set(pid, v); } return v; };
   return (a: Fair & { pid: number }, b: Fair & { pid: number }) =>
-    (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : a.lastBefore.localeCompare(b.lastBefore) || a.total - b.total) ||
+    // καθημερινή (Michael, 17/10): πρώτα οι μέρες χωρίς υπηρεσία, μετά το σύνολο, μετά οι αργίες· ΣΚ/αργία: οι αργίες
+    (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : a.lastBefore.localeCompare(b.lastBefore) || a.total - b.total || a.hol - b.hol) ||
     (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || sr(a.pid) - sr(b.pid);
 }
 export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[]; warn: string[] } {
