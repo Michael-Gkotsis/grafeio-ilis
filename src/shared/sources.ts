@@ -868,7 +868,7 @@ export const HK_COLS: [string, string, RegExp][] = [
 export const HKAI_DEFAULT: HkaiMap = {
   title: 'A4', date: 'V34',
   rows: Object.fromEntries(HK_RANKS.map((r, i) => [r, i < 5 ? 17 + i : 23 + i - 5])),
-  cols: { placed: 'C', attached: 'D', sum: 'E', yp: 'F', ey: 'G', tim: 'H', bl: 'I', os: 'J', mag: 'K', sid: 'L', kin: 'M', sumK: 'N', ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y', sumA: 'Z', avail: 'AA', ab: 'AB' }
+  cols: { prov: 'B', placed: 'C', attached: 'D', sum: 'E', yp: 'F', ey: 'G', tim: 'H', bl: 'I', os: 'J', mag: 'K', sid: 'L', kin: 'M', sumK: 'N', ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y', sumA: 'Z', avail: 'AA', ab: 'AB' }
 };
 // Βρίσκει γραμμές και στήλες της ΗΚΑΙ από τα κείμενα του εντύπου. Ό,τι δεν βρεθεί μένει όπως στο δείγμα.
 export function detectHkai(sheet: RawSheet, place = 'Αυλώνας'): { map: HkaiMap; found: number; total: number; missing: string[] } {
@@ -887,6 +887,10 @@ export function detectHkai(sheet: RawSheet, place = 'Αυλώνας'): { map: Hk
     for (const [k, , re] of HK_COLS) if (at[k] == null && k !== 'bl' && re.test(h)) { at[k] = c; break; }
   });
   if (at.tim != null && at.os != null && at.os - at.tim === 2) at.bl = at.tim + 1;
+  // «Προβλέπονται από τη σύνθεση»: προαιρετική στήλη (Ρυθμίσεις της ΗΚΑΙ), δεν μετρά στα «βρέθηκαν»
+  let pv: string | null = null;
+  for (let r = Math.max(0, top - 14); r < top && !pv; r++) (rows[r] || []).forEach((v, c) => { if (!pv && /^ΠΡΟΒΛΕΠΟΝΤΑΙ/.test(headText(v))) pv = colLetter(c); });
+  if (pv) map.cols.prov = pv;
   for (const [k, label] of HK_COLS) { if (at[k] != null) { map.cols[k] = colLetter(at[k]); found++; } else missing.push(label); }
   const cell = (re: RegExp) => { for (let r = 0; r < rows.length; r++) { const row = rows[r] || []; for (let c = 0; c < row.length; c++) if (re.test(headText(row[c]))) return colLetter(c) + (r + 1); } return null; };
   const t = cell(/ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ/); if (t) { map.title = t; found++; } else missing.push('Τίτλος');

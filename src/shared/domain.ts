@@ -27,6 +27,8 @@ export interface Person {
   dn?: boolean;          // έχει δικαίωμα ΔΝ (μόνιμο, από τον λοχία)
   weapon?: string;       // αριθμός όπλου: γράφεται μόνο δίπλα στον Λ/Υ και τον Δ/Υ στο έντυπο υπηρεσιών
   offDays?: number[];    // μέρες της εβδομάδας χωρίς υπηρεσία (0 = Κυριακή … 6 = Σάββατο), μόνιμα μέχρι να αλλάξουν
+  inOn?: ISODate;        // μπήκε στη δύναμη αυτή τη μέρα («Νέος στρατιώτης» ή νέα γραμμή του Δυναμολογίου): 1. ΕΓΓΡΑΦΕΣ της ΗΚΑΙ
+  outOn?: ISODate;       // βγήκε εκτός δύναμης αυτή τη μέρα: 2. ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ (φεύγει αν ξαναμπεί σε δύναμη)
   added?: boolean;       // φτιάχτηκε στην εφαρμογή («Νέος στρατιώτης»): μπαίνει σε νέα γραμμή στο Δυναμολόγιο ως την επόμενη εισαγωγή του
 }
 
@@ -211,7 +213,19 @@ export interface Settings {
   dutyCodeAliases?: Record<string, string>;   // έλεγχος υπηρεσιών: άγνωστος κωδικός (codeKey) → θέση, «kind:<είδος>» χωρίς θέση, ή «ignore»
   baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
   lists?: UserLists;                     // ό,τι πρόσθεσες ή έκρυψες στις λίστες (βαθμοί, Ο/Σ)· οι βασικές είναι στο ranks.ts
+  hkai?: HkaiSettings;                   // ΗΚΑΙ: ενότητες που δεν χρησιμοποιεί η Ίλη, οχήματα, «Προβλέπονται»
 }
+// Ενότητες της ΗΚΑΙ που ανοιγοκλείνουν (Michael, 17/10): κλειστή = δεν φαίνεται στην εφαρμογή και δεν γράφεται στο έντυπο
+export const HK_SECTIONS: [HkSection, string, string][] = [
+  ['veh', 'Κατάσταση οχημάτων', 'Είδος, προβλέπονται, σε κίνηση, προς επισκευή'],
+  ['acc', 'Ατυχήματα', 'Ζημιές σε οχήματα και σε άνδρες (αλλιώς μένει το Ø του εντύπου)'],
+  ['grd', 'Χορηγούμενες φρουρές', 'Νυκτοφρουρές και 24ωρες από τις υπηρεσίες της μέρας'],
+  ['prov', 'Προβλέπονται από τη σύνθεση', 'Ένας αριθμός ανά βαθμό, ίδιος κάθε μέρα']
+];
+export type HkSection = 'veh' | 'acc' | 'grd' | 'prov';
+export interface HkVehicle { type: string; prov?: number; kin?: number; maint?: number; dmg?: number }
+export interface HkaiSettings { off?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number> }
+export const hkOn = (st: Settings, k: HkSection) => !(st.hkai?.off || []).includes(k);
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
 export const DEFAULT_SETTINGS: Settings = {

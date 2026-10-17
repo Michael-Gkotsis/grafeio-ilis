@@ -57,7 +57,9 @@ export type Command =
   | { t: 'importDuties'; days: Record<ISODate, DutyCell[]>; source: string }
   | { t: 'expire' }
   | { t: 'extendOpen' }
-  | { t: 'setNightTraining'; date: ISODate; on: boolean };
+  | { t: 'setNightTraining'; date: ISODate; on: boolean }
+  // ΗΚΑΙ 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: άλλη μέρα, ή null = να μη γραφτεί
+  | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null };
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -116,9 +118,26 @@ function rememberChoices(st: Settings, p: Person, old?: Person): Settings {
   return lists === st.lists ? st : { ...st, lists };
 }
 
+// Εγγραφές και διαγραφές της ΗΚΑΙ (Michael, 17/10): όποιος βγαίνει εκτός δύναμης παίρνει τη σημερινή μέρα στο outOn
+// (φεύγει αν ξαναμπεί σε δύναμη)· ο «Νέος στρατιώτης» και οι νέες γραμμές του Δυναμολογίου στο inOn. Η πρώτη εισαγωγή
+// (χωρίς κανέναν σε δύναμη πριν) δεν είναι εγγραφές.
+function stampMoves(prev: AppState, next: AppState, c: Command, today: ISODate): AppState {
+  if (prev.people === next.people) return next;
+  const before = new Map(prev.people.map(p => [p.id, p]));
+  const joins = (c.t === 'addPerson' || c.t === 'importPeople') && prev.people.some(p => p.active);
+  let out: Person[] | null = null;
+  next.people.forEach((p, i) => {
+    const b = before.get(p.id); let q: Person | null = null;
+    if (!b) { if (joins && p.active && !p.inOn) q = { ...p, inOn: today }; }
+    else if (b.active && !p.active && !p.outOn) q = { ...p, outOn: today };
+    else if (!b.active && p.active && p.outOn) { q = { ...p }; delete q.outOn; }
+    if (q) { out = out || [...next.people]; out[i] = q; }
+  });
+  return out ? { ...next, people: out } : next;
+}
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const r = run(s, c, ctx);
-  const state = fitDeprivations(noPending(r.state));
+  const state = fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today)));
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
 function run(s: AppState, c: Command, ctx: Ctx): Result {
@@ -236,6 +255,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!st) throw new Error('Δεν έγινε η άδεια');
       const statuses = d.state.statuses.map(x => (x === st ? { ...x, req: r.id } : x));
       return { ...d, state: { ...d.state, statuses, requests: s.requests.map(x => (x === r ? { ...r, decision: 'ok' as const, decided, sid: st.id } : x)) }, text: 'Εγκρίθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [...new Set(['ΗΚΑΙ', ...d.files])] };
+    }
+    case 'setPersonMove': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      if (c.date && !/^\d{4}-\d{2}-\d{2}$/.test(c.date)) throw new Error('Λάθος ημερομηνία');
+      const q: Person = { ...p }; if (c.date) q[c.field] = c.date; else delete q[c.field];
+      const what = c.field === 'inOn' ? '1. Εγγραφές' : '2. Διαγραφές';
+      return { state: { ...s, people: s.people.map(x => (x === p ? q : x)) }, text: 'ΗΚΑΙ ' + what + ': ' + shortName(p) + (c.date ? ' στις ' + dm(c.date) : ', να μη γραφτεί'), files: ['ΗΚΑΙ'] };
     }
     case 'setPunInfo': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || st.type !== 'PUN') throw new Error('Δεν βρέθηκε η ποινή');
