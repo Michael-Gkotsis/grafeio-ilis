@@ -2,7 +2,7 @@
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { hkDay, type ISODate } from './dates';
 import { OUT_NOTE, TYPES, type AppState, type Person, type PersonRequest, type Status } from './domain';
-import { personMap } from './rules';
+import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, upper } from './text';
 import { genitive } from './greek';
@@ -87,3 +87,15 @@ export const linesText = (ls: Line[]) => ls.map(lineText).join('\n');
 // Γραμμές που πιάνει το κελί στο χαρτί: στο κελί του προτύπου (G11:K11) χωρούν περίπου 130 χαρακτήρες ανά γραμμή
 export const HK_LINE_CHARS = 130;
 export const paperLines = (ls: Line[], chars = HK_LINE_CHARS) => ls.reduce((a, l) => a + Math.max(1, Math.ceil(lineText(l).length / chars)), 0);
+
+// Όργανα υπηρεσίας › Λ/Υ και Δ/Υ: όποιος είναι στη θέση τη μέρα (με το χέρι ή από τη συμπλήρωση)· αν η θέση είναι κενή,
+// ο μόνιμος Λ/Υ ή Δ/Υ, όταν είναι σε δύναμη και δεν τον κρατά κάποια κατάσταση (Michael, 17/10)
+export function hkOrgans(s: AppState, d: ISODate): { ly?: number; dy?: number } {
+  const g = s.guards[d] || {}; const pm = personMap(s.people); const out: { ly?: number; dy?: number } = {};
+  for (const k of ['ly', 'dy'] as const) {
+    const f = s.settings.fixed?.[k]; const post = postBy(s, k);
+    const id = g[k] ?? (f && pm.get(f)?.active && !dutyBlock(s.statuses, d, f, post, s.settings.lists) ? f : undefined);
+    if (id != null) out[k] = id;
+  }
+  return out;
+}

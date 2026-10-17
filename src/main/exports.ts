@@ -2,7 +2,7 @@
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { dm, dmy, dmyy, hkDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
-import { byName, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
+import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
@@ -119,7 +119,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   if (leaves.length) await wb.setRich(bk, 'G10', leaves);
   if (puns.length) await wb.setRich(bk, 'G11', puns);
   if (reqs.length) await wb.setRich(bk, 'G12', reqs);
-  const ly = g.ly && pm.get(g.ly), dy = g.dy && pm.get(g.dy);
+  const og = hkOrgans(s, d); const ly = og.ly && pm.get(og.ly), dy = og.dy && pm.get(og.dy);
   if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
   if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
   bk.set('L23', s.settings.place + ', ' + hkDate(d));
