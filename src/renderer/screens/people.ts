@@ -14,6 +14,7 @@ import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from
 import { CadreView } from './cadre';
 import { SiField } from './si';
 import { siOf } from '../../shared/si';
+import { ROSTER_FILTERS, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { RequestDialog } from './other';
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -21,21 +22,32 @@ type P = any;
 
 const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσίες'], ['out', 'Έξοδος'], ['other', 'Άλλα'], ['pun', 'Ποινή']];
 
-const PersonRow = memo(function PersonRow({ p, odd, style, statuses, lists, today, duty, checked, selected, onToggle, onOpen }: P) {
-  return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${style} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
+// Δυναμολόγιο (Michael, 17/10): μόνο τα στοιχεία του στρατιώτη, με τις στήλες του Δυναμολογίου. Οι άδειες και οι ποινές
+// φαίνονται μόνο στα αντίστοιχα φίλτρα, με μία στήλη ακόμα (τι και από πότε έως πότε)· τα ιατρικά στα «Ιατρικά και ποινές».
+const COLS: [string, string][] = [['rank', 'Βαθμός'], ['spec', 'Ο/Σ'], ['last', 'Επίθετο'], ['first', 'Όνομα'], ['father', 'Πατρώνυμο'], ['asm', 'ΑΣΜ'], ['phone', 'Τηλέφωνο'], ['room', 'Θάλαμος'], ['post', 'Πόστο'], ['role', 'Ρόλος'], ['si', 'Σ.Ι.'], ['dn', 'ΔΝ']];
+// στις άδειες/ποινές η στήλη της κατάστασης μπαίνει μετά το πατρώνυμο, για να φαίνεται χωρίς κύλιση
+const HEAD_COLS = '36px 44px 84px 60px minmax(160px,1.6fr) minmax(100px,1fr) minmax(100px,1fr)', TAIL_COLS = ' 96px 106px 70px minmax(76px,.7fr) minmax(76px,.7fr) 104px 40px';
+const GRID = HEAD_COLS + TAIL_COLS, GRID_ST = HEAD_COLS + ' minmax(220px,1.6fr)' + TAIL_COLS;
+const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
+const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, checked, selected, onToggle, onOpen }: P) {
+  return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
     <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
-    <span><b>${plainName(p)}</b>${p.post && html` <${Badge} tone="outline" data-tip="Πόστο: δεν μπαίνει σε υπηρεσίες εκτός από Λ/Υ και Δ/Υ">${p.post}<//>`}</span><span>${p.father}</span><span>${p.rank}</span><span>${unitOf(p)}</span><span>${roomTxt(p)}</span><span className="num">${duty}</span>
-    <span><${StatusBadge} statuses=${statuses} pid=${p.id} date=${today} lists=${lists}/></span></div>`;
+    <span className="num muted">${n}</span><span>${p.rank}</span><span>${p.spec}</span><span><b>${p.last}</b></span><span>${p.first}</span><span>${p.father}</span>
+    ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
+    <span className="num">${p.asm}</span><span className="num">${p.phone}</span><span>${p.room ?? ''}</span><span>${p.post || ''}</span><span>${p.role || ''}</span>
+    <span>${p.si ? siOf(p, lists).text : ''}</span><span>${p.dn ? '✓' : ''}</span></div>`;
 });
-const PersonCard = memo(function PersonCard({ p, style, statuses, lists, today, checked, onToggle, onOpen }: P) {
+const PersonCard = memo(function PersonCard({ p, style, st, lists, checked, onToggle, onOpen }: P) {
   return html`<div className="pcard" style=${style} onClick=${() => onOpen(p.id)}>
     <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
-    <div><b>${plainName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p)} · ${roomTxt(p)}${p.post ? ' · πόστο ' + p.post : ''}</small></div>
-    <${StatusBadge} statuses=${statuses} pid=${p.id} date=${today} lists=${lists}/></div>`;
+    <div><b>${p.rank} ${plainName(p)}</b><small>${[p.father && 'του ' + p.father, p.spec, roomTxt(p), p.phone, p.si && siOf(p, lists).text, p.post && 'πόστο ' + p.post, p.dn && 'ΔΝ'].filter(Boolean).join(' · ')}</small></div>
+    ${st && html`<${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//>`}</div>`;
 });
 
 type Filt = { unit: string; room: number | null; filter: string };
 const DEF_SORT = { k: 'last', dir: 1 };
+// φίλτρα αποθηκευμένων λιστών από πριν (Παρόντες, ΕΥ…): ισχύουν ακόμα, απλώς δεν είναι πια κουμπιά
+const legacyMatch = (f: string, ss: Status[]) => { const away = ss.some(s => TYPES[s.type].away); return f === 'present' ? !away : f === 'absent' ? away : (TYPES as any)[f] ? ss.some(s => s.type === f) : true; };
 export function PeopleScreen() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
@@ -46,35 +58,30 @@ export function PeopleScreen() {
   const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room } as Person) !== u ? null : room });
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r } as Person) !== unit ? 'all' : unit });
   const [selected, setSelected] = useState(() => new Set<number>());
-  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false);
-  const ds = dutyStats(state);
-  const FILTERS: [string, string][] = [['all', 'Όλοι'], ['present', 'Παρόντες'], ['absent', 'Απόντες'], ...TYPE_KEYS.map(k => [k, TYPES[k].label] as [string, string]), ['dnright', 'Με δικαίωμα ΔΝ'], ['post', 'Με πόστο'], ['inactive', 'Εκτός δύναμης']];
+  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false); const [xl, setXl] = useState(false);
   const UNITS = [{ value: 'all', label: 'Όλη η Ίλη' }, { value: '1ος Ουλ.', label: '1ος Ουλ.', tip: 'Θάλαμοι 1–4' }, { value: '2ος Ουλ.', label: '2ος Ουλ.', tip: 'Θάλαμοι 5–8' }];
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const active = useMemo(() => state.people.filter(p => p.active), [state.people]);
   const total = active.length;
   const views = state.settings.views || [];
+  const lists = state.settings.lists;
+  const withSt = filter === 'leave' || filter === 'pun';
   // καταστάσεις της ημερομηνίας, μία φορά ανά άτομο (με το ευρετήριο των κανόνων)
   const ssOf = useMemo(() => { const m = new Map<number, Status[]>(); active.forEach(p => m.set(p.id, statusesOn(state.statuses, p.id, date))); return m; }, [active, state.statuses, date]);
   const place = (p: Person, f: Filt) => (f.unit === 'all' || unitOf(p) === f.unit) && (f.room == null || p.room === f.room);
   const matches = useCallback((p: Person, f: Filt) => {
     if (!place(p, f)) return false;
-    if (f.filter === 'inactive') return true;
-    const ss = ssOf.get(p.id) || []; const away = ss.some(s => TYPES[s.type].away);
-    if (f.filter === 'all') return true; if (f.filter === 'present') return !away; if (f.filter === 'absent') return away; if (f.filter === 'dnright') return !!p.dn; if (f.filter === 'post') return !!p.post;
-    if ((TYPES as any)[f.filter]) return ss.some(s => s.type === f.filter); return unitOf(p) === f.filter;
+    const ss = ssOf.get(p.id) || [];
+    return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss);
   }, [ssOf]);
   const listFor = useCallback((f: Filt, text: string) => (f.filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, text)).filter(p => matches(p, f)), [state.people, matches]);
   // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό/θάλαμο), για να φαίνεται πριν πατήσεις
   const counts = useMemo(() => {
-    const n: Record<string, number> = { all: 0, present: 0, absent: 0, dnright: 0, post: 0, inactive: 0 };
+    const n: Record<string, number> = {};
     state.people.forEach(p => {
       if (!place(p, { unit, room, filter: 'all' })) return;
-      if (!p.active) { n.inactive++; return; }
-      const s = ssOf.get(p.id) || []; n.all++;
-      if (s.some(x => TYPES[x.type].away)) n.absent++; else n.present++;
-      if (p.dn) n.dnright++; if (p.post) n.post++;
-      new Set(s.map(x => x.type)).forEach(t => { n[t] = (n[t] || 0) + 1; });
+      const ss = ssOf.get(p.id) || [];
+      for (const [k] of ROSTER_FILTERS) if (rosterMatch(k, p, ss)) n[k] = (n[k] || 0) + 1;
     });
     return n;
   }, [state.people, ssOf, unit, room]);
@@ -83,51 +90,62 @@ export function PeopleScreen() {
   const curView = views.find(v => v.unit === unit && v.room === room && v.filter === filter && normGreek(v.q) === normGreek(dq.trim()));
   const rows = useMemo(() => {
     let r = listFor({ unit, room, filter }, dq);
-    const val = (p: Person) => sort.k === 'unit' ? unitOf(p) : sort.k === 'room' ? String(p.room ?? 99).padStart(2, '0') : String((p as any)[sort.k] ?? '');
-    if (!dq || sort.k !== 'last' || sort.dir !== 1) r = [...r].sort((a, b) => (sort.k === 'duty' ? (ds.get(a.id)?.total || 0) - (ds.get(b.id)?.total || 0) : collator.compare(val(a), val(b)) || collator.compare(a.first, b.first)) * sort.dir);
+    const val = (p: Person) => sort.k === 'room' ? String(p.room ?? 99).padStart(2, '0') : sort.k === 'dn' ? (p.dn ? '0' : '1') : sort.k === 'si' ? siOf(p, lists).text : String((p as any)[sort.k] ?? '');
+    if (!dq || sort.k !== 'last' || sort.dir !== 1) r = [...r].sort((a, b) => (collator.compare(val(a), val(b)) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) * sort.dir);
     return r;
-  }, [dq, filter, unit, room, sort, listFor, ds]);
+  }, [dq, filter, unit, room, sort, listFor, lists]);
+  const stOf = (p: Person) => (withSt ? filterStatus(filter as RosterFilter, ssOf.get(p.id) || []) : undefined);
   const toggle = useCallback((id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
   const height = useViewportHeight(mobile ? 330 : 300);
   const rowH = useRowH(40, 32);
-  const H = (k: string, l: string) => html`<button type="button" aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ sort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
+  const H = (k: string, l: string) => html`<button key=${k} type="button" aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ sort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   const allSel = rows.length > 0 && rows.every(p => selected.has(p.id));
   const clear = () => { setQ(''); nav.set({ filter: 'all', unit: 'all', room: null, pdate: undefined }); };
   const applyView = (v: SavedView) => { if (curView === v) { clear(); return; } setQ(v.q); nav.set({ unit: v.unit, room: v.room, filter: v.filter }); };
   const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [undoMark()] }); };
   const dateLbl = date === today ? '' : dayName(date, today);
   const filtered = unit !== 'all' || room != null || filter !== 'all' || !!dq.trim();
+  const fLabel = (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
+  const exportXl = async () => {
+    setXl(true);
+    try {
+      const r = await window.api.exportLists(date);
+      toast({ text: r.ok ? 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': ένα φύλλο για κάθε φίλτρο, ' + (date === today ? 'για σήμερα.' : 'για ' + dayName(date, today).toLowerCase() + ' ' + dm(date) + '.') : html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
+    } finally { setXl(false); }
+  };
   const ptab = nav.params.peopleTab || 'soldiers';
   const tabs = html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${ptab} onChange=${(v: string) => nav.set({ peopleTab: v })} items=${[{ value: 'soldiers', label: 'Οπλίτες (' + total + ')' }, { value: 'cadre', label: 'Στελέχη (' + state.cadreList.length + ')' }]}/></div>`;
   if (ptab === 'cadre') return html`<${CadreView} tabs=${tabs}/>`;
-  const dateSel = html`<select className="hdsel" aria-label="Κατάσταση στην ημερομηνία" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
+  const dateSel = html`<select className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
+  const grid = withSt ? GRID_ST : GRID;
   return html`<div>
-    <${PageHeader} title="Προσωπικό" sub=${'Δύναμη Ίλης: ' + total + ' άτομα. Πάτα σε γραμμή για στοιχεία, ή επίλεξε πολλούς για μαζική δήλωση.'}>
+    <${PageHeader} title="Δυναμολόγιο" sub=${'Δύναμη Ίλης: ' + total + ' άτομα. Πάτα σε γραμμή για την καρτέλα του, ή επίλεξε πολλούς για μαζική δήλωση.'}>
       <${Button} variant="outline" onClick=${() => setAdding(true)} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">+ Νέος στρατιώτης<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
+      <${Button} variant="outline" disabled=${xl} onClick=${exportXl} data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
     ${tabs}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/>
       <select className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => setRoom(e.target.value ? +e.target.value : null)}>
         <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}</select>
-      ${mobile && dateSel}</div>
-    <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${FILTERS.filter(([k]) => k === filter || k === 'all' || k === 'present' || k === 'absent' || counts[k] > 0).map(([k, l], i, a) => html`<button key=${k} type="button" className=${cx('ui-chip', i > 0 && a[i - 1][0] === 'absent' && 'ui-chip--gap')} aria-pressed=${!curView && filter === k} data-tip=${(TYPES as any)[k] ? TYPES[k as TypeKey].long + (dateLbl ? ' · ' + dateLbl.toLowerCase() : '') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}
+      ${dateSel}</div>
+    <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${ROSTER_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${!curView && filter === k} data-tip=${k === 'leave' || k === 'pun' ? (k === 'leave' ? 'Σε άδεια ' : 'Με ποινή ') + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}
       ${views.map((v, i) => html`<button key=${v.id} type="button" className=${cx('ui-chip', 'ui-chip--view', i === 0 && 'ui-chip--gap')} aria-pressed=${curView === v} data-tip="Αποθηκευμένη λίστα" onClick=${() => applyView(v)}>${Icon.star}${v.name}<span className="cnt">${viewN[i]}</span></button>`)}<//>
-      <${ActiveFilter} parts=${curView ? ['★ ' + curView.name] : [unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && (FILTERS.find(([k]) => k === filter) || [, filter])[1], filter !== 'all' && dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}
+      <${ActiveFilter} parts=${curView ? ['★ ' + curView.name] : [unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && fLabel, withSt && dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}
         extra=${curView ? html`<button type="button" className="actfilter__act" onClick=${() => delView(curView)} data-tip="Σβήνει τη λίστα (όχι τους ανθρώπους)">Διαγραφή λίστας</button>` : filtered && html`<button type="button" className="actfilter__act" onClick=${() => setSaving(true)} data-tip="Κράτα αυτό το φίλτρο ως λίστα με όνομα, π.χ. «Θαλαμάρχες»">☆ Αποθήκευση</button>`}/>
-      <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive : total}</span></div>
+      <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : total}</span></div>
     ${selected.size > 0 && html`<div className="bulkbar"><span>${selected.size} επιλεγμένοι</span>
       <${Button} size="sm" onClick=${() => nav.declare({ pids: [...selected], type: 'OUT', from: today, to: today })}>Εξοδούχοι σήμερα<//>
       <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected], type: 'DN', from: today, to: today })} data-tip="Εξοδούχοι με διανυκτέρευση">ΔΝ σήμερα<//>
       <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected] })}>Άλλη δήλωση…<//>
       <${Button} size="sm" variant="ghost" onClick=${() => setSelected(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>Κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
-    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} statuses=${state.statuses} lists=${state.settings.lists} today=${date} checked=${selected.has(p.id)} onToggle=${toggle} onOpen=${open}/>`}/></div>` :
-    html`<div className="ptable" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '736px' }}>
-      <div className="ptable__head" role="row"><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" checked=${allSel} onChange=${() => setSelected(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span>${H('last', 'Ονοματεπώνυμο')}${H('father', 'Πατρώνυμο')}${H('rank', 'Βαθμός')}${H('unit', 'Ουλαμός')}${H('room', 'Θάλαμος')}${H('duty', 'Υπηρ.')}<span>${dateSel}</span></div>
-      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} odd=${i % 2 === 1} style=${style} statuses=${state.statuses} lists=${state.settings.lists} today=${date} duty=${ds.get(p.id)?.total || 0} checked=${selected.has(p.id)} selected=${nav.params.person === p.id} onToggle=${toggle} onOpen=${open}/>`}/>
+    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} checked=${selected.has(p.id)} onToggle=${toggle} onOpen=${open}/>`}/></div>` :
+    html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: withSt ? '1390px' : '1170px' }}>
+      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" checked=${allSel} onChange=${() => setSelected(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span>${COLS.slice(0, 5).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${COLS.slice(5).map(([k, l]) => H(k, l))}</div>
+      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} st=${stOf(p)} lists=${lists} checked=${selected.has(p.id)} selected=${nav.params.person === p.id} onToggle=${toggle} onOpen=${open}/>`}/>
     </div></div></div>`}
     ${adding && html`<${NewPersonDialog} onClose=${() => setAdding(false)}/>`}
     ${saving && html`<${SaveViewDialog} onClose=${() => setSaving(false)} onSave=${async (name: string) => {

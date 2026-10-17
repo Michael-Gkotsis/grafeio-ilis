@@ -2,8 +2,9 @@
 // Η ανάγνωση των Excel (Δυναμολόγιο, Αρχεία Excel) γίνεται πια με το ελαφρύ xlsx.ts.
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
-import { MONTHS, parseD, type ISODate } from '../shared/dates';
-import { norm, collator } from '../shared/text';
+import { MONTHS, dmy, parseD, type ISODate } from '../shared/dates';
+import { rosterSheets } from '../shared/rosterLists';
+import { norm, collator, upper } from '../shared/text';
 import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
@@ -76,4 +77,33 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   ws.pageSetup.printTitlesRow = '3:3';
   const data = Buffer.from(await wb.xlsx.writeBuffer());
   return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y + '.xlsx', data };
+}
+
+// Δυναμολόγιο και καταστάσεις (Michael, 17/10): ένα Excel, ένα φύλλο ανά φίλτρο της οθόνης (Όλοι, Άδειες, Τιμωρημένοι,
+// Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ), για μία ημερομηνία. Όλα με κεφαλαία, όπως ό,τι γράφει η εφαρμογή στα Excel.
+export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
+  wb.created = wb.modified = new Date(d + 'T00:00:00Z');
+  const thin = { style: 'thin' as const };
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  for (const sh of rosterSheets(s, d)) {
+    const ws = wb.addWorksheet(sh.name, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
+      views: [{ state: 'frozen', ySplit: 3 }]
+    });
+    const W = sh.head.length;
+    ws.mergeCells(1, 1, 1, W);
+    const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
+    sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = { bold: true, size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = border; });
+    sh.rows.forEach((r, j) => r.forEach((v, i) => {
+      const c = ws.getRow(4 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+      c.font = { size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
+    }));
+    if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { italic: true, size: 10 }; }
+    const width: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22 };
+    sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = width[h] || 12; });
+    ws.pageSetup.printTitlesRow = '3:3';
+  }
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
 }

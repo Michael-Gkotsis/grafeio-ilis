@@ -731,6 +731,14 @@ else {
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
+    ipcMain.handle('export:lists', async (_e, date: ISODate) => {
+      try {
+        const r = await excel().rosterLists(store.state, date);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        shell.openPath(out);
+        return { ok: true, file: out, warnings: [] };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('roster:pick', () => pickRoster());
     ipcMain.handle('roster:apply', (_e, token: string, deactivateMissing: boolean) => {
       const p = pending.get(token); if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');

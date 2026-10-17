@@ -22,7 +22,7 @@ export function CadreView({ tabs }: P) {
   const absOf = useMemo(() => { const m = new Map<string, CadreAbs[]>(); state.cadreAbs.filter(a => a.to >= today).sort((a, b) => a.from.localeCompare(b.from)).forEach(a => m.set(a.cid, [...(m.get(a.cid) || []), a])); return m; }, [state.cadreAbs, today]);
   const awayToday = list.filter(c => (absOf.get(c.id) || []).some(a => a.from <= today)).length;
   return html`<div>
-    <${PageHeader} title="Προσωπικό" sub=${'Στελέχη: ' + list.length + (list.length ? ' · απόντες σήμερα: ' + awayToday : '') + '. Με τη λίστα, η ΗΚΑΙ βγάζει μόνη της στελέχη ανά βαθμό και απουσίες.'}>
+    <${PageHeader} title="Δυναμολόγιο" sub=${'Στελέχη: ' + list.length + (list.length ? ' · απόντες σήμερα: ' + awayToday : '') + '. Με τη λίστα, η ΗΚΑΙ βγάζει μόνη της στελέχη ανά βαθμό και απουσίες.'}>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     ${tabs}
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(c => { const ab = absOf.get(c.id) || []; const now = ab.find(a => a.from <= today); return html`<li key=${c.id}>
