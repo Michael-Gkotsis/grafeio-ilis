@@ -250,9 +250,9 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .navbtn__lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
 .is-rail .sidenav{padding:10px 6px}
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:4px;height:auto;min-height:62px;padding:8px 2px;position:relative;text-align:center}
+.is-rail .navbtn{flex-direction:column;justify-content:center;gap:4px;height:auto;min-height:62px;padding:8px 0;position:relative;text-align:center}
 .is-rail .navbtn[aria-current="page"]{box-shadow:none}
-.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:normal;overflow:visible;overflow-wrap:anywhere;letter-spacing:-.25px}
 .is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
 .is-rail .sidenav__toggle{min-height:48px;font-size:11px}
 .is-rail .sidenav__sep{margin:6px 8px}
@@ -709,3 +709,4 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .sigrid .statsel{padding:2px 22px 2px 6px;height:auto;min-height:0;font-size:12px;width:auto;min-width:0;background-position:right 4px center}
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}
 .sigrid .statsel.is-last{color:var(--warn);background:var(--warn-bg)}
+.ptable--roster .ptable__head > *,.ptable--roster .ptable__row > *{padding-left:7px;padding-right:7px}

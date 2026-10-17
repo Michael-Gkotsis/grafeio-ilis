@@ -41,6 +41,7 @@ export interface Api {
   sync(): Promise<CmdResult>;
   dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
   exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult>;   // print: προεπισκόπηση εκτύπωσης αντί για Excel
+  exportLists(date: ISODate): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;
