@@ -1,11 +1,10 @@
 // Συμπλήρωση των εντύπων της Ίλης από την κατάσταση της εφαρμογής (06, 11).
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
-import { dm, dmy, dmyy, milDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
+import { dm, dmy, dmyy, hkDate, parseD, MON_SHORT, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
-import { byName, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
+import { byName, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, coversDay, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
-import { rangeHm } from '../shared/hours';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
@@ -74,8 +73,8 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const m = opts.map || hkaiMapOf();
   const pm = personMap(s.people); const warnings: string[] = [];
   const hk = hkaiCounts(s, d);
-  fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + dmyy(d));
-  fr.set(m.date, s.settings.place + ', ' + dmyy(d));
+  fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(d));
+  fr.set(m.date, s.settings.place + ', ' + hkDate(d));
   const rowsOf: [string, number][] = [...HK_OFFICERS, ...HK_NCO].map(r => [r, m.rows[r]] as [string, number]).filter(([, r]) => r > 0);
   // Προέλεγχος template (έρευνα §3.6): τα αθροίσματα πρέπει να είναι τύποι, όχι γραμμένοι αριθμοί
   const lost = rowsOf.flatMap(([, r]) => [m.cols.sum, m.cols.sumK, m.cols.sumA, m.cols.avail].filter(Boolean).map(c => c + r)).filter(ref => !fr.hasFormula(ref));
@@ -94,17 +93,15 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   let night = 0, day24 = 0;
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   bk.set('D5', night || null).set('D8', day24 || null);
-  const line = (x: Status) => who(pm.get(x.pid)!) + ': ' + (x.kind || TYPES[x.type].long) + ' ' + rangeHm(x, dm);
-  const leaves = s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'SICK') && x.from === d && pm.has(x.pid));
-  if (leaves.length) bk.set('G10', leaves.map(line).join('· '));
-  // 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες, μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
-  const puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
+  // 3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες («1.»), μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
+  const leaves = hkaiLeaveLines(s, d), puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
+  if (leaves.length) await wb.setRich(bk, 'G10', leaves);
   if (puns.length) await wb.setRich(bk, 'G11', puns);
   if (reqs.length) await wb.setRich(bk, 'G12', reqs);
   const ly = g.ly && pm.get(g.ly), dy = g.dy && pm.get(g.dy);
   if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
   if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
-  bk.set('L23', s.settings.place + ', ' + milDate(d));
+  bk.set('L23', s.settings.place + ', ' + hkDate(d));
   return { name: 'ΗΚΑΙ ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings };
 }
 

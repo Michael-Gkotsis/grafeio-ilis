@@ -161,9 +161,9 @@ describe('εγγραφή καταστάσεων στο φύλλο', () => {
     expect(row3.find(x => x.c === b.cols.from)!.v).toEqual({ date: '2026-10-12' });
     expect(plan.sets.some(x => x.r === 2)).toBe(false);
   });
-  it('ποινή που αιτείται ακόμα δεν γράφεται· όταν εγκριθεί γράφεται', () => {
+  it('η ποινή γράφεται αμέσως, χωρίς έγκριση', () => {
     const s = run(s0, { t: 'declare', cmd: { type: 'PUN', pids: [9], from: '2026-10-12', to: '2026-10-15', kind: 'Κράτηση' } });
-    expect(planWrite('punish', sh, b, s, [], TODAY).added).toBe(0);
+    expect(planWrite('punish', sh, b, s, [], TODAY).added).toBe(1);
   });
   it('αλλαγή «έως» στην εφαρμογή → αλλάζει μόνο εκείνο το κελί· διαγραφή → σβήνει τη γραμμή που είχε γράψει', () => {
     const p = parseStatuses('punish', sh, b, s0.people, TODAY);

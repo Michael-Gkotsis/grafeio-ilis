@@ -5,7 +5,7 @@ import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } fro
 import {
   activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, HK_A, HK_K, HK_NCO, HK_OFFICERS
 } from './rules';
-import { hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
+import { hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import type { ExportKind } from './api';
 
 export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' }
@@ -65,9 +65,7 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   if (h.avail !== h.total - h.apo) out.push({ level: 'err', text: 'Διαθέσιμοι ≠ Δύναμη − Απόντες' });
   if (!Object.values(s.settings.cadre).some(n => n > 0)) out.push({ level: 'warn', text: 'Τα στελέχη ανά βαθμό είναι όλα 0. Συμπλήρωσέ τα στις Ρυθμίσεις.', go: 'settings' });
   if (!Object.keys(s.guards[date] || {}).length) out.push({ level: 'warn', text: 'Δεν έχουν οριστεί υπηρεσίες για ' + dm(date) + ': η στήλη «Υπηρεσία» θα είναι 0.', go: 'guard' });
-  const late = s.statuses.filter(x => x.type === 'PUN' && x.pending && x.from < date && pm.get(x.pid)?.active);
-  if (late.length) out.push({ level: 'warn', text: 'Ποινές που αιτούνται ακόμα αλλά έπρεπε να έχουν ξεκινήσει: ' + late.map(x => shortName(pm.get(x.pid)!) + ' (από ' + dm(x.from) + ')').join(', ') + '. Αν εγκρίθηκαν, πάτα «Εγκρίθηκε».', go: 'records' });
-  for (const [ls, what] of [[hkaiPunLines(s, date), '4. Ποινές'], [hkaiReqLines(s, date), '5. Αιτήσεις']] as const) {
+  for (const [ls, what] of [[hkaiLeaveLines(s, date), '3. Άδειες'], [hkaiPunLines(s, date), '4. Ποινές'], [hkaiReqLines(s, date), '5. Αιτήσεις']] as const) {
     const n = paperLines(ls);
     if (n > 10) out.push({ level: 'warn', text: what + ': περίπου ' + n + ' γραμμές στην πίσω σελίδα. Θα χωρέσει με μικρότερα γράμματα ή θα περάσει σε δεύτερη σελίδα.' });
   }

@@ -41,6 +41,12 @@ export const MON_SHORT = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'Ι�
 // Στρατιωτική μορφή «04 Δεκ 25»
 export const MON_MIL = ['Ιαν', 'Φεβ', 'Μαρ', 'Απρ', 'Μαΐ', 'Ιουν', 'Ιουλ', 'Αυγ', 'Σεπ', 'Οκτ', 'Νοε', 'Δεκ'];
 
+// ΗΚΑΙ (Michael, 17/10): «15 ΟΚΤ 26» και «ΠΑΡ 16 ΟΚΤ 26», αντί για 15/10/2026
+export const HK_MON = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΙ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+export const HK_DOW = ['ΚΥΡ', 'ΔΕΥ', 'ΤΡΙ', 'ΤΕΤ', 'ΠΕΜ', 'ΠΑΡ', 'ΣΑΒ'];
+export const hkDate = (s: ISODate): string => s.slice(8, 10) + ' ' + HK_MON[+s.slice(5, 7) - 1] + ' ' + s.slice(2, 4);
+export const hkDay = (s: ISODate): string => HK_DOW[weekday(s)] + ' ' + hkDate(s);
+
 export const dm = (s: ISODate): string => { const x = parseD(s); return String(x.getDate()).padStart(2, '0') + '/' + String(x.getMonth() + 1).padStart(2, '0'); };
 export const dmy = (s: ISODate): string => dm(s) + '/' + parseD(s).getFullYear();
 export const dmyy = (s: ISODate): string => dm(s) + '/' + String(parseD(s).getFullYear()).slice(2);

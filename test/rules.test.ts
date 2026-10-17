@@ -8,14 +8,16 @@ let seq = 0;
 const ctx: Ctx = { today: '2026-10-12', newId: () => 'id' + ++seq };
 
 describe('κανόνες', () => {
-  it('Κ-19: η ποινή αιτείται και ισχύει μόνο όταν εγκριθεί', () => {
+  it('Κ-19: η ποινή ισχύει αμέσως (Michael, 17/10)· όσες είχαν μείνει «αιτείται» ισχύουν κι αυτές', () => {
     let s = fakeState(10);
     s = apply(s, { t: 'declare', cmd: { type: 'PUN', pids: [3], from: '2026-10-12', to: '2026-10-15', kind: 'Περιορισμός' } }, ctx).state;
-    const st = s.statuses[0];
-    expect(st.pending).toBe(true);
-    expect(statusesOn(s.statuses, 3, '2026-10-13')).toHaveLength(0);
-    s = apply(s, { t: 'approvePun', id: st.id }, ctx).state;
+    expect(s.statuses[0].pending).toBeUndefined();
     expect(statusesOn(s.statuses, 3, '2026-10-13')).toHaveLength(1);
+    const old = { ...s, statuses: [{ ...s.statuses[0], id: 'old', pid: 4, pending: true }] };
+    expect(statusesOn(old.statuses, 4, '2026-10-13')).toHaveLength(0);
+    s = apply(old, { t: 'setNightTraining', date: '2026-10-20', on: true }, ctx).state;
+    expect(s.statuses[0].pending).toBeUndefined();
+    expect(statusesOn(s.statuses, 4, '2026-10-13')).toHaveLength(1);
   });
   it('ΕΥ βγάζει το άτομο από τη θέση του και δεν επιτρέπει υπηρεσία', () => {
     let s = fakeState(10);
