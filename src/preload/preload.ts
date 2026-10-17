@@ -11,6 +11,7 @@ const api: Api = {
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   exportLists: date => ipcRenderer.invoke('export:lists', date),
   exportRoster: (date, print) => ipcRenderer.invoke('export:roster', date, print),
+  exportWeapons: (date, print) => ipcRenderer.invoke('export:weapons', date, print),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),
   backup: () => ipcRenderer.invoke('backup'),

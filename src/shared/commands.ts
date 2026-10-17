@@ -9,6 +9,7 @@ import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMa
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, type ListId } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
+import { normWeapon } from './weapons';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -59,7 +60,9 @@ export type Command =
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean }
   // ΗΚΑΙ 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: άλλη μέρα, ή null = να μη γραφτεί
-  | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null };
+  | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
+  // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
+  | { t: 'setWeapons'; changes: { pid: number; weapon: string }[]; what?: string };
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -461,6 +464,15 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
       const text = old.active && !c.person.active ? shortName(c.person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && c.person.active ? shortName(c.person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(c.person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'setWeapons': {
+      const by = new Map<number, string>();
+      for (const ch of c.changes) { const p = pm.get(ch.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο'); const w = normWeapon(ch.weapon); if (w !== (p.weapon || '')) by.set(p.id, w); else by.delete(p.id); }
+      if (!by.size) return { state: s, text: '', files: [] };
+      const people = s.people.map(p => { if (!by.has(p.id)) return p; const w = by.get(p.id)!; const q = { ...p }; if (w) q.weapon = w; else delete q.weapon; return q; });
+      const [pid, w] = [...by][0];
+      const text = by.size === 1 ? 'Όπλο ' + shortName(pm.get(pid)!) + ': ' + (w || 'χωρίς όπλο' + (pm.get(pid)!.weapon ? ' (ήταν ' + pm.get(pid)!.weapon + ')' : '')) : 'Οπλισμός' + (c.what ? ', ' + c.what : '') + ': άλλαξε σε ' + by.size + ' άτομα';
+      return { state: { ...s, people }, text, files: [] };
     }
     case 'addPerson': {
       const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
