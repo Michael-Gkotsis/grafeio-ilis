@@ -154,13 +154,13 @@ function Shell() {
   }, [undo, go, goBack, toggleRail]);
   const Screen = SCREENS[route.view][2];
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
-  const pending = useMemo(() => state.statuses.filter(s => s.pending).length, [state.statuses]);
+  const waiting = useMemo(() => state.requests.filter(r => r.leave && !r.decision && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
   const navItem = (v: string, inRail = false) => {
-    const [label, icon] = SCREENS[v]; const n = v === 'guard' ? emptyTomorrow : v === 'records' ? pending : 0;
-    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Ποινές που αιτούνται';
+    const [label, icon] = SCREENS[v]; const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
+    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
     const key = NAV_ALL.indexOf(v) + 1; const kb = key > 0 ? ' (Alt+' + key + ')' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key > 0 ? 'Alt+' + key : undefined}
-      data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'ποινές αιτούνται') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
+      data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
       ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
   };
   return html`<${PrefsCtx.Provider} value=${prefsV}><${NavCtx.Provider} value=${nav}><${ExportProvider}>
