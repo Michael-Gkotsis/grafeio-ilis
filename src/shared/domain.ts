@@ -97,7 +97,7 @@ export interface Status {
   to: ISODate;
   kind?: string;      // είδος ποινής / άδειας / ΕΑ-ΕΥ
   note?: string;
-  pending?: boolean;  // ποινή που αιτείται στην ΗΚΑΙ (Κ-19)
+  pending?: boolean;  // παλιά: ποινή που αιτούνταν στην ΗΚΑΙ (Κ-19)· πια οι ποινές ισχύουν αμέσως (noPending)
   by?: string;        // ποινή: ποιος τιμώρησε
   reason?: string;    // ποινή: «διότι …»
   on?: ISODate;       // ποινή: ημερομηνία τιμωρίας (αλλιώς η έναρξη)
@@ -105,6 +105,12 @@ export interface Status {
   fromTime?: string;  // άδεια: ώρα αναχώρησης την πρώτη μέρα (ΩΩ:ΛΛ), shared/hours.ts
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
   days?: number;      // στέρηση εξόδου: ημέρες ποινής· το «to» μετακινείται για κάθε μέρα με υπηρεσία ή βραδινή εκπαίδευση (shared/punish.ts)
+}
+// Οι ποινές ισχύουν αμέσως, χωρίς έγκριση (Michael, 17/10): όσες είχαν μείνει «αιτείται» από παλιότερη έκδοση ισχύουν κι αυτές.
+// Τρέχει στο άνοιγμα της βάσης και μετά από κάθε ενέργεια (commands.ts apply).
+export function noPending<S extends { statuses: Status[] }>(s: S): S {
+  if (!s.statuses.some(x => x.pending)) return s;
+  return { ...s, statuses: s.statuses.map(x => { if (!x.pending) return x; const y = { ...x }; delete y.pending; return y; }) };
 }
 // Ισχύει τη μέρα d; Η «χωρίς λήξη» ισχύει και κάθε επόμενη μέρα: το «to» της φτάνει μόνο ως σήμερα, αλλά οι υπηρεσίες
 // και οι έξοδοι γίνονται για αύριο και μετά (Χορβάτ, ΣΤΕΠ χωρίς λήξη, 13/10)

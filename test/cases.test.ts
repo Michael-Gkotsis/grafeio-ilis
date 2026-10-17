@@ -133,10 +133,11 @@ describe('Κ-Ε εξοδούχοι', () => {
     expect(() => outs(s, 5)).toThrow(/ΠΕΡΙΟΡΙΣΜΟΣ/);
     expect(() => declare(s, 'OUT', 5, D)).toThrow(/δεν βγαίνει/);
   });
-  it('Κ-Ε3: ποινή που ακόμα αιτείται (π.χ. κράτηση) κρατά μέσα, αν και δεν μετρά ακόμα στην ΗΚΑΙ (γραφέας, 10/10)', () => {
+  it('Κ-Ε3: η ποινή ισχύει αμέσως, χωρίς έγκριση (Michael, 17/10)', () => {
     const s = declare(fakeState(20), 'PUN', 5, D, D, { kind: 'Κράτηση' });
-    expect(outBlock(s, D, 5)).toMatch(/Κράτηση \(αιτείται\)/);
-    expect(() => outs(s, 5)).toThrow(/Κράτηση/);
+    expect(s.statuses[0].pending).toBeUndefined();
+    expect(outBlock(s, D, 5)).toMatch(/ΚΡΑΤΗΣΗ/);
+    expect(() => outs(s, 5)).toThrow(/ΚΡΑΤΗΣΗ/);
   });
   it('Κ-Ε4: ΔΝ', () => { expect(outs(fakeState(20), 5, 'DN').statuses.find(x => x.pid === 5)!.type).toBe('DN'); });
   it('εξοδούχος δεν μπαίνει σε υπηρεσία την ίδια μέρα', () => {
@@ -445,7 +446,7 @@ describe('Κείμενο ποινής', () => {
     const st = s.statuses.find(x => x.type === 'PUN')!;
     expect(st).toMatchObject({ by: 'ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ', on: '2026-10-12' });
     const t = punText(s.people[1], st);
-    expect(t.plain).toBe('Ο ΣΤΡ (ΠΖ) ' + s.people[1].last + ' ' + s.people[1].first + ' ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12/10/2026 ΑΠΟ ΤΟΝ ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΡΓΗΣΕ ΣΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
+    expect(t.plain).toBe('Ο ΣΤΡ (ΠΖ) ' + s.people[1].last + ' ' + s.people[1].first + ' ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 ΑΠΟ ΤΟΝ ΛΧΙΑ ΑΓΝΩΣΤΟΠΟΥΛΟ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΡΓΗΣΕ ΣΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
     expect(t.html).toContain('<u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>');
     expect(daysWord(1) + '|' + daysWord(14) + '|' + daysWord(23)).toBe('μία|δεκατέσσερις|είκοσι τρεις');
     expect(overMax('Κράτηση', 9)).toBe(8); expect(overMax('Στέρηση εξόδου', 4)).toBe(0);

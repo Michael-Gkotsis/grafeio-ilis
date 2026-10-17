@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
-import { emptyState, migrateSettings, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
 import { writeDurable } from './files';
 
@@ -144,7 +144,7 @@ export class Store {
   private load() {
     const s = emptyState();
     s.people = this.all<{ data: string }>('SELECT data FROM person ORDER BY id').map(r => JSON.parse(r.data));
-    s.statuses = this.all<{ data: string }>('SELECT data FROM status').map(r => JSON.parse(r.data));
+    s.statuses = noPending({ ...s, statuses: this.all<{ data: string }>('SELECT data FROM status').map(r => JSON.parse(r.data)) }).statuses;
     for (const r of this.all<{ date: string; data: string }>('SELECT date, data FROM guard')) s.guards[r.date] = JSON.parse(r.data);
     for (const r of this.all<{ pid: number; data: string }>('SELECT pid, data FROM cap')) s.caps[r.pid] = JSON.parse(r.data);
     const kv = new Map(this.all<{ key: string; value: string }>('SELECT key, value FROM kv').map(r => [r.key, JSON.parse(r.value)]));

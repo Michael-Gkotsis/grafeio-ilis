@@ -29,11 +29,10 @@ const pun = (s: AppState, pid: number, from: string, to: string, extra: Record<s
 const backXml = async (data: Buffer) => (await JSZip.loadAsync(data)).file('xl/worksheets/sheet2.xml')!.async('string');
 const cellXml = (xml: string, ref: string) => new RegExp('<c r="' + ref + '"[^>]*>[\\s\\S]*?</c>').exec(xml)![0];
 
-// Δύο ποινές στις 12/10 (μία εγκρίθηκε, μία αιτείται), μία στις 11/10, και μία που ξεκινά 13/10 αλλά επιβλήθηκε 12/10
+// Δύο ποινές στις 12/10, μία στις 11/10, και μία που ξεκινά 13/10 αλλά επιβλήθηκε 12/10
 function punState() {
   let s = fakeState(20);
   s = pun(s, 3, D, '2026-10-13', { by: 'ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ', reason: 'απουσίασε από το προσκλητήριο.' });
-  s = run(s, { t: 'approvePun', id: s.statuses[0].id });
   s = pun(s, 2, D, D, { kind: 'Στέρηση εξόδου' });
   s = pun(s, 4, '2026-10-11', '2026-10-12');
   s = pun(s, 5, '2026-10-13', '2026-10-14', { on: D });
@@ -41,14 +40,14 @@ function punState() {
 }
 
 describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
-  it('όσες επιβλήθηκαν τη μέρα, αριθμημένες ανά όνομα, εγκεκριμένες και όσες αιτούνται', () => {
+  it('όσες επιβλήθηκαν τη μέρα, αριθμημένες «1.» ανά όνομα', () => {
     const s = punState();
     const lines = hkaiPunLines(s, D).map(l => l.map(r => r.t).join(''));
     expect(lines).toHaveLength(3);
-    expect(lines.map(l => l.slice(0, 3))).toEqual(['1) ', '2) ', '3) ']);
+    expect(lines.map(l => l.slice(0, 3))).toEqual(['1. ', '2. ', '3. ']);
     // ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ (2), ΠΛΑΣΜΑΤΙΚΟΣ (5), ΥΠΟΘΕΤΙΔΗΣ (3) με αλφαβητική σειρά
-    expect(lines[0]).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ .* ΜΕ ΜΙΑ \(01\) ΗΜΕΡΑ ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ, ΔΙΟΤΙ ……\.$/);
-    expect(lines[2]).toBe('3) Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12/10/2026 ΑΠΟ ΤΟΝ ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΠΟΥΣΙΑΣΕ ΑΠΟ ΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
+    expect(lines[0]).toMatch(/^1\. Ο ΣΤΡ \(ΠΖ\) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ .* ΜΕ ΜΙΑ \(01\) ΗΜΕΡΑ ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ, ΔΙΟΤΙ ……\.$/);
+    expect(lines[2]).toBe('3. Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΠΟΥΣΙΑΣΕ ΑΠΟ ΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
     expect(hkaiPunLines(s, '2026-10-11')).toHaveLength(1);
   });
   it('στο Excel: μία γραμμή ανά ποινή, υπογραμμισμένη μόνο η διάρκεια, με τη γραμματοσειρά του κελιού', async () => {
@@ -69,7 +68,7 @@ describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
     const ht = async (s: AppState) => Number(/<row r="11" ht="([\d.]+)"[^>]*customHeight="1"/.exec(await backXml((await fillHkai(T('hkai.xlsx'), s, D)).data))![1]);
     expect(await ht(fakeState(20))).toBe(35.1);
     let s = fakeState(20);
-    for (let pid = 1; pid <= 6; pid++) s = pun(s, pid, D, D, { reason: 'δεν ήταν στη θέση του κατά τον έλεγχο του αξιωματικού υπηρεσίας και δεν ενημέρωσε κανέναν' });
+    for (let pid = 1; pid <= 6; pid++) s = pun(s, pid, D, D, { reason: 'δεν ήταν στη θέση του κατά τον έλεγχο ' + pid + ' του αξιωματικού υπηρεσίας και δεν ενημέρωσε κανέναν' });
     expect(await ht(s)).toBeGreaterThanOrEqual(6 * 12 * 1.35);
     expect(await ht(pun(fakeState(20), 1, D, D))).toBe(35.1);
   });
@@ -78,7 +77,7 @@ describe('ΗΚΑΙ: 4. ΠΟΙΝΕΣ', () => {
     const doc = await renderBook((await fillHkai(T('hkai.xlsx'), s, D)).data, { file: 'ΗΚΑΙ.xlsx' });
     const back = doc.sheets.find(x => x.name === 'πισω')!.html;
     expect(back).toContain('<u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>');
-    expect(back).toContain('1) Ο ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ');
+    expect(back).toContain('1. Ο ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ');
   });
 });
 
@@ -89,7 +88,7 @@ describe('ΗΚΑΙ: 5. ΑΙΤΗΣΕΙΣ', () => {
     s = run(s, { t: 'addRequest', req: { pid: 2, date: D, text: 'ολιγοήμερη άδεια' } });
     s = run(s, { t: 'addRequest', req: { pid: 4, date: '2026-10-13', text: 'αλλαγή θαλάμου' } });
     s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { ait: 'ΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ' } } });
-    expect(linesText(hkaiReqLines(s, D))).toBe('1) Ο ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ αιτείται ολιγοήμερη άδεια.\n2) Ο ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ αιτείται μετάθεση στην 2η ΕΠΧΙΑ.\nΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ');
+    expect(linesText(hkaiReqLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΙΤΕΙΤΑΙ ΟΛΙΓΟΗΜΕΡΗ ΑΔΕΙΑ.\n2. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΑΙΤΕΙΤΑΙ ΜΕΤΑΘΕΣΗ ΣΤΗΝ 2Η ΕΠΧΙΑ.\nΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ');
     const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
     expect(bk.get('G12')).toBe(upper(linesText(hkaiReqLines(s, D))));
     // μόνο ελεύθερο κείμενο, όπως πριν

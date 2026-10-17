@@ -374,7 +374,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     const w = cmd.pids.length === 1 ? shortName(pm.get(cmd.pids[0])!) : cmd.pids.length + ' άτομα';
     const acts = [undoMark()];
     if (plan && plan.conflicts.length) acts.unshift({ label: 'Βρες αντικαταστάτη', fn: () => nav.go('guard', { guardDate: plan.conflicts[0].date }) });
-    toast({ text: (cmd.type === 'PUN' ? 'Αιτείται ποινή: ' : 'Δηλώθηκε ' + (med ? med.name : t.label) + ': ') + w, actions: acts });
+    toast({ text: (cmd.type === 'PUN' ? 'Ποινή: ' : 'Δηλώθηκε ' + (med ? med.name : t.label) + ': ') + w, actions: acts });
   };
   const outPick = useCallback((p: Person) => outBlock(state, cmd.from, p.id), [state, cmd.from]);
   const desc = html`<span style=${{ fontWeight: step === 1 ? 700 : 400 }}>1 Στοιχεία</span> › <span style=${{ fontWeight: step === 2 ? 700 : 400 }}>2 Τι θα αλλάξει</span>`;
@@ -382,7 +382,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${next}>Συνέχεια: Τι θα αλλάξει<//>`}>
     <div className="field"><span className="field__label">Τι δηλώνεις *</span>
       <div className="typegrid">${CATS.map(([c, l]) => html`<div key=${c} className="typegrid__row"><span className="typegrid__lbl">${l}</span><${Segmented} value=${med ? 'm:' + med.name : cmd.type} onChange=${pickType} items=${[...TYPE_KEYS.filter(k => TYPES[k].cat === c).map(k => ({ value: k, label: TYPES[k].label, tip: TYPES[k].long })), ...(c === 'med' ? meds.map(m => ({ value: 'm:' + m.name, label: m.name, tip: m.name + (m.warn ? ': μόνο προειδοποίηση στις υπηρεσίες' : ': σαν ' + TYPES[m.like!].label) })) : [])]}/></div>`)}</div>
-      <span className="field__help"><b>${med ? med.name + (med.warn ? '' : ' (σαν ' + t.label + ', ' + t.long.toLowerCase() + ')') : t.long}</b>${med?.warn ? ': χωρίς περιορισμούς· όταν μπαίνει σε υπηρεσία βγαίνει προειδοποίηση' : effects(t) ? ': ' + effects(t) : ''}${cmd.type === 'PUN' ? ' · αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί' : ''}</span></div>
+      <span className="field__help"><b>${med ? med.name + (med.warn ? '' : ' (σαν ' + t.label + ', ' + t.long.toLowerCase() + ')') : t.long}</b>${med?.warn ? ': χωρίς περιορισμούς· όταν μπαίνει σε υπηρεσία βγαίνει προειδοποίηση' : effects(t) ? ': ' + effects(t) : ''}${cmd.type === 'PUN' ? ' · ισχύει αμέσως και γράφεται στην ΗΚΑΙ (4. Ποινές)' : ''}</span></div>
     ${hasKind && html`<div className="field"><label className="field__label" htmlFor="dpk">${cmd.type === 'PUN' ? 'Είδος ποινής *' : 'Είδος άδειας'}</label><select id="dpk" className="ui-input" value=${cmd.kind} onChange=${(e: any) => setCmd(c => ({ ...c, kind: e.target.value }))}>${(cmd.type === 'PUN' ? punKinds : leaveKinds).map(k => html`<option key=${k} value=${k}>${cmd.type === 'PUN' ? punLbl(k) : k}</option>`)}</select></div>`}
     <div className="field"><label className="field__label" htmlFor="dsp">Ποιοι * <span className="muted" style=${{ fontWeight: 400 }}>(ένας ή περισσότεροι)</span></label>
       <${PersonPicker} id="dsp" multiple=${true} value=${cmd.pids} onChange=${(pids: number[]) => set({ pids })} date=${cmd.from} unavailable=${t.cat === 'out' ? outPick : undefined} autoFocus=${!cmd.pids.length}/></div>
@@ -396,7 +396,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${isPun && html`<div className="field-row">
       <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><input id="dpby" className="ui-input" list="dpby-l" placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/><datalist id="dpby-l">${byList.map((x: string) => html`<option key=${x} value=${x}/>`)}</datalist></div>
       <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><input id="dpon" type="date" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
-    <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές».</span></div>`}
+    <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Ο τιμωρήσας γράφεται όπως είναι («ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ») και στην ΗΚΑΙ μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
     <div className="field"><label className="field__label" htmlFor="dsn">Παρατήρηση</label><input id="dsn" className="ui-input" placeholder="Προαιρετικό, π.χ. αριθμός διαταγής" value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/></div>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;

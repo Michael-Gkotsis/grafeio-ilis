@@ -1,35 +1,61 @@
-// ΗΚΑΙ, πίσω σελίδα: «4. ΠΟΙΝΕΣ» και «5. ΑΙΤΗΣΕΙΣ» ως αριθμημένες προτάσεις, μία ανά γραμμή.
-// Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
-import type { ISODate } from './dates';
-import { fullName, type AppState, type Person } from './domain';
+// ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
+// «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
+import { hkDay, type ISODate } from './dates';
+import { TYPES, type AppState, type Person, type Status } from './domain';
 import { personMap } from './rules';
-import { punText } from './punish';
-import { collator } from './text';
+import { hkWho, punGroupKey, punText } from './punish';
+import { collator, upper } from './text';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
 export interface Run { t: string; u?: boolean }
 export type Line = Run[];
 
 export const byName = (a: Person, b: Person) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
+// «1. », «2. » μπροστά από κάθε πρόταση
+const numbered = (ls: Line[]): Line[] => ls.map((l, i) => [{ ...l[0], t: (i + 1) + '. ' + l[0].t }, ...l.slice(1)]);
 
-// 4. ΠΟΙΝΕΣ: όσες επιβλήθηκαν αυτή τη μέρα (ημερομηνία τιμωρίας, αλλιώς η έναρξη), είτε αιτούνται είτε εγκρίθηκαν
-// «1) Ο ΣΤΡ (ΠΖ) … τιμωρήθηκε την 12/10/2026 από τον … με <u>δύο (02) ημέρες κράτηση</u>, διότι ….»
+// 4. ΠΟΙΝΕΣ: όσες επιβλήθηκαν αυτή τη μέρα (ημερομηνία τιμωρίας, αλλιώς η έναρξη). Ισχύουν αμέσως, χωρίς έγκριση.
+// Ίδια ποινή σε πολλούς: μία πρόταση με όλους. «1. Ο ΣΤΡ (ΠΖ) … ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 ΑΠΟ ΤΟΝ … ΜΕ <u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>, ΔΙΟΤΙ ….»
 export function hkaiPunLines(s: AppState, d: ISODate): Line[] {
-  const pm = personMap(s.people);
-  return s.statuses.filter(x => x.type === 'PUN' && (x.on || x.from) === d && pm.has(x.pid))
-    .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p))
-    .map(({ x, p }, i) => { const t = punText(p, x, s.settings.lists); return [{ t: (i + 1) + ') ' + t.before }, { t: t.dur, u: true }, { t: t.after }]; });
+  const pm = personMap(s.people); const groups = new Map<string, { st: Status; ps: Person[] }>();
+  for (const x of s.statuses) {
+    if (x.type !== 'PUN' || (x.on || x.from) !== d || !pm.has(x.pid)) continue;
+    const k = punGroupKey(x, s.settings.lists); const g = groups.get(k);
+    if (g) g.ps.push(pm.get(x.pid)!); else groups.set(k, { st: x, ps: [pm.get(x.pid)!] });
+  }
+  const list = [...groups.values()].map(g => ({ ...g, ps: g.ps.sort(byName) })).sort((a, b) => byName(a.ps[0], b.ps[0]));
+  return numbered(list.map(({ st, ps }) => { const t = punText(ps, st, s.settings.lists); return [{ t: t.before }, { t: t.dur, u: true }, { t: t.after }]; }));
 }
 
-// 5. ΑΙΤΗΣΕΙΣ: οι αιτήσεις της μέρας αριθμημένες, και στο τέλος ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ
+// 5. ΑΙΤΗΣΕΙΣ: «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΑΙΤΕΙΤΑΙ …», και στο τέλος ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ
 export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
-  const out: Line[] = s.requests.filter(x => x.date === d && pm.has(x.pid))
+  const out: Line[] = numbered(s.requests.filter(x => x.date === d && pm.has(x.pid))
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-    .map(({ x, p }, i) => [{ t: (i + 1) + ') Ο ' + p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p) + ' αιτείται ' + x.text + '.' }]);
+    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': αιτείται ' + x.text + '.') }]));
   const free = s.hkaiManual?.[d]?.text?.ait?.trim();
   if (free) out.push([{ t: free }]);
   return out;
+}
+
+// Το είδος της άδειας σε φράση: «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ», «ΑΔΕΙΑ ΑΜΔ», «ΤΙΜΗΤΙΚΗ ΑΔΕΙΑ»
+export function leaveName(st: Pick<Status, 'type' | 'kind'>): string {
+  const k = (st.type === 'LEAVE' ? st.kind : '') || TYPES[st.type].long;
+  return upper(/άδεια/i.test(k) ? k : /[ήη]$/i.test(k) ? k + ' άδεια' : 'άδεια ' + k);
+}
+// «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26» ή «ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26», με τις ώρες αν γράφτηκαν
+export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 'open'>): string {
+  const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''), back = x.toTime && !x.open ? ' ' + x.toTime : '';
+  if (x.open) return 'ΑΠΟ ' + a + ' (ΧΩΡΙΣ ΛΗΞΗ)';
+  if (x.from === x.to && !x.fromTime && !back) return 'ΓΙΑ ΤΗΝ ' + a;
+  return 'ΑΠΟ ' + a + ' ΕΩΣ ' + (x.from === x.to ? back.trim() : hkDay(x.to) + back);
+}
+// 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ … ΕΩΣ ….»
+export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
+  const pm = personMap(s.people);
+  return numbered(s.statuses.filter(x => (x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK') && x.from === d && pm.has(x.pid))
+    .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
+    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }]));
 }
 
 export const lineText = (l: Line) => l.map(r => r.t).join('');

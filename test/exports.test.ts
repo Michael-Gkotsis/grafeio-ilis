@@ -47,13 +47,13 @@ describe('εξαγωγή Excel', () => {
     const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
     save(r.name, r.data);
     const wb = await Workbook.open(r.data); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
-    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ΗΣ ΙΛΗΣ ΤΗΣ 12/10/26');
+    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ΗΣ ΙΛΗΣ ΤΗΣ 12 ΟΚΤ 26');
     expect(fr.get('C29')).toBe('89');
     expect(fr.get('C26')).toBe('1');
     expect(fr.get('O29')).toBe('8');
     expect(fr.formula('E29')).toBe('SUM(C29:D29)');
     expect(fr.formula('AA29')).toBe('E29-Z29');
-    expect(bk.get('G11')).toMatch(/^1\) Ο ΣΤΡ \(ΠΖ\) .* ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12\/10\/2026 .* ΜΕ ΠΕΝΤΕ \(05\) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ……\.$/);   // η ποινή της 11/10 όχι
+    expect(bk.get('G11')).toMatch(/^1\. Ο ΣΤΡ \(ΠΖ\) .* ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 .* ΜΕ ΠΕΝΤΕ \(05\) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ……\.$/);   // η ποινή της 11/10 όχι
     expect(bk.get('L23')).toBe('ΑΥΛΩΝΑΣ, 12 ΟΚΤ 26');
   });
   it('ΗΚΑΙ: ό,τι γράφει ο γραφέας στην οθόνη μπαίνει στο έντυπο και στα αθροίσματα', async () => {
