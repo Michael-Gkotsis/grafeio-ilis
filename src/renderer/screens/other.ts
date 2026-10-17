@@ -25,6 +25,7 @@ import { BrandCard, RoomsCard } from './units';
 import { appTitle } from '../../shared/brand';
 import { EssoCards } from './esso';
 import { listOf, statusLbl } from '../../shared/ranks';
+import { dutyOfficers } from '../../shared/cadre';
 type P = any;
 
 export function TodayScreen() {
@@ -269,13 +270,14 @@ function HkaiManualCard({ date }: { date: string }) {
   const setCell = (r: string, k: string, v: number) => { const row = { ...(m.cells[r] || {}) }; if (v) row[k] = v; else delete row[k]; const cells = { ...m.cells, [r]: row }; if (!Object.keys(row).length) delete cells[r]; setM({ ...m, cells }); };
   const used = Object.entries(m.cells).flatMap(([r, row]) => Object.entries(row).map(([k, v]) => ({ r, k, v })));
   const lbl = (k: string) => HK_MANUAL.find(x => x[0] === k)?.[1] || k;
+  const auto = dutyOfficers(state, date);   // αξιωματικός υπηρεσίας από τα Στελέχη, όταν το πεδίο μένει κενό
   return html`<${Card} title=${'Συμπληρώνεις εσύ (' + (date === today ? 'σήμερα' : dm(date)) + ')'}>
     <p className="note" style=${{ marginTop: 0 }}>Ό,τι δεν βγαίνει από τις καταστάσεις. Οι αριθμοί προστίθενται στη στήλη του βαθμού και τα σύνολα βγαίνουν από τους τύπους του εντύπου.</p>
     <div className="field"><span className="field__label">Αριθμοί ανά βαθμό</span>
       <div className="field-row"><select className="ui-input" aria-label="Βαθμός" value=${rk} onChange=${(e: any) => setRk(e.target.value)}>${[...HK_OFFICERS, ...HK_NCO].map(r => html`<option key=${r}>${r}</option>`)}</select></div>
       <div className="settings-grid" style=${{ marginTop: '6px' }}>${HK_MANUAL.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${m.cells[rk]?.[k] || ''} onChange=${(e: any) => setCell(rk, k, Math.max(0, +e.target.value || 0))}/></label>`)}</div>
       ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => u.r + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
-    ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><input id=${'hk-' + k} className="ui-input" placeholder=${ph} list=${k === 'off' ? 'hk-off-l' : undefined} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></div>`)}
+    ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><input id=${'hk-' + k} className="ui-input" placeholder=${k === 'off' && auto ? auto : ph} list=${k === 'off' ? 'hk-off-l' : undefined} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/>${k === 'off' && html`<span className="field__help">${auto ? 'Κενό = από τα Στελέχη: ' + auto + '.' : 'Κενό = όποιος αξιωματικός έχει «Υπηρεσία» στα Στελέχη.'}</span>`}</div>`)}
     <datalist id="hk-off-l">${state.cadreList.filter(c => c.active).map(c => html`<option key=${c.id} value=${(c.rank + ' ' + c.last + ' ' + c.first).trim()}/>`)}</datalist>
     ${hkOn(state.settings, 'acc') && html`<div className="field"><span className="field__label">Ατυχήματα</span><div className="settings-grid">${HK_ACC_FIELDS.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" placeholder="Ø" value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></label>`)}</div><span className="field__help">Κενό = Ø, όπως στο έντυπο.</span></div>`}
     <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 3 (άδειες που ξεκινούν ή εγκρίθηκαν), 4 (ποινές της μέρας) και 5 (αιτήσεις) γράφονται μόνες τους. Οχήματα και «Προβλέπονται» στις «Ενότητες της ΗΚΑΙ» πιο κάτω.</p>

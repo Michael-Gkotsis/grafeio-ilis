@@ -8,6 +8,7 @@ import { statusLbl } from '../shared/ranks';
 import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
+import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine } from '../shared/froura';
 export { FROURA_FORMS };
 
@@ -65,7 +66,8 @@ const HK_KEYS = ['yp', 'ey', 'tim', 'bl', 'os', 'mag', 'sid', 'kin', 'ka', 'an',
 export class TemplateError extends Error {}
 // 5. ΑΙΤΗΣΕΙΣ (G12): το ελεύθερο κείμενο γράφεται μαζί με τις αριθμημένες αιτήσεις, στο τέλος
 // 1. ΕΓΓΡΑΦΕΣ και 2. ΔΙΑΓΡΑΦΕΣ (G8, G9): το ελεύθερο κείμενο μετά από όσους μπήκαν ή βγήκαν από τη δύναμη τη μέρα
-export const HK_TEXT: Record<string, string> = { loi: 'G19', off: 'A18' };
+// Αξιωματικός υπηρεσίας (A18): ό,τι γράφτηκε, αλλιώς από τα Στελέχη (hkOffText)
+export const HK_TEXT: Record<string, string> = { loi: 'G19' };
 // Ατυχήματα (K5 ολικές ζημιές, L5 μερικές, M5 σε άνδρες): ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς μένει το Ø του εντύπου
 export const HK_ACC: Record<string, string> = { accT: 'K5', accP: 'L5', accM: 'M5' };
 // front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
@@ -100,6 +102,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   // κείμενα που γράφει ο χρήστης στην οθόνη ΗΚΑΙ (πίσω σελίδα)
   const tx = s.hkaiManual?.[d]?.text || {};
   for (const [k, ref] of Object.entries(HK_TEXT)) if (tx[k]) bk.set(ref, tx[k]);
+  const off = hkOffText(s, d); if (off) bk.set('A18', off);
   // Πίσω όψη: φρουρές της ημέρας, αποφάσεις Διοικητή, όργανα υπηρεσίας
   const g = s.guards[d] || {};
   let night = 0, day24 = 0;

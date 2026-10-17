@@ -40,6 +40,13 @@ export function cadreMatch(f: CadreFilter, c: Cadre, st: CadreStatus | undefined
   return f === 'all' || st?.group === f;
 }
 // αναζήτηση χωρίς τόνους: βαθμός, όνομα, θέση, τηλέφωνο
+// ΗΚΑΙ, «Όργανα υπηρεσίας › Αξιωματικοί»: ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς οι αξιωματικοί (αξιωματικοί, ανθυπασπιστές,
+// ΔΕΑ) της καρτέλας Στελέχη που έχουν «Υπηρεσία εντός στρατοπέδου» τη μέρα, με τη σειρά του βαθμού
+export function dutyOfficers(s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings'>, d: ISODate): string {
+  return (s.cadreList || []).filter(c => c.active && HK_OFFICERS.includes(c.hk) && cadreStatusOn(s, c.id, d)?.col === 'yp').sort(byCadreRank)
+    .map(c => [c.rank, c.last, c.first].filter(Boolean).join(' ')).join(', ');
+}
+export const hkOffText = (s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'hkaiManual'>, d: ISODate) => s.hkaiManual?.[d]?.text?.off?.trim() || dutyOfficers(s, d);
 export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).trim(); return !k || normGreek([c.rank, c.last, c.first, c.role, c.phone, c.hk].join(' ')).includes(k); };
 
 // Excel «Δυναμικό στελεχών»: όσοι είναι σε δύναμη με την κατάσταση της μέρας, όλες οι καταστάσεις από εκείνη τη μέρα
