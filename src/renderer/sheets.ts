@@ -5,7 +5,7 @@ import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
-import { byName, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
+import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
@@ -103,6 +103,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   const A = (k: string) => E(acc && tx[k]?.trim() ? tx[k].trim() : 'Ø', 'b c');
   const N = (v: number) => E(v || '', 'b c');
   const tx = s.hkaiManual?.[date]?.text || {};
+  const og = hkOrgans(s, date);
   // όργανα υπηρεσίας (6 στήλες) αριστερά, απόφαση δεξιά: τίτλος 2 στήλες, κείμενο 6
   const L = (n: number, lbl: string, v: string | Line[]) => [E(n + '. ' + lbl + ':', 'bold', 2), typeof v === 'string' ? E(v || '', 'w', 6) : { ...E(linesText(v), 'w', 6), rich: v }];
   const rows: (Cell | null)[][] = [[E('ΧΟΡΗΓΟΥΜΕΝΕΣ ΦΡΟΥΡΕΣ', 'b hdr', 5), E(''), E('ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ', 'b hdr', 4), E(''), E('ΑΤΥΧΗΜΑΤΑ', 'b hdr', 3)],
@@ -116,8 +117,8 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
     [E('Αξιωματικοί:', '', 6), ...L(1, 'ΕΓΓΡΑΦΕΣ', egr)],
     [E(hkOffText(s, date), 'w', 6), ...L(2, 'ΔΙΑΓΡΑΦΕΣ', dia)],
     [E('Υπαξιωματικοί:', '', 6), ...L(3, 'ΑΔΕΙΕΣ', leaves)],
-    [E(g.ly ? 'Λ/Υ: ' + name(g.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns)],
-    [E(g.dy ? 'Δ/Υ: ' + name(g.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],
+    [E(og.ly ? 'Λ/Υ: ' + name(og.ly) : '', 'w', 6), ...L(4, 'ΠΟΙΝΕΣ', puns)],
+    [E(og.dy ? 'Δ/Υ: ' + name(og.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],
     [E('', '', 6), ...L(6, 'ΛΟΙΠΑ', tx.loi || '')],
     [E('', '', 14)], [E('', '', 6), E('ΑΝΑΦΕΡΕΤΑΙ ΠΛΗΡΟΤΗΤΑ ΟΠΛΙΣΜΟΥ ΚΑΙ ΛΟΙΠΩΝ ΕΛΚΥΣΤΙΚΩΝ ΥΛΙΚΩΝ', 'bold', 8)], [E('', '', 9), E(s.settings.place + ', ' + hkDate(date), 'c', 5)],
     [E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 4), E('', '', 3), E('ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ', 'ttl', 5)]];

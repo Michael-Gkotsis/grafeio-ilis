@@ -6,7 +6,7 @@ import path from 'path';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fillHkai } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
-import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
+import { hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
 import { withArticle, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
 import type { AppState } from '../src/shared/domain';
@@ -188,5 +188,20 @@ describe('ενότητες της ΗΚΑΙ', () => {
     s = run(s, { t: 'setSettings', settings: { hkai: { ...s.settings.hkai, off: ['grd', 'veh', 'acc', 'prov'] } }, text: 'x' });
     wb = await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data); bk = await wb.sheet(1);
     expect([bk.get('D5'), bk.get('D8'), bk.get('G5'), bk.get('M5'), (await wb.sheet(0)).get('B29')]).toEqual([null, null, null, 'Ø', null]);
+  });
+});
+
+describe('ΗΚΑΙ: όργανα υπηρεσίας με μόνιμους Λ/Υ και Δ/Υ', () => {
+  it('κενές θέσεις: μπαίνουν και οι δύο μόνιμοι· ό,τι μπήκε στη θέση κερδίζει· όποιος λείπει δεν μπαίνει', async () => {
+    let s = fakeState(10); const [a, b, c] = s.people;
+    s = { ...s, settings: { ...s.settings, fixed: { ly: a.id, dy: b.id } } };
+    expect(hkOrgans(s, D)).toEqual({ ly: a.id, dy: b.id });
+    const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
+    expect(bk.get('A22')).toContain(a.last.toUpperCase());
+    expect(bk.get('A23')).toContain(b.last.toUpperCase());
+    s = { ...s, guards: { [D]: { dy: c.id } } };
+    expect(hkOrgans(s, D)).toEqual({ ly: a.id, dy: c.id });
+    s = run(s, { t: 'declare', cmd: { pids: [a.id], type: 'LEAVE', from: D, to: D } } as Command);
+    expect(hkOrgans(s, D)).toEqual({ dy: c.id });
   });
 });
