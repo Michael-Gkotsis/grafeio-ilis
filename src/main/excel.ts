@@ -2,7 +2,7 @@
 // Η ανάγνωση των Excel (Δυναμολόγιο, Αρχεία Excel) γίνεται πια με το ελαφρύ xlsx.ts.
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
-import { MONTHS, dmy, parseD, type ISODate } from '../shared/dates';
+import { MONTHS, dmy, hkDate, parseD, type ISODate } from '../shared/dates';
 import { rosterSheets } from '../shared/rosterLists';
 import { norm, collator, upper } from '../shared/text';
 import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
@@ -81,6 +81,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
 
 // Δυναμολόγιο και καταστάσεις (Michael, 17/10): ένα Excel, ένα φύλλο ανά φίλτρο της οθόνης (Όλοι, Άδειες, Τιμωρημένοι,
 // Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ), για μία ημερομηνία. Όλα με κεφαλαία, όπως ό,τι γράφει η εφαρμογή στα Excel.
+const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22 };
 export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
@@ -100,10 +101,34 @@ export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: stri
       c.font = { size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
     }));
     if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { italic: true, size: 10 }; }
-    const width: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22 };
+    const width = ROSTER_W;
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = width[h] || 12; });
     ws.pageSetup.printTitlesRow = '3:3';
   }
   const data = Buffer.from(await wb.xlsx.writeBuffer());
   return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
+}
+
+// Συνολικό Δυναμολόγιο για εκτύπωση (Michael, 17/10), με την κεφαλίδα της ΗΚΑΙ: οι 3 γραμμές της μονάδας πάνω αριστερά,
+// τόπος και ημερομηνία («14 ΟΚΤ 26») πάνω δεξιά, τίτλος στη μέση. Όλοι όσοι είναι σε δύναμη, κατά θάλαμο και επώνυμο.
+export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+  const sh = rosterSheets(s, d)[0];
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
+  wb.created = wb.modified = new Date(d + 'T00:00:00Z');
+  const ws = wb.addWorksheet('ΔΥΝΑΜΟΛΟΓΙΟ', { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
+  const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const W = sh.head.length; const T = Math.max(5, s.settings.unit.length + 2); const HEAD = T + 3;
+  s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = { bold: true, size: 10, underline: true }; c.alignment = { horizontal: 'center' }; });
+  ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = { bold: true, size: 10 }; dc.alignment = { horizontal: 'right' };
+  ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
+  ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length; n.font = { size: 10 }; n.alignment = { horizontal: 'center' };
+  sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = { bold: true, size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
+  sh.rows.forEach((r, j) => r.forEach((v, i) => {
+    const c = ws.getRow(HEAD + 1 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+    c.font = { size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
+  }));
+  sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = ROSTER_W[h] || 12; });
+  ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { name: 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
 }
