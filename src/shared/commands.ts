@@ -12,7 +12,7 @@ import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
-  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[] }
+  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[]; force?: boolean }
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
@@ -27,7 +27,7 @@ export type Command =
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
   | { t: 'approvePun'; id: string }
-  | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string }
+  | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string }
   | { t: 'autofill'; date: ISODate }
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
@@ -148,7 +148,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
       const tm = checkTimes(cmd);
-      if (plan.blocked.length) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
+      if (plan.blocked.length && !cmd.force) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
       const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
       if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + range(cmd.from, cmd.to));
@@ -171,7 +171,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'outs': {
       // Κ-Ε1…Κ-Ε3: ο ίδιος έλεγχος και εδώ, όχι μόνο στην οθόνη
-      for (const x of c.changes) if (x.to) {
+      // Τίποτα δεν απαγορεύεται πλήρως (Michael, 17/10): με force ο χρήστης είδε την προειδοποίηση και το επιβεβαίωσε
+      if (!c.force) for (const x of c.changes) if (x.to) {
         const r = outBlock(s, c.date, x.pid);
         if (r) throw new Error(shortName(pm.get(x.pid)!) + ' δεν βγαίνει έξοδο: ' + r);
       }
@@ -298,18 +299,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'assign': {
       const post = postBy(s, c.k); if (!post) throw new Error('Άγνωστη θέση');
-      // Κ-Υ1, Κ-Υ3 και «ήδη σε άλλη θέση» δεν παρακάμπτονται ποτέ· ανάπαυση, ΣΚ και δυνατότητα μόνο με αιτιολογία (ερ. 13)
-      let note = '';
+      // Τίποτα δεν απαγορεύεται πλήρως (Michael, 17/10): κατάσταση (ΕΥ, άδεια…), ανάπαυση, ΣΚ, δυνατότητα και «ήδη σε άλλη
+      // θέση» περνούν με αιτιολογία. move: η άλλη θέση του αδειάζει (μετακίνηση), αλλιώς μένει και στις δύο.
+      let note = ''; let base = s;
       if (c.pid) {
         if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
-        const hard = dutyBlock(s.statuses, c.date, c.pid, post, s.settings.lists) || (postOf(s, c.date, c.pid, c.k) ? 'Ήδη ' + postTxt(postOf(s, c.date, c.pid, c.k)!) : null);
-        if (hard) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + hard);
-        const soft = capBlock(s, c.date, c.pid, post) || ruleBlock(s, c.date, c.pid, undefined, c.k);
+        const other = postOf(s, c.date, c.pid, c.k);
+        if (c.move && other && other.k === c.move) { base = setGuard(s, c.date, c.move, null); note = ' (από ' + postTxt(other) + ')'; }
+        const twice = !c.move && other ? 'ήδη ' + postTxt(other) : null;
+        const soft = dutyBlock(s.statuses, c.date, c.pid, post, s.settings.lists) || twice || capBlock(base, c.date, c.pid, post) || ruleBlock(base, c.date, c.pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
-        if (soft) note = ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
+        if (soft) note += ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
         const lr = lastResort(s.statuses, c.date, c.pid, post, s.settings.lists) || statusWarn(s, c.date, c.pid); if (lr) note += ' (' + lr + ')';
       }
-      let next = setGuard(s, c.date, c.k, c.pid);
+      let next = setGuard(base, c.date, c.k, c.pid);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση
       const sl = c.pid ? (s.dutyLog[c.date] || []).filter(e => !(e.pid === c.pid && e.kind === post.kind)) : null;
       if (sl && sl.length !== (s.dutyLog[c.date] || []).length) { const dutyLog = { ...s.dutyLog, [c.date]: sl }; if (!sl.length) delete dutyLog[c.date]; next = { ...next, dutyLog }; }

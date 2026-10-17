@@ -729,3 +729,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .essochip small{font-size:11px;font-weight:600;letter-spacing:.6px;color:var(--gold)}
 .essochip b{font-size:13px;font-weight:700}
 @media (max-width:720px){.essochip small{display:none}.essochip{padding:0 8px}}
+/* Εξοδούχοι: όποιος δεν βγαίνει κατά τους κανόνες επιλέγεται με ⚠ */
+.orow__warn{color:var(--warn);font-weight:600}
+.ui-seg button.is-warn{color:var(--warn)}
+.ui-seg button.is-warn[aria-pressed="true"]{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}

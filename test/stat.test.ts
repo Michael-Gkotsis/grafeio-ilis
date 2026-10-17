@@ -44,10 +44,11 @@ describe('Καταστάσεις: αλλαγές από τις Ρυθμίσει�
     expect(guardUnavailable(s, D, 2, 'mg1')).toBeNull();
     expect(guardUnavailable(s, D, 2, 'th1')).toMatch(/ΕΥ/);
   });
-  it('ΕΑ όχι θαλαμοφύλακας: δεν μπαίνει ούτε με το χέρι', () => {
+  it('ΕΑ όχι θαλαμοφύλακας: με το χέρι μόνο με αιτία', () => {
     const s = withLists(declare(fakeState(5), 'EA', 2), { stat: { cells: { EA: { th: 'no' } } } });
     expect(guardUnavailable(s, D, 2, 'th1')).toMatch(/ΕΑ: όχι θαλαμοφύλακα/);
-    expect(() => run(s, { t: 'assign', date: D, k: 'th1', pid: 2, force: 'x' } as any)).toThrow(/ΕΑ/);
+    expect(() => run(s, { t: 'assign', date: D, k: 'th1', pid: 2 } as any)).toThrow(/ΕΑ/);
+    expect(run(s, { t: 'assign', date: D, k: 'th1', pid: 2, force: 'x' } as any).guards[D].th1).toBe(2);
     expect(guardUnavailable(s, D, 2, 'th5')).toBeNull();   // ο β΄ πίνακας είναι άλλη υπηρεσία
   });
   it('«μόνο αν δεν υπάρχει άλλος»: η αυτόματη συμπλήρωση τον βάζει τελευταίο, με προειδοποίηση', () => {
