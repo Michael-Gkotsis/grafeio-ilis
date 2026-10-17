@@ -410,29 +410,27 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
     expect(guardUnavailable(sp, D, 6, 'tae')).toMatch(/Πόστο/);
     expect(guardUnavailable(s, D, 6, 'ly')).toBeNull();
   });
-  it('ΣΚ: πρώτα όσοι δεν έχουν δικαίωμα ΔΝ και όσων ο θάλαμος δεν βγαίνει', () => {
+  it('ΣΚ: μετρούν μόνο οι αργίες, όχι ΔΝ, έξοδος ή θάλαμος (Michael, 17/10)', () => {
     const SAT = '2026-10-17';
     let s = fakeState(40);
-    // Σάββατο βγαίνουν οι θάλαμοι 1-4· με 40 άτομα και 18 θέσεις, κανείς από αυτούς δεν χρειάζεται
-    s = { ...s, people: s.people.map(p => (p.id === 13 ? { ...p, dn: true } : p)) };
-    const r = fillDay(s, SAT);
-    const used = Object.values(r.guards[SAT]);
-    const pm = new Map(s.people.map(p => [p.id, p]));
-    const goingHome = used.filter(id => [1, 2, 3, 4].includes(pm.get(id)!.room!) || pm.get(id)!.dn);
-    expect(goingHome).toEqual([]);
-  });
-  it('ΣΚ: η έξοδος/ΔΝ μετρά πριν από τις αργίες (Michael, 17/10)', () => {
-    const SAT = '2026-10-17';
-    let s = fakeState(60);
-    // όλοι όσοι δεν έχουν ΔΝ έκαναν ήδη μία αργία· όσοι έχουν ΔΝ καμία: μπαίνουν πρώτα όσοι δεν βγαίνουν
+    // όλοι όσοι δεν έχουν ΔΝ έκαναν ήδη μία αργία· όσοι έχουν ΔΝ (και θάλαμο που βγαίνει) καμία: μπαίνουν αυτοί
     const dn = new Set([2, 3, 4, 7, 8]);
-    s = { ...s, people: s.people.map(p => (dn.has(p.id) ? { ...p, dn: true, room: 6 } : p)), baseline: Object.fromEntries(s.people.filter(p => !dn.has(p.id)).map(p => [p.id, { hol: 1 }])) };
+    s = { ...s, people: s.people.map(p => (dn.has(p.id) ? { ...p, dn: true, room: 1 } : p)), baseline: Object.fromEntries(s.people.filter(p => !dn.has(p.id)).map(p => [p.id, { hol: 1 }])) };
     const used = new Set(Object.values(fillDay(s, SAT).guards[SAT]));
-    for (const id of dn) expect(used.has(id)).toBe(false);
-    // και όταν δεν φτάνουν όσοι μένουν μέσα, μπαίνουν πρώτοι από όσους βγαίνουν αυτοί με τις λιγότερες αργίες
-    const s2 = { ...s, people: s.people.map(p => (!dn.has(p.id) && p.room! >= 5 ? { ...p, room: 1 } : p)) };
-    const used2 = new Set(Object.values(fillDay(s2, SAT).guards[SAT]));
-    for (const id of dn) expect(used2.has(id)).toBe(true);
+    for (const id of dn) expect(used.has(id)).toBe(true);
+  });
+  it('Πέμπτη-Παρασκευή: όσοι χρωστάνε ΣΚ μένουν για το ΣΚ, και η ανάπαυση τηρείται (Michael, 17/10)', () => {
+    const FRI = '2026-10-16', SAT = '2026-10-17';
+    let s = fakeState(80);
+    // οι 20 πρώτοι δεν έχουν κάνει καμία αργία, οι άλλοι από μία: την Παρασκευή δεν μπαίνει κανείς από τους 20
+    const owe = new Set(s.people.slice(0, 20).map(p => p.id));
+    s = { ...s, baseline: Object.fromEntries(s.people.filter(p => !owe.has(p.id)).map(p => [p.id, { hol: 1 }])) };
+    s = { ...s, guards: fillDay(s, FRI).guards };
+    const fri = Object.values(s.guards[FRI]);
+    expect(fri.filter(id => owe.has(id))).toEqual([]);
+    // και το Σάββατο μπαίνουν αυτοί, αφού δεν έχουν υπηρεσία την Παρασκευή
+    const sat = new Set(Object.values(fillDay(s, SAT).guards[SAT]));
+    expect([...owe].filter(id => sat.has(id)).length).toBeGreaterThanOrEqual(Math.min(owe.size, sat.size) - 3);
   });
   it('ΣΤΕΠ: σε καμία υπηρεσία, ούτε άοπλη (Michael, 13/10)', () => {
     const s = declare(fakeState(20), 'STEP', 2, D);
