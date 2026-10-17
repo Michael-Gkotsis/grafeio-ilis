@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 import { ROSTER_COLS, rosterMatch, rosterSheets } from '../src/shared/rosterLists';
-import { rosterLists } from '../src/main/excel';
+import { rosterLists, rosterPrint } from '../src/main/excel';
 import { statusesOn } from '../src/shared/rules';
 import type { AppState, Status } from '../src/shared/domain';
 import { fakeState } from './fixtures';
@@ -56,5 +56,22 @@ describe('Δυναμολόγιο: ένα Excel, ένα φύλλο ανά φίλ�
     expect(lv.getCell(4, 14).value).toBe('ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ');
     expect(lv.getCell(4, 17).value).toBe('ΓΑΜΟΣ');
     expect(wb.getWorksheet('ΤΙΜΩΡΗΜΕΝΟΙ')!.getCell(5, 1).value).toBeNull();
+  });
+});
+
+describe('Συνολικό Δυναμολόγιο για εκτύπωση', () => {
+  it('κεφαλίδα ΗΚΑΙ, τίτλος με ημερομηνία, μόνο οι ενεργοί', async () => {
+    const s = sample();
+    const r = await rosterPrint(s, D);
+    expect(r.name).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ 17-10-2026.xlsx');
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data as any);
+    expect(wb.worksheets.map(w => w.name)).toEqual(['ΔΥΝΑΜΟΛΟΓΙΟ']);
+    const ws = wb.worksheets[0];
+    expect(ws.getCell(1, 1).value).toBe(s.settings.unit[0].toUpperCase());
+    expect(String(ws.getCell(5, 1).value)).toMatch(/^ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ .*ΤΗΣ 17 ΟΚΤ 26$/);
+    expect(ws.getCell(6, 1).value).toBe('ΔΥΝΑΜΗ: 11');
+    expect(ws.getCell(8, 4).value).toBe('ΕΠΙΘΕΤΟ');
+    expect(ws.getCell(19, 4).value).not.toBeNull();
+    expect(ws.getCell(20, 4).value).toBeNull();
   });
 });

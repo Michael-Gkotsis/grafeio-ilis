@@ -10,6 +10,7 @@ const api: Api = {
   dayCheck: () => ipcRenderer.invoke('day:check'),
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   exportLists: date => ipcRenderer.invoke('export:lists', date),
+  exportRoster: (date, print) => ipcRenderer.invoke('export:roster', date, print),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),
   backup: () => ipcRenderer.invoke('backup'),
