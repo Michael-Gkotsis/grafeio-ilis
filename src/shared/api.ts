@@ -58,6 +58,7 @@ export interface Api {
   exportLists(date: ISODate): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
   exportRoster(date: ISODate, print?: boolean): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
   exportWeapons(date: ISODate, print?: boolean): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
+  exportCadre(date: ISODate): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;

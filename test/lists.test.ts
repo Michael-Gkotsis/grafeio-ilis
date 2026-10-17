@@ -88,7 +88,7 @@ describe('λίστες', () => {
   it('απουσίες στελεχών: δικό σου είδος μετρά στη στήλη που όρισες· κρυμμένο βασικό διαβάζεται ακόμα', () => {
     expect(cadreAbsKinds()).toEqual(CADRE_ABS);
     const l: UserLists = { cadreAbs: { add: [{ name: 'Σχολείο', col: 'ekp' }, { name: 'Υπηρεσιακή' }], hide: ['Φύλλο πορείας'] } };
-    expect(cadreAbsKinds(l).map(x => x[0])).toEqual(['ka', 'an', 'eid', 'nos', 'ekp', 'allh', 'other', 'Σχολείο', 'Υπηρεσιακή']);
+    expect(cadreAbsKinds(l).map(x => x[0])).toEqual(['yp', 'ey', 'tim', 'os', 'mag', 'sid', 'kin', 'ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fyl', 'apal', 'ekp', 'allh', 'other', 'Σχολείο', 'Υπηρεσιακή']);
     expect(cadreAbsOf('fp', l)).toEqual(['fp', 'Φύλλο πορείας', 'fp']);
     expect(cadreAbsOf('Σχολείο', l)).toEqual(['Σχολείο', 'Σχολείο', 'ekp']);
     const s0 = fakeState(4); let s: AppState = { ...s0, settings: { ...s0.settings, lists: l } };

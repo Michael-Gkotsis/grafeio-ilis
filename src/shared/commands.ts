@@ -17,7 +17,7 @@ export type Command =
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
-  | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> }
+  | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> & { id?: string }; replace?: boolean }   // id: αλλαγή · replace: κόβει όσες πέφτουν στις ίδιες μέρες
   | { t: 'deleteCadreAbs'; id: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
   | { t: 'setTimes'; id: string; fromTime: string; toTime: string }
@@ -202,16 +202,27 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'addCadreAbs': {
       const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       if (c.abs.to < c.abs.from) throw new Error('Το «έως» είναι πριν από το «από»');
-      const clash = s.cadreAbs.find(a => a.cid === x.id && a.from <= c.abs.to && c.abs.from <= a.to);
-      if (clash) throw new Error(x.last + ' έχει ήδη απουσία ' + dm(clash.from) + '–' + dm(clash.to));
-      const abs: CadreAbs = { ...c.abs, id: 'a' + ctx.newId() }; if (!abs.note) delete abs.note;
+      const old = c.abs.id ? s.cadreAbs.find(a => a.id === c.abs.id) : undefined;
+      if (c.abs.id && !old) throw new Error('Δεν βρέθηκε η κατάσταση');
+      // μία κατάσταση τη μέρα (μία στήλη στην ΗΚΑΙ): η οθόνη ρωτά πριν, και με «replace» η νέα κόβει τις παλιές σε αυτές τις μέρες
+      const clash = s.cadreAbs.filter(a => a !== old && a.cid === x.id && a.from <= c.abs.to && c.abs.from <= a.to);
+      if (clash.length && !c.replace) throw new Error(x.last + ' έχει ήδη κατάσταση ' + dm(clash[0].from) + '–' + dm(clash[0].to));
+      const abs: CadreAbs = { ...c.abs, id: old?.id || 'a' + ctx.newId() }; if (!abs.note) delete abs.note;
+      const cut = clash.flatMap(a => {
+        const parts: CadreAbs[] = [];
+        if (a.from < abs.from) parts.push({ ...a, to: addDays(abs.from, -1) });
+        if (a.to > abs.to) parts.push({ ...a, id: parts.length ? 'a' + ctx.newId() : a.id, from: addDays(abs.to, 1) });
+        return parts;
+      });
+      const base = s.cadreAbs.filter(a => !clash.includes(a));
+      const cadreAbs = old ? [...base.map(a => (a === old ? abs : a)), ...cut] : [...base, ...cut, abs];
       const lbl = cadreAbsOf(abs.kind, s.settings.lists)?.[1] || abs.kind;
-      return { state: { ...s, cadreAbs: [...s.cadreAbs, abs] }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to), files: ['ΗΚΑΙ'] };
+      return { state: { ...s, cadreAbs }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to) + (old ? ' (αλλαγή)' : '') + (clash.length ? ', στη θέση ' + (clash.length === 1 ? 'άλλης' : clash.length + ' άλλων') : ''), files: ['ΗΚΑΙ'] };
     }
     case 'deleteCadreAbs': {
-      const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η απουσία');
+      const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η κατάσταση');
       const x = s.cadreList.find(y => y.id === a.cid);
-      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε απουσία στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: ['ΗΚΑΙ'] };
+      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: ['ΗΚΑΙ'] };
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');

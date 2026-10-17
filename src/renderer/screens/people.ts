@@ -1,7 +1,7 @@
 // features/people και features/status: προσωπικό, καρτέλα ατόμου, δήλωση κατάστασης
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { reqWhat } from '../../shared/hkaiText';
-import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
+import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, TIMES_HELP, TimeField } from '../common';
 import { hasTimes, normTime, timesTxt } from '../../shared/hours';
@@ -11,7 +11,6 @@ import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, 
 import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
-import { CadreView } from './cadre';
 import { SiField } from './si';
 import { RoomField } from './units';
 import { siOf } from '../../shared/si';
@@ -145,9 +144,6 @@ export function PeopleScreen() {
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
     } finally { setXl(false); }
   };
-  const ptab = nav.params.peopleTab || 'soldiers';
-  const tabs = html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${ptab} onChange=${(v: string) => nav.set({ peopleTab: v })} items=${[{ value: 'soldiers', label: 'Οπλίτες (' + total + ')' }, { value: 'cadre', label: 'Στελέχη (' + state.cadreList.length + ')' }]}/></div>`;
-  if (ptab === 'cadre') return html`<${CadreView} tabs=${tabs}/>`;
   const dateSel = html`<select className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
   const grid = withSt ? GRID_ST : GRID;
   return html`<div>
@@ -157,7 +153,6 @@ export function PeopleScreen() {
       <${Button} variant="outline" disabled=${xl} onClick=${exportXl} data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${printRoster} data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ· βγαίνει και Excel">${Icon.print}Εκτύπωση<//>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
-    ${tabs}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/>
       <select className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => setRoom(e.target.value ? +e.target.value : null)}>
