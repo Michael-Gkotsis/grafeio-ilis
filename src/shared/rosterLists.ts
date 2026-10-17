@@ -60,3 +60,10 @@ export function rosterSheets(s: AppState, d: ISODate): RosterSheet[] {
     return { name, title: name + ' ' + dmy(d), head: withStatus ? [...ROSTER_COLS, ...STATUS_COLS] : ROSTER_COLS, rows };
   });
 }
+
+// Η ΕΣΣΟ της δύναμης: η πιο συχνή όσων είναι σε δύναμη (φαίνεται πάνω δεξιά και μπαίνει στον νέο στρατιώτη)
+export function currentEssos(people: Person[]): string {
+  const n = new Map<string, number>();
+  for (const p of people) if (p.active && p.essos) n.set(p.essos, (n.get(p.essos) || 0) + 1);
+  return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}

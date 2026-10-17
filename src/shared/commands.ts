@@ -452,7 +452,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'updatePerson': {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
-      return { state: { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)), settings: rememberChoices(s.settings, c.person, old) }, text: 'Άλλαξαν τα στοιχεία: ' + shortName(c.person), files: [] };
+      let next: AppState = { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)), settings: rememberChoices(s.settings, c.person, old) };
+      // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
+      const gone = old.active && !c.person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
+      gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
+      const text = old.active && !c.person.active ? shortName(c.person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && c.person.active ? shortName(c.person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(c.person);
+      return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'addPerson': {
       const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();

@@ -14,8 +14,7 @@ import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from
 import { CadreView } from './cadre';
 import { SiField } from './si';
 import { siOf } from '../../shared/si';
-import { ROSTER_FILTERS, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
-import { RequestDialog } from './other';
+import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
 type P = any;
@@ -225,19 +224,34 @@ function DutyProfile({ p, caps, open, onMore }: P) {
   </div>`;
 }
 
+// «Τι κάνει» ένας στρατιώτης στις υπηρεσίες (μόνιμα, όχι με ημερομηνίες): από την οθόνη Υπηρεσίες (Michael, 17/10: όχι στην καρτέλα)
+export function DutyProfileDialog({ pid: pid0, onClose }: P) {
+  const { state, run } = useStore(); const toast = useToast();
+  const [pid, setPid] = useState<number | null>(pid0 ?? null); const [more, setMore] = useState(false);
+  const p = pid != null ? personMap(state.people).get(pid) : undefined;
+  const caps = p ? capsOf(state, p.id) : {};
+  return html`<${Dialog} title=${p ? 'Τι κάνει ο ' + shortName(p) : 'Τι κάνει ένας στρατιώτης'} description="Μόνιμα, όχι με ημερομηνίες. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
+    footer=${html`<${Button} onClick=${onClose}>Κλείσε<//>`}>
+    ${pid0 == null && html`<div className="field"><label className="field__label" htmlFor="dpp">Στρατιώτης</label><${PersonPicker} id="dpp" placeholder=${p ? "Άλλος στρατιώτης…" : undefined} onChange=${(id: number) => setPid(id)} autoFocus=${true}/></div>`}
+    ${p && html`<${DutyProfile} p=${p} caps=${caps} open=${more} onMore=${() => setMore(!more)}/>
+      ${more && html`<div>
+      <div className="capgrid">${CAP_KINDS.map(([k, l]) => { const off = (caps as P)[k]; return html`<label key=${k} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει: ' + off : 'Κάνει ' + CAP_ACC[k]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const allowed = e.target.checked; if (await run({ t: 'setCap', pid: p.id, kind: k, allowed }, false)) toast({ text: shortName(p) + (allowed ? ' κάνει ' : ' δεν κάνει ') + CAP_ACC[k] + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' }); }}/>${l}</label>`; })}</div>
+      <div className="capgrid" role="group" aria-label="Μέρες που κάνει υπηρεσία" style=${{ marginTop: '8px' }}><span className="muted" style=${{ fontSize: '13px', alignSelf: 'center' }}>Μέρες:</span>${WEEK.map(d => { const off = (p.offDays || []).includes(d); return html`<label key=${d} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : 'Κάνει υπηρεσία ' + DOW_FULL[d]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const on = e.target.checked; const days = on ? (p.offDays || []).filter(x => x !== d) : [...(p.offDays || []), d]; if (await run({ t: 'setOffDays', pid: p.id, days }, false)) toast({ text: shortName(p) + (on ? ' κάνει ξανά υπηρεσία ' : ' δεν κάνει υπηρεσία ') + DOW_FULL[d] + '. Η αυτόματη συμπλήρωση δεν τον βάζει εκείνες τις μέρες· με το χέρι μπαίνει με επιβεβαίωση.' }); }}/>${DOW[d]}</label>`; })}</div>
+      <p className="note" style=${{ margin: '8px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ρυθμίσεις › Σ.Ι.· αρχικά ο Ι3 ΧΩΡΙΣ ΟΠΛΟ και ο Ι4 όχι σε ένοπλη υπηρεσία) και το πόστο. Οι μέρες: ξετσέκαρε όσες δεν κάνει καμία υπηρεσία (μετρά η μέρα που ξεκινά η υπηρεσία, 14:00).</p></div>`}`}
+  <//>`;
+}
+
 export function PersonSheet({ pid, onClose }: P) {
   const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
   const p = personMap(state.people).get(pid);
-  const [edit, setEdit] = useState(false); const [req, setReq] = useState(false);
-  const [times, setTimes] = useState<Status | null>(null); const [capMore, setCapMore] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const [times, setTimes] = useState<Status | null>(null);
   if (!p) return null;
   const reqs = state.requests.filter(r => r.pid === pid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const posts = postsOf(state.settings);
   const hist = [...statusesOf(state.statuses, pid)].sort((a, b) => b.from.localeCompare(a.from));
   const dd = dutyStats(state).get(pid) || emptyStat();
   const duties = dd.log.slice().reverse().slice(0, 12).map(e => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h }));
-  const base = state.baseline[pid]; const nBase = baseTotal(base);
-  const caps = capsOf(state, pid);
   const ob = outBlock(state, today, pid);
   // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
   const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
@@ -245,24 +259,22 @@ export function PersonSheet({ pid, onClose }: P) {
   const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false });
   const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true });
   const rules = [noDutyT ? 'Καμία υπηρεσία' : unarmedT ? 'Μόνο άοπλες θέσεις' : null, ob ? 'Δεν βγαίνει έξοδο (' + ob + ')' : null].filter(Boolean);
+  const si = p.si ? siOf(p, lists) : null;
+  // Η καρτέλα (Michael, 17/10): ό,τι έχει το Δυναμολόγιο για τον στρατιώτη, οι υπηρεσίες του (σύνολο, με τις αργίες/ΣΚ από κάτω),
+  // το ημερολόγιο υπηρεσιών και το ιστορικό καταστάσεων. Το «Τι κάνει» είναι πλέον στις Υπηρεσίες, η ΕΣΣΟ πάνω δεξιά.
   return html`<${Sheet} onClose=${onClose} title=${html`<h2 style=${{ fontSize: '18px' }}>${plainName(p)}</h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${p.rank} · ${unitOf(p)}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
     ${rules.length > 0 && html`<${Alert} tone="warn"><span><b>Σήμερα:</b> ${rules.join(' · ')}</span><//>`}
-    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => nav.declare({ pids: [pid], type: 'DN', from: today, to: today })}>ΔΝ σήμερα<//><${Button} variant="ghost" onClick=${() => setReq(true)}>Νέα αίτηση<//><${Button} variant="ghost" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
-    <dl className="kv"><dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt><abbr data-tip="Έτος/Σειρά Στρατεύσιμων Οπλιτών">ΕΣΣΟ</abbr></dt><dd>${p.essos || '—'}</dd><dt>Ειδικότητα</dt><dd>${p.spec || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p)})</span></dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${p.si || '—'}${p.si && p.siCat && siOf(p, state.settings.lists).cat ? ' · ' + siOf(p, state.settings.lists).cat : ''}</dd>${p.post && html`<dt>Πόστο</dt><dd>${p.post}</dd>`}${p.role && html`<dt>Ρόλος</dt><dd>${p.role}</dd>`}<dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd>${p.weapon && html`<dt>Όπλο</dt><dd className="num">${p.weapon}</dd>`}
-      <dt>Υπηρεσίες</dt><dd><span className="num">${dd.total}</span> <span className="muted" style=${{ fontSize: '12px' }}>(${(Object.keys(dd.byKind).length ? Object.keys(dd.byKind) : ['th', 'mg']).map(k => (KIND_LBL as P)[k] + ' ' + (dd.byKind[k] || 0)).join(' · ')}${nBase ? ' · από αυτές ' + nBase + ' πριν την εφαρμογή' : ''})</span></dd><dt>Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd>${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}</dl>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '6px' }}>Τι κάνει <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(μόνιμα, όχι με ημερομηνίες)</span></h3>
-      <${DutyProfile} p=${p} caps=${caps} open=${capMore} onMore=${() => setCapMore(!capMore)}/>
-      ${capMore && html`<div style=${{ marginTop: '10px' }}>
-      <div className="capgrid">${CAP_KINDS.map(([k, l]) => { const off = caps[k]; return html`<label key=${k} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει: ' + off : 'Κάνει ' + CAP_ACC[k]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const allowed = e.target.checked; if (await run({ t: 'setCap', pid, kind: k, allowed }, false)) toast({ text: shortName(p) + (allowed ? ' κάνει ' : ' δεν κάνει ') + CAP_ACC[k] + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' }); }}/>${l}</label>`; })}</div>
-      <div className="capgrid" role="group" aria-label="Μέρες που κάνει υπηρεσία" style=${{ marginTop: '8px' }}><span className="muted" style=${{ fontSize: '13px', alignSelf: 'center' }}>Μέρες:</span>${WEEK.map(d => { const off = (p.offDays || []).includes(d); return html`<label key=${d} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : 'Κάνει υπηρεσία ' + DOW_FULL[d]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const on = e.target.checked; const days = on ? (p.offDays || []).filter(x => x !== d) : [...(p.offDays || []), d]; if (await run({ t: 'setOffDays', pid, days }, false)) toast({ text: shortName(p) + (on ? ' κάνει ξανά υπηρεσία ' : ' δεν κάνει υπηρεσία ') + DOW_FULL[d] + '. Η αυτόματη συμπλήρωση δεν τον βάζει εκείνες τις μέρες· με το χέρι μπαίνει μόνο με αιτία.' }); }}/>${DOW[d]}</label>`; })}</div>
-      </div>`}
-      <label className="rule" style=${{ marginTop: '8px' }}><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span><b>Δικαίωμα ΔΝ</b><small>Μόνιμο. Μόλις οριστεί σε έναν, στους Εξοδούχους το ΔΝ επιτρέπεται μόνο σε όσους το έχουν.</small></span></label>
-      ${capMore && html`<p className="note" style=${{ margin: '6px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ρυθμίσεις › Σ.Ι.· αρχικά ο Ι3 ΧΩΡΙΣ ΟΠΛΟ και ο Ι4 όχι σε ένοπλη υπηρεσία) και το πόστο. Οι μέρες: ξετσέκαρε όσες δεν κάνει καμία υπηρεσία (μετρά η μέρα που ξεκινά η υπηρεσία, 14:00).</p>`}</section>
+    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
+    <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
+      <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p)})</span></dd>
+      <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
+      <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
+      ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
+      <dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip="Ώρα αναχώρησης την πρώτη μέρα και ώρα επιστροφής την τελευταία">Ώρες…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">περιμένει<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>ΗΚΑΙ<//></li>`)}</ul></section>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
-    ${req && html`<${RequestDialog} req=${{ pid, date: today }} onClose=${() => setReq(false)}/>`}
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
   <//>`;
 }
@@ -337,15 +349,23 @@ function PersonFields({ x, setX, id, isNew }: P) {
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.</small></span></label>
-    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Δεν εμφανίζεται στις λίστες, στις υπηρεσίες και στην ΗΚΑΙ.</small></span></label>`}
+    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.</small></span></label>`}
     ${F('notes', 'Σημειώσεις')}`;
 }
 
 function EditPersonDialog({ p, onClose }: P) {
-  const { run, state } = useStore(); const toast = useToast();
+  const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const [x, setX] = useState<Person>({ ...p });
+  // εκτός δύναμης (Michael, 17/10): περνά στους «Εκτός δύναμης» του Δυναμολογίου και βγαίνει από τις υπηρεσίες που έχει από σήμερα
+  const save = async () => {
+    if (!(await run({ t: 'updatePerson', person: x }, false))) return;
+    onClose();
+    if (p.active && !x.active) toast({ text: shortName(x) + ' πέρασε στους Εκτός δύναμης.', actions: [{ label: 'Δες τους', fn: () => nav.go('people', { filter: 'inactive' }) }, undoMark()] });
+    else if (!p.active && x.active) toast({ text: shortName(x) + ' είναι ξανά σε δύναμη.', actions: [undoMark()] });
+    else toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + shortName(x) });
+  };
   return html`<${Dialog} title="Διόρθωση στοιχείων" description=${rosterNote(state, false)} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'updatePerson', person: x }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + shortName(x) }); } }}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
     <${PersonFields} x=${x} setX=${setX} id="ep"/>
   <//>`;
 }
@@ -354,7 +374,7 @@ function EditPersonDialog({ p, onClose }: P) {
 function NewPersonDialog({ onClose }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
-  const essos = useMemo(() => { const n = new Map<string, number>(); state.people.forEach((y: Person) => { if (y.active && y.essos) n.set(y.essos, (n.get(y.essos) || 0) + 1); }); return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] || ''; }, [state.people]);
+  const essos = useMemo(() => currentEssos(state.people), [state.people]);
   const [x, setX] = useState<P>({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '' });
   const ok = !!x.last.trim() && !!x.first.trim();
   const save = async () => {
