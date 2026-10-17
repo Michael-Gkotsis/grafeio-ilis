@@ -721,3 +721,11 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .stpick__opt small{color:var(--muted-fg);font-size:12px}
 .declsum{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;padding:8px 12px;background:var(--muted);border-radius:var(--radius);font-size:13px}
 .declsum__sep{color:var(--muted-fg)}
+dl.kv dt.kv__sub{padding-left:14px;font-size:13px}
+dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
+.kv__check{display:inline-flex;gap:8px;align-items:center;cursor:pointer}
+/* ΕΣΣΟ πάνω δεξιά, δίπλα στην αναζήτηση */
+.essochip{display:inline-flex;align-items:baseline;gap:6px;height:30px;padding:0 12px;border:1px solid var(--gold);border-radius:999px;color:var(--bar-fg);white-space:nowrap;line-height:28px}
+.essochip small{font-size:11px;font-weight:600;letter-spacing:.6px;color:var(--gold)}
+.essochip b{font-size:13px;font-weight:700}
+@media (max-width:720px){.essochip small{display:none}.essochip{padding:0 8px}}
