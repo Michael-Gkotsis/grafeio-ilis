@@ -2,6 +2,7 @@ import { greekHolidays, type ISODate } from './dates';
 import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
+import type { Esso } from './esso';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -235,6 +236,7 @@ export interface Settings {
   hkai?: HkaiSettings;                   // ΗΚΑΙ: ενότητες που δεν χρησιμοποιεί η Ίλη, οχήματα, «Προβλέπονται»
   rooms?: RoomSettings;                  // πόσοι θάλαμοι, πόσοι ανά ουλαμό και ποιοι ανήκουν σε κάθε ουλαμό (κενό = 8 και 4)
   brand?: BrandSettings;                 // τίτλος και λογότυπο της εφαρμογής (κενό = «Γραφείο Λοχία»)
+  essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.
 // rank: βαθμός από τον πίνακα του brand.ts · title: δικός σου τίτλος (κενό = του βαθμού)

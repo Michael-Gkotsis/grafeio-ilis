@@ -12,6 +12,7 @@ import { isHol, postBy } from './rules';
 import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime } from './hours';
+import { essoName } from './esso';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -1076,7 +1077,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
 // επώνυμο, αριθμός στο πατρώνυμο). Ο νέος στρατιώτης μπαίνει μετά πάνω από τα σύνολα και οι τύποι μεγαλώνουν (grow).
 export interface Extra { r: number; c: number; v?: string; f?: string; head?: boolean }
 export interface Span { r: number; c1: number; c2: number }
-export const rosterTitle = (s: AppState) => ('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '')).trim();
+export const rosterTitle = (s: AppState) => ('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + (s.settings.essos ? ' ' + essoName(s.settings.essos) : '')).replace(/\s+/g, ' ').trim();
 // ανά θάλαμο, ο θαλαμάρχης πρώτος (όπως στο δικό σας), μετά αλφαβητικά
 const isLead = (p: Person) => (/ΘΑΛΑΜΑΡΧ/.test(normGreek(p.role || '')) ? 0 : 1);
 const byRoom = (a: Person, c: Person) => (a.room ?? 999) - (c.room ?? 999) || isLead(a) - isLead(c) || byNameCmp(a, c);

@@ -41,6 +41,13 @@ const api: Api = {
   formSave: (form, b) => ipcRenderer.invoke('form:save', form, b),
   formDir: form => ipcRenderer.invoke('form:dir', form),
   openPath: file => ipcRenderer.invoke('open:path', file),
-  printFile: (file, sheet) => ipcRenderer.invoke('print:file', file, sheet)
+  printFile: (file, sheet) => ipcRenderer.invoke('print:file', file, sheet),
+  essoInfo: () => ipcRenderer.invoke('esso:info'),
+  essoDir: def => ipcRenderer.invoke('esso:dir', def),
+  essoRoster: () => ipcRenderer.invoke('esso:roster'),
+  essoStart: o => ipcRenderer.invoke('esso:start', o),
+  essoPick: () => ipcRenderer.invoke('esso:pick'),
+  essoRestore: dir => ipcRenderer.invoke('esso:restore', dir),
+  essoOpen: dir => ipcRenderer.invoke('esso:open', dir)
 };
 contextBridge.exposeInMainWorld('api', api);

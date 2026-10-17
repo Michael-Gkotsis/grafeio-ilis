@@ -145,6 +145,13 @@ export function mockApi(): Api {
     formSave: async (f, b) => { const forms = { ...(state.settings.forms || {}) }; if (b) forms[f] = b; else delete forms[f]; state = { ...state, settings: { ...state.settings, forms } }; return res(''); },
     formDir: async () => null,
     openPath: async () => {},
-    printFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν τυπώνονται αρχεία.' })
+    printFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν τυπώνονται αρχεία.' }),
+    essoInfo: async () => ({ people: state.people.filter(p => p.active).length, files: (Object.entries(state.settings.sources || {}) as [ListKind, SourceBinding][]).map(([k, b]) => ({ label: KIND[k].label, file: b.file, exists: true })), outDirs: ['C:\\Έγγραφα\\Γραφείο Ίλης'], archiveRoot: 'C:\\Έγγραφα\\Γραφείο Ίλης\\Αρχείο ΕΣΣΟ', newRoot: 'C:\\Έγγραφα\\Γραφείο Ίλης', archives: [{ dir: 'C:\\Έγγραφα\\Γραφείο Ίλης\\Αρχείο ΕΣΣΟ\\Β΄ ΕΣΣΟ 2026 (έως 10-08-2026)', name: 'Β΄ ΕΣΣΟ 2026', at: '2026-08-10 09:12', people: 118, files: 2 }] }),
+    essoDir: async () => 'D:\\USB',
+    essoRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    essoStart: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν ξεκινά νέα ΕΣΣΟ.' }),
+    essoPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    essoRestore: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
+    essoOpen: async () => {}
   };
 }

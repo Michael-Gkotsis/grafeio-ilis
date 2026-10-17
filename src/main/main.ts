@@ -10,7 +10,7 @@ import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import JSZip from 'jszip';
-import type { Boot, CmdResult, Diag, DirTarget, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
+import type { Boot, CmdResult, Diag, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, holdPatch, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
@@ -20,6 +20,8 @@ import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
 import { previewHtml, renderBook } from './print';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
+import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
+import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 
 const DEV = !app.isPackaged;
 const ROOT = DEV ? process.cwd() : path.dirname(process.execPath);
@@ -42,7 +44,7 @@ const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
 // Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
 const META = path.join(DATA, 'meta.json');
-type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number };
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[] };   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
 const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
@@ -549,9 +551,33 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   }
   const dir = newDir(kind);
   if (!writableDir(dir)) return { error: 'Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.' };
-  if (kind === 'duties') return { b: dutiesBinding(freeName(dir, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + today().slice(0, 4)), today().slice(0, 7)) };
-  const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + (store.state.settings.unitName || '')).trim() : KIND[kind].title;
+  // με γνωστή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ) το όνομά της μπαίνει στο όνομα του αρχείου: «ΔΥΝΑΜΟΛΟΓΙΟ Γ΄ ΕΣΣΟ 2026 4ης ΙΛΗΣ»
+  const es = store.state.settings.essos ? essoName(store.state.settings.essos) : '';
+  if (kind === 'duties') return { b: dutiesBinding(freeName(dir, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + (es || today().slice(0, 4))), today().slice(0, 7)) };
+  const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + es + ' ' + (store.state.settings.unitName || '')).replace(/\s+/g, ' ').trim() : KIND[kind].title;
   return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
+}
+// «Νέο αρχείο…» ενός είδους (Αρχεία Excel) και τα Excel της νέας ΕΣΣΟ
+type NewOut = { ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | { ok: false; error: string; locked?: boolean };
+async function createNew(kind: ListKind): Promise<NewOut> {
+  if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
+  const prev = bindingOf(kind); const prevMeta = srcMeta.keep(kind);
+  const at = await newPlace(kind); if ('error' in at) return fail(at.error);
+  if (at.found) { saveBinding(kind, at.b); notify(); return { ok: true, file: at.b.file, sheet: at.b.sheet, found: true }; }
+  saveBinding(kind, at.b);
+  const r = await syncOut(kind, false, true);
+  // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει), μαζί με ό,τι ήξερε η εφαρμογή για
+  // το παλιό αρχείο (πότε διαβάστηκε, τι είχε): αλλιώς θα έμενε «Νέο» και δεν θα έγραφε μόνη της
+  if (!r.ok) { saveBinding(kind, prev || null); prevMeta(); notify(); return r; }
+  // νέο Δυναμολόγιο: και τα φύλλα του (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) για όσα είδη δεν έχουν ακόμα αρχείο
+  const sheets: string[] = [];
+  if (kind === 'people') for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) {
+    const at2 = await newPlace(k); if ('error' in at2 || !at2.inRoster) continue;
+    saveBinding(k, at2.b);
+    if ((await syncOut(k, false, true)).ok) sheets.push(at2.b.sheet); else saveBinding(k, null);
+  }
+  notify();
+  return { ok: true, file: r.file, sheet: at.b.sheet, inRoster: at.inRoster, ...(sheets.length ? { sheets } : {}) };
 }
 async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; error: string }> {
   const b0 = await current(kind); if (!b0) return fail('Δεν έχει οριστεί αρχείο');
@@ -625,6 +651,146 @@ async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true
     try { await pw.loadFile(p.tmp); } catch (e) { pw.destroy(); throw e; }
     return { ok: true };
   } catch (e) { return fail(e); }
+}
+
+// ------------------------------------------------------------------ ΕΣΣΟ: αρχείο, νέα ΕΣΣΟ, επαναφορά (Ρυθμίσεις › ΕΣΣΟ, Michael 17/10)
+const DOCS = () => path.join(app.getPath('documents'), 'Γραφείο Ίλης');
+const archiveRoot = () => path.join(DOCS(), 'Αρχείο ΕΣΣΟ');
+// ο φάκελος της νέας ΕΣΣΟ φτιάχνεται δίπλα στον τωρινό αν αυτός είναι φάκελος ΕΣΣΟ («Β΄ ΕΣΣΟ 2026»), αλλιώς στα Έγγραφα
+const newRoot = () => { const o = outputDir(); return parseEsso(path.basename(o)) ? path.dirname(o) : DOCS(); };
+const essoDirs = new Set<string>();   // φάκελοι που διάλεξε ο χρήστης στους διαλόγους της ΕΣΣΟ
+const sameDir = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+const okEssoDir = (d: unknown): d is string => typeof d === 'string' && !!d && [archiveRoot(), ...essoDirs].some(x => sameDir(x, d));
+const knownArchives = () => (readMeta().essoArchives || []).filter(d => typeof d === 'string');
+const msgOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+let essoBusy = false;
+// Ό,τι περιμένει να γραφτεί στα Excel γράφεται πριν μπουν στο αρχείο
+async function settleAuto() { clearTimeout(autoTimer); while (autoBusy) await new Promise(r => setTimeout(r, 100)); await runAuto(); }
+// Τα Excel της τωρινής ΕΣΣΟ: οι πηγές κάθε είδους και τα δικά σου templates εντύπων
+function essoFiles(s: AppState): { orig: string; kind?: ListKind; form?: FormKind; label: string }[] {
+  const st = s.settings;
+  return [...(Object.entries(st.sources || {}) as [ListKind, SourceBinding | undefined][]).filter(([, b]) => b?.file).map(([k, b]) => ({ orig: b!.file, kind: k, label: KIND[k]?.label || k })),
+    ...(Object.entries(st.forms || {}) as [FormKind, FormBinding | undefined][]).filter(([, b]) => b?.file).map(([f, b]) => ({ orig: b!.file!, form: f, label: 'Template ' + f }))];
+}
+const outDirsOf = (s: AppState) => [...new Set([outputDir(), ...Object.values(s.settings.forms || {}).map(b => b?.dir), ...Object.values(s.settings.newDirs || {})].filter((x): x is string => !!x))];
+// Η τωρινή ΕΣΣΟ στο αρχείο: φάκελος με βάση, Excel, sources.json και ΕΣΣΟ.json. Ένα γράψιμο αρχείων τη φορά (serial).
+function archiveNow(root: string) {
+  const s = store.state; const e = currentEsso(s);
+  const r = writeArchive({ root, day: today(), db: store.data(), files: essoFiles(s).map(({ orig, kind, form }) => ({ orig, ...(kind ? { kind } : {}), ...(form ? { form } : {}) })), sources: srcMeta.dump(),
+    manifest: { app: 'grafeio-ilis', v: 1, name: e ? essoName(e) : 'ΕΣΣΟ', ...(e ? { esso: e } : {}), at: today() + ' ' + nowHM(), version: app.getVersion(), people: s.people.filter(p => p.active).length, outDirs: outDirsOf(s) } });
+  writeMeta({ essoArchives: [r.dir, ...knownArchives().filter(d => !sameDir(d, r.dir))].slice(0, 50) });
+  return r;
+}
+function essoInfo(): EssoInfo {
+  const s = store.state; const seen = new Set<string>(); const archives: EssoArchiveInfo[] = [];
+  const add = (dir: string, m: { name: string; at: string; people: number; files: unknown[] }) => { const k = path.resolve(dir).toLowerCase(); if (seen.has(k)) return; seen.add(k); archives.push({ dir, name: m.name, at: m.at, people: m.people, files: new Set(m.files.map((f: any) => f.copy)).size }); };
+  for (const d of knownArchives()) { const r = readArchive(d); if (r.ok) add(d, r.manifest); }
+  for (const x of listArchives(archiveRoot())) add(x.dir, x.manifest);
+  archives.sort((a, b) => b.at.localeCompare(a.at));
+  return { people: s.people.filter(p => p.active).length, files: essoFiles(s).map(f => ({ label: f.label, file: f.orig, exists: fs.existsSync(f.orig) })), outDirs: outDirsOf(s), archiveRoot: archiveRoot(), newRoot: newRoot(), archives };
+}
+// Αντίγραφο στον φάκελο της νέας ΕΣΣΟ με το ίδιο όνομα (και επέκταση), χωρίς να πατήσει υπάρχον
+function copyInto(dir: string, file: string): string {
+  const ext = path.extname(file), stem = path.basename(file, ext);
+  for (let i = 1; ; i++) { const f = path.join(dir, stem + (i > 1 ? ' (' + i + ')' : '') + ext); if (sameDir(f, file)) return f; if (!fs.existsSync(f)) { fs.mkdirSync(dir, { recursive: true }); copyDurable(file, f); return f; } }
+}
+// Νέα ΕΣΣΟ: 1. αρχείο της τωρινής (αν δεν γραφτεί, δεν αλλάζει τίποτα), 2. η βάση ξεκινά για τη νέα (freshState) χωρίς το
+// ιστορικό της παλιάς, 3. τα Excel της νέας στον φάκελό της: Δυναμολόγιο με τα φύλλα του (νέο, ή αυτό που σου έδωσαν) και
+// έλεγχος υπηρεσιών, όλα συνδεδεμένα. Ό,τι δεν φτιάχτηκε στο 3 λέγεται στο τέλος και φτιάχνεται από τα «Αρχεία Excel».
+async function startEsso(o: EssoStart): Promise<EssoResult> {
+  const e = o?.esso;
+  if (!e || !ESSO_SERIES.includes(e.s) || !Number.isInteger(e.y) || e.y < 2000 || e.y > 2100) return fail('Διάλεξε σειρά (Α΄, Β΄, Γ΄ ή Δ΄) και έτος');
+  if (!okEssoDir(o.archiveRoot)) return fail('Άγνωστος φάκελος για το αρχείο. Διάλεξέ τον ξανά.');
+  if (o.newDir && !okEssoDir(o.newDir)) return fail('Άγνωστος φάκελος για τα νέα Excel. Διάλεξέ τον ξανά.');
+  const dir = o.newDir || path.join(newRoot(), essoName(e));
+  const ros = o.roster ? pending.get(o.roster) : undefined;
+  if (o.roster && !ros) return fail('Η επιλογή του Δυναμολογίου έληξε. Διάλεξέ το ξανά.');
+  if (essoBusy) return fail('Γίνεται ήδη αλλαγή ΕΣΣΟ');
+  for (const d of [o.archiveRoot, dir]) if (!writableDir(d)) return fail('Δεν γράφεται ο φάκελος ' + d + '. Διάλεξε άλλον (π.χ. στα Έγγραφα ή σε USB).');
+  essoBusy = true;
+  try {
+    await settleAuto();
+    const prev = store.state; const old = currentEsso(prev);
+    let arch: ReturnType<typeof archiveNow>;
+    try { arch = await serial(async () => archiveNow(o.archiveRoot)); }
+    catch (err) { return fail('Δεν γράφτηκε το αρχείο της προηγούμενης ΕΣΣΟ, οπότε δεν άλλαξε τίποτα: ' + msgOf(err)); }
+    try { store.backup('πριν-νέα-ΕΣΣΟ'); } catch (err) { console.error('backup', err); }   // η βάση είναι ήδη και στο αρχείο
+    try { store.transact(() => { store.commit(freshState(prev, e, today(), dir)); }); }
+    catch (err) { return fail('Δεν ξεκίνησε η νέα ΕΣΣΟ, η βάση έμεινε όπως ήταν (το αρχείο κρατήθηκε στο ' + arch.dir + '): ' + msgOf(err)); }
+    // ό,τι ήξερε η εφαρμογή για τα παλιά Excel και τα έντυπα που βγήκαν δεν ισχύει πια
+    clearTimeout(autoTimer); dirty.clear(); formsDirty = false;
+    srcMeta.reset(); writeOuts([]); store.clearAudit();
+    seenUntil = 0; sessionStart = 0; writeMeta({ seenAudit: 0 });
+    srcMeta.allow([dir]);
+    store.addAudit({ at: nowHM(), day: today(), text: 'Νέα ΕΣΣΟ: ' + essoName(e) + '. Η προηγούμενη (' + (old ? essoName(old) : 'χωρίς όνομα') + ', ' + arch.manifest.people + ' σε δύναμη) κρατήθηκε στο ' + arch.dir + ' και ξαναφορτώνεται από Ρυθμίσεις › ΕΣΣΟ › Επαναφορά', files: [], source: 'app', undoable: false }, null);
+    const warnings = arch.missing.map(f => 'Δεν βρέθηκε (δεν μπήκε στο αρχείο): ' + f);
+    const files: string[] = [];
+    const made = (k: ListKind, r: NewOut) => { if (r.ok) files.push(r.file); else warnings.push(KIND[k].label + ': ' + r.error); };
+    if (ros) {
+      // το Δυναμολόγιο της νέας ΕΣΣΟ που σου έδωσαν: αντίγραφο στον φάκελό της, εισαγωγή, και τα φύλλα του για τα υπόλοιπα είδη
+      pending.delete(o.roster!);
+      try {
+        const copy = copyInto(dir, ros.file); srcMeta.allow([copy]);
+        const r = runCmd({ t: 'importPeople', rows: ros.rows, source: path.basename(copy), deactivateMissing: true });
+        if (!r.ok) warnings.push('Δεν μπήκαν οι στρατιώτες από το ' + path.basename(copy) + ': ' + r.error);
+        else { afterRoster({ ...ros, file: copy, binding: ros.binding ? { ...ros.binding, file: copy } : null, stamp: stamp(copy) || ros.stamp }); files.push(copy); }
+      } catch (err) { warnings.push('Δεν αντιγράφηκε το Δυναμολόγιο στο ' + dir + ': ' + msgOf(err)); }
+      if (bindingOf('people')) for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) made(k, await createNew(k));
+      else made('people', await createNew('people'));
+    } else made('people', await createNew('people'));
+    made('duties', await createNew('duties'));
+    notify();
+    return { ok: true, archive: arch.dir, dir, files: [...new Set(files)], warnings };
+  } finally { essoBusy = false; }
+}
+// Επαναφορά ΕΣΣΟ από τον φάκελο του αρχείου της: πρώτα η τωρινή μπαίνει κι αυτή στο αρχείο (για να γυρίσεις σε αυτήν), μετά η
+// βάση της παλιάς στη θέση της (όπως στην επαναφορά αντιγράφου) και τα Excel της: εκεί που ήταν, αν υπάρχουν ακόμα, αλλιώς
+// τα αντίγραφα του αρχείου. Η εφαρμογή δεν γράφει μόνη της στα Excel μέχρι νέα ανάγνωση (HOLD_RESTORE). Επανεκκίνηση.
+async function restoreEsso(dir: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!okEssoDir(dir) && !knownArchives().some(d => sameDir(d, dir))) return fail('Άγνωστος φάκελος. Διάλεξέ τον με το «Διάλεξε φάκελο…».');
+  const a = readArchive(dir); if (!a.ok) return a;
+  const bad = store.validate(a.db); if (bad) return fail('Η βάση του αρχείου δεν είναι καλή: ' + bad);
+  if (essoBusy) return fail('Γίνεται ήδη αλλαγή ΕΣΣΟ');
+  essoBusy = true;
+  try {
+    await settleAuto();
+    const s0 = store.state; let kept = '';
+    if (s0.people.length || Object.keys(s0.settings.sources || {}).length) {
+      const root = writableDir(path.dirname(dir)) ? path.dirname(dir) : archiveRoot();
+      try { kept = (await serial(async () => archiveNow(root))).dir; }
+      catch (err) { return fail('Δεν γράφτηκε αρχείο της τωρινής ΕΣΣΟ, οπότε δεν έγινε η επαναφορά: ' + msgOf(err)); }
+    }
+    const db = path.join(DATA, 'ilh.db'), tmp = db + '.restore.tmp';
+    try { copyDurable(a.db, tmp); const b2 = store.validate(tmp); if (b2) throw new Error(b2); }
+    catch (err) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + msgOf(err)); }
+    try { store.backup('πριν-επαναφορά-ΕΣΣΟ'); }
+    catch (err) { fs.rmSync(tmp, { force: true }); return fail('Δεν έγινε η επαναφορά: δεν κρατήθηκε αντίγραφο της τωρινής βάσης (' + msgOf(err) + '). Η βάση έμεινε όπως ήταν.'); }
+    try { store.close(); } catch { /* συνεχίζουμε */ }
+    try {
+      for (let i = 0; ; i++) {
+        try { fs.renameSync(tmp, db); break; }
+        catch (err: any) { if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(err.code)) throw err; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+      }
+    } catch (err) {
+      fs.rmSync(tmp, { force: true });
+      try { await store.open(); } catch (e2) { dialog.showErrorBox('Γραφείο Λοχία', 'Δεν ξανάνοιξε η βάση: ' + String(e2)); app.exit(1); }
+      return fail('Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + msgOf(err));
+    }
+    await store.open();
+    const at = (rel: string) => path.join(dir, ...rel.split('/'));
+    const re = (f: string) => restoredPath(f, a.manifest, at, fs.existsSync);
+    const st = store.state.settings;
+    const sources = Object.fromEntries(Object.entries(st.sources || {}).map(([k, b]) => [k, b && { ...b, file: re(b.file) }]));
+    const forms = Object.fromEntries(Object.entries(st.forms || {}).map(([k, b]) => [k, b?.file ? { ...b, file: re(b.file) } : b]));
+    store.commit({ ...store.state, settings: { ...st, sources, forms } });
+    let sj: any = {}; try { sj = JSON.parse(fs.readFileSync(path.join(dir, SOURCES_FILE), 'utf8')) || {}; } catch { /* χωρίς: όλα ξανά από ανάγνωση */ }
+    srcMeta.reset(sj);
+    srcMeta.allow([...Object.values(sources).map(b => b?.file || ''), ...Object.values(forms).flatMap(b => [b?.file || '', b?.dir || ''])]);
+    holdAll(HOLD_RESTORE); writeOuts([]);
+    store.addAudit({ at: nowHM(), day: today(), text: 'Επαναφορά ΕΣΣΟ: ' + a.manifest.name + ' από ' + dir + (kept ? '. Η ΕΣΣΟ που έτρεχε κρατήθηκε στο ' + kept : ''), files: [], source: 'app', undoable: false }, null);
+    app.relaunch(); app.exit(0);
+    return { ok: true };
+  } finally { essoBusy = false; }
 }
 
 let ready = 0;
@@ -775,26 +941,7 @@ else {
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο'); const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
-    ipcMain.handle('src:new', async (_e, kind: ListKind) => {
-      if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
-      const prev = bindingOf(kind); const prevMeta = srcMeta.keep(kind);
-      const at = await newPlace(kind); if ('error' in at) return fail(at.error);
-      if (at.found) { saveBinding(kind, at.b); notify(); return { ok: true, file: at.b.file, sheet: at.b.sheet, found: true }; }
-      saveBinding(kind, at.b);
-      const r = await syncOut(kind, false, true);
-      // δεν φτιάχτηκε: η αντιστοίχιση γυρνά όπως ήταν (όχι σε αρχείο που δεν υπάρχει), μαζί με ό,τι ήξερε η εφαρμογή για
-      // το παλιό αρχείο (πότε διαβάστηκε, τι είχε): αλλιώς θα έμενε «Νέο» και δεν θα έγραφε μόνη της
-      if (!r.ok) { saveBinding(kind, prev || null); prevMeta(); notify(); return r; }
-      // νέο Δυναμολόγιο: και τα φύλλα του (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) για όσα είδη δεν έχουν ακόμα αρχείο
-      const sheets: string[] = [];
-      if (kind === 'people') for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) {
-        const at2 = await newPlace(k); if ('error' in at2 || !at2.inRoster) continue;
-        saveBinding(k, at2.b);
-        if ((await syncOut(k, false, true)).ok) sheets.push(at2.b.sheet); else saveBinding(k, null);
-      }
-      notify();
-      return { ok: true, file: r.file, sheet: at.b.sheet, inRoster: at.inRoster, ...(sheets.length ? { sheets } : {}) };
-    });
+    ipcMain.handle('src:new', (_e, kind: ListKind) => createNew(kind));
     ipcMain.handle('src:status', async () => { retryPending(); return statusAll(); });
     ipcMain.handle('form:pick', async (_e, f: FormKind) => { const file = await pickXlsx('Template για ' + f); if (!file) return null; return formInfo(f, file); });
     ipcMain.handle('form:info', (_e, f: FormKind) => formInfo(f));
@@ -946,6 +1093,30 @@ else {
     });
     ipcMain.handle('dir:reset', (_e, t: DirTarget) => { if (!okTarget(t)) return fail('άγνωστος φάκελος'); const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός'); return c.ok ? reply(c.text, false) : c; });
     ipcMain.handle('dir:open', (_e, t: DirTarget) => { if (!okTarget(t)) return 'άγνωστος φάκελος'; const dir = dirOf(t); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
+    // ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)
+    ipcMain.handle('esso:info', () => essoInfo());
+    ipcMain.handle('esso:dir', async (_e, def?: string) => {
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε φάκελο', defaultPath: typeof def === 'string' && def ? def : DOCS(), properties: ['openDirectory', 'createDirectory'] });
+      const dir = r.canceled ? null : r.filePaths[0] || null; if (dir) essoDirs.add(dir); return dir;
+    });
+    ipcMain.handle('esso:roster', async () => {
+      const res = await dialog.showOpenDialog(win!, { title: 'Δυναμολόγιο της νέας ΕΣΣΟ', filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }], properties: ['openFile'] });
+      if (res.canceled || !res.filePaths[0]) return null;
+      return rosterPreview(res.filePaths[0], null);
+    });
+    ipcMain.handle('esso:start', (_e, o: EssoStart) => startEsso(o));
+    ipcMain.handle('esso:pick', async (): Promise<EssoArchiveInfo | { ok: false; error: string } | null> => {
+      const r = await dialog.showOpenDialog(win!, { title: 'Φάκελος αρχείου ΕΣΣΟ (με το ΕΣΣΟ.json)', defaultPath: fs.existsSync(archiveRoot()) ? archiveRoot() : DOCS(), properties: ['openDirectory'] });
+      const dir = r.canceled ? null : r.filePaths[0] || null; if (!dir) return null;
+      const a = readArchive(dir); if (!a.ok) return a;
+      essoDirs.add(dir);
+      return { dir, name: a.manifest.name, at: a.manifest.at, people: a.manifest.people, files: new Set(a.manifest.files.map(f => f.copy)).size };
+    });
+    ipcMain.handle('esso:restore', (_e, dir: string) => restoreEsso(dir));
+    ipcMain.handle('esso:open', (_e, dir: string) => {
+      if (typeof dir !== 'string' || !(okEssoDir(dir) || knownArchives().some(d => sameDir(d, dir)) || sameDir(dir, outputDir()) || sameDir(dir, newRoot())) || !fs.existsSync(dir)) return 'άγνωστος φάκελος';
+      return shell.openPath(dir);
+    });
     createWindow();
     ready = Date.now();
     // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα
