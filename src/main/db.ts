@@ -249,6 +249,11 @@ export class Store {
     return this.all<any>(`SELECT id, at, day, text, files, source, undoable, undone FROM audit WHERE id > ${Math.floor(after) || 0} ORDER BY id DESC LIMIT ${Math.floor(limit)}`)
       .map(r => ({ ...r, files: JSON.parse(r.files || '[]'), undoable: !!r.undoable, undone: !!r.undone }));
   }
+  // Νέα ΕΣΣΟ: το ιστορικό (και τα στοιχεία αναίρεσης) της προηγούμενης μένει μόνο στο αρχείο της. Αλλιώς μια αναίρεση
+  // θα ξανάφερνε στρατιώτες ή υπηρεσίες της παλιάς ΕΣΣΟ στη νέα.
+  clearAudit(): void { this.db.run('DELETE FROM audit'); this.db.run('VACUUM'); this.flush(); }
+  // Η βάση όπως είναι τώρα (για το αρχείο ΕΣΣΟ)
+  data(): Uint8Array { return this.db.export(); }
   hasAuditToday(day: string, source: string): boolean {
     return this.all('SELECT 1 FROM audit WHERE day = \'' + day.replace(/'/g, '') + '\' AND source = \'' + source.replace(/'/g, '') + '\' LIMIT 1').length > 0;
   }

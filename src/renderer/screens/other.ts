@@ -23,6 +23,7 @@ import { SiCard } from './si';
 import { StatCard } from './stat';
 import { BrandCard, RoomsCard } from './units';
 import { appTitle } from '../../shared/brand';
+import { EssoCards } from './esso';
 import { listOf, statusLbl } from '../../shared/ranks';
 type P = any;
 
@@ -540,7 +541,7 @@ function BackupsCard() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['backup', 'Αντίγραφα ασφαλείας']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -553,7 +554,7 @@ export function TemplatesScreen() {
     </div>`;
   const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : templates;
+    : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
@@ -579,6 +580,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
+    { t: 'Νέα ΕΣΣΟ / Επαναφορά ΕΣΣΟ', k: 'ΝΕΑ ΕΣΣΟ ΣΕΙΡΑ ΑΡΧΕΙΟ ΕΠΑΝΑΦΟΡΑ RESTORE', fn: () => nav.go('templates', { tab: 'esso' }) },
     { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'backup' }) },
     { t: 'Διάγνωση (μνήμη, ταχύτητα)', k: 'ΔΙΑΓΝΩΣΗ ΜΝΗΜΗ ΤΑΧΥΤΗΤΑ GPU', fn: () => nav.go('diag') },
     { t: 'Ρυθμίσεις', k: 'ΡΥΘΜΙΣΕΙΣ ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΣΤΕΛΕΧΗ', fn: () => nav.go('templates', { tab: 'unit' }) },

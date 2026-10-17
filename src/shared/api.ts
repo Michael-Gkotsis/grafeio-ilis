@@ -3,6 +3,7 @@ import type { AppState, AuditEntry } from './domain';
 import type { Command } from './commands';
 import type { ISODate } from './dates';
 import type { Check } from './preflight';
+import type { Esso } from './esso';
 import type { RawSheet } from './roster';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
@@ -33,6 +34,19 @@ export interface SourceStatus { kind: ListKind; file: string; exists: boolean; c
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[]; ambiguous?: PlanLine[]; warn?: string[]; tidy?: string[] }   // tidy: μορφή που λείπει (τίτλος, λίστες επιλογής)
 export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
 export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean; manual?: boolean }
+
+// ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ): τι θα μπει στο αρχείο της τωρινής, πού, και τα αρχεία παλιών ΕΣΣΟ
+export interface EssoArchiveInfo { dir: string; name: string; at: string; people: number; files: number }
+export interface EssoInfo {
+  people: number;                                  // σε δύναμη τώρα
+  files: { label: string; file: string; exists: boolean }[];   // τα Excel που μπαίνουν στο αρχείο
+  outDirs: string[];                               // πού μένουν τα έντυπα που βγήκαν
+  archiveRoot: string; newRoot: string;            // προεπιλογές: πού γράφεται το αρχείο, μέσα σε ποιον φάκελο φτιάχνεται ο φάκελος της νέας
+  archives: EssoArchiveInfo[];
+}
+// roster: προεπισκόπηση (token) του Δυναμολογίου της νέας ΕΣΣΟ, αν το έχεις ήδη· newDir: δικός σου φάκελος (αλλιώς newRoot\<όνομα ΕΣΣΟ>)
+export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string }
+export type EssoResult = { ok: true; archive: string; dir: string; files: string[]; warnings: string[] } | Fail;
 
 export interface Api {
   boot(): Promise<Boot>;
@@ -76,5 +90,12 @@ export interface Api {
   formDir(form: FormKind): Promise<string | null>;
   openPath(file: string): Promise<void>;
   printFile(file: string, sheet?: string): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: το φύλλο που τσεκάρεται)
+  essoInfo(): Promise<EssoInfo>;
+  essoDir(def?: string): Promise<string | null>;                 // διάλογος φακέλου (αρχείο ή φάκελος νέας ΕΣΣΟ)
+  essoRoster(): Promise<ImportPreview | Fail | null>;           // το Δυναμολόγιο της νέας ΕΣΣΟ (προεπισκόπηση, χωρίς εισαγωγή)
+  essoStart(o: EssoStart): Promise<EssoResult>;
+  essoPick(): Promise<EssoArchiveInfo | Fail | null>;            // διάλεξε φάκελο αρχείου ΕΣΣΟ για επαναφορά
+  essoRestore(dir: string): Promise<{ ok: true } | Fail>;        // επαναφορά και επανεκκίνηση
+  essoOpen(dir: string): Promise<void>;
 }
 declare global { interface Window { api: Api } }

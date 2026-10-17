@@ -15,6 +15,7 @@ import { CadreView } from './cadre';
 import { SiField } from './si';
 import { RoomField } from './units';
 import { siOf } from '../../shared/si';
+import { essoPersonTxt } from '../../shared/esso';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -378,7 +379,7 @@ function EditPersonDialog({ p, onClose }: P) {
 function NewPersonDialog({ onClose }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
-  const essos = useMemo(() => currentEssos(state.people), [state.people]);
+  const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [x, setX] = useState<P>({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '' });
   const ok = !!x.last.trim() && !!x.first.trim();
   const save = async () => {

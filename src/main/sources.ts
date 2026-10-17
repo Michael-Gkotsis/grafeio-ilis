@@ -43,6 +43,13 @@ export class SourceMetaStore {
     if (m === null) delete all[kind]; else all[kind] = { ...(all[kind] || { mtime: 0, size: 0, keys: [], at: '' }), ...m };
     try { writeJson(this.file, all); } catch (e) { console.error('sources meta', e); }
   }
+  // Όλο από την αρχή (νέα ΕΣΣΟ: κανένα είδος δεν έχει Excel· επαναφορά ΕΣΣΟ: ό,τι ήξερε τότε). Τα γνωστά αρχεία μένουν.
+  reset(data: Metas & { _paths?: string[] } = {}) {
+    const paths = [...new Set([...(this.raw()._paths || []), ...(data._paths || [])])];
+    this.cache = { ...data, _paths: paths };
+    try { writeJson(this.file, this.cache); } catch (e) { console.error('sources meta', e); }
+  }
+  dump(): Metas & { _paths?: string[] } { return JSON.parse(JSON.stringify(this.raw())); }
   // Για να γυρίσει ακριβώς όπως είναι τώρα (π.χ. όταν το «Νέο αρχείο» δεν φτιάχτηκε και η αντιστοίχιση γυρνά στο παλιό)
   keep(kind: ListKind): () => void {
     const was = this.get(kind);

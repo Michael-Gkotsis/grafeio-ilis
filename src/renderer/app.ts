@@ -14,6 +14,7 @@ import type { Boot, CmdResult } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
+import { essoPersonTxt } from '../shared/esso';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -101,7 +102,8 @@ function Root({ boot: initial }: { boot: Boot }) {
 
 function Shell() {
   const { state, today, tomorrow, undo, boot } = useStore();
-  const essos = useMemo(() => currentEssos(state.people), [state.people]);
+  // η ΕΣΣΟ των Ρυθμίσεων (Νέα ΕΣΣΟ), αλλιώς η πιο συχνή όσων είναι σε δύναμη
+  const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
   const [layer, setLayer] = useState<any>(null);
   // Υπόμνημα (F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
@@ -175,7 +177,7 @@ function Shell() {
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
         <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30} ...${appLogo(state.settings)}/><span>${title}<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
-        ${essos && html`<span className="essochip" data-tip="ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)" data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
+        ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
