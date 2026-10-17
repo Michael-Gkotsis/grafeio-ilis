@@ -85,7 +85,7 @@ export function RoomField({ id, value, onChange }: P) {
   if (value != null && !rooms.includes(value)) rooms.push(value);
   const unit = (r: number) => pl.find(u => u.rooms.includes(r))?.name;
   return html`<div className="field"><label className="field__label" htmlFor=${id}>Θάλαμος</label>
-    <select id=${id} className="ui-select" value=${value == null ? '' : String(value)} onChange=${(e: any) => onChange(e.target.value ? Number(e.target.value) : null)}>
+    <select id=${id} className="ui-input" value=${value == null ? '' : String(value)} onChange=${(e: any) => onChange(e.target.value ? Number(e.target.value) : null)}>
       <option value="">—</option>${rooms.map(r => html`<option key=${r} value=${String(r)}>Θάλαμος ${r}${unit(r) ? ' · ' + unit(r) : ''}</option>`)}
     </select></div>`;
 }
@@ -148,7 +148,7 @@ export function BrandCard() {
       </div>
       <span className="field__help">Τα σχέδια είναι ενδεικτικά. Για το ακριβές διακριτικό ή το σήμα της μονάδας ανέβασε δική σου εικόνα (μικραίνει σε 128×128).</span>
     </div>
-    <div className="brand-preview" style=${{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '10px', width: 'fit-content' }}>
+    <div className="brand-preview" style=${{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '10px', width: 'fit-content', margin: '4px 0 12px' }}>
       <${Logo} size=${30} ...${appLogo(draft)}/><b style=${{ fontSize: '15px' }}>${appTitle(draft)}</b><span className="muted" style=${{ fontSize: '12px' }}>${state.settings.unit[2] || ''}</span>
     </div>
     <div style=${{ display: 'flex', gap: '8px' }}><${Button} onClick=${save}>Αποθήκευση<//>
