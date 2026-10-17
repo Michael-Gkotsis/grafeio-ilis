@@ -7,7 +7,7 @@ import { useStore } from '../store';
 import { normGreek } from '../../shared/text';
 import { CADRE_ABS, TYPES, TYPE_KEYS, effects, type TypeKey } from '../../shared/domain';
 import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, siUnarmed, itemKey, itemName, leaveCol, listRows, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
-import { HK_A, HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
+import { HK_A, HK_K, HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
 import { punAcc, punMax } from '../../shared/punish';
 
 const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'siUnarmed'];
@@ -17,7 +17,7 @@ const HELP: Record<ListId, string> = {
   specs: 'Στη φόρμα στρατιώτη και στο dropdown «Ο/Σ» του Δυναμολογίου.',
   punKinds: 'Στη δήλωση ποινής. Κάθε ποινή κόβει την έξοδο, μετρά στη στήλη «Τιμ.» και γράφεται στην ΗΚΑΙ (4. Ποινές). Το «κείμενο» μπαίνει στην πρόταση «με δύο (02) ημέρες …».',
   leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ΗΚΑΙ.',
-  cadreAbs: 'Στην «Απουσία» στελέχους. Η στήλη λέει πού μετρά στην ΗΚΑΙ· «μόνο στη λίστα» δεν μετρά.',
+  cadreAbs: 'Στην «Κατάσταση» στελέχους (καρτέλα Στελέχη). Η στήλη λέει πού μετρά στην ΗΚΑΙ, στους κωλυόμενους ή στους απόντες· «μόνο στη λίστα» δεν μετρά.',
   siUnarmed: 'Όποιος έχει τέτοιο Σ.Ι. είναι άοπλος: δεν μπαίνει οπλοφύλακας ούτε σκοπός, και μετρά ως άοπλος στα «Αυστηρά Άοπλοι». Ένα δικό σου ισχύει για κάθε Σ.Ι. που αρχίζει από αυτό (χωρίς κενά και τελείες). Η «Δυνατότητα υπηρεσιών» κάθε ατόμου ισχύει όπως πριν.',
   medKinds: 'Στη δήλωση ιατρικού και στη στήλη «είδος» του Excel ΕΑ-ΕΥ. Κάθε δικό σου ιατρικό συμπεριφέρεται σαν ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ: ίδιοι κανόνες σε υπηρεσίες, έξοδο και ΗΚΑΙ, με το δικό του όνομα. Ή «μόνο προειδοποίηση» (π.χ. ΠΑΡΑΠΕΜΠΤΙΚΟ 401): κανένας περιορισμός, αλλά όταν μπαίνει σε υπηρεσία βγαίνει προειδοποίηση και η αυτόματη συμπλήρωση τον βάζει μόνο αν δεν υπάρχει άλλος. Ο κωδικός μπαίνει στις μέρες απουσίας του Excel «Έλεγχος υπηρεσιών» (κενό = του βασικού). Αν κάποιο φύλλο του Excel σου μετράει με τύπο, π.χ. COUNTIF(…;"ΕΑ"), το νέο όνομα δεν μετριέται εκεί.'
 };
@@ -27,7 +27,8 @@ type Pick = { f: 'hk' | 'col' | 'like'; label: string; opts: [string, string][] 
 const WARN = 'WARN';
 const likeOf = (v: string): Partial<ListItem> => (v === WARN ? { like: 'EARV', warn: true } : { like: v as TypeKey, warn: undefined });
 const rowsOf = (l: string[]): [string, string][] => l.map(x => [x, x]);
-const HK_COLS: [string, string][] = HK_A.map(([k, , full]) => [k, full]);
+// καταστάσεις στελεχών: κάθε στήλη της ΗΚΑΙ, κωλυόμενοι και απόντες
+const HK_COLS: [string, string][] = [...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]), ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string])];
 const PICK: Partial<Record<ListId, Pick>> = {
   soldierRanks: { f: 'hk', label: 'Γραμμή στην ΗΚΑΙ', opts: rowsOf(HK_NCO) },
   cadreRanks: { f: 'hk', label: 'Γραμμή στην ΗΚΑΙ', opts: rowsOf([...HK_OFFICERS, ...HK_NCO.slice(0, 3)]) },

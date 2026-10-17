@@ -3,8 +3,9 @@
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
 import { MONTHS, dmy, hkDate, parseD, type ISODate } from '../shared/dates';
-import { rosterSheets } from '../shared/rosterLists';
+import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
 import { weaponSheets } from '../shared/weapons';
+import { cadreSheets } from '../shared/cadre';
 import { norm, collator, upper } from '../shared/text';
 import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
@@ -82,13 +83,20 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
 
 // Δυναμολόγιο και καταστάσεις (Michael, 17/10): ένα Excel, ένα φύλλο ανά φίλτρο της οθόνης (Όλοι, Άδειες, Τιμωρημένοι,
 // Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ), για μία ημερομηνία. Όλα με κεφαλαία, όπως ό,τι γράφει η εφαρμογή στα Excel.
-const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22 };
+const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22, 'ΘΕΣΗ': 20, 'ΓΡΑΜΜΗ ΗΚΑΙ': 16, 'ΚΑΤΑΣΤΑΣΗ': 22, 'ΣΤΗΛΗ ΗΚΑΙ': 18 };
 export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, rosterSheets(s, d)) };
+}
+// Στελέχη (Michael, 17/10): ίδια μορφή, με τα φύλλα του cadre.ts (στελέχη, καταστάσεις της ΗΚΑΙ, εκτός δύναμης)
+export async function cadreLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+  return { name: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, cadreSheets(s, d)) };
+}
+async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
   const thin = { style: 'thin' as const };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
-  for (const sh of rosterSheets(s, d)) {
+  for (const sh of sheets) {
     const ws = wb.addWorksheet(sh.name, {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
       views: [{ state: 'frozen', ySplit: 3 }]
@@ -106,8 +114,7 @@ export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: stri
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = width[h] || 12; });
     ws.pageSetup.printTitlesRow = '3:3';
   }
-  const data = Buffer.from(await wb.xlsx.writeBuffer());
-  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 // Συνολικό Δυναμολόγιο για εκτύπωση (Michael, 17/10), με την κεφαλίδα της ΗΚΑΙ: οι 3 γραμμές της μονάδας πάνω αριστερά,

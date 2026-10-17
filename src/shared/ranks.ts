@@ -43,7 +43,7 @@ export const LIST_BASE: Record<ListId, readonly string[]> = {
   medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label),
   siUnarmed: ['ΑΟΠΛ', 'Ι4']   // Σ.Ι. που περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4» (όπως πριν τις Λίστες)
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Απουσίες στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων' };
+export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
 // βαθμοί, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
@@ -81,13 +81,17 @@ export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const own = userItem(lists, 'leaveKinds', kind)?.col;
   return own && LEAVE_COLS.some(c => c[0] === own) ? own : 'ka';
 }
-// Απουσίες στελεχών: [κωδικός, όνομα, στήλη ΗΚΑΙ]. Οι βασικές με τον κωδικό τους, οι δικές σου με το όνομα ως κωδικό.
+// Καταστάσεις στελεχών (οι στήλες της ΗΚΑΙ): [κωδικός, όνομα, στήλη ΗΚΑΙ]. Οι βασικές με τον κωδικό τους, οι δικές σου με το όνομα ως κωδικό.
 // all: και όσες έκρυψες (για εγγραφές που υπάρχουν ήδη)
 export function cadreAbsKinds(lists?: UserLists, all = false): [string, string, string][] {
   const rows = listRows(lists, 'cadreAbs').filter(r => all || !r.hidden);
   return rows.map(r => (r.builtin ? CADRE_ABS.find(x => x[1] === r.name)! : [r.name, r.name, r.col || ''] as [string, string, string]));
 }
-export const cadreAbsOf = (kind: string, lists?: UserLists) => cadreAbsKinds(lists, true).find(x => x[0] === kind);
+// με τον κωδικό, αλλιώς με το όνομα: μια δική σου (π.χ. «Πρατήριο») που έγινε μετά βασική κρατά τη στήλη της
+export function cadreAbsOf(kind: string, lists?: UserLists): [string, string, string] | undefined {
+  const all = cadreAbsKinds(lists, true); const k = itemKey(kind || '');
+  return all.find(x => x[0] === kind) || (k ? all.find(x => itemKey(x[1]) === k) : undefined);
+}
 
 // Ιατρικά (Michael, 13/10): κάθε δικό σου είναι ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ για τους κανόνες και την ΗΚΑΙ, με δικό του όνομα.
 // Αποθηκεύεται στο «είδος» της κατάστασης, όπως το γράφει και το διαβάζει το Excel ΕΑ-ΕΥ.

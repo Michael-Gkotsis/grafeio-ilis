@@ -12,6 +12,7 @@ const api: Api = {
   exportLists: date => ipcRenderer.invoke('export:lists', date),
   exportRoster: (date, print) => ipcRenderer.invoke('export:roster', date, print),
   exportWeapons: (date, print) => ipcRenderer.invoke('export:weapons', date, print),
+  exportCadre: date => ipcRenderer.invoke('export:cadre', date),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),
   backup: () => ipcRenderer.invoke('backup'),

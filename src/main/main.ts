@@ -905,6 +905,14 @@ else {
         return { ok: true, file: out, warnings: [] };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    ipcMain.handle('export:cadre', async (_e, date: ISODate) => {
+      try {
+        const r = await excel().cadreLists(store.state, date);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        shell.openPath(out);
+        return { ok: true, file: out, warnings: [] };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean) => {
       try {
         const r = await excel().rosterPrint(store.state, date);

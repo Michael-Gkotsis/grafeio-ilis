@@ -29,6 +29,11 @@ function seed(): AppState {
     st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true, on: t, by: 'ΛΧΙΑ ΔΟΚΙΜΙΟ', reason: 'απουσίασε από το προσκλητήριο' }), st(23, 'OUT', 0, 0), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1)];
   s.requests = [{ id: id(), pid: 33, date: t, text: 'μετάθεση στην 2η ΕΠΧΙΑ' }, { id: id(), pid: 61, date: t, text: 'για οικογενειακούς λόγους', leave: { type: 'LEAVE', kind: 'Κανονική', from: addDays(t, 1), to: addDays(t, 3) } }];
   s.people[99] = { ...s.people[99], active: false, outOn: t, notes: 'μετάθεση στο 2ο ΣΠ' };
+  // στελέχη με φανταστικά ονόματα και καταστάσεις της ΗΚΑΙ (καρτέλα «Στελέχη»)
+  s.cadreList = [['ΙΛΧΟΣ', 'Ίλαρχοι', 'ΥΠΟΘΕΤΙΚΟΣ', 'ΓΙΑΝΝΗΣ', 'Διοικητής Ίλης'], ['ΑΝΘΛΓΟΣ', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΟΚΙΜΑΚΗΣ', 'ΝΙΚΟΣ', 'Διοικητής ουλαμού'],
+    ['ΑΛΧΙΑΣ', 'Αρχιλοχίες', 'ΠΑΡΑΔΕΙΓΜΑΤΑΣ', 'ΚΩΣΤΑΣ', 'Αρχιλοχίας'], ['ΕΠΧΙΑΣ', 'Επιλοχίες', 'ΔΕΙΓΜΑΤΙΔΗΣ', 'ΠΕΤΡΟΣ', 'Επιλοχίας'], ['ΛΧΙΑΣ', 'Λοχίες', 'ΤΥΧΑΙΟΥ', 'ΜΑΡΙΑ', 'Γραφείο']]
+    .map(([rank, hk, last, first, role], i) => ({ id: 's' + i, rank, hk, last, first, role, phone: '69000000' + (10 + i), active: true }));
+  s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
@@ -103,6 +108,7 @@ export function mockApi(): Api {
     },
     exportWeapons: async date => ({ ok: true, file: '(δοκιμή) ΟΠΛΙΣΜΟΣ ' + date + '.xlsx', warnings: [] }),
     exportLists: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + date + '.xlsx', warnings: [] }),
+    exportCadre: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + date + '.xlsx', warnings: [] }),
     exportRoster: async date => ({ ok: true, file: '(δοκιμή) ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + date + '.xlsx', warnings: [] }),
     pickRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     applyRoster: async () => ({ ok: false, error: 'δοκιμή' }),

@@ -4,6 +4,7 @@ import { html, cx, Badge, Button, Icon, Kbd, Logo, Sheet, ToastProvider, useToas
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, TemplatesScreen, CommandPalette } from './screens/other';
 import { DiagScreen } from './screens/diag';
+import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { WeaponsScreen } from './screens/weapons';
@@ -19,14 +20,14 @@ import { essoPersonTxt } from '../shared/esso';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
-  home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
+  home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά & ποινές', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
   hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
-const NAV_MAIN = ['home', 'people', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
-const NAV_ALL = [...NAV_MAIN, ...NAV_MORE];   // Alt+1 … Alt+9 και Alt+0 (η δέκατη) με αυτή τη σειρά
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['records', 'strength', 'hkai', 'weapons', 'history', 'templates'];
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
+const NAV_ALL = [...NAV_MAIN, ...NAV_MORE];   // Alt+1 … Alt+9 και Alt+0 (η δέκατη) με αυτή τη σειρά· οι επόμενες μόνο από το μενού
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'history', 'templates'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());

@@ -473,7 +473,7 @@ describe('Κείμενο ποινής', () => {
     const c = s.cadreList[0];
     expect(c).toMatchObject({ rank: 'ΛΧΙΑΣ', last: 'ΔΟΚΙΜΙΔΗΣ', active: true });
     s = run(s, { t: 'addCadreAbs', abs: { cid: c.id, kind: 'ka', from: D, to: addDays(D, 3) } });
-    expect(() => run(s, { t: 'addCadreAbs', abs: { cid: c.id, kind: 'an', from: addDays(D, 2), to: addDays(D, 5) } })).toThrow(/ήδη απουσία/);
+    expect(() => run(s, { t: 'addCadreAbs', abs: { cid: c.id, kind: 'an', from: addDays(D, 2), to: addDays(D, 5) } })).toThrow(/ήδη κατάσταση/);
     const h = hkaiCounts(s, D);
     expect(h.rank['Λοχίες'].c.ka).toBe(1);
     expect(h.rank['Ίλαρχοι'].n).toBe(1);

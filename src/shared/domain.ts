@@ -354,11 +354,19 @@ export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // text: ό,τι αιτείται· στην άδεια η αιτιολόγηση (μπορεί να είναι κενή)
 export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate }
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
-// Στελέχη (από την εφαρμογή του άλλου γραφέα): ονόματα, θέση, απουσίες, που ταΐζουν και την ΗΚΑΙ
+// Στελέχη (καρτέλα «Στελέχη»): ονόματα, θέση, καταστάσεις της ΗΚΑΙ, που ταΐζουν και την ΗΚΑΙ
 export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; phone?: string; role?: string; active: boolean }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
-// είδος απουσίας στελέχους → στήλη της ΗΚΑΙ (κενό = μόνο στη λίστα)
-export const CADRE_ABS: [string, string, string][] = [['ka', 'Κανονική άδεια', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['fp', 'Φύλλο πορείας', 'fp'], ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']];
+// Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
+// [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
+// Οι παλιοί κωδικοί (ka, an, eid, nos, fp, ekp, allh, other) κρατούν το ίδιο όνομα, για όσες έχουν ήδη γραφτεί.
+export const CADRE_ABS: [string, string, string][] = [
+  ['yp', 'Υπηρεσία εντός στρατοπέδου', 'yp'], ['ey', 'Ελεύθερος υπηρεσίας', 'ey'], ['tim', 'Τιμωρημένος', 'tim'], ['os', 'Ο/Σ', 'os'],
+  ['mag', 'Μαγειρεία', 'mag'], ['sid', 'Σιδηρουργείο', 'sid'], ['kin', 'Σε κίνηση', 'kin'],
+  ['ka', 'Κανονική άδεια', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['prat', 'Πρατήριο', 'prat'],
+  ['adik', 'Αγνοούμενος / αδικαιολογήτως', 'adik'], ['fp', 'Φύλλο πορείας', 'fp'], ['fyl', 'Φυλάκιο', 'fyl'], ['apal', 'Απαλλαγή', 'apal'],
+  ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']
+];
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας
