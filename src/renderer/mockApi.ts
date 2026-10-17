@@ -23,6 +23,8 @@ function seed(): AppState {
   // αριθμοί όπλων: λίγοι χωρίς, ένας διπλός, ένας άοπλος (Ι4) με όπλο
   s.people.forEach((p, i) => { if (i % 19 !== 6 && !(i % 13 === 5 && i !== 18)) p.weapon = String(4810000 + i * 137); });
   s.people[30].weapon = s.people[32].weapon;
+  s.people.forEach((p, i) => { if (p.weapon && i % 4 !== 3) p.wtype = 'G3A3'; if (p.weapon && i < 24) p.rack = 'Ε' + (i + 1); });
+  s.people[5].rack = 'Ε3';
   const t = today(); let n = 0; const id = () => 'm' + ++n;
   const st = (pid: number, type: any, a: number, b: number, extra: any = {}) => ({ id: id(), pid, type, from: addDays(t, a), to: addDays(t, b), ...extra });
   s.statuses = [st(5, 'LEAVE', -3, 0), st(10, 'LEAVE', -4, 2), st(12, 'SICK', -1, 2), st(47, 'NOS', -2, 3), st(18, 'EY', 0, 0), st(21, 'EA', -5, 4), st(44, 'EO', -10, 20), st(52, 'EA', -3, 0, { open: true }),
