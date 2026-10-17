@@ -710,3 +710,14 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}
 .sigrid .statsel.is-last{color:var(--warn);background:var(--warn-bg)}
 .ptable--roster .ptable__head > *,.ptable--roster .ptable__row > *{padding-left:7px;padding-right:7px}
+/* Δήλωση κατάστασης: λίστα με όλες τις καταστάσεις και σύνοψη των προηγούμενων βημάτων */
+.stpick{display:flex;flex-direction:column;gap:14px}
+.stpick__cat{font-size:12px;font-weight:700;color:var(--muted-fg);margin-bottom:6px}
+.stpick__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+.stpick__opt{display:flex;flex-direction:column;gap:3px;text-align:left;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);cursor:pointer;font:inherit;font-size:13px}
+.stpick__opt:hover{background:var(--hover);border-color:var(--input)}
+.stpick__opt:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring-soft);border-color:var(--ring)}
+.stpick__opt.is-on{border-color:var(--ring);box-shadow:0 0 0 2px var(--ring-soft)}
+.stpick__opt small{color:var(--muted-fg);font-size:12px}
+.declsum{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;padding:8px 12px;background:var(--muted);border-radius:var(--radius);font-size:13px}
+.declsum__sep{color:var(--muted-fg)}
