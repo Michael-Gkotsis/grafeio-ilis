@@ -739,6 +739,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapons__body{max-height:calc(100vh - 300px);overflow-y:auto}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
+.weapon-type{height:30px;font-size:13px;padding:0 6px;width:100%}
+.weapon-out{display:flex;align-items:center;gap:6px;min-width:0}.weapon-out small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .weapon-notes{display:flex;gap:6px;align-items:center}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}

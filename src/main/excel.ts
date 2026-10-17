@@ -4,7 +4,7 @@
 import ExcelJS from 'exceljs';
 import { MONTHS, dmy, hkDate, parseD, type ISODate } from '../shared/dates';
 import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
-import { weaponSheets } from '../shared/weapons';
+import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { norm, collator, upper } from '../shared/text';
 import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
@@ -144,7 +144,7 @@ export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: stri
 // Οπλισμός: ένα Excel, ένα φύλλο ανά φίλτρο της καρτέλας. Το πρώτο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ και στήλη
 // υπογραφής, για να τυπωθεί ως κατάσταση χρέωσης όπλων· τα υπόλοιπα (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να
 // παραδώσουν) για έλεγχο. Όλα με κεφαλαία.
-const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΥΠΟΓΡΑΦΗ': 20 };
+const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΤΥΠΟΣ ΟΠΛΟΥ': 11, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΟΠΛΟΒΑΣΤΟΣ': 11, 'ΕΝΤΟΣ / ΕΚΤΟΣ': 22, 'ΥΠΟΓΡΑΦΗ': 20 };
 export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
@@ -157,7 +157,7 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: stri
       s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = { bold: true, size: 10, underline: true }; c.alignment = { horizontal: 'center' }; });
       ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = { bold: true, size: 10 }; dc.alignment = { horizontal: 'right' };
       ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
-      const armed = sh.rows.filter(r => r[9]).length;
+      const armed = sh.rows.filter(r => r[W_NUM]).length;
       ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { size: 10 }; n.alignment = { horizontal: 'center' };
     } else {
       ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
