@@ -442,9 +442,9 @@ describe('Από την εφαρμογή του άλλου γραφέα', () => 
 describe('Κείμενο ποινής', () => {
   it('γράφει πρόταση για το Word με τη διάρκεια ολογράφως', () => {
     let s = fakeState(5);
-    s = run(s, { t: 'declare', cmd: { type: 'PUN', pids: [2], from: '2026-10-13', to: '2026-10-14', kind: 'Κράτηση', by: 'ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ', reason: 'άργησε στο προσκλητήριο.', on: '2026-10-12' } as any });
+    s = run(s, { t: 'declare', cmd: { type: 'PUN', pids: [2], from: '2026-10-13', to: '2026-10-14', kind: 'Κράτηση', by: 'ΛΧΙΑ ΑΓΝΩΣΤΟΠΟΥΛΟ', reason: 'άργησε στο προσκλητήριο.', on: '2026-10-12' } as any });
     const st = s.statuses.find(x => x.type === 'PUN')!;
-    expect(st).toMatchObject({ by: 'ΛΧΙΑΣ ΑΓΝΩΣΤΟΠΟΥΛΟΣ', on: '2026-10-12' });
+    expect(st).toMatchObject({ by: 'ΛΧΙΑ ΑΓΝΩΣΤΟΠΟΥΛΟ', on: '2026-10-12' });
     const t = punText(s.people[1], st);
     expect(t.plain).toBe('Ο ΣΤΡ (ΠΖ) ' + s.people[1].last + ' ' + s.people[1].first + ' ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 ΑΠΟ ΤΟΝ ΛΧΙΑ ΑΓΝΩΣΤΟΠΟΥΛΟ ΜΕ ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ, ΔΙΟΤΙ ΑΡΓΗΣΕ ΣΤΟ ΠΡΟΣΚΛΗΤΗΡΙΟ.');
     expect(t.html).toContain('<u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>');

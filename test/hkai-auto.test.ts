@@ -7,7 +7,7 @@ import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fillHkai } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
-import { accusative, genitive } from '../src/shared/greek';
+import { withArticle, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
 import type { AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
@@ -18,7 +18,7 @@ let seq = 0;
 const ctx: Ctx = { today: D, newId: () => 'a' + ++seq };
 const run = (s: AppState, c: Command) => apply(s, c, ctx).state;
 const pun = (s: AppState, pids: number[], extra: Record<string, unknown> = {}) =>
-  run(s, { t: 'declare', cmd: { type: 'PUN', pids, from: D, to: '2026-10-17', kind: 'Κράτηση', by: 'ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ', reason: 'άργησε στο προσκλητήριο', ...extra } as any });
+  run(s, { t: 'declare', cmd: { type: 'PUN', pids, from: D, to: '2026-10-17', kind: 'Κράτηση', by: 'ΛΧΙΑ ΔΟΚΙΜΙΟ', reason: 'άργησε στο προσκλητήριο', ...extra } as any });
 
 describe('ημερομηνίες της ΗΚΑΙ', () => {
   it('«15 ΟΚΤ 26» και «ΠΑΡ 16 ΟΚΤ 26», ΜΑΙ χωρίς διαλυτικά', () => {
@@ -29,17 +29,13 @@ describe('ημερομηνίες της ΗΚΑΙ', () => {
   });
 });
 
-describe('κλίση', () => {
-  it('αιτιατική με άρθρο, χωρίς να κλίνει γενικές και ό,τι είναι ήδη σε αιτιατική', () => {
-    expect(accusative('ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ')).toBe('ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ');
-    expect(accusative('Ανθυπασπιστής Παραδειγματάκης')).toBe('ΤΟΝ ΑΝΘΥΠΑΣΠΙΣΤΗ ΠΑΡΑΔΕΙΓΜΑΤΑΚΗ');
-    expect(accusative('ΔΚΤΗΣ ΙΛΗΣ')).toBe('ΤΟΝ ΔΚΤΗ ΙΛΗΣ');
-    expect(accusative('ΔΚΤΗΣ ΕΠΧΙΑΣ')).toBe('ΤΟΝ ΔΚΤΗ ΕΠΧΙΑΣ');
-    expect(accusative('ΑΞΚΟΣ ΥΠΗΡΕΣΙΑΣ')).toBe('ΤΟΝ ΑΞΚΟ ΥΠΗΡΕΣΙΑΣ');
-    expect(accusative('ΛΧΙΑ ΔΟΚΙΜΙΟ')).toBe('ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ');
-    expect(accusative('ΕΠΧΙΑΣ ΔΕΙΓΜΑΤΑΣ')).toBe('ΤΟΝ ΕΠΧΙΑ ΔΕΙΓΜΑΤΑ');
-    expect(accusative('την ΛΧΙΑ ΔΟΚΙΜΙΟΥ')).toBe('ΤΗΝ ΛΧΙΑ ΔΟΚΙΜΙΟΥ');
-    expect(accusative('')).toBe('');
+describe('ονόματα στην ΗΚΑΙ', () => {
+  it('ο τιμωρήσας γράφεται όπως δόθηκε (σε αιτιατική), μόνο με «ΤΟΝ» μπροστά', () => {
+    expect(withArticle('λχια Δοκιμιο')).toBe('ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ');
+    expect(withArticle('ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ')).toBe('ΤΟΝ ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ');
+    expect(withArticle('ΤΟΝ ΔΚΤΗ ΙΛΗΣ')).toBe('ΤΟΝ ΔΚΤΗ ΙΛΗΣ');
+    expect(withArticle('την ΛΧΙΑ ΔΟΚΙΜΙΟΥ')).toBe('ΤΗΝ ΛΧΙΑ ΔΟΚΙΜΙΟΥ');
+    expect(withArticle('')).toBe('');
   });
   it('γενική πατρωνύμου', () => {
     expect(genitive('Γεώργιος')).toBe('ΓΕΩΡΓΙΟΥ');
