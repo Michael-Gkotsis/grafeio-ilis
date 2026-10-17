@@ -733,3 +733,12 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .orow__warn{color:var(--warn);font-weight:600}
 .ui-seg button.is-warn{color:var(--warn)}
 .ui-seg button.is-warn[aria-pressed="true"]{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+
+/* Οπλισμός: αριθμός όπλου μέσα στη γραμμή */
+.ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
+.weapons__body{max-height:calc(100vh - 300px);overflow-y:auto}
+.ptable__row .weapon-cell{overflow:visible}
+.weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
+.weapon-notes{display:flex;gap:6px;align-items:center}
+.weapon-notes .ui-btn{margin-left:auto}
+.ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}

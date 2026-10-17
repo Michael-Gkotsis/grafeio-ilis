@@ -6,6 +6,7 @@ import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, 
 import { DiagScreen } from './screens/diag';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
+import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
@@ -20,12 +21,12 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά & ποινές', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
-const NAV_MAIN = ['home', 'people', 'guard', 'outs', 'records', 'strength', 'hkai'], NAV_MORE = ['history', 'templates'];
-const NAV_ALL = [...NAV_MAIN, ...NAV_MORE];   // Alt+1 … Alt+9 με αυτή τη σειρά
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['records', 'strength', 'hkai', 'history', 'templates'];
+const NAV_MAIN = ['home', 'people', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
+const NAV_ALL = [...NAV_MAIN, ...NAV_MORE];   // Alt+1 … Alt+9 και Alt+0 (η δέκατη) με αυτή τη σειρά
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['records', 'strength', 'hkai', 'weapons', 'history', 'templates'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());
@@ -145,7 +146,7 @@ function Shell() {
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
       else if (mod && (k === 'b' || k === 'β')) { e.preventDefault(); toggleRail(); }
       else if (e.altKey && !mod && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
-      else if (e.altKey && !mod && /^Digit[1-9]$/.test(e.code)) { e.preventDefault(); go(NAV_ALL[+e.code.slice(5) - 1]); }
+      else if (e.altKey && !mod && /^Digit[0-9]$/.test(e.code) && NAV_ALL[(+e.code.slice(5) + 9) % 10]) { e.preventDefault(); go(NAV_ALL[(+e.code.slice(5) + 9) % 10]); }
       else if (mod && (k === 'f' || k === 'φ')) {   // αναζήτηση στη λίστα της οθόνης, αλλιώς η γενική
         e.preventDefault(); const el = document.querySelector('.main input[type="search"]') as HTMLInputElement | null;
         if (el) { el.focus(); el.select(); } else setOver('palette');
@@ -166,8 +167,8 @@ function Shell() {
   const navItem = (v: string, inRail = false) => {
     const [label, icon] = SCREENS[v]; const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
     const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
-    const key = NAV_ALL.indexOf(v) + 1; const kb = key > 0 ? ' (Alt+' + key + ')' : '';
-    return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key > 0 ? 'Alt+' + key : undefined}
+    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : '';
+    return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
       data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
       ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
   };

@@ -4,6 +4,7 @@
 import ExcelJS from 'exceljs';
 import { MONTHS, dmy, hkDate, parseD, type ISODate } from '../shared/dates';
 import { rosterSheets } from '../shared/rosterLists';
+import { weaponSheets } from '../shared/weapons';
 import { norm, collator, upper } from '../shared/text';
 import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
@@ -131,4 +132,40 @@ export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: stri
   ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
   const data = Buffer.from(await wb.xlsx.writeBuffer());
   return { name: 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
+}
+
+// Οπλισμός: ένα Excel, ένα φύλλο ανά φίλτρο της καρτέλας. Το πρώτο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ και στήλη
+// υπογραφής, για να τυπωθεί ως κατάσταση χρέωσης όπλων· τα υπόλοιπα (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να
+// παραδώσουν) για έλεγχο. Όλα με κεφαλαία.
+const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΥΠΟΓΡΑΦΗ': 20 };
+export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
+  wb.created = wb.modified = new Date(d + 'T00:00:00Z');
+  const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
+  weaponSheets(s, d).forEach((sh, k) => {
+    const ws = wb.addWorksheet(sh.name, { pageSetup: { paperSize: 9, orientation: k === 0 ? 'portrait' : 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
+    const W = sh.head.length; let HEAD = 3;
+    if (k === 0) {
+      const T = Math.max(5, s.settings.unit.length + 2); HEAD = T + 3;
+      s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = { bold: true, size: 10, underline: true }; c.alignment = { horizontal: 'center' }; });
+      ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = { bold: true, size: 10 }; dc.alignment = { horizontal: 'right' };
+      ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
+      const armed = sh.rows.filter(r => r[9]).length;
+      ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { size: 10 }; n.alignment = { horizontal: 'center' };
+    } else {
+      ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = { bold: true, size: 13, underline: true }; t.alignment = { horizontal: 'center' };
+      ws.mergeCells(2, 1, 2, W); const n = ws.getCell(2, 1); n.value = upper(sh.note); n.font = { italic: true, size: 9 }; n.alignment = { horizontal: 'center' };
+    }
+    sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = { bold: true, size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
+    sh.rows.forEach((r, j) => { const row = ws.getRow(HEAD + 1 + j); if (k === 0) row.height = 20; r.forEach((v, i) => {
+      const c = row.getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+      c.font = { size: 10, bold: sh.head[i] === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
+    }); });
+    if (!sh.rows.length) { ws.mergeCells(HEAD + 1, 1, HEAD + 1, W); const c = ws.getCell(HEAD + 1, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { italic: true, size: 10 }; }
+    sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = WEAPON_W[h] || 12; });
+    ws.views = [{ state: 'frozen', ySplit: HEAD }];
+    ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
+  });
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { name: 'ΟΠΛΙΣΜΟΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
 }

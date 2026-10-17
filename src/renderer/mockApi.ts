@@ -20,6 +20,9 @@ function seed(): AppState {
     si: i % 17 === 3 ? 'Ι3 ΑΟΠΛΟ' : i % 13 === 5 ? 'Ι4' : 'Ι1', post: i === 8 ? 'ΚΨΜ' : i === 50 ? 'ΙΑΤΡΟΣ ΣΤΕΠ' : null,
     role: i % 15 === 0 ? 'ΘΑΛΑΜΑΡΧΗΣ' : null, essos: '2026 Γ΄', attached: false, active: true, notes: ''
   }));
+  // αριθμοί όπλων: λίγοι χωρίς, ένας διπλός, ένας άοπλος (Ι4) με όπλο
+  s.people.forEach((p, i) => { if (i % 19 !== 6 && !(i % 13 === 5 && i !== 18)) p.weapon = String(4810000 + i * 137); });
+  s.people[30].weapon = s.people[32].weapon;
   const t = today(); let n = 0; const id = () => 'm' + ++n;
   const st = (pid: number, type: any, a: number, b: number, extra: any = {}) => ({ id: id(), pid, type, from: addDays(t, a), to: addDays(t, b), ...extra });
   s.statuses = [st(5, 'LEAVE', -3, 0), st(10, 'LEAVE', -4, 2), st(12, 'SICK', -1, 2), st(47, 'NOS', -2, 3), st(18, 'EY', 0, 0), st(21, 'EA', -5, 4), st(44, 'EO', -10, 20), st(52, 'EA', -3, 0, { open: true }),
@@ -98,6 +101,7 @@ export function mockApi(): Api {
       if (checks.length && !opts?.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
       return { ok: true, file: '(δοκιμή) ' + kind + ' ' + date + '.xlsx', warnings: [] };
     },
+    exportWeapons: async date => ({ ok: true, file: '(δοκιμή) ΟΠΛΙΣΜΟΣ ' + date + '.xlsx', warnings: [] }),
     exportLists: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + date + '.xlsx', warnings: [] }),
     exportRoster: async date => ({ ok: true, file: '(δοκιμή) ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + date + '.xlsx', warnings: [] }),
     pickRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
