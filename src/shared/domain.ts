@@ -350,6 +350,7 @@ export interface AppState {
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
   weaponLog: WeaponMove[];               // έξοδοι και είσοδοι όπλων από τον οπλοβαστό (καρτέλα Οπλισμός)
+  outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
 // Κίνηση όπλου (Michael, 18/10: «όπως οι εξοδούχοι»): βγαίνει από τον οπλοβαστό με λόγο από τη λίστα «Λόγοι εξόδου όπλου»
@@ -384,5 +385,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, weaponLog: [], lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, weaponLog: [], outNotes: {}, lastExpire: ''
 });

@@ -5,17 +5,19 @@ import { norm, normGreek } from './text';
 import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusWarn, type StatusCmd } from './rules';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normRack, normWeapon } from './weapons';
+import { isSat, isWk, WK } from './weekend';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
   // πολλά ιατρικά μαζί για τους ίδιους, με τις ίδιες ημερομηνίες (Michael, 18/10): καθένα σε δική του γραμμή, μία αναίρεση
   | { t: 'declareMany'; cmds: StatusCmd[] }
-  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[]; force?: boolean }
+  // wk: «ΔΝ ΣΚ» το Σάββατο (ΔΝ και εξοδούχος την Κυριακή)· notes: παρατηρήσεις της μέρας («ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)»), κενό = σβήνει
+  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null; wk?: boolean }[]; notes?: { pid: number; note: string }[]; force?: boolean }
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
@@ -207,9 +209,31 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const pids = new Set(c.changes.map(x => x.pid));
       // έξοδος/ΔΝ πολλών ημερών: αλλάζει μόνο αυτή η μέρα, οι άλλες μένουν
       const hit = (x: Status) => pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to;
-      const kept = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
-      const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date }));
-      return { state: { ...s, statuses: [...kept, ...added] }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + c.changes.length + ' αλλαγές', files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
+      let statuses = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
+      const wk = isSat(c.date) ? c.changes.filter(x => x.wk && x.to === 'DN') : [];
+      const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date, ...(wk.includes(x) ? { kind: WK } : {}) }));
+      // ΔΝ ΣΚ (Michael, 18/10): την Κυριακή μπαίνει μόνος του στους εξοδούχους, εκτός αν εκείνη τη μέρα έχει ήδη
+      // έξοδο/ΔΝ, λείπει, ή κάτι τον κρατά μέσα (υπηρεσία, ποινή…): τότε μένει η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί.
+      // Όποιος δεν είναι πια ΔΝ ΣΚ το Σάββατο χάνει και την έξοδο της Κυριακής που είχε μπει μόνη της.
+      const sun = addDays(c.date, 1); const kept: string[] = [];
+      if (isSat(c.date)) {
+        const wkIds = new Set(wk.map(x => x.pid));
+        statuses = statuses.filter(x => !(pids.has(x.pid) && !wkIds.has(x.pid) && isWk(x) && x.type === 'OUT' && x.from === sun && x.to === sun));
+        for (const x of wk) {
+          const onSun = statusesOn(statuses, x.pid, sun);
+          if (onSun.some(y => TYPES[y.type].cat === 'out')) continue;
+          if (onSun.some(y => TYPES[y.type].away) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }
+          added.push({ id: ctx.newId(), pid: x.pid, type: 'OUT', from: sun, to: sun, kind: WK });
+        }
+      }
+      let outNotes = s.outNotes;
+      if (c.notes?.length) {
+        const day = { ...(s.outNotes?.[c.date] || {}) };
+        for (const n of c.notes) { const v = norm(n.note).trim(); if (v) day[n.pid] = v; else delete day[n.pid]; }
+        outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
+      }
+      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
+      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
     }
     case 'saveCadre': {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
