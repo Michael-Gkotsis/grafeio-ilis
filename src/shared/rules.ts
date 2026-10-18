@@ -6,7 +6,7 @@ import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type Baseline, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -137,10 +137,56 @@ const allBlocks = (st: Settings): BlockDef[] => {
 };
 export function capsOf(s: AppState, pid: number): Partial<Record<DutyKind, string>> {
   const p = personMap(s.people).get(pid);
-  const c: Partial<Record<DutyKind, string | null>> = { ...(p ? defaultCaps(p, s.settings.lists, allBlocks(s.settings)) : {}), ...(s.caps[pid] || {}) };
+  const c: Partial<Record<CapKey, string | null>> = { ...(p ? defaultCaps(p, s.settings.lists, allBlocks(s.settings)) : {}), ...(s.caps[pid] || {}) };
   const out: Partial<Record<DutyKind, string>> = {};
-  (Object.keys(c) as DutyKind[]).forEach(k => { if (c[k]) out[k] = c[k] as string; });
+  CAP_KINDS.forEach(([k]) => { if (c[k]) out[k] = c[k] as string; });
   return out;
+}
+// Η ρύθμιση του λοχία για μια θέση: πρώτα της δικής σου υπηρεσίας («b:» + id), αλλιώς του είδους της.
+// string = δεν κάνει (αιτία), null = ρητά κάνει (παρά Σ.Ι./πόστο), undefined = ό,τι λένε Σ.Ι. και πόστο
+const manOf = (own: Partial<Record<CapKey, string | null>>, block: string | undefined, kind: DutyKind): string | null | undefined => {
+  const b = block ? own[('b:' + block) as CapKey] : undefined;
+  return b !== undefined ? b : own[kind];
+};
+
+// --------------------------- «Ποιος κάνει τι» (Υπηρεσίες, Michael 18/10) ---------------------------
+// Στήλες: τα είδη των υπηρεσιών του εντύπου (θαλαμοφύλακας, οπλοφύλακας, σκοπιά, μαγειρεία, ΤΑΕ) και κάθε δική σου
+// υπηρεσία χωριστά (πύλη…), από ΣΒΕΝ και ΣΠΕΝ μαζί. Όχι οι κρυμμένες, όχι Λ/Υ-Δ/Υ (ορίζονται με το χέρι). Νέα υπηρεσία
+// μπαίνει μόνη της ως στήλη. Τα δεδομένα είναι τα ίδια με το αρχείο «Δυνατότητα υπηρεσιών» (s.caps).
+export interface CapCol { key: CapKey; kind: DutyKind; label: string; short: string; armed: boolean; phases: Phase[]; block?: BlockDef }
+const colsIdx = new WeakMap<Settings, CapCol[]>();
+const CAP_SHORT: Partial<Record<DutyKind, string>> = { th: 'Θαλαμοφ.', op: 'Οπλοφ.', other: 'Άλλες' };
+export function capCols(st: Settings): CapCol[] {
+  let out = colsIdx.get(st);
+  if (out) return out;
+  const kinds = new Map<DutyKind, CapCol>(); const own = new Map<string, CapCol>();
+  for (const [ph, bs] of [['sven', st.blocks], ['spen', st.blocksSpen]] as [Phase, BlockDef[] | undefined][]) for (const b of bs || []) {
+    if (b.hidden || b.kind === 'ly') continue;
+    const m = b.custom ? own : kinds; const id = b.custom ? b.id : b.kind;
+    let c = (m as Map<string, CapCol>).get(id);
+    if (!c) { c = b.custom ? { key: ('b:' + b.id) as CapKey, kind: b.kind, label: b.name, short: b.name, armed: b.armed, phases: [], block: b } : { key: b.kind, kind: b.kind, label: capLabel(b.kind), short: CAP_SHORT[b.kind] || capLabel(b.kind), armed: false, phases: [] }; (m as Map<string, CapCol>).set(id, c); }
+    if (!b.custom && b.armed) c.armed = true;
+    if (!c.phases.includes(ph)) c.phases.push(ph);
+  }
+  out = [...CAP_KINDS.filter(([k]) => kinds.has(k)).map(([k]) => kinds.get(k)!), ...own.values()];
+  colsIdx.set(st, out);
+  return out;
+}
+// Ένα κελί: κάνει ή όχι, και από πού. auto = από Σ.Ι./πόστο (ή τίποτα), man = ο λοχίας, kind = ο λοχίας για όλο το
+// είδος (π.χ. «Άλλες» από το Excel) και ισχύει και σε αυτή, force = κάνει παρά τη Σ.Ι./το πόστο (why = τι παρακάμπτει)
+export interface CapCell { on: boolean; src: 'auto' | 'man' | 'kind' | 'force'; why: string }
+export function capDefault(s: AppState, p: Person, col: CapCol): string | null {
+  if (col.block) return p.post ? 'Πόστο: ' + p.post : siAllows(p, col.block, s.settings.lists) ? null : 'Σ.Ι. ' + siOf(p, s.settings.lists).text;
+  return defaultCaps(p, s.settings.lists, allBlocks(s.settings).filter(b => !b.custom))[col.kind] || null;
+}
+export function capCell(s: AppState, p: Person, col: CapCol): CapCell {
+  const own = s.caps[p.id] || {};
+  const v = manOf(own, col.block?.id, col.kind);
+  const src = col.block && own[col.key] === undefined && v !== undefined ? 'kind' : 'man';
+  if (typeof v === 'string') return { on: false, src, why: v };
+  const def = capDefault(s, p, col);
+  if (def) return v === null ? { on: true, src: 'force', why: def } : { on: false, src: 'auto', why: def };
+  return { on: true, src: 'auto', why: '' };
 }
 // Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος 14:00 → 14:00)
 export function offDayBlock(s: AppState, date: ISODate, pid: number): string | null {
@@ -155,8 +201,8 @@ export function capBlock(s: AppState, date: ISODate, pid: number, post?: Post | 
   if (!post || post.kind === 'ly') return null;   // Λ/Υ-Δ/Υ: ορίζονται με το χέρι, όπως πριν
   const no = (why: string) => 'Δεν κάνει ' + (CAP_ACC[post.kind] || post.kind) + ' (' + why + ')';
   // «Δυνατότητα υπηρεσιών» του ατόμου: «δεν κάνει» με αιτία, ή ρητά «κάνει» (null) που περνά πάνω από πόστο και Σ.Ι.
-  const man = (s.caps[pid] || {})[post.kind];
-  if (man) return no(man);
+  const man = manOf(s.caps[pid] || {}, post.block, post.kind);
+  if (man) { const b = (s.caps[pid] || {})[('b:' + post.block) as CapKey] ? allBlocks(s.settings).find(x => x.id === post.block) : undefined; return b ? 'Δεν κάνει ' + b.name + ' (' + man + ')' : no(man); }
   if (man === null) return null;
   const p = personMap(s.people).get(pid); if (!p) return null;
   if (p.post) return no('Πόστο: ' + p.post);
@@ -518,9 +564,9 @@ export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   if (statusesOn(s.statuses, pid, date).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
   if (siIsUnarmed(p, blocks, s.settings.lists)) return true;
-  const kinds = [...new Set(postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly').map(x => x.kind))];
+  const armed = postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly');
   const c = s.caps[pid] || {};
-  return kinds.length > 0 && kinds.every(k => !!c[k]);
+  return armed.length > 0 && armed.every(x => !!manOf(c, x.block, x.kind));
 }
 // 1 μαγειρεία · 2 θαλαμοφύλακας (και άοπλος οπλοφύλακας) 2ο-3ο νούμερο · 3 το ίδιο 1ο-4ο · 4 όλες οι άλλες
 export function strictTier(x: Post): number {

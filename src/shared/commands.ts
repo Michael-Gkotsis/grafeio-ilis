@@ -2,10 +2,10 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, type ListId } from './ranks';
 import { hasTimes, mins, normTime, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
@@ -34,7 +34,8 @@ export type Command =
   | { t: 'autofill'; date: ISODate }
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
-  | { t: 'setCap'; pid: number; kind: DutyKind; allowed: boolean }
+  // v: off = δεν κάνει (λοχίας), on = ρητά κάνει (και παρά Σ.Ι./πόστο), clear = ό,τι λένε Σ.Ι. και πόστο
+  | { t: 'setCap'; pid: number; key: CapKey; v: 'off' | 'on' | 'clear' }
   | { t: 'setOffDays'; pid: number; days: number[] }
   // συντομεύσεις της καρτέλας (π.χ. «Όχι ΣΚ», «Μόνο μαγειρεία»): ίδια δεδομένα με τα κουτάκια, μία αναίρεση.
   // off: είδη που δεν κάνει (από τον λοχία)· on: είδη που ξανακάνει (φεύγει η εξαίρεση του λοχία)· reset: χωρίς καμία εξαίρεση του λοχία
@@ -371,9 +372,15 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setRules':
       return { state: { ...s, rules: c.rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
     case 'setCap': {
-      const cur = { ...(s.caps[c.pid] || {}) }; cur[c.kind] = c.allowed ? null : 'Από τον λοχία';
-      const acc: Record<string, string> = CAP_ACC as Record<string, string>;
-      return { state: { ...s, caps: { ...s.caps, [c.pid]: cur } }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(pm.get(c.pid)!) + (c.allowed ? ' κάνει ' : ' δεν κάνει ') + (acc[c.kind] || c.kind), files: [] };
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const cur = { ...(s.caps[c.pid] || {}) };
+      if (c.v === 'clear') delete cur[c.key]; else cur[c.key] = c.v === 'on' ? null : 'Από τον λοχία';
+      const caps = { ...s.caps }; if (Object.keys(cur).length) caps[c.pid] = cur; else delete caps[c.pid];
+      const col = capCols(s.settings).find(x => x.key === c.key);
+      const what = col?.block ? col.block.name : (CAP_ACC as Record<string, string>)[c.key] || c.key;
+      const next = { ...s, caps };
+      const after = c.v === 'off' ? ' δεν κάνει ' : c.v === 'on' || !col || capCell(next, p, col).on ? ' κάνει ' : ' δεν κάνει (' + capCell(next, p, col).why + ') ';
+      return { state: next, text: 'Δυνατότητα υπηρεσιών: ' + shortName(p) + after + what, files: [] };
     }
     case 'setOffDays': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');

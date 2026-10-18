@@ -6,10 +6,10 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, TIMES_HELP, TimeField } from '../common';
 import { hasTimes, normTime, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
+import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { baseTotal, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
-import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
+import { addDays, daysBetween, dayName, dm, dow } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
 import { SiField } from './si';
 import { RoomField } from './units';
@@ -178,66 +178,6 @@ function SaveViewDialog({ onClose, onSave }: P) {
   return html`<${Dialog} title="Αποθήκευση λίστας" description="Το φίλτρο που βλέπεις γίνεται κουμπί στη γραμμή φίλτρων, με τον αριθμό ατόμων πάντα ενημερωμένο." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${() => ok && onSave(name.trim())}>Αποθήκευση<//>`}>
     <div className="field"><label className="field__label" htmlFor="sv-n">Όνομα *</label><input id="sv-n" className="ui-input" data-autofocus="" maxLength="30" placeholder="π.χ. Θαλαμάρχες, Οδηγοί, ΕΣΣΟ Γ΄" value=${name} onChange=${(e: any) => setName(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter' && ok) onSave(name.trim()); }}/></div>
-  <//>`;
-}
-
-// «Τι κάνει»: μία γραμμή με το αποτέλεσμα και συντομεύσεις που γράφουν στα ίδια κουτάκια (δυνατότητα και μέρες), με μία αναίρεση
-const ALL_KINDS = CAP_KINDS.map(([k]) => k);
-const SERGEANT = 'Από τον λοχία';
-function doesText(p: Person, caps: Partial<Record<DutyKind, string>>): string {
-  const off = ALL_KINDS.filter(k => caps[k]);
-  const why = [...new Set(off.map(k => caps[k]!))].filter(r => r !== SERGEANT);
-  const whyTxt = why.length ? ' (' + why.join(', ') + ')' : '';
-  const kinds = !off.length ? 'Όλες τις υπηρεσίες' : off.length === ALL_KINDS.length ? 'Καμία υπηρεσία' + whyTxt
-    : off.length > ALL_KINDS.length / 2 ? 'Μόνο ' + ALL_KINDS.filter(k => !caps[k]).map(k => CAP_ACC[k]).join(', ') + whyTxt
-    : 'Όλες εκτός από ' + off.map(k => CAP_ACC[k]).join(', ') + whyTxt;
-  const days = p.offDays || [];
-  const dayTxt = !days.length ? '' : days.length === 2 && days.includes(6) && days.includes(0) ? ' · όχι ΣΚ' : ' · όχι ' + days.map(d => DOW_FULL[d]).join(', ');
-  return kinds + dayTxt;
-}
-function DutyProfile({ p, caps, open, onMore }: P) {
-  const { state, run } = useStore(); const toast = useToast();
-  const days: number[] = p.offDays || []; const own = state.caps[p.id] || {};
-  const offK = (ks: DutyKind[]) => ks.every(k => caps[k]);
-  const hasOwn = Object.values(own).some(Boolean) || days.length > 0;
-  const go = async (cmd: { off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean }, text: string) => {
-    if (await run({ t: 'setDutyProfile', pid: p.id, ...cmd, text }, false)) toast({ text: shortName(p) + ': ' + text + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' });
-  };
-  const toggleDays = (ds: number[], label: string) => {
-    const on = ds.every(d => days.includes(d));
-    return { on, fn: () => go({ days: on ? days.filter(d => !ds.includes(d)) : [...new Set([...days, ...ds])] }, on ? 'ξανά υπηρεσία ' + label : 'όχι υπηρεσία ' + label) };
-  };
-  const sat = toggleDays([6], 'Σάββατο'), we = toggleDays([6, 0], 'ΣΚ');
-  const armedK: DutyKind[] = ['op', 'sk'], restK = ALL_KINDS.filter(k => k !== 'mg');
-  const unarmed = offK(armedK), onlyMg = offK(restK) && !caps.mg;
-  const presets = [
-    { lbl: 'Όχι Σάββατο', on: sat.on, fn: sat.fn, tip: 'Καμία υπηρεσία που ξεκινά Σάββατο' },
-    { lbl: 'Όχι ΣΚ', on: we.on, fn: we.fn, tip: 'Καμία υπηρεσία που ξεκινά Σάββατο ή Κυριακή' },
-    { lbl: 'Όχι σκοπιά/οπλοφύλακα', on: unarmed, fn: () => go(unarmed ? { on: armedK } : { off: armedK }, unarmed ? 'ξανά σκοπιά και οπλοφύλακας' : 'όχι σκοπιά και οπλοφύλακας'), tip: unarmed && armedK.some(k => caps[k] !== SERGEANT) ? 'Το ορίζει ' + caps.sk + ': αλλάζει από τη Σ.Ι.' : 'Μόνο θαλαμοφύλακας, μαγειρεία, ΤΑΕ, άλλες' },
-    { lbl: 'Μόνο μαγειρεία', on: onlyMg, fn: () => go(onlyMg ? { on: restK } : { off: restK, on: ['mg'] }, onlyMg ? 'ξανά όλες οι υπηρεσίες' : 'μόνο μαγειρεία'), tip: 'Μπαίνει μόνο στα μαγειρεία' }
-  ];
-  return html`<div className="does">
-    <p className="does__txt">${doesText(p, caps)}</p>
-    <div className="does__presets" role="group" aria-label="Συντομεύσεις">${presets.map(x => html`<button key=${x.lbl} type="button" className="ui-chip ui-chip--sm" aria-pressed=${x.on} data-tip=${x.tip} onClick=${x.fn}>${x.lbl}<//>`)}
-      ${hasOwn && html`<button type="button" className="ui-chip ui-chip--sm ui-chip--view" data-tip="Σβήνει ό,τι όρισες με το χέρι· μένουν μόνο όσα βγαίνουν από τη Σ.Ι. και το πόστο" onClick=${() => go({ reset: true }, 'χωρίς εξαιρέσεις από τον λοχία')}>Καμία εξαίρεση<//>`}
-      <${Button} variant="link" onClick=${onMore}>${open ? 'Λιγότερα' : 'Λεπτομέρειες…'}<//></div>
-  </div>`;
-}
-
-// «Τι κάνει» ένας στρατιώτης στις υπηρεσίες (μόνιμα, όχι με ημερομηνίες): από την οθόνη Υπηρεσίες (Michael, 17/10: όχι στην καρτέλα)
-export function DutyProfileDialog({ pid: pid0, onClose }: P) {
-  const { state, run } = useStore(); const toast = useToast();
-  const [pid, setPid] = useState<number | null>(pid0 ?? null); const [more, setMore] = useState(false);
-  const p = pid != null ? personMap(state.people).get(pid) : undefined;
-  const caps = p ? capsOf(state, p.id) : {};
-  return html`<${Dialog} title=${p ? 'Τι κάνει ο ' + shortName(p) : 'Τι κάνει ένας στρατιώτης'} description="Μόνιμα, όχι με ημερομηνίες. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
-    footer=${html`<${Button} onClick=${onClose}>Κλείσε<//>`}>
-    ${pid0 == null && html`<div className="field"><label className="field__label" htmlFor="dpp">Στρατιώτης</label><${PersonPicker} id="dpp" placeholder=${p ? "Άλλος στρατιώτης…" : undefined} onChange=${(id: number) => setPid(id)} autoFocus=${true}/></div>`}
-    ${p && html`<${DutyProfile} p=${p} caps=${caps} open=${more} onMore=${() => setMore(!more)}/>
-      ${more && html`<div>
-      <div className="capgrid">${CAP_KINDS.map(([k, l]) => { const off = (caps as P)[k]; return html`<label key=${k} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει: ' + off : 'Κάνει ' + CAP_ACC[k]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const allowed = e.target.checked; if (await run({ t: 'setCap', pid: p.id, kind: k, allowed }, false)) toast({ text: shortName(p) + (allowed ? ' κάνει ' : ' δεν κάνει ') + CAP_ACC[k] + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.' }); }}/>${l}</label>`; })}</div>
-      <div className="capgrid" role="group" aria-label="Μέρες που κάνει υπηρεσία" style=${{ marginTop: '8px' }}><span className="muted" style=${{ fontSize: '13px', alignSelf: 'center' }}>Μέρες:</span>${WEEK.map(d => { const off = (p.offDays || []).includes(d); return html`<label key=${d} className=${off ? 'is-off' : ''} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : 'Κάνει υπηρεσία ' + DOW_FULL[d]}><input type="checkbox" className="ui-check" checked=${!off} onChange=${async (e: any) => { const on = e.target.checked; const days = on ? (p.offDays || []).filter(x => x !== d) : [...(p.offDays || []), d]; if (await run({ t: 'setOffDays', pid: p.id, days }, false)) toast({ text: shortName(p) + (on ? ' κάνει ξανά υπηρεσία ' : ' δεν κάνει υπηρεσία ') + DOW_FULL[d] + '. Η αυτόματη συμπλήρωση δεν τον βάζει εκείνες τις μέρες· με το χέρι μπαίνει με επιβεβαίωση.' }); }}/>${DOW[d]}</label>`; })}</div>
-      <p className="note" style=${{ margin: '8px 0 0' }}>Όπως το αρχείο «Δυνατότητα υπηρεσιών». Προεπιλογή από τη Σ.Ι. (Ρυθμίσεις › Σ.Ι.· αρχικά ο Ι3 ΧΩΡΙΣ ΟΠΛΟ και ο Ι4 όχι σε ένοπλη υπηρεσία) και το πόστο. Οι μέρες: ξετσέκαρε όσες δεν κάνει καμία υπηρεσία (μετρά η μέρα που ξεκινά η υπηρεσία, 14:00).</p></div>`}`}
   <//>`;
 }
 
