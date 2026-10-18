@@ -5,9 +5,9 @@ import { norm, normGreek } from './text';
 import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
-import { hasTimes, mins, normTime, timesTxt } from './hours';
+import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normRack, normWeapon } from './weapons';
 
@@ -114,13 +114,13 @@ function wTime(v: unknown, what: string): string {
 }
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
-// Ώρες άδειας: μόνο στις άδειες, σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
+// Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
 function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: string; toTime?: string; open?: boolean }): { fromTime?: string; toTime?: string } {
   if (!hasTimes(c.type)) return {};
-  const f = normTime(c.fromTime), t = c.open ? '' : normTime(c.toTime);
-  if (f == null) throw new Error('Η ώρα αναχώρησης «' + c.fromTime + '» δεν διαβάζεται. Γράψε π.χ. 14:00.');
-  if (t == null) throw new Error('Η ώρα επιστροφής «' + c.toTime + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
-  if (f && t && c.from === c.to && mins(t) <= mins(f)) throw new Error('Την ίδια μέρα η επιστροφή (' + t + ') πρέπει να είναι μετά την αναχώρηση (' + f + ')');
+  const f = normTime(c.fromTime), t = c.open ? '' : normTime(c.toTime), n = timeNames(c.type);
+  if (f == null) throw new Error('Η ώρα ' + n.fromG + ' «' + c.fromTime + '» δεν διαβάζεται. Γράψε π.χ. 14:00.');
+  if (t == null) throw new Error('Η ώρα ' + n.toG + ' «' + c.toTime + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+  if (f && t && c.from === c.to && mins(t) <= mins(f)) throw new Error('Την ίδια μέρα η ' + n.to + ' (' + t + ') πρέπει να είναι μετά την ' + n.from + ' (' + f + ')');
   return { ...(f ? { fromTime: f } : {}), ...(t ? { toTime: t } : {}) };
 }
 
@@ -175,7 +175,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
-        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, cmd.to, ctx.newId)), ...cmd.pids.map(pid => {
+        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, cmd), ctx.newId)), ...cmd.pids.map(pid => {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
@@ -310,7 +310,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) }, text: 'Στοιχεία ποινής: ' + shortName(pm.get(st.pid)!) + (next.by ? ', από ' + next.by : '') + (next.reason ? ', διότι ' + next.reason : ''), files: [] };
     }
     case 'setTimes': {
-      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const tm = checkTimes({ ...st, fromTime: c.fromTime, toTime: c.toTime });
       const next: Status = { ...st, ...tm };
       if (!tm.fromTime) delete next.fromTime;
@@ -319,8 +319,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const plan = planStatusChange({ ...s, statuses: s.statuses.filter(x => x !== st) }, { type: st.type, pids: [st.pid], from: st.from, to: st.to, ...tm }, ctx.today);
       let out: AppState = { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) };
       plan.conflicts.forEach(x => { out = setGuard(out, x.date, x.k, null); });
-      const t = timesTxt(next);
-      return { state: out, text: 'Ώρες άδειας ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: ['Άδειες', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
+      const t = timesTxt(next), lv = TYPES[st.type].cat === 'abs';
+      return { state: out, text: 'Ώρες ' + (lv ? 'άδειας' : TYPES[st.type].label) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: [st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
     }
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');

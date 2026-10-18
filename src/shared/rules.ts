@@ -3,7 +3,7 @@ import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DO
 import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
-import { hasTimes, mins } from './hours';
+import { backBy, hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
@@ -98,18 +98,33 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
   }
   return r;
 }
+// Ώρες επιστροφής (Michael, 18/10): η τελευταία μέρα μιας άδειας (ή νοσοκομείου, ΣΤΕΠ) με ώρα επιστροφής μετρά μόνο ως
+// εκείνη την ώρα. Κάθε έλεγχος έχει τη δική του στιγμή: η έξοδος ξεκινά στις rules.outTime, η ΗΚΑΙ μετρά στις
+// rules.hkTime, οι υπηρεσίες ξεκινούν 14:00 (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
+// και κάθε μέρα χωρίς ώρα.
+export const DEFAULT_OUT_TIME = '16:00', DEFAULT_HK_TIME = '08:00';
+export const DUTY_START = 14 * 60;
+const timeOr = (t: string | undefined, def: string) => (t && /^\d\d:\d\d$/.test(t) ? t : def);
+export const outMin = (r?: Pick<Rules, 'outTime'> | null) => mins(timeOr(r?.outTime, DEFAULT_OUT_TIME));
+export const hkMin = (r?: Pick<Rules, 'hkTime'> | null) => mins(timeOr(r?.hkTime, DEFAULT_HK_TIME));
+// Οι καταστάσεις που ισχύουν τη μέρα date από τις m και μετά (λεπτά από τα μεσάνυχτα): χωρίς όσες τελείωσαν ως τότε
+export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: number): Status[] {
+  const ss = statusesOn(statuses, pid, date);
+  return ss.some(x => backBy(x, date, m)) ? ss.filter(x => !backBy(x, date, m)) : ss;
+}
 const untilTxt = (s: Status, date: ISODate) => (s.open ? ' (χωρίς λήξη)' : s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
 export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]> }
-export function strengthOf(s: AppState, date: ISODate): Strength {
+// at: η στιγμή της μέρας που μετρά (λεπτά)· προεπιλογή η ώρα της ΗΚΑΙ (οι Εξοδούχοι μετρούν από την ώρα εξόδου)
+export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Strength {
   const people = activePeople(s);
   const counts = {} as Record<TypeKey, number>;
   const lists = { present: [] } as unknown as Strength['lists'];
   TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; });
   let present = 0;
   for (const p of people) {
-    const ss = statusesOn(s.statuses, p.id, date);
+    const ss = statusesFrom(s.statuses, p.id, date, at);
     ss.forEach(x => { counts[x.type]++; lists[x.type].push(p); });
     if (!ss.some(x => TYPES[x.type].away)) { present++; lists.present.push(p); }
   }
@@ -353,8 +368,9 @@ export function guardUnavailable(s: AppState, date: ISODate, pid: number, k: str
 export function outBlock(s: AppState, date: ISODate, pid: number): string | null {
   const o = postOf(s, date, pid);
   if (o) return 'Έχει υπηρεσία: ' + o.label;
-  const st = statusesOn(s.statuses, pid, date).find(x => statNoOut(x, s.settings.lists));
-  if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date);
+  // γύρισε από άδεια (νοσοκομείο, ΣΤΕΠ) πριν από την ώρα εξόδου: βγαίνει κανονικά (Michael, 18/10)
+  const st = statusesFrom(s.statuses, pid, date, outMin(s.rules)).find(x => statNoOut(x, s.settings.lists));
+  if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date) + (st.toTime && !st.open && st.to === date && hasTimes(st.type) ? ' (γυρίζει ' + st.toTime + ')' : '');
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
   const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && coversDay(x, date));
   return pend ? (pend.kind || 'Ποινή') + ' (αιτείται)' + untilTxt(pend, date) : null;
@@ -561,7 +577,7 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
 // Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
 export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   const blocks = (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly');
-  if (statusesOn(s.statuses, pid, date).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
+  if (statusesFrom(s.statuses, pid, date, DUTY_START).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
   if (siIsUnarmed(p, blocks, s.settings.lists)) return true;
   const armed = postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly');
@@ -753,6 +769,8 @@ export function splitOut(st: Status, from: ISODate, to: ISODate, newId: () => st
   if (st.to > to) out.push({ ...st, id: out.length ? newId() : st.id, from: addDays(to, 1) });
   return out;
 }
+// Ως πότε ακυρώνει τις εξόδους μια δήλωση: χωρίς την τελευταία μέρα, αν τελειώνει με ώρα πριν από την ώρα εξόδου
+export const outCutTo = (s: AppState, cmd: Pick<StatusCmd, 'type' | 'to' | 'toTime'>) => (backBy(cmd, cmd.to, outMin(s.rules)) ? addDays(cmd.to, -1) : cmd.to);
 // μία γραμμή ανά μέρα: ποιοι βγαίνουν από ποιες θέσεις
 function conflictFiles(s: AppState, conflicts: StatusPlan['conflicts']): PlanFile[] {
   const pm = personMap(s.people), posts = allPosts(s.settings);
@@ -775,8 +793,17 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   const first = cmd.fromTime && hasTimes(cmd.type) ? addDays(cmd.from, -1) : cmd.from;
   const dates = Object.keys(s.guards).filter(d => d >= first && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
+  // έξοδος/ΔΝ και άδεια που τελειώνει με ώρα επιστροφής πριν από την έξοδο: δεν πέφτουν μαζί (Michael, 18/10)
+  const om = outMin(s.rules);
+  const meets = (x: Status) => {
+    if (!overlapsRange(x, cmd.from, cmd.to)) return false;
+    const xo = TYPES[x.type].cat === 'out';
+    if (t.cat === 'out' && !xo && backBy(x, x.to, om)) return overlapsRange({ ...x, to: addDays(x.to, -1) }, cmd.from, cmd.to) && x.from < x.to;
+    if (xo && t.cat !== 'out' && backBy({ ...cmd, open: false }, cmd.to, om)) return overlapsRange(x, cmd.from, addDays(cmd.to, -1)) && cmd.from < cmd.to;
+    return true;
+  };
   for (const pid of cmd.pids) {
-    const mine = statusesOf(s.statuses, pid).filter(x => overlapsRange(x, cmd.from, cmd.to));
+    const mine = statusesOf(s.statuses, pid).filter(meets);
     const ov = mine.find(clash);
     if (ov) overlaps.push({ pid, status: ov });
     else if (t.cat === 'med') mine.filter(x => TYPES[x.type].cat === 'med').forEach(x => alongside.push({ pid, status: x }));
@@ -794,14 +821,14 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
     if (medWarns(cmd, lists) && !(today && cmd.to < today)) dates.forEach(date => posts.forEach(x => { if ((!today || date >= today) && s.guards[date][x.k] === pid) warned.push({ pid, date, k: x.k }); }));
     // και η ποινή που ακόμα αιτείται κρατά τον στρατιώτη μέσα (outBlock)
     if (statNoOut(cmd, lists) && !t.away)
-      s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && overlapsRange(x, cmd.from, cmd.to)) cancels.push(x); });
+      s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && meets(x)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
   if (cmd.type === 'PUN') files.push({ fn: 'ΗΚΑΙ', desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (t.cat === 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
-  const keep = (x: Status) => splitOut(x, cmd.from, cmd.to, () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
+  const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   files.push(...conflictFiles(s, conflicts));
   [...new Set(warned.map(x => x.date))].forEach(date => {
@@ -882,11 +909,12 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const col = a && cadreAbsOf(a.kind, s.settings.lists)?.[2];
     if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
   }
-  let soldiers = 0;
+  let soldiers = 0; const at = hkMin(s.rules);
   for (const p of activePeople(s)) {
     soldiers++;
     const r = hkRankOf(p.rank, s.settings.lists); rank[r].n++; if (p.attached) rank[r].attached++;
-    const ss = statusesOn(s.statuses, p.id, date);
+    // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)
+    const ss = statusesFrom(s.statuses, p.id, date, at);
     const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
     const duty = onDuty.get(p.id);
     const col = abs ? (abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!) : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;

@@ -3,8 +3,8 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } fro
 import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, TIMES_HELP, TimeField } from '../common';
-import { hasTimes, normTime, timesTxt } from '../../shared/hours';
+import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
+import { hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { baseTotal, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
@@ -215,32 +215,33 @@ export function PersonSheet({ pid, onClose }: P) {
       ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
       <dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip="Ώρα αναχώρησης την πρώτη μέρα και ώρα επιστροφής την τελευταία">Ώρες…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
+    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">περιμένει<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>ΗΚΑΙ<//></li>`)}</ul></section>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
   <//>`;
 }
 
-// Ώρες μιας άδειας που υπάρχει ήδη (π.χ. ήρθε από το Excel χωρίς ώρες)
+// Ώρες μιας άδειας (νοσοκομείου, ΣΤΕΠ) που υπάρχει ήδη (π.χ. ήρθε από το Excel χωρίς ώρες)
 export function LeaveTimesDialog({ st, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const p = personMap(state.people).get(st.pid)!;
+  const tn = timeNames(st.type), what = TYPES[st.type as TypeKey].cat === 'abs' ? 'άδειας' : TYPES[st.type as TypeKey].label;
   const [f, setF] = useState({ fromTime: st.fromTime || '', toTime: st.toTime || '' });
   const [err, setErr] = useState<string | null>(null);
   const save = async () => {
     const a = normTime(f.fromTime), b = normTime(f.toTime);
-    if (a == null || b == null) { setErr('Η ώρα ' + (a == null ? 'αναχώρησης' : 'επιστροφής') + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
+    if (a == null || b == null) { setErr('Η ώρα ' + (a == null ? tn.fromG : tn.toG) + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
     if (!(await run({ t: 'setTimes', id: st.id, fromTime: a, toTime: b }, false))) return;
-    onClose(); toast({ text: 'Ώρες άδειας ' + shortName(p) + ': ' + (timesTxt({ fromTime: a, toTime: b, open: st.open }) || 'χωρίς ώρες'), actions: [undoMark()] });
+    onClose(); toast({ text: 'Ώρες ' + what + ' ' + shortName(p) + ': ' + (timesTxt({ type: st.type, fromTime: a, toTime: b, open: st.open }) || 'χωρίς ώρες'), actions: [undoMark()] });
   };
-  return html`<${Dialog} title="Ώρες άδειας" description=${fullName(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.to !== st.from ? '–' + dm(st.to) : '')} onClose=${onClose}
+  return html`<${Dialog} title=${'Ώρες ' + what} description=${fullName(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.to !== st.from ? '–' + dm(st.to) : '')} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field-row">
-      <${TimeField} id="lt-out" label="Ώρα αναχώρησης" value=${f.fromTime} onChange=${(v: string) => { setF({ ...f, fromTime: v }); setErr(null); }} help=${dow(st.from) + ' ' + dm(st.from)}/>
-      ${!st.open && html`<${TimeField} id="lt-in" label="Ώρα επιστροφής" value=${f.toTime} onChange=${(v: string) => { setF({ ...f, toTime: v }); setErr(null); }} help=${dow(st.to) + ' ' + dm(st.to)}/>`}
+      <${TimeField} id="lt-out" label=${'Ώρα ' + tn.fromG} value=${f.fromTime} onChange=${(v: string) => { setF({ ...f, fromTime: v }); setErr(null); }} help=${dow(st.from) + ' ' + dm(st.from)}/>
+      ${!st.open && html`<${TimeField} id="lt-in" label=${'Ώρα ' + tn.toG} value=${f.toTime} onChange=${(v: string) => { setF({ ...f, toTime: v }); setErr(null); }} help=${dow(st.to) + ' ' + dm(st.to)}/>`}
     </div>
-    <span className="field__help">${TIMES_HELP} Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.</span>
+    <span className="field__help">${timesHelp(state.rules)} Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.</span>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
@@ -358,7 +359,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   // ιατρικά: ένα ή περισσότερα μαζί για τον ίδιο λόγο (Michael, 18/10)· καθένα γράφεται σε δική του γραμμή στο Excel
   const [medSel, setMedSel] = useState<string[]>(() => (initial.type && TYPES[initial.type as TypeKey]?.cat === 'med' ? [meds.some(m => m.like === initial.type && m.name === initial.kind) ? 'm:' + initial.kind : initial.type] : []));
   const medPicks = t.cat === 'med' ? picks.filter(x => medSel.includes(x.key)) : [];
-  // ώρες: μόνο στις άδειες (κανονική, τιμητική), προαιρετικές
+  // ώρες: στις άδειες, στο νοσοκομείο και στον ΣΤΕΠ (hours.ts), προαιρετικές
   const timed = hasTimes(cmd.type);
   const tOut = timed ? normTime(cmd.fromTime) : '', tBack = timed ? normTime(cmd.toTime) : '';
   const full = { ...cmd, kind: hasKind ? cmd.kind : med ? med.name : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined, fromTime: tOut || undefined, toTime: tBack || undefined, unlockPast: unlock || undefined, force: ack || undefined };
@@ -371,8 +372,8 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   const plan = useMemo(() => (step === 4 ? planStatusChanges(state, cmds, today) : null), [step, state, cmd, medSel, today, unlock]);
   const next = () => {
     if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; }
-    if (tOut == null || tBack == null) { setErr('Η ώρα ' + (tOut == null ? 'αναχώρησης' : 'επιστροφής') + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
-    if (tOut && tBack && cmd.from === cmd.to && tBack <= tOut) { setErr('Την ίδια μέρα η επιστροφή πρέπει να είναι μετά την αναχώρηση.'); return; }
+    if (tOut == null || tBack == null) { setErr('Η ώρα ' + (tOut == null ? timeNames(cmd.type).fromG : timeNames(cmd.type).toG) + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
+    if (tOut && tBack && cmd.from === cmd.to && tBack <= tOut) { setErr('Την ίδια μέρα η ' + timeNames(cmd.type).to + ' πρέπει να είναι μετά την ' + timeNames(cmd.type).from + '.'); return; }
     // επικάλυψη ή «δεν βγαίνει έξοδο»: προειδοποίηση και επιβεβαίωση, όχι απαγόρευση (Michael, 17/10)
     const p = planStatusChanges(state, cmds, today);
     const warn = [...p.overlaps.map((o, i) => html`<span key=${'o' + i}><br/><b>${shortName(pm.get(o.pid)!)}</b> έχει ήδη ${statusLbl(o.status, state.settings.lists)} ${dm(o.status.from)}–${dm(o.status.to)}</span>`),
@@ -439,9 +440,9 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${sum}
     <${DateRangeField} from=${cmd.from} to=${cmd.to} onChange=${(from: string, to: string) => set({ from, to })}/>
     ${timed && html`<div className="field"><div className="field-row">
-      <${TimeField} id="dpt-out" label="Ώρα αναχώρησης" value=${cmd.fromTime} onChange=${(v: string) => set({ fromTime: v })} help=${'Προαιρετικό · ' + dow(cmd.from) + ' ' + dm(cmd.from)}/>
-      <${TimeField} id="dpt-in" label="Ώρα επιστροφής" value=${cmd.toTime} onChange=${(v: string) => set({ toTime: v })} help=${'Προαιρετικό · ' + dow(cmd.to) + ' ' + dm(cmd.to)}/>
-    </div><span className="field__help">${TIMES_HELP}</span></div>`}
+      <${TimeField} id="dpt-out" label=${'Ώρα ' + timeNames(cmd.type).fromG} value=${cmd.fromTime} onChange=${(v: string) => set({ fromTime: v })} help=${'Προαιρετικό · ' + dow(cmd.from) + ' ' + dm(cmd.from)}/>
+      <${TimeField} id="dpt-in" label=${'Ώρα ' + timeNames(cmd.type).toG} value=${cmd.toTime} onChange=${(v: string) => set({ toTime: v })} help=${'Προαιρετικό · ' + dow(cmd.to) + ' ' + dm(cmd.to)}/>
+    </div><span className="field__help">${timesHelp(state.rules)}</span></div>`}
     ${isPun && max > 0 && html`<${Alert} tone="warn"><span>${punLbl(cmd.kind)} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
     ${dep && html`<span className="note">${daysBetween(cmd.from, cmd.to)} ${daysBetween(cmd.from, cmd.to) === 1 ? 'ημέρα' : 'ημέρες'} στέρηση εξόδου. Οι μέρες με υπηρεσία ή βραδινή εκπαίδευση δεν μετράνε: η λήξη μετακινείται μόνη της.</span>`}
     ${isPun && html`<div className="field-row">

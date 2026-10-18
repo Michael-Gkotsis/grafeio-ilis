@@ -3,7 +3,7 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, HK_A, HK_K, HK_NCO, HK_OFFICERS
+  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K, HK_NCO, HK_OFFICERS
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import type { ExportKind } from './api';
@@ -20,6 +20,7 @@ export function preflight(kind: ExportKind, s: AppState, date: ISODate): Check[]
 }
 
 const outOn = (s: AppState, pid: number, date: ISODate) => statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].cat === 'out');
+const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(s.statuses, pid, date, outMin(s.rules));
 
 export function frouraChecks(s: AppState, date: ISODate): Check[] {
   const out: Check[] = []; const pm = personMap(s.people);
@@ -81,7 +82,7 @@ export function outsChecks(s: AppState, date: ISODate): Check[] {
   for (const { p, st } of outs) {
     const r = outBlock(s, date, p.id);
     if (r) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος αλλά δεν βγαίνει: ' + r, go: 'outs' });
-    const away = statusesOn(s.statuses, p.id, date).find(x => x !== st && TYPES[x.type].away && TYPES[x.type].cat !== 'out');
+    const away = fromOut(s, p.id, date).find(x => x !== st && TYPES[x.type].away && TYPES[x.type].cat !== 'out');
     if (away) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος και ' + TYPES[away.type].long.toLowerCase(), go: 'outs' });
   }
   // ΔΝ χωρίς δικαίωμα: μόνο αφού έχει σημειωθεί δικαίωμα ΔΝ σε έστω έναν (όπως στους Εξοδούχους)
