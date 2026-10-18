@@ -1,8 +1,11 @@
 // features/weapons: έξοδοι και είσοδοι όπλων από τον οπλοβαστό (Michael, 18/10: «όπως οι εξοδούχοι και οι παραμένοντες»).
 // Έξοδος: λόγος από τη λίστα «Λόγοι εξόδου όπλου» (ΕΚΠ, ΒΟΛΗ…), μέρα και ώρα (τώρα, αλλάζουν). Είσοδος: ο λόγος εισαγωγής
 // μπαίνει μόνος του από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ), με ώρα (τώρα). Κάθε κίνηση διορθώνεται ή σβήνεται στις «Κινήσεις».
-import { useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, Segmented, useToast } from '../ui';
+// Στη γραμμή (Michael, 18/10: «πιο ξεκάθαρο… πάνω στο table»): διακόπτης ΕΝΤΟΣ | ΕΚΤΟΣ, και ένα μικρό παράθυρο ακριβώς από κάτω
+// με ώρα (τώρα) και τους λόγους ως κουμπιά: ένα κλικ στον λόγο και βγήκε. Για είσοδο: ώρα και λόγος εισαγωγής έτοιμα, Enter.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { html, cx, Alert, Badge, Button, Dialog, Segmented, useEscape, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { ChoiceField, TimeField } from '../common';
 import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
@@ -10,16 +13,16 @@ import { personMap } from '../../shared/rules';
 import { listOf, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
 import { dm, dmy, nowHM, today as todayFn } from '../../shared/dates';
-import { byOut, movesOn, openMoves } from '../../shared/weapons';
+import { byOut, moveOutTxt, movesOn, openMoves } from '../../shared/weapons';
 type P = any;
 
 const names = (ps: Person[], n = 6) => ps.slice(0, n).map(shortName).join(', ') + (ps.length > n ? ' και ' + (ps.length - n) + ' ακόμα' : '');
 
 // Έξοδος όπλων για όσους διάλεξες: μόνο όσοι έχουν αριθμό όπλου και είναι εντός
-export function WeaponOutDialog({ pids, onClose, onDone }: P) {
+export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
-  const [reason, setReason] = useState(''); const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [note, setNote] = useState('');
+  const [reason, setReason] = useState(r0); const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [note, setNote] = useState('');
   const pm = personMap(state.people); const open = openMoves(state.weaponLog);
   const ps: Person[] = pids.map((id: number) => pm.get(id)).filter(Boolean);
   const go = ps.filter(p => p.weapon && !open.has(p.id)); const noW = ps.filter(p => !p.weapon); const already = ps.filter(p => p.weapon && open.has(p.id));
@@ -32,7 +35,7 @@ export function WeaponOutDialog({ pids, onClose, onDone }: P) {
   };
   return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? go[0].rank + ' ' + plainName(go[0]) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Έξοδος${go.length > 1 ? ' (' + go.length + ')' : ''}<//>`}>
-    <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${true} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
+    <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${!r0} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
     ${reason.trim() && html`<p className="note" style=${{ margin: '-4px 0 10px' }}>Όταν μπει πάλι: <b>${weaponBack(reason, state.settings.lists)}</b></p>`}
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="wo-d">Μέρα</label><input id="wo-d" type="date" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
@@ -121,6 +124,110 @@ export function MovesView({ date, onIn }: P) {
         <span className="num">${m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : '—'}</span><span className="muted">${m.note || ''}</span>
         <span className="weapon-acts">${!m.inDay && html`<${Button} size="sm" variant="outline" onClick=${() => onIn([m.id])}>Είσοδος<//>`}<${Button} size="sm" variant="ghost" onClick=${() => setEdit(m)} data-tip="Ώρες, λόγοι, παρατήρηση, ή σβήσιμο">Διόρθωση<//></span>
       </div>`; })}</div></div></div></div>`}
+    ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}
+  </div>`;
+}
+
+// Μικρό παράθυρο κάτω από τον διακόπτη (ή από πάνω, αν δεν χωρά)· κλείνει με Esc ή κλικ έξω
+function Pop({ anchor, onClose, children, label }: P) {
+  const box = useRef<HTMLDivElement>(null); const [pos, setPos] = useState<Record<string, number> | null>(null);
+  useEscape(onClose);
+  useLayoutEffect(() => {
+    const upd = () => {
+      const el = anchor.current; if (!el) return;
+      const r = el.getBoundingClientRect(), vh = window.innerHeight, vw = document.documentElement.clientWidth, h = box.current?.offsetHeight || 300;
+      const width = Math.min(380, vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
+      setPos(vh - r.bottom - 12 < h && r.top - 12 > vh - r.bottom ? { left, width, bottom: vh - r.top + 6 } : { left, width, top: r.bottom + 6 });
+    };
+    upd(); const t = setTimeout(upd);
+    window.addEventListener('scroll', upd, true); window.addEventListener('resize', upd);
+    return () => { clearTimeout(t); window.removeEventListener('scroll', upd, true); window.removeEventListener('resize', upd); };
+  }, []);
+  useEffect(() => {
+    const out = (e: MouseEvent) => { const t = e.target as Node; if (!box.current?.contains(t) && !anchor.current?.contains(t)) onClose(); };
+    document.addEventListener('mousedown', out); return () => document.removeEventListener('mousedown', out);
+  }, [onClose]);
+  useEffect(() => { (box.current?.querySelector('[data-autofocus]') as HTMLElement | null)?.focus(); }, []);
+  return createPortal(html`<div ref=${box} className="wpop" role="dialog" aria-label=${label} style=${pos || { left: -9999, top: 0 }}>${children}</div>`, document.body);
+}
+const when = (day: string, time: string, today: string) => (day === today ? '' : dm(day) + ' ') + time;
+// Ώρα και μέρα στο μικρό παράθυρο: η τωρινή, αλλάζουν
+function WhenRow({ day, time, setDay, setTime, label, focus }: P) {
+  const bad = !normTime(time);
+  return html`<div className="wpop__when"><label><span>${label}</span><input className="ui-input wpop__time" inputMode="numeric" autoComplete="off" value=${time} aria-invalid=${bad || undefined} aria-label=${label} data-autofocus=${focus ? '' : undefined}
+      onChange=${(e: any) => setTime(e.target.value)} onBlur=${() => { const t = normTime(time); if (t && t !== time) setTime(t); }}/></label>
+    <label><span>Μέρα</span><input type="date" className="ui-input wpop__day" value=${day} aria-label="Μέρα" onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></label></div>`;
+}
+
+// Έξοδος ενός όπλου από τη γραμμή: ώρα (τώρα), παρατήρηση, και ένα κλικ στον λόγο
+function OutPop({ p, anchor, onClose }: P) {
+  const { state, run, undoMark, today } = useStore(); const toast = useToast(); const lists = state.settings.lists;
+  const reasons: string[] = useMemo(() => listOf(lists, 'weaponOut'), [lists]);
+  const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [note, setNote] = useState(''); const [other, setOther] = useState('');
+  const [hover, setHover] = useState('');
+  const go = async (reason: string) => {
+    const t = normTime(time); if (!reason.trim() || !t) return;
+    if (!(await run({ t: 'weaponOut', pids: [p.id], reason, day, time: t, note }, false))) return;
+    toast({ text: shortName(p) + ': όπλο ' + p.weapon + ' ΕΚΤΟΣ (' + reason.trim().toUpperCase() + ') ' + when(day, t, today), actions: [undoMark()] });
+    onClose();
+  };
+  const tip = hover || other.trim();
+  return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Έξοδος όπλου ' + p.weapon}>
+    <div className="wpop__head"><b>Έξοδος όπλου ${p.weapon}</b><small>${p.rank} ${plainName(p)}</small></div>
+    <${WhenRow} label="Ώρα εξόδου" focus=${true} day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
+    <input className="ui-input wpop__note" placeholder="Παρατήρηση (αν θες), π.χ. πεδίο βολής" value=${note} onChange=${(e: any) => setNote(e.target.value)} aria-label="Παρατήρηση"/>
+    <div className="wpop__lbl">Γιατί βγαίνει; Πάτα τον λόγο:</div>
+    <div className="wpop__reasons">${reasons.map(r => html`<button key=${r} type="button" className="wpop__reason" disabled=${!normTime(time)}
+      onMouseEnter=${() => setHover(r)} onMouseLeave=${() => setHover('')} onFocus=${() => setHover(r)} onBlur=${() => setHover('')} onClick=${() => go(r)}>${r}</button>`)}</div>
+    <form className="wpop__other" onSubmit=${(e: any) => { e.preventDefault(); go(other); }}>
+      <input className="ui-input" placeholder="Άλλος λόγος…" value=${other} onChange=${(e: any) => setOther(e.target.value)} aria-label="Άλλος λόγος"/>
+      <${Button} size="sm" type="submit" disabled=${!other.trim() || !normTime(time)}>Έξοδος<//></form>
+    <p className="wpop__foot">${tip ? html`<span>Όταν μπει πάλι: <b>${weaponBack(tip, lists)}</b></span>` : 'Κάθε λόγος έχει τον λόγο εισαγωγής του (Ρυθμίσεις › Λίστες › Λόγοι εξόδου όπλου).'}</p>
+  <//>`;
+}
+// Είσοδος από τη γραμμή: ώρα (τώρα) και λόγος εισαγωγής από τη λίστα, έτοιμα· Enter και μπήκε
+function InPop({ p, m, anchor, onClose, onEdit }: P) {
+  const { state, run, undoMark, today } = useStore(); const toast = useToast();
+  const auto = weaponBack(m.reason, state.settings.lists);
+  const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [reason, setReason] = useState(auto);
+  const t = normTime(time); const early = !!t && day + ' ' + t < m.outDay + ' ' + m.outTime;
+  const ok = !!t && !early;
+  const go = async (e?: any) => {
+    e?.preventDefault(); if (!ok) return;
+    if (!(await run({ t: 'weaponIn', ids: [m.id], day, time: t!, reason: reason.trim() || undefined }, false))) return;
+    toast({ text: shortName(p) + ': όπλο ' + m.weapon + ' ΕΝΤΟΣ (' + (reason.trim().toUpperCase() || auto) + ') ' + when(day, t!, today), actions: [undoMark()] });
+    onClose();
+  };
+  return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Είσοδος όπλου ' + m.weapon}>
+    <div className="wpop__head"><b>Είσοδος όπλου ${m.weapon}</b><small>${p.rank} ${plainName(p)} · βγήκε ${m.reason} ${when(m.outDay, m.outTime, today)}</small></div>
+    <form onSubmit=${go}>
+      <${WhenRow} label="Ώρα εισόδου" day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
+      <label className="wpop__field"><span>Λόγος εισαγωγής</span><input className="ui-input" value=${reason} placeholder=${auto} onChange=${(e: any) => setReason(e.target.value)} aria-label="Λόγος εισαγωγής"/></label>
+      ${early && html`<p className="wpop__err">Η ώρα είναι πριν την έξοδο (${dm(m.outDay)} ${m.outTime}).</p>`}
+      <div className="wpop__acts"><${Button} variant="ghost" size="sm" onClick=${() => { onClose(); onEdit(m); }} data-tip="Άλλαξε λόγο, ώρα εξόδου ή παρατήρηση, ή σβήσε την κίνηση">Διόρθωση εξόδου…<//>
+        <${Button} size="sm" type="submit" disabled=${!ok} data-autofocus="">Μπαίνει ΕΝΤΟΣ<//></div>
+    </form>
+  <//>`;
+}
+
+// Κατάσταση του όπλου στη γραμμή: ΕΝΤΟΣ | ΕΚΤΟΣ, και δίπλα γιατί και από πότε. Ένοπλη υπηρεσία: εκτός αυτόματα.
+export function WeaponState({ p, info }: P) {
+  const { state, today } = useStore(); const lists = state.settings.lists;
+  const ref = useRef<HTMLDivElement>(null); const [open, setOpen] = useState(false); const [edit, setEdit] = useState<WeaponMove | null>(null);
+  const m: WeaponMove | undefined = info.moves.get(p.id); const duty: string | undefined = info.out.get(p.id);
+  const has = !!p.weapon;
+  if (!m && !duty && !(p.active && has)) return html`<span className="muted wstate__none">${has ? '—' : 'χωρίς όπλο'}</span>`;
+  const out = !!m || !!duty; const auto = !m && !!duty;
+  const why = m ? html`<span className="wstate__why" data-tip=${'Βγήκε: ' + moveOutTxt(m) + (m.note ? ' · ' + m.note : '') + (duty ? ' · και ένοπλη υπηρεσία: ' + duty : '') + ' · μπαίνει με ' + weaponBack(m.reason, lists)}><b>${m.reason}</b> <span>${when(m.outDay, m.outTime, today)}</span>${m.note ? html` <i>· ${m.note}</i>` : ''}</span>`
+    : auto ? html`<span className="wstate__why" data-tip=${'Αυτόματα: ένοπλη υπηρεσία ' + duty + '. Για να αλλάξει, άλλαξε τις υπηρεσίες.'}><b>ΥΠΗΡΕΣΙΑ</b> <span>${duty}</span></span>`
+    : html`<span className="wstate__why muted">στον οπλοβαστό</span>`;
+  const click = (want: boolean) => { if (auto || want === out) return; setOpen(true); };
+  return html`<div className=${cx('wstate', out && 'is-out', auto && 'is-auto')}>
+    <div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>
+      <button type="button" aria-pressed=${!out} disabled=${auto} onClick=${() => click(false)} data-tip=${out && !auto ? 'Μπαίνει στον οπλοβαστό: ώρα και λόγος εισαγωγής' : undefined}>ΕΝΤΟΣ</button>
+      <button type="button" aria-pressed=${out} disabled=${auto} onClick=${() => click(true)} data-tip=${!out ? 'Βγαίνει από τον οπλοβαστό: ώρα και λόγος' : undefined}>ΕΚΤΟΣ</button>
+    </div>${why}
+    ${open && (m ? html`<${InPop} p=${p} m=${m} anchor=${ref} onClose=${() => setOpen(false)} onEdit=${setEdit}/>` : html`<${OutPop} p=${p} anchor=${ref} onClose=${() => setOpen(false)}/>`)}
     ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}
   </div>`;
 }
