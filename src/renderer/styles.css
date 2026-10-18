@@ -11,7 +11,7 @@
   --rail:#3d4419; --rail-on:#525c2b; --gold:#d8b23a; --band:#e8ecdd; --band-fg:#2f3518; --band-line:#7d8a45; --thead:#f6f7f1; --h2:#3f4720;
   --xl-grid:#d9d9d9; --xl-head:#f3f3f3; --xl-bg:#ffffff; --xl-fg:#111111; --xl-hdr:#d9d9d9; --xl-kenh:#ffc7ce; --xl-kenh-fg:#9c0006; --flash:#ffe680; --flash-ring:#d9a400;
   --overlay:rgba(15,18,10,.42); --shadow:0 16px 40px rgba(15,18,10,.18),0 2px 6px rgba(15,18,10,.08); --shadow-sm:0 1px 2px rgba(27,31,22,.06);
-  --radius:8px; --radius-lg:12px;
+  --radius:8px; --radius-lg:12px; --sb-thumb:rgba(27,31,22,.2); --sb-thumb-hover:rgba(27,31,22,.42);
   --f-display:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-body:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-mono:Consolas,"Courier New",monospace;
@@ -27,7 +27,7 @@
   --bar:#2e3414; --bar-fg:#f1f3ea; --bar-muted:#c0c7a0; --bar-field:#3c4320; --bar-line:#4f582c;
   --rail:#262b10; --rail-on:#3d4520; --gold:#d4b03a; --band:#283019; --band-fg:#dfe6cc; --band-line:#9cad5c; --thead:#20251a; --h2:#c4cab4;
   --xl-grid:#3a3e36; --xl-head:#2a2d27; --xl-bg:#1a1c18; --xl-fg:#e8e8e3; --xl-hdr:#3b3f37; --xl-kenh:#5c1f25; --xl-kenh-fg:#ffb3bc; --flash:#6b5a00; --flash-ring:#d9a400;
-  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}}
+  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(231,234,223,.18); --sb-thumb-hover:rgba(231,234,223,.4); color-scheme:dark}}
 :root[data-theme="dark"]{
   --background:#13160e; --foreground:#e7eadf; --card:#1c2016; --muted:#242a1c; --muted-fg:#a4ab96;
   --border:#323929; --input:#4a5440; --ring:#9cbf62; --ring-soft:rgba(156,191,98,.3);
@@ -38,7 +38,7 @@
   --bar:#2e3414; --bar-fg:#f1f3ea; --bar-muted:#c0c7a0; --bar-field:#3c4320; --bar-line:#4f582c;
   --rail:#262b10; --rail-on:#3d4520; --gold:#d4b03a; --band:#283019; --band-fg:#dfe6cc; --band-line:#9cad5c; --thead:#20251a; --h2:#c4cab4;
   --xl-grid:#3a3e36; --xl-head:#2a2d27; --xl-bg:#1a1c18; --xl-fg:#e8e8e3; --xl-hdr:#3b3f37; --xl-kenh:#5c1f25; --xl-kenh-fg:#ffb3bc; --flash:#6b5a00; --flash-ring:#d9a400;
-  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}
+  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(231,234,223,.18); --sb-thumb-hover:rgba(231,234,223,.4); color-scheme:dark}
 
 html,body{height:100%;margin:0}
 #root{min-height:100%}
@@ -51,6 +51,12 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--muted-fg)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* Scrollbar: διακριτικό χάπι χωρίς βελάκια/γωνίες, φαρδαίνει στο hover. Μόνο ::-webkit-scrollbar: το Chromium 108 δεν έχει scrollbar-width/scrollbar-color (και στα νεότερα θα τα παρέκαμπταν) */
+::-webkit-scrollbar{width:12px;height:12px;background:transparent}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-thumb{background:var(--sb-thumb);border:4px solid transparent;background-clip:padding-box;border-radius:999px;min-height:40px}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:var(--sb-thumb-hover);background-clip:padding-box;border-width:2px}
 
 /* ---------- components/ui ---------- */
 .ui-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 16px;border-radius:var(--radius);border:1px solid transparent;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;transition:background-color .12s,border-color .12s,box-shadow .12s;flex:none}
@@ -101,7 +107,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .ui-chip .cnt{font-family:var(--f-mono);font-size:12px;margin-left:5px;opacity:.7}
 .ui-chip--sm{height:28px;padding:0 10px;font-size:12px}
 /* Strip: λωρίδα που κυλά οριζόντια· οι άκρες σβήνουν όταν κρύβονται κουμπιά */
-.strip{position:relative;overflow-x:auto;scrollbar-width:thin}
+.strip{position:relative;overflow-x:auto}
 .strip.fade-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
 .strip.fade-l{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 48px),transparent)}
 .strip.fade-l.fade-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 48px,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,transparent,#000 48px,#000 calc(100% - 48px),transparent)}
@@ -238,7 +244,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .syncbar{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 16px;background:var(--info-bg);border-bottom:1px solid var(--border);font-size:14px}
 .syncbar > div{flex:1;min-width:200px}
 /* το μενού μένει ορατό όσο κυλά η σελίδα (π.χ. στις Υπηρεσίες) */
-.sidenav{background:var(--rail);color:var(--bar-muted);padding:12px 10px;display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--top-h);height:calc(100vh - var(--top-h));align-self:start;z-index:30;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin}
+.sidenav{background:var(--rail);color:var(--bar-muted);padding:12px 10px;display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--top-h);height:calc(100vh - var(--top-h));align-self:start;z-index:30;overflow-x:hidden;overflow-y:auto}
 .sidenav :focus-visible{outline-color:var(--gold)}
 .navbtn{display:flex;align-items:center;gap:10px;height:42px;padding:0 12px;border:0;background:none;border-radius:10px;cursor:pointer;text-align:left;font-weight:600;width:100%;color:inherit}
 .navbtn:hover{background:var(--rail-on);color:var(--bar-fg)}
@@ -315,7 +321,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .toolbar .ui-input{flex:1;min-width:200px}
 .toolbar__count{font-size:13px;color:var(--muted-fg);margin-left:auto;white-space:nowrap}
-.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;min-width:0;flex:1}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;min-width:0;flex:1}
 .bulkbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border-radius:var(--radius);background:var(--secondary);color:var(--secondary-fg);font-weight:600}
 .bulkbar span{flex:1;min-width:120px}
 /* PeopleTable (στην εφαρμογή: PeopleTable.module.css) */
