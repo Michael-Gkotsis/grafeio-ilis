@@ -10,7 +10,7 @@ import { readDuty } from '../../shared/codes';
 import { MONTHS, addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
-  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
+  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
@@ -380,7 +380,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     if (list === 'caps') {
       const p = planCaps(sheet, b, state, choices);
       const cmd: Command = { t: 'importCaps', changes: p.changes.map(c => ({ pid: c.pid, kind: c.kind, reason: c.reason })), source: book.name };
-      const by = new Map<string, string[]>(); for (const c of p.changes) by.set(c.who, [...(by.get(c.who) || []), (c.reason ? 'δεν κάνει ' : 'κάνει ') + CAP_ACC[c.kind] + (c.reason && c.reason !== 'Από Excel' ? ' (' + c.reason.replace(/^Από Excel:\s*/, '') + ')' : '')]);
+      const by = new Map<string, string[]>(); for (const c of p.changes) by.set(c.who, [...(by.get(c.who) || []), (c.reason ? 'δεν κάνει ' : 'κάνει ') + capAcc(c.kind, state.settings) + (c.reason && c.reason !== 'Από Excel' ? ' (' + c.reason.replace(/^Από Excel:\s*/, '') + ')' : '')]);
       return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλαγές'], [p.listed, 'Στο φύλλο'], [p.same, 'Ίδιοι'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
         lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
     }

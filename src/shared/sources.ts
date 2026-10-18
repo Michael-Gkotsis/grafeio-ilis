@@ -4,11 +4,11 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator, upper } from './text';
-import { KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, fatherTxt, fullName, type AppState, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
-import { bareOf, codeOf, readDuty, type CellDuty } from './codes';
+import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
+import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
-import { isHol, postBy } from './rules';
+import { capCols, isHol, postBy } from './rules';
 import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
@@ -1101,7 +1101,7 @@ export function planPeopleNew(b: SourceBinding, s: AppState): Omit<FullPlan, 'ps
     if (p.added) plan.keys.push(String(p.id));
   });
   const { last, first, father, room } = b.cols;
-  const rooms = [...new Set(people.map(p => p.room).filter((x): x is number => x != null))].sort((x, y) => x - y);
+  const rooms = roomList(s, people);
   if (people.length && rooms.length && last != null && father != null && room != null) {
     const L = (c: number) => colLetter(c), r1 = b.header + 2, r2 = b.header + 1 + people.length;   // από 1
     let r = r2 + 1;   // μία κενή γραμμή (από 0: r2 είναι η κενή)
@@ -1116,11 +1116,15 @@ export function planPeopleNew(b: SourceBinding, s: AppState): Omit<FullPlan, 'ps
 }
 // ΘΑΛΑΜΟΙ: ένας πίνακας ανά θάλαμο («ΔΥΝΑΜΟΛΟΓΙΟ 1ου ΘΑΛΑΜΟΥ», επικεφαλίδες, άτομα), με κενή γραμμή ανάμεσα, όπως
 // το διαβάζει το roomBlocks. Οι στήλες που δεν κρατά η εφαρμογή (e-mail, νούμερο, ομάδα αίματος) μένουν κενές για τον λοχία.
+// Οι θάλαμοι του νέου Δυναμολογίου: όσοι ορίστηκαν στις Ρυθμίσεις › Θάλαμοι και ουλαμοί (και οι άδειοι, για όποιον
+// μπει αργότερα) και όποιος άλλος έχει κάποιον
+export const roomList = (s: Pick<AppState, 'settings'>, people: Person[]) => [...new Set([...Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1),
+  ...people.map(p => p.room).filter((x): x is number => x != null)])].sort((x, y) => x - y);
 export const ROOM_HEAD = ['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Κινητό Τηλέφωνο', 'E-mail', 'E-mail συγγενικού προσώπου', 'Νούμερο παραλλαγής', 'Ομάδα αίματος'];
-export function roomSheetNew(people: Person[]): { cells: { r: number; c: number; v: WVal; st: 'title' | 'head' | 'data' }[]; merges: Span[] } {
+export function roomSheetNew(people: Person[], rooms0?: number[]): { cells: { r: number; c: number; v: WVal; st: 'title' | 'head' | 'data' }[]; merges: Span[] } {
   const out = { cells: [] as { r: number; c: number; v: WVal; st: 'title' | 'head' | 'data' }[], merges: [] as Span[] };
   const act = people.filter(p => p.active && p.room != null).sort(byRoom);
-  const rooms = [...new Set(act.map(p => p.room!))];
+  const rooms = [...new Set([...(rooms0 || []), ...act.map(p => p.room!)])].sort((x, y) => x - y);
   let r = 0;
   for (const n of rooms) {
     out.cells.push({ r, c: 0, v: 'ΔΥΝΑΜΟΛΟΓΙΟ ' + n + 'ου ΘΑΛΑΜΟΥ', st: 'title' }); out.merges.push({ r, c1: 0, c2: ROOM_HEAD.length - 1 }); r++;
@@ -1171,7 +1175,8 @@ export function planRoomSheet(sheet: RawSheet, add: Person[], gone: PersonSnap[]
     if (p.room == null) continue;
     const bl = blocks.find(x => x.room === p.room); if (!bl) { out.missing.push(p); continue; }
     if (bl.rows.some(y => same2(y, p))) continue;
-    const at0 = bl.rows.length ? groupSlot(bl.rows, p) : { after: bl.header, tpl: bl.header };
+    // άδειος θάλαμος (π.χ. νέο Δυναμολόγιο με όλους τους θαλάμους): ακριβώς κάτω από τις επικεφαλίδες, με τη μορφή γραμμής ατόμου
+    const at0 = bl.rows.length ? groupSlot(bl.rows, p) : { after: bl.header, tpl: blocks.find(x => x.rows.length)?.rows[0].r ?? bl.header };
     const x = ins.find(y => y.after === at0.after); if (x) { x.n++; x.ps.push(p); continue; }
     ins.push({ ...at0, n: 1, bl, ps: [p] });
   }
@@ -1305,12 +1310,48 @@ export function planOutside(sheet: RawSheet, b: SourceBinding, s: AppState, choi
 // βάλει η εφαρμογή, ενώ τα αυτόματα (πόστο, Σ.Ι. Ι4/άοπλος) μένουν. Όσοι δεν είναι στο φύλλο δεν αλλάζουν.
 export const CAP_COLS: DutyKind[] = ['th', 'op', 'mg', 'sk', 'tae'];
 export const capNo = (t: string) => /^[-–—_.]+$|^ΟΧΙ|^ΔΕΝ|^0$/.test(normGreek(t).trim());
-export interface CapChange { pid: number; kind: DutyKind; reason: string | null; who: string }
+// Οι στήλες του «Ποιος κάνει τι» που δεν έχει το δείγμα: οι δικές σου υπηρεσίες (με το όνομά τους) και οι «Άλλες»
+// (πύλη κ.λπ.), αν υπάρχει τέτοια υπηρεσία. Στο φύλλο μπαίνουν μόνο όταν κάποιος «δεν κάνει» μία από αυτές (capExtraCols).
+export function capExtras(settings: Settings): { key: CapKey; head: string; acc: string }[] {
+  return capCols(settings).filter(c => !(CAP_COLS as string[]).includes(c.key))
+    .map(c => (c.block ? { key: c.key, head: norm(c.block.name), acc: c.block.name } : { key: c.key, head: 'ΑΛΛΕΣ ΥΠΗΡΕΣΙΕΣ', acc: CAP_ACC[c.kind] || c.label }));
+}
+// «όχι θαλαμοφύλακα», «όχι Πύλη»: πώς λέγεται η υπηρεσία μιας στήλης στην προεπισκόπηση
+export const capAcc = (k: CapKey, settings: Settings) => CAP_ACC[k as DutyKind] || capExtras(settings).find(x => x.key === k)?.acc || k;
+const capKeys = (b: SourceBinding, settings: Settings): CapKey[] => [...CAP_COLS, ...capExtras(settings).map(x => x.key)].filter(k => b.cols[k] != null);
+// Στήλες για τις δικές σου υπηρεσίες στο φύλλο δυνατοτήτων: όσες έχουν ήδη στήλη με το όνομά τους βρίσκονται μόνες
+// τους· όσες λείπουν και κάποιος «δεν κάνει» αυτή την υπηρεσία μπαίνουν (grow) στις πρώτες κενές στήλες μετά τον πίνακα,
+// όπως οι στήλες ωρών (timeCols), ώστε να μη μετακινηθεί καμία δική σου στήλη. Σε καινούργιο πίνακα πριν από τις
+// ΠΑΡΑΤΗΡΗΣΕΙΣ. head: οι επικεφαλίδες που γράφονται (σε καινούργιο πίνακα τις γράφει το planSource).
+export function capExtraCols(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, grow = true): { b: SourceBinding; head: { r: number; c: number; v: string }[] } {
+  if (kind !== 'caps') return { b, head: [] };
+  const ext = capExtras(s.settings); if (!ext.length) return { b, head: [] };
+  const rows = sheet?.rows || []; const row = rows[b.header] || [];
+  const fresh = !row.some(v => cellText(v));
+  const cols = { ...b.cols }; const used = new Set(Object.values(cols));
+  for (const x of ext) if (cols[x.key] == null) { const at = row.findIndex((v, c) => !used.has(c) && headText(v) === headText(x.head)); if (at >= 0) { cols[x.key] = at; used.add(at); } }
+  const active = new Set(s.people.filter(p => p.active).map(p => p.id));
+  const need = grow ? ext.filter(x => cols[x.key] == null && Object.entries(s.caps).some(([pid, c]) => active.has(Number(pid)) && typeof c[x.key] === 'string')) : [];
+  if (!need.length) return Object.keys(cols).length === Object.keys(b.cols).length ? { b, head: [] } : { b: { ...b, cols }, head: [] };
+  const head: { r: number; c: number; v: string }[] = [];
+  if (fresh && cols.capnote != null) {
+    let c = cols.capnote; for (const x of need) cols[x.key] = c++; cols.capnote = c;
+  } else {
+    const scan = sheet && !fresh ? tableRows(sheet, b.header, b.cols) : null;
+    const last = scan ? Math.max(scan.end, b.header) : b.header;
+    const empty = (c: number) => { for (let r = b.header; r <= last; r++) if (cellText((rows[r] || [])[c]) !== '') return false; return true; };
+    let c = Math.max(scan ? scan.width[1] : 0, ...Object.values(cols)) + 1;
+    for (const x of need) { while (Object.values(cols).includes(c) || !empty(c)) c++; cols[x.key] = c; if (!fresh) head.push({ r: b.header, c, v: x.head }); c++; }
+  }
+  return { b: { ...b, cols }, head };
+}
+export interface CapChange { pid: number; kind: CapKey; reason: string | null; who: string }
 export interface CapsPlan { changes: CapChange[]; same: number; listed: number; sp: SheetPeople }
-export function planCaps(sheet: RawSheet, b: SourceBinding, s: AppState, choices: Record<number, number | null> = {}): CapsPlan {
+export function planCaps(sheet: RawSheet, b0: SourceBinding, s: AppState, choices: Record<number, number | null> = {}): CapsPlan {
+  const b = capExtraCols('caps', sheet, b0, s, false).b;   // και οι στήλες των δικών σου υπηρεσιών, με το όνομά τους
   const sp = sheetPeople(sheet, b, s.people, choices); const pm = new Map(s.people.map(p => [p.id, p]));
   const plan: CapsPlan = { changes: [], same: 0, listed: sp.rows.length, sp };
-  const cols = CAP_COLS.filter(k => b.cols[k] != null);
+  const cols = capKeys(b, s.settings);
   for (const row of sp.rows) {
     const p = pm.get(row.pid)!; const cur = s.caps[p.id] || {};
     const note = cellText(row.v.capnote); const reason = 'Από Excel' + (note ? ': ' + note : '');
@@ -1518,7 +1559,7 @@ export function planOutsideWrite(sheet: RawSheet, b: SourceBinding, s: AppState)
 // απέκτησε εμπόδιο στην εφαρμογή. Τα αυτόματα εμπόδια (πόστο, Σ.Ι.) δεν γράφονται, όπως και στο δικό σου φύλλο.
 export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): SourcePlan {
   const w: ListWant = { upd: new Map(), add: new Map(), drop: new Set() };
-  const cols = CAP_COLS.filter(k => b.cols[k] != null); const active = new Set(s.people.filter(p => p.active).map(p => p.id));
+  const cols = capKeys(b, s.settings); const active = new Set(s.people.filter(p => p.active).map(p => p.id));
   for (const [id, c] of Object.entries(s.caps)) {
     const pid = Number(id); const u: Record<string, WVal> = {}; let no = false; let why = '';
     for (const k of cols) if (k in c) { u[k] = typeof c[k] === 'string' ? '-' : null; if (typeof c[k] === 'string') { no = true; why = why || String(c[k]); } }
@@ -1526,7 +1567,7 @@ export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): S
     w.upd.set(pid, u);
     if (no && active.has(pid)) w.add.set(pid, { ...u, capnote: why.replace(/^Από Excel:?\s*/, '') || null });
   }
-  return planList(sheet, b, s, w, (k, cell, v) => ((CAP_COLS as string[]).includes(k) ? capNo(cellText(cell)) === (v === '-') : same(cell, v)));
+  return planList(sheet, b, s, w, (k, cell, v) => ((cols as string[]).includes(k) ? capNo(cellText(cell)) === (v === '-') : same(cell, v)));
 }
 // Έλεγχος υπηρεσιών (το δικό σου μηνιαίο αρχείο): ο κωδικός της θέσης (Θ1α, Μ2…) στο κελί της μέρας, για όσες μέρες
 // έχει υπηρεσίες η εφαρμογή· για υπηρεσία χωρίς θέση το σκέτο γράμμα. Αν το φύλλο μετρά με COUNTIF(…, "Θ"), γράφεται
@@ -1601,11 +1642,38 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
 export const DUTY_HEAD = ['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', 'ΣΚΟΠΙΑ', 'ΜΑΓΕΙΡΕΙΑ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'Λ/Υ-Δ/Υ'];
 const DUTY_COUNT: [number, string[]][] = [[9, ['Σ*']], [10, ['Μ*']], [11, ['Θ*']], [12, ['ΟΠ*']], [13, ['ΛΥ*', 'ΔΥ*']]];
 const ANY_DUTY = ['Θ*', 'Μ*', 'Σ*', 'ΟΠ*', 'ΛΥ*', 'ΔΥ*', 'Τ*', 'Υ*'];
+// Στήλες μετρητών του μήνα: του δείγματος, και μία για κάθε δική σου υπηρεσία που δεν μετρά σε καμία τους (π.χ. «Πύλη»,
+// είδος «άλλη») με το όνομά της. Κάθε μετρητής και τα σύνολα μετρούν και τους κωδικούς που δεν αρχίζουν από το γράμμα του
+// είδους (κωδικός που άλλαξες στις Ρυθμίσεις, π.χ. «Π1»). Σκέτο γράμμα/λέξη (π.χ. «ΠΥΛΗ») με «*», για να μη μοιάζει ο
+// τύπος με COUNTIF σκέτου γράμματος (exactCountif). Χωρίς Ρυθμίσεις: όπως το δείγμα.
+const KIND_COL: Partial<Record<DutyKind, number>> = { sk: 9, mg: 10, th: 11, op: 12, ly: 13 };
+export interface DutyCols { head: string[]; count: [number, string[]][]; any: string[] }
+export function dutyCols(settings?: Settings): DutyCols {
+  const head = [...DUTY_HEAD]; const count = DUTY_COUNT.map(([c, x]) => [c, [...x]] as [number, string[]]); const any = [...ANY_DUTY];
+  if (!settings) return { head, count, any };
+  const hit = (list: string[], code: string) => list.some(w => (w.endsWith('*') ? codeKey(code).startsWith(codeKey(w.slice(0, -1))) : codeKey(w) === codeKey(code)));
+  const crit = (code: string) => (isBareCode(code) ? code + '*' : code);
+  const own = new Map<string, number>();
+  for (const b of [...(settings.blocks || []), ...(settings.blocksSpen || [])]) {
+    let col = KIND_COL[b.kind];
+    if (col == null && b.custom && !b.hidden) {
+      const name = norm(b.name); col = own.get(name);
+      if (col == null) { col = head.length; head.push(name); count.push([col, []]); own.set(name, col); }
+    }
+    const into = col == null ? null : count.find(x => x[0] === col)![1];
+    for (const p of b.posts) {
+      const code = (p.code || '').trim(); if (!code) continue;
+      if (!hit(any, code)) any.push(crit(code));
+      if (into && !hit(into, code)) into.push(crit(code));
+    }
+  }
+  return { head, count, any };
+}
 const monthUp = (ym: string) => norm(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]);
 export const dutiesTitle = (ym: string) => 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + monthUp(ym).replace(/ΟΣ$/, 'ΟΥ') + ' ' + ym.slice(0, 4);
 export const dutiesSheet = (ym: string) => monthUp(ym) + ' ' + ym.slice(0, 4);
-export const dutiesBinding = (file: string, ym: string, sheet = dutiesSheet(ym)): SourceBinding =>
-  ({ file, sheet, header: 1, cols: { aa: 0, rank: 1, spec: 2, last: 3, first: 4, room: 5, d1: DUTY_HEAD.length }, write: true, scope: 'all', month: ym });
+export const dutiesBinding = (file: string, ym: string, sheet = dutiesSheet(ym), settings?: Settings): SourceBinding =>
+  ({ file, sheet, header: 1, cols: { aa: 0, rank: 1, spec: 2, last: 3, first: 4, room: 5, d1: dutyCols(settings).head.length }, write: true, scope: 'all', month: ym });
 export interface NewCell { r: number; c: number; v?: WVal; f?: string; st: 'title' | 'head' | 'data' | 'code'; gray?: boolean }
 export function planDutiesNew(b: SourceBinding, s: AppState, today: ISODate): { cells: NewCell[]; merges: Span[]; widths: Record<number, number>; rows: number; filled: number; keys: string[] } {
   const ym = b.month!; const [y, m] = ym.split('-').map(Number); const nd = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -1613,13 +1681,16 @@ export function planDutiesNew(b: SourceBinding, s: AppState, today: ISODate): { 
   const hol = days.map(d => isHol(s.settings, d));
   const people = s.people.filter(p => p.active).sort(byRoom);
   const cells: NewCell[] = []; const last = d1 + nd - 1; const L = colLetter;
+  // οι στήλες των δικών σου υπηρεσιών μόνο αν τις προβλέπει η αντιστοίχιση (dutiesBinding με τις Ρυθμίσεις)
+  const DC = dutyCols(s.settings); const head = DC.head.slice(0, Math.max(DUTY_HEAD.length, d1)); const counts = DC.count.filter(([c]) => c < head.length);
+  const ANY = DC.any;
   cells.push({ r: 0, c: 0, v: dutiesTitle(ym), st: 'title' });
-  DUTY_HEAD.forEach((h, c) => cells.push({ r: 1, c, v: h, st: 'head' }));
+  head.forEach((h, c) => cells.push({ r: 1, c, v: h, st: 'head' }));
   days.forEach((_, i) => cells.push({ r: 1, c: d1 + i, v: i + 1, st: 'head', gray: hol[i] }));
-  const any = (rng: string) => 'SUM(COUNTIF(' + rng + ',{' + ANY_DUTY.map(x => '"' + x + '"').join(',') + '}))';
+  const any = (rng: string) => 'SUM(COUNTIF(' + rng + ',{' + ANY.map(x => '"' + x + '"').join(',') + '}))';
   // συνεχόμενες μέρες ΣΚ/αργιών: μία περιοχή η καθεμία
   const runs: [number, number][] = []; hol.forEach((h, i) => { if (!h) return; const l = runs[runs.length - 1]; if (l && l[1] === i - 1) l[1] = i; else runs.push([i, i]); });
-  const raw: CellValue[][] = [[dutiesTitle(ym)], [...DUTY_HEAD, ...days.map((_, i) => i + 1)]];
+  const raw: CellValue[][] = [[dutiesTitle(ym)], [...head, ...days.map((_, i) => i + 1)]];
   people.forEach((p, i) => {
     const r = 2 + i, R = r + 1; const row = L(d1) + R + ':' + L(last) + R;
     const vals: WVal[] = [i + 1, p.rank || null, p.spec || null, p.last, p.first, p.room ?? null];
@@ -1628,14 +1699,14 @@ export function planDutiesNew(b: SourceBinding, s: AppState, today: ISODate): { 
     cells.push({ r, c: 6, f: runs.length ? runs.map(([a, z]) => any(L(d1 + a) + R + ':' + L(d1 + z) + R)).join('+') : '0', st: 'data' });
     cells.push({ r, c: 7, f: L(8) + R + '-' + L(6) + R, st: 'data' });
     cells.push({ r, c: 8, f: any(row), st: 'data' });
-    for (const [c, codes] of DUTY_COUNT) cells.push({ r, c, f: codes.map(x => 'COUNTIF(' + row + ',"' + x + '")').join('+'), st: 'data' });
+    for (const [c, codes] of counts) cells.push({ r, c, f: codes.length ? codes.map(x => 'COUNTIF(' + row + ',"' + x + '")').join('+') : '0', st: 'data' });
     days.forEach((_, j) => cells.push({ r, c: d1 + j, st: 'code', gray: hol[j] }));
   });
   // ΣΥΝΟΛΑ: ανά στήλη μετρητή και ανά μέρα (όπως στο δείγμα, στη στήλη του ονόματος)
   const tr = 2 + people.length, TR = tr + 1;
   if (people.length) {
     cells.push({ r: tr, c: 4, v: 'ΣΥΝΟΛΑ', st: 'head' });
-    for (let c = 6; c < DUTY_HEAD.length; c++) cells.push({ r: tr, c, f: 'SUM(' + L(c) + '3:' + L(c) + (TR - 1) + ')', st: 'head' });
+    for (let c = 6; c < head.length; c++) cells.push({ r: tr, c, f: 'SUM(' + L(c) + '3:' + L(c) + (TR - 1) + ')', st: 'head' });
     days.forEach((_, j) => cells.push({ r: tr, c: d1 + j, f: any(L(d1 + j) + '3:' + L(d1 + j) + (TR - 1)), st: 'head', gray: hol[j] }));
   }
   // οι υπηρεσίες που έχει ήδη η εφαρμογή για τον μήνα, όπως τις γράφει και στο δικό σου αρχείο
@@ -1643,7 +1714,7 @@ export function planDutiesNew(b: SourceBinding, s: AppState, today: ISODate): { 
   const at = new Map(cells.map(x => [x.r + ':' + x.c, x]));
   for (const x of plan.sets) { const c = at.get(x.r + ':' + x.c); if (c) c.v = x.v; }
   const widths: Record<number, number> = { 1: 5, 2: 7, 3: 7, 4: 18, 5: 14, 6: 6 };
-  for (let c = 6; c < DUTY_HEAD.length; c++) widths[c + 1] = 8;
+  for (let c = 6; c < head.length; c++) widths[c + 1] = 8;
   for (let j = 0; j < nd; j++) widths[d1 + j + 1] = 4.5;
   return { cells, merges: [{ r: 0, c1: 0, c2: last }], widths, rows: people.length, filled: plan.changed, keys: plan.keys };
 }
@@ -1690,7 +1761,11 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
   }
   const plan: SourcePlan = isStatusKind(kind) ? { ...planWrite(kind, sheet, b, s, meta?.keys || [], today), notFound: [] }
     : kind === 'posts' ? planPostsWrite(sh, b, s) : kind === 'outside' ? planOutsideWrite(sh, b, s) : kind === 'caps' ? planCapsWrite(sh, b, s) : planDutiesWrite(sh, b, s, today, meta?.keys);
-  if (!isStatusKind(kind) && canCreate(kind)) plan.header = newHeader(kind, sh.rows, b);
+  if (!isStatusKind(kind) && canCreate(kind)) {
+    // οι στήλες των δικών σου υπηρεσιών (capExtraCols) με το όνομά τους
+    const own = new Map<string, string>(kind === 'caps' ? capExtras(s.settings).map(x => [x.key, x.head]) : []);
+    plan.header = newHeader(kind, sh.rows, b).map(h => (own.has(h.v) ? { ...h, v: own.get(h.v)! } : h));
+  }
   if (meta?.psnap && sheet) {
     const ps = personSets(sheet, b, s, meta.psnap, new Set(plan.sets.map(x => x.r + ':' + x.c)));
     plan.sets.push(...ps.sets); plan.changed += ps.changed;
