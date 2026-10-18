@@ -8,7 +8,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
 
 
 // ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα): ίδια διάταξη με το template που θα βγει
@@ -34,9 +34,9 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
       : [E(''), null, null, h(), null, E('', '', 3), null, null, h(), null, E('')]);
   }
   rows.push([E('', '', W)]);
-  const ext = (x: { label: string; name: string }) => (spen
-    ? [E(''), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 2) : E('ΚΕΝΗ', 'b c kenh', 2), E('', 'b'), E('', '', 8)]
-    : [E('', '', 4), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 3) : E('ΚΕΝΗ', 'b c kenh', 3), E('', 'b'), E('', '', 4)]);
+  const ext = (x: { label: string; name: string; hours: string }) => (spen
+    ? [E(''), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 2) : E('ΚΕΝΗ', 'b c kenh', 2), E(x.hours, 'b c'), E('', '', 8)]
+    : [E('', '', 4), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 3) : E('ΚΕΝΗ', 'b c kenh', 3), E(x.hours, 'b c'), E('', '', 4)]);
   if (!spen) {
     rows.push([E('', '', 4), E('Α/Α', 'b hdr'), E('ΜΑΓΕΙΡΕΙΑ', 'b hdr', 3), E('ΠΑΡ/ΣΕΙΣ', 'b hdr'), E('', '', 4)]);
     for (let r = 1; r <= 5; r++) rows.push([E('', '', 4), E(r + 'ο', 'b c'), nm('mg' + r, 1, 3), E('', 'b'), E('', '', 4)]);
@@ -60,7 +60,7 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   for (let i = 0; i < Math.max(6, pun.length, abs.length); i++) {
     const a = pun[i], b = abs[i];
     rows.push([E(i + 1, 'b c'), E(a ? dutyName(pm.get(a.pid)!) : '', 'b'), E(a ? norm(a.kind || 'Ποινή') : '', 'b c'), E(a ? dm(a.from) : '', 'b c'), E(a && !a.open ? dm(a.to) : '', 'b c'), E(a?.note || '', 'b'), E(''),
-      E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceText(b.kind, TYPES[b.type].long) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b && !b.open ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
+      E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceOf(b) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b && !b.open ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
   }
   rows.push([E('', '', W)], [E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 2), E('ΔΚΤΗΣ ΙΛΗΣ', 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E('ΔΚΤΗΣ ΕΠΧΙΑΣ', 'ttl', 3)]);
   return { cols: [30, 34, 150, 78, 54, 8, 8, 8, 34, 150, 78, 54, 30], rows };

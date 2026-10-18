@@ -59,7 +59,7 @@ export type Command =
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
-  | { t: 'importCaps'; changes: { pid: number; kind: DutyKind; reason: string | null }[]; source: string }
+  | { t: 'importCaps'; changes: { pid: number; kind: CapKey; reason: string | null }[]; source: string }
   | { t: 'importDuties'; days: Record<ISODate, DutyCell[]>; source: string }
   | { t: 'expire' }
   | { t: 'extendOpen' }
@@ -478,7 +478,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'importCaps': {
       const caps = { ...s.caps }; let n = 0;
       for (const ch of c.changes) {
-        if (!pm.has(ch.pid) || !CAP_ACC[ch.kind]) continue;
+        // βασικό είδος, ή δική σου υπηρεσία («b:» + id) που υπάρχει ακόμα στις Ρυθμίσεις
+        if (!pm.has(ch.pid) || !(CAP_ACC[ch.kind as DutyKind] || capCols(s.settings).some(x => x.key === ch.kind))) continue;
         const cur = { ...(caps[ch.pid] || {}) };
         if (ch.reason) cur[ch.kind] = ch.reason; else delete cur[ch.kind];
         caps[ch.pid] = cur; n++;

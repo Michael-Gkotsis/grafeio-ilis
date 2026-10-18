@@ -11,7 +11,7 @@ import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, 
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine } from '../shared/froura';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -45,7 +45,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   for (const k of lay.foreign) warnings.push('Η θέση ' + (postBy(s, k)?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
   lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
   if (extra.length) ws.insertRows(form.extra.after, extra.length, form.extra.after, wb);
-  extra.forEach((x, i) => { const r = form.extra.after + 1 + i; ws.set(form.extra.label + r, x.label).set(form.extra.name + r, x.name); });
+  extra.forEach((x, i) => { const r = form.extra.after + 1 + i; ws.set(form.extra.label + r, x.label).set(form.extra.name + r, x.name).set(form.extra.note + r, x.hours || null); });
   const first = form.list + extra.length;
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const abs = absentOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
@@ -57,7 +57,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     ws.set('A' + r, i + 1).set('H' + r, i + 1);
     const a = pun[i], b = abs[i];
     if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
-    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceText(b.x.kind, TYPES[b.x.type].long)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
+    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceOf(b.x)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
   }
   return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
 }

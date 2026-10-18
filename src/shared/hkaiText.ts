@@ -4,7 +4,7 @@ import { hkDay, type ISODate } from './dates';
 import { OUT_NOTE, TYPES, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
-import { collator, upper } from './text';
+import { collator, norm, upper } from './text';
 import { genitive } from './greek';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
@@ -41,11 +41,13 @@ export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
   return out;
 }
 
-// Το είδος της άδειας σε φράση: «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ», «ΑΔΕΙΑ ΑΜΔ», «ΤΙΜΗΤΙΚΗ ΑΔΕΙΑ»
-export function leaveName(st: Pick<Status, 'type' | 'kind'>): string {
-  const k = (st.type === 'LEAVE' ? st.kind : '') || TYPES[st.type].long;
-  return upper(/άδεια/i.test(k) ? k : /[ήη]$/i.test(k) ? k + ' άδεια' : 'άδεια ' + k);
+// Το είδος της άδειας σε φράση: «Κανονική άδεια», «Άδεια ΑΜΔ», «Τιμητική άδεια», και τα δικά σου είδη όπως τα έγραψες
+// («Αιμοδοσίας» → «Άδεια Αιμοδοσίας», «ΑΔΕΙΑ ΓΑΜΟΥ» μένει ως έχει)
+export function leavePhrase(st: Pick<Status, 'type' | 'kind'>): string {
+  const k = ((st.type === 'LEAVE' ? st.kind : '') || TYPES[st.type].long).trim(); const n = norm(k);
+  return /ΑΔΕΙΑ/.test(n) ? k : /Η$/.test(n) ? k + ' άδεια' : 'Άδεια ' + k;
 }
+export const leaveName = (st: Pick<Status, 'type' | 'kind'>): string => upper(leavePhrase(st));
 // «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26» ή «ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26», με τις ώρες αν γράφτηκαν
 export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 'open'>): string {
   const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''), back = x.toTime && !x.open ? ' ' + x.toTime : '';

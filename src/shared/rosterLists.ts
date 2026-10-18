@@ -5,6 +5,7 @@ import { dmy, type ISODate } from './dates';
 import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
 import { siOf } from './si';
 import { statusLbl } from './ranks';
+import { leavePhrase } from './hkaiText';
 import { collator } from './text';
 
 export type RosterFilter = 'all' | 'leave' | 'pun' | 'post' | 'inactive' | 'dnright';
@@ -34,7 +35,7 @@ export function rosterMatch(f: RosterFilter, p: Person, on: Status[]): boolean {
   return !!filterStatus(f, on);
 }
 export const statusKind = (s: Status, lists?: AppState['settings']['lists']) =>
-  s.type === 'PUN' ? statusLbl(s, lists) : s.type === 'LEAVE' ? (s.kind ? s.kind + ' άδεια' : TYPES.LEAVE.long) : TYPES[s.type].long;
+  s.type === 'PUN' ? statusLbl(s, lists) : s.type === 'LEAVE' ? leavePhrase(s) : TYPES[s.type].long;
 export const rosterCells = (p: Person, lists?: AppState['settings']['lists']): (string | number)[] => [
   p.rank, p.spec, p.last, p.first, p.father, p.asm, p.phone, p.room ?? '', p.post || '', p.role || '', p.si ? siOf(p, lists).text : '', p.dn ? 'ΝΑΙ' : ''
 ];

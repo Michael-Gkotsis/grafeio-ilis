@@ -13,7 +13,7 @@ import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomList, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, capExtraCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 // Πλάτος στήλης νέου πίνακα για μία τιμή (Calibri 11 του νέου αρχείου), με τα πραγματικά πλάτη των κεφαλαίων γραμμάτων
 const colChars = (v: unknown) => (v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: 'Calibri', sz: 11, b: false })));
 
@@ -324,7 +324,9 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     if (!had && !create) return { error: 'Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file) };
     if (kind === 'duties' && (!had || !exists)) return { ws };
     // άδειες με ώρα σε πίνακα χωρίς στήλες ωρών: οι στήλες μπαίνουν στο τέλος του πίνακα και κρατιούνται στην αντιστοίχιση
-    const tc = timeCols(kind, had ? sheet : null, b, s, today); const grown = tc.b !== b; b = tc.b;
+    // και στήλες για τις δικές σου υπηρεσίες στο φύλλο δυνατοτήτων (capExtraCols), με τον ίδιο τρόπο
+    const tc0 = timeCols(kind, had ? sheet : null, b, s, today); const tc1 = capExtraCols(kind, had ? sheet : null, tc0.b, s);
+    const tc = { b: tc1.b, head: [...tc0.head, ...tc1.head] }; const grown = tc.b !== b; b = tc.b;
     const plan = planSource(kind, had ? sheet : null, b, s, meta, today);
     const fresh = plan.header.length > 0;        // καινούργιος πίνακας: δικό μας στυλ με πλαίσια, όλα στο κέντρο
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];
@@ -383,7 +385,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
       for (const m of plan.merges || []) ws.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
     }
     if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x))) {
-      const rs = roomSheetNew(s.people);
+      const rs = roomSheetNew(s.people, roomList(s, s.people.filter(p => p.active)));
       if (rs.cells.length) {
         const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: data! };
         const ws2 = await wb.addSheet('ΘΑΛΑΜΟΙ');

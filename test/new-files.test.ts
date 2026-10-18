@@ -150,7 +150,7 @@ describe('νέο Δυναμολόγιο', () => {
     const n = s.people.filter(p => p.active).length; const r = 3 + n + 1;   // κενή γραμμή, μετά «ΘΑΛΑΜΟΙ»
     expect([ws.get('D' + r), ws.get('F' + r)]).toEqual(['ΘΑΛΑΜΟΙ', 'ΣΤΡΑΤΙΩΤΕΣ']);
     expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ΟΣ', `COUNTIF(I3:I${2 + n},"1")`]);
-    const k = new Set(s.people.filter(p => p.active && p.room != null).map(p => p.room)).size;   // 7: ο 7ος θάλαμος δεν έχει κανέναν
+    const k = 8;   // όλοι οι θάλαμοι των Ρυθμίσεων (8), και ο 7ος που δεν έχει κανέναν σε δύναμη: μετρά όποιον μπει αργότερα
     expect(ws.get('D' + (r + k + 1))).toBe('ΣΥΝΟΛΟ');
     expect(fx(ws, 'F' + (r + k + 1))).toBe(`SUM(F${r + 1}:F${r + k})`);
     expect(ws.merges().some(m => m.r1 === r && m.c1 === 4 && m.c2 === 5)).toBe(true);
@@ -173,7 +173,8 @@ describe('νέο Δυναμολόγιο', () => {
     const meta = { ...w.meta, at: 'x' } as SourceMeta;
     expect(planSource('people', sheets[0], b, s, meta, TODAY).sets).toEqual([]);
     const blocks = roomBlocks(sheets[1]);
-    expect(blocks.map(x => x.room)).toEqual([1, 2, 3, 4, 5, 6, 8]);   // ο 7ος: μόνο ένας, εκτός δύναμης
+    expect(blocks.map(x => x.room)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);   // ο 7ος: άδειος (μόνο ένας, εκτός δύναμης), για όποιον μπει αργότερα
+    expect(blocks.find(x => x.room === 7)!.rows).toEqual([]);
     expect(blocks.reduce((t, x) => t + x.rows.length, 0)).toBe(s.people.filter(p => p.active && p.room != null).length);
     const s2 = apply(s, { t: 'addPerson', person: NEW } as Command, { today: TODAY, newId: () => 'x' }).state;
     const w2 = await writeSource('people', b, s2, meta, TODAY);
