@@ -7,16 +7,17 @@ import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { normGreek } from '../../shared/text';
 import { CADRE_ABS, TYPES, type TypeKey } from '../../shared/domain';
-import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, siUnarmed, itemKey, itemName, leaveCol, listRows, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, siUnarmed, itemKey, itemName, leaveCol, listRows, weaponBack, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { HK_A, HK_K, HK_NCO, HK_OFFICERS, hkRankOf } from '../../shared/rules';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'siUnarmed'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed'];
 const HELP: Record<ListId, string> = {
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ΗΚΑΙ μετρά.',
   cadreRanks: 'Στη φόρμα «Νέο στέλεχος». Ο βαθμός διαλέγει μόνος του τη γραμμή της ΗΚΑΙ (αλλάζει και στη φόρμα).',
   specs: 'Στη φόρμα στρατιώτη και στο dropdown «Ο/Σ» του Δυναμολογίου.',
   weaponTypes: 'Στη στήλη «Τύπος» της καρτέλας Οπλισμός και στο Excel «Οπλισμός».',
+  weaponOut: 'Στην «Έξοδο όπλων» της καρτέλας Οπλισμός. Κάθε λόγος εξόδου έχει τον λόγο εισαγωγής του (π.χ. ΕΚΠ → ΛΗΞ ΕΚΠ), που μπαίνει μόνος του όταν επιστρέφει το όπλο.',
   punKinds: 'Στη δήλωση ποινής. Κάθε ποινή κόβει την έξοδο, μετρά στη στήλη «Τιμ.» και γράφεται στην ΗΚΑΙ (4. Ποινές). Το «κείμενο» μπαίνει στην πρόταση «με δύο (02) ημέρες …». Σε ποιες υπηρεσίες μπαίνει κάθε είδος ορίζεις στις Υπηρεσίες και αργίες.',
   leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ΗΚΑΙ.',
   cadreAbs: 'Στην «Κατάσταση» στελέχους (καρτέλα Στελέχη). Η στήλη λέει πού μετρά στην ΗΚΑΙ, στους κωλυόμενους ή στους απόντες· «μόνο στη λίστα» δεν μετρά.',
@@ -56,7 +57,7 @@ export function ListsCard() {
   // η λίστα «Σ.Ι. άοπλων» έγινε ο πίνακας Σ.Ι. (κάρτα «Σ.Ι.»): φαίνεται μόνο σε όποιον έχει ήδη αλλάξει κάτι εκεί
   const ids = IDS.filter(v => v !== 'siUnarmed' || !!(state.settings.lists?.siUnarmed?.add?.length || state.settings.lists?.siUnarmed?.hide?.length));
   const [name, setName] = useState(''); const [choice, setChoice] = useState<string | null>(null);
-  const [acc, setAcc] = useState(''); const [max, setMax] = useState(''); const [code, setCode] = useState(''); const [warn, setWarn] = useState(false);
+  const [acc, setAcc] = useState(''); const [max, setMax] = useState(''); const [code, setCode] = useState(''); const [warn, setWarn] = useState(false); const [back, setBack] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const lists: UserLists = state.settings.lists || {};
   const rows = listRows(lists, id);
@@ -70,15 +71,16 @@ export function ListsCard() {
       : id === 'medKinds' ? state.statuses.filter(x => MED_LIKE.includes(x.type)).map(x => x.kind || '')
       : id === 'siUnarmed' ? []
       : id === 'weaponTypes' ? state.people.map(p => p.wtype || '')
+      : id === 'weaponOut' ? (state.weaponLog || []).map(m => m.reason)
       : state.people.map(p => (id === 'specs' ? p.spec : p.rank));
     return new Set(vals.filter(Boolean).map(keyOf(id)));
-  }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses]);
+  }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses, state.weaponLog]);
   const save = (next: UserLists, text: string) => run({ t: 'setSettings', settings: { lists: next }, text: 'λίστα ' + LIST_NAME[id] + ': ' + text }, false);
   const withList = (fn: (u: { add: ListItem[]; hide: string[] }) => void): UserLists => {
     const u = { add: [...(lists[id]?.add || [])], hide: [...(lists[id]?.hide || [])] }; fn(u);
     return { ...lists, [id]: u };
   };
-  const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setErr(null); };
+  const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setBack(''); setErr(null); };
   const toDuty = () => nav.set({ tab: 'duty' });
   const select = (v: ListId) => { setId(v); reset(); };
   const n = itemName(name, id); const key = keyOf(id); const isUsed = (r: ListRow) => used.has(key(r.name));
@@ -93,7 +95,7 @@ export function ListsCard() {
     if (same && !same.hidden) { setErr('Το «' + same.name + '» υπάρχει ήδη στη λίστα.'); return; }
     const m = Math.floor(+max); if (max.trim() && !(m > 0)) { setErr('Οι ανώτατες ημέρες θέλουν αριθμό πάνω από 0 (ή άφησέ το κενό).'); return; }
     // νέο ιατρικό: βασικός τύπος ΕΑΡΒ (χωρίς περιορισμούς), τι κάνει ορίζεται στις Υπηρεσίες και αργίες
-    const item0: ListItem = { name: n, ...(pick && curChoice ? { [pick.f]: curChoice } : {}), ...(id === 'medKinds' ? { like: 'EARV' as TypeKey, ...(warn ? { warn: true } : {}) } : {}), ...(id === 'punKinds' && acc.trim() ? { acc: acc.trim() } : {}), ...(id === 'punKinds' && m > 0 ? { max: m } : {}), ...(id === 'medKinds' && cd ? { code: cd } : {}) };
+    const item0: ListItem = { name: n, ...(pick && curChoice ? { [pick.f]: curChoice } : {}), ...(id === 'medKinds' ? { like: 'EARV' as TypeKey, ...(warn ? { warn: true } : {}) } : {}), ...(id === 'punKinds' && acc.trim() ? { acc: acc.trim() } : {}), ...(id === 'punKinds' && m > 0 ? { max: m } : {}), ...(id === 'medKinds' && cd ? { code: cd } : {}), ...(id === 'weaponOut' && back.trim() ? { back: back.trim().replace(/\s+/g, ' ').toUpperCase() } : {}) };
     const item = JSON.parse(JSON.stringify(item0)) as ListItem;   // χωρίς κενά πεδία
     // κρυμμένο: ξαναφαίνεται (κι αν είναι δικό σου, με ό,τι διάλεξες τώρα)
     const next = withList(u => {
@@ -102,7 +104,7 @@ export function ListsCard() {
       const was = u.add.find(x => itemKey(x.name) === k); if (id === 'medKinds' && was?.like) item.like = was.like;
       if (!same?.builtin) { u.add = u.add.filter(x => itemKey(x.name) !== k); u.add.push(item); }
     });
-    const what = id === 'medKinds' ? ([warn && 'μόνο προειδοποίηση', cd && 'κωδικός ' + cd].filter(Boolean).join(', ').replace(/^(.+)$/, ' ($1)')) : pick && curChoice ? ' (ΗΚΑΙ: ' + optLbl(pick, curChoice) + ')' : id === 'punKinds' ? ' (κείμενο «' + punAcc(n, next) + '»' + (m > 0 ? ', ως ' + m + ' ημ.' : '') + ')' : '';
+    const what = id === 'weaponOut' ? ' (εισαγωγή: ' + weaponBack(n, next) + ')' : id === 'medKinds' ? ([warn && 'μόνο προειδοποίηση', cd && 'κωδικός ' + cd].filter(Boolean).join(', ').replace(/^(.+)$/, ' ($1)')) : pick && curChoice ? ' (ΗΚΑΙ: ' + optLbl(pick, curChoice) + ')' : id === 'punKinds' ? ' (κείμενο «' + punAcc(n, next) + '»' + (m > 0 ? ', ως ' + m + ' ημ.' : '') + ')' : '';
     if (!(await save(next, '+ ' + n + what))) return;
     if (id === 'medKinds' || id === 'punKinds') toast({ text: 'Μπήκε στη λίστα: ' + n + '. ' + (id === 'medKinds' ? 'Όρισε τι κάνει (υπηρεσίες, έξοδος, ΗΚΑΙ)' : 'Σε ποιες υπηρεσίες μπαίνει, το ορίζεις') + ' στις Υπηρεσίες και αργίες.', actions: [{ label: 'Τι κάνει', fn: toDuty }] });
     else toast({ text: 'Μπήκε στη λίστα: ' + n });
@@ -110,12 +112,14 @@ export function ListsCard() {
   };
   const toggle = (r: ListRow) => save(withList(u => { u.hide = r.hidden ? u.hide.filter(x => itemKey(x) !== itemKey(r.name)) : [...u.hide, r.name]; }), (r.hidden ? 'ξανά το ' : 'κρυφό το ') + r.name);
   const remove = (r: ListRow) => save(withList(u => { u.add = u.add.filter(x => itemKey(x.name) !== itemKey(r.name)); u.hide = u.hide.filter(x => itemKey(x) !== itemKey(r.name)); }), 'σβήστηκε το ' + r.name);
-  const setRow = (r: ListRow, f: 'hk' | 'col' | 'code', v: string, text: string) => save(withList(u => { u.add = u.add.map(x => { if (itemKey(x.name) !== itemKey(r.name)) return x; const y = { ...x, [f]: v }; if (!v) delete y[f]; return y; }); }), r.name + ': ' + text);
+  const setRow = (r: ListRow, f: 'hk' | 'col' | 'code' | 'back', v: string, text: string) => save(withList(u => { u.add = u.add.map(x => { if (itemKey(x.name) !== itemKey(r.name)) return x; const y = { ...x, [f]: v }; if (!v) delete y[f]; return y; }); }), r.name + ': ' + text);
   const setPick = (r: ListRow, v: string) => setRow(r, pick!.f, v, 'στην ΗΚΑΙ: ' + optLbl(pick!, v));
   // «μόνο προειδοποίηση» ενός ιατρικού (checkbox, Michael 18/10): δεν αλλάζει τι κάνει στις υπηρεσίες
   const setWarnOf = (r: ListRow, on: boolean) => save(withList(u => { u.add = u.add.map(x => { if (itemKey(x.name) !== itemKey(r.name)) return x; const y: ListItem = { ...x, warn: true }; if (!on) delete y.warn; return y; }); }), r.name + ': ' + (on ? 'μόνο προειδοποίηση' : 'χωρίς προειδοποίηση'));
   const setCodeOf = (r: ListRow, v: string) => { const c = v.trim().toUpperCase(); if (c === (r.code || '')) return; if (!codeOk(c)) { setErr('Ο κωδικός του «' + r.name + '» θέλει τελεία ή κάθετο, π.χ. Ε.Γ.'); return; } setErr(null); setRow(r, 'code', c, c ? 'κωδικός ' + c : 'κωδικός του βασικού'); };
+  const setBackOf = (r: ListRow, v: string) => { const b = v.trim().replace(/\s+/g, ' ').toUpperCase(); if (b === (r.back || '')) return; setRow(r, 'back', b, 'εισαγωγή ' + (b || weaponBack(r.name))); };
   const info = (r: ListRow) => {
+    if (id === 'weaponOut') return 'εισαγωγή: ' + weaponBack(r.name, lists);
     if (id === 'punKinds') { const mx = punMax(r.name, lists); return 'κείμενο: «' + punAcc(r.name, lists) + '»' + (mx ? ' · ως ' + mx + ' ημ.' : ''); }
     if (id === 'siUnarmed') {
       // μόνο αυτός ο κανόνας: οι άλλοι κρυφοί, για να μετρηθούν όσοι πιάνει
@@ -132,7 +136,9 @@ export function ListsCard() {
     <ul className="hist">${rows.map(r => html`<li key=${r.name} className=${r.hidden ? 'muted' : ''}>
       <b style=${r.hidden ? { textDecoration: 'line-through' } : undefined}>${r.name}</b>
       ${r.builtin ? html`<${Badge} tone="outline">βασικό<//>` : html`<${Badge} tone="info">δικό σου<//>`}
-      ${id === 'medKinds' && !r.builtin
+      ${id === 'weaponOut' && !r.builtin
+        ? html`<input key=${r.name + '|' + (r.back || '')} className="ui-input" style=${{ width: '200px' }} aria-label=${'Λόγος εισαγωγής: ' + r.name} data-tip="Μπαίνει μόνος του όταν επιστρέφει το όπλο" placeholder=${'ΛΗΞ ' + r.name} defaultValue=${r.back || ''} onBlur=${(e: any) => setBackOf(r, e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') e.target.blur(); }}/>`
+        : id === 'medKinds' && !r.builtin
         ? html`<input key=${r.name + '|' + (r.code || '')} className="ui-input" style=${{ width: '90px' }} aria-label=${'Κωδικός ημερολογίου: ' + r.name} data-tip="Κωδικός στις μέρες του Excel «Έλεγχος υπηρεσιών»" placeholder=${(r.like && TYPES[r.like]?.code) || 'κωδικός'} defaultValue=${r.code || ''} onBlur=${(e: any) => setCodeOf(r, e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') e.target.blur(); }}/>
           <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.warn} onChange=${(e: any) => setWarnOf(r, e.target.checked)}/> Μόνο προειδοποίηση</label>
           <${Button} size="sm" variant="outline" data-tip="Σε ποιες υπηρεσίες μπαίνει, έξοδος και ΗΚΑΙ" onClick=${toDuty}>Τι κάνει<//>`
@@ -150,10 +156,11 @@ export function ListsCard() {
       ${pick && html`<div className="field"><label className="field__label" htmlFor="ls-c">${pick.label}</label><select id="ls-c" className="ui-input" value=${curChoice} onChange=${(e: any) => setChoice(e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}</select></div>`}
       ${id === 'punKinds' && html`<div className="field"><label className="field__label" htmlFor="ls-a">Κείμενο ποινής</label><input id="ls-a" className="ui-input" placeholder=${n ? n.toLowerCase() : 'π.χ. επίπληξη'} value=${acc} onChange=${(e: any) => setAcc(e.target.value)}/></div>
         <div className="field" style=${{ maxWidth: '130px' }}><label className="field__label" htmlFor="ls-m">Ως ημέρες</label><input id="ls-m" className="ui-input" type="number" min="1" placeholder="χωρίς όριο" value=${max} onChange=${(e: any) => setMax(e.target.value)}/></div>`}
+      ${id === 'weaponOut' && html`<div className="field"><label className="field__label" htmlFor="ls-b">Λόγος εισαγωγής</label><input id="ls-b" className="ui-input" placeholder=${n ? 'ΛΗΞ ' + n : 'π.χ. ΛΗΞ ΦΡΟΥΡΑΣ'} value=${back} onChange=${(e: any) => setBack(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>`}
       ${id === 'medKinds' && html`<div className="field" style=${{ maxWidth: '130px' }}><label className="field__label" htmlFor="ls-k">Κωδικός</label><input id="ls-k" className="ui-input" placeholder="π.χ. Ε.Γ" value=${code} onChange=${(e: any) => { setCode(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>
         <div className="field" style=${{ flex: 'none' }}><label className="ui-checkrow" style=${{ height: '38px' }}><input id="ls-w" type="checkbox" className="ui-check" checked=${warn} onChange=${(e: any) => setWarn(e.target.checked)}/> Μόνο προειδοποίηση</label></div>`}
       <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!name.trim()} onClick=${add}>Πρόσθεσε<//></div></div>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };

@@ -2,21 +2,23 @@
 // Όλοι σε δύναμη με τον αριθμό όπλου τους, γραμμένο κατευθείαν στη γραμμή: Enter/↓ πάει στον επόμενο, επικόλληση στήλης
 // από Excel γεμίζει τις επόμενες γραμμές με τη σειρά. Ίδιος αριθμός σε άλλον: ρωτά (μεταφορά ή και στους δύο), δεν μπλοκάρει.
 // Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
-import { useCallback, useDeferredValue, useMemo, useState, useEffect, memo } from 'react';
-import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, useToast } from '../ui';
+// Έξοδος/είσοδος όπλων με λόγο και ώρα (Michael, 18/10): κουμπί στη γραμμή ή τσέκαρε πολλούς· ημερολόγιο στις «Κινήσεις» (weaponMoves.ts).
+import { Fragment, useCallback, useDeferredValue, useMemo, useState, useEffect, memo } from 'react';
+import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useToast } from '../ui';
+import { MovesView, WeaponInDialog, WeaponOutDialog } from './weaponMoves';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, DateBar } from '../common';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
-import { WEAPON_FILTERS, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
+import { WEAPON_FILTERS, isOut, moveOutTxt, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { listOf } from '../../shared/ranks';
 import { collator, normGreek, translit, norm } from '../../shared/text';
 import { dm, dow } from '../../shared/dates';
 type P = any;
 
-const GRID = '40px 64px minmax(130px,1.4fr) minmax(84px,1fr) minmax(84px,1fr) 80px 84px minmax(84px,.7fr) 98px 128px 106px minmax(200px,1.3fr) minmax(110px,.8fr)';
+const GRID = '30px 40px 64px minmax(130px,1.4fr) minmax(84px,1fr) minmax(84px,1fr) 80px 84px minmax(84px,.7fr) 98px 128px 106px minmax(240px,1.4fr) minmax(110px,.8fr)';
 const focusRow = (f: string, i: number) => { const el = document.querySelector('input[data-wf="' + f + '"][data-wrow="' + i + '"]') as HTMLInputElement | null; if (el) { el.focus(); el.select(); el.scrollIntoView({ block: 'nearest' }); } return !!el; };
 const NORM: Record<'weapon' | 'rack', (v: unknown) => string> = { weapon: normWeapon, rack: normRack };
 const LBL = { weapon: 'Αριθμός όπλου', rack: 'Θέση οπλοβαστού' };
@@ -50,10 +52,13 @@ function TypeSelect({ p, types, onPick }: P) {
     <option value="">—</option>${opts.map((t: string) => html`<option key=${t} value=${t}>${t}</option>`)}</select>`;
 }
 // Εντός ή εκτός οπλοβαστού τη μέρα: εκτός όποιος έχει ένοπλη υπηρεσία, με τη θέση ως λόγο
-function InOut({ p, info }: P) {
-  const why = info.out.get(p.id);
+// Βγήκε με λόγο (Έξοδος όπλων): «Είσοδος». Μέσα με αριθμό όπλου: «Έξοδος».
+function InOut({ p, info, onOut, onIn }: P) {
+  const m = info.moves.get(p.id); const why = info.out.get(p.id);
+  if (m) return html`<span className="weapon-out"><${Badge} tone="bad" data-tip=${'Βγήκε: ' + moveOutTxt(m) + (m.note ? ' · ' + m.note : '') + (why ? ' · και ένοπλη υπηρεσία: ' + why : '')}>Εκτός<//> <small className="muted">${m.reason} ${m.outTime}</small>
+    <${Button} size="sm" variant="outline" className="weapon-io" onClick=${() => onIn([m.id])} data-tip=${'Μπαίνει στον οπλοβαστό: ' + m.reason + ' → λόγος εισαγωγής από τη λίστα'}>Είσοδος<//></span>`;
   if (why) return html`<span className="weapon-out"><${Badge} tone="warn" data-tip=${'Ένοπλη υπηρεσία: ' + why}>Εκτός<//> <small className="muted">${why}</small></span>`;
-  return p.active && weaponKey(p.weapon) ? html`<${Badge} tone="outline">Εντός<//>` : html`<span className="muted">—</span>`;
+  return p.active && weaponKey(p.weapon) ? html`<span className="weapon-out"><${Badge} tone="outline">Εντός<//><${Button} size="sm" variant="ghost" className="weapon-io" onClick=${() => onOut([p.id])} data-tip="Βγαίνει από τον οπλοβαστό: λόγος και ώρα">Έξοδος<//></span>` : html`<span className="muted">—</span>`;
 }
 
 function notes(p: Person, info: WeaponInfo, lists: P) {
@@ -65,7 +70,7 @@ function notes(p: Person, info: WeaponInfo, lists: P) {
   if (same.length) out.push(html`<${Badge} key="dup" tone="bad" data-tip=${'Ο ίδιος αριθμός: ' + same.map(x => shortName(x) + (x.active ? '' : ' (εκτός δύναμης)')).join(', ')}>Ίδιος με ${shortName(same[0])}${same.length > 1 ? ' +' + (same.length - 1) : ''}<//>`);
   const rk = p.active && rackKey(p.rack) ? sameRack(info, p) : [];
   if (rk.length) out.push(html`<${Badge} key="rk" tone="warn" data-tip=${'Η ίδια θέση οπλοβαστού (' + p.rack + '): ' + rk.map(shortName).join(', ')}>Θέση ${p.rack} και σε ${shortName(rk[0])}${rk.length > 1 ? ' +' + (rk.length - 1) : ''}<//>`);
-  if (!has && info.out.has(p.id)) out.push(html`<${Badge} key="noW" tone="bad" data-tip=${'Ένοπλη υπηρεσία (' + info.out.get(p.id) + ') χωρίς αριθμό όπλου'}>Ένοπλη χωρίς όπλο<//>`);
+  if (!has && isOut(info, p.id)) out.push(html`<${Badge} key="noW" tone="bad" data-tip=${'Ένοπλη υπηρεσία (' + info.out.get(p.id) + ') χωρίς αριθμό όπλου'}>Ένοπλη χωρίς όπλο<//>`);
   return out;
 }
 
@@ -89,7 +94,12 @@ export function WeaponsScreen() {
   const [ask, setAsk] = useState<{ p: Person; w: string; others: Person[] } | null>(null);
   const [xl, setXl] = useState(false);
   const lists = state.settings.lists;
-  const info = useMemo(() => weaponInfo(state, date), [state.people, state.settings, state.guards, state.dutyLog, date]);
+  const info = useMemo(() => weaponInfo(state, date), [state.people, state.settings, state.guards, state.dutyLog, state.weaponLog, date]);
+  // τσεκαρισμένοι για έξοδο/είσοδο μαζί· οι διάλογοι έξοδος (pids) και είσοδος (ids κινήσεων)
+  const [sel, setSel] = useState(() => new Set<number>());
+  const [outFor, setOutFor] = useState<number[] | null>(null); const [inFor, setInFor] = useState<string[] | null>(null);
+  const tab: string = nav.params.wtab || 'weapons';
+  const toggle = useCallback((id: number) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const types = useMemo(() => listOf(lists, 'weaponTypes'), [lists]);
   const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const place = (p: Person) => (unit === 'all' || unitOf(p, state.settings) === unit) && (room == null || p.room === room);
@@ -109,6 +119,10 @@ export function WeaponsScreen() {
     return r.sort(filter === 'dup' ? (a, b) => collator.compare(weaponKey(a.weapon), weaponKey(b.weapon)) || byRoomName(a, b) : cmp);
   }, [state.people, info, filter, dq, unit, room, sort, state.settings.rooms]);
   const total = state.people.filter(p => p.active).length;
+  const outN = new Set([...info.moves.keys(), ...info.out.keys()]).size;
+  const selP = state.people.filter(p => sel.has(p.id));
+  const selIn = selP.filter(p => p.weapon && !info.moves.has(p.id)); const selOut = selP.map(p => info.moves.get(p.id)).filter(Boolean) as { id: string }[];
+  const allSel = rows.length > 0 && rows.every(p => sel.has(p.id));
   const armedN = state.people.filter(p => p.active && weaponKey(p.weapon)).length;
 
   // msg: το μήνυμα (αλλιώς «Χ: όπλο 123»)· warn: προειδοποίηση από κάτω, με αναίρεση
@@ -161,10 +175,12 @@ export function WeaponsScreen() {
   const empty = { all: 'Δεν υπάρχει κανείς σε δύναμη.', with: 'Κανείς δεν έχει ακόμα όπλο.', out: 'Κανείς δεν έχει ένοπλη υπηρεσία ' + (date === today ? 'σήμερα' : dm(date)) + '.', without: 'Όλοι οι ένοπλοι έχουν όπλο.', unarmed: 'Κανένας άοπλος δεν έχει όπλο.', dup: 'Κανένας αριθμός δεν είναι σε δύο.', return: 'Όλοι οι εκτός δύναμης παρέδωσαν το όπλο τους.' }[filter];
 
   return html`<div>
-    <${PageHeader} title="Οπλισμός" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'σήμερα' : dow(date) + ' ' + dm(date)) + ' ' + info.out.size + '. Γράψε αριθμό και θέση στη γραμμή· Enter για τον επόμενο. Επικόλληση στήλης από Excel γεμίζει τις γραμμές από κάτω.'}>
+    <${PageHeader} title="Οπλισμός" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'σήμερα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Γράψε αριθμό και θέση στη γραμμή· Enter για τον επόμενο. Επικόλληση στήλης από Excel γεμίζει τις γραμμές από κάτω.'}>
       <${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ΗΚΑΙ και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//><//>
+    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (info.moves.size ? ' · εκτός ' + info.moves.size : '') }]}/></div>
+    ${tab === 'moves' ? html`<${MovesView} date=${date} onIn=${setInFor}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${(u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room })} items=${UNITS}/>
       <select className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit }); }}>
@@ -174,20 +190,27 @@ export function WeaponsScreen() {
     <div className="filters"><${Strip} role="group" aria-label="Φίλτρα οπλισμού">${WEAPON_FILTERS.map(([k, l, , tip]) => html`<button key=${k} type="button" className=${cx('ui-chip', (k === 'unarmed' || k === 'dup' || k === 'return') && (counts[k] || 0) > 0 && 'ui-chip--warn')} aria-pressed=${filter === k} data-tip=${tip} onClick=${() => nav.set({ wfilter: filter === k && k !== 'all' ? 'all' : k })}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}<//>
       <${ActiveFilter} parts=${[unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && fLabel, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}/>
       <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'άτομο' : 'άτομα'}</span></div>
+    ${sel.size > 0 && html`<div className="bulkbar"><span>${sel.size} επιλεγμένοι</span>
+      <${Button} size="sm" disabled=${!selIn.length} onClick=${() => setOutFor(selIn.map(p => p.id))} data-tip="Βγαίνουν από τον οπλοβαστό με λόγο και ώρα">Έξοδος όπλων (${selIn.length})…<//>
+      <${Button} size="sm" variant="secondary" disabled=${!selOut.length} onClick=${() => setInFor(selOut.map(m => m.id))}>Είσοδος όπλων (${selOut.length})…<//>
+      <${Button} size="sm" variant="ghost" onClick=${() => setSel(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || unit !== 'all' || room != null ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : empty}</div>` :
     html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1310px' }}>
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>Πατρώνυμο</span><span>ΑΣΜ</span>${H('room', 'Θάλαμος')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}${H('rack', 'Οπλοβαστός')}<span>${date === today ? 'Σήμερα' : dow(date) + ' ' + dm(date)}</span><span>Παρατήρηση</span></div>
+      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται (π.χ. ένας ουλαμός για ΕΚΠ)" checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>Πατρώνυμο</span><span>ΑΣΜ</span>${H('room', 'Θάλαμος')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}${H('rack', 'Οπλοβαστός')}<span>${date === today ? 'Σήμερα' : dow(date) + ' ' + dm(date)}</span><span>Παρατήρηση</span></div>
       <div className="weapons__body">${rows.map((p, i) => html`<div key=${p.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd')} style=${{ gridTemplateColumns: GRID, cursor: 'default' }} role="row">
+        <span><input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + fullName(p)} checked=${sel.has(p.id)} onChange=${() => toggle(p.id)}/></span>
         <span className="num muted">${i + 1}</span><span>${p.rank}</span>
         <span><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b></button></span><span>${p.first}</span><span>${p.father}</span>
         <span className="num">${p.asm}</span><span>${p.room ?? ''}</span><span>${p.si ? siOf(p, lists).text : ''}</span>
         <span className="weapon-cell"><${TypeSelect} p=${p} types=${types} onPick=${(q: Person, t: string) => save([{ pid: q.id, wtype: t }])}/></span>
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="rack" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
-        <span><${InOut} p=${p} info=${info}/></span>
+        <span><${InOut} p=${p} info=${info} onOut=${setOutFor} onIn=${setInFor}/></span>
         <span className="badges weapon-notes">${notes(p, info, lists)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: shortName(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
       </div>`)}</div>
-    </div></div></div>`}
+    </div></div></div>`}<//>`}
+    ${outFor && html`<${WeaponOutDialog} pids=${outFor} onClose=${() => setOutFor(null)} onDone=${() => setSel(new Set())}/>`}
+    ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${ask && html`<${Dialog} title=${'Το όπλο ' + ask.w + ' είναι ήδη χρεωμένο'} onClose=${() => { setAsk(null); setReset(n => n + 1); }}
       description=${html`<span>Ο αριθμός <b>${ask.w}</b> είναι στον ${ask.others.map(x => html`<b key=${x.id}>${x.rank} ${plainName(x)}</b>${x.active ? '' : ' (εκτός δύναμης)'}`).reduce((a: any[], x: any, j: number) => (j ? [...a, ', ', x] : [x]), [])}. Να μεταφερθεί στον ${ask.p.rank} ${plainName(ask.p)};</span>`}
       footer=${html`<${Button} variant="outline" onClick=${() => { setAsk(null); setReset(n => n + 1); }}>Άκυρο<//>
