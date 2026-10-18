@@ -203,7 +203,9 @@ export const postTxt = (x: Post) => x.label + (x.slots ? ' ' + x.slots[0].slice(
 // Κατάσταση εφαρμογής
 // ---------------------------------------------------------------------------
 export type Guards = Record<ISODate, Record<string, number>>;
-export type Caps = Record<number, Partial<Record<DutyKind, string | null>>>;
+// Ανά άτομο: είδος (th, mg…) ή δική σου υπηρεσία («b:» + id μπλοκ) → αιτία «δεν κάνει», ή null = ρητά «κάνει» (παρά Σ.Ι./πόστο)
+export type CapKey = DutyKind | `b:${string}`;
+export type Caps = Record<number, Partial<Record<CapKey, string | null>>>;
 
 export interface Rules {
   noConsecHol: boolean;                  // Κ-13

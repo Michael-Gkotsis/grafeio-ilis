@@ -493,12 +493,6 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .sigrid td.is-set{background:var(--hover)}
 .sigrid tr.sigrid__sec th{text-align:left;font-size:12px;font-weight:700;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;padding-top:14px}
 .sigrid__tag{display:block;font-weight:400;font-size:11px}
-.capgrid{display:flex;flex-wrap:wrap;gap:6px}
-.capgrid label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
-.capgrid label.is-off{background:var(--muted);color:var(--muted-fg);text-decoration:line-through}
-.does__txt{margin:0 0 8px;font-weight:600}
-.does__presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.does__presets .ui-btn--link{margin-left:4px;font-size:13px}
 .hk-src{list-style:none;margin:0;padding:0}
 .hk-src li{border-top:1px solid var(--border);padding:8px 0;font-size:13px}
 .hk-src li:first-child{border-top:0}
@@ -756,3 +750,42 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapon-notes{display:flex;gap:6px;align-items:center}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
+/* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
+.ptable--whod .ptable__head > *,.ptable--whod .ptable__row > *{padding-left:6px;padding-right:6px}
+.whod__body{max-height:calc(100vh - 330px);overflow-y:auto}
+.whod__head{align-items:stretch}
+.whod__head > span:first-child{display:flex;align-items:flex-end}
+.ptable--whod .ptable__head > .whod__colhd{padding-left:2px;padding-right:2px}
+.whod__colhd{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;text-align:center !important;white-space:normal !important;line-height:1.15;border-radius:6px}
+.whod__colhd:hover{background:var(--muted)}
+.whod__colhd[aria-pressed="true"]{background:var(--primary);color:var(--primary-fg)}
+.whod__lbl{font-size:12px;word-break:keep-all;overflow-wrap:normal;max-width:100%}
+.whod__colhd small{font-size:11px;font-weight:500;opacity:.65;font-family:var(--f-mono)}
+.whod__colhd small.has-n{color:var(--bad);opacity:1;font-weight:700}
+.whod__colhd[aria-pressed="true"] small{color:inherit}
+.whod__dayhd{display:flex;flex-direction:column;justify-content:flex-end;gap:2px;font-size:12px;cursor:default}
+.whod__dayhd small{display:flex;gap:2px}.whod__dayhd i{font-style:normal;width:28px;text-align:center;font-size:11px;font-weight:500;opacity:.7}
+.whod__row{height:46px;cursor:default}
+.whod__name{display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.2}
+.whod__name .linkish{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.whod__name small{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.whod__hint{margin-left:6px;color:var(--warn);font-weight:600}.whod__hint.is-bad{color:var(--bad)}
+.whod__c{display:flex;justify-content:center}
+.whod__cell{width:100%;max-width:62px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:15px;font-weight:700;line-height:1;color:var(--ok)}
+.whod__cell:hover{border-color:var(--muted-fg)}
+.whod__cell:focus-visible,.whod__day:focus-visible,.whod__x:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.whod__cell.is-on{color:var(--ok);border-color:transparent;background:transparent}
+.whod__cell.is-on:hover{background:var(--muted)}
+.whod__cell.is-off,.whod__lg.is-off{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+.whod__cell.is-auto,.whod__lg.is-auto{background:repeating-linear-gradient(135deg,var(--border) 0 4px,transparent 4px 9px);color:var(--muted-fg);border-style:dashed}
+.whod__cell.is-force,.whod__lg.is-force{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.whod__lg{display:inline-block;min-width:22px;text-align:center;border:1px solid;border-radius:5px;padding:0 3px}
+.whod__days{display:flex;gap:2px;align-items:center}
+.whod__day{width:28px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:11px;font-weight:600;padding:0;color:var(--foreground)}
+.whod__day.is-we{border-color:var(--input)}
+.whod__day:hover{border-color:var(--muted-fg)}
+.whod__day.is-off{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line);text-decoration:line-through}
+.whod__reset{display:flex;justify-content:center}
+.whod__x{width:26px;height:26px;border-radius:6px;border:0;background:none;cursor:pointer;color:var(--muted-fg);font-size:15px}
+.whod__x:hover{background:var(--muted);color:inherit}
+.whod__legend{margin:10px 0 0;line-height:1.7}
