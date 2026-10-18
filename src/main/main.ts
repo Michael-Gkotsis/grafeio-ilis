@@ -351,7 +351,7 @@ async function autoCheck(kind: ListKind): Promise<{ b: SourceBinding; m?: Source
 // Μετά την εγγραφή ενός είδους: νέα αντιστοίχιση (στήλες ωρών, πίνακας που κατέβηκε), τι ξέρουμε για το αρχείο, Ιστορικό
 function afterWrite(kind: ListKind, b: SourceBinding, r: WriteOutcome): SyncOut {
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
-  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? 'μπήκαν στήλες «ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ» και «ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ» στο φύλλο «' + b.sheet + '» (άδειες με ώρα)' : undefined); b = bindingOf(kind) || r.binding; }
+  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? 'μπήκαν στήλες ' + KIND[kind].fields.filter(f => f.k === 'tout' || f.k === 'tin').map(f => '«' + f.head + '»').join(' και ') + ' στο φύλλο «' + b.sheet + '» (' + (kind === 'leave' ? 'άδειες' : 'εγγραφές') + ' με ώρα)' : undefined); b = bindingOf(kind) || r.binding; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);

@@ -737,6 +737,12 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 @media (max-width:720px){.essochip small{display:none}.essochip{padding:0 8px}}
 /* Εξοδούχοι: όποιος δεν βγαίνει κατά τους κανόνες επιλέγεται με ⚠ */
 .orow__warn{color:var(--warn);font-weight:600}
+.orow__note{width:170px;flex:none;height:32px;padding:0 8px;font-size:13px}
+.backs__day{padding:8px 16px 4px;font-size:12px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.03em}
+.backs .rows li > span{display:flex;align-items:center;gap:6px;font-size:13px;text-align:right}
+.backs-box{margin:0 0 12px}
+.backs-box summary{cursor:pointer;font-weight:600}
+@media (max-width:767px){.orow__note{flex:1;width:auto;min-width:120px}}
 .ui-seg button.is-warn{color:var(--warn)}
 .ui-seg button.is-warn[aria-pressed="true"]{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
 
@@ -789,3 +795,11 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .whod__x{width:26px;height:26px;border-radius:6px;border:0;background:none;cursor:pointer;color:var(--muted-fg);font-size:15px}
 .whod__x:hover{background:var(--muted);color:inherit}
 .whod__legend{margin:10px 0 0;line-height:1.7}
+
+/* Οπλισμός: έξοδος/είσοδος στη γραμμή και Κινήσεις */
+.weapon-out{display:flex;gap:6px;align-items:center;min-width:0}
+.weapon-out small{overflow:hidden;text-overflow:ellipsis}
+.weapon-out .weapon-io{margin-left:auto;flex:none}
+.ptable--moves .ptable__head,.ptable--moves .ptable__row{grid-template-columns:minmax(170px,1.3fr) 100px 120px 160px 160px 160px minmax(110px,1fr) 190px}
+.weapon-acts{display:flex;gap:6px;justify-content:flex-end}
+.weapon-movelist{max-height:220px;overflow-y:auto}

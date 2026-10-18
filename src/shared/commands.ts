@@ -2,20 +2,22 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, type ListId } from './ranks';
-import { hasTimes, mins, normTime, timesTxt } from './hours';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
+import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normRack, normWeapon } from './weapons';
+import { isSat, isWk, WK } from './weekend';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
   // πολλά ιατρικά μαζί για τους ίδιους, με τις ίδιες ημερομηνίες (Michael, 18/10): καθένα σε δική του γραμμή, μία αναίρεση
   | { t: 'declareMany'; cmds: StatusCmd[] }
-  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[]; force?: boolean }
+  // wk: «ΔΝ ΣΚ» το Σάββατο (ΔΝ και εξοδούχος την Κυριακή)· notes: παρατηρήσεις της μέρας («ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)»), κενό = σβήνει
+  | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null; wk?: boolean }[]; notes?: { pid: number; note: string }[]; force?: boolean }
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
@@ -65,7 +67,13 @@ export type Command =
   // ΗΚΑΙ 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: άλλη μέρα, ή null = να μη γραφτεί
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
-  | { t: 'setWeapons'; changes: WeaponChange[]; what?: string };
+  | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
+  // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
+  // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
+  | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
+  | { t: 'weaponIn'; ids: string[]; day: ISODate; time: string; reason?: string }
+  | { t: 'editWeaponMove'; id: string; patch: Partial<Pick<WeaponMove, 'reason' | 'outDay' | 'outTime' | 'inDay' | 'inTime' | 'inReason' | 'note'>> }
+  | { t: 'deleteWeaponMove'; id: string };
 
 // Οπλισμός: μόνο τα πεδία που δόθηκαν αλλάζουν (αριθμός, τύπος, θέση οπλοβαστού)· κενό = σβήνεται
 export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string }
@@ -101,15 +109,20 @@ const setGuard = (s: AppState, date: ISODate, k: string, pid: number | null): Ap
 };
 // «αιτείται μετάθεση.» → «μετάθεση»: η πρόταση της ΗΚΑΙ βάζει μόνη της το «αιτείται» και την τελεία
 export const reqText = (t: string) => t.trim().replace(/^αιτ[εέ][ιί]ται\s+/i, '').replace(/[.\s]+$/, '').trim();
+// Οπλισμός: λόγος με κεφαλαία, ώρα ΩΩ:ΛΛ (υποχρεωτική)
+const wReason = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+function wTime(v: unknown, what: string): string {
+  const t = normTime(v); if (!t) throw new Error('Γράψε την ώρα ' + what + ', π.χ. 08:15'); return t;
+}
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
-// Ώρες άδειας: μόνο στις άδειες, σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
+// Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
 function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: string; toTime?: string; open?: boolean }): { fromTime?: string; toTime?: string } {
   if (!hasTimes(c.type)) return {};
-  const f = normTime(c.fromTime), t = c.open ? '' : normTime(c.toTime);
-  if (f == null) throw new Error('Η ώρα αναχώρησης «' + c.fromTime + '» δεν διαβάζεται. Γράψε π.χ. 14:00.');
-  if (t == null) throw new Error('Η ώρα επιστροφής «' + c.toTime + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
-  if (f && t && c.from === c.to && mins(t) <= mins(f)) throw new Error('Την ίδια μέρα η επιστροφή (' + t + ') πρέπει να είναι μετά την αναχώρηση (' + f + ')');
+  const f = normTime(c.fromTime), t = c.open ? '' : normTime(c.toTime), n = timeNames(c.type);
+  if (f == null) throw new Error('Η ώρα ' + n.fromG + ' «' + c.fromTime + '» δεν διαβάζεται. Γράψε π.χ. 14:00.');
+  if (t == null) throw new Error('Η ώρα ' + n.toG + ' «' + c.toTime + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+  if (f && t && c.from === c.to && mins(t) <= mins(f)) throw new Error('Την ίδια μέρα η ' + n.to + ' (' + t + ') πρέπει να είναι μετά την ' + n.from + ' (' + f + ')');
   return { ...(f ? { fromTime: f } : {}), ...(t ? { toTime: t } : {}) };
 }
 
@@ -164,7 +177,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
-        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, cmd.to, ctx.newId)), ...cmd.pids.map(pid => {
+        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, cmd), ctx.newId)), ...cmd.pids.map(pid => {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
@@ -196,9 +209,31 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const pids = new Set(c.changes.map(x => x.pid));
       // έξοδος/ΔΝ πολλών ημερών: αλλάζει μόνο αυτή η μέρα, οι άλλες μένουν
       const hit = (x: Status) => pids.has(x.pid) && TYPES[x.type].cat === 'out' && x.from <= c.date && c.date <= x.to;
-      const kept = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
-      const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date }));
-      return { state: { ...s, statuses: [...kept, ...added] }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + c.changes.length + ' αλλαγές', files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
+      let statuses = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
+      const wk = isSat(c.date) ? c.changes.filter(x => x.wk && x.to === 'DN') : [];
+      const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date, ...(wk.includes(x) ? { kind: WK } : {}) }));
+      // ΔΝ ΣΚ (Michael, 18/10): την Κυριακή μπαίνει μόνος του στους εξοδούχους, εκτός αν εκείνη τη μέρα έχει ήδη
+      // έξοδο/ΔΝ, λείπει, ή κάτι τον κρατά μέσα (υπηρεσία, ποινή…): τότε μένει η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί.
+      // Όποιος δεν είναι πια ΔΝ ΣΚ το Σάββατο χάνει και την έξοδο της Κυριακής που είχε μπει μόνη της.
+      const sun = addDays(c.date, 1); const kept: string[] = [];
+      if (isSat(c.date)) {
+        const wkIds = new Set(wk.map(x => x.pid));
+        statuses = statuses.filter(x => !(pids.has(x.pid) && !wkIds.has(x.pid) && isWk(x) && x.type === 'OUT' && x.from === sun && x.to === sun));
+        for (const x of wk) {
+          const onSun = statusesOn(statuses, x.pid, sun);
+          if (onSun.some(y => TYPES[y.type].cat === 'out')) continue;
+          if (onSun.some(y => TYPES[y.type].away) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }
+          added.push({ id: ctx.newId(), pid: x.pid, type: 'OUT', from: sun, to: sun, kind: WK });
+        }
+      }
+      let outNotes = s.outNotes;
+      if (c.notes?.length) {
+        const day = { ...(s.outNotes?.[c.date] || {}) };
+        for (const n of c.notes) { const v = norm(n.note).trim(); if (v) day[n.pid] = v; else delete day[n.pid]; }
+        outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
+      }
+      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
+      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
     }
     case 'saveCadre': {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
@@ -299,7 +334,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) }, text: 'Στοιχεία ποινής: ' + shortName(pm.get(st.pid)!) + (next.by ? ', από ' + next.by : '') + (next.reason ? ', διότι ' + next.reason : ''), files: [] };
     }
     case 'setTimes': {
-      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const tm = checkTimes({ ...st, fromTime: c.fromTime, toTime: c.toTime });
       const next: Status = { ...st, ...tm };
       if (!tm.fromTime) delete next.fromTime;
@@ -308,8 +343,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const plan = planStatusChange({ ...s, statuses: s.statuses.filter(x => x !== st) }, { type: st.type, pids: [st.pid], from: st.from, to: st.to, ...tm }, ctx.today);
       let out: AppState = { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) };
       plan.conflicts.forEach(x => { out = setGuard(out, x.date, x.k, null); });
-      const t = timesTxt(next);
-      return { state: out, text: 'Ώρες άδειας ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: ['Άδειες', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
+      const t = timesTxt(next), lv = TYPES[st.type].cat === 'abs';
+      return { state: out, text: 'Ώρες ' + (lv ? 'άδειας' : TYPES[st.type].label) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: [st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
     }
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
@@ -513,6 +548,56 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const onlyNum = q.wtype === p.wtype && q.rack === p.rack;
       const text = by.size === 1 ? (onlyNum ? 'Όπλο ' + shortName(p) + ': ' + (q.weapon || 'χωρίς όπλο' + (p.weapon ? ' (ήταν ' + p.weapon + ')' : '')) : 'Οπλισμός ' + shortName(p) + ': ' + one) : 'Οπλισμός' + (c.what ? ', ' + c.what : '') + ': άλλαξε σε ' + by.size + ' άτομα';
       return { state: { ...s, people }, text, files: [] };
+    }
+    case 'weaponOut': {
+      const reason = wReason(c.reason); if (!reason) throw new Error('Διάλεξε τον λόγο εξόδου');
+      const time = wTime(c.time, 'εξόδου'); const log = s.weaponLog || [];
+      const open = new Set(log.filter(m => !m.inDay).map(m => m.pid));
+      const add: WeaponMove[] = []; const noW: string[] = []; const already: string[] = [];
+      for (const pid of [...new Set(c.pids)]) {
+        const p = pm.get(pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+        if (!p.weapon) noW.push(shortName(p)); else if (open.has(pid)) already.push(shortName(p));
+        else add.push({ id: ctx.newId(), pid, weapon: p.weapon, reason, outDay: c.day, outTime: time, ...(c.note?.trim() ? { note: c.note.trim() } : {}) });
+      }
+      if (!add.length) throw new Error(noW.length && !already.length ? 'Δεν έχει αριθμό όπλου: ' + noW.join(', ') : 'Είναι ήδη εκτός: ' + already.join(', ') + (noW.length ? ' · χωρίς αριθμό όπλου: ' + noW.join(', ') : ''));
+      const skip = [noW.length && 'χωρίς αριθμό όπλου: ' + noW.join(', '), already.length && 'ήδη εκτός: ' + already.join(', ')].filter(Boolean).join(' · ');
+      return { state: { ...s, weaponLog: [...log, ...add] }, text: 'Έξοδος όπλων (' + reason + ') ' + dm(c.day) + ' ' + time + ': ' + who(s, add.map(m => m.pid)) + (skip ? ' (δεν βγήκαν, ' + skip + ')' : ''), files: [] };
+    }
+    case 'weaponIn': {
+      const time = wTime(c.time, 'εισόδου'); const ids = new Set(c.ids); const lists = s.settings.lists;
+      const done: WeaponMove[] = [];
+      const weaponLog = (s.weaponLog || []).map(m => {
+        if (!ids.has(m.id) || m.inDay) return m;
+        if (c.day + ' ' + time < m.outDay + ' ' + m.outTime) throw new Error('Η είσοδος (' + dm(c.day) + ' ' + time + ') είναι πριν την έξοδο (' + dm(m.outDay) + ' ' + m.outTime + ') για ' + shortName(pm.get(m.pid) || { last: '?', first: '' } as Person));
+        const x: WeaponMove = { ...m, inDay: c.day, inTime: time, inReason: wReason(c.reason) || weaponBack(m.reason, lists) }; done.push(x); return x;
+      });
+      if (!done.length) return { state: s, text: '', files: [] };
+      const rs = [...new Set(done.map(m => m.inReason))];
+      return { state: { ...s, weaponLog }, text: 'Είσοδος όπλων (' + rs.join(', ') + ') ' + dm(c.day) + ' ' + time + ': ' + who(s, done.map(m => m.pid)), files: [] };
+    }
+    case 'editWeaponMove': {
+      const log = s.weaponLog || []; const m = log.find(x => x.id === c.id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
+      const pt = c.patch; const x: WeaponMove = { ...m };
+      if (pt.reason !== undefined) { const r = wReason(pt.reason); if (!r) throw new Error('Ο λόγος εξόδου δεν μένει κενός'); x.reason = r; }
+      if (pt.outDay) x.outDay = pt.outDay;
+      if (pt.outTime !== undefined) x.outTime = wTime(pt.outTime, 'εξόδου');
+      if (pt.note !== undefined) { if (pt.note.trim()) x.note = pt.note.trim(); else delete x.note; }
+      if (pt.inDay === '') { delete x.inDay; delete x.inTime; delete x.inReason; }
+      else {
+        if (pt.inDay) x.inDay = pt.inDay;
+        if (pt.inTime !== undefined && x.inDay) x.inTime = wTime(pt.inTime, 'εισόδου');
+        if (pt.inReason !== undefined && x.inDay) x.inReason = wReason(pt.inReason) || weaponBack(x.reason, s.settings.lists);
+      }
+      if (x.inDay && (x.inDay + ' ' + (x.inTime || '')) < x.outDay + ' ' + x.outTime) throw new Error('Η είσοδος είναι πριν την έξοδο');
+      if (!x.inDay && log.some(y => y.id !== x.id && y.pid === x.pid && !y.inDay)) throw new Error('Το όπλο του έχει ήδη άλλη έξοδο χωρίς είσοδο');
+      if (JSON.stringify(x) === JSON.stringify(m)) return { state: s, text: '', files: [] };
+      const p = pm.get(m.pid);
+      return { state: { ...s, weaponLog: log.map(y => (y.id === x.id ? x : y)) }, text: 'Διόρθωση κίνησης όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + x.reason + ' ' + dm(x.outDay) + ' ' + x.outTime + (x.inDay ? ' → ' + (x.inReason || '') + ' ' + dm(x.inDay) + ' ' + x.inTime : ' (εκτός)'), files: [] };
+    }
+    case 'deleteWeaponMove': {
+      const log = s.weaponLog || []; const m = log.find(x => x.id === c.id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
+      const p = pm.get(m.pid);
+      return { state: { ...s, weaponLog: log.filter(x => x.id !== c.id) }, text: 'Σβήστηκε κίνηση όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + m.reason + ' ' + dm(m.outDay) + ' ' + m.outTime, files: [] };
     }
     case 'addPerson': {
       const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();

@@ -213,6 +213,8 @@ export interface Rules {
   numRest: number;                       // 3ο/4ο νούμερο: ξανά στο ίδιο νούμερο μετά από τόσες μέρες (0 = όχι)
   outRooms: Record<number, number[]>;    // Κ-16: ημέρα εβδομάδας → θάλαμοι που βγαίνουν
   strictUnarmed?: boolean;               // «Αυστηρά Άοπλοι»: οι άοπλοι πρώτα σε μαγειρεία, μετά 2ο-3ο, μετά 1ο-4ο νούμερο· σκοποί μόνο ένοπλοι
+  outTime?: string;                      // ώρα που ξεκινά η έξοδος (ΩΩ:ΛΛ, προεπιλογή 16:00): όποιος γυρίσει ως τότε βγαίνει κανονικά
+  hkTime?: string;                       // ώρα της ΗΚΑΙ (ΩΩ:ΛΛ, προεπιλογή 08:00): όποιος γυρίσει ως τότε μετρά παρών εκείνη τη μέρα
 }
 export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
@@ -347,8 +349,14 @@ export interface AppState {
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
+  weaponLog: WeaponMove[];               // έξοδοι και είσοδοι όπλων από τον οπλοβαστό (καρτέλα Οπλισμός)
+  outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
+// Κίνηση όπλου (Michael, 18/10: «όπως οι εξοδούχοι»): βγαίνει από τον οπλοβαστό με λόγο από τη λίστα «Λόγοι εξόδου όπλου»
+// (ΕΚΠ, ΒΟΛΗ…) και ώρα, και μπαίνει με τον λόγο εισαγωγής του (ΛΗΞ ΕΚΠ…) και ώρα. Χωρίς inDay: είναι ακόμα εκτός.
+// weapon: ο αριθμός όπλου τη στιγμή της εξόδου. Ώρες ΩΩ:ΛΛ, γράφονται μόνες τους (τώρα) και διορθώνονται.
+export interface WeaponMove { id: string; pid: number; weapon: string; reason: string; outDay: ISODate; outTime: string; inDay?: ISODate; inTime?: string; inReason?: string; note?: string }
 // Υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες· όχι στον κανόνα του ίδιου νούμερου
 export interface SeatlessDuty { pid: number; kind: DutyKind }
 export type DutyLog = Record<ISODate, SeatlessDuty[]>;
@@ -377,5 +385,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, weaponLog: [], outNotes: {}, lastExpire: ''
 });

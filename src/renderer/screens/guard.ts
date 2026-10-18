@@ -2,19 +2,22 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
+import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, DUTY_START, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
+import { backDay, backWhen, dutyAt, isSat, isWk, outLbl, returnsOn } from '../../shared/weekend';
+import { statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : ''].filter(Boolean).join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ΗΚΑΙ ' + r.hkTime : ''].filter(Boolean).join(', ');
 const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
 const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.kind === 'op' && !x.hidden); return b.length ? 'οπλοφύλακας: ' + (b.every((x: P) => x.armed) ? 'ένοπλος' : 'άοπλος') + ' (Ρυθμίσεις)' : ''; };
@@ -85,12 +88,21 @@ function DutyCheck({ onOpen, m }: P) {
 
 function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
-  const [r, setR] = useState(state.rules);
+  const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME });
+  const badT = !normTime(r.outTime) || !normTime(r.hkTime);
+  const save = async () => {
+    const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! };
+    if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
+  };
   return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'setRules', rules: r, text: RULE_TXT(r) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(r) }); } }}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} onClick=${save}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
     <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση μετά από υπηρεσία (Κ-14)</label><select id="rrest" className="ui-input" value=${r.restDays} onChange=${(e: any) => setR({ ...r, restDays: +e.target.value })}><option value="0">Χωρίς</option><option value="1">1 ημέρα (όχι δύο μέρες στη σειρά)</option><option value="2">2 ημέρες</option></select></div>
     <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><select id="rnum" className="ui-input" value=${r.numRest || 0} onChange=${(e: any) => setR({ ...r, numRest: +e.target.value })}><option value="0">Χωρίς περιορισμό</option><option value="3">Ξανά στο ίδιο νούμερο μετά από 3 ημέρες</option><option value="4">Μετά από 4 ημέρες</option></select><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
+    <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
+      <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
+      <${TimeField} id="rhk" label="Ώρα ΗΚΑΙ" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ΗΚΑΙ της μέρας"/>
+    </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => setR({ ...r, strictUnarmed: e.target.checked })}/><span><b>Αυστηρά Άοπλοι</b><small>${STRICT_TXT}${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''} Όταν είναι κλειστό, ισχύει η κανονική σειρά.</small></span></label>
     <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · ΕΥ και ΣΤΕΠ σε καμία υπηρεσία · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>
     <div className="field"><span className="field__label">Πώς διαλέγει η αυτόματη συμπλήρωση</span><ol className="note fairlist">
@@ -126,7 +138,7 @@ export function GuardScreen() {
     const noDuty: P[] = [], unarmed: P[] = [];
     // όπως ορίζει ο πίνακας καταστάσεων (Ρυθμίσεις › Υπηρεσίες): καμία υπηρεσία του εντύπου, ή καμία ένοπλη
     const lists = state.settings.lists; const blocks = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-    people.forEach(p => { const ss = statusesOn(state.statuses, p.id, date); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
+    people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, DUTY_START); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
     // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
     const cols = capCols(state.settings);
@@ -349,16 +361,36 @@ export function AddBlockDialog({ onClose }: P) {
 
 /* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
 const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
+// Σάββατο: και «ΔΝ ΣΚ» = ΔΝ σήμερα και εξοδούχος την Κυριακή (Michael, 18/10)
+const OUT_OPTS_SAT = [...OUT_OPTS, { value: 'DNSK', label: 'ΔΝ ΣΚ' }];
+type OutVal = TypeKey | 'DNSK';
+const DNSK_TIP = 'ΔΝ το Σάββατο και εξοδούχος την Κυριακή (μπαίνει μόνος του). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ και γυρίζει Κυριακή πρωί.';
+const valLbl = (v: OutVal | null | undefined) => (v === 'DNSK' ? 'ΔΝ ΣΚ' : v ? TYPES[v].label : 'Μένει');
+const valTone = (v: OutVal) => TYPES[v === 'DNSK' ? 'DN' : v].tone;
 // 1–4 αν είναι συνεχόμενοι, αλλιώς 1, 3, 5 (Ρυθμίσεις › Θάλαμοι και ουλαμοί)
 const roomsTxt = (rs: number[]) => (rs.length > 2 && rs[rs.length - 1] - rs[0] === rs.length - 1 ? rs[0] + '–' + rs[rs.length - 1] : rs.join(', '));
 // Όποιος δεν βγαίνει σύμφωνα με τους κανόνες (υπηρεσία, ποινή, ΕΥ…) ή δεν έχει δικαίωμα ΔΝ επιλέγεται κι αυτός, με
 // προειδοποίηση· στην αποθήκευση ζητείται επιβεβαίωση (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
-const OutRow = memo(function OutRow({ p, unit, style, reason, value, changed, onSet, onOpen, noDn }: P) {
+// sun: ΔΝ ΣΚ και την Κυριακή κάτι τον κρατά (υπηρεσία, ποινή…): γυρίζει Κυριακή πρωί· wkNote: «από ΔΝ ΣΚ» την Κυριακή
+// note: παρατήρηση της μέρας, γράφεται σε παρένθεση δίπλα στην κατάσταση («ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», Michael 18/10)
+const OutRow = memo(function OutRow({ p, unit, style, reason, value, changed, onSet, onOpen, noDn, sat, sun, wkNote, note, onNote }: P) {
   return html`<div className=${cx('orow', changed && 'is-changed', reason && 'is-blocked')} style=${style}>
-    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unit}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${reason && html` · <span className="orow__warn" data-tip="Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">⚠ ${reason}</span>`}</small></div>
-    <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${OUT_OPTS.map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : o.value === 'DN' && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; return html`<button key=${o.value} type="button" className=${warn ? 'is-warn' : undefined} data-tip=${warn} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
+    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unit}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${wkNote && ' · από ΔΝ ΣΚ'}${reason && html` · <span className="orow__warn" data-tip="Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">⚠ ${reason}</span>`}${value === 'DNSK' && sun && html` · <span className="orow__warn" data-tip="Την Κυριακή δεν μπαίνει στους εξοδούχους: μένει μόνο η ΔΝ του Σαββάτου">Κυριακή: ${sun}, γυρίζει Κυριακή πρωί</span>`}</small></div>
+    <input className="ui-input orow__note" aria-label=${'Παρατήρηση ' + fullName(p)} placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=${note} onChange=${(e: any) => onNote(p.id, e.target.value)}/>
+    <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${(sat ? OUT_OPTS_SAT : OUT_OPTS).map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : (o.value === 'DN' || o.value === 'DNSK') && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; return html`<button key=${o.value} type="button" className=${warn ? 'is-warn' : undefined} data-tip=${warn || (o.value === 'DNSK' ? DNSK_TIP : undefined)} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
   </div>`;
 });
+// Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία
+export function ReturnsList({ date, limit }: { date: string; limit?: number }) {
+  const { state } = useStore(); const nav = useNav();
+  const list = useMemo(() => returnsOn(state, date), [state, date]);
+  if (!list.length) return html`<div className="empty">Κανείς δεν λείπει.</div>`;
+  const shown = limit ? list.slice(0, limit) : list;
+  const days = [...new Set(shown.map(backDay))];
+  return html`<div className="backs">${days.map(d => html`<div key=${d}><div className="backs__day">${d}</div><ul className="rows">${shown.filter(b => backDay(b) === d).map(b => html`<li key=${b.p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(b.p.id)}>${shortName(b.p)}</button><span className=${b.duty ? 'txt-bad' : 'muted'}><${Badge} tone=${TYPES[b.st.type].tone} className="tag">${TYPES[b.st.type].cat === 'out' ? outLbl(b.st) : statusLbl(b.st, state.settings.lists)}<//> ${backWhen(b)}</span></li>`)}</ul></div>`)}
+    ${limit && list.length > limit && html`<p className="note rows__more">Και άλλοι ${list.length - limit} στους Εξοδούχους.</p>`}</div>`;
+}
+const NO_NOTES: Record<number, string> = {};
 export function OutsScreen() {
   const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
   const date = nav.params.outDate || today;
@@ -366,7 +398,13 @@ export function OutsScreen() {
   const outDays = [...new Set([today, tomorrow, nextDow(6), nextDow(0)])].sort();
   const rooms = outRoomsOn(state.rules, date);
   const people = activePeople(state);
-  const saved = useMemo(() => { const m: Record<number, TypeKey> = {}; state.statuses.forEach(s => { if (TYPES[s.type].cat === 'out' && s.from <= date && date <= s.to) m[s.pid] = s.type; }); return m; }, [state.statuses, date]);
+  const sat = isSat(date);
+  const saved = useMemo(() => { const m: Record<number, OutVal> = {}; state.statuses.forEach(s => { if (TYPES[s.type].cat === 'out' && s.from <= date && date <= s.to) m[s.pid] = sat && s.type === 'DN' && isWk(s) ? 'DNSK' : s.type; }); return m; }, [state.statuses, date]);
+  // την Κυριακή: όσοι μπήκαν μόνοι τους από τη ΔΝ ΣΚ του Σαββάτου
+  const wkSun = useMemo(() => new Set(state.statuses.filter(s => s.type === 'OUT' && isWk(s) && s.from <= date && date <= s.to).map(s => s.pid)), [state.statuses, date]);
+  const savedNotes = state.outNotes?.[date] || NO_NOTES;
+  const [notes, setNotes] = useState<Record<number, string>>(savedNotes);
+  useEffect(() => setNotes(savedNotes), [savedNotes]);
   const [draft, setDraft] = useState(saved);
   // άλλη μέρα: από την αρχή. Ίδια μέρα και άλλαξαν οι καταστάσεις αλλού (δήλωση, ανάγνωση από Excel): ό,τι άλλαξες εδώ
   // και δεν άλλαξε αλλού μένει στο πρόχειρο, αντί να χαθεί
@@ -376,7 +414,7 @@ export function OutsScreen() {
     if (old.date !== date) { setDraft(saved); return; }
     if (old.saved === saved) return;
     setDraft(d => {
-      const n: Record<number, TypeKey> = { ...saved };
+      const n: Record<number, OutVal> = { ...saved };
       for (const id of new Set([...Object.keys(d), ...Object.keys(old.saved)].map(Number)))
         if ((old.saved[id] || null) === (saved[id] || null) && (d[id] || null) !== (old.saved[id] || null)) { if (d[id]) n[id] = d[id]; else delete n[id]; }
       return n;
@@ -391,27 +429,37 @@ export function OutsScreen() {
     const r = searchPeople(state.people, dq).filter(p => p.active && (room == null || p.room === room) && (filter === 'all' || (filter === 'can' ? !reasons[p.id] : filter === 'cant' ? !!reasons[p.id] : !!draft[p.id])));
     return sort === 'room' && !dq ? [...r].sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) : r;
   }, [dq, filter, reasons, draft, state.people, room, sort]);
-  const changes = useMemo(() => people.filter(p => (saved[p.id] || null) !== (draft[p.id] || null)).map(p => ({ pid: p.id, from: saved[p.id] || null, to: draft[p.id] || null })), [saved, draft, people]);
+  const diffs = useMemo(() => people.filter(p => (saved[p.id] || null) !== (draft[p.id] || null)).map(p => ({ pid: p.id, from: saved[p.id] || null, to: draft[p.id] || null })), [saved, draft, people]);
+  const noteChanges = useMemo(() => [...new Set([...Object.keys(notes), ...Object.keys(savedNotes)].map(Number))].filter(pid => (notes[pid] || '').trim() !== (savedNotes[pid] || '')).map(pid => ({ pid, note: (notes[pid] || '').trim() })), [notes, savedNotes]);
+  const changes = useMemo(() => diffs.map(c => ({ pid: c.pid, from: c.from === 'DNSK' ? 'DN' as TypeKey : c.from, to: c.to === 'DNSK' ? 'DN' as TypeKey : c.to, ...(c.to === 'DNSK' ? { wk: true } : {}) })), [diffs]);
+  const nChanges = diffs.length + noteChanges.length;
+  // ΔΝ ΣΚ: τι τον κρατά μέσα την Κυριακή (υπηρεσία, ποινή…), οπότε δεν μπαίνει στους εξοδούχους της Κυριακής
+  const sunday = addDays(date, 1);
+  const sunWhy = useCallback((pid: number) => { if (!sat) return null; const d = dutyAt(state, sunday, pid); return d ? d.label + (d.time ? ' από ' + d.time : '') : outBlock(state, sunday, pid); }, [state, sat, sunday]);
+  const backEarly = useMemo(() => returnsOn(state, date).some(b => b.duty), [state, date]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
   const blockedN = people.filter(p => reasons[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !statusesOn(state.statuses, p.id, date).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
-  const set = useCallback((pid: number, v: TypeKey | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
+  const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
+  const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
+  const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
   const byRooms = () => {
     if (!rooms) return;
-    const n: Record<number, TypeKey> = {}; people.forEach(p => { if (p.room != null && rooms.includes(p.room) && !reasons[p.id]) n[p.id] = draft[p.id] === 'DN' ? 'DN' : 'OUT'; }); setDraft(n);
+    const n: Record<number, OutVal> = {}; people.forEach(p => { if (p.room != null && rooms.includes(p.room) && !reasons[p.id]) n[p.id] = draft[p.id] === 'DN' || draft[p.id] === 'DNSK' ? draft[p.id] : 'OUT'; }); setDraft(n);
     const kept = people.filter(p => p.room != null && rooms.includes(p.room) && reasons[p.id]).length;
     toast({ text: 'Πρόταση: θάλαμοι ' + roomsTxt(rooms) + ' έξω (' + Object.keys(n).length + '). ' + kept + ' από αυτούς μένουν λόγω κανόνων και μπαίνουν στους Παραμένοντες.' });
   };
   const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
   const height = useViewportHeight(mobile ? 380 : 330);
-  const c0 = strengthOf(state, date);
-  const awayDelta = changes.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
+  const c0 = strengthOf(state, date, outMin(state.rules));   // «Παρόντες απόψε»: από την ώρα εξόδου
+  const awayDelta = diffs.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
   // όσοι βγαίνουν παρά τους κανόνες ή με ΔΝ χωρίς δικαίωμα: φαίνονται στο «Τι θα αλλάξει» και η αποθήκευση τους επιβεβαιώνει
   const pmO = useMemo(() => personMap(state.people), [state.people]);
   const warns = changes.filter(c => c.to && (reasons[c.pid] || (c.to === 'DN' && dnSet && !pmO.get(c.pid)?.dn))).map(c => ({ pid: c.pid, why: reasons[c.pid] || 'χωρίς δικαίωμα ΔΝ' }));
-  const save = async () => { if (await run({ t: 'outs', date, changes, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + changes.length + ' αλλαγές)', actions: [undoMark()] }); } };
-  const rh = useRowH(mobile ? 96 : 52, mobile ? 96 : 44);
+  // ΔΝ ΣΚ που γυρίζουν Κυριακή πρωί (υπηρεσία ή κάτι άλλο την Κυριακή)
+  const sunBack = diffs.filter(c => c.to === 'DNSK').map(c => ({ pid: c.pid, why: sunWhy(c.pid) })).filter(x => x.why);
+  const save = async () => { if (await run({ t: 'outs', date, changes, notes: noteChanges.length ? noteChanges : undefined, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + nChanges + ' αλλαγές)' + (sunBack.length ? '. Γυρίζουν Κυριακή πρωί: ' + sunBack.map(x => shortName(pmO.get(x.pid)!)).join(', ') : ''), actions: [undoMark()] }); } };
+  const rh = useRowH(mobile ? 136 : 52, mobile ? 136 : 44);
   // Βραδινή εκπαίδευση (Michael, 13/10): η μέρα δεν μετρά στη στέρηση εξόδου κανενός· η λήξη τους μετακινείται μόνη της
   const night = !!state.nightTraining?.[date];
   const setNight = async (on: boolean) => {
@@ -425,17 +473,20 @@ export function OutsScreen() {
   return html`<div>
     <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ. Όσοι έχουν υπηρεσία, ΕΥ, ΣΤΕΠ ή ποινή έχουν ⚠: βγαίνουν μόνο με επιβεβαίωση."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
-    <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b> · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
-      ${changes.length ? html`<${Button} size="sm" variant="ghost" onClick=${() => setDraft(saved)}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${changes.length})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}</div>
+    <details className="note backs-box" open=${backEarly}><summary>Ποιοι γυρίζουν και πότε</summary><${ReturnsList} date=${date}/></details>
+    <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b>${sat ? html` · ΔΝ ΣΚ <b>${cnt('DNSK')}</b>` : null} · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
+      ${nChanges ? html`<${Button} size="sm" variant="ghost" onClick=${() => { setDraft(saved); setNotes(savedNotes); }}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${nChanges})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}</div>
     <div className="toolbar"><${Strip} className="chips" role="group" aria-label="Θάλαμος"><button type="button" className="ui-chip" aria-pressed=${room == null} onClick=${() => setRoom(null)}>Όλοι οι θάλαμοι</button>${roomList.map(r => { const n = people.filter(p => p.room === r); const out = n.filter(p => draft[p.id]).length; return html`<button key=${r} type="button" className="ui-chip" aria-pressed=${room === r} onClick=${() => setRoom(room === r ? null : r)} data-tip=${out + ' από ' + n.length + ' βγαίνουν'}>Θ${r}<span className="cnt">${out}/${n.length}</span></button>`; })}<//>
       <${Segmented} small=${true} value=${sort} onChange=${setSort} items=${[{ value: 'room', label: 'Ανά θάλαμο' }, { value: 'name', label: 'Αλφαβητικά' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/></div>
-    <div className="toolbar"><${Strip} className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι', people.length], ['can', 'Μπορούν να βγουν', people.length - blockedN], ['cant', 'Δεν μπορούν', blockedN], ['sel', 'Επιλεγμένοι', cnt('OUT') + cnt('DN')]].map(([k, l, n]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k as string)}>${l}<span className="cnt">${n}</span></button>`)}<//><${ActiveFilter} parts=${[room != null && 'Θάλαμος ' + room, filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); setRoom(null); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
-    <div className="toolbar"><${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm" disabled=${changes.length > 0}/>${changes.length > 0 && html`<span className="note">Αποθήκευσε πρώτα τις αλλαγές.</span>`}<${TemplateNote} ids=${['outs']}/></div>
-    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date + '|' + room + '|' + sort} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} unit=${unitOf(p, state.settings)} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open} noDn=${dnSet && !p.dn}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
+    <div className="toolbar"><${Strip} className="chips" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι', people.length], ['can', 'Μπορούν να βγουν', people.length - blockedN], ['cant', 'Δεν μπορούν', blockedN], ['sel', 'Επιλεγμένοι', cnt('OUT') + cnt('DN') + cnt('DNSK')]].map(([k, l, n]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k as string)}>${l}<span className="cnt">${n}</span></button>`)}<//><${ActiveFilter} parts=${[room != null && 'Θάλαμος ' + room, filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); setRoom(null); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
+    <div className="toolbar"><${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm" disabled=${nChanges > 0}/>${nChanges > 0 && html`<span className="note">Αποθήκευσε πρώτα τις αλλαγές.</span>`}<${TemplateNote} ids=${['outs']}/></div>
+    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date + '|' + room + '|' + sort} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} unit=${unitOf(p, state.settings)} style=${style} reason=${reasons[p.id]} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open} noDn=${dnSet && !p.dn} sat=${sat} sun=${draft[p.id] === 'DNSK' ? sunWhy(p.id) : null} wkNote=${wkSun.has(p.id)} note=${notes[p.id] || ''} onNote=${setNote}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
     ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>${warns.length ? 'Αποθήκευση παρά τους κανόνες' : 'Αποθήκευση'}<//>`}>
       ${warns.length > 0 && html`<${Alert} tone="warn"><span><b>Παρά τους κανόνες:</b>${warns.map(w => html`<span key=${w.pid}><br/>${shortName(pmO.get(w.pid)!)}: ${w.why}</span>`)}<br/>Με την αποθήκευση το επιβεβαιώνεις.</span><//>`}
-      <ul className="hist">${changes.map(c => html`<li key=${c.pid}><b>${shortName(personMap(state.people).get(c.pid)!)}</b> <span className="muted">${c.from ? TYPES[c.from].label : 'Μένει'} →</span> ${c.to ? html`<${Badge} tone=${TYPES[c.to].tone}>${TYPES[c.to].label}<//>` : 'Μένει'}</li>`)}</ul>
+      ${sunBack.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, γυρίζουν Κυριακή πρωί</b> (δεν μπαίνουν στους εξοδούχους της Κυριακής):${sunBack.map(x => html`<span key=${x.pid}><br/>${shortName(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
+      <ul className="hist">${diffs.map(c => html`<li key=${c.pid}><b>${shortName(pmO.get(c.pid)!)}</b> <span className="muted">${valLbl(c.from)} →</span> ${c.to ? html`<${Badge} tone=${valTone(c.to)}>${valLbl(c.to)}<//>` : 'Μένει'}${c.to === 'DNSK' && !sunWhy(c.pid) ? html` <span className="muted">και Κυριακή εξοδούχος</span>` : null}</li>`)}
+        ${noteChanges.map(n => html`<li key=${'n' + n.pid}><b>${shortName(pmO.get(n.pid)!)}</b> <span className="muted">παρατήρηση →</span> ${n.note ? '«' + n.note + '»' : html`<span className="muted">καμία</span>`}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>
     <//>`}
   </div>`;
