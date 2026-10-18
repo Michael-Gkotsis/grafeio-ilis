@@ -281,7 +281,7 @@ export function PersonSheet({ pid, onClose }: P) {
 }
 
 // Ώρες μιας άδειας που υπάρχει ήδη (π.χ. ήρθε από το Excel χωρίς ώρες)
-function LeaveTimesDialog({ st, onClose }: P) {
+export function LeaveTimesDialog({ st, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const p = personMap(state.people).get(st.pid)!;
   const [f, setF] = useState({ fromTime: st.fromTime || '', toTime: st.toTime || '' });

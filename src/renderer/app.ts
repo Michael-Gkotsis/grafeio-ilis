@@ -21,12 +21,14 @@ import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
-  outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά & ποινές', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
+  outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
   hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
-const NAV_ALL = [...NAV_MAIN, ...NAV_MORE];   // Alt+1 … Alt+9 και Alt+0 (η δέκατη) με αυτή τη σειρά· οι επόμενες μόνο από το μενού
+const NAV_ALL = [...NAV_MAIN, 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· το Ιστορικό μόνο από το μενού
+// οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
+const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
 const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'history', 'templates'];
 
 function useToday() {
@@ -127,7 +129,8 @@ function Shell() {
   }, []);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.
   const go = useCallback((view: string, params?: Record<string, any>) => {
-    const r = cur.current.route; const base = view === r.view ? r.params : params ? {} : memory.current[view] || {};
+    const r = cur.current.route; let base = view === r.view ? r.params : params ? {} : memory.current[view] || {};
+    if (!params && MENU_TAB[view]) base = { ...base, [MENU_TAB[view]]: undefined };
     moveTo({ view, params: { ...base, ...(params || {}) } }, true);
   }, [moveTo]);
   const goBack = useCallback(() => {
