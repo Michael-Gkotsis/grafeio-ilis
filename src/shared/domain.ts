@@ -368,7 +368,8 @@ export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate }
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
 // Στελέχη (καρτέλα «Στελέχη»): ονόματα, θέση, καταστάσεις της ΗΚΑΙ, που ταΐζουν και την ΗΚΑΙ
-export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; phone?: string; role?: string; active: boolean }
+// spec: Ο/Σ · am: αριθμός μητρώου · pos: η σειρά που όρισε ο χρήστης (ιεραρχία· χωρίς pos σε κανέναν, με τη σειρά της ΗΚΑΙ)
+export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.

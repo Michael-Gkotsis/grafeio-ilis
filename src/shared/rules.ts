@@ -6,7 +6,7 @@ import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -890,7 +890,8 @@ export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISO
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
-export interface Hkai { cols: Record<string, Person[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
+// cadre: τα στελέχη ανά στήλη (καρτέλα Στελέχη), για να φαίνονται με ονόματα όπως οι στρατιώτες
+export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
   const onDuty = new Map<number, DutyKind>();
@@ -902,12 +903,12 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const cl = (s.cadreList || []).filter(c => c.active);
   [...HK_OFFICERS, ...HK_NCO].forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
   // κατάσταση στελέχους = στήλη της ΗΚΑΙ: στους κωλυόμενους (υπηρεσία, ΕΥ…) ή στους απόντες (άδειες…)
-  let cadreKol = 0, cadreAway = 0;
+  let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   for (const c of cl) {
     const r = rank[c.hk] ? c.hk : 'Λοχίες'; rank[r].n++;
     const a = cadreAbsOn(s, c.id, date);
     const col = a && cadreAbsOf(a.kind, s.settings.lists)?.[2];
-    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
+    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
   }
   let soldiers = 0; const at = hkMin(s.rules);
   for (const p of activePeople(s)) {
@@ -932,5 +933,5 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     }
   }
   const cadre = cl.length || Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
-  return { cols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
+  return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
 }

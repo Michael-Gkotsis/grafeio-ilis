@@ -843,3 +843,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wpop__acts{display:flex;justify-content:space-between;gap:8px;margin-top:10px}
 .bulkbar__reasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .bulkbar__reasons small{font-size:12px;font-weight:600}
+/* Στελέχη: χειροκίνητη σειρά με σύρσιμο */
+.ptable__row .drag-h{cursor:grab;color:var(--muted-fg);text-align:center;padding:0;user-select:none}
+.ptable__row.is-drag{opacity:.45}
+.ptable__row.is-drop-before{box-shadow:inset 0 3px 0 var(--primary)}
+.ptable__row.is-drop-after{box-shadow:inset 0 -3px 0 var(--primary)}

@@ -7,6 +7,7 @@ import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
+import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
@@ -21,6 +22,7 @@ export type Command =
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
+  | { t: 'orderCadre'; ids: string[] }   // η σειρά των στελεχών, όλα τα id με τη νέα σειρά
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> & { id?: string }; replace?: boolean }   // id: αλλαγή · replace: κόβει όσες πέφτουν στις ίδιες μέρες
   | { t: 'deleteCadreAbs'; id: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
@@ -240,9 +242,17 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!last) throw new Error('Γράψε επώνυμο');
       const old = c0.id ? s.cadreList.find(x => x.id === c0.id) : undefined;
       const x: Cadre = { id: old?.id || 's' + ctx.newId(), rank: (c0.rank || '').trim().toUpperCase(), hk: c0.hk, last, first, active: c0.active ?? old?.active ?? true };
+      if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
-      const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : [...s.cadreList, x];
+      if (old?.pos != null) x.pos = old.pos;
+      // σε χειροκίνητη σειρά το νέο μπαίνει κάτω από τους ίδιους ή ανώτερους βαθμούς (μετά το μετακινεί όπου θέλει)
+      const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : isManualOrder(s.cadreList) ? insertCadre(s.cadreList, x) : [...s.cadreList, x];
       return { state: { ...s, cadreList }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first, files: ['ΗΚΑΙ'] };
+    }
+    case 'orderCadre': {
+      const ids = new Set(c.ids); const by = new Map(s.cadreList.map(x => [x.id, x]));
+      if (ids.size !== c.ids.length || c.ids.length !== s.cadreList.length || c.ids.some(id => !by.has(id))) throw new Error('Άλλαξε η λίστα των στελεχών, δοκίμασε ξανά');
+      return { state: { ...s, cadreList: c.ids.map((id, pos) => ({ ...by.get(id)!, pos })) }, text: 'Άλλαξε η σειρά των στελεχών', files: [] };
     }
     case 'deleteCadre': {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
