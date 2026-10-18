@@ -8,7 +8,7 @@ import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
 import { AddBlockDialog } from './guard';
-import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesOn, strengthOf } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, greekHolidays, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
@@ -38,9 +38,9 @@ export function TodayScreen() {
   // Απόντες σήμερα με τον λόγο και ως πότε· η λίστα τελειώνει στους 12, οι υπόλοιποι στη Δύναμη
   const away = useMemo(() => {
     const out: { p: Person; s: Status }[] = [];
-    activePeople(state).forEach(p => { const x = statusesOn(state.statuses, p.id, today).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
+    const at = hkMin(state.rules); activePeople(state).forEach(p => { const x = statusesFrom(state.statuses, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
-  }, [state.statuses, state.people, today]);
+  }, [state.statuses, state.people, state.rules, today]);
   const empty = frouraEmpty(state, tomorrow);
   // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
   const { ending, endTom, expired, nRec } = useMemo(() => {
