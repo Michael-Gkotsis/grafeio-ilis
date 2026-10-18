@@ -4,7 +4,7 @@ import { ROT, TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, ty
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, activePeople, isHol, DUTY_START, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { hkRowsOf } from '../shared/ranks';
-import { formText, hkRowLabel, unitKindOf } from '../shared/unit';
+import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
@@ -72,7 +72,8 @@ export const frouraEmpty = (s: AppState, date: ISODate) => postsOf(s.settings).f
 // ΗΚΑΙ μπροστινό (δείγμα 15)
 export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
   const nK = HK_K.length, nA = HK_A.length, W = 8 + nK + nA;
-  const rows: (Cell | null)[][] = [[E('ΚΕΤΘ', 'u', 4), E('', '', W - 4)], [E(formText(s.settings, '2Η ΕΠΧΙΑ'), 'u', 4), E('', '', W - 4)],
+  const hd = hkHeadOf(s.settings);
+  const rows: (Cell | null)[][] = [[E(hd[0], 'u', 4), E('', '', W - 4)], [E(hd[1], 'u', 4), E('', '', W - 4)],
     [E('ΚΑΤΑΣΤΑΣΗ', 'ttl big', W)], [E('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(date), 'ttl', W)], [E('', '', W)]];
   const H = (v: string, cs?: number, rs?: number) => E(v, 'b hdr sm', cs, rs);
   rows.push([H('ΒΑΘΜΟΙ', 1, 2), H('Προβλ.', 1, 2), H('ΔΥΝΑΜΗ', 2), H('Σύν.', 1, 2), H('ΚΩΛΥΟΜΕΝΟΙ', nK), H('Σύν. κωλ.', 1, 2), H('ΑΠΟΝΤΕΣ', nA), H('Σύν. απ.', 1, 2), H('Διαθ. εκπ.', 1, 2), H('Μισθοτρ.', 1, 2)]);
@@ -85,10 +86,10 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
     return [E(label, 'b' + (bold ? ' bold' : '')), E(prov || '', st), E(n - att, st), E(att, st), E(n, st), ...k.map(v => E(v || '', st)), E(sk, st), ...a.map(v => E(v || '', st)), E(sa, st), E(n - sa, st), E(c.ab || '', st)];
   };
   const sum = (list: string[]) => { const c: Record<string, number> = {}; let n = 0, att = 0; list.forEach(r => { const x = h.rank[r]; n += x.n; att += x.attached; for (const k in x.c) c[k] = (c[k] || 0) + x.c[k]; }); return { n, att, c }; };
-  const R = hkRowsOf(s.settings.lists), kind = unitKindOf(s.settings);
-  R.off.forEach(r => rows.push(line(hkRowLabel(r, kind), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  const R = hkRowsOf(s.settings.lists);
+  R.off.forEach(r => rows.push(line(hkRowLabel(r, s.settings), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
   let x = sum(R.off); rows.push(line('ΣΥΝΟΛΟ ΑΞΚΩΝ', x.n, x.att, x.c, true, pvOf(R.off)));
-  R.nco.forEach(r => rows.push(line(hkRowLabel(r, kind), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  R.nco.forEach(r => rows.push(line(hkRowLabel(r, s.settings), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
   x = sum(R.nco); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true, pvOf(R.nco)));
   x = sum([...R.off, ...R.nco]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...R.off, ...R.nco])));
   rows.push([E('', '', W)], [E('', '', W - 8), E(s.settings.place + ', ' + hkDate(date), 'c', 8)], [E('', '', W)],

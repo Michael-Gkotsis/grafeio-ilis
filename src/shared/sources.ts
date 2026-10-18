@@ -881,17 +881,17 @@ export const HKAI_DEFAULT: HkaiMap = {
 };
 // Βρίσκει γραμμές και στήλες της ΗΚΑΙ από τα κείμενα του εντύπου. Ό,τι δεν βρεθεί μένει όπως στο δείγμα.
 // own: γραμμές που πρόσθεσες (Ρυθμίσεις): αν τις έχει ήδη το έντυπο, γράφονται εκεί, αλλιώς μπαίνουν νέες (δεν λείπουν)
-export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: string[] = []): { map: HkaiMap; found: number; total: number; missing: string[] } {
+export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: string[] = [], names: Record<string, string> = {}): { map: HkaiMap; found: number; total: number; missing: string[] } {
   const map: HkaiMap = JSON.parse(JSON.stringify(HKAI_DEFAULT)); const missing: string[] = []; let found = 0;
   const rows = sheet.rows.slice(0, 120);
   const rk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z]/g, '');
   const rowOf = (names: string[]) => rows.findIndex(row => (row || []).slice(0, 4).some(v => names.some(n => rk(cellText(v)) === rk(n))));
-  // κάθε βασική γραμμή και με το όνομά της στην ΗΚΑΛ (Ταγματάρχες, Λοχαγοί…)
+  // κάθε βασική γραμμή και με το όνομά της στην ΗΚΑΛ (Ταγματάρχες, Λοχαγοί…) ή το δικό σου (Ρυθμίσεις › «Άλλο όνομα»)
   for (const r of HK_RANKS) {
-    const i = rowOf(hkRowNames(r));
+    const i = rowOf([...hkRowNames(r), ...(names[r] ? [names[r]] : [])]);
     if (i >= 0) { map.rows[r] = i + 1; found++; } else missing.push(r);
   }
-  for (const r of own) { const i = rowOf([r]); if (i >= 0) map.rows[r] = i + 1; }
+  for (const r of own) { const i = rowOf([r, ...(names[r] ? [names[r]] : [])]); if (i >= 0) map.rows[r] = i + 1; }
   // επικεφαλίδες: οι γραμμές πάνω από τον πρώτο βαθμό
   const top = Math.min(...Object.values(map.rows)) - 1;
   const at: Record<string, number> = {};

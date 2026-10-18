@@ -7,7 +7,9 @@ import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
 import { hkaiCounts, hkRankOf } from '../src/shared/rules';
 import { guessHk, hkRowsOf } from '../src/shared/ranks';
-import { unitSettingsFor, unitText } from '../src/shared/unit';
+import { hkRowLabel, unitSettingsFor, unitText } from '../src/shared/unit';
+import { hkaiFront } from '../src/renderer/sheets';
+import { detectHkai } from '../src/shared/sources';
 import { preflight } from '../src/shared/preflight';
 import { fakeState } from './fixtures';
 
@@ -113,5 +115,43 @@ describe('δικές σου γραμμές στην ΗΚΑΙ', () => {
     expect(fr.get('V37')).toMatch(/^ΑΥΛΩΝΑΣ, 12 ΟΚΤ 26$/);
     expect([fr.get('AC17'), fr.get('AC18'), fr.get('AC19'), fr.get('AC20'), fr.get('AC21'), fr.get('AC22'), fr.get('AC23'), fr.get('AC24')]).toEqual(['1', '2', '3', '4', '5', '6', '7', 'ΔΙΑΓΡΑΦΗΚΑΝ']);
     expect(preflight('hkai', s, '2026-10-12').filter(c => c.level === 'err')).toEqual([]);
+  });
+});
+
+describe('άλλο όνομα γραμμής και κεφαλίδα της ΗΚΑΙ (Michael, 18/10)', () => {
+  it('βασική και δική σου γραμμή με άλλο όνομα: στην οθόνη, στο έντυπο, στην αναγνώριση template· το κλειδί μένει', async () => {
+    let s = fakeState(40);
+    s = apply(s, { t: 'saveCadre', cadre: { rank: 'ΙΛΧΟΣ', hk: 'Ίλαρχοι', last: 'ΤΥΧΑΙΟΣ', first: 'ΒΗΤΑΣ' } }, ctx).state;
+    s = apply(s, { t: 'setHkRows', rows: [{ name: 'Λοχαγοί', grp: 'off', after: 'Ίλαρχοι' }], names: { 'Ίλαρχοι': ' Ίλαρχοι  Λοχαγοί ', 'Λοχαγοί': 'Λγοί', 'Άγνωστη': 'Χ', 'Λοχίες': '' }, text: 'ονόματα' }, ctx).state;
+    expect(s.settings.lists!.hkNames).toEqual({ 'Ίλαρχοι': 'Ίλαρχοι Λοχαγοί', 'Λοχαγοί': 'Λγοί' });
+    expect(s.cadreList.find(c => c.rank === 'ΙΛΧΟΣ')!.hk).toBe('Ίλαρχοι');
+    expect([hkRowLabel('Ίλαρχοι', s.settings), hkRowLabel('Επίλαρχοι', s.settings)]).toEqual(['Ίλαρχοι Λοχαγοί', 'Επίλαρχοι']);
+    expect(hkaiFront(s, '2026-10-12', hkaiCounts(s, '2026-10-12')).rows.flat().some(c => c?.v === 'Ίλαρχοι Λοχαγοί')).toBe(true);
+    // στον λόχο το δικό σου όνομα κερδίζει το «Λοχαγοί» του λόχου
+    expect(hkRowLabel('Ίλαρχοι', { ...s.settings, unitKind: 'lochos' })).toBe('Ίλαρχοι Λοχαγοί');
+    const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
+    const fr = await (await Workbook.open(r.data)).sheet(0);
+    expect([fr.get('A17'), fr.get('A18'), fr.get('A19')]).toEqual(['ΕΠΙΛΑΡΧΟΙ', 'ΙΛΑΡΧΟΙ ΛΟΧΑΓΟΙ', 'ΛΓΟΙ']);
+    expect(fr.get('C18')).toBe('1');
+    // το έντυπο που βγήκε, αν γίνει template, βρίσκει τις γραμμές με τα νέα ονόματα
+    const rows = Array.from({ length: 40 }, (_, i) => Array.from({ length: 4 }, (_, c) => fr.get(String.fromCharCode(65 + c) + (i + 1)) || ''));
+    const d = detectHkai({ name: 'x', rows }, 'Αυλώνας', ['Λοχαγοί'], s.settings.lists!.hkNames);
+    expect([d.map.rows['Ίλαρχοι'], d.map.rows['Λοχαγοί']]).toEqual([18, 19]);
+    // σβήνεται η δική σου γραμμή: φεύγει και το όνομά της
+    const t = apply(s, { t: 'setHkRows', rows: [], text: 'γραμμές' }, ctx).state;
+    expect(t.settings.lists!.hkNames).toEqual({ 'Ίλαρχοι': 'Ίλαρχοι Λοχαγοί' });
+  });
+  it('η κεφαλίδα της ΗΚΑΙ: η δική σου (με τις λέξεις του λόχου), αλλιώς του εντύπου', async () => {
+    let s = fakeState(40);
+    const A = async (st: typeof s) => { const fr = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), st, '2026-10-12')).data)).sheet(0); return [fr.get('A1'), fr.get('A2'), fr.get('A3')]; };
+    expect(await A(s)).toEqual(['ΚΕΤΘ', '2Η ΕΠΧΙΑ', 'ΚΑΤΑΣΤΑΣΗ']);
+    s = apply(s, { t: 'setSettings', settings: { hkai: { head: ['ΚΕΝ Αυλώνα', '2η ΕΠΧΙΑ Ν/Σ'] } }, text: 'κεφαλίδα' }, ctx).state;
+    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2Η ΕΠΧΙΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
+    expect(hkaiFront(s, '2026-10-12', hkaiCounts(s, '2026-10-12')).rows[1][0]!.v).toBe('2η ΕΠΧΙΑ Ν/Σ');
+    s = apply(s, { t: 'setSettings', settings: { unitKind: 'lochos' }, text: 'λόχος' }, ctx).state;
+    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2Ο ΤΑΓΜΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
+    // μόνο η 2η γραμμή: η 1η μένει του εντύπου
+    s = apply(s, { t: 'setSettings', settings: { unitKind: 'ili', hkai: { head: ['', '3η ΕΠΧΙΑ'] } }, text: 'κεφαλίδα' }, ctx).state;
+    expect((await A(s)).slice(0, 2)).toEqual(['ΚΕΤΘ', '3Η ΕΠΧΙΑ']);
   });
 });

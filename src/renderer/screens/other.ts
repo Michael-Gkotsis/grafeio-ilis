@@ -26,8 +26,8 @@ import { appTitle } from '../../shared/brand';
 import { EssoCards } from './esso';
 import { LeavesTab } from './leaves';
 import { cadreCountRows, hkRowList, listOf, statusLbl } from '../../shared/ranks';
-import { UNIT, UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
-import { HkRowsCard, UnitKindField } from './hkrows';
+import { UNIT, UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
+import { HkHeadCard, HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 type P = any;
 
@@ -272,6 +272,7 @@ function HkaiMain() {
     <p className="note" style=${{ margin: '8px 0 0' }}>Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο· τα στελέχη από τις καταστάσεις τους στην καρτέλα Στελέχη. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.</p>
   <//>
   <${CadreCard} warn=${!cadre}/>
+  <${HkHeadCard}/>
   <${RequestsLink} date=${date}/>
   <${HkaiMovesCard} date=${date}/>
   <${HkaiManualCard} date=${date}/>
@@ -296,10 +297,10 @@ function CadreCard({ warn }: { warn: boolean }) {
   const list = state.cadreList.filter(x => x.active);
   if (list.length) {
     const by = new Map<string, number>(); list.forEach(x => by.set(hkRowLabel(x.hk), (by.get(hkRowLabel(x.hk)) || 0) + 1));
-    return html`<${Card} title="Στελέχη ανά βαθμό" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('cadre')}>Στελέχη<//>`}>
+    return html`<${Card} title="Στελέχη ανά βαθμό" actions=${html`<${HkRowsButton}/><${Button} size="sm" variant="outline" onClick=${() => nav.go('cadre')}>Στελέχη<//>`}>
       <p className="note" style=${{ margin: 0 }}>${[...by].map(([r, n]) => r + ' ' + n).join(' · ')}. Βγαίνουν από την καρτέλα «Στελέχη», μαζί με τις καταστάσεις τους (κωλυόμενοι, απόντες).</p><//>`;
   }
-  return html`<${Card} title="Στελέχη ανά βαθμό" actions=${!open && html`<${Button} size="sm" variant="outline" onClick=${() => setOpen(true)}>Άλλαξε<//>`}>
+  return html`<${Card} title="Στελέχη ανά βαθμό" actions=${html`<${HkRowsButton}/>${!open && html`<${Button} size="sm" variant="outline" onClick=${() => setOpen(true)}>Άλλαξε<//>`}`}>
     ${warn && html`<${Alert} tone="warn"><span>Δεν έχουν μπει ακόμα. Γράψε πόσοι είναι σε κάθε βαθμό και πάτα «Αποθήκευση», ή πέρασε τα στελέχη με ονόματα στο <button type="button" className="linkish" onClick=${() => nav.go('cadre')}>καρτέλα «Στελέχη»</button>.</span><//>`}
     ${open ? html`<div className="settings-grid">${ranks.map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${c[r] || ''} placeholder="0" onChange=${(e: any) => setC({ ...c, [r]: Math.max(0, +e.target.value || 0) })}/></label>`)}</div>
       <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setSettings', settings: { cadre: c }, text: 'στελέχη ' + HK() }, false)) { toast({ text: 'Αποθηκεύτηκαν τα στελέχη. Ισχύουν για κάθε μέρα.' }); setOpen(false); } }}>Αποθήκευση<//><span className="note">Λοχίες, δεκανείς και στρατιώτες μετρώνται από το προσωπικό.</span></div>`
@@ -484,19 +485,21 @@ function AppearanceCard() {
 
 function SettingsCard() {
   const { state, run, boot } = useStore(); const toast = useToast();
-  const [s, setS] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
+  const [s, setS] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre }, head: [state.settings.hkai?.head?.[0] || '', state.settings.hkai?.head?.[1] || ''] }));
   // άλλος τύπος μονάδας: η κεφαλίδα και ο τίτλος αλλάζουν μαζί («4η ΙΛΗ» → «4ος ΛΟΧΟΣ»), για να τα δεις πριν την αποθήκευση
-  const setKind = (k: UnitKind) => setS({ ...s, unitKind: k, ...unitSettingsFor(s, k) });
+  const setKind = (k: UnitKind) => setS({ ...s, unitKind: k, ...unitSettingsFor(s, k), head: s.head.map(x => unitText(x, k)) });
   const save = async () => {
-    const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
+    const head = s.head.map(x => x.trim()); const hkai = { ...(state.settings.hkai || {}) }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
+    const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre, hkai }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
   };
   return html`<${Card} title="Μονάδα και έντυπα">
     <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
+    <${HkHeadFields} value=${s.head} onChange=${(head: string[]) => setS({ ...s, head })} kind=${s.unitKind}/>
     <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ${HK()}</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
-    <div className="field"><span className="field__label">Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι»)</span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
+    <div className="field"><span className="field__label" style=${{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι») <${HkRowsButton}/></span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
       <span className="field__help">Οι στρατιώτες, δεκανείς και λοχίες μετρώνται από το προσωπικό της εφαρμογής.</span></div>
     <p className="note" style=${{ margin: 0 }}>Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους <b>Θαλάμους και ουλαμούς</b>.</p>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
