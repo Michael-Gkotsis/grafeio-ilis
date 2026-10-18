@@ -1,7 +1,7 @@
 // features/weapons: Οπλισμός (Michael, 17/10: ο αριθμός όπλου βγήκε από την καρτέλα του οπλίτη σε δική του καρτέλα).
 // Όλοι σε δύναμη με τον αριθμό όπλου τους, γραμμένο κατευθείαν στη γραμμή: Enter/↓ πάει στον επόμενο, επικόλληση στήλης
 // από Excel γεμίζει τις επόμενες γραμμές με τη σειρά. Ίδιος αριθμός σε άλλον: ρωτά (μεταφορά ή και στους δύο), δεν μπλοκάρει.
-// Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
+// Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6), «Θέση» του όπλου (ελεύθερο κείμενο, Michael 18/10) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
 // Έξοδος/είσοδος όπλων με λόγο και ώρα (Michael, 18/10): κουμπί στη γραμμή ή τσέκαρε πολλούς· ημερολόγιο στις «Κινήσεις» (weaponMoves.ts).
 import { Fragment, useCallback, useDeferredValue, useMemo, useState, useEffect, memo } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useToast } from '../ui';
@@ -11,17 +11,18 @@ import { ActiveFilter, DateBar } from '../common';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
-import { WEAPON_FILTERS, isOut, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
+import { WEAPON_FILTERS, isOut, normPos, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { listOf } from '../../shared/ranks';
 import { collator, normGreek, translit, norm } from '../../shared/text';
 import { dm, dow } from '../../shared/dates';
 type P = any;
 
-const GRID = '30px 40px 64px minmax(130px,1.4fr) minmax(84px,1fr) minmax(84px,1fr) 80px 86px minmax(84px,.7fr) 98px 128px minmax(280px,1.5fr) 96px minmax(110px,.8fr)';
+const GRID = '30px 40px 64px minmax(130px,1.4fr) minmax(84px,1fr) minmax(84px,1fr) 80px 86px minmax(84px,.7fr) 98px 128px minmax(280px,1.5fr) 96px minmax(110px,.9fr) minmax(110px,.8fr)';
 const focusRow = (f: string, i: number) => { const el = document.querySelector('input[data-wf="' + f + '"][data-wrow="' + i + '"]') as HTMLInputElement | null; if (el) { el.focus(); el.select(); el.scrollIntoView({ block: 'nearest' }); } return !!el; };
-const NORM: Record<'weapon' | 'rack', (v: unknown) => string> = { weapon: normWeapon, rack: normRack };
-const LBL = { weapon: 'Αριθμός όπλου', rack: 'Θέση οπλοβαστού' };
+type WF = 'weapon' | 'rack' | 'wpos';
+const NORM: Record<WF, (v: unknown) => string> = { weapon: normWeapon, rack: normRack, wpos: normPos };
+const LBL: Record<WF, string> = { weapon: 'Αριθμός όπλου', rack: 'Θέση οπλοβαστού', wpos: 'Θέση όπλου' };
 
 // Αριθμός ή θέση οπλοβαστού στη γραμμή: γράφεται όταν φύγεις από το κουτί (Enter, ↑/↓, Tab ή κλικ αλλού)· Esc ξαναφέρνει
 // τον παλιό. Επικόλληση στήλης από Excel: μία τιμή ανά γραμμή, από αυτή και κάτω.
@@ -30,9 +31,9 @@ const WeaponInput = memo(function WeaponInput({ p, i, f = 'weapon', reset, onCom
   const [v, setV] = useState(cur);
   useEffect(() => setV(cur), [cur, reset]);
   const move = (e: any, to: number) => { e.preventDefault(); if (!focusRow(f, to)) e.target.blur(); };
-  return html`<input className="ui-input weapon-input" data-wf=${f} data-wrow=${i} value=${v} placeholder="—" aria-label=${LBL[f as 'weapon'] + ' ' + fullName(p)} spellCheck="false" autoComplete="off"
+  return html`<input className="ui-input weapon-input" data-wf=${f} data-wrow=${i} value=${v} placeholder="—" aria-label=${LBL[f as WF] + ' ' + fullName(p)} spellCheck="false" autoComplete="off"
     onChange=${(e: any) => setV(e.target.value)}
-    onBlur=${() => { if (NORM[f as 'weapon'](v) !== cur) onCommit(p, v, f); }}
+    onBlur=${() => { if (NORM[f as WF](v) !== cur) onCommit(p, v, f); }}
     onKeyDown=${(e: any) => {
       if (e.key === 'Enter' || e.key === 'ArrowDown') move(e, i + 1);
       else if (e.key === 'ArrowUp') move(e, i - 1);
@@ -66,7 +67,7 @@ function notes(p: Person, info: WeaponInfo, lists: P) {
 
 const matchText = (p: Person, q: string) => {
   const n = normGreek(q.trim()); if (!n) return true;
-  const key = normGreek([p.last, p.first, p.father, p.asm, p.rank, p.spec, p.room != null ? 'Θ' + p.room : '', p.wtype || '', p.rack || ''].join(' '));
+  const key = normGreek([p.last, p.first, p.father, p.asm, p.rank, p.spec, p.room != null ? 'Θ' + p.room : '', p.wtype || '', p.rack || '', p.wpos || ''].join(' '));
   const wk = weaponKey(q);
   return n.split(/\s+/).every(t => key.includes(t)) || translit(p.last + ' ' + p.first).includes(norm(q.trim())) || (!!wk && weaponKey(p.weapon).includes(wk));
 };
@@ -120,11 +121,12 @@ export function WeaponsScreen() {
   const save = useCallback(async (changes: WeaponChange[], o: { warn?: string; what?: string; msg?: string } = {}) => {
     if (await run({ t: 'setWeapons', changes, what: o.what }, false) === null) { setReset(n => n + 1); return; }
     const c0 = changes[0]; const one = changes.length === 1 ? state.people.find(p => p.id === c0.pid) : null;
-    const part = c0 && (c0.weapon !== undefined ? (normWeapon(c0.weapon) ? 'όπλο ' + normWeapon(c0.weapon) : 'χωρίς όπλο') : c0.rack !== undefined ? (normRack(c0.rack) ? 'οπλοβαστός ' + normRack(c0.rack) : 'χωρίς θέση οπλοβαστού') : (c0.wtype ? 'τύπος ' + c0.wtype : 'χωρίς τύπο όπλου'));
+    const part = c0 && (c0.weapon !== undefined ? (normWeapon(c0.weapon) ? 'όπλο ' + normWeapon(c0.weapon) : 'χωρίς όπλο') : c0.rack !== undefined ? (normRack(c0.rack) ? 'οπλοβαστός ' + normRack(c0.rack) : 'χωρίς θέση οπλοβαστού') : c0.wpos !== undefined ? (normPos(c0.wpos) ? 'θέση ' + normPos(c0.wpos) : 'χωρίς θέση') : (c0.wtype ? 'τύπος ' + c0.wtype : 'χωρίς τύπο όπλου'));
     const msg = o.msg || (one ? shortName(one) + ': ' + part : 'Οπλισμός: ' + changes.length + ' άτομα');
     toast({ text: html`<span>${msg}${o.warn && html`<br/><b>Προσοχή:</b> ${o.warn}`}</span>`, actions: [undoMark()] });
   }, [run, toast, undoMark, state.people]);
-  const commit = useCallback((p: Person, raw: string, f: 'weapon' | 'rack' = 'weapon') => {
+  const commit = useCallback((p: Person, raw: string, f: WF = 'weapon') => {
+    if (f === 'wpos') { save([{ pid: p.id, wpos: raw }]); return; }
     if (f === 'rack') { const r = normRack(raw); const o = r && p.active ? sameRack(info, p, r) : []; save([{ pid: p.id, rack: r }], { warn: o.length ? 'η θέση ' + r + ' είναι και του ' + o.map(shortName).join(', ') + '.' : undefined }); return; }
     const w = normWeapon(raw);
     const others = w ? sameWeapon(info, p, w) : [];
@@ -132,12 +134,13 @@ export function WeaponsScreen() {
     save([{ pid: p.id, weapon: w }], { warn: w && info.unarmed.has(p.id) ? 'είναι άοπλος κατά τη Σ.Ι. (' + siOf(p, lists).text + ').' : undefined });
   }, [info, save, lists]);
   // Επικόλληση στήλης από Excel: ένας αριθμός ανά γραμμή, από αυτή τη γραμμή και κάτω, με τη σειρά που φαίνεται
-  const paste = useCallback((i: number, vals: string[], f: 'weapon' | 'rack' = 'weapon') => {
+  const paste = useCallback((i: number, vals: string[], f: WF = 'weapon') => {
     const left = vals.length - Math.min(vals.length, rows.length - i);
-    if (f === 'rack') {
-      const ch = vals.slice(0, rows.length - i).map((v, j) => ({ pid: rows[i + j].id, rack: v }));
+    if (f !== 'weapon') {
+      const ch = vals.slice(0, rows.length - i).map((v, j) => ({ pid: rows[i + j].id, [f]: v }));
+      const what = f === 'rack' ? [' θέση οπλοβαστού', ' θέσεις οπλοβαστού'] : [' θέση όπλου', ' θέσεις όπλων'];
       setReset(n => n + 1);
-      save(ch, { what: 'επικόλληση θέσεων', msg: 'Επικόλληση: ' + ch.length + (ch.length === 1 ? ' θέση οπλοβαστού' : ' θέσεις οπλοβαστού') + ' από ' + shortName(rows[i]) + ' και κάτω', warn: left > 0 ? left + ' περίσσεψαν (δεν υπάρχουν άλλες γραμμές)' : undefined });
+      save(ch, { what: 'επικόλληση θέσεων', msg: 'Επικόλληση: ' + ch.length + (ch.length === 1 ? what[0] : what[1]) + ' από ' + shortName(rows[i]) + ' και κάτω', warn: left > 0 ? left + ' περίσσεψαν (δεν υπάρχουν άλλες γραμμές)' : undefined });
       return;
     }
     const changes = vals.slice(0, rows.length - i).map((v, j) => ({ pid: rows[i + j].id, weapon: v }));
@@ -186,8 +189,8 @@ export function WeaponsScreen() {
       ${selOut.length > 0 && html`<${Button} size="sm" variant="outline" onClick=${() => setInFor(selOut.map(m => m.id))}>ΕΝΤΟΣ ${selOut.length} ${selOut.length === 1 ? 'όπλο' : 'όπλα'}…<//>`}
       <${Button} size="sm" variant="ghost" onClick=${() => setSel(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || unit !== 'all' || room != null ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : empty}</div>` :
-    html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1400px' }}>
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται (π.χ. ένας ουλαμός για ΕΚΠ)" checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>Πατρώνυμο</span><span>ΑΣΜ</span>${H('room', 'Θάλαμος')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβαστός')}<span>Παρατήρηση</span></div>
+    html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1510px' }}>
+      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται (π.χ. ένας ουλαμός για ΕΚΠ)" checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>Πατρώνυμο</span><span>ΑΣΜ</span>${H('room', 'Θάλαμος')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβαστός')}<span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">Θέση</span><span>Παρατήρηση</span></div>
       <div className="weapons__body">${rows.map((p, i) => html`<div key=${p.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', info.moves.has(p.id) && 'is-wout')} style=${{ gridTemplateColumns: GRID, cursor: 'default' }} role="row">
         <span><input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + fullName(p)} checked=${sel.has(p.id)} onChange=${() => toggle(p.id)}/></span>
         <span className="num muted">${i + 1}</span><span>${p.rank}</span>
@@ -197,6 +200,7 @@ export function WeaponsScreen() {
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
         <span className="weapon-cell"><${WeaponState} p=${p} info=${info}/></span>
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="rack" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
+        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="wpos" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
         <span className="badges weapon-notes">${notes(p, info, lists)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: shortName(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
       </div>`)}</div>
     </div></div></div>`}<//>`}

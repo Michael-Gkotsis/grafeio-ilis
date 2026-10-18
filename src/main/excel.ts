@@ -157,7 +157,7 @@ export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: stri
 // Οπλισμός: ένα Excel, ένα φύλλο ανά φίλτρο της καρτέλας. Το πρώτο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ και στήλη
 // υπογραφής, για να τυπωθεί ως κατάσταση χρέωσης όπλων· τα υπόλοιπα (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να
 // παραδώσουν) για έλεγχο. Όλα με κεφαλαία.
-const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΤΥΠΟΣ ΟΠΛΟΥ': 11, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΟΠΛΟΒΑΣΤΟΣ': 11, 'ΕΝΤΟΣ / ΕΚΤΟΣ': 28, 'ΥΠΟΓΡΑΦΗ': 20, 'ΛΟΓΟΣ ΕΞΟΔΟΥ': 14, 'ΕΞΟΔΟΣ': 17, 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ': 20, 'ΕΙΣΟΔΟΣ': 17 };
+const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΤΥΠΟΣ ΟΠΛΟΥ': 11, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΟΠΛΟΒΑΣΤΟΣ': 11, 'ΘΕΣΗ': 14, 'ΕΝΤΟΣ / ΕΚΤΟΣ': 28, 'ΥΠΟΓΡΑΦΗ': 20, 'ΛΟΓΟΣ ΕΞΟΔΟΥ': 14, 'ΕΞΟΔΟΣ': 17, 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ': 20, 'ΕΙΣΟΔΟΣ': 17 };
 export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
