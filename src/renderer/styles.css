@@ -772,6 +772,11 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .whod__dayhd{display:flex;flex-direction:column;justify-content:flex-end;gap:2px;font-size:12px;cursor:default}
 .whod__dayhd small{display:flex;gap:2px}.whod__dayhd i{font-style:normal;width:28px;text-align:center;font-size:11px;font-weight:500;opacity:.7}
 .whod__row{height:46px;cursor:default}
+/* Μεγάλοι πίνακες χωρίς VirtualList (Οπλισμός, Ποιος κάνει τι): οι γραμμές εκτός οθόνης δεν στήνονται (στυλ, layout,
+   ζωγραφική) μέχρι να κυλήσεις εκεί. Ίδιο DOM, ίδια συμπεριφορά (focus, Enter στην επόμενη γραμμή, επικόλληση)· το ύψος
+   είναι σταθερό (40px, 46px), οπότε η μπάρα κύλισης δεν πηδά. Μέτρηση: bench/ui, review απόδοσης 18/10. */
+.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:auto;contain-intrinsic-size:auto 40px}
+@media print{.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:visible}}
 .whod__name{display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.2}
 .whod__name .linkish{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
 .whod__name small{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
