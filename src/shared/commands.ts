@@ -50,7 +50,7 @@ export type Command =
   | { t: 'setDutyProfile'; pid: number; off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean; text: string }
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
   // γραμμές της ΗΚΑΙ που πρόσθεσες: τα στελέχη με βαθμό που μαζεύει μια γραμμή πηγαίνουν σε αυτήν (και φεύγουν όταν σβηστεί)
-  | { t: 'setHkRows'; rows: HkRowDef[]; text: string }
+  | { t: 'setHkRows'; rows: HkRowDef[]; names?: Record<string, string>; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
@@ -478,6 +478,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setHkRows': {
       const before = s.settings.lists; const lists = { ...(before || {}), hkRows: c.rows };
       const rows = new Set(hkRowList(lists));
+      // άλλα ονόματα: μόνο για γραμμές που υπάρχουν, χωρίς κενά
+      const names = Object.fromEntries(Object.entries(c.names || before?.hkNames || {}).map(([k, v]) => [k, (v || '').trim().replace(/\s+/g, ' ')]).filter(([k, v]) => v && rows.has(k)));
+      if (Object.keys(names).length) lists.hkNames = names; else delete lists.hkNames;
       const cadreList = s.cadreList.map(x => {
         const claim = hkRowClaim(lists, x.rank);
         if (claim) return claim === x.hk ? x : { ...x, hk: claim };

@@ -7,7 +7,7 @@ import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
-import { hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
+import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, postBy, postOf } from '../shared/rules';
 import { Workbook, colName, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
@@ -90,6 +90,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const R = hkRowsOf(s.settings.lists); const ALL = [...R.off, ...R.nco];
   addHkRows(wb, fr, m, R, warnings);
   hkRowLabels(fr, m, ALL, s);
+  hkHead(fr, m, s);
   fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(d));
   fr.set(m.date, s.settings.place + ', ' + hkDate(d));
   const rowsOf: [string, number][] = ALL.map(r => [r, m.rows[r]] as [string, number]).filter(([, r]) => r > 0);
@@ -176,11 +177,18 @@ function addHkRows(wb: Workbook, fr: Sheet, m: HkaiMap, R: HkRows, warnings: str
 // Τα ονόματα των γραμμών: στον λόχο οι αξιωματικοί (Ταγματάρχες, Λοχαγοί…) και οι δικές σου. Αν αλλάζει έστω μία,
 // γράφονται όλες (με κεφαλαία, όπως ό,τι γράφει η εφαρμογή), για να είναι ίδιες στη στήλη· αλλιώς το έντυπο μένει ως έχει.
 function hkRowLabels(fr: Sheet, m: HkaiMap, rows: string[], s: AppState) {
-  const kind = unitKindOf(s.settings);
   const at = (r: number) => ['A', 'B', 'C', 'D'].find(c => { const v = (fr.get(c + r) || '').trim(); return v && !/^[\d.,]+$/.test(v) && !fr.formula(c + r); });
-  const todo = rows.filter(k => m.rows[k] > 0).map(k => ({ r: m.rows[k], col: at(m.rows[k]) || at(m.rows[k] - 1) || 'A', label: hkRowLabel(k, kind) }));
+  const todo = rows.filter(k => m.rows[k] > 0).map(k => ({ r: m.rows[k], col: at(m.rows[k]) || at(m.rows[k] - 1) || 'A', label: hkRowLabel(k, s.settings) }));
   if (todo.every(x => itemKey(fr.get(x.col + x.r) || '') === itemKey(x.label))) return;
   for (const x of todo) fr.set(x.col + x.r, x.label);
+}
+
+// Η κεφαλίδα της ΗΚΑΙ (Michael, 18/10): οι 2 γραμμές πάνω από το «ΚΑΤΑΣΤΑΣΗ», στη στήλη του τίτλου. Μόνο αν τη γράψεις
+// στις Ρυθμίσεις ή στην ΗΚΑΙ· αλλιώς μένει του εντύπου. Στον λόχο με τις λέξεις του λόχου, όπως όλο το έντυπο.
+function hkHead(fr: Sheet, m: HkaiMap, s: AppState) {
+  const head = (s.settings.hkai?.head || []).map(x => (x || '').trim());
+  const t = /^([A-Z]+)(\d+)$/.exec(m.title); if (!t || !head.some(Boolean) || Number(t[2]) < 3) return;
+  head.slice(0, 2).forEach((x, i) => { if (x) fr.set(t[1] + (Number(t[2]) - 3 + i), formText(s.settings, x)); });
 }
 
 // ------------------------------------------------------------------ Εξοδούχοι / Παραμένοντες (δείγμα 10)

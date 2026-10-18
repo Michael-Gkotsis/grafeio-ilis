@@ -14,7 +14,8 @@ export const reportOf = (st?: Pick<Settings, 'unitKind'> | null) => (unitKindOf(
 // Ο τύπος που ισχύει τώρα, για τα κείμενα της οθόνης (το ορίζει το store όταν φορτώνει ή αλλάζει η κατάσταση,
 // και η διεργασία main για ό,τι γράφει στο ιστορικό)
 let cur: UnitKind = 'ili';
-export const setUnitKind = (st?: Pick<Settings, 'unitKind'> | null) => { cur = unitKindOf(st); };
+let names: Record<string, string> = {};
+export const setUnitKind = (st?: Pick<Settings, 'unitKind' | 'lists'> | null) => { cur = unitKindOf(st); names = st?.lists?.hkNames || {}; };
 // «ΗΚΑΙ» ή «ΗΚΑΛ»
 export const HK = () => (cur === 'lochos' ? 'ΗΚΑΛ' : 'ΗΚΑΙ');
 // η μονάδα σε κείμενα της οθόνης: «Ίλη», «Ίλης», «Όλη η Ίλη»
@@ -22,7 +23,14 @@ export const UNIT = () => (cur === 'lochos' ? { nom: 'Λόχος', gen: 'Λόχ�
 
 // Γραμμές των αξιωματικών στην ΗΚΑΛ (οι άλλες ίδιες). Το κλειδί μένει της ΗΚΑΙ: με αυτό είναι γραμμένα στελέχη, ρυθμίσεις, χειροκίνητα.
 const ROW_LOCHOS: Record<string, string> = { 'Επίλαρχοι': 'Ταγματάρχες', 'Ίλαρχοι': 'Λοχαγοί', 'Ανθυπίλαρχοι-Ανθλγοι': 'Υπολοχαγοί-Ανθυπολοχαγοί' };
-export const hkRowLabel = (key: string, kind: UnitKind = cur) => (kind === 'lochos' && ROW_LOCHOS[key]) || key;
+// Το όνομα μιας γραμμής: το δικό σου (Ρυθμίσεις › «Άλλο όνομα», lists.hkNames), αλλιώς του τύπου μονάδας.
+// st: οι ρυθμίσεις (στα έντυπα), ή μόνο ο τύπος μονάδας με τα ονόματα της οθόνης· χωρίς τίποτα, ό,τι ισχύει στην οθόνη.
+export const hkRowName = (key: string, kind: UnitKind) => (kind === 'lochos' && ROW_LOCHOS[key]) || key;
+export function hkRowLabel(key: string, st: UnitKind | Pick<Settings, 'unitKind' | 'lists'> | null = cur): string {
+  const kind = typeof st === 'string' ? st : unitKindOf(st);
+  const own = (typeof st === 'string' ? names : st?.lists?.hkNames || {})[key]?.trim();
+  return own || hkRowName(key, kind);
+}
 // όλα τα ονόματα που μπορεί να έχει μια βασική γραμμή σε ένα έντυπο (για να βρεθεί σε δικό σου template)
 export const hkRowNames = (key: string) => [key, ...(ROW_LOCHOS[key] ? [ROW_LOCHOS[key]] : [])];
 
@@ -56,3 +64,6 @@ export const unitSettingsFor = (st: Pick<Settings, 'unit' | 'unitName'>, to: Uni
 });
 // Κείμενο εντύπου (π.χ. «ΑΛΧΙΑΣ ΙΛΗΣ» του template) για τη μονάδα των ρυθμίσεων: στην ίλη μένει όπως είναι
 export const formText = (st: Pick<Settings, 'unitKind'> | null | undefined, t: string) => (unitKindOf(st) === 'lochos' ? unitText(t, 'lochos') : t);
+// Η κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά): η δική σου (settings.hkai.head), αλλιώς αυτή του εντύπου
+export const HK_HEAD_FORM = ['ΚΕΤΘ', '2Η ΕΠΧΙΑ'];
+export const hkHeadOf = (st: Pick<Settings, 'unitKind' | 'hkai'>) => HK_HEAD_FORM.map((d, i) => formText(st, (st.hkai?.head?.[i] || '').trim() || d));

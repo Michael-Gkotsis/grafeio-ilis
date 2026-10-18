@@ -176,7 +176,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState): Promise<{ 
 async function hkaiMap(buf: Buffer, b: FormBinding) {
   if (!b.file) return hkaiMapOf(b.cells);
   const wb = await Workbook.open(buf); const front = b.sheet && wb.hasSheet(b.sheet) ? b.sheet : wb.sheetNames()[0];
-  const det = detectHkai({ name: front, rows: await wb.values(front, 120, 40) }, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own]).map;
+  const det = detectHkai({ name: front, rows: await wb.values(front, 120, 40) }, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own], store.state.settings.lists?.hkNames).map;
   return { title: b.cells?.title || det.title, date: b.cells?.date || det.date, rows: { ...det.rows, ...(b.cells?.rows || {}) }, cols: { ...det.cols, ...(b.cells?.cols || {}) } };
 }
 
@@ -617,7 +617,7 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
       const scored = book.sheets.map(x => ({ x, d: detectHkai(x, store.state.settings.place) })).sort((a, c) => c.d.found - a.d.found);
       const front = (keep && has(b.sheet)) || scored[0]?.x.name || names[0];
       const back = (keep && has(b.sheet2)) || find(/ΑΠΟΦΑΣΕΙΣ|ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|ΦΡΟΥΡΕΣ/) || names.find(n => n !== front) || front;
-      const d = detectHkai(book.sheets.find(x => x.name === front)!, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own]);
+      const d = detectHkai(book.sheets.find(x => x.name === front)!, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own], store.state.settings.lists?.hkNames);
       if (keep && b.cells) d.map = { title: b.cells.title || d.map.title, date: b.cells.date || d.map.date, rows: { ...d.map.rows, ...(b.cells.rows || {}) }, cols: { ...d.map.cols, ...(b.cells.cols || {}) } };
       return { ok: true, file: src, custom, sheets: names, sheet: front, sheet2: back, hkai: d };
     }

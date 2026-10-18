@@ -1,6 +1,6 @@
 // Στελέχη (Michael, 17/10): δική τους καρτέλα, χωριστά από το Δυναμολόγιο των οπλιτών. Οι καταστάσεις τους είναι οι
 // στήλες της ΗΚΑΙ (κωλυόμενοι ή απόντες), όχι οι καταστάσεις των οπλιτών. Ίδια λογική για την οθόνη και το Excel.
-import { formText, hkRowLabel, unitKindOf } from './unit';
+import { formText, hkRowLabel } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
 import { cadreAbsOf, hkRowsOf, type UserLists } from './ranks';
@@ -70,8 +70,7 @@ export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).tri
 export const CADRE_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΑΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΕΣΗ', 'ΓΡΑΜΜΗ ΗΚΑΙ'];
 export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const lists = s.settings.lists; const all = orderedCadre(s.cadreList || []);
-  const kind = unitKindOf(s.settings);
-  const cells = (c: Cadre) => [c.rank, c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, kind)];
+  const cells = (c: Cadre) => [c.rank, c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, s.settings)];
   const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col));
   const active = all.filter(c => c.active);
   const now = active.map((c, i) => {

@@ -7,7 +7,7 @@ import {
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { hkRowList } from './ranks';
-import { hkRowLabel, unitKindOf } from './unit';
+import { hkRowLabel } from './unit';
 import type { ExportKind } from './api';
 
 export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' }
@@ -62,7 +62,7 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   // ανά βαθμό: κωλυόμενοι + απόντες δεν ξεπερνούν τη δύναμη
   for (const r of hkRowList(s.settings.lists)) {
     const row = h.rank[r]; const used = [...HK_K, ...HK_A].reduce((a, [k]) => a + (row.c[k] || 0), 0);
-    if (used > row.n) out.push({ level: 'err', text: hkRowLabel(r, unitKindOf(s.settings)) + ': κωλυόμενοι και απόντες (' + used + ') περισσότεροι από τη δύναμη (' + row.n + ')' });
+    if (used > row.n) out.push({ level: 'err', text: hkRowLabel(r, s.settings) + ': κωλυόμενοι και απόντες (' + used + ') περισσότεροι από τη δύναμη (' + row.n + ')' });
   }
   const sum = Object.values(h.rank).reduce((a, r) => a + r.n, 0);
   if (sum !== h.total) out.push({ level: 'err', text: 'Το σύνολο ανά βαθμό (' + sum + ') δεν συμφωνεί με τη δύναμη (' + h.total + ')' });

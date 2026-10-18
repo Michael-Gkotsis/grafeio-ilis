@@ -260,7 +260,8 @@ export const HK_SECTIONS: [HkSection, string, string][] = [
 ];
 export type HkSection = 'veh' | 'acc' | 'grd' | 'prov';
 export interface HkVehicle { type: string; prov?: number; kin?: number; maint?: number; dmg?: number }
-export interface HkaiSettings { off?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number> }
+// head: η κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά, π.χ. ΚΕΤΘ / 2Η ΕΠΧΙΑ)· κενή = ό,τι έχει το έντυπο
+export interface HkaiSettings { off?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number>; head?: string[] }
 export const hkOn = (st: Settings, k: HkSection) => !(st.hkai?.off || []).includes(k);
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
