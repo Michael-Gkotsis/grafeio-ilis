@@ -13,6 +13,8 @@ import { normRack, normWeapon } from './weapons';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
+  // πολλά ιατρικά μαζί για τους ίδιους, με τις ίδιες ημερομηνίες (Michael, 18/10): καθένα σε δική του γραμμή, μία αναίρεση
+  | { t: 'declareMany'; cmds: StatusCmd[] }
   | { t: 'outs'; date: ISODate; changes: { pid: number; from: TypeKey | null; to: TypeKey | null }[]; force?: boolean }
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
@@ -174,6 +176,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       plan.conflicts.forEach(x => { next = setGuard(next, x.date, x.k, null); });
       const verb = cmd.type === 'PUN' ? 'Ποινή (' + punLbl(cmd.kind || PUN_KINDS[0]) + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
       return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
+    }
+    case 'declareMany': {
+      if (!c.cmds.length) throw new Error('Δεν διάλεξες κατάσταση');
+      let next = s; const files: string[] = [], texts: string[] = [];
+      for (const cmd of c.cmds) { const r = run(next, { t: 'declare', cmd }, ctx); next = r.state; files.push(...r.files); texts.push(r.text); }
+      const c0 = c.cmds[0];
+      const text = c.cmds.length === 1 ? texts[0] : 'Δηλώθηκαν ' + c.cmds.map(x => statusLbl(x, s.settings.lists)).join(' + ') + ' ' + range(c0.from, c0.to) + ': ' + who(s, c0.pids);
+      return { state: next, text, files: [...new Set(files)] };
     }
     case 'outs': {
       // Κ-Ε1…Κ-Ε3: ο ίδιος έλεγχος και εδώ, όχι μόνο στην οθόνη

@@ -700,6 +700,14 @@ export function splitOut(st: Status, from: ISODate, to: ISODate, newId: () => st
   if (st.to > to) out.push({ ...st, id: out.length ? newId() : st.id, from: addDays(to, 1) });
   return out;
 }
+// μία γραμμή ανά μέρα: ποιοι βγαίνουν από ποιες θέσεις
+function conflictFiles(s: AppState, conflicts: StatusPlan['conflicts']): PlanFile[] {
+  const pm = personMap(s.people), posts = allPosts(s.settings);
+  return [...new Set(conflicts.map(x => x.date))].sort().map(date => {
+    const cs = conflicts.filter(x => x.date === date);
+    return { fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: cs.map(x => shortName(pm.get(x.pid)!) + ' βγαίνει από ' + postTxt(posts.find(p => p.k === x.k)!)).join(' · ') + '. ' + (cs.length > 1 ? 'Οι θέσεις μένουν' : 'Η θέση μένει') + ' ΚΕΝΗ.' };
+  });
+}
 const rangeTxt = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 // today: οι υπηρεσίες πριν από σήμερα δεν σβήνονται (έγιναν), μόνο αναφέρονται
 export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): StatusPlan {
@@ -742,11 +750,7 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, cmd.to, () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
-  dates.forEach(date => {
-    const cs = conflicts.filter(x => x.date === date);
-    if (!cs.length) return;
-    files.push({ fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: cs.map(x => shortName(pm.get(x.pid)!) + ' βγαίνει από ' + postTxt(posts.find(p => p.k === x.k)!)).join(' · ') + '. ' + (cs.length > 1 ? 'Οι θέσεις μένουν' : 'Η θέση μένει') + ' ΚΕΝΗ.' });
-  });
+  files.push(...conflictFiles(s, conflicts));
   [...new Set(warned.map(x => x.date))].forEach(date => {
     files.push({ fn: 'Υπηρεσίες ' + dm(date), warn: true, desc: warned.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': έχει υπηρεσία. Μένει· έλεγξε αν μπορεί να την κάνει.' });
   });
@@ -754,6 +758,32 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
     files.push({ fn: 'Υπηρεσίες ' + dm(date), desc: past.filter(x => x.date === date).map(x => shortName(pm.get(x.pid)!) + ' (' + postTxt(posts.find(p => p.k === x.k)!) + ')').join(' · ') + ': υπηρεσία που έγινε, μένει.' });
   });
   return { files, overlaps, conflicts, past, blocked, cancels, alongside };
+}
+
+// Πολλά ιατρικά μαζί (declareMany): ένα σχέδιο για όλα. Ίδιες γραμμές μία φορά· οι «+N γραμμές» στο ίδιο αρχείο αθροίζονται
+export function planStatusChanges(s: AppState, cmds: StatusCmd[], today?: ISODate): StatusPlan {
+  const ps = cmds.map(c => planStatusChange(s, c, today));
+  if (ps.length === 1) return ps[0];
+  const uniq = <T>(xs: T[], key: (x: T) => string) => { const seen = new Set<string>(); return xs.filter(x => !seen.has(key(x)) && !!seen.add(key(x))); };
+  const ROWS = /^\+(\d+) γραμμ(?:ή|ές)/;
+  const at = (x: { pid: number; date: ISODate; k: string }) => x.pid + '|' + x.date + '|' + x.k;
+  const conflicts = uniq(ps.flatMap(p => p.conflicts), at), out = new Set(ps.flatMap(p => conflictFiles(s, p.conflicts)).map(f => f.fn + '|' + f.desc));
+  const files: PlanFile[] = [];
+  for (const f of ps.flatMap(p => p.files)) {
+    if (out.has(f.fn + '|' + f.desc)) continue;   // οι γραμμές «βγαίνει από» ξαναφτιάχνονται από όλες μαζί
+
+    const m = ROWS.exec(f.desc), rest = f.desc.replace(ROWS, '');
+    const i = m ? files.findIndex(x => x.fn === f.fn && ROWS.test(x.desc) && x.desc.replace(ROWS, '') === rest) : -1;
+    if (i >= 0) { const k = Number(ROWS.exec(files[i].desc)![1]) + Number(m![1]); files[i] = { ...files[i], desc: '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή') + rest }; }
+    else if (!files.some(x => x.fn === f.fn && x.desc === f.desc)) files.push(f);
+  }
+  files.push(...conflictFiles(s, conflicts));
+  return {
+    files,
+    overlaps: ps.flatMap(p => p.overlaps), blocked: uniq(ps.flatMap(p => p.blocked), x => x.pid + '|' + x.date),
+    conflicts, past: uniq(ps.flatMap(p => p.past), at),
+    cancels: uniq(ps.flatMap(p => p.cancels), x => x.id), alongside: uniq(ps.flatMap(p => p.alongside), x => x.pid + '|' + x.status.id)
+  };
 }
 
 // --------------------------- ΗΚΑΙ (Κ-17) ---------------------------
