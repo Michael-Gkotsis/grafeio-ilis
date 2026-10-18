@@ -213,7 +213,7 @@ export function usePrintFile() {
   }, [toast]);
 }
 const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
-  guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['records', { recTab: 'pun' }],
+  guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['hkai', { hkTab: 'pun' }],
   settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}]
 };
 export function ExportProvider({ children }: P) {
@@ -291,7 +291,7 @@ export function useUsbCopy() {
 /* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
 const SHORTCUTS: [string, string][] = [
   ['Ctrl K', 'Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε'], ['Ctrl F', 'Αναζήτηση στη λίστα της οθόνης'], ['Ctrl N', 'Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)'],
-  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Δυναμολόγιο, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ, Ιστορικό, Ρυθμίσεις'],
+  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Δυναμολόγιο, Στελέχη, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ (με Ποινές, Άδειες, Αιτήσεις), Οπλισμός'], ['Alt 0', 'Ρυθμίσεις'],
   ['Alt ←', 'Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)'], ['Ctrl B', 'Μενού πλήρες ή μόνο εικονίδια'], ['F1', 'Αυτό το υπόμνημα'], ['Esc', 'Κλείσιμο παραθύρου ή καρτέλας']
 ];
 export function LegendDialog({ onClose }: { onClose: () => void }) {
