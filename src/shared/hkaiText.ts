@@ -55,13 +55,12 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
   if (x.from === x.to && !x.fromTime && !back) return 'ΓΙΑ ΤΗΝ ' + a;
   return 'ΑΠΟ ' + a + ' ΕΩΣ ' + (x.from === x.to ? back.trim() : hkDay(x.to) + back);
 }
-// 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα, και οι αιτήσεις άδειας που εγκρίθηκαν τη μέρα (αυτές μόνο τη μέρα
-// της έγκρισης). «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ … ΕΩΣ ….»
+// 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. Όσες ζητήθηκαν με αίτηση δεν ξαναγράφονται: στην πίσω σελίδα
+// μένει μόνο η αίτηση, μία φορά, και απλά εγκρίνεται (Michael, 18/10). «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ … ΕΩΣ ….»
 export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
-  const okOn = new Set(s.requests.filter(r => r.decision === 'ok' && r.decided === d && r.sid).map(r => r.sid!));
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
-  return numbered(s.statuses.filter(x => leave(x) && pm.has(x.pid) && (x.req ? okOn.has(x.id) : x.from === d))
+  return numbered(s.statuses.filter(x => leave(x) && pm.has(x.pid) && !x.req && x.from === d)
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
     .map(({ x, p }) => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }]));
 }
