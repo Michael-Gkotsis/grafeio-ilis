@@ -6,12 +6,16 @@ import fs from 'fs';
 import path from 'path';
 import { Workbook, colName, toSerial, type Sheet } from './xlsx';
 import { writeAll, writeJson, LockedError } from './files';
+import { widthChars } from './textfit';
+import { upper } from '../shared/text';
 import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+// Πλάτος στήλης νέου πίνακα για μία τιμή (Calibri 11 του νέου αρχείου), με τα πραγματικά πλάτη των κεφαλαίων γραμμάτων
+const colChars = (v: unknown) => (v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: 'Calibri', sz: 11, b: false })));
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -222,7 +226,10 @@ async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppS
     ws.setStyle(at, x.gray ? await grayOf(st[x.st]) : st[x.st]);
   }
   for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
-  ws.setColWidths(lay.widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
+  // στήλες πριν από τις ημέρες (Α/Α, βαθμός, επώνυμο, όνομα, σύνολα): όσο θέλει το μεγαλύτερο κείμενο, για να φαίνεται ολόκληρο
+  const widths = { ...lay.widths };
+  for (const x of lay.cells) if (x.c < b.cols.d1 && x.st !== 'title' && x.v != null && typeof x.v !== 'object') widths[x.c + 1] = Math.min(40, Math.max(widths[x.c + 1] || 6, colChars(x.v)));
+  ws.setColWidths(widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
   const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY, expect });
   return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: lay.keys, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
 }
@@ -335,7 +342,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
       const head = await wb.tableStyle('head'), title = await wb.tableStyle('title');
       const c2 = Math.max(...Object.values(b.cols));
       const wide: Record<number, number> = {};
-      const fit = (c: number, v: unknown) => { const n = v != null && typeof v === 'object' ? 10 : String(v ?? '').length; wide[c + 1] = Math.min(32, Math.max(wide[c + 1] || 6, n + 2)); };
+      const fit = (c: number, v: unknown) => { const n = v != null && typeof v === 'object' ? 12 : colChars(v); wide[c + 1] = Math.min(40, Math.max(wide[c + 1] || 6, n)); };
       for (const h of plan.header) {
         ws.set(ref(h.r, h.c), h.v).setStyle(ref(h.r, h.c), h.title ? title : head);
         if (h.title && c2 > h.c) ws.addMerge(ref(h.r, h.c) + ':' + ref(h.r, c2)); else if (!h.title) fit(h.c, h.v);
@@ -383,7 +390,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
         for (const x of rs.cells) { const at = ref(x.r, x.c); if (x.v != null) ws2.set(at, typeof x.v === 'object' ? null : x.v); ws2.setStyle(at, st[x.st]); }
         for (const m of rs.merges) ws2.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
         ws2.setPrintFit(true);
-        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(32, Math.max(8, h.length + 2, ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => String(x.v ?? '').length + 2)))])));
+        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(40, Math.max(8, colChars(h), ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => colChars(x.v))))])));
       }
     }
     // νέος που αναιρέθηκε: η γραμμή του φεύγει (σε φύλλο με πίνακα του Excel απλώς αδειάζει)

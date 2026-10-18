@@ -4,6 +4,7 @@
 // αντιγράφουμε μια γραμμή-πρότυπο και σπρώχνουμε ό,τι είναι από κάτω (υπογραφές κ.λπ.).
 import JSZip from 'jszip';
 import { upper } from '../shared/text';
+import { digitPx, fitText, minSize, type Box, type Fit, type FontSpec } from './textfit';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
@@ -79,6 +80,8 @@ function tailInsert(tail: string, name: string, xml: string): string {
 
 export class Sheet {
   private head = ''; private tail = ''; private rows: Row[] = [];
+  // Κελιά που έγραψε η εφαρμογή: στην αποθήκευση ελέγχεται αν χωράει το κείμενό τους (Workbook.fitSheet)
+  readonly wrote = new Set<string>();
   constructor(public name: string, public path: string, xml: string) {
     const a = xml.indexOf('<sheetData'); const b = xml.indexOf('</sheetData>');
     if (a < 0) throw new Error('Το φύλλο ' + name + ' δεν έχει δεδομένα');
@@ -139,7 +142,7 @@ export class Sheet {
     if (v == null || v === '') { x.attrs = a; x.inner = ''; x.selfClose = true; return this; }
     if (typeof v === 'number') { x.attrs = a; x.inner = `<v>${v}</v>`; }
     else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(text(v))}</t></is>`; }
-    x.selfClose = false; return this;
+    x.selfClose = false; this.wrote.add(ref); return this;
   }
   // Τύπος σε καινούργιο κελί (χωρίς «=»): ο Excel τον υπολογίζει στο άνοιγμα (fullCalcOnLoad στο save)
   setFormula(ref: string, f: string): this {
@@ -149,8 +152,23 @@ export class Sheet {
   setRuns(ref: string, runs: string): this {
     const x = this.cell(ref)!;
     if (x.inner.includes('<f')) throw new Error(`Το κελί ${this.name}!${ref} έχει τύπο και δεν αλλάζει`);
-    x.attrs = setAttr(x.attrs, 't', 'inlineStr'); x.inner = `<is>${runs}</is>`; x.selfClose = false; return this;
+    x.attrs = setAttr(x.attrs, 't', 'inlineStr'); x.inner = `<is>${runs}</is>`; x.selfClose = false; this.wrote.add(ref); return this;
   }
+  // Μέγεθος γραμμάτων σε όλα τα κομμάτια ενός κειμένου με μορφή (setRuns)
+  sizeRuns(ref: string, sz: number): this {
+    const x = this.cell(ref, false); if (x) x.inner = x.inner.replace(/<sz val="[^"]*"\/>/g, `<sz val="${sz}"/>`);
+    return this;
+  }
+  // Όλα τα κελιά με τιμή, για έλεγχο χωρητικότητας σε αρχείο που δεν έγραψε το Sheet.set (ExcelJS)
+  markAll(): this { for (const row of this.rows) for (const c of row.cells) if (c.inner) this.wrote.add(colName(c.col) + row.r); return this; }
+  // Τιμή όπως είναι στο XML: τύπος (t), στυλ και περιεχόμενο· null για κενό
+  raw(ref: string): { t: string | null; s: number | null; inner: string } | null {
+    const x = this.cell(ref, false); if (!x || !x.inner || /^<v\/>$|^<is\/>$/.test(x.inner)) return null;
+    const s = attr(x.attrs, 's'); return { t: attr(x.attrs, 't'), s: s == null ? null : Number(s), inner: x.inner };
+  }
+  // Τελευταία στήλη με κελί σε κάποια γραμμή (ή συγχώνευση)
+  lastCol(): number { let n = 0; for (const row of this.rows) for (const c of row.cells) if (c.col > n) n = c.col; for (const m of this.merges()) if (m.c2 > n) n = m.c2; return n; }
+  rowHidden(r: number): boolean { return /^(1|true)$/.test(attr(this.row(r, false)?.attrs || '', 'hidden') || ''); }
   // Συγχώνευση που ξεκινά από το κελί (π.χ. G11:K11)
   mergeAt(ref: string): { c1: number; r1: number; c2: number; r2: number } | null {
     const { c, r } = splitRef(ref);
@@ -410,7 +428,7 @@ export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
   private sst: string[] | null = null;
-  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number> } | null = null;
+  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number>; fitted?: Map<string, number> } | null = null;
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -590,6 +608,129 @@ export class Workbook {
     return this.xfLike(base ?? 0, st.centered, x => withAlign(x, { horizontal: 'center', vertical: 'center' }));
   }
 
+  // Γραμματοσειρά όπως η id σε άλλο μέγεθος
+  private fontSized(id: number, sz: number): number {
+    const fonts = this.part('fonts'); const base = fonts.items[id] || fonts.items[0] || '<font><sz val="11"/><name val="Calibri"/></font>';
+    const parts = new Map<string, string>();
+    for (const m of base.replace(/^<font\b[^>]*>/, '').matchAll(/<(\w+)\b[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g)) parts.set(m[1], m[0]);
+    parts.set('sz', `<sz val="${sz}"/>`);
+    return fonts.add('<font>' + FONT_ORDER.map(k => parts.get(k) || '').join('') + '</font>');
+  }
+  // Στυλ όπως το base με άλλο μέγεθος γραμμάτων ή/και αναδίπλωση (κρατά πλαίσια, στοίχιση, γέμισμα, μορφή αριθμού)
+  private fitStyle(base: number, fontId: number, sz: number | null, wrap: boolean): number {
+    const st = this.styles!; st.fitted = st.fitted || new Map();
+    const key = base + ':' + sz + ':' + wrap; if (st.fitted.has(key)) return st.fitted.get(key)!;
+    let x = this.xfList(st.xml)[base] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
+    if (sz != null) { const fid = this.fontSized(fontId, sz); x = x.replace(/^<xf\b[^>]*?(?=\/?>)/, a => setAttr(setAttr(a, 'fontId', String(fid)), 'applyFont', '1')); }
+    if (wrap) x = withAlign(x, { wrapText: '1' });
+    const idx = this.addXf(x); st.fitted.set(key, idx); return idx;
+  }
+  // Τελευταία στήλη της περιοχής εκτύπωσης του φύλλου (Infinity αν δεν έχει)
+  private printLastCol(sheet: string): number {
+    const i = this.names.findIndex(x => x.name === sheet);
+    const m = [...this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)].find(x => attr(x[1], 'name') === '_xlnm.Print_Area' && attr(x[1], 'localSheetId') === String(i));
+    if (!m) return Infinity;
+    const cols = [...unesc(m[2]).matchAll(/!\$?([A-Z]+)\$?\d+(?::\$?([A-Z]+)\$?\d+)?/g)].map(x => colNum(x[2] || x[1]));
+    return cols.length ? Math.max(...cols) : Infinity;
+  }
+  // Ό,τι έγραψε η εφαρμογή πρέπει να φαίνεται ολόκληρο μέσα στο κελί του (ή στη συγχώνευση), χωρίς να κόβεται ή να
+  // βγαίνει πάνω σε άλλα κελιά, πλαίσια ή έξω από την περιοχή εκτύπωσης (Michael, 18/10). Η διάταξη του εντύπου μένει ίδια:
+  // λίγο μικρότερα γράμματα ή αναδίπλωση στο ύψος που έχει, και μόνο αν δεν φτάνει ψηλώνει η γραμμή (fitText).
+  // Κείμενο χωρίς πλαίσιο στοιχισμένο αριστερά απλώνεται, όπως στο Excel, στα άδεια κελιά δεξιά του ως την άκρη της εκτύπωσης.
+  private async fitSheet(ws: Sheet, refs: Iterable<string>): Promise<void> {
+    const st = await this.loadStyles();
+    const xfs = this.xfList(st.xml); const fonts = this.part('fonts').items; const borders = this.part('borders').items;
+    const fontOf = (i: number): FontSpec => {
+      const f = fonts[i] ?? fonts[0] ?? '';
+      return { name: attr(/<name\b[^>]*>/.exec(f)?.[0] || '', 'val') || 'Calibri', sz: Number(attr(/<sz\b[^>]*>/.exec(f)?.[0] || '', 'val') || 11), b: /<b\/>|<b val="(1|true)"\/>/.test(f) };
+    };
+    const info = (s: number | null) => {
+      const x = xfs[s ?? 0] || ''; const open = x.slice(0, x.indexOf('>') + 1); const al = /<alignment\b[^>]*>/.exec(x)?.[0] || '';
+      const bd = borders[Number(attr(open, 'borderId') || 0)] || '';
+      return { fontId: Number(attr(open, 'fontId') || 0), h: attr(al, 'horizontal') || 'general', wrap: /^(1|true)$/.test(attr(al, 'wrapText') || ''),
+        rot: Number(attr(al, 'textRotation') || 0), l: /<(left|start)\b[^>]*\sstyle="/.test(bd), r: /<(right|end)\b[^>]*\sstyle="/.test(bd) };
+    };
+    const mdw = digitPx(fontOf(0));
+    const colPx = (c: number) => Math.floor(ws.colWidth(c) * mdw);
+    const merges = ws.merges(); const top = new Map<string, typeof merges[number]>(); const inside = new Set<string>();
+    for (const m of merges) for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) (r === m.r1 && c === m.c1 ? top.set(colName(c) + r, m) : inside.add(colName(c) + r));
+    const last = Math.min(this.printLastCol(ws.name), ws.lastCol());
+    const sst = await this.sharedStrings();
+    type Item = { ref: string; t: string; num: boolean; rich: boolean; s: number; k: ReturnType<typeof info>; font: FontSpec; box: Box; own: number; r2: number; base: number; key: string; r: number; fit: Fit | null };
+    const items: Item[] = [];
+    const fitOf = (t: string, font: FontSpec, box: Box, own: number, min?: number) => {
+      const fit = fitText(t, font, box, min);
+      // με αναδίπλωση το κείμενο δεν απλώνεται πια στα διπλανά κελιά: οι γραμμές μετράνε στο δικό του πλάτος
+      return fit?.wrap && !box.wrap && box.w > own - 6 ? fitText(t, font, { ...box, w: own - 6 }, min) : fit;
+    };
+    for (const ref of refs) {
+      const x = ws.raw(ref); if (!x || x.inner.includes('<f') || inside.has(ref)) continue;
+      let t: string, num = false; const rich = x.t === 'inlineStr' && x.inner.includes('<r>');
+      if (x.t === 'inlineStr') t = texts(x.inner);
+      else if (x.t === 's') t = sst[Number(/<v>([^<]*)<\/v>/.exec(x.inner)?.[1])] ?? '';
+      else if (x.t == null || x.t === 'n') { const v = /<v>([^<]*)<\/v>/.exec(x.inner)?.[1]; if (v == null || v === '') continue; t = (await this.isDateStyle(x.s)) ? '00/00/0000' : String(Number(v)); num = true; }
+      else continue;
+      if (!t.trim()) continue;
+      const k = info(x.s); if (k.rot) continue;
+      const { c, r } = splitRef(ref); const m = top.get(ref) || { c1: c, r1: r, c2: c, r2: r };
+      let w = 0, h = 0, hidden = false;
+      for (let i = m.c1; i <= m.c2; i++) w += colPx(i);
+      const own = w;
+      for (let i = m.r1; i <= m.r2; i++) { if (ws.rowHidden(i)) hidden = true; h += ws.rowHeight(i); }
+      if (hidden || w <= 0) continue;
+      // άπλωμα σε άδεια κελιά δίπλα (μόνο κείμενο σε ένα κελί, χωρίς αναδίπλωση)
+      if (!top.has(ref) && !k.wrap && !num) {
+        const side = (dir: 1 | -1) => {
+          let px = 0; let prev = k;
+          for (let i = c + dir; i >= 1 && i <= last; i += dir) {
+            const nr = colName(i) + r; if (ws.raw(nr) || top.has(nr) || inside.has(nr)) break;
+            const nk = info(ws.style(nr));
+            if (dir > 0 ? prev.r || nk.l : prev.l || nk.r) break;
+            px += colPx(i); prev = nk;
+          }
+          return px;
+        };
+        if (k.h === 'general' || k.h === 'left') w += side(1);
+        else if (k.h === 'right') w += side(-1);
+        else if (k.h === 'center') w += 2 * Math.min(side(1), side(-1));
+      }
+      const font = fontOf(k.fontId);
+      if (rich) { const sz = Number(/<sz val="([^"]*)"\/>/.exec(x.inner)?.[1]); if (sz > 0) font.sz = sz; }
+      const box: Box = { w: w - 6, h, wrap: k.wrap, num };
+      items.push({ ref, t, num, rich, s: x.s ?? 0, k, font, box, own, r2: m.r2, base: ws.rowHeight(m.r2), key: [c, m.c2 - m.c1, m.r2 - m.r1, x.s, rich].join(':'), r, fit: fitOf(t, font, box, own) });
+    }
+    // Κελιά της ίδιας στήλης με το ίδιο στυλ, το ένα κάτω από το άλλο (ονόματα μιας λίστας, θαλαμοφύλακες ανά 3 γραμμές):
+    // όλα με το ίδιο μέγεθος γραμμάτων, για να στοιχίζονται: το μεγαλύτερο που χωράει σε όλα χωρίς να ψηλώσει η γραμμή.
+    // Όσα δεν χωράνε ούτε στο minSize αναδιπλώνονται σε αυτό το μέγεθος και ψηλώνει μόνο η δική τους γραμμή.
+    const groups = new Map<string, Item[]>();
+    for (const it of items) groups.set(it.key, [...(groups.get(it.key) || []), it]);
+    for (const list of groups.values()) {
+      list.sort((a, b) => a.r - b.r);
+      const runs: Item[][] = [];
+      for (const it of list) { const run = runs[runs.length - 1]; if (run && it.r - run[run.length - 1].r <= 3) run.push(it); else runs.push([it]); }
+      for (const run of runs) {
+        if (run.length < 2 || run[0].num) continue;
+        const floor = minSize(run[0].font.sz);
+        const ok = run.filter(it => !it.fit || (!it.fit.grow && it.fit.sz >= floor));
+        if (!ok.length) continue;
+        const g = Math.min(...ok.map(it => (it.fit ? it.fit.sz : it.font.sz)));
+        for (const it of run) {
+          const was = it.fit ? it.fit.sz : it.font.sz; if (was === g) continue;
+          const f = fitOf(it.t, { ...it.font, sz: g }, it.box, it.own, g);
+          it.fit = f || { sz: g, wrap: it.fit?.wrap ?? it.k.wrap, grow: 0 };
+        }
+      }
+    }
+    for (const it of items) {
+      const fit = it.fit; if (!fit) continue;
+      const sz = fit.sz !== it.font.sz ? fit.sz : null;
+      if (sz != null || fit.wrap !== it.k.wrap) ws.setStyle(it.ref, this.fitStyle(it.s, it.k.fontId, it.rich ? null : sz, fit.wrap));
+      if (it.rich && sz != null) ws.sizeRuns(it.ref, sz);
+      const want = Math.round((it.base + fit.grow) * 100) / 100;
+      if (fit.grow > 0 && want > ws.rowHeight(it.r2)) ws.setRowHeight(it.r2, want);
+    }
+  }
+
   // Κείμενο σε γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ: 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ). Κρατά πλαίσιο και γραμματοσειρά του κελιού:
   // κάθε κομμάτι παίρνει τη γραμματοσειρά του κελιού (αλλιώς ο Excel βάζει την προεπιλεγμένη του βιβλίου), αναδιπλώνεται,
   // και η γραμμή ψηλώνει όσο χρειάζεται (ο Excel δεν το κάνει μόνος του σε συγχωνευμένα κελιά). Άδειο = σβήνει το κελί.
@@ -699,6 +840,7 @@ export class Workbook {
       const plain = unesc(xml);
       if (this.moved.some(x => plain.includes(x.sheet + '!') || plain.includes(x.sheet.replace(/'/g, "''") + "'!"))) await this.sheet(e.name);
     }
+    for (const s of this.sheets.values()) if (s.wrote.size) { await this.fitSheet(s, s.wrote); s.wrote.clear(); }
     for (const [path, s] of this.sheets) this.zip.file(path, s.toXml());
     if (this.styles?.dirty) this.zip.file('xl/styles.xml', this.styles.xml);
     // πίνακες: όσοι περιέχουν τη γραμμή μεγαλώνουν, όσοι είναι πιο κάτω κατεβαίνουν ολόκληροι
@@ -744,6 +886,13 @@ export class Workbook {
     this.zip.file('xl/workbook.xml', wbx);
     return this.zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   }
+}
+
+// Αρχείο που έφτιαξε το ExcelJS: κάθε κελί με τιμή να φαίνεται ολόκληρο (fitSheet)
+export async function fitBook(buf: Buffer | Uint8Array): Promise<Buffer> {
+  const wb = await Workbook.open(buf);
+  for (const n of wb.sheetNames()) (await wb.sheet(n)).markAll();
+  return wb.save();
 }
 
 // Ένα αρχείο με πολλά φύλλα από ήδη συμπληρωμένα αρχεία του ίδιου template (π.χ. ΦΡΟΥΡΑ ΠΣΚ: ένα φύλλο ανά ημέρα).
