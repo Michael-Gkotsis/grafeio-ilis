@@ -40,11 +40,12 @@ describe('μέρες χωρίς υπηρεσία', () => {
     expect(seen).not.toContain(3);
     expect(seen.length).toBeGreaterThan(5);
   });
-  it('ο μόνιμος Λ/Υ δεν μπαίνει μόνος του εκείνη τη μέρα· η θέση γεμίζει με τη σειρά', () => {
+  it('ο μόνιμος Λ/Υ μπαίνει πάντα (Michael, 18/10), και εκείνη τη μέρα, με προειδοποίηση', () => {
     let s = off(4, [6]);
     s = apply(s, { t: 'setSettings', settings: { fixed: { ly: 4 } }, text: '' }, ctx).state;
-    expect(fillDay(s, SAT).guards[SAT].ly).not.toBe(4);
-    expect(fillDay(s, SAT).guards[SAT].ly).toBeTruthy();
+    const r = fillDay(s, SAT);
+    expect(r.guards[SAT].ly).toBe(4);
+    expect(r.warn.join(' ')).toMatch(/Μόνιμος Λ\/Υ .*μπήκε παρά τον κανόνα \(Δεν κάνει υπηρεσία Σάββατο\)/);
     expect(fillDay(s, TUE).guards[TUE].ly).toBe(4);
   });
   it('με το χέρι μπαίνει μόνο με αιτία, και φαίνεται ως προειδοποίηση', () => {
