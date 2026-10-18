@@ -84,6 +84,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .ui-input:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
 .ui-input::placeholder{color:var(--muted-fg)}
 .ui-check{width:18px;height:18px;accent-color:var(--primary);flex:none;cursor:pointer}
+.ui-checkrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap}
 .strict-sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;padding:0 4px}
 .ui-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);min-width:0}
 .ui-card__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:48px;padding:8px 16px;border-bottom:1px solid var(--border)}
@@ -490,6 +491,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .sigrid tr.is-sub td:first-child{padding-left:22px}
 .sigrid tr.is-cat td:first-child{padding-left:40px;font-size:12px}
 .sigrid td.is-set{background:var(--hover)}
+.sigrid tr.sigrid__sec th{text-align:left;font-size:12px;font-weight:700;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;padding-top:14px}
 .sigrid__tag{display:block;font-weight:400;font-size:11px}
 .capgrid{display:flex;flex-wrap:wrap;gap:6px}
 .capgrid label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}

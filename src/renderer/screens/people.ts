@@ -6,9 +6,9 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, TIMES_HELP, TimeField } from '../common';
 import { hasTimes, normTime, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { TYPES, TYPE_KEYS, RECORD_CATS, CAP_KINDS, CAP_ACC, KIND_LBL, KIND_NAME, WEEK, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { baseTotal, capsOf, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
-import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
+import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, DOW, DOW_FULL } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
 import { SiField } from './si';
@@ -27,15 +27,16 @@ const CAT_NAME: Record<string, string> = Object.fromEntries(CATS);
 const STEPS = ['Στρατιώτης', 'Κατάσταση', 'Πότε', 'Τι θα αλλάξει'];
 interface StatusPick { key: string; cat: string; type: TypeKey; kind?: string; short: string; long: string; help: string }
 // Όλες οι καταστάσεις σε μία λίστα: κάθε είδος άδειας και ποινής χωριστά, και τα δικά σου ιατρικά δίπλα στα βασικά
-function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: string; like?: string; warn?: boolean }[]): StatusPick[] {
+function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: string; like?: string; warn?: boolean }[], sum: (s: Pick<Status, 'type' | 'kind'>) => string): StatusPick[] {
   const out: StatusPick[] = [];
   for (const [c] of CATS) for (const k of TYPE_KEYS.filter(x => TYPES[x].cat === c)) {
     const t = TYPES[k];
     if (k === 'LEAVE') leaveKinds.forEach(n => out.push({ key: 'LEAVE:' + n, cat: c, type: k, kind: n, short: n === 'Κανονική' ? t.label : n, long: n + ' άδεια', help: effects(t) }));
-    else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: effects(t) + ' · ισχύει αμέσως και γράφεται στην ΗΚΑΙ (4. Ποινές)' }));
-    else out.push({ key: k, cat: c, type: k, short: t.label, long: t.long, help: effects(t) });
+    else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: sum({ type: k, kind: n }) + ' · ισχύει αμέσως και γράφεται στην ΗΚΑΙ (4. Ποινές)' }));
+    else out.push({ key: k, cat: c, type: k, short: t.label, long: t.long, help: sum({ type: k }) });
+    // τα δικά σου ιατρικά: ό,τι όρισες στις Υπηρεσίες και αργίες (Michael, 18/10)
     if (c === 'med' && k === TYPE_KEYS.filter(x => TYPES[x].cat === 'med').slice(-1)[0])
-      meds.forEach(m => out.push({ key: 'm:' + m.name, cat: c, type: m.like as TypeKey, kind: m.name, short: m.name, long: m.warn ? 'Μόνο προειδοποίηση' : 'Σαν ' + TYPES[m.like as TypeKey].label, help: m.warn ? 'Χωρίς περιορισμούς· όταν μπαίνει σε υπηρεσία βγαίνει προειδοποίηση' : effects(TYPES[m.like as TypeKey]) }));
+      meds.forEach(m => out.push({ key: 'm:' + m.name, cat: c, type: m.like as TypeKey, kind: m.name, short: m.name, long: m.warn ? 'Μόνο προειδοποίηση' : 'Δικό σου ιατρικό', help: sum({ type: m.like as TypeKey, kind: m.name }) + (m.warn ? ' · προειδοποίηση όταν μπαίνει σε υπηρεσία' : '') }));
   }
   return out;
 }
@@ -406,7 +407,10 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   // δικά σου ιατρικά (Ρυθμίσεις › Λίστες): στη γραμμή «Ιατρικά» δίπλα στα βασικά· κρατούν τον βασικό τύπο και το όνομά τους στο «είδος»
   const meds = medKinds(state.settings.lists);
   const med = !hasKind ? meds.find(m => m.like === cmd.type && m.name === cmd.kind) : undefined;
-  const picks = useMemo(() => statusPicks(punKinds, leaveKinds, meds), [state.settings.lists]);
+  const picks = useMemo(() => {
+    const bl = (blocksOf(state.settings) || state.settings.blocks) as BlockDef[];
+    return statusPicks(punKinds, leaveKinds, meds, x => statSummary(x, bl, state.settings.lists));
+  }, [state.settings]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ιατρικά: ένα ή περισσότερα μαζί για τον ίδιο λόγο (Michael, 18/10)· καθένα γράφεται σε δική του γραμμή στο Excel
   const [medSel, setMedSel] = useState<string[]>(() => (initial.type && TYPES[initial.type as TypeKey]?.cat === 'med' ? [meds.some(m => m.like === initial.type && m.name === initial.kind) ? 'm:' + initial.kind : initial.type] : []));
   const medPicks = t.cat === 'med' ? picks.filter(x => medSel.includes(x.key)) : [];
