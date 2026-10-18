@@ -44,20 +44,18 @@ function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: str
 // φαίνονται μόνο στα αντίστοιχα φίλτρα, με μία στήλη ακόμα (τι και από πότε έως πότε)· τα ιατρικά στα «Ιατρικά και ποινές».
 const COLS: [string, string][] = [['rank', 'Βαθμός'], ['spec', 'Ο/Σ'], ['last', 'Επίθετο'], ['first', 'Όνομα'], ['father', 'Πατρώνυμο'], ['asm', 'ΑΣΜ'], ['phone', 'Τηλέφωνο'], ['room', 'Θάλαμος'], ['post', 'Πόστο'], ['role', 'Ρόλος'], ['si', 'Σ.Ι.'], ['dn', 'ΔΝ']];
 // στις άδειες/ποινές η στήλη της κατάστασης μπαίνει μετά το πατρώνυμο, για να φαίνεται χωρίς κύλιση
-const HEAD_COLS = '36px 44px 84px 60px minmax(160px,1.6fr) minmax(100px,1fr) minmax(100px,1fr)', TAIL_COLS = ' 96px 106px 70px minmax(76px,.7fr) minmax(76px,.7fr) 104px 40px';
+const HEAD_COLS = '44px 84px 60px minmax(160px,1.6fr) minmax(100px,1fr) minmax(100px,1fr)', TAIL_COLS = ' 96px 106px 70px minmax(76px,.7fr) minmax(76px,.7fr) 104px 40px';
 const GRID = HEAD_COLS + TAIL_COLS, GRID_ST = HEAD_COLS + ' minmax(220px,1.6fr)' + TAIL_COLS;
 const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
-const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, checked, selected, onToggle, onOpen }: P) {
+const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen }: P) {
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
-    <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
     <span className="num muted">${n}</span><span>${p.rank}</span><span>${p.spec}</span><span><b>${p.last}</b></span><span>${p.first}</span><span>${p.father}</span>
     ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
     <span className="num">${p.asm}</span><span className="num">${p.phone}</span><span>${p.room ?? ''}</span><span>${p.post || ''}</span><span>${p.role || ''}</span>
     <span>${p.si ? siOf(p, lists).text : ''}</span><span>${p.dn ? '✓' : ''}</span></div>`;
 });
-const PersonCard = memo(function PersonCard({ p, style, st, lists, checked, onToggle, onOpen }: P) {
+const PersonCard = memo(function PersonCard({ p, style, st, lists, onOpen }: P) {
   return html`<div className="pcard" style=${style} onClick=${() => onOpen(p.id)}>
-    <span onClick=${(e: any) => e.stopPropagation()}><input type="checkbox" className="ui-check" checked=${checked} aria-label=${'Επιλογή ' + fullName(p)} onChange=${() => onToggle(p.id)}/></span>
     <div><b>${p.rank} ${plainName(p)}</b><small>${[p.father && 'του ' + p.father, p.spec, roomTxt(p), p.phone, p.si && siOf(p, lists).text, p.post && 'πόστο ' + p.post, p.dn && 'ΔΝ'].filter(Boolean).join(' · ')}</small></div>
     ${st && html`<${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//>`}</div>`;
 });
@@ -77,7 +75,6 @@ export function PeopleScreen() {
   const sort: { k: string; dir: number } = nav.params.sort || DEF_SORT;
   const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room });
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit });
-  const [selected, setSelected] = useState(() => new Set<number>());
   const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false); const [xl, setXl] = useState(false);
   // ουλαμοί από τις Ρυθμίσεις › Θάλαμοι και ουλαμοί (προεπιλογή 1–4 → 1ος, 5–8 → 2ος)
   const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
@@ -116,12 +113,10 @@ export function PeopleScreen() {
     return r;
   }, [dq, filter, unit, room, sort, listFor, lists]);
   const stOf = (p: Person) => (withSt ? filterStatus(filter as RosterFilter, ssOf.get(p.id) || []) : undefined);
-  const toggle = useCallback((id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
   const height = useViewportHeight(mobile ? 330 : 300);
   const rowH = useRowH(40, 32);
   const H = (k: string, l: string) => html`<button key=${k} type="button" aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ sort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
-  const allSel = rows.length > 0 && rows.every(p => selected.has(p.id));
   const clear = () => { setQ(''); nav.set({ filter: 'all', unit: 'all', room: null, pdate: undefined }); };
   const applyView = (v: SavedView) => { if (curView === v) { clear(); return; } setQ(v.q); nav.set({ unit: v.unit, room: v.room, filter: v.filter }); };
   const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [undoMark()] }); };
@@ -163,16 +158,11 @@ export function PeopleScreen() {
       <${ActiveFilter} parts=${curView ? ['★ ' + curView.name] : [unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && fLabel, withSt && dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}
         extra=${curView ? html`<button type="button" className="actfilter__act" onClick=${() => delView(curView)} data-tip="Σβήνει τη λίστα (όχι τους ανθρώπους)">Διαγραφή λίστας</button>` : filtered && html`<button type="button" className="actfilter__act" onClick=${() => setSaving(true)} data-tip="Κράτα αυτό το φίλτρο ως λίστα με όνομα, π.χ. «Θαλαμάρχες»">☆ Αποθήκευση</button>`}/>
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : total}</span></div>
-    ${selected.size > 0 && html`<div className="bulkbar"><span>${selected.size} επιλεγμένοι</span>
-      <${Button} size="sm" onClick=${() => nav.declare({ pids: [...selected], type: 'OUT', from: today, to: today })}>Εξοδούχοι σήμερα<//>
-      <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected], type: 'DN', from: today, to: today })} data-tip="Εξοδούχοι με διανυκτέρευση">ΔΝ σήμερα<//>
-      <${Button} size="sm" variant="secondary" onClick=${() => nav.declare({ pids: [...selected] })}>Άλλη δήλωση…<//>
-      <${Button} size="sm" variant="ghost" onClick=${() => setSelected(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>Κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
-    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} checked=${selected.has(p.id)} onToggle=${toggle} onOpen=${open}/>`}/></div>` :
-    html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: withSt ? '1390px' : '1170px' }}>
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" checked=${allSel} onChange=${() => setSelected(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span>${COLS.slice(0, 5).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${COLS.slice(5).map(([k, l]) => H(k, l))}</div>
-      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} st=${stOf(p)} lists=${lists} checked=${selected.has(p.id)} selected=${nav.params.person === p.id} onToggle=${toggle} onOpen=${open}/>`}/>
+    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
+    html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: withSt ? '1354px' : '1134px' }}>
+      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Α/Α</span>${COLS.slice(0, 5).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${COLS.slice(5).map(([k, l]) => H(k, l))}</div>
+      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} onOpen=${open}/>`}/>
     </div></div></div>`}
     ${adding && html`<${NewPersonDialog} onClose=${() => setAdding(false)}/>`}
     ${saving && html`<${SaveViewDialog} onClose=${() => setSaving(false)} onSave=${async (name: string) => {
