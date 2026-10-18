@@ -34,6 +34,9 @@ export type Command =
   // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
+  // Άδεια (κανονική, τιμητική, αναρρωτική): ακύρωση = φεύγει όλη (δεν έφυγε ή μπήκε λάθος)· διακοπή = γύρισε νωρίτερα, στη μέρα και ώρα που λες
+  | { t: 'cancelLeave'; id: string }
+  | { t: 'endLeave'; id: string; date: ISODate; time: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string }
   | { t: 'autofill'; date: ISODate }
@@ -119,6 +122,7 @@ const wReason = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUp
 function wTime(v: unknown, what: string): string {
   const t = normTime(v); if (!t) throw new Error('Γράψε την ώρα ' + what + ', π.χ. 08:15'); return t;
 }
+const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά');
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
 // Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
@@ -368,6 +372,24 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'deleteStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
+    }
+    case 'cancelLeave': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || TYPES[st.type].cat !== 'abs') throw new Error('Δεν βρέθηκε η άδεια');
+      // από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια (δεν γράφεται πια στην ΗΚΑΙ ως άδεια)
+      const requests = s.requests.map(r => { if (r.sid !== st.id) return r; const n = { ...r }; delete n.sid; return n; });
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: 'Ακυρώθηκε η ' + TYPES[st.type].long.toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
+    }
+    case 'endLeave': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || TYPES[st.type].cat !== 'abs') throw new Error('Δεν βρέθηκε η άδεια');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c.date)) throw new Error('Λάθος ημερομηνία');
+      const t = normTime(c.time); if (t == null) throw new Error('Η ώρα επιστροφής «' + c.time + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+      const was = st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '');
+      if (c.date < st.from || (c.date === st.from && st.fromTime && t && mins(t) <= mins(st.fromTime))) throw new Error('Η άδεια ξεκινά ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + '. Αν δεν έφυγε καθόλου, πάτα «Ακύρωση άδειας».');
+      // ίδια ή μεταγενέστερη επιστροφή: δεν είναι διακοπή (για παράταση άλλαξε την άδεια)
+      if (!st.open && (c.date > st.to || (c.date === st.to && (!t || (!!st.toTime && mins(t) >= mins(st.toTime)))))) throw new Error('Η άδεια είναι ήδη ' + was + '. Διάλεξε νωρίτερη επιστροφή.');
+      const n: Status = { ...st, to: c.date }; delete n.open; delete n.days;
+      if (t) n.toTime = t; else delete n.toTime;
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + TYPES[st.type].long.toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', επιστροφή ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
     }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');

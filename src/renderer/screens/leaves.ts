@@ -3,7 +3,7 @@ import { HK } from '../../shared/unit';
 import { useDeferredValue, useMemo, useState } from 'react';
 import { html, Badge, Button, PageHeader, Segmented } from '../ui';
 import { useNav, useStore } from '../store';
-import { LeaveTimesDialog } from './people';
+import { LeaveEndDialog, LeaveTimesDialog, leaveStarted } from './people';
 import { TYPES, fullName, type Status } from '../../shared/domain';
 import { personMap } from '../../shared/rules';
 import { statusLbl } from '../../shared/ranks';
@@ -19,6 +19,7 @@ export function LeavesTab() {
   const view: string = nav.params.leaveTab === 'back' ? 'back' : 'now';
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   const [times, setTimes] = useState<Status | null>(null);
+  const [end, setEnd] = useState<Status | null>(null);
   const since = addDays(today, -14);
   const nNow = useMemo(() => state.statuses.filter(s => isLeave(s) && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
   const list = useMemo(() => {
@@ -43,7 +44,9 @@ export function LeavesTab() {
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>
         <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${when(s)}${tt ? ' · ' + tt : ''}${s.req ? ' · από αίτηση' : ''}${s.note ? ' · ' + s.note : ''}</small></div>
       ${view === 'now' && hasTimes(s.type) && html`<${Button} size="sm" variant="ghost" onClick=${() => setTimes(s)} data-tip="Ώρα αναχώρησης την πρώτη μέρα και ώρα επιστροφής την τελευταία" data-tip-side="left">Ώρες…<//>`}
+      ${view === 'now' && (leaveStarted(s, today) ? html`<${Button} size="sm" variant="ghost" onClick=${() => setEnd(s)} data-tip="Γύρισε νωρίτερα: η άδεια τελειώνει τη μέρα και ώρα που λες" data-tip-side="left">Διακοπή…<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setEnd(s)} data-tip="Δεν θα φύγει: η άδεια φεύγει ολόκληρη" data-tip-side="left">Ακύρωση…<//>`)}
     </li>`; })}</ul>` : html`<div className="empty">${view === 'now' ? 'Κανείς σε άδεια τώρα ή στις επόμενες μέρες.' : 'Κανείς δεν γύρισε από άδεια τις τελευταίες 14 μέρες.'}</div>`}</div>
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
+    ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}
   </div>`;
 }
