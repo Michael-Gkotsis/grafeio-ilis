@@ -25,6 +25,8 @@ const CAT_NAME: Record<string, string> = Object.fromEntries(CATS);
 // Δήλωση σε βήματα (Michael, 17/10 και 18/10): πρώτα τον στρατιώτη, μετά την κατάσταση (στα ιατρικά μία ή περισσότερες),
 // μετά από πότε έως πότε και παρατήρηση για τον λόγο· στο τέλος βλέπεις τι θα αλλάξει
 const STEPS = ['Στρατιώτης', 'Κατάσταση', 'Πότε', 'Τι θα αλλάξει'];
+// από τα «Ιατρικά και ποινές» (+ Ιατρικό, + Ποινή) πρώτα η κατάσταση και μετά προσθέτεις τους στρατιώτες έναν-έναν (Michael, 18/10)
+const ORDER_STATUS_FIRST = [2, 1, 3, 4];
 interface StatusPick { key: string; cat: string; type: TypeKey; kind?: string; short: string; long: string; help: string }
 // Όλες οι καταστάσεις σε μία λίστα: κάθε είδος άδειας και ποινής χωριστά, και τα δικά σου ιατρικά δίπλα στα βασικά
 function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: string; like?: string; warn?: boolean }[], sum: (s: Pick<Status, 'type' | 'kind'>) => string): StatusPick[] {
@@ -396,7 +398,9 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people);
   // πρώτα ο στρατιώτης (Michael, 18/10)· από την καρτέλα του ατόμου ξεκινά από την κατάσταση
-  const [step, setStep] = useState(() => (initial.pids?.length ? (initial.type ? 3 : 2) : 1)); const [unlock, setUnlock] = useState(false); const [ack, setAck] = useState(false);
+  const statusFirst = !!initial.cat && !initial.pids?.length;
+  const order = statusFirst ? ORDER_STATUS_FIRST : [1, 2, 3, 4];
+  const [step, setStep] = useState(() => (initial.pids?.length ? (initial.type ? 3 : 2) : statusFirst ? 2 : 1)); const [unlock, setUnlock] = useState(false); const [ack, setAck] = useState(false);
   const punKinds = listOf(state.settings.lists, 'punKinds'), leaveKinds = listOf(state.settings.lists, 'leaveKinds');
   const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: '', kind: initial.kind || (initial.type === 'LEAVE' ? leaveKinds[0] : initial.type === 'PUN' ? punKinds[0] : ''), by: '', reason: '', on: today, fromTime: '', toTime: '' }));
   const [err, setErr] = useState<any>(null);
@@ -455,31 +459,31 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
   // μη ιατρικό: μία επιλογή και πας στο «Πότε»· ιατρικό: μπαίνει ή βγαίνει από τα επιλεγμένα
   const choose = (x: StatusPick) => {
     setErr(null); setAck(false);
-    if (x.cat !== 'med') { setPicked(true); setMedSel([]); setCmd(c => ({ ...c, type: x.type, kind: x.kind || '' })); setStep(3); return; }
+    if (x.cat !== 'med') { setPicked(true); setMedSel([]); setCmd(c => ({ ...c, type: x.type, kind: x.kind || '' })); setStep(cmd.pids.length ? 3 : 1); return; }
     const sel = medSel.includes(x.key) ? medSel.filter(k => k !== x.key) : [...(t.cat === 'med' ? medSel : []), x.key];
     setMedSel(sel); setPicked(sel.length > 0);
     const first = picks.find(y => sel.includes(y.key));
     if (first) setCmd(c => ({ ...c, type: first.type, kind: first.kind || '' }));
   };
   const toStatus = () => { if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; } setErr(null); setStep(picked ? 3 : 2); };
-  const toDates = () => { if (!medPicks.length) { setErr('Διάλεξε ένα ή περισσότερα ιατρικά.'); return; } setErr(null); setStep(3); };
-  const desc = html`${STEPS.map((l, i) => html`<span key=${l}>${i > 0 && ' › '}<span style=${{ fontWeight: step === i + 1 ? 700 : 400 }}>${i + 1} ${l}</span></span>`)}`;
+  const toDates = () => { if (!medPicks.length) { setErr('Διάλεξε ένα ή περισσότερα ιατρικά.'); return; } setErr(null); setStep(cmd.pids.length ? 3 : 1); };
+  const desc = html`${order.map((n, i) => html`<span key=${n}>${i > 0 && ' › '}<span style=${{ fontWeight: step === n ? 700 : 400 }}>${i + 1} ${STEPS[n - 1]}</span></span>`)}`;
   const who = cmd.pids.length === 1 && pm.get(cmd.pids[0]) ? fullName(pm.get(cmd.pids[0])!) : cmd.pids.length + ' άτομα';
   const stBadges = medPicks.length > 1 ? html`${medPicks.map((x, i) => html`<span key=${x.key}>${i > 0 && ' + '}<${Badge} tone=${TYPES[x.type].tone}>${x.short}<//></span>`)}` : cur ? html`<${Badge} tone=${TYPES[cur.type].tone}>${cur.short}<//> ${cur.long}` : t.long;
   // τι διάλεξες στα προηγούμενα βήματα, με «Αλλαγή» για να γυρίσεις
   const sum = html`<div className="declsum">
-    <span><b>${who}</b></span><${Button} variant="link" onClick=${() => { setErr(null); setStep(1); }}>Αλλαγή<//>
-    ${step === 3 && html`<span className="declsum__sep">·</span><span>${stBadges}</span><${Button} variant="link" onClick=${() => { setErr(null); setStep(2); }}>Αλλαγή<//>`}</div>`;
+    ${cmd.pids.length > 0 && html`<span><b>${who}</b></span><${Button} variant="link" onClick=${() => { setErr(null); setStep(1); }}>Αλλαγή<//>`}
+    ${step === 3 && html`${cmd.pids.length > 0 && html`<span className="declsum__sep">·</span>`}<span>${stBadges}</span><${Button} variant="link" onClick=${() => { setErr(null); setStep(2); }}>Αλλαγή<//>`}</div>`;
   if (step === 1) return html`<${Dialog} title="Δήλωση κατάστασης" description=${desc} onClose=${onClose} closeOnOverlay=${!cmd.pids.length}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${toStatus}>${picked ? 'Συνέχεια: Από πότε έως πότε' : 'Συνέχεια: Κατάσταση'}<//>`}>
-    <div className="field"><label className="field__label" htmlFor="dsp">Ποιος στρατιώτης * <span className="muted" style=${{ fontWeight: 400 }}>(ένας ή περισσότεροι)</span></label>
+    footer=${html`${statusFirst ? html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(2); }}>Πίσω<//>` : html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>`}<${Button} onClick=${toStatus}>${picked ? 'Συνέχεια: Από πότε έως πότε' : 'Συνέχεια: Κατάσταση'}<//>`}>
+    <div className="field"><label className="field__label" htmlFor="dsp">${statusFirst ? 'Ποιοι στρατιώτες *' : 'Ποιος στρατιώτης *'} <span className="muted" style=${{ fontWeight: 400 }}>${statusFirst ? '(γράψε επώνυμο και Enter, μετά τον επόμενο)' : '(ένας ή περισσότεροι)'}</span></label>
       <${PersonPicker} id="dsp" multiple=${true} value=${cmd.pids} onChange=${(pids: number[]) => set({ pids })} date=${cmd.from} unavailable=${picked && t.cat === 'out' ? outPick : undefined} onBlocked=${(q: Person, why: string) => { set({ pids: [...cmd.pids, q.id] }); toast({ text: shortName(q) + ': ' + why + '. Μπήκε· θα ζητηθεί επιβεβαίωση.' }); }} autoFocus=${true}/></div>
     ${picked && html`<div className="declsum"><span>${stBadges}</span><${Button} variant="link" onClick=${() => { setErr(null); setStep(2); }}>Αλλαγή<//></div>`}
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
   if (step === 2) return html`<${Dialog} title="Δήλωση κατάστασης" description=${desc} size="lg" onClose=${onClose} closeOnOverlay=${!cmd.pids.length}
-    footer=${html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(1); }}>Πίσω<//>${medPicks.length > 0 && html`<${Button} onClick=${toDates}>Συνέχεια: Από πότε έως πότε${medPicks.length > 1 ? ' (' + medPicks.length + ' ιατρικά)' : ''}<//>`}`}>
-    ${sum}
+    footer=${html`${statusFirst ? html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>` : html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(1); }}>Πίσω<//>`}${medPicks.length > 0 && html`<${Button} onClick=${toDates}>${cmd.pids.length ? 'Συνέχεια: Από πότε έως πότε' : 'Συνέχεια: Στρατιώτες'}${medPicks.length > 1 ? ' (' + medPicks.length + ' ιατρικά)' : ''}<//>`}`}>
+    ${cmd.pids.length > 0 && sum}
     <div className="field"><label className="field__label" htmlFor="dsq">Ποια κατάσταση δηλώνεις;</label>
       <input id="dsq" className="ui-input" data-autofocus placeholder="Αναζήτηση, π.χ. ΕΥ, κανονική, κράτηση" value=${q} onChange=${(e: any) => setQ(e.target.value)} onKeyDown=${(e: any) => { if (e.key !== 'Enter') return; e.preventDefault(); if (!q.trim() && medPicks.length) toDates(); else if (shown.length) { choose(shown[0]); setQ(''); } }}/>
       ${catF && html`<span className="field__help">Μόνο ${catF === 'med' ? 'ιατρικά, ΣΤΕΠ και νοσοκομείο' : CAT_NAME[catF].toLowerCase()}. <${Button} variant="link" onClick=${() => setCatF('')}>Δείξε όλες τις καταστάσεις<//></span>`}</div>
@@ -491,7 +495,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
   if (step === 3) return html`<${Dialog} title="Δήλωση κατάστασης" description=${desc} onClose=${onClose} closeOnOverlay=${false}
-    footer=${html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(2); }}>Πίσω<//><${Button} onClick=${next}>Συνέχεια: Τι θα αλλάξει<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(statusFirst ? 1 : 2); }}>Πίσω<//><${Button} onClick=${next}>Συνέχεια: Τι θα αλλάξει<//>`}>
     ${sum}
     <${DateRangeField} from=${cmd.from} to=${cmd.to} onChange=${(from: string, to: string) => set({ from, to })}/>
     ${timed && html`<div className="field"><div className="field-row">
@@ -508,11 +512,12 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${err && html`<${Alert} tone=${ack ? 'warn' : 'bad'}><span>${err}</span><//>`}
   <//>`;
   const one = cmd.pids.length === 1 && pm.get(cmd.pids[0]);
-  const rows = medPicks.length > 1 ? medPicks.flatMap(x => cmd.pids.map(pid => ({ x, pid }))) : [];
+  // μία γραμμή στα Ιατρικά για κάθε ιατρικό και κάθε στρατιώτη
+  const rows = medPicks.length * cmd.pids.length > 1 ? medPicks.flatMap(x => cmd.pids.map(pid => ({ x, pid }))) : [];
   return html`<${Dialog} title="Τι θα αλλάξει" description=${desc} onClose=${onClose} closeOnOverlay=${false}
     footer=${html`<${Button} variant="outline" onClick=${() => setStep(3)}>Πίσω<//><${Button} onClick=${apply}>Αποθήκευση<//>`}>
     <p style=${{ margin: 0 }}>Δηλώνεις ${medPicks.length > 1 ? stBadges : html`<${Badge} tone=${t.tone}>${hasKind ? (cmd.type === 'PUN' ? 'Ποινή: ' + punLbl(cmd.kind) : 'Άδεια: ' + cmd.kind) : med ? med.name + (med.warn ? '' : ' (σαν ' + t.label + ')') : t.long}<//>`} ${one ? html`τον <b>${fullName(one)}</b> του ${one.father}` : html`<b>${cmd.pids.length} άτομα</b> (${cmd.pids.map(id => shortName(pm.get(id)!)).join(', ')})`}, ${cmd.from === cmd.to ? html`<b>${dayName(cmd.from, today).toLowerCase()} ${dm(cmd.from)}</b>` : html`από <b>${dow(cmd.from)} ${dm(cmd.from)}</b> έως <b>${dow(cmd.to)} ${dm(cmd.to)}</b>`}${timesTxt(full) ? ' (' + timesTxt(full) + ')' : ''}.</p>
-    ${rows.length > 0 && html`<div className="field"><span className="field__label">Γράφονται ${rows.length} γραμμές στα Ιατρικά, μία για το καθένα</span><ul className="declrows">${rows.slice(0, 12).map(r => html`<li key=${r.x.key + r.pid}><${Badge} tone=${TYPES[r.x.type].tone}>${r.x.short}<//> ${fullName(pm.get(r.pid)!)} · ${cmd.from === cmd.to ? dm(cmd.from) : dm(cmd.from) + '–' + dm(cmd.to)}${cmd.note ? ' · ' + upper(cmd.note) : ''}</li>`)}</ul>${rows.length > 12 && html`<span className="muted">και άλλες ${rows.length - 12}</span>`}</div>`}
+    ${rows.length > 0 && html`<div className="field"><span className="field__label">Γράφονται ${rows.length} γραμμές στα Ιατρικά, μία για κάθε ${medPicks.length > 1 ? 'ιατρικό' : 'στρατιώτη'}${medPicks.length > 1 && cmd.pids.length > 1 ? ' και στρατιώτη' : ''}</span><ul className="declrows">${rows.slice(0, 12).map(r => html`<li key=${r.x.key + r.pid}><${Badge} tone=${TYPES[r.x.type].tone}>${r.x.short}<//> ${fullName(pm.get(r.pid)!)} · ${cmd.from === cmd.to ? dm(cmd.from) : dm(cmd.from) + '–' + dm(cmd.to)}${cmd.note ? ' · ' + upper(cmd.note) : ''}</li>`)}</ul>${rows.length > 12 && html`<span className="muted">και άλλες ${rows.length - 12}</span>`}</div>`}
     ${depEnds.length > 0 && html`<${Alert} tone="info"><span>${depEnds.map((x, i) => html`<span key=${x.pid}>${i > 0 && html`<br/>`}<b>${shortName(pm.get(x.pid)!)}</b> λήγει <b>${dow(x.to)} ${dm(x.to)}</b>, γιατί έχει υπηρεσία ή βραδινή εκπαίδευση μέσα στις μέρες της ποινής.</span>`)}</span><//>`}
     ${plan && plan.files.length > 0 && html`<div className="field"><span className="field__label">Επηρεάζει</span><${ChangePlanList} plan=${plan}/></div>`}
     ${plan && plan.conflicts.length > 0 && html`<${Alert} tone="warn">Μετά την αποθήκευση θα σου προταθεί αντικαταστάτης στις Υπηρεσίες.<//>`}
