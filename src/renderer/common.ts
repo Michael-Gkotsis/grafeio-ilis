@@ -1,4 +1,5 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
+import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, Kbd, Strip } from './ui';
 import { createPortal } from 'react-dom';
@@ -106,7 +107,7 @@ export function TimeField({ id, label, value, onChange, help }: P) {
     <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
 }
 // Τι κάνουν οι ώρες (Michael, 13/10 και 18/10): υπηρεσίες, έξοδος την ημέρα της επιστροφής, ΗΚΑΙ
-export const timesHelp = (r?: Rules | null) => 'Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως τις ' + (r?.outTime || DEFAULT_OUT_TIME) + ', βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ΗΚΑΙ. Χωρίς ώρες μετρά όλη η μέρα.';
+export const timesHelp = (r?: Rules | null) => 'Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως τις ' + (r?.outTime || DEFAULT_OUT_TIME) + ', βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
 export function ChangePlanList({ plan }: P) {
   return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
 }
@@ -290,19 +291,19 @@ export function useUsbCopy() {
 }
 
 /* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
-const SHORTCUTS: [string, string][] = [
+const SHORTCUTS = (): [string, string][] => [
   ['Ctrl K', 'Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε'], ['Ctrl F', 'Αναζήτηση στη λίστα της οθόνης'], ['Ctrl N', 'Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)'],
-  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Δυναμολόγιο, Στελέχη, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ (με Ποινές, Άδειες, Αιτήσεις), Οπλισμός'], ['Alt 0', 'Ρυθμίσεις'],
+  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Δυναμολόγιο, Στελέχη, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ' + HK() + ' (με Ποινές, Άδειες, Αιτήσεις), Οπλισμός'], ['Alt 0', 'Ρυθμίσεις'],
   ['Alt ←', 'Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)'], ['Ctrl B', 'Μενού πλήρες ή μόνο εικονίδια'], ['F1', 'Αυτό το υπόμνημα'], ['Esc', 'Κλείσιμο παραθύρου ή καρτέλας']
 ];
 export function LegendDialog({ onClose }: { onClose: () => void }) {
   const CAT: Record<string, string> = { med: 'Ιατρικό', other: 'Άλλο', pun: 'Ποινή', abs: 'Απουσία', out: 'Έξοδος' };
-  return html`<${Dialog} size="lg" title="Υπόμνημα κωδικών" description="Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ΗΚΑΙ." onClose=${onClose} footer=${html`<${Button} onClick=${onClose}>Κλείσιμο<//>`}>
+  return html`<${Dialog} size="lg" title="Υπόμνημα κωδικών" description="Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ${HK()}." onClose=${onClose} footer=${html`<${Button} onClick=${onClose}>Κλείσιμο<//>`}>
     <table className="legend"><thead><tr><th>Κωδικός</th><th>Σημαίνει</th><th>Τι κάνει</th></tr></thead><tbody>
-      ${TYPE_KEYS.map(k => { const t = TYPES[k]; return html`<tr key=${k}><td><${Badge} tone=${t.tone}>${t.label}<//></td><td>${t.long}<small className="muted"> · ${CAT[t.cat] || t.cat}${t.code ? ' · στο ημερολόγιο: ' + t.code : ''}</small></td><td>${effects(t) || 'Μπαίνει κανονικά σε υπηρεσίες και έξοδο'}${k === 'PUN' ? '. Αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί.' : ''}</td></tr>`; })}
+      ${TYPE_KEYS.map(k => { const t = TYPES[k]; return html`<tr key=${k}><td><${Badge} tone=${t.tone}>${t.label}<//></td><td>${t.long}<small className="muted"> · ${CAT[t.cat] || t.cat}${t.code ? ' · στο ημερολόγιο: ' + t.code : ''}</small></td><td>${effects(t) || 'Μπαίνει κανονικά σε υπηρεσίες και έξοδο'}${k === 'PUN' ? '. Αιτείται στην ' + HK() + ' και ισχύει όταν εγκριθεί.' : ''}</td></tr>`; })}
     </tbody></table>
     <p className="note" style=${{ margin: '10px 0 0' }}>Στις υπηρεσίες: <b>Ένοπλη</b> θέση = δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ. <b>★</b> = υπηρεσία σε ΣΚ ή αργία. <b>⚠</b> = πέρασε παρά τον κανόνα. Στον έλεγχο υπηρεσιών: Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ.</p>
     <h3 style=${{ fontSize: '15px', margin: '14px 0 6px' }}>Συντομεύσεις</h3>
-    <table className="legend"><tbody>${SHORTCUTS.map(([k, t]) => html`<tr key=${k}><td className="nw"><${Kbd}>${k}<//></td><td>${t}</td></tr>`)}</tbody></table>
+    <table className="legend"><tbody>${SHORTCUTS().map(([k, t]) => html`<tr key=${k}><td className="nw"><${Kbd}>${k}<//></td><td>${t}</td></tr>`)}</tbody></table>
   <//>`;
 }

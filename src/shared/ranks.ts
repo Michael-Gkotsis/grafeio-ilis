@@ -42,7 +42,8 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'lea
 export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; back?: string }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
-export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig };
+// hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[] };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
@@ -78,6 +79,44 @@ export function weaponBack(reason: string, lists?: UserLists): string {
   const own = (lists?.weaponOut?.add || []).find(x => itemKey(x.name) === k);
   return own?.back || 'ΛΗΞ ' + reason.trim().toUpperCase();
 }
+// ---------------------------------------------------------------------------
+// Γραμμές (βαθμοί) της ΗΚΑΙ: οι βασικές του εντύπου και όσες πρόσθεσες (Michael, 18/10: «Ίλαρχος, Λοχαγός, Ταγματάρχης…»).
+// Κάθε δική σου γραμμή μπαίνει στους αξιωματικούς ή στους οπλίτες, κάτω από μια άλλη, και μαζεύει τους βαθμούς που
+// διάλεξες. Στο έντυπο μπαίνει ως νέα γραμμή με τους τύπους της και μετρά στα σύνολα (exports.ts).
+// ---------------------------------------------------------------------------
+export const HK_OFFICERS = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'Ανθυπασπιστές', 'ΔΕΑ'];
+export const HK_NCO = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες', 'Δεκανείς', 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης', 'Στρατιώτες'];
+// name: όνομα (και κλειδί) της γραμμής · grp: αξιωματικοί ή οπλίτες · after: κάτω από ποια (κενό = στο τέλος της ομάδας)
+// ranks: βαθμοί που μετρούν σε αυτήν (στελέχη και στρατιώτες), αντί για τη γραμμή που θα έπαιρναν
+export interface HkRowDef { name: string; grp: 'off' | 'nco'; after?: string; ranks?: string[] }
+export interface HkRows { off: string[]; nco: string[]; own: Set<string> }
+const rowsIdx = new WeakMap<object, HkRows>();
+export function hkRowsOf(lists?: UserLists): HkRows {
+  const key = lists?.hkRows; if (!key?.length) return { off: HK_OFFICERS, nco: HK_NCO, own: new Set() };
+  let r = rowsIdx.get(key); if (r) return r;
+  const off = [...HK_OFFICERS], nco = [...HK_NCO]; const own = new Set<string>();
+  const taken = new Set([...off, ...nco, 'ΣΥΝΟΛΟ ΑΞΚΩΝ', 'ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', 'ΓΕΝΙΚΟ ΣΥΝΟΛΟ'].map(itemKey));
+  for (const x of key) {
+    const k = itemKey(x.name || ''); if (!k || taken.has(k)) continue;
+    taken.add(k); own.add(x.name);
+    const list = x.grp === 'off' ? off : nco; const i = x.after ? list.indexOf(x.after) : -1;
+    list.splice(i >= 0 ? i + 1 : list.length, 0, x.name);
+  }
+  r = { off, nco, own }; rowsIdx.set(key, r); return r;
+}
+// όλες οι γραμμές με τη σειρά του εντύπου
+export const hkRowList = (lists?: UserLists) => { const r = hkRowsOf(lists); return [...r.off, ...r.nco]; };
+// γραμμές όπου μπαίνει στέλεχος: αξιωματικοί, ανθυπασπιστές, ΔΕΑ, αρχιλοχίες, επιλοχίες, λοχίες και όσες πρόσθεσες
+export const hkCadreRows = (lists?: UserLists) => { const r = hkRowsOf(lists); return [...r.off, ...r.nco.filter(x => HK_NCO.indexOf(x) < 3 && HK_NCO.indexOf(x) >= 0 || r.own.has(x))]; };
+// γραμμές όπου γράφεις πόσα στελέχη έχει, όταν δεν τα περνάς με ονόματα (οι λοχίες μετρώνται από το προσωπικό)
+export const cadreCountRows = (lists?: UserLists) => hkCadreRows(lists).filter(r => r !== 'Λοχίες');
+// η δική σου γραμμή που μαζεύει έναν βαθμό (grp: μόνο από αυτή την ομάδα)
+export function hkRowClaim(lists: UserLists | undefined, rank: string, grp?: 'off' | 'nco'): string | undefined {
+  const k = itemKey(rank || ''); if (!k || !lists?.hkRows?.length) return undefined;
+  const own = hkRowsOf(lists).own;
+  return lists.hkRows.find(x => own.has(x.name) && (!grp || x.grp === grp) && (x.ranks || []).some(r => itemKey(r) === k))?.name;
+}
+
 // Η γραμμή της ΗΚΑΙ που όρισες για έναν δικό σου βαθμό (αλλιώς undefined: τη βρίσκει η εφαρμογή από το όνομα)
 export function hkOfRank(lists: UserLists | undefined, id: 'soldierRanks' | 'cadreRanks', rank: string): string | undefined {
   const k = itemKey(rank); if (!k) return undefined;
@@ -158,7 +197,8 @@ function siUnarmedRaw(si: string, lists?: UserLists): boolean {
 
 // Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό που γράφει ο χρήστης· πρώτα ό,τι όρισες στις Λίστες
 export function guessHk(rank: string, lists?: UserLists): string {
-  const own = hkOfRank(lists, 'cadreRanks', rank); if (own) return own;
+  const claim = hkRowClaim(lists, rank); if (claim) return claim;
+  const own = hkOfRank(lists, 'cadreRanks', rank); if (own && hkCadreRows(lists).includes(own)) return own;
   const r = rank.toUpperCase().replace(/[.\s]/g, '');
   if (/ΕΠΧ|ΕΠΙΛΑΡΧ|ΕΠΛΧΟ|ΤΧΗΣ/.test(r)) return 'Επίλαρχοι';
   if (/ΑΝΘΥΠΑΣ|ΑΝΘΣΤ/.test(r)) return 'Ανθυπασπιστές';

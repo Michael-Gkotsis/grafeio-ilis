@@ -1,5 +1,5 @@
 // Το συμβόλαιο ανάμεσα στο UI (renderer) και στο main process. Ό,τι γράφει δεδομένα περνά από εδώ.
-import type { AppState, AuditEntry } from './domain';
+import type { AppState, AuditEntry, Settings } from './domain';
 import type { Command } from './commands';
 import type { ISODate } from './dates';
 import type { Check } from './preflight';
@@ -45,7 +45,8 @@ export interface EssoInfo {
   archives: EssoArchiveInfo[];
 }
 // roster: προεπισκόπηση (token) του Δυναμολογίου της νέας ΕΣΣΟ, αν το έχεις ήδη· newDir: δικός σου φάκελος (αλλιώς newRoot\<όνομα ΕΣΣΟ>)
-export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string }
+// unit: τύπος μονάδας (Ίλη/Λόχος), κεφαλίδα και μονάδα του τίτλου για τη νέα ΕΣΣΟ
+export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string; unit?: Pick<Settings, 'unitKind' | 'unit' | 'unitName'> }
 export type EssoResult = { ok: true; archive: string; dir: string; files: string[]; warnings: string[] } | Fail;
 
 export interface Api {

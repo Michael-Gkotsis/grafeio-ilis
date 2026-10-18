@@ -1,6 +1,7 @@
 // Ρυθμίσεις › Υπηρεσίες: «Καταστάσεις: σε ποιες υπηρεσίες μπαίνουν» (Michael, 13/10). Για ΕΥ, ΕΑ, ΕΟ, ΕΑΡΒ και
 // τα δικά σου ιατρικά: μία στήλη ανά υπηρεσία (ναι · μόνο αν δεν υπάρχει άλλος · όχι), μία για την έξοδο και μία για την ΗΚΑΙ.
 // Κάθε ιατρικό που προσθέτεις στις Λίστες ρυθμίζεται εδώ, και οι ποινές ανά είδος (Michael, 18/10).
+import { HK } from '../../shared/unit';
 import { useMemo } from 'react';
 import { html, Badge, Button, Card, useToast } from '../ui';
 import { useNav, useStore } from '../store';
@@ -65,7 +66,7 @@ export function StatCard() {
   // ΗΚΑΙ ενός δικού σου ιατρικού: στους ΕΥ (βασικός τύπος ΕΥ) ή παρών (ΕΑΡΒ)· οι υπηρεσίες και η έξοδος μένουν όπως φαίνονται
   const setHk = async (r: Row, col: string) => {
     const to: TypeKey = col === HK_EY ? 'EY' : 'EARV'; if (to === r.type || !r.med) return;
-    const next = statRebase(lists, r.own, to, cols); const txt = col === HK_EY ? 'στην ΗΚΑΙ στους ΕΥ' : 'στην ΗΚΑΙ παρών';
+    const next = statRebase(lists, r.own, to, cols); const txt = col === HK_EY ? 'στην ' + HK() + ' στους ΕΥ' : 'στην ' + HK() + ' παρών';
     if (await run({ t: 'setSettings', settings: { lists: next }, text: 'Καταστάσεις: ' + r.own + ' ' + txt }, false)) toast({ text: r.own + ': ' + txt + '. Οι υπηρεσίες και η έξοδος μένουν όπως είναι.' });
   };
   const resetRow = (type: TypeKey, own: string) => {
@@ -76,8 +77,8 @@ export function StatCard() {
     if (r.type === 'PUN') return html`<td className="muted" data-tip="Οι ποινές μετρούν στη στήλη «Τιμ.» (κωλυόμενοι)">Τιμ.</td>`;
     if (!r.med) return html`<td className="muted" data-tip=${r.type === 'EY' ? 'Κωλυόμενοι: ελεύθεροι υπηρεσίας' : 'Παρών: δεν μετρά σε στήλη'}>${r.type === 'EY' ? 'ΕΥ' : '—'}</td>`;
     const used = usedMed.has(itemKey(r.own).replace(/[^Α-ΩA-Z0-9]/g, ''));
-    return html`<td><select className="ui-input statsel" aria-label=${r.own + ': ΗΚΑΙ'} value=${r.type === 'EY' ? HK_EY : ''} disabled=${used}
-      data-tip=${used ? 'Το έχουν ήδη κάποιοι, οπότε η ΗΚΑΙ μένει όπως είναι. Για άλλη στήλη φτιάξε νέο ιατρικό στις Λίστες.' : 'Πού μετρά στην ΗΚΑΙ'} onChange=${(e: any) => setHk(r, e.target.value)}>
+    return html`<td><select className="ui-input statsel" aria-label=${r.own + ': ' + HK()} value=${r.type === 'EY' ? HK_EY : ''} disabled=${used}
+      data-tip=${used ? 'Το έχουν ήδη κάποιοι, οπότε η ' + HK() + ' μένει όπως είναι. Για άλλη στήλη φτιάξε νέο ιατρικό στις Λίστες.' : 'Πού μετρά στην ' + HK()} onChange=${(e: any) => setHk(r, e.target.value)}>
       <option value=${HK_EY}>ΕΥ</option><option value="">— (παρών)</option></select></td>`;
   };
   const span = cols.length + 5;
@@ -85,7 +86,7 @@ export function StatCard() {
   return html`<${Card} title="Καταστάσεις: σε ποιες υπηρεσίες μπαίνουν">
     <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία, και για όσες προσθέτεις. Αρχικά όπως πριν: ΕΥ σε καμία υπηρεσία, ΕΑ και ΕΟ όχι σε ένοπλη, όχι μαγειρεία και σκοπιά μόνο αν δεν υπάρχει άλλος, ΕΑΡΒ παντού, οι ποινές παντού. Κάθε ιατρικό που προσθέτεις στις Λίστες μπαίνει εδώ χωρίς περιορισμούς, ώσπου να ορίσεις τι κάνει. «Αν δεν υπάρχει άλλος»: η αυτόματη συμπλήρωση τον βάζει τελευταίο, με προειδοποίηση. «Όχι»: μπαίνει με το χέρι μόνο με αιτία. Ισχύει μαζί με τη Σ.Ι. και τη «Δυνατότητα υπηρεσιών» του ατόμου: μετρά το αυστηρότερο.</p>
     <div style=${{ overflowX: 'auto' }}><table className="sigrid">
-      <thead><tr><th>Κατάσταση</th><th>Σήμερα</th>${cols.map(colHead)}<th>Έξοδος</th><th>ΗΚΑΙ</th><th></th></tr></thead>
+      <thead><tr><th>Κατάσταση</th><th>Σήμερα</th>${cols.map(colHead)}<th>Έξοδος</th><th>${HK()}</th><th></th></tr></thead>
       ${sections.map(sec => html`<tbody key=${sec.title}>
         <tr className="sigrid__sec"><th colSpan=${span}>${sec.title}</th></tr>
         ${sec.empty && !sec.rows.length && html`<tr><td colSpan=${span} className="muted" style=${{ textAlign: 'left' }}>Κανένα ακόμα. Πρόσθεσε από τις <a href="#" onClick=${(e: any) => { e.preventDefault(); nav.set({ tab: 'lists' }); }}>Λίστες › Ιατρικά</a>· εμφανίζεται εδώ για να ορίσεις τι κάνει.</td></tr>`}

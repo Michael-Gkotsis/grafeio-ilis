@@ -45,10 +45,11 @@ export function nextEsso(cur: Esso | null, today: ISODate): Esso {
 // οι αργίες, τα templates των εντύπων και τα στελέχη. Τα Excel της παλιάς δεν είναι πια πηγές· ο φάκελος των αρχείων
 // γίνεται ο φάκελος της νέας (outputDir) και τα έντυπα πηγαίνουν εκεί (χωρίς δικό τους φάκελο). Το έντυπο υπηρεσιών
 // ξεκινά από τη ΣΒΕΝ, όπως κάθε νέα σειρά.
-export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: string): AppState {
+// unit: τύπος μονάδας, κεφαλίδα και μονάδα του τίτλου, όπως ορίστηκαν στο πρώτο βήμα (κενό = όπως ήταν)
+export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: string, unit?: Pick<Settings, 'unitKind' | 'unit' | 'unitName'>): AppState {
   const st = s.settings;
   const forms = Object.fromEntries(Object.entries(st.forms || {}).map(([k, b]) => { const c = { ...b }; delete c.dir; return [k, c]; }).filter(([, b]) => Object.values(b as object).some(v => v !== undefined && v !== '')));
-  const settings: Settings = { ...st, essos: { s: e.s, y: e.y, from: today }, sources: {}, newDirs: {}, forms, outputDir, fixed: {}, phase: 'sven', baselineReviewed: true };
+  const settings: Settings = { ...st, essos: { s: e.s, y: e.y, from: today }, sources: {}, newDirs: {}, forms, outputDir, fixed: {}, phase: 'sven', baselineReviewed: true, ...(unit || {}) };
   return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs };
 }
 

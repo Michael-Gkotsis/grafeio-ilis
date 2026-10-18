@@ -22,6 +22,8 @@ import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
+import { hkRowsOf } from '../shared/ranks';
+import { setUnitKind, unitKindOf, unitText } from '../shared/unit';
 
 const DEV = !app.isPackaged;
 const ROOT = DEV ? process.cwd() : path.dirname(process.execPath);
@@ -77,7 +79,8 @@ const newDir = (k: ListKind) => store.state.settings.newDirs?.[k] || outputDir()
 const dirOf = (t: DirTarget) => (t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind));
 const templates = (): TemplateInfo[] => [
   ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = store?.state.settings.forms?.[f];
-    return b?.file ? { id: t.id, name: t.name, file: b.file, ok: fs.existsSync(b.file), custom: true } : { id: t.id, name: t.name, file: t.file, ok: fs.existsSync(tplPath(t.file)), custom: fs.existsSync(path.join(USER_TPL, t.file)) }; }),
+    const name = unitText(t.name, unitKindOf(store?.state.settings));
+    return b?.file ? { id: t.id, name, file: b.file, ok: fs.existsSync(b.file), custom: true } : { id: t.id, name, file: t.file, ok: fs.existsSync(tplPath(t.file)), custom: fs.existsSync(path.join(USER_TPL, t.file)) }; }),
   { id: 'check', name: 'Έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', file: 'δημιουργείται από την εφαρμογή', ok: true, custom: false }
 ];
 
@@ -107,7 +110,7 @@ const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: 
 // Τρέχει μια εντολή και τη γράφει. Ό,τι άλλαξε φτάνει στο UI με την επόμενη απάντηση reply() (και όσα έγιναν χωρίς αυτό, π.χ. λήξεις)
 function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: string } {
   try {
-    const prev = store.state;
+    const prev = store.state; setUnitKind(prev.settings);   // ΗΚΑΙ ή ΗΚΑΛ στα κείμενα του ιστορικού
     const r = apply(store.state, cmd, ctx());
     const changed = r.state !== store.state;
     // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού· αν δεν γραφτεί, γυρίζουν όλα πίσω
@@ -173,7 +176,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState): Promise<{ 
 async function hkaiMap(buf: Buffer, b: FormBinding) {
   if (!b.file) return hkaiMapOf(b.cells);
   const wb = await Workbook.open(buf); const front = b.sheet && wb.hasSheet(b.sheet) ? b.sheet : wb.sheetNames()[0];
-  const det = detectHkai({ name: front, rows: await wb.values(front, 120, 40) }, store.state.settings.place).map;
+  const det = detectHkai({ name: front, rows: await wb.values(front, 120, 40) }, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own]).map;
   return { title: b.cells?.title || det.title, date: b.cells?.date || det.date, rows: { ...det.rows, ...(b.cells?.rows || {}) }, cols: { ...det.cols, ...(b.cells?.cols || {}) } };
 }
 
@@ -614,7 +617,7 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
       const scored = book.sheets.map(x => ({ x, d: detectHkai(x, store.state.settings.place) })).sort((a, c) => c.d.found - a.d.found);
       const front = (keep && has(b.sheet)) || scored[0]?.x.name || names[0];
       const back = (keep && has(b.sheet2)) || find(/ΑΠΟΦΑΣΕΙΣ|ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|ΦΡΟΥΡΕΣ/) || names.find(n => n !== front) || front;
-      const d = detectHkai(book.sheets.find(x => x.name === front)!, store.state.settings.place);
+      const d = detectHkai(book.sheets.find(x => x.name === front)!, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own]);
       if (keep && b.cells) d.map = { title: b.cells.title || d.map.title, date: b.cells.date || d.map.date, rows: { ...d.map.rows, ...(b.cells.rows || {}) }, cols: { ...d.map.cols, ...(b.cells.cols || {}) } };
       return { ok: true, file: src, custom, sheets: names, sheet: front, sheet2: back, hkai: d };
     }
@@ -716,7 +719,10 @@ async function startEsso(o: EssoStart): Promise<EssoResult> {
     try { arch = await serial(async () => archiveNow(o.archiveRoot)); }
     catch (err) { return fail('Δεν γράφτηκε το αρχείο της προηγούμενης ΕΣΣΟ, οπότε δεν άλλαξε τίποτα: ' + msgOf(err)); }
     try { store.backup('πριν-νέα-ΕΣΣΟ'); } catch (err) { console.error('backup', err); }   // η βάση είναι ήδη και στο αρχείο
-    try { store.transact(() => { store.commit(freshState(prev, e, today(), dir)); }); }
+    // τύπος μονάδας και κεφαλίδα από το πρώτο βήμα: ισχύουν ήδη για τα νέα Excel που φτιάχνονται παρακάτω
+    const u = o.unit && (o.unit.unitKind === 'ili' || o.unit.unitKind === 'lochos') && Array.isArray(o.unit.unit) && o.unit.unit.length === 3 && o.unit.unit.every(x => typeof x === 'string') && typeof o.unit.unitName === 'string'
+      ? { unitKind: o.unit.unitKind, unit: o.unit.unit.map(x => x.trim()) as [string, string, string], unitName: o.unit.unitName.trim() } : undefined;
+    try { store.transact(() => { store.commit(freshState(prev, e, today(), dir, u)); }); }
     catch (err) { return fail('Δεν ξεκίνησε η νέα ΕΣΣΟ, η βάση έμεινε όπως ήταν (το αρχείο κρατήθηκε στο ' + arch.dir + '): ' + msgOf(err)); }
     // ό,τι ήξερε η εφαρμογή για τα παλιά Excel και τα έντυπα που βγήκαν δεν ισχύει πια
     clearTimeout(autoTimer); dirty.clear(); formsDirty = false;

@@ -1,4 +1,5 @@
 // features/people και features/status: προσωπικό, καρτέλα ατόμου, δήλωση κατάστασης
+import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
@@ -34,7 +35,7 @@ function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: str
   for (const [c] of CATS) for (const k of TYPE_KEYS.filter(x => TYPES[x].cat === c)) {
     const t = TYPES[k];
     if (k === 'LEAVE') leaveKinds.forEach(n => out.push({ key: 'LEAVE:' + n, cat: c, type: k, kind: n, short: n === 'Κανονική' ? t.label : n, long: n + ' άδεια', help: effects(t) }));
-    else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: sum({ type: k, kind: n }) + ' · ισχύει αμέσως και γράφεται στην ΗΚΑΙ (4. Ποινές)' }));
+    else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: sum({ type: k, kind: n }) + ' · ισχύει αμέσως και γράφεται στην ' + HK() + ' (4. Ποινές)' }));
     else out.push({ key: k, cat: c, type: k, short: t.label, long: t.long, help: sum({ type: k }) });
     // τα δικά σου ιατρικά: ό,τι όρισες στις Υπηρεσίες και αργίες (Michael, 18/10)
     if (c === 'med' && k === TYPE_KEYS.filter(x => TYPES[x].cat === 'med').slice(-1)[0])
@@ -80,7 +81,7 @@ export function PeopleScreen() {
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit });
   const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false); const [xl, setXl] = useState(false);
   // ουλαμοί από τις Ρυθμίσεις › Θάλαμοι και ουλαμοί (προεπιλογή 1–4 → 1ος, 5–8 → 2ος)
-  const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
+  const UNITS = useMemo(() => [{ value: 'all', label: UNIT().all }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const active = useMemo(() => state.people.filter(p => p.active), [state.people]);
   const total = active.length;
@@ -145,11 +146,11 @@ export function PeopleScreen() {
   const dateSel = html`<select className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
   const grid = withSt ? GRID_ST : GRID;
   return html`<div>
-    <${PageHeader} title="Δυναμολόγιο" sub=${'Δύναμη Ίλης: ' + total + ' άτομα. Πάτα σε γραμμή για την καρτέλα του, ή επίλεξε πολλούς για μαζική δήλωση.'}>
+    <${PageHeader} title="Δυναμολόγιο" sub=${'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα σε γραμμή για την καρτέλα του, ή επίλεξε πολλούς για μαζική δήλωση.'}>
       <${Button} variant="outline" onClick=${() => setAdding(true)} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">+ Νέος στρατιώτης<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
       <${Button} variant="outline" disabled=${xl} onClick=${exportXl} data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
-      <${Button} variant="outline" disabled=${xl} onClick=${printRoster} data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ· βγαίνει και Excel">${Icon.print}Εκτύπωση<//>
+      <${Button} variant="outline" disabled=${xl} onClick=${printRoster} data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ${HK()}· βγαίνει και Excel">${Icon.print}Εκτύπωση<//>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/>
@@ -216,7 +217,7 @@ export function PersonSheet({ pid, onClose }: P) {
       <dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 12)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ιστορικό καταστάσεων</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
-    ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">περιμένει<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>ΗΚΑΙ<//></li>`)}</ul></section>`}
+    ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">περιμένει<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>${HK()}<//></li>`)}</ul></section>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
   <//>`;
@@ -292,8 +293,8 @@ function PersonFields({ x, setX, id, isNew }: P) {
     <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}<${RoomField} id=${id + '-room'} value=${x.room} onChange=${(v: number | null) => setX({ ...x, room: v })}/></div>
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.</small></span></label>
-    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.</small></span></label>`}
+    <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ${HK()}.</small></span></label>
+    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ${HK()}. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.</small></span></label>`}
     ${F('notes', 'Σημειώσεις')}`;
 }
 
@@ -448,7 +449,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${isPun && html`<div className="field-row">
       <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><input id="dpby" className="ui-input" list="dpby-l" placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/><datalist id="dpby-l">${byList.map((x: string) => html`<option key=${x} value=${x}/>`)}</datalist></div>
       <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><input id="dpon" type="date" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
-    <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Τον τιμωρήσαντα γράψε τον σε αιτιατική («ΛΧΙΑ ΔΟΚΙΜΙΟ») και στην ΗΚΑΙ μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
+    <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Τον τιμωρήσαντα γράψε τον σε αιτιατική («ΛΧΙΑ ΔΟΚΙΜΙΟ») και στην ${HK()} μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
     <div className="field"><label className="field__label" htmlFor="dsn">${isPun ? 'Παρατήρηση' : 'Παρατήρηση (λόγος)'}</label><input id="dsn" className="ui-input" placeholder=${isPun ? 'Προαιρετικό, π.χ. αριθμός διαταγής' : 'Προαιρετικό, π.χ. γιατί ή αριθμός διαταγής'} value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/></div>
     ${err && html`<${Alert} tone=${ack ? 'warn' : 'bad'}><span>${err}</span><//>`}
   <//>`;
