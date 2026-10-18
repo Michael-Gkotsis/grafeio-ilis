@@ -789,3 +789,11 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .whod__x{width:26px;height:26px;border-radius:6px;border:0;background:none;cursor:pointer;color:var(--muted-fg);font-size:15px}
 .whod__x:hover{background:var(--muted);color:inherit}
 .whod__legend{margin:10px 0 0;line-height:1.7}
+
+/* Οπλισμός: έξοδος/είσοδος στη γραμμή και Κινήσεις */
+.weapon-out{display:flex;gap:6px;align-items:center;min-width:0}
+.weapon-out small{overflow:hidden;text-overflow:ellipsis}
+.weapon-out .weapon-io{margin-left:auto;flex:none}
+.ptable--moves .ptable__head,.ptable--moves .ptable__row{grid-template-columns:minmax(170px,1.3fr) 100px 120px 160px 160px 160px minmax(110px,1fr) 190px}
+.weapon-acts{display:flex;gap:6px;justify-content:flex-end}
+.weapon-movelist{max-height:220px;overflow-y:auto}
