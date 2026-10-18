@@ -3,10 +3,11 @@
 import { addDays, dm, dmy, dmyy, hkDate, parseD, DOW_FULL, MON_SHORT, type ISODate } from '../shared/dates';
 import { dutyAt, isWk, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
+import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { statusLbl } from '../shared/ranks';
-import { activePeople, personMap, statusesOn, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
+import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, postBy, postOf, HK_OFFICERS, HK_NCO } from '../shared/rules';
 import { Workbook } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
@@ -25,8 +26,8 @@ export function punishedOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => x.type === 'PUN' && !x.pending && coversDay(x, d));
 }
 export function absentOn(s: AppState, d: ISODate): Status[] {
-  // απόντες του εντύπου υπηρεσιών: άδειες, αναρρωτικές, νοσοκομείο (όχι οι εξοδούχοι)
-  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d));
+  // απόντες του εντύπου υπηρεσιών: άδειες, αναρρωτικές, νοσοκομείο (όχι οι εξοδούχοι)· όχι όποιος γυρίζει ως τις 14:00
+  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, DUTY_START));
 }
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
@@ -131,7 +132,8 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
 export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: Status }[]; stay: { p: Person; note: string }[] } {
   const outs: { p: Person; st: Status }[] = []; const stay: { p: Person; note: string }[] = [];
   for (const p of activePeople(s)) {
-    const ss = statusesOn(s.statuses, p.id, d);
+    // γύρισε ως την ώρα εξόδου: μετρά σαν να ήταν μέσα (εξοδούχος ή παραμένων)
+    const ss = statusesFrom(s.statuses, p.id, d, outMin(s.rules));
     const o = ss.find(x => TYPES[x.type].cat === 'out');
     if (o) { outs.push({ p, st: o }); continue; }
     if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων

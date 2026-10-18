@@ -2,10 +2,11 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
+import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, DUTY_START, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -16,7 +17,7 @@ import { statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : ''].filter(Boolean).join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ΗΚΑΙ ' + r.hkTime : ''].filter(Boolean).join(', ');
 const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
 const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.kind === 'op' && !x.hidden); return b.length ? 'οπλοφύλακας: ' + (b.every((x: P) => x.armed) ? 'ένοπλος' : 'άοπλος') + ' (Ρυθμίσεις)' : ''; };
@@ -87,12 +88,21 @@ function DutyCheck({ onOpen, m }: P) {
 
 function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
-  const [r, setR] = useState(state.rules);
+  const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME });
+  const badT = !normTime(r.outTime) || !normTime(r.hkTime);
+  const save = async () => {
+    const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! };
+    if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
+  };
   return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${async () => { if (await run({ t: 'setRules', rules: r, text: RULE_TXT(r) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(r) }); } }}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} onClick=${save}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
     <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση μετά από υπηρεσία (Κ-14)</label><select id="rrest" className="ui-input" value=${r.restDays} onChange=${(e: any) => setR({ ...r, restDays: +e.target.value })}><option value="0">Χωρίς</option><option value="1">1 ημέρα (όχι δύο μέρες στη σειρά)</option><option value="2">2 ημέρες</option></select></div>
     <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><select id="rnum" className="ui-input" value=${r.numRest || 0} onChange=${(e: any) => setR({ ...r, numRest: +e.target.value })}><option value="0">Χωρίς περιορισμό</option><option value="3">Ξανά στο ίδιο νούμερο μετά από 3 ημέρες</option><option value="4">Μετά από 4 ημέρες</option></select><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
+    <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
+      <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
+      <${TimeField} id="rhk" label="Ώρα ΗΚΑΙ" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ΗΚΑΙ της μέρας"/>
+    </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => setR({ ...r, strictUnarmed: e.target.checked })}/><span><b>Αυστηρά Άοπλοι</b><small>${STRICT_TXT}${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''} Όταν είναι κλειστό, ισχύει η κανονική σειρά.</small></span></label>
     <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · ΕΥ και ΣΤΕΠ σε καμία υπηρεσία · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>
     <div className="field"><span className="field__label">Πώς διαλέγει η αυτόματη συμπλήρωση</span><ol className="note fairlist">
@@ -128,7 +138,7 @@ export function GuardScreen() {
     const noDuty: P[] = [], unarmed: P[] = [];
     // όπως ορίζει ο πίνακας καταστάσεων (Ρυθμίσεις › Υπηρεσίες): καμία υπηρεσία του εντύπου, ή καμία ένοπλη
     const lists = state.settings.lists; const blocks = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-    people.forEach(p => { const ss = statusesOn(state.statuses, p.id, date); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
+    people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, DUTY_START); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
     // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
     const cols = capCols(state.settings);
@@ -429,7 +439,7 @@ export function OutsScreen() {
   const backEarly = useMemo(() => returnsOn(state, date).some(b => b.duty), [state, date]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
   const blockedN = people.filter(p => reasons[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !statusesOn(state.statuses, p.id, date).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
+  const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
@@ -441,7 +451,7 @@ export function OutsScreen() {
   };
   const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
   const height = useViewportHeight(mobile ? 380 : 330);
-  const c0 = strengthOf(state, date);
+  const c0 = strengthOf(state, date, outMin(state.rules));   // «Παρόντες απόψε»: από την ώρα εξόδου
   const awayDelta = diffs.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
   // όσοι βγαίνουν παρά τους κανόνες ή με ΔΝ χωρίς δικαίωμα: φαίνονται στο «Τι θα αλλάξει» και η αποθήκευση τους επιβεβαιώνει
   const pmO = useMemo(() => personMap(state.people), [state.people]);

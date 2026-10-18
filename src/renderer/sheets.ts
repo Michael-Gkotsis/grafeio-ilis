@@ -2,9 +2,10 @@
 import { E, type Cell, type SheetModel } from './common';
 import { ROT, TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, DUTY_START, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
+import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceText, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
@@ -51,8 +52,9 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   lay.extra.forEach(x => rows.push(ext(x)));
   rows.push([E('', '', W)]);
   const on = (x: Status) => coversDay(x, date);
+  const away = (x: Status) => on(x) && !backBy(x, date, DUTY_START);   // όποιος γυρίζει ως τις 14:00 δεν είναι απών της υπηρεσίας
   const pun = s.statuses.filter(x => x.type === 'PUN' && !x.pending && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
-  const abs = s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
+  const abs = s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && away(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   rows.push([E('ΤΙΜΩΡΗΜΕΝΟΙ', 'b hdr', 6), E(''), E('ΑΠΟΝΤΕΣ', 'b hdr', 6)]);
   rows.push([...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ'), E(''), ...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΑΠΟΥΣΙΑΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ')]);
   for (let i = 0; i < Math.max(6, pun.length, abs.length); i++) {
