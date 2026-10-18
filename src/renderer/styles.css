@@ -725,6 +725,10 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .stpick__opt:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring-soft);border-color:var(--ring)}
 .stpick__opt.is-on{border-color:var(--ring);box-shadow:0 0 0 2px var(--ring-soft)}
 .stpick__opt small{color:var(--muted-fg);font-size:12px}
+.stpick__hint{font-weight:400}
+.stpick__box{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-right:6px;vertical-align:-3px;border:1.5px solid var(--input);border-radius:4px;background:var(--card);color:var(--primary-fg);font-size:11px;font-weight:700;line-height:1}
+.stpick__box.is-on{background:var(--primary);border-color:var(--primary)}
+.declrows{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:13px}
 .declsum{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;padding:8px 12px;background:var(--muted);border-radius:var(--radius);font-size:13px}
 .declsum__sep{color:var(--muted-fg)}
 dl.kv dt.kv__sub{padding-left:14px;font-size:13px}
