@@ -1,6 +1,7 @@
 // Ώρες στις άδειες (Michael, 13/10): ώρα αναχώρησης και ώρα επιστροφής, προαιρετικές. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
+import JSZip from 'jszip';
 import os from 'os';
 import path from 'path';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
@@ -176,7 +177,10 @@ describe('ώρες: Excel «Άδειες»', () => {
     expect(rows[0].slice(5, 7)).toEqual(['ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ', 'ΩΡΑ ΕΠΙΣΤΡΟΦΗΣ']);
     expect(rows[1].slice(5, 7)).toEqual(['14:00', '22:00']);
     const back = (await Workbook.open(fs.readFileSync(file)));
-    expect((await back.sheet('ΑΔΕΙΕΣ')).style('F1')).toBe((await back.sheet('ΑΔΕΙΕΣ')).style('E1'));
+    // η επικεφαλίδα πήρε το πλαίσιο της διπλανής (και αναδιπλώνεται, αφού δεν χωράει στη στενή στήλη)
+    const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(await (await JSZip.loadAsync(fs.readFileSync(file))).file('xl/styles.xml')!.async('string'))![1].match(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)!;
+    const frame = async (ref: string) => xfs[(await back.sheet('ΑΔΕΙΕΣ')).style(ref)!].match(/borderId="\d+"/g);
+    expect(await frame('F1')).toEqual(await frame('E1'));
     if (!w.ok) return;
     const d = diffStatuses('leave', s, parseStatuses('leave', { name: 'ΑΔΕΙΕΣ', rows }, w.binding!, s.people, TODAY), w.binding!);
     expect(d.update).toEqual([]); expect(d.same).toBe(1);

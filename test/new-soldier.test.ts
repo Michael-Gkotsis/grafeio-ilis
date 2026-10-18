@@ -104,7 +104,13 @@ async function dynFile(people: Person[], blanks: number): Promise<{ file: string
   return { file, b: { file, sheet: x.sheet, header: x.header, cols: x.cols, write: true } };
 }
 const formulas = async (file: string, sheet: string) => { const ws = await (await Workbook.open(fs.readFileSync(file))).sheet(sheet); const out: Record<string, string> = {}; for (const c of ws.cells()) if (c.inner.includes('<f')) out[String.fromCharCode(64 + c.c) + c.r] = ws.formula(String.fromCharCode(64 + c.c) + c.r)!; return out; };
-const styleOf = async (file: string, ref: string) => (await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ')).style(ref);
+// Πλαίσιο και στοίχιση του κελιού (το μέγεθος γραμμάτων μπορεί να μικρύνει για να χωρέσει το όνομα στη στήλη)
+const styleOf = async (file: string, ref: string) => {
+  const s = (await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ')).style(ref); if (s == null) return null;
+  const xml = await (await JSZip.loadAsync(fs.readFileSync(file))).file('xl/styles.xml')!.async('string');
+  const xf = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)![1].match(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)![s];
+  return xf.match(/borderId="\d+"|fillId="\d+"|numFmtId="\d+"|horizontal="\w+"/g)!.join(' ');
+};
 
 describe('εγγραφή στο αρχείο', () => {
   it('νέα γραμμή κάτω από τον τελευταίο με τη μορφή του, τα σύνολα τον μετράνε, και η αναίρεση αδειάζει τη γραμμή', async () => {

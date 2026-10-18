@@ -170,7 +170,9 @@ describe('υπάρχον φύλλο του λοχία', () => {
     expect(w.ok && w.added).toBe(1);
     const wb = await Workbook.open(fs.readFileSync(file)); const ws = await wb.sheet(0);
     expect(ws.get('D4')).toBe(s.people[1].last);
-    for (const c of 'ABCDEFGHIL') expect(ws.style(c + '4'), c).toBe(2);
+    // ίδιο πλαίσιο και στοίχιση με τη γραμμή από πάνω (το μέγεθος γραμμάτων μπορεί να μικρύνει για να χωρέσει το όνομα)
+    const frame = async (ref: string) => (await xfOf(file, 'ΤΙΜΩΡΗΜΕΝΟΙ', ref)).match(/borderId="\d+"|horizontal="\w+"/g);
+    for (const c of 'ABCDEFGHIL') expect(await frame(c + '4'), c).toEqual(await frame(c + '3'));
     // η ημερομηνία πήρε μορφή ημέρα/μήνας/έτος πάνω στο ίδιο πλαίσιο
     expect(await xfOf(file, 'ΤΙΜΩΡΗΜΕΝΟΙ', 'J4')).toMatch(/borderId="1"/);
     // η γραμμή 5 δεν γράφτηκε: μένει χωρίς στυλ
