@@ -60,7 +60,7 @@ describe('Οπλισμός', () => {
     s = { ...s, settings: { ...s.settings, unit: ['ΚΕΤΘ', '4η ΙΛΗ', 'ΓΡΑΦΕΙΟ ΛΟΧΙΑ'], unitName: '4ης Ίλης', place: 'Αυλώνα' } };
     const sh = weaponSheets(s, '2026-10-17');
     expect(sh.map(x => x.name)).toEqual(['ΟΠΛΙΣΜΟΣ', 'ΜΕ ΟΠΛΟ', 'ΕΚΤΟΣ ΟΠΛΟΒΑΣΤΟΥ', 'ΧΩΡΙΣ ΟΠΛΟ', 'ΑΟΠΛΟΙ ΜΕ ΟΠΛΟ', 'ΙΔΙΟΣ ΑΡΙΘΜΟΣ', 'ΝΑ ΠΑΡΑΔΩΣΟΥΝ', 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ']);
-    expect(sh[0].head.slice(-5)).toEqual(['ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 'ΥΠΟΓΡΑΦΗ']);
+    expect(sh[0].head.slice(-6)).toEqual(['ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΘΕΣΗ', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 'ΥΠΟΓΡΑΦΗ']);
     expect(sh[5].rows.map(r => r[W_NUM])).toEqual(['A1', 'A1']);
     const r = await weaponsBook(s, '2026-10-17');
     expect(r.name).toBe('ΟΠΛΙΣΜΟΣ 17-10-2026.xlsx');
@@ -84,6 +84,15 @@ describe('Οπλισμός', () => {
     const s2 = run(s, { t: 'setWeapons', changes: [{ pid: 2, rack: 'E6' }] }).state;
     expect(s2.people.filter(p => weaponMatch('dup', p, weaponInfo(s2))).map(p => p.id)).toEqual([1, 2]);
     expect(run(s2, { t: 'setWeapons', changes: [{ pid: 1, wtype: '' }] }).state.people[0].wtype).toBeUndefined();
+  });
+  it('«Θέση» όπλου: ελεύθερο κείμενο με κεφαλαία, στο Excel μετά τον οπλοβαστό', () => {
+    let r = run(W(fakeState(3), [{ pid: 1, weapon: '100' }]), { t: 'setWeapons', changes: [{ pid: 1, wpos: '  πύλη   2 ' }] });
+    expect(r.state.people[0]).toMatchObject({ weapon: '100', wpos: 'ΠΥΛΗ 2' });
+    expect(r.text).toMatch(/θέση ΠΥΛΗ 2/);
+    const sh = weaponSheets(r.state, '2026-10-17')[0];
+    expect(sh.rows.find(x => x[W_NUM] === '100')![sh.head.indexOf('ΘΕΣΗ')]).toBe('ΠΥΛΗ 2');
+    r = run(r.state, { t: 'setWeapons', changes: [{ pid: 1, wpos: '' }] });
+    expect(r.state.people[0].wpos).toBeUndefined();
   });
   it('εντός/εκτός: εκτός όποιος έχει ένοπλη υπηρεσία τη μέρα, με τη θέση ως λόγο', () => {
     const D = '2026-10-17';

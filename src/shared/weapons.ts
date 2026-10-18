@@ -17,6 +17,8 @@ export const weaponKey = (v: unknown) => normWeapon(v).replace(/[\s.\-/]/g, '');
 
 // Θέση οπλοβαστού: κεφαλαία χωρίς κενά («ε 6» → «Ε6»)· για σύγκριση και λατινικά που μοιάζουν («E6» = «Ε6»)
 export const normRack = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, '').trim());
+// «Θέση» όπλου: ελεύθερο κείμενο, με κεφαλαία
+export const normPos = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ' ').trim());
 export const rackKey = (v: unknown) => normGreek(normRack(v)).replace(/[.\-/]/g, '');
 
 export type WeaponFilter = 'all' | 'with' | 'out' | 'without' | 'unarmed' | 'dup' | 'return';
@@ -92,13 +94,13 @@ export function weaponMatch(f: WeaponFilter, p: Person, info: WeaponInfo): boole
 }
 
 // Excel «Οπλισμός»: ένα φύλλο ανά φίλτρο. Το πρώτο (όλοι) έχει και στήλη υπογραφής, για τη χρέωση των όπλων.
-export const WEAPON_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι.', 'ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΕΝΤΟΣ / ΕΚΤΟΣ'];
+export const WEAPON_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι.', 'ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΘΕΣΗ', 'ΕΝΤΟΣ / ΕΚΤΟΣ'];
 export const W_NUM = WEAPON_COLS.indexOf('ΑΡΙΘΜΟΣ ΟΠΛΟΥ');
 export interface WeaponSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string }
 export function weaponSheets(s: AppState, d: ISODate): WeaponSheet[] {
   const info = weaponInfo(s, d); const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
   return WEAPON_FILTERS.map(([f, , name, note], i) => {
-    const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), inOutText(p, info)]);
+    const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
     if (f === 'dup') rows.sort((a, b) => weaponKey(a[W_NUM]).localeCompare(weaponKey(b[W_NUM])) || 0).forEach((r, j) => { r[0] = j + 1; });
     return { name, title: name + ' ' + dmy(d), head: i === 0 ? [...WEAPON_COLS, 'ΥΠΟΓΡΑΦΗ'] : WEAPON_COLS, rows: i === 0 ? rows.map(r => [...r, '']) : rows, note };
   }).concat([moveSheet(s, d)]);

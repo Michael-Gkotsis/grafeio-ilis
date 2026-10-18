@@ -9,7 +9,7 @@ import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, 
 import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
-import { normRack, normWeapon } from './weapons';
+import { normPos, normRack, normWeapon } from './weapons';
 import { isSat, isWk, WK } from './weekend';
 
 export type Command =
@@ -76,7 +76,7 @@ export type Command =
   | { t: 'deleteWeaponMove'; id: string };
 
 // Οπλισμός: μόνο τα πεδία που δόθηκαν αλλάζουν (αριθμός, τύπος, θέση οπλοβαστού)· κενό = σβήνεται
-export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string }
+export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -533,20 +533,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'setWeapons': {
-      const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack } as const;
+      const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack, wpos: normPos } as const;
       const by = new Map<number, Person>();
       for (const ch of c.changes) {
         const p0 = pm.get(ch.pid); if (!p0) throw new Error('Δεν βρέθηκε το άτομο');
         const q: Person = { ...(by.get(p0.id) || p0) };
-        for (const f of ['weapon', 'wtype', 'rack'] as const) { if (ch[f] === undefined) continue; const v = F[f](ch[f]); if (v) q[f] = v; else delete q[f]; }
-        if (q.weapon !== p0.weapon || q.wtype !== p0.wtype || q.rack !== p0.rack) by.set(p0.id, q); else by.delete(p0.id);
+        for (const f of ['weapon', 'wtype', 'rack', 'wpos'] as const) { if (ch[f] === undefined) continue; const v = F[f](ch[f]); if (v) q[f] = v; else delete q[f]; }
+        if (q.weapon !== p0.weapon || q.wtype !== p0.wtype || q.rack !== p0.rack || q.wpos !== p0.wpos) by.set(p0.id, q); else by.delete(p0.id);
       }
       if (!by.size) return { state: s, text: '', files: [] };
       const people = s.people.map(p => by.get(p.id) || p);
       const [pid, q] = [...by][0]; const p = pm.get(pid)!;
       const one = [q.weapon !== p.weapon && (q.weapon ? 'όπλο ' + q.weapon : 'χωρίς όπλο' + (p.weapon ? ' (ήταν ' + p.weapon + ')' : '')),
-        q.wtype !== p.wtype && 'τύπος ' + (q.wtype || '—'), q.rack !== p.rack && 'οπλοβαστός ' + (q.rack || '—')].filter(Boolean).join(', ');
-      const onlyNum = q.wtype === p.wtype && q.rack === p.rack;
+        q.wtype !== p.wtype && 'τύπος ' + (q.wtype || '—'), q.rack !== p.rack && 'οπλοβαστός ' + (q.rack || '—'), q.wpos !== p.wpos && 'θέση ' + (q.wpos || '—')].filter(Boolean).join(', ');
+      const onlyNum = q.wtype === p.wtype && q.rack === p.rack && q.wpos === p.wpos;
       const text = by.size === 1 ? (onlyNum ? 'Όπλο ' + shortName(p) + ': ' + (q.weapon || 'χωρίς όπλο' + (p.weapon ? ' (ήταν ' + p.weapon + ')' : '')) : 'Οπλισμός ' + shortName(p) + ': ' + one) : 'Οπλισμός' + (c.what ? ', ' + c.what : '') + ': άλλαξε σε ' + by.size + ' άτομα';
       return { state: { ...s, people }, text, files: [] };
     }
