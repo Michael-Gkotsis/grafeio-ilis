@@ -379,6 +379,13 @@ describe('Απαντήσεις του λοχία (10/10)', () => {
     s = run(s, { t: 'autofill', date: D2 });
     expect(s.guards[D2].ly).not.toBe(7); expect(s.guards[D2].ly).not.toBe(8); expect(s.guards[D2].ly).toBeTruthy();
     expect(s.guards[D2].dy).toBe(8);
+    // και μετά από υπηρεσία χθες ή με «Όχι ΣΚ»: μπαίνουν πάντα και οι δύο (Michael, 18/10)
+    const D5 = addDays(D, 5);
+    s = { ...s, people: s.people.map(p => (p.id === 7 ? { ...p, offDays: [0, 1, 2, 3, 4, 5, 6] } : p)) };
+    const f5 = fillDay(s, D5);
+    expect(f5.guards[D5].ly).toBe(7); expect(f5.guards[D5].dy).toBe(8);
+    expect(f5.warn.some(w => w.startsWith('Μόνιμος Λ/Υ'))).toBe(true);
+    s = { ...s, people: s.people.map(p => (p.id === 7 ? { ...p, offDays: undefined } : p)) };
     // αλλαγή για μία μέρα: ο αντικαταστάτης μετρά υπηρεσία κανονικά
     const D3 = addDays(D, 3), far = addDays(D, 10);
     const busy = new Set([D2, D3, addDays(D, 4)].flatMap(d => Object.values(s.guards[d] || {})));

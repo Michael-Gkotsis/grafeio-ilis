@@ -425,11 +425,18 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };
   let n = 0; const skNone = new Set<string>();
   const posts = postsOf(s.settings);
-  // 1. οι μόνιμοι Λ/Υ και Δ/Υ, αν είναι διαθέσιμοι· αλλιώς η θέση γεμίζει με τη σειρά, όπως όλες
+  // 1. οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση (Michael, 18/10), και παρά τους κανόνες (ανάπαυση, ΣΚ, μέρες
+  // χωρίς υπηρεσία, «Τι κάνει»), με προειδοποίηση. Όχι μόνο όταν τον κρατά κατάσταση (άδεια, ΕΥ…) ή είναι ήδη σε άλλη θέση:
+  // τότε η θέση γεμίζει με τη σειρά, όπως όλες, και η προειδοποίηση λέει γιατί.
+  const fixedWarn: string[] = []; const pm0 = personMap(s.people);
   for (const x of posts) {
     const f = (x.k === 'ly' || x.k === 'dy') ? s.settings.fixed?.[x.k] : undefined;
-    if (g[x.k] || !f || !people.some(p => p.id === f) || guardUnavailable(work, date, f, x.k, idx)) continue;
+    if (g[x.k] || !f || !people.some(p => p.id === f)) continue;
+    const who = 'Μόνιμος ' + x.label + ' ' + shortName(pm0.get(f)!);
+    const st = dutyBlock(work.statuses, date, f, x, s.settings.lists); const r = st || guardUnavailable(work, date, f, x.k, idx);
+    if (st || (r && r.startsWith('Ήδη '))) { fixedWarn.push(who + ': δεν μπήκε (' + r + ')'); continue; }
     g[x.k] = f; n++; setDay(); mark(f);
+    if (r) fixedWarn.push(who + ': μπήκε παρά τον κανόνα (' + r + ')');
   }
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
   const mine = new Set<string>();   // οι θέσεις που γέμισε αυτή η συμπλήρωση (μόνο αυτές μετακινούνται στην επιδιόρθωση)
@@ -445,7 +452,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   }
   n += repair(s, date, g, mine, order, people, fair, idx, fixed);
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
-  const pm = personMap(s.people); const empty: string[] = []; const warn: string[] = [];
+  const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn];
   for (const x of order) {
     const pid = g[x.k];
     if (!pid) { empty.push(x.k); if (skNone.has(x.k)) warn.push(x.label + ': ' + STRICT_SK); continue; }
