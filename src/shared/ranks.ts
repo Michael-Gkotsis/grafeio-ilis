@@ -11,6 +11,8 @@ export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑ�
 export const CADRE_RANKS = ['ΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΑΛΧΙΑΣ', 'ΑΝΘΣΤΗΣ', 'ΑΝΘΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΙΛΧΟΣ', 'ΑΝΘΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΛΓΟΣ', 'ΕΠΛΧΟΣ', 'ΤΧΗΣ', 'ΔΕΑ'];
 // Τύποι όπλων (καρτέλα Οπλισμός, Michael 17/10)· οι άλλοι προστίθενται στις Λίστες
 export const WEAPON_TYPES = ['G3A3', 'G3A4', 'M16A2', 'M4'];
+// Λόγοι εξόδου όπλου από τον οπλοβαστό και ο λόγος εισαγωγής του καθενός (Michael, 18/10: «ΕΚΠ» → «ΛΗΞ ΕΚΠ»)· οι άλλοι στις Λίστες
+export const WEAPON_OUT: [string, string][] = [['ΕΚΠ', 'ΛΗΞ ΕΚΠ'], ['ΒΟΛΗ', 'ΛΗΞ ΒΟΛΗΣ'], ['ΑΣΚΗΣΗ', 'ΛΗΞ ΑΣΚΗΣΗΣ'], ['ΥΠΗΡΕΣΙΑ', 'ΛΗΞ ΥΠΗΡΕΣΙΑΣ'], ['ΚΑΘΑΡΙΣΜΟΣ', 'ΛΗΞ ΚΑΘΑΡΙΣΜΟΥ'], ['ΕΠΙΣΚΕΥΗ', 'ΕΠΙΣΤΡΟΦΗ ΑΠΟ ΕΠΙΣΚΕΥΗ']];
 // Όπλα και σώματα (στήλη «Ο/Σ»)
 export const SPECS = ['ΠΖ', 'ΤΘ', 'ΠΒ', 'ΜΧ', 'ΔΒ', 'ΔΒ-ΗΠ', 'ΑΣ', 'ΤΧ', 'ΕΜ', 'ΥΓ', 'ΥΠ', 'ΓΕ'];
 
@@ -30,13 +32,14 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
 // Τα καινούργια μπαίνουν σαν ΕΑΡΒ (χωρίς περιορισμούς ώσπου να τα ρυθμίσεις, Michael 18/10) · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
+// back: λόγος εισαγωγής όπλου για έναν δικό σου λόγο εξόδου (κενό = «ΛΗΞ <λόγος>»)
 // warn: «μόνο προειδοποίηση» (checkbox): βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
-export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean }
+export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; back?: string }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
 export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig };
@@ -45,13 +48,14 @@ export const LIST_BASE: Record<ListId, readonly string[]> = {
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
   medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label),
   siUnarmed: ['ΑΟΠΛ', 'Ι4'],   // Σ.Ι. που περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4» (όπως πριν τις Λίστες)
-  weaponTypes: WEAPON_TYPES
+  weaponTypes: WEAPON_TYPES,
+  weaponOut: WEAPON_OUT.map(x => x[0])
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων' };
+export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
 // βαθμοί, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
-const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes'];
+const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut'];
 export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
@@ -67,6 +71,13 @@ export function listRows(lists: UserLists | undefined, id: ListId): ListRow[] {
 }
 // Ό,τι προτείνεται στις φόρμες και στα dropdown του Excel: οι βασικές που δεν έκρυψες και οι δικές σου
 export const listOf = (lists: UserLists | undefined, id: ListId): string[] => (lists?.[id] ? listRows(lists, id).filter(x => !x.hidden).map(x => x.name) : [...LIST_BASE[id]]);
+// Λόγος εισαγωγής όπλου για έναν λόγο εξόδου: του βασικού (ΕΚΠ → ΛΗΞ ΕΚΠ), όποιον όρισες στον δικό σου, αλλιώς «ΛΗΞ <λόγος>»
+export function weaponBack(reason: string, lists?: UserLists): string {
+  const k = itemKey(reason || ''); if (!k) return '';
+  const base = WEAPON_OUT.find(x => itemKey(x[0]) === k); if (base) return base[1];
+  const own = (lists?.weaponOut?.add || []).find(x => itemKey(x.name) === k);
+  return own?.back || 'ΛΗΞ ' + reason.trim().toUpperCase();
+}
 // Η γραμμή της ΗΚΑΙ που όρισες για έναν δικό σου βαθμό (αλλιώς undefined: τη βρίσκει η εφαρμογή από το όνομα)
 export function hkOfRank(lists: UserLists | undefined, id: 'soldierRanks' | 'cadreRanks', rank: string): string | undefined {
   const k = itemKey(rank); if (!k) return undefined;

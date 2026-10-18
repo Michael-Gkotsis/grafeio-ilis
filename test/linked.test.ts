@@ -196,7 +196,7 @@ describe('δυνατότητα υπηρεσιών', () => {
     const s = fakeState(12); const sh = capsSheet(s);
     expect(detectTables([sh])[0].best).toBe('caps');
     const b = bind('caps', sh);
-    const s0 = run(s, { t: 'setCap', pid: 2, kind: 'op', allowed: false });   // ο 2ος είχε εμπόδιο στον οπλοφύλακα από την εφαρμογή
+    const s0 = run(s, { t: 'setCap', pid: 2, key: 'op', v: 'off' });   // ο 2ος είχε εμπόδιο στον οπλοφύλακα από την εφαρμογή
     const p = planCaps(sh, b, { ...s0, caps: { ...s0.caps, 9: { sk: 'Από τον λοχία' } } });
     expect(p.changes.map(c => [c.pid, c.kind, c.reason])).toEqual([[1, 'op', 'Από Excel: ΛΟΓΩ Ι'], [1, 'sk', 'Από Excel: ΛΟΓΩ Ι'], [2, 'op', null], [2, 'mg', 'Από Excel'], [2, 'sk', 'Από Excel']]);
     const s2 = run(s0, { t: 'importCaps', changes: p.changes, source: 'x' });
@@ -208,8 +208,8 @@ describe('δυνατότητα υπηρεσιών', () => {
   it('αλλαγή στην εφαρμογή γράφεται στο φύλλο: «-» ή κενό στο κελί, νέα γραμμή για νέο εμπόδιο', () => {
     const s = fakeState(12); const sh = capsSheet(s); const b = bind('caps', sh);
     let s2 = run(s, { t: 'importCaps', changes: planCaps(sh, b, s).changes, source: 'x' });
-    s2 = run(s2, { t: 'setCap', pid: 1, kind: 'sk', allowed: true });       // ο 1ος κάνει πια σκοπιά
-    s2 = run(s2, { t: 'setCap', pid: 4, kind: 'mg', allowed: false });      // ο 4ος δεν κάνει μαγειρεία
+    s2 = run(s2, { t: 'setCap', pid: 1, key: 'sk', v: 'on' });       // ο 1ος κάνει πια σκοπιά
+    s2 = run(s2, { t: 'setCap', pid: 4, key: 'mg', v: 'off' });      // ο 4ος δεν κάνει μαγειρεία
     const w = planCapsWrite(sh, b, s2);
     expect(w.sets).toContainEqual({ r: 1, c: 6, v: null });
     expect(w.sets.filter(x => x.r === 3)).toEqual([{ r: 3, c: 0, v: s.people[3].last }, { r: 3, c: 1, v: s.people[3].first }, { r: 3, c: 2, v: s.people[3].father }, { r: 3, c: 5, v: '-' }, { r: 3, c: 7, v: 'Από τον λοχία' }]);

@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { W_NUM, inOutText, normRack, normWeapon, rackKey, weaponInfo, weaponKey, weaponMatch, weaponSheets } from '../src/shared/weapons';
 import { weaponsBook } from '../src/main/excel';
+import { weaponBack } from '../src/shared/ranks';
 import { lyLine } from '../src/shared/froura';
 import type { AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
@@ -58,7 +59,7 @@ describe('Οπλισμός', () => {
     let s = W(fakeState(6), [{ pid: 1, weapon: 'a1' }, { pid: 2, weapon: 'a1' }, { pid: 3, weapon: 'b2' }]);
     s = { ...s, settings: { ...s.settings, unit: ['ΚΕΤΘ', '4η ΙΛΗ', 'ΓΡΑΦΕΙΟ ΛΟΧΙΑ'], unitName: '4ης Ίλης', place: 'Αυλώνα' } };
     const sh = weaponSheets(s, '2026-10-17');
-    expect(sh.map(x => x.name)).toEqual(['ΟΠΛΙΣΜΟΣ', 'ΜΕ ΟΠΛΟ', 'ΕΚΤΟΣ ΟΠΛΟΒΑΣΤΟΥ', 'ΧΩΡΙΣ ΟΠΛΟ', 'ΑΟΠΛΟΙ ΜΕ ΟΠΛΟ', 'ΙΔΙΟΣ ΑΡΙΘΜΟΣ', 'ΝΑ ΠΑΡΑΔΩΣΟΥΝ']);
+    expect(sh.map(x => x.name)).toEqual(['ΟΠΛΙΣΜΟΣ', 'ΜΕ ΟΠΛΟ', 'ΕΚΤΟΣ ΟΠΛΟΒΑΣΤΟΥ', 'ΧΩΡΙΣ ΟΠΛΟ', 'ΑΟΠΛΟΙ ΜΕ ΟΠΛΟ', 'ΙΔΙΟΣ ΑΡΙΘΜΟΣ', 'ΝΑ ΠΑΡΑΔΩΣΟΥΝ', 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ']);
     expect(sh[0].head.slice(-5)).toEqual(['ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 'ΥΠΟΓΡΑΦΗ']);
     expect(sh[5].rows.map(r => r[W_NUM])).toEqual(['A1', 'A1']);
     const r = await weaponsBook(s, '2026-10-17');
@@ -96,5 +97,55 @@ describe('Οπλισμός', () => {
     expect(weaponInfo(s).out.size).toBe(0);
     const row = weaponSheets(s, D)[0].rows[0];
     expect(String(row[row.length - 2])).toMatch(/^ΕΚΤΟΣ/);
+  });
+});
+
+describe('Έξοδοι και είσοδοι όπλων', () => {
+  const armedState = () => W(fakeState(6), [{ pid: 1, weapon: '111' }, { pid: 2, weapon: '222' }, { pid: 3, weapon: '333' }]);
+  it('έξοδος με λόγο και ώρα: όσοι έχουν όπλο, μία φορά ο καθένας', () => {
+    const r = run(armedState(), { t: 'weaponOut', pids: [1, 2, 4], reason: ' εκπ ', day: '2026-10-18', time: '8.15' });
+    expect(r.state.weaponLog.map(m => [m.pid, m.weapon, m.reason, m.outTime])).toEqual([[1, '111', 'ΕΚΠ', '08:15'], [2, '222', 'ΕΚΠ', '08:15']]);
+    expect(r.text).toMatch(/χωρίς αριθμό όπλου/);
+    const info = weaponInfo(r.state, '2026-10-18');
+    expect(r.state.people.filter(p => weaponMatch('out', p, info)).map(p => p.id)).toEqual([1, 2]);
+    expect(inOutText(r.state.people[0], info)).toBe('ΕΚΤΟΣ: ΕΚΠ από 18/10 08:15');
+    // ήδη εκτός ή χωρίς όπλο: δεν ξαναβγαίνει
+    expect(() => run(r.state, { t: 'weaponOut', pids: [1, 4], reason: 'ΒΟΛΗ', day: '2026-10-18', time: '09:00' })).toThrow(/ήδη εκτός/);
+    expect(() => run(r.state, { t: 'weaponOut', pids: [3], reason: 'ΒΟΛΗ', day: '2026-10-18', time: '' })).toThrow(/ώρα/);
+  });
+  it('είσοδος: ο λόγος εισαγωγής από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ), ή δικός σου', () => {
+    let s = run(armedState(), { t: 'weaponOut', pids: [1, 2], reason: 'ΕΚΠ', day: '2026-10-18', time: '08:15' }).state;
+    const [a, b] = s.weaponLog;
+    expect(() => run(s, { t: 'weaponIn', ids: [a.id], day: '2026-10-18', time: '08:00' })).toThrow(/πριν την έξοδο/);
+    s = run(s, { t: 'weaponIn', ids: [a.id], day: '2026-10-18', time: '12:30' }).state;
+    expect(s.weaponLog[0]).toMatchObject({ inDay: '2026-10-18', inTime: '12:30', inReason: 'ΛΗΞ ΕΚΠ' });
+    s = run(s, { t: 'weaponIn', ids: [b.id], day: '2026-10-18', time: '13:00', reason: 'επιστροφη νωρις' }).state;
+    expect(s.weaponLog[1].inReason).toBe('ΕΠΙΣΤΡΟΦΗ ΝΩΡΙΣ');
+    expect(weaponInfo(s, '2026-10-18').moves.size).toBe(0);
+  });
+  it('δικός σου λόγος με δικό του λόγο εισαγωγής· χωρίς: «ΛΗΞ <λόγος>»', () => {
+    const lists = { weaponOut: { add: [{ name: 'ΦΡΟΥΡΑ', back: 'ΑΛΛΑΓΗ ΦΡΟΥΡΑΣ' }, { name: 'ΠΑΡΕΛΑΣΗ' }] } };
+    expect(weaponBack('φρουρα', lists)).toBe('ΑΛΛΑΓΗ ΦΡΟΥΡΑΣ');
+    expect(weaponBack('ΠΑΡΕΛΑΣΗ', lists)).toBe('ΛΗΞ ΠΑΡΕΛΑΣΗ');
+    expect(weaponBack('ΒΟΛΗ', lists)).toBe('ΛΗΞ ΒΟΛΗΣ');
+  });
+  it('διόρθωση ωρών, ξανά εκτός, σβήσιμο', () => {
+    let s = run(armedState(), { t: 'weaponOut', pids: [1], reason: 'ΒΟΛΗ', day: '2026-10-18', time: '07:00' }).state;
+    const id = s.weaponLog[0].id;
+    s = run(s, { t: 'weaponIn', ids: [id], day: '2026-10-18', time: '15:00' }).state;
+    s = run(s, { t: 'editWeaponMove', id, patch: { outTime: '06:45', inTime: '14:10' } }).state;
+    expect(s.weaponLog[0]).toMatchObject({ outTime: '06:45', inTime: '14:10', inReason: 'ΛΗΞ ΒΟΛΗΣ' });
+    expect(() => run(s, { t: 'editWeaponMove', id, patch: { inTime: '06:00' } })).toThrow(/πριν την έξοδο/);
+    s = run(s, { t: 'editWeaponMove', id, patch: { inDay: '' } }).state;
+    expect(s.weaponLog[0].inDay).toBeUndefined();
+    expect(run(s, { t: 'deleteWeaponMove', id }).state.weaponLog).toEqual([]);
+  });
+  it('Excel: φύλλο «ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ» με όσα κινήθηκαν τη μέρα ή είναι ακόμα εκτός', () => {
+    let s = run(armedState(), { t: 'weaponOut', pids: [1, 2], reason: 'ΕΚΠ', day: '2026-10-17', time: '08:00' }).state;
+    s = run(s, { t: 'weaponIn', ids: [s.weaponLog[0].id], day: '2026-10-17', time: '13:00' }).state;
+    const day18 = weaponSheets(s, '2026-10-18').find(x => x.name === 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ')!;
+    expect(day18.rows.map(r => [r[4], r[8]])).toEqual([['222', 'ΕΚΤΟΣ']]);
+    const day17 = weaponSheets(s, '2026-10-17').find(x => x.name === 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ')!;
+    expect(day17.rows.map(r => [r[4], r[5], r[6], r[7], r[8]])).toEqual([['111', 'ΕΚΠ', '17/10/2026 08:00', 'ΛΗΞ ΕΚΠ', '17/10/2026 13:00'], ['222', 'ΕΚΠ', '17/10/2026 08:00', '', 'ΕΚΤΟΣ']]);
   });
 });

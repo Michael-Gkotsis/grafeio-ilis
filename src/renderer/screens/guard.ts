@@ -4,16 +4,16 @@ import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segment
 import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, useExport, useExportBusy } from '../common';
 import { frouraSheet, checkSheet } from '../sheets';
-import { TYPES, CAP_KINDS, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capsOf, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
+import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesOn, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
-import { DutyProfileDialog } from './people';
 import { backDay, backWhen, dutyAt, isSat, isWk, outLbl, returnsOn } from '../../shared/weekend';
 import { statusLbl } from '../../shared/ranks';
+import { WhoDoes } from './whodoes';
 type P = any;
 
 const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : ''].filter(Boolean).join(', ');
@@ -113,8 +113,9 @@ export function GuardScreen() {
   const ex = useExport(); const xb = useExportBusy();
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
   const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
-  // «Τι κάνει» ένας στρατιώτης: null κλειστό, -1 με επιλογή στρατιώτη
-  const [prof, setProf] = useState<number | null>(null);
+  // «Ποιος κάνει τι»: η καρτέλα, μόνο με τον στρατιώτη όταν έρχεσαι από ένα όνομα (κλειδί για να ξαναρχίσει)
+  const [who, setWho] = useState<{ pid: number | null; n: number }>({ pid: null, n: 0 });
+  const setProf = (pid: number) => { setWho(w => ({ pid: pid >= 0 ? pid : null, n: w.n + 1 })); setTab('who'); };
   const g = state.guards[date] || {}; const seatless = state.dutyLog?.[date] || [];
   const posts = postsOf(state.settings);
   const pm = personMap(state.people);
@@ -130,7 +131,8 @@ export function GuardScreen() {
     people.forEach(p => { const ss = statusesOn(state.statuses, p.id, date); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
     // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
-    const capped = people.filter(p => !p.post && Object.keys(capsOf(state, p.id)).length).map(p => ({ p, c: capsOf(state, p.id) }));
+    const cols = capCols(state.settings);
+    const capped = people.filter(p => !p.post).map(p => ({ p, c: cols.map(col => ({ col, x: capCell(state, p, col) })).filter(o => !o.x.on) })).filter(o => o.c.length);
     const offDay = people.filter(p => !noDuty.some(x => x.p === p) && offDayBlock(state, date, p.id)).map(p => ({ p }));
     return { noDuty, unarmed, posted, capped, offDay };
   }, [state.statuses, state.caps, state.people, state.settings, date]);
@@ -266,9 +268,9 @@ export function GuardScreen() {
         <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
         <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
         ${excluded.posted.length > 0 && html`<h3 className="minihd">Με πόστο, μόνο Λ/Υ και Δ/Υ (${excluded.posted.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει. Με το χέρι μπαίνουν σε οποιαδήποτε θέση: διάλεξέ τον στη θέση και γράψε την αιτία.</p><div className="avail">${excluded.posted.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από το φύλλο ΠΟΣΤΑ (Αρχεία Excel)">${shortName(p)} <${Badge} tone="outline">${p.post}<//></button>`)}</div>`}
-        <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip=${Object.keys(c).map(k => CAP_KINDS.find(x => x[0] === k)![1] + ': ' + c[k]).join(' · ')}>${shortName(p)} <${Badge} tone="outline">όχι ${Object.keys(c).map(k => (KIND_LBL as P)[k]).join(', ')}<//></button>`)}</div>
-        ${excluded.offDay.length > 0 && html`<h3 className="minihd">Όχι υπηρεσία ${DOW_FULL[weekday(date)]} (${excluded.offDay.length})</h3><div className="avail">${excluded.offDay.map(({ p }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip="Άλλαξε τι κάνει και ποιες μέρες">${shortName(p)}</button>`)}</div>`}
-        <${Button} size="sm" variant="outline" onClick=${() => setProf(-1)} data-tip="Μόνιμα όχι σε κάποιες θέσεις ή κάποιες μέρες (όπως το αρχείο «Δυνατότητα υπηρεσιών»)">Τι κάνει ένας στρατιώτης…<//>
+        <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip=${c.map((o: P) => o.col.label + ': ' + o.x.why).join(' · ') + ' · Πάτα: «Ποιος κάνει τι»'}>${shortName(p)} <${Badge} tone="outline">όχι ${c.map((o: P) => o.col.block ? o.col.label : (KIND_LBL as P)[o.col.kind]).join(', ')}<//></button>`)}</div>
+        ${excluded.offDay.length > 0 && html`<h3 className="minihd">Όχι υπηρεσία ${DOW_FULL[weekday(date)]} (${excluded.offDay.length})</h3><div className="avail">${excluded.offDay.map(({ p }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip="Πάτα: «Ποιος κάνει τι»">${shortName(p)}</button>`)}</div>`}
+        <${Button} size="sm" variant="outline" onClick=${() => setProf(-1)} data-tip="Όλοι οι στρατιώτες: ποιες υπηρεσίες κάνει ο καθένας και ποιες μέρες (όπως το αρχείο «Δυνατότητα υπηρεσιών»)">Ποιος κάνει τι…<//>
         <p className="note" style=${{ margin: '10px 0 0' }}>Βγαίνει από τα ιατρικά, τις άδειες και τις εξόδους. Όταν λήξει ένα ιατρικό, ο άνθρωπος ξαναμπαίνει μόνος του.</p>
         <${Button} size="sm" variant="ghost" onClick=${() => flip('ex', true)}>Λιγότερα<//></div>` : html`<button type="button" className="side__link" onClick=${() => flip('ex', false)}>Ποιοι είναι</button>`}
     </section>
@@ -283,7 +285,8 @@ export function GuardScreen() {
   </div>`;
   const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon}/>`;
-  const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
+  const whoTab = html`<${WhoDoes} key=${who.n} date=${date} pid=${who.pid}/>`;
+  const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }, { value: 'who', label: 'Ποιος κάνει τι' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
   const cur = !mobile && tab === 'xl' ? 'posts' : tab;
   const emptyOn = (d: string) => { const gd = state.guards[d] || {}; let n = 0; for (const x of posts) if (!gd[x.k]) n++; return n; };
   return html`<div>
@@ -291,11 +294,10 @@ export function GuardScreen() {
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules)}>Κανόνες<//><label className="strict-sw" data-tip=${STRICT_TXT + (opState(state) ? ' Τώρα: ' + opState(state) + '.' : '')} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${!!state.rules.strictUnarmed} onChange=${async (e: any) => { const on = e.target.checked; const nr = { ...state.rules, strictUnarmed: on }; if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) toast({ text: 'Αυστηρά Άοπλοι: ' + (on ? 'ανοιχτό. Ισχύει στην αυτόματη συμπλήρωση και στο «Επόμενος».' : 'κλειστό, κανονική σειρά.') }); }}/>Αυστηρά Άοπλοι</label><${Button} disabled=${locked || !empty.length || !people.length} onClick=${autofill} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες, ίδιο είδος, κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//>${!mobile && html`<${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}</div><//>
     <div className="guard__days"><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))} count=${emptyOn}/></div>
     <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
-    ${mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
+    ${cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Ό,τι βλέπεις εδώ βγαίνει ίδιο στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
-    ${prof != null && html`<${DutyProfileDialog} pid=${prof < 0 ? null : prof} onClose=${() => setProf(null)}/>`}
     ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
     ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : force.move ? shortName(force.p) + ' είναι ήδη σε άλλη θέση' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//>${force.move

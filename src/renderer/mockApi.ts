@@ -40,6 +40,10 @@ function seed(): AppState {
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
   s.baseline = { 7: { th: 3, mg: 1, hol: 1 }, 19: { th: 2 } };
+  // όπλα εκτός οπλοβαστού: τρία στην ΕΚΠ από το πρωί, ένα για επισκευή από χθες, και ένα που μπήκε
+  s.weaponLog = [1, 2, 3].map(i => ({ id: id(), pid: s.people[i].id, weapon: s.people[i].weapon!, reason: 'ΕΚΠ', outDay: t, outTime: '07:40' }))
+    .concat([{ id: id(), pid: s.people[11].id, weapon: s.people[11].weapon!, reason: 'ΕΠΙΣΚΕΥΗ', outDay: addDays(t, -1), outTime: '10:05', note: 'ΒΛΑΒΗ ΣΤΟΝ ΟΠΛΟΦΟΡΕΑ' } as any,
+      { id: id(), pid: s.people[12].id, weapon: s.people[12].weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '06:30', inDay: t, inTime: '11:20', inReason: 'ΛΗΞ ΒΟΛΗΣ' } as any]);
   return s;
 }
 
