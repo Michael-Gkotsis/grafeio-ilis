@@ -33,8 +33,9 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
-// like: ιατρικό που συμπεριφέρεται σαν ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
-// warn: ιατρικό χωρίς περιορισμούς που βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
+// like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
+// Τα καινούργια μπαίνουν σαν ΕΑΡΒ (χωρίς περιορισμούς ώσπου να τα ρυθμίσεις, Michael 18/10) · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
+// warn: «μόνο προειδοποίηση» (checkbox): βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
 export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
@@ -96,7 +97,7 @@ export function cadreAbsOf(kind: string, lists?: UserLists): [string, string, st
   return all.find(x => x[0] === kind) || (k ? all.find(x => itemKey(x[1]) === k) : undefined);
 }
 
-// Ιατρικά (Michael, 13/10): κάθε δικό σου είναι ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ για τους κανόνες και την ΗΚΑΙ, με δικό του όνομα.
+// Ιατρικά (Michael, 13/10): κάθε δικό σου έχει βασικό τύπο ΕΑ, ΕΥ, ΕΟ ή ΕΑΡΒ (για την ΗΚΑΙ και ό,τι δεν όρισες στον πίνακα Καταστάσεων), με δικό του όνομα.
 // Αποθηκεύεται στο «είδος» της κατάστασης, όπως το γράφει και το διαβάζει το Excel ΕΑ-ΕΥ.
 export const MED_LIKE: TypeKey[] = ['EA', 'EY', 'EO', 'EARV'];
 // χωρίς κενά και σημεία: «ΕΛ.ΓΥΜΝ», «Ελ γυμν» και «ΕΛ ΓΥΜΝ» είναι το ίδιο (όπως διαβάζει το Excel)
