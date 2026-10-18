@@ -444,7 +444,8 @@ export const dutyMonths = (s: AppState): string[] => [...new Set([...Object.keys
 //    (χωρίς αυτούς κάποια ένοπλη θα έμενε κενή). Όταν οι ένοπλοι περισσεύουν, ισχύει για όλους η σειρά δικαιοσύνης,
 //    και ο ΕΑ/ΕΟ δεν μπαίνει πρώτος σε κάθε άοπλη θέση (ΣΒΕΝ, σχέδιο 11/10).
 // 3. Αργία/ΣΚ: λιγότερες αργίες → παλιότερη τελευταία αργία. Καθημερινή: παλιότερη τελευταία υπηρεσία → λιγότερες υπηρεσίες.
-// 4. Λιγότερες φορές στο ίδιο είδος θέσης.
+// 4. Εναλλαγή υπηρεσιών (rotate): από όσους είναι η σειρά τους σήμερα, όποιος χρωστά αυτή την υπηρεσία. Μετά: λιγότερες
+//    φορές στο ίδιο είδος θέσης.
 // 5. Ισοπαλία: κλήρωση με σταθερό σπόρο την ημερομηνία (ίδια μέρα → ίδια πρόταση, όχι αλφαβητικά).
 export function seedRank(date: ISODate, pid: number): number {
   let h = 2166136261;
@@ -452,20 +453,28 @@ export function seedRank(date: ISODate, pid: number): number {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-export interface Fair { total: number; hol: number; byKind: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+export interface Fair { total: number; hol: number; byKind: Record<string, number>; byType: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+// Τύπος υπηρεσίας για την εναλλαγή: το είδος (θαλαμοφύλακας α΄ και β΄ πίνακα μαζί, σκοπιά, μαγειρεία…), κάθε δική σου
+// υπηρεσία χωριστά («b:» + id, όπως στο «Ποιος κάνει τι»). Υπηρεσία χωρίς θέση (από Excel): το είδος της.
+const typeIdx = new WeakMap<Settings, Map<string, string>>();
+export function dutyType(s: AppState, k: string, kind: DutyKind): string {
+  let m = typeIdx.get(s.settings);
+  if (!m) { const own = new Set(allBlocks(s.settings).filter(b => b.custom).map(b => b.id)); m = new Map(allPosts(s.settings).map(p => [p.k, own.has(p.block) ? 'b:' + p.block : p.kind])); typeIdx.set(s.settings, m); }
+  return (k && m.get(k)) || kind;
+}
 // Στοιχεία δικαιοσύνης ενός ατόμου για μια ημέρα: μετρά όλες τις υπηρεσίες εκτός από την ίδια την ημέρα
 export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   const st = statOf(s, pid);
-  const f: Fair = { total: 0, hol: 0, byKind: {}, lastBefore: '', lastHolBefore: '' };
+  const f: Fair = { total: 0, hol: 0, byKind: {}, byType: {}, lastBefore: '', lastHolBefore: '' };
   for (const e of st.log) {
     if (e.d === date) continue;
-    const kind = e.kind;
-    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1;
+    const kind = e.kind; const ty = dutyType(s, e.k, kind);
+    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1;
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
   }
   const b = s.baseline?.[pid];
-  if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) f.byKind[k] = (f.byKind[k] || 0) + n; f.total += baseTotal(b); f.hol += b.hol || 0; }
+  if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) { f.byKind[k] = (f.byKind[k] || 0) + n; f.byType[k] = (f.byType[k] || 0) + n; } f.total += baseTotal(b); f.hol += b.hol || 0; }
   return f;
 }
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
@@ -618,10 +627,77 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const due = h ? null : weekendDue(s, date, people, fair, fixed, idx);
   const owes = (p: Person) => (due?.has(p.id) ? 1 : 0);
   const cmp = fairCompare(h, x.kind, date);
+  // ποιοι περνούν τους κανόνες της θέσης: μία φορά ανά μέρα (memo), μετά μόνο όσοι δεν μπήκαν ήδη σήμερα
+  memo = memo || new Map(); const busy = new Set(Object.values(s.guards[date] || {}));
+  const ok = new Set(allowedOn(s, date, x, people, fixed, idx, memo));
   // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
-  return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
+  const list = people.filter(p => ok.has(p.id) && !busy.has(p.id))
     .map(p => ({ p, key: last(p) * 100 + reserve(p) * 10 + owes(p), f: fair.get(p.id)! }))
-    .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
+    .sort((a, b) => a.key - b.key || cmp(a.f, b.f));
+  return rotate(s, date, x, list, people, fair, idx, fixed, due, memo).map(c => c.p);
+}
+// --------------------------- Εναλλαγή υπηρεσιών (Michael, 18/10) ---------------------------
+// «να μην κάνει κάποιος τον ίδιο τύπο υπηρεσίας εάν υπάρχει κάποιος διαθέσιμος άλλος που δεν έχει κάνει, ώστε να
+// περνάνε όλοι οι διαθέσιμοι από όλες τις υπηρεσίες και μετά να ξανακάνουν την ίδια όταν έρθει η ώρα τους».
+// Ποιοι μπαίνουν σήμερα το κρίνει η σειρά δικαιοσύνης όπως πριν (αργίες, ΣΚ που χρωστάνε, μέρες χωρίς υπηρεσία, σύνολο):
+// «η σειρά τους» = οι πρώτοι στη σειρά ανάμεσα σε όσους μπορούν να μπουν κάπου σήμερα, όσες οι κενές θέσεις της μέρας.
+// Από αυτούς, τη θέση την παίρνει όποιος έχει κάνει τις λιγότερες φορές αυτόν τον τύπο υπηρεσίας. Μετρά μόνο ανάμεσα σε
+// όσους μπαίνουν στη θέση (Ποιος κάνει τι, Σ.Ι., καταστάσεις, κανόνες): όποιος δεν την κάνει δεν τη «χρωστά». Πρώτοι
+// μένουν όσοι είναι η σειρά τους και δεν χωρούν σε καμία άλλη κενή θέση, για να μη μείνουν σήμερα χωρίς υπηρεσία.
+// Οι προτεραιότητες της λίστας (τελευταία λύση, κράτηση ενόπλων, ΣΚ που χρωστάνε) δεν αλλάζουν.
+type Cand = { p: Person; key: number; f: Fair & { pid: number } };
+function allowedOn(s: AppState, date: ISODate, y: Post, people: Person[], fixed: Set<number>, idx: Map<number, Set<ISODate>>, memo: Map<string, number[]>): number[] {
+  let l = memo.get(y.k);
+  if (!l) { l = people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, y.k, idx)).map(p => p.id); memo.set(y.k, l); }
+  return l;
+}
+// Όλοι με τη σειρά δικαιοσύνης χωρίς το είδος της θέσης (όσοι χρωστάνε ΣΚ τελευταίοι): μία φορά ανά συμπλήρωση
+const turnCache = new WeakMap<object, number[]>();
+function turnOrder(s: AppState, date: ISODate, fair: Map<number, Fair & { pid: number }>, due: Set<number> | null): number[] {
+  let o = turnCache.get(fair);
+  if (!o) {
+    const cmp = fairCompare(isHol(s.settings, date), '', date); const owes = (pid: number) => (due?.has(pid) ? 1 : 0);
+    o = [...fair.values()].sort((a, b) => owes(a.pid) - owes(b.pid) || cmp(a, b)).map(f => f.pid); turnCache.set(fair, o);
+  }
+  return o;
+}
+function rotate(s: AppState, date: ISODate, x: Post, list: Cand[], people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, due: Set<number> | null, memo = new Map<string, number[]>()): Cand[] {
+  if (s.rules.rotate === false || x.kind === 'ly' || list.length < 2) return list;
+  const g = s.guards[date] || {}; const busy = new Set(Object.values(g));
+  const open = postsOf(s.settings).filter(y => !g[y.k] && y.k !== x.k);
+  // Λ/Υ-Δ/Υ: ορίζονται με το χέρι και δεν μετρούν στην εναλλαγή (μετρούν μόνο ως κενές θέσεις της μέρας)
+  const ty = dutyType(s, x.k, x.kind);
+  const byTy = new Map<string, Set<number>>();   // οι άλλοι τύποι υπηρεσίας με κενή θέση σήμερα → ποιοι μπαίνουν
+  for (const y of open) {
+    if (y.kind === 'ly') continue;
+    const t = dutyType(s, y.k, y.kind); let o = byTy.get(t); if (!o) byTy.set(t, (o = new Set()));
+    for (const pid of allowedOn(s, date, y, people, fixed, idx, memo)) if (!busy.has(pid)) o.add(pid);
+  }
+  // όσοι μπαίνουν κάπου σήμερα, με τη σειρά δικαιοσύνης (χωρίς το είδος της θέσης)· οι πρώτοι, όσες οι κενές θέσεις
+  const inList = new Set(list.map(c => c.p.id)); const turn = new Set<number>();
+  for (const pid of turnOrder(s, date, fair, due)) {
+    if (turn.size > open.length) break;
+    if (inList.has(pid) || [...byTy.values()].some(o => o.has(pid))) turn.add(pid);
+  }
+  const top = list[0].key;
+  const win = list.filter(c => c.key === top && turn.has(c.p.id));
+  if (win.length < 2) return list;
+  // Πόσο «χρωστά» κάθε τύπο: φορές / μέσος όρος όσων τον κάνουν (οι υπηρεσίες με πολλές θέσεις γίνονται πιο συχνά). Στη
+  // θέση πάει πρώτα όποιος χρωστά αυτόν τον τύπο περισσότερο από κάθε άλλο που μπορεί να κάνει σήμερα (αλλιώς όποιος έχει
+  // λίγες φορές και από τα δύο θα έπαιρνε πάντα την υπηρεσία που γεμίζει πρώτη), μετά οι λιγότερες φορές σε αυτόν.
+  const mean = (t: string, ids: Iterable<number>) => { let n = 0, sum = 0; for (const pid of ids) { const f = fair.get(pid); if (f) { n++; sum += f.byType[t] || 0; } } return n ? sum / n : 0; };
+  const rel = (f: Fair, t: string, m: number) => ((f.byType[t] || 0) + 1) / (m + 1);
+  const mT = mean(ty, list.map(c => c.p.id)); const mU = new Map([...byTy].map(([t, o]) => [t, mean(t, o)]));
+  const pos = new Map(list.map((c, i) => [c, i]));
+  const v = new Map(win.map(c => {
+    const pid = c.p.id; const r = rel(c.f, ty, mT); let best = Infinity, only = 0;
+    for (const [t, o] of byTy) if (t !== ty && o.has(pid)) best = Math.min(best, rel(c.f, t, mU.get(t)!));
+    for (const o of byTy.values()) if (o.has(pid)) only = 1;
+    return [c, [only, Math.max(0, r - best), c.f.byType[ty] || 0, pos.get(c)!]];
+  }));
+  win.sort((a, b) => { const A = v.get(a)!, B = v.get(b)!; return A[0] - B[0] || A[1] - B[1] || A[2] - B[2] || A[3] - B[3]; });
+  const inWin = new Set(win);
+  return [...win, ...list.filter(c => !inWin.has(c))];
 }
 // Όσοι «χρωστάνε» το επόμενο ΣΚ/αργία (Michael, 17/10: «να κρατάει όσους δεν έχουν κάνει ΣΚ για το επόμενο και να μην
 // τους βάζει Πέμπτη-Παρασκευή, ώστε να τηρείται η ανάπαυση»): τις μέρες πριν από ΣΚ/αργία (ως 2 μέρες, ή όσες η ανάπαυση
@@ -723,6 +799,8 @@ function reservedFor(s: AppState, date: ISODate, post: Post, pid: number): boole
   const free = activePeople(s).filter(p => !busy.has(p.id) && !fixed.has(p.id) && !seatlessOn(s, date, p.id));
   return all.some(y => { const q = g[y.k]; return q != null && !fixed.has(q) && cmp({ ...fairOf(s, q, date), pid: q }, me) < 0 && can(q, post) && !free.some(f => can(f.id, y)); });
 }
+const TYPE_NAME: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακας', op: 'οπλοφύλακας', sk: 'σκοπιά', mg: 'μαγειρεία', tae: 'ΤΑΕ', other: 'άλλη υπηρεσία' };
+const typeName = (s: AppState, post: Post) => { const t = dutyType(s, post.k, post.kind); return t.startsWith('b:') ? allBlocks(s.settings).find(b => 'b:' + b.id === t)?.name || post.label : TYPE_NAME[post.kind] || post.kind; };
 export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number }): string {
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
@@ -737,6 +815,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(f.lastBefore ?  (daysBetween(f.lastBefore, date) - 2) + ' μέρες χωρίς υπηρεσία' : 'καμία υπηρεσία ως τώρα');
     parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
+  if (s.rules.rotate !== false && post.kind !== 'ly') { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }
   if (post.armed) parts.push('ένοπλος');
   else if (!s.rules.strictUnarmed && reservedFor(s, date, post, pid)) parts.push('προτιμήθηκε γιατί δεν κάνει ένοπλη και οι ένοπλες θέσεις δεν έφταναν');
   if (s.rules.strictUnarmed && strictTier(post) <= 3 && isUnarmed(s, date, pid)) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + TIER_TXT[strictTier(post)]);
