@@ -3,6 +3,7 @@
 // από Excel γεμίζει τις επόμενες γραμμές με τη σειρά. Ίδιος αριθμός σε άλλον: ρωτά (μεταφορά ή και στους δύο), δεν μπλοκάρει.
 // Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6), «Θέση» του όπλου (ελεύθερο κείμενο, Michael 18/10) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
 // Έξοδος/είσοδος όπλων με λόγο και ώρα (Michael, 18/10): κουμπί στη γραμμή ή τσέκαρε πολλούς· ημερολόγιο στις «Κινήσεις» (weaponMoves.ts).
+import { HK, UNIT } from '../../shared/unit';
 import { Fragment, useCallback, useDeferredValue, useMemo, useState, useEffect, memo } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useToast } from '../ui';
 import { MovesView, WeaponInDialog, WeaponOutDialog, WeaponState } from './weaponMoves';
@@ -93,7 +94,7 @@ export function WeaponsScreen() {
   const tab: string = nav.params.wtab || 'weapons';
   const toggle = useCallback((id: number) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const types = useMemo(() => listOf(lists, 'weaponTypes'), [lists]);
-  const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
+  const UNITS = useMemo(() => [{ value: 'all', label: UNIT().all }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const place = (p: Person) => (unit === 'all' || unitOf(p, state.settings) === unit) && (room == null || p.room === room);
   const counts = useMemo(() => {
     const n: Record<string, number> = {};
@@ -172,7 +173,7 @@ export function WeaponsScreen() {
     <${PageHeader} title="Οπλισμός" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'σήμερα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Κατάσταση: πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή και διάλεξε λόγο, η ώρα μπαίνει μόνη της· για πολλά μαζί τσέκαρέ τα. Αριθμός και θέση γράφονται στη γραμμή (Enter για τον επόμενο, επικόλληση στήλης από Excel).'}>
       <${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
-      <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ΗΚΑΙ και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//><//>
+      <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (info.moves.size ? ' · εκτός ' + info.moves.size : '') }]}/></div>
     ${tab === 'moves' ? html`<${MovesView} date=${date} onIn=${setInFor}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>

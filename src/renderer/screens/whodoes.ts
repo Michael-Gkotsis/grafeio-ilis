@@ -3,6 +3,7 @@
 // εντύπων (capCols): νέα υπηρεσία εμφανίζεται μόνη της. Ίδια δεδομένα με το αρχείο «Δυνατότητα υπηρεσιών».
 // Σ.Ι. και πόστο φαίνονται ως «—» (ισχύουν μόνα τους)· η κατάσταση της μέρας (ΕΥ, άδεια…) γράφεται κάτω από το όνομα.
 // Τίποτα δεν απαγορεύεται: με το χέρι μπαίνει πάντα με επιβεβαίωση, και οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν πάντα.
+import { UNIT } from '../../shared/unit';
 import { useDeferredValue, useMemo, useState } from 'react';
 import { html, cx, Button, Dialog, Segmented, Strip, useToast } from '../ui';
 import { useNav, useStore } from '../store';
@@ -84,7 +85,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const counts = useMemo(() => { const n: Record<string, number> = { all: base.length, limited: 0, manual: 0, auto: 0 }; base.forEach(p => { const k = kindOf(p); if (k.limited) n.limited++; if (k.manual) n.manual++; if (k.auto) n.auto++; }); return n; }, [base, cells]);
   const colN = useMemo(() => cols.map((_, i) => base.filter(p => !cells.get(p.id)![i].on).length), [base, cells, cols]);
   const rows = base.filter(p => (filter === 'all' || kindOf(p)[filter]) && (ci < 0 || !cells.get(p.id)![ci].on));
-  const UNITS = useMemo(() => [{ value: 'all', label: 'Όλη η Ίλη' }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
+  const UNITS = useMemo(() => [{ value: 'all', label: UNIT().all }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const rooms = useMemo(() => { const m = new Map<number, number>(); people.forEach(p => { if (p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [people]);
 
   const done = (r: unknown, txt: string) => { if (r) toast({ text: txt + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.', actions: [undoMark()] }); };

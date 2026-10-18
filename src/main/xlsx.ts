@@ -479,6 +479,23 @@ export class Workbook {
     }
     return n;
   }
+  // Κείμενα του template που αλλάζουν (π.χ. οι λέξεις της μονάδας: «ΔΚΤΗΣ ΙΛΗΣ» → «ΔΚΤΗΣ ΛΟΧΟΥ»): ξαναγράφονται μόνο
+  // αυτά, με τους κανόνες κάθε γραμμένου κελιού (κεφαλαία, να χωράει). Τύποι και αριθμοί μένουν. Πόσα κελιά άλλαξαν.
+  async mapTexts(fn: (s: string) => string): Promise<number> {
+    const sst = await this.sharedStrings(); let n = 0;
+    for (const e of this.names) {
+      const ws = await this.sheet(e.name); const todo: [string, string][] = [];
+      for (const c of ws.cells()) {
+        if (c.inner.includes('<f')) continue;
+        const v = c.t === 's' ? sst[Number(/<v>(\d+)<\/v>/.exec(c.inner)?.[1] ?? -1)] : c.t === 'inlineStr' ? texts(c.inner) : null;
+        if (!v) continue;
+        const w = fn(v); if (w !== v) todo.push([colName(c.c) + c.r, w]);
+      }
+      for (const [ref, w] of todo) ws.set(ref, w);
+      n += todo.length;
+    }
+    return n;
+  }
   sheetNames() { return this.names.map(x => x.name); }
   get date1904() { return /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml); }
   hasSheet(name: string) { return this.names.some(x => x.name === name); }

@@ -3,9 +3,11 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K, HK_NCO, HK_OFFICERS
+  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
+import { hkRowList } from './ranks';
+import { hkRowLabel, unitKindOf } from './unit';
 import type { ExportKind } from './api';
 
 export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' }
@@ -58,9 +60,9 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   const twice = [...counted].filter(([, n]) => n > 1).map(([id]) => shortName(pm.get(id)!));
   if (twice.length) out.push({ level: 'err', text: 'Μετριούνται δύο φορές: ' + twice.join(', ') });
   // ανά βαθμό: κωλυόμενοι + απόντες δεν ξεπερνούν τη δύναμη
-  for (const r of [...HK_OFFICERS, ...HK_NCO]) {
+  for (const r of hkRowList(s.settings.lists)) {
     const row = h.rank[r]; const used = [...HK_K, ...HK_A].reduce((a, [k]) => a + (row.c[k] || 0), 0);
-    if (used > row.n) out.push({ level: 'err', text: r + ': κωλυόμενοι και απόντες (' + used + ') περισσότεροι από τη δύναμη (' + row.n + ')' });
+    if (used > row.n) out.push({ level: 'err', text: hkRowLabel(r, unitKindOf(s.settings)) + ': κωλυόμενοι και απόντες (' + used + ') περισσότεροι από τη δύναμη (' + row.n + ')' });
   }
   const sum = Object.values(h.rank).reduce((a, r) => a + r.n, 0);
   if (sum !== h.total) out.push({ level: 'err', text: 'Το σύνολο ανά βαθμό (' + sum + ') δεν συμφωνεί με τη δύναμη (' + h.total + ')' });

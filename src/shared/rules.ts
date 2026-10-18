@@ -1,6 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
+import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkOfRank, hkRowClaim, hkRowList, hkRowsOf, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -824,10 +825,10 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && meets(x)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
-  if (cmd.type === 'PUN') files.push({ fn: 'ΗΚΑΙ', desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
+  if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
-  else if (t.cat === 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
-  if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
+  else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
+  if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   files.push(...conflictFiles(s, conflicts));
@@ -871,11 +872,11 @@ export function planStatusChanges(s: AppState, cmds: StatusCmd[], today?: ISODat
 // (Michael, 13/10)· η στήλη Ο/Σ γράφεται με το χέρι.
 export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
 export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
-export const HK_OFFICERS = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'Ανθυπασπιστές', 'ΔΕΑ'];
-export const HK_NCO = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες', 'Δεκανείς', 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης', 'Στρατιώτες'];
+export { HK_OFFICERS, HK_NCO } from './ranks';
 // Βαθμός προσώπου → γραμμή της ΗΚΑΙ: πρώτα ό,τι όρισες στις Λίστες για δικό σου βαθμό, αλλιώς από το όνομα
 export function hkRankOf(rank: string, lists?: UserLists): string {
-  const own = hkOfRank(lists, 'soldierRanks', rank); if (own && HK_NCO.includes(own)) return own;
+  const claim = hkRowClaim(lists, rank, 'nco'); if (claim) return claim;
+  const own = hkOfRank(lists, 'soldierRanks', rank); if (own && hkRowsOf(lists).nco.includes(own)) return own;
   const r = rank.toUpperCase().replace(/\./g, '');
   if (/ΑΡΧΙΛΧ|ΑΡΧΙΛΟΧ/.test(r)) return 'Αρχιλοχίες';
   if (/ΕΠΙΛΧ|ΕΠΙΛΟΧ/.test(r)) return 'Επιλοχίες';
@@ -901,11 +902,12 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const rank: Record<string, HkaiRow> = {};
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
   const cl = (s.cadreList || []).filter(c => c.active);
-  [...HK_OFFICERS, ...HK_NCO].forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
+  const lists = s.settings.lists;
+  hkRowList(lists).forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
   // κατάσταση στελέχους = στήλη της ΗΚΑΙ: στους κωλυόμενους (υπηρεσία, ΕΥ…) ή στους απόντες (άδειες…)
   let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   for (const c of cl) {
-    const r = rank[c.hk] ? c.hk : 'Λοχίες'; rank[r].n++;
+    const hk = rank[c.hk] ? c.hk : guessHk(c.rank, lists); const r = rank[hk] ? hk : 'Λοχίες'; rank[r].n++;
     const a = cadreAbsOn(s, c.id, date);
     const col = a && cadreAbsOf(a.kind, s.settings.lists)?.[2];
     if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
@@ -932,6 +934,6 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
       if (HK_K.some(x => x[0] === k)) kol += v; else if (HK_A.some(x => x[0] === k)) apo += v;
     }
   }
-  const cadre = cl.length || Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
+  const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
   return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
 }

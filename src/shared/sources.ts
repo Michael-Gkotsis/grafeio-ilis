@@ -13,6 +13,7 @@ import { listOf, medTypeOf, optionsOf, type ListId, type UserLists } from './ran
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
+import { hkRowNames } from './unit';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -879,14 +880,18 @@ export const HKAI_DEFAULT: HkaiMap = {
   cols: { prov: 'B', placed: 'C', attached: 'D', sum: 'E', yp: 'F', ey: 'G', tim: 'H', bl: 'I', os: 'J', mag: 'K', sid: 'L', kin: 'M', sumK: 'N', ka: 'O', an: 'P', eid: 'Q', nos: 'R', prat: 'S', adik: 'T', fp: 'U', fyl: 'V', apal: 'W', ekp: 'X', allh: 'Y', sumA: 'Z', avail: 'AA', ab: 'AB' }
 };
 // Βρίσκει γραμμές και στήλες της ΗΚΑΙ από τα κείμενα του εντύπου. Ό,τι δεν βρεθεί μένει όπως στο δείγμα.
-export function detectHkai(sheet: RawSheet, place = 'Αυλώνας'): { map: HkaiMap; found: number; total: number; missing: string[] } {
+// own: γραμμές που πρόσθεσες (Ρυθμίσεις): αν τις έχει ήδη το έντυπο, γράφονται εκεί, αλλιώς μπαίνουν νέες (δεν λείπουν)
+export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: string[] = []): { map: HkaiMap; found: number; total: number; missing: string[] } {
   const map: HkaiMap = JSON.parse(JSON.stringify(HKAI_DEFAULT)); const missing: string[] = []; let found = 0;
   const rows = sheet.rows.slice(0, 120);
   const rk = (s: string) => normGreek(s).replace(/[^Α-ΩA-Z]/g, '');
+  const rowOf = (names: string[]) => rows.findIndex(row => (row || []).slice(0, 4).some(v => names.some(n => rk(cellText(v)) === rk(n))));
+  // κάθε βασική γραμμή και με το όνομά της στην ΗΚΑΛ (Ταγματάρχες, Λοχαγοί…)
   for (const r of HK_RANKS) {
-    const i = rows.findIndex(row => (row || []).slice(0, 4).some(v => rk(cellText(v)) === rk(r)));
+    const i = rowOf(hkRowNames(r));
     if (i >= 0) { map.rows[r] = i + 1; found++; } else missing.push(r);
   }
+  for (const r of own) { const i = rowOf([r]); if (i >= 0) map.rows[r] = i + 1; }
   // επικεφαλίδες: οι γραμμές πάνω από τον πρώτο βαθμό
   const top = Math.min(...Object.values(map.rows)) - 1;
   const at: Record<string, number> = {};

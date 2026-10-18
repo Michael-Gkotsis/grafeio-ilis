@@ -3,6 +3,7 @@ import { normGreek } from './text';
 import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
 import type { Esso } from './esso';
+import type { UnitKind } from './unit';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -222,6 +223,7 @@ export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3
 export interface Settings {
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
+  unitKind?: UnitKind;                   // Ίλη/Επιλαρχία (ΗΚΑΙ, προεπιλογή) ή Λόχος/Τάγμα (ΗΚΑΛ), unit.ts
   place: string;                         // Αυλώνας
   blocks: BlockDef[];                    // ΣΒΕΝ
   blocksSpen: BlockDef[];                // ΣΠΕΝ

@@ -1,8 +1,9 @@
 // Στελέχη (Michael, 17/10): δική τους καρτέλα, χωριστά από το Δυναμολόγιο των οπλιτών. Οι καταστάσεις τους είναι οι
 // στήλες της ΗΚΑΙ (κωλυόμενοι ή απόντες), όχι οι καταστάσεις των οπλιτών. Ίδια λογική για την οθόνη και το Excel.
+import { formText, hkRowLabel, unitKindOf } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
-import { cadreAbsOf, type UserLists } from './ranks';
+import { cadreAbsOf, hkRowsOf, type UserLists } from './ranks';
 import { cadreAbsOn, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
@@ -55,7 +56,8 @@ export function cadreMatch(f: CadreFilter, c: Cadre, st: CadreStatus | undefined
 // ΗΚΑΙ, «Όργανα υπηρεσίας › Αξιωματικοί»: ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς οι αξιωματικοί (αξιωματικοί, ανθυπασπιστές,
 // ΔΕΑ) της καρτέλας Στελέχη που έχουν «Υπηρεσία εντός στρατοπέδου» τη μέρα, με τη σειρά της καρτέλας
 export function dutyOfficers(s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings'>, d: ISODate): string {
-  return orderedCadre(s.cadreList || []).filter(c => c.active && HK_OFFICERS.includes(c.hk) && cadreStatusOn(s, c.id, d)?.col === 'yp')
+  const off = hkRowsOf(s.settings.lists).off;
+  return orderedCadre(s.cadreList || []).filter(c => c.active && off.includes(c.hk) && cadreStatusOn(s, c.id, d)?.col === 'yp')
     .map(c => [c.rank, c.last, c.first].filter(Boolean).join(' ')).join(', ');
 }
 export const hkOffText = (s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'hkaiManual'>, d: ISODate) => s.hkaiManual?.[d]?.text?.off?.trim() || dutyOfficers(s, d);
@@ -68,7 +70,8 @@ export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).tri
 export const CADRE_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΑΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΕΣΗ', 'ΓΡΑΜΜΗ ΗΚΑΙ'];
 export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const lists = s.settings.lists; const all = orderedCadre(s.cadreList || []);
-  const cells = (c: Cadre) => [c.rank, c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', c.hk];
+  const kind = unitKindOf(s.settings);
+  const cells = (c: Cadre) => [c.rank, c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, kind)];
   const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col));
   const active = all.filter(c => c.active);
   const now = active.map((c, i) => {
@@ -86,5 +89,6 @@ export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   ];
   const off = all.filter(c => !c.active);
   if (off.length) out.push({ name: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ', title: 'ΣΤΕΛΕΧΗ ΕΚΤΟΣ ΔΥΝΑΜΗΣ', head: CADRE_COLS, rows: off.map((c, i) => [i + 1, ...cells(c)]) });
-  return out;
+  // σε λόχο: «ΓΡΑΜΜΗ ΗΚΑΛ», «ΣΤΗΛΗ ΗΚΑΛ»
+  return out.map(x => ({ ...x, head: x.head.map(h => formText(s.settings, h)) }));
 }

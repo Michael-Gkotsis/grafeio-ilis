@@ -2,7 +2,9 @@
 import { E, type Cell, type SheetModel } from './common';
 import { ROT, TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, HK_OFFICERS, HK_NCO, activePeople, isHol, DUTY_START, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, activePeople, isHol, DUTY_START, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { hkRowsOf } from '../shared/ranks';
+import { formText, hkRowLabel, unitKindOf } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
@@ -62,7 +64,7 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
     rows.push([E(i + 1, 'b c'), E(a ? dutyName(pm.get(a.pid)!) : '', 'b'), E(a ? norm(a.kind || 'Ποινή') : '', 'b c'), E(a ? dm(a.from) : '', 'b c'), E(a && !a.open ? dm(a.to) : '', 'b c'), E(a?.note || '', 'b'), E(''),
       E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceOf(b) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b && !b.open ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
   }
-  rows.push([E('', '', W)], [E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 2), E('ΔΚΤΗΣ ΙΛΗΣ', 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E('ΔΚΤΗΣ ΕΠΧΙΑΣ', 'ttl', 3)]);
+  rows.push([E('', '', W)], [E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 2), E(formText(s.settings, 'ΔΚΤΗΣ ΙΛΗΣ'), 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E(formText(s.settings, 'ΔΚΤΗΣ ΕΠΧΙΑΣ'), 'ttl', 3)]);
   return { cols: [30, 34, 150, 78, 54, 8, 8, 8, 34, 150, 78, 54, 30], rows };
 }
 export const frouraEmpty = (s: AppState, date: ISODate) => postsOf(s.settings).filter(x => !(s.guards[date] || {})[x.k]).length;
@@ -70,7 +72,7 @@ export const frouraEmpty = (s: AppState, date: ISODate) => postsOf(s.settings).f
 // ΗΚΑΙ μπροστινό (δείγμα 15)
 export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
   const nK = HK_K.length, nA = HK_A.length, W = 8 + nK + nA;
-  const rows: (Cell | null)[][] = [[E('ΚΕΤΘ', 'u', 4), E('', '', W - 4)], [E('2Η ΕΠΧΙΑ', 'u', 4), E('', '', W - 4)],
+  const rows: (Cell | null)[][] = [[E('ΚΕΤΘ', 'u', 4), E('', '', W - 4)], [E(formText(s.settings, '2Η ΕΠΧΙΑ'), 'u', 4), E('', '', W - 4)],
     [E('ΚΑΤΑΣΤΑΣΗ', 'ttl big', W)], [E('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(date), 'ttl', W)], [E('', '', W)]];
   const H = (v: string, cs?: number, rs?: number) => E(v, 'b hdr sm', cs, rs);
   rows.push([H('ΒΑΘΜΟΙ', 1, 2), H('Προβλ.', 1, 2), H('ΔΥΝΑΜΗ', 2), H('Σύν.', 1, 2), H('ΚΩΛΥΟΜΕΝΟΙ', nK), H('Σύν. κωλ.', 1, 2), H('ΑΠΟΝΤΕΣ', nA), H('Σύν. απ.', 1, 2), H('Διαθ. εκπ.', 1, 2), H('Μισθοτρ.', 1, 2)]);
@@ -83,13 +85,14 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
     return [E(label, 'b' + (bold ? ' bold' : '')), E(prov || '', st), E(n - att, st), E(att, st), E(n, st), ...k.map(v => E(v || '', st)), E(sk, st), ...a.map(v => E(v || '', st)), E(sa, st), E(n - sa, st), E(c.ab || '', st)];
   };
   const sum = (list: string[]) => { const c: Record<string, number> = {}; let n = 0, att = 0; list.forEach(r => { const x = h.rank[r]; n += x.n; att += x.attached; for (const k in x.c) c[k] = (c[k] || 0) + x.c[k]; }); return { n, att, c }; };
-  HK_OFFICERS.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
-  let x = sum(HK_OFFICERS); rows.push(line('ΣΥΝΟΛΟ ΑΞΚΩΝ', x.n, x.att, x.c, true, pvOf(HK_OFFICERS)));
-  HK_NCO.forEach(r => rows.push(line(r, h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
-  x = sum(HK_NCO); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true, pvOf(HK_NCO)));
-  x = sum([...HK_OFFICERS, ...HK_NCO]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...HK_OFFICERS, ...HK_NCO])));
+  const R = hkRowsOf(s.settings.lists), kind = unitKindOf(s.settings);
+  R.off.forEach(r => rows.push(line(hkRowLabel(r, kind), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  let x = sum(R.off); rows.push(line('ΣΥΝΟΛΟ ΑΞΚΩΝ', x.n, x.att, x.c, true, pvOf(R.off)));
+  R.nco.forEach(r => rows.push(line(hkRowLabel(r, kind), h.rank[r].n, h.rank[r].attached, h.rank[r].c, false, pv[r])));
+  x = sum(R.nco); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true, pvOf(R.nco)));
+  x = sum([...R.off, ...R.nco]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...R.off, ...R.nco])));
   rows.push([E('', '', W)], [E('', '', W - 8), E(s.settings.place + ', ' + hkDate(date), 'c', 8)], [E('', '', W)],
-    [E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 6), E('', '', W - 16), E('ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ', 'ttl', 8)]);
+    [E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 6), E('', '', W - 16), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 8)]);
   return { cols: [132, 40, 34, 34, 34, ...HK_K.map(() => 32), 36, ...HK_A.map(() => 32), 36, 36, 40], rows };
 }
 // ΗΚΑΙ πίσω: ίδιοι κανόνες με την εξαγωγή (main/exports.ts)
@@ -123,7 +126,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
     [E(og.dy ? 'Δ/Υ: ' + name(og.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],
     [E('', '', 6), ...L(6, 'ΛΟΙΠΑ', tx.loi || '')],
     [E('', '', 14)], [E('', '', 6), E('ΑΝΑΦΕΡΕΤΑΙ ΠΛΗΡΟΤΗΤΑ ΟΠΛΙΣΜΟΥ ΚΑΙ ΛΟΙΠΩΝ ΕΛΚΥΣΤΙΚΩΝ ΥΛΙΚΩΝ', 'bold', 8)], [E('', '', 9), E(s.settings.place + ', ' + hkDate(date), 'c', 5)],
-    [E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E('ΑΛΧΙΑΣ ΙΛΗΣ', 'ttl', 4), E('', '', 3), E('ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ', 'ttl', 5)]];
+    [E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 4), E('', '', 3), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 5)]];
   return { cols: [96, 46, 46, 60, 50, 10, 70, 46, 56, 56, 10, 60, 50, 50], rows };
 }
 

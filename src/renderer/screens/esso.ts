@@ -5,6 +5,8 @@ import { useNav, useStore } from '../store';
 import { ESSO_SERIES, currentEsso, essoName, nextEsso, parseEsso, type Esso, type EssoSeries } from '../../shared/esso';
 import { dmy } from '../../shared/dates';
 import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../../shared/api';
+import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
+import { UnitKindField } from './hkrows';
 type P = any;
 
 const join = (dir: string, name: string) => dir.replace(/[\\/]+$/, '') + (dir.includes('\\') ? '\\' : '/') + name;
@@ -60,6 +62,8 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   const cur = currentEsso(state);
   const [step, setStep] = useState(1);
   const [e, setE] = useState<Esso>(() => nextEsso(cur, today));
+  // πού είναι η μονάδα (Michael, 18/10): ίλη → ΗΚΑΙ, λόχος → ΗΚΑΛ· η κεφαλίδα αλλάζει μαζί και διορθώνεται εδώ
+  const [u, setU] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName }));
   const [root, setRoot] = useState<string>(info.archiveRoot);
   const [dir, setDir] = useState<string | null>(null);   // δικός σου φάκελος για τη νέα· αλλιώς newRoot\<όνομα>
   const [ros, setRos] = useState<ImportPreview | null>(null);
@@ -72,7 +76,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   const start = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await window.api.essoStart({ esso: { s: e.s, y: e.y }, archiveRoot: root, ...(dir ? { newDir: dir } : {}), ...(ros ? { roster: ros.token } : {}) });
+      const r = await window.api.essoStart({ esso: { s: e.s, y: e.y }, archiveRoot: root, ...(dir ? { newDir: dir } : {}), ...(ros ? { roster: ros.token } : {}), unit: u });
       if (!r.ok) { setErr(r.error); return; }
       await refresh(); toast({ text: 'Ξεκίνησε η ' + essoName(e) }); onDone(r);
     } finally { setBusy(false); }
@@ -86,18 +90,23 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
     ${step === 1 && html`
       <div className="field"><span className="field__label">Ποια ΕΣΣΟ ξεκινά;</span><${EssoFields} v=${e} onChange=${setE} id="ne-y"/>
         <span className="field__help">Τωρινή: ${cur ? essoName(cur) : 'δεν έχει οριστεί'}. Προτείνεται η επόμενη.</span></div>
+      <${UnitKindField} value=${u.unitKind} onChange=${(k: UnitKind) => setU({ ...u, unitKind: k, ...unitSettingsFor(u, k) })}/>
+      <div className="field"><span className="field__label">Κεφαλίδα εντύπων και μονάδα στον τίτλο της ${reportOf(u)}</span>
+        <div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" aria-label=${'Κεφαλίδα, γραμμή ' + (i + 1)} style=${{ flex: 1, minWidth: '140px' }} value=${u.unit[i]} onChange=${(ev: any) => { const x = [...u.unit] as [string, string, string]; x[i] = ev.target.value; setU({ ...u, unit: x }); }}/>`)}
+          <input className="ui-input" aria-label="Μονάδα στον τίτλο" style=${{ flex: 1, minWidth: '120px' }} value=${u.unitName} onChange=${(ev: any) => setU({ ...u, unitName: ev.target.value })}/></div>
+        <span className="field__help">«ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ${u.unitName} ΤΗΣ …». Ισχύουν για όλα τα Excel της νέας ΕΣΣΟ· αλλάζουν και μετά από Ρυθμίσεις › Μονάδα και έντυπα.</span></div>
       ${same && html`<${Alert} tone="warn"><span>Είναι η ίδια με την τωρινή. Αν θες μόνο να διορθώσεις το όνομα, κλείσε και πάτα «Διόρθωση».</span><//>`}
-      <${Alert} tone="warn"><span><b>Η εφαρμογή θα ξεκινήσει χωρίς στρατιώτες.</b> Φεύγουν οι ${info.people} στρατιώτες της τωρινής ΕΣΣΟ με τις καταστάσεις, τις υπηρεσίες, τις αιτήσεις, την ΗΚΑΙ και το ιστορικό τους. Όλα κρατιούνται πρώτα στο αρχείο (επόμενο βήμα) και ξαναφορτώνονται από την «Επαναφορά ΕΣΣΟ».</span><//>
+      <${Alert} tone="warn"><span><b>Η εφαρμογή θα ξεκινήσει χωρίς στρατιώτες.</b> Φεύγουν οι ${info.people} στρατιώτες της τωρινής ΕΣΣΟ με τις καταστάσεις, τις υπηρεσίες, τις αιτήσεις, την ${HK()} και το ιστορικό τους. Όλα κρατιούνται πρώτα στο αρχείο (επόμενο βήμα) και ξαναφορτώνονται από την «Επαναφορά ΕΣΣΟ».</span><//>
       <p className="note">Μένουν: κεφαλίδα και μονάδα, υπηρεσίες και κωδικοί, κανόνες, λίστες, Σ.Ι., αργίες, στελέχη, templates εντύπων. Το έντυπο υπηρεσιών ξεκινά από τη ΦΡΟΥΡΑ ΣΒΕΝ.</p>`}
     ${step === 2 && html`
       <div className="field"><span className="field__label">Φάκελος αρχείου ΕΣΣΟ</span>
         <div className="toolbar"><span className="plan__fn" title=${root}>${root}</span><${Button} size="sm" variant="outline" onClick=${() => choose(root, setRoot)}>Άλλαξε…<//></div>
         <span className="field__help">Εκεί φτιάχνεται ο φάκελος «${cur ? essoName(cur) : 'ΕΣΣΟ'} (έως ${dmy(today)})». Για σιγουριά διάλεξε USB ή άλλο δίσκο· αντίγραφο της βάσης κρατιέται και στα αντίγραφα ασφαλείας.</span></div>
       <div className="field"><span className="field__label">Τι μπαίνει στο αρχείο</span>
-        <ul className="hist"><li>Η βάση της εφαρμογής (στρατιώτες, καταστάσεις, υπηρεσίες, ΗΚΑΙ, ιστορικό)</li>
+        <ul className="hist"><li>Η βάση της εφαρμογής (στρατιώτες, καταστάσεις, υπηρεσίες, ${HK()}, ιστορικό)</li>
           ${info.files.map((f: P) => html`<li key=${f.label + f.file}>${f.label}: <span className="plan__fn" title=${f.file}>${f.file}</span>${!f.exists && html` <${Badge} tone="bad">δεν βρέθηκε<//>`}</li>`)}
           ${!info.files.length && html`<li className="muted">Κανένα Excel δεν είναι συνδεδεμένο.</li>`}</ul>
-        <span className="field__help">Τα έντυπα που βγήκαν (ΦΡΟΥΡΑ, ΗΚΑΙ, εξοδούχοι) δεν αντιγράφονται· μένουν εκεί που είναι: ${info.outDirs.join(' · ')}.</span></div>`}
+        <span className="field__help">Τα έντυπα που βγήκαν (ΦΡΟΥΡΑ, ${HK()}, εξοδούχοι) δεν αντιγράφονται· μένουν εκεί που είναι: ${info.outDirs.join(' · ')}.</span></div>`}
     ${step === 3 && html`
       <div className="field"><span className="field__label">Φάκελος για τα Excel της νέας ΕΣΣΟ</span>
         <div className="toolbar"><span className="plan__fn" title=${target}>${target}</span><${Button} size="sm" variant="outline" onClick=${() => choose(dir || info.newRoot, setDir)}>Άλλαξε…<//>${dir && html`<${Button} size="sm" variant="ghost" onClick=${() => setDir(null)}>Προεπιλογή<//>`}</div>
@@ -112,6 +121,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
     ${step === 4 && html`
       <ul className="hist">
         <li>Ξεκινά η <b>${essoName(e)}</b>${cur ? ' (μετά την ' + essoName(cur) + ')' : ''}.</li>
+        <li>Μονάδα: <b>${UNIT_KINDS.find(k => k.id === u.unitKind)!.label}</b>, αναφορά <b>${reportOf(u)}</b> της ${u.unitName}.</li>
         <li>Αρχείο της τωρινής στο <span className="plan__fn">${root}</span></li>
         <li>Νέα Excel στο <span className="plan__fn">${target}</span>: ${ros ? ros.file + ' (' + ros.active + ' στρατιώτες)' : 'κενό Δυναμολόγιο'} και έλεγχος υπηρεσιών</li></ul>
       <label className="rule"><input type="checkbox" className="ui-check" checked=${ack} onChange=${(ev: any) => setAck(ev.target.checked)}/><span><b>Κατάλαβα: η εφαρμογή ξεκινά χωρίς τους ${info.people} στρατιώτες της τωρινής ΕΣΣΟ</b><small>Δεν αναιρείται με το «Αναίρεση»· γυρνά πίσω μόνο με την «Επαναφορά ΕΣΣΟ».</small></span></label>`}
@@ -138,7 +148,7 @@ function RestoreDialog({ a, onClose }: P) {
   const go = async () => { setBusy(true); const r = await window.api.essoRestore(a.dir); setBusy(false); if (!r.ok) toast({ text: r.error }); };
   return html`<${Dialog} role="alertdialog" title=${'Επαναφορά: ' + a.name} description=${atTxt(a.at) + ' · ' + a.people + ' σε δύναμη'} onClose=${busy ? () => {} : onClose}
     footer=${html`<${Button} variant="outline" data-autofocus="" disabled=${busy} onClick=${onClose}>Άκυρο<//><${Button} variant="destructive" disabled=${busy} onClick=${go}>${busy ? 'Γίνεται…' : 'Επαναφορά και επανεκκίνηση'}<//>`}>
-    <p style=${{ marginTop: 0 }}>Η εφαρμογή θα γυρίσει όπως ήταν στην ${a.name}: στρατιώτες, καταστάσεις, υπηρεσίες, ΗΚΑΙ, ιστορικό και ρυθμίσεις. Τα Excel της ανοίγουν από εκεί που ήταν, ή από τα αντίγραφα του φακέλου αν δεν υπάρχουν πια.</p>
+    <p style=${{ marginTop: 0 }}>Η εφαρμογή θα γυρίσει όπως ήταν στην ${a.name}: στρατιώτες, καταστάσεις, υπηρεσίες, ${HK()}, ιστορικό και ρυθμίσεις. Τα Excel της ανοίγουν από εκεί που ήταν, ή από τα αντίγραφα του φακέλου αν δεν υπάρχουν πια.</p>
     <p>Πρώτα ${cur ? 'η ' + essoName(cur) : 'η τωρινή ΕΣΣΟ'} μπαίνει κι αυτή στο αρχείο, για να γυρίσεις σε αυτήν με τον ίδιο τρόπο. Η εφαρμογή δεν γράφει μόνη της στα Excel μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel».</p>
   <//>`;
 }

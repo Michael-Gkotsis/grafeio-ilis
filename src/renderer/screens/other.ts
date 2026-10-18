@@ -8,7 +8,7 @@ import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
 import { AddBlockDialog, ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, HK_OFFICERS, HK_NCO, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, greekHolidays, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
@@ -25,7 +25,9 @@ import { BrandCard, RoomsCard } from './units';
 import { appTitle } from '../../shared/brand';
 import { EssoCards } from './esso';
 import { LeavesTab } from './leaves';
-import { listOf, statusLbl } from '../../shared/ranks';
+import { cadreCountRows, hkRowList, listOf, statusLbl } from '../../shared/ranks';
+import { UNIT, UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
+import { HkRowsCard, UnitKindField } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 type P = any;
 
@@ -67,8 +69,8 @@ export function TodayScreen() {
   };
   const what = (s: Status) => (s.type === 'PUN' ? 'ποινή (' + punLbl(s.kind) + ')' : statusLbl(s, state.settings.lists));
   if (!c.total) return html`<div className="onboard"><${Card} title=${'Καλώς ήρθες στο ' + appTitle(state.settings)}>
-    <p style=${{ marginTop: 0 }}>Για να ξεκινήσεις χρειάζεται το προσωπικό της Ίλης. Πάρ' το από το Δυναμολόγιο (το αρχείο .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»).</p>
-    <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ΗΚΑΙ.</li></ol>
+    <p style=${{ marginTop: 0 }}>Για να ξεκινήσεις χρειάζεται το προσωπικό ${UNIT().nom === 'Λόχος' ? 'του Λόχου' : 'της Ίλης'}. Πάρ' το από το Δυναμολόγιο (το αρχείο .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»).</p>
+    <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ${HK()}.</li></ol>
     <${Button} onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
   <//></div>`;
   // Τι πρέπει να γίνει σήμερα (με αριθμό) και τι απλώς λήγει
@@ -85,7 +87,7 @@ export function TodayScreen() {
   const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string) => html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
   return html`<div>
     <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις 14:00.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
-      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip="Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις">ΗΚΑΙ σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
+      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip="Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις">${HK()} σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
     ${boot.dataFallback && html`<${Alert} tone="warn"><span><b>Τα δεδομένα είναι στο προφίλ του χρήστη</b> (${boot.dataDir}), όχι δίπλα στο GrafeioIlis.exe. Αν μεταφέρεις την εφαρμογή σε άλλο PC, πάρε μαζί και αυτόν τον φάκελο, ή κάνε «Αντίγραφο σε USB».</span><//>`}
     <${SourcesAlert}/>
     <div className="kpis">
@@ -151,10 +153,10 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   const [txt, setTxt] = useState<Status | null>(null);
   const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [undoMark()] }); };
   return html`<div>
-    ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Μετράνε στη Δύναμη και στην ΗΚΑΙ (ΕΥ, νοσοκομείο).">
+    ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Μετράνε στη Δύναμη και στην ${HK()} (ΕΥ, νοσοκομείο).">
       <${Button} onClick=${() => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Σε ισχύ (' + nMed + ')' }, { value: 'expired', label: 'Έληξαν' }]}/></div>`
-    : html`<${PageHeader} title="Ποινές" sub="Οι ποινές ισχύουν αμέσως και γράφονται στην ΗΚΑΙ (4. Ποινές) της μέρας που επιβλήθηκαν. Όταν λήξει μια ποινή, αφαιρείται μόνη της την επόμενη μέρα.">
+    : html`<${PageHeader} title="Ποινές" sub="Οι ποινές ισχύουν αμέσως και γράφονται στην ${HK()} (4. Ποινές) της μέρας που επιβλήθηκαν. Όταν λήξει μια ποινή, αφαιρείται μόνη της την επόμενη μέρα.">
       <${Button} onClick=${() => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) })}>+ Ποινή<//><//>
     <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ punTab: v })} items=${[{ value: 'pun', label: 'Ισχύουν (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }, { value: 'allpun', label: 'Όλες οι ποινές' }]}/></div>`}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${mode === 'med' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
@@ -209,7 +211,7 @@ export function StrengthScreen() {
   const c = useMemo(() => strengthOf(state, date), [state, date]);
   return html`<div>
     <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει αυτόματα από τα ιατρικά, τις άδειες, τις εξόδους και τις ποινές. Απόντες: άδεια, αναρρωτική, νοσοκομείο, εξοδούχοι."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
-    <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>ΗΚΑΙ<//>`}>
+    <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//>`}>
       <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Οργανική</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
       ${TYPE_KEYS.map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${c.counts[k]}</span></div>
         ${c.counts[k] > 0 && html`<div className="cat__names">${c.lists[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
@@ -228,7 +230,7 @@ export function HkaiScreen() {
   const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
   const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
   return html`<div>
-    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: 'ΗΚΑΙ' }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }]}/></div>
+    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }]}/></div>
     ${tab === 'pun' ? html`<${RecordList} mode="pun"/>` : tab === 'leave' ? html`<${LeavesTab}/>` : tab === 'req' ? html`<${RequestsTab}/>` : html`<${HkaiMain}/>`}
   </div>`;
 }
@@ -236,7 +238,7 @@ function RequestsTab() {
   const { today } = useStore(); const nav = useNav();
   const date = nav.params.hkaiDate || today;
   return html`<div>
-    <${PageHeader} title="Αιτήσεις" sub="Γράφονται στην ΗΚΑΙ της μέρας (5. Αιτήσεις). Η άδεια, όταν εγκριθεί, περνά μόνη της στο 3. Άδειες και στην καρτέλα Άδειες."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ hkaiDate: d })} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
+    <${PageHeader} title="Αιτήσεις" sub="Γράφονται στην ${HK()} της μέρας (5. Αιτήσεις). Η άδεια, όταν εγκριθεί, περνά μόνη της στο 3. Άδειες και στην καρτέλα Άδειες."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ hkaiDate: d })} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
     <div style=${{ maxWidth: '960px' }}><${RequestsCard} date=${date}/></div>
   </div>`;
 }
@@ -262,7 +264,7 @@ function HkaiMain() {
   const src = [...HK_K, ...HK_A].filter(([k]) => h.cols[k].length || h.cadre[k]?.length);
   const cOrd = useMemo(() => new Map(orderedCadre(state.cadreList).map((c, i) => [c.id, i])), [state.cadreList]);
   const cadreOf = (k: string) => [...(h.cadre[k] || [])].sort((a, b) => (cOrd.get(a.id) ?? 0) - (cOrd.get(b.id) ?? 0));
-  const fn = 'ΗΚΑΙ ' + dm(date).replace('/', '.') + '.' + date.slice(2, 4) + '.xlsx';
+  const fn = HK() + ' ' + dm(date).replace('/', '.') + '.' + date.slice(2, 4) + '.xlsx';
   const cadre = state.cadreList.filter(c => c.active).length || Object.values(state.settings.cadre).reduce((a, b) => a + (b || 0), 0);
   const sum = html`<div className="stack"><${Card} title="Από πού βγαίνει κάθε αριθμός">
     <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${h.total}</span><span className="tile__l">Δύναμη</span></div><div className="tile"><span className="tile__n">${h.kol}</span><span className="tile__l">Κωλυόμενοι</span></div><div className="tile"><span className="tile__n">${h.apo}</span><span className="tile__l">Απόντες</span></div><div className="tile"><span className="tile__n">${h.avail}</span><span className="tile__l">Διαθέσιμοι</span></div></div>
@@ -277,9 +279,9 @@ function HkaiMain() {
   const sheets = html`<div>
     ${!mobile && html`<div style=${{ marginBottom: '8px' }}><${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>`}
     ${side === 'back' ? html`<${ExcelSheet} model=${back} fileName=${fn} sheetName="πισω" meta="A4 οριζόντιο"/>` : html`<${ExcelSheet} model=${front} fileName=${fn} sheetName="μπροστινο" meta="A4 οριζόντιο · 1 σελίδα" footer="Γράφονται μόνο τα κελιά εισόδου· τα αθροίσματα μένουν τύποι του εντύπου."/>`}
-    <div className="toolbar" style=${{ marginTop: '10px' }}><${ExportButton} kind="hkai" date=${date} label="η ΗΚΑΙ"/></div><${TemplateNote} ids=${['hkai']}/></div>`;
+    <div className="toolbar" style=${{ marginTop: '10px' }}><${ExportButton} kind="hkai" date=${date} label="η ${HK()}"/></div><${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
-    <${PageHeader} title=${'ΗΚΑΙ της ' + dmy(date)} sub="Κατάσταση Ημερήσιας Αναφοράς. Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ hkaiDate: d })} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
+    <${PageHeader} title=${HK() + ' της ' + dmy(date)} sub="Κατάσταση Ημερήσιας Αναφοράς. Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ hkaiDate: d })} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
     ${mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
   </div>`;
 }
@@ -289,19 +291,19 @@ function CadreCard({ warn }: { warn: boolean }) {
   const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
   const [c, setC] = useState(() => ({ ...state.settings.cadre }));
   const [open, setOpen] = useState(warn);
-  const ranks = [...HK_OFFICERS, ...HK_NCO.slice(0, 2)];
+  const ranks = cadreCountRows(state.settings.lists);
   const dirty = ranks.some(r => (c[r] || 0) !== (state.settings.cadre[r] || 0));
   const list = state.cadreList.filter(x => x.active);
   if (list.length) {
-    const by = new Map<string, number>(); list.forEach(x => by.set(x.hk, (by.get(x.hk) || 0) + 1));
+    const by = new Map<string, number>(); list.forEach(x => by.set(hkRowLabel(x.hk), (by.get(hkRowLabel(x.hk)) || 0) + 1));
     return html`<${Card} title="Στελέχη ανά βαθμό" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('cadre')}>Στελέχη<//>`}>
       <p className="note" style=${{ margin: 0 }}>${[...by].map(([r, n]) => r + ' ' + n).join(' · ')}. Βγαίνουν από την καρτέλα «Στελέχη», μαζί με τις καταστάσεις τους (κωλυόμενοι, απόντες).</p><//>`;
   }
   return html`<${Card} title="Στελέχη ανά βαθμό" actions=${!open && html`<${Button} size="sm" variant="outline" onClick=${() => setOpen(true)}>Άλλαξε<//>`}>
     ${warn && html`<${Alert} tone="warn"><span>Δεν έχουν μπει ακόμα. Γράψε πόσοι είναι σε κάθε βαθμό και πάτα «Αποθήκευση», ή πέρασε τα στελέχη με ονόματα στο <button type="button" className="linkish" onClick=${() => nav.go('cadre')}>καρτέλα «Στελέχη»</button>.</span><//>`}
-    ${open ? html`<div className="settings-grid">${ranks.map(r => html`<label key=${r} className="field"><span className="field__help">${r}</span><input className="ui-input" type="number" min="0" value=${c[r] || ''} placeholder="0" onChange=${(e: any) => setC({ ...c, [r]: Math.max(0, +e.target.value || 0) })}/></label>`)}</div>
-      <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setSettings', settings: { cadre: c }, text: 'στελέχη ΗΚΑΙ' }, false)) { toast({ text: 'Αποθηκεύτηκαν τα στελέχη. Ισχύουν για κάθε μέρα.' }); setOpen(false); } }}>Αποθήκευση<//><span className="note">Λοχίες, δεκανείς και στρατιώτες μετρώνται από το προσωπικό.</span></div>`
-    : html`<p className="note" style=${{ margin: 0 }}>${ranks.filter(r => state.settings.cadre[r]).map(r => r + ' ' + state.settings.cadre[r]).join(' · ') || 'Κανένα'}. Ισχύουν για κάθε μέρα.</p>`}
+    ${open ? html`<div className="settings-grid">${ranks.map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${c[r] || ''} placeholder="0" onChange=${(e: any) => setC({ ...c, [r]: Math.max(0, +e.target.value || 0) })}/></label>`)}</div>
+      <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setSettings', settings: { cadre: c }, text: 'στελέχη ' + HK() }, false)) { toast({ text: 'Αποθηκεύτηκαν τα στελέχη. Ισχύουν για κάθε μέρα.' }); setOpen(false); } }}>Αποθήκευση<//><span className="note">Λοχίες, δεκανείς και στρατιώτες μετρώνται από το προσωπικό.</span></div>`
+    : html`<p className="note" style=${{ margin: 0 }}>${ranks.filter(r => state.settings.cadre[r]).map(r => hkRowLabel(r) + ' ' + state.settings.cadre[r]).join(' · ') || 'Κανένα'}. Ισχύουν για κάθε μέρα.</p>`}
   <//>`;
 }
 // Ό,τι στην ΗΚΑΙ δεν το ξέρει η εφαρμογή: αριθμοί ανά βαθμό και κείμενα της πίσω σελίδας, για τη συγκεκριμένη μέρα
@@ -310,7 +312,7 @@ const HK_ACC_FIELDS: [string, string][] = [['accT', 'Ζημιές σε οχήμ�
 function HkaiManualCard({ date }: { date: string }) {
   const { state, run, today } = useStore(); const toast = useToast();
   const cur = state.hkaiManual[date] || { cells: {}, text: {} };
-  const [m, setM] = useState(cur); const [rk, setRk] = useState(HK_NCO[HK_NCO.length - 1]);
+  const [m, setM] = useState(cur); const [rk, setRk] = useState('Στρατιώτες');
   useEffect(() => setM(state.hkaiManual[date] || { cells: {}, text: {} }), [date, state.hkaiManual]);
   const dirty = JSON.stringify(m) !== JSON.stringify(cur);
   const setCell = (r: string, k: string, v: number) => { const row = { ...(m.cells[r] || {}) }; if (v) row[k] = v; else delete row[k]; const cells = { ...m.cells, [r]: row }; if (!Object.keys(row).length) delete cells[r]; setM({ ...m, cells }); };
@@ -320,14 +322,14 @@ function HkaiManualCard({ date }: { date: string }) {
   return html`<${Card} title=${'Συμπληρώνεις εσύ (' + (date === today ? 'σήμερα' : dm(date)) + ')'}>
     <p className="note" style=${{ marginTop: 0 }}>Ό,τι δεν βγαίνει από τις καταστάσεις. Οι αριθμοί προστίθενται στη στήλη του βαθμού και τα σύνολα βγαίνουν από τους τύπους του εντύπου.</p>
     <div className="field"><span className="field__label">Αριθμοί ανά βαθμό</span>
-      <div className="field-row"><select className="ui-input" aria-label="Βαθμός" value=${rk} onChange=${(e: any) => setRk(e.target.value)}>${[...HK_OFFICERS, ...HK_NCO].map(r => html`<option key=${r}>${r}</option>`)}</select></div>
+      <div className="field-row"><select className="ui-input" aria-label="Βαθμός" value=${rk} onChange=${(e: any) => setRk(e.target.value)}>${hkRowList(state.settings.lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}</select></div>
       <div className="settings-grid" style=${{ marginTop: '6px' }}>${HK_MANUAL.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${m.cells[rk]?.[k] || ''} onChange=${(e: any) => setCell(rk, k, Math.max(0, +e.target.value || 0))}/></label>`)}</div>
-      ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => u.r + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
+      ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => hkRowLabel(u.r) + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
     ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><input id=${'hk-' + k} className="ui-input" placeholder=${k === 'off' && auto ? auto : ph} list=${k === 'off' ? 'hk-off-l' : undefined} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/>${k === 'off' && html`<span className="field__help">${auto ? 'Κενό = από τα Στελέχη: ' + auto + '.' : 'Κενό = όποιος αξιωματικός έχει «Υπηρεσία» στα Στελέχη.'}</span>`}</div>`)}
     <datalist id="hk-off-l">${state.cadreList.filter(c => c.active).map(c => html`<option key=${c.id} value=${(c.rank + ' ' + c.last + ' ' + c.first).trim()}/>`)}</datalist>
     ${hkOn(state.settings, 'acc') && html`<div className="field"><span className="field__label">Ατυχήματα</span><div className="settings-grid">${HK_ACC_FIELDS.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" placeholder="Ø" value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></label>`)}</div><span className="field__help">Κενό = Ø, όπως στο έντυπο.</span></div>`}
-    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 3 (άδειες που ξεκινούν ή εγκρίθηκαν), 4 (ποινές της μέρας) και 5 (αιτήσεις) γράφονται μόνες τους. Οχήματα και «Προβλέπονται» στις «Ενότητες της ΗΚΑΙ» πιο κάτω.</p>
-    <div className="toolbar"><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setHkaiManual', date, manual: m }, false)) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ΗΚΑΙ ' + dm(date) }); }}>Αποθήκευση<//>${dirty && html`<${Button} variant="ghost" onClick=${() => setM(cur)}>Ακύρωση<//>`}</div>
+    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 3 (άδειες που ξεκινούν ή εγκρίθηκαν), 4 (ποινές της μέρας) και 5 (αιτήσεις) γράφονται μόνες τους. Οχήματα και «Προβλέπονται» στις «Ενότητες της ${HK()}» πιο κάτω.</p>
+    <div className="toolbar"><${Button} disabled=${!dirty} onClick=${async () => { if (await run({ t: 'setHkaiManual', date, manual: m }, false)) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ' + HK() + ' ' + dm(date) }); }}>Αποθήκευση<//>${dirty && html`<${Button} variant="ghost" onClick=${() => setM(cur)}>Ακύρωση<//>`}</div>
   <//>`;
 }
 
@@ -338,7 +340,7 @@ function HkaiMovesCard({ date }: { date: string }) {
   if (!ins.length && !outs.length) return null;
   const drop = async (p: Person, field: 'inOn' | 'outOn') => { if (await run({ t: 'setPersonMove', pid: p.id, field, date: null }, false)) toast({ text: shortName(p) + ': δεν γράφεται στις ' + (field === 'inOn' ? 'εγγραφές' : 'διαγραφές'), actions: [undoMark()] }); };
   const list = (ps: Person[], field: 'inOn' | 'outOn') => html`<ol className="hk-req">${ps.map(p => html`<li key=${p.id}><div className="hk-req__row"><span><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> <span className="muted">${personLine(p)}${field === 'outOn' && outReason(p) ? ': ' + outReason(p) : ''}</span></span>
-    <span className="hk-req__acts"><${Button} size="sm" variant="ghost" onClick=${() => drop(p, field)} data-tip="Μένει όπως είναι στο προσωπικό, απλώς δεν γράφεται στην ΗΚΑΙ">Να μη γραφτεί<//></span></div></li>`)}</ol>`;
+    <span className="hk-req__acts"><${Button} size="sm" variant="ghost" onClick=${() => drop(p, field)} data-tip="Μένει όπως είναι στο προσωπικό, απλώς δεν γράφεται στην ${HK()}">Να μη γραφτεί<//></span></div></li>`)}</ol>`;
   return html`<${Card} title=${'Εγγραφές και διαγραφές (' + (date === today ? 'σήμερα' : dm(date)) + ')'}>
     ${ins.length > 0 && html`<div className="field"><span className="field__label">1. Εγγραφές: μπήκαν στη δύναμη</span>${list(ins, 'inOn')}</div>`}
     ${outs.length > 0 && html`<div className="field"><span className="field__label">2. Διαγραφές: βγήκαν εκτός δύναμης</span>${list(outs, 'outOn')}</div>`}
@@ -351,21 +353,21 @@ function HkaiSectionsCard() {
   const cur: HkaiSettings = state.settings.hkai || {};
   const [veh, setVeh] = useState<HkVehicle>(() => ({ type: '1/4 τόνων', ...(cur.veh || {}) }));
   const [prov, setProv] = useState<Record<string, number>>(() => ({ ...(cur.prov || {}) }));
-  const save = (hkai: HkaiSettings, text: string) => run({ t: 'setSettings', settings: { hkai }, text: 'ΗΚΑΙ, ' + text }, false);
+  const save = (hkai: HkaiSettings, text: string) => run({ t: 'setSettings', settings: { hkai }, text: HK() + ', ' + text }, false);
   const toggle = async (k: HkSection, on: boolean) => { const off = (cur.off || []).filter(x => x !== k); if (!on) off.push(k); if (await save({ ...cur, off }, (on ? 'άνοιξε: ' : 'έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1].toLowerCase())) toast({ text: (on ? 'Άνοιξε: ' : 'Έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1] }); };
   const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, +v || 0));
   const vehDirty = JSON.stringify(veh) !== JSON.stringify({ type: '1/4 τόνων', ...(cur.veh || {}) });
   const provDirty = JSON.stringify(prov) !== JSON.stringify(cur.prov || {});
   const VF: [keyof HkVehicle, string][] = [['prov', 'Προβλέπονται'], ['kin', 'Σε κίνηση'], ['maint', 'Για συντήρηση'], ['dmg', 'Λόγω βλάβης ή ατυχήματος']];
-  return html`<${Card} title="Ενότητες της ΗΚΑΙ">
-    <p className="note" style=${{ marginTop: 0 }}>Κλείσε όσα η Ίλη δεν συμπληρώνει (π.χ. οχήματα, αν δεν έχετε): δεν φαίνονται εδώ και δεν γράφονται στο έντυπο.</p>
+  return html`<${Card} title="Ενότητες της ${HK()}">
+    <p className="note" style=${{ marginTop: 0 }}>Κλείσε όσα ${UNIT().nom === 'Λόχος' ? 'ο Λόχος' : 'η Ίλη'} δεν συμπληρώνει (π.χ. οχήματα, αν δεν έχετε): δεν φαίνονται εδώ και δεν γράφονται στο έντυπο.</p>
     ${HK_SECTIONS.map(([k, l, help]) => html`<label key=${k} className="rule"><input type="checkbox" className="ui-check" checked=${hkOn(state.settings, k)} onChange=${(e: any) => toggle(k, e.target.checked)}/><span><b>${l}</b><small>${help}</small></span></label>`)}
     ${hkOn(state.settings, 'veh') && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Όχημα (ίδιο κάθε μέρα)</span>
       <div className="settings-grid"><label className="field"><span className="field__help">Είδος</span><input className="ui-input" value=${veh.type} onChange=${(e: any) => setVeh({ ...veh, type: e.target.value })}/></label>
       ${VF.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" value=${veh[k] ?? ''} onChange=${(e: any) => setVeh({ ...veh, [k]: num(e.target.value) })}/></label>`)}</div>
-      ${vehDirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${async () => { if (await save({ ...cur, veh }, 'όχημα')) toast({ text: 'Αποθηκεύτηκε το όχημα της ΗΚΑΙ' }); }}>Αποθήκευση<//></div>`}</div>`}
+      ${vehDirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${async () => { if (await save({ ...cur, veh }, 'όχημα')) toast({ text: 'Αποθηκεύτηκε το όχημα της ' + HK() }); }}>Αποθήκευση<//></div>`}</div>`}
     ${hkOn(state.settings, 'prov') && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Προβλέπονται από τη σύνθεση</span>
-      <div className="settings-grid">${[...HK_OFFICERS, ...HK_NCO].map(r => html`<label key=${r} className="field"><span className="field__help">${r}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${prov[r] || ''} onChange=${(e: any) => { const n = num(e.target.value); const x = { ...prov }; if (n) x[r] = n; else delete x[r]; setProv(x); }}/></label>`)}</div>
+      <div className="settings-grid">${hkRowList(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${prov[r] || ''} onChange=${(e: any) => { const n = num(e.target.value); const x = { ...prov }; if (n) x[r] = n; else delete x[r]; setProv(x); }}/></label>`)}</div>
       ${provDirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${async () => { if (await save({ ...cur, prov }, 'προβλέπονται')) toast({ text: 'Αποθηκεύτηκαν τα «Προβλέπονται»' }); }}>Αποθήκευση<//></div>`}</div>`}
   <//>`;
 }
@@ -384,16 +386,16 @@ function RequestsCard({ date }: { date: string }) {
   const decide = async (r: PersonRequest, ok: boolean | null) => {
     if (!(await run({ t: 'decideRequest', id: r.id, ok }, false))) return;
     const who = shortName(pm.get(r.pid)!); const on = r.date > today ? r.date : today;
-    toast({ text: ok === null ? 'Αναιρέθηκε η απόφαση για την άδεια του ' + who : ok ? 'Εγκρίθηκε η άδεια του ' + who + '. Γράφεται στην ΗΚΑΙ ' + dm(on) + ', 3. ΑΔΕΙΕΣ.' : 'Απορρίφθηκε η αίτηση άδειας του ' + who, actions: [undoMark()] });
+    toast({ text: ok === null ? 'Αναιρέθηκε η απόφαση για την άδεια του ' + who : ok ? 'Εγκρίθηκε η άδεια του ' + who + '. Γράφεται στην ' + HK() + ' ' + dm(on) + ', 3. ΑΔΕΙΕΣ.' : 'Απορρίφθηκε η αίτηση άδειας του ' + who, actions: [undoMark()] });
   };
   const item = (r: PersonRequest, showDate: boolean) => { const p = pm.get(r.pid)!; return html`<li key=${r.id}><div className="hk-req__row">
     <span>${showDate && html`<span className="num">${dm(r.date)} </span>`}<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${upper(reqWhat(r))}.
-      ${r.decision === 'ok' && html` <${Badge} tone="ok" data-tip=${'Γράφτηκε στο 3. ΑΔΕΙΕΣ της ΗΚΑΙ ' + dm(r.decided!)}>Εγκρίθηκε ${dm(r.decided!)}<//>`}${r.decision === 'no' && html` <${Badge} tone="bad">Απορρίφθηκε ${dm(r.decided!)}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">Περιμένει απάντηση<//>`}</span>
-    <span className="hk-req__acts">${r.leave && !r.decision && html`<${Button} size="sm" onClick=${() => decide(r, true)} data-tip="Γίνεται άδεια και γράφεται στο 3. ΑΔΕΙΕΣ της σημερινής ΗΚΑΙ">Εγκρίθηκε<//><${Button} size="sm" variant="outline" onClick=${() => decide(r, false)}>Απορρίφθηκε<//>`}
+      ${r.decision === 'ok' && html` <${Badge} tone="ok" data-tip=${'Γράφτηκε στο 3. ΑΔΕΙΕΣ της ' + HK() + ' ' + dm(r.decided!)}>Εγκρίθηκε ${dm(r.decided!)}<//>`}${r.decision === 'no' && html` <${Badge} tone="bad">Απορρίφθηκε ${dm(r.decided!)}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">Περιμένει απάντηση<//>`}</span>
+    <span className="hk-req__acts">${r.leave && !r.decision && html`<${Button} size="sm" onClick=${() => decide(r, true)} data-tip="Γίνεται άδεια και γράφεται στο 3. ΑΔΕΙΕΣ της σημερινής ${HK()}">Εγκρίθηκε<//><${Button} size="sm" variant="outline" onClick=${() => decide(r, false)}>Απορρίφθηκε<//>`}
       ${r.decision ? html`<${Button} size="sm" variant="ghost" onClick=${() => decide(r, null)} data-tip=${r.decision === 'ok' ? 'Η αίτηση ξαναπεριμένει απάντηση και η άδεια βγαίνει' : 'Η αίτηση ξαναπεριμένει απάντηση'}>Αναίρεση απόφασης<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; };
   return html`<${Card} title=${'5. Αιτήσεις (' + (date === today ? 'σήμερα' : dm(date)) + ')'} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => setEdit({ date, leave: { type: 'LEAVE', from: addDays(date, 1), to: addDays(date, 1) } })}>+ Αίτηση άδειας<//><${Button} size="sm" variant="ghost" onClick=${() => setEdit({ date })}>+ Άλλη αίτηση<//>`}>
     ${list.length ? html`<ol className="hk-req">${list.map(r => item(r, false))}</ol>`
-      : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ΗΚΑΙ ως «1. ΣΤΡ (ΠΖ) … : ΑΙΤΕΙΤΑΙ …». Η άδεια, όταν εγκριθεί, περνά μόνη της στο «3. ΑΔΕΙΕΣ».</p>`}
+      : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ${HK()} ως «1. ΣΤΡ (ΠΖ) … : ΑΙΤΕΙΤΑΙ …». Η άδεια, όταν εγκριθεί, περνά μόνη της στο «3. ΑΔΕΙΕΣ».</p>`}
     ${other.length > 0 && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Αιτήσεις άδειας άλλων ημερών που περιμένουν απάντηση</span><ul className="hk-req" style=${{ listStyle: 'none', paddingLeft: 0 }}>${other.map(r => item(r, true))}</ul></div>`}
     ${edit && html`<${RequestDialog} req=${edit} onClose=${() => setEdit(null)}/>`}
   <//>`;
@@ -413,16 +415,16 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
     if (!ok) return;
     const body = { pid: p!.id, date: f.date, text, ...(leave ? { leave } : {}) };
     const cmd = req.id ? { t: 'updateRequest' as const, req: { id: req.id, ...body } } : { t: 'addRequest' as const, req: body };
-    if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ΗΚΑΙ ' + dm(f.date) + ': ') + shortName(p!), actions: [undoMark()] }); }
+    if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ' + HK() + ' ' + dm(f.date) + ': ') + shortName(p!), actions: [undoMark()] }); }
   };
-  const line = p && ok ? 'Στην ΗΚΑΙ: «' + upper(hkWho(p) + ': αιτείται ' + reqWhat({ id: '', pid: p.id, date: f.date, text, leave })) + '.»' : '';
-  return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : f.isLeave ? 'Αίτηση άδειας' : 'Νέα αίτηση'} description="Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose}
+  const line = p && ok ? 'Στην ' + HK() + ': «' + upper(hkWho(p) + ': αιτείται ' + reqWhat({ id: '', pid: p.id, date: f.date, text, leave })) + '.»' : '';
+  return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : f.isLeave ? 'Αίτηση άδειας' : 'Νέα αίτηση'} description="Γράφεται στην ${HK()} της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field"><span className="field__label">Τι αιτείται</span><${Segmented} value=${f.isLeave ? 'leave' : 'other'} onChange=${(v: string) => setF({ ...f, isLeave: v === 'leave' })} items=${[{ value: 'leave', label: 'Άδεια' }, { value: 'other', label: 'Κάτι άλλο' }]}/></div>
     <div className="field"><label className="field__label" htmlFor="rq-p">Ποιος</label>
       ${p ? html`<div className="field-row"><b>${fullName(p)}</b>${!req.pid && html`<${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, pid: null })}>Άλλος<//>`}</div>`
         : html`<${PersonPicker} id="rq-p" autoFocus=${true} onChange=${(pid: number) => setF({ ...f, pid })}/>`}</div>
-    <div className="field"><label className="field__label" htmlFor="rq-d">Ημερομηνία ΗΚΑΙ</label><input id="rq-d" type="date" className="ui-input" value=${f.date} onChange=${(e: any) => e.target.value && setF({ ...f, date: e.target.value })}/></div>
+    <div className="field"><label className="field__label" htmlFor="rq-d">Ημερομηνία ${HK()}</label><input id="rq-d" type="date" className="ui-input" value=${f.date} onChange=${(e: any) => e.target.value && setF({ ...f, date: e.target.value })}/></div>
     ${f.isLeave && html`<div className="field"><label className="field__label" htmlFor="rq-k">Είδος άδειας</label><select id="rq-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value })}>${kinds.map(k => html`<option key=${k} value=${k}>${k}</option>`)}</select></div>
       <${DateRangeField} from=${f.from} to=${f.to} onChange=${(from: string, to: string) => setF({ ...f, from, to })}/>`}
     <div className="field"><label className="field__label" htmlFor="rq-t">${f.isLeave ? 'Αιτιολόγηση (προαιρετικό)' : 'Αιτείται'}</label><input id="rq-t" className="ui-input" placeholder=${f.isLeave ? 'π.χ. για οικογενειακούς λόγους' : 'π.χ. μετάθεση στην 2η ΕΠΧΙΑ'} value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
@@ -482,16 +484,19 @@ function AppearanceCard() {
 
 function SettingsCard() {
   const { state, run, boot } = useStore(); const toast = useToast();
-  const [s, setS] = useState(() => ({ unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
+  const [s, setS] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre } }));
+  // άλλος τύπος μονάδας: η κεφαλίδα και ο τίτλος αλλάζουν μαζί («4η ΙΛΗ» → «4ος ΛΟΧΟΣ»), για να τα δεις πριν την αποθήκευση
+  const setKind = (k: UnitKind) => setS({ ...s, unitKind: k, ...unitSettingsFor(s, k) });
   const save = async () => {
-    const ok = await run({ t: 'setSettings', settings: { unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre }, text: 'μονάδα, στελέχη ΗΚΑΙ' }, false);
+    const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
   };
   return html`<${Card} title="Μονάδα και έντυπα">
+    <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
-    <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ΗΚΑΙ</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
+    <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ${HK()}</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
-    <div className="field"><span className="field__label">Στελέχη ανά βαθμό (ΗΚΑΙ, στήλη «Τοποθετημένοι»)</span><div className="settings-grid">${[...HK_OFFICERS, ...HK_NCO.slice(0, 2)].map(r => html`<label key=${r} className="field"><span className="field__help">${r}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
+    <div className="field"><span className="field__label">Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι»)</span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
       <span className="field__help">Οι στρατιώτες, δεκανείς και λοχίες μετρώνται από το προσωπικό της εφαρμογής.</span></div>
     <p className="note" style=${{ margin: 0 }}>Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους <b>Θαλάμους και ουλαμούς</b>.</p>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
@@ -600,7 +605,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<${SettingsCard}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
   return html`<div>
@@ -618,13 +623,13 @@ export function CommandPalette({ onClose }: P) {
   const ACTIONS = [
     { t: 'Εξοδούχοι σήμερα', k: 'ΕΞΟΔΟΥΧΟΙ ΕΞΟΔΟΣ ΔΝ ΔΙΑΝΥΚΤΕΡΕΥΣΗ ΠΑΡΑΜΕΝΟΝΤΕΣ', fn: () => nav.go('outs', { outDate: today }) },
     { t: 'Υπηρεσίες αύριο', k: 'ΥΠΗΡΕΣΙΕΣ ΦΡΟΥΡΑ ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΜΑΓΕΙΡΕΙΑ ΛΥ', fn: () => nav.go('guard', { guardDate: tomorrow }) },
-    { t: 'ΗΚΑΙ σήμερα', k: 'ΗΚΑΙ ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('hkai', { hkaiDate: today }) },
+    { t: HK() + ' σήμερα', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('hkai', { hkaiDate: today }) },
     { t: 'Δήλωσε ιατρικό (ΕΑ, ΕΑΡΒ, ΕΥ, ΕΟ, ΝΟΣ)', k: 'ΙΑΤΡΙΚΑ ΕΑ ΕΑΡΒ ΑΡΒΥΛΩΝ ΕΥ ΕΟ ΝΟΣ', fn: () => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) }) },
-    { t: 'Νέα ποινή (αίτηση στην ΗΚΑΙ)', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) }) },
+    { t: 'Νέα ποινή (αίτηση στην ' + HK() + ')', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) }) },
     { t: 'Ιατρικά', k: 'ΙΑΤΡΙΚΑ ΕΥ ΕΑ ΕΟ ΣΤΕΠ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'med' }) },
-    { t: 'ΗΚΑΙ › Ποινές', k: 'ΠΟΙΝΕΣ ΤΙΜΩΡΗΜΕΝΟΙ ΣΤΕΡΗΣΗ ΚΡΑΤΗΣΗ', fn: () => nav.go('hkai', { hkTab: 'pun' }) },
-    { t: 'ΗΚΑΙ › Άδειες', k: 'ΑΔΕΙΕΣ ΤΙΜΗΤΙΚΗ ΑΝΑΡΡΩΤΙΚΗ ΕΠΙΣΤΡΟΦΗ', fn: () => nav.go('hkai', { hkTab: 'leave' }) },
-    { t: 'ΗΚΑΙ › Αιτήσεις', k: 'ΑΙΤΗΣΕΙΣ ΑΙΤΗΣΗ ΑΔΕΙΑΣ ΕΓΚΡΙΣΗ', fn: () => nav.go('hkai', { hkTab: 'req' }) },
+    { t: HK() + ' › Ποινές', k: 'ΠΟΙΝΕΣ ΤΙΜΩΡΗΜΕΝΟΙ ΣΤΕΡΗΣΗ ΚΡΑΤΗΣΗ', fn: () => nav.go('hkai', { hkTab: 'pun' }) },
+    { t: HK() + ' › Άδειες', k: 'ΑΔΕΙΕΣ ΤΙΜΗΤΙΚΗ ΑΝΑΡΡΩΤΙΚΗ ΕΠΙΣΤΡΟΦΗ', fn: () => nav.go('hkai', { hkTab: 'leave' }) },
+    { t: HK() + ' › Αιτήσεις', k: 'ΑΙΤΗΣΕΙΣ ΑΙΤΗΣΗ ΑΔΕΙΑΣ ΕΓΚΡΙΣΗ', fn: () => nav.go('hkai', { hkTab: 'req' }) },
     { t: 'Δώσε άδεια', k: 'ΑΔΕΙΑ', fn: () => nav.declare({ cat: 'abs' }) },
     { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },

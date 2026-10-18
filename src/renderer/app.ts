@@ -17,6 +17,7 @@ import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
 import { essoPersonTxt } from '../shared/esso';
+import { HK, setUnitKind } from '../shared/unit';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -25,6 +26,8 @@ const SCREENS: Record<string, [string, any, any]> = {
   hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
+// το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
+const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
 const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
 const NAV_ALL = [...NAV_MAIN, 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· το Ιστορικό μόνο από το μενού
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
@@ -64,6 +67,7 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
   noteNamesakes(state.people);   // πατρώνυμο στους συνονόματους, πριν αποδοθούν οι οθόνες
+  setUnitKind(state.settings);   // ΗΚΑΙ ή ΗΚΑΛ, Ίλη ή Λόχος στα κείμενα των οθονών
   const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
   const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);
@@ -169,7 +173,7 @@ function Shell() {
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
   const waiting = useMemo(() => state.requests.filter(r => r.leave && !r.decision && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
   const navItem = (v: string, inRail = false) => {
-    const [label, icon] = SCREENS[v]; const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
+    const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
     const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
     const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
@@ -179,7 +183,7 @@ function Shell() {
   return html`<${PrefsCtx.Provider} value=${prefsV}><${NavCtx.Provider} value=${nav}><${ExportProvider}>
     <div className=${cx('shell', rail && 'is-rail')}>
       <header className="topbar">
-        <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + SCREENS[back[back.length - 1].view][0] + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
+        <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + screenName(back[back.length - 1].view) + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
         <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30} ...${appLogo(state.settings)}/><span>${title}<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
@@ -195,7 +199,7 @@ function Shell() {
       <main className="main"><${Screen} key=${route.view}/></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">
-      ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${SCREENS[v][0]}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
+      ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
       <button type="button" aria-current=${MOBILE_MORE.includes(route.view) ? 'page' : undefined} onClick=${() => setLayer({ kind: 'more' })}>${Icon.more}Άλλα</button>
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} onClose=${() => setPersonId(null)}/>`}

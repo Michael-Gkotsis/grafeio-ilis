@@ -1,4 +1,5 @@
 // features/guard (Κατάσταση υπηρεσιών, έλεγχος) και features/outs (εξοδούχοι, ΔΝ)
+import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
@@ -17,7 +18,7 @@ import { statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ΗΚΑΙ ' + r.hkTime : ''].filter(Boolean).join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : ''].filter(Boolean).join(', ');
 const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
 const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.kind === 'op' && !x.hidden); return b.length ? 'οπλοφύλακας: ' + (b.every((x: P) => x.armed) ? 'ένοπλος' : 'άοπλος') + ' (Ρυθμίσεις)' : ''; };
@@ -101,7 +102,7 @@ function RulesDialog({ onClose }: P) {
     <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><select id="rnum" className="ui-input" value=${r.numRest || 0} onChange=${(e: any) => setR({ ...r, numRest: +e.target.value })}><option value="0">Χωρίς περιορισμό</option><option value="3">Ξανά στο ίδιο νούμερο μετά από 3 ημέρες</option><option value="4">Μετά από 4 ημέρες</option></select><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
     <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
       <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
-      <${TimeField} id="rhk" label="Ώρα ΗΚΑΙ" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ΗΚΑΙ της μέρας"/>
+      <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
     </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => setR({ ...r, strictUnarmed: e.target.checked })}/><span><b>Αυστηρά Άοπλοι</b><small>${STRICT_TXT}${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''} Όταν είναι κλειστό, ισχύει η κανονική σειρά.</small></span></label>
     <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · ΕΥ και ΣΤΕΠ σε καμία υπηρεσία · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>
