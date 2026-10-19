@@ -4,23 +4,23 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { copyDurable, dataDirOf, writeAll, writeJson, freeName, isLocked, LockedError } from './files';
+import { copyDurable, dataDirOf, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
-import { Workbook, mergeFirstSheets } from './xlsx';
+import { Workbook, mergeFirstSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
-import { normGreek } from '../shared/text';
+import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
 import { previewHtml, renderBook } from './print';
-import { buildTemplate, fillReport, inspectTemplate, previewReport, previewTemplate } from './reports';
-import type { BuildOpts, RepKind, Report } from '../shared/reports';
+import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
+import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
@@ -49,7 +49,11 @@ const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
 // Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
 const META = path.join(DATA, 'meta.json');
-type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string> };   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string>; repTimes?: Record<string, RepTimes>; repSheets?: Record<string, RepSheets> };
+// Έντυπα: πόσες φορές βγήκε ο καθένας σε κάθε έντυπο με τυχαίους (ανά ΕΣΣΟ: η Νέα ΕΣΣΟ ξεκινά από το μηδέν) και ποια φύλλα
+// έγραψε κάθε έντυπο σε ποιο αρχείο (για να μη γράψει πάνω σε φύλλο που δεν έφτιαξε, και να μην τα διαβάζει η εισαγωγή)
+type RepTimes = { essos: string; n: Record<string, number> };
+type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
 const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
@@ -331,7 +335,8 @@ const statusAll = async () => ({ sources: await sourceStatus(), forms: readOuts(
 const notify = () => { statusAll().then(st => { try { win?.webContents.send('sources', st); } catch { /* παράθυρο κλειστό */ } }, e => console.error('sources status', e)); };
 async function bookOf(file: string): Promise<SourceBook> {
   const r = await readBook(file);
-  return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: r.sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000) })), hits: detectTables(r.sheets) };
+  const sheets = notReports(file, r.sheets);
+  return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000) })), hits: detectTables(sheets) };
 }
 const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name === name);
 // Η μορφή που μπήκε, σύντομα (για το Ιστορικό)
@@ -406,7 +411,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   if (prev === next) return;
   if (toExcel) kindsOf(prev, next).forEach(k => dirty.add(k));
   // τα έντυπα δεν χρησιμοποιούν δυνατότητες ούτε το «βγήκε στις…»: χωρίς αυτά δεν ξαναπαράγονται
-  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && prev[k] !== next[k])) formsDirty = true;
+  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
   if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
@@ -434,6 +439,7 @@ async function runAuto() {
     if (byFile.size || (formsDirty && readOuts().some(o => !o.manual && lastDay(o) >= today()))) { wrote = true; busy({ on: true }); }
     for (const [f, ks] of byFile) { const t0 = Date.now(); await serial(() => syncFileAuto(ks)); logWrite(path.basename(f), t0, srcMeta.get(ks[0])?.error); }
     if (formsDirty) { formsDirty = false; const t0 = Date.now(); if (await regenForms()) logWrite('Έντυπα (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι)', t0); }
+    if (repDirty) { repDirty = false; if (!wrote && autoReps().length) { wrote = true; busy({ on: true }); } await regenReports(); }
   } catch (e) { console.error('auto', e); err = e instanceof Error ? e.message : String(e); }
   finally { autoBusy = false; notify(); if (wrote) busy({ on: false, at: nowHM(), error: err }); }
 }
@@ -442,14 +448,78 @@ function retryPending() {
   const metas = srcMeta.all(); let any = false;
   for (const [k, m] of Object.entries(metas) as [ListKind, NonNullable<ReturnType<SourceMetaStore['get']>>][]) if (m?.pending && m.locked) { dirty.add(k); any = true; }
   if (readOuts().some(o => o.pending)) { formsDirty = true; any = true; }
+  if (repDirty) any = true;
   if (any) runAuto();
+}
+
+// Έντυπα › «Φύλλο στο Δυναμολόγιο» / «Φύλλο σε άλλο Excel…»: το έντυπο γράφεται ως φύλλο (ή φύλλα, ένα ανά θάλαμο) μέσα
+// στο αρχείο. Κάθε φορά ξαναγράφονται μόνο τα φύλλα του εντύπου· η εφαρμογή δεν τα διαβάζει ποτέ (εισαγωγή, Αρχεία Excel).
+type RepOut = { ok: true; file: string; warnings: string[]; sheets?: string[] } | { ok: false; error: string; locked?: boolean; confirm?: string[] };
+const repSheetBase = (r: Report) => sheetSafe(upper((r.target?.sheet || r.name || '').trim())).trim() || 'ΕΝΤΥΠΟ';
+function repFileOf(r: Report): string | { error: string } {
+  const t = r.target;
+  const f = !t || t.to === 'people' ? bindingOf('people')?.file : t.file;
+  if (!f) return { error: !t || t.to === 'people' ? 'Δεν έχει οριστεί Δυναμολόγιο. Όρισέ το στα Αρχεία Excel ή διάλεξε «Φύλλο σε άλλο Excel…».' : 'Δεν έχει διαλεχτεί αρχείο. Άνοιξε το έντυπο με «Αλλαγή» και διάλεξε το Excel.' };
+  if (!/\.xls[xm]$/i.test(f)) return { error: 'Το ' + path.basename(f) + ' δεν είναι .xlsx: φύλλο γράφεται μόνο σε .xlsx ή .xlsm.' };
+  if (!fs.existsSync(f)) return { error: 'Δεν βρίσκω το ' + path.basename(f) + '. Άνοιξε το έντυπο με «Αλλαγή» και διάλεξέ το ξανά.' };
+  return f;
+}
+const sameFile = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+// τα φύλλα ενός αρχείου που έγραψαν τα έντυπα (για να μην τα διαβάζει η εισαγωγή σαν πίνακες)
+const repOwned = (file: string): Set<string> => new Set(Object.values(readMeta().repSheets || {}).filter(x => sameFile(x.file, file)).flatMap(x => x.sheets));
+const notReports = <T extends { name: string }>(file: string, sheets: T[]): T[] => { const own = repOwned(file); return own.size ? sheets.filter(x => !own.has(x.name)) : sheets; };
+// Χωρίς serial μέσα: ο καλών (rep:run, αυτόματη ενημέρωση) το βάζει σε serial με όλη την ανάγνωση-εγγραφή
+async function writeRepSheet(r: Report, tplFile: string, ids: (number | string)[], d: ISODate, force: boolean): Promise<RepOut> {
+  const file = repFileOf(r); if (typeof file !== 'string') return { ok: false, error: file.error };
+  const s = store.state; const all = readMeta().repSheets || {};
+  const prev = all[r.id] && sameFile(all[r.id].file, file) ? all[r.id] : undefined;
+  const base = repSheetBase(r); const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre';
+  const tpl = await tplBuf(tplFile); const o = split ? { prefix: base, stale: prev?.groups || [] } : {};
+  const out = await off('fillReport', [tpl, r, ids, d, o], () => fillReport(tpl, s, r, ids, d, o), s);
+  const pairs: [string, string][] = split ? out.sheets.map(n => [n, n]) : [[out.sheets[0], base]];
+  // φύλλα που διαβάζει η εφαρμογή (Δυναμολόγιο, ιατρικά…) δεν γράφονται ποτέ από πάνω
+  const bound = KINDS.map(k => bindingOf(k.id)).filter((b): b is SourceBinding => !!b && sameFile(b.file, file)).map(b => b.sheet.toUpperCase());
+  const hit = pairs.map(p => p[1]).find(n => bound.includes(n.toUpperCase()));
+  if (hit) return { ok: false, error: 'Το φύλλο «' + hit + '» το διαβάζει η εφαρμογή (είναι πίνακας από τα Αρχεία Excel). Δώσε άλλο όνομα φύλλου στο έντυπο.' };
+  const fj = path.join(path.dirname(file), path.basename(file)); const st = stamp(fj);
+  const target = await fs.promises.readFile(fj);
+  const placed = await off('placeSheets', [target, out.data, pairs, force ? null : prev?.sheets || []], () => placeSheets(target, out.data, pairs, force ? null : prev?.sheets || []));
+  if (placed.clash) return { ok: false, error: (placed.clash.length === 1 ? 'Υπάρχει ήδη φύλλο «' + placed.clash[0] + '» στο ' + path.basename(file) + ' που δεν το έφτιαξε αυτό το έντυπο.' : 'Υπάρχουν ήδη τα φύλλα ' + placed.clash.map(x => '«' + x + '»').join(', ') + ' στο ' + path.basename(file) + ' που δεν τα έφτιαξε αυτό το έντυπο.'), confirm: placed.clash };
+  const [f] = await writeAll([{ dir: path.dirname(fj), name: path.basename(fj), data: placed.data! }], { prevEvery: PREV_EVERY, expect: st ? { [fj]: st } : undefined });
+  const names = pairs.map(p => p[1]);
+  const m = readMeta().repSheets || {};
+  writeMeta({ repSheets: { ...m, [r.id]: { file: f, sheets: [...new Set([...(prev?.sheets || []), ...names])], groups: out.groups } } });
+  return { ok: true, file: f, warnings: out.warnings || [], sheets: names };
+}
+// τυχαίοι: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο (η Νέα ΕΣΣΟ αλλάζει το settings.essos, άρα ξεκινά από την αρχή)
+const essoKey = () => JSON.stringify(store.state.settings.essos || null);
+function repTimes(id: string): Record<string, number> { const t = readMeta().repTimes?.[id]; return t && t.essos === essoKey() ? t.n : {}; }
+function countTimes(id: string, ids: (number | string)[]) {
+  const n = { ...repTimes(id) }; for (const x of ids) n[String(x)] = (n[String(x)] || 0) + 1;
+  writeMeta({ repTimes: { ...(readMeta().repTimes || {}), [id]: { essos: essoKey(), n } } });
+}
+// «Ενημερώνεται μόνο του»: μετά από κάθε αλλαγή, μέσα στην αυτόματη ενημέρωση (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
+const autoReps = () => (store.state.settings.reports || []).filter(r => r.out === 'sheet' && r.target?.auto && r.pick.mode !== 'random');
+let repDirty = false;
+async function regenReports(): Promise<boolean> {
+  let wrote = false;
+  for (const r of autoReps()) {
+    const tpl = (store.state.settings.reportTpls || []).find(t => t.id === r.tpl); if (!tpl) continue;
+    const t0 = Date.now(); const d = repDate(r, today());
+    try {
+      const ids = rowsOf(store.state, r, d).map(x => x.id);
+      const res = await serial(() => writeRepSheet(r, tpl.file, ids, d, false));
+      logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0, res.ok ? undefined : res.error); wrote = true;
+    } catch (e) { if (e instanceof LockedError) repDirty = true; logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0, msgOf(e)); }
+  }
+  return wrote;
 }
 
 // Εισαγωγή προσωπικού: από το κουμπί (αναγνώριση μόνη της) ή από τα Αρχεία Excel (με την αντιστοίχιση του χρήστη)
 const pending = new Map<string, { rows: ImportRow[]; file: string; binding: SourceBinding | null; stamp: { mtime: number; size: number }; sheet: RawSheet | null }>();
 async function rosterPreview(file: string, b: SourceBinding | null): Promise<ImportPreview | { ok: false; error: string }> {
   try {
-    const book = await readBook(file);
+    const book0 = await readBook(file); const book = { ...book0, sheets: notReports(file, book0.sheets) };
     if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
     const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) });
@@ -552,7 +622,7 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   if (inRoster(kind) && ros && ros.write !== false && /\.xls[xm]$/i.test(ros.file) && fs.existsSync(ros.file)) {
     try {
       const book = await readBook(ros.file);
-      const hit = detectTables(book.sheets).find(h => h.best === kind);
+      const hit = detectTables(notReports(ros.file, book.sheets)).find(h => h.best === kind);
       if (hit) return { b: { file: ros.file, sheet: hit.sheet, header: hit.header, cols: hit.cols, write: true, scope: 'all' }, found: true };
       const names = new Set(book.sheets.map(x => normGreek(x.name)));
       const title = KIND[kind].title.slice(0, 28); let name = title;
@@ -650,7 +720,7 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
 // Ο χρήστης ανοίγει μόνο αρχεία και φακέλους που ξέρει η εφαρμογή (πηγές, templates, έντυπα που βγήκαν)
 function knownPath(file: string): boolean {
   const f = path.resolve(file);
-  const known = [...Object.values(store.state.settings.sources || {}).map(b => b && b.file), ...Object.values(store.state.settings.forms || {}).map(b => b && b.file), ...readOuts().map(o => o.file)].filter(Boolean).map(x => path.resolve(x as string));
+  const known = [...Object.values(store.state.settings.sources || {}).map(b => b && b.file), ...Object.values(store.state.settings.forms || {}).map(b => b && b.file), ...readOuts().map(o => o.file), ...Object.values(readMeta().repSheets || {}).map(x => x.file)].filter(Boolean).map(x => path.resolve(x as string));
   return known.some(k => k === f || path.dirname(k) === f);
 }
 
@@ -1004,22 +1074,40 @@ else {
         return await off('previewReport', [buf, r, ids, date], () => previewReport(buf, s, r, ids, date), s);
       } catch (e) { return fail(e); }
     });
-    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean) => {
+    // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
+    // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
+    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean): Promise<RepOut> => {
       try {
-        const s = store.state; const buf = await tplBuf(file); const t0 = Date.now();
-        const out = await off('fillReport', [buf, r, ids, date], () => fillReport(buf, s, r, ids, date), s);
-        const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
-        const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
-        logWrite('Έντυπο ' + r.name, t0);
-        const warnings = [...(out.warnings || [])];
-        if (print) { const p = await printPreview(f, [r.sheet]); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(f);
+        const s = store.state; const t0 = Date.now(); let res: RepOut;
+        if (r.out === 'sheet' && !print) {
+          res = await serial(() => writeRepSheet(r, file, ids, date, !!force));
+          if (res.ok) { logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0); notify(); }
+        } else {
+          const buf = await tplBuf(file);
+          const out = await off('fillReport', [buf, r, ids, date], () => fillReport(buf, s, r, ids, date), s);
+          const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
+          const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
+          logWrite('Έντυπο ' + r.name, t0);
+          const warnings = [...(out.warnings || [])];
+          if (print) { const p = await printPreview(f, out.sheets); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(f);
+          res = { ok: true, file: f, warnings, sheets: out.sheets };
+        }
+        if (!res.ok) return res;
+        if (r.pick.mode === 'random') countTimes(r.id, ids);
         writeMeta({ repLast: { ...(readMeta().repLast || {}), [r.id]: today() + ' ' + nowHM() } });
-        return { ok: true, file: f, warnings };
+        return res;
       } catch (e) {
         if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
+        if (e instanceof ChangedError) return { ok: false, error: 'Το ' + path.basename(e.file || '') + ' άλλαξε την ώρα που γραφόταν. Πάτα ξανά.' };
         if (e instanceof TemplateError) return { ok: false, error: e.message };
         return fail(e);
       }
+    });
+    ipcMain.handle('rep:times', (_e, id: string) => repTimes(id));
+    // «Φύλλο σε άλλο Excel…»: το αρχείο που θα πάρει το φύλλο
+    ipcMain.handle('rep:pickFile', async () => {
+      const res = await dialog.showOpenDialog(win!, { title: 'Σε ποιο Excel θα γράφεται το φύλλο', filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }], properties: ['openFile'] });
+      return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
     });
     ipcMain.handle('rep:openTpl', async (_e, file: string) => { if (TPL_NAME.test(file) && fs.existsSync(path.join(TPL_DIR, file))) await shell.openPath(path.join(TPL_DIR, file)); });
     ipcMain.handle('rep:files', (_e, files: string[]) => Object.fromEntries((Array.isArray(files) ? files : []).filter(f => TPL_NAME.test(f)).map(f => { try { return [f, { exists: true, mtime: Math.round(fs.statSync(path.join(TPL_DIR, f)).mtimeMs) }]; } catch { return [f, { exists: false, mtime: 0 }]; } })));
@@ -1078,13 +1166,13 @@ else {
       const dir = r.canceled ? null : r.filePaths[0] || null; if (dir) srcMeta.allow([dir]); return dir;
     });
     ipcMain.handle('open:path', (_e, file: string) => { if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file)) return shell.openPath(file); return 'άγνωστο αρχείο'; });
-    ipcMain.handle('print:file', (_e, file: string, sheet?: string) => {
+    ipcMain.handle('print:file', (_e, file: string, sheet?: string | string[]) => {
       // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
       const inside = (dir?: string) => !!dir && !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') && !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
       const known = knownPath(file) || [outputDir(), ...Object.values(store.state.settings.forms || {}).map(b => b?.dir)].some(inside);
       if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file)) return fail('Δεν βρέθηκε το ' + path.basename(file));
       if (/\.xls$/i.test(file)) return fail('Το ' + path.basename(file) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.');
-      return printPreview(file, sheet ? [sheet] : undefined);
+      return printPreview(file, Array.isArray(sheet) ? sheet.filter(x => typeof x === 'string') : sheet ? [sheet] : undefined);
     });
     // από το παράθυρο προεπισκόπησης
     ipcMain.handle('print:sheets', async (e, names: string[]) => {

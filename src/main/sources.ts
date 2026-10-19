@@ -387,7 +387,8 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
       for (const x of plan.extra) { const at = ref(x.r, x.c); if (x.f) ws.setFormula(at, x.f); else ws.set(at, x.v ?? null); ws.setStyle(at, x.head ? head : data!); }
       for (const m of plan.merges || []) ws.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
     }
-    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x))) {
+    const reps = kind === 'people' ? wb.reportSheets() : new Set<string>();   // φύλλα των Εντύπων (π.χ. «ΘΑΛΑΜΟΙ Θ1») δεν είναι το φύλλο ΘΑΛΑΜΟΙ
+    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && !reps.has(x) && /ΘΑΛΑΜ/i.test(x))) {
       const rs = roomSheetNew(s.people, roomList(s, s.people.filter(p => p.active)));
       if (rs.cells.length) {
         const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: data! };
@@ -403,7 +404,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     // Θάλαμοι: στο φύλλο ΘΑΛΑΜΟΙ (ένας πίνακας ανά θάλαμο) ο νέος μπαίνει στο τέλος του θαλάμου του και ο αναιρεμένος φεύγει.
     // Όταν αλλάζει θάλαμος κάποιου που υπήρχε, ή δεν βρέθηκε πίνακας για τον θάλαμο, θυμίζουμε να γίνει με το χέρι.
     const rc = kind === 'people' ? b.cols.room : undefined;
-    const roomSheet = kind === 'people' ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
+    const roomSheet = kind === 'people' ? wb.sheetNames().find(x => x !== b.sheet && !reps.has(x) && /ΘΑΛΑΜ/i.test(x)) : undefined;
     const pm = new Map(s.people.map(p => [p.id, p]));
     const add = (plan.fresh || []).map(id => pm.get(id)!).filter(Boolean);
     let placed = 0, missing = add.filter(p => p.room != null).length;
