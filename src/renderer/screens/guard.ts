@@ -2,7 +2,7 @@
 import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
-import { useNav, useStore, searchPeople } from '../store';
+import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
@@ -447,7 +447,7 @@ export function OutsScreen() {
   const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
-  const open = useCallback((id: number) => nav.openPerson(id), [nav.openPerson]);
+  const open = useOpenFrom(rows);
   const byRooms = () => {
     if (!rooms) return;
     const n: Record<number, OutVal> = {}; people.forEach(p => { if (p.room != null && rooms.includes(p.room) && !reasons[p.id]) n[p.id] = draft[p.id] === 'DN' || draft[p.id] === 'DNSK' ? draft[p.id] : 'OUT'; }); setDraft(n);

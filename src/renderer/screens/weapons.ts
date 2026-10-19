@@ -7,7 +7,7 @@ import { HK, UNIT } from '../../shared/unit';
 import { Fragment, useCallback, useDeferredValue, useMemo, useRef, useState, useEffect, memo } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
 import { MovesView, WeaponInDialog, WeaponOutDialog, WeaponState } from './weaponMoves';
-import { useNav, useStore } from '../store';
+import { useNav, useOpenFrom, useStore } from '../store';
 import { ActiveFilter, DateBar } from '../common';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf } from '../../shared/si';
@@ -144,6 +144,7 @@ export function WeaponsScreen() {
     // ίδιος αριθμός: ο ένας κάτω από τον άλλον
     return r.sort(filter === 'dup' ? (a, b) => collator.compare(weaponKey(a.weapon), weaponKey(b.weapon)) || byRoomName(a, b) : cmp);
   }, [state.people, info, filter, dq, unit, room, sort, state.settings.rooms]);
+  const openP = useOpenFrom(rows);
   const total = state.people.filter(p => p.active).length;
   const outN = new Set([...info.moves.keys(), ...info.out.keys()]).size;
   const selP = state.people.filter(p => sel.has(p.id));
@@ -225,7 +226,7 @@ export function WeaponsScreen() {
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || unit !== 'all' || room != null ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : empty}</div>` :
     html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: GRID_MIN + 'px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται (π.χ. ένας ουλαμός για ΕΚΠ)" checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>ΑΣΜ</span>${H('room', 'Θάλ.')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβ.')}<span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">Θέση</span><span>Παρατήρηση</span></div>
-      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${ROW_H} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + JSON.stringify(sort)} renderRow=${(p: Person, i: number, style: P) => html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} types=${types} lists=${lists} reset=${reset} onToggle=${toggle} onOpen=${nav.openPerson} save=${save} commit=${commit} paste=${paste}/>`}/>
+      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${ROW_H} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + JSON.stringify(sort)} renderRow=${(p: Person, i: number, style: P) => html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} types=${types} lists=${lists} reset=${reset} onToggle=${toggle} onOpen=${openP} save=${save} commit=${commit} paste=${paste}/>`}/>
     </div></div></div>`}<//>`}
     ${outFor && html`<${WeaponOutDialog} pids=${outFor} reason=${outReason} onClose=${() => setOutFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}

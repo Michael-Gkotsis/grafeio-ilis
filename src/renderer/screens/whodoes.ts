@@ -6,7 +6,7 @@
 import { UNIT } from '../../shared/unit';
 import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useViewportHeight } from '../ui';
-import { useNav, useStore } from '../store';
+import { useOpenFrom, useStore } from '../store';
 import { ActiveFilter } from '../common';
 import { PHASE_NAME, WEEK, blocksOf, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { capCell, capCols, statusesOn, type CapCell, type CapCol } from '../../shared/rules';
@@ -54,7 +54,7 @@ const Row = memo(function Row({ p, own, cols, cells, odd, grid, hintTxt, hintTip
 });
 
 export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
-  const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
+  const { state, run, today, undoMark } = useStore(); const toast = useToast();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   // ήρθες από ένα όνομα (Θέσεις › Δεν μπαίνουν): μόνο αυτός, μέχρι να ψάξεις ή να καθαρίσεις το φίλτρο
   const [only, setOnly] = useState<number | null>(pid ?? null);
@@ -87,6 +87,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const counts = useMemo(() => { const n: Record<string, number> = { all: base.length, limited: 0, manual: 0, auto: 0 }; base.forEach(p => { const k = kindOf(p); if (k.limited) n.limited++; if (k.manual) n.manual++; if (k.auto) n.auto++; }); return n; }, [base, cells]);
   const colN = useMemo(() => cols.map((_, i) => base.filter(p => !cells.get(p.id)![i].on).length), [base, cells, cols]);
   const rows = base.filter(p => (filter === 'all' || kindOf(p)[filter]) && (ci < 0 || !cells.get(p.id)![ci].on));
+  const openP = useOpenFrom(rows);
   const UNITS = useMemo(() => [{ value: 'all', label: UNIT().all }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const rooms = useMemo(() => { const m = new Map<number, number>(); people.forEach(p => { if (p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [people]);
 
@@ -127,7 +128,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
       <div className="ptable__head whod__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Στρατιώτης</span>
         ${cols.map((c, i) => html`<button key=${c.key} type="button" className="whod__colhd" aria-pressed=${colF === c.key} data-tip=${colTip(c) + '. Πάτα: μόνο όσοι δεν κάνουν ' + c.label.toLowerCase()} onClick=${() => setColF(colF === c.key ? null : c.key)}><span className="whod__lbl">${c.short}</span><small className=${cx(colN[i] > 0 && 'has-n')}>${colN[i] ? 'όχι ' + colN[i] : 'όλοι'}</small></button>`)}
         <span className="whod__dayhd" data-tip="Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, 14:00."><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>
-      <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${nav.openPerson}/>`; }}/>
+      <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${openP}/>`; }}/>
     </div></div></div>`}
     <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (Ρυθμίσεις › Σ.Ι.) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
       Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.</p>

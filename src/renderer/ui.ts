@@ -25,7 +25,7 @@ export const Icon: Record<string, any> = {
   x: svg('<path d="M6 6l12 12M18 6L6 18"/>', '16'),
   shield: svg('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/>', '22'),
   back: svg('<path d="M19 12H5M11 18l-6-6 6-6"/>'),
-  chev: svg('<path d="M9 6l6 6-6 6"/>', '16'),
+  chev: svg('<path d="M9 6l6 6-6 6"/>', '16'), up: svg('<path d="M6 15l6-6 6 6"/>', '16'), down: svg('<path d="M6 9l6 6 6-6"/>', '16'),
   star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>', '14'),
   collapse: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>'),
   // σταυρόνημα: Οπλισμός
@@ -108,12 +108,12 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
       ${footer && html`<div className="ui-dialog__foot">${footer}</div>`}
     </div></div>`, document.body);
 }
-export function Sheet({ title, subtitle, onClose, children }: P) {
+export function Sheet({ title, subtitle, actions, onClose, children }: P) {
   useEscape(onClose);
   return createPortal(html`<${Fragment}>
     <div className="ui-sheet-overlay" onMouseDown=${onClose}></div>
     <aside className="ui-sheet" role="dialog" aria-modal="true" aria-label="Λεπτομέρειες">
-      <div className="ui-sheet__head"><div>${title}${subtitle}</div><${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
+      <div className="ui-sheet__head"><div>${title}${subtitle}</div>${actions && html`<div className="ui-sheet__acts">${actions}</div>`}<${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
       <div className="ui-sheet__body">${children}</div>
     </aside><//>`, document.body);
 }

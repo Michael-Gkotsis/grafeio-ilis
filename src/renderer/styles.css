@@ -906,3 +906,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .dayforms__done{margin:6px 0 0 28px;font-size:13px}
 .txt-warn{color:var(--warn)}
 .txt-ok{color:var(--ok)}
+/* Καρτέλα στρατιώτη: ↑/↓ στη λίστα */
+.ui-sheet__head > .ui-sheet__acts{flex:none;display:flex;align-items:center}
+.sheetnav{display:inline-flex;align-items:center;gap:2px;font-size:12px}
+.sheetnav .num{margin-right:4px}
+.ui-sheet__body > .ui-tabs{margin-top:2px}
