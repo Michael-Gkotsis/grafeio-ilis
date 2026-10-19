@@ -6,6 +6,8 @@ import JSZip from 'jszip';
 import { upper } from '../shared/text';
 import { digitPx, fitText, minSize, type Box, type Fit, type FontSpec } from './textfit';
 
+export const REPORT_MARK = 'GL_ENTYPO';
+export const sheetSafe = (name: string) => name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
@@ -836,11 +838,14 @@ export class Workbook {
 
   // Νέο κενό φύλλο στο τέλος (π.χ. «ΤΙΜΩΡΗΜΕΝΟΙ» μέσα στο Δυναμολόγιο). Οι μακροεντολές και τα άλλα φύλλα μένουν όπως ήταν.
   async addSheet(name: string): Promise<Sheet> {
-    const safe = name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
+    const safe = sheetSafe(name);
     if (this.hasSheet(safe)) return this.sheet(safe);
+    return this.newSheet(safe, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
+  }
+  private async newSheet(safe: string, xml: string): Promise<Sheet> {
     let n = this.names.length + 1; while (this.zip.file(`xl/worksheets/sheet_a${n}.xml`)) n++;
     const path = `xl/worksheets/sheet_a${n}.xml`;
-    this.zip.file(path, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
+    this.zip.file(path, xml);
     const rp = 'xl/_rels/workbook.xml.rels'; let rels = await this.zip.file(rp)!.async('string');
     const rid = 'rId' + (Math.max(0, ...[...rels.matchAll(/Id="rId(\d+)"/g)].map(m => +m[1])) + 1);
     rels = rels.replace('</Relationships>', `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}"/></Relationships>`);
@@ -852,6 +857,130 @@ export class Workbook {
     this.workbookXml = this.workbookXml.replace('</sheets>', `<sheet name="${esc(safe)}" sheetId="${id}"${ns} r:id="${rid}"/></sheets>`);
     this.names.push({ name: safe, path });
     return this.sheet(safe);
+  }
+  // Το XML ενός φύλλου όπως είναι τώρα (με ό,τι γράφτηκε), χωρίς ό,τι δείχνει σε άλλα μέρη του αρχείου (σχέδια, εικόνες,
+  // πίνακες, σχόλια, ρυθμίσεις εκτυπωτή): για αντίγραφο του φύλλου στο ίδιο ή σε άλλο βιβλίο
+  private async bareXml(name: string): Promise<string> {
+    const ws = await this.sheet(name);
+    return ws.toXml().replace(/<drawing\b[^>]*\/>|<legacyDrawing\b[^>]*\/>|<legacyDrawingHF\b[^>]*\/>|<picture\b[^>]*\/>/g, '')
+      .replace(/<tableParts\b[\s\S]*?<\/tableParts>|<tableParts\b[^>]*\/>|<hyperlinks>[\s\S]*?<\/hyperlinks>/g, '')
+      .replace(/\sr:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
+  }
+  sheetIndex(name: string) { return this.names.findIndex(x => x.name === name); }
+  // Τα ονόματα εκτύπωσης (περιοχή, γραμμές σε κάθε σελίδα) ενός φύλλου, με άλλο όνομα φύλλου μέσα τους
+  private localNames(i: number, sheet: string): string[] {
+    const q = (n: string) => "'" + n.replace(/'/g, "''") + "'!";
+    return [...this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)]
+      .filter(m => attr(m[1], 'localSheetId') === String(i) && /^_xlnm\.Print_(Area|Titles)$/.test(attr(m[1], 'name') || ''))
+      .map(m => ({ name: attr(m[1], 'name')!, body: unesc(m[2]).split(',').map(x => q(sheet) + x.replace(/^.*!/, '')).join(',') }))
+      .map(x => `<definedName name="${x.name}" localSheetId="__">${esc(x.body).replace(/'/g, '&apos;')}</definedName>`);
+  }
+  private setLocalNames(i: number, dns: string[]) {
+    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>[^<]*<\/definedName>/g, (m, a: string) => (attr(a, 'localSheetId') === String(i) && /^_xlnm\.Print_(Area|Titles)$/.test(attr(a, 'name') || '') ? '' : m));
+    const add = dns.map(d => d.replace('localSheetId="__"', `localSheetId="${i}"`)).join('');
+    if (!add) return;
+    if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('<definedNames>', '<definedNames>' + add);
+    else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + add + '</definedNames>');
+  }
+  // Αντίγραφο φύλλου στο ίδιο βιβλίο (ίδια στυλ και κείμενα), στο τέλος, με τις ρυθμίσεις εκτύπωσής του (Έντυπα: ένα φύλλο ανά θάλαμο)
+  async cloneSheet(from: string, name: string): Promise<Sheet> {
+    const safe = sheetSafe(name); if (this.hasSheet(safe)) throw new Error('Υπάρχει ήδη φύλλο ' + safe);
+    const dns = this.localNames(this.sheetIndex(from), safe);
+    const ws = await this.newSheet(safe, await this.bareXml(from));
+    this.setLocalNames(this.sheetIndex(safe), dns);
+    return ws;
+  }
+  // Νέο όνομα φύλλου (και στις περιοχές εκτύπωσης που το αναφέρουν)
+  renameSheet(from: string, to: string): string {
+    const safe = sheetSafe(to); const e = this.names.find(x => x.name === from); if (!e || from === safe) return from;
+    this.workbookXml = this.workbookXml.replace(/<sheet\b[^>]*>/g, t => (attr(t, 'name')?.replace(/&amp;/g, '&') === from ? setAttr(t, 'name', esc(safe)) : t));
+    const a = esc(from).replace(/'/g, '&apos;&apos;'), b = esc(safe).replace(/'/g, '&apos;&apos;');
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, x, body: string, y) => x + body.split('&apos;' + a + '&apos;!').join('&apos;' + b + '&apos;!').split(a + '!').join('&apos;' + b + '&apos;!') + y);
+    e.name = safe; const ws = this.sheets.get(e.path); if (ws) ws.name = safe;
+    return safe;
+  }
+  // Φύλλο από άλλο βιβλίο (Έντυπα › «Φύλλο στο Δυναμολόγιο»): τα στυλ του μεταφέρονται (ίδια → ίδιο στυλ), τα κοινά κείμενα
+  // γίνονται κείμενα μέσα στο κελί, και ό,τι δείχνει σε άλλα μέρη του αρχείου του (σχέδια, πίνακες) μένει πίσω. Αν υπάρχει
+  // ήδη φύλλο με αυτό το όνομα, γράφεται από πάνω του στην ίδια θέση· τα άλλα φύλλα δεν αλλάζουν.
+  async importSheet(src: Workbook, from: string, name: string): Promise<Sheet> {
+    const safe = sheetSafe(name);
+    let xml = await src.bareXml(from);
+    // μορφοποίηση υπό όρους και λίστες από άλλα φύλλα δείχνουν σε πράγματα του άλλου βιβλίου
+    xml = xml.replace(/<conditionalFormatting\b[\s\S]*?<\/conditionalFormatting>|<extLst>[\s\S]*?<\/extLst>/g, '')
+      .replace(/<dataValidation\b[^>]*>(?:(?!<\/dataValidation>)[\s\S])*!(?:(?!<\/dataValidation>)[\s\S])*<\/dataValidation>/g, '');
+    xml = xml.replace(/<dataValidations\b[^>]*count="\d+"[^>]*>\s*<\/dataValidations>/g, '');
+    // κοινά κείμενα → μέσα στο κελί
+    const f = src.zip.file('xl/sharedStrings.xml') || src.zip.file(/sharedStrings\.xml$/i)[0];
+    const sis = f ? [...(await f.async('string')).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => (m[1] || '').replace(/<rPh\b[\s\S]*?<\/rPh>|<phoneticPr\b[^>]*\/>/g, '')) : [];
+    xml = xml.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (m, a: string, inner?: string) => {
+      if (attr(a, 't') !== 's' || inner == null) return m;
+      const v = /<v>(\d+)<\/v>/.exec(inner); const si = v ? sis[+v[1]] ?? '' : '';
+      return `<c${setAttr(a, 't', 'inlineStr')}><is>${si || '<t></t>'}</is></c>`;
+    });
+    // στυλ: όσα χρησιμοποιεί το φύλλο, με γραμματοσειρές, γεμίσματα, πλαίσια και μορφές αριθμών τους
+    const ids = new Set<number>();
+    for (const m of xml.matchAll(/<(?:c|row)\b[^>]*?\ss="(\d+)"/g)) ids.add(+m[1]);
+    for (const m of xml.matchAll(/<col\b[^>]*?\sstyle="(\d+)"/g)) ids.add(+m[1]);
+    const map = await this.adoptStyles(src, ids);
+    const re = (n: string) => String(map.get(+n) ?? 0);
+    xml = xml.replace(/<(c|row)\b[^>]*?>/g, t => t.replace(/(\ss=")(\d+)(")/, (_m, a, n, b) => a + re(n) + b))
+      .replace(/<col\b[^>]*?>/g, t => t.replace(/(\sstyle=")(\d+)(")/, (_m, a, n, b) => a + re(n) + b));
+    const dns = src.localNames(src.sheetIndex(from), safe);
+    let ws: Sheet;
+    if (this.hasSheet(safe)) {
+      const e = this.names.find(x => x.name === safe)!;
+      this.zip.file(e.path, xml); ws = new Sheet(safe, e.path, xml); this.sheets.set(e.path, ws);
+    } else ws = await this.newSheet(safe, xml);
+    this.setLocalNames(this.sheetIndex(safe), dns);
+    return ws;
+  }
+  // Φύλλα που έγραψαν τα Έντυπα: σημάδι μέσα στο αρχείο (κρυφό όνομα του φύλλου), ώστε όποιο κομμάτι της εφαρμογής ψάχνει
+  // φύλλα με το όνομά τους (π.χ. «ΘΑΛΑΜΟΙ» για τους νέους στρατιώτες) να μην πέφτει πάνω τους
+  markReport(name: string) {
+    const i = this.sheetIndex(name); if (i < 0 || this.reportSheets().has(name)) return;
+    const dn = `<definedName name="${REPORT_MARK}" localSheetId="${i}" hidden="1">TRUE</definedName>`;
+    if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('</definedNames>', dn + '</definedNames>');
+    else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+  }
+  reportSheets(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.workbookXml.matchAll(/<definedName\b([^>]*)>/g)) if (attr(m[1], 'name') === REPORT_MARK) { const n = this.names[Number(attr(m[1], 'localSheetId'))]; if (n) out.add(n.name); }
+    return out;
+  }
+  private async adoptStyles(src: Workbook, ids: Set<number>): Promise<Map<number, number>> {
+    const out = new Map<number, number>(); if (!ids.size) return out;
+    await this.loadStyles(); const sst = await src.loadStyles();
+    const xfs = src.xfList(sst.xml);
+    const sp = { fonts: src.part('fonts').items, fills: src.part('fills').items, borders: src.part('borders').items };
+    for (const id of ids) {
+      const xf = xfs[id]; if (!xf) { out.set(id, 0); continue; }
+      const open = xf.slice(0, xf.indexOf('>') + 1);
+      let a = open;
+      const font = sp.fonts[Number(attr(open, 'fontId') || 0)], fill = sp.fills[Number(attr(open, 'fillId') || 0)], border = sp.borders[Number(attr(open, 'borderId') || 0)];
+      if (font) a = setAttr(a, 'fontId', String(this.part('fonts').add(font)));
+      if (fill) a = setAttr(a, 'fillId', String(this.part('fills').add(fill)));
+      if (border) a = setAttr(a, 'borderId', String(this.part('borders').add(border)));
+      const nf = Number(attr(open, 'numFmtId') || 0);
+      if (nf >= 164 && sst.codes.has(nf)) a = setAttr(a, 'numFmtId', String(this.fmtFor(sst.codes.get(nf)!)));
+      a = setAttr(a, 'xfId', '0');
+      out.set(id, this.addXf(a + xf.slice(open.length)));
+    }
+    return out;
+  }
+  // Μορφή αριθμών με αυτόν τον κωδικό: η υπάρχουσα του βιβλίου, αλλιώς νέα
+  private fmtFor(code: string): number {
+    const st = this.styles!;
+    for (const [id, c] of st.codes) if (c === code) return id;
+    const id = Math.max(163, ...st.codes.keys()) + 1;
+    const nf = '<numFmt numFmtId="' + id + '" formatCode="' + esc(code) + '"/>';
+    const m = /<numFmts\b[^>]*?(\/>|>)/.exec(st.xml);
+    if (m) {
+      const n = (st.xml.match(/<numFmt\b/g) || []).length + 1;
+      const open = setAttr(m[0].replace(/\/?>$/, ''), 'count', String(n)) + '>';
+      st.xml = st.xml.replace(m[0], m[1] === '/>' ? open + nf + '</numFmts>' : open + nf);
+    } else st.xml = st.xml.replace(/(<styleSheet\b[^>]*>)/, '$1<numFmts count="1">' + nf + '</numFmts>');
+    st.codes.set(id, code); st.dirty = true;
+    return id;
   }
 
   // Καινούργιο αρχείο με ένα φύλλο (στυλ 1 = έντονα με πλαίσιο για επικεφαλίδες, 2 = πλαίσιο, 3 = ημερομηνία με πλαίσιο)

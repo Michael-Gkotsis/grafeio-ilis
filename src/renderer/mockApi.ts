@@ -185,6 +185,8 @@ export function mockApi(): Api {
       return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
     },
     repRun: async (r, _f, ids) => ({ ok: true, file: '(δοκιμή) ' + r.name + ' (' + ids.length + ').xlsx', warnings: [] }),
+    repTimes: async () => ({}),
+    repPickFile: async () => null,
     repOpenTpl: async () => {},
     repFiles: async files => Object.fromEntries(files.map(f => [f, { exists: true, mtime: 0 }])),
     repLast: async () => ({})

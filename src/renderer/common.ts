@@ -212,7 +212,7 @@ const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string,
 /* Εκτύπωση ενός Excel που υπάρχει ήδη (έντυπο που βγήκε, αρχείο από τα «Αρχεία Excel»), χωρίς Excel */
 export function usePrintFile() {
   const toast = useToast();
-  return useCallback(async (file: string, sheet?: string) => {
+  return useCallback(async (file: string, sheet?: string | string[]) => {
     let r: Awaited<ReturnType<typeof window.api.printFile>>;
     try { r = await window.api.printFile(file, sheet); } catch (e) { r = { ok: false, error: String(e) }; }
     if (!r.ok) toast({ text: html`<span><b>Δεν άνοιξε η εκτύπωση.</b> ${r.error}</span>` });

@@ -18,6 +18,7 @@ export interface TemplateInfo { id: string; name: string; file: string; ok: bool
 // Σε έναν χρόνο οι καταστάσεις είναι πάνω από 400 KB: να μην περνούν σε κάθε κλικ.
 export type CmdResult = { ok: true; changes: Partial<AppState>; newAudit: AuditEntry[]; audit?: AuditEntry[]; text: string } | { ok: false; error: string };
 export type ExportResult = { ok: true; file: string; warnings: string[] } | { ok: false; error: string; checks?: Check[]; needAck?: boolean; locked?: boolean };
+export type RepRunResult = { ok: true; file: string; warnings: string[]; sheets?: string[] } | { ok: false; error: string; locked?: boolean; confirm?: string[] };
 export type UsbResult = { ok: true; file: string; day: string; warning?: string } | { ok: false; error: string } | null;
 export interface BackupInfo { name: string; day: string; label: string; size: number }
 export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number; writes: WriteTime[]; worker: boolean }
@@ -103,7 +104,7 @@ export interface Api {
   formSave(form: FormKind, b: FormBinding | null): Promise<CmdResult>;
   formDir(form: FormKind): Promise<string | null>;
   openPath(file: string): Promise<void>;
-  printFile(file: string, sheet?: string): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: το φύλλο που τσεκάρεται)
+  printFile(file: string, sheet?: string | string[]): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: τα φύλλα που τσεκάρονται)
   essoInfo(): Promise<EssoInfo>;
   essoDir(def?: string): Promise<string | null>;                 // διάλογος φακέλου (αρχείο ή φάκελος νέας ΕΣΣΟ)
   essoRoster(): Promise<ImportPreview | Fail | null>;           // το Δυναμολόγιο της νέας ΕΣΣΟ (προεπισκόπηση, χωρίς εισαγωγή)
@@ -116,7 +117,10 @@ export interface Api {
   repInspect(file: string, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect | Fail>;
   repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<{ ok: true; file: string; mtime: number; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] } | Fail>;
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
-  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean): Promise<ExportResult>;
+  // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
+  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean): Promise<RepRunResult>;
+  repTimes(id: string): Promise<Record<string, number>>;   // τυχαίοι: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο σε αυτή την ΕΣΣΟ
+  repPickFile(): Promise<string | null>;
   repOpenTpl(file: string): Promise<void>;
   repFiles(files: string[]): Promise<Record<string, TplFile>>;
   repLast(): Promise<Record<string, string>>;   // πότε βγήκε τελευταία φορά κάθε έντυπο (id → «2026-10-19 09:12»)

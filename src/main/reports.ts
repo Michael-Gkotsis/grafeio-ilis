@@ -2,16 +2,17 @@
 // Με το ελαφρύ xlsx.ts, όπως η ΦΡΟΥΡΑ και η ΗΚΑΙ: αλλάζουν μόνο οι τιμές, η μορφοποίηση του προτύπου μένει όπως είναι.
 // Η πρώτη γραμμή κάτω από τις επικεφαλίδες είναι η «γραμμή-πρότυπο»: κάθε άτομο παίρνει τη μορφή της και ό,τι είναι
 // από κάτω (υπογραφές, σύνολα) κατεβαίνει όσο μεγαλώνει η λίστα.
-import { Workbook, colName, colNum, type Sheet, type XlValue } from './xlsx';
+import { Workbook, colName, colNum, sheetSafe, type Sheet, type XlValue } from './xlsx';
 import { TemplateError } from './exports';
 import { renderBook } from './print';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, guessField, tagKey, type BuildOpts, type RepCell, type RepCol, type RepKind, type Report } from '../shared/reports';
+import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
 
 export const MAX_ROWS = 2000;
+export const GTITLE = '#title';   // το κελί του τίτλου σε φτιαγμένο πρότυπο (όχι στοιχείο που διαλέγεις)
 const SCAN_ROWS = 80, SCAN_COLS = 40, TAG_ROWS = 400;
 const key = (v: unknown) => normGreek(String(v ?? '')).replace(/[\s.\-_:/\\(){}]/g, '');
 const str = (v: XlValue | undefined) => (v == null ? '' : v instanceof Date ? '' : String(v).trim());
@@ -98,14 +99,40 @@ function locateHead(ws: Sheet, rows: XlValue[][], r: Report): number {
   throw new TemplateError('Το πρότυπο άλλαξε και δεν βρίσκω τις στήλες του πίνακα (' + want.map(c => c.h).slice(0, 4).join(', ') + '). Άνοιξε το έντυπο με «Αλλαγή» και δείξε ξανά τη γραμμή με τις επικεφαλίδες.');
 }
 
-// Το συμπληρωμένο έντυπο. ids: τα άτομα με τη σειρά που θα μπουν (η οθόνη έχει ήδη κάνει φίλτρα, τυχαία επιλογή, σειρά)
-export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate): Promise<{ name: string; data: Buffer; warnings: string[] }> {
+// Το συμπληρωμένο έντυπο. ids: τα άτομα με τη σειρά που θα μπουν (η οθόνη έχει ήδη κάνει φίλτρα, τυχαία επιλογή, σειρά).
+// Με χωρισμό (r.split) ένα φύλλο ανά ομάδα, αντίγραφα του προτύπου, με όνομα «ΘΑΛΑΜΟΣ 3» ή, με prefix, «ΑΓΓΑΡΕΙΑ Θ3»
+// (φύλλα στο Δυναμολόγιο)· stale: ομάδες που είχαν βγει παλιότερα και τώρα δεν έχουν κανέναν (γράφονται άδειες, για να μη
+// μείνουν παλιά ονόματα)
+export type GroupKey = Omit<RepGroup, 'rows'>;
+export interface FillOpts { prefix?: string; stale?: GroupKey[] }
+export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[] }> {
   const wb = await Workbook.open(tpl); const warnings: string[] = [];
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
+  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS));
+  if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
+  const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre';
+  let groups = groupsOf(s, r.kind, rows, r.split);
+  if (split) groups = [...groups, ...(o.stale || []).filter(x => !groups.some(g => g.key === x.key)).map(x => ({ ...x, rows: [] }))];
+  if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
+  const names: string[] = [];
+  if (!split) { await fillSheet(wb, sheet, s, r, rows, d, ''); names.push(sheet); }
+  else {
+    // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
+    const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
+    const used = new Set(wb.sheetNames().filter(x => x !== sheet));
+    const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
+    for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
+    const first = wb.renameSheet(sheet, uniq[0]);
+    for (let i = 0; i < groups.length; i++) await fillSheet(wb, i ? uniq[i] : first, s, r, groups[i].rows, d, groups[i].label);
+    names.push(first, ...uniq.slice(1));
+  }
+  const name = upper(r.name).replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
+  return { name, data: await wb.save(), warnings, sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [] };
+}
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, rows: Row[], d: ISODate, group: string): Promise<void> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const head = locateHead(ws, scan, r); const data = dataRowOf(ws, head);
-  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS)); const n = rows.length;
-  if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
+  const n = rows.length;
   const cols = r.cols.filter(c => c.c >= 1 && fieldOf(r.kind, c.f));
   // στοιχεία εντύπου πρώτα (στις θέσεις του προτύπου, πριν μπουν γραμμές): όσα όρισες με κλικ και κάθε {ΕΤΙΚΕΤΑ} του φύλλου
   // κείμενο σε γραμμές (η κεφαλίδα): μία γραμμή σε κάθε κελί προς τα κάτω αν είναι άδεια, όπως γράφεται στο χαρτί·
@@ -123,15 +150,20 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
       } else await wb.setRich(ws, ref, lines.map(t => [{ t }]));
     } else ws.set(ref, v);
   };
-  const val = (k: string) => cellValue(s, k, d, r, n);
   const inTable = new Set(cols.map(c => colName(c.c) + data));
-  for (const t of tagCells(tagScan)) {
+  // χωρισμός σε φύλλα: αν το πρότυπο δεν έχει πουθενά {ΟΜΑΔΑ}, η ομάδα μπαίνει δίπλα στον τίτλο (ΑΓΓΑΡΕΙΑ - ΘΑΛΑΜΟΣ 3)
+  const tags = tagCells(tagScan);
+  const hasGroup = r.cells.some(c => c.k === 'group') || tags.some(t => [...t.text.matchAll(TAG_RE)].some(m => tagKey(m[1]) === 'group'));
+  const val = (k: string) => { const v = cellValue(s, k, d, r, n, group); return k === 'title' && group && !hasGroup && v ? v + ' - ' + group : v; };
+  // ο τίτλος του «Φτιάξ' το εδώ» είναι κείμενο του προτύπου (GTITLE): παίρνει μόνο την ομάδα
+  for (const c of r.cells) if (c.k === GTITLE && group && !hasGroup && !r.cells.some(x => x.k === 'title')) { const t = ws.get(c.ref); if (t != null && String(t).trim()) ws.set(c.ref, String(t).trim() + ' - ' + group); }
+  for (const t of tags) {
     if (inTable.has(t.ref)) continue;
     const whole = /^\{([^{}]+)\}$/.exec(t.text.trim());
     if (whole && tagKey(whole[1])) await put(t.ref, val(tagKey(whole[1])!));
     else ws.set(t.ref, t.text.replace(TAG_RE, (m, tg: string) => { const kk = tagKey(tg); if (!kk) return m; const v = val(kk); return v == null ? '' : String(v).replace(/\n/g, ' '); }));
   }
-  for (const c of r.cells) if (/^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) await put(c.ref, val(c.k));
+  for (const c of r.cells) if (c.k !== GTITLE && /^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) await put(c.ref, val(c.k));
   // ο πίνακας: όσες γραμμές χρειάζονται, με τη μορφή της γραμμής-προτύπου
   const k = preparedRows(ws, data, cols.map(c => c.c));
   const aa = cols.find(c => c.f === 'aa');
@@ -152,8 +184,6 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
   wb.setPrintTitles(sheet, head, data - 1);
   ws.setPrintFit(false);
-  const name = upper(r.name).replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
-  return { name, data: await wb.save(), warnings };
 }
 
 // ------------------------------------------------------------------ «Φτιάξ' το εδώ»
@@ -183,7 +213,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind): Promise<{ data
     }
     r = o.head ? 5 : 3;
   }
-  ws.set('A' + r, o.title || ' ').setStyle('A' + r, st.title); if (n > 1) { ws.addMerge('A' + r + ':' + L(n) + r); for (let c = 2; c <= n; c++) ws.setStyle(L(c) + r, st.title); }
+  const tref = 'A' + r; ws.set(tref, o.title || ' ').setStyle(tref, st.title); if (n > 1) { ws.addMerge('A' + r + ':' + L(n) + r); for (let c = 2; c <= n; c++) ws.setStyle(L(c) + r, st.title); }
   ws.setRowHeight(r, (sz + 2) * 1.6);
   const head = r + 2, data = head + 1;
   const out: RepCol[] = [];
@@ -211,13 +241,13 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind): Promise<{ data
   ws.setPrintFit(!!o.land); ws.setFooter('ΣΕΛΙΔΑ &P ΑΠΟ &N');
   wb.setPrintTitles(sheet, head, head);
   // οι ετικέτες μένουν μέσα στο αρχείο: αν το ανοίξεις στο Excel και το αλλάξεις, η εφαρμογή τις ξαναβρίσκει
-  return { data: await wb.save(), sheet, head, cols: out, cells: [] };
+  return { data: await wb.save(), sheet, head, cols: out, cells: [{ ref: tref, k: GTITLE }] };
 }
 
 // Προεπισκόπηση: η πρώτη σελίδα όπως θα τυπωθεί, με τα κελιά σημαδεμένα (data-a) για να διαλέγεις με κλικ
 export async function previewReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, pages = 1): Promise<{ html: string; css: string; pages: number; error?: string }> {
   const out = await fillReport(tpl, s, r, ids.slice(0, 120), d);
-  const doc = await renderBook(out.data, { file: out.name, sheets: [r.sheet], refs: true, maxPages: pages });
+  const doc = await renderBook(out.data, { file: out.name, sheets: [out.sheets[0]], refs: true, maxPages: pages });
   const sh = doc.sheets[0];
   return { html: sh ? sh.html : '', css: doc.css, pages: sh ? sh.pages : 0 };
 }
@@ -226,4 +256,16 @@ export async function previewTemplate(tpl: Buffer | Uint8Array, sheet: string, p
   const doc = await renderBook(tpl, { file: 'πρότυπο.xlsx', sheets: [sheet], refs: true, maxPages: pages });
   const sh = doc.sheets[0];
   return { html: sh ? sh.html : '', css: doc.css, pages: sh ? sh.pages : 0 };
+}
+// «Φύλλο στο Δυναμολόγιο» / «Φύλλο σε άλλο Excel»: τα φύλλα του εντύπου μέσα στο αρχείο (pairs: [φύλλο εντύπου, όνομα εκεί]).
+// Ένα υπάρχον φύλλο με αυτό το όνομα γράφεται από πάνω στην ίδια θέση· τα άλλα φύλλα, οι τύποι και οι μακροεντολές δεν αλλάζουν.
+// mine: τα φύλλα που έφτιαξε ήδη αυτό το έντυπο· όποιο άλλο υπάρχει με ίδιο όνομα επιστρέφεται (clash) χωρίς να γραφτεί
+// τίποτα (null: γράφονται όλα, ο χρήστης είπε «Αντικατάσταση»). Το Excel δεν ξεχωρίζει κεφαλαία-μικρά στα ονόματα φύλλων.
+export async function placeSheets(target: Buffer | Uint8Array, out: Buffer | Uint8Array, pairs: [string, string][], mine: string[] | null): Promise<{ data?: Buffer; clash?: string[] }> {
+  const wb = await Workbook.open(target);
+  const same = (to: string) => wb.sheetNames().find(n => n.toUpperCase() === to.toUpperCase());
+  if (mine) { const clash = pairs.map(p => same(p[1])).filter((n): n is string => !!n && !mine.includes(n)); if (clash.length) return { clash }; }
+  const src = await Workbook.open(out);
+  for (const [from, to] of pairs) { const ex = same(to); if (ex && ex !== to) wb.renameSheet(ex, to); await wb.importSheet(src, from, to); wb.markReport(to); }
+  return { data: await wb.save() };
 }
