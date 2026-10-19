@@ -911,3 +911,9 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .sheetnav{display:inline-flex;align-items:center;gap:2px;font-size:12px}
 .sheetnav .num{margin-right:4px}
 .ui-sheet__body > .ui-tabs{margin-top:2px}
+/* Λίστες: «Το έχουν N» και ποιοι */
+.lists__n{font-size:12px;white-space:nowrap}
+.lists__who{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 6px;padding:6px 0 2px;max-height:168px;overflow-y:auto}
+.lists__who .na{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:999px;font-size:12px;background:var(--card)}
+.lists__who button.na:hover{background:var(--hover)}
+button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color:var(--primary)}

@@ -5,10 +5,10 @@
 import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { useNav, useStore } from '../store';
-import { normGreek } from '../../shared/text';
-import { CADRE_ABS, TYPES, type TypeKey } from '../../shared/domain';
+import { collator, normGreek } from '../../shared/text';
+import { CADRE_ABS, TYPES, shortName, type Person, type TypeKey } from '../../shared/domain';
 import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, listRows, weaponBack, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
-import { HK_A, HK_K, hkRankOf } from '../../shared/rules';
+import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
 import { punAcc, punMax } from '../../shared/punish';
 
@@ -64,19 +64,24 @@ export function ListsCard() {
   const lists: UserLists = state.settings.lists || {};
   const rows = listRows(lists, id);
   const pick = pickOf(id, lists);
-  // ποιες τιμές έχει ήδη κάποιος (αυτές δεν σβήνονται, μόνο κρύβονται)
+  // ποιοι έχουν ήδη κάθε τιμή (αυτές δεν σβήνονται, μόνο κρύβονται): στρατιώτες με το id τους, στελέχη με το όνομα
   const used = useMemo(() => {
-    const vals = id === 'cadreRanks' ? state.cadreList.map(c => c.rank)
-      : id === 'cadreAbs' ? state.cadreAbs.map(a => a.kind)
-      : id === 'punKinds' ? state.statuses.filter(x => x.type === 'PUN').map(x => x.kind || '')
-      : id === 'leaveKinds' ? state.statuses.filter(x => x.type === 'LEAVE').map(x => x.kind || '')
-      : id === 'medKinds' ? state.statuses.filter(x => MED_LIKE.includes(x.type)).map(x => x.kind || '')
-      : id === 'siUnarmed' ? []
-      : id === 'weaponTypes' ? state.people.map(p => p.wtype || '')
-      : id === 'weaponOut' ? (state.weaponLog || []).map(m => m.reason)
-      : state.people.map(p => (id === 'specs' ? p.spec : p.rank));
-    return new Set(vals.filter(Boolean).map(keyOf(id)));
+    const m = new Map<string, { pids: Set<number>; names: Set<string> }>(); const k = keyOf(id);
+    const add = (v: string | undefined, pid?: number, name?: string) => {
+      if (!v) return; const kk = k(v); let e = m.get(kk); if (!e) m.set(kk, e = { pids: new Set(), names: new Set() });
+      if (pid != null) e.pids.add(pid); if (name) e.names.add(name);
+    };
+    const cName = (c?: { rank: string; last: string; first: string }) => (c ? c.rank + ' ' + c.last + ' ' + c.first : '');
+    const cm = new Map(state.cadreList.map(c => [c.id, c]));
+    if (id === 'cadreRanks') state.cadreList.forEach(c => add(c.rank, undefined, cName(c)));
+    else if (id === 'cadreAbs') state.cadreAbs.forEach(a => add(a.kind, undefined, cName(cm.get(a.cid))));
+    else if (id === 'punKinds' || id === 'leaveKinds' || id === 'medKinds') { const ok = (t: TypeKey) => (id === 'punKinds' ? t === 'PUN' : id === 'leaveKinds' ? t === 'LEAVE' : MED_LIKE.includes(t)); state.statuses.forEach(x => { if (ok(x.type)) add(x.kind || '', x.pid); }); }
+    else if (id === 'weaponTypes') state.people.forEach(p => add(p.wtype, p.id));
+    else if (id === 'weaponOut') (state.weaponLog || []).forEach(w => add(w.reason, w.pid));
+    else if (id !== 'siUnarmed') state.people.forEach(p => add(id === 'specs' ? p.spec : p.rank, p.id));
+    return m;
   }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses, state.weaponLog]);
+  const [who, setWho] = useState<string | null>(null);   // ανοιχτό «ποιοι το έχουν» (κλειδί στοιχείου)
   const save = (next: UserLists, text: string) => run({ t: 'setSettings', settings: { lists: next }, text: 'λίστα ' + LIST_NAME[id] + ': ' + text }, false);
   const withList = (fn: (u: { add: ListItem[]; hide: string[] }) => void): UserLists => {
     const u = { add: [...(lists[id]?.add || [])], hide: [...(lists[id]?.hide || [])] }; fn(u);
@@ -84,8 +89,9 @@ export function ListsCard() {
   };
   const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setBack(''); setErr(null); };
   const toDuty = () => nav.set({ tab: 'duty' });
-  const select = (v: ListId) => { setId(v); reset(); };
+  const select = (v: ListId) => { setId(v); reset(); setWho(null); };
   const n = itemName(name, id); const key = keyOf(id); const isUsed = (r: ListRow) => used.has(key(r.name));
+  const usedN = (r: ListRow) => { const e = used.get(key(r.name)); return e ? e.pids.size + e.names.size : 0; };
   const cd = code.trim().toUpperCase();
   const curChoice = pick ? choice ?? (pick.f === 'hk' ? current(id, { name: n }, lists) : pick.opts[0][0]) : '';
   const add = async () => {
@@ -148,10 +154,12 @@ export function ListsCard() {
         ? html`<select className="ui-select" aria-label=${pick.label + ': ' + r.name} value=${current(id, r, lists)} onChange=${(e: any) => setPick(r, e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}</select>`
         : html`<span className="muted" style=${{ fontSize: '12px' }}>${info(r)}</span>`}
       <span style=${{ flex: 1 }}></span>
+      ${id !== 'siUnarmed' && (usedN(r) ? html`<button type="button" className="linkish lists__n" aria-expanded=${who === key(r.name)} data-tip=${who === key(r.name) ? 'Κλείσε' : 'Δες ποιοι'} onClick=${() => setWho(who === key(r.name) ? null : key(r.name))}>${(STAT_IDS.includes(id) ? 'Δηλώθηκε σε ' : 'Το έχουν ') + usedN(r)}</button>` : html`<span className="muted lists__n">Κανείς</span>`)}
       ${id === 'medKinds' && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>βασικός τύπος</span>`
         : r.builtin || isUsed(r)
         ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει ξανά' : 'Να μη θεωρείται άοπλος όποιος έχει αυτό το Σ.Ι.') : r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'specs' ? ' και στο Excel' : '')}>${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει' : 'Να μην ισχύει') : r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + r.name} onClick=${() => remove(r)}>✕<//>`}
+      ${who === key(r.name) && html`<${WhoHas} e=${used.get(key(r.name))}/>`}
     </li>`)}</ul>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
       <div className="field"><label className="field__label" htmlFor="ls-n">Νέο: ${LIST_NAME[id].toLowerCase()}</label><input id="ls-n" className="ui-input" placeholder=${PH[id]} value=${name} onChange=${(e: any) => { setName(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>
@@ -164,5 +172,15 @@ export function ListsCard() {
       <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!name.trim()} onClick=${add}>Πρόσθεσε<//></div></div>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
+}
+const STAT_IDS: ListId[] = ['punKinds', 'leaveKinds', 'medKinds', 'weaponOut', 'cadreAbs'];
+// «Το έχουν N»: τα ονόματα, οι στρατιώτες ανοίγουν την καρτέλα τους (με ↑/↓ μέσα σε αυτούς)
+function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
+  const { state } = useStore(); const nav = useNav();
+  if (!e) return null;
+  const pm = personMap(state.people);
+  const ps = [...e.pids].map(id => pm.get(id)).filter((p): p is Person => !!p).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
+  const ids = ps.map(p => p.id);
+  return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${shortName(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
 const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };
