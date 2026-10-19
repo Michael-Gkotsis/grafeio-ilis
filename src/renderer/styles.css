@@ -15,7 +15,7 @@
   --f-display:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-body:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-mono:Consolas,"Courier New",monospace;
-  --nav-h:62px; --top-h:60px; --side-w:236px; --rail-w:84px;
+  --nav-h:62px; --top-h:60px; --side-w:236px; --rail-w:88px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --background:#13160e; --foreground:#e7eadf; --card:#1c2016; --muted:#242a1c; --muted-fg:#a4ab96;
@@ -41,6 +41,8 @@
   --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(231,234,223,.18); --sb-thumb-hover:rgba(231,234,223,.4); color-scheme:dark}
 
 html,body{height:100%;margin:0}
+/* ο χώρος της μπάρας κύλισης κρατιέται πάντα: η σελίδα δεν πηδά όταν αλλάζεις οθόνη (π.χ. Δυναμολόγιο → Στελέχη) */
+html{scrollbar-gutter:stable}
 #root{min-height:100%}
 body{background:var(--background);color:var(--foreground);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
 *{box-sizing:border-box}
@@ -175,12 +177,15 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .plan li.is-warn{background:var(--warn-bg)}
 .plan li.is-warn .plan__ic{color:var(--warn)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted-fg)}
-.page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px}
-.page-head > div{flex:1 1 340px;min-width:220px}
+.page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.page-head > div{flex:1 1 260px;min-width:220px}
 .page-head > .datebar,.page-head > .page-head__acts{flex:0 1 auto;min-width:0}
 .page-head > .page-head__acts{justify-content:flex-end;margin-left:auto}
-.page-head h1{font-size:27px;font-weight:700;line-height:1.2}
+.page-head h1{font-size:25px;font-weight:700;line-height:1.2}
 .page-head p{margin:4px 0 0;color:var(--muted-fg)}
+.page-head__sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page-head__sub.is-cut{cursor:pointer}
+.page-head__sub.is-open{white-space:normal}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
@@ -236,6 +241,8 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .searchbtn:hover{border-color:var(--bar-muted)}
 .searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .searchbtn .ui-kbd{background:transparent;border-color:var(--bar-line);color:var(--bar-muted)}
+/* στενή οθόνη (1024): μόνο ο φακός, όχι ένα σπασμένο «Ctrl K» */
+@media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}}
 .topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .topbar .ui-btn--ghost{color:var(--bar-fg)}
 .topbar .ui-btn--ghost:hover{background:var(--bar-field)}
@@ -259,14 +266,17 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .navbtn__lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
 .is-rail .sidenav{padding:10px 6px}
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:4px;height:auto;min-height:62px;padding:8px 0;position:relative;text-align:center}
+/* 11 οθόνες + σύμπτυξη χωρούν σε ύψος 768 (1366×768) χωρίς να κυλά το μενού· κάθε όνομα σε μία γραμμή */
+.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:52px;padding:6px 0;position:relative;text-align:center}
 .is-rail .navbtn[aria-current="page"]{box-shadow:none}
-.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:normal;overflow:visible;overflow-wrap:anywhere;letter-spacing:-.25px}
+.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.3px}
 .is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
-.is-rail .sidenav__toggle{min-height:48px;font-size:11px}
-.is-rail .sidenav__sep{margin:6px 8px}
+.is-rail .sidenav__toggle{min-height:42px;font-size:11px}
+.is-rail .sidenav__toggle .navbtn__lbl{display:none}
+@media (max-height:700px){.is-rail .navbtn{min-height:44px;padding:4px 0}.is-rail .navbtn svg{width:18px;height:18px}}
+.is-rail .sidenav__sep{margin:4px 8px}
 .sidenav__sep{height:1px;background:var(--bar-line);margin:8px 4px}
-.main{padding:24px 32px 48px;min-width:0}
+.main{padding:20px 32px 48px;min-width:0}
 .bottomnav{display:none}
 
 /* ---------- features ---------- */
@@ -415,6 +425,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .cat__head{display:flex;align-items:center;gap:8px}
 .cat__head b{flex:1}
 .cat__names{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;margin-top:4px}
+.cat__zero{margin:12px 0 0;color:var(--muted-fg);font-size:14px}
 .cat__names button{background:none;border:0;padding:0;color:var(--info);cursor:pointer;font-size:13px}
 /* History & templates */
 .log{list-style:none;margin:0;padding:0}
@@ -525,6 +536,12 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .ui-seg--sm{flex-wrap:nowrap;gap:4px}
 .ui-seg--sm button{height:32px;padding:0 10px;font-size:13px}
 .outbar b{font-family:var(--f-mono)}
+/* Εξοδούχοι: η μπάρα με τα σύνολα, την αποθήκευση και το Excel μένει πάνω όταν κυλάς */
+.outbar{position:sticky;top:var(--top-h);z-index:20;box-shadow:0 0 0 6px var(--background)}
+.outbar .outbar__xl{flex:none;margin-left:auto;display:flex;gap:6px;align-items:center}
+.outs__find .ui-input{flex:0 1 300px;min-width:200px}
+.outs__find .strip{flex:1 1 320px;display:flex;gap:6px;min-width:0}
+.backs-box summary .cnt{font-family:var(--f-mono);color:var(--muted-fg);margin-left:4px}
 .rec{list-style:none;margin:0;padding:0}
 .rec li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)}
 .rec li:last-child{border-bottom:0}

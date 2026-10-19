@@ -11,7 +11,7 @@ import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
-import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
+import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot, CmdResult } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
@@ -109,7 +109,9 @@ function Root({ boot: initial }: { boot: Boot }) {
 }
 
 function Shell() {
-  const { state, today, tomorrow, undo, boot } = useStore();
+  const { state, audit, today, tomorrow, undo, boot } = useStore();
+  // τι θα αναιρέσει το κουμπί: όπως ο main (db.lastUndoable), μέσα στις 50 πιο πρόσφατες ενέργειες που αναιρούνται
+  const lastUndo = useMemo(() => audit.filter(a => a.undoable).slice(0, 50).find(a => !a.undone), [audit]);
   // η ΕΣΣΟ των Ρυθμίσεων (Νέα ΕΣΣΟ), αλλιώς η πιο συχνή όσων είναι σε δύναμη
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
@@ -191,7 +193,7 @@ function Shell() {
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
-          <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
+          <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}

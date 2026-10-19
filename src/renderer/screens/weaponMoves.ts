@@ -220,7 +220,7 @@ export function WeaponState({ p, info }: P) {
   const out = !!m || !!duty; const auto = !m && !!duty;
   const why = m ? html`<span className="wstate__why" data-tip=${'Βγήκε: ' + moveOutTxt(m) + (m.note ? ' · ' + m.note : '') + (duty ? ' · και ένοπλη υπηρεσία: ' + duty : '') + ' · μπαίνει με ' + weaponBack(m.reason, lists)}><b>${m.reason}</b> <span>${when(m.outDay, m.outTime, today)}</span>${m.note ? html` <i>· ${m.note}</i>` : ''}</span>`
     : auto ? html`<span className="wstate__why" data-tip=${'Αυτόματα: ένοπλη υπηρεσία ' + duty + '. Για να αλλάξει, άλλαξε τις υπηρεσίες.'}><b>ΥΠΗΡΕΣΙΑ</b> <span>${duty}</span></span>`
-    : html`<span className="wstate__why muted">στον οπλοβαστό</span>`;
+    : null;   // ΕΝΤΟΣ: το λέει ήδη ο διακόπτης
   const click = (want: boolean) => { if (auto || want === out) return; setOpen(true); };
   return html`<div className=${cx('wstate', out && 'is-out', auto && 'is-auto')}>
     <div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>

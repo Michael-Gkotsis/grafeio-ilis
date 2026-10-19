@@ -1,5 +1,5 @@
 // components/ui: Button, Badge, Card, Dialog, Sheet, Toast… (ίδια με το mockup)
-import React, { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import htm from 'htm';
 
@@ -182,4 +182,15 @@ export function Strip({ className, children, ...rest }: P) {
   });
   return html`<div ref=${ref} className=${cx('strip', className)} ...${rest}>${children}</div>`;
 }
-export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<p>${sub}</p>`}</div>${children}</div>`; }
+// Ο υπότιτλος σε μία γραμμή, για να μένει χώρος για τον πίνακα σε 1366×768. Αν δεν χωρά: όλος στη συμβουλή, και με κλικ ανοίγει.
+function PageSub({ sub }: P) {
+  const ref = useRef<HTMLParagraphElement>(null); const [cut, setCut] = useState(false); const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const f = () => setCut(el.scrollWidth > el.clientWidth + 1);
+    f(); const ro = new ResizeObserver(f); ro.observe(el); return () => ro.disconnect();
+  });
+  const el = ref.current;
+  return html`<p ref=${ref} className=${cx('page-head__sub', open && 'is-open', cut && 'is-cut')} data-tip=${cut && !open && el ? el.textContent : undefined} onClick=${cut || open ? () => setOpen(!open) : undefined}>${sub}</p>`;
+}
+export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }
