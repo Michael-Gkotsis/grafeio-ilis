@@ -655,7 +655,12 @@ async function printPage(file: string, sheets?: string[]): Promise<{ tmp: string
   await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file)));
   return { tmp, sheets: doc.sheets.map(x => x.name) };
 }
+// Μία προεπισκόπηση τη φορά («Τύπωσε όλα» στα Έντυπα ημέρας): η επόμενη ανοίγει όταν κλείσει η προηγούμενη
+let previewGate: Promise<void> = Promise.resolve();
 async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const prev = previewGate; let free = () => {};
+  previewGate = new Promise<void>(r => { free = r; });
+  await prev;
   try {
     const p = await printPage(file, sheets);
     const pw = new BrowserWindow({
@@ -665,10 +670,10 @@ async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true
     pw.setMenu(null);
     const id = pw.webContents.id; printJobs.set(id, { file, ...p });
     pw.once('ready-to-show', () => { if (win && win.isMaximized()) pw.maximize(); pw.show(); });
-    pw.on('closed', () => { const j = printJobs.get(id); if (j) fs.rmSync(j.tmp, { force: true }); printJobs.delete(id); });
+    pw.on('closed', () => { const j = printJobs.get(id); if (j) fs.rmSync(j.tmp, { force: true }); printJobs.delete(id); free(); });
     try { await pw.loadFile(p.tmp); } catch (e) { pw.destroy(); throw e; }
     return { ok: true };
-  } catch (e) { return fail(e); }
+  } catch (e) { free(); return fail(e); }
 }
 
 // ------------------------------------------------------------------ ΕΣΣΟ: αρχείο, νέα ΕΣΣΟ, επαναφορά (Ρυθμίσεις › ΕΣΣΟ, Michael 17/10)

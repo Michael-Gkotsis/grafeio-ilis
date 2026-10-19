@@ -897,3 +897,12 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate}
 @keyframes xlpulse{from{opacity:.35}to{opacity:1}}
 @media (max-width:900px){.xlchip:not(.is-on):not(.is-bad){display:none}}
+/* «Έντυπα ημέρας» (Σήμερα) */
+.dayforms{display:flex;flex-direction:column;gap:14px}
+.dayforms__head{display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;font-size:15px}
+.dayforms__st{margin-left:auto;font-size:13px;font-weight:600}
+.dayforms__item.is-off .preflight{opacity:.6}
+.dayforms__item .preflight{margin:0}
+.dayforms__done{margin:6px 0 0 28px;font-size:13px}
+.txt-warn{color:var(--warn)}
+.txt-ok{color:var(--ok)}
