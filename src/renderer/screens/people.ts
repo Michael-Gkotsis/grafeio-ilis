@@ -14,6 +14,7 @@ import { addDays, daysBetween, dayName, dm, dow, nowHM } from '../../shared/date
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
 import { SiField } from './si';
 import { RoomField } from './units';
+import { QuickAddDialog } from './quickAdd';
 import { siOf } from '../../shared/si';
 import { essoPersonTxt } from '../../shared/esso';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
@@ -79,7 +80,9 @@ export function PeopleScreen() {
   const sort: { k: string; dir: number } = nav.params.sort || DEF_SORT;
   const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room });
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit });
-  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false); const [xl, setXl] = useState(false);
+  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState<false | 'one' | 'many'>(false); const [xl, setXl] = useState(false);
+  // από το τέλος της Νέας ΕΣΣΟ: ανοίγει κατευθείαν η γρήγορη εισαγωγή
+  useEffect(() => { if (nav.params.quickAdd) { setAdding('many'); nav.set({ quickAdd: undefined }); } }, [nav.params.quickAdd]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ουλαμοί από τις Ρυθμίσεις › Θάλαμοι και ουλαμοί (προεπιλογή 1–4 → 1ος, 5–8 → 2ος)
   const UNITS = useMemo(() => [{ value: 'all', label: UNIT().all }, ...platoonsOf(state.settings).map(u => ({ value: platoonShort(u.name), label: platoonShort(u.name), tip: u.rooms.length ? 'Θάλαμοι ' + u.rooms.join(', ') : 'Χωρίς θαλάμους' }))], [state.settings.rooms]);
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
@@ -147,7 +150,7 @@ export function PeopleScreen() {
   const grid = withSt ? GRID_ST : GRID;
   return html`<div>
     <${PageHeader} title="Δυναμολόγιο" sub=${'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα σε γραμμή για την καρτέλα του, ή επίλεξε πολλούς για μαζική δήλωση.'}>
-      <${Button} variant="outline" onClick=${() => setAdding(true)} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">+ Νέος στρατιώτης<//>
+      <${Button} variant="outline" onClick=${() => setAdding('one')} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">+ Νέος στρατιώτης<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
       <${Button} variant="outline" disabled=${xl} onClick=${exportXl} data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${printRoster} data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ${HK()}· βγαίνει και Excel">${Icon.print}Εκτύπωση<//>
@@ -162,13 +165,14 @@ export function PeopleScreen() {
       <${ActiveFilter} parts=${curView ? ['★ ' + curView.name] : [unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && fLabel, withSt && dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}
         extra=${curView ? html`<button type="button" className="actfilter__act" onClick=${() => delView(curView)} data-tip="Σβήνει τη λίστα (όχι τους ανθρώπους)">Διαγραφή λίστας</button>` : filtered && html`<button type="button" className="actfilter__act" onClick=${() => setSaving(true)} data-tip="Κράτα αυτό το φίλτρο ως λίστα με όνομα, π.χ. «Θαλαμάρχες»">☆ Αποθήκευση</button>`}/>
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : total}</span></div>
-    ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>Κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
+    ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => setAdding('many')}>Γράψε τους στρατιώτες τον έναν μετά τον άλλον<//> ή <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
     mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
     html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: withSt ? '1354px' : '1134px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Α/Α</span>${COLS.slice(0, 5).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${COLS.slice(5).map(([k, l]) => H(k, l))}</div>
       <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} onOpen=${open}/>`}/>
     </div></div></div>`}
-    ${adding && html`<${NewPersonDialog} onClose=${() => setAdding(false)}/>`}
+    ${adding === 'one' && html`<${NewPersonDialog} onClose=${() => setAdding(false)} onMany=${() => setAdding('many')}/>`}
+    ${adding === 'many' && html`<${QuickAddDialog} onClose=${() => setAdding(false)}/>`}
     ${saving && html`<${SaveViewDialog} onClose=${() => setSaving(false)} onSave=${async (name: string) => {
       const v: SavedView = { id: Date.now().toString(36), name, unit, room, filter, q: dq.trim() };
       if (await run({ t: 'setSettings', settings: { views: [...views, v] }, text: 'αποθηκευμένη λίστα «' + name + '»' }, false)) { setSaving(false); toast({ text: 'Αποθηκεύτηκε η λίστα «' + name + '». Τη βρίσκεις στη γραμμή φίλτρων.' }); }
@@ -362,23 +366,38 @@ function EditPersonDialog({ p, onClose }: P) {
   <//>`;
 }
 
-// Νέος στρατιώτης (π.χ. ήρθε μετάθεση): μπαίνει στην εφαρμογή και σε νέα γραμμή στο Δυναμολόγιο
-function NewPersonDialog({ onClose }: P) {
+// Νέος στρατιώτης (π.χ. ήρθε μετάθεση): μπαίνει στην εφαρμογή και σε νέα γραμμή στο Δυναμολόγιο.
+// «Προσθήκη και επόμενος» (Michael, 19/10): το παράθυρο μένει ανοιχτό με τον ίδιο βαθμό, Ο/Σ, θάλαμο και ΕΣΣΟ
+function NewPersonDialog({ onClose, onMany }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
-  const [x, setX] = useState<P>({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '' });
+  const blank = (c: P = {}) => ({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '', ...c });
+  const [x, setX] = useState<P>(blank);
+  const [done, setDone] = useState<string[]>([]);   // όσοι μπήκαν με «Προσθήκη και επόμενος»
+  const [gen, setGen] = useState(0);
   const ok = !!x.last.trim() && !!x.first.trim();
+  const name = x.last.trim().toUpperCase() + ' ' + x.first.trim().toUpperCase();
+  const toExcel = () => { const b = state.settings.sources?.people; return !!b && b.write !== false; };
   const save = async () => {
     if (!ok) return;
     const next = await run({ t: 'addPerson', person: x }, false); if (!next) return;
     onClose(); nav.openPerson(next.people.reduce((a: number, y: Person) => Math.max(a, y.id), 0));   // ο νέος έχει τον μεγαλύτερο αριθμό
-    const b = state.settings.sources?.people;
-    toast({ text: 'Προστέθηκε ο ' + x.last.trim().toUpperCase() + ' ' + x.first.trim().toUpperCase() + (b && b.write !== false ? '. Γράφεται και στο Δυναμολόγιο.' : '.'), actions: [undoMark()] });
+    toast({ text: 'Προστέθηκε ο ' + name + (toExcel() ? '. Γράφεται και στο Δυναμολόγιο.' : '.'), actions: [undoMark()] });
   };
-  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${onClose} closeOnOverlay=${!x.last && !x.first}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Προσθήκη<//>`}>
-    <${PersonFields} x=${x} setX=${setX} id="np" isNew=${true}/>
+  const saveNext = async () => {
+    if (!ok) return;
+    if (!(await run({ t: 'addPerson', person: x }, false))) return;
+    setDone(d => [...d, name]); setX(blank({ rank: x.rank, spec: x.spec, room: x.room, essos: x.essos })); setGen(g => g + 1);
+  };
+  useEffect(() => { if (gen) (document.getElementById('np-last') as HTMLInputElement | null)?.focus(); }, [gen]);
+  const keys = (e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNext(); } };
+  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${onClose} closeOnOverlay=${!x.last && !x.first && !done.length}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>${done.length ? 'Τέλος' : 'Άκυρο'}<//><${Button} variant="outline" disabled=${!ok} onClick=${saveNext} data-tip="Ctrl+Enter· μένει ανοιχτό για τον επόμενο, με τον ίδιο βαθμό, Ο/Σ και θάλαμο">Προσθήκη και επόμενος<//><${Button} disabled=${!ok} onClick=${save}>Προσθήκη<//>`}>
+    <div onKeyDown=${keys} className="stack" style=${{ gap: '14px' }}>
+    ${done.length > 0 ? html`<${Alert} tone="info"><span>Μπήκαν ${done.length}: ${done.slice(-4).join(', ')}${done.length > 4 ? '…' : ''}. ${toExcel() ? 'Γράφονται και στο Δυναμολόγιο.' : ''}</span><//>`
+      : onMany && html`<span className="note" style=${{ margin: 0 }}>Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; <${Button} variant="link" onClick=${() => { onClose(); onMany(); }}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
+    <${PersonFields} key=${gen} x=${x} setX=${setX} id="np" isNew=${true}/></div>
   <//>`;
 }
 
