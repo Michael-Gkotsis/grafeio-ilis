@@ -6,7 +6,7 @@ import { norm, normGreek } from './text';
 import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkRowClaim, hkRowList, itemKey, itemName, listRows, statusLbl, weaponBack, type HkRowDef, type ListId } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
@@ -177,17 +177,22 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'declare': {
       const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
-      if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
-      const tm = checkTimes(cmd);
+      if (cmd.open && !canOpen(cmd.type)) throw new Error('«Χωρίς λήξη» δηλώνονται μόνο ιατρικά, ΣΤΕΠ και νοσοκομείο');
+      // χωρίς λήξη: το «έως» είναι σήμερα (ή το «από») και προχωρά μόνο του κάθε μέρα (extendOpen)
+      const open = !!cmd.open; const to = open ? (cmd.from > ctx.today ? cmd.from : ctx.today) : cmd.to;
+      if (!open && cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const tm = checkTimes({ ...cmd, open });
       if (plan.blocked.length && !cmd.force) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
-      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
-      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + range(cmd.from, cmd.to));
+      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && (open ? !!x.open : !x.open && x.to === cmd.to) && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
+      const when = open ? 'από ' + dm(cmd.from) + ' χωρίς λήξη' : range(cmd.from, cmd.to);
+      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + when);
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
-        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, cmd), ctx.newId)), ...cmd.pids.map(pid => {
-          const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
+        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, planTo(cmd)), ctx.newId)), ...cmd.pids.map(pid => {
+          const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to };
+          if (open) st.open = true;
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
           Object.assign(st, tm);
@@ -198,14 +203,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       };
       plan.conflicts.forEach(x => { next = setGuard(next, x.date, x.k, null); });
       const verb = cmd.type === 'PUN' ? 'Ποινή (' + punLbl(cmd.kind || PUN_KINDS[0]) + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
-      return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
+      return { state: next, text: verb + ' ' + when + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
     }
     case 'declareMany': {
       if (!c.cmds.length) throw new Error('Δεν διάλεξες κατάσταση');
       let next = s; const files: string[] = [], texts: string[] = [];
       for (const cmd of c.cmds) { const r = run(next, { t: 'declare', cmd }, ctx); next = r.state; files.push(...r.files); texts.push(r.text); }
       const c0 = c.cmds[0];
-      const text = c.cmds.length === 1 ? texts[0] : 'Δηλώθηκαν ' + c.cmds.map(x => statusLbl(x, s.settings.lists)).join(' + ') + ' ' + range(c0.from, c0.to) + ': ' + who(s, c0.pids);
+      const text = c.cmds.length === 1 ? texts[0] : 'Δηλώθηκαν ' + c.cmds.map(x => statusLbl(x, s.settings.lists)).join(' + ') + ' ' + (c0.open ? 'από ' + dm(c0.from) + ' χωρίς λήξη' : range(c0.from, c0.to)) + ': ' + who(s, c0.pids);
       return { state: next, text, files: [...new Set(files)] };
     }
     case 'outs': {
