@@ -22,6 +22,8 @@ describe('εντολή addPeople', () => {
     const r = run(emptyState(), { t: 'addPeople', people: NEW.map(x => toNewPerson(x, '2026 Δ΄')) });
     expect(r.state.people.map(p => [p.id, p.last, p.first, p.asm, p.room, p.essos, p.added, p.active])).toEqual([
       [1, 'ΚΑΙΝΟΥΡΓΙΟΣ', 'ΑΛΦΑΣ', '910001', 2, '2026 Δ΄', true, true], [2, 'ΝΕΟΦΕΡΤΟΣ', 'ΒΗΤΑΣ', '', 1, '2026 Δ΄', true, true]]);
+    expect(r.state.people.map(p => p.si)).toEqual(['Ι1', 'Ι1']);   // νέα γραμμή: Ι1
+    expect(toNewPerson(row({ last: 'Χ', first: 'Υ', si: 'ι3 χωρις οπλο' }), '').si).toBe('ι3 χωρις οπλο');
     expect(r.text).toBe('2 νέοι στρατιώτες: ΚΑΙΝΟΥΡΓΙΟΣ ΑΛΦΑΣ, ΝΕΟΦΕΡΤΟΣ ΒΗΤΑΣ');
     // στη νέα ΕΣΣΟ (κανείς πριν) δεν είναι εγγραφές της ΗΚΑΙ· με άλλους σε δύναμη είναι
     expect(r.state.people.every(p => !p.inOn)).toBe(true);
@@ -70,8 +72,8 @@ describe('επικόλληση από Excel', () => {
   it('με επικεφαλίδες: οι στήλες από τα ονόματά τους, και με άλλη σειρά ή άλλες στήλες', () => {
     const t = 'Α/Α\tΕΠΩΝΥΜΟ\tΟΝΟΜΑ\tΠΑΤΡΩΝΥΜΟ\tΒΑΘΜΟΣ\tΣ.Ι\tΚΙΝΗΤΟ ΤΗΛΕΦΩΝΟ\tΘΑΛΑΜΟΣ\r\n1\tΔΟΚΙΜΙΟΣ\tΑΛΦΑΣ\tΠΑΤΕΡΑΣ\tΣΤΡ\tΙ1\t6900000001\t3\r\n2\tΤΥΧΑΙΟΣ\tΒΗΤΑΣ\t\tΣΤΡ\t\t\t4\r\n\r\n';
     expect(parsePaste(t, 0)).toEqual([
-      { last: 'ΔΟΚΙΜΙΟΣ', first: 'ΑΛΦΑΣ', father: 'ΠΑΤΕΡΑΣ', rank: 'ΣΤΡ', phone: '6900000001', room: '3' },
-      { last: 'ΤΥΧΑΙΟΣ', first: 'ΒΗΤΑΣ', father: '', rank: 'ΣΤΡ', phone: '', room: '4' }]);
+      { last: 'ΔΟΚΙΜΙΟΣ', first: 'ΑΛΦΑΣ', father: 'ΠΑΤΕΡΑΣ', rank: 'ΣΤΡ', si: 'Ι1', phone: '6900000001', room: '3' },
+      { last: 'ΤΥΧΑΙΟΣ', first: 'ΒΗΤΑΣ', father: '', rank: 'ΣΤΡ', si: '', phone: '', room: '4' }]);
   });
   it('χωρίς επικεφαλίδες: με τη σειρά από τη στήλη του κέρσορα, χωρίς την πρώτη στήλη Α/Α', () => {
     expect(parsePaste('ΔΟΚΙΜΙΟΣ\tΑΛΦΑΣ\nΤΥΧΑΙΟΣ\tΒΗΤΑΣ', 2)).toEqual([{ last: 'ΔΟΚΙΜΙΟΣ', first: 'ΑΛΦΑΣ' }, { last: 'ΤΥΧΑΙΟΣ', first: 'ΒΗΤΑΣ' }]);

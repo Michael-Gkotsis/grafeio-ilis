@@ -312,3 +312,17 @@ export function LegendDialog({ onClose }: { onClose: () => void }) {
     <table className="legend"><tbody>${SHORTCUTS().map(([k, t]) => html`<tr key=${k}><td className="nw"><${Kbd}>${k}<//></td><td>${t}</td></tr>`)}</tbody></table>
   <//>`;
 }
+
+// Κλείσιμο παραθύρου με δουλειά που δεν προστέθηκε (Michael, 19/10: «δεν θα θέλαμε να χάσουμε τη δουλειά»):
+// προστίθεται τώρα, κλείνει χωρίς προσθήκη ή γυρνάς πίσω. Esc και κλικ έξω = Πίσω
+export function UnsavedDialog({ title, children, saveLabel, canSave, onSave, discardLabel, onDiscard, onBack }: P) {
+  // με «Πίσω» ο κέρσορας γυρνά εκεί που έγραφες
+  const [prev] = useState(() => document.activeElement as HTMLElement | null);   // πριν πάρει το κουμπί του παραθύρου τον κέρσορα
+  useEffect(() => () => { if (prev && prev.isConnected) prev.focus(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  return html`<${Dialog} role="alertdialog" title=${title} onClose=${onBack} footer=${html`
+    <${Button} variant="ghost" onClick=${onDiscard}>${discardLabel}<//>
+    <${Button} variant="outline" data-autofocus=${canSave ? undefined : ''} onClick=${onBack}>Πίσω<//>
+    <${Button} disabled=${!canSave} data-autofocus=${canSave ? '' : undefined} onClick=${onSave}>${saveLabel}<//>`}>
+    ${children}
+  <//>`;
+}
