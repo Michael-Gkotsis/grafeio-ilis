@@ -10,7 +10,7 @@ import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
 import { zipHash } from './ziphash';
-import { off, useWorker, workerUp } from './offload';
+import { off, useWorker, warmWorker, workerUp } from './offload';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
@@ -423,9 +423,10 @@ async function runAuto() {
     // ανά αρχείο: όλα τα είδη του (π.χ. τα φύλλα του Δυναμολογίου) μαζί
     const byFile = new Map<string, ListKind[]>();
     for (const k of [...dirty]) { dirty.delete(k); const b = bindingOf(k); if (!b) continue; const f = path.resolve(b.file); byFile.set(f, [...(byFile.get(f) || []), k]); }
-    if (byFile.size || formsDirty) { wrote = true; busy({ on: true }); }
+    // ένδειξη μόνο όταν υπάρχει κάτι να γραφτεί: αρχεία με αλλαγές ή έντυπα που έχουν βγει για σήμερα και μετά
+    if (byFile.size || (formsDirty && readOuts().some(o => !o.manual && lastDay(o) >= today()))) { wrote = true; busy({ on: true }); }
     for (const [f, ks] of byFile) { const t0 = Date.now(); await serial(() => syncFileAuto(ks)); logWrite(path.basename(f), t0, srcMeta.get(ks[0])?.error); }
-    if (formsDirty) { formsDirty = false; const t0 = Date.now(); await regenForms(); logWrite('Έντυπα (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι)', t0); }
+    if (formsDirty) { formsDirty = false; const t0 = Date.now(); if (await regenForms()) logWrite('Έντυπα (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι)', t0); }
   } catch (e) { console.error('auto', e); err = e instanceof Error ? e.message : String(e); }
   finally { autoBusy = false; notify(); if (wrote) busy({ on: false, at: nowHM(), error: err }); }
 }
@@ -1177,6 +1178,7 @@ else {
     ready = Date.now();
     // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα
     // Excel και μόνο όπου ο πίνακας δεν άλλαξε στο μεταξύ, όπως σε κάθε αυτόματη εγγραφή.
+    setTimeout(warmWorker, 2500);
     setTimeout(() => { for (const k of KINDS) if (bindingOf(k.id)) dirty.add(k.id); formsDirty = true; runAuto(); }, 4000);
   }).catch(e => {
     // λάθος στην εκκίνηση (π.χ. στην επαναφορά): μήνυμα και κλείσιμο, όχι διεργασία χωρίς παράθυρο που κρατά την εφαρμογή «ανοιχτή»

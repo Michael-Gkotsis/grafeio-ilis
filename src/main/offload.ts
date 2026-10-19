@@ -59,3 +59,5 @@ export function off<T>(fn: string, args: unknown[], local: () => Promise<T>, sta
   });
 }
 export const workerUp = () => !!w && !broken;
+// ξεκινά το νήμα από πριν (λίγο μετά το άνοιγμα), για να μην περιμένει η πρώτη εγγραφή να φορτώσει
+export const warmWorker = () => { start(); };
