@@ -38,6 +38,7 @@ const api: Api = {
   srcWrite: kind => ipcRenderer.invoke('src:write', kind),
   srcNewFile: kind => ipcRenderer.invoke('src:new', kind),
   srcStatus: () => ipcRenderer.invoke('src:status'),
+  onBusy: cb => { const h = (_e: unknown, b: any) => cb(b); ipcRenderer.on('excel:busy', h); return () => { ipcRenderer.removeListener('excel:busy', h); }; },
   onSources: cb => { const h = (_e: unknown, st: any) => cb(st); ipcRenderer.on('sources', h); return () => { ipcRenderer.removeListener('sources', h); }; },
   formPick: form => ipcRenderer.invoke('form:pick', form),
   formInfo: form => ipcRenderer.invoke('form:info', form),

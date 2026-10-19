@@ -890,3 +890,10 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .qa__del{display:grid;place-items:center;width:28px;height:30px;border:0;background:transparent;color:var(--muted-fg);cursor:pointer}
 .qa__del:hover{color:var(--bad)}
 .qa__sum{margin-right:auto;font-size:13px;color:var(--muted-fg)}
+/* Πάνω μπάρα: εγγραφή στο Excel στο παρασκήνιο */
+.xlchip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;color:var(--bar-fg);opacity:.75}
+.xlchip.is-on{opacity:1;border:1px solid var(--bar-line)}
+.xlchip.is-bad{opacity:1;color:#1b1f16;background:var(--gold);font-weight:600}
+.xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate}
+@keyframes xlpulse{from{opacity:.35}to{opacity:1}}
+@media (max-width:900px){.xlchip:not(.is-on):not(.is-bad){display:none}}

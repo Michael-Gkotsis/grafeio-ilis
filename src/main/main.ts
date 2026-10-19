@@ -9,9 +9,10 @@ import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets } from './xlsx';
-import JSZip from 'jszip';
-import type { Boot, CmdResult, Diag, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { SourceMetaStore, OldFormatError, holdPatch, bookNow, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { zipHash } from './ziphash';
+import { off, useWorker, workerUp } from './offload';
+import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
+import { SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
@@ -155,22 +156,31 @@ async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boo
   finally { clearTimeout(timer); work.finally(() => { exporting = false; }); }
 }
 
+// Τα βαριά των εντύπων στο νήμα των Excel (offload.ts), με την κατάσταση s· αν το νήμα δεν δουλεύει, εδώ όπως πριν
+const X = {
+  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string) => off('fillFroura', [buf, d, undefined, sheet], () => fillFroura(buf, s, d, undefined, sheet), s),
+  hkai: (buf: Buffer, s: AppState, d: ISODate, opts: Parameters<typeof fillHkai>[3]) => off('fillHkai', [buf, d, opts], () => fillHkai(buf, s, d, opts), s),
+  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3]) => off('fillOuts', [buf, d, sheets], () => fillOuts(buf, s, d, sheets), s),
+  merge: (bufs: Buffer[], names: string[], pick?: string) => off('mergeFirstSheets', [bufs, names, pick], () => mergeFirstSheets(bufs, names, pick)),
+  zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
+  valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
+};
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
 async function produce(kind: ExportKind, date: ISODate, s: AppState): Promise<{ name: string; data: Buffer; warnings?: string[] }> {
   const form = formOf(kind, s);
-  if (kind === 'check') return excel().dutyCheck(s, date.slice(0, 7));
+  if (kind === 'check') return off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s);
   const b = formBinding(form);
   const buf = await fs.promises.readFile(formTpl(form as Exclude<FormKind, 'check'>));
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
-    const parts = await Promise.all(days.map(d => (fr ? fillFroura(buf, s, d, undefined, b.sheet) : fillOuts(buf, s, d, { outs: b.sheet, stay: b.sheet2 }))));
-    const data = await mergeFirstSheets(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), fr ? b.sheet : undefined);
+    const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }))));
+    const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), fr ? b.sheet : undefined);
     return { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: parts.flatMap(x => x.warnings || []) };
   }
-  if (kind === 'froura') return fillFroura(buf, s, date, undefined, b.sheet);
-  if (kind === 'hkai') return fillHkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b) });
-  return fillOuts(buf, s, date, { outs: b.sheet, stay: b.sheet2 });
+  if (kind === 'froura') return X.froura(buf, s, date, b.sheet);
+  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b) });
+  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 });
 }
 // ΗΚΑΙ σε δικό του template: οι θέσεις βρίσκονται από τα κείμενα του εντύπου, και από πάνω ό,τι διόρθωσε ο χρήστης
 async function hkaiMap(buf: Buffer, b: FormBinding) {
@@ -197,7 +207,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     const { r, out } = await serial(async () => {
       const r = await produce(kind, date, s);
       const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
-      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await zipHash(r.data), vhash: await valuesHash(r.data), ...(stamp(out) || {}) });
+      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}) });
       return { r, out };
     });
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
@@ -228,11 +238,6 @@ function rememberOut(o: OutRec) {
   const t = today();
   writeOuts([...readOuts().filter(x => x.file !== o.file && lastDay(x) >= t), o]);
 }
-async function zipHash(buf: Buffer): Promise<string> {
-  const z = await JSZip.loadAsync(buf); const h = crypto.createHash('sha1');
-  for (const n of Object.keys(z.files).sort()) { if (z.files[n].dir) continue; h.update(n); h.update(await z.files[n].async('nodebuffer')); }
-  return h.digest('hex');
-}
 const regenForms = () => serial(regenFormsNow);
 async function regenFormsNow(): Promise<boolean> {
   const t = today(); const list = readOuts().filter(o => lastDay(o) >= t); let any = false;
@@ -243,16 +248,16 @@ async function regenFormsNow(): Promise<boolean> {
       // Το διόρθωσε ο χρήστης με το χέρι στο Excel: δεν το πατάμε. Ξαναβγαίνει μόνο με το κουμπί της εφαρμογής.
       const st = stamp(o.file);
       if (st && o.vhash && (st.mtime !== o.mtime || st.size !== o.size)) {
-        if ((await valuesHash(await fs.promises.readFile(o.file))) !== o.vhash) { o.manual = true; o.pending = false; o.error = 'Το άλλαξες με το χέρι στο Excel, οπότε δεν ξαναγράφεται μόνο του. Αν θες τα νέα στοιχεία της εφαρμογής, βγάλ\' το ξανά από την εφαρμογή.'; continue; }
+        if ((await X.valuesHash(await fs.promises.readFile(o.file))) !== o.vhash) { o.manual = true; o.pending = false; o.error = 'Το άλλαξες με το χέρι στο Excel, οπότε δεν ξαναγράφεται μόνο του. Αν θες τα νέα στοιχεία της εφαρμογής, βγάλ\' το ξανά από την εφαρμογή.'; continue; }
         o.mtime = st.mtime; o.size = st.size;   // απλώς ανοίχτηκε και σώθηκε: ίδιες τιμές
       }
       const s = store.state;
       const errs = preflight(o.kind, s, o.date).filter(c => c.level === 'err');
       if (errs.length) { o.pending = true; o.error = 'Ο προέλεγχος βρήκε λάθος: ' + errs[0].text; continue; }
-      const r = await produce(o.kind, o.date, s); const h = await zipHash(r.data);
+      const r = await produce(o.kind, o.date, s); const h = await X.zipHash(r.data);
       if (h === o.hash) { o.pending = false; o.error = undefined; continue; }
       await writeAll([{ dir: path.dirname(o.file), name: path.basename(o.file), data: r.data }]);
-      o.hash = h; o.vhash = await valuesHash(r.data); Object.assign(o, stamp(o.file) || {}); o.at = nowHM(); o.pending = false; o.error = undefined; any = true;
+      o.hash = h; o.vhash = await X.valuesHash(r.data); Object.assign(o, stamp(o.file) || {}); o.at = nowHM(); o.pending = false; o.error = undefined; any = true;
       store.addAudit({ at: nowHM(), day: t, text: 'Ενημερώθηκε μόνο του το ' + path.basename(o.file) + ' (άλλαξαν δεδομένα)', files: [path.basename(o.file)], source: 'auto', undoable: false }, null, false);
     } catch (e) { o.pending = true; o.error = e instanceof Error ? e.message : String(e); }
   }
@@ -373,7 +378,9 @@ async function syncFileAuto(kinds: ListKind[]) {
   const jobs: { kind: ListKind; b: SourceBinding; meta?: SourceMeta }[] = [];
   for (const k of kinds) { const c = await autoCheck(k); if (!('ok' in c)) jobs.push({ kind: k, b: c.b, meta: c.m }); }
   if (!jobs.length) return;
-  const rs = await writeGroup(jobs, store.state, today(), { tidy: false });
+  // στο νήμα των Excel: το παράθυρο δεν παγώνει όσο γράφεται το Δυναμολόγιο
+  const s = store.state, t = today();
+  const rs = await off('writeGroup', [jobs, t, { tidy: false }], () => writeGroup(jobs, s, t, { tidy: false }), s);
   jobs.forEach((j, i) => afterWrite(j.kind, j.b, rs[i]));
 }
 // Μετά από κάθε αλλαγή: τα είδη που άλλαξαν γράφονται στα Excel τους και τα έντυπα που έχουν βγει ενημερώνονται
@@ -403,17 +410,24 @@ function hold(kinds: Iterable<ListKind>, why: string) {
   for (const k of kinds) { if (!bindingOf(k) || !srcMeta.get(k)?.at) continue; dirty.delete(k); srcMeta.set(k, holdPatch(k, why)); }
 }
 const holdAll = (why: string) => hold(KINDS.map(k => k.id), why);
+// Διάγνωση › «Μέτρηση ταχύτητας»: πόσο κράτησαν οι τελευταίες εγγραφές στο Excel
+const writeLog: WriteTime[] = [];
+const logWrite = (what: string, t0: number, error?: string) => { writeLog.unshift({ at: nowHM(), what, ms: Date.now() - t0, error }); writeLog.length = Math.min(writeLog.length, 12); };
+// ένδειξη στην πάνω μπάρα: «Γράφεται στο Excel…» / «Γράφτηκε 10:42»
+const busy = (b: ExcelBusy) => { try { win?.webContents.send('excel:busy', b); } catch { /* παράθυρο κλειστό */ } };
 async function runAuto() {
   if (autoBusy) { clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1500); return; }
   autoBusy = true;
+  let wrote = false, err: string | undefined;
   try {
     // ανά αρχείο: όλα τα είδη του (π.χ. τα φύλλα του Δυναμολογίου) μαζί
     const byFile = new Map<string, ListKind[]>();
     for (const k of [...dirty]) { dirty.delete(k); const b = bindingOf(k); if (!b) continue; const f = path.resolve(b.file); byFile.set(f, [...(byFile.get(f) || []), k]); }
-    for (const ks of byFile.values()) await serial(() => syncFileAuto(ks));
-    if (formsDirty) { formsDirty = false; await regenForms(); }
-  } catch (e) { console.error('auto', e); }
-  finally { autoBusy = false; notify(); }
+    if (byFile.size || formsDirty) { wrote = true; busy({ on: true }); }
+    for (const [f, ks] of byFile) { const t0 = Date.now(); await serial(() => syncFileAuto(ks)); logWrite(path.basename(f), t0, srcMeta.get(ks[0])?.error); }
+    if (formsDirty) { formsDirty = false; const t0 = Date.now(); await regenForms(); logWrite('Έντυπα (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι)', t0); }
+  } catch (e) { console.error('auto', e); err = e instanceof Error ? e.message : String(e); }
+  finally { autoBusy = false; notify(); if (wrote) busy({ on: false, at: nowHM(), error: err }); }
 }
 // όσα περιμένουν (ήταν ανοιχτά στο Excel) ξαναδοκιμάζονται κάθε λεπτό
 function retryPending() {
@@ -862,6 +876,9 @@ else {
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(DEV ? Menu.buildFromTemplate([{ role: 'viewMenu' }]) : null);
     lockdown();
+    // το νήμα των Excel: ανάγνωση, έντυπα και εγγραφή στο Δυναμολόγιο χωρίς να παγώνει το παράθυρο
+    useWorker(path.join(__dirname, 'worker.js'));
+    setBookReader(f => off('readBook', [f], () => readBook(f)));
     store = new Store(DATA, path.join(__dirname, 'sql-wasm.wasm'));
     try { await store.open(); }
     catch (e) {
@@ -1062,7 +1079,7 @@ else {
       procs: app.getAppMetrics().map(m => ({ type: m.type, kb: m.memory.workingSetSize, cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10 })),
       gpuDisabled: !!readFlags().disableGpu, versions: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
       dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024), people: store.state.people.length, statuses: store.state.statuses.length, guardDays: Object.keys(store.state.guards).length,
-      dataDir: DATA, backups: listBackups(BACKUPS).length
+      dataDir: DATA, backups: listBackups(BACKUPS).length, writes: writeLog, worker: workerUp()
     }));
     ipcMain.handle('flags:gpu', (_e, disable: boolean) => { writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable }); app.relaunch(); app.exit(0); });
     // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού

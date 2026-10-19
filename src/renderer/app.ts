@@ -14,7 +14,7 @@ import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
-import type { Boot, CmdResult } from '../shared/api';
+import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
@@ -192,6 +192,7 @@ function Shell() {
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">
+          <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
@@ -215,6 +216,14 @@ function Shell() {
   <//><//><//>`;
 }
 
+// Πάνω μπάρα: οι εγγραφές στο Excel γίνονται στο παρασκήνιο, εδώ φαίνεται πότε γράφει και πότε τελείωσε
+function ExcelChip() {
+  const [b, setB] = useState<ExcelBusy | null>(null);
+  useEffect(() => window.api.onBusy?.(setB), []);
+  if (!b) return null;
+  if (b.on) return html`<span className="xlchip is-on" role="status" data-tip="Η εφαρμογή γράφει τις αλλαγές στα αρχεία Excel. Μπορείς να συνεχίσεις κανονικά." data-tip-side="bottom"><span className="xlchip__dot"></span>Γράφεται στο Excel…</span>`;
+  return html`<span className=${cx('xlchip', b.error && 'is-bad')} role="status" data-tip=${b.error ? 'Η τελευταία εγγραφή στο Excel δεν έγινε: ' + b.error + ' (Ρυθμίσεις › Αρχεία Excel)' : 'Οι αλλαγές γράφτηκαν στα αρχεία Excel στις ' + b.at} data-tip-side="bottom">${b.error ? 'Δεν γράφτηκε στο Excel' : 'Γράφτηκε ' + b.at}</span>`;
+}
 export function App({ boot }: { boot: Boot }) {
   return html`<${ToastProvider}><${Root} boot=${boot}/><//>`;
 }

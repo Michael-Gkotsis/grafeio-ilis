@@ -19,7 +19,9 @@ export type CmdResult = { ok: true; changes: Partial<AppState>; newAudit: AuditE
 export type ExportResult = { ok: true; file: string; warnings: string[] } | { ok: false; error: string; checks?: Check[]; needAck?: boolean; locked?: boolean };
 export type UsbResult = { ok: true; file: string; day: string; warning?: string } | { ok: false; error: string } | null;
 export interface BackupInfo { name: string; day: string; label: string; size: number }
-export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number }
+export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number; writes: WriteTime[]; worker: boolean }
+export interface WriteTime { at: string; what: string; ms: number; error?: string }   // μία εγγραφή στο Excel και πόσο κράτησε
+export interface ExcelBusy { on: boolean; at?: string; error?: string }   // ένδειξη «Γράφεται στο Excel…» / «Γράφτηκε 10:42»
 export interface ImportPreview { ok: true; token: string; file: string; total: number; active: number; added: number; updated: number; missing: number; warnings: string[]; essos: string; skipped: string[]; declared: number | null; found: number; suspicious: string[]; changes: { who: string; what: string }[]; same: number }
 
 // Αρχεία Excel: ένα βιβλίο όπως το βλέπει η αντιστοίχιση (τιμές κελιών και πίνακες που αναγνωρίστηκαν)
@@ -88,6 +90,7 @@ export interface Api {
   srcNewFile(kind: ListKind): Promise<{ ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | Fail | null>;   // sheets: τα φύλλα που μπήκαν μαζί στο νέο Δυναμολόγιο
   srcStatus(): Promise<{ sources: SourceStatus[]; forms: FormOut[] }>;
   onSources(cb: (st: { sources: SourceStatus[]; forms: FormOut[] }) => void): () => void;
+  onBusy(cb: (b: ExcelBusy) => void): () => void;
   formPick(form: FormKind): Promise<FormInfo | Fail | null>;
   formInfo(form: FormKind): Promise<FormInfo | Fail>;
   formSave(form: FormKind, b: FormBinding | null): Promise<CmdResult>;
