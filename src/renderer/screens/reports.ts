@@ -1,0 +1,489 @@
+// features/reports · «Έντυπα» (Michael, 19/10): δικά σου πρότυπα Excel (ανεβασμένα ή φτιαγμένα εδώ) που γεμίζουν με
+// στοιχεία της εφαρμογής. Ένα έντυπο το στήνεις μία φορά (οδηγός 5 βημάτων) και μετά βγαίνει με ένα κλικ.
+// Η τυχαία επιλογή γίνεται εδώ, ώστε να βγει ακριβώς ό,τι είδες· ο main παίρνει μόνο τη λίστα των ατόμων.
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
+import { useNav, useStore } from '../store';
+import { usePrintFile } from '../common';
+import { dayName, dm } from '../../shared/dates';
+import { ROSTER_FILTERS } from '../../shared/rosterLists';
+import { siCombos } from '../../shared/si';
+import type { AppState } from '../../shared/domain';
+import type { RepPreview, RepSource, TplInspect } from '../../shared/api';
+import {
+  CELLS, FIELDS, PRESETS, REP_KINDS, blankBuild, candidates, cellOf, defaultPick, fieldOf, pickRandom, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  type BuildCol, type BuildOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepTpl, type Report, type Row
+} from '../../shared/reports';
+type P = any;
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const SORTS: { value: RepSort; label: string }[] = [{ value: 'name', label: 'Αλφαβητικά' }, { value: 'room', label: 'Θάλαμος' }, { value: 'rank', label: 'Βαθμός' }, { value: 'pick', label: 'Όπως βγήκαν' }];
+const STEPS = ['Πρότυπο', 'Τι αφορά', 'Στήλες και στοιχεία', 'Ποιοι μπαίνουν', 'Πού βγαίνει'];
+const needsAsk = (r: Report) => r.pick.mode === 'random' || r.day === 'ask';
+const nameOf = (x: Row) => [x.last, x.first].filter(Boolean).join(' ');
+const tplsOf = (s: AppState) => s.settings.reportTpls || [];
+const repsOf = (s: AppState) => s.settings.reports || [];
+const lastTxt = (v?: string, today?: string) => { if (!v) return 'Δεν έχει βγει'; const [d, t] = v.split(' '); return (d === today ? 'Σήμερα' : dm(d)) + ' ' + (t || ''); };
+// το φτιαγμένο πρότυπο άλλαξε στο Excel (αποθηκεύτηκε μετά από εμάς): από εκεί και πέρα αντιστοιχίζεται σαν ανεβασμένο
+const editedInExcel = (t: RepTpl, mtime?: number) => !!t.built && !!mtime && !!t.mtime && Math.abs(mtime - t.mtime) > 2000;
+
+// ------------------------------------------------------------------ βγάλσιμο
+function useRunReport() {
+  const toast = useToast(); const printFile = usePrintFile();
+  const busy = useRef(false);
+  return useCallback(async (s: AppState, r: Report, ids: (number | string)[], d: string, print: boolean): Promise<boolean> => {
+    const tpl = tplsOf(s).find(t => t.id === r.tpl);
+    if (!tpl) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Το πρότυπό του δεν υπάρχει πια. Άνοιξέ το με «Αλλαγή» και διάλεξε άλλο.</span>` }); return false; }
+    if (!ids.length) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Κανείς δεν περνά τα φίλτρα του για ${dayName(d).toLowerCase()} ${dm(d)}.</span>` }); return false; }
+    if (busy.current) return false; busy.current = true;
+    let res: Awaited<ReturnType<typeof window.api.repRun>>;
+    try { res = await window.api.repRun(r, tpl.file, ids, d, print); } catch (e) { res = { ok: false, error: String(e) }; } finally { busy.current = false; }
+    if (!res.ok) {
+      toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> ${res.error}</span>`, actions: res.locked ? [{ label: 'Ξανά', fn: () => { window.api.repRun(r, tpl.file, ids, d, print); } }] : undefined });
+      return false;
+    }
+    const file = res.file;
+    toast({ text: html`<span>Βγήκε: <b>${file.split(/[\\/]/).pop()}</b> (${ids.length} ${r.kind === 'cadre' ? 'στελέχη' : 'άτομα'})${res.warnings.length ? html`<br/>⚠ ${res.warnings.join(' · ')}` : ''}</span>`, actions: [...(print ? [] : [{ label: 'Εκτύπωση', fn: () => { printFile(file); } }]), { label: 'Φάκελος', fn: () => window.api.openFolder('output') }] });
+    return true;
+  }, [toast, printFile]);
+}
+
+// Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά, ✕ αλλαγή ενός)
+function usePick(r: Report, d: string) {
+  const { state } = useStore(); const toast = useToast();
+  const pk = JSON.stringify(r.pick);
+  const pool = useMemo(() => candidates(state, r, d), [state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [seed, setSeed] = useState(0); const [rand, setRand] = useState<Row[]>([]);
+  const random = r.pick.mode === 'random';
+  useEffect(() => { if (random) setRand(pickRandom(pool, r.pick.n || 0, !!r.pick.even)); }, [pool, random, r.pick.n, r.pick.even, seed]);
+  const rows = useMemo(() => (random ? sortRows(rand, r.sort, state, r.kind) : rowsOf(state, r, d)), [random, rand, r.sort, state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const replace = (id: number | string) => {
+    const i = rand.findIndex(x => x.id === id); if (i < 0) return;
+    const nx = replaceOne(rand, i, pool);
+    if (nx) setRand(nx); else toast({ text: 'Δεν υπάρχει άλλος που να περνά τα φίλτρα.' });
+  };
+  return { pool, rows, random, reroll: () => setSeed(x => x + 1), replace };
+}
+
+const PickRow = memo(function PickRow({ x, i, kind, onX }: P) {
+  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nameOf(x)}</b><small>${[x.rank, kind === 'people' && x.room != null ? 'Θ' + x.room : ''].filter(Boolean).join(' · ')}</small>
+    ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλαξε τον ' + nameOf(x)} data-tip="Βάλε άλλον τυχαίο στη θέση του" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</li>`;
+});
+function PickList({ p, kind }: P) {
+  const who = kind === 'cadre' ? 'στελέχη' : 'άτομα';
+  return html`<div className="rep-picks">
+    <div className="rep-picks__head"><b>${p.rows.length} ${who}</b><span className="muted">${p.random ? 'τυχαία από ' + p.pool.length + ' που περνούν τα φίλτρα' : p.rows.length < p.pool.length ? 'από ' + p.pool.length + ' που περνούν τα φίλτρα' : ''}</span>
+      ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση">⟳ Ξανά τυχαία<//>`}</div>
+    ${p.rows.length ? html`<ol className="rep-picks__list">${p.rows.map((x: Row, i: number) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} onX=${p.random ? p.replace : null}/>`)}</ol>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ προεπισκόπηση (σελίδα όπως θα τυπωθεί, κελιά με κλικ)
+const PAGE_CSS = `:host{display:block}*{box-sizing:border-box}.wrap{transform-origin:0 0}
+.pg{position:relative;margin:0 auto 12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.35);overflow:hidden}.ar{position:absolute;transform-origin:0 0}
+table{border-collapse:collapse;table-layout:fixed;color:#000}td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
+table.grid td{outline:.5px solid #bbb}.x{display:flex;padding:0 2px;white-space:pre;overflow:hidden;line-height:1.15}.x.o{overflow:visible}
+.x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
+.hf{position:absolute;display:flex;justify-content:space-between;font:10pt Calibri,Carlito,Arial,sans-serif}.hf span{flex:1}.hf span:nth-child(2){text-align:center}.hf span:nth-child(3){text-align:right}
+.picking td[data-a]{cursor:crosshair}.picking td[data-a]:hover{outline:2px solid #1a73e8;outline-offset:-2px;background:rgba(26,115,232,.08)}
+td.on{outline:2px solid #d9a400;outline-offset:-2px}td.hd{background-image:linear-gradient(rgba(91,122,43,.14),rgba(91,122,43,.14))}
+.mock{border-collapse:collapse;font:12px Arial}.mock td,.mock th{border:1px solid #999;padding:2px 6px}`;
+function Preview({ pv, busy, picking, marks, head, onPick }: P) {
+  const host = useRef<HTMLDivElement>(null); const root = useRef<ShadowRoot | null>(null);
+  const pick = useRef(onPick); pick.current = onPick;
+  useEffect(() => {
+    const el = host.current; if (!el || root.current) return;
+    root.current = el.attachShadow({ mode: 'open' });
+    root.current.addEventListener('click', (e: Event) => { const td = (e.target as HTMLElement).closest?.('td[data-a]'); if (td && pick.current) pick.current(td.getAttribute('data-a')); });
+  }, []);
+  // η σελίδα σε όλο το πλάτος του πλαισίου (zoom): οι αριθμοί του renderBook είναι σε px της σελίδας
+  const fit = useCallback(() => {
+    const r = root.current; const el = host.current; if (!r || !el) return;
+    const w = r.querySelector('.wrap') as HTMLElement | null; const pg = r.querySelector('.pg') as HTMLElement | null;
+    if (w) (w.style as P).zoom = pg ? String(Math.min(1, (el.clientWidth - 4) / pg.offsetWidth)) : '1';
+  }, []);
+  useEffect(() => {
+    const r = root.current; if (!r) return;
+    r.innerHTML = '<style>' + PAGE_CSS + (pv?.css || '') + '</style><div class="wrap' + (picking ? ' picking' : '') + '">' + (pv?.html || '') + '</div>';
+    (marks || []).forEach((a: string) => r.querySelectorAll('td[data-a="' + a + '"]').forEach(td => td.classList.add('on')));
+    if (head) r.querySelectorAll('td[data-a]').forEach(td => { if ((td.getAttribute('data-a') || '').replace(/^[A-Z]+/, '') === String(head)) td.classList.add('hd'); });
+    fit();
+  }, [pv, picking, (marks || []).join(), head, fit]);
+  useEffect(() => { const el = host.current; if (!el) return; const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect(); }, [fit]);
+  return html`<div className=${cx('rep-pv', busy && 'is-busy')}>
+    <div ref=${host} className="rep-pv__page"></div>
+    ${!pv && html`<div className="empty">${busy ? 'Φτιάχνεται η προεπισκόπηση…' : 'Η προεπισκόπηση φαίνεται εδώ.'}</div>`}
+    ${pv && pv.pages > 1 && html`<div className="note rep-pv__more">Φαίνεται η 1η σελίδα από ${pv.pages}.</div>`}
+  </div>`;
+}
+// ζητά προεπισκόπηση λίγο μετά την τελευταία αλλαγή (όχι σε κάθε πλήκτρο: το Atom φτιάχνει ένα xlsx κάθε φορά)
+function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean) {
+  const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, ids.slice(0, 120), d, raw]);
+  useEffect(() => {
+    if (!src) { setPv(null); return; }
+    let live = true; setBusy(true);
+    const t = setTimeout(async () => {
+      try {
+        const x = await window.api.repPreview(src, r, ids.slice(0, 120), d, raw);
+        if (!live) return;
+        if ('ok' in x && !x.ok) { setErr(x.error); setPv(null); } else { setErr(''); setPv(x as RepPreview); }
+      } catch (e) { if (live) setErr(String(e)); } finally { if (live) setBusy(false); }
+    }, 450);
+    return () => { live = false; clearTimeout(t); };
+  }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return { pv, busy, err };
+}
+
+// ------------------------------------------------------------------ οθόνη
+export function ReportsScreen() {
+  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const runReport = useRunReport();
+  const tab: string = nav.params.repTab || 'ready';
+  const reports = repsOf(state); const tpls = tplsOf(state);
+  const [last, setLast] = useState<Record<string, string>>({});
+  const loadLast = useCallback(() => { window.api.repLast().then(setLast, () => {}); }, []);
+  useEffect(loadLast, [loadLast]);
+  const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
+  const [ask, setAsk] = useState<{ r: Report; print: boolean } | null>(null);
+  const go = async (r: Report, print = r.out === 'print', s = state) => {
+    if (needsAsk(r)) { setAsk({ r, print }); return; }
+    const d = repDate(r, today);
+    if (await runReport(s, r, rowsOf(s, r, d).map(x => x.id), d, print)) loadLast();
+  };
+  // από την αναζήτηση (Ctrl+K): «Βγάλε: …»
+  useEffect(() => {
+    const id = nav.params.repRun; if (!id) return; nav.set({ repRun: undefined });
+    const r = reports.find(x => x.id === id); if (r) go(r);
+  }, [nav.params.repRun]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const save = (settings: { reports?: Report[]; reportTpls?: RepTpl[] }, text: string) => run({ t: 'setSettings', settings, text }, false);
+  const del = async (r: Report) => { if (await save({ reports: reports.filter(x => x.id !== r.id) }, 'Διαγραφή εντύπου «' + r.name + '»')) toast({ text: 'Σβήστηκε το έντυπο «' + r.name + '».', actions: [undoMark()] }); };
+  const copy = async (r: Report) => { const c = { ...r, id: uid(), name: r.name + ' (αντίγραφο)' }; if (await save({ reports: [...reports, c] }, 'Αντίγραφο εντύπου «' + r.name + '»')) setWiz({ r: c }); };
+  const delTpl = async (t: RepTpl) => { if (await save({ reportTpls: tpls.filter(x => x.id !== t.id) }, 'Διαγραφή προτύπου «' + t.name + '»')) toast({ text: 'Σβήστηκε το πρότυπο «' + t.name + '».', actions: [undoMark()] }); };
+  const usedBy = (t: RepTpl) => reports.filter(r => r.tpl === t.id);
+  return html`<div>
+    <${PageHeader} title="Έντυπα" sub="Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.">
+      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setWiz({ start: 'upload' })} data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">Ανέβασε Excel…<//>
+      <${Button} onClick=${() => setWiz({})}>+ Νέο έντυπο<//></div><//>
+    <${Tabs} value=${tab} onChange=${(v: string) => nav.set({ repTab: v === 'ready' ? undefined : v })} items=${[{ value: 'ready', label: 'Έτοιμα έντυπα (' + reports.length + ')' }, { value: 'tpls', label: 'Πρότυπα (' + tpls.length + ')' }]}/>
+    ${tab === 'ready' && (reports.length ? html`<div className="ui-card"><table className="rep-table"><thead><tr><th>Έντυπο</th><th>Ποιοι μπαίνουν</th><th>Τελευταία φορά</th><th></th></tr></thead><tbody>
+      ${reports.map(r => html`<tr key=${r.id}>
+        <td><b>${r.name}</b><small>${tpls.find(t => t.id === r.tpl)?.name || 'χωρίς πρότυπο'} · ${r.out === 'print' ? 'εκτύπωση' : 'Excel'}${r.day === 'tomorrow' ? ' · για αύριο' : r.day === 'ask' ? ' · ρωτά μέρα' : ''}</small></td>
+        <td>${pickText(r, state)}</td><td className="nw muted">${lastTxt(last[r.id], today)}</td>
+        <td className="rep-table__acts"><${Button} size="sm" onClick=${() => go(r)} data-tip=${needsAsk(r) ? 'Δείχνει πρώτα ποιοι μπαίνουν' : 'Βγαίνει τώρα, για ' + (r.day === 'tomorrow' ? 'αύριο' : 'σήμερα')}>${needsAsk(r) ? 'Βγάλε…' : 'Βγάλε'}<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => setWiz({ r })}>Αλλαγή<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
+          <${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + r.name} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => del(r)}>${Icon.x}<//></td>
+      </tr>`)}</tbody></table></div>` : html`<div className="ui-card"><div className="rep-empty">
+        <h2>Ξεκίνα από ένα έτοιμο</h2><p className="muted">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις. Αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
+        <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => setWiz({ start: 'build', preset: p.id })}><b>${p.name}</b><small>${p.help}</small></button>`)}
+          <button type="button" className="rep-preset rep-preset--up" onClick=${() => setWiz({ start: 'upload' })}><b>Δικό σου Excel</b><small>Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.</small></button></div>
+      </div></div>`)}
+    ${tab === 'tpls' && (tpls.length ? html`<div className="ui-card"><table className="rep-table"><thead><tr><th>Πρότυπο</th><th>Από πού</th><th>Έντυπα</th><th></th></tr></thead><tbody>
+      ${tpls.map(t => { const u = usedBy(t); return html`<tr key=${t.id}><td><b>${t.name}</b></td><td>${t.built ? 'Φτιαγμένο εδώ' : 'Ανεβασμένο Excel'}</td><td>${u.length ? u.map(r => r.name).join(', ') : html`<span className="muted">κανένα</span>`}</td>
+        <td className="rep-table__acts"><${Button} size="sm" variant="outline" onClick=${() => setWiz({ start: 'tpl', tpl: t.id })}>Νέο έντυπο από αυτό<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => window.api.repOpenTpl(t.file)} data-tip="Άλλαξε μορφή, λογότυπο, στήλες στο Excel. Οι αλλαγές ισχύουν από το επόμενο έντυπο.">Άνοιξέ το στο Excel<//>
+          <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
+    </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
+    ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${(r: Report, s: AppState) => go(r, r.out === 'print', s)}/>`}
+    ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
+  </div>`;
+}
+
+// Πριν βγει: ποια μέρα (αν ρωτά) και ποιοι τυχαίοι (με ✕ και «Ξανά τυχαία»)
+function RunDialog({ r, print, onClose, onDone }: P) {
+  const { state, today, tomorrow } = useStore(); const runReport = useRunReport();
+  const [d, setD] = useState(repDate(r, today));
+  const [n, setN] = useState(r.pick.n || 10);
+  const rr = useMemo(() => ({ ...r, pick: { ...r.pick, n } }), [r, n]);
+  const p = usePick(rr, d);
+  const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr)) onDone(); };
+  return html`<${Dialog} size="lg" title=${r.name} description=${pickText(rr, state)} onClose=${onClose} footer=${html`
+    <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
+    <${Button} variant=${print ? 'default' : 'outline'} disabled=${!p.rows.length} onClick=${() => out(true)}>${Icon.print}Τύπωσε<//>
+    ${!print && html`<${Button} disabled=${!p.rows.length} onClick=${() => out(false)}>Βγάλε το Excel<//>`}`}>
+    <div className="field-row">
+      <div className="field"><span className="field__label">Για ποια μέρα</span><div className="rep-inline">
+        <${Segmented} small=${true} value=${d === today ? 't' : d === tomorrow ? 'm' : 'x'} onChange=${(v: string) => setD(v === 't' ? today : v === 'm' ? tomorrow : d)} items=${[{ value: 't', label: 'Σήμερα' }, { value: 'm', label: 'Αύριο' }, { value: 'x', label: 'Άλλη' }]}/>
+        <input type="date" className="ui-input rep-date" aria-label="Ημερομηνία" value=${d} onChange=${(e: any) => e.target.value && setD(e.target.value)}/></div></div>
+      ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
+    </div>
+    <${PickList} p=${p} kind=${r.kind}/>
+  <//>`;
+}
+
+// ------------------------------------------------------------------ οδηγός
+type Mode = 'upload' | 'build';
+const blankReport = (): Report => ({ id: uid(), name: '', tpl: '', kind: 'people', sheet: '', head: 1, cols: [], cells: [], pick: defaultPick(), sort: 'name', day: 'today', out: 'file' });
+const colsFrom = (insp: TplInspect): RepCol[] => insp.headers.filter(h => h.f).map(h => ({ c: h.c, f: h.f!, h: h.text }));
+
+function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P) {
+  const { state, today, run } = useStore(); const toast = useToast();
+  const tpls = tplsOf(state); const editing = !!initial && repsOf(state).some(x => x.id === initial.id);
+  const [step, setStep] = useState(initial ? 3 : 1);
+  const [r, setR] = useState<Report>(() => initial ? { ...initial } : blankReport());
+  const upd = (x: Partial<Report>) => setR(o => ({ ...o, ...x }));
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [tpl, setTpl] = useState<RepTpl | null>(null);
+  const [build, setBuild] = useState<BuildOpts | null>(null);
+  const [insp, setInsp] = useState<TplInspect | null>(null);
+  const [note, setNote] = useState('');
+  const [picking, setPicking] = useState<string | null>(null);   // '#head' ή κλειδί στοιχείου (CELLS) που περιμένει κλικ σε κελί
+  const [view, setView] = useState<'filled' | 'tpl'>('filled');
+  const [signers, setSigners] = useState(state.settings.signers || { sergeant: '', commander: '' });
+  const [busy, setBusy] = useState(false);
+  const d = repDate(r, today);
+  const inspect = async (t: RepTpl, kind: RepKind, sheet?: string, head?: number, keepCols = false) => {
+    const x = await window.api.repInspect(t.file, kind, sheet, head);
+    if ('ok' in x && !x.ok) { toast({ text: html`<span><b>Δεν διαβάστηκε το πρότυπο.</b> ${x.error}</span>` }); return null; }
+    const i = x as TplInspect; setInsp(i);
+    setR(o => ({ ...o, sheet: i.sheet, head: i.head, cols: keepCols ? o.cols : colsFrom(i) }));
+    return i;
+  };
+  const useTpl = async (t: RepTpl, kind: RepKind, keepCols: boolean) => {
+    setTpl(t); setNote('');
+    const f = (await window.api.repFiles([t.file]))[t.file];
+    if (!f || !f.exists) { setNote('Το αρχείο του προτύπου λείπει από τον φάκελο «Πρότυπα εντύπων». Ανέβασέ το ξανά ή διάλεξε άλλο.'); setMode(null); return; }
+    if (t.built && !editedInExcel(t, f.mtime)) { setMode('build'); setBuild(JSON.parse(JSON.stringify(t.built))); setInsp(null); return; }
+    if (t.built) setNote('Το πρότυπο άλλαξε στο Excel, οπότε οι στήλες διαβάζονται από το αρχείο.');
+    setMode('upload'); setBuild(null); await inspect(t, kind, keepCols ? r.sheet : undefined, keepCols ? r.head : undefined, keepCols);
+  };
+  const upload = async () => {
+    const x = await window.api.repUpload(r.kind); if (!x) return;
+    if (!x.ok) { toast({ text: html`<span><b>Δεν ανέβηκε.</b> ${x.error}</span>` }); return; }
+    setTpl(x.tpl); setMode('upload'); setBuild(null); setInsp(x.insp); setNote('');
+    upd({ sheet: x.insp.sheet, head: x.insp.head, cols: colsFrom(x.insp), cells: [], name: r.name || x.tpl.name });
+    setStep(2);
+  };
+  const startBuild = (o: BuildOpts, name: string) => { setMode('build'); setTpl(null); setInsp(null); setBuild(JSON.parse(JSON.stringify(o))); setNote(''); upd({ name: r.name || name, title: undefined, cells: [] }); setStep(2); };
+  useEffect(() => {
+    if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true); else setStep(1); }
+    else if (start === 'upload') upload();
+    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : ''); }
+    else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)); } }
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
+  const setKind = async (kind: RepKind) => {
+    if (kind === r.kind) return;
+    upd({ kind, pick: kind === 'cadre' ? { from: r.pick.from === 'present' ? 'present' : 'all', mode: r.pick.mode, n: r.pick.n } : r.pick, sort: r.sort === 'room' && kind === 'cadre' ? 'rank' : r.sort });
+    if (mode === 'upload' && tpl) await inspect(tpl, kind, r.sheet, r.head);
+    if (mode === 'build' && build) setBuild({ ...build, cols: build.cols.filter(c => fieldOf(kind, c.f)) });
+  };
+  const p = usePick(r, d);
+  const ids = useMemo(() => p.rows.map(x => x.id), [p.rows]);
+  const raw = mode === 'upload' && (view === 'tpl' || !!picking);
+  const src: RepSource | null = step < 3 ? null : mode === 'build' && build ? { build } : mode === 'upload' && tpl ? { file: tpl.file } : null;
+  const prev = usePreview(src, r, ids, d, raw);
+  const onPick = async (ref: string) => {
+    if (!picking || !tpl) return;
+    if (picking === '#head') { setPicking(null); await inspect(tpl, r.kind, r.sheet, +ref.replace(/^[A-Z]+/, '')); return; }
+    upd({ cells: [...r.cells.filter(c => c.ref !== ref && c.k !== picking), { ref, k: picking }] }); setPicking(null);
+  };
+  // τι λείπει για να προχωρήσει κάθε βήμα
+  const missing = (i: number): string => {
+    if (i >= 1 && !mode) return 'Διάλεξε πρότυπο.';
+    if (i >= 3 && mode === 'build' && !build?.cols.length) return 'Βάλε τουλάχιστον μία στήλη.';
+    if (i >= 3 && mode === 'upload' && !r.cols.length) return 'Δείξε ποια στήλη παίρνει τι (τουλάχιστον μία).';
+    if (i >= 5 && !r.name.trim()) return 'Δώσε όνομα στο έντυπο.';
+    return '';
+  };
+  const save = async (andRun: boolean) => {
+    const why = missing(5); if (why) { toast({ text: why }); return; }
+    setBusy(true);
+    try {
+      let rr: Report = { ...r, name: r.name.trim() }; let list = [...tpls];
+      if (mode === 'build' && build) {
+        const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
+        const file = tpl && !shared ? tpl.file : undefined;
+        const b = await window.api.repBuild(build, r.kind, file);
+        if (!b.ok) { toast({ text: html`<span><b>Δεν αποθηκεύτηκε.</b> ${b.error}</span>` }); return; }
+        const t: RepTpl = { id: file && tpl ? tpl.id : uid(), name: rr.name, file: b.file, built: build, mtime: b.mtime };
+        list = [...list.filter(x => x.id !== t.id), t];
+        rr = { ...rr, tpl: t.id, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells };
+      } else if (tpl) { if (!list.some(x => x.id === tpl.id)) list.push(tpl); rr = { ...rr, tpl: tpl.id }; }
+      const reps = repsOf(state); const exists = reps.some(x => x.id === rr.id);
+      const sg = state.settings.signers || { sergeant: '', commander: '' };
+      const sChanged = sg.sergeant !== signers.sergeant || sg.commander !== signers.commander;
+      const next = await run({ t: 'setSettings', settings: { reportTpls: list, reports: exists ? reps.map(x => (x.id === rr.id ? rr : x)) : [...reps, rr], ...(sChanged ? { signers: { sergeant: signers.sergeant.trim(), commander: signers.commander.trim() } } : {}) }, text: (exists ? 'Αλλαγή' : 'Νέο') + ' έντυπο «' + rr.name + '»' }, (exists ? 'Αποθηκεύτηκε' : 'Έτοιμο') + ' το έντυπο «' + rr.name + '».');
+      if (!next) return;
+      onClose(); if (andRun) onRun(rr, next);
+    } finally { setBusy(false); }
+  };
+  const canGo = (i: number) => !missing(i);
+  const foot = html`<span className="rep-wiz__why">${missing(Math.min(5, step + 1))}</span>
+    <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
+    ${step > 1 && html`<${Button} variant="outline" onClick=${() => setStep(step - 1)}>Πίσω<//>`}
+    ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} data-tip=${missing(step + 1) || undefined} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
+      : html`<${Button} variant="outline" disabled=${busy || !canGo(5)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(5)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
+  const showPv = step === 3 || step === 5;
+  return html`<${Dialog} size="xl" title=${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'} closeOnOverlay=${false} onClose=${onClose} footer=${foot}>
+    <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} onClick=${() => setStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
+    ${note && html`<${Alert} tone="warn">${note}<//>`}
+    <div className=${cx('rep-wiz', showPv && 'rep-wiz--pv')}>
+      <div className="rep-wiz__main">
+        ${step === 1 && html`<${StepTpl} mode=${mode} tpl=${tpl} build=${build} tpls=${tpls} upload=${upload} onBuild=${startBuild} onTpl=${(t: RepTpl) => { upd({ name: r.name || t.name }); useTpl(t, r.kind, false).then(() => setStep(2)); }}/>`}
+        ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
+        ${step === 3 && mode === 'build' && build && html`<${Builder} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners}
+          onExcel=${async () => {
+            const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
+            const b = await window.api.repBuild(build, r.kind, tpl && !shared ? tpl.file : undefined);
+            if (!b.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${b.error}</span>` }); return; }
+            const t: RepTpl = { id: tpl && !shared ? tpl.id : uid(), name: r.name || build.title, file: b.file };   // χωρίς built: από εδώ και πέρα το αρχείο είναι το πρότυπο
+            setTpl(t); setMode('upload'); setBuild(null); upd({ sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells });
+            await inspect(t, r.kind, b.sheet, b.head, true); window.api.repOpenTpl(b.file);
+            setNote('Άνοιξε στο Excel. Άλλαξε ό,τι θέλεις, αποθήκευσε, και πάτα «Ξαναδιάβασε το πρότυπο». Οι {ΕΤΙΚΕΤΕΣ} μέσα στο Excel γεμίζουν μόνες τους.');
+          }}/>`}
+        ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
+          signers=${signers} setSigners=${setSigners} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
+        ${step === 4 && html`<${StepPick} r=${r} upd=${upd} p=${p}/>`}
+        ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} n=${p.rows.length}/>`}
+      </div>
+      ${showPv && html`<div className="rep-wiz__pv">
+        ${prev.err && html`<${Alert} tone="bad">${prev.err}<//>`}
+        ${picking && html`<div className="rep-pickhint" role="status"><b>Κάνε κλικ σε ένα κελί</b> ${picking === '#head' ? 'της γραμμής με τις επικεφαλίδες' : 'για «' + (cellOf(picking)?.label || '') + '»'} <${Button} size="sm" variant="ghost" onClick=${() => setPicking(null)}>Άκυρο<//></div>`}
+        <${Preview} pv=${prev.pv} busy=${prev.busy} picking=${!!picking} head=${raw ? r.head : 0} marks=${raw ? [...r.cells.map(c => c.ref), ...(insp?.tags || []).map(t => t.ref)] : []} onPick=${onPick}/>
+      </div>`}
+    </div>
+  <//>`;
+}
+
+function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
+  const cur = mode === 'build' && !tpl ? 'Φτιάχνεται εδώ: «' + (build?.title || '') + '»' : tpl ? '«' + tpl.name + '»' : '';
+  return html`<div className="stack">
+    ${cur && html`<${Alert} tone="info">Πρότυπο: <b>${cur}</b>. Πάτα «Επόμενο» ή διάλεξε άλλο.<//>`}
+    <div><h3 className="rep-h">Δικό σου Excel</h3><p className="note">Ένα έντυπο που ήδη έχεις (.xlsx). Κρατά τη μορφή του (γραμματοσειρές, πλαίσια, λογότυπο, υπογραφές) και η εφαρμογή συμπληρώνει μόνο τα στοιχεία.</p>
+      <${Button} variant="outline" onClick=${upload}>Ανέβασε Excel…<//></div>
+    <div><h3 className="rep-h">Φτιάξ' το εδώ</h3><p className="note">Η εφαρμογή φτιάχνει το Excel: κεφαλίδα και υπογραφές από τις Ρυθμίσεις, πλαίσια, Α/Α, επικεφαλίδες σε κάθε σελίδα.</p>
+      <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => onBuild(p.opts, p.name)}><b>${p.name}</b><small>${p.help}</small></button>`)}
+        <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '')}><b>Κενό</b><small>Α/Α, βαθμός, ονοματεπώνυμο. Προσθέτεις στήλες στο βήμα 3.</small></button></div></div>
+    ${tpls.length > 0 && html`<div><h3 className="rep-h">Πρότυπο που ήδη υπάρχει</h3><div className="rep-presets">${tpls.map((t: RepTpl) => html`<button key=${t.id} type="button" className="rep-preset" aria-pressed=${tpl?.id === t.id} onClick=${() => onTpl(t)}><b>${t.name}</b><small>${t.built ? 'Φτιαγμένο εδώ' : 'Ανεβασμένο Excel'}</small></button>`)}</div></div>`}
+  </div>`;
+}
+
+function StepKind({ r, setKind, mode, tpl, build }: P) {
+  return html`<div className="stack">
+    <div className="rep-kinds">${REP_KINDS.map(k => html`<button key=${k.id} type="button" className="rep-preset" aria-pressed=${r.kind === k.id} onClick=${() => setKind(k.id)}><b>${k.label}</b><small>${k.help}</small></button>`)}</div>
+    <p className="note">${mode === 'upload' ? 'Οι στήλες του «' + (tpl?.name || '') + '» ξαναδιαβάζονται για ' + (r.kind === 'cadre' ? 'στελέχη' : 'στρατιώτες') + ' όταν αλλάζεις.' : build ? 'Οι στήλες που δεν υπάρχουν για ' + (r.kind === 'cadre' ? 'στελέχη' : 'στρατιώτες') + ' φεύγουν (π.χ. ΑΣΜ στα στελέχη, εκεί είναι ΑΜ).' : ''}</p>
+  </div>`;
+}
+
+const fieldOpts = (kind: RepKind) => FIELDS[kind].map(f => html`<option key=${f.k} value=${f.k}>${f.label}</option>`);
+function SignerFields({ signers, setSigners, both }: P) {
+  return html`<div className="field-row">
+    <div className="field"><label className="field__label" htmlFor="sg-s">Όνομα λοχία κάτω από την υπογραφή</label><input id="sg-s" className="ui-input" placeholder="π.χ. ΕΠΟΠ ΛΧΙΑΣ ΠΑΠΑΔΟΠΟΥΛΟΣ" value=${signers.sergeant} onChange=${(e: any) => setSigners({ ...signers, sergeant: e.target.value })}/></div>
+    ${both && html`<div className="field"><label className="field__label" htmlFor="sg-c">Όνομα Διοικητή</label><input id="sg-c" className="ui-input" placeholder="π.χ. ΙΛΧΟΣ (ΤΘ) ΓΕΩΡΓΙΟΥ" value=${signers.commander} onChange=${(e: any) => setSigners({ ...signers, commander: e.target.value })}/></div>`}
+    <p className="field__help" style=${{ width: '100%', margin: 0 }}>Κοινά για όλα τα έντυπα. Κενό: μένει χώρος να υπογράψει.</p></div>`;
+}
+
+// «Φτιάξ' το εδώ»: στήλες, τίτλος, κεφαλίδα, υπογραφές, σελίδα
+function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
+  const set = (x: Partial<BuildOpts>) => setO({ ...o, ...x });
+  const setCol = (i: number, x: Partial<BuildCol>) => set({ cols: o.cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)) });
+  const move = (i: number, by: number) => { const cs = [...o.cols]; const j = i + by; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; set({ cols: cs }); };
+  const add = () => { const k: RepKind = kind; const used = new Set(o.cols.map((c: BuildCol) => c.f)); const f = FIELDS[k].find(x => !used.has(x.k) && x.k !== 'text') || FIELDS[k][0]; set({ cols: [...o.cols, { f: f.k, h: f.head, w: 'auto' }] }); };
+  return html`<div className="stack rep-build">
+    <div className="field"><label className="field__label" htmlFor="b-title">Τίτλος</label><input id="b-title" className="ui-input" value=${o.title} onChange=${(e: any) => set({ title: e.target.value })}/></div>
+    <div><span className="field__label">Στήλες</span>
+      <ul className="rep-cols">${o.cols.map((c: BuildCol, i: number) => html`<li key=${i}>
+        <span className="rep-cols__l">${String.fromCharCode(65 + i)}</span>
+        <select className="ui-select" aria-label=${'Στοιχείο στήλης ' + (i + 1)} value=${c.f} onChange=${(e: any) => { const f = fieldOf(kind, e.target.value); setCol(i, { f: e.target.value, h: f?.head || c.h }); }}>${fieldOpts(kind)}</select>
+        <input className="ui-input" aria-label=${'Επικεφαλίδα στήλης ' + (i + 1)} placeholder="Επικεφαλίδα" value=${c.h} onChange=${(e: any) => setCol(i, { h: e.target.value })}/>
+        ${c.f === 'text' && html`<input className="ui-input" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(i, { text: e.target.value })}/>`}
+        <select className="ui-select rep-cols__w" aria-label=${'Πλάτος στήλης ' + (i + 1)} value=${c.w} onChange=${(e: any) => setCol(i, { w: e.target.value })}><option value="narrow">Στενή</option><option value="auto">Κανονική</option><option value="wide">Φαρδιά</option></select>
+        <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${i === 0} onClick=${() => move(i, -1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${i === o.cols.length - 1} onClick=${() => move(i, 1)}>${Icon.down}<//>
+          <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${o.cols.length < 2} onClick=${() => set({ cols: o.cols.filter((_: BuildCol, j: number) => j !== i) })}>${Icon.x}<//></span>
+      </li>`)}</ul>
+      <${Button} size="sm" variant="outline" disabled=${o.cols.length >= 16} onClick=${add}>+ Στήλη<//></div>
+    <div className="rep-opts">
+      <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
+      <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος και ημερομηνία πάνω δεξιά</label>
+    </div>
+    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${o.sig} onChange=${(sig: BuildOpts['sig']) => set({ sig })} items=${[{ value: 'none', label: 'Καμία' }, { value: 'sgt', label: 'Λοχίας' }, { value: 'both', label: 'Λοχίας και Διοικητής' }]}/></div>
+    ${o.sig !== 'none' && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${o.sig === 'both'}/>`}
+    <div className="rep-opts"><span className="field__label">Σελίδα</span><${Segmented} small=${true} value=${o.land ? 'l' : 'p'} onChange=${(v: string) => set({ land: v === 'l' })} items=${[{ value: 'p', label: 'Όρθια' }, { value: 'l', label: 'Οριζόντια' }]}/>
+      <span className="field__label">Γράμματα</span><${Segmented} small=${true} value=${String(o.sz)} onChange=${(v: string) => set({ sz: +v as BuildOpts['sz'] })} items=${[{ value: '10', label: '10' }, { value: '11', label: '11' }, { value: '12', label: '12' }]}/>
+      <span className="field__label">Επικεφαλίδες</span><${Segmented} small=${true} value=${o.fill} onChange=${(fill: BuildOpts['fill']) => set({ fill })} items=${[{ value: 'none', label: 'Λευκές' }, { value: 'gray', label: 'Γκρι' }, { value: 'olive', label: 'Λαδί' }]}/></div>
+    <p className="note">Θέλεις λογότυπο, άλλη γραμματοσειρά ή κάτι που δεν έχει εδώ; <${Button} variant="link" onClick=${onExcel}>Άνοιξέ το στο Excel<//> και άλλαξέ το εκεί. Ό,τι γράψεις σε {ΑΓΚΥΛΕΣ} (π.χ. {ΗΜΕΡΟΜΗΝΙΑ}, {ΣΥΝΟΛΟ}) γεμίζει μόνο του.</p>
+  </div>`;
+}
+
+// Ανεβασμένο πρότυπο: φύλλο, γραμμή επικεφαλίδων, ποια στήλη παίρνει τι, στοιχεία σε κελιά
+function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signers, setSigners, reread, sheetTo }: P) {
+  if (!insp) return html`<div className="empty">Διαβάζεται το πρότυπο…</div>`;
+  const colOf = (c: number) => r.cols.find((x: RepCol) => x.c === c);
+  const setCol = (h: TplInspect['headers'][number], f: string, text?: string) => {
+    const rest = r.cols.filter((x: RepCol) => x.c !== h.c);
+    upd({ cols: f ? [...rest, { c: h.c, f, h: h.text, ...(f === 'text' ? { text: text ?? colOf(h.c)?.text ?? '' } : {}) }].sort((a: RepCol, b: RepCol) => a.c - b.c) : rest });
+  };
+  const keys = new Set([...r.cells.map((c: P) => c.k), ...insp.tags.map((t: P) => t.k)]);
+  const free = CELLS.filter(c => !r.cells.some((x: P) => x.k === c.k));
+  return html`<div className="stack rep-map">
+    <div className="rep-opts">
+      ${insp.sheets.length > 1 && html`<label className="field__label" htmlFor="m-sheet">Φύλλο</label><select id="m-sheet" className="ui-select" value=${insp.sheet} onChange=${(e: any) => sheetTo(e.target.value)}>${insp.sheets.map((s: string) => html`<option key=${s} value=${s}>${s}</option>`)}</select>`}
+      <span>Επικεφαλίδες στη γραμμή <b>${insp.head}</b>${insp.guessed ? ' (βρέθηκε μόνη της)' : ''} · ${insp.prepared > 1 ? insp.prepared + ' έτοιμες γραμμές' : 'οι γραμμές μπαίνουν όσες χρειάζονται'}</span>
+      <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head'} onClick=${() => setPicking(picking === '#head' ? null : '#head')}>Άλλη γραμμή…<//>
+    </div>
+    <div><span className="field__label">Ποια στήλη παίρνει τι</span>
+      ${insp.headers.length ? html`<table className="rep-table rep-table--map"><tbody>${insp.headers.map((h: P) => { const c = colOf(h.c); return html`<tr key=${h.c}>
+        <td className="nw"><span className="rep-cols__l">${String.fromCharCode(64 + Math.min(h.c, 26))}${h.c > 26 ? '…' : ''}</span> ${h.text}</td>
+        <td><select className=${cx('ui-select', !c && 'is-off')} aria-label=${'Στοιχείο για «' + h.text + '»'} value=${c?.f || ''} onChange=${(e: any) => setCol(h, e.target.value)}><option value="">— δεν γεμίζει —</option>${fieldOpts(r.kind)}</select>
+          ${c?.f === 'text' && html`<input className="ui-input rep-map__txt" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(h, 'text', e.target.value)}/>`}</td></tr>`; })}</tbody></table>`
+        : html`<${Alert} tone="warn">Δεν βρέθηκαν επικεφαλίδες. Πάτα «Άλλη γραμμή…» και κάνε κλικ στη γραμμή με τις επικεφαλίδες του πίνακα.<//>`}</div>
+    <div><span className="field__label">Στοιχεία σε κελιά (κεφαλίδα, ημερομηνία, υπογραφές…)</span>
+      <ul className="rep-cells">
+        ${insp.tags.map((t: P) => html`<li key=${'t' + t.ref}><b>${t.ref}</b> ${cellOf(t.k)?.label}<small className="muted"> · από {${cellOf(t.k)?.tag}} στο Excel</small></li>`)}
+        ${r.cells.map((c: P) => html`<li key=${c.ref}><b>${c.ref}</b> ${cellOf(c.k)?.label}<button type="button" className="rep-picks__x" aria-label="Βγάλε" onClick=${() => upd({ cells: r.cells.filter((x: P) => x !== c) })}>${Icon.x}</button></li>`)}
+        ${!insp.tags.length && !r.cells.length && html`<li className="muted">Κανένα ακόμα.</li>`}
+      </ul>
+      <select className="ui-select" aria-label="Πρόσθεσε στοιχείο σε κελί" value="" onChange=${(e: any) => e.target.value && setPicking(e.target.value)}><option value="">+ Στοιχείο σε κελί (μετά κλικ στο κελί)…</option>${free.map(c => html`<option key=${c.k} value=${c.k}>${c.label}</option>`)}</select></div>
+    ${keys.has('title') && html`<div className="field"><label className="field__label" htmlFor="m-title">Τίτλος</label><input id="m-title" className="ui-input" placeholder=${r.name} value=${r.title || ''} onChange=${(e: any) => upd({ title: e.target.value })}/></div>`}
+    ${(keys.has('sgtName') || keys.has('cmdName')) && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${keys.has('cmdName')}/>`}
+    <div className="rep-opts"><span className="field__label">Προεπισκόπηση</span><${Segmented} small=${true} value=${picking ? 'tpl' : view} onChange=${setView} items=${[{ value: 'filled', label: 'Με στοιχεία' }, { value: 'tpl', label: 'Το πρότυπο' }]}/>
+      <${Button} size="sm" variant="ghost" onClick=${() => tpl && window.api.repOpenTpl(tpl.file)}>Άνοιξέ το στο Excel<//><${Button} size="sm" variant="ghost" onClick=${reread} data-tip="Αφού το άλλαξες και το αποθήκευσες στο Excel">Ξαναδιάβασε το πρότυπο<//></div>
+    <p className="note">Μπορείς και να γράψεις μέσα στο Excel ετικέτες σε αγκύλες, π.χ. {ΚΕΦΑΛΙΔΑ}, {ΗΜΕΡΟΜΗΝΙΑ}, {ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}, {ΣΥΝΟΛΟ}, {ΛΟΧΙΑΣ}, {ΔΙΟΙΚΗΤΗΣ}: γεμίζουν μόνες τους.</p>
+  </div>`;
+}
+
+// Ποιοι μπαίνουν: από πού, φίλτρα, πόσοι (όλοι, οι πρώτοι, τυχαίοι), σειρά, μέρα
+function StepPick({ r, upd, p }: P) {
+  const { state } = useStore();
+  const pk: RepPick = r.pick; const set = (x: Partial<RepPick>) => upd({ pick: { ...pk, ...x } });
+  const people = r.kind === 'people';
+  const views = state.settings.views || [];
+  const fromVal = pk.view ? 'v:' + pk.view : pk.from;
+  const setFrom = (v: string) => (v.startsWith('v:') ? set({ from: 'all', view: v.slice(2) }) : set({ from: v as RepPick['from'], view: undefined }));
+  // τυχαίοι: από προεπιλογή μόνο όσοι είναι παρόντες χωρίς υπηρεσία σήμερα και αύριο (μπορείς να το αλλάξεις)
+  const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && pk.from === 'all' && !pk.view ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms, ...(people ? {} : { noDuty: false }) } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
+  const toggle = <T,>(list: T[] | undefined, x: T) => { const s = new Set(list || []); if (s.has(x)) s.delete(x); else s.add(x); return [...s]; };
+  return html`<div className="rep-pick">
+    <div className="stack">
+      <div className="field-row">
+        <div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
+          <option value="all">${people ? 'Όλοι σε δύναμη' : 'Όλα τα στελέχη'}</option><option value="present">${people ? 'Παρόντες τη μέρα' : 'Παρόντα τη μέρα (χωρίς κατάσταση)'}</option>
+          ${people && ROSTER_FILTERS.filter(([k]) => k !== 'all').map(([k, l]) => html`<option key=${k} value=${k}>Φίλτρο Δυναμολογίου: ${l}</option>`)}
+          ${people && views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>
+        <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
+      </div>
+      ${people && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.noDuty} onChange=${(e: any) => set({ noDuty: e.target.checked })}/>Χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη</label>`}
+      ${people && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
+      ${people && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
+      <div className="rep-opts"><span className="field__label">Πόσοι</span><${Segmented} small=${true} value=${pk.mode} onChange=${setMode} items=${[{ value: 'all', label: 'Όλοι' }, { value: 'first', label: 'Οι πρώτοι Ν' }, { value: 'random', label: 'Ν τυχαίοι' }]}/>
+        ${pk.mode !== 'all' && html`<input type="number" min="1" className="ui-input rep-n" aria-label="Πόσοι" value=${pk.n || 10} onChange=${(e: any) => set({ n: Math.max(1, +e.target.value || 1) })}/>`}
+        ${pk.mode === 'random' && people && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.even} onChange=${(e: any) => set({ even: e.target.checked })}/>Ισομερώς από κάθε θάλαμο</label>`}</div>
+      ${pk.mode === 'random' && html`<p className="note">Κάθε φορά που βγαίνει, η κλήρωση γίνεται από την αρχή και σου δείχνει ποιοι βγήκαν πριν φτιαχτεί το Excel. Με ✕ αλλάζεις έναν.</p>`}
+      <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${SORTS.filter(s => people || s.value !== 'room')}/></div>
+    </div>
+    <${PickList} p=${p} kind=${r.kind}/>
+  </div>`;
+}
+
+function StepOut({ r, upd, mode, insp, n }: P) {
+  return html`<div className="stack">
+    <div className="field"><label className="field__label" htmlFor="o-name">Όνομα εντύπου</label><input id="o-name" className="ui-input" data-autofocus="" placeholder="π.χ. Αγγαρεία μαγειρείων" value=${r.name} onChange=${(e: any) => upd({ name: e.target.value })}/>
+      <span className="field__help">Έτσι το βρίσκεις στη λίστα και στην αναζήτηση (Ctrl+K). Το αρχείο λέγεται «${(r.name || 'ΕΝΤΥΠΟ').toUpperCase()} ${'ηη-μμ-εεεε'}.xlsx».</span></div>
+    <div className="field"><span className="field__label">Όταν πατάς «Βγάλε»</span><${Segmented} value=${r.out} onChange=${(out: Report['out']) => upd({ out })} items=${[{ value: 'file', label: 'Νέο αρχείο Excel' }, { value: 'print', label: 'Μόνο εκτύπωση' }]}/>
+      <span className="field__help">${r.out === 'print' ? 'Ανοίγει η προεπισκόπηση εκτύπωσης, χωρίς Excel. Το αρχείο γράφεται κι αυτό στον φάκελο των Excel.' : 'Γράφεται στον φάκελο των Excel και ανοίγει.'}</span></div>
+    ${mode === 'upload' && insp && insp.prepared > 1 && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.trim} onChange=${(e: any) => upd({ trim: e.target.checked })}/>Σβήσε τις κενές γραμμές του προτύπου που περισσεύουν (έχει ${insp.prepared})</label>`}
+    <${Alert} tone="info">Τώρα: ${n} ${r.kind === 'cadre' ? 'στελέχη' : 'άτομα'}, για ${r.day === 'tomorrow' ? 'αύριο' : r.day === 'ask' ? 'τη μέρα που θα διαλέγεις' : 'σήμερα'}. Όλα όσα γράφει στο Excel μπαίνουν με κεφαλαία.<//>
+  </div>`;
+}

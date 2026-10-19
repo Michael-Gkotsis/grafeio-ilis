@@ -1,0 +1,239 @@
+// Έντυπα (Michael, 19/10): δικά σου πρότυπα Excel (ανεβασμένα ή φτιαγμένα στην εφαρμογή) που γεμίζουν με στοιχεία της
+// εφαρμογής. Πρότυπο = το αρχείο (εμφάνιση)· Έντυπο = πρότυπο + τι αφορά + ποια στήλη παίρνει τι + ποιοι μπαίνουν.
+// Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
+import { addDays, dmy, parseD, MON_SHORT, type ISODate } from './dates';
+import { collator, norm, normGreek } from './text';
+import { fullName, unitOf, roomCfg, type AppState, type Cadre, type Person } from './domain';
+import { activePeople, personMap, postBy, statusesOn, strengthOf } from './rules';
+import { listOf, statusLbl } from './ranks';
+import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
+import { currentEsso, essoName } from './esso';
+import { rosterMatch, type RosterFilter } from './rosterLists';
+
+export type RepKind = 'people' | 'cadre';
+export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
+  { id: 'people', label: 'Στρατιώτες', help: 'Μία γραμμή για κάθε στρατιώτη' },
+  { id: 'cadre', label: 'Στελέχη', help: 'Μία γραμμή για κάθε στέλεχος' }
+];
+
+// Στοιχεία (στήλες) ανά είδος: [κλειδί, όνομα στη λίστα, επικεφαλίδα όταν το φτιάχνεις εδώ, πλάτος σε χαρακτήρες, στοίχιση]
+export type Align = 'left' | 'center';
+export interface FieldDef { k: string; label: string; head: string; w: number; al: Align }
+const F = (k: string, label: string, head: string, w: number, al: Align = 'center'): FieldDef => ({ k, label, head, w, al });
+const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός', 'ΒΑΘΜΟΣ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
+const TAIL = [F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18), F('text', 'Σταθερό κείμενο', '', 12)];
+export const FIELDS: Record<RepKind, FieldDef[]> = {
+  people: [...COMMON,
+    F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
+    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
+    F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
+    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
+    F('status', 'Κατάσταση την ημέρα (ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
+    ...TAIL],
+  cadre: [...COMMON,
+    F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
+    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('am', 'ΑΜ', 'ΑΜ', 12), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13),
+    F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18),
+    ...TAIL]
+};
+export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find(x => x.k === k);
+
+// Στοιχεία εντύπου: ένα κελί (κεφαλίδα, ημερομηνία, υπογραφές…), είτε με κλικ στο κελί είτε με {ΕΤΙΚΕΤΑ} μέσα στο Excel
+export interface CellDef { k: string; label: string; tag: string }
+export const CELLS: CellDef[] = [
+  { k: 'head', label: 'Κεφαλίδα εγγράφων (3 γραμμές, Ρυθμίσεις)', tag: 'ΚΕΦΑΛΙΔΑ' },
+  { k: 'head1', label: 'Κεφαλίδα, 1η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 1' }, { k: 'head2', label: 'Κεφαλίδα, 2η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 2' }, { k: 'head3', label: 'Κεφαλίδα, 3η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 3' },
+  { k: 'unitName', label: 'Όνομα μονάδας (π.χ. 4ης ΙΛΗΣ)', tag: 'ΜΟΝΑΔΑ' },
+  { k: 'placeDate', label: 'Τόπος και ημερομηνία (ΑΥΛΩΝΑΣ, 19 ΟΚΤ 26)', tag: 'ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ' },
+  { k: 'date', label: 'Ημερομηνία (19/10/2026)', tag: 'ΗΜΕΡΟΜΗΝΙΑ' },
+  { k: 'title', label: 'Τίτλος του εντύπου', tag: 'ΤΙΤΛΟΣ' },
+  { k: 'count', label: 'Σύνολο ατόμων', tag: 'ΣΥΝΟΛΟ' },
+  { k: 'sgtName', label: 'Υπογραφή λοχία (όνομα, Ρυθμίσεις)', tag: 'ΛΟΧΙΑΣ' },
+  { k: 'cmdName', label: 'Υπογραφή Διοικητή (όνομα, Ρυθμίσεις)', tag: 'ΔΙΟΙΚΗΤΗΣ' },
+  { k: 'esso', label: 'ΕΣΣΟ (Γ΄ ΕΣΣΟ 2026)', tag: 'ΕΣΣΟ' },
+  { k: 'officer', label: 'Αξιωματικός υπηρεσίας', tag: 'ΑΞΙΩΜΑΤΙΚΟΣ ΥΠΗΡΕΣΙΑΣ' }
+];
+export const cellOf = (k: string) => CELLS.find(x => x.k === k);
+const TAG_KEY = new Map(CELLS.map(c => [normGreek(c.tag), c.k]));
+export const TAG_RE = /\{([^{}]{1,40})\}/g;
+
+export interface RepCol { c: number; f: string; text?: string; h?: string }   // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
+export interface RepCell { ref: string; k: string }
+export interface RepPick {
+  from: 'all' | 'present' | RosterFilter;   // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
+  view?: string;                              // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
+  noDuty?: boolean;                           // χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη
+  si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
+  mode: 'all' | 'first' | 'random'; n?: number;
+  even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
+}
+export type RepSort = 'name' | 'room' | 'rank' | 'pick';
+export interface Report {
+  id: string; name: string; tpl: string; kind: RepKind;
+  sheet: string; head: number;                // φύλλο και γραμμή επικεφαλίδων (από 1)
+  cols: RepCol[]; cells: RepCell[];
+  title?: string;                             // για το στοιχείο «Τίτλος»
+  pick: RepPick; sort: RepSort;
+  day: 'today' | 'tomorrow' | 'ask';
+  out: 'file' | 'print';
+  trim?: boolean;                             // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
+}
+// Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
+export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
+export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string }
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive' }
+export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
+
+// Έτοιμα για αρχή (Φτιάξ' το εδώ)
+const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
+export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts }[] = [
+  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'both', land: false, sz: 11, fill: 'gray' } },
+  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'sgt', land: false, sz: 11, fill: 'gray' } },
+  { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 11, fill: 'gray' } }
+];
+export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'both', land: false, sz: 11, fill: 'gray' });
+
+// ------------------------------------------------------------------ μαντεψιά από τις επικεφαλίδες του Excel
+const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');
+const GUESS: [string, RegExp][] = [
+  ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/], ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
+  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
+  ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
+  ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
+  ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
+  ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/], ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/], ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/], ['rack', /ΟΠΛΟΒΑΣΤΟΣ/], ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
+  ['status', /^ΚΑΤΑΣΤΑΣΗ$/], ['duty', /^ΥΠΗΡΕΣΙΑ$/], ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/]
+];
+// Ποιο στοιχείο ταιριάζει σε μια επικεφαλίδα (ή σε {ΕΤΙΚΕΤΑ} μέσα στη γραμμή)· null = δεν το ξέρω
+export function guessField(kind: RepKind, head: unknown): string | null {
+  const t = k(String(head ?? '').replace(/[{}]/g, '')); if (!t) return null;
+  const ok = new Set(FIELDS[kind].map(f => f.k));
+  for (const [f, re] of GUESS) if (ok.has(f) && re.test(t)) return f;
+  for (const f of FIELDS[kind]) if (f.k !== 'text' && f.k !== 'blank' && (k(f.head) === t || k(f.label) === t)) return f.k;
+  return null;
+}
+// {ΗΜΕΡΟΜΗΝΙΑ} → 'date'
+export const tagKey = (tag: string) => TAG_KEY.get(normGreek(tag).replace(/\s+/g, ' ').trim()) || null;
+
+// ------------------------------------------------------------------ τιμές
+const shortDate = (d: ISODate) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + String(x.getFullYear()).slice(2); };
+export const repDate = (r: Pick<Report, 'day'>, today: ISODate, asked?: ISODate) => (r.day === 'tomorrow' ? addDays(today, 1) : r.day === 'ask' && asked ? asked : today);
+
+export type Row = Person | Cadre;
+export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string): string | number | null {
+  if (f === 'aa') return i + 1;
+  if (f === 'blank') return null;
+  if (f === 'text') return text || null;
+  if (kind === 'cadre') {
+    const c = x as Cadre; const nm = [c.last, c.first].filter(Boolean).join(' ');
+    switch (f) {
+      case 'rank': return c.rank; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [c.rank, c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
+      case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
+      case 'status': return cadreStatusOn(s, c.id, d)?.label || '';
+    }
+    return null;
+  }
+  const p = x as Person;
+  switch (f) {
+    case 'rank': return p.rank; case 'spec': return p.spec; case 'name': return fullName(p);
+    case 'who': return [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
+    case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
+    case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
+    case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
+    case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
+    case 'status': return statusesOn(s.statuses, p.id, d).map(x => statusLbl(x, s.settings.lists)).join(', ');
+    case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
+    case 'notes': return p.notes;
+  }
+  return null;
+}
+export function cellValue(s: AppState, key: string, d: ISODate, r: Pick<Report, 'title' | 'name'>, n: number): string | number | null {
+  const st = s.settings; const head = st.unit.filter(Boolean);
+  switch (key) {
+    case 'head': return head.join('\n');
+    case 'head1': return st.unit[0] || ''; case 'head2': return st.unit[1] || ''; case 'head3': return st.unit[2] || '';
+    case 'unitName': return st.unitName; case 'place': return st.place;
+    case 'placeDate': return (st.place ? st.place + ', ' : '') + shortDate(d);
+    case 'date': return dmy(d); case 'title': return r.title || r.name; case 'count': return n;
+    case 'sgtName': return st.signers?.sergeant || ''; case 'cmdName': return st.signers?.commander || '';
+    case 'esso': { const e = currentEsso(s); return e ? essoName(e) : ''; }
+    case 'officer': return dutyOfficers(s, d);
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ ποιοι μπαίνουν
+export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode === 'random' ? { from: 'present', noDuty: true, mode, n: 10, even: false } : { from: 'all', mode });
+// Όσοι περνούν τα φίλτρα (πριν από «πόσοι»), με τη σειρά του Δυναμολογίου (αλφαβητικά)
+export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISODate): Row[] {
+  const pk = r.pick;
+  if (r.kind === 'cadre') {
+    const list = orderedCadre(s.cadreList || []).filter(c => c.active);
+    return pk.from === 'present' ? list.filter(c => !cadreStatusOn(s, c.id, d)) : list;
+  }
+  const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
+  let list: Person[] = pk.from === 'all' || pk.from === 'present' ? activePeople(s) : s.people.filter(p => rosterMatch(pk.from as RosterFilter, p, statusesOn(s.statuses, p.id, d)));
+  if (pk.from === 'present') { const pres = new Set(strengthOf(s, d).lists.present.map(p => p.id)); list = list.filter(p => pres.has(p.id)); }
+  if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.post, p.role].join(' ')).includes(normGreek(view.q))));
+  if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
+  if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }
+  if (pk.noDuty) {
+    const busy = new Set<number>([...Object.values(s.guards[d] || {}), ...Object.values(s.guards[addDays(d, 1)] || {})].filter((x): x is number => typeof x === 'number'));
+    list = list.filter(p => !busy.has(p.id));
+  }
+  return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
+}
+export const rowId = (x: Row) => x.id;
+
+// Τυχαίοι n από τη λίστα. even: ισομερώς από κάθε θάλαμο (όσοι λείπουν από έναν θάλαμο συμπληρώνονται από τους άλλους).
+// rnd: για τα τεστ (Math.random)
+function shuffle<X>(a: X[], rnd: () => number): X[] { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; }
+export function pickRandom<T extends Row>(list: T[], n: number, even = false, rnd: () => number = Math.random): T[] {
+  n = Math.max(0, Math.min(n, list.length));
+  if (!even) return shuffle(list, rnd).slice(0, n);
+  const groups = new Map<string, T[]>();
+  for (const x of list) { const g = String((x as Person).room ?? '—'); const l = groups.get(g); if (l) l.push(x); else groups.set(g, [x]); }
+  const gs = shuffle([...groups.values()].map(g => shuffle(g, rnd)), rnd);
+  const out: T[] = []; const at = gs.map(() => 0);
+  // γύρω γύρω: ένας από κάθε θάλαμο με τη σειρά, μέχρι να φτάσουν οι n (οι θάλαμοι που τελείωσαν παραλείπονται)
+  while (out.length < n) gs.forEach((g, i) => { if (out.length < n && at[i] < g.length) out.push(g[at[i]++]); });
+  return out;
+}
+// Ένας άλλος τυχαίος στη θέση του i (από όσους δεν είναι ήδη μέσα)· null: δεν υπάρχει άλλος
+export function replaceOne<T extends Row>(picked: T[], i: number, pool: T[], rnd: () => number = Math.random): T[] | null {
+  const ids = new Set(picked.map(x => x.id)); const rest = pool.filter(x => !ids.has(x.id));
+  if (!rest.length) return null;
+  const nx = [...picked]; nx[i] = rest[Math.floor(rnd() * rest.length)]; return nx;
+}
+// Σειρά στο έντυπο
+export function sortRows<T extends Row>(rows: T[], sort: RepSort, s: AppState, kind: RepKind): T[] {
+  if (sort === 'pick') return rows;
+  if (kind === 'cadre') { if (sort !== 'rank') return [...rows].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first)); const ord = orderedCadre(s.cadreList || []).map(c => c.id); return [...rows].sort((a, b) => ord.indexOf(a.id as string) - ord.indexOf(b.id as string)); }
+  const byName = (a: Row, b: Row) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
+  if (sort === 'room') return [...rows].sort((a, b) => ((a as Person).room ?? 99) - ((b as Person).room ?? 99) || byName(a, b));
+  if (sort === 'rank') { const rk = listOf(s.settings.lists, 'soldierRanks'); const ix = (r: string) => { const i = rk.indexOf(r); return i < 0 ? -1 : i; }; return [...rows].sort((a, b) => ix(b.rank) - ix(a.rank) || byName(a, b)); }
+  return [...rows].sort(byName);
+}
+// Τα άτομα του εντύπου, χωρίς τυχαία επιλογή (αυτή γίνεται στην οθόνη, για να βγει ό,τι είδες)
+export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'>, d: ISODate): Row[] {
+  const c = candidates(s, r, d);
+  const n = r.pick.mode === 'all' ? c.length : Math.max(0, r.pick.n || 0);
+  return sortRows(r.pick.mode === 'first' ? c.slice(0, n) : c, r.sort, s, r.kind);
+}
+export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[]): Row[] => {
+  if (kind === 'cadre') { const m = new Map((s.cadreList || []).map(c => [c.id, c])); return ids.map(id => m.get(id as string)).filter((x): x is Cadre => !!x); }
+  const pm = personMap(s.people); return ids.map(id => pm.get(id as number)).filter((x): x is Person => !!x);
+};
+
+// Σύνοψη για τη λίστα των εντύπων: «57 τυχαίοι από τους παρόντες»
+export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'settings'>): string {
+  const pk = r.pick; const who = r.kind === 'cadre' ? 'στελέχη' : 'στρατιώτες';
+  const from = pk.from === 'all' ? (r.kind === 'cadre' ? 'όλα τα στελέχη' : 'όλους') : pk.from === 'present' ? 'τους παρόντες' : 'τη λίστα «' + (FROM_NAME[pk.from] || pk.from) + '»';
+  const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
+  const extra = [view && 'λίστα «' + view + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.noDuty && 'χωρίς υπηρεσία'].filter(Boolean).join(', ');
+  const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (pk.from === 'all' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
+  return head + (extra ? ' (' + extra + ')' : '');
+}
+const FROM_NAME: Record<string, string> = { leave: 'Άδειες', pun: 'Τιμωρημένοι', post: 'Πόστα', inactive: 'Εκτός δύναμης', dnright: 'Με δικαίωμα ΔΝ' };
+export const roomList = (s: Pick<AppState, 'settings'>) => Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1);

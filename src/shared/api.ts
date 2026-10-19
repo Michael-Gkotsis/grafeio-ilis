@@ -5,6 +5,7 @@ import type { ISODate } from './dates';
 import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';
+import type { BuildOpts, RepCell, RepCol, RepKind, Report, RepTpl } from './reports';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
@@ -51,6 +52,12 @@ export interface EssoInfo {
 export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string; unit?: Pick<Settings, 'unitKind' | 'unit' | 'unitName'> }
 export type EssoResult = { ok: true; archive: string; dir: string; files: string[]; warnings: string[] } | Fail;
 
+// Έντυπα: πρότυπο όπως το βρήκε η εφαρμογή (φύλλα, γραμμή επικεφαλίδων, στήλες, {ΕΤΙΚΕΤΕΣ})
+export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; prepared: number; guessed: boolean }
+export interface RepPreview { html: string; css: string; pages: number }
+export interface TplFile { exists: boolean; mtime: number }
+// Πρόχειρο εντύπου για προεπισκόπηση: από αρχείο προτύπου, ή από τις επιλογές του «Φτιάξ' το εδώ» (χωρίς αρχείο ακόμα)
+export type RepSource = { file: string } | { build: BuildOpts };
 export interface Api {
   boot(): Promise<Boot>;
   run(cmd: Command): Promise<CmdResult>;
@@ -104,5 +111,14 @@ export interface Api {
   essoPick(): Promise<EssoArchiveInfo | Fail | null>;            // διάλεξε φάκελο αρχείου ΕΣΣΟ για επαναφορά
   essoRestore(dir: string): Promise<{ ok: true } | Fail>;        // επαναφορά και επανεκκίνηση
   essoOpen(dir: string): Promise<void>;
+  // Έντυπα (file: όνομα αρχείου στον φάκελο «Πρότυπα εντύπων»)
+  repUpload(kind: RepKind): Promise<{ ok: true; tpl: RepTpl; insp: TplInspect } | Fail | null>;
+  repInspect(file: string, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect | Fail>;
+  repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<{ ok: true; file: string; mtime: number; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] } | Fail>;
+  repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
+  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean): Promise<ExportResult>;
+  repOpenTpl(file: string): Promise<void>;
+  repFiles(files: string[]): Promise<Record<string, TplFile>>;
+  repLast(): Promise<Record<string, string>>;   // πότε βγήκε τελευταία φορά κάθε έντυπο (id → «2026-10-19 09:12»)
 }
 declare global { interface Window { api: Api } }

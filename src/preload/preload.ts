@@ -52,6 +52,14 @@ const api: Api = {
   essoStart: o => ipcRenderer.invoke('esso:start', o),
   essoPick: () => ipcRenderer.invoke('esso:pick'),
   essoRestore: dir => ipcRenderer.invoke('esso:restore', dir),
-  essoOpen: dir => ipcRenderer.invoke('esso:open', dir)
+  essoOpen: dir => ipcRenderer.invoke('esso:open', dir),
+  repUpload: kind => ipcRenderer.invoke('rep:upload', kind),
+  repInspect: (file, kind, sheet, head) => ipcRenderer.invoke('rep:inspect', file, kind, sheet, head),
+  repBuild: (o, kind, file) => ipcRenderer.invoke('rep:build', o, kind, file),
+  repPreview: (src, r, ids, date, raw) => ipcRenderer.invoke('rep:preview', src, r, ids, date, !!raw),
+  repRun: (r, file, ids, date, print) => ipcRenderer.invoke('rep:run', r, file, ids, date, !!print),
+  repOpenTpl: file => ipcRenderer.invoke('rep:openTpl', file),
+  repFiles: files => ipcRenderer.invoke('rep:files', files),
+  repLast: () => ipcRenderer.invoke('rep:last')
 };
 contextBridge.exposeInMainWorld('api', api);

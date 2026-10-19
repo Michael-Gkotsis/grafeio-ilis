@@ -4,6 +4,7 @@ import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
 import type { Esso } from './esso';
 import type { UnitKind } from './unit';
+import type { Report, RepTpl } from './reports';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -246,6 +247,8 @@ export interface Settings {
   hkai?: HkaiSettings;                   // ΗΚΑΙ: ενότητες που δεν χρησιμοποιεί η Ίλη, οχήματα, «Προβλέπονται»
   rooms?: RoomSettings;                  // πόσοι θάλαμοι, πόσοι ανά ουλαμό και ποιοι ανήκουν σε κάθε ουλαμό (κενό = 8 και 4)
   brand?: BrandSettings;                 // τίτλος και λογότυπο της εφαρμογής (κενό = «Γραφείο Λοχία»)
+  reportTpls?: RepTpl[];                 // Έντυπα: τα πρότυπά σου (αρχεία στον φάκελο «Πρότυπα εντύπων»), shared/reports.ts
+  reports?: Report[];                    // Έντυπα: τα έτοιμα έντυπα (πρότυπο, στήλες, ποιοι μπαίνουν, πού βγαίνει)
   essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.
