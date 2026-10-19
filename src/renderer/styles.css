@@ -767,7 +767,6 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 
 /* Οπλισμός: αριθμός όπλου μέσα στη γραμμή */
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
-.weapons__body{max-height:calc(100vh - 300px);overflow-y:auto}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 6px;width:100%}
@@ -777,7 +776,6 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
 /* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
 .ptable--whod .ptable__head > *,.ptable--whod .ptable__row > *{padding-left:6px;padding-right:6px}
-.whod__body{max-height:calc(100vh - 330px);overflow-y:auto}
 .whod__head{align-items:stretch}
 .whod__head > span:first-child{display:flex;align-items:flex-end}
 .ptable--whod .ptable__head > .whod__colhd{padding-left:2px;padding-right:2px}
@@ -794,8 +792,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 /* Μεγάλοι πίνακες χωρίς VirtualList (Οπλισμός, Ποιος κάνει τι): οι γραμμές εκτός οθόνης δεν στήνονται (στυλ, layout,
    ζωγραφική) μέχρι να κυλήσεις εκεί. Ίδιο DOM, ίδια συμπεριφορά (focus, Enter στην επόμενη γραμμή, επικόλληση)· το ύψος
    είναι σταθερό (40px, 46px), οπότε η μπάρα κύλισης δεν πηδά. Μέτρηση: bench/ui, review απόδοσης 18/10. */
-.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:auto;contain-intrinsic-size:auto 40px}
-@media print{.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:visible}}
+
 .whod__name{display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.2}
 .whod__name .linkish{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
 .whod__name small{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

@@ -4,8 +4,8 @@
 // Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6), «Θέση» του όπλου (ελεύθερο κείμενο, Michael 18/10) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
 // Έξοδος/είσοδος όπλων με λόγο και ώρα (Michael, 18/10): κουμπί στη γραμμή ή τσέκαρε πολλούς· ημερολόγιο στις «Κινήσεις» (weaponMoves.ts).
 import { HK, UNIT } from '../../shared/unit';
-import { Fragment, useCallback, useDeferredValue, useMemo, useState, useEffect, memo } from 'react';
-import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useToast } from '../ui';
+import { Fragment, useCallback, useDeferredValue, useMemo, useRef, useState, useEffect, memo } from 'react';
+import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
 import { MovesView, WeaponInDialog, WeaponOutDialog, WeaponState } from './weaponMoves';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, DateBar } from '../common';
@@ -22,7 +22,18 @@ type P = any;
 // Χωρά σε 1366 χωρίς οριζόντια κύλιση (1190px): χωρίς πατρώνυμο (είναι στην καρτέλα και στο Excel)
 const GRID = '28px 34px 52px minmax(150px,1.3fr) minmax(84px,1fr) 72px 52px 64px 84px 102px minmax(196px,1.4fr) 80px 80px minmax(90px,.8fr)';
 const GRID_MIN = 1190;
-const focusRow = (f: string, i: number) => { const el = document.querySelector('input[data-wf="' + f + '"][data-wrow="' + i + '"]') as HTMLInputElement | null; if (el) { el.focus(); el.select(); el.scrollIntoView({ block: 'nearest' }); } return !!el; };
+const ROW_H = 40;
+// Πάει στο κουτί της γραμμής i. Ο πίνακας στήνει μόνο τις γραμμές που φαίνονται: αν δεν είναι στη σελίδα, κυλά ως εκεί πρώτα.
+const focusRow = (f: string, i: number) => {
+  const find = () => document.querySelector('input[data-wf="' + f + '"][data-wrow="' + i + '"]') as HTMLInputElement | null;
+  const go = (el: HTMLInputElement) => { el.focus(); el.select(); el.scrollIntoView({ block: 'nearest' }); };
+  const el = find(); if (el) { go(el); return true; }
+  const box = document.querySelector('.weapons__body') as HTMLElement | null;
+  if (!box || i < 0 || i >= Number(box.dataset.rows || 0)) return false;
+  box.scrollTop = Math.max(0, i * ROW_H - box.clientHeight / 2);
+  requestAnimationFrame(() => requestAnimationFrame(() => { const x = find(); if (x) go(x); }));
+  return true;
+};
 type WF = 'weapon' | 'rack' | 'wpos';
 const NORM: Record<WF, (v: unknown) => string> = { weapon: normWeapon, rack: normRack, wpos: normPos };
 const LBL: Record<WF, string> = { weapon: 'Αριθμός όπλου', rack: 'Θέση οπλοβαστού', wpos: 'Θέση όπλου' };
@@ -33,10 +44,13 @@ const WeaponInput = memo(function WeaponInput({ p, i, f = 'weapon', reset, onCom
   const cur = p[f] || '';
   const [v, setV] = useState(cur);
   useEffect(() => setV(cur), [cur, reset]);
+  // η γραμμή φεύγει από τη σελίδα (κύλιση, φίλτρο) ενώ γράφεις: η τιμή γράφεται, δεν χάνεται
+  const live = useRef({ v, cur, p, f, onCommit, sent: cur }); live.current = { ...live.current, v, cur, p, f, onCommit };
+  useEffect(() => () => { const x = live.current; const n = NORM[x.f as WF](x.v); if (n !== x.cur && n !== NORM[x.f as WF](x.sent)) x.onCommit(x.p, x.v, x.f); }, []);
   const move = (e: any, to: number) => { e.preventDefault(); if (!focusRow(f, to)) e.target.blur(); };
   return html`<input className="ui-input weapon-input" data-wf=${f} data-wrow=${i} value=${v} placeholder="—" aria-label=${LBL[f as WF] + ' ' + fullName(p)} spellCheck="false" autoComplete="off"
     onChange=${(e: any) => setV(e.target.value)}
-    onBlur=${() => { if (NORM[f as WF](v) !== cur) onCommit(p, v, f); }}
+    onBlur=${() => { if (NORM[f as WF](v) !== cur) { live.current.sent = v; onCommit(p, v, f); } }}
     onKeyDown=${(e: any) => {
       if (e.key === 'Enter' || e.key === 'ArrowDown') move(e, i + 1);
       else if (e.key === 'ArrowUp') move(e, i - 1);
@@ -75,6 +89,22 @@ const matchText = (p: Person, q: string) => {
   return n.split(/\s+/).every(t => key.includes(t)) || translit(p.last + ' ' + p.first).includes(norm(q.trim())) || (!!wk && weaponKey(p.weapon).includes(wk));
 };
 
+// Μία γραμμή του πίνακα. Ξαναζωγραφίζεται μόνο όταν αλλάξει κάτι δικό της ή ο οπλισμός (info), όχι σε κάθε πλήκτρο της αναζήτησης.
+const WRow = memo(function WRow({ p, i, style, selected, info, types, lists, reset, onToggle, onOpen, save, commit, paste }: P) {
+  return html`<div className=${cx('ptable__row', i % 2 === 1 && 'is-odd', info.moves.has(p.id) && 'is-wout')} style=${{ ...style, gridTemplateColumns: GRID, cursor: 'default' }} role="row">
+        <span><input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + fullName(p)} checked=${selected} onChange=${() => onToggle(p.id)}/></span>
+        <span className="num muted">${i + 1}</span><span>${p.rank}</span>
+        <span><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b></button></span><span>${p.first}</span>
+        <span className="num">${p.asm}</span><span>${p.room ?? ''}</span><span>${p.si ? siOf(p, lists).text : ''}</span>
+        <span className="weapon-cell"><${TypeSelect} p=${p} types=${types} onPick=${(q: Person, t: string) => save([{ pid: q.id, wtype: t }])}/></span>
+        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
+        <span className="weapon-cell"><${WeaponState} p=${p} info=${info}/></span>
+        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="rack" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
+        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="wpos" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
+        <span className="badges weapon-notes">${notes(p, info, lists)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: shortName(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
+      </div>`;
+});
+
 export function WeaponsScreen() {
   const { state, today, tomorrow, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast();
   const date: string = nav.params.wdate || today;
@@ -85,6 +115,7 @@ export function WeaponsScreen() {
   const room: number | null = nav.params.room ?? null;
   const sort: { k: string; dir: number } = nav.params.wsort || { k: 'room', dir: 1 };
   const [reset, setReset] = useState(0);
+  const height = useViewportHeight(360);
   const [ask, setAsk] = useState<{ p: Person; w: string; others: Person[] } | null>(null);
   const [xl, setXl] = useState(false);
   const lists = state.settings.lists;
@@ -194,18 +225,7 @@ export function WeaponsScreen() {
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || unit !== 'all' || room != null ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : empty}</div>` :
     html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: GRID_MIN + 'px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται (π.χ. ένας ουλαμός για ΕΚΠ)" checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(rows.map(p => p.id)))}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>ΑΣΜ</span>${H('room', 'Θάλ.')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβ.')}<span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">Θέση</span><span>Παρατήρηση</span></div>
-      <div className="weapons__body">${rows.map((p, i) => html`<div key=${p.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', info.moves.has(p.id) && 'is-wout')} style=${{ gridTemplateColumns: GRID, cursor: 'default' }} role="row">
-        <span><input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + fullName(p)} checked=${sel.has(p.id)} onChange=${() => toggle(p.id)}/></span>
-        <span className="num muted">${i + 1}</span><span>${p.rank}</span>
-        <span><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b></button></span><span>${p.first}</span>
-        <span className="num">${p.asm}</span><span>${p.room ?? ''}</span><span>${p.si ? siOf(p, lists).text : ''}</span>
-        <span className="weapon-cell"><${TypeSelect} p=${p} types=${types} onPick=${(q: Person, t: string) => save([{ pid: q.id, wtype: t }])}/></span>
-        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
-        <span className="weapon-cell"><${WeaponState} p=${p} info=${info}/></span>
-        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="rack" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
-        <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="wpos" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
-        <span className="badges weapon-notes">${notes(p, info, lists)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: shortName(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
-      </div>`)}</div>
+      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${ROW_H} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + JSON.stringify(sort)} renderRow=${(p: Person, i: number, style: P) => html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} types=${types} lists=${lists} reset=${reset} onToggle=${toggle} onOpen=${nav.openPerson} save=${save} commit=${commit} paste=${paste}/>`}/>
     </div></div></div>`}<//>`}
     ${outFor && html`<${WeaponOutDialog} pids=${outFor} reason=${outReason} onClose=${() => setOutFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}

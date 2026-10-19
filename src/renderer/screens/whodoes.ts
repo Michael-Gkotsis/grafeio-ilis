@@ -4,8 +4,8 @@
 // Σ.Ι. και πόστο φαίνονται ως «—» (ισχύουν μόνα τους)· η κατάσταση της μέρας (ΕΥ, άδεια…) γράφεται κάτω από το όνομα.
 // Τίποτα δεν απαγορεύεται: με το χέρι μπαίνει πάντα με επιβεβαίωση, και οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν πάντα.
 import { UNIT } from '../../shared/unit';
-import { useDeferredValue, useMemo, useState } from 'react';
-import { html, cx, Button, Dialog, Segmented, Strip, useToast } from '../ui';
+import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
+import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useViewportHeight } from '../ui';
 import { useNav, useStore } from '../store';
 import { ActiveFilter } from '../common';
 import { PHASE_NAME, WEEK, blocksOf, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
@@ -40,16 +40,18 @@ function cellView(c: CapCell, col: CapCol): { sym: string; cls: string; tip: str
   return { sym: '✕', cls: 'is-off', tip: 'Δεν κάνει ' + what + (c.why !== SERGEANT ? ' (' + c.why + ')' : '') + (c.src === 'kind' ? ' · ορίστηκε για όλες τις «Άλλες»' : '') + '. Πάτα: κάνει' };
 }
 
-function Row({ p, own, cols, cells, odd, grid, hint, lists, onCell, onDay, onReset, onOpen }: P) {
+// Ξαναζωγραφίζεται μόνο όταν αλλάξει κάτι δικό της (memo): ένα κλικ σε κελί δεν ξαναφτιάχνει και τις 180 γραμμές
+const Row = memo(function Row({ p, own, cols, cells, odd, grid, hintTxt, hintTip, hintBad, lists, style, onCell, onDay, onReset, onOpen }: P) {
+  const hint = hintTxt ? { txt: hintTxt, tip: hintTip, bad: hintBad } : null;
   const days: number[] = p.offDays || [];
-  return html`<div className=${cx('ptable__row', 'whod__row', odd && 'is-odd')} role="row" style=${{ gridTemplateColumns: grid }}>
+  return html`<div className=${cx('ptable__row', 'whod__row', odd && 'is-odd')} role="row" style=${{ ...style, gridTemplateColumns: grid }}>
     <span className="whod__name"><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b> ${p.first}</button>
       <small>${[p.room != null && 'Θ' + p.room, p.si && 'Σ.Ι. ' + siOf(p, lists).text, p.post && 'πόστο ' + p.post].filter(Boolean).join(' · ')}${hint && html`<span className=${cx('whod__hint', hint.bad && 'is-bad')} data-tip=${hint.tip}>${hint.txt}</span>`}</small></span>
     ${cols.map((col: CapCol, i: number) => { const v = cellView(cells[i], col); return html`<span key=${col.key} className="whod__c"><button type="button" className=${cx('whod__cell', v.cls)} aria-label=${shortName(p) + ', ' + col.label + ': ' + v.tip.split('.')[0]} data-tip=${v.tip} onClick=${() => onCell(p, col, cells[i])}>${v.sym}</button></span>`; })}
     <span className="whod__days" role="group" aria-label=${'Μέρες υπηρεσίας ' + shortName(p)}>${WEEK.map(d => { const off = days.includes(d); return html`<button key=${d} type="button" className=${cx('whod__day', off && 'is-off', (d === 6 || d === 0) && 'is-we')} aria-pressed=${!off} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: κάνει' : 'Κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: όχι ' + DOW_FULL[d]} onClick=${() => onDay(p, d)}>${DAY2(d)}</button>`; })}</span>
     <span className="whod__reset">${own && html`<button type="button" className="whod__x" aria-label=${'Καμία εξαίρεση για ' + shortName(p)} data-tip="Σβήνει ό,τι όρισες με το χέρι (✕, ✓! και μέρες)· μένουν μόνο Σ.Ι. και πόστο" data-tip-side="left" onClick=${() => onReset(p)}>↺</button>`}</span>
   </div>`;
-}
+});
 
 export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
@@ -104,6 +106,10 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
     done(await run({ t: 'setOffDays', pid: p.id, days: on ? cur.filter(x => x !== d) : [...cur, d] }, false), shortName(p) + (on ? ': κάνει ξανά υπηρεσία ' : ': όχι υπηρεσία ') + DOW_FULL[d]);
   };
   const onReset = async (p: Person) => done(await run({ t: 'setDutyProfile', pid: p.id, reset: true, text: 'χωρίς εξαιρέσεις από τον λοχία' }, false), shortName(p) + ': χωρίς εξαιρέσεις από τον λοχία');
+  // σταθερές συναρτήσεις για τις γραμμές (memo): καλούν πάντα τις τωρινές
+  const live = useRef({ onCell, onDay, onReset }); live.current = { onCell, onDay, onReset };
+  const act = useMemo(() => ({ cell: (p: Person, col: CapCol, c: CapCell) => live.current.onCell(p, col, c), day: (p: Person, d: number) => live.current.onDay(p, d), reset: (p: Person) => live.current.onReset(p) }), []);
+  const height = useViewportHeight(400);
   const clear = () => { setQ(''); setOnly(null); setFilter('all'); setColF(null); setUnit('all'); setRoom(null); };
   const onlyP = only != null ? people.find(p => p.id === only) : undefined;
   const colLbl = ci >= 0 ? 'όχι ' + cols[ci].label.toLowerCase() : null;
@@ -121,7 +127,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
       <div className="ptable__head whod__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Στρατιώτης</span>
         ${cols.map((c, i) => html`<button key=${c.key} type="button" className="whod__colhd" aria-pressed=${colF === c.key} data-tip=${colTip(c) + '. Πάτα: μόνο όσοι δεν κάνουν ' + c.label.toLowerCase()} onClick=${() => setColF(colF === c.key ? null : c.key)}><span className="whod__lbl">${c.short}</span><small className=${cx(colN[i] > 0 && 'has-n')}>${colN[i] ? 'όχι ' + colN[i] : 'όλοι'}</small></button>`)}
         <span className="whod__dayhd" data-tip="Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, 14:00."><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>
-      <div className="whod__body">${rows.map((p, i) => html`<${Row} key=${p.id} p=${p} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hint=${hintOf(p)} lists=${lists} onCell=${onCell} onDay=${onDay} onReset=${onReset} onOpen=${nav.openPerson}/>`)}</div>
+      <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${nav.openPerson}/>`; }}/>
     </div></div></div>`}
     <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (Ρυθμίσεις › Σ.Ι.) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
       Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.</p>

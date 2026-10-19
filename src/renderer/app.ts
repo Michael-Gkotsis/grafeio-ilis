@@ -1,9 +1,11 @@
 // app/AppShell: πλοήγηση, συντομεύσεις, επίπεδα (dialogs/sheets), σύνδεση με το main process
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Icon, Kbd, Logo, Sheet, ToastProvider, useToast } from './ui';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
-import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, TemplatesScreen, CommandPalette } from './screens/other';
-import { DiagScreen } from './screens/diag';
+import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, CommandPalette } from './screens/other';
+// Ρυθμίσεις και Διάγνωση φορτώνουν όταν τις ανοίξεις: λιγότερος κώδικας να διαβαστεί στο άνοιγμα της εφαρμογής
+const TemplatesScreen = lazy(() => import('./screens/settings').then(m => ({ default: m.TemplatesScreen })));
+const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.DiagScreen })));
 import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
@@ -198,7 +200,7 @@ function Shell() {
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
         <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
-      <main className="main"><${Screen} key=${route.view}/></main>
+      <main className="main"><${Suspense} fallback=${html`<div className="empty">Φόρτωση…</div>`}><${Screen} key=${route.view}/><//></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">
       ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}

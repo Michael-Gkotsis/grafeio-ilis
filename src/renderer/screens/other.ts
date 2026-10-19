@@ -6,28 +6,21 @@ import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, PHASE_NAME, blocksOf, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Phase, type Settings, type Status } from '../../shared/domain';
-import { AddBlockDialog, ReturnsList } from './guard';
+import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status } from '../../shared/domain';
+import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, dow, greekHolidays, parseD, DOW_GEN } from '../../shared/dates';
+import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
-import { codeErrors } from '../../shared/codes';
-import type { BackupInfo, ImportPreview } from '../../shared/api';
-import { recentPeople, usePrefs, type Prefs } from '../prefs';
-import { FoldersCard, RosterPreview, SourcesAlert, SourcesView } from './sources';
-import { ListsCard } from './lists';
-import { SiCard } from './si';
-import { StatCard } from './stat';
-import { BrandCard, RoomsCard } from './units';
+import { recentPeople } from '../prefs';
+import { SourcesAlert } from './srcStatus';
 import { appTitle } from '../../shared/brand';
-import { EssoCards } from './esso';
 import { LeavesTab } from './leaves';
 import { cadreCountRows, hkRowList, listOf, statusLbl } from '../../shared/ranks';
-import { UNIT, UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
-import { HkHeadCard, HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
+import { UNIT, hkRowLabel, HK } from '../../shared/unit';
+import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 type P = any;
 
@@ -457,169 +450,6 @@ export function HistoryScreen() {
       <div><b>${e.text}</b> <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//>${e.undone && html` <${Badge}>Αναιρέθηκε<//>`}<div className="log__files">${e.files.join(' · ')}</div></div>
       ${e === last ? html`<${Button} size="sm" variant="outline" onClick=${() => undo(e.id)}>Αναίρεση<//>` : null}
     </li>`)}</ul>${shown.length < list.length && html`<div className="toolbar" style=${{ justifyContent: 'center', margin: '8px 0' }}><${Button} variant="outline" size="sm" onClick=${() => setMore(m => m + 1)}>Δείξε παλιότερες (${list.length - shown.length})<//></div>`}` : html`<div className="empty">Δεν έχει γίνει ακόμα καμία ενέργεια.</div>`}</div>
-  </div>`;
-}
-
-function ImportCard() {
-  const nav = useNav();
-  const [pv, setPv] = useState<ImportPreview | null>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const pick = async () => { setErr(''); setBusy(true); try { const r = await window.api.pickRoster(); if (!r) return; if (!r.ok) setErr(r.error); else setPv(r); } finally { setBusy(false); } };
-  return html`<${Card} title="Εισαγωγή από το Δυναμολόγιο">
-    <p style=${{ marginTop: 0 }}>Διαβάζει το φύλλο <b>ΣΥΝΟΛΙΚΟ</b> (βαθμός, Ο/Σ, ονοματεπώνυμο, πατρώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος), τα <b>ΠΟΣΤΑ</b> και το <b>ΕΚΤΟΣ ΔΥΝΑΜΗΣ</b>. Οι στήλες βρίσκονται από τις επικεφαλίδες· αν κάτι δεν βρεθεί σωστά, το δείχνεις στα <${Button} variant="link" onClick=${() => nav.set({ tab: 'files' })}>Αρχεία Excel<//>.</p>
-    <p className="note">Όσοι υπάρχουν ήδη ενημερώνονται (ταίριασμα με ΑΣΜ, αλλιώς ονοματεπώνυμο και πατρώνυμο). Οι υπηρεσίες, τα ιατρικά και οι ποινές τους μένουν. Μετά την εισαγωγή, όταν διορθώνεις στοιχεία ατόμου στην εφαρμογή (π.χ. Σ.Ι., τηλέφωνο), η διόρθωση γράφεται και στο κελί του στο Δυναμολόγιο.</p>
-    ${!pv && html`<${Button} disabled=${busy} onClick=${pick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε αρχείο Δυναμολογίου…'}<//>`}
-    ${pv && html`<${RosterPreview} pv=${pv} onDone=${() => { setPv(null); nav.go('people'); }} onCancel=${() => setPv(null)}/>`}
-    ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
-  <//>`;
-}
-
-// Ρυθμίσεις του PC (όχι της βάσης): ισχύουν αμέσως, χωρίς επανεκκίνηση
-function AppearanceCard() {
-  const { prefs, set } = usePrefs();
-  const row = <K extends keyof Prefs>(k: K, label: string, help: string, items: { value: Prefs[K]; label: string }[]) => html`<div className="pref" key=${k}>
-    <div><b>${label}</b><small>${help}</small></div><${Segmented} small=${true} value=${prefs[k]} onChange=${(v: Prefs[K]) => set(k, v)} items=${items}/></div>`;
-  return html`<${Card} title="Εμφάνιση (αυτό το PC)">
-    ${row('theme', 'Θέμα', 'Στα Windows 7 το «Όπως τα Windows» είναι φωτεινό.', [{ value: 'light', label: 'Φωτεινό' }, { value: 'dark', label: 'Σκοτεινό' }, { value: 'auto', label: 'Όπως τα Windows' }])}
-    ${row('density', 'Πυκνότητα', 'Η συμπαγής χωρά περισσότερες γραμμές σε οθόνη 1024×768.', [{ value: 'normal', label: 'Κανονική' }, { value: 'compact', label: 'Συμπαγής' }])}
-    ${row('nav', 'Μενού', 'Αυτόματο: στενό μενού σε οθόνες κάτω από 1500px. Αλλάζει και με Ctrl+B.', [{ value: 'full', label: 'Πλήρες' }, { value: 'rail', label: 'Στενό' }, { value: 'auto', label: 'Αυτόματο' }])}
-    ${row('xlZoom', 'Προεπισκόπηση Excel', 'Το «Χωρά» μικραίνει το έντυπο για να φαίνεται όλο το πλάτος.', [{ value: 'fit', label: 'Χωρά' }, { value: '100', label: '100%' }])}
-  <//>`;
-}
-
-function SettingsCard() {
-  const { state, run, boot } = useStore(); const toast = useToast();
-  const [s, setS] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre }, head: [state.settings.hkai?.head?.[0] || '', state.settings.hkai?.head?.[1] || ''] }));
-  // άλλος τύπος μονάδας: η κεφαλίδα και ο τίτλος αλλάζουν μαζί («4η ΙΛΗ» → «4ος ΛΟΧΟΣ»), για να τα δεις πριν την αποθήκευση
-  const setKind = (k: UnitKind) => setS({ ...s, unitKind: k, ...unitSettingsFor(s, k), head: s.head.map(x => unitText(x, k)) });
-  const save = async () => {
-    const head = s.head.map(x => x.trim()); const hkai = { ...(state.settings.hkai || {}) }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
-    const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre, hkai }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
-  };
-  return html`<${Card} title="Μονάδα και έντυπα">
-    <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
-    <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
-    <${HkHeadFields} value=${s.head} onChange=${(head: string[]) => setS({ ...s, head })} kind=${s.unitKind}/>
-    <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ${HK()}</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
-      <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
-    <div className="field"><span className="field__label" style=${{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι») <${HkRowsButton}/></span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
-      <span className="field__help">Οι στρατιώτες, δεκανείς και λοχίες μετρώνται από το προσωπικό της εφαρμογής.</span></div>
-    <p className="note" style=${{ margin: 0 }}>Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους <b>Θαλάμους και ουλαμούς</b>.</p>
-    <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
-    <hr style=${{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }}/>
-    <dl className="kv"><dt>Αρχεία</dt><dd>Στο ${state.settings.outputDir || boot.outputDir}, εκτός αν διάλεξες άλλο στους <b>Φακέλους αρχείων</b> παρακάτω.</dd>
-      <dt>Δεδομένα</dt><dd>${boot.dataDir} <${Button} variant="link" onClick=${() => window.api.openFolder('data')}>Άνοιξε<//></dd>
-      <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
-      <dt>Έκδοση</dt><dd>${boot.version}</dd></dl>
-  <//>`;
-}
-
-// Υπηρεσίες ανά έντυπο (ΣΒΕΝ/ΣΠΕΝ): ένοπλες ή άοπλες (Κ-Υ1), νέες υπηρεσίες, αφαίρεση όσων δεν χρειάζονται
-function BlocksCard() {
-  const { state, run } = useStore();
-  const [phase, setPhase] = useState<Phase>(state.settings.phase || 'sven'); const [add, setAdd] = useState(false); const [ed, setEd] = useState<string | null>(null);
-  const list = blocksOf(state.settings, phase) || [];
-  const bad = useMemo(() => codeErrors(state.settings), [state.settings]);
-  return html`<${Card} title="Υπηρεσίες" actions=${html`<${Segmented} small=${true} value=${phase} onChange=${setPhase} items=${[{ value: 'sven', label: 'ΣΒΕΝ' }, { value: 'spen', label: 'ΣΠΕΝ' }]}/>`}>
-    ${bad.length > 0 && html`<${Alert} tone="warn"><span><b>Κωδικοί που θέλουν διόρθωση</b> (Επεξεργασία στην υπηρεσία τους): ${bad.join(' · ')}</span><//>`}
-    <p className="note" style=${{ marginTop: 0 }}>Τώρα ισχύει η <b>ΦΡΟΥΡΑ ${PHASE_NAME[state.settings.phase || 'sven']}</b> (αλλάζει από τις Υπηρεσίες). Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ.</p>
-    ${list.map(b => html`<div key=${b.id} className=${'rule' + (b.hidden ? ' is-off' : '')}><input type="checkbox" className="ui-check" aria-label=${'Ένοπλη: ' + b.name} disabled=${b.hidden || b.kind === 'ly'} checked=${b.armed} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armed: e.target.checked } })}/><span style=${{ flex: 1 }}><b>${b.name}</b><small>${b.posts.filter(x => !x.hidden).length} ${b.posts.filter(x => !x.hidden).length === 1 ? 'θέση' : 'θέσεις'} · ${b.hidden ? 'αφαιρέθηκε' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''} · κωδικοί ${b.posts.filter(x => !x.hidden).map(x => x.code || '?').join(', ')}</small></span>
-      ${b.kind !== 'ly' && !b.hidden && html`<${Button} size="sm" variant="ghost" aria-label=${'Πιο πάνω: ' + b.name} data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)" onClick=${() => run({ t: 'editBlock', phase, id: b.id, name: b.name, n: 0, hrs: {}, move: -1 })}>↑<//><${Button} size="sm" variant="ghost" onClick=${() => setEd(b.id)}>Επεξεργασία<//>`}
-      ${b.kind !== 'ly' && html`<${Button} size="sm" variant="ghost" onClick=${() => run({ t: 'setBlock', phase, id: b.id, patch: { hidden: !b.hidden } })} data-tip=${b.hidden ? 'Να ξαναφαίνεται στις θέσεις και στο έντυπο' : 'Να μη φαίνεται πια. Το ιστορικό της μένει στον έλεγχο υπηρεσιών.'}>${b.hidden ? 'Επαναφορά' : 'Αφαίρεση'}<//>`}</div>`)}
-    <div style=${{ marginTop: '8px' }}><${Button} variant="outline" size="sm" disabled=${phase !== (state.settings.phase || 'sven')} data-tip=${phase !== (state.settings.phase || 'sven') ? 'Πρόσθεσε στο έντυπο που ισχύει τώρα' : undefined} onClick=${() => setAdd(true)}>+ Νέα υπηρεσία<//></div>
-    ${add && html`<${AddBlockDialog} onClose=${() => setAdd(false)}/>`}
-    ${ed && html`<${EditBlockDialog} phase=${phase} b=${list.find(x => x.id === ed)} onClose=${() => setEd(null)}/>`}
-  <//>`;
-}
-function EditBlockDialog({ phase, b, onClose }: P) {
-  const { run, state } = useStore(); const toast = useToast();
-  const [name, setName] = useState(b.name); const [n, setN] = useState(b.posts.filter((x: P) => !x.hidden).length);
-  const [hrs, setHrs] = useState<Record<string, string>>(() => Object.fromEntries(b.posts.filter((x: P) => x.rot == null).map((x: P) => [x.k, x.hrs || ''])));
-  const [codes, setCodes] = useState<Record<string, string>>(() => Object.fromEntries(b.posts.map((x: P) => [x.k, x.code || ''])));
-  const shown = b.posts.filter((x: P) => !x.hidden && x.rot == null);
-  const coded = b.posts.filter((x: P) => !x.hidden);
-  // λάθη στους κωδικούς αυτής της υπηρεσίας όπως θα ήταν μετά την αποθήκευση (ίδιος κωδικός αλλού, σκέτο γράμμα…):
-  // εμποδίζουν την αποθήκευση. Λάθη σε άλλες υπηρεσίες μόνο φαίνονται.
-  const [errs, others] = useMemo(() => {
-    const key = phase === 'spen' ? 'blocksSpen' : 'blocks';
-    const list = blocksOf(state.settings, phase).map((x: P) => (x.id === b.id ? { ...x, posts: x.posts.map((p: P) => (codes[p.k] != null && codes[p.k].trim() ? { ...p, code: codes[p.k].trim() } : p)) } : x));
-    const st = { ...state.settings, [key]: list }; const mine = codeErrors(st, { phase, id: b.id });
-    return [mine, codeErrors(st).filter(t => !mine.includes(t))];
-  }, [codes, state.settings, phase, b.id]);
-  const save = async () => { if (await run({ t: 'editBlock', phase, id: b.id, name, n, hrs, codes }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.custom ? name : b.name) }); } };
-  return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.custom ? 'Δική σου υπηρεσία: αλλάζουν όνομα, πλήθος και ώρες.' : 'Υπηρεσία του εντύπου: οι θέσεις είναι σταθερές· αλλάζουν οι ώρες όσων θέσεων δεν έχουν βάρδιες.'} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${errs.length > 0} onClick=${save}>Αποθήκευση<//>`}>
-    ${b.custom && html`<div className="field-row"><div className="field"><label className="field__label" htmlFor="eb-n">Όνομα</label><input id="eb-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>
-      <div className="field"><label className="field__label" htmlFor="eb-c">Πόσα άτομα</label><input id="eb-c" type="number" min="1" max="10" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, Math.min(10, +e.target.value || 1)))}/><span className="field__help">Όσες θέσεις φύγουν κρατούν το ιστορικό τους.</span></div></div>`}
-    <div className="field"><span className="field__label">Κωδικός στον έλεγχο υπηρεσιών</span><div className="settings-grid">${coded.map((x: P) => html`<label key=${x.k} className="field"><span className="field__help">${x.label}</span><input className="ui-input" maxLength="8" value=${codes[x.k] ?? ''} placeholder="αυτόματα" onChange=${(e: any) => setCodes({ ...codes, [x.k]: e.target.value })}/></label>`)}</div>
-      <span className="field__help">Αυτό γράφεται στο κελί της μέρας (π.χ. Θ1α) και έτσι διαβάζεται πίσω. Το σκέτο γράμμα (Θ, Μ, Σ) σημαίνει υπηρεσία χωρίς θέση.${b.custom ? ' Νέες θέσεις παίρνουν μόνες τους κωδικό.' : ''}</span>
-      ${errs.map((t: string) => html`<${Alert} key=${t} tone="bad"><span>${t}</span><//>`)}
-      ${others.length > 0 && html`<${Alert} tone="warn"><span>Σε άλλες υπηρεσίες (δεν εμποδίζει την αποθήκευση): ${others.join(' · ')}</span><//>`}</div>
-    ${shown.length ? shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__label" htmlFor=${'eb-h-' + x.k}>Ώρες: ${x.label}</label><input id=${'eb-h-' + x.k} className="ui-input" placeholder="π.χ. 07:30-08:00 (κενό = όλη μέρα)" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`) : html`<p className="note">Οι ώρες αυτής της υπηρεσίας είναι οι βάρδιες του εντύπου.</p>`}
-  <//>`;
-}
-// Αργίες (10 §4β): ΣΚ μετρούν πάντα· οι επίσημες βγαίνουν μόνες τους κάθε χρονιά (και από το Πάσχα)· εδώ αφαιρείς όποια
-// δεν ισχύει για τη μονάδα και προσθέτεις δικές σου
-function HolidaysCard() {
-  const { state, run, today } = useStore();
-  const [d, setD] = useState(''); const [n, setN] = useState('');
-  const st = state.settings; const off = st.holidaysOff || []; const y = +today.slice(0, 4);
-  const gen = [y, y + 1].flatMap(yy => Object.entries(greekHolidays(yy)));
-  const list = [...gen.filter(([k]) => !off.includes(k) && !st.holidays[k]).map(([k, v]) => ({ k, v, gen: true })), ...Object.entries(st.holidays).map(([k, v]) => ({ k, v, gen: false }))].sort((a, b) => a.k.localeCompare(b.k));
-  const removed = gen.filter(([k]) => off.includes(k));
-  const save = (settings: Partial<Settings>, text: string) => run({ t: 'setSettings', settings, text });
-  const drop = (x: { k: string; v: string; gen: boolean }) => {
-    if (x.gen) return save({ holidaysOff: [...off, x.k] }, 'αφαιρέθηκε η αργία ' + x.v + ' ' + dmy(x.k));
-    const h = { ...st.holidays }; delete h[x.k]; return save({ holidays: h }, 'αφαιρέθηκε η αργία ' + x.v + ' ' + dmy(x.k));
-  };
-  return html`<${Card} title="Αργίες">
-    <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Οι επίσημες αργίες (και οι κινητές από το Πάσχα) μπαίνουν μόνες τους κάθε χρονιά· αφαίρεσε όποια δεν ισχύει για τη μονάδα και πρόσθεσε δικές σου. Μετρούν στον έλεγχο υπηρεσιών και στον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
-    <ul className="hist">${list.map(x => html`<li key=${x.k} className=${x.k < today ? 'muted' : ''}><span className="nw">${dow(x.k)} ${dmy(x.k)}</span> <b>${x.v}</b> ${x.gen ? html`<${Badge}>επίσημη<//>` : html`<${Badge} tone="info">δική σου<//>`} <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + x.v} onClick=${() => drop(x)}>✕<//></li>`)}</ul>
-    ${removed.length > 0 && html`<details className="note"><summary>Επίσημες που αφαίρεσες (${removed.length})</summary><ul className="hist">${removed.map(([k, v]) => html`<li key=${k}><span className="nw">${dow(k)} ${dmy(k)}</span> ${v} <${Button} size="sm" variant="ghost" onClick=${() => save({ holidaysOff: off.filter(x => x !== k) }, 'ξανά αργία ' + v + ' ' + dmy(k))}>Επαναφορά<//></li>`)}</ul></details>`}
-    <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><input id="hol-d" type="date" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
-      <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Τοπική εορτή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ holidays: { ...st.holidays, [d]: n.trim() }, holidaysOff: off.filter(x => x !== d) }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
-  <//>`;
-}
-// Επαναφορά από αντίγραφο (έρευνα §4.2): πριν την επαναφορά κρατιέται αντίγραφο της τωρινής βάσης
-function BackupsCard() {
-  const toast = useToast(); const usb = useUsbCopy(); const { boot, today } = useStore();
-  const [list, setList] = useState<BackupInfo[] | null>(null); const [pick, setPick] = useState<BackupInfo | null>(null);
-  const load = () => window.api.listBackups().then(setList);
-  useEffect(() => { load(); }, []);
-  const imp = async () => { const r = await window.api.importBackup(); if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } await load(); toast({ text: 'Το αντίγραφο μπήκε στη λίστα. Πάτα «Επαναφορά» δίπλα του.' }); };
-  return html`<${Card} title="Αντίγραφα ασφαλείας">
-    <p style=${{ marginTop: 0 }}>Αυτόματα: ένα κάθε μέρα και πριν από κάθε εισαγωγή, στον φάκελο data\\backups. Επειδή είναι στον ίδιο δίσκο, πάρε και <b>αντίγραφο σε USB</b> κάθε ${USB_DAYS} μέρες.
-      Τελευταίο σε USB: <b className=${usbDue(boot.lastUsb, today) ? 'txt-bad' : ''}>${boot.lastUsb ? dow(boot.lastUsb) + ' ' + dmy(boot.lastUsb) : 'ποτέ'}</b>.</p>
-    <div className="toolbar"><${Button} onClick=${async () => { if (await usb()) load(); }}>Αντίγραφο σε USB…<//><${Button} variant="outline" onClick=${imp} data-tip="Για καινούργιο PC ή αν χάλασε η βάση: διάλεξε ένα ilh_….db από το USB και μετά «Επαναφορά»">Φέρε αντίγραφο από USB…<//><${Button} variant="ghost" onClick=${() => window.api.openFolder('backups')}>Άνοιξε τον φάκελο<//></div>
-    ${!list ? 'Φόρτωση…' : !list.length ? html`<p className="note">Δεν υπάρχει ακόμα αντίγραφο. Το πρώτο κρατιέται αυτόματα σήμερα.</p>` : html`<ul className="hist">${list.slice(0, 15).map(b => html`<li key=${b.name}><span className="nw">${dow(b.day)} ${dmy(b.day)}</span> ${b.label} <span className="muted">${Math.round(b.size / 1024)} KB</span> <${Button} size="sm" variant="outline" onClick=${() => setPick(b)}>Επαναφορά<//></li>`)}</ul>`}
-    ${pick && html`<${Dialog} role="alertdialog" title="Επαναφορά από αντίγραφο" description=${dmy(pick.day) + ' · ' + pick.label} onClose=${() => setPick(null)}
-      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setPick(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${async () => { const r = await window.api.restoreBackup(pick.name); setPick(null); if (!r.ok) toast({ text: r.error }); }}>Επαναφορά και επανεκκίνηση<//>`}>
-      <p style=${{ margin: 0 }}>Τα δεδομένα θα γυρίσουν όπως ήταν στο αντίγραφο. Ό,τι έγινε μετά χάνεται, αλλά η τωρινή βάση κρατιέται πρώτα ως αντίγραφο «πριν-επαναφορά», οπότε μπορείς να γυρίσεις πίσω.</p><//>`}
-  <//>`;
-}
-
-// Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
-export function TemplatesScreen() {
-  const { boot } = useStore(); const nav = useNav();
-  const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
-  const tab = SET_SECTIONS.some(([k]) => k === want) ? want : 'unit';
-  const templates = html`<div>
-      <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
-        ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
-      <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
-      <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
-    </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
-    : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
-  return html`<div>
-    <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
-    <div className="setgrid">
-      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => nav.set({ tab: k })}>${l}</button>`)}</nav>
-      <div className="setbody">${body}</div>
-    </div>
   </div>`;
 }
 
