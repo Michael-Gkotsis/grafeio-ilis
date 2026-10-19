@@ -4,16 +4,18 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, useToast } from '../ui';
 import { useNav, useStore } from '../store';
+import { UnsavedDialog } from '../common';
 import { listOf, optionsOf } from '../../shared/ranks';
 import { roomCfg, type Person } from '../../shared/domain';
 import { essoPersonTxt } from '../../shared/esso';
 import { currentEssos } from '../../shared/rosterLists';
+import { siCombos } from '../../shared/si';
 import { CARRY, QA_COLS, carryOf, checkRows, emptyRow, isFilled, parsePaste, toNewPerson, type QaKey, type QaRow } from '../../shared/quickAdd';
 type P = any;
 
 const DRAFT = 'grafeio.quickAdd';
-const LABEL: Record<QaKey, string> = { rank: 'Βαθμός', spec: 'Ο/Σ', last: 'Επώνυμο *', first: 'Όνομα *', father: 'Πατρώνυμο', asm: 'ΑΣΜ', phone: 'Τηλέφωνο', room: 'Θάλαμος' };
-const LIST: Partial<Record<QaKey, string>> = { rank: 'qa-ranks', spec: 'qa-specs', room: 'qa-rooms' };
+const LABEL: Record<QaKey, string> = { rank: 'Βαθμός', spec: 'Ο/Σ', last: 'Επώνυμο *', first: 'Όνομα *', father: 'Πατρώνυμο', asm: 'ΑΣΜ', phone: 'Τηλέφωνο', room: 'Θάλαμος', si: 'Σ.Ι.' };
+const LIST: Partial<Record<QaKey, string>> = { rank: 'qa-ranks', spec: 'qa-specs', room: 'qa-rooms', si: 'qa-si' };
 const INPUT_MODE: Partial<Record<QaKey, string>> = { asm: 'numeric', phone: 'tel', room: 'numeric' };
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -45,7 +47,7 @@ export function QuickAddDialog({ onClose }: P) {
   const [draft] = useState(loadDraft);
   const [rows, setRows] = useState<QaRow[]>(() => withTail(draft?.rows || []));
   const [essos, setEssos] = useState(draft?.essos || defEssos);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); const [asking, setAsking] = useState(false);
   const focus = useRef<{ r: number; c: number } | null>(null);
   const ranks = useMemo(() => optionsOf(listOf(state.settings.lists, 'soldierRanks'), state.people.map((y: Person) => y.rank)), [state.people, state.settings.lists]);
   const specs = useMemo(() => optionsOf(listOf(state.settings.lists, 'specs'), state.people.map((y: Person) => y.spec)), [state.people, state.settings.lists]);
@@ -104,13 +106,15 @@ export function QuickAddDialog({ onClose }: P) {
     });
     toast({ text: 'Επικολλήθηκαν ' + got.length + (got.length === 1 ? ' γραμμή' : ' γραμμές') + '. Έλεγξε τις στήλες πριν από την προσθήκη.' });
   }, [toast]);
+  // κλείσιμο με στρατιώτες που δεν προστέθηκαν: ρωτά πρώτα (μένουν και στο πρόχειρο)
+  const close = () => { if (busy) return; if (n) setAsking(true); else onClose(); };
   const clear = () => { setRows(withTail([])); focus.current = { r: 0, c: 2 }; };
 
   const foot = html`<span className="qa__sum">${bad ? html`<span className="qa__err">${bad === 1 ? '1 γραμμή θέλει διόρθωση' : bad + ' γραμμές θέλουν διόρθωση'}</span>` : n ? n + (n === 1 ? ' στρατιώτης' : ' στρατιώτες') : ''}</span>
     ${n > 0 && html`<${Button} variant="ghost" disabled=${busy} onClick=${clear}>Καθάρισμα<//>`}
-    <${Button} variant="outline" disabled=${busy} onClick=${onClose}>Κλείσιμο<//>
+    <${Button} variant="outline" disabled=${busy} onClick=${close}>Κλείσιμο<//>
     <${Button} disabled=${!n || bad > 0 || busy} onClick=${save} data-tip="Ctrl+Enter">${busy ? 'Γίνεται…' : n ? 'Πρόσθεσε ' + (n === 1 ? '1 στρατιώτη' : n + ' στρατιώτες') : 'Πρόσθεσε'}<//>`;
-  return html`<${Dialog} title="Γρήγορη εισαγωγή στρατιωτών" size="xl" closeOnOverlay=${false} onClose=${busy ? () => {} : onClose} footer=${foot}
+  return html`<${Dialog} title="Γρήγορη εισαγωγή στρατιωτών" size="xl" closeOnOverlay=${false} onClose=${close} footer=${foot}
     description="Γράψε τον έναν κάτω από τον άλλον, σαν στο Excel. Στο τέλος μία προσθήκη για όλους.">
     <div className="qa__top">
       <div className="field" style=${{ width: '150px', flex: 'none' }}><label className="field__label" htmlFor="qa-essos">ΕΣΣΟ για όλους</label><input id="qa-essos" className="ui-input" placeholder="π.χ. 2026 Γ΄" value=${essos} onChange=${(e: any) => setEssos(e.target.value)}/></div>
@@ -123,7 +127,13 @@ export function QuickAddDialog({ onClose }: P) {
     </div>
     <datalist id="qa-ranks">${ranks.map((o: string) => html`<option key=${o} value=${o}/>`)}</datalist>
     <datalist id="qa-specs">${specs.map((o: string) => html`<option key=${o} value=${o}/>`)}</datalist>
+    <datalist id="qa-si">${siCombos(state.settings.lists?.si).map(o => html`<option key=${o} value=${o}/>`)}</datalist>
     <datalist id="qa-rooms">${rooms.map(r => html`<option key=${r} value=${String(r)}/>`)}</datalist>
-    <p className="note">Πατρώνυμο, ΑΣΜ, τηλέφωνο και θάλαμος δεν είναι υποχρεωτικά. Σ.Ι., πόστο, ρόλος και όπλο μπαίνουν μετά από την καρτέλα του καθενός ή από τις οθόνες Σ.Ι. και Οπλισμός. ${state.settings.sources?.people && state.settings.sources.people.write !== false ? 'Γράφονται όλοι μαζί στο Δυναμολόγιο, ο καθένας στον θάλαμό του.' : ''}</p>
+    <p className="note">Πατρώνυμο, ΑΣΜ, τηλέφωνο και θάλαμος δεν είναι υποχρεωτικά. Το Σ.Ι. ξεκινά Ι1 σε κάθε γραμμή. Πόστο, ρόλος και όπλο μπαίνουν μετά από την καρτέλα του καθενός ή από την οθόνη Οπλισμός. ${state.settings.sources?.people && state.settings.sources.people.write !== false ? 'Γράφονται όλοι μαζί στο Δυναμολόγιο, ο καθένας στον θάλαμό του.' : ''}</p>
+    ${asking && html`<${UnsavedDialog} title=${n === 1 ? 'Ο στρατιώτης δεν προστέθηκε' : 'Οι ' + n + ' στρατιώτες δεν προστέθηκαν'} saveLabel=${'Πρόσθεσε ' + (n === 1 ? '1 στρατιώτη' : n + ' στρατιώτες')} canSave=${!bad}
+      onSave=${() => { setAsking(false); save(); }} discardLabel="Κλείσε χωρίς προσθήκη" onDiscard=${() => { setAsking(false); onClose(); }} onBack=${() => setAsking(false)}>
+      <p style=${{ margin: 0 }}>${bad ? html`<b>${bad === 1 ? '1 γραμμή θέλει' : bad + ' γραμμές θέλουν'} διόρθωση</b> πριν από την προσθήκη. Πάτα «Πίσω» για να τις διορθώσεις.` : html`Πάτα «Πρόσθεσε» για να μπουν τώρα στο Δυναμολόγιο.`}</p>
+      <p className="note" style=${{ margin: 0 }}>Αν κλείσεις χωρίς προσθήκη, ό,τι έγραψες μένει στο πρόχειρο και το βρίσκεις την επόμενη φορά που θα ανοίξεις τη Γρήγορη εισαγωγή.</p>
+    <//>`}
   <//>`;
 }

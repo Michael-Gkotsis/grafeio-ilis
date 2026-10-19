@@ -4,7 +4,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } fro
 import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChangePlanList, ChoiceField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
+import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
 import { hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
@@ -399,11 +399,15 @@ function NewPersonDialog({ onClose, onMany }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
-  const blank = (c: P = {}) => ({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: '', post: null, role: null, essos, attached: false, notes: '', weapon: '', ...c });
+  const blank = (c: P = {}) => ({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: 'Ι1', post: null, role: null, essos, attached: false, notes: '', weapon: '', ...c });
   const [x, setX] = useState<P>(blank);
   const [done, setDone] = useState<string[]>([]);   // όσοι μπήκαν με «Προσθήκη και επόμενος»
   const [gen, setGen] = useState(0);
   const ok = !!x.last.trim() && !!x.first.trim();
+  // γράφτηκε κάτι που δεν προστέθηκε: πριν κλείσει ρωτά (Michael, 19/10)
+  const dirty = ['last', 'first', 'father', 'asm', 'phone', 'notes', 'weapon', 'post', 'role'].some(k => String(x[k] ?? '').trim());
+  const [asking, setAsking] = useState<null | (() => void)>(null);
+  const close = (after?: () => void) => { if (dirty) setAsking(() => () => { onClose(); after?.(); }); else { onClose(); after?.(); } };
   const name = x.last.trim().toUpperCase() + ' ' + x.first.trim().toUpperCase();
   const toExcel = () => { const b = state.settings.sources?.people; return !!b && b.write !== false; };
   const save = async () => {
@@ -419,12 +423,16 @@ function NewPersonDialog({ onClose, onMany }: P) {
   };
   useEffect(() => { if (gen) (document.getElementById('np-last') as HTMLInputElement | null)?.focus(); }, [gen]);
   const keys = (e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNext(); } };
-  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${onClose} closeOnOverlay=${!x.last && !x.first && !done.length}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>${done.length ? 'Τέλος' : 'Άκυρο'}<//><${Button} variant="outline" disabled=${!ok} onClick=${saveNext} data-tip="Ctrl+Enter· μένει ανοιχτό για τον επόμενο, με τον ίδιο βαθμό, Ο/Σ και θάλαμο">Προσθήκη και επόμενος<//><${Button} disabled=${!ok} onClick=${save}>Προσθήκη<//>`}>
+  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${() => close()} closeOnOverlay=${!dirty && !done.length}
+    footer=${html`<${Button} variant="outline" onClick=${() => close()}>${done.length ? 'Τέλος' : 'Άκυρο'}<//><${Button} variant="outline" disabled=${!ok} onClick=${saveNext} data-tip="Ctrl+Enter· μένει ανοιχτό για τον επόμενο, με τον ίδιο βαθμό, Ο/Σ και θάλαμο">Προσθήκη και επόμενος<//><${Button} disabled=${!ok} onClick=${save}>Προσθήκη<//>`}>
     <div onKeyDown=${keys} className="stack" style=${{ gap: '14px' }}>
     ${done.length > 0 ? html`<${Alert} tone="info"><span>Μπήκαν ${done.length}: ${done.slice(-4).join(', ')}${done.length > 4 ? '…' : ''}. ${toExcel() ? 'Γράφονται και στο Δυναμολόγιο.' : ''}</span><//>`
-      : onMany && html`<span className="note" style=${{ margin: 0 }}>Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; <${Button} variant="link" onClick=${() => { onClose(); onMany(); }}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
+      : onMany && html`<span className="note" style=${{ margin: 0 }}>Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; <${Button} variant="link" onClick=${() => close(onMany)}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
     <${PersonFields} key=${gen} x=${x} setX=${setX} id="np" isNew=${true}/></div>
+    ${asking && html`<${UnsavedDialog} title=${ok ? 'Ο ' + name + ' δεν προστέθηκε' : 'Ο στρατιώτης δεν προστέθηκε'} saveLabel="Πρόσθεσέ τον" canSave=${ok}
+      onSave=${() => { setAsking(null); save(); }} discardLabel="Κλείσε χωρίς προσθήκη" onDiscard=${() => { const go = asking; setAsking(null); go(); }} onBack=${() => setAsking(null)}>
+      <p style=${{ margin: 0 }}>${ok ? 'Έγραψες στοιχεία που δεν έχουν αποθηκευτεί. Αν κλείσεις χωρίς προσθήκη, χάνονται.' : html`Έγραψες στοιχεία που δεν έχουν αποθηκευτεί. Για να προστεθεί γράψε <b>επώνυμο και όνομα</b>: πάτα «Πίσω».`}</p>
+    <//>`}
   <//>`;
 }
 

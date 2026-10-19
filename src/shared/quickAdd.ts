@@ -5,13 +5,14 @@ import { norm } from './text';
 import { personKey, type NewPerson } from './commands';
 import type { Person } from './domain';
 
-export const QA_COLS = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room'] as const;
+export const QA_COLS = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si'] as const;
 export type QaKey = typeof QA_COLS[number];
 export type QaRow = Record<QaKey, string>;
 // έρχονται ίδια με τη γραμμή από πάνω
 export const CARRY: QaKey[] = ['rank', 'spec', 'room'];
 
-export const emptyRow = (carry: Partial<QaRow> = {}): QaRow => ({ rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: '', ...carry });
+// Σ.Ι. Ι1 σε κάθε νέα γραμμή (Michael, 19/10), όχι από τον από πάνω: οι περισσότεροι είναι Ι1
+export const emptyRow = (carry: Partial<QaRow> = {}): QaRow => ({ rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: '', si: 'Ι1', ...carry });
 export const carryOf = (r: QaRow): Partial<QaRow> => Object.fromEntries(CARRY.map(k => [k, r[k]]));
 // γραμμή με στρατιώτη: ό,τι δεν έρχεται από πάνω
 export const isFilled = (r: QaRow) => !!(r.last.trim() || r.first.trim() || r.father.trim() || r.asm.trim() || r.phone.trim());
@@ -23,7 +24,7 @@ const roomOf = (v: string) => { const m = /\d+/.exec(v); return m && +m[0] > 0 ?
 
 export function toNewPerson(r: QaRow, essos: string): NewPerson {
   return { rank: clean(r.rank), spec: clean(r.spec), last: clean(r.last), first: clean(r.first), father: clean(r.father), asm: asmOf(r.asm), phone: asmOf(r.phone),
-    room: roomOf(r.room), si: '', post: null, role: null, essos: clean(essos), attached: false, notes: '' };
+    room: roomOf(r.room), si: clean(r.si), post: null, role: null, essos: clean(essos), attached: false, notes: '' };
 }
 
 // Τι δεν πάει σε κάθε γραμμή (null = εντάξει ή κενή): λείπει επώνυμο/όνομα, ίδιο ΑΣΜ ή ονοματεπώνυμο και πατρώνυμο
