@@ -15,7 +15,7 @@
   --f-display:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-body:"Segoe UI",Tahoma,Arial,sans-serif;
   --f-mono:Consolas,"Courier New",monospace;
-  --nav-h:62px; --top-h:60px; --side-w:236px; --rail-w:84px;
+  --nav-h:62px; --top-h:60px; --side-w:236px; --rail-w:88px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --background:#13160e; --foreground:#e7eadf; --card:#1c2016; --muted:#242a1c; --muted-fg:#a4ab96;
@@ -41,6 +41,8 @@
   --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(231,234,223,.18); --sb-thumb-hover:rgba(231,234,223,.4); color-scheme:dark}
 
 html,body{height:100%;margin:0}
+/* ο χώρος της μπάρας κύλισης κρατιέται πάντα: η σελίδα δεν πηδά όταν αλλάζεις οθόνη (π.χ. Δυναμολόγιο → Στελέχη) */
+html{scrollbar-gutter:stable}
 #root{min-height:100%}
 body{background:var(--background);color:var(--foreground);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
 *{box-sizing:border-box}
@@ -175,12 +177,15 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .plan li.is-warn{background:var(--warn-bg)}
 .plan li.is-warn .plan__ic{color:var(--warn)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted-fg)}
-.page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px}
-.page-head > div{flex:1 1 340px;min-width:220px}
+.page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.page-head > div{flex:1 1 260px;min-width:220px}
 .page-head > .datebar,.page-head > .page-head__acts{flex:0 1 auto;min-width:0}
 .page-head > .page-head__acts{justify-content:flex-end;margin-left:auto}
-.page-head h1{font-size:27px;font-weight:700;line-height:1.2}
+.page-head h1{font-size:25px;font-weight:700;line-height:1.2}
 .page-head p{margin:4px 0 0;color:var(--muted-fg)}
+.page-head__sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page-head__sub.is-cut{cursor:pointer}
+.page-head__sub.is-open{white-space:normal}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
@@ -236,6 +241,8 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .searchbtn:hover{border-color:var(--bar-muted)}
 .searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .searchbtn .ui-kbd{background:transparent;border-color:var(--bar-line);color:var(--bar-muted)}
+/* στενή οθόνη (1024): μόνο ο φακός, όχι ένα σπασμένο «Ctrl K» */
+@media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}}
 .topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .topbar .ui-btn--ghost{color:var(--bar-fg)}
 .topbar .ui-btn--ghost:hover{background:var(--bar-field)}
@@ -259,14 +266,17 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .navbtn__lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
 .is-rail .sidenav{padding:10px 6px}
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:4px;height:auto;min-height:62px;padding:8px 0;position:relative;text-align:center}
+/* 11 οθόνες + σύμπτυξη χωρούν σε ύψος 768 (1366×768) χωρίς να κυλά το μενού· κάθε όνομα σε μία γραμμή */
+.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:52px;padding:6px 0;position:relative;text-align:center}
 .is-rail .navbtn[aria-current="page"]{box-shadow:none}
-.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:normal;overflow:visible;overflow-wrap:anywhere;letter-spacing:-.25px}
+.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.3px}
 .is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
-.is-rail .sidenav__toggle{min-height:48px;font-size:11px}
-.is-rail .sidenav__sep{margin:6px 8px}
+.is-rail .sidenav__toggle{min-height:42px;font-size:11px}
+.is-rail .sidenav__toggle .navbtn__lbl{display:none}
+@media (max-height:700px){.is-rail .navbtn{min-height:44px;padding:4px 0}.is-rail .navbtn svg{width:18px;height:18px}}
+.is-rail .sidenav__sep{margin:4px 8px}
 .sidenav__sep{height:1px;background:var(--bar-line);margin:8px 4px}
-.main{padding:24px 32px 48px;min-width:0}
+.main{padding:20px 32px 48px;min-width:0}
 .bottomnav{display:none}
 
 /* ---------- features ---------- */
@@ -415,6 +425,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .cat__head{display:flex;align-items:center;gap:8px}
 .cat__head b{flex:1}
 .cat__names{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;margin-top:4px}
+.cat__zero{margin:12px 0 0;color:var(--muted-fg);font-size:14px}
 .cat__names button{background:none;border:0;padding:0;color:var(--info);cursor:pointer;font-size:13px}
 /* History & templates */
 .log{list-style:none;margin:0;padding:0}
@@ -525,6 +536,12 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .ui-seg--sm{flex-wrap:nowrap;gap:4px}
 .ui-seg--sm button{height:32px;padding:0 10px;font-size:13px}
 .outbar b{font-family:var(--f-mono)}
+/* Εξοδούχοι: η μπάρα με τα σύνολα, την αποθήκευση και το Excel μένει πάνω όταν κυλάς */
+.outbar{position:sticky;top:var(--top-h);z-index:20;box-shadow:0 0 0 6px var(--background)}
+.outbar .outbar__xl{flex:none;margin-left:auto;display:flex;gap:6px;align-items:center}
+.outs__find .ui-input{flex:0 1 300px;min-width:200px}
+.outs__find .strip{flex:1 1 320px;display:flex;gap:6px;min-width:0}
+.backs-box summary .cnt{font-family:var(--f-mono);color:var(--muted-fg);margin-left:4px}
 .rec{list-style:none;margin:0;padding:0}
 .rec li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)}
 .rec li:last-child{border-bottom:0}
@@ -750,7 +767,6 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 
 /* Οπλισμός: αριθμός όπλου μέσα στη γραμμή */
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
-.weapons__body{max-height:calc(100vh - 300px);overflow-y:auto}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 6px;width:100%}
@@ -760,7 +776,6 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
 /* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
 .ptable--whod .ptable__head > *,.ptable--whod .ptable__row > *{padding-left:6px;padding-right:6px}
-.whod__body{max-height:calc(100vh - 330px);overflow-y:auto}
 .whod__head{align-items:stretch}
 .whod__head > span:first-child{display:flex;align-items:flex-end}
 .ptable--whod .ptable__head > .whod__colhd{padding-left:2px;padding-right:2px}
@@ -777,8 +792,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 /* Μεγάλοι πίνακες χωρίς VirtualList (Οπλισμός, Ποιος κάνει τι): οι γραμμές εκτός οθόνης δεν στήνονται (στυλ, layout,
    ζωγραφική) μέχρι να κυλήσεις εκεί. Ίδιο DOM, ίδια συμπεριφορά (focus, Enter στην επόμενη γραμμή, επικόλληση)· το ύψος
    είναι σταθερό (40px, 46px), οπότε η μπάρα κύλισης δεν πηδά. Μέτρηση: bench/ui, review απόδοσης 18/10. */
-.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:auto;contain-intrinsic-size:auto 40px}
-@media print{.weapons__body > .ptable__row,.whod__body > .whod__row{content-visibility:visible}}
+
 .whod__name{display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.2}
 .whod__name .linkish{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
 .whod__name small{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -876,3 +890,30 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .qa__del{display:grid;place-items:center;width:28px;height:30px;border:0;background:transparent;color:var(--muted-fg);cursor:pointer}
 .qa__del:hover{color:var(--bad)}
 .qa__sum{margin-right:auto;font-size:13px;color:var(--muted-fg)}
+/* Πάνω μπάρα: εγγραφή στο Excel στο παρασκήνιο */
+.xlchip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;color:var(--bar-fg);opacity:.75}
+.xlchip.is-on{opacity:1;border:1px solid var(--bar-line)}
+.xlchip.is-bad{opacity:1;color:#1b1f16;background:var(--gold);font-weight:600}
+.xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate}
+@keyframes xlpulse{from{opacity:.35}to{opacity:1}}
+@media (max-width:900px){.xlchip:not(.is-on):not(.is-bad){display:none}}
+/* «Έντυπα ημέρας» (Σήμερα) */
+.dayforms{display:flex;flex-direction:column;gap:14px}
+.dayforms__head{display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;font-size:15px}
+.dayforms__st{margin-left:auto;font-size:13px;font-weight:600}
+.dayforms__item.is-off .preflight{opacity:.6}
+.dayforms__item .preflight{margin:0}
+.dayforms__done{margin:6px 0 0 28px;font-size:13px}
+.txt-warn{color:var(--warn)}
+.txt-ok{color:var(--ok)}
+/* Καρτέλα στρατιώτη: ↑/↓ στη λίστα */
+.ui-sheet__head > .ui-sheet__acts{flex:none;display:flex;align-items:center}
+.sheetnav{display:inline-flex;align-items:center;gap:2px;font-size:12px}
+.sheetnav .num{margin-right:4px}
+.ui-sheet__body > .ui-tabs{margin-top:2px}
+/* Λίστες: «Το έχουν N» και ποιοι */
+.lists__n{font-size:12px;white-space:nowrap}
+.lists__who{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 6px;padding:6px 0 2px;max-height:168px;overflow-y:auto}
+.lists__who .na{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:999px;font-size:12px;background:var(--card)}
+.lists__who button.na:hover{background:var(--hover)}
+button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color:var(--primary)}

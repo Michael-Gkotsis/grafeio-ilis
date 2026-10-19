@@ -38,9 +38,9 @@ describe('απόδοση με ρεαλιστικά δεδομένα', () => {
     expect(await ams(() => fillHkai(T('hkai.xlsx'), s, END))).toBeLessThan(1500);
     expect(await ams(() => fillOuts(T('exodouxoi.xlsx'), s, END))).toBeLessThan(1500);
   }, 20_000);
-  it('οι μεγάλοι πίνακες χωρίς VirtualList δεν στήνουν τις γραμμές εκτός οθόνης', () => {
-    // Οπλισμός ~3 δευτ. → ~0,8 και «Ποιος κάνει τι» ~1,7 δευτ. → ~0,07 με 180 άτομα (bench/ui)
-    const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles.css'), 'utf8');
-    expect(css).toMatch(/\.weapons__body > \.ptable__row,\.whod__body > \.whod__row\{content-visibility:auto/);
+  it('οι μεγάλοι πίνακες δεν στήνουν τις γραμμές εκτός οθόνης', () => {
+    // Οπλισμός ~3 δευτ. → ~0,8 (content-visibility, 18/10) → ~0,2 (VirtualList, 19/10) με 180 άτομα (bench/ui)
+    // από 19/10 στήνονται μόνο οι γραμμές που φαίνονται (VirtualList), όπως στο Δυναμολόγιο
+    for (const f of ['weapons.ts', 'whodoes.ts']) expect(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'screens', f), 'utf8')).toMatch(/<\$\{VirtualList\}/);
   });
 });

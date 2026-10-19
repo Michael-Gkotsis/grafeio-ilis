@@ -2,6 +2,7 @@
 // 1. το template δεν γράφεται ποτέ (διαβάζεται μόνο), 2. πρώτα έλεγχος αν το αρχείο είναι ανοιχτό στο Excel,
 // 3. γράφεται σε .tmp, ξαναδιαβάζεται, και μόνο τότε μετονομάζεται, 4. η προηγούμενη έκδοση κρατιέται στα «_προηγούμενα».
 import fs from 'fs';
+import { threadId } from 'worker_threads';
 const fsp = fs.promises;
 import path from 'path';
 import JSZip from 'jszip';
@@ -21,7 +22,8 @@ export class ChangedError extends Error {
 }
 // Μοναδικό .tmp ανά εγγραφή: δύο εγγραφές του ίδιου αρχείου δεν γράφουν η μία πάνω στο .tmp της άλλης
 let tmpN = 0;
-const tmpOf = (file: string) => file + '.' + process.pid + '.' + ++tmpN + '.tmp';
+// και ανά νήμα: το νήμα των Excel (worker.ts) έχει το ίδιο pid
+const tmpOf = (file: string) => file + '.' + process.pid + (threadId ? '-' + threadId : '') + '.' + ++tmpN + '.tmp';
 // Πού είναι τα δεδομένα: όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe), αλλιώς δίπλα στο exe αν ο φάκελος γράφεται,
 // αλλιώς στο προφίλ του χρήστη. fallback: τρέχει από το προφίλ (το λέει το «Σήμερα»)
 export function dataDirOf(local: string, profile: string, writable: (dir: string) => boolean): { dir: string; fallback: boolean } {

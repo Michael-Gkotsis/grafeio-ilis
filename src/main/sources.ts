@@ -116,12 +116,15 @@ export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS)
   return { sheets, mtime: Math.round(st.mtimeMs), size: st.size };
 }
 
+// Ο main βάζει εδώ την ανάγνωση από το νήμα των Excel (offload.ts), για να μην παγώνει το παράθυρο
+let readNow: (file: string) => Promise<{ sheets: RawSheet[]; mtime: number; size: number }> = f => readBook(f);
+export function setBookReader(f: typeof readNow) { readNow = f; }
 // Το βιβλίο όπως είναι τώρα στον δίσκο (ξαναδιαβάζεται μόνο όταν άλλαξε)
 const books = new Map<string, { mtime: number; size: number; sheets: RawSheet[] }>();
 export async function bookNow(file: string): Promise<{ mtime: number; size: number; sheets: RawSheet[] } | null> {
   const st = stamp(file); if (!st) return null;
   const c = books.get(file); if (c && c.mtime === st.mtime && c.size === st.size) return c;
-  const r = await readBook(file); books.set(file, r); if (books.size > 12) books.delete(books.keys().next().value!);
+  const r = await readNow(file); books.set(file, r); if (books.size > 12) books.delete(books.keys().next().value!);
   return r;
 }
 // Τι κρατιέται μετά από ανάγνωση ή εγγραφή: ώρα, μέγεθος και αποτύπωμα του πίνακα

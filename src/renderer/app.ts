@@ -1,9 +1,11 @@
 // app/AppShell: πλοήγηση, συντομεύσεις, επίπεδα (dialogs/sheets), σύνδεση με το main process
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Icon, Kbd, Logo, Sheet, ToastProvider, useToast } from './ui';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
-import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, TemplatesScreen, CommandPalette } from './screens/other';
-import { DiagScreen } from './screens/diag';
+import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, CommandPalette } from './screens/other';
+// Ρυθμίσεις και Διάγνωση φορτώνουν όταν τις ανοίξεις: λιγότερος κώδικας να διαβαστεί στο άνοιγμα της εφαρμογής
+const TemplatesScreen = lazy(() => import('./screens/settings').then(m => ({ default: m.TemplatesScreen })));
+const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.DiagScreen })));
 import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
@@ -11,8 +13,8 @@ import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
-import { addDays, dmy, dow, today as todayFn } from '../shared/dates';
-import type { Boot, CmdResult } from '../shared/api';
+import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
+import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
@@ -109,7 +111,9 @@ function Root({ boot: initial }: { boot: Boot }) {
 }
 
 function Shell() {
-  const { state, today, tomorrow, undo, boot } = useStore();
+  const { state, audit, today, tomorrow, undo, boot } = useStore();
+  // τι θα αναιρέσει το κουμπί: όπως ο main (db.lastUndoable), μέσα στις 50 πιο πρόσφατες ενέργειες που αναιρούνται
+  const lastUndo = useMemo(() => audit.filter(a => a.undoable).slice(0, 50).find(a => !a.undone), [audit]);
   // η ΕΣΣΟ των Ρυθμίσεων (Νέα ΕΣΣΟ), αλλιώς η πιο συχνή όσων είναι σε δύναμη
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
@@ -117,6 +121,7 @@ function Shell() {
   // Υπόμνημα (F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
+  const [personList, setPersonList] = useState<number[] | null>(null);   // ↑/↓ στην καρτέλα: η λίστα από την οποία άνοιξε
   const [baseLater, setBaseLater] = useState(false);
   const prefsV = usePrefsState(); const { rail } = prefsV;
   const toggleRail = useCallback(() => prefsV.set('nav', rail ? 'full' : 'rail'), [prefsV.set, rail]);
@@ -143,7 +148,7 @@ function Shell() {
   }, [moveTo]);
   const setParams = useCallback((params: Record<string, any>) => setRoute(r => ({ view: r.view, params: { ...r.params, ...params } })), []);
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
-  const openPerson = useCallback((id: number) => { setPersonId(id); setLayer(null); pushRecent(id); }, []);
+  const openPerson = useCallback((id: number, list?: number[]) => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, []);
   const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, openPerson }), [route, personId, go, setParams, declare, openPerson]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -188,21 +193,22 @@ function Shell() {
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">
+          <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
-          <${Button} variant="outline" size="sm" data-tip="Αναίρεση τελευταίας ενέργειας (Ctrl+Z)" data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
+          <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
         <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
-      <main className="main"><${Screen} key=${route.view}/></main>
+      <main className="main"><${Suspense} fallback=${html`<div className="empty">Φόρτωση…</div>`}><${Screen} key=${route.view}/><//></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">
       ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
       <button type="button" aria-current=${MOBILE_MORE.includes(route.view) ? 'page' : undefined} onClick=${() => setLayer({ kind: 'more' })}>${Icon.more}Άλλα</button>
     </nav>
-    ${personId != null && html`<${PersonSheet} pid=${personId} onClose=${() => setPersonId(null)}/>`}
+    ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${setPersonId} onClose=${() => setPersonId(null)}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
     ${!baseLater && !layer && state && needsBaselineReview(state) && html`<${BaselineReviewDialog} onClose=${() => setBaseLater(true)}/>`}
@@ -211,6 +217,14 @@ function Shell() {
   <//><//><//>`;
 }
 
+// Πάνω μπάρα: οι εγγραφές στο Excel γίνονται στο παρασκήνιο, εδώ φαίνεται πότε γράφει και πότε τελείωσε
+function ExcelChip() {
+  const [b, setB] = useState<ExcelBusy | null>(null);
+  useEffect(() => window.api.onBusy?.(setB), []);
+  if (!b) return null;
+  if (b.on) return html`<span className="xlchip is-on" role="status" data-tip="Η εφαρμογή γράφει τις αλλαγές στα αρχεία Excel. Μπορείς να συνεχίσεις κανονικά." data-tip-side="bottom"><span className="xlchip__dot"></span>Γράφεται στο Excel…</span>`;
+  return html`<span className=${cx('xlchip', b.error && 'is-bad')} role="status" data-tip=${b.error ? 'Η τελευταία εγγραφή στο Excel δεν έγινε: ' + b.error + ' (Ρυθμίσεις › Αρχεία Excel)' : 'Οι αλλαγές γράφτηκαν στα αρχεία Excel στις ' + b.at} data-tip-side="bottom">${b.error ? 'Δεν γράφτηκε στο Excel' : 'Γράφτηκε ' + b.at}</span>`;
+}
 export function App({ boot }: { boot: Boot }) {
   return html`<${ToastProvider}><${Root} boot=${boot}/><//>`;
 }

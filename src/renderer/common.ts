@@ -219,7 +219,7 @@ export function usePrintFile() {
     return r.ok;
   }, [toast]);
 }
-const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
+export const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
   guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['hkai', { hkTab: 'pun' }],
   settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}]
 };
