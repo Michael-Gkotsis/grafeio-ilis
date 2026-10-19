@@ -88,9 +88,14 @@ export function ChoiceField({ id, label, value, options, onChange, placeholder, 
     ${typing && otherHelp && html`<span className="field__help">${otherHelp}</span>`}
   </div>`;
 }
-export function DateRangeField({ from, to, onChange }: P) {
+// open: χωρίς λήξη (μόνο το «από»)
+export function DateRangeField({ from, to, onChange, open }: P) {
   const { today } = useStore();
   const n = daysBetween(from, to);
+  if (open) return html`<div className="field"><div className="field-row">
+    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><input id="dr-from" type="date" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
+    <div className="field"><span className="field__label">Έως</span><span className="ui-input ui-input--static">Χωρίς λήξη</span></div>
+  </div></div>`;
   return html`<div className="field"><div className="field-row">
     <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><input id="dr-from" type="date" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
     <div className="field"><label className="field__label" htmlFor="dr-to">Έως *</label><input id="dr-to" type="date" className="ui-input" min=${from} value=${to} onChange=${(e: any) => { const t = e.target.value; if (t) onChange(from, t < from ? from : t); }}/><span className="field__help">${dayName(to, today)}</span></div>

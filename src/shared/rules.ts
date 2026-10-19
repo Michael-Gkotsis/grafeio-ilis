@@ -825,7 +825,12 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
 // unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
 // force: ο χρήστης είδε ότι κάποιος δεν βγαίνει έξοδο (ποινή, υπηρεσία…) και το δήλωσε παρ' όλα αυτά (Michael, 17/10)
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean }
+// «Χωρίς λήξη» στη δήλωση (Michael, 19/10: «στα ΣΤΕΠ και καταστάσεις»): ιατρικά, ΣΤΕΠ και νοσοκομείο, όχι άδειες, ποινές,
+// εξοδούχοι. Ισχύει μέχρι «Σταμάτησε» (endStatus)· στο Excel το «έως» μένει κενό, όπως στις εγγραφές X4 από το Excel.
+export const canOpen = (type: TypeKey) => TYPES[type].cat === 'med' || TYPES[type].cat === 'other';
+const OPEN_END: ISODate = '9999-12-31';   // για τον σχεδιασμό: όλες οι μέρες από το «από» και μετά
+export const planTo = <T extends Pick<StatusCmd, 'type' | 'to' | 'toTime' | 'open'>>(cmd: T): T => (cmd.open && canOpen(cmd.type) ? { ...cmd, to: OPEN_END, toTime: undefined } : cmd);
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
@@ -861,8 +866,8 @@ function conflictFiles(s: AppState, conflicts: StatusPlan['conflicts']): PlanFil
 }
 const rangeTxt = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 // today: οι υπηρεσίες πριν από σήμερα δεν σβήνονται (έγιναν), μόνο αναφέρονται
-export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): StatusPlan {
-  const t = TYPES[cmd.type];
+export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate): StatusPlan {
+  const cmd = planTo(cmd0); const t = TYPES[cmd.type];
   const n = cmd.pids.length;
   const pm = personMap(s.people);
   const files: PlanFile[] = [];
