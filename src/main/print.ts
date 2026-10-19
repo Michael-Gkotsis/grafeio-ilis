@@ -517,7 +517,8 @@ function fontCss(f: Font): string {
 }
 const sideCss = (s?: Side) => (s ? `${s.w}px ${s.style} ${s.color}` : '0');
 
-export async function renderBook(buf: Buffer | Uint8Array, opts: { file: string; sheets?: string[] }): Promise<PrintDoc> {
+// refs: κάθε κελί με data-a="B4" (προεπισκόπηση των Εντύπων, όπου διαλέγεις κελί με κλικ)· maxPages: μόνο οι πρώτες σελίδες
+export async function renderBook(buf: Buffer | Uint8Array, opts: { file: string; sheets?: string[]; refs?: boolean; maxPages?: number }): Promise<PrintDoc> {
   const book = await Book.open(buf);
   const visible = book.sheets.filter(x => !x.hidden);
   const all = visible.map(x => x.name);
@@ -529,13 +530,13 @@ export async function renderBook(buf: Buffer | Uint8Array, opts: { file: string;
   const sheets: PrintSheet[] = [];
   for (const name of want) {
     const sh = (await book.load(name))!; await book.loadRefs(sh);
-    sheets.push(renderSheet(book, sh, book.sheets.findIndex(x => x.name === name), opts.file, used));
+    sheets.push(renderSheet(book, sh, book.sheets.findIndex(x => x.name === name), opts.file, used, opts));
   }
   const css = [...used].map(i => { const x = book.styles.xfs[i] || book.styles.xfs[0]; return `.s${i}{${fontCss(book.styles.fonts[x.font] || book.styles.fonts[0])}${x.fill ? 'background:' + x.fill + ';' : ''}}`; }).join('\n');
   return { sheets, all, css };
 }
 
-function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, used: Set<number>): PrintSheet {
+function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, used: Set<number>, opt: { refs?: boolean; maxPages?: number } = {}): PrintSheet {
   const x = sh.xml; const st = book.styles;
   const ps = /<pageSetup\b[^>]*>/.exec(x)?.[0] || ''; const pm = /<pageMargins\b[^>]*>/.exec(x)?.[0] || '';
   const paper = PAPER[num(ps, 'paperSize', 9)] || PAPER[9];
@@ -607,7 +608,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
   const oddH = /<oddHeader>([\s\S]*?)<\/oddHeader>/.exec(hdr)?.[1], oddF = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(hdr)?.[1];
   const firstNo = /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1;
 
-  const pages = order.map(([rp, cp], pi) => {
+  const pages = (opt.maxPages ? order.slice(0, opt.maxPages) : order).map(([rp, cp], pi) => {
     const rows = withTitles(rp[0]) ? [...titleList, ...rp] : rp;
     const rowIx = new Map(rows.map((r, i) => [r, i])); const colIx = new Map(cp.map((c, i) => [c, i]));
     const tw = cp.reduce((a, c) => a + colW(c), 0), th = rows.reduce((a, r) => a + rowH(r), 0);
@@ -649,7 +650,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
           const rot = xf.rot === 90 || xf.rot === 180 || xf.rot === 255 ? 'writing-mode:vertical-rl;' + (xf.rot === 90 ? 'transform:rotate(180deg);' : '') : '';
           inner = `<div class="x${xf.wrap ? ' w' : ''}${spill ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span>${rich ? richHtml(rich) : esc(txt)}</span></div>`;
         }
-        tr += `<td class="s${s}"${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
+        tr += `<td class="s${s}"${opt.refs ? ` data-a="${colName(ac)}${ar}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
       }
       body += `<tr style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
     }
@@ -659,7 +660,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
     const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
     return `<div class="pg" style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${grid ? 'grid' : ''}" style="width:${tw}px">${cg}<tbody>${body}</tbody></table></div>${hf(oddF, false)}</div>`;
   });
-  return { name: sh.name, paper: paper.name, landscape, pages: pages.length, scale, html: pages.join('') };
+  return { name: sh.name, paper: paper.name, landscape, pages: order.length, scale, html: pages.join('') };
 }
 // κρυφές γραμμές ανάμεσα σε δύο ορατές (για να συνεχίζει η συγχώνευση από πάνω τους)
 const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let n = 0; for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++; return n; };

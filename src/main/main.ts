@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { copyDurable, dataDirOf, writeAll, writeJson, freeName, LockedError } from './files';
+import { copyDurable, dataDirOf, writeAll, writeJson, freeName, isLocked, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
@@ -19,6 +19,8 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, 
 import { normGreek } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
 import { previewHtml, renderBook } from './print';
+import { buildTemplate, fillReport, inspectTemplate, previewReport, previewTemplate } from './reports';
+import type { BuildOpts, RepKind, Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
@@ -47,7 +49,7 @@ const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
 // Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
 const META = path.join(DATA, 'meta.json');
-type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[] };   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string> };   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
 const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
@@ -55,7 +57,12 @@ const USB_KEEP = 10;
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
 // Ελληνικά για το Chromium: τα πεδία ημερομηνίας δείχνουν ημέρα/μήνα/έτος και σε Windows με αγγλικές ρυθμίσεις (αλλιώς μήνας/ημέρα)
 app.commandLine.appendSwitch('lang', 'el');
-const USER_TPL = path.join(ROOT, 'templates');   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
+const USER_TPL = path.join(ROOT, 'templates');
+// Έντυπα: τα πρότυπά σου (ανεβασμένα ή φτιαγμένα εδώ), με όνομα αρχείου <id>.xlsx· μένουν και στη Νέα ΕΣΣΟ
+const TPL_DIR = path.join(DATA, 'Πρότυπα εντύπων');
+const TPL_NAME = /^[0-9a-f-]{36}\.xls[xm]$/i;
+const TPL_MAX = 5 * 1024 * 1024;
+const tplBuf = (file: string) => { if (!TPL_NAME.test(file)) throw new Error('Άγνωστο πρότυπο'); const f = path.join(TPL_DIR, file); if (!fs.existsSync(f)) throw new Error('Λείπει το αρχείο του προτύπου. Ανέβασέ το ξανά στα Έντυπα › Πρότυπα.'); return fs.promises.readFile(f); };   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΠΕΝ)', file: 'froura-spen.xlsx' },
@@ -962,6 +969,61 @@ else {
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Έντυπα: πρότυπα στον φάκελο «Πρότυπα εντύπων», έντυπα που βγαίνουν στον φάκελο των Excel
+    ipcMain.handle('rep:upload', async (_e, kind: RepKind) => {
+      const res = await dialog.showOpenDialog(win!, { title: 'Διάλεξε το Excel που θα γίνει πρότυπο', filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }], properties: ['openFile'] });
+      const src = res.canceled ? null : res.filePaths[0]; if (!src) return null;
+      try {
+        if (/\.xls$/i.test(src)) return fail('Το ' + path.basename(src) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx.');
+        const st = fs.statSync(src); if (st.size > TPL_MAX) return fail('Το αρχείο είναι πάνω από 5 MB. Κράτα σε ένα αρχείο μόνο το φύλλο του εντύπου και ξαναδοκίμασε.');
+        const buf = await fs.promises.readFile(src);
+        const insp = await inspectTemplate(buf, kind);
+        const file = crypto.randomUUID() + (/\.xlsm$/i.test(src) ? '.xlsm' : '.xlsx');
+        await fs.promises.mkdir(TPL_DIR, { recursive: true }); await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
+        return { ok: true, tpl: { id: crypto.randomUUID(), name: path.basename(src).replace(/\.xls[xm]$/i, ''), file, mtime: Math.round(fs.statSync(path.join(TPL_DIR, file)).mtimeMs) }, insp };
+      } catch (e) { return fail('Δεν διαβάστηκε το ' + path.basename(src) + ': ' + msgOf(e)); }
+    });
+    ipcMain.handle('rep:inspect', async (_e, file: string, kind: RepKind, sheet?: string, head?: number) => {
+      try { return await inspectTemplate(await tplBuf(file), kind, sheet, head); } catch (e) { return fail(e); }
+    });
+    ipcMain.handle('rep:build', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
+      try {
+        const b = await buildTemplate(o, kind); const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
+        await fs.promises.mkdir(TPL_DIR, { recursive: true }); const f = path.join(TPL_DIR, name);
+        if (isLocked(f)) return fail('Το πρότυπο είναι ανοιχτό στο Excel. Κλείσε το Excel και ξαναπάτα.');
+        await fs.promises.writeFile(f, b.data);
+        return { ok: true, file: name, mtime: Math.round(fs.statSync(f).mtimeMs), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells };
+      } catch (e) { return fail(e); }
+    });
+    ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean) => {
+      try {
+        const s = store.state;
+        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind); return previewReport(b.data, s, { ...r, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells }, ids, date); }, s);
+        const buf = await tplBuf(src.file || '');
+        if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
+        return await off('previewReport', [buf, r, ids, date], () => previewReport(buf, s, r, ids, date), s);
+      } catch (e) { return fail(e); }
+    });
+    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean) => {
+      try {
+        const s = store.state; const buf = await tplBuf(file); const t0 = Date.now();
+        const out = await off('fillReport', [buf, r, ids, date], () => fillReport(buf, s, r, ids, date), s);
+        const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
+        const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
+        logWrite('Έντυπο ' + r.name, t0);
+        const warnings = [...(out.warnings || [])];
+        if (print) { const p = await printPreview(f, [r.sheet]); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(f);
+        writeMeta({ repLast: { ...(readMeta().repLast || {}), [r.id]: today() + ' ' + nowHM() } });
+        return { ok: true, file: f, warnings };
+      } catch (e) {
+        if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
+        if (e instanceof TemplateError) return { ok: false, error: e.message };
+        return fail(e);
+      }
+    });
+    ipcMain.handle('rep:openTpl', async (_e, file: string) => { if (TPL_NAME.test(file) && fs.existsSync(path.join(TPL_DIR, file))) await shell.openPath(path.join(TPL_DIR, file)); });
+    ipcMain.handle('rep:files', (_e, files: string[]) => Object.fromEntries((Array.isArray(files) ? files : []).filter(f => TPL_NAME.test(f)).map(f => { try { return [f, { exists: true, mtime: Math.round(fs.statSync(path.join(TPL_DIR, f)).mtimeMs) }]; } catch { return [f, { exists: false, mtime: 0 }]; } })));
+    ipcMain.handle('rep:last', () => readMeta().repLast || {});
     ipcMain.handle('roster:pick', () => pickRoster());
     ipcMain.handle('roster:apply', (_e, token: string, deactivateMissing: boolean) => {
       const p = pending.get(token); if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');

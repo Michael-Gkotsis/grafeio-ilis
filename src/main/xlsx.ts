@@ -231,6 +231,12 @@ export class Sheet {
     this.tail = tailInsert(this.tail, 'pageSetup', `<pageSetup paperSize="9" orientation="${landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0"/>`);
     return this;
   }
+  // Υποσέλιδο σε κάθε σελίδα (π.χ. «Σελίδα &P από &N» στο κέντρο), μόνο αν το φύλλο δεν έχει ήδη δικό του
+  setFooter(center: string): this {
+    if (/<headerFooter\b/.test(this.tail)) return this;
+    this.tail = tailInsert(this.tail, 'headerFooter', `<headerFooter><oddFooter>&amp;C${esc(center)}</oddFooter></headerFooter>`);
+    return this;
+  }
   // Σταθερές γραμμές/στήλες (πάγωμα παραθύρου) για καινούργιο φύλλο
   setFreeze(cols: number, rows: number): this {
     if (/<sheetViews\b/.test(this.head)) return this;
@@ -625,6 +631,29 @@ export class Workbook {
     return this.xfLike(base ?? 0, st.centered, x => withAlign(x, { horizontal: 'center', vertical: 'center' }));
   }
 
+  // Στυλ από απλές επιλογές, για πρότυπα που φτιάχνει η εφαρμογή (Έντυπα › «Φτιάξ' το εδώ»): γραμματοσειρά της βάσης του
+  // βιβλίου σε μέγεθος sz (έντονη, υπογραμμισμένη), γέμισμα (rgb χωρίς #), λεπτό πλαίσιο και στοίχιση. Ίδιες επιλογές → ίδιο στυλ.
+  async style(o: { sz?: number; b?: boolean; u?: boolean; fill?: string; border?: boolean; h?: 'left' | 'center' | 'right'; v?: 'top' | 'center' | 'bottom'; wrap?: boolean }): Promise<number> {
+    await this.loadStyles();
+    const fonts = this.part('fonts'); const base = fonts.items[0] || '<font><sz val="11"/><name val="Calibri"/></font>';
+    const parts = new Map<string, string>();
+    for (const m of base.replace(/^<font\b[^>]*>/, '').matchAll(/<(\w+)\b[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g)) parts.set(m[1], m[0]);
+    if (o.b) parts.set('b', '<b/>'); if (o.u) parts.set('u', '<u/>'); if (o.sz) parts.set('sz', `<sz val="${o.sz}"/>`);
+    const font = fonts.add('<font>' + FONT_ORDER.map(k => parts.get(k) || '').join('') + '</font>');
+    const fill = o.fill ? this.part('fills').add(`<fill><patternFill patternType="solid"><fgColor rgb="FF${o.fill.toUpperCase()}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+    const border = o.border ? this.thinBorder() : 0;
+    const al = [o.h && `horizontal="${o.h}"`, `vertical="${o.v || 'center'}"`, o.wrap && 'wrapText="1"'].filter(Boolean).join(' ');
+    return this.addXf(`<xf numFmtId="0" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" applyFont="1"${fill ? ' applyFill="1"' : ''}${border ? ' applyBorder="1"' : ''} applyAlignment="1"><alignment ${al}/></xf>`);
+  }
+  // Γραμμές που επαναλαμβάνονται σε κάθε τυπωμένη σελίδα (Print_Titles), αν το φύλλο δεν έχει ήδη· false: είχε
+  setPrintTitles(sheet: string, r1: number, r2: number): boolean {
+    const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return false;
+    if ([...this.workbookXml.matchAll(/<definedName\b([^>]*)>/g)].some(m => attr(m[1], 'name') === '_xlnm.Print_Titles' && attr(m[1], 'localSheetId') === String(i))) return false;
+    const dn = `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${esc(sheet).replace(/'/g, '&apos;&apos;')}'!$${r1}:$${r2}</definedName>`;
+    if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('<definedNames>', '<definedNames>' + dn);
+    else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+    return true;
+  }
   // Γραμματοσειρά όπως η id σε άλλο μέγεθος
   private fontSized(id: number, sz: number): number {
     const fonts = this.part('fonts'); const base = fonts.items[id] || fonts.items[0] || '<font><sz val="11"/><name val="Calibri"/></font>';

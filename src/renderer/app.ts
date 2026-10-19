@@ -6,6 +6,7 @@ import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, 
 // Ρυθμίσεις και Διάγνωση φορτώνουν όταν τις ανοίξεις: λιγότερος κώδικας να διαβαστεί στο άνοιγμα της εφαρμογής
 const TemplatesScreen = lazy(() => import('./screens/settings').then(m => ({ default: m.TemplatesScreen })));
 const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.DiagScreen })));
+const ReportsScreen = lazy(() => import('./screens/reports').then(m => ({ default: m.ReportsScreen })));
 import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
@@ -25,16 +26,16 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 // το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
 const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
-const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons'], NAV_MORE = ['history', 'templates'];
-const NAV_ALL = [...NAV_MAIN, 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· το Ιστορικό μόνο από το μενού
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates'];
+const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, το Ιστορικό μόνο από το μενού
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
 const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'history', 'templates'];
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'history', 'templates'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());
@@ -158,6 +159,7 @@ function Shell() {
       else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); if (!e.repeat) undo(); }
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
       else if (mod && (k === 'b' || k === 'β')) { e.preventDefault(); toggleRail(); }
+      else if (mod && !e.shiftKey && (k === 'e' || k === 'ε')) { e.preventDefault(); go('reports'); }
       else if (e.altKey && !mod && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
       else if (e.altKey && !mod && /^Digit[0-9]$/.test(e.code) && NAV_ALL[(+e.code.slice(5) + 9) % 10]) { e.preventDefault(); go(NAV_ALL[(+e.code.slice(5) + 9) % 10]); }
       else if (mod && (k === 'f' || k === 'φ')) {   // αναζήτηση στη λίστα της οθόνης, αλλιώς η γενική
@@ -180,7 +182,7 @@ function Shell() {
   const navItem = (v: string, inRail = false) => {
     const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
     const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
-    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : '';
+    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
       data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
       ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
