@@ -22,7 +22,7 @@ export const isDnYes = (v: string) => { const t = normGreek(v).replace(/\s+/g, '
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
 export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
 export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
-const HEADERS: [Field, RegExp][] = [
+export const HEADERS: [Field, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
   ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD]

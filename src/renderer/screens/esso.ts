@@ -114,7 +114,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
       <div className="field"><span className="field__label">Δυναμολόγιο</span>
         <${Segmented} value=${ros ? 'file' : 'new'} onChange=${(v: string) => { if (v === 'new') setRos(null); else pickRoster(); }} items=${[{ value: 'new', label: 'Νέο, χωρίς στρατιώτες' }, { value: 'file', label: 'Έχω το Excel της νέας ΕΣΣΟ…' }]}/>
         ${ros ? html`<span className="field__help"><b>${ros.file}</b>: ${ros.active} σε δύναμη από ${ros.total}${ros.essos ? ' · ΕΣΣΟ ' + ros.essos : ''}. Αντιγράφεται στον φάκελο της νέας, οι στρατιώτες μπαίνουν στην εφαρμογή και τα φύλλα που λείπουν (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) προστίθενται εκεί. <${Button} variant="link" onClick=${pickRoster}>Άλλο αρχείο<//></span>`
-          : html`<span className="field__help">Φτιάχνεται κενό ΔΥΝΑΜΟΛΟΓΙΟ ${essoName(e)} με όλα τα φύλλα του. Τους στρατιώτες τους βάζεις μετά με «+ Νέος στρατιώτης» ή με εισαγωγή.</span>`}
+          : html`<span className="field__help">Φτιάχνεται κενό ΔΥΝΑΜΟΛΟΓΙΟ ${essoName(e)} με όλα τα φύλλα του. Τους στρατιώτες τους γράφεις μετά σε πίνακα, τον έναν κάτω από τον άλλον (Γρήγορη εισαγωγή), ή με εισαγωγή.</span>`}
         ${ros?.warnings.map(w => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
         ${rosEsso && (rosEsso.s !== e.s || rosEsso.y !== e.y) && html`<${Alert} tone="warn"><span>Το αρχείο γράφει ${essoName(rosEsso)}, ενώ διάλεξες ${essoName(e)}. <${Button} variant="link" onClick=${() => setE(rosEsso)}>Κράτα ${essoName(rosEsso)}<//></span><//>`}</div>
       <p className="note">Φτιάχνεται επίσης ο ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ${essoName(e)} με το φύλλο του μήνα. Όλα συνδέονται μόνα τους στα «Αρχεία Excel».</p>`}
@@ -133,7 +133,7 @@ function EssoDone({ r, onClose }: P) {
   const { state } = useStore(); const nav = useNav(); const name = state.settings.essos ? essoName(state.settings.essos) : 'νέα ΕΣΣΟ';
   const n = state.people.filter(p => p.active).length;
   return html`<${Dialog} title=${'Ξεκίνησε η ' + name} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//><${Button} onClick=${() => { onClose(); nav.go('people'); }}>${n ? 'Στο Δυναμολόγιο (' + n + ')' : 'Στο Δυναμολόγιο: πρόσθεσε στρατιώτες'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//><${Button} onClick=${() => { onClose(); if (n) nav.go('people'); else nav.go('people', { quickAdd: true }); }}>${n ? 'Στο Δυναμολόγιο (' + n + ')' : 'Γράψε τους στρατιώτες'}<//>`}>
     <dl className="kv"><dt>Αρχείο</dt><dd><span className="plan__fn">${r.archive}</span> <${Button} variant="link" onClick=${() => window.api.essoOpen(r.archive)}>Άνοιξε<//></dd>
       <dt>Φάκελος</dt><dd><span className="plan__fn">${r.dir}</span> <${Button} variant="link" onClick=${() => window.api.essoOpen(r.dir)}>Άνοιξε<//></dd>
       <dt>Excel</dt><dd>${r.files.length ? r.files.map((f: string) => html`<div key=${f}><${Button} variant="link" onClick=${() => window.api.openPath(f)}>${f.split(/[\\/]/).pop()}<//></div>`) : 'κανένα'}</dd></dl>
