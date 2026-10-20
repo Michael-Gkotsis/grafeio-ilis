@@ -5,7 +5,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { usePrintFile } from '../common';
+import { PAGE_CSS } from '../pageCss';
 import { SigsDialog } from '../sigs';
+import { LayoutDialog } from '../layout';
+import { dropSigMoves, type Layout } from '../../shared/layout';
 import { sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
 import { ROSTER_FILTERS } from '../../shared/rosterLists';
@@ -120,15 +123,6 @@ function PickList({ p, kind }: P) {
 }
 
 // ------------------------------------------------------------------ προεπισκόπηση (σελίδα όπως θα τυπωθεί, κελιά με κλικ)
-const PAGE_CSS = `:host{display:block}*{box-sizing:border-box}.wrap{transform-origin:0 0}
-.pg{position:relative;margin:0 auto 12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.35);overflow:hidden}.ar{position:absolute;transform-origin:0 0}
-table{border-collapse:collapse;table-layout:fixed;color:#000}td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
-table.grid td{outline:.5px solid #bbb}.x{display:flex;padding:0 2px;white-space:pre;overflow:hidden;line-height:1.15}.x.o{overflow:visible}
-.x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
-.hf{position:absolute;display:flex;justify-content:space-between;font:10pt Calibri,Carlito,Arial,sans-serif}.hf span{flex:1}.hf span:nth-child(2){text-align:center}.hf span:nth-child(3){text-align:right}
-.picking td[data-a]{cursor:crosshair}.picking td[data-a]:hover{outline:2px solid #1a73e8;outline-offset:-2px;background:rgba(26,115,232,.08)}
-td.on{outline:2px solid #d9a400;outline-offset:-2px}td.hd{background-image:linear-gradient(rgba(91,122,43,.14),rgba(91,122,43,.14))}
-.mock{border-collapse:collapse;font:12px Arial}.mock td,.mock th{border:1px solid #999;padding:2px 6px}`;
 function Preview({ pv, busy, picking, marks, head, onPick }: P) {
   const host = useRef<HTMLDivElement>(null); const root = useRef<ShadowRoot | null>(null);
   const pick = useRef(onPick); pick.current = onPick;
@@ -188,6 +182,7 @@ export function ReportsScreen() {
   const [ask, setAsk] = useState<{ r: Report; print: boolean; init?: { ids: (number | string)[]; d: string } } | null>(null);
   const [hist, setHist] = useState<Report | null>(null);
   const [sigFor, setSigFor] = useState<Report | null>(null);
+  const [layFor, setLayFor] = useState<{ r: Report; sigs: Sig[] } | null>(null);
   const go = async (r: Report, print = r.out === 'print', s = state) => {
     if (needsAsk(r)) { setAsk({ r, print }); return; }
     const d = repDate(r, today);
@@ -211,10 +206,19 @@ export function ReportsScreen() {
   const delTpl = async (t: RepTpl) => { if (await save({ reportTpls: tpls.filter(x => x.id !== t.id) }, 'Διαγραφή προτύπου «' + t.name + '»')) toast({ text: 'Σβήστηκε το πρότυπο «' + t.name + '».', actions: [undoMark()] }); };
   const usedBy = (t: RepTpl) => reports.filter(r => r.tpl === t.id);
   // «Υπογραφές…»: άλλες για αυτή τη φορά, ή (keep) για αυτό το έντυπο από εδώ και πέρα
-  const sigsGo = async (r: Report, sigs: Sig[], keep: boolean, print: boolean) => {
-    let s = state;
-    if (keep) { const next = await save({ reports: reports.map(x => (x.id === r.id ? { ...x, sigs } : x)) }, 'Υπογραφές εντύπου «' + r.name + '»'); if (!next) return; s = next; }
+  const sigsGo = async (r0: Report, sigs: Sig[], keep: boolean, print: boolean) => {
+    let s = state; let r = reports.find(x => x.id === r0.id) || r0;   // με ό,τι άλλαξε στο μεταξύ (π.χ. θέσεις στο χαρτί)
+    if (keep) {
+      // άλλο πλήθος υπογραφών: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
+      if (r.layout && sigs.length !== (r.sigs ?? sigsSaved(state.settings, 'reports')).length) { const { layout: _, ...rest } = r; const l = dropSigMoves({ main: r.layout })?.main; r = l ? { ...rest, layout: l } : rest; }
+      const next = await save({ reports: reports.map(x => (x.id === r.id ? { ...r, sigs } : x)) }, 'Υπογραφές εντύπου «' + r.name + '»'); if (!next) return; s = next;
+    }
     go({ ...r, sigs }, print, s);
+  };
+  // θέσεις πάνω στο χαρτί: για όλα τα φύλλα του εντύπου (το πρότυπο είναι ένα)
+  const layoutSave = async (r: Report, l: Layout | undefined) => {
+    const { layout: _, ...rest } = r; const next = l?.main ? { ...rest, layout: l.main } : rest;
+    if (await save({ reports: reports.map(x => (x.id === r.id ? next : x)) }, 'Θέσεις στο χαρτί: «' + r.name + '»')) toast({ text: 'Αποθηκεύτηκαν οι θέσεις του «' + r.name + '».' });
   };
   const sigsReset = async (r: Report) => { const { sigs: _, ...rest } = r; if (await save({ reports: reports.map(x => (x.id === r.id ? rest : x)) }, 'Υπογραφές εντύπου «' + r.name + '»')) toast({ text: 'Το «' + r.name + '» παίρνει ξανά τις υπογραφές των Ρυθμίσεων.' }); };
   return html`<div>
@@ -245,7 +249,9 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
     ${sigFor && html`<${SigsDialog} title=${sigFor.name} initial=${sigFor.sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
-      onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
+      onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} onLayout=${(sigs: Sig[]) => setLayFor({ r: sigFor, sigs })} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
+    ${layFor && html`<${LayoutDialog} title=${layFor.r.name} sigs=${layFor.sigs} initial=${layFor.r.layout ? { main: layFor.r.layout } : undefined} onClose=${() => setLayFor(null)} onSave=${(l: Layout | undefined) => layoutSave(layFor.r, l)}
+      req=${(l: Layout) => { const d = repDate(layFor.r, today); return { report: { ...layFor.r, sigs: layFor.sigs, layout: l.main }, file: tpls.find(t => t.id === layFor.r.tpl)?.file || '', ids: rowsOf(state, layFor.r, d).map(x => x.id), date: d }; }}/>`}
     ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${fromWizard}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
     ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}

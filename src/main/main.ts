@@ -11,6 +11,8 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
+import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
+import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
@@ -183,7 +185,7 @@ const X = {
 };
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
 // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
-async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings?: string[] }> {
+async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
   const form = formOf(kind, s);
   if (kind === 'check') return off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s);
   const b = formBinding(form);
@@ -1084,6 +1086,21 @@ else {
     // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
     // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
     // opts.quiet: δεν ανοίγει το Excel (Έντυπα ημέρας › «Τύπωσε όλα») · opts.again: «Ξαναβγάλε» από το ιστορικό (δεν μετρά ξανά τους τυχαίους)
+    // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (σήμερα), με 8 γραμμές παραπάνω για να μπορείς να κατεβάσεις κάτι
+    ipcMain.handle('layout:preview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
+      try {
+        const s = store.state; let out: { data: Buffer; warnings?: string[]; layout?: LayoutSheet[] };
+        if ('report' in q) { const buf = await tplBuf(q.file); out = await off('fillReport', [buf, q.report, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, q.report, q.ids.slice(0, 120), q.date), s); }
+        else {
+          const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
+          out = await produce(q.form, q.date, s2, q.sigs);
+        }
+        const ls = out.layout || []; const wb = await Workbook.open(out.data);
+        for (const l of ls) { const r = wb.printLastRow(l.sheet); if (r) wb.printDownTo(l.sheet, r + 8); }
+        const doc = await renderBook(await wb.save(), { file: 'προεπισκόπηση.xlsx', sheets: ls.map(l => l.sheet), refs: true, maxPages: 2 });
+        return { css: doc.css, warnings: out.warnings || [], sheets: ls.map(l => { const sh = doc.sheets.find(x => x.name === l.sheet); return { ...l, html: sh?.html || '', pages: sh?.pages || 0 }; }) };
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    });
     ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepOut> => {
       try {
         const s = store.state; const t0 = Date.now(); let res: RepOut;

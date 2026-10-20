@@ -29,12 +29,12 @@ export function SigEditor({ value, onChange, id = 'sg' }: { value: Sig[]; onChan
 }
 
 // Τη στιγμή που βγαίνει: αλλαγές μόνο για αυτή τη φορά, ή και για τις επόμενες (keepText). onGo(λίστα, κράτα, εκτύπωση)
-export function SigsDialog({ title, initial, keepText, onGo, onClose, print = true, reset, onceText = 'Αλλιώς ισχύουν μόνο για αυτό το αρχείο (και όταν ενημερώνεται μόνο του).' }: { title: string; initial: Sig[]; keepText: string; onGo: (sigs: Sig[], keep: boolean, print: boolean) => unknown; onClose: () => void; print?: boolean; reset?: { text: string; onClick: () => unknown }; onceText?: string }) {
+export function SigsDialog({ title, initial, keepText, onGo, onClose, print = true, reset, onLayout, onceText = 'Αλλιώς ισχύουν μόνο για αυτό το αρχείο (και όταν ενημερώνεται μόνο του).' }: { title: string; initial: Sig[]; keepText: string; onGo: (sigs: Sig[], keep: boolean, print: boolean) => unknown; onClose: () => void; print?: boolean; reset?: { text: string; onClick: () => unknown }; onLayout?: (list: Sig[]) => unknown; onceText?: string }) {
   const [list, setList] = useState<Sig[]>(() => initial.map(x => ({ ...x })));
   const [keep, setKeep] = useState(false);
   const go = (pr: boolean) => { onClose(); onGo(sigsClean(list), keep, pr); };
   return html`<${Dialog} title=${'Υπογραφές: ' + title} description="Με τη σειρά που θα φαίνονται στο χαρτί, από αριστερά προς τα δεξιά." onClose=${onClose} size="lg"
-    footer=${html`${reset && html`<${Button} variant="ghost" onClick=${() => { onClose(); reset.onClick(); }} style=${{ marginRight: 'auto' }}>${reset.text}<//>`}<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>${print && html`<${Button} variant="outline" onClick=${() => go(true)}>${Icon.print}Εκτύπωση<//>`}<${Button} onClick=${() => go(false)}>Βγάλε το Excel<//>`}>
+    footer=${html`${onLayout && html`<${Button} variant="outline" onClick=${() => onLayout(sigsClean(list))} style=${reset ? undefined : { marginRight: 'auto' }} data-tip="Σύρε κεφαλίδα, ημερομηνία και υπογραφές όπου θέλεις πάνω στο χαρτί">Θέσεις στο χαρτί…<//>`}${reset && html`<${Button} variant="ghost" onClick=${() => { onClose(); reset.onClick(); }} style=${{ marginRight: 'auto' }}>${reset.text}<//>`}<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>${print && html`<${Button} variant="outline" onClick=${() => go(true)}>${Icon.print}Εκτύπωση<//>`}<${Button} onClick=${() => go(false)}>Βγάλε το Excel<//>`}>
     <${SigEditor} value=${list} onChange=${setList} id="sgd"/>
     <label className="rule" style=${{ marginTop: '12px' }}><input type="checkbox" className="ui-check" checked=${keep} onChange=${(e: P) => setKeep(e.target.checked)}/><span><b>${keepText}</b><small>${onceText}</small></span></label>
   <//>`;

@@ -6,6 +6,7 @@ import type { Esso } from './esso';
 import type { UnitKind } from './unit';
 import type { Report, RepTpl } from './reports';
 import type { Sig, SigForm } from './sigs';
+import type { Layout, LayoutForm } from './layout';
 import type { XlLook } from './xlLook';
 
 // ---------------------------------------------------------------------------
@@ -237,6 +238,7 @@ export interface Settings {
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
   sigs?: Partial<Record<SigForm, Sig[]>>;  // υπογραφές ανά έντυπο, από αριστερά προς τα δεξιά (κενό = όπως το έντυπο), sigs.ts
+  layout?: Partial<Record<LayoutForm, Layout>>;  // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία πάνω στο χαρτί, layout.ts
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
   fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών

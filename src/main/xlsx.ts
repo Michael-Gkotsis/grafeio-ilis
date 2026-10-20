@@ -170,6 +170,13 @@ export class Sheet {
     const x = this.cell(ref, false); if (!x || !x.inner || /^<v\/>$|^<is\/>$/.test(x.inner)) return null;
     const s = attr(x.attrs, 's'); return { t: attr(x.attrs, 't'), s: s == null ? null : Number(s), inner: x.inner };
   }
+  // Γράφει ό,τι έδωσε το raw (μετακίνηση κελιού, layout.ts)· null = άδειασμα. Τα κελιά με τύπο δεν αλλάζουν.
+  setRaw(ref: string, x: { t: string | null; inner: string } | null): this {
+    const c = this.cell(ref)!; if (c.inner.includes('<f')) return this;
+    c.attrs = setAttr(c.attrs, 't', x ? x.t : null); c.inner = x ? x.inner : ''; c.selfClose = !c.inner;
+    if (c.inner) this.wrote.add(ref); else this.wrote.delete(ref);
+    return this;
+  }
   // Τελευταία στήλη με κελί σε κάποια γραμμή (ή συγχώνευση)
   lastCol(): number { let n = 0; for (const row of this.rows) for (const c of row.cells) if (c.col > n) n = c.col; for (const m of this.merges()) if (m.c2 > n) n = m.c2; return n; }
   rowHidden(r: number): boolean { return /^(1|true)$/.test(attr(this.row(r, false)?.attrs || '', 'hidden') || ''); }
@@ -1067,6 +1074,12 @@ export class Workbook {
     });
   }
   // Η περιοχή εκτύπωσης του φύλλου φτάνει τουλάχιστον ως τη γραμμή row (π.χ. όνομα κάτω από υπογραφή)· χωρίς περιοχή, τίποτα
+  // Τελευταία γραμμή της περιοχής εκτύπωσης (null αν δεν έχει)
+  printLastRow(sheet: string): number | null {
+    const i = this.names.findIndex(x => x.name === sheet);
+    const m = [...this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)].find(x => attr(x[1], 'name') === '_xlnm.Print_Area' && attr(x[1], 'localSheetId') === String(i));
+    const r = m && /:\$?[A-Z]+\$?(\d+)(?:$|,)/.exec(unesc(m[2])); return r ? Number(r[1]) : null;
+  }
   printDownTo(sheet: string, row: number) {
     const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
     this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {

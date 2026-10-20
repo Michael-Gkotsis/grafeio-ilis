@@ -11,6 +11,7 @@ import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
+import type { Moves } from './layout';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
@@ -136,6 +137,7 @@ export interface Report {
   trim?: boolean;                             // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
   daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
   sigs?: Sig[];                               // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
+  layout?: Moves;                             // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
 }
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
