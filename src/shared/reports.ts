@@ -147,11 +147,11 @@ export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
 const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
 export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts }[] = [
-  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' } },
-  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' } },
-  { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 11, fill: 'gray' } }
+  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
+  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
+  { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 12, fill: 'gray' } }
 ];
-export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' });
+export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' });
 
 // ------------------------------------------------------------------ μαντεψιά από τις επικεφαλίδες του Excel
 const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');

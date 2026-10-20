@@ -19,6 +19,7 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, 
 import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
 import { previewHtml, renderBook } from './print';
+import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
@@ -1064,7 +1065,7 @@ else {
     });
     ipcMain.handle('rep:build', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
       try {
-        const b = await buildTemplate(o, kind); const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
+        const b = await buildTemplate(o, kind, xlLook(store.state.settings)); const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
         await fs.promises.mkdir(TPL_DIR, { recursive: true }); const f = path.join(TPL_DIR, name);
         if (isLocked(f)) return fail('Το πρότυπο είναι ανοιχτό στο Excel. Κλείσε το Excel και ξαναπάτα.');
         await fs.promises.writeFile(f, b.data);
@@ -1074,7 +1075,7 @@ else {
     ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean) => {
       try {
         const s = store.state;
-        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind); return previewReport(b.data, s, { ...r, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells }, ids, date); }, s);
+        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind, xlLook(s.settings)); return previewReport(b.data, s, { ...r, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells }, ids, date); }, s);
         const buf = await tplBuf(src.file || '');
         if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
         return await off('previewReport', [buf, r, ids, date], () => previewReport(buf, s, r, ids, date), s);
