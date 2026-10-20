@@ -10,7 +10,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
@@ -48,9 +48,6 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
       : [E(''), null, null, h(), null, E('', '', 3), null, null, h(), null, E('')]);
   }
   rows.push([E('', '', W)]);
-  const ext = (x: { label: string; name: string; hours: string }) => (spen
-    ? [E(''), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 2) : E('ΚΕΝΗ', 'b c kenh', 2), E(x.hours, 'b c'), E('', '', 8)]
-    : [E('', '', 4), E(x.label, 'b c'), x.name ? E(x.name, 'b c', 3) : E('ΚΕΝΗ', 'b c kenh', 3), E(x.hours, 'b c'), E('', '', 4)]);
   if (!spen) {
     rows.push([E('', '', 4), E('Α/Α', 'b hdr'), E('ΜΑΓΕΙΡΕΙΑ', 'b hdr', 3), E('ΠΑΡ/ΣΕΙΣ', 'b hdr'), E('', '', 4)]);
     for (let r = 1; r <= 5; r++) rows.push([E('', '', 4), E(r + 'ο', 'b c'), nm('mg' + r, 1, 3), E('', 'b'), E('', '', 4)]);
@@ -63,7 +60,20 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
       rows.push([E(''), ...left, E('', '', 3), ...rt, E('')]);
     }
   }
-  lay.extra.forEach(x => rows.push(ext(x)));
+  // δικές σου υπηρεσίες: πίνακας η καθεμία, ανά δύο δίπλα δίπλα, με μία κενή γραμμή πριν (όπως στο Excel)
+  const tabs = frouraTables(s, lay, phase);
+  const half = (t: FrouraTable | undefined, i: number): Cell[] => {
+    if (!t || i > t.rows.length) return [E('', '', 4)];
+    const span = t.hours ? 1 : 2;
+    if (i === 0) return [E('Α/Α', 'b hdr'), E(t.title, 'b hdr', span), ...(t.hours ? [E('ΩΡΕΣ', 'b hdr')] : []), E('ΠΑΡ/ΣΕΙΣ', 'b hdr')];
+    const x = t.rows[i - 1];
+    return [E(x.n, 'b c'), x.name ? E(x.name, 'b c', span) : E('ΚΕΝΗ', 'b c kenh', span), ...(t.hours ? [E(x.hours, 'b c')] : []), E('', 'b')];
+  };
+  for (let j = 0; j < tabs.length; j += 2) {
+    const a = tabs[j], b = tabs[j + 1];
+    rows.push([E('', '', W)]);
+    for (let i = 0; i <= Math.max(a.rows.length, b ? b.rows.length : 0); i++) rows.push([E(''), ...half(a, i), E('', '', 3), ...half(b, i), E('')]);
+  }
   rows.push([E('', '', W)]);
   const on = (x: Status) => coversDay(x, date);
   const away = (x: Status) => on(x) && !backBy(x, date, DUTY_START);   // όποιος γυρίζει ως τις 14:00 δεν είναι απών της υπηρεσίας

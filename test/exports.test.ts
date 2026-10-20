@@ -116,9 +116,11 @@ describe('ΦΡΟΥΡΑ ΣΠΕΝ', () => {
     expect(ws.get('J13')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
     expect(ws.get('J27')!.split('\n')).toHaveLength(2);
     expect(ws.get('C33')).toBeTruthy();
-    expect(ws.get('B34')).toBe('ΠΥΛΗ 1Ο'); expect(ws.get('B35')).toBe('ΠΥΛΗ 2Ο'); expect(ws.get('C35')).toBeTruthy();
-    // οι τιμωρημένοι κατέβηκαν δύο γραμμές για τη «Πύλη»
-    expect(ws.get('A40')).toBe('1');
+    // η «Πύλη» σε δικό της πίνακα κάτω από την ΤΑΕ, αριστερά, μετά από μία κενή γραμμή
+    expect(ws.get('B34')).toBeNull(); expect([ws.get('B35'), ws.get('C35')]).toEqual(['Α/Α', 'ΠΥΛΗ']);
+    expect(ws.get('B36')).toBe('1Ο'); expect(ws.get('B37')).toBe('2Ο'); expect(ws.get('C37')).toBeTruthy();
+    // οι τιμωρημένοι κατέβηκαν τέσσερις γραμμές για τη «Πύλη»
+    expect(ws.get('A42')).toBe('1');
     const ly = s.people.find(p => p.id === g.ly)!;
     expect(ws.get('A9')).toContain(ly.weapon ? 'ΟΠΛΟ: ' + ly.weapon : 'ΤΗΛ:');
     expect(r.warnings).toEqual([]);
