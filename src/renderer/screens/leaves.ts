@@ -5,7 +5,8 @@ import { html, Badge, Button, PageHeader, Segmented } from '../ui';
 import { useNav, useStore } from '../store';
 import { LeaveEndDialog, LeaveTimesDialog, leaveStarted } from './people';
 import { TYPES, fullName, type Status } from '../../shared/domain';
-import { personMap } from '../../shared/rules';
+import { awayNow, personMap } from '../../shared/rules';
+import { useNowMin } from '../clock';
 import { statusLbl } from '../../shared/ranks';
 import { hasTimes, timesTxt } from '../../shared/hours';
 import { addDays, dayName, daysBetween, dm, dow } from '../../shared/dates';
@@ -21,15 +22,18 @@ export function LeavesTab() {
   const [times, setTimes] = useState<Status | null>(null);
   const [end, setEnd] = useState<Status | null>(null);
   const since = addDays(today, -14);
-  const nNow = useMemo(() => state.statuses.filter(s => isLeave(s) && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
+  // γύρισε σήμερα και πέρασε η ώρα επιστροφής: πάει στους «Γύρισαν» (Michael, 20/10)
+  const now = useNowMin(); const away = (s: Status) => awayNow(s, today, now);
+  const nNow = useMemo(() => state.statuses.filter(s => isLeave(s) && away(s) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);   // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => {
     const qq = normGreek(dq.trim());
     const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + statusLbl(s, state.settings.lists) + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '')).includes(qq));
     // τώρα: όσοι λείπουν πρώτα (κατά επιστροφή), μετά όσοι φεύγουν (κατά αναχώρηση)
-    if (view === 'now') return state.statuses.filter(s => isLeave(s) && s.to >= today && ok(s)).sort((a, b) => (a.from > today ? 1 : 0) - (b.from > today ? 1 : 0) || (a.from > today ? a.from.localeCompare(b.from) : a.to.localeCompare(b.to)));
-    return state.statuses.filter(s => isLeave(s) && s.to < today && s.to >= since && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
-  }, [state.statuses, view, today, dq, pm, state.settings.lists]);
+    if (view === 'now') return state.statuses.filter(s => isLeave(s) && away(s) && ok(s)).sort((a, b) => (a.from > today ? 1 : 0) - (b.from > today ? 1 : 0) || (a.from > today ? a.from.localeCompare(b.from) : a.to.localeCompare(b.to)));
+    return state.statuses.filter(s => isLeave(s) && !away(s) && s.to >= since && ok(s)).sort((a, b) => b.to.localeCompare(a.to) || (b.toTime || '').localeCompare(a.toTime || ''));
+  }, [state.statuses, view, today, dq, pm, state.settings.lists, now]);   // eslint-disable-line react-hooks/exhaustive-deps
   const when = (s: Status) => {
+    if (s.to === today && !away(s)) return 'γύρισε σήμερα';
     if (s.to < today) { const d = daysBetween(s.to, today) - 1; return d === 1 ? 'γύρισε χθες' : 'γύρισε πριν από ' + d + ' ημ.'; }
     if (s.from > today) return 'φεύγει ' + dayName(s.from, today).toLowerCase();
     if (s.open) return 'χωρίς λήξη';

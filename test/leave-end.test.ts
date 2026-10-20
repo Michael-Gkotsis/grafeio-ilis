@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import type { AppState, PersonRequest, Status } from '../src/shared/domain';
 import { hkaiLeaveLines } from '../src/shared/hkaiText';
-import { outBlock, strengthOf } from '../src/shared/rules';
+import { awayNow, outBlock, statusesNow, strengthOf } from '../src/shared/rules';
+import { ROSTER_FILTERS, rosterMatch, rosterSheets } from '../src/shared/rosterLists';
 import type { RawSheet } from '../src/shared/roster';
 import { identity, planWrite, type SourceBinding } from '../src/shared/sources';
 import { fakeState } from './fixtures';
@@ -94,5 +95,36 @@ describe('Excel «Άδειες»', () => {
     const w = planWrite('leave', sheet, b, n, keys, TODAY);
     expect(w.cleared).toBe(1);
     expect(w.sets.every(x => x.r === 1 && x.v === null)).toBe(true);
+  });
+});
+
+// Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό δυναμολόγιο», από την ώρα που έβαλες
+describe('γύρισε: παρών από την ώρα επιστροφής', () => {
+  const back = (time: string) => run(with1(leave()), { t: 'endLeave', id: 'l1', date: TODAY, time }).state;
+  it('Δυναμολόγιο: λείπει ως τις 16:00, μετά παρών (άλλες μέρες όλη η μέρα)', () => {
+    const s = back('16:00');
+    expect(statusesNow(s.statuses, 1, TODAY, TODAY, 15 * 60 + 59)).toHaveLength(1);
+    expect(statusesNow(s.statuses, 1, TODAY, TODAY, 16 * 60)).toEqual([]);
+    expect(rosterMatch('leave', s.people[0], statusesNow(s.statuses, 1, TODAY, TODAY, 17 * 60))).toBe(false);
+    expect(rosterMatch('leave', s.people[0], statusesNow(s.statuses, 1, TODAY, TODAY, 10 * 60))).toBe(true);
+  });
+  it('Άδειες: «Τώρα» ως την ώρα επιστροφής, μετά «Γύρισαν»', () => {
+    const st = back('16:00').statuses[0];
+    expect(awayNow(st, TODAY, 15 * 60)).toBe(true);
+    expect(awayNow(st, TODAY, 16 * 60)).toBe(false);
+    expect(awayNow(leave({ open: true, to: TODAY, toTime: '10:00' }), TODAY, 20 * 60)).toBe(true);   // χωρίς λήξη: λείπει
+  });
+  it('Excel Δυναμολογίου: το φύλλο Άδειες σήμερα μετά την επιστροφή είναι άδειο', () => {
+    const s = back('16:00');
+    const leaves = (at?: number) => rosterSheets(s, TODAY, at).find(x => x.name === ROSTER_FILTERS.find(([k]) => k === 'leave')![2])!.rows.length;
+    expect(leaves()).toBe(1); expect(leaves(15 * 60)).toBe(1); expect(leaves(16 * 60 + 5)).toBe(0);
+  });
+  it('νοσοκομείο: βγήκε νωρίτερα στις 11:00, η ώρα κρατιέται· όχι για ΕΥ', () => {
+    const s = with1(leave({ type: 'NOS', kind: undefined }));
+    const r = run(s, { t: 'endLeave', id: 'l1', date: TODAY, time: '11:00' });
+    expect(r.state.statuses[0]).toMatchObject({ to: TODAY, toTime: '11:00' });
+    expect(r.text).toMatch(/έξοδος 14\/10 11:00/);
+    expect(statusesNow(r.state.statuses, 1, TODAY, TODAY, 12 * 60)).toEqual([]);
+    expect(() => run(with1(leave({ type: 'EY', kind: undefined })), { t: 'endLeave', id: 'l1', date: TODAY, time: '11:00' })).toThrow('Δεν βρέθηκε');
   });
 });

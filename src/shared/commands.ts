@@ -406,22 +406,23 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
     }
     case 'cancelLeave': {
-      const st = s.statuses.find(x => x.id === c.id); if (!st || TYPES[st.type].cat !== 'abs') throw new Error('Δεν βρέθηκε η άδεια');
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
       // από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια (δεν γράφεται πια στην ΗΚΑΙ ως άδεια)
       const requests = s.requests.map(r => { if (r.sid !== st.id) return r; const n = { ...r }; delete n.sid; return n; });
-      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: 'Ακυρώθηκε η ' + TYPES[st.type].long.toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: (TYPES[st.type].cat === 'abs' ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + TYPES[st.type].long.toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
     }
     case 'endLeave': {
-      const st = s.statuses.find(x => x.id === c.id); if (!st || TYPES[st.type].cat !== 'abs') throw new Error('Δεν βρέθηκε η άδεια');
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      const abs = TYPES[st.type].cat === 'abs', tn = timeNames(st.type);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(c.date)) throw new Error('Λάθος ημερομηνία');
-      const t = normTime(c.time); if (t == null) throw new Error('Η ώρα επιστροφής «' + c.time + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+      const t = normTime(c.time); if (t == null) throw new Error('Η ώρα ' + tn.toG + ' «' + c.time + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
       const was = st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '');
-      if (c.date < st.from || (c.date === st.from && st.fromTime && t && mins(t) <= mins(st.fromTime))) throw new Error('Η άδεια ξεκινά ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + '. Αν δεν έφυγε καθόλου, πάτα «Ακύρωση άδειας».');
+      if (c.date < st.from || (c.date === st.from && st.fromTime && t && mins(t) <= mins(st.fromTime))) throw new Error((abs ? 'Η άδεια' : 'Η ' + TYPES[st.type].long.toLowerCase()) + ' ξεκινά ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + (abs ? '. Αν δεν έφυγε καθόλου, πάτα «Ακύρωση άδειας».' : '. Αν μπήκε λάθος, πάτα «Διαγραφή».'));
       // ίδια ή μεταγενέστερη επιστροφή: δεν είναι διακοπή (για παράταση άλλαξε την άδεια)
-      if (!st.open && (c.date > st.to || (c.date === st.to && (!t || (!!st.toTime && mins(t) >= mins(st.toTime)))))) throw new Error('Η άδεια είναι ήδη ' + was + '. Διάλεξε νωρίτερη επιστροφή.');
+      if (!st.open && (c.date > st.to || (c.date === st.to && (!t || (!!st.toTime && mins(t) >= mins(st.toTime)))))) throw new Error((abs ? 'Η άδεια' : 'Η ' + TYPES[st.type].long.toLowerCase()) + ' είναι ήδη ' + was + '. Διάλεξε νωρίτερη ' + tn.to + '.');
       const n: Status = { ...st, to: c.date }; delete n.open; delete n.days;
       if (t) n.toTime = t; else delete n.toTime;
-      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + TYPES[st.type].long.toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', επιστροφή ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + TYPES[st.type].long.toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', ' + tn.to + ' ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
     }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');
