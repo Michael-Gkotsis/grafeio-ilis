@@ -30,7 +30,9 @@ const hrs = (x: Post) => (x.slots ? x.slots.map((t: string, i: number, all: stri
 function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen }: P) {
   const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x, lists) || ruleWarn);
-  const head = html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">${hrs(x)}</span></div>`;
+  // βάρδιες: όλες οι ώρες η μία κάτω από την άλλη, δίπλα στο νούμερο, όπως στο έντυπο (Michael, 20/10)
+  const head = x.slots && x.slots.length ? html`<div className="post__pos is-slots"><b>${x.short}</b><span className="post__slots">${x.slots.map((t: string, i: number) => html`<span key=${i}>${t}</span>`)}</span></div>`
+    : html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">${hrs(x)}</span></div>`;
   const kenh = html`<span className="post__who"><span className="kenh-tag">Κενή</span></span>`;
   if (locked) return html`<li className=${cx('post', !p && 'is-empty')}>${head}${p ? html`<span className="post__who"><button type="button" className="post__name linkish" data-tip="Άνοιξε την καρτέλα" onClick=${() => onOpen(p.id)}>${fullName(p)}</button>${r && html`<${Badge} tone="bad">⚠ ${r}<//>`}</span>` : kenh}<span className="duty">${duty}</span><span></span></li>`;
   if (p && swap) return html`<li className="post is-swap">${head}

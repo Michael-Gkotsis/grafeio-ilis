@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { TYPES, blocksOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
+import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { personMap, postsOf } from './rules';
 
@@ -77,6 +77,18 @@ export const absenceText = (kind: string | undefined, long: string) => norm(kind
 // Είδος απουσίας στο έντυπο: η άδεια με το είδος της («ΑΔΕΙΑ ΑΙΜΟΔΟΣΙΑΣ», «ΕΙΔΙΚΗ ΑΔΕΙΑ»), όχι «ΑΙΜΟΔΟΣΙΑΣ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ»
 export const absenceOf = (x: Pick<Status, 'type' | 'kind'>) => (x.type === 'LEAVE' ? norm(leaveName(x)) : absenceText(x.kind, TYPES[x.type].long));
 
+// Πίνακες θαλαμοφυλάκων/οπλοφυλάκων (γραμμές 13–24): κάθε νούμερο έχει στο template 3 γραμμές, μία ανά βάρδια. Με άλλες
+// βάρδιες (Michael, 20/10: «όλες οι ώρες η μια κάτω από την άλλη και να γίνεται adjust το block») το νούμερο πιάνει
+// όσες γραμμές έχει βάρδιες το πιο γεμάτο από τα δύο δίπλα δίπλα: περισσότερες μπαίνουν, όσες περισσεύουν κρύβονται.
+export const NUM_ROWS = [13, 16, 19, 22];
+export function frouraPer(s: AppState, phase: Phase = phaseOf(s)): number[] {
+  const ps = buildPosts(blocksOf(s.settings, phase).filter(b => !b.hidden), dutyStartOf(s.settings));
+  const right = phase === 'spen' ? 'op' : 'th', off = phase === 'spen' ? 1 : 5;
+  return [0, 1, 2, 3].map(i => {
+    const ns = [ps.find(x => x.k === 'th' + (i + 1)), ps.find(x => x.k === right + (i + off))].filter(x => x && !x.hidden && x.slots).map(x => x!.slots!.length);
+    return ns.length ? Math.max(1, ...ns) : 3;
+  });
+}
 // Στα κελιά του εντύπου κάθε νούμερο έχει 3 γραμμές ωρών: λιγότερες βάρδιες αφήνουν κενό, περισσότερες μπαίνουν δύο-δύο
 export function rows3(slots: string[] | null | undefined): string[] {
   const sl = slots || []; if (sl.length <= 3) return [0, 1, 2].map(i => sl[i] || '');

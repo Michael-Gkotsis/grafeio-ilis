@@ -6,7 +6,9 @@ import path from 'path';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { DEFAULT_BLOCKS, ROT, buildPosts, shiftSlots, type AppState, type BlockDef, type Status } from '../src/shared/domain';
 import { dutyBlock, dutyMin, postBy, postSpan, postsOf } from '../src/shared/rules';
-import { frouraLayout, frouraTables, rows3 } from '../src/shared/froura';
+import { frouraLayout, frouraPer, frouraTables, rows3 } from '../src/shared/froura';
+import { dutyAt } from '../src/shared/weekend';
+import { frouraSheet } from '../src/renderer/sheets';
 import { fillFroura, absentOn } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
 import { fakeState } from './fixtures';
@@ -121,5 +123,45 @@ describe('ΦΡΟΥΡΑ', () => {
     const s = run(fakeState(60), { t: 'autofill', date: D });
     const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), s, D)).data)).sheet(0);
     expect(ws.get('D17')).toBe('00:00-2:00');
+  });
+});
+
+describe('το κουτί κάθε νούμερου μεγαλώνει ή μικραίνει', () => {
+  const th = (s: AppState, every: number, ids = ['th', 'th2']): AppState => ({ ...s, settings: { ...s.settings, blocks: s.settings.blocks.map(b => (ids.includes(b.id) ? { ...b, shift: { every } } : b)) } });
+  it('ανά 1 ώρα: 6 γραμμές ανά νούμερο, μία ώρα σε κάθε γραμμή, όλα τα από κάτω κατεβαίνουν', async () => {
+    const s = run(th(fakeState(60), 60, ['th']), { t: 'autofill', date: D });
+    expect(frouraPer(s)).toEqual([6, 6, 6, 6]);
+    const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), s, D)).data)).sheet(0);
+    expect([13, 14, 15, 16, 17, 18].map(r => ws.get('D' + r))).toEqual(['14:00-15:00', '18:00-19:00', '22:00-23:00', '02:00-03:00', '06:00-07:00', '10:00-11:00']);
+    expect(ws.get('D19')).toBe('15:00-16:00');
+    // ο β΄ πίνακας (βάρδιες του εντύπου) ξαναγράφεται στο μεγάλο κουτί: 3 ώρες και κενό από κάτω
+    expect([13, 14, 15, 16].map(r => ws.get('K' + r))).toEqual(['14:00-16:00', '22:00-00:00', '06:00-08:00', null]);
+    // το όνομα του 1ου πιάνει τις 6 γραμμές· ο 2ος ξεκινά στη 19
+    expect(ws.merges().some(m => m.c1 === 3 && m.r1 === 13 && m.r2 === 18)).toBe(true);
+    expect(ws.get('C19')).toBeTruthy();
+    // μαγειρεία: ήταν F27, κατέβηκαν 12 γραμμές
+    expect(ws.get('F39')).toBeTruthy(); expect(ws.get('E26')).toBeFalsy();
+    // ίδιο και στην προεπισκόπηση
+    const m = frouraSheet(s, D); const txt = JSON.stringify(m);
+    expect(txt).toContain('10:00-11:00');
+  });
+  it('ανά 3 ώρες και στους δύο πίνακες: 2 γραμμές, η τρίτη κρύβεται', async () => {
+    const s = run(th(fakeState(60), 180), { t: 'autofill', date: D });
+    expect(frouraPer(s)).toEqual([2, 2, 2, 2]);
+    const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), s, D)).data)).sheet(0);
+    expect([13, 14].map(r => ws.get('D' + r))).toEqual(['14:00-17:00', '02:00-05:00']);
+    expect(ws.rowHidden(15)).toBe(true); expect(ws.rowHidden(14)).toBe(false);
+  });
+});
+
+describe('ό,τι άλλο μετρά ώρες υπηρεσίας', () => {
+  it('Ποιοι γυρίζουν: η ώρα της υπηρεσίας από τις βάρδιες και την αρχή του κύκλου', () => {
+    let s = fakeState(30); s = { ...s, settings: { ...s.settings, dutyStart: '08:00' } };
+    s = { ...s, guards: { [D]: { th2: 5, ly: 6 } } };
+    expect(dutyAt(s, D, 5)).toEqual({ label: expect.any(String), time: '10:00' });
+    expect(dutyAt(s, D, 6)!.time).toBe('08:00');
+    const g = { ...fakeState(30), guards: { [D]: { b_gate_1: 7 } } };
+    const s2 = withGate(gate(1, { every: 120, from: '06:00', to: '08:00' })); const s3 = { ...s2, guards: g.guards };
+    expect(dutyAt(s3, D, 7)!.time).toBe('06:00');
   });
 });

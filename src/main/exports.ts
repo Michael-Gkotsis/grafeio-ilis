@@ -12,7 +12,7 @@ import { activePeople, personMap, statusesFrom, outMin, dutyMin, hkaiCounts, pos
 import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { placeSigs } from './sigs';
 import { applyMoves, blockOf } from './layout';
@@ -110,22 +110,33 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const p = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
   ws.set('A9', 'Λ/Υ: ' + (p('ly') ? lyLine(p('ly')!) : ''));
   ws.set('A10', 'Δ/Υ: ' + (p('dy') ? lyLine(p('dy')!) : ''));
+  // νούμερα με άλλο πλήθος βαρδιών (frouraPer): γραμμές μπαίνουν μέσα στο κουτί (το όνομα, το Α/Α και οι ΠΑΡ/ΣΕΙΣ
+  // μεγαλώνουν μαζί) ή όσες περισσεύουν κρύβονται. at(): πού πήγε κάθε κελί του template από κάτω.
+  const per = frouraPer(s, phase);
+  const ins = per.map((k, i) => ({ after: NUM_ROWS[i] + 1, n: Math.max(0, k - 3) })).filter(x => x.n > 0);
+  for (const x of [...ins].reverse()) ws.insertRows(x.after, x.n, x.after, wb);
+  const down = (r: number) => r + ins.filter(x => x.after < r).reduce((a, x) => a + x.n, 0);
+  const at = (ref: string) => { const m = /^([A-Z]+)(\d+)$/.exec(ref)!; return m[1] + down(+m[2]); };
+  per.forEach((k, i) => { for (let j = k; j < 3; j++) ws.setRowHidden(down(NUM_ROWS[i]) + j); });
   const lay = frouraLayout(s, d, phase);
   for (const k of lay.foreign) {
     const x = postBy(s, k); const off = x && blocksOf(s.settings, phase).find(b => b.id === x.block)?.hidden;
     warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
   }
-  lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
-  // ώρες των νούμερων με βάρδιες (θαλαμοφύλακες, οπλοφύλακες, σκοποί): στη στήλη δεξιά από το όνομα, 3 γραμμές το καθένα.
-  // Με τις βάρδιες του εντύπου (2 ώρες από τις 14:00) μένουν όπως είναι στο template.
+  lay.cells.forEach((names, ref) => { if (names.length) ws.set(at(ref), names.join('\n')); });
+  // ώρες των νούμερων με βάρδιες: στη στήλη δεξιά από το όνομα, μία γραμμή ανά βάρδια (οι σκοποί της ΣΠΕΝ έχουν δίπλα
+  // τη μαγειρεία, οπότε μένουν 3 γραμμές: περισσότερες βάρδιες μπαίνουν δύο-δύο). Με τις βάρδιες του εντύπου (2 ώρες από
+  // τις 14:00) μένουν όπως είναι στο template.
   const done = new Set<string>(); const own = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || !!blocksOf(s.settings, phase).find(b => b.id === id)?.shift;
   for (const x of postsOf(s.settings)) {
-    const at = form.pos[x.k]; if (!at || !x.slots || done.has(at) || !own(x.block)) continue; done.add(at);
-    const m = /^([A-Z]+)(\d+)$/.exec(at)!; const hc = colName(colNum(m[1]) + 1);
-    rows3(x.slots).forEach((h, j) => ws.set(hc + (+m[2] + j), h));
+    const ref = form.pos[x.k]; if (!ref || !x.slots || done.has(ref)) continue;
+    const m = /^([A-Z]+)(\d+)$/.exec(ref)!; const hc = colName(colNum(m[1]) + 1); const i = NUM_ROWS.indexOf(+m[2]);
+    if (!own(x.block) && !(i >= 0 && per[i] !== 3)) continue; done.add(ref);   // το κουτί άλλαξε από τον διπλανό πίνακα: ξαναγράφονται κι αυτές
+    const hs = i >= 0 ? Array.from({ length: per[i] }, (_, j) => x.slots![j] || '') : rows3(x.slots);
+    hs.forEach((h, j) => ws.set(hc + (down(+m[2]) + j), h));
   }
-  const added = frouraTablesInto(wb, ws, form, frouraTables(s, lay, phase));
-  const first = form.list + added;
+  const added = frouraTablesInto(wb, ws, { ...form, extra: { after: down(form.extra.after) } }, frouraTables(s, lay, phase));
+  const first = down(form.list) + added;
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const abs = absentOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const rows = Math.max(pun.length, abs.length);

@@ -10,7 +10,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, type FrouraTable } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
@@ -42,10 +42,11 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   rows.push([E('', '', W)]);
   const right = spen ? 'op' : 'th', off = spen ? 1 : 5;
   rows.push([E(''), ...hdr('Α/Α', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ'), E('', '', 3), ...hdr('Α/Α', spen ? 'ΟΠΛΟΦΥΛΑΚΕΣ' : 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ'), E('')]);
-  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
-    const h = () => E(rows3(postBy(s, 'th' + (i + 1))?.slots)[j], 'b c');
-    const h2 = () => E(rows3(postBy(s, right + (i + off))?.slots)[j], 'b c');
-    rows.push(j === 0 ? [E(''), E((i + 1) + 'ο', 'b c', 1, 3), nm('th' + (i + 1)), h(), E('', 'b', 1, 3), E('', '', 3), E((i + 1) + 'ο', 'b c', 1, 3), nm(right + (i + off)), h2(), E('', 'b', 1, 3), E('')]
+  // κάθε νούμερο πιάνει όσες γραμμές έχει βάρδιες (frouraPer), όπως στο Excel
+  const per = frouraPer(s, phase); const sl = (k: string) => postBy(s, k)?.slots || [];
+  for (let i = 0; i < 4; i++) for (let j = 0; j < per[i]; j++) {
+    const k = per[i]; const h = () => E(sl('th' + (i + 1))[j] || '', 'b c'); const h2 = () => E(sl(right + (i + off))[j] || '', 'b c');
+    rows.push(j === 0 ? [E(''), E((i + 1) + 'ο', 'b c', 1, k), nm('th' + (i + 1), k), h(), E('', 'b', 1, k), E('', '', 3), E((i + 1) + 'ο', 'b c', 1, k), nm(right + (i + off), k), h2(), E('', 'b', 1, k), E('')]
       : [E(''), null, null, h(), null, E('', '', 3), null, null, h2(), null, E('')]);
   }
   rows.push([E('', '', W)]);

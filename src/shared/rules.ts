@@ -101,7 +101,7 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
 }
 // Ώρες επιστροφής (Michael, 18/10): η τελευταία μέρα μιας άδειας (ή νοσοκομείου, ΣΤΕΠ) με ώρα επιστροφής μετρά μόνο ως
 // εκείνη την ώρα. Κάθε έλεγχος έχει τη δική του στιγμή: η έξοδος ξεκινά στις rules.outTime, η ΗΚΑΙ μετρά στις
-// rules.hkTime, οι υπηρεσίες ξεκινούν 14:00 (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
+// rules.hkTime, οι υπηρεσίες στην αρχή του κύκλου, settings.dutyStart (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
 // και κάθε μέρα χωρίς ώρα.
 export const DEFAULT_OUT_TIME = '16:00', DEFAULT_HK_TIME = '08:00';
 // Αρχή του κύκλου των υπηρεσιών σε λεπτά (Ρυθμίσεις › Υπηρεσίες, προεπιλογή 14:00)
@@ -211,7 +211,7 @@ export function capCell(s: AppState, p: Person, col: CapCol): CapCell {
   if (def) return v === null ? { on: true, src: 'force', why: def } : { on: false, src: 'auto', why: def };
   return { on: true, src: 'auto', why: '' };
 }
-// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος 14:00 → 14:00)
+// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος π.χ. 14:00 → 14:00)
 export function offDayBlock(s: AppState, date: ISODate, pid: number): string | null {
   const w = personMap(s.people).get(pid)?.offDays;
   if (!w || !w.length) return null;
@@ -250,7 +250,7 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
   return leavesBefore(statuses, date, pid, post);
 }
 // --------------------------- ώρες στις άδειες (Michael, 13/10) ---------------------------
-// Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
+// Η μέρα της υπηρεσίας είναι από την αρχή του κύκλου (settings.dutyStart, π.χ. 14:00) ως την ίδια ώρα την επόμενη. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
 // της υπηρεσίας: από τις βάρδιες (14:00-16:00, 22:00-00:00, 06:00-08:00 → 14:00 ως 08:00 της επόμενης) ή από τις ώρες
 // της θέσης («14:00 → 14:00»). null = δεν ξέρουμε (μαγειρεία «ημέρα», ΤΑΕ χωρίς ώρες).
 const spanIdx = new WeakMap<object, { start: number | null; end: number | null }>();
@@ -285,7 +285,7 @@ function backBefore(s: Status, date: ISODate, post?: DutyPost | null): boolean {
   return st != null && mins(s.toTime) <= st;
 }
 // Φεύγει για άδεια την επόμενη μέρα πριν τελειώσει η υπηρεσία που ξεκινά σήμερα (π.χ. αναχώρηση 10:00, η υπηρεσία
-// τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει 14:00 της επόμενης· η μαγειρεία είναι της ημέρας.
+// τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει στην αρχή του κύκλου της επόμενης· η μαγειρεία είναι της ημέρας.
 function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
   if (!post) return null;
   const next = addDays(date, 1);
