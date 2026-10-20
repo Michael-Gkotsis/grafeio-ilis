@@ -63,7 +63,12 @@ function DutyCheck({ onOpen, m }: P) {
   const allSt = dutyStats(state);
   const idle = (pid: number): number => { const l = allSt.get(pid)?.last; return l ? Math.max(0, daysBetween(l, today) - 1) : 9999; };
   const { ym, setYm, allM, setAllM, st } = m as DutyMonth;
-  const kinds = [...new Set(postsOf(state.settings).map(p => p.kind))];
+  // στήλες: τα είδη του εντύπου, και των ανενεργών υπηρεσιών του όσο έχουν υπηρεσίες στο διάστημα (δεν χάνονται)
+  const kinds = useMemo(() => {
+    const on = new Set(postsOf(state.settings).map(p => p.kind));
+    for (const b of blocksOf(state.settings) || []) if (b.hidden && !on.has(b.kind) && [...st.values()].some(d => d.byKind[b.kind])) on.add(b.kind);
+    return [...on];
+  }, [state.settings, st]);
   // το πλέγμα διαβάζει μόνο υπηρεσίες, προσωπικό και ρυθμίσεις: δεν ξαναχτίζεται για άλλες αλλαγές (π.χ. εξοδούχοι, ιατρικά)
   const grid = useMemo(() => (view === 'grid' ? checkSheet(state, ym, dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : undefined) : null), [view, state.guards, state.dutyLog, state.people, state.settings, ym, dq]);
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
@@ -350,8 +355,8 @@ export function FixedDialog({ onClose }: P) {
 export function AddBlockDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const phase: Phase = state.settings.phase || 'sven';
-  const [f, setF] = useState({ name: '', kind: 'other' as DutyKind, armed: false, n: 1, hrs: '' });
-  const save = async () => { if (await run({ t: 'addBlock', phase, ...f }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + '. Τη βλέπεις στις θέσεις και στο έντυπο.' }); } };
+  const [f, setF] = useState({ name: '', kind: 'other' as DutyKind, armed: false, n: 1, hrs: '', off: false });
+  const save = async () => { if (await run({ t: 'addBlock', phase, ...f }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : '. Τη βλέπεις στις θέσεις και στο έντυπο.') }); } };
   return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + PHASE_NAME[phase] + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim()} onClick=${save}>Προσθήκη<//>`}>
     <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
@@ -361,6 +366,7 @@ export function AddBlockDialog({ onClose }: P) {
     </div>
     <div className="field"><label className="field__label" htmlFor="nb-h">Ώρες</label><input id="nb-h" className="ui-input" placeholder="π.χ. 08:00-20:00 (κενό = όλη μέρα)" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις Ρυθμίσεις › Σ.Ι.</small></span></label>
+    <label className="rule"><input type="checkbox" className="ui-check" checked=${!f.off} onChange=${(e: any) => setF({ ...f, off: !e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις Ρυθμίσεις › Υπηρεσίες.</small></span></label>
   <//>`;
 }
 

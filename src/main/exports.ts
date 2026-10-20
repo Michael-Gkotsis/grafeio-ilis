@@ -5,7 +5,7 @@ import { dutyAt, isWk, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, blocksOf, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, postBy, postOf } from '../shared/rules';
@@ -104,7 +104,10 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   ws.set('A9', 'Λ/Υ: ' + (p('ly') ? lyLine(p('ly')!) : ''));
   ws.set('A10', 'Δ/Υ: ' + (p('dy') ? lyLine(p('dy')!) : ''));
   const lay = frouraLayout(s, d, phase);
-  for (const k of lay.foreign) warnings.push('Η θέση ' + (postBy(s, k)?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
+  for (const k of lay.foreign) {
+    const x = postBy(s, k); const off = x && blocksOf(s.settings, phase).find(b => b.id === x.block)?.hidden;
+    warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
+  }
   lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
   const added = frouraTablesInto(wb, ws, form, frouraTables(s, lay, phase));
   const first = form.list + added;
