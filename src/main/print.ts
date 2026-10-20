@@ -277,7 +277,7 @@ interface ParsedSheet {
 const colPx = (w: number) => Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7);
 const ptPx = (pt: number) => (pt * 96) / 72;
 
-class Book {
+export class Book {
   private parsed = new Map<string, ParsedSheet>();
   private memo = new Map<string, Map<number, Val>>();
   private busy = new Set<string>();
@@ -470,8 +470,10 @@ function shiftFormula(f: string, dr: number, dc: number): string {
 const PAPER: Record<number, { name: string; w: number; h: number }> = {
   1: { name: 'Letter', w: 215.9, h: 279.4 }, 5: { name: 'Legal', w: 215.9, h: 355.6 }, 8: { name: 'A3', w: 297, h: 420 }, 9: { name: 'A4', w: 210, h: 297 }, 11: { name: 'A5', w: 148, h: 210 }
 };
-export interface PrintSheet { name: string; paper: string; landscape: boolean; pages: number; scale: number; html: string }
-export interface PrintDoc { sheets: PrintSheet[]; all: string[]; css: string }
+// pt: το μέγεθος στο χαρτί της γραμματοσειράς των περισσότερων κελιών (font, size στο Excel)· titles: έχει γραμμές τίτλων
+export interface PrintSheet { name: string; paper: string; landscape: boolean; pages: number; scale: number; html: string; pt: number; font: string; size: number; titles: boolean }
+// total: όλες οι σελίδες· sug: σε πόσες σελίδες τα γράμματα βγαίνουν καθαρά (όταν είναι μικρά)
+export interface PrintDoc { sheets: PrintSheet[]; all: string[]; css: string; total: number; sug?: { n: number; pt: number } }
 
 function definedName(wbx: string, name: string, idx: number): string | null {
   for (const m of wbx.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)) if (attr(m[1], 'name') === name && attr(m[1], 'localSheetId') === String(idx)) return unesc(m[2]);
@@ -517,44 +519,74 @@ function fontCss(f: Font): string {
 }
 const sideCss = (s?: Side) => (s ? `${s.w}px ${s.style} ${s.color}` : '0');
 
-// refs: κάθε κελί με data-a="B4" (προεπισκόπηση των Εντύπων, όπου διαλέγεις κελί με κλικ)· maxPages: μόνο οι πρώτες σελίδες
-export async function renderBook(buf: Buffer | Uint8Array, opts: { file: string; sheets?: string[]; refs?: boolean; maxPages?: number }): Promise<PrintDoc> {
-  const book = await Book.open(buf);
+// refs: κάθε κελί με data-a="B4" (προεπισκόπηση των Εντύπων, όπου διαλέγεις κελί με κλικ)· maxPages: μόνο οι πρώτες σελίδες·
+// layout: η διάταξη του παραθύρου «Εκτύπωση» (σελίδες, προσανατολισμός, περιθώρια…) αντί για τη διάταξη σελίδας του αρχείου
+export interface RenderOpts { file: string; sheets?: string[]; refs?: boolean; maxPages?: number; layout?: PrintOpts }
+export async function renderBook(buf: Buffer | Uint8Array, opts: RenderOpts): Promise<PrintDoc> {
+  return renderOpen(await Book.open(buf), opts);
+}
+export async function openBook(buf: Buffer | Uint8Array): Promise<Book> { return Book.open(buf); }
+export const bookSheets = (book: Book) => book.sheets.filter(x => !x.hidden).map(x => x.name);
+export async function renderOpen(book: Book, opts: RenderOpts): Promise<PrintDoc> {
   const visible = book.sheets.filter(x => !x.hidden);
   const all = visible.map(x => x.name);
   let want = opts.sheets?.filter(n => all.includes(n)) || [];
   // χωρίς επιλογή (ή φύλλο που δεν υπάρχει πια): όλα τα φύλλα αν είναι λίγα (έντυπα), αλλιώς το ενεργό φύλλο του βιβλίου.
   // Άδεια λίστα = ο χρήστης ξετσέκαρε όλα τα φύλλα.
   if (!want.length && !(opts.sheets && !opts.sheets.length)) want = all.length <= 4 ? all : [book.sheets[book.activeTab] && !book.sheets[book.activeTab].hidden ? book.sheets[book.activeTab].name : all[0]];
+  const geos: Geo[] = [];
+  for (const name of want) geos.push(await geoOf(book, name, book.sheets.findIndex(x => x.name === name)));
   const used = new Set<number>();
-  const sheets: PrintSheet[] = [];
-  for (const name of want) {
-    const sh = (await book.load(name))!; await book.loadRefs(sh);
-    sheets.push(renderSheet(book, sh, book.sheets.findIndex(x => x.name === name), opts.file, used, opts));
-  }
+  let plans: Plan[]; let sug: { n: number; pt: number } | undefined;
+  if (opts.layout) {
+    const o = opts.layout;
+    plans = planDoc(geos, o);
+    // μικρά γράμματα: σε πόσες σελίδες διαβάζεται καθαρά (10 pt)
+    const pt = Math.min(...plans.map(p => p.pt));
+    if (plans.length && pt < 9.75 && typeof o.pages === 'number' && !hasBreaks(o)) {
+      // η πρώτη που φτάνει τα 10 pt, αλλιώς αυτή με τα μεγαλύτερα γράμματα (αν κερδίζει τουλάχιστον 1 pt)
+      let best: { n: number; pt: number } | undefined;
+      for (let n = o.pages + 1; n <= 8; n++) {
+        const tp = Math.min(...planDoc(geos, { ...o, pages: n }).map(p => p.pt));
+        if (tp >= 9.75) { best = { n, pt: tp }; break; }
+        if (!best || tp > best.pt + 0.25) best = { n, pt: tp };
+      }
+      if (best && best.pt >= pt + 1) sug = { n: best.n, pt: Math.round(best.pt * 2) / 2 };
+    }
+  } else plans = geos.map(g => planFile(g));
+  const total = plans.reduce((a, p) => a + p.order.length, 0);
+  let at = 0;
+  const sheets: PrintSheet[] = geos.map((g, i) => {
+    const p = plans[i]; const s = drawSheet(book, g, p, opts.file, used, opts, at, total); at += p.order.length; return s;
+  });
   const css = [...used].map(i => { const x = book.styles.xfs[i] || book.styles.xfs[0]; return `.s${i}{${fontCss(book.styles.fonts[x.font] || book.styles.fonts[0])}${x.fill ? 'background:' + x.fill + ';' : ''}}`; }).join('\n');
-  return { sheets, all, css };
+  return { sheets, all, css, total, sug };
 }
 
-function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, used: Set<number>, opt: { refs?: boolean; maxPages?: number } = {}): PrintSheet {
+// ------------------------------------------------------------------ το φύλλο: περιοχή, γραμμές, στήλες, τίτλοι
+interface Geo {
+  sh: ParsedSheet; idx: number; ps: string; pm: string; po: string;
+  rowsAll: number[]; colsAll: number[]; rowH: (r: number) => number; colW: (c: number) => number; W: number;
+  titles: [number, number] | null; titleList: number[]; titleH: number;
+  oddH?: string; oddF?: string; firstNo: number; grid: boolean;
+  dom: { name: string; sz: number };      // η γραμματοσειρά των περισσότερων κελιών (για «Arial 12 → 10 pt»)
+  units: number[][][];                    // μπλοκ (θάλαμος, πίνακας ανάμεσα σε κενές γραμμές) από ενότητες (γραμμές με κάθετη συγχώνευση)
+  framed: Set<number>;                    // γραμμές με πλαίσιο (μόνο αυτές ψηλώνουν στο «Ψηλότερες γραμμές»)
+}
+const geoCache = new WeakMap<Book, Map<string, Geo>>();
+const normHead = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω]/g, '');
+async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
+  let m = geoCache.get(book); if (!m) { m = new Map(); geoCache.set(book, m); }
+  const hit = m.get(name); if (hit) return hit;
+  const sh = (await book.load(name))!; await book.loadRefs(sh);
   const x = sh.xml; const st = book.styles;
-  const ps = /<pageSetup\b[^>]*>/.exec(x)?.[0] || ''; const pm = /<pageMargins\b[^>]*>/.exec(x)?.[0] || '';
-  const paper = PAPER[num(ps, 'paperSize', 9)] || PAPER[9];
-  const landscape = attr(ps, 'orientation') === 'landscape';
-  const pw = ((landscape ? paper.h : paper.w) / 25.4) * 96, ph = ((landscape ? paper.w : paper.h) / 25.4) * 96;
-  const M = { l: num(pm, 'left', 0.7) * 96, r: num(pm, 'right', 0.7) * 96, t: num(pm, 'top', 0.75) * 96, b: num(pm, 'bottom', 0.75) * 96, h: num(pm, 'header', 0.3) * 96, f: num(pm, 'footer', 0.3) * 96 };
-  const availW = Math.max(50, pw - M.l - M.r), availH = Math.max(50, ph - M.t - M.b);
-  const po = /<printOptions\b[^>]*>/.exec(x)?.[0] || '';
-  const centerH = attr(po, 'horizontalCentered') === '1' || attr(po, 'horizontalCentered') === 'true';
-  const centerV = attr(po, 'verticalCentered') === '1' || attr(po, 'verticalCentered') === 'true';
-  const grid = attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true';
-
+  const ps = /<pageSetup\b[^>]*>/.exec(x)?.[0] || '', pm = /<pageMargins\b[^>]*>/.exec(x)?.[0] || '', po = /<printOptions\b[^>]*>/.exec(x)?.[0] || '';
   // περιοχή εκτύπωσης: ορισμένη, αλλιώς ό,τι έχει τιμή, πλαίσιο ή γέμισμα
   let area = areaOf(definedName(book.wbXml, '_xlnm.Print_Area', idx));
   if (!area) {
     let r2 = sh.maxR, c2 = sh.maxC;
     for (const [k, c] of sh.cells) { if (c.s == null) continue; const xf = st.xfs[c.s]; if (!xf || (!xf.fill && !xf.border.l && !xf.border.r && !xf.border.t && !xf.border.b)) continue; const r = Math.floor(k / 16384), cc = k % 16384; if (r > r2) r2 = r; if (cc > c2) c2 = cc; }
-    for (const m of sh.merges) { if (m.r2 > r2 && sh.cells.has(key(m.r1, m.c1))) r2 = m.r2; if (m.c2 > c2 && sh.cells.has(key(m.r1, m.c1))) c2 = m.c2; }
+    for (const mg of sh.merges) { if (mg.r2 > r2 && sh.cells.has(key(mg.r1, mg.c1))) r2 = mg.r2; if (mg.c2 > c2 && sh.cells.has(key(mg.r1, mg.c1))) c2 = mg.c2; }
     area = { r1: 1, c1: 1, r2: Math.max(1, r2), c2: Math.max(1, c2) };
   }
   const colInfo = (c: number) => sh.cols.find(k => c >= k.min && c <= k.max);
@@ -563,25 +595,92 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
   const rowsAll: number[] = [], colsAll: number[] = [];
   for (let r = area.r1; r <= area.r2; r++) if (rowH(r) > 0) rowsAll.push(r);
   for (let c = area.c1; c <= area.c2; c++) if (colW(c) > 0) colsAll.push(c);
-  const W = colsAll.reduce((a, c) => a + colW(c), 0), H = rowsAll.reduce((a, r) => a + rowH(r), 0);
+  const W = colsAll.reduce((a, c) => a + colW(c), 0);
+  const titles = titleRows(definedName(book.wbXml, '_xlnm.Print_Titles', idx));
+  const titleList = titles ? Array.from({ length: titles[1] - titles[0] + 1 }, (_, i) => titles[0] + i).filter(r => rowH(r) > 0) : [];
+  const hdr = /<headerFooter\b[^>]*>([\s\S]*?)<\/headerFooter>/.exec(x)?.[1] || '';
+  const oddH = /<oddHeader>([\s\S]*?)<\/oddHeader>/.exec(hdr)?.[1], oddF = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(hdr)?.[1];
 
-  // κλίμακα: «προσαρμογή σε Χ σελίδες πλάτος × Υ ύψος» ή ποσοστό
+  // κελιά: τιμή, πλαίσιο, γραμματοσειρά (για τις ενότητες, τα μπλοκ και το «κυρίαρχο» μέγεθος γραμμάτων)
+  const styleOf = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
+  const shown = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v == null ? '' : v instanceof XErr ? v.code : String(v); };
+  const sizes = new Map<string, number>(); const framed = new Set<number>(); const blank = new Set<number>();
+  for (const r of rowsAll) {
+    let any = false;
+    for (const c of colsAll) {
+      const xf = st.xfs[styleOf(r, c)] || st.xfs[0]; const v = shown(r, c);
+      if (xf.border.l || xf.border.r || xf.border.t || xf.border.b) { framed.add(r); any = true; }
+      if (v !== '') { any = true; const f = st.fonts[xf.font] || st.fonts[0]; const k = f.name + '|' + f.sz; sizes.set(k, (sizes.get(k) || 0) + 1); }
+    }
+    if (!any) blank.add(r);
+  }
+  for (const mg of sh.merges) if (mg.r1 !== mg.r2 || mg.c1 !== mg.c2) for (let r = mg.r1; r <= mg.r2; r++) if (shown(mg.r1, mg.c1) !== '') blank.delete(r);
+  const top = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] || (st.fonts[0].name + '|' + st.fonts[0].sz);
+  const dom = { name: top.split('|')[0], sz: +top.split('|')[1] || 11 };
+
+  // ενότητες: γραμμές που ενώνει κάθετη συγχώνευση δεν χωρίζονται ποτέ
+  const at = new Map(rowsAll.map((r, i) => [r, i])); const link = new Array(rowsAll.length).fill(false);
+  for (const mg of sh.merges) if (mg.r2 > mg.r1) for (let r = mg.r1; r < mg.r2; r++) { const i = at.get(r); if (i != null) link[i] = true; }
+  const unitList: number[][] = [];
+  rowsAll.forEach((r, i) => { if (i && link[i - 1]) unitList[unitList.length - 1].push(r); else unitList.push([r]); });
+  // μπλοκ: ανάμεσα σε κενές γραμμές (πίνακες της ΦΡΟΥΡΑΣ) ή όπου αλλάζει ο θάλαμος/ουλαμός (στήλη στη γραμμή τίτλων)
+  const groupCol = titleList.length ? colsAll.find(c => titleList.some(r => /^(ΘΑΛΑΜΟΣ|ΘΑΛ|ΟΥΛΑΜΟΣ)$/.test(normHead(shown(r, c))))) : undefined;
+  const after = titles ? titles[1] : 0;
+  const units: number[][][] = []; let cur: number[][] = []; let prevG: string | null = null; let prevBlank = false;
+  for (const u of unitList) {
+    const r = u[0]; const isBlank = u.every(y => blank.has(y));
+    const g = groupCol != null && r > after ? shown(r, groupCol) : null;
+    const brk = cur.length && ((prevBlank && !isBlank) || (g != null && prevG != null && g !== prevG));
+    if (brk) { units.push(cur); cur = []; }
+    cur.push(u); prevBlank = isBlank; if (g != null) prevG = g;
+  }
+  if (cur.length) units.push(cur);
+  // υπογραφές: το τελευταίο μπλοκ χωρίς πλαίσια μένει μαζί με τις 2 τελευταίες γραμμές του πίνακα από πάνω
+  if (units.length > 1) {
+    const last = units[units.length - 1]; const rows = last.flat();
+    if (rows.length <= 12 && !rows.some(r => framed.has(r))) {
+      const prev = units[units.length - 2]; let n = 0; const glue: number[][] = [];
+      while (prev.length && n < 2) { const u = prev.pop()!; glue.unshift(u); if (!u.every(y => blank.has(y))) n++; }
+      if (!prev.length) units.splice(units.length - 2, 1);
+      units[units.length - 1] = [[...glue.flat(), ...rows]];
+    }
+  }
+  const g: Geo = { sh, idx, ps, pm, po, rowsAll, colsAll, rowH, colW, W, titles, titleList, titleH: titleList.reduce((a, r) => a + rowH(r), 0),
+    oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
+    grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units, framed };
+  m.set(name, g);
+  return g;
+}
+
+// ------------------------------------------------------------------ το σχέδιο: χαρτί, κλίμακα, ποιες γραμμές σε κάθε σελίδα
+interface Plan {
+  paper: { name: string; w: number; h: number }; landscape: boolean; pw: number; ph: number;
+  M: { l: number; r: number; t: number; b: number; h: number; f: number }; availW: number; availH: number;
+  scale: number; maxScale: number; pt: number; cs: number; f: number; centerH: boolean; centerV: boolean; pno: boolean; repeat: boolean;
+  order: [number[], number[]][];
+}
+const geomOf = (paper: { w: number; h: number }, landscape: boolean) => ({ pw: ((landscape ? paper.h : paper.w) / 25.4) * 96, ph: ((landscape ? paper.w : paper.h) / 25.4) * 96 });
+// η διάταξη σελίδας του ίδιου του αρχείου (Excel): ποσοστό ή «προσαρμογή σε Χ × Υ σελίδες», αλλαγές σελίδας, στήλες σε σελίδες
+function planFile(g: Geo): Plan {
+  const x = g.sh.xml, ps = g.ps, pm = g.pm;
+  const paper = PAPER[num(ps, 'paperSize', 9)] || PAPER[9];
+  const landscape = attr(ps, 'orientation') === 'landscape';
+  const { pw, ph } = geomOf(paper, landscape);
+  const M = { l: num(pm, 'left', 0.7) * 96, r: num(pm, 'right', 0.7) * 96, t: num(pm, 'top', 0.75) * 96, b: num(pm, 'bottom', 0.75) * 96, h: num(pm, 'header', 0.3) * 96, f: num(pm, 'footer', 0.3) * 96 };
+  const availW = Math.max(50, pw - M.l - M.r), availH = Math.max(50, ph - M.t - M.b);
+  const H = g.rowsAll.reduce((a, r) => a + g.rowH(r), 0);
   const fit = /<pageSetUpPr\b[^>]*fitToPage="(1|true)"/.test(x);
   let scale = num(ps, 'scale', 100) / 100;
   if (fit) {
     const fw = num(ps, 'fitToWidth', 1), fh = num(ps, 'fitToHeight', 1); scale = 1;
-    if (fw > 0 && W > 0) scale = Math.min(scale, (availW * fw) / W);
+    if (fw > 0 && g.W > 0) scale = Math.min(scale, (availW * fw) / g.W);
     if (fh > 0 && H > 0) scale = Math.min(scale, (availH * fh) / H);
     scale = Math.floor(scale * 100) / 100;
   }
   scale = Math.min(4, Math.max(0.1, scale));
-
   // σελίδες: χειροκίνητες αλλαγές και ό,τι δεν χωρά, με τις γραμμές τίτλων σε κάθε σελίδα
   const brk = (tag: string) => new Set([...block(x, tag).matchAll(/<brk\b[^>]*>/g)].map(m => num(m[0], 'id', 0)));
   const rowBrk = brk('rowBreaks'), colBrk = brk('colBreaks');
-  const titles = titleRows(definedName(book.wbXml, '_xlnm.Print_Titles', idx));
-  const titleList = titles ? Array.from({ length: titles[1] - titles[0] + 1 }, (_, i) => titles[0] + i).filter(r => rowH(r) > 0) : [];
-  const titleH = titleList.reduce((a, r) => a + rowH(r), 0);
   const split = (list: number[], size: (n: number) => number, room: (first: number) => number, breaks: Set<number>) => {
     const out: number[][] = []; let cur: number[] = []; let acc = 0;
     for (const n of list) {
@@ -592,24 +691,162 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
     if (cur.length) out.push(cur);
     return out;
   };
-  const withTitles = (first: number) => !!titles && first > titles[1];
-  const rowPages = split(rowsAll, rowH, f => availH / scale - (withTitles(f) ? titleH : 0), rowBrk);
-  const colPages = split(colsAll, colW, () => availW / scale, colBrk);
+  const withT = (first: number) => !!g.titles && first > g.titles[1];
+  const rowPages = split(g.rowsAll, g.rowH, f => availH / scale - (withT(f) ? g.titleH : 0), rowBrk);
+  const colPages = split(g.colsAll, g.colW, () => availW / scale, colBrk);
   const order: [number[], number[]][] = [];
   if (attr(ps, 'pageOrder') === 'overThenDown') rowPages.forEach(rp => colPages.forEach(cp => order.push([rp, cp])));
   else colPages.forEach(cp => rowPages.forEach(rp => order.push([rp, cp])));
+  const on1 = (n: string) => attr(g.po, n) === '1' || attr(g.po, n) === 'true';
+  return { paper, landscape, pw, ph, M, availW, availH, scale, maxScale: scale, pt: g.dom.sz * scale, cs: 1, f: 1, centerH: on1('horizontalCentered'), centerV: on1('verticalCentered'), pno: false, repeat: true, order };
+}
 
+// Οι επιλογές του παραθύρου «Εκτύπωση» (Michael, 20/10): πάντα όλες οι στήλες στο πλάτος της σελίδας, και οι γραμμές σε όσες
+// σελίδες διαλέξει, με τα μεγαλύτερα γράμματα που χωράνε. Ίδια κλίμακα σε όλες τις σελίδες ενός φύλλου (και, με same, σε όλα τα
+// φύλλα), ώστε π.χ. Arial 12 να βγαίνει ίδιο μέγεθος στη σελίδα 1 και 2, μπρος και πίσω.
+export interface PrintOpts {
+  pages: number | 'auto';                // σελίδες ανά φύλλο· 'auto' = όσες χρειάζονται με γράμματα size pt
+  size: number;
+  or: 'auto' | 'p' | 'l';
+  paper: 'A4' | 'A3';
+  m: 'narrow' | 'normal' | 'wide';
+  sp: 'top' | 'center' | 'fill';          // ό,τι περισσεύει από κάτω: πάνω, στο κέντρο, ψηλότερες γραμμές
+  stretch: boolean;                       // λίγες στήλες φαρδαίνουν ως το πλάτος της σελίδας
+  repeat: boolean;                        // οι γραμμές τίτλων (Print_Titles) σε κάθε σελίδα
+  keep: boolean;                          // δεν κόβεται μπλοκ (θάλαμος, πίνακας) στη μέση
+  pno: boolean;                           // «Σελίδα 1 από 2» κάτω, όταν είναι πάνω από μία
+  side: 'new' | 'back';                   // η επόμενη σελίδα στην πίσω όψη ή σε νέο φύλλο
+  same: boolean;                          // ίδια γράμματα σε όλα τα φύλλα του Excel
+  breaks?: Record<string, number[]>;      // ανά φύλλο: γραμμές του Excel από όπου ξεκινά νέα σελίδα (κλικ στην προεπισκόπηση)
+}
+export const PRINT_DEFAULT: PrintOpts = { pages: 1, size: 12, or: 'auto', paper: 'A4', m: 'normal', sp: 'top', stretch: true, repeat: true, keep: true, pno: true, side: 'new', same: true };
+const MARGIN = { narrow: 0.5, normal: 1.2, wide: 2.5 };   // εκ.
+const pick = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
+// ό,τι έρχεται από το παράθυρο (IPC) ή από τις αποθηκευμένες ρυθμίσεις, καθαρισμένο
+export function cleanOpts(x: unknown, base: PrintOpts = PRINT_DEFAULT): PrintOpts {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+  const bool = (k: keyof PrintOpts) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : (base[k] as boolean));
+  const pages = o.pages === 'auto' ? 'auto' : Number.isInteger(o.pages) && (o.pages as number) >= 1 && (o.pages as number) <= 20 ? (o.pages as number) : base.pages;
+  const size = typeof o.size === 'number' && o.size >= 5 && o.size <= 24 ? Math.round(o.size * 2) / 2 : base.size;
+  let breaks: Record<string, number[]> | undefined;
+  if (o.breaks && typeof o.breaks === 'object') {
+    breaks = {};
+    for (const [k, v] of Object.entries(o.breaks as Record<string, unknown>).slice(0, 50)) if (Array.isArray(v)) breaks[String(k)] = [...new Set(v.filter(n => Number.isInteger(n) && n > 0 && n < 1048577) as number[])].sort((a, b) => a - b).slice(0, 500);
+  }
+  return {
+    pages, size, or: pick(o.or, ['auto', 'p', 'l'] as const, base.or), paper: pick(o.paper, ['A4', 'A3'] as const, base.paper), m: pick(o.m, ['narrow', 'normal', 'wide'] as const, base.m),
+    sp: pick(o.sp, ['top', 'center', 'fill'] as const, base.sp), stretch: bool('stretch'), repeat: bool('repeat'), keep: bool('keep'), pno: bool('pno'),
+    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {})
+  };
+}
+const hasBreaks = (o: PrintOpts) => !!o.breaks && Object.values(o.breaks).some(b => b.length);
+const PAPERS = { A4: PAPER[9], A3: PAPER[8] };
+
+function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan {
+  const paper = PAPERS[o.paper]; const { pw, ph } = geomOf(paper, landscape);
+  const m = (MARGIN[o.m] / 2.54) * 96;
+  // κεφαλίδα/υποσέλιδο του αρχείου: χώρος στο περιθώριο
+  const M = { l: m, r: m, t: g.oddH ? Math.max(m, 38) : m, b: g.oddF ? Math.max(m, 38) : m, h: 12, f: 12 };
+  const availW = Math.max(50, pw - M.l - M.r), availH = Math.max(50, ph - M.t - M.b);
+  const maxScale = Math.min(availW / Math.max(1, g.W), 2, 16 / g.dom.sz);
+  const repeat = o.repeat && !!g.titles;
+  const tH = (first: number) => (repeat && g.titles && first > g.titles[1] ? g.titleH : 0);
+  const hOf = (rows: number[]) => rows.reduce((a, r) => a + g.rowH(r), 0);
+  const blocks = o.keep ? g.units : g.units.flat().map(u => [u]);
+  // γεμίζει σελίδες με τη σειρά· limit = μέγιστο ύψος ανά σελίδα (για ισόποσο μοίρασμα)
+  const split = (s: number, limit: number): number[][] => {
+    const cap = availH / s; const pages: number[][] = []; let cur: number[] = []; let h = 0;
+    const room = (first: number) => Math.min(limit, cap - tH(first));
+    const put = (u: number[]) => { const uh = hOf(u); if (cur.length && h + uh > room(cur[0]) + 0.5) { pages.push(cur); cur = []; h = 0; } cur.push(...u); h += uh; };
+    for (const b of blocks) {
+      const bh = b.reduce((a, u) => a + hOf(u), 0);
+      if (cur.length && h + bh > room(cur[0]) + 0.5 && bh <= room(b[0][0]) + 0.5) { pages.push(cur); cur = []; h = 0; }
+      b.forEach(put);
+    }
+    if (cur.length || !pages.length) pages.push(cur);
+    return pages;
+  };
+  const fitsAll = (s: number, pages: number[][]) => pages.every(p => tH(p[0] ?? 0) + hOf(p) <= availH / s + 0.5);
+  let s: number; let pages: number[][];
+  const br = (o.breaks?.[g.sh.name] || []).filter(r => r > g.rowsAll[0] && g.rowsAll.includes(r));
+  if (br.length) {
+    pages = []; let cur: number[] = [];
+    for (const r of g.rowsAll) { if (cur.length && br.includes(r)) { pages.push(cur); cur = []; } cur.push(r); }
+    pages.push(cur);
+    s = Math.min(maxScale, ...pages.map(p => availH / Math.max(1, tH(p[0]) + hOf(p))));
+    if (sFix) s = Math.min(s, sFix);
+  } else if (o.pages === 'auto') {
+    s = Math.min(maxScale, o.size / g.dom.sz); if (sFix) s = Math.min(s, sFix);
+    pages = split(s, Infinity);
+  } else {
+    const N = o.pages;
+    if (sFix) s = Math.min(sFix, maxScale);
+    else if (split(maxScale, Infinity).length <= N) s = maxScale;
+    else {
+      let lo = 0.02, hi = maxScale;
+      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (split(mid, Infinity).length <= N) lo = mid; else hi = mid; }
+      s = lo;
+    }
+    s = Math.max(0.02, Math.floor(s * 1000) / 1000);
+    // ισόποσο μοίρασμα: το μικρότερο όριο ανά σελίδα που κρατά τις ίδιες σελίδες
+    const need = split(s, Infinity).length; const total = hOf(g.rowsAll);
+    let a = total / Math.max(1, need), b = availH / s;
+    for (let i = 0; i < 22; i++) { const L = (a + b) / 2; if (split(s, L).length <= need) b = L; else a = L; }
+    pages = split(s, b + 0.5);
+    if (pages.length > need || !fitsAll(s, pages)) pages = split(s, Infinity);
+  }
+  s = Math.max(0.02, Math.floor(s * 1000) / 1000);
+  // λίγες στήλες: φαρδαίνουν ώστε ο πίνακας να πιάσει το πλάτος (τα γράμματα μένουν ίδια)
+  const cs = o.stretch && g.W * s < availW - 1 ? availW / (g.W * s) : 1;
+  // περισσεύει χώρος: οι γραμμές του πίνακα ψηλώνουν (ίδιο ύψος σε όλες τις σελίδες· η τελευταία, μισή, δεν μετρά)
+  let f = 1;
+  if (o.sp === 'fill') {
+    f = 1.9;
+    pages.forEach((p, i) => {
+      if (pages.length > 1 && i === pages.length - 1) return;
+      const grow = p.filter(r => g.framed.has(r)); const gh = hOf(grow); if (!gh) return;
+      f = Math.min(f, (availH / s - tH(p[0]) - (hOf(p) - gh)) / gh);
+    });
+    f = Math.max(1, Math.floor(f * 100) / 100);
+  }
+  return { paper, landscape, pw, ph, M, availW, availH, scale: s, maxScale, pt: g.dom.sz * s, cs, f, centerH: true, centerV: o.sp === 'center', pno: o.pno, repeat, order: pages.map(p => [p, g.colsAll]) };
+}
+// όλα τα φύλλα: προσανατολισμός (αυτόματα: όποιος βγάζει μεγαλύτερα γράμματα· με μπρος-πίσω ίδιος για όλα) και κοινή κλίμακα
+function planDoc(geos: Geo[], o: PrintOpts): Plan[] {
+  if (!geos.length) return [];
+  const better = (a: Plan[], b: Plan[]) => {   // true αν το b είναι καλύτερο: μεγαλύτερα γράμματα, και με ίδια γράμματα λιγότερες σελίδες
+    const sa = Math.min(...a.map(p => p.scale)), sb = Math.min(...b.map(p => p.scale));
+    if (Math.abs(sa - sb) > 0.005) return sb > sa;
+    return b.reduce((x, p) => x + p.order.length, 0) < a.reduce((x, p) => x + p.order.length, 0);
+  };
+  let lands: boolean[];
+  if (o.or !== 'auto') lands = geos.map(() => o.or === 'l');
+  else if (o.side === 'back' || o.same) {
+    const P = geos.map(g => planFit(g, o, false)), L = geos.map(g => planFit(g, o, true));
+    const same = (ps: Plan[]) => (o.same && ps.length > 1 ? geos.map((g, i) => planFit(g, o, ps[i].landscape, Math.min(...ps.map(p => p.scale)))) : ps);
+    lands = geos.map(() => better(same(P), same(L)));
+  } else lands = geos.map(g => better([planFit(g, o, false)], [planFit(g, o, true)]));
+  let plans = geos.map((g, i) => planFit(g, o, lands[i]));
+  if (o.same && plans.length > 1) { const s = Math.min(...plans.map(p => p.scale)); plans = geos.map((g, i) => planFit(g, o, lands[i], s)); }
+  return plans;
+}
+
+// ------------------------------------------------------------------ οι σελίδες σε HTML
+function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>, opt: RenderOpts, pageAt: number, pageTotal: number): PrintSheet {
+  const sh = g.sh; const st = book.styles; const fit = !!opt.layout;
+  const { pw, ph, M, availW, availH, scale } = P;
   const mergeAt = new Map<number, { r1: number; c1: number; r2: number; c2: number }>();
   for (const m of sh.merges) for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) mergeAt.set(key(r, c), m);
+  const colInfo = (c: number) => sh.cols.find(k => c >= k.min && c <= k.max);
   const cellOf = (r: number, c: number) => sh.cells.get(key(r, c));
   const styleOf = (r: number, c: number) => { const k = cellOf(r, c); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
   const shown = (r: number, c: number) => { const k = cellOf(r, c); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? v.code : v; };
-  const hdr = /<headerFooter\b[^>]*>([\s\S]*?)<\/headerFooter>/.exec(x)?.[1] || '';
-  const oddH = /<oddHeader>([\s\S]*?)<\/oddHeader>/.exec(hdr)?.[1], oddF = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(hdr)?.[1];
-  const firstNo = /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1;
+  const rowH = (r: number) => g.rowH(r) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
+  const colW = (c: number) => g.colW(c) * P.cs;
+  const withTitles = (first: number) => P.repeat && !!g.titles && first > g.titles[1];
 
-  const pages = (opt.maxPages ? order.slice(0, opt.maxPages) : order).map(([rp, cp], pi) => {
-    const rows = withTitles(rp[0]) ? [...titleList, ...rp] : rp;
+  const pages = (opt.maxPages ? P.order.slice(0, opt.maxPages) : P.order).map(([rp, cp], pi) => {
+    const rows = withTitles(rp[0]) ? [...g.titleList, ...rp] : rp;
     const rowIx = new Map(rows.map((r, i) => [r, i])); const colIx = new Map(cp.map((c, i) => [c, i]));
     const tw = cp.reduce((a, c) => a + colW(c), 0), th = rows.reduce((a, r) => a + rowH(r), 0);
     let body = '';
@@ -622,7 +859,7 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
           // το κομμάτι της συγχώνευσης που πέφτει σε αυτή τη σελίδα· η τιμή μόνο εκεί που είναι το πάνω-αριστερό κελί
           const vr = rows.filter(y => y >= m.r1 && y <= m.r2), vc = cp.filter(y => y >= m.c1 && y <= m.c2);
           if (vr[0] !== r || vc[0] !== c) continue;
-          let k = rowIx.get(r)!; while (k + 1 < rows.length && rows[k + 1] <= m.r2 && rows[k + 1] === rows[k] + 1 + countHidden(rows[k], rows[k + 1], rowH)) { k++; rs++; }
+          let k = rowIx.get(r)!; while (k + 1 < rows.length && rows[k + 1] <= m.r2 && rows[k + 1] === rows[k] + 1 + countHidden(rows[k], rows[k + 1], g.rowH)) { k++; rs++; }
           let j = colIx.get(c)!; while (j + 1 < cp.length && cp[j + 1] <= m.c2) { j++; cs++; }
           ar = m.r1; ac = m.c1; isAnchor = r === m.r1 && c === m.c1;
         }
@@ -652,90 +889,294 @@ function renderSheet(book: Book, sh: ParsedSheet, idx: number, file: string, use
         }
         tr += `<td class="s${s}"${opt.refs ? ` data-a="${colName(ac)}${ar}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
       }
-      body += `<tr style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
+      body += `<tr${fit ? ` data-r="${r}"` : ''} style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
     }
-    const cg = '<colgroup>' + cp.map(c => `<col style="width:${colW(c)}px">`).join('') + '</colgroup>';
-    const left = M.l + (centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
-    const ctx = { page: firstNo + pi, pages: order.length, sheet: sh.name, file };
+    const cg = '<colgroup>' + cp.map(c => `<col style="width:${colW(c).toFixed(2)}px">`).join('') + '</colgroup>';
+    const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
+    const no = pageAt + pi + 1;
+    const ctx = { page: fit ? no : g.firstNo + pi, pages: fit ? pageTotal : P.order.length, sheet: sh.name, file };
     const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
-    return `<div class="pg" style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${grid ? 'grid' : ''}" style="width:${tw}px">${cg}<tbody>${body}</tbody></table></div>${hf(oddF, false)}</div>`;
+    const pno = P.pno && pageTotal > 1 && !g.oddF ? `<div class="pno" style="bottom:${Math.max(3, M.b / 2 - 7).toFixed(1)}px">Σελίδα ${no} από ${pageTotal}</div>` : '';
+    const data = fit ? ` data-n="${no}" data-sheet="${esc(sh.name)}" data-first="${rp[0] ?? 0}" data-land="${P.landscape ? 1 : 0}" data-paper="${P.paper.name}"` : '';
+    return `<div class="pg"${data} style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(g.oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${g.grid ? 'grid' : ''}" style="width:${tw.toFixed(2)}px">${cg}<tbody>${body}</tbody></table></div>${hf(g.oddF, false)}${pno}</div>`;
   });
-  return { name: sh.name, paper: paper.name, landscape, pages: order.length, scale, html: pages.join('') };
+  return { name: sh.name, paper: P.paper.name, landscape: P.landscape, pages: P.order.length, scale, html: pages.join(''), pt: Math.round(P.pt * 2) / 2, font: g.dom.name, size: g.dom.sz, titles: !!g.titles };
 }
 // κρυφές γραμμές ανάμεσα σε δύο ορατές (για να συνεχίζει η συγχώνευση από πάνω τους)
 const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let n = 0; for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++; return n; };
 
-// Το script της προεπισκόπησης (μπάρα: φύλλα, εκτυπωτής, «Εκτύπωση»). Είναι το μόνο που επιτρέπει το CSP (με το hash του),
-// ώστε ό,τι άλλο βρεθεί μέσα στη σελίδα από το αρχείο να μην τρέχει.
+// Το κλειδί των ρυθμίσεων εκτύπωσης ενός εντύπου: το όνομα του αρχείου χωρίς ημερομηνίες, αριθμούς και κατάληξη
+// («ΗΚΑΙ 2Η ΕΠΧΙΑ 21.10.26.xlsx» και «… 22.10.26.xlsx» → ίδιο κλειδί), ώστε να θυμάται το ίδιο έντυπο κάθε μέρα
+const GR_MONTHS = /(ΙΑΝΟΥΑΡΙΟΣ|ΦΕΒΡΟΥΑΡΙΟΣ|ΜΑΡΤΙΟΣ|ΑΠΡΙΛΙΟΣ|ΜΑΙΟΣ|ΙΟΥΝΙΟΣ|ΙΟΥΛΙΟΣ|ΑΥΓΟΥΣΤΟΣ|ΣΕΠΤΕΜΒΡΙΟΣ|ΟΚΤΩΒΡΙΟΣ|ΝΟΕΜΒΡΙΟΣ|ΔΕΚΕΜΒΡΙΟΣ)/g;
+export function printKey(file: string): string {
+  const base = file.split(/[\\/]/).pop() || file;
+  const k = base.replace(/\.xls[xm]?$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+    .replace(GR_MONTHS, ' ').replace(/\d{1,4}([-./]\d{1,4})+/g, ' ').replace(/\(\d+\)/g, ' ').replace(/\b(ΕΩΣ)\b/g, ' ').replace(/\b\d+\b/g, ' ')
+    .replace(/[-_.,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return k.slice(0, 80) || 'ΑΡΧΕΙΟ';
+}
+// αρχικές ρυθμίσεις ανά έντυπο: ΗΚΑΙ μπρος-πίσω, στενά περιθώρια, στο κέντρο· ΦΡΟΥΡΑ στενά (το template είχε μηδενικά)
+export function printDefaults(key: string, sheets: string[]): PrintOpts {
+  const low = sheets.map(s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase());
+  if (low.includes('μπροστινο') && low.includes('πισω')) return { ...PRINT_DEFAULT, side: 'back', m: 'narrow', sp: 'center', pno: false };
+  if (/^ΦΡΟΥΡΑ/.test(key)) return { ...PRINT_DEFAULT, m: 'narrow' };
+  return { ...PRINT_DEFAULT };
+}
+
+// ------------------------------------------------------------------ το παράθυρο «Εκτύπωση»
+// Τα στοιχεία που χρειάζεται η στήλη ρυθμίσεων: σελίδες, προσανατολισμός και γράμματα κάθε φύλλου
+export interface PrintInfo { sheets: { name: string; pages: number; landscape: boolean; pt: number; font: string; size: number; titles: boolean; scale: number }[]; all: string[]; total: number; sug?: { n: number; pt: number } }
+export const infoOf = (doc: PrintDoc): PrintInfo => ({ sheets: doc.sheets.map(s => ({ name: s.name, pages: s.pages, landscape: s.landscape, pt: s.pt, font: s.font, size: s.size, titles: s.titles, scale: s.scale })), all: doc.all, total: doc.total, ...(doc.sug ? { sug: doc.sug } : {}) });
+export const sectionsHtml = (doc: PrintDoc) => doc.sheets.map((s, i) => `<section data-i="${i}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)}</h2>` : ''}${s.html}</section>`).join('') || '<p class="empty">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>';
+
+// Το script της προεπισκόπησης. Είναι το μόνο που επιτρέπει το CSP (με το hash του), ώστε ό,τι άλλο βρεθεί μέσα στη σελίδα
+// από το αρχείο να μην τρέχει. Κάθε αλλαγή ρύθμισης ζητά από την εφαρμογή νέα διάταξη (το Excel έχει ήδη διαβαστεί μία φορά).
 const PREVIEW_SCRIPT = `
 (function(){
-  var api = window.printer, go = document.getElementById('go'), dlg = document.getElementById('dlg'), msg = document.getElementById('msg'), pageCss = document.getElementById('page');
-  var prn = document.getElementById('prn'), copies = document.getElementById('copies');
+  'use strict';
+  var api = window.printer, $ = function(id){ return document.getElementById(id); };
+  var init = {}; try { init = JSON.parse(document.body.getAttribute('data-init') || '{}'); } catch (e) {}
+  var o = init.opts || {}, info = init.info || { sheets: [], all: [], total: 0 }, remember = init.remember !== false, duplex = !!init.duplex, sel = null;
+  var pagesEl = $('pages'), view = $('view'), msg = $('msg'), go = $('go'), dlg = $('dlg'), pdf = $('pdf'), prn = $('prn'), copies = $('copies');
+  var seq = 0, timer = 0, slow = 0;
+  var fmt = function(n){ return String(Math.round(n * 2) / 2).replace('.', ','); };
+  var plural = function(n, a, b){ return n + ' ' + (n === 1 ? a : b); };
+  var hasBreaks = function(){ return !!o.breaks && Object.keys(o.breaks).some(function(k){ return o.breaks[k].length; }); };
+  function say(t, ok){ msg.textContent = t || ''; msg.className = 'msg' + (ok ? ' ok' : ''); }
+
+  // ---------------------------------------------------------------- νέα διάταξη από την εφαρμογή
+  function request(save){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      var my = ++seq; clearTimeout(slow); slow = setTimeout(function(){ document.body.classList.add('busy'); }, 200);
+      api.layout({ opts: o, sheets: sel, save: !!save && remember }).then(function(r){
+        if (my !== seq) return;
+        clearTimeout(slow); document.body.classList.remove('busy');
+        if (!r || !r.ok) { say((r && r.error) || 'Δεν έγινε η διάταξη.'); return; }
+        $('cells').textContent = r.css; pagesEl.innerHTML = r.html; info = r.info; say('');
+        render();
+      });
+    }, 40);
+  }
+  function set(k, v, save){ o[k] = v; if (k === 'pages') delete o.breaks; request(save !== false); }
+
+  // ---------------------------------------------------------------- στήλη ρυθμίσεων
+  function radios(name, val){ [].forEach.call(document.querySelectorAll('input[name="' + name + '"]'), function(i){ i.checked = !hasBreaks() || name !== 'pages' ? i.value === String(val) : false; }); }
+  function panel(){
+    var manual = hasBreaks(), multi = info.sheets.length > 1, land = info.sheets.length && info.sheets.every(function(s){ return s.landscape; }), port = info.sheets.every(function(s){ return !s.landscape; });
+    radios('pages', o.pages); radios('or', o.or); radios('sp', o.sp); radios('m', o.m); radios('pa', o.paper); radios('side', o.side);
+    ['stretch','repeat','keep','pno','same'].forEach(function(k){ $(k).checked = !!o[k]; });
+    $('duplex').checked = duplex; $('remember').checked = remember;
+    $('manual').hidden = !manual; $('mcount').textContent = info.total;
+    $('sizeGrp').hidden = manual || o.pages !== 'auto'; $('size').value = o.size; $('sizeOut').textContent = fmt(o.size) + ' pt';
+    $('oaText').textContent = o.or === 'auto' && info.sheets.length ? 'Αυτόματα (' + (land ? 'οριζ.' : port ? 'κατακ.' : 'μικτά') + ')' : 'Αυτόματα';
+    $('duplexRow').hidden = o.side !== 'back';
+    $('sideHelp').textContent = o.side === 'back'
+      ? (duplex ? 'Γυρίζει στην ' + (land ? 'κοντή' : 'μακριά') + ' πλευρά, ώστε η πίσω όψη να μη βγαίνει ανάποδα.' : 'Τυπώνει πρώτα τις μπροστινές. Μετά σου λέει να ξαναβάλεις τα φύλλα στον δίσκο και τυπώνει τις πίσω.')
+      : 'Κάθε σελίδα σε δικό της χαρτί.';
+    $('sameGrp').hidden = !multi;
+    $('repeatRow').hidden = !info.sheets.some(function(s){ return s.titles; });
+    $('pagesHelp').textContent = manual ? 'Οι σελίδες αλλάζουν εκεί που έκανες κλικ. Τα γράμματα βγαίνουν όσο μεγάλα χωράνε.'
+      : o.pages === 'auto' ? 'Διαλέγεις μέγεθος γραμμάτων και βγαίνουν όσες σελίδες χρειαστούν.'
+      : 'Τα γράμματα βγαίνουν όσο μεγάλα χωράνε σε ' + (o.pages === 1 ? '1 σελίδα' : o.pages + ' σελίδες, με ίσες γραμμές') + (multi ? ' για κάθε φύλλο.' : '.');
+    // πόσο καθαρά θα διαβάζεται, και ότι Arial 12 βγαίνει ίδιο σε όλες τις σελίδες
+    var lg = $('legible');
+    if (!info.sheets.length) { lg.hidden = true; } else {
+      lg.hidden = false;
+      var min = Math.min.apply(null, info.sheets.map(function(s){ return s.pt; }));
+      var cls = min >= 10 ? 'ok' : min >= 8 ? 'warn' : 'bad';
+      lg.className = 'legible ' + cls;
+      var one = info.sheets.every(function(s){ var a = info.sheets[0]; return s.font === a.font && s.size === a.size && s.pt === a.pt; });
+      var first = info.sheets[0];
+      var head = one ? first.font + ' ' + fmt(first.size) + ' του Excel → <b>' + fmt(first.pt) + ' pt</b> στο χαρτί'
+        : info.sheets.map(function(s){ return esc(s.name) + ': ' + esc(s.font) + ' ' + fmt(s.size) + ' → <b>' + fmt(s.pt) + ' pt</b>'; }).join('<br>');
+      var word = cls === 'ok' ? 'Διαβάζεται καθαρά.' : cls === 'warn' ? 'Μικρά γράμματα, διαβάζονται.' : 'Πολύ μικρά γράμματα.';
+      var scales = info.sheets.map(function(s){ return s.scale; }), oneScale = scales.every(function(x){ return Math.abs(x - scales[0]) < 0.002; });
+      var same = info.total < 2 ? '' : one ? ' Ίδιο μέγεθος σε όλες τις σελίδες' + (multi && o.side === 'back' ? ', μπρος και πίσω.' : '.')
+        : oneScale ? ' Ίδια κλίμακα σε όλα: ' + esc(first.font) + ' 12 βγαίνει ' + fmt(12 * scales[0]) + ' pt παντού.' : '';
+      lg.innerHTML = '<span>' + head + '</span><span>' + word + same + '</span>' + (info.sug ? '<button type="button" class="sm" data-sug="' + info.sug.n + '">Σε ' + info.sug.n + ' σελίδες: ' + fmt(info.sug.pt) + ' pt</button>' : '');
+    }
+    // φύλλα του Excel
+    var chips = $('sheets'); chips.hidden = info.all.length < 2;
+    chips.innerHTML = info.all.map(function(n){ var s = info.sheets.filter(function(x){ return x.name === n; })[0]; return '<label><input type="checkbox" value="' + esc(n) + '"' + (s ? ' checked' : '') + '> ' + esc(n) + (s ? ' <small>' + s.pages + '</small>' : '') + '</label>'; }).join('');
+    var sheetsOf = o.side === 'back' ? Math.ceil(info.total / 2) : info.total;
+    $('meta').textContent = info.total ? plural(info.total, 'σελίδα', 'σελίδες') + ' σε ' + plural(sheetsOf, 'φύλλο', 'φύλλα') + ' χαρτί' + (o.side === 'back' && info.total > 1 ? ' (μπρος-πίσω)' : '') + ' · ' + o.paper + ' ' + (land ? 'οριζόντια' : port ? 'κατακόρυφα' : 'κατακόρυφα και οριζόντια') : '';
+    go.disabled = dlg.disabled = pdf.disabled = !info.total;
+  }
+  function esc(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  // ---------------------------------------------------------------- σελίδες: με λεζάντα, ανά δύο σε «φύλλο» στο μπρος-πίσω
+  function pages(){ return [].slice.call(pagesEl.querySelectorAll('.pg')); }
+  function render(){
+    panel();
+    var list = pages(), back = o.side === 'back' && list.length > 1;
+    list.forEach(function(p, i){
+      var box = document.createElement('div'); box.className = 'pbox';
+      p.parentNode.insertBefore(box, p); box.appendChild(p);
+      var cap = document.createElement('small');
+      cap.textContent = 'Σελίδα ' + (i + 1) + ' από ' + list.length + (back ? ' · ' + (i % 2 ? 'πίσω' : 'μπρος') : '');
+      box.appendChild(cap);
+    });
+    if (back) {
+      var boxes = list.map(function(p){ return p.parentNode; }), wrap = document.createDocumentFragment();
+      for (var i = 0; i < boxes.length; i += 2) {
+        var sh = document.createElement('div'); sh.className = 'sheet';
+        var t = document.createElement('b'); t.textContent = 'Φύλλο ' + (i / 2 + 1) + (boxes[i + 1] ? ' · μπρος και πίσω' : ' · μόνο μπρος'); sh.appendChild(t);
+        var pair = document.createElement('div'); pair.className = 'pair'; pair.appendChild(boxes[i]); if (boxes[i + 1]) pair.appendChild(boxes[i + 1]); sh.appendChild(pair);
+        wrap.appendChild(sh);
+      }
+      pagesEl.innerHTML = ''; pagesEl.appendChild(wrap);
+    }
+    zoom();
+  }
+  // οι σελίδες χωράνε στο πλάτος της προεπισκόπησης (μόνο στην οθόνη· στο χαρτί τυπώνονται στο πραγματικό μέγεθος)
+  function zoom(){
+    var list = pages(); if (!list.length) return;
+    var back = o.side === 'back' && list.length > 1, w = 0, room = view.clientWidth - 48;
+    list.forEach(function(p){ w = Math.max(w, parseFloat(p.style.width) || 0); });
+    // μπρος-πίσω: δίπλα-δίπλα αν χωράνε σε τουλάχιστον μισό μέγεθος, αλλιώς το ένα κάτω από το άλλο
+    var side = back && room / (w * 2 + 48) >= 0.5;
+    [].forEach.call(pagesEl.querySelectorAll('.pair'), function(x){ x.classList.toggle('stack', !side); });
+    pagesEl.style.zoom = Math.min(1, Math.max(0.2, room / ((side ? w * 2 + 24 : w) + 24)));
+  }
+  window.addEventListener('resize', function(){ clearTimeout(zoom.t); zoom.t = setTimeout(zoom, 80); });
+
+  // ---------------------------------------------------------------- κλικ σε γραμμή: η σελίδα αλλάζει από εκεί
+  view.addEventListener('click', function(e){
+    var tr = e.target.closest && e.target.closest('tr[data-r]'), pg = tr && tr.closest('.pg'); if (!pg) return;
+    var r = +tr.getAttribute('data-r'), sheet = pg.getAttribute('data-sheet'), first = +pg.getAttribute('data-first');
+    var ofSheet = pages().filter(function(p){ return p.getAttribute('data-sheet') === sheet; });
+    if (r < first || r <= +ofSheet[0].getAttribute('data-first')) return;   // γραμμή τίτλων που επαναλαμβάνεται, ή η πρώτη γραμμή
+    var had = hasBreaks();
+    if (!had) { o.breaks = {}; info.sheets.forEach(function(s){ o.breaks[s.name] = pages().filter(function(p){ return p.getAttribute('data-sheet') === s.name; }).slice(1).map(function(p){ return +p.getAttribute('data-first'); }); }); }
+    var starts = (o.breaks[sheet] || []).slice(), at = starts.indexOf(r);
+    if (at >= 0) starts.splice(at, 1);                                          // πρώτη γραμμή σελίδας: ενώνεται με την προηγούμενη
+    else if (!had && o.pages !== 'auto' && starts.length) {                      // 2 ή 3 σελίδες: μετακινείται η πιο κοντινή αλλαγή
+      var best = 0; starts.forEach(function(s, i){ if (Math.abs(s - r) < Math.abs(starts[best] - r)) best = i; }); starts[best] = r;
+    } else starts.push(r);
+    o.breaks[sheet] = starts.filter(function(v, i, a){ return a.indexOf(v) === i; }).sort(function(a, b){ return a - b; });
+    request(false);
+  });
+
+  // ---------------------------------------------------------------- χειρισμοί
+  [['pages','pages'],['or','or'],['sp','sp'],['m','m'],['pa','paper'],['side','side']].forEach(function(x){
+    [].forEach.call(document.querySelectorAll('input[name="' + x[0] + '"]'), function(i){ i.addEventListener('change', function(){ set(x[1], x[0] === 'pages' && i.value !== 'auto' ? +i.value : i.value); }); });
+  });
+  ['stretch','repeat','keep','pno','same'].forEach(function(k){ $(k).addEventListener('change', function(){ set(k, $(k).checked); }); });
+  $('size').addEventListener('input', function(){ $('sizeOut').textContent = fmt(+$('size').value) + ' pt'; set('size', +$('size').value); });
+  $('mreset').addEventListener('click', function(){ delete o.breaks; request(false); });
+  $('legible').addEventListener('click', function(e){ var b = e.target.closest('[data-sug]'); if (b) set('pages', +b.getAttribute('data-sug')); });
+  $('sheets').addEventListener('change', function(){ sel = [].slice.call(document.querySelectorAll('#sheets input:checked')).map(function(x){ return x.value; }); delete o.breaks; request(false); });
+  $('duplex').addEventListener('change', function(){ duplex = $('duplex').checked; api.duplex(duplex); panel(); });
+  $('remember').addEventListener('change', function(){ remember = $('remember').checked; if (remember) request(true); else api.forget(); });
+  $('reset').addEventListener('click', function(){ api.forget().then(function(d){ o = d; request(remember); say('Επανήλθαν οι αρχικές ρυθμίσεις.', true); }); });
+  $('close').addEventListener('click', function(){ api.close(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { if (!$('flip').hidden) { flipDone(false); return; } api.close(); return; }
+    if (e.ctrlKey && (e.key === 'p' || e.key === 'P' || e.key === 'π' || e.key === 'Π')) { e.preventDefault(); if (!go.disabled) go.click(); return; }
+    if (e.ctrlKey || e.altKey || e.metaKey || (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'radio' && e.target.type !== 'checkbox')) return;
+    if (e.key === '1' || e.key === '2' || e.key === '3') set('pages', +e.key);
+    else if (/^[oOοΟ]$/.test(e.key)) set('or', info.sheets.length && info.sheets.every(function(s){ return s.landscape; }) ? 'p' : 'l');
+  });
+
+  // ---------------------------------------------------------------- εκτύπωση
   // εκτυπωτές για εκτύπωση χωρίς τον διάλογο των Windows (κρατά χαρτί και προσανατολισμό)· χωρίς λίστα: ο διάλογος
   if (api && api.printers) api.printers().then(function(list){
     if (!list || !list.length) return;
-    list.forEach(function(p){ var o = document.createElement('option'); o.value = p.name; o.textContent = p.label; if (p.def) o.selected = true; prn.appendChild(o); });
+    list.forEach(function(p){ var x = document.createElement('option'); x.value = p.name; x.textContent = p.label; if (p.def) x.selected = true; prn.appendChild(x); });
     [].forEach.call(document.querySelectorAll('.prn'), function(l){ l.hidden = false; });
     go.textContent = 'Εκτύπωση'; dlg.hidden = false;
   });
-  var secs = [].slice.call(document.querySelectorAll('main section'));
-  if (!secs.length) go.disabled = dlg.disabled = true;
-  document.getElementById('close').onclick = function(){ api && api.close(); };
-  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') api && api.close(); if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); go.click(); } });
-  [].forEach.call(document.querySelectorAll('.sheets input'), function(i){ i.onchange = function(){
-    var names = [].slice.call(document.querySelectorAll('.sheets input:checked')).map(function(x){ return x.value; });
-    msg.textContent = 'Ετοιμάζεται…'; api && api.sheets(names);
-  }; });
-  // ένα «τύπωμα» για κάθε συνδυασμό χαρτιού και προσανατολισμού (ο διάλογος των Windows έχει έναν για όλη τη δουλειά)
-  async function printAll(useDialog){
+  function blank(like){ var b = document.createElement('div'); b.className = 'pg'; b.style.width = like.style.width; b.style.height = like.style.height; b.setAttribute('data-land', like.getAttribute('data-land')); b.setAttribute('data-paper', like.getAttribute('data-paper')); return b; }
+  // μία «δουλειά» ανά χαρτί και προσανατολισμό: οι σελίδες αντιγράφονται στο #out, που είναι το μόνο που φαίνεται στο χαρτί
+  async function send(list, useDialog, n, two){
     var groups = [];
-    secs.forEach(function(s){ var k = s.dataset.paper + '|' + s.dataset.land; var g = groups.filter(function(x){ return x.k === k; })[0]; if (!g) groups.push(g = { k: k, paper: s.dataset.paper, land: s.dataset.land === '1', list: [] }); g.list.push(s); });
-    go.disabled = dlg.disabled = true; msg.textContent = ''; msg.classList.remove('ok');
-    var device = useDialog || !prn.value ? '' : prn.value;
+    list.forEach(function(p){ var k = p.getAttribute('data-paper') + '|' + p.getAttribute('data-land'), g = groups[groups.length - 1]; if (!g || g.k !== k) groups.push(g = { k: k, list: [] }); g.list.push(p); });
+    var device = useDialog || !prn.value ? '' : prn.value, out = $('out'), r = { ok: true };
     try {
-      for (var i = 0; i < groups.length; i++) {
-        var g = groups[i];
-        secs.forEach(function(s){ s.classList.toggle('skip', g.list.indexOf(s) < 0); });
-        pageCss.textContent = '@page{size:' + g.paper + ' ' + (g.land ? 'landscape' : 'portrait') + ';margin:0}';
-        var r = await api.print({ landscape: g.land, pageSize: g.paper, part: groups.length > 1 ? (i + 1) + '/' + groups.length : '', device: device, copies: +copies.value || 1 });
-        if (!r.ok) { if (r.error) msg.textContent = r.error; break; }
+      for (var i = 0; i < groups.length && r.ok; i++) {
+        var g = groups[i], land = g.list[0].getAttribute('data-land') === '1', paper = g.list[0].getAttribute('data-paper') || 'A4';
+        out.innerHTML = ''; g.list.forEach(function(p){ out.appendChild(p.cloneNode(true)); });
+        $('page').textContent = '@page{size:' + paper + ' ' + (land ? 'landscape' : 'portrait') + ';margin:0}';
+        r = await api.print({ landscape: land, pageSize: paper, part: groups.length > 1 ? (i + 1) + '/' + groups.length : '', device: device, copies: n, duplex: two ? (land ? 'shortEdge' : 'longEdge') : 'simplex' });
       }
-      if (r && r.ok && device) { msg.classList.add('ok'); msg.textContent = 'Στάλθηκε στον εκτυπωτή ' + prn.options[prn.selectedIndex].text + '.'; }
-    } finally { secs.forEach(function(s){ s.classList.remove('skip'); }); go.disabled = dlg.disabled = !secs.length; }
+    } finally { out.innerHTML = ''; }
+    return r;
   }
-  go.onclick = function(){ printAll(false); };
-  dlg.onclick = function(){ printAll(true); };
+  var flipNext = null;
+  function flipDone(ok){ $('flip').hidden = true; var f = flipNext; flipNext = null; if (f) f(ok); }
+  $('flipGo').addEventListener('click', function(){ flipDone(true); });
+  $('flipNo').addEventListener('click', function(){ flipDone(false); });
+  async function printAll(useDialog){
+    var list = pages(); if (!list.length) return;
+    var n = Math.min(99, Math.max(1, +copies.value || 1)), back = o.side === 'back' && list.length > 1, r;
+    go.disabled = dlg.disabled = pdf.disabled = true; say('');
+    try {
+      if (back && !duplex) {
+        // χωρίς διπλή όψη στον εκτυπωτή: πρώτα οι μπροστινές, μετά (αφού ξαναμπούν τα φύλλα) οι πίσω
+        var front = [], rear = [];
+        for (var c = 0; c < n; c++) list.forEach(function(p, i){ (i % 2 ? rear : front).push(p); });
+        if (list.length % 2) for (var k = 0; k < n; k++) rear.splice((k + 1) * Math.ceil(list.length / 2) - 1, 0, blank(list[0]));
+        r = await send(front, useDialog, 1, false);
+        if (!r.ok) { if (r.error) say(r.error); return; }
+        $('flipCount').textContent = plural(front.length, 'φύλλο', 'φύλλα');
+        var go2 = await new Promise(function(res){ flipNext = res; $('flip').hidden = false; $('flipGo').focus(); });
+        if (!go2) { say('Τυπώθηκαν μόνο οι μπροστινές.'); return; }
+        var rev = $('flipRev').checked; try { localStorage.setItem('flipRev', rev ? '1' : ''); } catch (e) {}
+        r = await send(rev ? rear.slice().reverse() : rear, useDialog, 1, false);
+      } else r = await send(list, useDialog, n, back);
+      if (!r.ok) { if (r.error) say(r.error); return; }
+      if (prn.value && !useDialog) say('Στάλθηκε στον εκτυπωτή ' + prn.options[prn.selectedIndex].text + '.', true);
+    } finally { go.disabled = dlg.disabled = pdf.disabled = !pages().length; }
+  }
+  try { $('flipRev').checked = localStorage.getItem('flipRev') === '1'; } catch (e) {}
+  go.addEventListener('click', function(){ printAll(false); });
+  dlg.addEventListener('click', function(){ printAll(true); });
+  pdf.addEventListener('click', async function(){
+    var list = pages(); if (!list.length) return; var out = $('out');
+    out.innerHTML = ''; list.forEach(function(p){ var x = p.cloneNode(true); x.style.page = p.getAttribute('data-land') === '1' ? 'land' : 'port'; out.appendChild(x); });
+    var paper = list[0].getAttribute('data-paper') || 'A4', land = list[0].getAttribute('data-land') === '1';
+    $('page').textContent = '@page{size:' + paper + ' ' + (land ? 'landscape' : 'portrait') + ';margin:0}@page land{size:' + paper + ' landscape;margin:0}@page port{size:' + paper + ' portrait;margin:0}';
+    pdf.disabled = true;
+    try { var r = await api.pdf(); if (r && r.ok) say('Σώθηκε το ' + r.name + '.', true); else if (r && r.error) say(r.error); }
+    finally { out.innerHTML = ''; pdf.disabled = !pages().length; }
+  });
+  render();
 })();
 `;
 const SCRIPT_HASH = crypto.createHash('sha256').update(PREVIEW_SCRIPT).digest('base64');
-// Η σελίδα της προεπισκόπησης: σελίδες όπως θα τυπωθούν, και πάνω μπάρα με τα φύλλα και το κουμπί «Εκτύπωση…»
-export function previewHtml(doc: PrintDoc, file: string): string {
-  const pages = doc.sheets.reduce((a, s) => a + s.pages, 0);
-  const chips = doc.all.length > 1 ? `<div class="sheets" role="group" aria-label="Φύλλα">${doc.all.map(n => { const s = doc.sheets.find(x => x.name === n); return `<label><input type="checkbox" value="${esc(n)}"${s ? ' checked' : ''}> ${esc(n)}${s ? ` <small>${s.pages}</small>` : ''}</label>`; }).join('')}</div>` : '';
-  const sections = doc.sheets.map((s, i) => `<section data-i="${i}" data-paper="${s.paper}" data-land="${s.landscape ? 1 : 0}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)} · ${s.pages} ${s.pages === 1 ? 'σελίδα' : 'σελίδες'} · ${s.paper} ${s.landscape ? 'οριζόντια' : 'κατακόρυφα'} · ${Math.round(s.scale * 100)}%</h2>` : ''}${s.html}</section>`).join('');
+const seg = (name: string, label: string, opts: [string, string, string?][]) =>
+  `<div class="grp"><span class="lbl" id="l-${name}">${label}</span><div class="seg" role="radiogroup" aria-labelledby="l-${name}">${opts.map(([v, t, id]) => `<label><input type="radio" name="${name}" value="${v}"><span${id ? ` id="${id}"` : ''}>${t}</span></label>`).join('')}</div>`;
+// Η σελίδα της προεπισκόπησης: αριστερά οι σελίδες όπως θα τυπωθούν, δεξιά οι ρυθμίσεις (σελίδες, όψεις, προσανατολισμός…)
+export function previewHtml(doc: PrintDoc, file: string, init: { opts?: PrintOpts; remember?: boolean; duplex?: boolean } = {}): string {
   const one = doc.sheets[0];
-  const info = doc.sheets.length === 1 && one ? ` · ${one.paper} ${one.landscape ? 'οριζόντια' : 'κατακόρυφα'} · κλίμακα ${Math.round(one.scale * 100)}%` : '';
+  const data = { opts: init.opts || PRINT_DEFAULT, info: infoOf(doc), remember: init.remember !== false, duplex: !!init.duplex };
   return `<!doctype html><html lang="el"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'">
 <title>Εκτύπωση · ${esc(file)}</title>
 <style>
 *{box-sizing:border-box}
-html,body{margin:0}
-body{background:#5f6368;font:14px "Segoe UI",Tahoma,Arial,sans-serif;color:#202124}
-.bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,.2)}
-.bar b{font-size:15px}.bar .meta{color:#5f6368}
-.sheets{display:flex;flex-wrap:wrap;gap:6px}.sheets label{display:inline-flex;gap:5px;align-items:center;padding:3px 9px;border:1px solid #c4c7c5;border-radius:14px;cursor:pointer}
-.sheets small{color:#5f6368}.sheets input:checked+*{font-weight:600}
-.acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.prn{display:inline-flex;gap:6px;align-items:center;color:#5f6368}.prn[hidden]{display:none}.prn select,.prn input{font:inherit;padding:6px 8px;border:1px solid #c4c7c5;border-radius:6px;background:#fff;color:#202124}.prn select{max-width:260px}.prn input{width:64px}
-button{font:inherit;padding:7px 16px;border-radius:6px;border:1px solid #c4c7c5;background:#fff;cursor:pointer}
-button.pri{background:#2e5e3a;border-color:#2e5e3a;color:#fff;font-weight:600}button:disabled{opacity:.6;cursor:default}
-button:focus-visible,.sheets label:focus-within{outline:2px solid #1a73e8;outline-offset:2px}
-.msg{width:100%;color:#b3261e}.msg.ok{color:#2e5e3a}.msg:empty{display:none}
-main{padding:20px 0 40px}
-section h2{margin:8px auto;color:#fff;font-size:13px;font-weight:600;text-align:center}
-.pg{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden}
+html,body{margin:0;height:100%}
+body{background:#5c6152;font:14px "Segoe UI",Tahoma,Arial,sans-serif;color:#1b1f16;display:flex;flex-direction:column}
+[hidden]{display:none!important}
+.bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:9px 16px;background:#4b5320;color:#fff}
+.bar b{font-size:15px}.bar .meta{color:#d6dbbf}
+.sheets{display:flex;flex-wrap:wrap;gap:6px}.sheets label{display:inline-flex;gap:5px;align-items:center;padding:2px 9px;border:1px solid #727c45;border-radius:14px;cursor:pointer}
+.sheets small{color:#d6dbbf}.sheets input{accent-color:#d8b23a}
+.wrap{flex:1;display:flex;min-height:0}
+#view{flex:1;overflow:auto;padding:18px 0 30px;min-width:0}
+#pages{display:flex;flex-direction:column;align-items:center;gap:18px}
+section{display:flex;flex-direction:column;align-items:center;gap:18px}
+section h2{margin:0;color:#e9ecdf;font-size:13px;font-weight:600}
+.pbox{display:flex;flex-direction:column;align-items:center;gap:5px}.pbox>small{color:#e9ecdf;font-size:12px}
+.sheet{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 12px;border:1px dashed rgba(233,236,223,.45);border-radius:10px}
+.sheet>b{color:#e9ecdf;font-size:13px;font-weight:600}.pair{display:flex;gap:24px;align-items:flex-start}.pair.stack{flex-direction:column;gap:14px}
+.hint{color:#e9ecdf;font-size:12.5px;text-align:center;margin:16px auto 0;max-width:60ch}
+.empty{color:#fff;text-align:center}
+body.busy #pages{opacity:.55;transition:opacity .15s}
+.pg{position:relative;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden;flex:none}
 .ar{position:absolute;transform-origin:0 0}
+#view tr[data-r]{cursor:pointer}#view tr[data-r]:hover td{background-color:#fff6c9!important}
 table{border-collapse:collapse;table-layout:fixed;color:#000}
 td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
 table.grid td{outline:0.5px solid #bbb}
@@ -743,11 +1184,73 @@ table.grid td{outline:0.5px solid #bbb}
 .x.o{overflow:visible}
 .x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
 .hf{position:absolute;display:flex;justify-content:space-between;font:10pt Calibri,Carlito,Arial,sans-serif}.hf span{flex:1}.hf span:nth-child(2){text-align:center}.hf span:nth-child(3){text-align:right}
+.pno{position:absolute;left:0;right:0;text-align:center;font:9pt Arial,sans-serif;color:#333}
+.side{width:336px;flex:none;background:#fff;display:flex;flex-direction:column;border-left:1px solid #dadecf;min-height:0}
+.scroll{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:14px}
+.grp{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#596050}
+.seg{display:flex;border:1px solid #c2c8b5;border-radius:7px;overflow:hidden}
+.seg label{flex:1;position:relative;min-width:0}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:5px 3px;border-left:1px solid #c2c8b5;font-size:12.5px;line-height:1.2;cursor:pointer}
+.seg label:first-child span{border-left:0}
+.seg input:checked+span{background:#4b5320;color:#fff;font-weight:600}
+.seg input:focus-visible+span{outline:2px solid #5b7a2b;outline-offset:-3px}
+.help{font-size:12px;color:#596050;margin:0}
+.chk{display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer}.chk input{margin-top:3px;accent-color:#4b5320}
+.legible{display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:8px;font-size:13px}
+.legible.ok{background:#ddf0e2;color:#1e6b34}.legible.warn{background:#fbedd2;color:#7a4700}.legible.bad{background:#fadfdc;color:#8a1c12}
+.legible b{font-size:14px}
+.manual{display:flex;gap:8px;align-items:center;justify-content:space-between;background:#e3e7d8;padding:5px 9px;border-radius:7px;font-size:12.5px}
+.range{display:flex;gap:8px;align-items:center}.range input{flex:1;accent-color:#4b5320}.range output{min-width:46px;text-align:right;font-weight:600}
+.foot{border-top:1px solid #dadecf;padding:10px 14px;display:flex;flex-direction:column;gap:8px;background:#f3f4ef}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.prn{display:inline-flex;gap:6px;align-items:center;color:#596050;font-size:13px}.prn select,.prn input{font:inherit;padding:4px 6px;border:1px solid #c2c8b5;border-radius:6px;background:#fff;color:#1b1f16}.prn select{max-width:200px}.prn input{width:56px}
+button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid #c2c8b5;background:#fff;cursor:pointer;color:#1b1f16}
+button.sm{padding:3px 9px;font-size:12.5px;align-self:flex-start}
+button.pri{background:#4b5320;border-color:#4b5320;color:#fff;font-weight:600}button:disabled{opacity:.6;cursor:default}
+button:focus-visible,.sheets label:focus-within{outline:2px solid #5b7a2b;outline-offset:2px}
+.msg{color:#b3261e;font-size:13px}.msg.ok{color:#1e6b34}.msg:empty{display:none}
+.flip{position:fixed;inset:0;background:rgba(15,18,10,.45);display:flex;align-items:center;justify-content:center;z-index:5}
+.flip>div{background:#fff;border-radius:12px;padding:18px 20px;max-width:440px;display:flex;flex-direction:column;gap:12px;box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.flip h3{margin:0;font-size:16px}.flip p{margin:0}
+#out{display:none}
 ${doc.css}
-@media print{body{background:none}.bar,section h2{display:none}main{padding:0}.pg{margin:0;box-shadow:none;break-after:page}section.skip{display:none}}
-</style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body>
-<div class="bar"><b>${esc(file)}</b><span class="meta">${pages} ${pages === 1 ? 'σελίδα' : 'σελίδες'}${info}</span>${chips}
-<span class="acts"><label class="prn" hidden>Εκτυπωτής <select id="prn"></select></label><label class="prn" hidden>Αντίτυπα <input id="copies" type="number" min="1" max="99" value="1"></label><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="dlg" hidden title="Ο διάλογος των Windows παίρνει τον προσανατολισμό του εκτυπωτή: διάλεξε εκεί «Οριζόντιο» για τα οριζόντια φύλλα">Διάλογος των Windows…</button><button type="button" id="close">Κλείσιμο</button></span><div class="msg" id="msg" role="status"></div></div>
-<main>${sections || '<p style="color:#fff;text-align:center">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>'}</main>
+@media print{body{background:none;display:block}.bar,.wrap,.flip{display:none!important}#out{display:block}#out .pg{margin:0;box-shadow:none;break-after:page}#out .pg:last-child{break-after:auto}}
+</style><style id="cells"></style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body data-init="${esc(JSON.stringify(data))}">
+<div class="bar"><b>${esc(file)}</b><span class="meta" id="meta"></span><div class="sheets" id="sheets" role="group" aria-label="Φύλλα"></div></div>
+<div class="wrap">
+<div id="view"><div id="pages">${sectionsHtml(doc)}</div><p class="hint">Κλικ σε μια γραμμή: η νέα σελίδα ξεκινά από εκεί. Κλικ στην πρώτη γραμμή μιας σελίδας: ενώνεται με την προηγούμενη.</p></div>
+<aside class="side" aria-label="Ρυθμίσεις εκτύπωσης"><div class="scroll">
+${seg('pages', 'Σε πόσες σελίδες', [['1', '1'], ['2', '2'], ['3', '3'], ['auto', 'Όσες χρειάζονται']])}
+<div class="manual" id="manual" hidden><span>Χειροκίνητα: <b id="mcount"></b> σελίδες</span><button type="button" class="sm" id="mreset">Αρχικό</button></div>
+<p class="help" id="pagesHelp"></p></div>
+<div class="legible" id="legible" role="status"></div>
+<div class="grp" id="sizeGrp" hidden><span class="lbl" id="l-size">Μέγεθος γραμμάτων</span><div class="range"><input type="range" id="size" min="6" max="16" step="0.5" aria-labelledby="l-size"><output id="sizeOut" for="size"></output></div><p class="help">Οι στήλες χωράνε πάντα στο πλάτος: αν δεν χωράει, σταματά στο μέγιστο που χωράει.</p></div>
+${seg('side', 'Η σελίδα 2 τυπώνεται', [['back', 'Στην πίσω όψη'], ['new', 'Σε νέο φύλλο']])}
+<label class="chk" id="duplexRow"><input type="checkbox" id="duplex"> <span>Ο εκτυπωτής γυρίζει μόνος του το χαρτί</span></label>
+<p class="help" id="sideHelp"></p></div>
+<div class="grp" id="sameGrp"><label class="chk"><input type="checkbox" id="same"> <span>Ίδια γράμματα σε όλα τα φύλλα (μπρος και πίσω)</span></label><p class="help">Αν ένα φύλλο του Excel χρειάζεται μικρότερα γράμματα, μικραίνουν και τα άλλα, ώστε π.χ. Arial 12 να βγαίνει ίδιο παντού.</p></div>
+${seg('or', 'Προσανατολισμός', [['auto', 'Αυτόματα', 'oaText'], ['p', 'Κατακόρυφα'], ['l', 'Οριζόντια']])}<p class="help">«Αυτόματα» διαλέγει όποιον βγάζει τα μεγαλύτερα γράμματα.</p></div>
+${seg('sp', 'Αν περισσεύει χώρος από κάτω', [['top', 'Πάνω'], ['center', 'Στο κέντρο'], ['fill', 'Ψηλότερες γραμμές']])}<p class="help">«Ψηλότερες γραμμές» αφήνει χώρο για υπογραφή με το χέρι.</p></div>
+${seg('m', 'Περιθώρια', [['narrow', 'Στενά'], ['normal', 'Κανονικά'], ['wide', 'Φαρδιά']])}</div>
+${seg('pa', 'Χαρτί', [['A4', 'A4'], ['A3', 'A3']])}</div>
+<div class="grp"><span class="lbl">Σε κάθε σελίδα</span>
+<label class="chk"><input type="checkbox" id="stretch"> <span>Οι στήλες πιάνουν όλο το πλάτος</span></label>
+<label class="chk" id="repeatRow"><input type="checkbox" id="repeat"> <span>Η κεφαλίδα του πίνακα ξανά πάνω</span></label>
+<label class="chk"><input type="checkbox" id="keep"> <span>Δεν κόβεται θάλαμος ή πίνακας στη μέση</span></label>
+<label class="chk"><input type="checkbox" id="pno"> <span>«Σελίδα 1 από 2» κάτω</span></label></div>
+</div><div class="foot">
+<label class="chk"><input type="checkbox" id="remember"> <span>Να θυμάται τις ρυθμίσεις για αυτό το έντυπο</span></label>
+<div class="row"><label class="prn" hidden>Εκτυπωτής <select id="prn"></select></label><label class="prn" hidden>Αντίτυπα <input id="copies" type="number" min="1" max="99" value="1"></label></div>
+<div class="row"><button type="button" class="pri" id="go" autofocus>Εκτύπωση…</button><button type="button" id="pdf">PDF…</button><button type="button" id="dlg" hidden title="Ο διάλογος των Windows παίρνει τον προσανατολισμό του εκτυπωτή: διάλεξε εκεί «Οριζόντιο» για τα οριζόντια φύλλα">Διάλογος των Windows…</button></div>
+<div class="row"><button type="button" id="reset">Αρχικές ρυθμίσεις</button><button type="button" id="close">Κλείσιμο</button></div>
+<div class="msg" id="msg" role="status"></div></div></aside>
+</div>
+<div class="flip" id="flip" hidden role="dialog" aria-modal="true" aria-labelledby="flipT"><div><h3 id="flipT">Γύρισε τα φύλλα</h3>
+<p>Τυπώθηκαν οι μπροστινές σελίδες (<span id="flipCount"></span>). Πάρε τα φύλλα όπως βγήκαν και βάλ' τα ξανά στον δίσκο του εκτυπωτή με την τυπωμένη πλευρά από την άλλη μεριά. Μετά πάτα «Τύπωσε τις πίσω».</p>
+<label class="chk"><input type="checkbox" id="flipRev"> <span>Αντίστροφη σειρά (αν την προηγούμενη φορά βγήκαν ανακατεμένες)</span></label>
+<div class="row"><button type="button" class="pri" id="flipGo">Τύπωσε τις πίσω</button><button type="button" id="flipNo">Άκυρο</button></div></div></div>
+<div id="out"></div>
 <script>${PREVIEW_SCRIPT}</script></body></html>`;
 }
