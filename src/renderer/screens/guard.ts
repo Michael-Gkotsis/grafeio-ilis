@@ -3,11 +3,11 @@ import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
-import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, DUTY_START, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, dutyStartOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
+import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, dutyMin, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -30,7 +30,9 @@ const hrs = (x: Post) => (x.slots ? x.slots.map((t: string, i: number, all: stri
 function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen }: P) {
   const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x, lists) || ruleWarn);
-  const head = html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">${hrs(x)}</span></div>`;
+  // βάρδιες: όλες οι ώρες η μία κάτω από την άλλη, δίπλα στο νούμερο, όπως στο έντυπο (Michael, 20/10)
+  const head = x.slots && x.slots.length ? html`<div className="post__pos is-slots"><b>${x.short}</b><span className="post__slots">${x.slots.map((t: string, i: number) => html`<span key=${i}>${t}</span>`)}</span></div>`
+    : html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">${hrs(x)}</span></div>`;
   const kenh = html`<span className="post__who"><span className="kenh-tag">Κενή</span></span>`;
   if (locked) return html`<li className=${cx('post', !p && 'is-empty')}>${head}${p ? html`<span className="post__who"><button type="button" className="post__name linkish" data-tip="Άνοιξε την καρτέλα" onClick=${() => onOpen(p.id)}>${fullName(p)}</button>${r && html`<${Badge} tone="bad">⚠ ${r}<//>`}</span>` : kenh}<span className="duty">${duty}</span><span></span></li>`;
   if (p && swap) return html`<li className="post is-swap">${head}
@@ -93,19 +95,36 @@ function DutyCheck({ onOpen, m }: P) {
   <//>`;
 }
 
+// Μέρες σε κανόνα: οι συνηθισμένες στη λίστα και «Άλλο…» για όσες θέλεις (Michael, 20/10)
+const MAX_DAYS = 30;
+function DaysSelect({ id, value, onChange, opts, txt }: P) {
+  const known = opts.some(([v]: [number]) => v === value);
+  const [own, setOwn] = useState(!known);
+  return html`<div className="field-row" style=${{ alignItems: 'center' }}>
+    <select id=${id} className="ui-input" value=${own ? 'own' : value} onChange=${(e: any) => { if (e.target.value === 'own') { setOwn(true); if (known) onChange(Math.max(1, value + 1)); } else { setOwn(false); onChange(+e.target.value); } }}>
+      ${opts.map(([v, l]: [number, string]) => html`<option key=${v} value=${v}>${l}</option>`)}<option value="own">${own ? txt(value) : 'Άλλο…'}</option></select>
+    ${own && html`<input type="number" min="1" max=${MAX_DAYS} className="ui-input" style=${{ maxWidth: '90px' }} aria-label="Ημέρες" value=${value} onChange=${(e: any) => onChange(Math.max(1, Math.min(MAX_DAYS, Math.floor(+e.target.value) || 1)))}/><span className="note">ημέρες</span>`}
+  </div>`;
+}
 function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME });
-  const badT = !normTime(r.outTime) || !normTime(r.hkTime);
+  const [ds, setDs] = useState(dutyStartOf(state.settings));
+  const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds);
   const save = async () => {
-    const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! };
+    const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! }; const nds = normTime(ds)!;
+    if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
     if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
   };
   return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} onClick=${save}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
-    <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση μετά από υπηρεσία (Κ-14)</label><select id="rrest" className="ui-input" value=${r.restDays} onChange=${(e: any) => setR({ ...r, restDays: +e.target.value })}><option value="0">Χωρίς</option><option value="1">1 ημέρα (όχι δύο μέρες στη σειρά)</option><option value="2">2 ημέρες</option></select></div>
-    <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><select id="rnum" className="ui-input" value=${r.numRest || 0} onChange=${(e: any) => setR({ ...r, numRest: +e.target.value })}><option value="0">Χωρίς περιορισμό</option><option value="3">Ξανά στο ίδιο νούμερο μετά από 3 ημέρες</option><option value="4">Μετά από 4 ημέρες</option></select><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
+    <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση μετά από υπηρεσία (Κ-14)</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => setR({ ...r, restDays: v })} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
+    <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><${DaysSelect} id="rnum" value=${r.numRest || 0} onChange=${(v: number) => setR({ ...r, numRest: v })} opts=${[[0, 'Χωρίς περιορισμό'], [3, 'Ξανά στο ίδιο νούμερο μετά από 3 ημέρες'], [4, 'Μετά από 4 ημέρες']]} txt=${(n: number) => 'Μετά από ' + n + ' ημέρες'}/><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
+    <div className="field"><span className="field__label">Αρχή υπηρεσίας</span><div className="field-row">
+      <${TimeField} id="rds" label="Ο κύκλος ξεκινά στις" value=${ds} onChange=${setDs} help=${'Η μέρα της υπηρεσίας είναι ' + (normTime(ds) || '14:00') + ' → ' + (normTime(ds) || '14:00') + ' της επόμενης. Από εδώ ξεκινούν και οι βάρδιες.'}/>
+      <div className="field"><span className="field__label">Βάρδιες</span><span className="note">Κάθε πόσες ώρες αλλάζει το νούμερο το ορίζεις σε κάθε υπηρεσία: Ρυθμίσεις › Υπηρεσίες και αργίες › Επεξεργασία.</span></div>
+    </div></div>
     <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
       <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
       <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
@@ -147,7 +166,7 @@ export function GuardScreen() {
     const noDuty: P[] = [], unarmed: P[] = [];
     // όπως ορίζει ο πίνακας καταστάσεων (Ρυθμίσεις › Υπηρεσίες): καμία υπηρεσία του εντύπου, ή καμία ένοπλη
     const lists = state.settings.lists; const blocks = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-    people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, DUTY_START); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
+    people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, dutyMin(state.settings)); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
     // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
     const cols = capCols(state.settings);
@@ -310,7 +329,7 @@ export function GuardScreen() {
   const cur = !mobile && tab === 'xl' ? 'posts' : tab;
   const emptyOn = (d: string) => { const gd = state.guards[d] || {}; let n = 0; for (const x of posts) if (!gd[x.k]) n++; return n; };
   return html`<div>
-    <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dm(date)} sub=${html`Κύκλος <b className="mono-lg">${dow(date)} ${dm(date)} 14:00 → ${dow(addDays(date, 1))} ${dm(addDays(date, 1))} 14:00</b>`}>
+    <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dm(date)} sub=${html`Κύκλος <b className="mono-lg">${dow(date)} ${dm(date)} ${dutyStartOf(state.settings)} → ${dow(addDays(date, 1))} ${dm(addDays(date, 1))} ${dutyStartOf(state.settings)}</b>`}>
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules)}>Κανόνες<//><label className="strict-sw" data-tip=${STRICT_TXT + (opState(state) ? ' Τώρα: ' + opState(state) + '.' : '')} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${!!state.rules.strictUnarmed} onChange=${async (e: any) => { const on = e.target.checked; const nr = { ...state.rules, strictUnarmed: on }; if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) toast({ text: 'Αυστηρά Άοπλοι: ' + (on ? 'ανοιχτό. Ισχύει στην αυτόματη συμπλήρωση και στο «Επόμενος».' : 'κλειστό, κανονική σειρά.') }); }}/>Αυστηρά Άοπλοι</label><${Button} disabled=${locked || !empty.length || !people.length} onClick=${autofill} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες· από όσους είναι η σειρά τους, η υπηρεσία πάει σε όποιον δεν την έχει κάνει (εναλλαγή υπηρεσιών), μετά κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//>${!mobile && html`<${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}</div><//>
     <div className="guard__days"><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))} count=${emptyOn}/></div>
     <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
@@ -356,15 +375,17 @@ export function AddBlockDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const phase: Phase = state.settings.phase || 'sven';
   const [f, setF] = useState({ name: '', kind: 'other' as DutyKind, armed: false, n: 1, hrs: '', off: false });
-  const save = async () => { if (await run({ t: 'addBlock', phase, ...f }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : '. Τη βλέπεις στις θέσεις και στο έντυπο.') }); } };
+  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState({ every: 120, from: '', to: '' });
+  const save = async () => { if (await run({ t: 'addBlock', phase, ...f, hrs: mode === 'fixed' ? f.hrs : '', shift: mode === 'shift' ? shiftOf(sh) : null }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : '. Τη βλέπεις στις θέσεις και στο έντυπο.') }); } };
   return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + PHASE_NAME[phase] + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim()} onClick=${save}>Προσθήκη<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim() || (mode === 'shift' && shiftBad(sh))} onClick=${save}>Προσθήκη<//>`}>
     <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="nb-k">Είδος (για τη δυνατότητα και τον έλεγχο)</label><select id="nb-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value, armed: e.target.value === 'op' || e.target.value === 'sk' ? true : f.armed })}>${(['other', 'sk', 'op', 'th', 'tae', 'mg'] as DutyKind[]).map(k => html`<option key=${k} value=${k}>${KIND_NAME[k]}</option>`)}</select></div>
       <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
     </div>
-    <div className="field"><label className="field__label" htmlFor="nb-h">Ώρες</label><input id="nb-h" className="ui-input" placeholder="π.χ. 08:00-20:00 (κενό = όλη μέρα)" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/></div>
+    <${HoursField} id="nb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${Array.from({ length: f.n }, (_, i) => (i + 1) + 'ος')} start=${dutyStartOf(state.settings)}
+      fixed=${html`<input id="nb-h" className="ui-input" aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/>`}/>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις Ρυθμίσεις › Σ.Ι.</small></span></label>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!f.off} onChange=${(e: any) => setF({ ...f, off: !e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις Ρυθμίσεις › Υπηρεσίες.</small></span></label>
   <//>`;

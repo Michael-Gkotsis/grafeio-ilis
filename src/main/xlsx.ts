@@ -305,6 +305,7 @@ export class Sheet {
     const ht = attr(this.row(r, false)?.attrs || '', 'ht');
     return Number(ht ?? attr(/<sheetFormatPr\b[^>]*>/.exec(this.head)?.[0] || '', 'defaultRowHeight') ?? 15);
   }
+  setRowHidden(r: number): this { const x = this.row(r)!; x.attrs = setAttr(x.attrs, 'hidden', '1'); return this; }
   setRowHeight(r: number, ht: number): this { const x = this.row(r)!; x.attrs = setAttr(setAttr(x.attrs, 'ht', String(ht)), 'customHeight', '1'); return this; }
 
   // Αναγνώσιμη τιμή (για τεστ): inline string ή αριθμός

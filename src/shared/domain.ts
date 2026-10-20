@@ -159,20 +159,36 @@ export const KIND_CODE: Record<DutyKind, string> = { ly: 'ΛΥ', th: 'Θ', op: '
 export const CAP_KINDS: [DutyKind, string][] = [['th', 'Θαλαμοφύλακας'], ['op', 'Οπλοφύλακας'], ['mg', 'Μαγειρεία'], ['sk', 'Σκοπιά'], ['tae', 'ΤΑΕ'], ['other', 'Άλλες (πύλη κ.λπ.)']];
 export const CAP_ACC: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακα', op: 'οπλοφύλακα', mg: 'μαγειρεία', sk: 'σκοπιά', tae: 'ΤΑΕ', other: 'άλλη υπηρεσία' };
 
-// Βάρδιες 2 ωρών, κύκλος 14:00 → 14:00 (δείγμα «ΦΡΟΥΡΑ»)
+// Βάρδιες 2 ωρών, κύκλος 14:00 → 14:00 (δείγμα «ΦΡΟΥΡΑ»): οι προεπιλογές, όταν η υπηρεσία δεν έχει δικές της βάρδιες
 export const ROT = [
   ['14:00-16:00', '22:00-00:00', '06:00-08:00'],
   ['16:00-18:00', '00:00-02:00', '08:00-10:00'],
   ['18:00-20:00', '02:00-04:00', '10:00-12:00'],
   ['20:00-22:00', '04:00-06:00', '12:00-14:00']
 ];
-
+// Βάρδιες ανά υπηρεσία (Michael, 20/10): κάθε πόσα λεπτά αλλάζει το νούμερο, μέσα σε ποιες ώρες του κύκλου (κενό = όλος
+// ο κύκλος, από την αρχή της υπηρεσίας ως την ίδια ώρα την επόμενη μέρα). Τα νούμερα μοιράζονται τις βάρδιες με τη σειρά.
+export interface ShiftDef { every: number; from?: string; to?: string }
+export const DEFAULT_DUTY_START = '14:00';
+export const SHIFT_EVERY = [60, 90, 120, 180, 240, 360, 480, 720];
+const hhmm = (m: number) => String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(((m % 60) + 60) % 60).padStart(2, '0');
+const toMin = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+const okT = (t?: string) => !!t && /^\d\d:\d\d$/.test(t);
+export const dutyStartOf = (st?: Pick<Settings, 'dutyStart'> | null) => (okT(st?.dutyStart) ? st!.dutyStart! : DEFAULT_DUTY_START);
+// Οι βάρδιες όλων των νούμερων: [νούμερο][βάρδια] = «14:00-16:00». Η τελευταία κόβεται στο τέλος των ωρών.
+export function shiftSlots(start: string, sh: ShiftDef, n: number): string[][] {
+  const a = toMin(okT(sh.from) ? sh.from! : start); const b0 = toMin(okT(sh.to) ? sh.to! : (okT(sh.from) ? sh.from! : start));
+  const len = ((b0 - a) % 1440 + 1440) % 1440 || 1440; const ev = Math.max(15, sh.every || 120);
+  const out: string[][] = Array.from({ length: Math.max(1, n) }, () => []);
+  for (let t = 0, j = 0; t < len; t += ev, j++) out[j % out.length].push(hhmm(a + t) + '-' + hhmm(a + Math.min(len, t + ev)));
+  return out;
+}
 // code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
 export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
-export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean }
+export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null }
 export type Phase = 'sven' | 'spen';
 export const PHASE_NAME: Record<Phase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
-export interface Post extends PostDef { block: string; kind: DutyKind; armed: boolean; slots: string[] | null; hours: string }
+export interface Post extends PostDef { block: string; kind: DutyKind; armed: boolean; slots: string[] | null; hours: string; cyc?: number }
 
 // Προεπιλογή = το πραγματικό έντυπο «ΦΡΟΥΡΑ ΣΒΕΝ» (δείγμα 01): Λ/Υ, Δ/Υ, 2 μπλοκ θαλαμοφυλάκων 4×3, μαγειρεία ×5.
 // Ποιες θέσεις είναι ένοπλες θέλει επιβεβαίωση από τον λοχία: ρυθμίζεται.
@@ -196,12 +212,20 @@ export const DEFAULT_BLOCKS_SPEN: BlockDef[] = [
 ];
 export const blocksOf = (settings: Settings, phase: Phase = settings.phase) => (phase === 'spen' ? settings.blocksSpen : settings.blocks);
 
-export function buildPosts(blocks: BlockDef[]): Post[] {
-  return blocks.flatMap(b => b.posts.map(p => ({
-    ...p, block: b.id, kind: b.kind, armed: b.armed,
-    slots: p.rot != null ? ROT[p.rot] : null,
-    hours: p.rot != null ? ROT[p.rot].join(' · ') : (p.hrs || '')
-  })));
+// Νούμερα μιας υπηρεσίας με βάρδιες: οι θέσεις με το ίδιο rot είναι ένα νούμερο (ζεύγος σκοπών)· οι δικές σου, ένα η καθεμία
+export const shiftGroups = (b: BlockDef) => { const ps = b.posts.filter(p => !p.hidden); const keys: string[] = []; for (const p of ps) { const k = p.rot != null ? 'r' + p.rot : p.k; if (!keys.includes(k)) keys.push(k); } return keys; };
+const groupKey = (p: PostDef) => (p.rot != null ? 'r' + p.rot : p.k);
+export function buildPosts(blocks: BlockDef[], start: string = DEFAULT_DUTY_START): Post[] {
+  const def = start === DEFAULT_DUTY_START ? ROT : shiftSlots(start, { every: 120 }, 4);
+  return blocks.flatMap(b => {
+    const sh = b.shift && b.shift.every > 0 ? b.shift : null;
+    const groups = sh ? shiftGroups(b) : []; const sl = sh ? shiftSlots(start, sh, groups.length) : null;
+    return b.posts.map(p => {
+      const slots = sl ? (sl[groups.indexOf(groupKey(p))] || null) : p.rot != null ? def[p.rot] : null;
+      const hrs = p.hrs === '14:00 → 14:00' ? start + ' → ' + start : p.hrs;   // Λ/Υ, Δ/Υ: όλος ο κύκλος
+      return { ...p, ...(hrs !== p.hrs ? { hrs } : {}), block: b.id, kind: b.kind, armed: b.armed, slots, hours: slots ? slots.join(' · ') : (hrs || ''), cyc: toMin(start) };
+    });
+  });
 }
 export const postTxt = (x: Post) => x.label + (x.slots ? ' ' + x.slots[0].slice(0, 5) : '');
 
@@ -255,6 +279,7 @@ export interface Settings {
   reportTpls?: RepTpl[];                 // Έντυπα: τα πρότυπά σου (αρχεία στον φάκελο «Πρότυπα εντύπων»), shared/reports.ts
   reports?: Report[];                    // Έντυπα: τα έτοιμα έντυπα (πρότυπο, στήλες, ποιοι μπαίνουν, πού βγαίνει)
   essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
+  dutyStart?: string;                    // πότε ξεκινά ο κύκλος των υπηρεσιών (ΩΩ:ΛΛ, κενό = 14:00): η μέρα της υπηρεσίας είναι από τότε ως την ίδια ώρα την επόμενη
   xl?: Partial<XlLook>;                  // γράμματα και στοίχιση σε ό,τι φτιάχνει η εφαρμογή στο Excel (κενό = Arial 12, κέντρο), xlLook.ts
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.

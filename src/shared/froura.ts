@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { TYPES, blocksOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
+import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { personMap, postsOf } from './rules';
 
@@ -37,7 +37,7 @@ export const rankName = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : ''
 export const dutyName = (p: Person) => fullName(p);
 export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '') + (p.weapon ? ', ΟΠΛΟ: ' + p.weapon : '');
 
-export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string }[]; foreign: string[] }
+export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
 // Τι γράφεται πού: θέσεις με δικό τους κελί, και όσες δεν έχουν (π.χ. νέα υπηρεσία «Πύλη») σε γραμμές από κάτω
 export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s)): FrouraLayout {
   const form = FROURA_FORMS[phase]; const g = s.guards[date] || {}; const pm = personMap(s.people);
@@ -49,7 +49,7 @@ export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(
     if (at) { if (!cells.has(at)) cells.set(at, []); if (person) cells.get(at)!.push(dutyName(person)); continue; }
     const same = posts.filter(y => y.block === x.block); const b = blocksOf(s.settings, phase).find(y => y.id === x.block);
     const label = norm(b ? b.name : x.label) + (same.length > 1 ? ' ' + (same.indexOf(x) + 1) + 'ο' : '');
-    extra.push({ label, k: x.k, block: x.block, name: person ? dutyName(person) : '', hours: x.hours });
+    extra.push({ label, k: x.k, block: x.block, name: person ? dutyName(person) : '', hours: x.hours, slots: x.slots });
   }
   const foreign = Object.keys(g).filter(k => k !== 'ly' && k !== 'dy' && !posts.some(x => x.k === k) && pm.get(g[k]));
   return { cells, extra, foreign };
@@ -57,13 +57,15 @@ export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(
 
 // Οι υπηρεσίες χωρίς δικό τους κελί (π.χ. νέα υπηρεσία «Πύλη») σε δικό τους πίνακα η καθεμία (Michael, 20/10):
 // τίτλος το όνομά της, 1ο, 2ο… αριστερά, ώρες δεξιά μόνο αν έχει (όχι «ημέρα»)
-export interface FrouraTable { title: string; hours: boolean; rows: { n: string; name: string; hours: string }[] }
+// shifts: οι βάρδιες του νούμερου, μία γραμμή η καθεμία (Α/Α και όνομα ενωμένα από πάνω ως κάτω)
+export interface FrouraTable { title: string; hours: boolean; rows: { n: string; name: string; hours: string; shifts?: string[] }[] }
 const realHours = (h: string) => !!h.trim() && norm(h) !== 'ΗΜΕΡΑ';
 export function frouraTables(s: AppState, lay: FrouraLayout, phase: Phase = phaseOf(s)): FrouraTable[] {
   const out = new Map<string, FrouraTable>();
   for (const x of lay.extra) {
     let t = out.get(x.block);
     if (!t) { const b = blocksOf(s.settings, phase).find(y => y.id === x.block); t = { title: norm(b ? b.name : x.label), hours: false, rows: [] }; out.set(x.block, t); }
+    if (x.slots && x.slots.length) { t.rows.push({ n: (t.rows.length + 1) + 'ο', name: x.name, hours: x.slots[0], shifts: x.slots }); t.hours = true; continue; }
     t.rows.push({ n: (t.rows.length + 1) + 'ο', name: x.name, hours: realHours(x.hours) ? norm(x.hours) : '' });
     if (realHours(x.hours)) t.hours = true;
   }
@@ -74,3 +76,23 @@ export function frouraTables(s: AppState, lay: FrouraLayout, phase: Phase = phas
 export const absenceText = (kind: string | undefined, long: string) => norm(kind && !norm(long).includes(norm(kind)) ? kind + ' ' + long : long);
 // Είδος απουσίας στο έντυπο: η άδεια με το είδος της («ΑΔΕΙΑ ΑΙΜΟΔΟΣΙΑΣ», «ΕΙΔΙΚΗ ΑΔΕΙΑ»), όχι «ΑΙΜΟΔΟΣΙΑΣ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ»
 export const absenceOf = (x: Pick<Status, 'type' | 'kind'>) => (x.type === 'LEAVE' ? norm(leaveName(x)) : absenceText(x.kind, TYPES[x.type].long));
+
+// Πίνακες θαλαμοφυλάκων/οπλοφυλάκων (γραμμές 13–24): κάθε νούμερο έχει στο template 3 γραμμές, μία ανά βάρδια. Με άλλες
+// βάρδιες (Michael, 20/10: «όλες οι ώρες η μια κάτω από την άλλη και να γίνεται adjust το block») το νούμερο πιάνει
+// όσες γραμμές έχει βάρδιες το πιο γεμάτο από τα δύο δίπλα δίπλα: περισσότερες μπαίνουν, όσες περισσεύουν κρύβονται.
+export const NUM_ROWS = [13, 16, 19, 22];
+export function frouraPer(s: AppState, phase: Phase = phaseOf(s)): number[] {
+  const ps = buildPosts(blocksOf(s.settings, phase).filter(b => !b.hidden), dutyStartOf(s.settings));
+  const right = phase === 'spen' ? 'op' : 'th', off = phase === 'spen' ? 1 : 5;
+  return [0, 1, 2, 3].map(i => {
+    const ns = [ps.find(x => x.k === 'th' + (i + 1)), ps.find(x => x.k === right + (i + off))].filter(x => x && !x.hidden && x.slots).map(x => x!.slots!.length);
+    return ns.length ? Math.max(1, ...ns) : 3;
+  });
+}
+// Στα κελιά του εντύπου κάθε νούμερο έχει 3 γραμμές ωρών: λιγότερες βάρδιες αφήνουν κενό, περισσότερες μπαίνουν δύο-δύο
+export function rows3(slots: string[] | null | undefined): string[] {
+  const sl = slots || []; if (sl.length <= 3) return [0, 1, 2].map(i => sl[i] || '');
+  const k = Math.ceil(sl.length / 3); return [0, 1, 2].map(i => sl.slice(i * k, i * k + k).join(' · '));
+}
+// Πόσες γραμμές πιάνει ένα νούμερο σε πίνακα δικής σου υπηρεσίας
+export const tableRowSpan = (x: FrouraTable['rows'][number]) => (x.shifts && x.shifts.length > 1 ? x.shifts.length : 1);

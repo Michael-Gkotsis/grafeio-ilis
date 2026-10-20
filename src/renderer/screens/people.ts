@@ -279,7 +279,7 @@ export function LeaveTimesDialog({ st, onClose }: P) {
       <${TimeField} id="lt-out" label=${'Ώρα ' + tn.fromG} value=${f.fromTime} onChange=${(v: string) => { setF({ ...f, fromTime: v }); setErr(null); }} help=${dow(st.from) + ' ' + dm(st.from)}/>
       ${!st.open && html`<${TimeField} id="lt-in" label=${'Ώρα ' + tn.toG} value=${f.toTime} onChange=${(v: string) => { setF({ ...f, toTime: v }); setErr(null); }} help=${dow(st.to) + ' ' + dm(st.to)}/>`}
     </div>
-    <span className="field__help">${timesHelp(state.rules)} Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.</span>
+    <span className="field__help">${timesHelp(state.rules, state.settings)} Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.</span>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
@@ -555,7 +555,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${timed && html`<div className="field"><div className="field-row">
       <${TimeField} id="dpt-out" label=${'Ώρα ' + timeNames(cmd.type).fromG} value=${cmd.fromTime} onChange=${(v: string) => set({ fromTime: v })} help=${'Προαιρετικό · ' + dow(cmd.from) + ' ' + dm(cmd.from)}/>
       ${!open && html`<${TimeField} id="dpt-in" label=${'Ώρα ' + timeNames(cmd.type).toG} value=${cmd.toTime} onChange=${(v: string) => set({ toTime: v })} help=${'Προαιρετικό · ' + dow(cmd.to) + ' ' + dm(cmd.to)}/>`}
-    </div><span className="field__help">${timesHelp(state.rules)}</span></div>`}
+    </div><span className="field__help">${timesHelp(state.rules, state.settings)}</span></div>`}
     ${isPun && max > 0 && html`<${Alert} tone="warn"><span>${punLbl(cmd.kind)} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
     ${dep && html`<span className="note">${daysBetween(cmd.from, cmd.to)} ${daysBetween(cmd.from, cmd.to) === 1 ? 'ημέρα' : 'ημέρες'} στέρηση εξόδου. Οι μέρες με υπηρεσία ή βραδινή εκπαίδευση δεν μετράνε: η λήξη μετακινείται μόνη της.</span>`}
     ${isPun && html`<div className="field-row">
