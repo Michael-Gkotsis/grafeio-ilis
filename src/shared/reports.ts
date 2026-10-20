@@ -2,14 +2,14 @@
 // εφαρμογής. Πρότυπο = το αρχείο (εμφάνιση)· Έντυπο = πρότυπο + τι αφορά + ποια στήλη παίρνει τι + ποιοι μπαίνουν.
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
 import { addDays, daysBetween, dmy, parseD, MON_SHORT, type ISODate } from './dates';
-import { collator, norm, normGreek } from './text';
+import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
 import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, movesOn, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
-import { rosterMatch, type RosterFilter } from './rosterLists';
+import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
 
@@ -103,7 +103,8 @@ export interface RepCell { ref: string; k: string }
 export interface RepPick {
   from: 'all' | 'present' | RosterFilter;   // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
   view?: string;                              // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
-  noDuty?: boolean;                           // χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη
+  noDuty?: boolean;                           // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
+  need?: RepCond[]; not?: RepCond[];          // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
   si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
   mode: 'all' | 'first' | 'random'; n?: number;
   even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
@@ -115,6 +116,50 @@ export interface RepPick {
   wf?: WeaponFilter;                          // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
   open?: boolean;                             // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
 }
+// Φίλτρα στρατιωτών που συνδυάζονται (Michael 20/10: «π.χ. όχι πόστα και με ιατρικά»), όλα για τη μέρα του εντύπου
+export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'dnright' | 'weapon';
+export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[] = [
+  { id: 'present', label: 'Παρών τη μέρα', yes: 'Παρόντες', no: 'Απόντες' },
+  { id: 'duty', label: 'Υπηρεσία τη μέρα ή την επόμενη', yes: 'Με υπηρεσία', no: 'Χωρίς υπηρεσία' },
+  { id: 'post', label: 'Πόστο', yes: 'Με πόστο', no: 'Χωρίς πόστο' },
+  { id: 'med', label: 'Ιατρικό τη μέρα', yes: 'Με ιατρικό', no: 'Χωρίς ιατρικό' },
+  { id: 'pun', label: 'Ποινή τη μέρα', yes: 'Τιμωρημένοι', no: 'Χωρίς ποινή' },
+  { id: 'leave', label: 'Άδεια τη μέρα', yes: 'Σε άδεια', no: 'Όχι σε άδεια' },
+  { id: 'dnright', label: 'Δικαίωμα ΔΝ', yes: 'Με δικαίωμα ΔΝ', no: 'Χωρίς δικαίωμα ΔΝ' },
+  { id: 'weapon', label: 'Όπλο', yes: 'Με όπλο', no: 'Χωρίς όπλο' }
+];
+const LEGACY_FROM: Partial<Record<string, RepCond>> = { present: 'present', leave: 'leave', pun: 'pun', post: 'post', dnright: 'dnright' };
+// Τα φίλτρα του εντύπου, και από τα παλιά πεδία (from: παρόντες/άδειες/…, noDuty), ώστε τα αποθηκευμένα έντυπα να δουλεύουν όπως πριν
+export function condsOf(pk: RepPick): { need: RepCond[]; not: RepCond[] } {
+  const need = new Set(pk.need || []); const not = new Set(pk.not || []);
+  const old = LEGACY_FROM[pk.from]; if (old) need.add(old);
+  if (pk.noDuty) not.add('duty');
+  for (const c of need) not.delete(c);
+  return { need: [...need], not: [...not] };
+}
+// Αλλάζει ένα φίλτρο (any: όλοι, yes: μόνο όσοι το έχουν, no: χωρίς όσους το έχουν). Γράφει μόνο τα νέα πεδία.
+export function setCond(pk: RepPick, c: RepCond, v: 'any' | 'yes' | 'no'): RepPick {
+  const { need, not } = condsOf(pk);
+  const n = need.filter(x => x !== c); const o = not.filter(x => x !== c);
+  if (v === 'yes') n.push(c); if (v === 'no') o.push(c);
+  const order = (l: RepCond[]) => REP_CONDS.map(x => x.id).filter(x => l.includes(x));
+  return { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: order(n), not: order(o) };
+}
+export const condVal = (pk: RepPick, c: RepCond): 'any' | 'yes' | 'no' => { const { need, not } = condsOf(pk); return need.includes(c) ? 'yes' : not.includes(c) ? 'no' : 'any'; };
+// Ελέγχει ένα φίλτρο για έναν στρατιώτη τη μέρα d (τα σύνολα φτιάχνονται μία φορά, μόνο όσα χρειάζονται)
+function condTest(s: AppState, d: ISODate) {
+  let present: Set<number> | null = null; let busy: Set<number> | null = null;
+  return (c: RepCond, p: Person): boolean => {
+    if (c === 'present') { present = present || new Set(strengthOf(s, d).lists.present.map(x => x.id)); return present.has(p.id); }
+    if (c === 'duty') { busy = busy || new Set<number>([...Object.values(s.guards[d] || {}), ...Object.values(s.guards[addDays(d, 1)] || {})].filter((x): x is number => typeof x === 'number')); return busy.has(p.id); }
+    if (c === 'post') return !!p.post;
+    if (c === 'dnright') return !!p.dn;
+    if (c === 'weapon') return !!(p.weapon || '').trim();
+    const on = statusesOn(s.statuses, p.id, d);
+    if (c === 'med') return on.some(x => TYPES[x.type].cat === 'med');
+    return !!filterStatus(c, on);
+  };
+}
 export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from' | 'seat';
 export type StCat = 'med' | 'pun' | 'abs' | 'other' | 'out';
 export const ST_CATS: { id: StCat; label: string }[] = [{ id: 'med', label: 'Ιατρικά' }, { id: 'pun', label: 'Ποινές' }, { id: 'abs', label: 'Άδειες' }, { id: 'other', label: 'ΣΤΕΠ, νοσοκομείο' }, { id: 'out', label: 'Έξοδοι' }];
@@ -123,7 +168,7 @@ const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
 // auto: ξαναγράφεται μόνο του μετά από κάθε αλλαγή (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
 export interface RepTarget { to: 'people' | 'file'; file?: string; sheet: string; auto?: boolean }
 export type RepSplit = 'none' | 'room' | 'unit' | 'si';
-export const SPLITS: { value: RepSplit; label: string }[] = [{ value: 'none', label: 'Ένα φύλλο' }, { value: 'room', label: 'Ανά θάλαμο' }, { value: 'unit', label: 'Ανά ουλαμό' }, { value: 'si', label: 'Ανά Σ.Ι.' }];
+export const SPLITS: { value: RepSplit; label: string }[] = [{ value: 'none', label: 'Ένα για όλους' }, { value: 'room', label: 'Ανά θάλαμο' }, { value: 'unit', label: 'Ανά ουλαμό' }, { value: 'si', label: 'Ανά Σ.Ι.' }];
 export interface Report {
   id: string; name: string; tpl: string; kind: RepKind;
   sheet: string; head: number;                // φύλλο και γραμμή επικεφαλίδων (από 1)
@@ -267,13 +312,15 @@ export function cellValue(s: AppState, key: string, d: ISODate, r: Pick<Report, 
 }
 
 // ------------------------------------------------------------------ ποιοι μπαίνουν
-export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode === 'random' ? { from: 'present', noDuty: true, mode, n: 10, even: false } : { from: 'all', mode });
+export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode === 'random' ? { from: 'all', need: ['present'], not: ['duty'], mode, n: 10, even: false } : { from: 'all', mode });
+// τα φίλτρα στρατιωτών χωρίς «ποιοι» φίλτρα (για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση)
+const soldiersPick = (pk: RepPick): RepPick => ({ ...pk, from: 'all', noDuty: false, need: undefined, not: undefined, mode: 'all' });
 // Όσοι περνούν τα φίλτρα (πριν από «πόσοι»), με τη σειρά του Δυναμολογίου (αλφαβητικά)
 export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISODate): Row[] {
   const pk = r.pick;
   if (r.kind === 'status') {
     const cats = new Set(pk.cats?.length ? pk.cats : DEF_CATS); const pm = personMap(s.people);
-    const people = new Set(candidates(s, { kind: 'people', pick: { ...pk, from: 'all', noDuty: false, mode: 'all' } }, d).map(p => p.id));
+    const people = new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id));
     const out: StatusRow[] = [];
     for (const st of s.statuses) {
       if (!cats.has(TYPES[st.type]?.cat as StCat) || !people.has(st.pid)) continue;
@@ -318,21 +365,18 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
     return pk.from === 'present' ? list.filter(c => !cadreStatusOn(s, c.id, d)) : list;
   }
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
-  let list: Person[] = pk.from === 'all' || pk.from === 'present' ? activePeople(s) : s.people.filter(p => rosterMatch(pk.from as RosterFilter, p, statusesOn(s.statuses, p.id, d)));
-  if (pk.from === 'present') { const pres = new Set(strengthOf(s, d).lists.present.map(p => p.id)); list = list.filter(p => pres.has(p.id)); }
+  let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
+  const { need, not } = condsOf(pk);
+  if (need.length || not.length) { const t = condTest(s, d); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
   if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.post, p.role].join(' ')).includes(normGreek(view.q))));
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
   if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }
-  if (pk.noDuty) {
-    const busy = new Set<number>([...Object.values(s.guards[d] || {}), ...Object.values(s.guards[addDays(d, 1)] || {})].filter((x): x is number => typeof x === 'number'));
-    list = list.filter(p => !busy.has(p.id));
-  }
   return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
 }
 export const rowId = (x: Row) => x.id;
 // στρατιώτες που περνούν τα φίλτρα του Δυναμολογίου (λίστα, θάλαμοι, Σ.Ι.): για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση
 function soldiersOf(s: AppState, pk: RepPick, d: ISODate): Set<number> {
-  return new Set(candidates(s, { kind: 'people', pick: { ...pk, from: 'all', noDuty: false, mode: 'all' } }, d).map(p => p.id as number));
+  return new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id as number));
 }
 const NOBODY = { rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', si: '', room: null } as unknown as Omit<Person, 'id'>;
 function dutyRow(pm: Map<number, Person>, po: Post, pid: number | undefined): DutyRow {
@@ -387,6 +431,27 @@ export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row
   }
   return [...by.values()].sort((a, b) => Number(a.key === '~') - Number(b.key === '~') || collator.compare(a.key, b.key));   // «χωρίς» στο τέλος
 }
+// Τι θα γίνει όταν πατηθεί «Βγάλε», σε απλά λόγια (οδηγός, «Βγάλε…»): πόσα φύλλα/σελίδες, ποια, πού
+export const repFileName = (r: Pick<Report, 'name'>, d: ISODate) => upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
+const baseName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
+export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'] };
+export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d: ISODate): { groups: RepGroup[]; text: string } {
+  const split = r.kind !== 'cadre' && !!r.split && r.split !== 'none';
+  const groups = split ? groupsOf(s, r.kind, rows, r.split) : [];
+  const gl = (f: (g: RepGroup) => string) => groups.slice(0, 6).map(g => f(g) + ' (' + g.rows.length + ')').join(', ') + (groups.length > 6 ? ' κ.ά.' : '');
+  const one = SPLIT_NOUN[r.split || 'none'][0];
+  const file = repFileName(r, d);
+  const parts = (page: boolean) => (groups.length === 1 ? (page ? '1 σελίδα' : '1 φύλλο') : groups.length + (page ? ' σελίδες' : ' φύλλα')) + (page ? ', μία' : ', ένα') + ' για κάθε ' + one + (groups.length ? ': ' + gl(g => g.short) : '');
+  let text: string;
+  if (r.out === 'print') text = 'Ανοίγει η προεπισκόπηση εκτύπωσης' + (split ? ' με ' + parts(true) : '') + '. Το αρχείο «' + file + '» μένει και στον φάκελο των Excel.';
+  else if (r.out === 'sheet') {
+    const t = r.target || { to: 'people', sheet: '' };
+    const where = t.to === 'file' ? baseName(t.file) : baseName(s.settings.sources?.people?.file) || 'Δυναμολόγιο';
+    const base = upper(t.sheet || r.name || 'ΕΝΤΥΠΟ').trim();
+    text = (split ? 'Γράφονται ' + parts(false) + ', μέσα στο ' + where : 'Γράφεται το φύλλο «' + base.slice(0, 31) + '» μέσα στο ' + where) + '. Τα άλλα φύλλα του αρχείου δεν αλλάζουν.';
+  } else text = 'Φτιάχνεται το αρχείο «' + file + '» στον φάκελο των Excel' + (split ? ', με ' + parts(false) : '') + ', και ανοίγει.';
+  return { groups, text };
+}
 // Σειρά στο έντυπο
 export function sortRows<T extends Row>(rows: T[], sort: RepSort, s: AppState, kind: RepKind): T[] {
   if (sort === 'pick' || (sort === 'seat' && kind === 'duty')) return rows;
@@ -440,11 +505,14 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
     const wf = WEAPON_FILTERS.find(x => x[0] === (pk.wf || 'with'));
     return (pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι: ' : '') + 'Οπλισμός, ' + (wf ? wf[1].toLowerCase() : '') + tail;
   }
-  const from = pk.from === 'all' ? (r.kind === 'cadre' ? 'όλα τα στελέχη' : 'όλους') : pk.from === 'present' ? 'τους παρόντες' : 'τη λίστα «' + (FROM_NAME[pk.from] || pk.from) + '»';
+  const cadre = r.kind === 'cadre';
+  const { need, not } = cadre ? { need: [] as RepCond[], not: [] as RepCond[] } : condsOf(pk);
+  const pres = cadre ? pk.from === 'present' : need.includes('present');
+  const from = pk.from === 'inactive' ? 'τους εκτός δύναμης' : pres ? (cadre ? 'τα παρόντα στελέχη' : 'τους παρόντες') : cadre ? 'όλα τα στελέχη' : 'όλους';
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
-  const extra = [view && 'λίστα «' + view + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.noDuty && 'χωρίς υπηρεσία'].filter(Boolean).join(', ');
-  const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (pk.from === 'all' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
+  const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
+  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false))].filter(Boolean).join(', ');
+  const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
   return head + (extra ? ' (' + extra + ')' : '');
 }
-const FROM_NAME: Record<string, string> = { leave: 'Άδειες', pun: 'Τιμωρημένοι', post: 'Πόστα', inactive: 'Εκτός δύναμης', dnright: 'Με δικαίωμα ΔΝ' };
 export const roomList = (s: Pick<AppState, 'settings'>) => Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1);
