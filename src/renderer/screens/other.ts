@@ -3,13 +3,16 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { useNav, useStore, searchPeople } from '../store';
+import { useNowMin } from '../clock';
+import { LeaveEndDialog } from './people';
+import { hasTimes, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
 import { ActiveFilter, DateBar, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
@@ -31,13 +34,15 @@ export function TodayScreen() {
   const due = usbDue(boot.lastUsb, today);
   const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
   const pm = personMap(state.people);
-  const c = useMemo(() => strengthOf(state, today), [state, today]);
+  const now = useNowMin();
+  const c = useMemo(() => strengthOf(state, today, Math.max(hkMin(state.rules), now)), [state, today, now]);
   // Απόντες σήμερα με τον λόγο και ως πότε· η λίστα τελειώνει στους 12, οι υπόλοιποι στη Δύναμη
   const away = useMemo(() => {
     const out: { p: Person; s: Status }[] = [];
-    const at = hkMin(state.rules); activePeople(state).forEach(p => { const x = statusesFrom(state.statuses, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
+    // όπως η ΗΚΑΙ (ως τις 08:00 παρών), και μετά όποιος γύρισε ως τώρα (Michael, 20/10)
+    const at = Math.max(hkMin(state.rules), now); activePeople(state).forEach(p => { const x = statusesFrom(state.statuses, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
-  }, [state.statuses, state.people, state.rules, today]);
+  }, [state.statuses, state.people, state.rules, today, now]);
   const empty = frouraEmpty(state, tomorrow);
   // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
   const { ending, endTom, expired, nRec } = useMemo(() => {
@@ -53,7 +58,7 @@ export function TodayScreen() {
     return o;
   }, [state.statuses, state.people, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const endTxt = (s: Status) => {
-    const t = TYPES[s.type]; if (t.cat === 'abs') return 'Αναμένεται επιστροφή' + (s.toTime ? ' στις ' + s.toTime : '');
+    const t = TYPES[s.type]; if (t.cat === 'abs') return awayNow(s, today, now) ? 'Αναμένεται επιστροφή' + (s.toTime ? ' στις ' + s.toTime : '') : 'Γύρισε στις ' + s.toTime;
     // άλλο ιατρικό που συνεχίζει αύριο: λέει τι μένει, όχι ότι ξαναμπαίνει
     const rest = statusesOn(state.statuses, s.pid, tomorrow).filter(x => x.id !== s.id && TYPES[x.type].cat !== 'out');
     const lbl = (x: Status) => statusLbl(x, state.settings.lists) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to));
@@ -120,7 +125,7 @@ export function RecordsScreen() { return html`<${RecordList} mode="med"/>`; }
 const MED_TABS = ['med', 'expired'], PUN_TABS = ['pun', 'expired', 'allpun'];
 function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const pm = personMap(state.people);
+  const pm = personMap(state.people); const now = useNowMin();
   const tabKey = mode === 'med' ? 'recTab' : 'punTab';
   const tab: string = (mode === 'med' ? MED_TABS : PUN_TABS).includes(nav.params[tabKey]) ? nav.params[tabKey] : mode;
   const [pq, setPq] = useState(''); const dpq = useDeferredValue(pq);
@@ -132,12 +137,12 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
     const qq = normGreek(dpq.trim());
     const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + TYPES[s.type].label + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '') + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq));
     if (tab === 'allpun') return state.statuses.filter(s => s.type === 'PUN' && ok(s)).sort((a, b) => b.from.localeCompare(a.from));
-    if (tab === 'expired') return state.statuses.filter(s => (mode === 'med' ? isMed(s) : s.type === 'PUN') && !s.pending && s.to < today && s.to >= addDays(today, -14) && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
-    return state.statuses.filter(s => s.to >= today && (tab === 'med' ? isMed(s) && (!medF || statusLbl(s, state.settings.lists) === medF) : s.type === 'PUN') && ok(s)).sort((a, b) => a.to.localeCompare(b.to));
-  }, [state.statuses, tab, today, dpq, medF, mode]);
+    if (tab === 'expired') return state.statuses.filter(s => (mode === 'med' ? isMed(s) : s.type === 'PUN') && !s.pending && !awayNow(s, today, now) && s.to >= addDays(today, -14) && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
+    return state.statuses.filter(s => awayNow(s, today, now) && (tab === 'med' ? isMed(s) && (!medF || statusLbl(s, state.settings.lists) === medF) : s.type === 'PUN') && ok(s)).sort((a, b) => a.to.localeCompare(b.to));
+  }, [state.statuses, tab, today, dpq, medF, mode, now]);
   // ΕΥ, ΕΑ, ΕΟ, ΣΤΕΠ… ως φίλτρα, με πόσοι έχουν τον καθένα (Michael, 17/10: τα ιατρικά εδώ, όχι στο Δυναμολόγιο)
-  const medCnt = useMemo(() => { const m = new Map<string, number>(); state.statuses.forEach(s => { if (s.to >= today && isMed(s) && pm.has(s.pid)) { const l = statusLbl(s, state.settings.lists); m.set(l, (m.get(l) || 0) + 1); } }); return [...m].sort((a, b) => b[1] - a[1]); }, [state.statuses, today, state.settings.lists]);
-  const nMed = state.statuses.filter(s => s.to >= today && isMed(s)).length;
+  const medCnt = useMemo(() => { const m = new Map<string, number>(); state.statuses.forEach(s => { if (awayNow(s, today, now) && isMed(s) && pm.has(s.pid)) { const l = statusLbl(s, state.settings.lists); m.set(l, (m.get(l) || 0) + 1); } }); return [...m].sort((a, b) => b[1] - a[1]); }, [state.statuses, today, state.settings.lists, now]);
+  const nMed = state.statuses.filter(s => awayNow(s, today, now) && isMed(s)).length;
   const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN' && pm.has(s.pid)).length;
   const left = (s: Status) => {
     if (s.to < today) { const d = daysBetween(s.to, today) - 1; return d === 1 ? 'έληξε χθες' : 'έληξε πριν από ' + d + ' ημ.'; }
@@ -146,6 +151,7 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   // στέρηση εξόδου: ποιες μέρες δεν μέτρησαν (υπηρεσία, βραδινή εκπαίδευση), για να φαίνεται γιατί μετακινήθηκε η λήξη
   const skipTxt = (s: Status) => { const k = skippedDays(state, s); return k.length ? ' · ' + punDays(s) + ' ημ. ποινή, δεν μετράνε: ' + k.map(x => dm(x.date) + ' ' + (x.why === 'duty' ? 'υπηρεσία' : 'βραδινή εκπαίδευση')).join(', ') : ''; };
   const [stop, setStop] = useState<Status | null>(null);
+  const [end, setEnd] = useState<Status | null>(null);
   const [txt, setTxt] = useState<Status | null>(null);
   const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [undoMark()] }); };
   return html`<div>
@@ -159,14 +165,15 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
     ${tab === 'med' && medCnt.length > 1 && html`<div className="filters"><${Strip} role="group" aria-label="Είδος ιατρικού">${[['', 'Όλα', nMed] as [string, string, number], ...medCnt.map(([l, n]) => [l, l, n] as [string, string, number])].map(([k, l, n]) => html`<button key=${k || 'all'} type="button" className="ui-chip" aria-pressed=${medF === k} onClick=${() => nav.set({ medF: medF === k ? '' : k })}>${l}<span className="cnt">${n}</span></button>`)}<//></div>`}
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>
-        <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${tab === 'expired' ? 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}${skipTxt(s)}</small></div>
+        <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${tab === 'expired' ? (s.to === today ? timeNames(s.type).to + ' σήμερα ' + s.toTime : 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1)))) : left(s)}${tab !== 'expired' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}${skipTxt(s)}</small></div>
       ${s.type === 'PUN' && html`<${Button} size="sm" variant="outline" onClick=${() => setTxt(s)} data-tip="Έτοιμο κείμενο για το Word, με «Αντιγραφή»" data-tip-side="left">Κείμενο<//>`}
-      ${tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : tab === 'allpun' || s.to < today ? html`<${Badge} tone=${s.to < today ? 'outline' : 'warn'}>${s.to < today ? 'Έληξε' : 'Ισχύει'}<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setStop(s)} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Σταμάτησε νωρίτερα…<//>`}
+      ${tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : tab === 'allpun' || s.to < today ? html`<${Badge} tone=${s.to < today ? 'outline' : 'warn'}>${s.to < today ? 'Έληξε' : 'Ισχύει'}<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => (hasTimes(s.type) ? setEnd(s) : setStop(s))} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Σταμάτησε νωρίτερα…<//>`}
     </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : mode === 'med' ? 'Κανένα ιατρικό σε ισχύ.' : 'Καμία ποινή σε ισχύ.'}</div>`}</div>
     ${stop && (() => { const t = TYPES[stop.type]; const p = pm.get(stop.pid)!; const what = (stop.type === 'PUN' ? 'Η ποινή' : t.label) + ' του ' + shortName(p); return html`<${Dialog} role="alertdialog" title="Σταμάτησε νωρίτερα;" description=${what + ' · ' + dm(stop.from) + '–' + (stop.open ? 'χωρίς λήξη' : dm(stop.to))} onClose=${() => setStop(null)}
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setStop(null)}>Όχι, να λήξει κανονικά<//><${Button} onClick=${async () => { const x = stop; setStop(null); await act(() => run({ t: 'endStatus', id: x.id }, false), what + ': σταμάτησε, από σήμερα δεν ισχύει')(); }}>Ναι, από σήμερα δεν ισχύει<//>`}>
       <p style=${{ margin: 0 }}>${what} ${stop.open ? html`είναι <b>χωρίς λήξη</b>` : html`θα έληγε <b>${dayName(stop.to, today).toLowerCase()} ${dm(stop.to)}</b>`}. Αν πατήσεις «Ναι», σταματά τώρα: από σήμερα ${t.noDuty ? 'ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'ξαναμπαίνει και σε ένοπλες θέσεις' : t.noOut ? 'μπορεί να βγει έξοδο' : 'δεν ισχύει'}.</p><//>`; })()}
     ${txt && html`<${PunTextDialog} st=${txt} onClose=${() => setTxt(null)}/>`}
+    ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}
     ${tab === 'med' && html`<p className="note" style=${{ marginTop: '8px' }}>ΕΟ = ελεύθερος ορθοστασίας, ΕΑ = ελεύθερος ασκήσεων, ΕΥ = ελεύθερος υπηρεσίας. ΣΤΕΠ = εισαγωγή ΣΤΕΠ.</p>`}
   </div>`;
 }
@@ -225,7 +232,8 @@ export function HkaiScreen() {
   const tab: string = nav.params.hkTab || 'hkai';
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const nPun = useMemo(() => state.statuses.filter(s => s.type === 'PUN' && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
-  const nLeave = useMemo(() => state.statuses.filter(s => TYPES[s.type].cat === 'abs' && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
+  const now = useNowMin();
+  const nLeave = useMemo(() => state.statuses.filter(s => TYPES[s.type].cat === 'abs' && awayNow(s, today, now) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);
   const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
   const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
   return html`<div>

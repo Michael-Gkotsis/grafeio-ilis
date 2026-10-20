@@ -6,10 +6,11 @@ import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
-import { statusesOn, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
+import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
+import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, effects, plainName, shortName, unitOf, type Rules, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
-import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
+import { daysBetween, dayName, dm, dmy, dow, today as todayFn, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
 import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
@@ -21,7 +22,8 @@ type P = any;
 
 // lists: για τα δικά σου ιατρικά (δείχνουν το όνομά τους)
 export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, lists }: { statuses: Status[]; pid: number; date: ISODate; lists?: UserLists }) {
-  const ss = statusesOn(statuses, pid, date);
+  // σήμερα: όποιος γύρισε ως τώρα είναι παρών
+  const now = useNowMin(); const ss = statusesNow(statuses, pid, date, todayFn(), now);
   if (!ss.length) return html`<${Badge} tone="ok">Παρών<//>`;
   const s = ss[0], t = TYPES[s.type];
   const until = s.open ? ' χωρίς λήξη' : s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);

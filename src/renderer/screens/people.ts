@@ -5,10 +5,10 @@ import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
-import { hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
+import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { DEFAULT_HK_TIME, DEFAULT_OUT_TIME, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
+import { DEFAULT_HK_TIME, DEFAULT_OUT_TIME, awayNow, statusesNow, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, nowHM } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
@@ -20,6 +20,7 @@ import { essoPersonTxt } from '../../shared/esso';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
+import { useNowMin } from '../clock';
 type P = any;
 
 const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσίες'], ['out', 'Έξοδος'], ['other', 'Άλλα'], ['pun', 'Ποινή']];
@@ -92,7 +93,9 @@ export function PeopleScreen() {
   const lists = state.settings.lists;
   const withSt = filter === 'leave' || filter === 'pun';
   // καταστάσεις της ημερομηνίας, μία φορά ανά άτομο (με το ευρετήριο των κανόνων)
-  const ssOf = useMemo(() => { const m = new Map<number, Status[]>(); active.forEach(p => m.set(p.id, statusesOn(state.statuses, p.id, date))); return m; }, [active, state.statuses, date]);
+  // σήμερα: όποιος γύρισε από άδεια ως τώρα είναι πάλι παρών (Michael, 20/10)
+  const nowM = useNowMin(); const at = date === today ? nowM : -1;
+  const ssOf = useMemo(() => { const m = new Map<number, Status[]>(); active.forEach(p => m.set(p.id, statusesNow(state.statuses, p.id, date, today, at))); return m; }, [active, state.statuses, date, today, at]);
   const place = (p: Person, f: Filt) => (f.unit === 'all' || unitOf(p, state.settings) === f.unit) && (f.room == null || p.room === f.room);
   const matches = useCallback((p: Person, f: Filt) => {
     if (!place(p, f)) return false;
@@ -203,6 +206,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   const at = order.indexOf(pid);
   const move = useCallback((d: number) => { const i = order.indexOf(pid) + d; if (i >= 0 && i < order.length) onMove(order[i]); }, [order, pid, onMove]);
   const busy = edit || !!times || !!end;
+  const nowM = useNowMin();
   useEffect(() => { setEdit(false); setTimes(null); setEnd(null); const b = document.querySelector('.ui-sheet__body'); if (b) b.scrollTop = 0; }, [pid]);
   // ↑/↓ (και PageUp/PageDown): ο προηγούμενος/επόμενος της λίστας, όχι όταν γράφεις σε πεδίο ή είναι ανοιχτός διάλογος
   useEffect(() => {
@@ -223,7 +227,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   const ob = outBlock(state, today, pid);
   // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
   const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-  const ssT = statusesOn(state.statuses, pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = statusesOf(state.statuses, pid).filter(x => !STAT_ROWS.includes(x.type));
+  const ssT = statusesOn(state.statuses, pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = statusesOf(state.statuses, pid).filter(x => !STAT_ROWS.includes(x.type) && !backBy(x, today, nowM));   // γύρισε σήμερα ως τώρα: όχι πια «καμία υπηρεσία»
   const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false });
   const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true });
   const rules = [noDutyT ? 'Καμία υπηρεσία' : unarmedT ? 'Μόνο άοπλες θέσεις' : null, ob ? 'Δεν βγαίνει έξοδο (' + ob + ')' : null].filter(Boolean);
@@ -247,7 +251,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 40)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     `}
     ${tab === 'hist' && html`
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Καταστάσεις</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${TYPES[s.type].cat === 'abs' && s.to >= today && html`<${Button} variant="link" onClick=${() => setEnd(s)} data-tip=${leaveStarted(s, today) ? 'Γύρισε νωρίτερα: η άδεια τελειώνει τη μέρα και ώρα που λες' : 'Δεν θα φύγει: η άδεια φεύγει ολόκληρη'}>${leaveStarted(s, today) ? 'Διακοπή…' : 'Ακύρωση…'}<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
+    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Καταστάσεις</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}><${Badge} tone=${TYPES[s.type].tone}>${statusLbl(s, state.settings.lists)}<//><span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${TYPES[s.type].cat === 'abs' && awayNow(s, today, nowM) && html`<${Button} variant="link" onClick=${() => setEnd(s)} data-tip=${leaveStarted(s, today) ? 'Γύρισε νωρίτερα: η άδεια τελειώνει τη μέρα και ώρα που λες' : 'Δεν θα φύγει: η άδεια φεύγει ολόκληρη'}>${leaveStarted(s, today) ? 'Διακοπή…' : 'Ακύρωση…'}<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">περιμένει<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>${HK()}<//></li>`)}</ul></section>`}
     `}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
@@ -283,6 +287,7 @@ export function LeaveTimesDialog({ st, onClose }: P) {
 // Άδεια (κανονική, τιμητική, αναρρωτική) που ξεκίνησε ή όχι ακόμα (Michael, 18/10: «να μπορείς να ακυρώσεις / τερματίσεις άδεια»)
 export const leaveStarted = (st: Status, today: string) => st.from < today || (st.from === today && (!st.fromTime || st.fromTime <= nowHM()));
 // Πριν φύγει: ακύρωση (φεύγει όλη). Αφού έφυγε: διακοπή, γύρισε τη μέρα και ώρα που λες (τώρα)· η ακύρωση μένει για λάθος καταχώρηση.
+// Το ίδιο για νοσοκομείο και ΣΤΕΠ (Michael, 20/10: «να γυρνάει την ώρα που έβαλες»): βγήκε νωρίτερα, στη μέρα και ώρα εξόδου.
 export function LeaveEndDialog({ st, onClose }: P) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast();
   const p = personMap(state.people).get(st.pid)!;
@@ -292,33 +297,36 @@ export function LeaveEndDialog({ st, onClose }: P) {
   const [day, setDay] = useState(max && max < today ? max : today < st.from ? st.from : today);
   const [time, setTime] = useState(nowHM());
   const [err, setErr] = useState<string | null>(null);
+  const abs = TYPES[st.type as TypeKey].cat === 'abs', tn = timeNames(st.type);
   const what = TYPES[st.type as TypeKey].long.toLowerCase();
+  const W = abs ? { title: 'Διακοπή άδειας', cancel: 'Ακύρωση άδειας', go: 'Γύρισε', intro: 'Γύρισε νωρίτερα (π.χ. ανακλήθηκε): η άδεια τελειώνει' }
+    : { title: 'Έξοδος νωρίτερα', cancel: 'Διαγραφή', go: 'Βγήκε', intro: 'Βγήκε νωρίτερα: η ' + what + ' τελειώνει' };
   const desc = fullName(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + ' – ' + (st.open ? 'χωρίς λήξη' : dm(st.to) + (st.toTime ? ' ' + st.toTime : ''));
   const t = normTime(time);
-  // τι σημαίνει η ώρα επιστροφής τη μέρα που γυρνά (ίδιοι κανόνες με τις ώρες της άδειας)
+  // τι σημαίνει η ώρα τη μέρα που γυρνά (ίδιοι κανόνες με τις ώρες της άδειας)· ο ΣΤΕΠ μετρά έτσι κι αλλιώς παρών
   const hk = state.rules?.hkTime || DEFAULT_HK_TIME, out = state.rules?.outTime || DEFAULT_OUT_TIME;
-  const effect = !t ? 'Χωρίς ώρα η μέρα της επιστροφής μετρά ολόκληρη στην άδεια· παρών από την επόμενη μέρα.'
-    : (t <= hk ? 'Εκείνη τη μέρα μετρά παρών και στην ' + HK() + ', βγαίνει έξοδο και μπαίνει σε υπηρεσίες.'
-      : t <= out ? 'Εκείνη τη μέρα βγαίνει κανονικά έξοδο και μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· στην ' + HK() + ' μετρά παρών από την επόμενη μέρα.'
-      : 'Εκείνη τη μέρα μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· έξοδος και ' + HK() + ' κανονικά από την επόμενη μέρα.');
+  const effect = !t ? 'Χωρίς ώρα η μέρα αυτή μετρά ολόκληρη· ' + (st.type === 'STEP' ? 'κανονικά' : 'παρών') + ' από την επόμενη μέρα.'
+    : (t <= hk ? 'Εκείνη τη μέρα ' + (st.type === 'STEP' ? '' : 'μετρά παρών και στην ' + HK() + ', ') + 'βγαίνει έξοδο και μπαίνει σε υπηρεσίες.'
+      : t <= out ? 'Εκείνη τη μέρα βγαίνει κανονικά έξοδο και μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + (st.type === 'STEP' ? '.' : '· στην ' + HK() + ' μετρά παρών από την επόμενη μέρα.')
+      : 'Εκείνη τη μέρα μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· έξοδος' + (st.type === 'STEP' ? '' : ' και ' + HK()) + ' κανονικά από την επόμενη μέρα.');
   const doCancel = async () => {
     if (!(await run({ t: 'cancelLeave', id: st.id }, false))) return;
-    onClose(); toast({ text: 'Ακυρώθηκε η ' + what + ' του ' + shortName(p), actions: [undoMark()] });
+    onClose(); toast({ text: (abs ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + what + ' του ' + shortName(p), actions: [undoMark()] });
   };
   const doEnd = async () => {
     if (t == null) { setErr('Η ώρα δεν διαβάζεται. Γράψε π.χ. 22:00 ή άφησέ την κενή.'); return; }
     if (!(await run({ t: 'endLeave', id: st.id, date: day, time: t }, false))) return;
-    onClose(); toast({ text: shortName(p) + ': γύρισε από ' + what + ' ' + dm(day) + (t ? ' ' + t : ''), actions: [undoMark()] });
+    onClose(); toast({ text: shortName(p) + ': ' + (abs ? 'γύρισε από ' + what : what + ', ' + tn.to) + ' ' + dm(day) + (t ? ' ' + t : ''), actions: [undoMark()] });
   };
-  if (cancel) return html`<${Dialog} role="alertdialog" title="Ακύρωση άδειας" description=${desc} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${started ? () => setCancel(false) : onClose}>${started ? 'Πίσω' : 'Όχι'}<//><${Button} variant="destructive" onClick=${doCancel}>Ναι, ακύρωσέ την<//>`}>
-    <p style=${{ margin: 0 }}>${started ? html`Η άδεια έχει ήδη ξεκινήσει. Ακύρωση μόνο αν <b>μπήκε κατά λάθος</b> ή δεν έφυγε καθόλου· αν γύρισε νωρίτερα, πάτα «Πίσω» και «Γύρισε».` : html`Ξεκινά <b>${dayName(st.from, today).toLowerCase()} ${dm(st.from)}</b>.`} Αν ακυρωθεί, φεύγει από παντού (Άδειες, ${HK()}, Δύναμη, Excel) και μετρά διαθέσιμος για υπηρεσίες και έξοδο.${st.req ? ' Η αίτηση μένει εγκεκριμένη.' : ''}</p><//>`;
-  return html`<${Dialog} title="Διακοπή άδειας" description=${desc} onClose=${onClose}
-    footer=${html`<${Button} variant="ghost" onClick=${() => setCancel(true)} data-tip="Μόνο αν μπήκε κατά λάθος: η άδεια φεύγει ολόκληρη">Ακύρωση άδειας…<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${doEnd}>Γύρισε<//>`}>
-    <p style=${{ margin: '0 0 10px' }}>Γύρισε νωρίτερα (π.χ. ανακλήθηκε): η άδεια τελειώνει τη μέρα και ώρα που λες και από εκεί και πέρα μετρά παρών σε υπηρεσίες, εξόδους, ${HK()}, Δύναμη και Excel.</p>
+  if (cancel) return html`<${Dialog} role="alertdialog" title=${W.cancel} description=${desc} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${started ? () => setCancel(false) : onClose}>${started ? 'Πίσω' : 'Όχι'}<//><${Button} variant="destructive" onClick=${doCancel}>${abs ? 'Ναι, ακύρωσέ την' : 'Ναι, διάγραψέ την'}<//>`}>
+    <p style=${{ margin: 0 }}>${started ? html`Έχει ήδη ξεκινήσει. ${abs ? 'Ακύρωση' : 'Διαγραφή'} μόνο αν <b>μπήκε κατά λάθος</b>· αν ${abs ? 'γύρισε' : 'βγήκε'} νωρίτερα, πάτα «Πίσω» και «${W.go}».` : html`Ξεκινά <b>${dayName(st.from, today).toLowerCase()} ${dm(st.from)}</b>.`} Φεύγει από παντού (${abs ? 'Άδειες' : 'Ιατρικά'}, ${HK()}, Δύναμη, Excel) και μετρά διαθέσιμος για υπηρεσίες και έξοδο.${st.req ? ' Η αίτηση μένει εγκεκριμένη.' : ''}</p><//>`;
+  return html`<${Dialog} title=${W.title} description=${desc} onClose=${onClose}
+    footer=${html`<${Button} variant="ghost" onClick=${() => setCancel(true)} data-tip="Μόνο αν μπήκε κατά λάθος: φεύγει ολόκληρη">${W.cancel}…<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${doEnd}>${W.go}<//>`}>
+    <p style=${{ margin: '0 0 10px' }}>${W.intro} τη μέρα και ώρα που λες και από εκεί και πέρα μετρά κανονικά σε υπηρεσίες, εξόδους, ${HK()}, Δύναμη, Δυναμολόγιο και Excel.</p>
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="le-d">Μέρα επιστροφής</label><input id="le-d" type="date" className="ui-input" min=${st.from} max=${max} value=${day} onChange=${(e: any) => { if (e.target.value) { setDay(e.target.value); setErr(null); } }}/><span className="field__help">${dayName(day, today)}</span></div>
-      <${TimeField} id="le-t" label="Ώρα επιστροφής" value=${time} onChange=${(v: string) => { setTime(v); setErr(null); }} help="Η τωρινή· άλλαξέ την αν γύρισε άλλη ώρα"/>
+      <div className="field"><label className="field__label" htmlFor="le-d">Μέρα ${tn.toG}</label><input id="le-d" type="date" className="ui-input" min=${st.from} max=${max} value=${day} onChange=${(e: any) => { if (e.target.value) { setDay(e.target.value); setErr(null); } }}/><span className="field__help">${dayName(day, today)}</span></div>
+      <${TimeField} id="le-t" label=${'Ώρα ' + tn.toG} value=${time} onChange=${(v: string) => { setTime(v); setErr(null); }} help=${'Η τωρινή· άλλαξέ την αν ' + (abs ? 'γύρισε' : 'βγήκε') + ' άλλη ώρα'}/>
     </div>
     <span className="field__help">${effect}</span>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}

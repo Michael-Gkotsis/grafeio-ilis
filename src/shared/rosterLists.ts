@@ -7,6 +7,7 @@ import { siOf } from './si';
 import { statusLbl } from './ranks';
 import { leavePhrase } from './hkaiText';
 import { collator } from './text';
+import { backBy } from './hours';
 
 export type RosterFilter = 'all' | 'leave' | 'pun' | 'post' | 'inactive' | 'dnright';
 export const ROSTER_FILTERS: [RosterFilter, string, string][] = [
@@ -43,11 +44,12 @@ export const rosterCells = (p: Person, lists?: AppState['settings']['lists']): (
 export const byRoomName = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
 
 export interface RosterSheet { name: string; title: string; head: string[]; rows: (string | number)[][] }
-// Τα φύλλα του Excel για τη μέρα d: ένα ανά φίλτρο, και στις άδειες/ποινές μία γραμμή για κάθε άδεια ή ποινή
-export function rosterSheets(s: AppState, d: ISODate): RosterSheet[] {
+// Τα φύλλα του Excel για τη μέρα d: ένα ανά φίλτρο, και στις άδειες/ποινές μία γραμμή για κάθε άδεια ή ποινή.
+// at (λεπτά): σήμερα, όποιος γύρισε από άδεια ως τότε δεν είναι πια στις Άδειες (όπως στην οθόνη)
+export function rosterSheets(s: AppState, d: ISODate, at?: number): RosterSheet[] {
   const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
   const byPid = new Map<number, Status[]>();
-  for (const x of s.statuses) if (coversDay(x, d)) { const l = byPid.get(x.pid); if (l) l.push(x); else byPid.set(x.pid, [x]); }
+  for (const x of s.statuses) if (coversDay(x, d) && !(at != null && backBy(x, d, at))) { const l = byPid.get(x.pid); if (l) l.push(x); else byPid.set(x.pid, [x]); }
   return ROSTER_FILTERS.map(([f, , name]) => {
     const withStatus = f === 'leave' || f === 'pun';
     const rows: (string | number)[][] = [];

@@ -2,7 +2,7 @@
 // Η ανάγνωση των Excel (Δυναμολόγιο, Αρχεία Excel) γίνεται πια με το ελαφρύ xlsx.ts.
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
-import { MONTHS, dmy, hkDate, parseD, type ISODate } from '../shared/dates';
+import { MONTHS, dmy, hkDate, nowMin, parseD, today, type ISODate } from '../shared/dates';
 import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
 import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
@@ -110,7 +110,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
 // Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ), για μία ημερομηνία. Όλα με κεφαλαία, όπως ό,τι γράφει η εφαρμογή στα Excel.
 const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22, 'ΘΕΣΗ': 20, 'ΓΡΑΜΜΗ ΗΚΑΙ': 16, 'ΓΡΑΜΜΗ ΗΚΑΛ': 16, 'ΚΑΤΑΣΤΑΣΗ': 22, 'ΣΤΗΛΗ ΗΚΑΙ': 18, 'ΣΤΗΛΗ ΗΚΑΛ': 18 };
 export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
-  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, rosterSheets(s, d)) };
+  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, rosterSheets(s, d, d === today() ? nowMin() : undefined)) };
 }
 // Στελέχη (Michael, 17/10): ίδια μορφή, με τα φύλλα του cadre.ts (στελέχη, καταστάσεις της ΗΚΑΙ, εκτός δύναμης)
 export async function cadreLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {

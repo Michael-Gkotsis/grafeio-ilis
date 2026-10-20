@@ -55,6 +55,7 @@ export const dow = (s: ISODate): string => DOW[parseD(s).getDay()];
 export const fileDate = (s: ISODate): string => dm(s).replace('/', '-');
 export const dayName = (s: ISODate, ref: ISODate = today()): string =>
   s === ref ? 'Σήμερα' : s === addDays(ref, 1) ? 'Αύριο' : s === addDays(ref, -1) ? 'Χθες' : dow(s) + ' ' + dm(s);
+export const nowMin = (): number => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 export const nowHM = (): string => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 // Ημέρα της εβδομάδας με αριθμητική (Sakamoto), χωρίς Date: 0 = Κυριακή
 const SAK = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];

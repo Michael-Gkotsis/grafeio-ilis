@@ -113,6 +113,12 @@ export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: 
   const ss = statusesOn(statuses, pid, date);
   return ss.some(x => backBy(x, date, m)) ? ss.filter(x => !backBy(x, date, m)) : ss;
 }
+// Τώρα (Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό»): όποιος γύρισε σήμερα ως την ώρα
+// που είναι τώρα (now, λεπτά) δεν λείπει πια στο Δυναμολόγιο, στις Άδειες και στο «Σήμερα». Άλλες μέρες: ολόκληρη η μέρα.
+export const statusesNow = (statuses: Status[], pid: number, date: ISODate, today: ISODate, now: number) =>
+  (date === today ? statusesFrom(statuses, pid, date, now) : statusesOn(statuses, pid, date));
+// Άδεια που δεν έχει τελειώσει ακόμα τώρα (σήμερα, now λεπτά)
+export const awayNow = (s: Status, today: ISODate, now: number) => s.to > today || (s.to === today && !backBy(s, today, now));
 const untilTxt = (s: Status, date: ISODate) => (s.open ? ' (χωρίς λήξη)' : s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
