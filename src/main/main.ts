@@ -20,7 +20,7 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, 
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
-import { previewHtml, renderBook } from './print';
+import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
@@ -53,7 +53,8 @@ const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
 // Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
 const META = path.join(DATA, 'meta.json');
-type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string>; repTimes?: Record<string, RepTimes>; repSheets?: Record<string, RepSheets>; repHist?: Record<string, RepHist[]> };
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string>; repTimes?: Record<string, RepTimes>; repSheets?: Record<string, RepSheets>; repHist?: Record<string, RepHist[]>; printPrefs?: Record<string, Partial<PrintOpts>>; printDuplex?: boolean };
+// printPrefs: οι ρυθμίσεις του παραθύρου «Εκτύπωση» ανά έντυπο (printKey)· printDuplex: ο εκτυπωτής τυπώνει μόνος του διπλή όψη
 // Έντυπα: πόσες φορές βγήκε ο καθένας σε κάθε έντυπο με τυχαίους (ανά ΕΣΣΟ: η Νέα ΕΣΣΟ ξεκινά από το μηδέν) και ποια φύλλα
 // έγραψε κάθε έντυπο σε ποιο αρχείο (για να μη γράψει πάνω σε φύλλο που δεν έφτιαξε, και να μην τα διαβάζει η εισαγωγή)
 type RepTimes = { essos: string; n: Record<string, number> };
@@ -734,13 +735,27 @@ function knownPath(file: string): boolean {
 }
 
 // ------------------------------------------------------------------ Εκτύπωση χωρίς Excel (print.ts): προεπισκόπηση και διάλογος εκτυπωτή των Windows
-type PrintJob = { file: string; sheets: string[]; tmp: string };
+type PrintJob = { file: string; sheets: string[]; tmp: string; book: Book; key: string; base: PrintOpts; opts: PrintOpts };
 const printJobs = new Map<number, PrintJob>();   // ανά παράθυρο προεπισκόπησης (webContents)
-async function printPage(file: string, sheets?: string[]): Promise<{ tmp: string; sheets: string[] }> {
-  const doc = await renderBook(await fs.promises.readFile(file), { file: path.basename(file), sheets });
+// οι ρυθμίσεις του εντύπου: οι αποθηκευμένες (χωρίς τις αλλαγές σελίδας, που αφορούν μόνο το σημερινό), αλλιώς οι αρχικές του
+function printPrefs(key: string, base: PrintOpts): { opts: PrintOpts; remember: boolean } {
+  const saved = readMeta().printPrefs?.[key];
+  return { opts: cleanOpts({ ...(saved || {}), breaks: undefined }, base), remember: true };
+}
+function savePrintPrefs(key: string, o: PrintOpts | null) {
+  const all = { ...(readMeta().printPrefs || {}) };
+  if (o) { const { breaks: _b, ...keep } = o; delete all[key]; all[key] = keep; } else delete all[key];
+  const keys = Object.keys(all); for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k];   // τα 200 τελευταία έντυπα
+  writeMeta({ printPrefs: all });
+}
+async function printPage(file: string, sheets?: string[]): Promise<Omit<PrintJob, 'file'>> {
+  const book = await openBook(await fs.promises.readFile(file));
+  const key = printKey(file); const visible = book.sheets.filter(x => !x.hidden).map(x => x.name);
+  const base = printDefaults(key, sheets && sheets.length ? sheets : visible); const { opts, remember } = printPrefs(key, base);
+  const doc = await renderOpen(book, { file: path.basename(file), sheets, layout: opts });
   const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
-  await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file)));
-  return { tmp, sheets: doc.sheets.map(x => x.name) };
+  await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file), { opts, remember, duplex: !!readMeta().printDuplex }));
+  return { tmp, sheets: doc.sheets.map(x => x.name), book, key, base, opts };
 }
 // Μία προεπισκόπηση τη φορά («Τύπωσε όλα» στα Έντυπα ημέρας): η επόμενη ανοίγει όταν κλείσει η προηγούμενη
 let previewGate: Promise<void> = Promise.resolve();
@@ -751,7 +766,7 @@ async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true
   try {
     const p = await printPage(file, sheets);
     const pw = new BrowserWindow({
-      parent: win || undefined, modal: !!win, width: 1180, height: 860, minWidth: 700, minHeight: 500, show: false, title: 'Εκτύπωση · ' + path.basename(file), backgroundColor: '#5f6368',
+      parent: win || undefined, modal: !!win, width: 1280, height: 880, minWidth: 820, minHeight: 520, show: false, title: 'Εκτύπωση · ' + path.basename(file), backgroundColor: '#5f6368',
       webPreferences: { preload: path.join(__dirname, '..', 'preload', 'print.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
     });
     pw.setMenu(null);
@@ -1202,14 +1217,32 @@ else {
       if (/\.xls$/i.test(file)) return fail('Το ' + path.basename(file) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.');
       return printPreview(file, Array.isArray(sheet) ? sheet.filter(x => typeof x === 'string') : sheet ? [sheet] : undefined);
     });
-    // από το παράθυρο προεπισκόπησης
-    ipcMain.handle('print:sheets', async (e, names: string[]) => {
-      const job = printJobs.get(e.sender.id); if (!job || !Array.isArray(names)) return fail('Έκλεισε η εκτύπωση');
+    // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
+    ipcMain.handle('print:layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
+      const job = printJobs.get(e.sender.id); if (!job) return fail('Έκλεισε η εκτύπωση');
       try {
-        const p = await printPage(job.file, names.map(String));
-        fs.rmSync(job.tmp, { force: true }); Object.assign(job, p);
-        await e.sender.loadFile(p.tmp);
-        return { ok: true };
+        const opts = cleanOpts(req?.opts, job.base);
+        const sheets = Array.isArray(req?.sheets) ? req!.sheets.filter((x): x is string => typeof x === 'string') : job.sheets;
+        const doc = await renderOpen(job.book, { file: path.basename(job.file), sheets, layout: opts });
+        job.sheets = doc.sheets.map(x => x.name); job.opts = opts;
+        if (req?.save) savePrintPrefs(job.key, opts);
+        return { ok: true, html: sectionsHtml(doc), css: doc.css, info: infoOf(doc) };
+      } catch (err) { return fail(err); }
+    });
+    // «Να θυμάται» ξετσεκαρισμένο ή «Αρχικές ρυθμίσεις»: σβήνει τις αποθηκευμένες, γυρίζει τις αρχικές του εντύπου
+    ipcMain.handle('print:forget', e => { const job = printJobs.get(e.sender.id); if (!job) return null; savePrintPrefs(job.key, null); return job.base; });
+    ipcMain.handle('print:duplex', (_e, on: unknown) => { writeMeta({ printDuplex: on === true }); });
+    // PDF: ίδιο με το χαρτί, στον φάκελο του αρχείου (ή όπου διαλέξει)
+    ipcMain.handle('print:pdf', async e => {
+      const job = printJobs.get(e.sender.id); if (!job) return fail('Έκλεισε η εκτύπωση');
+      const pw = BrowserWindow.fromWebContents(e.sender);
+      const r = await dialog.showSaveDialog(pw!, { title: 'Αποθήκευση PDF', defaultPath: path.join(path.dirname(job.file), path.basename(job.file).replace(/\.xls[xm]?$/i, '') + '.pdf'), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (r.canceled || !r.filePath) return { ok: false, error: '' };
+      try {
+        const data = await e.sender.printToPDF({ printBackground: true, preferCSSPageSize: true });
+        await fs.promises.writeFile(r.filePath, data);
+        store.addAudit({ at: nowHM(), day: today(), text: 'PDF ' + path.basename(r.filePath) + ' από ' + path.basename(job.file), files: [path.basename(job.file)], source: 'app', undoable: false }, null);
+        return { ok: true, name: path.basename(r.filePath) };
       } catch (err) { return fail(err); }
     });
     ipcMain.handle('print:printers', async e => {
@@ -1217,13 +1250,14 @@ else {
     });
     // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
     // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
-    ipcMain.handle('print:go', async (e, o: { landscape?: boolean; pageSize?: string; part?: string; device?: string; copies?: number }) => {
+    ipcMain.handle('print:go', async (e, o: { landscape?: boolean; pageSize?: string; part?: string; device?: string; copies?: number; duplex?: string }) => {
       const job = printJobs.get(e.sender.id); if (!job) return fail('Έκλεισε η εκτύπωση');
       const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize)) ? String(o.pageSize) : 'A4';
       let device = typeof o?.device === 'string' && o.device ? o.device : '';
       if (device) { try { if (!(await e.sender.getPrintersAsync()).some(p => p.name === device)) device = ''; } catch { device = ''; } }
       const copies = Math.min(99, Math.max(1, Math.floor(Number(o?.copies) || 1)));
-      return new Promise(res => e.sender.print({ silent: !!device, ...(device ? { deviceName: device, copies } : {}), printBackground: true, landscape: !!o?.landscape, pageSize, margins: { marginType: 'none' } }, (ok, reason) => {
+      const duplexMode = o?.duplex === 'longEdge' || o?.duplex === 'shortEdge' ? o.duplex : 'simplex';
+      return new Promise(res => e.sender.print({ silent: !!device, ...(device ? { deviceName: device, copies, collate: true } : {}), printBackground: true, landscape: !!o?.landscape, pageSize, duplexMode, margins: { marginType: 'none' } }, (ok, reason) => {
         if (ok) store.addAudit({ at: nowHM(), day: today(), text: 'Εκτύπωση ' + path.basename(job.file) + (job.sheets.length > 1 || o?.part ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')' : ''), files: [path.basename(job.file)], source: 'app', undoable: false }, null);
         res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
       }));
