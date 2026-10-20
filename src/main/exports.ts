@@ -9,10 +9,10 @@ import { TYPES, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, postBy, postOf } from '../shared/rules';
-import { Workbook, colName, unesc, type Sheet } from './xlsx';
+import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { placeSigs } from './sigs';
 import { applyMoves, blockOf } from './layout';
@@ -62,6 +62,35 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, DUTY_START));
 }
 
+// Πίνακες των δικών σου υπηρεσιών κάτω από τους πίνακες του εντύπου, ανά δύο δίπλα δίπλα (στις στήλες των θαλαμοφυλάκων),
+// με μία κενή γραμμή πριν από κάθε σειρά πινάκων. Επιστρέφει πόσες γραμμές μπήκαν.
+function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: FrouraTable[]): number {
+  if (!tabs.length) return 0;
+  const lk = form.tables.look; const st = { aa: ws.style(lk.aa), name: ws.style(lk.name), hours: ws.style(lk.hours), note: ws.style(lk.note) };
+  const groups: { t: FrouraTable; at: TableCols }[][] = [];
+  for (let i = 0; i < tabs.length; i += 2) groups.push([{ t: tabs[i], at: form.tables.left }, ...(tabs[i + 1] ? [{ t: tabs[i + 1], at: form.tables.right }] : [])]);
+  const n = groups.reduce((a, g) => a + 2 + Math.max(...g.map(x => x.t.rows.length)), 0);
+  const after = form.extra.after; ws.insertRows(after, n, after + 1, wb);
+  const put = (ref: string, v: string | null, style: number | null) => { ws.set(ref, v); if (style != null) ws.setStyle(ref, style); };
+  const line = (at: TableCols, t: FrouraTable, r: number, v: { aa: string; name: string; hours: string; note: string }) => {
+    put(at.aa + r, v.aa, st.aa); put(at.name + r, v.name, st.name); put(at.note + r, v.note, st.note);
+    const last = colName(colNum(t.hours ? at.hours : at.note) - 1);
+    for (let c = colNum(at.name) + 1; c <= colNum(last); c++) put(colName(c) + r, null, st.name);
+    if (last !== at.name) ws.addMerge(at.name + r + ':' + last + r);
+    if (t.hours) put(at.hours + r, v.hours, st.hours);
+  };
+  let r = after + 1;
+  for (const g of groups) {
+    r++;
+    for (const { t, at } of g) {
+      line(at, t, r, { aa: 'Α/Α', name: t.title, hours: 'ΩΡΕΣ', note: 'ΠΑΡ/ΣΕΙΣ' });
+      t.rows.forEach((x, i) => line(at, t, r + 1 + i, { aa: x.n, name: x.name, hours: x.hours, note: '' }));
+    }
+    r += 1 + Math.max(...g.map(x => x.t.rows.length));
+  }
+  return n;
+}
+
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
   const form = FROURA_FORMS[phase];
@@ -74,12 +103,11 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const p = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
   ws.set('A9', 'Λ/Υ: ' + (p('ly') ? lyLine(p('ly')!) : ''));
   ws.set('A10', 'Δ/Υ: ' + (p('dy') ? lyLine(p('dy')!) : ''));
-  const lay = frouraLayout(s, d, phase); const extra = lay.extra;
+  const lay = frouraLayout(s, d, phase);
   for (const k of lay.foreign) warnings.push('Η θέση ' + (postBy(s, k)?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
   lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
-  if (extra.length) ws.insertRows(form.extra.after, extra.length, form.extra.after, wb);
-  extra.forEach((x, i) => { const r = form.extra.after + 1 + i; ws.set(form.extra.label + r, x.label).set(form.extra.name + r, x.name).set(form.extra.note + r, x.hours || null); });
-  const first = form.list + extra.length;
+  const added = frouraTablesInto(wb, ws, form, frouraTables(s, lay, phase));
+  const first = form.list + added;
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const abs = absentOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const rows = Math.max(pun.length, abs.length);
