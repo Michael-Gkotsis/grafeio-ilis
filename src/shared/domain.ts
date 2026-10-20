@@ -5,6 +5,7 @@ import type { UserLists } from './ranks';
 import type { Esso } from './esso';
 import type { UnitKind } from './unit';
 import type { Report, RepTpl } from './reports';
+import type { Sig, SigForm } from './sigs';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -234,6 +235,7 @@ export interface Settings {
   holidaysOff?: ISODate[];               // επίσημες αργίες που αφαίρεσες
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
+  sigs?: Partial<Record<SigForm, Sig[]>>;  // υπογραφές ανά έντυπο, από αριστερά προς τα δεξιά (κενό = όπως το έντυπο), sigs.ts
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
   fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών

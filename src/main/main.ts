@@ -11,7 +11,7 @@ import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
-import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
+import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
@@ -23,6 +23,7 @@ import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport,
 import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
+import type { Sig } from '../shared/sigs';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
@@ -160,7 +161,7 @@ const excel = (): typeof import('./excel') => nodeRequire(path.join(__dirname, '
 // το κουμπί ξεκλειδώνει με μήνυμα αντί να μένει στο «Δημιουργία…»
 const EXPORT_MAX = 60000;
 let exporting = false;
-async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult> {
+async function exportGuarded(kind: ExportKind, date: ISODate, opts: ExportOpts): Promise<ExportResult> {
   if (exporting) return { ok: false, error: 'Βγαίνει ήδη άλλο έντυπο. Περίμενε να τελειώσει και ξαναπάτα.' };
   exporting = true;
   let timer: NodeJS.Timeout | undefined;
@@ -172,15 +173,16 @@ async function exportGuarded(kind: ExportKind, date: ISODate, opts: { open?: boo
 
 // Τα βαριά των εντύπων στο νήμα των Excel (offload.ts), με την κατάσταση s· αν το νήμα δεν δουλεύει, εδώ όπως πριν
 const X = {
-  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string) => off('fillFroura', [buf, d, undefined, sheet], () => fillFroura(buf, s, d, undefined, sheet), s),
+  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string, sigs?: Sig[] | null) => off('fillFroura', [buf, d, undefined, sheet, sigs], () => fillFroura(buf, s, d, undefined, sheet, sigs), s),
   hkai: (buf: Buffer, s: AppState, d: ISODate, opts: Parameters<typeof fillHkai>[3]) => off('fillHkai', [buf, d, opts], () => fillHkai(buf, s, d, opts), s),
-  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3]) => off('fillOuts', [buf, d, sheets], () => fillOuts(buf, s, d, sheets), s),
+  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3], sigs?: Sig[] | null) => off('fillOuts', [buf, d, sheets, sigs], () => fillOuts(buf, s, d, sheets, sigs), s),
   merge: (bufs: Buffer[], names: string[], pick?: string) => off('mergeFirstSheets', [bufs, names, pick], () => mergeFirstSheets(bufs, names, pick)),
   zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
 };
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
-async function produce(kind: ExportKind, date: ISODate, s: AppState): Promise<{ name: string; data: Buffer; warnings?: string[] }> {
+// sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
+async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings?: string[] }> {
   const form = formOf(kind, s);
   if (kind === 'check') return off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s);
   const b = formBinding(form);
@@ -188,13 +190,13 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState): Promise<{ 
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
-    const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }))));
+    const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
     const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), fr ? b.sheet : undefined);
-    return { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: parts.flatMap(x => x.warnings || []) };
+    return { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
-  if (kind === 'froura') return X.froura(buf, s, date, b.sheet);
-  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b) });
-  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 });
+  if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
+  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b), sigs });
+  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 }, sigs);
 }
 // ΗΚΑΙ σε δικό του template: οι θέσεις βρίσκονται από τα κείμενα του εντύπου, και από πάνω ό,τι διόρθωσε ο χρήστης
 async function hkaiMap(buf: Buffer, b: FormBinding) {
@@ -211,7 +213,7 @@ function serial<T>(f: () => Promise<T>): Promise<T> {
   const p = ioChain.then(f, f); ioChain = p.catch(() => undefined); return p;
 }
 
-async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult> {
+async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Promise<ExportResult> {
   try {
     const s = store.state;
     // Προέλεγχος: με ✕ δεν βγαίνει έντυπο, με ⚠ χρειάζεται επιβεβαίωση που γράφεται στο ιστορικό
@@ -219,9 +221,10 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
     if (hasErrors(checks)) return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη που πρέπει να διορθωθούν πρώτα', checks };
     if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
     const { r, out } = await serial(async () => {
-      const r = await produce(kind, date, s);
+      const r = await produce(kind, date, s, opts.sigs);
       const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
-      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}) });
+      // οι υπογραφές αυτής της φοράς μένουν και στις αυτόματες ενημερώσεις του ίδιου αρχείου
+      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}), ...(opts.sigs ? { sigs: opts.sigs } : {}) });
       return { r, out };
     });
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
@@ -243,7 +246,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: { open?: boolea
 // Κάθε έντυπο που βγήκε για σήμερα ή επόμενη μέρα ξαναγράφεται όταν αλλάξει κάτι στην εφαρμογή (Michael, 11/10).
 // Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
 // vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
-type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number };
+type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number; sigs?: Sig[] };
 const OUTS_FILE = path.join(DATA, 'forms.json');
 const readOuts = (): OutRec[] => { try { return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8')); } catch { return []; } };
 const writeOuts = (l: OutRec[]) => { try { writeJson(OUTS_FILE, l); } catch (e) { console.error('forms.json', e); } };
@@ -268,7 +271,7 @@ async function regenFormsNow(): Promise<boolean> {
       const s = store.state;
       const errs = preflight(o.kind, s, o.date).filter(c => c.level === 'err');
       if (errs.length) { o.pending = true; o.error = 'Ο προέλεγχος βρήκε λάθος: ' + errs[0].text; continue; }
-      const r = await produce(o.kind, o.date, s); const h = await X.zipHash(r.data);
+      const r = await produce(o.kind, o.date, s, o.sigs); const h = await X.zipHash(r.data);
       if (h === o.hash) { o.pending = false; o.error = undefined; continue; }
       await writeAll([{ dir: path.dirname(o.file), name: path.basename(o.file), data: r.data }]);
       o.hash = h; o.vhash = await X.valuesHash(r.data); Object.assign(o, stamp(o.file) || {}); o.at = nowHM(); o.pending = false; o.error = undefined; any = true;

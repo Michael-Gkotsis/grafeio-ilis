@@ -19,6 +19,8 @@ import { EssoCards } from './esso';
 import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
+import { SigEditor } from '../sigs';
+import { SIG_FORMS, sameSigs, sigDefaults, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
 
 function ImportCard() {
@@ -72,6 +74,34 @@ function SettingsCard() {
       <dt>Δεδομένα</dt><dd>${boot.dataDir} <${Button} variant="link" onClick=${() => window.api.openFolder('data')}>Άνοιξε<//></dd>
       <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
       <dt>Έκδοση</dt><dd>${boot.version}</dd></dl>
+  <//>`;
+}
+
+// Υπογραφές ανά έντυπο (Michael, 20/10): όσες θέλεις, από αριστερά προς τα δεξιά. Αλλάζουν και τη στιγμή που βγαίνει
+// το έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»).
+const SIG_LABEL = (f: SigForm) => (f === 'hkai' ? HK() : f === 'froura' ? 'ΦΡΟΥΡΑ' : f === 'outs' ? 'Εξοδούχοι' : 'Έντυπα');
+function SigsCard() {
+  const { state, run } = useStore(); const toast = useToast();
+  const [form, setForm] = useState<SigForm>('hkai');
+  const [edit, setEdit] = useState<Partial<Record<SigForm, Sig[]>>>({});
+  const saved = sigsSaved(state.settings, form); const list = edit[form] ?? saved;
+  const changed = !sameSigs(list, saved);
+  const setList = (v: Sig[]) => setEdit({ ...edit, [form]: v });
+  const save = async () => {
+    const v = sigsClean(list);
+    if (await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: v } }, text: 'υπογραφές ' + SIG_LABEL(form) + ': ' + sigsText(v) }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Αποθηκεύτηκαν οι υπογραφές: ' + SIG_LABEL(form) }); }
+  };
+  const reset = async () => {
+    const all = { ...(state.settings.sigs || {}) }; delete all[form];
+    if (await run({ t: 'setSettings', settings: { sigs: all }, text: 'υπογραφές ' + SIG_LABEL(form) + ': όπως το έντυπο' }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Οι υπογραφές ' + SIG_LABEL(form) + ' είναι πάλι όπως το έντυπο' }); }
+  };
+  return html`<${Card} title="Υπογραφές" actions=${html`<${Segmented} small=${true} value=${form} onChange=${setForm} items=${SIG_FORMS.map(f => ({ value: f, label: SIG_LABEL(f) + (edit[f] && !sameSigs(edit[f]!, sigsSaved(state.settings, f)) ? ' •' : '') }))}/>`}>
+    <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
+      ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} (στο «Φτιάξ\' το εδώ»: «Υπογραφές: Ναι»), εκτός αν το έντυπο έχει δικές του.' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
+    <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
+    <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} onClick=${save}>Αποθήκευση<//>
+      ${changed && html`<${Button} variant="ghost" onClick=${() => setEdit({ ...edit, [form]: undefined })}>Άκυρο<//>`}
+      ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}</div>
   <//>`;
 }
 
@@ -172,7 +202,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
   return html`<div>

@@ -5,10 +5,13 @@ import type { ISODate } from './dates';
 import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';
+import type { Sig } from './sigs';
 import type { BuildOpts, RepCell, RepCol, RepKind, Report, RepTpl } from './reports';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
+// print: προεπισκόπηση εκτύπωσης αντί για Excel · sigs: υπογραφές μόνο για αυτή τη φορά (Ρυθμίσεις › Υπογραφές για όλες)
+export interface ExportOpts { open?: boolean; ack?: boolean; print?: boolean; sigs?: Sig[] }
 // Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
 export type DirTarget = 'output' | { form: FormKind } | { kind: ListKind };
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number; dataFallback?: boolean }   // dataFallback: τα δεδομένα είναι στο προφίλ, όχι δίπλα στο exe
@@ -66,7 +69,7 @@ export interface Api {
   undo(id?: number): Promise<CmdResult>;   // id: αναιρεί μόνο αν αυτή είναι ακόμα η τελευταία ενέργεια
   sync(): Promise<CmdResult>;
   dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
-  exportFile(kind: ExportKind, date: ISODate, opts?: { open?: boolean; ack?: boolean; print?: boolean }): Promise<ExportResult>;   // print: προεπισκόπηση εκτύπωσης αντί για Excel
+  exportFile(kind: ExportKind, date: ISODate, opts?: ExportOpts): Promise<ExportResult>;
   exportLists(date: ISODate): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
   exportRoster(date: ISODate, print?: boolean): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
   exportWeapons(date: ISODate, print?: boolean): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης

@@ -94,8 +94,8 @@ describe('Έντυπα', () => {
     expect(ws.get('E1')).toMatch(/19 ΟΚΤ 26$/);
     expect(ws.get('A5')).toBe('ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ');
     expect(ws.get('C7')).toBe('ΟΝΟΜΑΤΕΠΩΝΥΜΟ'); expect(ws.get('C32')).toBe(s.people[24].last + ' ' + s.people[24].first);
-    expect(ws.get('A34')).toBe('Ο ΛΟΧΙΑΣ'); expect(ws.get('D34')).toBe('Ο ΔΙΟΙΚΗΤΗΣ');
-    expect(ws.get('A37')).toBeNull();   // χωρίς όνομα στις Ρυθμίσεις: κενό για να υπογράψει
+    expect(ws.get('A34')).toBe('Ο'); expect(ws.get('A35')).toBe('ΛΟΧΙΑΣ'); expect(ws.get('D34')).toBe('Ο'); expect(ws.get('D35')).toBe('ΔΙΟΙΚΗΤΗΣ');
+    expect(ws.get('A39')).toBeNull();   // χωρίς όνομα στις Ρυθμίσεις: κενό για να υπογράψει
     expect(ws.dump().print).toMatch(/fitToWidth="1"/);
     // και η εκτύπωση: πρώτη σελίδα, με κελιά που διαλέγονται
     const pv = await previewReport(b.data, s, r, s.people.map(p => p.id), D);

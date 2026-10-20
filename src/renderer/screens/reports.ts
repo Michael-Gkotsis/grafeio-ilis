@@ -5,6 +5,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { usePrintFile } from '../common';
+import { SigsDialog } from '../sigs';
+import { sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
 import { ROSTER_FILTERS } from '../../shared/rosterLists';
 import { siCombos } from '../../shared/si';
@@ -171,6 +173,7 @@ export function ReportsScreen() {
   const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
   const [ask, setAsk] = useState<{ r: Report; print: boolean } | null>(null);
   const [hist, setHist] = useState<Report | null>(null);
+  const [sigFor, setSigFor] = useState<Report | null>(null);
   const go = async (r: Report, print = r.out === 'print', s = state) => {
     if (needsAsk(r)) { setAsk({ r, print }); return; }
     const d = repDate(r, today);
@@ -186,6 +189,13 @@ export function ReportsScreen() {
   const copy = async (r: Report) => { const c = { ...r, id: uid(), name: r.name + ' (αντίγραφο)' }; if (await save({ reports: [...reports, c] }, 'Αντίγραφο εντύπου «' + r.name + '»')) setWiz({ r: c }); };
   const delTpl = async (t: RepTpl) => { if (await save({ reportTpls: tpls.filter(x => x.id !== t.id) }, 'Διαγραφή προτύπου «' + t.name + '»')) toast({ text: 'Σβήστηκε το πρότυπο «' + t.name + '».', actions: [undoMark()] }); };
   const usedBy = (t: RepTpl) => reports.filter(r => r.tpl === t.id);
+  // «Υπογραφές…»: άλλες για αυτή τη φορά, ή (keep) για αυτό το έντυπο από εδώ και πέρα
+  const sigsGo = async (r: Report, sigs: Sig[], keep: boolean, print: boolean) => {
+    let s = state;
+    if (keep) { const next = await save({ reports: reports.map(x => (x.id === r.id ? { ...x, sigs } : x)) }, 'Υπογραφές εντύπου «' + r.name + '»'); if (!next) return; s = next; }
+    go({ ...r, sigs }, print, s);
+  };
+  const sigsReset = async (r: Report) => { const { sigs: _, ...rest } = r; if (await save({ reports: reports.map(x => (x.id === r.id ? rest : x)) }, 'Υπογραφές εντύπου «' + r.name + '»')) toast({ text: 'Το «' + r.name + '» παίρνει ξανά τις υπογραφές των Ρυθμίσεων.' }); };
   return html`<div>
     <${PageHeader} title="Έντυπα" sub="Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.">
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setWiz({ start: 'upload' })} data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">Ανέβασε Excel…<//>
@@ -197,6 +207,7 @@ export function ReportsScreen() {
         <td>${pickText(r, state)}</td><td className="nw muted">${lastTxt(last[r.id], today)}</td>
         <td className="rep-table__acts"><${Button} size="sm" onClick=${() => go(r)} data-tip=${needsAsk(r) ? 'Δείχνει πρώτα ποιοι μπαίνουν' : 'Βγαίνει τώρα, για ' + (r.day === 'tomorrow' ? 'αύριο' : 'σήμερα')}>${needsAsk(r) ? 'Βγάλε…' : 'Βγάλε'}<//>
           <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => setSigFor(r)} data-tip=${'Υπογραφές' + (r.sigs ? ' (δικές του)' : '') + ': ' + sigsText(r.sigs ?? sigsSaved(state.settings, 'reports')) + '. Αλλάζεις, προσθέτεις ή αλλάζεις σειρά πριν βγει.'}>Υπογραφές…<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setHist(r)} data-tip="Πότε βγήκε και ποιοι μπήκαν· ξαναβγαίνει ίδιο αν χαθεί το χαρτί">Ιστορικό<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setWiz({ r })}>Αλλαγή<//>
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
@@ -212,6 +223,8 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" onClick=${() => window.api.repOpenTpl(t.file)} data-tip="Άλλαξε μορφή, λογότυπο, στήλες στο Excel. Οι αλλαγές ισχύουν από το επόμενο έντυπο.">Άνοιξέ το στο Excel<//>
           <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
+    ${sigFor && html`<${SigsDialog} title=${sigFor.name} initial=${sigFor.sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
+      onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
     ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${(r: Report, s: AppState) => go(r, r.out === 'print', s)}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
     ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
@@ -437,6 +450,7 @@ function SignerFields({ signers, setSigners, both }: P) {
 
 // «Φτιάξ' το εδώ»: στήλες, τίτλος, κεφαλίδα, υπογραφές, σελίδα
 function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
+  const { state } = useStore(); const custom = sigsCustom(state.settings, 'reports');
   const set = (x: Partial<BuildOpts>) => setO({ ...o, ...x });
   const setCol = (i: number, x: Partial<BuildCol>) => set({ cols: o.cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)) });
   const move = (i: number, by: number) => { const cs = [...o.cols]; const j = i + by; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; set({ cols: cs }); };
@@ -458,8 +472,9 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος και ημερομηνία πάνω δεξιά</label>
     </div>
-    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${o.sig} onChange=${(sig: BuildOpts['sig']) => set({ sig })} items=${[{ value: 'none', label: 'Καμία' }, { value: 'sgt', label: 'Λοχίας' }, { value: 'both', label: 'Λοχίας και Διοικητής' }]}/></div>
-    ${o.sig !== 'none' && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${o.sig === 'both'}/>`}
+    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${o.sig === 'none' ? 'none' : 'list'} onChange=${(sig: BuildOpts['sig']) => set({ sig })} items=${[{ value: 'none', label: 'Καμία' }, { value: 'list', label: 'Από τις Ρυθμίσεις' }]}/></div>
+    ${o.sig !== 'none' && html`<p className="note" style=${{ margin: 0 }}>Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(sigsSaved(state.settings, 'reports'))}</b>. Τις αλλάζεις στις Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές (Έντυπα), ή κάθε φορά που βγαίνει με το «Υπογραφές…».</p>`}
+    ${o.sig !== 'none' && !custom && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${true}/>`}
     <div className="rep-opts"><span className="field__label">Σελίδα</span><${Segmented} small=${true} value=${o.land ? 'l' : 'p'} onChange=${(v: string) => set({ land: v === 'l' })} items=${[{ value: 'p', label: 'Όρθια' }, { value: 'l', label: 'Οριζόντια' }]}/>
       <span className="field__label">Γράμματα</span><${Segmented} small=${true} value=${String(o.sz)} onChange=${(v: string) => set({ sz: +v as BuildOpts['sz'] })} items=${[{ value: '10', label: '10' }, { value: '11', label: '11' }, { value: '12', label: '12' }]}/>
       <span className="field__label">Επικεφαλίδες</span><${Segmented} small=${true} value=${o.fill} onChange=${(fill: BuildOpts['fill']) => set({ fill })} items=${[{ value: 'none', label: 'Λευκές' }, { value: 'gray', label: 'Γκρι' }, { value: 'olive', label: 'Λαδί' }]}/></div>

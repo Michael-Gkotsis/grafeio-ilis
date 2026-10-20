@@ -13,6 +13,8 @@ import { Workbook, colName, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine } from '../shared/froura';
+import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
+import { placeSigs } from './sigs';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -22,9 +24,21 @@ export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) 
 export interface ExportResult { name: string; data: Buffer; warnings: string[] }
 
 // Λόχος/Τάγμα (Michael, 18/10): οι λέξεις της ίλης στα κείμενα του template («ΔΚΤΗΣ ΙΛΗΣ», «2Η ΕΠΧΙΑ») γίνονται του λόχου,
-// πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Στην ίλη το template μένει ως έχει.
-async function unitWords(wb: Workbook, s: AppState) {
-  if (unitKindOf(s.settings) === 'lochos') await wb.mapTexts(t => unitText(t, 'lochos'));
+// πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Και ανάποδα (20/10): δικό σου
+// template του λόχου σε ίλη παίρνει τις λέξεις της ίλης. Τα templates της εφαρμογής είναι της ίλης και εκεί δεν αλλάζουν.
+export async function unitWords(wb: Workbook, s: AppState) {
+  const kind = unitKindOf(s.settings);
+  await wb.mapTexts(t => unitText(t, kind));
+}
+// Οι υπογραφές ενός εντύπου (Michael, 20/10): όσες έδωσες τη στιγμή που βγαίνει (over), αλλιώς οι δικές σου των Ρυθμίσεων·
+// χωρίς αυτές μένουν του εντύπου. def: για το κελί {ΥΠΟΓΡΑΦΕΣ} σε δικό σου template, όταν δεν άλλαξες τίποτα.
+export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs: Sig[] | null; def: Sig[] } {
+  const def = sigsFor(s.settings, sigsSaved(s.settings, form));
+  return { sigs: over ? sigsFor(s.settings, over) : sigsCustom(s.settings, form) ? def : null, def };
+}
+async function signSheets(wb: Workbook, sheets: Sheet[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[]) {
+  const g = sigsOf(s, form, over);
+  for (const ws of sheets) await placeSigs(wb, ws, g.sigs, g.def, warnings);
 }
 
 // ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)
@@ -38,7 +52,7 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
 }
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
-export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string): Promise<ExportResult> {
+export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
   const form = FROURA_FORMS[phase];
   const wb = await Workbook.open(tpl); await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = personMap(s.people);
   const warnings: string[] = [];
@@ -66,6 +80,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
     if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceOf(b.x)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
   }
+  await signSheets(wb, [ws], s, 'froura', sigs, warnings);
   return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
 }
 
@@ -80,7 +95,7 @@ export const HK_TEXT: Record<string, string> = { loi: 'G19' };
 // Ατυχήματα (K5 ολικές ζημιές, L5 μερικές, M5 σε άνδρες): ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς μένει το Ø του εντύπου
 export const HK_ACC: Record<string, string> = { accT: 'K5', accP: 'L5', accM: 'M5' };
 // front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
-export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap } = {}): Promise<ExportResult> {
+export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap; sigs?: Sig[] | null } = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); await unitWords(wb, s);
   const pick = (n: string | undefined, i: number) => (n && wb.hasSheet(n) ? n : i);
   const fr = await wb.sheet(pick(opts.front, 0)); const bk = await wb.sheet(pick(opts.back, 1));
@@ -136,6 +151,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
   if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
   bk.set('L23', s.settings.place + ', ' + hkDate(d));
+  await signSheets(wb, fr === bk ? [fr] : [fr, bk], s, 'hkai', opts.sigs, warnings);
   return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings };
 }
 
@@ -218,8 +234,8 @@ export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): stri
   return norm(withNote(auto, outNoteOf(s, d, pid)));
 }
 // sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)
-export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}): Promise<ExportResult> {
-  const wb = await Workbook.open(tpl); await unitWords(wb, s);
+export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null): Promise<ExportResult> {
+  const wb = await Workbook.open(tpl); await unitWords(wb, s); const warnings: string[] = []; const done: Sheet[] = [];
   const { outs, stay } = outsAndStay(s, d);
   const lists: [string, { p: Person; note: string }[], string | undefined][] = [
     ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: outsNote(s, d, x.p.id, x.st) })), sheets.outs],
@@ -237,6 +253,8 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
     });
     const foot = 9 + Math.max(list.length - 1, 0);
     ws.set('G' + foot, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
+    if (!done.includes(ws)) done.push(ws);
   }
-  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings: [] };
+  await signSheets(wb, done, s, 'outs', sigs, warnings);
+  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
 }

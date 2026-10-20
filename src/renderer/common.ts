@@ -12,6 +12,8 @@ import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { daysBetween, dayName, dm, dmy, dow, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
+import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
+import { SigsDialog } from './sigs';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
@@ -206,9 +208,10 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
 
 /* Βγάζει ένα έντυπο από το template και ανοίγει το αρχείο στο Excel (ή, με print, την προεπισκόπηση εκτύπωσης).
    Πρώτα ο προέλεγχος (έρευνα §3.6): ✕ σταματά με «Δείξε μου», ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό. */
-type Gate = { kind: ExportKind; date: ISODate; label: string; print: boolean; checks: Check[]; resolve: (ok: boolean) => void };
+type Gate = { kind: ExportKind; date: ISODate; label: string; print: boolean; sigs?: Sig[]; checks: Check[]; resolve: (ok: boolean) => void };
 const ExportBusyCtx = createContext<ExportKind | null>(null);
-const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string, print?: boolean) => Promise<boolean>>(async () => false);
+// sigs: υπογραφές μόνο για αυτή τη φορά
+const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string, print?: boolean, sigs?: Sig[]) => Promise<boolean>>(async () => false);
 /* Εκτύπωση ενός Excel που υπάρχει ήδη (έντυπο που βγήκε, αρχείο από τα «Αρχεία Excel»), χωρίς Excel */
 export function usePrintFile() {
   const toast = useToast();
@@ -228,16 +231,16 @@ export function ExportProvider({ children }: P) {
   const [gate, setGate] = useState<Gate | null>(null);
   // Ποιο έντυπο βγαίνει τώρα: τα κουμπιά δείχνουν «Δημιουργία…» και δεύτερο κλικ δεν ξεκινά δεύτερη εξαγωγή
   const [busy, setBusy] = useState<ExportKind | null>(null); const busyRef = useRef(false);
-  const exec = useCallback(async (kind: ExportKind, date: ISODate, label: string, ack: boolean, print = false): Promise<boolean> => {
+  const exec = useCallback(async (kind: ExportKind, date: ISODate, label: string, ack: boolean, print = false, sigs?: Sig[]): Promise<boolean> => {
     if (busyRef.current) return false;
     busyRef.current = true; setBusy(kind);
     let r: Awaited<ReturnType<typeof window.api.exportFile>>;
-    try { r = await window.api.exportFile(kind, date, { open: !print, print, ack }); }
+    try { r = await window.api.exportFile(kind, date, { open: !print, print, ack, ...(sigs ? { sigs } : {}) }); }
     catch (e) { r = { ok: false, error: String(e) } as typeof r; }
     finally { busyRef.current = false; setBusy(null); }
     if (!r.ok) {
-      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate(g => { g && g.resolve(false); return { kind, date, label, print, checks: r.checks!, resolve }; }));
-      toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack, print); } }] : undefined });
+      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate(g => { g && g.resolve(false); return { kind, date, label, print, sigs, checks: r.checks!, resolve }; }));
+      toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack, print, sigs); } }] : undefined });
       return false;
     }
     await sync();   // «βγήκε» και ιστορικό: μόνο ό,τι άλλαξε
@@ -245,14 +248,14 @@ export function ExportProvider({ children }: P) {
     toast({ text: html`<span>Βγήκε ${label}: <b>${file.split(/[\\/]/).pop()}</b>${r.warnings.length ? html`<br/>⚠ ${r.warnings.join(' · ')}` : ''}</span>`, actions: [...(print ? [] : [{ label: 'Εκτύπωση', fn: () => { printFile(file); } }]), { label: 'Φάκελος', fn: () => window.api.openFolder('output') }] });
     return true;
   }, [toast, sync, printFile]);
-  const start = useCallback((kind: ExportKind, date: ISODate, label: string, print?: boolean) => exec(kind, date, label, false, !!print), [exec]);
+  const start = useCallback((kind: ExportKind, date: ISODate, label: string, print?: boolean, sigs?: Sig[]) => exec(kind, date, label, false, !!print, sigs), [exec]);
   const close = (ok: boolean) => { const g = gate; setGate(null); g && g.resolve(ok); };
   const errs = gate ? gate.checks.filter(c => c.level === 'err') : [];
   const warns = gate ? gate.checks.filter(c => c.level === 'warn') : [];
   const show = (c: Check) => { const g = gate!; close(false); if (c.go) { const [v, p] = GO[c.go](g.date); nav.go(v, p); } };
   return html`<${ExportCtx.Provider} value=${start}><${ExportBusyCtx.Provider} value=${busy}>${children}
     ${gate && html`<${Dialog} role="alertdialog" title=${errs.length ? 'Δεν μπορεί να βγει ' + gate.label : 'Έλεγχος πριν βγει ' + gate.label} description=${dayName(gate.date) + ' ' + dmy(gate.date)} onClose=${() => close(false)}
-      footer=${errs.length ? html`<${Button} data-autofocus="" onClick=${() => close(false)}>Κλείσιμο<//>` : html`<${Button} variant="outline" data-autofocus="" onClick=${() => close(false)}>Άκυρο<//><${Button} onClick=${async () => { const g = gate!; setGate(null); g.resolve(await exec(g.kind, g.date, g.label, true, g.print)); }}>Το ξέρω, συνέχισε<//>`}>
+      footer=${errs.length ? html`<${Button} data-autofocus="" onClick=${() => close(false)}>Κλείσιμο<//>` : html`<${Button} variant="outline" data-autofocus="" onClick=${() => close(false)}>Άκυρο<//><${Button} onClick=${async () => { const g = gate!; setGate(null); g.resolve(await exec(g.kind, g.date, g.label, true, g.print, g.sigs)); }}>Το ξέρω, συνέχισε<//>`}>
       <ul className="preflight">${[...errs, ...warns].map((c, i) => html`<li key=${i} className=${c.level === 'err' ? 'is-err' : 'is-warn'}><span className="preflight__ic">${c.level === 'err' ? '✕' : '⚠'}</span><span>${c.text}</span>${c.go && html`<${Button} size="sm" variant="link" onClick=${() => show(c)}>Δείξε μου<//>`}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>${errs.length ? 'Διόρθωσε τα ✕ και ξαναδοκίμασε. Έτσι δεν φεύγει ποτέ λάθος έντυπο.' : 'Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.'}</p>
     <//>`}<//><//>`;
@@ -261,7 +264,19 @@ export const useExport = () => useContext(ExportCtx);
 export const useExportBusy = () => useContext(ExportBusyCtx);
 export function ExportButton({ kind, date, label, variant, size, disabled }: P) {
   const ex = useExport(); const busy = useExportBusy();
-  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label)}>${busy === kind ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled}/><//>`;
+  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label)}>${busy === kind ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled}/><${SigsButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled}/><//>`;
+}
+/* «Υπογραφές…»: βγαίνει με άλλες υπογραφές αυτή τη φορά (ή και τις επόμενες, στις Ρυθμίσεις) */
+export function SigsButton({ kind, date, label, variant = 'ghost', size, disabled }: P) {
+  const ex = useExport(); const busy = useExportBusy(); const { state, run } = useStore(); const [open, setOpen] = useState(false);
+  const form = sigFormOf(kind); if (!form) return null;
+  const cur = sigsSaved(state.settings, form);
+  const go = async (sigs: Sig[], keep: boolean, print: boolean) => {
+    if (keep && !(await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: sigs } }, text: 'υπογραφές ' + label.replace(/^(η|οι|το) /, '') + ': ' + sigsText(sigs) }, false))) return;
+    ex(kind, date, label, print, keep ? undefined : sigs);
+  };
+  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => setOpen(true)} data-tip=${'Υπογραφές: ' + sigsText(cur) + '. Άλλαξέ τες για αυτή τη φορά ή για πάντα.'}>Υπογραφές…<//>
+    ${open && html`<${SigsDialog} title=${label.replace(/^(η|οι|το) /, '')} initial=${cur} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onGo=${go} onClose=${() => setOpen(false)}/>`}<//>`;
 }
 /* Εκτύπωση: βγαίνει το Excel όπως πάντα και ανοίγει προεπισκόπηση με τον διάλογο εκτυπωτή των Windows (χωρίς Excel) */
 export function PrintButton({ kind, date, label, variant = 'ghost', size, disabled }: P) {
