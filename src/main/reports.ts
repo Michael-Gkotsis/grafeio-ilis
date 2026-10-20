@@ -3,7 +3,8 @@
 // Η πρώτη γραμμή κάτω από τις επικεφαλίδες είναι η «γραμμή-πρότυπο»: κάθε άτομο παίρνει τη μορφή της και ό,τι είναι
 // από κάτω (υπογραφές, σύνολα) κατεβαίνει όσο μεγαλώνει η λίστα.
 import { Workbook, colName, colNum, sheetSafe, type Sheet, type XlValue } from './xlsx';
-import { TemplateError } from './exports';
+import { TemplateError, sigsOf, unitWords } from './exports';
+import { SIG_TAG, placeSigs } from './sigs';
 import { renderBook } from './print';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
@@ -107,6 +108,7 @@ export type GroupKey = Omit<RepGroup, 'rows'>;
 export interface FillOpts { prefix?: string; stale?: GroupKey[] }
 export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[] }> {
   const wb = await Workbook.open(tpl); const warnings: string[] = [];
+  await unitWords(wb, s);
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
   const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
@@ -115,7 +117,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (split) groups = [...groups, ...(o.stale || []).filter(x => !groups.some(g => g.key === x.key)).map(x => ({ ...x, rows: [] }))];
   if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
   const names: string[] = [];
-  if (!split) { await fillSheet(wb, sheet, s, r, rows, d, ''); names.push(sheet); }
+  if (!split) { await fillSheet(wb, sheet, s, r, rows, d, '', warnings); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -123,13 +125,13 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) await fillSheet(wb, i ? uniq[i] : first, s, r, groups[i].rows, d, groups[i].label);
+    for (let i = 0; i < groups.length; i++) await fillSheet(wb, i ? uniq[i] : first, s, r, groups[i].rows, d, groups[i].label, warnings);
     names.push(first, ...uniq.slice(1));
   }
   const name = upper(r.name).replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
-  return { name, data: await wb.save(), warnings, sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [] };
+  return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [] };
 }
-async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, rows: Row[], d: ISODate, group: string): Promise<void> {
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, rows: Row[], d: ISODate, group: string, warnings: string[]): Promise<void> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const head = locateHead(ws, scan, r); const data = dataRowOf(ws, head);
   const n = rows.length;
@@ -160,10 +162,11 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
   for (const t of tags) {
     if (inTable.has(t.ref)) continue;
     const whole = /^\{([^{}]+)\}$/.exec(t.text.trim());
+    if (whole && tagKey(whole[1]) === 'sigs') continue;   // οι υπογραφές μπαίνουν στο τέλος, όταν ξέρουμε πού κατέληξε η γραμμή τους
     if (whole && tagKey(whole[1])) await put(t.ref, val(tagKey(whole[1])!));
     else ws.set(t.ref, t.text.replace(TAG_RE, (m, tg: string) => { const kk = tagKey(tg); if (!kk) return m; const v = val(kk); return v == null ? '' : String(v).replace(/\n/g, ' '); }));
   }
-  for (const c of r.cells) if (c.k !== GTITLE && /^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) await put(c.ref, val(c.k));
+  for (const c of r.cells) if (c.k !== GTITLE && /^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) { if (c.k === 'sigs') ws.set(c.ref, SIG_TAG); else await put(c.ref, val(c.k)); }
   // ο πίνακας: όσες γραμμές χρειάζονται, με τη μορφή της γραμμής-προτύπου
   const k = preparedRows(ws, data, cols.map(c => c.c));
   const aa = cols.find(c => c.f === 'aa');
@@ -181,6 +184,9 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
       ws.set(ref, i < n ? fieldValue(s, r.kind, rows[i], c.f, i, d, c.text) : null);
     }
   }
+  // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
+  const g = sigsOf(s, 'reports', r.sigs);
+  await placeSigs(wb, ws, g.sigs, g.def, warnings);
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
   wb.setPrintTitles(sheet, head, data - 1);
   ws.setPrintFit(false);
@@ -227,7 +233,11 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind): Promise<{ data
   });
   ws.setRowHeight(head, sz * 2.4); ws.setRowHeight(data, sz * 1.9);
   ws.setColWidths(widths);
-  if (o.sig !== 'none') {
+  if (o.sig === 'list') {
+    // μία γραμμή για όλες: γεμίζει όταν βγαίνει, με τις υπογραφές του εντύπου ή των Ρυθμίσεων
+    const sr = data + 2; ws.set('A' + sr, SIG_TAG).setStyle('A' + sr, st.sig);
+    if (n > 1) { for (let c = 2; c <= n; c++) ws.setStyle(L(c) + sr, st.sig); ws.addMerge('A' + sr + ':' + L(n) + sr); }
+  } else if (o.sig !== 'none') {
     const sr = data + 2; const half = Math.max(1, Math.floor(n / 2));
     const left = n > 1 ? 'A' + sr + ':' + L(half) + sr : null;
     ws.set('A' + sr, 'Ο ΛΟΧΙΑΣ').setStyle('A' + sr, st.sig); ws.set('A' + (sr + 3), '{ΛΟΧΙΑΣ}').setStyle('A' + (sr + 3), st.sigName);

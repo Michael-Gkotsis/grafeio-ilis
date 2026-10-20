@@ -10,6 +10,7 @@ import { listOf, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { rosterMatch, type RosterFilter } from './rosterLists';
+import type { Sig } from './sigs';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
@@ -85,6 +86,7 @@ export const CELLS: CellDef[] = [
   { k: 'date', label: 'Ημερομηνία (19/10/2026)', tag: 'ΗΜΕΡΟΜΗΝΙΑ' },
   { k: 'title', label: 'Τίτλος του εντύπου', tag: 'ΤΙΤΛΟΣ' },
   { k: 'count', label: 'Σύνολο ατόμων', tag: 'ΣΥΝΟΛΟ' },
+  { k: 'sigs', label: 'Υπογραφές (όλες, από αριστερά προς τα δεξιά, Ρυθμίσεις)', tag: 'ΥΠΟΓΡΑΦΕΣ' },
   { k: 'sgtName', label: 'Υπογραφή λοχία (όνομα, Ρυθμίσεις)', tag: 'ΛΟΧΙΑΣ' },
   { k: 'cmdName', label: 'Υπογραφή Διοικητή (όνομα, Ρυθμίσεις)', tag: 'ΔΙΟΙΚΗΤΗΣ' },
   { k: 'esso', label: 'ΕΣΣΟ (Γ΄ ΕΣΣΟ 2026)', tag: 'ΕΣΣΟ' },
@@ -133,21 +135,23 @@ export interface Report {
   split?: RepSplit;                           // ένα φύλλο ανά θάλαμο, ουλαμό ή Σ.Ι.
   trim?: boolean;                             // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
   daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
+  sigs?: Sig[];                               // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
 }
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
 export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string }
-export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive' }
+// sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive' }
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
 const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
 export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts }[] = [
-  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'both', land: false, sz: 11, fill: 'gray' } },
-  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'sgt', land: false, sz: 11, fill: 'gray' } },
+  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' } },
+  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' } },
   { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 11, fill: 'gray' } }
 ];
-export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'both', land: false, sz: 11, fill: 'gray' });
+export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 11, fill: 'gray' });
 
 // ------------------------------------------------------------------ μαντεψιά από τις επικεφαλίδες του Excel
 const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');

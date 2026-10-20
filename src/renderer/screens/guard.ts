@@ -3,7 +3,7 @@ import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
@@ -294,10 +294,11 @@ export function GuardScreen() {
       <${Button} variant="outline" onClick=${() => setPreview(true)}>Προεπισκόπηση<//>
       <${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/>
+      <${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/>
       <${TemplateNote} ids=${['froura', 'check']}/>
     </section>
   </div>`;
-  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
+  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/><${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon}/>`;
   const whoTab = html`<${WhoDoes} key=${who.n} date=${date} pid=${who.pid}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }, { value: 'who', label: 'Ποιος κάνει τι' }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);

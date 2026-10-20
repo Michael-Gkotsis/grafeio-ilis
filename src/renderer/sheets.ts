@@ -11,6 +11,18 @@ import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine, phaseOf } from '../shared/froura';
+import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
+
+// Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
+function sigRows(s: AppState, form: SigForm, W: number, dash: boolean, base: (Cell | null)[][]): (Cell | null)[][] {
+  if (!sigsCustom(s.settings, form)) return base;
+  const list = sigsFor(s.settings, sigsSaved(s.settings, form)); if (!list.length) return [];
+  const n = list.length, k = Math.floor(W / n), extra = W - k * n;
+  const cs = list.map((_, i) => Math.max(1, k + (i < extra ? 1 : 0)));
+  const rows = [list.map((x, i) => E(x.art ? (dash ? '-' + x.art + '-' : x.art) : '', 'c', cs[i])), list.map((x, i) => E(x.title, 'ttl', cs[i]))];
+  if (list.some(x => x.name)) rows.push([E('', '', W)], [E('', '', W)], [E('', '', W)], list.map((x, i) => E(x.name || '', 'c', cs[i])));
+  return rows;
+}
 
 
 // ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα): ίδια διάταξη με το template που θα βγει
@@ -64,7 +76,7 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
     rows.push([E(i + 1, 'b c'), E(a ? dutyName(pm.get(a.pid)!) : '', 'b'), E(a ? norm(a.kind || 'Ποινή') : '', 'b c'), E(a ? dm(a.from) : '', 'b c'), E(a && !a.open ? dm(a.to) : '', 'b c'), E(a?.note || '', 'b'), E(''),
       E(i + 1, 'b c'), E(b ? dutyName(pm.get(b.pid)!) : '', 'b'), E(b ? absenceOf(b) : '', 'b c'), E(b ? dm(b.from) : '', 'b c'), E(b && !b.open ? dm(b.to) : '', 'b c'), E(b?.note || '', 'b')]);
   }
-  rows.push([E('', '', W)], [E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 2), E(formText(s.settings, 'ΔΚΤΗΣ ΙΛΗΣ'), 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E(formText(s.settings, 'ΔΚΤΗΣ ΕΠΧΙΑΣ'), 'ttl', 3)]);
+  rows.push([E('', '', W)], ...sigRows(s, 'froura', W, false, [[E(''), E('-Ο-', 'c', 2), E('-Ο-', 'c', 2), E('', '', 2), E('ΤΟ', 'c', 3), E('-Ο-', 'c', 3)], [E(''), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 2), E(formText(s.settings, 'ΔΚΤΗΣ ΙΛΗΣ'), 'ttl', 2), E('', '', 2), E('2ο ΓΡΑΦΕΙΟ', 'ttl', 3), E(formText(s.settings, 'ΔΚΤΗΣ ΕΠΧΙΑΣ'), 'ttl', 3)]]));
   return { cols: [30, 34, 150, 78, 54, 8, 8, 8, 34, 150, 78, 54, 30], rows };
 }
 export const frouraEmpty = (s: AppState, date: ISODate) => postsOf(s.settings).filter(x => !(s.guards[date] || {})[x.k]).length;
@@ -93,7 +105,7 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
   x = sum(R.nco); rows.push(line('ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', x.n, x.att, x.c, true, pvOf(R.nco)));
   x = sum([...R.off, ...R.nco]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...R.off, ...R.nco])));
   rows.push([E('', '', W)], [E('', '', W - 8), E(s.settings.place + ', ' + hkDate(date), 'c', 8)], [E('', '', W)],
-    [E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 6), E('', '', W - 16), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 8)]);
+    ...sigRows(s, 'hkai', W, true, [[E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 6), E('', '', W - 16), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 8)]]));
   return { cols: [132, 40, 34, 34, 34, ...HK_K.map(() => 32), 36, ...HK_A.map(() => 32), 36, 36, 40], rows };
 }
 // ΗΚΑΙ πίσω: ίδιοι κανόνες με την εξαγωγή (main/exports.ts)
@@ -127,7 +139,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
     [E(og.dy ? 'Δ/Υ: ' + name(og.dy) : '', 'w', 6), ...L(5, 'ΑΙΤΗΣΕΙΣ', reqs)],
     [E('', '', 6), ...L(6, 'ΛΟΙΠΑ', tx.loi || '')],
     [E('', '', 14)], [E('', '', 6), E('ΑΝΑΦΕΡΕΤΑΙ ΠΛΗΡΟΤΗΤΑ ΟΠΛΙΣΜΟΥ ΚΑΙ ΛΟΙΠΩΝ ΕΛΚΥΣΤΙΚΩΝ ΥΛΙΚΩΝ', 'bold', 8)], [E('', '', 9), E(s.settings.place + ', ' + hkDate(date), 'c', 5)],
-    [E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 4), E('', '', 3), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 5)]];
+    ...sigRows(s, 'hkai', 14, true, [[E('', '', 2), E('-Ο-', 'c', 4), E('', '', 3), E('-Ο-', 'c', 5)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 4), E('', '', 3), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 5)]])];
   return { cols: [96, 46, 46, 60, 50, 10, 70, 46, 56, 56, 10, 60, 50, 50], rows };
 }
 

@@ -191,6 +191,16 @@ export class Sheet {
     } else this.tail = tailInsert(this.tail, 'mergeCells', `<mergeCells count="1"><mergeCell ref="${ref}"/></mergeCells>`);
     return this;
   }
+  // Βγάζει μια συγχώνευση (π.χ. όταν οι υπογραφές μπαίνουν σε άλλες θέσεις)
+  removeMerge(m: { c1: number; r1: number; c2: number; r2: number }): this {
+    const a = colName(m.c1) + m.r1, b = colName(m.c2) + m.r2;
+    const before = this.tail;
+    this.tail = this.tail.replace(new RegExp('<mergeCell ref="' + a + '(?::' + b + ')?"/>'), '');
+    if (this.tail === before) return this;
+    const n = this.merges().length;
+    this.tail = n ? this.tail.replace(/<mergeCells\b([^>]*)>/, (_m, x: string) => `<mergeCells${setAttr(x, 'count', String(n))}>`) : this.tail.replace(/<mergeCells\b[^>]*>\s*<\/mergeCells>/, '');
+    return this;
+  }
   // Υπάρχει ήδη έλεγχος δεδομένων (λίστα κ.λπ.) σε κάποιο κελί της στήλης c μεταξύ των γραμμών r1–r2;
   hasValidation(c: number, r1: number, r2: number): boolean {
     const refs = [...this.tail.matchAll(/<(?:x14:)?dataValidation\b[^>]*?\ssqref="([^"]+)"/g), ...this.tail.matchAll(/<xm:sqref>([^<]+)<\/xm:sqref>/g)].flatMap(m => m[1].split(/\s+/));
@@ -1001,6 +1011,14 @@ export class Workbook {
       const plain = body.replace(/&apos;/g, "'");
       if (!plain.includes(sheet + '!') && !plain.includes(sheet.replace(/'/g, "''") + "'!")) return a + body + c;
       return a + shiftFormula(body, sheet, false, after, n).replace(/'/g, '&apos;') + c;
+    });
+  }
+  // Η περιοχή εκτύπωσης του φύλλου φτάνει τουλάχιστον ως τη γραμμή row (π.χ. όνομα κάτω από υπογραφή)· χωρίς περιοχή, τίποτα
+  printDownTo(sheet: string, row: number) {
+    const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {
+      if (attr(at, 'name') !== '_xlnm.Print_Area' || attr(at, 'localSheetId') !== String(i)) return m;
+      return a + body.replace(/(:\$?[A-Z]+\$?)(\d+)(?=$|,)/, (x, p: string, n: string) => (Number(n) < row ? p + row : x)) + c;
     });
   }
   // Πίνακες του Excel (ListObject) στο φύλλο
