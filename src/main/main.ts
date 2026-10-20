@@ -60,7 +60,7 @@ type RepTimes = { essos: string; n: Record<string, number> };
 type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };
 // ιστορικό εκδόσεων: ποιοι μπήκαν κάθε φορά που βγήκε (για να ξαναβγεί ίδιο αν χαθεί το χαρτί)· τα 10 τελευταία ανά έντυπο
 type RepHist = { at: string; date: ISODate; ids: (number | string)[]; n: number; file: string; sheets?: string[] };
-const HIST_MAX = 10;   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
+const HIST_MAX = 30;   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
 const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';

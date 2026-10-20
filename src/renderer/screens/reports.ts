@@ -4,7 +4,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { useNav, useStore } from '../store';
-import { usePrintFile } from '../common';
+import { PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
@@ -13,11 +13,11 @@ import { sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
 import { statusLbl } from '../../shared/ranks';
-import { blocksOf, type AppState } from '../../shared/domain';
+import { blocksOf, type AppState, type Person } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  CELLS, FIELDS, PRESETS, REP_CONDS, REP_KINDS, SPLITS, ST_CATS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   type BuildCol, type BuildOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -72,53 +72,83 @@ function useRunReport() {
   return go;
 }
 
-// Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά, ✕ αλλαγή ενός).
-// init: η κλήρωση που ήδη είδε (από τον οδηγό), αντί για νέα. Η κλήρωση ξαναγίνεται μόνο αν αλλάξουν οι υποψήφιοι
-// (ποιοι, όχι μια οποιαδήποτε αλλαγή στα δεδομένα), το πόσοι ή το ⟳: αλλιώς χάνονταν οι αλλαγές με ✕.
+// Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά όλοι ή ένας, ✕ βγάλ' τον,
+// και όποιον θέλεις με το όνομα). init: η κλήρωση που ήδη είδε (από τον οδηγό), αντί για νέα. Αν αλλάξουν τα φίλτρα ή
+// το πόσοι, η κλήρωση κρατά όσους περνούν ακόμα· από την αρχή γίνεται μόνο με «⟳ Ξανά τυχαία».
 function usePick(r: Report, d: string, init?: (number | string)[] | null) {
   const { state } = useStore(); const toast = useToast();
   const pk = JSON.stringify(r.pick);
-  const pool = useMemo(() => candidates(state, r, d), [state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const poolKey = useMemo(() => pool.map(x => x.id).join(), [pool]);
+  const random = r.pick.mode === 'random'; const fair = random && !!r.pick.fair; const gap = random ? r.pick.gap || 0 : 0;
+  const manual = manualKind(r.kind);
+  // «όχι όσοι βγήκαν τις τελευταίες Ν μέρες»: από το Ιστορικό του εντύπου
+  const [hist, setHist] = useState<RepHistEntry[] | null>(null);
+  useEffect(() => { if (!gap) { setHist(null); return; } let live = true; window.api.repHist(r.id).then(h => { if (live) setHist(h || []); }, () => { if (live) setHist([]); }); return () => { live = false; }; }, [gap, r.id]);
+  const recent = useMemo(() => (gap && hist ? recentIds(hist, d, gap) : null), [gap, hist, d]);
+  const always = useMemo(() => alwaysOf(state, r), [state, r.kind, pk]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const pool = useMemo(() => { const c = candidates(state, r, d); return recent ? c.filter(x => !recent.has(x.id)) : c; }, [state, r.kind, pk, d, recent]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const poolKey = useMemo(() => pool.map(x => x.id).join() + '|' + always.map(x => x.id).join(), [pool, always]);
   const [seed, setSeed] = useState(0); const [rand, setRand] = useState<Row[]>([]);
-  const initRef = useRef(init && init.length ? init : null);
-  const random = r.pick.mode === 'random'; const fair = random && !!r.pick.fair;
+  const initRef = useRef(init && init.length ? init : null); const seedRef = useRef(-1);
+  const added = useRef(new Set<number | string>());   // όσοι μπήκαν με το όνομα: μένουν όταν αλλάζουν τα φίλτρα
   // «Πρώτα όσοι βγήκαν λιγότερες φορές»: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο (από τον main, ανά ΕΣΣΟ)
   const [times, setTimes] = useState<Record<string, number> | null>(null);
   useEffect(() => { if (!fair) { setTimes(null); return; } let live = true; window.api.repTimes(r.id).then(t => { if (live) setTimes(t || {}); }, () => { if (live) setTimes({}); }); return () => { live = false; }; }, [fair, r.id]);
-  const ready = !fair || !!times;
+  const ready = (!fair || !!times) && (!gap || !!hist);
   useEffect(() => {
     if (!random || !ready) return;
     const keep = initRef.current; initRef.current = null;
-    const got = keep && keepDraw(pool, keep); if (got) { setRand(got); return; }
-    setRand(pickRandom(pool, r.pick.n || 0, !!r.pick.even, Math.random, fair ? times! : undefined));
+    const got = keep && keepDraw(pool, keep, manual ? state.people : []); if (got) { setRand(got); seedRef.current = seed; return; }
+    const tm = fair ? times! : undefined; const n = r.pick.n || 0;
+    if (seedRef.current === seed) {
+      const nv = new Set(r.pick.never || []);
+      setRand(prev => refillDraw(prev, [...always, ...prev.filter(x => added.current.has(x.id) && !nv.has(x.id as number) && !always.some(a => a.id === x.id))], pool, n, !!r.pick.even, Math.random, tm));
+    } else { seedRef.current = seed; added.current.clear(); setRand(drawRows(always, pool, n, !!r.pick.even, Math.random, tm)); }
   }, [poolKey, random, r.pick.n, r.pick.even, seed, ready, times]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // όχι τυχαίοι: όσοι πρόσθεσες ή έβγαλες αυτή τη φορά
+  const [extra, setExtra] = useState<number[]>([]); const [drop, setDrop] = useState<(number | string)[]>([]);
   // οι τυχαίοι με τα τωρινά τους στοιχεία (η κλήρωση κρατά μόνο ποιοι)
   const rows = useMemo(() => {
-    if (!random) return rowsOf(state, r, d);
-    const by = new Map(pool.map(x => [x.id, x]));
-    return sortRows(rand.map(x => by.get(x.id) || x), r.sort, state, r.kind);
-  }, [random, rand, pool, r.sort, state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
+    const pm = new Map<number | string, Row>([...state.people, ...pool].map(x => [x.id, x]));
+    if (!random) {
+      const base = rowsOf(state, r, d).filter(x => !drop.includes(x.id)); const have = new Set(base.map(x => x.id));
+      const add = extra.filter(id => !have.has(id)).map(id => pm.get(id)).filter((x): x is Row => !!x);
+      return add.length ? sortRows([...base, ...add], r.sort, state, r.kind) : base;
+    }
+    return sortRows(rand.map(x => pm.get(x.id) || x), r.sort, state, r.kind);
+  }, [random, rand, pool, r.sort, state, r.kind, pk, d, extra, drop]);   // eslint-disable-line react-hooks/exhaustive-deps
   const replace = (id: number | string) => {
     const i = rand.findIndex(x => x.id === id); if (i < 0) return;
     const nx = replaceOne(rand, i, pool, Math.random, fair && times ? times : undefined);
     if (nx) setRand(nx); else toast({ text: 'Δεν υπάρχει άλλος που να περνά τα φίλτρα.' });
   };
-  return { pool, rows, random, times: fair ? times : null, reroll: () => setSeed(x => x + 1), replace };
+  const remove = (id: number | string) => { if (random) setRand(x => x.filter(y => y.id !== id)); else { setDrop(x => [...x, id]); setExtra(x => x.filter(y => y !== id)); } };
+  const add = (id: number) => {
+    const p = state.people.find(x => x.id === id); if (!p) return;
+    if (random) { added.current.add(id); setRand(x => (x.some(y => y.id === id) ? x : [...x, p])); } else { setExtra(x => [...x, id]); setDrop(x => x.filter(y => y !== id)); }
+  };
+  return { pool, rows, random, manual, times: fair ? times : null, recent: recent ? recent.size : 0, reroll: () => setSeed(x => x + 1), replace, remove, add };
 }
 
-const PickRow = memo(function PickRow({ x, i, kind, onX, times }: P) {
-  const t = times ? times[x.id] || 0 : -1;
-  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nameOf(x) || '(κενή θέση)'}</b><small>${[x.rank, kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
+const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times }: P) {
+  const t = times ? times[x.id] || 0 : -1; const nm = nameOf(x);
+  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small>${[x.rank, kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
     kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ')}</small>
-    ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλαξε τον ' + nameOf(x)} data-tip="Βάλε άλλον τυχαίο στη θέση του" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</li>`;
+    <span className="rep-picks__acts">
+      ${onNever && html`<button type="button" className="rep-picks__never" aria-label=${'Ποτέ ο ' + nm} data-tip="Να μη μπαίνει ποτέ σε αυτό το έντυπο" onClick=${() => onNever(x.id)}>Ποτέ</button>`}
+      ${onSwap && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλος τυχαίος αντί για ' + nm} data-tip="Άλλος τυχαίος στη θέση του" onClick=${() => onSwap(x.id)}>⟳</button>`}
+      ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Βγάλε τον ' + nm} data-tip="Βγάλ' τον (αυτή τη φορά)" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</span></li>`;
 });
-function PickList({ p, kind }: P) {
+// onNever: «Ποτέ σε αυτό το έντυπο» (ο οδηγός ή το «Βγάλε…» το κρατούν στο έντυπο)
+function PickList({ p, kind, onNever }: P) {
   const who = rowNoun(kind);
+  const inList = useMemo(() => new Set(p.rows.map((x: Row) => x.id)), [p.rows]);
+  const na = useCallback((x: Person) => (inList.has(x.id) ? 'Είναι ήδη μέσα' : null), [inList]);
   return html`<div className="rep-picks">
-    <div className="rep-picks__head"><b>${p.rows.length} ${who}</b><span className="muted">${p.random ? 'τυχαία από ' + p.pool.length + ' που περνούν τα φίλτρα' : p.rows.length < p.pool.length ? 'από ' + p.pool.length + ' που περνούν τα φίλτρα' : ''}</span>
-      ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση">⟳ Ξανά τυχαία<//>`}</div>
-    ${p.rows.length ? html`<ol className="rep-picks__list">${p.rows.map((x: Row, i: number) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} times=${p.times} onX=${p.random ? p.replace : null}/>`)}</ol>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
+    <div className="rep-picks__head"><b>${p.rows.length} ${who}</b><span className="muted">${p.random ? 'τυχαία από ' + p.pool.length + ' που περνούν τα φίλτρα' : p.rows.length < p.pool.length ? 'από ' + p.pool.length + ' που περνούν τα φίλτρα' : ''}${p.recent ? ' (εκτός ' + p.recent + ' που βγήκαν πρόσφατα)' : ''}</span>
+      ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση για όλους">⟳ Ξανά τυχαία<//>`}</div>
+    ${p.rows.length ? html`<ol className="rep-picks__list">${p.rows.map((x: Row, i: number) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} times=${p.times}
+      onSwap=${p.random ? p.replace : null} onX=${p.random || p.manual ? p.remove : null} onNever=${p.manual && onNever ? onNever : null}/>`)}</ol>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
+    ${p.manual && html`<div className="rep-picks__add"><${PersonPicker} placeholder="Βάλε συγκεκριμένο: επώνυμο, όνομα ή ΑΣΜ…" unavailable=${na} onChange=${(id: number) => p.add(id)}/></div>`}
   </div>`;
 }
 
@@ -260,10 +290,19 @@ export function ReportsScreen() {
 
 // Πριν βγει: ποια μέρα (αν ρωτά) και ποιοι τυχαίοι (με ✕ και «Ξανά τυχαία»)
 function RunDialog({ r, print, init, onClose, onDone }: P) {
-  const { state, today, tomorrow } = useStore(); const runReport = useRunReport();
+  const { state, today, tomorrow, run } = useStore(); const runReport = useRunReport(); const toast = useToast();
   const [d, setD] = useState(init?.d || repDate(r, today));
   const [n, setN] = useState(r.pick.n || 10);
-  const rr = useMemo(() => ({ ...r, pick: { ...r.pick, n } }), [r, n]);
+  const [never, setNever] = useState<number[]>(r.pick.never || []);
+  const rr = useMemo(() => ({ ...r, pick: { ...r.pick, n, never } }), [r, n, never]);
+  // «Ποτέ»: φεύγει τώρα και μένει στο έντυπο για τις επόμενες φορές
+  const onNever = async (id: number) => {
+    const nv = [...never, id]; setNever(nv);
+    const reps = repsOf(state); const cur = reps.find(x => x.id === r.id); if (!cur) return;
+    const who = state.people.find(x => x.id === id);
+    if (await run({ t: 'setSettings', settings: { reports: reps.map(x => (x.id === r.id ? { ...x, pick: { ...x.pick, never: nv, always: (x.pick.always || []).filter(y => y !== id) } } : x)) }, text: 'Ποτέ στο έντυπο «' + r.name + '»' }, false))
+      toast({ text: (who ? who.last + ' ' + who.first : 'Αυτός') + ': δεν θα μπαίνει ποτέ στο «' + r.name + '». Το αλλάζεις από «Αλλαγή» › Ποιοι μπαίνουν.' });
+  };
   const p = usePick(rr, d, init?.ids);
   const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr)) onDone(); };
   return html`<${Dialog} size="lg" title=${r.name} description=${pickText(rr, state)} onClose=${onClose} footer=${html`
@@ -276,18 +315,18 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
         <input type="date" className="ui-input rep-date" aria-label="Ημερομηνία" value=${d} onChange=${(e: any) => e.target.value && setD(e.target.value)}/></div></div>
       ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
     </div>
-    <${PickList} p=${p} kind=${r.kind}/>
-    <p className="note">${p.random ? 'Βγαίνουν ακριβώς αυτοί που βλέπεις (με ✕ αλλάζεις έναν). ' : ''}${outPlan(state, { ...rr, out: print ? 'print' : rr.out }, p.rows, d).text}</p>
+    <${PickList} p=${p} kind=${r.kind} onNever=${onNever}/>
+    <p className="note">${p.random || p.manual ? 'Βγαίνουν ακριβώς αυτοί που βλέπεις. ' : ''}${outPlan(state, { ...rr, out: print ? 'print' : rr.out }, p.rows, d).text}</p>
   <//>`;
 }
 
-// Ιστορικό εκδόσεων: οι 10 τελευταίες φορές, με «Ξαναβγάλε» (ίδιοι, ίδια μέρα, με τα τωρινά στοιχεία τους)
+// Ιστορικό εκδόσεων: οι 30 τελευταίες φορές, με «Ξαναβγάλε» (ίδιοι, ίδια μέρα, με τα τωρινά στοιχεία τους)
 function HistDialog({ r, onClose }: P) {
   const { state, today } = useStore(); const runReport = useRunReport(); const printFile = usePrintFile();
   const [list, setList] = useState<RepHistEntry[] | null>(null);
   useEffect(() => { window.api.repHist(r.id).then(setList, () => setList([])); }, [r.id]);
   const again = async (h: RepHistEntry) => { if (await runReport(state, r, h.ids, h.date, false, false, true)) onClose(); };
-  return html`<${Dialog} size="lg" title=${'Ιστορικό: ' + r.name} description="Οι 10 τελευταίες φορές που βγήκε. «Ξαναβγάλε» φτιάχνει ξανά το έντυπο με τους ίδιους και για την ίδια μέρα, με τα τωρινά τους στοιχεία." onClose=${onClose}
+  return html`<${Dialog} size="lg" title=${'Ιστορικό: ' + r.name} description="Οι τελευταίες φορές που βγήκε (έως 30). «Ξαναβγάλε» φτιάχνει ξανά το έντυπο με τους ίδιους και για την ίδια μέρα, με τα τωρινά τους στοιχεία." onClose=${onClose}
     footer=${html`<${Button} data-autofocus="" onClick=${onClose}>Κλείσιμο<//>`}>
     ${!list ? html`<div className="empty">Φορτώνει…</div>` : !list.length ? html`<div className="empty">Δεν έχει βγει ακόμα.</div>`
       : html`<table className="rep-table"><thead><tr><th>Πότε</th><th>Για</th><th>Πόσοι</th><th>Αρχείο</th><th></th></tr></thead><tbody>${list.map((h, i) => html`<tr key=${i}>
@@ -341,11 +380,13 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
     upd({ sheet: x.insp.sheet, head: x.insp.head, cols: colsFrom(x.insp), cells: [], name: r.name || x.tpl.name });
     setStep(2);
   };
-  const startBuild = (o: BuildOpts, name: string) => { setMode('build'); setTpl(null); setInsp(null); setBuild(JSON.parse(JSON.stringify(o))); setNote(''); upd({ name: r.name || name, title: undefined, cells: [] }); setStep(2); };
+  // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
+  const [quick, setQuick] = useState(false);
+  const startBuild = (o: BuildOpts, name: string, jump = false) => { setMode('build'); setTpl(null); setInsp(null); setBuild(JSON.parse(JSON.stringify(o))); setNote(''); upd({ name: r.name || name, title: undefined, cells: [] }); setQuick(jump); setStep(jump ? 4 : 2); };
   useEffect(() => {
     if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true); else setStep(1); }
     else if (start === 'upload') upload();
-    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : ''); }
+    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p); }
     else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)); } }
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
@@ -374,7 +415,12 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const ids = useMemo(() => p.rows.map(x => x.id), [p.rows]);
   const raw = mode === 'upload' && (view === 'tpl' || !!picking);
   const src: RepSource | null = step < 3 ? null : mode === 'build' && build ? { build } : mode === 'upload' && tpl ? { file: tpl.file } : null;
-  const prev = usePreview(src, r, ids, d, raw);
+  // χωρισμένο ανά θάλαμο/ουλαμό/Σ.Ι.: η προεπισκόπηση δείχνει την ομάδα που διαλέγεις
+  const groups = useMemo(() => (r.kind !== 'cadre' && r.split && r.split !== 'none' ? groupsOf(state, r.kind, p.rows, r.split) : []), [state, r.kind, r.split, p.rows]);
+  const [pvG, setPvG] = useState('');
+  const g = groups.find(x => x.key === pvG) || groups[0];
+  const pvIds = useMemo(() => (g ? g.rows.map(x => x.id) : ids), [g, ids]);
+  const prev = usePreview(src, r, pvIds, d, raw);
   const onPick = async (ref: string) => {
     if (!picking || !tpl) return;
     if (picking === '#head') { setPicking(null); await inspect(tpl, r.kind, r.sheet, +ref.replace(/^[A-Z]+/, '')); return; }
@@ -414,6 +460,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const foot = html`<span className="rep-wiz__why">${missing(step + 1)}</span>
     <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
     ${step > 1 && html`<${Button} variant="outline" onClick=${() => setStep(step - 1)}>Πίσω<//>`}
+    ${step === 4 && html`<${Button} variant="outline" disabled=${busy || !canGo(6)} data-tip=${'Χωρίς το βήμα 5: ' + outText(r)} onClick=${() => save(true)}>Αποθήκευση και Βγάλε<//>`}
     ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} data-tip=${missing(step + 1) || undefined} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
       : html`<${Button} variant="outline" disabled=${busy || !canGo(6)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(6)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
   const showPv = step === 3 || step === 5;
@@ -436,12 +483,14 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
           }}/>`}
         ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
           signers=${signers} setSigners=${setSigners} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
+        ${step === 4 && quick && html`<${Alert} tone="info">Ξεκίνησες από το έτοιμο «${r.name}»: οι στήλες είναι έτοιμες. Διάλεξε ποιοι μπαίνουν και πάτα «Αποθήκευση και Βγάλε», ή «Επόμενο» για το πού βγαίνει. Τις στήλες τις αλλάζεις από το βήμα 3.<//>`}
         ${step === 4 && html`<${StepPick} r=${r} upd=${upd} p=${p}/>`}
         ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
       </div>
       ${showPv && html`<div className="rep-wiz__pv">
         ${prev.err && html`<${Alert} tone="bad">${prev.err}<//>`}
         ${picking && html`<div className="rep-pickhint" role="status"><b>Κάνε κλικ σε ένα κελί</b> ${picking === '#head' ? 'της γραμμής με τις επικεφαλίδες' : 'για «' + (cellOf(picking)?.label || '') + '»'} <${Button} size="sm" variant="ghost" onClick=${() => setPicking(null)}>Άκυρο<//></div>`}
+        ${groups.length > 1 && !raw && html`<div className="rep-chips rep-pvgroups" role="group" aria-label="Ποια ομάδα δείχνει η προεπισκόπηση">${groups.map(x => html`<button key=${x.key} type="button" className="ui-chip ui-chip--sm" aria-pressed=${x === g} onClick=${() => setPvG(x.key)}>${x.short} (${x.rows.length})</button>`)}</div>`}
         <${Preview} pv=${prev.pv} busy=${prev.busy} picking=${!!picking} head=${raw ? r.head : 0} marks=${raw ? [...r.cells.map(c => c.ref), ...(insp?.tags || []).map(t => t.ref)] : []} onPick=${onPick}/>
       </div>`}
     </div>
@@ -589,14 +638,20 @@ function StepPick({ r, upd, p }: P) {
         <div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${condVal(pk, c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setCond(pk, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
+      ${people && html`<div className="field-row">
+        <div className="field"><label className="field__label" htmlFor="p-always">Πάντα μέσα <small className="muted">(ό,τι κι αν λένε τα φίλτρα)</small></label><${PersonPicker} id="p-always" multiple=${true} value=${pk.always || []} onChange=${(always: number[]) => set({ always, never: (pk.never || []).filter(x => !always.includes(x)) })}/></div>
+        <div className="field"><label className="field__label" htmlFor="p-never">Ποτέ σε αυτό το έντυπο</label><${PersonPicker} id="p-never" multiple=${true} value=${pk.never || []} onChange=${(never: number[]) => set({ never, always: (pk.always || []).filter(x => !never.includes(x)) })}/></div>
+      </div>`}
       ${counted && html`<div className="rep-opts"><span className="field__label">Πόσοι</span><${Segmented} small=${true} value=${pk.mode} onChange=${setMode} items=${[{ value: 'all', label: 'Όλοι' }, { value: 'first', label: 'Οι πρώτοι Ν' }, { value: 'random', label: 'Ν τυχαίοι' }]}/>
         ${pk.mode !== 'all' && html`<input type="number" min="1" className="ui-input rep-n" aria-label="Πόσοι" value=${pk.n || 10} onChange=${(e: any) => set({ n: Math.max(1, +e.target.value || 1) })}/>`}
         ${pk.mode === 'random' && soldiers && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.even} onChange=${(e: any) => set({ even: e.target.checked })}/>Ισομερώς από κάθε θάλαμο</label>`}</div>`}
       ${pk.mode === 'random' && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.fair} onChange=${(e: any) => set({ fair: e.target.checked })}/>Πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (η μέτρηση ξεκινά από την αρχή με τη Νέα ΕΣΣΟ)</label>`}
-      ${pk.mode === 'random' && html`<${Alert} tone="info"><b>Πώς δουλεύει η κλήρωση.</b> Δεξιά είναι μια κλήρωση: με ✕ αλλάζεις έναν, με «⟳ Ξανά τυχαία» όλους. <b>Αυτοί ακριβώς</b> βγαίνουν αν πατήσεις «Αποθήκευση και Βγάλε». Τις επόμενες φορές, από το «Βγάλε…» στη λίστα, γίνεται νέα κλήρωση και τη βλέπεις (και την αλλάζεις) πριν βγει.<//>`}
+      ${pk.mode === 'random' && html`<div className="rep-inline"><label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.gap} onChange=${(e: any) => set({ gap: e.target.checked ? 1 : undefined })}/>Όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες</label>
+        <input type="number" min="1" max="30" className="ui-input rep-n" aria-label="Μέρες" disabled=${!pk.gap} value=${pk.gap || 1} onChange=${(e: any) => set({ gap: Math.min(30, Math.max(1, +e.target.value || 1)) })}/><span>${(pk.gap || 1) === 1 ? 'μέρα' : 'μέρες'}</span></div>`}
+      ${pk.mode === 'random' && html`<${Alert} tone="info"><b>Πώς δουλεύει η κλήρωση.</b> Δεξιά είναι μια κλήρωση: με ⟳ δίπλα σε κάποιον μπαίνει άλλος τυχαίος, με ✕ τον βγάζεις, με «Βάλε συγκεκριμένο» βάζεις όποιον θέλεις, με «⟳ Ξανά τυχαία» αλλάζουν όλοι. Αν αλλάξεις φίλτρα ή πόσοι, μένουν όσοι περνούν ακόμα. <b>Αυτοί ακριβώς</b> βγαίνουν αν πατήσεις «Αποθήκευση και Βγάλε». Τις επόμενες φορές, από το «Βγάλε…» στη λίστα, γίνεται νέα κλήρωση και τη βλέπεις (και την αλλάζεις) πριν βγει.<//>`}
       <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${sortsOf(r.kind)}/></div>
     </div>
-    <${PickList} p=${p} kind=${r.kind}/>
+    <${PickList} p=${p} kind=${r.kind} onNever=${(id: number) => set({ never: [...(pk.never || []), id], always: (pk.always || []).filter(x => x !== id) })}/>
   </div>`;
 }
 

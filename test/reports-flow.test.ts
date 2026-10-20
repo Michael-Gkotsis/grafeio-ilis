@@ -6,7 +6,7 @@ import { apply, type Ctx } from '../src/shared/commands';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport } from '../src/main/reports';
 import {
-  blankBuild, candidates, condVal, condsOf, dailyOk, defaultPick, groupsOf, keepDraw, outPlan, pickRandom, pickText, repFileName, replaceOne, rowsOf, setCond,
+  blankBuild, candidates, condVal, condsOf, dailyOk, defaultPick, drawRows, groupsOf, keepDraw, outPlan, pickRandom, pickText, recentIds, refillDraw, repFileName, replaceOne, rowsOf, setCond,
   type RepPick, type Report
 } from '../src/shared/reports';
 import type { AppState, Person } from '../src/shared/domain';
@@ -168,5 +168,57 @@ describe('Έντυπα: πώς βγαίνουν', () => {
       for (const p of rows.filter(x => (x as Person).room === room)) expect(vals).toContain(p.last + ' ' + p.first);
       for (const p of rows.filter(x => (x as Person).room !== room)) expect(vals).not.toContain(p.last + ' ' + p.first);
     }
+  });
+});
+
+describe('Έντυπα: όποιον θέλεις με το όνομα, «ποτέ», «όχι ξανά τόσο σύντομα»', () => {
+  const name = (id: number) => S.people.find(p => p.id === id)!;
+  it('«Ποτέ σε αυτό το έντυπο»: δεν μπαίνει ούτε στους υποψήφιους ούτε στις Καταστάσεις', () => {
+    const c = ids(candidates(S, rep({ pick: pk({ never: [9, 10] }) }), D));
+    expect(c).not.toContain(9); expect(c).not.toContain(10); expect(c).toContain(11);
+    const st = candidates(S, rep({ kind: 'status', pick: pk({ cats: ['med'], never: [3] }) }), D);
+    expect(st.map(x => (x as any).pid).sort()).toEqual([4, 6]);
+  });
+  it('«Πάντα μέσα»: μπαίνουν ό,τι κι αν λένε τα φίλτρα, πρώτοι στους «πρώτους Ν», όχι αν είναι και στο «Ποτέ»', () => {
+    const r = rep({ pick: pk({ need: ['med'], always: [20, 21] }) });
+    expect(ids(rowsOf(S, r, D))).toEqual([3, 4, 6, 20, 21]);
+    expect(ids(rowsOf(S, rep({ pick: pk({ mode: 'first', n: 2, need: ['med'], always: [20] }), sort: 'pick' }), D))).toContain(20);
+    expect(ids(rowsOf(S, rep({ pick: pk({ need: ['med'], always: [20], never: [20] }) }), D))).toEqual([3, 4, 6]);
+    expect(ids(rowsOf(S, rep({ kind: 'status', pick: pk({ cats: ['med'], always: [20] }) }), D).map(x => ({ id: (x as any).pid })))).not.toContain(20);
+  });
+  it('κλήρωση με «πάντα μέσα»: αυτοί και τυχαίοι μέχρι να γίνουν n', () => {
+    const pool = candidates(S, rep({ pick: pk({ need: ['present'] }) }), D);
+    const a = [name(1), name(2)];   // σε άδεια: εκτός φίλτρων, μπαίνουν γιατί είναι «πάντα μέσα»
+    const x = drawRows(a, pool, 6, false, seeded(3));
+    expect(x.length).toBe(6); expect(x.slice(0, 2).map(y => y.id)).toEqual([1, 2]);
+    expect(new Set(x.map(y => y.id)).size).toBe(6);
+    expect(drawRows(a, pool, 1, false, seeded(3)).length).toBe(2);   // οι «πάντα» μπαίνουν όλοι, ακόμα κι αν είναι παραπάνω από n
+  });
+  it('αλλαγή φίλτρων ή πόσοι: μένουν όσοι περνούν ακόμα, συμπληρώνονται ή κόβονται μέχρι n', () => {
+    const pool = candidates(S, rep({ pick: pk({ need: ['present'] }) }), D);
+    const first = drawRows([], pool, 6, false, seeded(5));
+    const smaller = pool.filter(p => p.id !== first[0].id);   // ο πρώτος βγαίνει από τα φίλτρα (π.χ. «Ποτέ»)
+    const re = refillDraw(first, [], smaller, 6, false, seeded(6));
+    expect(re.length).toBe(6); expect(re.map(y => y.id)).not.toContain(first[0].id);
+    expect(first.slice(1).every(y => re.some(z => z.id === y.id))).toBe(true);
+    expect(refillDraw(first, [], pool, 3, false, seeded(6)).map(y => y.id)).toEqual(first.slice(0, 3).map(y => y.id));
+    // όσοι μπήκαν με το όνομα κρατιούνται σαν «πάντα»
+    const kept = refillDraw([...first, name(1)], [name(1)], pool, 7, false, seeded(7));
+    expect(kept.map(y => y.id)).toContain(1); expect(kept.length).toBe(7);
+  });
+  it('«όχι όσοι βγήκαν τις τελευταίες Ν μέρες»: από το Ιστορικό, μόνο μέρες πριν από τη μέρα του εντύπου', () => {
+    const hist = [{ date: '2026-10-18', ids: [1, 2] }, { date: '2026-10-17', ids: [3] }, { date: '2026-10-16', ids: [4] }, { date: D, ids: [5] }, { date: '2026-10-20', ids: [6] }];
+    expect([...recentIds(hist, D, 1)].sort()).toEqual([1, 2]);
+    expect([...recentIds(hist, D, 2)].sort()).toEqual([1, 2, 3]);
+    expect([...recentIds(hist, D, 3)].sort()).toEqual([1, 2, 3, 4]);
+    expect(recentIds([], D, 3).size).toBe(0);
+  });
+  it('η κλήρωση με κάποιον που μπήκε με το όνομα ξαναβρίσκεται (Ρώτα κάθε φορά)', () => {
+    const pool = candidates(S, rep({ pick: pk({ need: ['present'] }) }), D);
+    expect(keepDraw(pool, [pool[0].id, 1])).toBeNull();
+    expect(keepDraw(pool, [pool[0].id, 1], S.people)!.map(y => y.id)).toEqual([pool[0].id, 1]);
+  });
+  it('το κείμενο λέει και τα νέα', () => {
+    expect(pickText(rep({ pick: pk({ mode: 'random', n: 3, gap: 2, always: [1], never: [2, 3] }) }), S)).toBe('3 τυχαίοι από όλους (όχι όσοι βγήκαν τις τελευταίες 2 μέρες, 1 πάντα μέσα, 2 ποτέ)');
   });
 });

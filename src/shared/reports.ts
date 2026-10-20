@@ -105,6 +105,8 @@ export interface RepPick {
   view?: string;                              // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
   noDuty?: boolean;                           // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
   need?: RepCond[]; not?: RepCond[];          // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
+  always?: number[]; never?: number[];        // στρατιώτες: πάντα μέσα (ό,τι κι αν λένε τα φίλτρα) / ποτέ σε αυτό το έντυπο
+  gap?: number;                               // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
   si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
   mode: 'all' | 'first' | 'random'; n?: number;
   even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
@@ -369,6 +371,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   const { need, not } = condsOf(pk);
   if (need.length || not.length) { const t = condTest(s, d); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
   if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.post, p.role].join(' ')).includes(normGreek(view.q))));
+  if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
   if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }
   return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
@@ -406,8 +409,9 @@ export function pickRandom<T extends Row>(list: T[], n: number, even = false, rn
 // Ένας άλλος τυχαίος στη θέση του i (από όσους δεν είναι ήδη μέσα, πρώτα όσοι βγήκαν λιγότερες φορές)· null: δεν υπάρχει άλλος
 // Η κλήρωση που ήδη είδε ο χρήστης (π.χ. στον οδηγό, με τις αλλαγές με ✕), ξανά από τους τωρινούς υποψήφιους.
 // null αν κάποιος δεν περνά πια τα φίλτρα: τότε γίνεται νέα κλήρωση.
-export function keepDraw(pool: Row[], ids: (number | string)[]): Row[] | null {
-  const by = new Map(pool.map(x => [x.id, x])); const got: Row[] = [];
+// more: όσοι μπήκαν με το όνομα (μπορεί να μην περνούν τα φίλτρα)
+export function keepDraw(pool: Row[], ids: (number | string)[], more: Row[] = []): Row[] | null {
+  const by = new Map([...more, ...pool].map(x => [x.id, x])); const got: Row[] = [];
   for (const id of ids) { const x = by.get(id); if (!x) return null; got.push(x); }
   return got;
 }
@@ -464,8 +468,35 @@ export function sortRows<T extends Row>(rows: T[], sort: RepSort, s: AppState, k
   return [...rows].sort(byName);
 }
 // Τα άτομα του εντύπου, χωρίς τυχαία επιλογή (αυτή γίνεται στην οθόνη, για να βγει ό,τι είδες)
+// Στρατιώτες που διαλέγεις με το όνομα: μόνο στα έντυπα με μία γραμμή ανά στρατιώτη
+export const manualKind = (k: RepKind) => k === 'people' || k === 'weapon';
+// «Πάντα μέσα»: μπαίνουν ό,τι κι αν λένε τα φίλτρα (όχι όσοι είναι και στο «Ποτέ»)
+export function alwaysOf(s: AppState, r: Pick<Report, 'kind' | 'pick'>): Person[] {
+  if (!manualKind(r.kind) || !r.pick.always?.length) return [];
+  const pm = personMap(s.people); const nv = new Set(r.pick.never || []);
+  return r.pick.always.map(id => pm.get(id)).filter((p): p is Person => !!p && !nv.has(p.id));
+}
+// Κλήρωση: οι «πάντα μέσα» και τυχαίοι μέχρι να γίνουν n
+export function drawRows(always: Row[], pool: Row[], n: number, even = false, rnd: () => number = Math.random, times?: Record<string, number>): Row[] {
+  const ids = new Set(always.map(x => x.id));
+  return [...always, ...pickRandom(pool.filter(x => !ids.has(x.id)), Math.max(0, n - always.length), even, rnd, times)];
+}
+// Όταν αλλάζουν τα φίλτρα ή το πόσοι, η κλήρωση κρατά όσους περνούν ακόμα και συμπληρώνει (ή κόβει) μέχρι n
+export function refillDraw(prev: Row[], always: Row[], pool: Row[], n: number, even = false, rnd: () => number = Math.random, times?: Record<string, number>): Row[] {
+  const by = new Map(pool.map(x => [x.id, x])); const aIds = new Set(always.map(x => x.id));
+  const kept = [...always, ...prev.filter(x => !aIds.has(x.id) && by.has(x.id)).map(x => by.get(x.id)!)].slice(0, Math.max(n, always.length));
+  const used = new Set(kept.map(x => x.id));
+  return [...kept, ...pickRandom(pool.filter(x => !used.has(x.id)), Math.max(0, n - kept.length), even, rnd, times)];
+}
+// Όσοι βγήκαν σε αυτό το έντυπο τις gap μέρες πριν από τη d (το Ιστορικό κρατά ποιοι και για ποια μέρα)
+export function recentIds(hist: { date: ISODate; ids: (number | string)[] }[], d: ISODate, gap: number): Set<number | string> {
+  const from = addDays(d, -Math.max(0, gap)); const out = new Set<number | string>();
+  for (const h of hist) if (h.date < d && h.date >= from) h.ids.forEach(i => out.add(i));
+  return out;
+}
 export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'>, d: ISODate): Row[] {
-  const c = candidates(s, r, d);
+  const a = alwaysOf(s, r); const aIds = new Set(a.map(p => p.id));
+  const c = [...a, ...candidates(s, r, d).filter(x => !aIds.has(x.id as number))];
   const n = r.pick.mode === 'all' ? c.length : Math.max(0, r.pick.n || 0);
   return sortRows(r.pick.mode === 'first' ? c.slice(0, n) : c, r.sort, s, r.kind);
 }
@@ -511,7 +542,10 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
   const from = pk.from === 'inactive' ? 'τους εκτός δύναμης' : pres ? (cadre ? 'τα παρόντα στελέχη' : 'τους παρόντες') : cadre ? 'όλα τα στελέχη' : 'όλους';
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
   const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
-  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false))].filter(Boolean).join(', ');
+  const man = manualKind(r.kind);
+  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)),
+    pk.mode === 'random' && pk.gap ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες') : '',
+    man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '', man && pk.never?.length ? pk.never.length + ' ποτέ' : ''].filter(Boolean).join(', ');
   const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
   return head + (extra ? ' (' + extra + ')' : '');
 }
