@@ -4,6 +4,7 @@
 import { HK } from '../../shared/unit';
 import { useMemo } from 'react';
 import { html, Badge, Button, Card, useToast } from '../ui';
+import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { TYPES, type BlockDef, type Person, type TypeKey } from '../../shared/domain';
 import { itemKey, listRows, type ListItem, type UserLists } from '../../shared/ranks';
@@ -77,9 +78,9 @@ export function StatCard() {
     if (r.type === 'PUN') return html`<td className="muted" data-tip="Οι ποινές μετρούν στη στήλη «Τιμ.» (κωλυόμενοι)">Τιμ.</td>`;
     if (!r.med) return html`<td className="muted" data-tip=${r.type === 'EY' ? 'Κωλυόμενοι: ελεύθεροι υπηρεσίας' : 'Παρών: δεν μετρά σε στήλη'}>${r.type === 'EY' ? 'ΕΥ' : '—'}</td>`;
     const used = usedMed.has(itemKey(r.own).replace(/[^Α-ΩA-Z0-9]/g, ''));
-    return html`<td><select className="ui-input statsel" aria-label=${r.own + ': ' + HK()} value=${r.type === 'EY' ? HK_EY : ''} disabled=${used}
+    return html`<td><${Select} className="ui-input statsel" aria-label=${r.own + ': ' + HK()} value=${r.type === 'EY' ? HK_EY : ''} disabled=${used}
       data-tip=${used ? 'Το έχουν ήδη κάποιοι, οπότε η ' + HK() + ' μένει όπως είναι. Για άλλη στήλη φτιάξε νέο ιατρικό στις Λίστες.' : 'Πού μετρά στην ' + HK()} onChange=${(e: any) => setHk(r, e.target.value)}>
-      <option value=${HK_EY}>ΕΥ</option><option value="">— (παρών)</option></select></td>`;
+      <option value=${HK_EY}>ΕΥ</option><option value="">— (παρών)</option><//></td>`;
   };
   const span = cols.length + 5;
 
@@ -99,7 +100,7 @@ export function StatCard() {
               : html`<b data-tip=${isPun ? 'Κάθε ποινή, εκτός αν ορίσεις κάτι άλλο για το είδος της' : TYPES[type].long}>${name(type, own)}</b>`}</td>
             <td className="num">${n || ''}</td>
             ${cols.map(b => { const c = statCellOf(lists, type, own || undefined, b); return html`<td key=${b.id} className=${c.from === (own ? 'own' : 'row') ? 'is-set' : ''}>
-              <select className=${'ui-input statsel is-' + c.v} aria-label=${name(type, own) + ': ' + b.name} value=${c.v} onChange=${(e: any) => setCell(type, own, b, e.target.value)}>${OPTS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}</select></td>`; })}
+              <${Select} className=${'ui-input statsel is-' + c.v} aria-label=${name(type, own) + ': ' + b.name} value=${c.v} onChange=${(e: any) => setCell(type, own, b, e.target.value)}>${OPTS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}<//></td>`; })}
             <td className=${o.from === (own ? 'own' : 'row') ? 'is-set' : ''}>${isPun
               ? html`<input type="checkbox" className="ui-check" aria-label=${name(type, own) + ': έξοδος'} checked=${false} disabled data-tip="Η ποινή κόβει πάντα την έξοδο"/>`
               : html`<input type="checkbox" className="ui-check" aria-label=${name(type, own) + ': έξοδος'} checked=${o.ok} onChange=${(e: any) => setOut(type, own, e.target.checked)}/>`}</td>

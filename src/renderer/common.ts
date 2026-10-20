@@ -2,6 +2,7 @@
 import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, Kbd, Segmented, Strip } from './ui';
+import { Combo, Select, useFloat } from './select';
 import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
@@ -32,25 +33,6 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
   return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => (MED_LIKE.includes(x.type) && statusLbl(x, lists) !== TYPES[x.type].label ? statusLbl(x, lists) : TYPES[x.type].long) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
 });
 
-// Λίστα που «επιπλέει» κάτω από το πεδίο (ή από πάνω, αν δεν χωρά): δεν κόβεται από παράθυρα, κάρτες ή το κάτω μέρος της οθόνης
-function useFloat(ref: { current: HTMLElement | null }, open: boolean) {
-  const [pos, setPos] = useState<Record<string, number> | null>(null);
-  useLayoutEffect(() => {
-    if (!open) { setPos(null); return; }
-    const upd = () => {
-      const el = ref.current; if (!el) return;
-      const r = el.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 12, above = r.top - 12;
-      const up = below < 220 && above > below;
-      const maxHeight = Math.max(120, Math.min(320, up ? above : below));
-      const vw = document.documentElement.clientWidth, width = Math.min(Math.max(r.width, 420), vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
-      setPos(up ? { left, width, bottom: vh - r.top + 4, maxHeight } : { left, width, top: r.bottom + 4, maxHeight });
-    };
-    upd();
-    window.addEventListener('scroll', upd, true); window.addEventListener('resize', upd);
-    return () => { window.removeEventListener('scroll', upd, true); window.removeEventListener('resize', upd); };
-  }, [open]);
-  return pos;
-}
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
 export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked }: P) {
   const { state, today } = useStore();
@@ -61,7 +43,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
   // όλοι όσοι ταιριάζουν, όχι μόνο οι πρώτοι 8 (Michael, 17/10: «να τους βγάζεις όλους στο search»)· η λίστα κυλά
   const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
-  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open); const list = useRef<HTMLUListElement>(null);
+  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open, 420); const list = useRef<HTMLUListElement>(null);
   // με τα βελάκια η επιλογή μένει μέσα στη λίστα που κυλά
   useEffect(() => { (list.current?.children[sel] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' }); }, [sel]);
   const pick = (i: number) => { const x = items[i]; if (!x) return; if (x.na) { if (onBlocked) { setOpen(false); setQ(''); onBlocked(x.p, x.na); } return; } if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
@@ -86,10 +68,10 @@ export function ChoiceField({ id, label, value, options, onChange, placeholder, 
   const known = !value || options.includes(value);
   const [typing, setTyping] = useState(!known);
   return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
-    <select id=${id} className="ui-input" value=${typing ? OTHER : value || ''} data-autofocus=${autoFocus ? '' : undefined}
+    <${Select} id=${id} className="ui-input" value=${typing ? OTHER : value || ''} data-autofocus=${autoFocus ? '' : undefined}
       onChange=${(e: any) => { const v = e.target.value; setTyping(v === OTHER); onChange(v === OTHER ? (known ? '' : value) : v); }}>
-      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER}>${otherLabel || 'Άλλο (γράψε το)…'}</option>
-    </select>
+      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER} data-keep>${otherLabel || 'Άλλο (γράψε το)…'}</option>
+    <//>
     ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label=${label + ' με το χέρι'} placeholder=${placeholder || ''} value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value)}/>`}
     ${typing && otherHelp && html`<span className="field__help">${otherHelp}</span>`}
   </div>`;
@@ -112,9 +94,8 @@ const COMMON_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '13:
 export function TimeField({ id, label, value, onChange, help }: P) {
   const bad = normTime(value) == null;
   return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
-    <input id=${id} className="ui-input" inputMode="numeric" autoComplete="off" list=${id + '-l'} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
+    <${Combo} id=${id} className="ui-input" inputMode="numeric" options=${COMMON_TIMES} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
       onChange=${(e: any) => onChange(e.target.value)} onBlur=${() => { const t = normTime(value); if (t != null && t !== value) onChange(t); }}/>
-    <datalist id=${id + '-l'}>${COMMON_TIMES.map(t => html`<option key=${t} value=${t}/>`)}</datalist>
     <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
 }
 // Τι κάνουν οι ώρες (Michael, 13/10 και 18/10): υπηρεσίες, έξοδος την ημέρα της επιστροφής, ΗΚΑΙ
@@ -131,7 +112,7 @@ export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, f
     ${mode === 'day' && html`<span className="field__help">Χωρίς ώρες στις Θέσεις και στο έντυπο, όπως η μαγειρεία.</span>`}
     ${mode === 'fixed' && fixed}
     ${mode === 'shift' && html`<div className="field-row" style=${{ alignItems: 'flex-start' }}>
-      <div className="field"><label className="field__label" htmlFor=${id + '-ev'}>Αλλάζει κάθε</label><select id=${id + '-ev'} className="ui-input" value=${sh.every} onChange=${(e: any) => setSh({ ...sh, every: +e.target.value })}>${SHIFT_EVERY.map(m => html`<option key=${m} value=${m}>${everyTxt(m)}</option>`)}</select></div>
+      <div className="field"><label className="field__label" htmlFor=${id + '-ev'}>Αλλάζει κάθε</label><${Select} id=${id + '-ev'} className="ui-input" value=${sh.every} onChange=${(e: any) => setSh({ ...sh, every: +e.target.value })}>${SHIFT_EVERY.map(m => html`<option key=${m} value=${m}>${everyTxt(m)}</option>`)}<//></div>
       <${TimeField} id=${id + '-from'} label="Από" value=${sh.from || ''} onChange=${(v: string) => setSh({ ...sh, from: v })} help=${'Κενό = ' + start + ', η αρχή της υπηρεσίας'}/>
       <${TimeField} id=${id + '-to'} label="Ως" value=${sh.to || ''} onChange=${(v: string) => setSh({ ...sh, to: v })} help=${'Κενό = ' + start + ' της επόμενης'}/></div>
       <div className="shiftprev">${slots.map((t: string[], i: number) => html`<div key=${i}><b>${labels[i]}</b><span>${t.map((x, j) => html`<span key=${j} className="nw mono">${x}</span>`)}</span><small>${t.length} ${t.length === 1 ? 'βάρδια' : 'βάρδιες'}</small></div>`)}</div>

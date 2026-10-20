@@ -3,6 +3,7 @@
 // ανήκει πού. Ο αριθμός θαλάμων γίνεται η λίστα του πεδίου «Θάλαμος» στη φόρμα στρατιώτη.
 import { useMemo, useState } from 'react';
 import { html, Alert, Button, Card, Logo, useToast } from '../ui';
+import { Select } from '../select';
 import { useStore } from '../store';
 import { makePlatoons, platoonsOf, roomCfg, type Person, type Platoon, type RoomSettings } from '../../shared/domain';
 import { BRAND_RANKS, DEFAULT_TITLE, LOGO_KINDS, appLogo, appTitle, type LogoKind } from '../../shared/brand';
@@ -85,9 +86,9 @@ export function RoomField({ id, value, onChange }: P) {
   if (value != null && !rooms.includes(value)) rooms.push(value);
   const unit = (r: number) => pl.find(u => u.rooms.includes(r))?.name;
   return html`<div className="field"><label className="field__label" htmlFor=${id}>Θάλαμος</label>
-    <select id=${id} className="ui-input" value=${value == null ? '' : String(value)} onChange=${(e: any) => onChange(e.target.value ? Number(e.target.value) : null)}>
+    <${Select} id=${id} className="ui-input" value=${value == null ? '' : String(value)} onChange=${(e: any) => onChange(e.target.value ? Number(e.target.value) : null)}>
       <option value="">—</option>${rooms.map(r => html`<option key=${r} value=${String(r)}>Θάλαμος ${r}${unit(r) ? ' · ' + unit(r) : ''}</option>`)}
-    </select></div>`;
+    <//></div>`;
 }
 
 // Εικόνα που ανέβασε ο χρήστης → τετράγωνο PNG 128×128 (μικρό, για να χωρά στις ρυθμίσεις)
@@ -133,7 +134,7 @@ export function BrandCard() {
   return html`<${Card} title="Τίτλος και λογότυπο">
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="br-rank">Βαθμός όποιου τη χρησιμοποιεί</label>
-        <select id="br-rank" className="ui-select" value=${rank} onChange=${(e: any) => setRank(e.target.value)}>${BRAND_RANKS.map(r => html`<option key=${r.rank} value=${r.rank}>${r.name} · «${r.title}»</option>`)}</select>
+        <${Select} id="br-rank" className="ui-select" value=${rank} onChange=${(e: any) => setRank(e.target.value)}>${BRAND_RANKS.map(r => html`<option key=${r.rank} value=${r.rank}>${r.name} · «${r.title}»</option>`)}<//>
         <span className="field__help">Αλλάζει τον τίτλο και, αν δεν διάλεξες άλλο, το λογότυπο.</span></div>
       <div className="field"><label className="field__label" htmlFor="br-title">Δικός σου τίτλος (προαιρετικά)</label>
         <input id="br-title" className="ui-input" value=${title} placeholder=${rk.title} maxLength=${40} onChange=${(e: any) => setTitle(e.target.value)}/>
