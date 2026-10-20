@@ -4,6 +4,7 @@
 // άλλο όνομα (lists.hkNames) χωρίς να αλλάξει το κλειδί της. Ανοίγει και από την ΗΚΑΙ (Michael, 18/10: «extend ή άλλο όνομα»).
 import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
+import { Select } from '../select';
 import { useStore } from '../store';
 import { guessHk, hkRowsOf, itemKey, listOf, optionsOf, type HkRowDef } from '../../shared/ranks';
 import { hkaiCounts, hkRankOf } from '../../shared/rules';
@@ -85,8 +86,8 @@ export function HkRowsCard({ bare }: { bare?: boolean }) {
       <div className="field-row">
         <div className="field"><label className="field__label" htmlFor="hr-n">Όνομα</label><input id="hr-n" className="ui-input" placeholder="π.χ. Λοχαγοί" value=${f.name} onChange=${(e: P) => setF({ ...f, name: e.target.value })}/></div>
         <div className="field" style=${{ flex: 'none' }}><span className="field__label">Ομάδα</span><${Segmented} value=${f.grp} onChange=${(grp: 'off' | 'nco') => setF({ ...f, grp, after: '' })} items=${GROUPS.map(([v, l]) => ({ value: v, label: l }))}/></div>
-        <div className="field"><label className="field__label" htmlFor="hr-a">Κάτω από</label><select id="hr-a" className="ui-input" value=${f.after} onChange=${(e: P) => setF({ ...f, after: e.target.value })}>
-          <option value="">${'Στο τέλος (πριν το ' + (f.grp === 'off' ? 'ΣΥΝΟΛΟ ΑΞΚΩΝ' : 'ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ') + ')'}</option>${groupRows(f.grp).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r, st)}</option>`)}</select></div>
+        <div className="field"><label className="field__label" htmlFor="hr-a">Κάτω από</label><${Select} id="hr-a" className="ui-input" value=${f.after} onChange=${(e: P) => setF({ ...f, after: e.target.value })}>
+          <option value="">${'Στο τέλος (πριν το ' + (f.grp === 'off' ? 'ΣΥΝΟΛΟ ΑΞΚΩΝ' : 'ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ') + ')'}</option>${groupRows(f.grp).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r, st)}</option>`)}<//></div>
       </div>
       <span className="field__label" style=${{ marginTop: '6px' }}>Βαθμοί που μετρούν εδώ</span>
       <div className="filters" style=${{ flexWrap: 'wrap', gap: '6px' }}>${allRanks.map(r => html`<button key=${r} type="button" className="ui-chip ui-chip--sm" aria-pressed=${f.ranks.includes(r)} onClick=${() => toggleRank(r)}>${r}</button>`)}</div>

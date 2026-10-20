@@ -3,6 +3,7 @@ import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
+import { Combo, Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
@@ -149,7 +150,7 @@ export function PeopleScreen() {
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
     } finally { setXl(false); }
   };
-  const dateSel = html`<select className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select>`;
+  const dateSel = html`<${Select} className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//>`;
   const grid = withSt ? GRID_ST : GRID;
   return html`<div>
     <${PageHeader} title="Δυναμολόγιο" sub=${'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα σε γραμμή για την καρτέλα του, ή επίλεξε πολλούς για μαζική δήλωση.'}>
@@ -160,8 +161,8 @@ export function PeopleScreen() {
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">+ Δήλωσε κατάσταση<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/>
-      <select className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => setRoom(e.target.value ? +e.target.value : null)}>
-        <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}</select>
+      <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => setRoom(e.target.value ? +e.target.value : null)}>
+        <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}<//>
       ${dateSel}</div>
     <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${ROSTER_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${!curView && filter === k} data-tip=${k === 'leave' || k === 'pun' ? (k === 'leave' ? 'Σε άδεια ' : 'Με ποινή ') + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}
       ${views.map((v, i) => html`<button key=${v.id} type="button" className=${cx('ui-chip', 'ui-chip--view', i === 0 && 'ui-chip--gap')} aria-pressed=${curView === v} data-tip="Αποθηκευμένη λίστα" onClick=${() => applyView(v)}>${Icon.star}${v.name}<span className="cnt">${viewN[i]}</span></button>`)}<//>
@@ -559,7 +560,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${isPun && max > 0 && html`<${Alert} tone="warn"><span>${punLbl(cmd.kind)} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
     ${dep && html`<span className="note">${daysBetween(cmd.from, cmd.to)} ${daysBetween(cmd.from, cmd.to) === 1 ? 'ημέρα' : 'ημέρες'} στέρηση εξόδου. Οι μέρες με υπηρεσία ή βραδινή εκπαίδευση δεν μετράνε: η λήξη μετακινείται μόνη της.</span>`}
     ${isPun && html`<div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><input id="dpby" className="ui-input" list="dpby-l" placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/><datalist id="dpby-l">${byList.map((x: string) => html`<option key=${x} value=${x}/>`)}</datalist></div>
+      <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><${Combo} id="dpby" className="ui-input" options=${byList} placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><input id="dpon" type="date" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
     <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Τον τιμωρήσαντα γράψε τον σε αιτιατική («ΛΧΙΑ ΔΟΚΙΜΙΟ») και στην ${HK()} μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
     <div className="field"><label className="field__label" htmlFor="dsn">${isPun ? 'Παρατήρηση' : 'Παρατήρηση (λόγος)'}</label><input id="dsn" className="ui-input" placeholder=${isPun ? 'Προαιρετικό, π.χ. αριθμός διαταγής' : 'Προαιρετικό, π.χ. γιατί ή αριθμός διαταγής'} value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/></div>

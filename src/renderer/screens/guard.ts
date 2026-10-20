@@ -2,6 +2,7 @@
 import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
+import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
@@ -56,7 +57,7 @@ function useDutyMonth() {
   return { ym, setYm, allM, setAllM, st, months };
 }
 type DutyMonth = ReturnType<typeof useDutyMonth>;
-const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: string; small?: boolean }) => html`<select className="ui-input" style=${{ flex: '0 0 ' + width, width, ...(small ? { height: '32px', fontSize: '13px' } : {}) }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${m.allM ? '' : m.ym} onChange=${(e: any) => { const v = e.target.value; m.setAllM(!v); if (v) m.setYm(v); }}><option value="">Όλοι οι μήνες</option>${m.months.map(x => html`<option key=${x} value=${x}>${monLbl(x)}</option>`)}</select>`;
+const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: string; small?: boolean }) => html`<${Select} className="ui-input" style=${{ flex: '0 0 ' + width, width, ...(small ? { height: '32px', fontSize: '13px' } : {}) }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${m.allM ? '' : m.ym} onChange=${(e: any) => { const v = e.target.value; m.setAllM(!v); if (v) m.setYm(v); }}><option value="">Όλοι οι μήνες</option>${m.months.map(x => html`<option key=${x} value=${x}>${monLbl(x)}</option>`)}<//>`;
 
 function DutyCheck({ onOpen, m }: P) {
   const { state, today } = useStore();
@@ -101,8 +102,8 @@ function DaysSelect({ id, value, onChange, opts, txt }: P) {
   const known = opts.some(([v]: [number]) => v === value);
   const [own, setOwn] = useState(!known);
   return html`<div className="field-row" style=${{ alignItems: 'center' }}>
-    <select id=${id} className="ui-input" value=${own ? 'own' : value} onChange=${(e: any) => { if (e.target.value === 'own') { setOwn(true); if (known) onChange(Math.max(1, value + 1)); } else { setOwn(false); onChange(+e.target.value); } }}>
-      ${opts.map(([v, l]: [number, string]) => html`<option key=${v} value=${v}>${l}</option>`)}<option value="own">${own ? txt(value) : 'Άλλο…'}</option></select>
+    <${Select} id=${id} className="ui-input" value=${own ? 'own' : value} onChange=${(e: any) => { if (e.target.value === 'own') { setOwn(true); if (known) onChange(Math.max(1, value + 1)); } else { setOwn(false); onChange(+e.target.value); } }}>
+      ${opts.map(([v, l]: [number, string]) => html`<option key=${v} value=${v}>${l}</option>`)}<option value="own" data-keep>${own ? txt(value) : 'Άλλο…'}</option><//>
     ${own && html`<input type="number" min="1" max=${MAX_DAYS} className="ui-input" style=${{ maxWidth: '90px' }} aria-label="Ημέρες" value=${value} onChange=${(e: any) => onChange(Math.max(1, Math.min(MAX_DAYS, Math.floor(+e.target.value) || 1)))}/><span className="note">ημέρες</span>`}
   </div>`;
 }
@@ -381,7 +382,7 @@ export function AddBlockDialog({ onClose }: P) {
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim() || (mode === 'shift' && shiftBad(sh))} onClick=${save}>Προσθήκη<//>`}>
     <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="nb-k">Είδος (για τη δυνατότητα και τον έλεγχο)</label><select id="nb-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value, armed: e.target.value === 'op' || e.target.value === 'sk' ? true : f.armed })}>${(['other', 'sk', 'op', 'th', 'tae', 'mg'] as DutyKind[]).map(k => html`<option key=${k} value=${k}>${KIND_NAME[k]}</option>`)}</select></div>
+      <div className="field"><label className="field__label" htmlFor="nb-k">Είδος (για τη δυνατότητα και τον έλεγχο)</label><${Select} id="nb-k" className="ui-input" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value, armed: e.target.value === 'op' || e.target.value === 'sk' ? true : f.armed })}>${(['other', 'sk', 'op', 'th', 'tae', 'mg'] as DutyKind[]).map(k => html`<option key=${k} value=${k}>${KIND_NAME[k]}</option>`)}<//></div>
       <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
     </div>
     <${HoursField} id="nb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${Array.from({ length: f.n }, (_, i) => (i + 1) + 'ος')} start=${dutyStartOf(state.settings)}

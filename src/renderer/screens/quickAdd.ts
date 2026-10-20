@@ -3,6 +3,7 @@
 // Ό,τι γράφεις κρατιέται σε πρόχειρο, αν κλείσει το παράθυρο πριν από την προσθήκη.
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, useToast } from '../ui';
+import { Combo } from '../select';
 import { useNav, useStore } from '../store';
 import { UnsavedDialog } from '../common';
 import { listOf, optionsOf } from '../../shared/ranks';
@@ -15,7 +16,7 @@ type P = any;
 
 const DRAFT = 'grafeio.quickAdd';
 const LABEL: Record<QaKey, string> = { rank: 'Βαθμός', spec: 'Ο/Σ', last: 'Επώνυμο *', first: 'Όνομα *', father: 'Πατρώνυμο', asm: 'ΑΣΜ', phone: 'Τηλέφωνο', room: 'Θάλαμος', si: 'Σ.Ι.' };
-const LIST: Partial<Record<QaKey, string>> = { rank: 'qa-ranks', spec: 'qa-specs', room: 'qa-rooms', si: 'qa-si' };
+const LISTED: QaKey[] = ['rank', 'spec', 'room', 'si'];   // στήλες με λίστα από κάτω (Combo)
 const INPUT_MODE: Partial<Record<QaKey, string>> = { asm: 'numeric', phone: 'tel', room: 'numeric' };
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -31,10 +32,11 @@ function withTail(rows: QaRow[]): QaRow[] {
   return !last ? [emptyRow({ rank: 'ΣΤΡ' })] : isFilled(last) ? [...rows, emptyRow(carryOf(last))] : rows;
 }
 
-const Row = memo(function Row({ r, i, err, onCell, onKey, onPaste, onDel, tail, af }: P) {
+// lists: οι προτάσεις για βαθμό, Ο/Σ, θάλαμο και Σ.Ι.
+const Row = memo(function Row({ r, i, err, lists, onCell, onKey, onPaste, onDel, tail, af }: P) {
   return html`<tr className=${cx(err && 'is-err', tail && 'is-tail')}>
     <td className="qa__n">${i + 1}</td>
-    ${QA_COLS.map((k, c) => html`<td key=${k}><input className="qa__in" data-r=${i} data-c=${c} aria-label=${LABEL[k] + ', γραμμή ' + (i + 1)} list=${LIST[k]} data-autofocus=${af && k === 'last' ? '' : undefined} inputMode=${INPUT_MODE[k]} autoComplete="off" spellCheck=${false}
+    ${QA_COLS.map((k, c) => html`<td key=${k}><${lists[k] ? Combo : 'input'} className="qa__in" data-r=${i} data-c=${c} aria-label=${LABEL[k] + ', γραμμή ' + (i + 1)} options=${lists[k]} data-autofocus=${af && k === 'last' ? '' : undefined} inputMode=${INPUT_MODE[k]} autoComplete="off" spellCheck=${false}
       value=${r[k]} onChange=${(e: any) => onCell(i, k, e.target.value)} onKeyDown=${(e: any) => onKey(e, i, c)} onPaste=${(e: any) => onPaste(e, i, c)}/></td>`)}
     <td className="qa__st">${err ? html`<span className="qa__err">${err}</span>` : isFilled(r) ? html`<span className="qa__ok" aria-label="εντάξει">✓</span>` : ''}</td>
     <td>${!tail && html`<button type="button" className="qa__del" tabIndex=${-1} aria-label=${'Σβήσε τη γραμμή ' + (i + 1)} data-tip="Σβήσε τη γραμμή" onClick=${() => onDel(i)}>${Icon.x}</button>`}</td>
@@ -51,7 +53,8 @@ export function QuickAddDialog({ onClose }: P) {
   const focus = useRef<{ r: number; c: number } | null>(null);
   const ranks = useMemo(() => optionsOf(listOf(state.settings.lists, 'soldierRanks'), state.people.map((y: Person) => y.rank)), [state.people, state.settings.lists]);
   const specs = useMemo(() => optionsOf(listOf(state.settings.lists, 'specs'), state.people.map((y: Person) => y.spec)), [state.people, state.settings.lists]);
-  const rooms = range(roomCfg(state.settings).n);
+  const roomN = roomCfg(state.settings).n, siList = state.settings.lists?.si;
+  const lists = useMemo(() => ({ rank: ranks, spec: specs, room: range(roomN).map(String), si: siCombos(siList) }), [ranks, specs, roomN, siList]);
   // ο έλεγχος λίγο πίσω από το πληκτρολόγιο, για να μη βαραίνει το γράψιμο με πολλές γραμμές
   const dRows = useDeferredValue(rows);
   const errs = useMemo(() => checkRows(state.people, dRows), [state.people, dRows]);
@@ -91,7 +94,7 @@ export function QuickAddDialog({ onClose }: P) {
     // Enter: στο επώνυμο του επόμενου (βαθμός, Ο/Σ, θάλαμος έρχονται από πάνω)
     if (e.key === 'Enter') { go(i + 1, QA_COLS.indexOf('last')); return; }
     // ↑↓ σε άλλη γραμμή, ίδια στήλη (όχι στις στήλες με λίστα, όπου τα βέλη διαλέγουν από τη λίστα)
-    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !LIST[QA_COLS[c]]) { const r = i + (e.key === 'ArrowDown' ? 1 : -1); if (r >= 0) go(r, c); }
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !LISTED.includes(QA_COLS[c])) { const r = i + (e.key === 'ArrowDown' ? 1 : -1); if (r >= 0) go(r, c); }
   }, []);
   const onPaste = useCallback((e: ClipboardEvent, i: number, c: number) => {
     const got = parsePaste(e.clipboardData?.getData('text/plain') || '', c); if (!got) return;
@@ -123,12 +126,8 @@ export function QuickAddDialog({ onClose }: P) {
     ${draft && html`<${Alert} tone="info"><span>Συνεχίζεις από εκεί που είχες μείνει: ${draft.rows.length} ${draft.rows.length === 1 ? 'γραμμή' : 'γραμμές'} από το πρόχειρο. <${Button} variant="link" onClick=${clear}>Ξεκίνα από την αρχή<//></span><//>`}
     <div className="qa">
       <table><thead><tr><th className="qa__n">#</th>${QA_COLS.map(k => html`<th key=${k} className=${'qa__' + k}>${LABEL[k]}</th>`)}<th className="qa__st"></th><th></th></tr></thead>
-        <tbody>${rows.map((r, i) => html`<${Row} key=${i} r=${r} i=${i} err=${errs[i] || null} tail=${i === rows.length - 1 && !isFilled(r)} af=${i === rows.length - 1} onCell=${onCell} onKey=${onKey} onPaste=${onPaste} onDel=${onDel}/>`)}</tbody></table>
+        <tbody>${rows.map((r, i) => html`<${Row} key=${i} r=${r} i=${i} err=${errs[i] || null} lists=${lists} tail=${i === rows.length - 1 && !isFilled(r)} af=${i === rows.length - 1} onCell=${onCell} onKey=${onKey} onPaste=${onPaste} onDel=${onDel}/>`)}</tbody></table>
     </div>
-    <datalist id="qa-ranks">${ranks.map((o: string) => html`<option key=${o} value=${o}/>`)}</datalist>
-    <datalist id="qa-specs">${specs.map((o: string) => html`<option key=${o} value=${o}/>`)}</datalist>
-    <datalist id="qa-si">${siCombos(state.settings.lists?.si).map(o => html`<option key=${o} value=${o}/>`)}</datalist>
-    <datalist id="qa-rooms">${rooms.map(r => html`<option key=${r} value=${String(r)}/>`)}</datalist>
     <p className="note">Πατρώνυμο, ΑΣΜ, τηλέφωνο και θάλαμος δεν είναι υποχρεωτικά. Το Σ.Ι. ξεκινά Ι1 σε κάθε γραμμή. Πόστο, ρόλος και όπλο μπαίνουν μετά από την καρτέλα του καθενός ή από την οθόνη Οπλισμός. ${state.settings.sources?.people && state.settings.sources.people.write !== false ? 'Γράφονται όλοι μαζί στο Δυναμολόγιο, ο καθένας στον θάλαμό του.' : ''}</p>
     ${asking && html`<${UnsavedDialog} title=${n === 1 ? 'Ο στρατιώτης δεν προστέθηκε' : 'Οι ' + n + ' στρατιώτες δεν προστέθηκαν'} saveLabel=${'Πρόσθεσε ' + (n === 1 ? '1 στρατιώτη' : n + ' στρατιώτες')} canSave=${!bad}
       onSave=${() => { setAsking(false); save(); }} discardLabel="Κλείσε χωρίς προσθήκη" onDiscard=${() => { setAsking(false); onClose(); }} onBack=${() => setAsking(false)}>

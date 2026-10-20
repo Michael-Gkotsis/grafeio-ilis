@@ -2,6 +2,7 @@
 // βγαίνει ένα έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»).
 import { useState } from 'react';
 import { html, Button, Dialog, Icon } from './ui';
+import { Combo, Select } from './select';
 import { useStore } from './store';
 import { ARTS, artOf, sigTitles, sigsClean, type Sig } from '../shared/sigs';
 import { unitKindOf, unitText } from '../shared/unit';
@@ -16,13 +17,12 @@ export function SigEditor({ value, onChange, id = 'sg' }: { value: Sig[]; onChan
   return html`<div className="sigs">
     ${value.length ? html`<ol className="sigs__list">${value.map((x, i) => html`<li key=${i} className="sigs__row">
       <span className="sigs__n" data-tip="Σειρά από αριστερά προς τα δεξιά">${i + 1}</span>
-      <select className="ui-select" aria-label=${'Λέξη από πάνω, υπογραφή ' + (i + 1)} value=${x.art} onChange=${(e: P) => set(i, { art: e.target.value })}>${ARTS.map(a => html`<option key=${a} value=${a}>${a || '(χωρίς)'}</option>`)}</select>
-      <input className="ui-input sigs__title" list=${id + '-t'} aria-label=${'Θέση, υπογραφή ' + (i + 1)} placeholder="π.χ. ΔΚΤΗΣ ΙΛΗΣ" value=${unitText(x.title, kind)}
+      <${Select} className="ui-select" aria-label=${'Λέξη από πάνω, υπογραφή ' + (i + 1)} value=${x.art} onChange=${(e: P) => set(i, { art: e.target.value })}>${ARTS.map(a => html`<option key=${a} value=${a}>${a || '(χωρίς)'}</option>`)}<//>
+      <${Combo} className="ui-input sigs__title" options=${titles} aria-label=${'Θέση, υπογραφή ' + (i + 1)} placeholder="π.χ. ΔΚΤΗΣ ΙΛΗΣ" value=${unitText(x.title, kind)}
         onChange=${(e: P) => set(i, { title: e.target.value, ...(!x.title && !x.name ? { art: artOf(e.target.value) } : {}) })}/>
       <input className="ui-input sigs__name" aria-label=${'Όνομα κάτω από την υπογραφή ' + (i + 1)} placeholder="Όνομα (προαιρετικό)" value=${x.name || ''} onChange=${(e: P) => set(i, { name: e.target.value })}/>
       <span className="sigs__acts"><${Button} size="icon" variant="ghost" aria-label="Μία θέση αριστερά" data-tip="Πιο αριστερά" disabled=${i === 0} onClick=${() => move(i, -1)}>←<//><${Button} size="icon" variant="ghost" aria-label="Μία θέση δεξιά" data-tip="Πιο δεξιά" disabled=${i === value.length - 1} onClick=${() => move(i, 1)}>→<//><${Button} size="icon" variant="ghost" aria-label=${'Αφαίρεση υπογραφής ' + (i + 1)} data-tip="Αφαίρεση" onClick=${() => onChange(value.filter((_, j) => j !== i))}>${Icon.x}<//></span>
     </li>`)}</ol>` : html`<p className="note" style=${{ margin: 0 }}>Χωρίς υπογραφές.</p>`}
-    <datalist id=${id + '-t'}>${titles.map(t => html`<option key=${t} value=${t}/>`)}</datalist>
     <div><${Button} size="sm" variant="outline" onClick=${() => onChange([...value, { art: 'Ο', title: '' }])}>+ Υπογραφή<//></div>
     ${value.length > 1 && html`<div className="sigs__strip" aria-hidden="true">${value.map((x, i) => html`<span key=${i}><small>${x.art}</small>${unitText(x.title, kind) || '…'}</span>`)}</div>`}
   </div>`;

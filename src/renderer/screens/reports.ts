@@ -3,6 +3,7 @@
 // Η τυχαία επιλογή γίνεται εδώ, ώστε να βγει ακριβώς ό,τι είδες· ο main παίρνει μόνο τη λίστα των ατόμων.
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
+import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
@@ -537,10 +538,10 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
     <div><span className="field__label">Στήλες</span>
       <ul className="rep-cols">${o.cols.map((c: BuildCol, i: number) => html`<li key=${i}>
         <span className="rep-cols__l">${String.fromCharCode(65 + i)}</span>
-        <select className="ui-select" aria-label=${'Στοιχείο στήλης ' + (i + 1)} value=${c.f} onChange=${(e: any) => { const f = fieldOf(kind, e.target.value); setCol(i, { f: e.target.value, h: f?.head || c.h }); }}>${fieldOpts(kind)}</select>
+        <${Select} className="ui-select" aria-label=${'Στοιχείο στήλης ' + (i + 1)} value=${c.f} onChange=${(e: any) => { const f = fieldOf(kind, e.target.value); setCol(i, { f: e.target.value, h: f?.head || c.h }); }}>${fieldOpts(kind)}<//>
         <input className="ui-input" aria-label=${'Επικεφαλίδα στήλης ' + (i + 1)} placeholder="Επικεφαλίδα" value=${c.h} onChange=${(e: any) => setCol(i, { h: e.target.value })}/>
         ${c.f === 'text' && html`<input className="ui-input" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(i, { text: e.target.value })}/>`}
-        <select className="ui-select rep-cols__w" aria-label=${'Πλάτος στήλης ' + (i + 1)} value=${c.w} onChange=${(e: any) => setCol(i, { w: e.target.value })}><option value="narrow">Στενή</option><option value="auto">Κανονική</option><option value="wide">Φαρδιά</option></select>
+        <${Select} className="ui-select rep-cols__w" aria-label=${'Πλάτος στήλης ' + (i + 1)} value=${c.w} onChange=${(e: any) => setCol(i, { w: e.target.value })}><option value="narrow">Στενή</option><option value="auto">Κανονική</option><option value="wide">Φαρδιά</option><//>
         <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${i === 0} onClick=${() => move(i, -1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${i === o.cols.length - 1} onClick=${() => move(i, 1)}>${Icon.down}<//>
           <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${o.cols.length < 2} onClick=${() => set({ cols: o.cols.filter((_: BuildCol, j: number) => j !== i) })}>${Icon.x}<//></span>
       </li>`)}</ul>
@@ -571,14 +572,14 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
   const free = CELLS.filter(c => !r.cells.some((x: P) => x.k === c.k));
   return html`<div className="stack rep-map">
     <div className="rep-opts">
-      ${insp.sheets.length > 1 && html`<label className="field__label" htmlFor="m-sheet">Φύλλο</label><select id="m-sheet" className="ui-select" value=${insp.sheet} onChange=${(e: any) => sheetTo(e.target.value)}>${insp.sheets.map((s: string) => html`<option key=${s} value=${s}>${s}</option>`)}</select>`}
+      ${insp.sheets.length > 1 && html`<label className="field__label" htmlFor="m-sheet">Φύλλο</label><${Select} id="m-sheet" className="ui-select" value=${insp.sheet} onChange=${(e: any) => sheetTo(e.target.value)}>${insp.sheets.map((s: string) => html`<option key=${s} value=${s}>${s}</option>`)}<//>`}
       <span>Επικεφαλίδες στη γραμμή <b>${insp.head}</b>${insp.guessed ? ' (βρέθηκε μόνη της)' : ''} · ${insp.prepared > 1 ? insp.prepared + ' έτοιμες γραμμές' : 'οι γραμμές μπαίνουν όσες χρειάζονται'}</span>
       <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head'} onClick=${() => setPicking(picking === '#head' ? null : '#head')}>Άλλη γραμμή…<//>
     </div>
     <div><span className="field__label">Ποια στήλη παίρνει τι</span>
       ${insp.headers.length ? html`<table className="rep-table rep-table--map"><tbody>${insp.headers.map((h: P) => { const c = colOf(h.c); return html`<tr key=${h.c}>
         <td className="nw"><span className="rep-cols__l">${String.fromCharCode(64 + Math.min(h.c, 26))}${h.c > 26 ? '…' : ''}</span> ${h.text}</td>
-        <td><select className=${cx('ui-select', !c && 'is-off')} aria-label=${'Στοιχείο για «' + h.text + '»'} value=${c?.f || ''} onChange=${(e: any) => setCol(h, e.target.value)}><option value="">— δεν γεμίζει —</option>${fieldOpts(r.kind)}</select>
+        <td><${Select} className=${cx('ui-select', !c && 'is-off')} aria-label=${'Στοιχείο για «' + h.text + '»'} value=${c?.f || ''} onChange=${(e: any) => setCol(h, e.target.value)}><option value="">— δεν γεμίζει —</option>${fieldOpts(r.kind)}<//>
           ${c?.f === 'text' && html`<input className="ui-input rep-map__txt" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(h, 'text', e.target.value)}/>`}</td></tr>`; })}</tbody></table>`
         : html`<${Alert} tone="warn">Δεν βρέθηκαν επικεφαλίδες. Πάτα «Άλλη γραμμή…» και κάνε κλικ στη γραμμή με τις επικεφαλίδες του πίνακα.<//>`}</div>
     <div><span className="field__label">Στοιχεία σε κελιά (κεφαλίδα, ημερομηνία, υπογραφές…)</span>
@@ -587,7 +588,7 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
         ${r.cells.filter((c: P) => cellOf(c.k)).map((c: P) => html`<li key=${c.ref}><b>${c.ref}</b> ${cellOf(c.k)?.label}<button type="button" className="rep-picks__x" aria-label="Βγάλε" onClick=${() => upd({ cells: r.cells.filter((x: P) => x !== c) })}>${Icon.x}</button></li>`)}
         ${!insp.tags.length && !r.cells.some((c: P) => cellOf(c.k)) && html`<li className="muted">Κανένα ακόμα.</li>`}
       </ul>
-      <select className="ui-select" aria-label="Πρόσθεσε στοιχείο σε κελί" value="" onChange=${(e: any) => e.target.value && setPicking(e.target.value)}><option value="">+ Στοιχείο σε κελί (μετά κλικ στο κελί)…</option>${free.map(c => html`<option key=${c.k} value=${c.k}>${c.label}</option>`)}</select></div>
+      <${Select} className="ui-select" aria-label="Πρόσθεσε στοιχείο σε κελί" value="" onChange=${(e: any) => e.target.value && setPicking(e.target.value)}><option value="">+ Στοιχείο σε κελί (μετά κλικ στο κελί)…</option>${free.map(c => html`<option key=${c.k} value=${c.k}>${c.label}</option>`)}<//></div>
     ${keys.has('title') && html`<div className="field"><label className="field__label" htmlFor="m-title">Τίτλος</label><input id="m-title" className="ui-input" placeholder=${r.name} value=${r.title || ''} onChange=${(e: any) => upd({ title: e.target.value })}/></div>`}
     ${(keys.has('sgtName') || keys.has('cmdName')) && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${keys.has('cmdName')}/>`}
     <div className="rep-opts"><span className="field__label">Προεπισκόπηση</span><${Segmented} small=${true} value=${picking ? 'tpl' : view} onChange=${setView} items=${[{ value: 'filled', label: 'Με στοιχεία' }, { value: 'tpl', label: 'Το πρότυπο' }]}/>
@@ -623,15 +624,15 @@ function StepPick({ r, upd, p }: P) {
       ${duty && html`<div><span className="field__label">Ποιες υπηρεσίες <small className="muted">(καμία = όλες)</small></span><div className="rep-chips">${blockList.map(b => html`<button key=${b.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.blocks?.includes(b.id)} onClick=${() => set({ blocks: toggle(pk.blocks, b.id) })}>${b.name}</button>`)}</div></div>`}
       ${duty && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.empty} onChange=${(e: any) => set({ empty: e.target.checked })}/>Και οι θέσεις που δεν έχουν κανέναν (όχι με φίλτρο θαλάμου ή Σ.Ι.)</label>`}
       ${wmove && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.open} onChange=${(e: any) => set({ open: e.target.checked })}/>Μόνο όσα όπλα είναι ακόμα έξω</label>`}
-      ${r.kind === 'weapon' && html`<div className="field"><label className="field__label" htmlFor="p-wf">Ποια όπλα</label><select id="p-wf" className="ui-select" value=${pk.wf || 'with'} onChange=${(e: any) => set({ wf: e.target.value })}>${WEAPON_FILTERS.map(([k, l, , help]) => html`<option key=${k} value=${k} title=${help}>${l}</option>`)}</select></div>`}
+      ${r.kind === 'weapon' && html`<div className="field"><label className="field__label" htmlFor="p-wf">Ποια όπλα</label><${Select} id="p-wf" className="ui-select" value=${pk.wf || 'with'} onChange=${(e: any) => set({ wf: e.target.value })}>${WEAPON_FILTERS.map(([k, l, , help]) => html`<option key=${k} value=${k} title=${help}>${l}</option>`)}<//></div>`}
       <div className="field-row">
-        ${linked ? html`<div className="field"><label className="field__label" htmlFor="p-from">Στρατιώτες</label><select id="p-from" className="ui-select" value=${pk.view ? 'v:' + pk.view : 'all'} onChange=${(e: any) => setFrom(e.target.value)}>
-          <option value="all">Όλοι σε δύναμη</option>${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`
-        : people ? html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
+        ${linked ? html`<div className="field"><label className="field__label" htmlFor="p-from">Στρατιώτες</label><${Select} id="p-from" className="ui-select" value=${pk.view ? 'v:' + pk.view : 'all'} onChange=${(e: any) => setFrom(e.target.value)}>
+          <option value="all">Όλοι σε δύναμη</option>${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}<//></div>`
+        : people ? html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><${Select} id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
           <option value="all">Όλοι σε δύναμη</option><option value="inactive">Εκτός δύναμης</option>
-          ${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`
-        : html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
-          <option value="all">Όλα τα στελέχη</option><option value="present">Παρόντα τη μέρα (χωρίς κατάσταση)</option></select></div>`}
+          ${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}<//></div>`
+        : html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><${Select} id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
+          <option value="all">Όλα τα στελέχη</option><option value="present">Παρόντα τη μέρα (χωρίς κατάσταση)</option><//></div>`}
         <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
       </div>
       ${people && html`<div><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>

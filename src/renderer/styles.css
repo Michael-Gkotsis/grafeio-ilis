@@ -444,7 +444,6 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .map{width:100%;border-collapse:collapse;font-size:14px}
 .map th{text-align:left;font-size:12px;color:var(--muted-fg);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border)}
 .map td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle}
-.map select{height:34px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);padding:0 8px;max-width:100%}
 .map tr.is-bad td{background:var(--bad-bg)}
 .sync{list-style:none;margin:0;padding:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .sync li{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);align-items:flex-start}
@@ -624,9 +623,30 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 /* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
 .backbtn{margin:0 -4px 0 -6px;color:var(--muted-fg)}
 .backbtn:disabled{opacity:.35}
-.ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%}
-.hdsel{border:0;background:transparent;font-weight:600;font-size:13px;cursor:pointer;padding:0;margin:0;max-width:100%}
-.hdsel:hover{text-decoration:underline}
+.ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%;transition:border-color .12s,box-shadow .12s}
+.ui-select:hover{border-color:var(--muted-fg)}
+.ui-select:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
+/* Λίστες επιλογής (select.ts): ίδιο κουτί με τα πεδία (.ui-input 40px στις φόρμες, .ui-select 32px στις μπάρες), βελάκι δεξιά,
+   και η ίδια λίστα από κάτω παντού, στο φωτεινό και στο σκοτεινό θέμα */
+.ui-dd{display:inline-flex;align-items:center;gap:6px;text-align:left;cursor:pointer;min-width:0;max-width:100%;line-height:1.2}
+.ui-dd.ui-input{display:flex;padding-right:10px}
+.ui-dd__v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ui-dd > svg{flex:none;width:16px;height:16px;color:var(--muted-fg);transition:transform .12s}
+.ui-dd.is-open{border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
+.ui-dd.is-open > svg{transform:rotate(180deg)}
+.ui-dd:disabled{cursor:not-allowed;opacity:.55}
+.ui-dd:disabled:hover{border-color:var(--input)}
+.ui-dd__pop{position:fixed;z-index:75;display:flex;flex-direction:column;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;font-size:14px;animation:fade .08s ease-out}
+.ui-dd__q{flex:none;margin:6px 6px 2px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius);background:var(--background);font-size:14px}
+.ui-dd__q:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
+.ui-dd__list{list-style:none;margin:0;padding:4px;overflow:auto;flex:1;min-height:0}
+.ui-opt{padding:6px 12px;border-radius:6px;cursor:pointer;line-height:1.3}
+.ui-opt.is-act{background:var(--secondary);color:var(--secondary-fg)}
+.ui-opt[aria-selected="true"]{font-weight:600;box-shadow:inset 3px 0 0 var(--primary)}
+.ui-opt.is-off{color:var(--muted-fg);opacity:.6;cursor:default}
+.ui-dd__grp{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);padding:8px 10px 2px}
+.ui-dd__grp:first-child{padding-top:4px}
+.ui-dd__none{padding:8px 10px;color:var(--muted-fg);font-size:13px}
 .actfilter .actfilter__act{font-weight:600;color:var(--info);white-space:nowrap}
 .ui-chip--view{border-style:dashed}
 .ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
@@ -727,7 +747,8 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .setnav button[aria-current="page"]{background:var(--card);color:var(--foreground);box-shadow:var(--shadow-sm),inset 3px 0 0 var(--primary)}
 .setbody{min-width:0}
 @media (max-width:900px){.setgrid{grid-template-columns:minmax(0,1fr)}.setnav{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}.setnav button{flex:none}}
-.sigrid .statsel{padding:2px 22px 2px 6px;height:auto;min-height:0;font-size:12px;width:auto;min-width:0;background-position:right 4px center}
+.sigrid .statsel{padding:3px 4px 3px 6px;gap:2px;height:auto;min-height:0;font-size:12px;width:auto;min-width:0}
+.sigrid .statsel > svg{width:13px;height:13px}
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}
 .sigrid .statsel.is-last{color:var(--warn);background:var(--warn-bg)}
 .ptable--roster .ptable__head > *,.ptable--roster .ptable__row > *{padding-left:7px;padding-right:7px}
@@ -769,7 +790,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
-.weapon-type{height:30px;font-size:13px;padding:0 6px;width:100%}
+.weapon-type{height:30px;font-size:13px;padding:0 4px 0 6px;gap:2px;width:100%}.weapon-type > svg{width:14px;height:14px}
 .weapon-out{display:flex;align-items:center;gap:6px;min-width:0}.weapon-out small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .weapon-notes{display:flex;gap:6px;align-items:center}
 .weapon-notes .ui-btn{margin-left:auto}

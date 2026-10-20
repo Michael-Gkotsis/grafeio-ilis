@@ -6,6 +6,7 @@
 import { UNIT } from '../../shared/unit';
 import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useViewportHeight } from '../ui';
+import { Select } from '../select';
 import { useOpenFrom, useStore } from '../store';
 import { ActiveFilter } from '../common';
 import { PHASE_NAME, WEEK, blocksOf, dutyStartOf, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
@@ -118,8 +119,8 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   return html`<div className="whod">
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στρατιώτη" placeholder="Όνομα, ΑΣΜ, θάλαμος, Σ.Ι., πόστο (χωρίς τόνους)" value=${q} onChange=${(e: any) => { setQ(e.target.value); setOnly(null); }}/>
       <${Segmented} small=${true} value=${unit} onChange=${(u: string) => { setUnit(u); if (room != null && u !== 'all' && unitOf({ room }, state.settings) !== u) setRoom(null); }} items=${UNITS}/>
-      <select className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; setRoom(r); if (r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit) setUnit('all'); }}>
-        <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}</select></div>
+      <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; setRoom(r); if (r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit) setUnit('all'); }}>
+        <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}<//></div>
     <div className="filters"><${Strip} role="group" aria-label="Φίλτρα">${FILTERS.map(([k, l, tip]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} data-tip=${tip} onClick=${() => setFilter(filter === k ? 'all' : k)}>${l}<span className="cnt">${counts[k]}</span></button>`)}<//>
       <${ActiveFilter} parts=${[onlyP && shortName(onlyP), unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && FILTERS.find(f => f[0] === filter)![1], colLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}/>
       <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'άτομο' : 'άτομα'}</span></div>

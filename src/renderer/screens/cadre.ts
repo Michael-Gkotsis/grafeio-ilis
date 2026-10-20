@@ -2,6 +2,7 @@
 // Οι καταστάσεις τους είναι οι στήλες της ΗΚΑΙ (κωλυόμενοι, απόντες) και ταΐζουν την ΗΚΑΙ όπως πριν.
 import { useDeferredValue, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Dialog, PageHeader, Strip, useToast } from '../ui';
+import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateRangeField } from '../common';
 import { cadreAbsKinds, guessHk, hkCadreRows, listOf, optionsOf } from '../../shared/ranks';
@@ -59,7 +60,7 @@ export function CadreScreen() {
       <${Button} variant="outline" disabled=${xl || !all.length} onClick=${exportXl} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
-      <select className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}</select></div>
+      <${Select} className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//></div>
     <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${CADRE_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} data-tip=${k === 'kol' || k === 'apo' ? 'Στην ' + HK() + ' ' + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}<//>
       <${ActiveFilter} parts=${[filter !== 'all' && (CADRE_FILTERS.find(([k]) => k === filter) || [, ''])[1], dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}/>
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : active}</span></div>
@@ -120,7 +121,7 @@ function CadreDialog({ c, onClose }: P) {
     <div className="field-row">${fld('last', 'Επώνυμο *')}${fld('first', 'Όνομα')}</div>
     <div className="field-row">${fld('am', 'ΑΜ', 'αριθμός μητρώου')}${fld('phone', 'Τηλέφωνο')}</div>
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής ' + UNIT().gen)}
-      <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><select id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}</select></div></div>
+      <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><${Select} id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div></div>
     ${c.id && html`<label className="field" style=${{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}><input type="checkbox" className="ui-check" checked=${f.active} onChange=${() => setF({ ...f, active: !f.active })}/>
       <span>Σε δύναμη <span className="field__help">(αν φύγει από τη μονάδα, βγάλ' το: μένει στη λίστα «Εκτός δύναμης» και δεν μετρά στην ${HK()})</span></span></label>`}
   <//>`;
@@ -144,8 +145,8 @@ function StatusDialog({ c, abs, onClose }: P) {
   const group = (g: CadreGroup) => opts.filter(k => groupOfCol(k[2]) === g);
   return html`<${Dialog} title=${(abs ? 'Αλλαγή κατάστασης: ' : 'Κατάσταση: ') + c.rank + ' ' + c.last} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${bad} onClick=${save}>${clash.length ? 'Αποθήκευση στη θέση της' : 'Αποθήκευση'}<//>`}>
-    <div className="field"><label className="field__label" htmlFor="ca-k">Κατάσταση (στήλη της ${HK()})</label><select id="ca-k" className="ui-input" data-autofocus="" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value })}>
-      ${(['kol', 'apo', 'list'] as CadreGroup[]).map(g => group(g).length > 0 && html`<optgroup key=${g} label=${g === 'kol' ? 'Κωλυόμενοι' : g === 'apo' ? 'Απόντες' : 'Μόνο στη λίστα'}>${group(g).map(([k, l, col]) => html`<option key=${k} value=${k}>${l}${col ? ' (' + colShort(col) + ')' : ''}</option>`)}</optgroup>`)}</select>
+    <div className="field"><label className="field__label" htmlFor="ca-k">Κατάσταση (στήλη της ${HK()})</label><${Select} id="ca-k" className="ui-input" data-autofocus="" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value })}>
+      ${(['kol', 'apo', 'list'] as CadreGroup[]).map(g => group(g).length > 0 && html`<optgroup key=${g} label=${g === 'kol' ? 'Κωλυόμενοι' : g === 'apo' ? 'Απόντες' : 'Μόνο στη λίστα'}>${group(g).map(([k, l, col]) => html`<option key=${k} value=${k}>${l}${col ? ' (' + colShort(col) + ')' : ''}</option>`)}</optgroup>`)}<//>
       <span className="field__help">${st.group === 'list' ? 'Δεν μετρά στην ' + HK() + ', φαίνεται μόνο στη λίστα.' : 'Μετρά στην ' + HK() + ' στους ' + (st.group === 'kol' ? 'κωλυόμενους' : 'απόντες') + ', στήλη «' + colShort(st.col) + '», γραμμή «' + hkRowLabel(c.hk) + '».'}</span></div>
     <${DateRangeField} from=${f.from} to=${f.to} onChange=${(from: string, to: string) => setF({ ...f, from, to })}/>
     <div className="field"><label className="field__label" htmlFor="ca-n">Παρατήρηση</label><input id="ca-n" className="ui-input" value=${f.note} onChange=${(e: any) => setF({ ...f, note: e.target.value })}/></div>

@@ -1,6 +1,7 @@
 // Ρυθμίσεις (μενού Ρυθμίσεις): φορτώνεται όταν ανοίξει η οθόνη, για να ανοίγει πιο γρήγορα η εφαρμογή.
 import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
+import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { HoursField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
@@ -98,7 +99,7 @@ function XlLookCard() {
     <p className="note" style=${{ marginTop: 0 }}>Σε ό,τι φτιάχνει η εφαρμογή στο Excel: τα Excel που βγάζεις (Δυναμολόγιο και καταστάσεις, Συνολικό δυναμολόγιο, Στελέχη, Οπλισμός, Έλεγχος υπηρεσιών), τα νέα αρχεία και φύλλα στα <b>Αρχεία Excel</b> (π.χ. Ιατρικά, Ποινές, ΘΑΛΑΜΟΙ, νέος μήνας) και τα πρότυπα του «Φτιάξ' το εδώ» στα Έντυπα (εκεί το μέγεθος το διαλέγεις στο πρότυπο).
       Οι ${HK()}, ΦΡΟΥΡΑ και Εξοδούχοι κρατούν τη διάταξη του εντύπου. Στα δικά σου Excel οι νέες γραμμές παίρνουν τη μορφή της γραμμής από πάνω. Ό,τι δεν χωρά μικραίνει λίγο ή αναδιπλώνεται, για να μην κόβεται.</p>
     ${row('Γραμματοσειρά', 'Υπάρχουν σε κάθε PC με Windows 7.', html`<${Segmented} small=${true} value=${x.font} onChange=${(font: string) => setX({ ...x, font })} items=${XL_FONTS.map(f => ({ value: f, label: f }))}/>`)}
-    ${row('Μέγεθος', 'Ο τίτλος του φύλλου βγαίνει 2 μεγέθη μεγαλύτερος.', html`<select className="ui-select" aria-label="Μέγεθος γραμμάτων" value=${String(x.sz)} onChange=${(e: any) => setX({ ...x, sz: +e.target.value })}>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}</select>`)}
+    ${row('Μέγεθος', 'Ο τίτλος του φύλλου βγαίνει 2 μεγέθη μεγαλύτερος.', html`<${Select} className="ui-select" aria-label="Μέγεθος γραμμάτων" value=${String(x.sz)} onChange=${(e: any) => setX({ ...x, sz: +e.target.value })}>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}<//>`)}
     ${row('Οριζόντια στοίχιση', 'Στα κελιά του πίνακα και στις επικεφαλίδες. Ο τίτλος μένει στο κέντρο.', html`<${Segmented} small=${true} value=${x.h} onChange=${(h: XlLook['h']) => setX({ ...x, h })} items=${XL_H}/>`)}
     ${row('Κάθετη στοίχιση', 'Πού κάθεται το κείμενο όταν η γραμμή είναι ψηλότερη.', html`<${Segmented} small=${true} value=${x.v} onChange=${(v: XlLook['v']) => setX({ ...x, v })} items=${XL_V}/>`)}
     <div style=${{ overflowX: 'auto', margin: '8px 0 12px' }}><table style=${{ borderCollapse: 'collapse', minWidth: '360px' }} aria-label="Δείγμα"><tbody>
