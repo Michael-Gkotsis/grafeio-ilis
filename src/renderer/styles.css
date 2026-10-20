@@ -987,7 +987,12 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-picks__list li:hover{background:var(--hover)}
 .rep-picks__list small{color:var(--muted-fg)}
 .rep-picks__n{width:26px;text-align:right;color:var(--muted-fg);font:12px var(--f-mono)}
-.rep-picks__x{margin-left:auto;display:inline-grid;place-items:center;width:24px;height:24px;border:0;border-radius:6px;background:none;color:var(--muted-fg);cursor:pointer}
+.rep-picks__acts{margin-left:auto;display:inline-flex;gap:2px;align-items:center}
+.rep-picks__never{height:22px;padding:0 6px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted-fg);font-size:11px;cursor:pointer}
+.rep-picks__never:hover{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
+.rep-pvgroups{margin:0 0 8px}
+.rep-picks__add{padding:6px 10px;border-top:1px solid var(--border)}
+.rep-picks__x{display:inline-grid;place-items:center;width:24px;height:24px;border:0;border-radius:6px;background:none;color:var(--muted-fg);cursor:pointer}
 .rep-picks__x:hover{background:var(--bad-bg);color:var(--bad)}
 .rep-picks__x svg{width:14px;height:14px}
 @media (max-width:980px){.rep-wiz--pv,.rep-pick{grid-template-columns:1fr}.rep-wiz__pv{position:static}}
