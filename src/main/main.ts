@@ -49,11 +49,14 @@ const FLAGS = path.join(DATA, 'flags.json');
 const readFlags = (): { disableGpu?: boolean } => { try { return JSON.parse(fs.readFileSync(FLAGS, 'utf8')); } catch { return {}; } };
 // Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
 const META = path.join(DATA, 'meta.json');
-type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string>; repTimes?: Record<string, RepTimes>; repSheets?: Record<string, RepSheets> };
+type Meta = { lastUsb?: string; usbDir?: string; seenAudit?: number; essoArchives?: string[]; repLast?: Record<string, string>; repTimes?: Record<string, RepTimes>; repSheets?: Record<string, RepSheets>; repHist?: Record<string, RepHist[]> };
 // Έντυπα: πόσες φορές βγήκε ο καθένας σε κάθε έντυπο με τυχαίους (ανά ΕΣΣΟ: η Νέα ΕΣΣΟ ξεκινά από το μηδέν) και ποια φύλλα
 // έγραψε κάθε έντυπο σε ποιο αρχείο (για να μη γράψει πάνω σε φύλλο που δεν έφτιαξε, και να μην τα διαβάζει η εισαγωγή)
 type RepTimes = { essos: string; n: Record<string, number> };
-type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
+type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };
+// ιστορικό εκδόσεων: ποιοι μπήκαν κάθε φορά που βγήκε (για να ξαναβγεί ίδιο αν χαθεί το χαρτί)· τα 10 τελευταία ανά έντυπο
+type RepHist = { at: string; date: ISODate; ids: (number | string)[]; n: number; file: string; sheets?: string[] };
+const HIST_MAX = 10;   // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
 const readMeta = (): Meta => { try { return JSON.parse(fs.readFileSync(META, 'utf8')); } catch { return {}; } };
 const writeMeta = (m: Partial<Meta>) => { try { writeJson(META, { ...readMeta(), ...m }); } catch (e) { console.error('meta', e); } };
 const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
@@ -720,7 +723,7 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
 // Ο χρήστης ανοίγει μόνο αρχεία και φακέλους που ξέρει η εφαρμογή (πηγές, templates, έντυπα που βγήκαν)
 function knownPath(file: string): boolean {
   const f = path.resolve(file);
-  const known = [...Object.values(store.state.settings.sources || {}).map(b => b && b.file), ...Object.values(store.state.settings.forms || {}).map(b => b && b.file), ...readOuts().map(o => o.file), ...Object.values(readMeta().repSheets || {}).map(x => x.file)].filter(Boolean).map(x => path.resolve(x as string));
+  const known = [...Object.values(store.state.settings.sources || {}).map(b => b && b.file), ...Object.values(store.state.settings.forms || {}).map(b => b && b.file), ...readOuts().map(o => o.file), ...Object.values(readMeta().repSheets || {}).map(x => x.file), ...Object.values(readMeta().repHist || {}).flat().map(x => x.file)].filter(Boolean).map(x => path.resolve(x as string));
   return known.some(k => k === f || path.dirname(k) === f);
 }
 
@@ -1076,7 +1079,8 @@ else {
     });
     // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
     // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
-    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean): Promise<RepOut> => {
+    // opts.quiet: δεν ανοίγει το Excel (Έντυπα ημέρας › «Τύπωσε όλα») · opts.again: «Ξαναβγάλε» από το ιστορικό (δεν μετρά ξανά τους τυχαίους)
+    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepOut> => {
       try {
         const s = store.state; const t0 = Date.now(); let res: RepOut;
         if (r.out === 'sheet' && !print) {
@@ -1089,12 +1093,14 @@ else {
           const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
           logWrite('Έντυπο ' + r.name, t0);
           const warnings = [...(out.warnings || [])];
-          if (print) { const p = await printPreview(f, out.sheets); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(f);
+          if (print) { const p = await printPreview(f, out.sheets); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else if (!opts?.quiet) shell.openPath(f);
           res = { ok: true, file: f, warnings, sheets: out.sheets };
         }
         if (!res.ok) return res;
-        if (r.pick.mode === 'random') countTimes(r.id, ids);
-        writeMeta({ repLast: { ...(readMeta().repLast || {}), [r.id]: today() + ' ' + nowHM() } });
+        if (r.pick.mode === 'random' && !opts?.again) countTimes(r.id, ids);
+        const at = today() + ' ' + nowHM(); const m = readMeta();
+        const h: RepHist = { at, date, ids: ids.slice(0, 2000), n: ids.length, file: res.file, ...(res.sheets && r.out === 'sheet' && !print ? { sheets: res.sheets } : {}) };
+        writeMeta({ repLast: { ...(m.repLast || {}), [r.id]: at }, repHist: { ...(m.repHist || {}), [r.id]: [h, ...(m.repHist?.[r.id] || [])].slice(0, HIST_MAX) } });
         return res;
       } catch (e) {
         if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
@@ -1104,6 +1110,7 @@ else {
       }
     });
     ipcMain.handle('rep:times', (_e, id: string) => repTimes(id));
+    ipcMain.handle('rep:hist', (_e, id: string) => (readMeta().repHist?.[id] || []).map(h => ({ ...h, exists: fs.existsSync(h.file) })));
     // «Φύλλο σε άλλο Excel…»: το αρχείο που θα πάρει το φύλλο
     ipcMain.handle('rep:pickFile', async () => {
       const res = await dialog.showOpenDialog(win!, { title: 'Σε ποιο Excel θα γράφεται το φύλλο', filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }], properties: ['openFile'] });

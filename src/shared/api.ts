@@ -18,6 +18,7 @@ export interface TemplateInfo { id: string; name: string; file: string; ok: bool
 // Σε έναν χρόνο οι καταστάσεις είναι πάνω από 400 KB: να μην περνούν σε κάθε κλικ.
 export type CmdResult = { ok: true; changes: Partial<AppState>; newAudit: AuditEntry[]; audit?: AuditEntry[]; text: string } | { ok: false; error: string };
 export type ExportResult = { ok: true; file: string; warnings: string[] } | { ok: false; error: string; checks?: Check[]; needAck?: boolean; locked?: boolean };
+export interface RepHistEntry { at: string; date: ISODate; ids: (number | string)[]; n: number; file: string; sheets?: string[]; exists: boolean }
 export type RepRunResult = { ok: true; file: string; warnings: string[]; sheets?: string[] } | { ok: false; error: string; locked?: boolean; confirm?: string[] };
 export type UsbResult = { ok: true; file: string; day: string; warning?: string } | { ok: false; error: string } | null;
 export interface BackupInfo { name: string; day: string; label: string; size: number }
@@ -118,7 +119,8 @@ export interface Api {
   repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<{ ok: true; file: string; mtime: number; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] } | Fail>;
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
-  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean): Promise<RepRunResult>;
+  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepRunResult>;
+  repHist(id: string): Promise<RepHistEntry[]>;   // ιστορικό εκδόσεων: τα 10 τελευταία, νεότερο πρώτο
   repTimes(id: string): Promise<Record<string, number>>;   // τυχαίοι: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο σε αυτή την ΕΣΣΟ
   repPickFile(): Promise<string | null>;
   repOpenTpl(file: string): Promise<void>;

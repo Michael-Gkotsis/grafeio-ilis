@@ -108,7 +108,7 @@ export interface FillOpts { prefix?: string; stale?: GroupKey[] }
 export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[] }> {
   const wb = await Workbook.open(tpl); const warnings: string[] = [];
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
-  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS));
+  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
   const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre';
   let groups = groupsOf(s, r.kind, rows, r.split);

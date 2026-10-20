@@ -3,25 +3,40 @@
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
 import { addDays, daysBetween, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek } from './text';
-import { TYPES, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Status } from './domain';
-import { activePeople, personMap, postBy, statusesOn, strengthOf } from './rules';
+import { TYPES, blocksOf, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
+import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
+import { WEAPON_FILTERS, byOut, inOutText, movesOn, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { rosterMatch, type RosterFilter } from './rosterLists';
 
-export type RepKind = 'people' | 'cadre' | 'status';
+export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
   { id: 'people', label: 'Στρατιώτες', help: 'Μία γραμμή για κάθε στρατιώτη' },
   { id: 'cadre', label: 'Στελέχη', help: 'Μία γραμμή για κάθε στέλεχος' },
-  { id: 'status', label: 'Καταστάσεις', help: 'Μία γραμμή για κάθε ιατρικό, ποινή ή άδεια, με τα στοιχεία του στρατιώτη' }
+  { id: 'status', label: 'Καταστάσεις', help: 'Μία γραμμή για κάθε ιατρικό, ποινή ή άδεια, με τα στοιχεία του στρατιώτη' },
+  { id: 'duty', label: 'Υπηρεσίες ημέρας', help: 'Μία γραμμή για κάθε θέση υπηρεσίας της μέρας (θέση, ώρες), με τον στρατιώτη που την έχει' },
+  { id: 'weapon', label: 'Οπλισμός', help: 'Μία γραμμή για κάθε στρατιώτη με όπλο: αριθμός, τύπος, οπλοβαστός, εντός ή εκτός' },
+  { id: 'wmove', label: 'Κινήσεις όπλων', help: 'Μία γραμμή για κάθε έξοδο όπλου της μέρας: λόγος, ώρα εξόδου και εισόδου' }
 ];
+// Είδη με μία γραμμή ανά «κάτι» ενός στρατιώτη (κατάσταση, θέση, κίνηση όπλου): τα στοιχεία του στρατιώτη είναι στο p
+export const isLinked = (k: RepKind) => k === 'status' || k === 'duty' || k === 'wmove';
+// «Έντυπα ημέρας»: βγαίνει χωρίς ερώτηση, άρα όχι με τυχαίους ή με «Ρώτα κάθε φορά»
+export const dailyOk = (r: Pick<Report, 'pick' | 'day'>) => r.pick.mode !== 'random' && r.day !== 'ask';
+// τι μετράει κάθε είδος: «20 άτομα», «12 θέσεις»
+export const rowNoun = (k: RepKind) => (k === 'cadre' ? 'στελέχη' : k === 'status' ? 'καταστάσεις' : k === 'duty' ? 'θέσεις' : k === 'wmove' ? 'κινήσεις' : 'άτομα');
 
 // Στοιχεία (στήλες) ανά είδος: [κλειδί, όνομα στη λίστα, επικεφαλίδα όταν το φτιάχνεις εδώ, πλάτος σε χαρακτήρες, στοίχιση]
 export type Align = 'left' | 'center';
 export interface FieldDef { k: string; label: string; head: string; w: number; al: Align }
 const F = (k: string, label: string, head: string, w: number, al: Align = 'center'): FieldDef => ({ k, label, head, w, al });
 const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός', 'ΒΑΘΜΟΣ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
+// τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
+const SOLDIER = [
+  F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
+  F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
+  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8)];
 const TAIL = [F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18), F('text', 'Σταθερό κείμενο', '', 12)];
 export const FIELDS: Record<RepKind, FieldDef[]> = {
   people: [...COMMON,
@@ -38,12 +53,24 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18),
     ...TAIL],
   // Καταστάσεις (Φάση 2): τα στοιχεία του στρατιώτη και της κατάστασης
-  status: [...COMMON,
-    F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
-    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-    F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8),
+  status: [...COMMON, ...SOLDIER,
     F('stype', 'Είδος (ΚΑ, ΕΥ, ποινή…)', 'ΕΙΔΟΣ', 16), F('from', 'Από', 'ΑΠΟ', 11), F('to', 'Έως', 'ΕΩΣ', 11), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', 7),
     F('note', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'), F('by', 'Ποιος τιμώρησε', 'ΤΙΜΩΡΗΣΕ', 18, 'left'), F('reason', 'Διότι', 'ΔΙΟΤΙ', 30, 'left'), F('on', 'Ημερομηνία τιμωρίας', 'ΗΜ. ΤΙΜΩΡΙΑΣ', 11),
+    ...TAIL],
+  // Φάση 3: θέσεις υπηρεσίας της μέρας, όπλα, κινήσεις όπλων
+  duty: [...COMMON,
+    F('seat', 'Θέση (π.χ. Θαλαμοφύλακας 1ος)', 'ΘΕΣΗ', 24, 'left'), F('code', 'Κωδικός θέσης (Θ1α, Μ2…)', 'ΚΩΔ.', 7), F('block', 'Υπηρεσία (ομάδα θέσεων)', 'ΥΠΗΡΕΣΙΑ', 20, 'left'),
+    F('hours', 'Ώρες', 'ΩΡΕΣ', 16), F('armed', 'Ένοπλη (ΝΑΙ)', 'ΕΝΟΠΛΗ', 8),
+    ...SOLDIER, F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    ...TAIL],
+  weapon: [...COMMON, ...SOLDIER,
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
+    F('inout', 'Εντός ή εκτός (με τον λόγο)', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 26, 'left'),
+    ...TAIL],
+  wmove: [...COMMON, ...SOLDIER,
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
+    F('mreason', 'Λόγος εξόδου (ΕΚΠ, βολή…)', 'ΛΟΓΟΣ ΕΞΟΔΟΥ', 16), F('mout', 'Έξοδος (ημερομηνία και ώρα)', 'ΕΞΟΔΟΣ', 17),
+    F('minr', 'Λόγος εισόδου', 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ', 16), F('min', 'Είσοδος (ημερομηνία και ώρα)', 'ΕΙΣΟΔΟΣ', 17), F('mnote', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'),
     ...TAIL]
 };
 export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find(x => x.k === k);
@@ -80,8 +107,12 @@ export interface RepPick {
   fair?: boolean;                             // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
   cats?: StCat[];                             // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
   when?: 'on' | 'from';                       // Καταστάσεις: όσες ισχύουν τη μέρα ή όσες ισχύουν από τη μέρα και μετά
+  blocks?: string[];                          // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
+  empty?: boolean;                            // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
+  wf?: WeaponFilter;                          // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
+  open?: boolean;                             // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
 }
-export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from';
+export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from' | 'seat';
 export type StCat = 'med' | 'pun' | 'abs' | 'other' | 'out';
 export const ST_CATS: { id: StCat; label: string }[] = [{ id: 'med', label: 'Ιατρικά' }, { id: 'pun', label: 'Ποινές' }, { id: 'abs', label: 'Άδειες' }, { id: 'other', label: 'ΣΤΕΠ, νοσοκομείο' }, { id: 'out', label: 'Έξοδοι' }];
 const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
@@ -101,6 +132,7 @@ export interface Report {
   target?: RepTarget;                         // out = 'sheet'
   split?: RepSplit;                           // ένα φύλλο ανά θάλαμο, ουλαμό ή Σ.Ι.
   trim?: boolean;                             // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
+  daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
 }
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
@@ -128,7 +160,9 @@ const GUESS: [string, RegExp][] = [
   ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/], ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/], ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/], ['rack', /ΟΠΛΟΒΑΣΤΟΣ/], ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
   ['status', /^ΚΑΤΑΣΤΑΣΗ$/], ['duty', /^ΥΠΗΡΕΣΙΑ$/], ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/],
   ['stype', /^ΕΙΔΟΣ$|^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣΑΔΕΙΑΣ$|^ΠΟΙΝΗ$/], ['from', /^ΑΠΟ$|^ΕΝΑΡΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΑΠΟ$/], ['to', /^ΕΩΣ$|^ΜΕΧΡΙ$|^ΛΗΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΕΩΣ$/],
-  ['days', /^ΗΜΕΡΕΣ$|^ΗΜΕΡΩΝ$|^ΗΜ$/], ['note', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['by', /ΤΙΜΩΡΗΣΕ|^ΥΠΟ$/], ['reason', /^ΔΙΟΤΙ$|^ΑΙΤΙΟΛΟΓΙΑ$|^ΑΙΤΙΑ$/], ['on', /^ΗΜΤΙΜΩΡΙΑΣ$|^ΗΜΕΡΟΜΗΝΙΑΤΙΜΩΡΙΑΣ$/]
+  ['days', /^ΗΜΕΡΕΣ$|^ΗΜΕΡΩΝ$|^ΗΜ$/], ['note', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['by', /ΤΙΜΩΡΗΣΕ|^ΥΠΟ$/], ['reason', /^ΔΙΟΤΙ$|^ΑΙΤΙΟΛΟΓΙΑ$|^ΑΙΤΙΑ$/], ['on', /^ΗΜΤΙΜΩΡΙΑΣ$|^ΗΜΕΡΟΜΗΝΙΑΤΙΜΩΡΙΑΣ$/],
+  ['seat', /^ΘΕΣΗ$|^ΘΕΣΗΥΠΗΡΕΣΙΑΣ$/], ['hours', /^ΩΡΕΣ$|^ΩΡΑ$/], ['block', /^ΥΠΗΡΕΣΙΑ$/], ['armed', /^ΕΝΟΠΛΗ$|^ΕΝΟΠΛΟΣ$/], ['code', /^ΚΩΔ$|^ΚΩΔΙΚΟΣ$/],
+  ['inout', /^ΕΝΤΟΣΕΚΤΟΣ$|^ΕΝΤΟΣ$|^ΕΚΤΟΣ$/], ['mreason', /^ΛΟΓΟΣΕΞΟΔΟΥ$|^ΛΟΓΟΣ$/], ['mout', /^ΕΞΟΔΟΣ$|^ΩΡΑΕΞΟΔΟΥ$/], ['minr', /^ΛΟΓΟΣΕΙΣΟΔΟΥ$/], ['min', /^ΕΙΣΟΔΟΣ$|^ΩΡΑΕΙΣΟΔΟΥ$/], ['mnote', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/]
 ];
 // Ποιο στοιχείο ταιριάζει σε μια επικεφαλίδα (ή σε {ΕΤΙΚΕΤΑ} μέσα στη γραμμή)· null = δεν το ξέρω
 export function guessField(kind: RepKind, head: unknown): string | null {
@@ -147,7 +181,16 @@ export const repDate = (r: Pick<Report, 'day'>, today: ISODate, asked?: ISODate)
 
 // Καταστάσεις: μία γραμμή = μία κατάσταση, με τα στοιχεία του στρατιώτη (θάλαμος, βαθμός… για φίλτρα, σειρά, χωρισμό)
 export type StatusRow = Omit<Person, 'id'> & { id: string; pid: number; st: Status; p: Person };
-export type Row = Person | Cadre | StatusRow;
+// Υπηρεσίες: μία γραμμή = μία θέση (id = κλειδί θέσης)· p: ο στρατιώτης, null σε κενή θέση
+export type DutyRow = Omit<Person, 'id'> & { id: string; pid: number | null; p: Person | null; seat: Post };
+// Κινήσεις όπλων: μία γραμμή = μία έξοδος όπλου (id = της κίνησης)
+export type MoveRow = Omit<Person, 'id'> & { id: string; pid: number; p: Person; m: WeaponMove };
+export type Row = Person | Cadre | StatusRow | DutyRow | MoveRow;
+const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.settings.blocks).find(b => b.id === id) || [...(s.settings.blocks || []), ...(s.settings.blocksSpen || [])].find(b => b.id === id))?.name || '';
+// εντός/εκτός για όλους μαζί: μία φορά ανά κατάσταση και μέρα (καλείται για κάθε γραμμή)
+let wiMemo: { s: AppState; d: ISODate; info: WeaponInfo } | null = null;
+const wInfo = (s: AppState, d: ISODate) => { if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) }; return wiMemo.info; };
+const when = (day?: ISODate, t?: string) => (day ? dmy(day) + (t ? ' ' + t : '') : '');
 export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string): string | number | null {
   if (f === 'aa') return i + 1;
   if (f === 'blank') return null;
@@ -161,6 +204,23 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     }
     return fieldValue(s, 'people', r.p, f, i, d, text);
   }
+  if (kind === 'duty') {
+    const r = x as DutyRow; const po = r.seat;
+    switch (f) {
+      case 'seat': return po.label; case 'code': return po.code || ''; case 'block': return blockName(s, po.block); case 'hours': return po.hours || '';
+      case 'armed': return po.armed ? 'ΝΑΙ' : '';
+    }
+    return r.p ? fieldValue(s, 'people', r.p, f, i, d, text) : null;
+  }
+  if (kind === 'wmove') {
+    const r = x as MoveRow; const m = r.m;
+    switch (f) {
+      case 'weapon': return m.weapon || r.p.weapon || ''; case 'mreason': return m.reason; case 'mout': return when(m.outDay, m.outTime);
+      case 'minr': return m.inReason || ''; case 'min': return when(m.inDay, m.inTime); case 'mnote': return m.note || '';
+    }
+    return fieldValue(s, 'people', r.p, f, i, d, text);
+  }
+  if (kind === 'weapon' && f === 'inout') return inOutText(x as Person, wInfo(s, d));
   if (kind === 'cadre') {
     const c = x as Cadre; const nm = [c.last, c.first].filter(Boolean).join(' ');
     switch (f) {
@@ -217,6 +277,36 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
     }
     return out.sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first) || (a.st.from < b.st.from ? -1 : 1));
   }
+  // Υπηρεσίες: οι θέσεις της μέρας με τη σειρά της ΦΡΟΥΡΑΣ (και όσες έχουν κάποιον αλλά δεν είναι πια στο έντυπο)
+  if (r.kind === 'duty') {
+    const filtered = !!(pk.view || pk.si?.length || pk.rooms?.length);
+    const ok = filtered ? soldiersOf(s, pk, d) : null; const pm = personMap(s.people);
+    const blocks = pk.blocks?.length ? new Set(pk.blocks) : null;
+    const g = s.guards[d] || {}; const posts = postsOf(s.settings); const have = new Set(posts.map(x => x.k));
+    const out: DutyRow[] = [];
+    for (const po of [...posts, ...Object.keys(g).filter(k => !have.has(k)).map(k => postBy(s, k)).filter((x): x is Post => !!x)]) {
+      if (blocks && !blocks.has(po.block)) continue;
+      const row = dutyRow(pm, po, g[po.k]);
+      if (row.p ? (!ok || ok.has(row.p.id)) : pk.empty && !filtered) out.push(row);
+    }
+    return out;
+  }
+  // Κινήσεις όπλων της μέρας (έξοδοι της μέρας, είσοδοι της μέρας, όσα είναι ακόμα έξω), με τη σειρά που βγήκαν
+  if (r.kind === 'wmove') {
+    const ok = soldiersOf(s, pk, d); const pm = personMap(s.people);
+    const out: MoveRow[] = [];
+    for (const m of [...movesOn(s.weaponLog, d)].sort(byOut)) {
+      if (pk.open && m.inDay && m.inDay <= d) continue;
+      const p = pm.get(m.pid); if (p && ok.has(p.id)) out.push({ ...p, id: m.id, pid: p.id, p, m });
+    }
+    return out;
+  }
+  // Οπλισμός: όπως οι στρατιώτες, με το φίλτρο της καρτέλας Οπλισμός («Να παραδώσουν»: και όσοι είναι εκτός δύναμης)
+  if (r.kind === 'weapon') {
+    const wf = pk.wf || 'with'; const info = wInfo(s, d);
+    const base = wf === 'return' ? s.people.filter(p => !p.active) : (candidates(s, { kind: 'people', pick: pk }, d) as Person[]);
+    return base.filter(p => weaponMatch(wf, p, info)).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
+  }
   if (r.kind === 'cadre') {
     const list = orderedCadre(s.cadreList || []).filter(c => c.active);
     return pk.from === 'present' ? list.filter(c => !cadreStatusOn(s, c.id, d)) : list;
@@ -234,6 +324,15 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
 }
 export const rowId = (x: Row) => x.id;
+// στρατιώτες που περνούν τα φίλτρα του Δυναμολογίου (λίστα, θάλαμοι, Σ.Ι.): για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση
+function soldiersOf(s: AppState, pk: RepPick, d: ISODate): Set<number> {
+  return new Set(candidates(s, { kind: 'people', pick: { ...pk, from: 'all', noDuty: false, mode: 'all' } }, d).map(p => p.id as number));
+}
+const NOBODY = { rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', si: '', room: null } as unknown as Omit<Person, 'id'>;
+function dutyRow(pm: Map<number, Person>, po: Post, pid: number | undefined): DutyRow {
+  const p = pid != null ? pm.get(pid) : undefined;
+  return p ? { ...p, id: po.k, pid: p.id, p, seat: po } : { ...NOBODY, id: po.k, pid: null, p: null, seat: po };
+}
 
 // Τυχαίοι n από τη λίστα. even: ισομερώς από κάθε θάλαμο (όσοι λείπουν από έναν θάλαμο συμπληρώνονται από τους άλλους).
 // rnd: για τα τεστ (Math.random)
@@ -277,7 +376,8 @@ export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row
 }
 // Σειρά στο έντυπο
 export function sortRows<T extends Row>(rows: T[], sort: RepSort, s: AppState, kind: RepKind): T[] {
-  if (sort === 'pick') return rows;
+  if (sort === 'pick' || (sort === 'seat' && kind === 'duty')) return rows;
+  if (sort === 'from' && kind === 'wmove') return [...rows].sort((a, b) => byOut((a as MoveRow).m, (b as MoveRow).m));
   if (sort === 'from' && kind === 'status') return [...rows].sort((a, b) => ((a as StatusRow).st.from < (b as StatusRow).st.from ? -1 : (a as StatusRow).st.from > (b as StatusRow).st.from ? 1 : collator.compare(a.last, b.last)));
   if (kind === 'cadre') { if (sort !== 'rank') return [...rows].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first)); const ord = orderedCadre(s.cadreList || []).map(c => c.id); return [...rows].sort((a, b) => ord.indexOf(a.id as string) - ord.indexOf(b.id as string)); }
   const byName = (a: Row, b: Row) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
@@ -291,7 +391,15 @@ export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'>, d
   const n = r.pick.mode === 'all' ? c.length : Math.max(0, r.pick.n || 0);
   return sortRows(r.pick.mode === 'first' ? c.slice(0, n) : c, r.sort, s, r.kind);
 }
-export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[]): Row[] => {
+export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: ISODate): Row[] => {
+  if (kind === 'duty') {
+    const pm = personMap(s.people); const g = (d && s.guards[d]) || {};
+    return ids.map(k => { const po = postBy(s, String(k)); return po ? dutyRow(pm, po, g[po.k]) : null; }).filter((x): x is DutyRow => !!x);
+  }
+  if (kind === 'wmove') {
+    const pm = personMap(s.people); const mm = new Map((s.weaponLog || []).map(m => [m.id, m]));
+    return ids.map(id => { const m = mm.get(id as string); const p = m && pm.get(m.pid); return m && p ? { ...p, id: m.id, pid: p.id, p, m } as MoveRow : null; }).filter((x): x is MoveRow => !!x);
+  }
   if (kind === 'status') {
     const pm = personMap(s.people); const sm = new Map(s.statuses.map(x => [x.id, x]));
     return ids.map(id => { const st = sm.get(id as string); const p = st && pm.get(st.pid); return st && p ? { ...p, id: st.id, pid: p.id, st, p } as StatusRow : null; }).filter((x): x is StatusRow => !!x);
@@ -307,6 +415,17 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
     const cats = (pk.cats?.length ? pk.cats : DEF_CATS).map(c => ST_CATS.find(x => x.id === c)?.label.toLowerCase()).join(', ');
     const lead = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
     return lead + ' (' + cats + ') ' + (pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
+  }
+  const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', ')].filter(Boolean).join(', ');
+  const tail = rest ? ' (' + rest + ')' : '';
+  if (r.kind === 'duty') {
+    const bl = pk.blocks?.length ? pk.blocks.map(id => [...(s.settings.blocks || []), ...(s.settings.blocksSpen || [])].find(b => b.id === id)?.name).filter(Boolean).join(', ') : '';
+    return (bl ? 'Θέσεις: ' + bl : 'Όλες οι θέσεις υπηρεσίας') + (pk.empty ? ', και οι κενές' : '') + tail;
+  }
+  if (r.kind === 'wmove') return (pk.open ? 'Τα όπλα που είναι ακόμα έξω' : 'Οι κινήσεις όπλων της μέρας') + tail;
+  if (r.kind === 'weapon') {
+    const wf = WEAPON_FILTERS.find(x => x[0] === (pk.wf || 'with'));
+    return (pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι: ' : '') + 'Οπλισμός, ' + (wf ? wf[1].toLowerCase() : '') + tail;
   }
   const from = pk.from === 'all' ? (r.kind === 'cadre' ? 'όλα τα στελέχη' : 'όλους') : pk.from === 'present' ? 'τους παρόντες' : 'τη λίστα «' + (FROM_NAME[pk.from] || pk.from) + '»';
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
