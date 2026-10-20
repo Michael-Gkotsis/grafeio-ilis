@@ -1,5 +1,6 @@
 // «Έντυπα ημέρας» (Σήμερα): η αυριανή ΦΡΟΥΡΑ, η σημερινή ΗΚΑΙ και οι σημερινοί Εξοδούχοι με έναν προέλεγχο για όλα,
-// μετά «Βγάλε όλα» (ανοίγουν στο Excel) ή «Τύπωσε όλα» (μία προεπισκόπηση εκτύπωσης μετά την άλλη)
+// μετά «Βγάλε όλα» (ανοίγουν στο Excel) ή «Τύπωσε όλα» (μία προεπισκόπηση εκτύπωσης μετά την άλλη).
+// Μαζί και τα δικά σου έντυπα (Έντυπα) που έχουν «Βγαίνει και από τα Έντυπα ημέρας».
 import { useMemo, useState } from 'react';
 import { html, cx, Button, Dialog, Icon } from '../ui';
 import { useNav, useStore } from '../store';
@@ -7,18 +8,25 @@ import { GO } from '../common';
 import { preflight, type Check } from '../../shared/preflight';
 import { HK } from '../../shared/unit';
 import { dayName, dmy, type ISODate } from '../../shared/dates';
-import type { ExportKind } from '../../shared/api';
+import { dailyOk, repDate, rowNoun, rowsOf, type Report } from '../../shared/reports';
+import type { ExportKind, ExportResult } from '../../shared/api';
 
-type Item = { kind: ExportKind; date: ISODate; name: string; label: string };
+type Item = { kind: ExportKind | 'rep'; date: ISODate; name: string; label: string; rep?: Report };
 type Done = { ok: boolean; text: string; file?: string };
 export function DayFormsDialog({ onClose }: { onClose: () => void }) {
   const { state, today, tomorrow, sync } = useStore(); const nav = useNav();
   const items: Item[] = [
     { kind: 'froura', date: tomorrow, name: 'ΦΡΟΥΡΑ', label: 'η κατάσταση υπηρεσιών' },
     { kind: 'hkai', date: today, name: HK(), label: 'η ' + HK() },
-    { kind: 'outs', date: today, name: 'Εξοδούχοι και παραμένοντες', label: 'οι εξοδούχοι' }
+    { kind: 'outs', date: today, name: 'Εξοδούχοι και παραμένοντες', label: 'οι εξοδούχοι' },
+    ...(state.settings.reports || []).filter(r => r.daily && dailyOk(r)).map(r => ({ kind: 'rep' as const, date: repDate(r, today), name: r.name, label: 'το έντυπο', rep: r }))
   ];
-  const checks = useMemo(() => items.map(it => preflight(it.kind, state, it.date)), [state, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // δικά σου έντυπα: χωρίς πρότυπο δεν βγαίνει· χωρίς κανέναν βγαίνει άδειο, με προειδοποίηση
+  const repCheck = (r: Report, d: ISODate): Check[] => {
+    if (!(state.settings.reportTpls || []).some(t => t.id === r.tpl)) return [{ level: 'err', text: 'Το πρότυπό του δεν υπάρχει πια. Άνοιξέ το στα Έντυπα με «Αλλαγή».' } as Check];
+    return rowsOf(state, r, d).length ? [] : [{ level: 'warn', text: 'Κανείς δεν περνά τα φίλτρα του (0 ' + rowNoun(r.kind) + ').' } as Check];
+  };
+  const checks = useMemo(() => items.map(it => (it.rep ? repCheck(it.rep, it.date) : preflight(it.kind as ExportKind, state, it.date))), [state, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const bad = checks.map(cs => cs.some(c => c.level === 'err'));
   // με ✕ δεν βγαίνει (όπως και από το κουμπί του κάθε εντύπου), τα άλλα βγαίνουν κανονικά
   const [on, setOn] = useState(() => items.map((_, i) => !bad[i]));
@@ -29,20 +37,25 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
   const show = (it: Item, c: Check) => { if (!c.go) return; onClose(); const [v, p] = GO[c.go](it.date); nav.go(v, p); };
   const go = async (print: boolean) => {
     setBusy(print ? 'print' : 'xl'); setDone({});
-    const files: [number, string][] = [];
+    const files: [number, string, string[] | undefined][] = [];
     for (const i of pick) {
       const it = items[i]; setDone(d => ({ ...d, [i]: 'run' }));
-      let r: Awaited<ReturnType<typeof window.api.exportFile>>;
+      let r: ExportResult & { sheets?: string[] };
       // οι προειδοποιήσεις φάνηκαν εδώ: «Βγάλε όλα» είναι το «Το ξέρω, συνέχισε» και γράφονται στο Ιστορικό
-      try { r = await window.api.exportFile(it.kind, it.date, { open: !print, ack: true }); } catch (e) { r = { ok: false, error: String(e) } as typeof r; }
-      if (r.ok) { files.push([i, r.file]); setDone(d => ({ ...d, [i]: { ok: true, text: 'Βγήκε: ' + r.file.split(/[\\/]/).pop() + (r.ok && r.warnings.length ? ' · ⚠ ' + r.warnings.join(' · ') : ''), file: r.file } })); }
+      try {
+        if (it.rep) {
+          const tpl = (state.settings.reportTpls || []).find(t => t.id === it.rep!.tpl)!;
+          r = await window.api.repRun(it.rep, tpl.file, rowsOf(state, it.rep, it.date).map(x => x.id), it.date, false, false, { quiet: print });
+        } else r = await window.api.exportFile(it.kind as ExportKind, it.date, { open: !print, ack: true });
+      } catch (e) { r = { ok: false, error: String(e) }; }
+      if (r.ok) { files.push([i, r.file, r.sheets]); setDone(d => ({ ...d, [i]: { ok: true, text: 'Βγήκε: ' + r.file.split(/[\\/]/).pop() + (r.ok && r.warnings.length ? ' · ⚠ ' + r.warnings.join(' · ') : ''), file: r.file } })); }
       else setDone(d => ({ ...d, [i]: { ok: false, text: 'Δεν βγήκε: ' + r.error } }));
     }
     await sync();
     // μία προεπισκόπηση τη φορά: η επόμενη ανοίγει όταν κλείσει η προηγούμενη
-    if (print) for (const [i, f] of files) {
+    if (print) for (const [i, f, sh] of files) {
       setDone(d => ({ ...d, [i]: { ok: true, text: 'Στην εκτύπωση: ' + f.split(/[\\/]/).pop(), file: f } }));
-      const p = await window.api.printFile(f).catch(e => ({ ok: false as const, error: String(e) }));
+      const p = await window.api.printFile(f, sh).catch(e => ({ ok: false as const, error: String(e) }));
       if (!p.ok) setDone(d => ({ ...d, [i]: { ok: false, text: 'Δεν άνοιξε η εκτύπωση: ' + p.error } }));
     }
     setBusy('');
@@ -55,7 +68,7 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
         <${Button} data-autofocus="" disabled=${!!busy || !pick.length} onClick=${() => go(false)}>${busy === 'xl' ? 'Βγαίνουν…' : pick.length === items.length ? 'Βγάλε όλα' : 'Βγάλε τα ' + pick.length}<//>`}>
     <div className="dayforms">${items.map((it, i) => {
       const cs = checks[i]; const d = done[i];
-      return html`<section key=${it.kind} className=${cx('dayforms__item', !on[i] && 'is-off')}>
+      return html`<section key=${it.rep ? it.rep.id : it.kind} className=${cx('dayforms__item', !on[i] && 'is-off')}>
         <label className="dayforms__head"><input type="checkbox" className="ui-check" checked=${on[i] && !bad[i]} disabled=${bad[i] || !!busy} onChange=${(e: any) => setOn(o => o.map((x, j) => (j === i ? e.target.checked : x)))}/>
           <b>${it.name}</b><span className="muted">${dayName(it.date, today)} ${dmy(it.date)}</span>
           <span className=${cx('dayforms__st', bad[i] ? 'txt-bad' : cs.length ? 'txt-warn' : 'txt-ok')}>${bad[i] ? '✕ δεν μπορεί να βγει' : cs.length ? '⚠ ' + cs.length + (cs.length === 1 ? ' προειδοποίηση' : ' προειδοποιήσεις') : '✓ έτοιμο'}</span></label>

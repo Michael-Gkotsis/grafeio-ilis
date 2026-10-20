@@ -9,17 +9,21 @@ import { dayName, dm } from '../../shared/dates';
 import { ROSTER_FILTERS } from '../../shared/rosterLists';
 import { siCombos } from '../../shared/si';
 import { statusLbl } from '../../shared/ranks';
-import type { AppState } from '../../shared/domain';
-import type { RepPreview, RepSource, TplInspect } from '../../shared/api';
+import { blocksOf, type AppState } from '../../shared/domain';
+import { WEAPON_FILTERS } from '../../shared/weapons';
+import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  CELLS, FIELDS, PRESETS, REP_KINDS, SPLITS, ST_CATS, blankBuild, candidates, cellOf, defaultPick, fieldOf, pickRandom, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  CELLS, FIELDS, PRESETS, REP_KINDS, SPLITS, ST_CATS, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   type BuildCol, type BuildOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-const SORTS: { value: RepSort; label: string }[] = [{ value: 'name', label: 'Αλφαβητικά' }, { value: 'room', label: 'Θάλαμος' }, { value: 'rank', label: 'Βαθμός' }, { value: 'from', label: 'Ημερομηνία' }, { value: 'pick', label: 'Όπως βγήκαν' }];
-const sortsOf = (kind: RepKind) => SORTS.filter(s => (kind !== 'cadre' || s.value !== 'room') && (kind === 'status' || s.value !== 'from'));
+const SORTS: { value: RepSort; label: string }[] = [{ value: 'seat', label: 'Σειρά ΦΡΟΥΡΑΣ' }, { value: 'name', label: 'Αλφαβητικά' }, { value: 'room', label: 'Θάλαμος' }, { value: 'rank', label: 'Βαθμός' }, { value: 'from', label: 'Ημερομηνία' }, { value: 'pick', label: 'Όπως βγήκαν' }];
+const sortsOf = (kind: RepKind) => SORTS.filter(s => (kind !== 'cadre' || s.value !== 'room') && ((kind === 'status' || kind === 'wmove') || s.value !== 'from') && (kind === 'duty' || s.value !== 'seat')
+  && !((kind === 'duty' || kind === 'wmove') && s.value === 'pick')).map(s => (kind === 'wmove' && s.value === 'from' ? { ...s, label: 'Ώρα εξόδου' } : s));
+// στήλες που μπαίνουν μόνες τους όταν διαλέγεις είδος σε «Φτιάξ' το εδώ»
+const KIND_COLS: Partial<Record<RepKind, string[]>> = { status: ['stype', 'from', 'to'], duty: ['seat', 'hours'], weapon: ['weapon', 'wtype', 'rack', 'inout'], wmove: ['weapon', 'mreason', 'mout', 'min'] };
 const fileName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
 // πού βγαίνει, για τη λίστα: «φύλλο ΑΓΓΑΡΕΙΑ στο Δυναμολόγιο»
 const outText = (r: Report) => r.out === 'print' ? 'εκτύπωση' : r.out !== 'sheet' ? 'Excel' :
@@ -37,20 +41,20 @@ const editedInExcel = (t: RepTpl, mtime?: number) => !!t.built && !!mtime && !!t
 function useRunReport() {
   const toast = useToast(); const printFile = usePrintFile();
   const busy = useRef(false);
-  const go = useCallback(async (s: AppState, r: Report, ids: (number | string)[], d: string, print: boolean, force = false): Promise<boolean> => {
+  const go = useCallback(async (s: AppState, r: Report, ids: (number | string)[], d: string, print: boolean, force = false, again = false): Promise<boolean> => {
     const tpl = tplsOf(s).find(t => t.id === r.tpl);
     if (!tpl) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Το πρότυπό του δεν υπάρχει πια. Άνοιξέ το με «Αλλαγή» και διάλεξε άλλο.</span>` }); return false; }
     if (!ids.length) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Κανείς δεν περνά τα φίλτρα του για ${dayName(d).toLowerCase()} ${dm(d)}.</span>` }); return false; }
     if (busy.current) return false; busy.current = true;
     let res: Awaited<ReturnType<typeof window.api.repRun>>;
-    try { res = await window.api.repRun(r, tpl.file, ids, d, print, force); } catch (e) { res = { ok: false, error: String(e) }; } finally { busy.current = false; }
+    try { res = await window.api.repRun(r, tpl.file, ids, d, print, force, { again }); } catch (e) { res = { ok: false, error: String(e) }; } finally { busy.current = false; }
     if (!res.ok) {
       // φύλλο με ίδιο όνομα που δεν έφτιαξε το έντυπο: γράφεται από πάνω μόνο αν το πεις
-      if (res.confirm) { toast({ text: html`<span><b>Δεν γράφτηκε «${r.name}».</b> ${res.error} Να γραφτεί από πάνω; Ό,τι έχει χάνεται (μένει αντίγραφο στον φάκελο «_προηγούμενα»).</span>`, actions: [{ label: 'Γράψε από πάνω', fn: () => { go(s, r, ids, d, print, true); } }] }); return false; }
-      toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> ${res.error}</span>`, actions: res.locked ? [{ label: 'Ξανά', fn: () => { go(s, r, ids, d, print, force); } }] : undefined });
+      if (res.confirm) { toast({ text: html`<span><b>Δεν γράφτηκε «${r.name}».</b> ${res.error} Να γραφτεί από πάνω; Ό,τι έχει χάνεται (μένει αντίγραφο στον φάκελο «_προηγούμενα»).</span>`, actions: [{ label: 'Γράψε από πάνω', fn: () => { go(s, r, ids, d, print, true, again); } }] }); return false; }
+      toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> ${res.error}</span>`, actions: res.locked ? [{ label: 'Ξανά', fn: () => { go(s, r, ids, d, print, force, again); } }] : undefined });
       return false;
     }
-    const file = res.file; const n = ids.length + ' ' + (r.kind === 'cadre' ? 'στελέχη' : r.kind === 'status' ? 'καταστάσεις' : 'άτομα');
+    const file = res.file; const n = ids.length + ' ' + rowNoun(r.kind);
     const warn = res.warnings.length ? html`<br/>⚠ ${res.warnings.join(' · ')}` : '';
     if (r.out === 'sheet' && !print) {
       const sh = res.sheets || [];
@@ -86,11 +90,12 @@ function usePick(r: Report, d: string) {
 
 const PickRow = memo(function PickRow({ x, i, kind, onX, times }: P) {
   const t = times ? times[x.id] || 0 : -1;
-  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nameOf(x)}</b><small>${[x.rank, kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ')}</small>
+  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nameOf(x) || '(κενή θέση)'}</b><small>${[x.rank, kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
+    kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ')}</small>
     ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλαξε τον ' + nameOf(x)} data-tip="Βάλε άλλον τυχαίο στη θέση του" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</li>`;
 });
 function PickList({ p, kind }: P) {
-  const who = kind === 'cadre' ? 'στελέχη' : kind === 'status' ? 'καταστάσεις' : 'άτομα';
+  const who = rowNoun(kind);
   return html`<div className="rep-picks">
     <div className="rep-picks__head"><b>${p.rows.length} ${who}</b><span className="muted">${p.random ? 'τυχαία από ' + p.pool.length + ' που περνούν τα φίλτρα' : p.rows.length < p.pool.length ? 'από ' + p.pool.length + ' που περνούν τα φίλτρα' : ''}</span>
       ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση">⟳ Ξανά τυχαία<//>`}</div>
@@ -165,6 +170,7 @@ export function ReportsScreen() {
   useEffect(loadLast, [loadLast]);
   const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
   const [ask, setAsk] = useState<{ r: Report; print: boolean } | null>(null);
+  const [hist, setHist] = useState<Report | null>(null);
   const go = async (r: Report, print = r.out === 'print', s = state) => {
     if (needsAsk(r)) { setAsk({ r, print }); return; }
     const d = repDate(r, today);
@@ -191,6 +197,7 @@ export function ReportsScreen() {
         <td>${pickText(r, state)}</td><td className="nw muted">${lastTxt(last[r.id], today)}</td>
         <td className="rep-table__acts"><${Button} size="sm" onClick=${() => go(r)} data-tip=${needsAsk(r) ? 'Δείχνει πρώτα ποιοι μπαίνουν' : 'Βγαίνει τώρα, για ' + (r.day === 'tomorrow' ? 'αύριο' : 'σήμερα')}>${needsAsk(r) ? 'Βγάλε…' : 'Βγάλε'}<//>
           <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => setHist(r)} data-tip="Πότε βγήκε και ποιοι μπήκαν· ξαναβγαίνει ίδιο αν χαθεί το χαρτί">Ιστορικό<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setWiz({ r })}>Αλλαγή<//>
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
           <${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + r.name} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => del(r)}>${Icon.x}<//></td>
@@ -206,6 +213,7 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
     ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${(r: Report, s: AppState) => go(r, r.out === 'print', s)}/>`}
+    ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
     ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
   </div>`;
 }
@@ -229,6 +237,23 @@ function RunDialog({ r, print, onClose, onDone }: P) {
       ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
     </div>
     <${PickList} p=${p} kind=${r.kind}/>
+  <//>`;
+}
+
+// Ιστορικό εκδόσεων: οι 10 τελευταίες φορές, με «Ξαναβγάλε» (ίδιοι, ίδια μέρα, με τα τωρινά στοιχεία τους)
+function HistDialog({ r, onClose }: P) {
+  const { state, today } = useStore(); const runReport = useRunReport(); const printFile = usePrintFile();
+  const [list, setList] = useState<RepHistEntry[] | null>(null);
+  useEffect(() => { window.api.repHist(r.id).then(setList, () => setList([])); }, [r.id]);
+  const again = async (h: RepHistEntry) => { if (await runReport(state, r, h.ids, h.date, false, false, true)) onClose(); };
+  return html`<${Dialog} size="lg" title=${'Ιστορικό: ' + r.name} description="Οι 10 τελευταίες φορές που βγήκε. «Ξαναβγάλε» φτιάχνει ξανά το έντυπο με τους ίδιους και για την ίδια μέρα, με τα τωρινά τους στοιχεία." onClose=${onClose}
+    footer=${html`<${Button} data-autofocus="" onClick=${onClose}>Κλείσιμο<//>`}>
+    ${!list ? html`<div className="empty">Φορτώνει…</div>` : !list.length ? html`<div className="empty">Δεν έχει βγει ακόμα.</div>`
+      : html`<table className="rep-table"><thead><tr><th>Πότε</th><th>Για</th><th>Πόσοι</th><th>Αρχείο</th><th></th></tr></thead><tbody>${list.map((h, i) => html`<tr key=${i}>
+        <td className="nw">${lastTxt(h.at, today)}</td><td className="nw">${dayName(h.date, today)} ${dm(h.date)}</td><td>${h.n} ${rowNoun(r.kind)}</td>
+        <td>${fileName(h.file)}${h.sheets?.length ? html`<small>${h.sheets.length > 1 ? h.sheets.length + ' φύλλα' : 'φύλλο ' + h.sheets[0]}</small>` : ''}${!h.exists ? html`<small className="muted">δεν υπάρχει πια</small>` : ''}</td>
+        <td className="rep-table__acts">${h.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(h.file)}>Άνοιξε<//><${Button} size="sm" variant="ghost" onClick=${() => printFile(h.file, h.sheets)}>${Icon.print}Τύπωσε<//>`}
+          <${Button} size="sm" variant="outline" onClick=${() => again(h)} data-tip="Ίδιοι, ίδια μέρα, με τα τωρινά στοιχεία">Ξαναβγάλε<//></td></tr>`)}</tbody></table>`}
   <//>`;
 }
 
@@ -285,14 +310,24 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
   const setKind = async (kind: RepKind) => {
     if (kind === r.kind) return;
-    const { cats, when, ...rest } = r.pick;
+    // κάθε είδος κρατά μόνο τα δικά του φίλτρα· θάλαμοι, Σ.Ι. και λίστα μένουν σε όσα έχουν στρατιώτες
+    const { cats, when, blocks, empty, wf, open, ...rest } = r.pick;
+    const base = { ...rest, from: 'all' as const, noDuty: false };
     const pick: RepPick = kind === 'cadre' ? { from: r.pick.from === 'present' ? 'present' : 'all', mode: r.pick.mode, n: r.pick.n }
-      : kind === 'status' ? { ...rest, from: 'all', view: r.pick.view, noDuty: false, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' } : { ...rest, from: r.kind === 'status' ? 'all' : rest.from };
-    const sort = r.sort === 'room' && kind === 'cadre' ? 'rank' : r.sort === 'from' && kind !== 'status' ? 'name' : r.sort;
+      : kind === 'status' ? { ...base, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' }
+      : kind === 'duty' ? { ...base, mode: 'all', blocks, empty } : kind === 'wmove' ? { ...base, mode: 'all', open }
+      : kind === 'weapon' ? { ...rest, from: isLinked(r.kind) ? 'all' : rest.from, wf: wf || 'with' } : { ...rest, from: isLinked(r.kind) ? 'all' : rest.from };
+    const sort: RepSort = kind === 'duty' ? 'seat' : kind === 'wmove' ? 'from' : sortsOf(kind).some(x => x.value === r.sort) ? r.sort : kind === 'cadre' ? 'rank' : 'name';
     upd({ kind, pick, sort, split: kind === 'cadre' ? 'none' : r.split });
     if (mode === 'upload' && tpl) await inspect(tpl, kind, r.sheet, r.head);
     // Καταστάσεις: μπαίνουν και οι στήλες της κατάστασης (είδος, από, έως) αν λείπουν
-    if (mode === 'build' && build) { const cols = build.cols.filter(c => fieldOf(kind, c.f)); if (kind === 'status') for (const f of ['stype', 'from', 'to']) if (!cols.some(c => c.f === f)) cols.push({ f, h: fieldOf(kind, f)!.head, w: f === 'stype' ? 'auto' : 'narrow' }); setBuild({ ...build, cols }); }
+    if (mode === 'build' && build) {
+      const cols = build.cols.filter(c => fieldOf(kind, c.f) && !Object.values(KIND_COLS).some(l => l!.includes(c.f) && !fieldOf('people', c.f)));
+      for (const f of KIND_COLS[kind] || []) if (!cols.some(c => c.f === f)) cols.push({ f, h: fieldOf(kind, f)!.head, w: ['stype', 'seat', 'inout', 'mreason'].includes(f) ? 'auto' : 'narrow' });
+      // η θέση πρώτη, αμέσως μετά το Α/Α
+      if (kind === 'duty') { const i = cols.findIndex(c => c.f === 'seat'); const [x] = cols.splice(i, 1); cols.splice(cols[0]?.f === 'aa' ? 1 : 0, 0, x); }
+      setBuild({ ...build, cols });
+    }
   };
   const p = usePick(r, d);
   const ids = useMemo(() => p.rows.map(x => x.id), [p.rows]);
@@ -388,7 +423,7 @@ function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
 function StepKind({ r, setKind, mode, tpl, build }: P) {
   return html`<div className="stack">
     <div className="rep-kinds">${REP_KINDS.map(k => html`<button key=${k.id} type="button" className="rep-preset" aria-pressed=${r.kind === k.id} onClick=${() => setKind(k.id)}><b>${k.label}</b><small>${k.help}</small></button>`)}</div>
-    <p className="note">${mode === 'upload' ? 'Οι στήλες του «' + (tpl?.name || '') + '» ξαναδιαβάζονται για ' + (r.kind === 'cadre' ? 'στελέχη' : 'στρατιώτες') + ' όταν αλλάζεις.' : build ? 'Οι στήλες που δεν υπάρχουν για ' + (r.kind === 'cadre' ? 'στελέχη' : 'στρατιώτες') + ' φεύγουν (π.χ. ΑΣΜ στα στελέχη, εκεί είναι ΑΜ).' : ''}</p>
+    <p className="note">${mode === 'upload' ? 'Οι στήλες του «' + (tpl?.name || '') + '» ξαναδιαβάζονται για το είδος που διαλέγεις.' : build ? 'Οι στήλες που δεν υπάρχουν στο είδος φεύγουν (π.χ. ΑΣΜ στα στελέχη, εκεί είναι ΑΜ) και μπαίνουν οι βασικές του (π.χ. θέση και ώρες στις υπηρεσίες).' : ''}</p>
   </div>`;
 }
 
@@ -473,7 +508,9 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
 function StepPick({ r, upd, p }: P) {
   const { state } = useStore();
   const pk: RepPick = r.pick; const set = (x: Partial<RepPick>) => upd({ pick: { ...pk, ...x } });
-  const people = r.kind === 'people'; const status = r.kind === 'status'; const soldiers = people || status;
+  const people = r.kind === 'people' || r.kind === 'weapon'; const status = r.kind === 'status'; const linked = isLinked(r.kind); const soldiers = r.kind !== 'cadre';
+  const duty = r.kind === 'duty'; const wmove = r.kind === 'wmove'; const counted = !duty && !wmove;
+  const blockList = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
   const views = state.settings.views || [];
   const fromVal = pk.view ? 'v:' + pk.view : pk.from;
   const setFrom = (v: string) => (v.startsWith('v:') ? set({ from: 'all', view: v.slice(2) }) : set({ from: v as RepPick['from'], view: undefined }));
@@ -484,8 +521,12 @@ function StepPick({ r, upd, p }: P) {
     <div className="stack">
       ${status && html`<div><span className="field__label">Ποιες καταστάσεις</span><div className="rep-chips">${ST_CATS.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${(pk.cats || []).includes(c.id)} onClick=${() => { const cats = toggle<StCat>(pk.cats, c.id); if (cats.length) set({ cats }); }}>${c.label}</button>`)}</div></div>`}
       ${status && html`<div className="rep-opts"><span className="field__label">Ποιες μπαίνουν</span><${Segmented} small=${true} value=${pk.when || 'on'} onChange=${(when: RepPick['when']) => set({ when })} items=${[{ value: 'on', label: 'Όσες ισχύουν τη μέρα' }, { value: 'from', label: 'Από τη μέρα και μετά' }]}/></div>`}
+      ${duty && html`<div><span className="field__label">Ποιες υπηρεσίες <small className="muted">(καμία = όλες)</small></span><div className="rep-chips">${blockList.map(b => html`<button key=${b.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.blocks?.includes(b.id)} onClick=${() => set({ blocks: toggle(pk.blocks, b.id) })}>${b.name}</button>`)}</div></div>`}
+      ${duty && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.empty} onChange=${(e: any) => set({ empty: e.target.checked })}/>Και οι θέσεις που δεν έχουν κανέναν (όχι με φίλτρο θαλάμου ή Σ.Ι.)</label>`}
+      ${wmove && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.open} onChange=${(e: any) => set({ open: e.target.checked })}/>Μόνο όσα όπλα είναι ακόμα έξω</label>`}
+      ${r.kind === 'weapon' && html`<div className="field"><label className="field__label" htmlFor="p-wf">Ποια όπλα</label><select id="p-wf" className="ui-select" value=${pk.wf || 'with'} onChange=${(e: any) => set({ wf: e.target.value })}>${WEAPON_FILTERS.map(([k, l, , help]) => html`<option key=${k} value=${k} title=${help}>${l}</option>`)}</select></div>`}
       <div className="field-row">
-        ${status ? html`<div className="field"><label className="field__label" htmlFor="p-from">Στρατιώτες</label><select id="p-from" className="ui-select" value=${pk.view ? 'v:' + pk.view : 'all'} onChange=${(e: any) => setFrom(e.target.value)}>
+        ${linked ? html`<div className="field"><label className="field__label" htmlFor="p-from">Στρατιώτες</label><select id="p-from" className="ui-select" value=${pk.view ? 'v:' + pk.view : 'all'} onChange=${(e: any) => setFrom(e.target.value)}>
           <option value="all">Όλοι σε δύναμη</option>${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`
         : html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
           <option value="all">${people ? 'Όλοι σε δύναμη' : 'Όλα τα στελέχη'}</option><option value="present">${people ? 'Παρόντες τη μέρα' : 'Παρόντα τη μέρα (χωρίς κατάσταση)'}</option>
@@ -496,9 +537,9 @@ function StepPick({ r, upd, p }: P) {
       ${people && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.noDuty} onChange=${(e: any) => set({ noDuty: e.target.checked })}/>Χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη</label>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
-      <div className="rep-opts"><span className="field__label">Πόσοι</span><${Segmented} small=${true} value=${pk.mode} onChange=${setMode} items=${[{ value: 'all', label: 'Όλοι' }, { value: 'first', label: 'Οι πρώτοι Ν' }, { value: 'random', label: 'Ν τυχαίοι' }]}/>
+      ${counted && html`<div className="rep-opts"><span className="field__label">Πόσοι</span><${Segmented} small=${true} value=${pk.mode} onChange=${setMode} items=${[{ value: 'all', label: 'Όλοι' }, { value: 'first', label: 'Οι πρώτοι Ν' }, { value: 'random', label: 'Ν τυχαίοι' }]}/>
         ${pk.mode !== 'all' && html`<input type="number" min="1" className="ui-input rep-n" aria-label="Πόσοι" value=${pk.n || 10} onChange=${(e: any) => set({ n: Math.max(1, +e.target.value || 1) })}/>`}
-        ${pk.mode === 'random' && soldiers && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.even} onChange=${(e: any) => set({ even: e.target.checked })}/>Ισομερώς από κάθε θάλαμο</label>`}</div>
+        ${pk.mode === 'random' && soldiers && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.even} onChange=${(e: any) => set({ even: e.target.checked })}/>Ισομερώς από κάθε θάλαμο</label>`}</div>`}
       ${pk.mode === 'random' && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.fair} onChange=${(e: any) => set({ fair: e.target.checked })}/>Πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο</label>`}
       ${pk.mode === 'random' && html`<p className="note">Κάθε φορά που βγαίνει, η κλήρωση γίνεται από την αρχή και σου δείχνει ποιοι βγήκαν πριν φτιαχτεί το Excel. Με ✕ αλλάζεις έναν.${pk.fair ? ' Η εφαρμογή μετρά πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο· η μέτρηση ξεκινά από την αρχή με τη Νέα ΕΣΣΟ.' : ''}</p>`}
       <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${sortsOf(r.kind)}/></div>
@@ -539,6 +580,7 @@ function StepOut({ r, upd, mode, insp, n }: P) {
     ${r.kind !== 'cadre' && r.out !== 'print' && html`<div className="field"><span className="field__label">Χωρισμός σε φύλλα</span><${Segmented} small=${true} value=${r.split || 'none'} onChange=${(split: RepSplit) => upd({ split })} items=${SPLITS}/>
       ${split && html`<span className="field__help">Ένα φύλλο για κάθε ${r.split === 'room' ? 'θάλαμο' : r.split === 'unit' ? 'ουλαμό' : 'Σ.Ι.'}, με το ίδιο πρότυπο${sheet ? '' : ', με όνομα π.χ. «' + example + '»'}. Βάλε {ΟΜΑΔΑ} σε ένα κελί του προτύπου για να γράφεται εκεί.</span>`}</div>`}
     ${mode === 'upload' && insp && insp.prepared > 1 && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.trim} onChange=${(e: any) => upd({ trim: e.target.checked })}/>Σβήσε τις κενές γραμμές του προτύπου που περισσεύουν (έχει ${insp.prepared})</label>`}
-    <${Alert} tone="info">Τώρα: ${n} ${r.kind === 'cadre' ? 'στελέχη' : r.kind === 'status' ? 'καταστάσεις' : 'άτομα'}, για ${r.day === 'tomorrow' ? 'αύριο' : r.day === 'ask' ? 'τη μέρα που θα διαλέγεις' : 'σήμερα'}. Όλα όσα γράφει στο Excel μπαίνουν με κεφαλαία.<//>
+    <label className="ui-checkrow"><input type="checkbox" className="ui-check" disabled=${!dailyOk(r)} checked=${!!r.daily && dailyOk(r)} onChange=${(e: any) => upd({ daily: e.target.checked })}/>Βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ και Εξοδούχους${dailyOk(r) ? '' : ' (όχι με τυχαίους ή «Ρώτα κάθε φορά»)'}</label>
+    <${Alert} tone="info">Τώρα: ${n} ${rowNoun(r.kind)}, για ${r.day === 'tomorrow' ? 'αύριο' : r.day === 'ask' ? 'τη μέρα που θα διαλέγεις' : 'σήμερα'}. Όλα όσα γράφει στο Excel μπαίνουν με κεφαλαία.<//>
   </div>`;
 }

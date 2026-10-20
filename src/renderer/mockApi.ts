@@ -179,13 +179,14 @@ export function mockApi(): Api {
     repPreview: async (src, r: Report, ids, date) => {
       const cols = 'build' in src ? src.build.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h, text: c.text })) : r.cols;
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
-      const rows = byIds(state, r.kind, ids.slice(0, 40));
+      const rows = byIds(state, r.kind, ids.slice(0, 40), date);
       const head = cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('');
       const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text)) + '</td>').join('') + '</tr>').join('');
       return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
     },
     repRun: async (r, _f, ids) => ({ ok: true, file: '(δοκιμή) ' + r.name + ' (' + ids.length + ').xlsx', warnings: [] }),
     repTimes: async () => ({}),
+    repHist: async () => [],
     repPickFile: async () => null,
     repOpenTpl: async () => {},
     repFiles: async files => Object.fromEntries(files.map(f => [f, { exists: true, mtime: 0 }])),
