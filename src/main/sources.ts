@@ -249,7 +249,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const st0 = exists ? stamp(b.file) : null; const expect = st0 ? { [path.join(path.dirname(b.file), path.basename(b.file))]: st0 } : undefined;
     const create = isStatusKind(kind) || (!!opts.create && canCreate(kind));
     if (!exists && !create) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
-    const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
+    const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet); wb.widen = true;
     const a = await applyKind(wb, kind, b, s, meta, today, opts, create, !exists);
     if ('error' in a) return { ok: false, error: a.error };
     if ('ws' in a) return await newDutiesSheet(wb, a.ws, b, s, today, expect);
@@ -271,7 +271,7 @@ export async function writeGroup(jobs: { kind: ListKind; b: SourceBinding; meta?
   const file = jobs[0].b.file; const out = new Map<typeof jobs[number], WriteOutcome>();
   try {
     const st0 = stamp(file); const expect = st0 ? { [path.join(path.dirname(file), path.basename(file))]: st0 } : undefined;
-    const wb = await Workbook.open(await fs.promises.readFile(file));
+    const wb = await Workbook.open(await fs.promises.readFile(file)); wb.widen = true;
     const here = jobs.filter(j => wb.hasSheet(j.b.sheet));
     const done: { j: typeof jobs[number]; a: Extract<Applied, { keep: unknown }>; moved: boolean }[] = []; let touched = false;
     for (const j of here) {

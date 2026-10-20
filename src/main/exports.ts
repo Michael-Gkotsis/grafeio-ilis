@@ -54,7 +54,8 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
   const form = FROURA_FORMS[phase];
-  const wb = await Workbook.open(tpl); await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = personMap(s.people);
+  // οι στήλες φαρδαίνουν όσο χρειάζεται: το έντυπο τυπώνεται σε μία σελίδα (fitToPage), απλώς λίγο μικρότερο
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = personMap(s.people);
   const warnings: string[] = [];
   const g = s.guards[d] || {};
   ws.set('L1', s.settings.unit[0]).set('L2', s.settings.unit[1]).set('L3', s.settings.unit[2]);
@@ -235,7 +236,7 @@ export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): stri
 }
 // sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null): Promise<ExportResult> {
-  const wb = await Workbook.open(tpl); await unitWords(wb, s); const warnings: string[] = []; const done: Sheet[] = [];
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = []; const done: Sheet[] = [];
   const { outs, stay } = outsAndStay(s, d);
   const lists: [string, { p: Person; note: string }[], string | undefined][] = [
     ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: outsNote(s, d, x.p.id, x.st) })), sheets.outs],
