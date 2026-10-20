@@ -9,7 +9,7 @@ import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
+import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, repFileName, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, type XlLook } from '../shared/xlLook';
 import type { ISODate } from '../shared/dates';
@@ -131,7 +131,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, groups[i].rows, d, groups[i].label, warnings); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
-  const name = upper(r.name).replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
+  const name = repFileName(r, d);
   return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [], layout };
 }
 async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, rows: Row[], d: ISODate, group: string, warnings: string[]): Promise<LayoutSheet[]> {

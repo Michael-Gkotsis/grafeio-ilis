@@ -971,6 +971,13 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-n{width:80px;height:32px}
 .rep-date{width:150px;height:32px}
 .rep-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rep-conds{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin-top:4px;font-size:13px}
+.rep-conds .ui-seg{justify-self:start}
+.rep-outs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.rep-out{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);cursor:pointer}
+.rep-out:has(input:checked){border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.rep-out b{display:block;font-size:13px}.rep-out small{color:var(--muted-fg);font-size:12px}
+.rep-plan{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
 .rep-pick{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;align-items:start}
 .rep-picks{border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .rep-picks__head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}

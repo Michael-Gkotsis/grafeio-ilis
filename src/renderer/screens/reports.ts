@@ -1,7 +1,7 @@
 // features/reports · «Έντυπα» (Michael, 19/10): δικά σου πρότυπα Excel (ανεβασμένα ή φτιαγμένα εδώ) που γεμίζουν με
 // στοιχεία της εφαρμογής. Ένα έντυπο το στήνεις μία φορά (οδηγός 5 βημάτων) και μετά βγαίνει με ένα κλικ.
 // Η τυχαία επιλογή γίνεται εδώ, ώστε να βγει ακριβώς ό,τι είδες· ο main παίρνει μόνο τη λίστα των ατόμων.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { usePrintFile } from '../common';
@@ -11,14 +11,13 @@ import { LayoutDialog } from '../layout';
 import { dropSigMoves, type Layout } from '../../shared/layout';
 import { sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
-import { ROSTER_FILTERS } from '../../shared/rosterLists';
 import { siCombos } from '../../shared/si';
 import { statusLbl } from '../../shared/ranks';
 import { blocksOf, type AppState } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  CELLS, FIELDS, PRESETS, REP_KINDS, SPLITS, ST_CATS, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  CELLS, FIELDS, PRESETS, REP_CONDS, REP_KINDS, SPLITS, ST_CATS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   type BuildCol, type BuildOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -31,8 +30,9 @@ const sortsOf = (kind: RepKind) => SORTS.filter(s => (kind !== 'cadre' || s.valu
 const KIND_COLS: Partial<Record<RepKind, string[]>> = { status: ['stype', 'from', 'to'], duty: ['seat', 'hours'], weapon: ['weapon', 'wtype', 'rack', 'inout'], wmove: ['weapon', 'mreason', 'mout', 'min'] };
 const fileName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
 // πού βγαίνει, για τη λίστα: «φύλλο ΑΓΓΑΡΕΙΑ στο Δυναμολόγιο»
-const outText = (r: Report) => r.out === 'print' ? 'εκτύπωση' : r.out !== 'sheet' ? 'Excel' :
-  'φύλλο ' + (r.target?.sheet || r.name).toUpperCase() + (r.split && r.split !== 'none' ? ' (' + (SPLITS.find(x => x.value === r.split)?.label.toLowerCase() || '') + ')' : '') + ' στο ' + (r.target?.to === 'file' ? fileName(r.target.file) : 'Δυναμολόγιο') + (r.target?.auto ? ', ενημερώνεται μόνο του' : '');
+const splitText = (r: Report) => (r.kind !== 'cadre' && r.split && r.split !== 'none' ? ', ' + (SPLITS.find(x => x.value === r.split)?.label.toLowerCase() || '') : '');
+const outText = (r: Report) => r.out === 'print' ? 'εκτύπωση' + splitText(r) : r.out !== 'sheet' ? 'Excel' + splitText(r) :
+  'φύλλο ' + (r.target?.sheet || r.name).toUpperCase() + splitText(r) + ' στο ' + (r.target?.to === 'file' ? fileName(r.target.file) : 'Δυναμολόγιο') + (r.target?.auto ? ', ενημερώνεται μόνο του' : '');
 const STEPS = ['Πρότυπο', 'Τι αφορά', 'Στήλες και στοιχεία', 'Ποιοι μπαίνουν', 'Πού βγαίνει'];
 const needsAsk = (r: Report) => r.pick.mode === 'random' || r.day === 'ask';
 const nameOf = (x: Row) => [x.last, x.first].filter(Boolean).join(' ');
@@ -277,6 +277,7 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
       ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
     </div>
     <${PickList} p=${p} kind=${r.kind}/>
+    <p className="note">${p.random ? 'Βγαίνουν ακριβώς αυτοί που βλέπεις (με ✕ αλλάζεις έναν). ' : ''}${outPlan(state, { ...rr, out: print ? 'print' : rr.out }, p.rows, d).text}</p>
   <//>`;
 }
 
@@ -436,7 +437,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
         ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
           signers=${signers} setSigners=${setSigners} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
         ${step === 4 && html`<${StepPick} r=${r} upd=${upd} p=${p}/>`}
-        ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} n=${p.rows.length}/>`}
+        ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
       </div>
       ${showPv && html`<div className="rep-wiz__pv">
         ${prev.err && html`<${Alert} tone="bad">${prev.err}<//>`}
@@ -554,10 +555,17 @@ function StepPick({ r, upd, p }: P) {
   const duty = r.kind === 'duty'; const wmove = r.kind === 'wmove'; const counted = !duty && !wmove;
   const blockList = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
   const views = state.settings.views || [];
-  const fromVal = pk.view ? 'v:' + pk.view : pk.from;
-  const setFrom = (v: string) => (v.startsWith('v:') ? set({ from: 'all', view: v.slice(2) }) : set({ from: v as RepPick['from'], view: undefined }));
+  // στρατιώτες: βάση (σε δύναμη / εκτός δύναμης / λίστα) και φίλτρα που συνδυάζονται· στελέχη: όλα ή παρόντα
+  const fromVal = pk.view ? 'v:' + pk.view : people ? (pk.from === 'inactive' ? 'inactive' : 'all') : pk.from;
+  const setFrom = (v: string) => {
+    if (!people) { set(v.startsWith('v:') ? { from: 'all', view: v.slice(2) } : { from: v as RepPick['from'], view: undefined }); return; }
+    const kept = setCond(pk, 'present', condVal(pk, 'present'));   // τα παλιά πεδία γίνονται φίλτρα
+    upd({ pick: v.startsWith('v:') ? { ...kept, from: 'all', view: v.slice(2) } : { ...kept, from: v === 'inactive' ? 'inactive' : 'all', view: undefined } });
+  };
+  const nPass = p.pool.length;
   // τυχαίοι: από προεπιλογή μόνο όσοι είναι παρόντες χωρίς υπηρεσία σήμερα και αύριο (μπορείς να το αλλάξεις)
-  const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && pk.from === 'all' && !pk.view && !status ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms, ...(people ? {} : { noDuty: false }) } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
+  const noConds = () => { const c = condsOf(pk); return !c.need.length && !c.not.length; };
+  const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && people && pk.from === 'all' && !pk.view && noConds() ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
   const toggle = <T,>(list: T[] | undefined, x: T) => { const s = new Set(list || []); if (s.has(x)) s.delete(x); else s.add(x); return [...s]; };
   return html`<div className="rep-pick">
     <div className="stack">
@@ -570,59 +578,70 @@ function StepPick({ r, upd, p }: P) {
       <div className="field-row">
         ${linked ? html`<div className="field"><label className="field__label" htmlFor="p-from">Στρατιώτες</label><select id="p-from" className="ui-select" value=${pk.view ? 'v:' + pk.view : 'all'} onChange=${(e: any) => setFrom(e.target.value)}>
           <option value="all">Όλοι σε δύναμη</option>${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`
+        : people ? html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
+          <option value="all">Όλοι σε δύναμη</option><option value="inactive">Εκτός δύναμης</option>
+          ${views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`
         : html`<div className="field"><label className="field__label" htmlFor="p-from">Από</label><select id="p-from" className="ui-select" value=${fromVal} onChange=${(e: any) => setFrom(e.target.value)}>
-          <option value="all">${people ? 'Όλοι σε δύναμη' : 'Όλα τα στελέχη'}</option><option value="present">${people ? 'Παρόντες τη μέρα' : 'Παρόντα τη μέρα (χωρίς κατάσταση)'}</option>
-          ${people && ROSTER_FILTERS.filter(([k]) => k !== 'all').map(([k, l]) => html`<option key=${k} value=${k}>Φίλτρο Δυναμολογίου: ${l}</option>`)}
-          ${people && views.map(v => html`<option key=${v.id} value=${'v:' + v.id}>Λίστα: ${v.name}</option>`)}</select></div>`}
+          <option value="all">Όλα τα στελέχη</option><option value="present">Παρόντα τη μέρα (χωρίς κατάσταση)</option></select></div>`}
         <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
       </div>
-      ${people && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.noDuty} onChange=${(e: any) => set({ noDuty: e.target.checked })}/>Χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη</label>`}
+      ${people && html`<div><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
+        <div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${condVal(pk, c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setCond(pk, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
       ${counted && html`<div className="rep-opts"><span className="field__label">Πόσοι</span><${Segmented} small=${true} value=${pk.mode} onChange=${setMode} items=${[{ value: 'all', label: 'Όλοι' }, { value: 'first', label: 'Οι πρώτοι Ν' }, { value: 'random', label: 'Ν τυχαίοι' }]}/>
         ${pk.mode !== 'all' && html`<input type="number" min="1" className="ui-input rep-n" aria-label="Πόσοι" value=${pk.n || 10} onChange=${(e: any) => set({ n: Math.max(1, +e.target.value || 1) })}/>`}
         ${pk.mode === 'random' && soldiers && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.even} onChange=${(e: any) => set({ even: e.target.checked })}/>Ισομερώς από κάθε θάλαμο</label>`}</div>`}
-      ${pk.mode === 'random' && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.fair} onChange=${(e: any) => set({ fair: e.target.checked })}/>Πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο</label>`}
-      ${pk.mode === 'random' && html`<p className="note">Κάθε φορά που βγαίνει, η κλήρωση γίνεται από την αρχή και σου δείχνει ποιοι βγήκαν πριν φτιαχτεί το Excel. Με ✕ αλλάζεις έναν.${pk.fair ? ' Η εφαρμογή μετρά πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο· η μέτρηση ξεκινά από την αρχή με τη Νέα ΕΣΣΟ.' : ''}</p>`}
+      ${pk.mode === 'random' && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.fair} onChange=${(e: any) => set({ fair: e.target.checked })}/>Πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (η μέτρηση ξεκινά από την αρχή με τη Νέα ΕΣΣΟ)</label>`}
+      ${pk.mode === 'random' && html`<${Alert} tone="info"><b>Πώς δουλεύει η κλήρωση.</b> Δεξιά είναι μια κλήρωση: με ✕ αλλάζεις έναν, με «⟳ Ξανά τυχαία» όλους. <b>Αυτοί ακριβώς</b> βγαίνουν αν πατήσεις «Αποθήκευση και Βγάλε». Τις επόμενες φορές, από το «Βγάλε…» στη λίστα, γίνεται νέα κλήρωση και τη βλέπεις (και την αλλάζεις) πριν βγει.<//>`}
       <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${sortsOf(r.kind)}/></div>
     </div>
     <${PickList} p=${p} kind=${r.kind}/>
   </div>`;
 }
 
-function StepOut({ r, upd, mode, insp, n }: P) {
+// Πού βγαίνει: όνομα, ένα για όλους ή ανά ομάδα (και στην εκτύπωση), τι γίνεται με το «Βγάλε», και σε απλά λόγια τι θα γίνει
+const OUTS: { v: string; t: string; h: string }[] = [
+  { v: 'file', t: 'Νέο αρχείο Excel', h: 'Φτιάχνεται ένα αρχείο στον φάκελο των Excel και ανοίγει.' },
+  { v: 'print', t: 'Μόνο εκτύπωση', h: 'Ανοίγει κατευθείαν η προεπισκόπηση εκτύπωσης (το αρχείο μένει κι αυτό στον φάκελο).' },
+  { v: 'people', t: 'Φύλλο στο Δυναμολόγιο', h: 'Γράφεται ως φύλλο μέσα στο Excel του Δυναμολογίου. Ξαναγράφεται μόνο αυτό το φύλλο.' },
+  { v: 'other', t: 'Φύλλο σε άλλο Excel…', h: 'Όπως το προηγούμενο, σε ένα Excel που διαλέγεις.' }
+];
+function StepOut({ r, upd, mode, insp, rows, d }: P) {
   const { state } = useStore();
   const t = r.target || { to: 'people', sheet: '' };
   const setT = (x: Partial<NonNullable<Report['target']>>) => upd({ target: { ...t, ...x } });
   const sheet = r.out === 'sheet'; const random = r.pick.mode === 'random';
-  const ros = state.settings.sources?.people?.file;
-  const where = t.to === 'file' ? fileName(t.file) : ros ? fileName(ros) : '';
   const outVal = sheet ? (t.to === 'file' ? 'other' : 'people') : r.out;
   const setOut = async (v: string) => {
     if (v === 'other') { const f = t.file || await window.api.repPickFile(); if (!f) return; upd({ out: 'sheet', target: { ...t, to: 'file', file: f } }); return; }
     if (v === 'people') { upd({ out: 'sheet', target: { ...t, to: 'people' } }); return; }
     upd({ out: v as Report['out'] });
   };
-  const base = (t.sheet || r.name || 'ΕΝΤΥΠΟ').toUpperCase().trim();
-  const split = r.kind !== 'cadre' && r.split && r.split !== 'none';
-  const example = split ? (r.split === 'room' ? 'ΘΑΛΑΜΟΣ 3' : r.split === 'unit' ? 'ΟΥΛΑΜΟΣ Α' : 'Ι1') : '';
+  const canSplit = r.kind !== 'cadre';
+  const split = canSplit && !!r.split && r.split !== 'none';
+  const plan = outPlan(state, r, rows, d);
+  const noRoster = sheet && t.to !== 'file' && !state.settings.sources?.people?.file;
   return html`<div className="stack">
     <div className="field"><label className="field__label" htmlFor="o-name">Όνομα εντύπου</label><input id="o-name" className="ui-input" data-autofocus="" placeholder="π.χ. Αγγαρεία μαγειρείων" value=${r.name} onChange=${(e: any) => upd({ name: e.target.value })}/>
-      <span className="field__help">Έτσι το βρίσκεις στη λίστα και στην αναζήτηση (Ctrl+K).${sheet ? '' : ' Το αρχείο λέγεται «' + (r.name || 'ΕΝΤΥΠΟ').toUpperCase() + ' ηη-μμ-εεεε.xlsx».'}</span></div>
-    <div className="field"><span className="field__label">Όταν πατάς «Βγάλε»</span><${Segmented} value=${outVal} onChange=${setOut} items=${[{ value: 'file', label: 'Νέο αρχείο Excel' }, { value: 'people', label: 'Φύλλο στο Δυναμολόγιο' }, { value: 'other', label: 'Φύλλο σε άλλο Excel…' }, { value: 'print', label: 'Μόνο εκτύπωση' }]}/>
-      <span className="field__help">${r.out === 'print' ? 'Ανοίγει η προεπισκόπηση εκτύπωσης, χωρίς Excel. Το αρχείο γράφεται κι αυτό στον φάκελο των Excel.'
-        : sheet ? (where ? 'Γράφεται ως φύλλο μέσα στο ' + where + '. Κάθε φορά ξαναγράφεται μόνο αυτό το φύλλο· τα άλλα φύλλα δεν αλλάζουν και η εφαρμογή δεν το διαβάζει ποτέ.' : 'Δεν έχει οριστεί Δυναμολόγιο: όρισέ το στα Αρχεία Excel ή διάλεξε «Φύλλο σε άλλο Excel…».')
-        : 'Γράφεται στον φάκελο των Excel και ανοίγει.'}</span></div>
+      <span className="field__help">Έτσι το βρίσκεις στη λίστα και στην αναζήτηση (Ctrl+K).</span></div>
+    ${canSplit && html`<div className="field"><span className="field__label">Ένα έντυπο για όλους ή χωριστό ανά ομάδα;</span><${Segmented} small=${true} value=${r.split || 'none'} onChange=${(sp: RepSplit) => upd({ split: sp })} items=${SPLITS}/>
+      <span className="field__help">${split ? 'Ένα ' + (r.out === 'print' ? 'φύλλο (και σελίδα στην εκτύπωση)' : 'φύλλο') + ' για κάθε ' + SPLIT_NOUN[r.split as RepSplit][0] + ', με το ίδιο πρότυπο. Βάλε {ΟΜΑΔΑ} σε ένα κελί του προτύπου για να γράφεται εκεί π.χ. «' + (r.split === 'room' ? 'ΘΑΛΑΜΟΣ 3' : r.split === 'unit' ? 'ΟΥΛΑΜΟΣ Α' : 'Ι1') + '».' : 'Όλοι σε ένα φύλλο.'}</span></div>`}
+    <div className="field"><span className="field__label">Όταν πατάς «Βγάλε»</span><div className="rep-outs" role="radiogroup">
+      ${OUTS.map(o => html`<label key=${o.v} className="rep-out"><input type="radio" name="rep-out" className="ui-check" checked=${outVal === o.v} onChange=${() => setOut(o.v)}/><span><b>${o.t}</b><small>${o.h}</small></span></label>`)}</div></div>
     ${sheet && html`<div className="field-row">
       <div className="field"><label className="field__label" htmlFor="o-sheet">Όνομα φύλλου</label><input id="o-sheet" className="ui-input" maxLength=${31} placeholder=${(r.name || 'ΕΝΤΥΠΟ').toUpperCase()} value=${t.sheet} onChange=${(e: any) => setT({ sheet: e.target.value })}/>
-        <span className="field__help">${split ? 'Ένα φύλλο ανά ομάδα, π.χ. «' + (base.slice(0, 24) + ' ' + (r.split === 'room' ? 'Θ3' : r.split === 'unit' ? 'Α' : 'Ι1')) + '».' : 'Αν υπάρχει ήδη φύλλο με αυτό το όνομα που δεν το έφτιαξε το έντυπο, θα σε ρωτήσει πριν γράψει από πάνω.'}</span></div>
+        <span className="field__help">Αν υπάρχει ήδη φύλλο με αυτό το όνομα που δεν το έφτιαξε το έντυπο, θα σε ρωτήσει πριν γράψει από πάνω.</span></div>
       ${t.to === 'file' && html`<div className="field" style=${{ flex: 'none' }}><span className="field__label">Αρχείο</span><${Button} variant="outline" onClick=${async () => { const f = await window.api.repPickFile(); if (f) setT({ file: f }); }}>${fileName(t.file) || 'Διάλεξε…'}<//></div>`}
     </div>`}
     ${sheet && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" disabled=${random} checked=${!!t.auto && !random} onChange=${(e: any) => setT({ auto: e.target.checked })}/>Ενημερώνεται μόνο του μετά από κάθε αλλαγή${random ? ' (όχι με τυχαίους: θα άλλαζαν κάθε φορά)' : ''}</label>`}
-    ${r.kind !== 'cadre' && r.out !== 'print' && html`<div className="field"><span className="field__label">Χωρισμός σε φύλλα</span><${Segmented} small=${true} value=${r.split || 'none'} onChange=${(split: RepSplit) => upd({ split })} items=${SPLITS}/>
-      ${split && html`<span className="field__help">Ένα φύλλο για κάθε ${r.split === 'room' ? 'θάλαμο' : r.split === 'unit' ? 'ουλαμό' : 'Σ.Ι.'}, με το ίδιο πρότυπο${sheet ? '' : ', με όνομα π.χ. «' + example + '»'}. Βάλε {ΟΜΑΔΑ} σε ένα κελί του προτύπου για να γράφεται εκεί.</span>`}</div>`}
     ${mode === 'upload' && insp && insp.prepared > 1 && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.trim} onChange=${(e: any) => upd({ trim: e.target.checked })}/>Σβήσε τις κενές γραμμές του προτύπου που περισσεύουν (έχει ${insp.prepared})</label>`}
     <label className="ui-checkrow"><input type="checkbox" className="ui-check" disabled=${!dailyOk(r)} checked=${!!r.daily && dailyOk(r)} onChange=${(e: any) => upd({ daily: e.target.checked })}/>Βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ και Εξοδούχους${dailyOk(r) ? '' : ' (όχι με τυχαίους ή «Ρώτα κάθε φορά»)'}</label>
-    <${Alert} tone="info">Τώρα: ${n} ${rowNoun(r.kind)}, για ${r.day === 'tomorrow' ? 'αύριο' : r.day === 'ask' ? 'τη μέρα που θα διαλέγεις' : 'σήμερα'}. Όλα όσα γράφει στο Excel μπαίνουν με κεφαλαία.<//>
+    ${noRoster && html`<${Alert} tone="warn">Δεν έχει οριστεί Δυναμολόγιο: όρισέ το στα Αρχεία Excel ή διάλεξε «Φύλλο σε άλλο Excel…».<//>`}
+    <${Alert} tone="info"><b>Τι θα γίνει με «Αποθήκευση και Βγάλε»</b><ul className="rep-plan">
+      <li>${rows.length} ${rowNoun(r.kind)}, για ${r.day === 'tomorrow' ? 'αύριο' : r.day === 'ask' ? 'τη μέρα που θα διαλέξεις' : 'σήμερα'}${random ? ': ακριβώς αυτοί της κλήρωσης στο βήμα 4' : ''}.</li>
+      <li>${plan.text}</li>
+      ${random && html`<li>Μετά, κάθε «Βγάλε…» από τη λίστα κάνει νέα κλήρωση και σου τη δείχνει πριν βγει.</li>`}
+    </ul><//>
   </div>`;
 }
