@@ -358,6 +358,13 @@ export function pickRandom<T extends Row>(list: T[], n: number, even = false, rn
   return out;
 }
 // Ένας άλλος τυχαίος στη θέση του i (από όσους δεν είναι ήδη μέσα, πρώτα όσοι βγήκαν λιγότερες φορές)· null: δεν υπάρχει άλλος
+// Η κλήρωση που ήδη είδε ο χρήστης (π.χ. στον οδηγό, με τις αλλαγές με ✕), ξανά από τους τωρινούς υποψήφιους.
+// null αν κάποιος δεν περνά πια τα φίλτρα: τότε γίνεται νέα κλήρωση.
+export function keepDraw(pool: Row[], ids: (number | string)[]): Row[] | null {
+  const by = new Map(pool.map(x => [x.id, x])); const got: Row[] = [];
+  for (const id of ids) { const x = by.get(id); if (!x) return null; got.push(x); }
+  return got;
+}
 export function replaceOne<T extends Row>(picked: T[], i: number, pool: T[], rnd: () => number = Math.random, times?: Record<string, number>): T[] | null {
   const ids = new Set(picked.map(x => x.id)); let rest = pool.filter(x => !ids.has(x.id));
   if (!rest.length) return null;

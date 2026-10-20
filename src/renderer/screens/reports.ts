@@ -15,7 +15,7 @@ import { blocksOf, type AppState } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  CELLS, FIELDS, PRESETS, REP_KINDS, SPLITS, ST_CATS, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  CELLS, FIELDS, PRESETS, REP_KINDS, SPLITS, ST_CATS, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, pickRandom, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   type BuildCol, type BuildOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -69,19 +69,33 @@ function useRunReport() {
   return go;
 }
 
-// Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά, ✕ αλλαγή ενός)
-function usePick(r: Report, d: string) {
+// Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά, ✕ αλλαγή ενός).
+// init: η κλήρωση που ήδη είδε (από τον οδηγό), αντί για νέα. Η κλήρωση ξαναγίνεται μόνο αν αλλάξουν οι υποψήφιοι
+// (ποιοι, όχι μια οποιαδήποτε αλλαγή στα δεδομένα), το πόσοι ή το ⟳: αλλιώς χάνονταν οι αλλαγές με ✕.
+function usePick(r: Report, d: string, init?: (number | string)[] | null) {
   const { state } = useStore(); const toast = useToast();
   const pk = JSON.stringify(r.pick);
   const pool = useMemo(() => candidates(state, r, d), [state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const poolKey = useMemo(() => pool.map(x => x.id).join(), [pool]);
   const [seed, setSeed] = useState(0); const [rand, setRand] = useState<Row[]>([]);
+  const initRef = useRef(init && init.length ? init : null);
   const random = r.pick.mode === 'random'; const fair = random && !!r.pick.fair;
   // «Πρώτα όσοι βγήκαν λιγότερες φορές»: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο (από τον main, ανά ΕΣΣΟ)
   const [times, setTimes] = useState<Record<string, number> | null>(null);
   useEffect(() => { if (!fair) { setTimes(null); return; } let live = true; window.api.repTimes(r.id).then(t => { if (live) setTimes(t || {}); }, () => { if (live) setTimes({}); }); return () => { live = false; }; }, [fair, r.id]);
   const ready = !fair || !!times;
-  useEffect(() => { if (random && ready) setRand(pickRandom(pool, r.pick.n || 0, !!r.pick.even, Math.random, fair ? times! : undefined)); }, [pool, random, r.pick.n, r.pick.even, seed, ready, times]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const rows = useMemo(() => (random ? sortRows(rand, r.sort, state, r.kind) : rowsOf(state, r, d)), [random, rand, r.sort, state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!random || !ready) return;
+    const keep = initRef.current; initRef.current = null;
+    const got = keep && keepDraw(pool, keep); if (got) { setRand(got); return; }
+    setRand(pickRandom(pool, r.pick.n || 0, !!r.pick.even, Math.random, fair ? times! : undefined));
+  }, [poolKey, random, r.pick.n, r.pick.even, seed, ready, times]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // οι τυχαίοι με τα τωρινά τους στοιχεία (η κλήρωση κρατά μόνο ποιοι)
+  const rows = useMemo(() => {
+    if (!random) return rowsOf(state, r, d);
+    const by = new Map(pool.map(x => [x.id, x]));
+    return sortRows(rand.map(x => by.get(x.id) || x), r.sort, state, r.kind);
+  }, [random, rand, pool, r.sort, state, r.kind, pk, d]);   // eslint-disable-line react-hooks/exhaustive-deps
   const replace = (id: number | string) => {
     const i = rand.findIndex(x => x.id === id); if (i < 0) return;
     const nx = replaceOne(rand, i, pool, Math.random, fair && times ? times : undefined);
@@ -171,13 +185,20 @@ export function ReportsScreen() {
   const loadLast = useCallback(() => { window.api.repLast().then(setLast, () => {}); }, []);
   useEffect(loadLast, [loadLast]);
   const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
-  const [ask, setAsk] = useState<{ r: Report; print: boolean } | null>(null);
+  const [ask, setAsk] = useState<{ r: Report; print: boolean; init?: { ids: (number | string)[]; d: string } } | null>(null);
   const [hist, setHist] = useState<Report | null>(null);
   const [sigFor, setSigFor] = useState<Report | null>(null);
   const go = async (r: Report, print = r.out === 'print', s = state) => {
     if (needsAsk(r)) { setAsk({ r, print }); return; }
     const d = repDate(r, today);
     if (await runReport(s, r, rowsOf(s, r, d).map(x => x.id), d, print)) loadLast();
+  };
+  // «Αποθήκευση και Βγάλε»: βγαίνουν αυτοί που έδειχνε ο οδηγός (με τις αλλαγές με ✕), όχι νέα κλήρωση.
+  // Αν ρωτά μέρα, ανοίγει το «Βγάλε…» για τη μέρα, με την ίδια κλήρωση.
+  const fromWizard = async (r: Report, s: AppState, ids: (number | string)[], d: string) => {
+    const print = r.out === 'print';
+    if (r.day === 'ask') { setAsk({ r, print, init: r.pick.mode === 'random' ? { ids, d } : undefined }); return; }
+    if (await runReport(s, r, ids, d, print)) loadLast();
   };
   // από την αναζήτηση (Ctrl+K): «Βγάλε: …»
   useEffect(() => {
@@ -225,19 +246,19 @@ export function ReportsScreen() {
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
     ${sigFor && html`<${SigsDialog} title=${sigFor.name} initial=${sigFor.sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
       onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
-    ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${(r: Report, s: AppState) => go(r, r.out === 'print', s)}/>`}
+    ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${fromWizard}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
-    ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
+    ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
   </div>`;
 }
 
 // Πριν βγει: ποια μέρα (αν ρωτά) και ποιοι τυχαίοι (με ✕ και «Ξανά τυχαία»)
-function RunDialog({ r, print, onClose, onDone }: P) {
+function RunDialog({ r, print, init, onClose, onDone }: P) {
   const { state, today, tomorrow } = useStore(); const runReport = useRunReport();
-  const [d, setD] = useState(repDate(r, today));
+  const [d, setD] = useState(init?.d || repDate(r, today));
   const [n, setN] = useState(r.pick.n || 10);
   const rr = useMemo(() => ({ ...r, pick: { ...r.pick, n } }), [r, n]);
-  const p = usePick(rr, d);
+  const p = usePick(rr, d, init?.ids);
   const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr)) onDone(); };
   return html`<${Dialog} size="lg" title=${r.name} description=${pickText(rr, state)} onClose=${onClose} footer=${html`
     <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
@@ -379,7 +400,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
       const sChanged = sg.sergeant !== signers.sergeant || sg.commander !== signers.commander;
       const next = await run({ t: 'setSettings', settings: { reportTpls: list, reports: exists ? reps.map(x => (x.id === rr.id ? rr : x)) : [...reps, rr], ...(sChanged ? { signers: { sergeant: signers.sergeant.trim(), commander: signers.commander.trim() } } : {}) }, text: (exists ? 'Αλλαγή' : 'Νέο') + ' έντυπο «' + rr.name + '»' }, (exists ? 'Αποθηκεύτηκε' : 'Έτοιμο') + ' το έντυπο «' + rr.name + '».');
       if (!next) return;
-      onClose(); if (andRun) onRun(rr, next);
+      onClose(); if (andRun) onRun(rr, next, ids, d);
     } finally { setBusy(false); }
   };
   const canGo = (i: number) => !missing(i);
