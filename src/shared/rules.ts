@@ -6,7 +6,7 @@ import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -21,12 +21,12 @@ export function personMap(people: Person[]): Map<number, Person> {
 export const activePeople = (s: AppState) => s.people.filter(p => p.active);
 
 // Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ ή ΣΠΕΝ), χωρίς όσες έχουν αφαιρεθεί
-const postsIdx = new WeakMap<Settings['blocks'], Post[]>();
+const postsIdx = new WeakMap<Settings['blocks'], { start: string; p: Post[] }>();
 export function postsOf(settings: Settings): Post[] {
-  const blocks = blocksOf(settings) || settings.blocks;
-  let p = postsIdx.get(blocks);
-  if (!p) { p = buildPosts(blocks.filter(b => !b.hidden)).filter(x => !x.hidden); postsIdx.set(blocks, p); }
-  return p;
+  const blocks = blocksOf(settings) || settings.blocks; const start = dutyStartOf(settings);
+  let c = postsIdx.get(blocks);
+  if (!c || c.start !== start) { c = { start, p: buildPosts(blocks.filter(b => !b.hidden), start).filter(x => !x.hidden) }; postsIdx.set(blocks, c); }
+  return c.p;
 }
 // Όλες οι θέσεις που έχουν υπάρξει (και των δύο εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
 const allIdx = new WeakMap<Settings, Post[]>();
@@ -34,7 +34,7 @@ export function allPosts(settings: Settings): Post[] {
   let p = allIdx.get(settings);
   if (!p) {
     const seen = new Set<string>(); p = [];
-    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])])]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
+    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])], dutyStartOf(settings))]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
     allIdx.set(settings, p);
   }
   return p;
@@ -104,7 +104,8 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
 // rules.hkTime, οι υπηρεσίες ξεκινούν 14:00 (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
 // και κάθε μέρα χωρίς ώρα.
 export const DEFAULT_OUT_TIME = '16:00', DEFAULT_HK_TIME = '08:00';
-export const DUTY_START = 14 * 60;
+// Αρχή του κύκλου των υπηρεσιών σε λεπτά (Ρυθμίσεις › Υπηρεσίες, προεπιλογή 14:00)
+export const dutyMin = (st?: Pick<Settings, 'dutyStart'> | null) => mins(dutyStartOf(st));
 const timeOr = (t: string | undefined, def: string) => (t && /^\d\d:\d\d$/.test(t) ? t : def);
 export const outMin = (r?: Pick<Rules, 'outTime'> | null) => mins(timeOr(r?.outTime, DEFAULT_OUT_TIME));
 export const hkMin = (r?: Pick<Rules, 'hkTime'> | null) => mins(timeOr(r?.hkTime, DEFAULT_HK_TIME));
@@ -235,7 +236,7 @@ export const capLabel = (k: DutyKind) => CAP_KINDS.find(x => x[0] === k)?.[1] ||
 
 // Κ-01, Κ-02, Κ-05: γιατί κάποιος ΔΕΝ μπαίνει σε μια θέση (null = μπαίνει). Χωρίς θέση: ελέγχει σαν ένοπλη.
 // lists: ό,τι άλλαξες στον πίνακα καταστάσεων (stat.ts)· χωρίς αυτό ισχύουν οι κανόνες του λοχία όπως πριν
-type DutyPost = { armed: boolean; kind?: DutyKind; block?: string; slots?: string[] | null; hrs?: string };
+type DutyPost = { armed: boolean; kind?: DutyKind; block?: string; slots?: string[] | null; hrs?: string; cyc?: number };
 export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null, lists?: UserLists): string | null {
   for (const s of statusesOn(statuses, pid, date)) {
     if (backBefore(s, date, post)) continue;
@@ -260,7 +261,8 @@ export function postSpan(post: DutyPost): { start: number | null; end: number | 
   const times = (txt: string) => [...txt.matchAll(re)].map(m => +m[1] * 60 + +m[2]);
   r = { start: null, end: null };
   if (post.slots && post.slots.length) {
-    let day = 0, prev = -1;
+    // βάρδια που ξεκινά πριν την αρχή του κύκλου είναι της επόμενης μέρας (π.χ. κύκλος 14:00, βάρδιες από 06:00)
+    let day = post.cyc != null && (times(post.slots[0])[0] ?? 1440) < post.cyc ? 1440 : 0, prev = -1;
     for (const sl of post.slots) {
       const [a, b] = times(sl); if (a == null) continue;
       if (a < prev) day += 1440;
@@ -289,7 +291,7 @@ function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: Dut
   const next = addDays(date, 1);
   const s = statusesOf(statuses, pid).find(x => x.from === next && x.fromTime && !x.pending && hasTimes(x.type));
   if (!s) return null;
-  const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + 14 * 60);
+  const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + (post.cyc ?? 14 * 60));
   if (end == null || 1440 + mins(s.fromTime!) >= end) return null;
   return 'Φεύγει ' + TYPES[s.type].label + ' ' + dm(next) + ' στις ' + s.fromTime;
 }
@@ -593,7 +595,7 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
 // Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
 export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   const blocks = (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly');
-  if (statusesFrom(s.statuses, pid, date, DUTY_START).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
+  if (statusesFrom(s.statuses, pid, date, dutyMin(s.settings)).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
   if (siIsUnarmed(p, blocks, s.settings.lists)) return true;
   const armed = postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly');

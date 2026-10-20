@@ -10,7 +10,7 @@ import { DayFormsDialog } from './dayForms';
 import { ActiveFilter, DateBar, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status } from '../../shared/domain';
+import { HK_SECTIONS, dutyStartOf, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
@@ -75,7 +75,7 @@ export function TodayScreen() {
   <//></div>`;
   // Τι πρέπει να γίνει σήμερα (με αριθμό) και τι απλώς λήγει
   const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
-  if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις 14:00', urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
+  if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις ' + dutyStartOf(state.settings), urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
   const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
   if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση άδειας περιμένει απάντηση' : waiting.length + ' αιτήσεις άδειας περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
   if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
@@ -86,7 +86,7 @@ export function TodayScreen() {
   ];
   const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string) => html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
   return html`<div>
-    <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις 14:00.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
+    <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις ' + dutyStartOf(state.settings) + '.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setForms(true)} data-tip=${'Αυριανή ΦΡΟΥΡΑ, σημερινή ' + HK() + ' και Εξοδούχοι: ένας έλεγχος για όλα, μετά «Βγάλε όλα» ή «Τύπωσε όλα»'}>${Icon.print}Έντυπα ημέρας<//><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip="Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις">${HK()} σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
     ${boot.dataFallback && html`<${Alert} tone="warn"><span><b>Τα δεδομένα είναι στο προφίλ του χρήστη</b> (${boot.dataDir}), όχι δίπλα στο GrafeioIlis.exe. Αν μεταφέρεις την εφαρμογή σε άλλο PC, πάρε μαζί και αυτόν τον φάκελο, ή κάνε «Αντίγραφο σε USB».</span><//>`}
     <${SourcesAlert}/>

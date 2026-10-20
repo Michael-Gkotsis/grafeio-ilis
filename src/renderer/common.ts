@@ -1,14 +1,14 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Dialog, Icon, Kbd, Strip } from './ui';
+import { html, cx, Alert, Badge, Button, Dialog, Icon, Kbd, Segmented, Strip } from './ui';
 import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
 import { useNowMin } from './clock';
-import { TYPES, TYPE_KEYS, effects, plainName, shortName, unitOf, type Rules, type Status } from '../shared/domain';
+import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, plainName, shiftSlots, shortName, unitOf, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { daysBetween, dayName, dm, dmy, dow, today as todayFn, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
@@ -118,7 +118,28 @@ export function TimeField({ id, label, value, onChange, help }: P) {
     <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
 }
 // Τι κάνουν οι ώρες (Michael, 13/10 και 18/10): υπηρεσίες, έξοδος την ημέρα της επιστροφής, ΗΚΑΙ
-export const timesHelp = (r?: Rules | null) => 'Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως τις ' + (r?.outTime || DEFAULT_OUT_TIME) + ', βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
+// Ώρες μιας υπηρεσίας (Michael, 20/10: «μια υπηρεσία μπορεί να μην έχει ωράρια»): όλη μέρα, ίδιες ώρες για κάθε θέση, ή
+// βάρδιες που αλλάζουν κάθε τόσο. rot: υπηρεσία του εντύπου με νούμερα (θαλαμοφύλακες…), μόνο βάρδιες. labels: τα νούμερα.
+export type HoursMode = 'day' | 'fixed' | 'shift';
+const everyTxt = (m: number) => (m % 60 ? (m - 30) / 60 + '½ ώρα' : m === 60 ? '1 ώρα' : m / 60 + ' ώρες');
+export const shiftOf = (sh: { every: number; from?: string; to?: string }): ShiftDef => ({ every: sh.every, ...(normTime(sh.from) ? { from: normTime(sh.from)! } : {}), ...(normTime(sh.to) ? { to: normTime(sh.to)! } : {}) });
+export const shiftBad = (sh: { from?: string; to?: string }) => normTime(sh.from) == null || normTime(sh.to) == null;
+export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, fixed }: P) {
+  const slots = mode === 'shift' && !shiftBad(sh) ? shiftSlots(start, shiftOf(sh), labels.length) : [];
+  return html`<div className="field"><span className="field__label">Ώρες</span>
+    ${!rot && html`<${Segmented} small=${true} value=${mode} onChange=${setMode} items=${[{ value: 'day', label: 'Όλη μέρα' }, { value: 'fixed', label: 'Ίδιες ώρες' }, { value: 'shift', label: 'Βάρδιες' }]}/>`}
+    ${mode === 'day' && html`<span className="field__help">Χωρίς ώρες στις Θέσεις και στο έντυπο, όπως η μαγειρεία.</span>`}
+    ${mode === 'fixed' && fixed}
+    ${mode === 'shift' && html`<div className="field-row" style=${{ alignItems: 'flex-start' }}>
+      <div className="field"><label className="field__label" htmlFor=${id + '-ev'}>Αλλάζει κάθε</label><select id=${id + '-ev'} className="ui-input" value=${sh.every} onChange=${(e: any) => setSh({ ...sh, every: +e.target.value })}>${SHIFT_EVERY.map(m => html`<option key=${m} value=${m}>${everyTxt(m)}</option>`)}</select></div>
+      <${TimeField} id=${id + '-from'} label="Από" value=${sh.from || ''} onChange=${(v: string) => setSh({ ...sh, from: v })} help=${'Κενό = ' + start + ', η αρχή της υπηρεσίας'}/>
+      <${TimeField} id=${id + '-to'} label="Ως" value=${sh.to || ''} onChange=${(v: string) => setSh({ ...sh, to: v })} help=${'Κενό = ' + start + ' της επόμενης'}/></div>
+      <div className="shiftprev">${slots.map((t: string[], i: number) => html`<div key=${i}><b>${labels[i]}</b><span>${t.map((x, j) => html`<span key=${j} className="nw mono">${x}</span>`)}</span><small>${t.length} ${t.length === 1 ? 'βάρδια' : 'βάρδιες'}</small></div>`)}</div>
+      ${slots.length > 1 && slots.some((t: string[]) => t.length !== slots[0].length) && html`<${Alert} tone="warn"><span>Οι βάρδιες δεν μοιράζονται ίσα: ${slots.map((t: string[], i: number) => labels[i] + ' ' + t.length).join(', ')}. Άλλαξε το «Αλλάζει κάθε» ή το «Από/Ως» αν θέλεις ίσα.</span><//>`}
+      <span className="field__help">Γράφονται στις Θέσεις και στη ΦΡΟΥΡΑ, μία γραμμή για κάθε βάρδια. Η αρχή της υπηρεσίας (${start}) αλλάζει στους Κανόνες.</span>`}
+  </div>`;
+}
+export const timesHelp = (r?: Rules | null, st?: Pick<Settings, 'dutyStart'> | null) => 'Η μέρα της υπηρεσίας είναι ' + dutyStartOf(st) + ' → ' + dutyStartOf(st) + '. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως τις ' + (r?.outTime || DEFAULT_OUT_TIME) + ', βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
 export function ChangePlanList({ plan }: P) {
   return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
 }

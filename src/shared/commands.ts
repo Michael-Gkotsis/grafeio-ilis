@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -61,8 +61,8 @@ export type Command =
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean }
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string> }
+  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
@@ -722,7 +722,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
-      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
+      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
@@ -746,7 +746,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         posts.forEach(p => { if (!p.hidden) delete p.hidden; });
       }
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
-      list[i] = { ...b, name, posts };
+      const nb: BlockDef = { ...b, name, posts };
+      // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
+      if (c.shift !== undefined) { if (c.shift && c.shift.every > 0) nb.shift = { every: Math.round(c.shift.every), ...(c.shift.from ? { from: c.shift.from } : {}), ...(c.shift.to ? { to: c.shift.to } : {}) }; else delete nb.shift; }
+      list[i] = nb;
       const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
       return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };

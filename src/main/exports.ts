@@ -5,14 +5,14 @@ import { dutyAt, isWk, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, blocksOf, coversDay, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
-import { activePeople, personMap, statusesFrom, outMin, DUTY_START, hkaiCounts, postBy, postOf } from '../shared/rules';
+import { activePeople, personMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
 import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { placeSigs } from './sigs';
 import { applyMoves, blockOf } from './layout';
@@ -59,7 +59,7 @@ export function punishedOn(s: AppState, d: ISODate): Status[] {
 }
 export function absentOn(s: AppState, d: ISODate): Status[] {
   // απόντες του εντύπου υπηρεσιών: άδειες, αναρρωτικές, νοσοκομείο (όχι οι εξοδούχοι)· όχι όποιος γυρίζει ως τις 14:00
-  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, DUTY_START));
+  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, dutyMin(s.settings)));
 }
 
 // Πίνακες των δικών σου υπηρεσιών κάτω από τους πίνακες του εντύπου, ανά δύο δίπλα δίπλα (στις στήλες των θαλαμοφυλάκων),
@@ -69,24 +69,31 @@ function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: Frour
   const lk = form.tables.look; const st = { aa: ws.style(lk.aa), name: ws.style(lk.name), hours: ws.style(lk.hours), note: ws.style(lk.note) };
   const groups: { t: FrouraTable; at: TableCols }[][] = [];
   for (let i = 0; i < tabs.length; i += 2) groups.push([{ t: tabs[i], at: form.tables.left }, ...(tabs[i + 1] ? [{ t: tabs[i + 1], at: form.tables.right }] : [])]);
-  const n = groups.reduce((a, g) => a + 2 + Math.max(...g.map(x => x.t.rows.length)), 0);
+  const height = (t: FrouraTable) => t.rows.reduce((a, x) => a + tableRowSpan(x), 0);
+  const n = groups.reduce((a, g) => a + 2 + Math.max(...g.map(x => height(x.t))), 0);
   const after = form.extra.after; ws.insertRows(after, n, after + 1, wb);
   const put = (ref: string, v: string | null, style: number | null) => { ws.set(ref, v); if (style != null) ws.setStyle(ref, style); };
-  const line = (at: TableCols, t: FrouraTable, r: number, v: { aa: string; name: string; hours: string; note: string }) => {
-    put(at.aa + r, v.aa, st.aa); put(at.name + r, v.name, st.name); put(at.note + r, v.note, st.note);
+  // ένα νούμερο σε rs γραμμές (μία ανά βάρδια): Α/Α, όνομα και ΠΑΡ/ΣΕΙΣ ενωμένα κάθετα, οι ώρες μία σε κάθε γραμμή
+  const line = (at: TableCols, t: FrouraTable, r: number, v: { aa: string; name: string; hours: string[]; note: string }) => {
+    const rs = Math.max(1, v.hours.length); const end = r + rs - 1;
     const last = colName(colNum(t.hours ? at.hours : at.note) - 1);
-    for (let c = colNum(at.name) + 1; c <= colNum(last); c++) put(colName(c) + r, null, st.name);
-    if (last !== at.name) ws.addMerge(at.name + r + ':' + last + r);
-    if (t.hours) put(at.hours + r, v.hours, st.hours);
+    for (let rr = r; rr <= end; rr++) {
+      put(at.aa + rr, rr === r ? v.aa : null, st.aa); put(at.note + rr, rr === r ? v.note : null, st.note);
+      for (let c = colNum(at.name); c <= colNum(last); c++) put(colName(c) + rr, rr === r && c === colNum(at.name) ? v.name : null, st.name);
+      if (t.hours) put(at.hours + rr, v.hours[rr - r] || '', st.hours);
+    }
+    if (last !== at.name || end > r) ws.addMerge(at.name + r + ':' + last + end);
+    if (end > r) { ws.addMerge(at.aa + r + ':' + at.aa + end); ws.addMerge(at.note + r + ':' + at.note + end); }
   };
   let r = after + 1;
   for (const g of groups) {
     r++;
     for (const { t, at } of g) {
-      line(at, t, r, { aa: 'Α/Α', name: t.title, hours: 'ΩΡΕΣ', note: 'ΠΑΡ/ΣΕΙΣ' });
-      t.rows.forEach((x, i) => line(at, t, r + 1 + i, { aa: x.n, name: x.name, hours: x.hours, note: '' }));
+      line(at, t, r, { aa: 'Α/Α', name: t.title, hours: ['ΩΡΕΣ'], note: 'ΠΑΡ/ΣΕΙΣ' });
+      let rr = r + 1;
+      for (const x of t.rows) { line(at, t, rr, { aa: x.n, name: x.name, hours: x.shifts && x.shifts.length > 1 ? x.shifts : [x.hours], note: '' }); rr += tableRowSpan(x); }
     }
-    r += 1 + Math.max(...g.map(x => x.t.rows.length));
+    r += 1 + Math.max(...g.map(x => height(x.t)));
   }
   return n;
 }
@@ -109,6 +116,14 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
   }
   lay.cells.forEach((names, at) => { if (names.length) ws.set(at, names.join('\n')); });
+  // ώρες των νούμερων με βάρδιες (θαλαμοφύλακες, οπλοφύλακες, σκοποί): στη στήλη δεξιά από το όνομα, 3 γραμμές το καθένα.
+  // Με τις βάρδιες του εντύπου (2 ώρες από τις 14:00) μένουν όπως είναι στο template.
+  const done = new Set<string>(); const own = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || !!blocksOf(s.settings, phase).find(b => b.id === id)?.shift;
+  for (const x of postsOf(s.settings)) {
+    const at = form.pos[x.k]; if (!at || !x.slots || done.has(at) || !own(x.block)) continue; done.add(at);
+    const m = /^([A-Z]+)(\d+)$/.exec(at)!; const hc = colName(colNum(m[1]) + 1);
+    rows3(x.slots).forEach((h, j) => ws.set(hc + (+m[2] + j), h));
+  }
   const added = frouraTablesInto(wb, ws, form, frouraTables(s, lay, phase));
   const first = form.list + added;
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));

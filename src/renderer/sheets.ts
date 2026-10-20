@@ -1,8 +1,8 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { ROT, TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
+import { TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, activePeople, isHol, DUTY_START, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, activePeople, isHol, dutyMin, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { hkRowsOf } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
@@ -10,7 +10,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, type FrouraTable } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
@@ -43,9 +43,10 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   const right = spen ? 'op' : 'th', off = spen ? 1 : 5;
   rows.push([E(''), ...hdr('Α/Α', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ'), E('', '', 3), ...hdr('Α/Α', spen ? 'ΟΠΛΟΦΥΛΑΚΕΣ' : 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ'), E('')]);
   for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
-    const h = () => E(ROT[i][j], 'b c');
-    rows.push(j === 0 ? [E(''), E((i + 1) + 'ο', 'b c', 1, 3), nm('th' + (i + 1)), h(), E('', 'b', 1, 3), E('', '', 3), E((i + 1) + 'ο', 'b c', 1, 3), nm(right + (i + off)), h(), E('', 'b', 1, 3), E('')]
-      : [E(''), null, null, h(), null, E('', '', 3), null, null, h(), null, E('')]);
+    const h = () => E(rows3(postBy(s, 'th' + (i + 1))?.slots)[j], 'b c');
+    const h2 = () => E(rows3(postBy(s, right + (i + off))?.slots)[j], 'b c');
+    rows.push(j === 0 ? [E(''), E((i + 1) + 'ο', 'b c', 1, 3), nm('th' + (i + 1)), h(), E('', 'b', 1, 3), E('', '', 3), E((i + 1) + 'ο', 'b c', 1, 3), nm(right + (i + off)), h2(), E('', 'b', 1, 3), E('')]
+      : [E(''), null, null, h(), null, E('', '', 3), null, null, h2(), null, E('')]);
   }
   rows.push([E('', '', W)]);
   if (!spen) {
@@ -56,27 +57,31 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
     for (let r = 0; r < 7; r++) {
       const left = r < 5 ? [E((r + 1) + 'ο', 'b c'), nm('mg' + (r + 1), 1, 2), E('', 'b')] : r === 6 ? [E('ΤΑΕ', 'b c'), nm('tae', 1, 2), E('', 'b')] : [E('', '', 4)];
       const sk = r < 6 ? Math.floor(r / 3) : -1, j = r % 3;
-      const rt = sk < 0 ? [E('', '', 4)] : j === 0 ? [E((sk + 3) + 'η', 'b c', 1, 3), nm('sk' + (sk + 3) + 'a'), E(ROT[sk + 2][0], 'b c'), E('', 'b', 1, 3)] : [null, null, E(ROT[sk + 2][j], 'b c'), null];
+      const rt = sk < 0 ? [E('', '', 4)] : j === 0 ? [E((sk + 3) + 'η', 'b c', 1, 3), nm('sk' + (sk + 3) + 'a'), E(rows3(postBy(s, 'sk' + (sk + 3) + 'a')?.slots)[0], 'b c'), E('', 'b', 1, 3)] : [null, null, E(rows3(postBy(s, 'sk' + (sk + 3) + 'a')?.slots)[j], 'b c'), null];
       rows.push([E(''), ...left, E('', '', 3), ...rt, E('')]);
     }
   }
   // δικές σου υπηρεσίες: πίνακας η καθεμία, ανά δύο δίπλα δίπλα, με μία κενή γραμμή πριν (όπως στο Excel)
   const tabs = frouraTables(s, lay, phase);
-  const half = (t: FrouraTable | undefined, i: number): Cell[] => {
-    if (!t || i > t.rows.length) return [E('', '', 4)];
+  // γραμμές κάθε πίνακα: κεφαλίδα και μετά κάθε νούμερο, με μία γραμμή για κάθε βάρδια του (Α/Α και όνομα ενωμένα)
+  const lines = (t: FrouraTable) => [null, ...t.rows.flatMap(x => Array.from({ length: tableRowSpan(x) }, (_, j) => ({ x, j })))];
+  const half = (t: FrouraTable | undefined, i: number): (Cell | null)[] => {
+    const L = t ? lines(t) : [];
+    if (!t || i >= L.length) return [E('', '', 4)];
     const span = t.hours ? 1 : 2;
     if (i === 0) return [E('Α/Α', 'b hdr'), E(t.title, 'b hdr', span), ...(t.hours ? [E('ΩΡΕΣ', 'b hdr')] : []), E('ΠΑΡ/ΣΕΙΣ', 'b hdr')];
-    const x = t.rows[i - 1];
-    return [E(x.n, 'b c'), x.name ? E(x.name, 'b c', span) : E('ΚΕΝΗ', 'b c kenh', span), ...(t.hours ? [E(x.hours, 'b c')] : []), E('', 'b')];
+    const { x, j } = L[i]!; const rs = tableRowSpan(x); const hr = x.shifts ? x.shifts[j] : x.hours;
+    if (j > 0) return [null, null, ...(t.hours ? [E(hr, 'b c')] : []), null];
+    return [E(x.n, 'b c', 1, rs), x.name ? E(x.name, 'b c', span, rs) : E('ΚΕΝΗ', 'b c kenh', span, rs), ...(t.hours ? [E(hr, 'b c')] : []), E('', 'b', 1, rs)];
   };
   for (let j = 0; j < tabs.length; j += 2) {
     const a = tabs[j], b = tabs[j + 1];
     rows.push([E('', '', W)]);
-    for (let i = 0; i <= Math.max(a.rows.length, b ? b.rows.length : 0); i++) rows.push([E(''), ...half(a, i), E('', '', 3), ...half(b, i), E('')]);
+    for (let i = 0; i < Math.max(lines(a).length, b ? lines(b).length : 0); i++) rows.push([E(''), ...half(a, i), E('', '', 3), ...half(b, i), E('')]);
   }
   rows.push([E('', '', W)]);
   const on = (x: Status) => coversDay(x, date);
-  const away = (x: Status) => on(x) && !backBy(x, date, DUTY_START);   // όποιος γυρίζει ως τις 14:00 δεν είναι απών της υπηρεσίας
+  const away = (x: Status) => on(x) && !backBy(x, date, dutyMin(s.settings));   // όποιος γυρίζει ως την αρχή της υπηρεσίας (π.χ. 14:00) δεν είναι απών της υπηρεσίας
   const pun = s.statuses.filter(x => x.type === 'PUN' && !x.pending && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   const abs = s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && away(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   rows.push([E('ΤΙΜΩΡΗΜΕΝΟΙ', 'b hdr', 6), E(''), E('ΑΠΟΝΤΕΣ', 'b hdr', 6)]);

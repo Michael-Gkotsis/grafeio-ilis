@@ -1010,3 +1010,8 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .sigs__strip small{font-weight:400;color:var(--muted-fg)}
 .lay-pv{max-height:66vh;padding:12px}
 .lay-pv__page{position:relative;overflow:hidden}
+/* Βάρδιες ανά νούμερο στην Επεξεργασία υπηρεσίας */
+.shiftprev { display: grid; gap: 2px; margin: 6px 0; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; background: var(--muted); }
+.shiftprev > div { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; align-items: baseline; padding: 2px 0; }
+.shiftprev > div > span { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.shiftprev small { color: var(--muted-fg); }
