@@ -4,7 +4,8 @@
 // αντιγράφουμε μια γραμμή-πρότυπο και σπρώχνουμε ό,τι είναι από κάτω (υπογραφές κ.λπ.).
 import JSZip from 'jszip';
 import { upper } from '../shared/text';
-import { digitPx, fitText, minSize, type Box, type Fit, type FontSpec } from './textfit';
+import { digitPx, fitText, minSize, textPx, type Box, type Fit, type FontSpec } from './textfit';
+const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει μια στήλη πίνακα για να χωρά ό,τι γράφτηκε (fitSheet)
 import type { XlLook } from '../shared/xlLook';
 
 export const REPORT_MARK = 'GL_ENTYPO';
@@ -264,6 +265,26 @@ export class Sheet {
     if (cols) this.head = this.head.replace(/<sheetData\b[^>]*>$/, m => `<cols>${cols}</cols>` + m);
     return this;
   }
+  // Πλάτος μίας στήλης (σε χαρακτήρες): αλλάζει μόνο αυτή, ακόμα κι αν το <col> της πιάνει κι άλλες στήλες (χωρίζεται)
+  setColWidth(c: number, w: number): this {
+    const cw = (a: string) => setAttr(setAttr(a, 'width', String(w)), 'customWidth', '1');
+    const all = /<cols>([\s\S]*?)<\/cols>/.exec(this.head);
+    if (!all) { this.head = this.head.replace(/<sheetData\b[^>]*>$/, m => `<cols><col min="${c}" max="${c}" width="${w}" customWidth="1"/></cols>` + m); return this; }
+    const list = [...all[1].matchAll(/<col\b[^>]*?\/?>(?:<\/col>)?/g)].map(m => m[0].replace(/\/?>(<\/col>)?$/, ''));
+    const out: string[] = []; let done = false;
+    for (const a of list) {
+      const min = Number(attr(a, 'min')), max = Number(attr(a, 'max'));
+      if (c < min || c > max) { out.push(a); continue; }
+      if (min < c) out.push(setAttr(a, 'max', String(c - 1)));
+      out.push(cw(setAttr(setAttr(a, 'min', String(c)), 'max', String(c))));
+      if (c < max) out.push(setAttr(a, 'min', String(c + 1)));
+      done = true;
+    }
+    if (!done) out.push(`<col min="${c}" max="${c}" width="${w}" customWidth="1"`);
+    out.sort((x, y) => Number(attr(x, 'min')) - Number(attr(y, 'min')));
+    this.head = this.head.replace(all[0], '<cols>' + out.map(a => a + '/>').join('') + '</cols>');
+    return this;
+  }
   // Πλάτος στήλης σε χαρακτήρες του Excel (<cols>, αλλιώς το προεπιλεγμένο του φύλλου)
   colWidth(c: number): number {
     for (const m of this.head.matchAll(/<col\b[^>]*>/g)) {
@@ -448,6 +469,9 @@ export class Workbook {
   private names: { name: string; path: string }[] = [];
   private sst: string[] | null = null;
   private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number>; fitted?: Map<string, number> } | null = null;
+  // Οι στήλες των πινάκων φαρδαίνουν όσο χρειάζεται στην αποθήκευση (fitSheet): στα αρχεία που φτιάχνει η εφαρμογή και σε όσα
+  // το ζητά ο καλών. Όχι στη ΗΚΑΙ: η διάταξη του εντύπου είναι σταθερή και οι στήλες της μοιράζονται πολλούς πίνακες.
+  widen = false;
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -706,6 +730,44 @@ export class Workbook {
     for (const m of merges) for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) (r === m.r1 && c === m.c1 ? top.set(colName(c) + r, m) : inside.add(colName(c) + r));
     const last = Math.min(this.printLastCol(ws.name), ws.lastCol());
     const sst = await this.sharedStrings();
+    const textOf = async (x: { t: string | null; s: number | null; inner: string }): Promise<{ t: string; num: boolean } | null> => {
+      if (x.t === 'inlineStr') return { t: texts(x.inner), num: false };
+      if (x.t === 's') return { t: sst[Number(/<v>([^<]*)<\/v>/.exec(x.inner)?.[1])] ?? '', num: false };
+      if (x.t == null || x.t === 'n') { const v = /<v>([^<]*)<\/v>/.exec(x.inner)?.[1]; if (v == null || v === '') return null; return { t: (await this.isDateStyle(x.s)) ? '00/00/0000' : String(Number(v)), num: true }; }
+      return null;
+    };
+    const list = [...refs];
+    // Στήλες πίνακα όσο φαρδιές χρειάζεται (Michael, 20/10: «να φαίνεται πλήρως και το όνομα της στήλης και οι τιμές όλων»):
+    // κελί με πλαίσιο → η στήλη του μεγαλώνει ώστε επικεφαλίδα και τιμές να χωρούν σε μία γραμμή, ως
+    // WIDE_MAX χαρακτήρες. Δεν στενεύει ποτέ. Ό,τι ξεπερνά το όριο μικραίνει λίγο ή αναδιπλώνεται, όπως πριν.
+    if (this.widen) {
+      const need = new Map<number, number>(); const wide: { c1: number; c2: number; px: number }[] = [];
+      for (const ref of list) {
+        if (inside.has(ref)) continue;
+        const x = ws.raw(ref); if (!x || x.inner.includes('<f')) continue;
+        const k = info(x.s); if (k.rot || !(k.l || k.r)) continue;
+        const v = await textOf(x); if (!v || !v.t.trim()) continue;
+        const { c, r } = splitRef(ref); if (ws.rowHidden(r)) continue;
+        const font = fontOf(k.fontId);
+        if (x.t === 'inlineStr' && x.inner.includes('<r>')) { const sz = Number(/<sz val="([^"]*)"\/>/.exec(x.inner)?.[1]); if (sz > 0) font.sz = sz; }
+        const px = Math.max(...v.t.split('\n').map(l => textPx(l, font))) + 8;
+        // συγχώνευση μόνο προς τα κάτω (ονόματα της ΦΡΟΥΡΑΣ σε 3 γραμμές) μετρά ως ένα κελί της στήλης· σε πλάτος, μετά
+        const mg = top.get(ref);
+        if (mg && mg.c2 > mg.c1) wide.push({ c1: mg.c1, c2: mg.c2, px }); else need.set(c, Math.max(need.get(c) || 0, px));
+      }
+      const grow = (c: number, px: number) => {
+        const cur = ws.colWidth(c); if (cur <= 0) return;
+        const w = Math.min(WIDE_MAX, Math.ceil((px / mdw + 0.2) * 10) / 10);
+        if (w > cur + 0.05) ws.setColWidth(c, w);
+      };
+      for (const [c, px] of need) grow(c, px);
+      // συγχωνευμένο σε πλάτος (π.χ. ονόματα μαγειρείων F:H): ό,τι λείπει μπαίνει στη φαρδύτερη στήλη του
+      for (const m of wide) {
+        let have = 0, at = m.c1;
+        for (let i = m.c1; i <= m.c2; i++) { have += colPx(i); if (ws.colWidth(i) > ws.colWidth(at)) at = i; }
+        if (m.px > have) grow(at, colPx(at) + m.px - have);
+      }
+    }
     type Item = { ref: string; t: string; num: boolean; rich: boolean; s: number; k: ReturnType<typeof info>; font: FontSpec; box: Box; own: number; r2: number; base: number; key: string; r: number; fit: Fit | null };
     const items: Item[] = [];
     const fitOf = (t: string, font: FontSpec, box: Box, own: number, min?: number) => {
@@ -713,13 +775,11 @@ export class Workbook {
       // με αναδίπλωση το κείμενο δεν απλώνεται πια στα διπλανά κελιά: οι γραμμές μετράνε στο δικό του πλάτος
       return fit?.wrap && !box.wrap && box.w > own - 6 ? fitText(t, font, { ...box, w: own - 6 }, min) : fit;
     };
-    for (const ref of refs) {
+    for (const ref of list) {
       const x = ws.raw(ref); if (!x || x.inner.includes('<f') || inside.has(ref)) continue;
-      let t: string, num = false; const rich = x.t === 'inlineStr' && x.inner.includes('<r>');
-      if (x.t === 'inlineStr') t = texts(x.inner);
-      else if (x.t === 's') t = sst[Number(/<v>([^<]*)<\/v>/.exec(x.inner)?.[1])] ?? '';
-      else if (x.t == null || x.t === 'n') { const v = /<v>([^<]*)<\/v>/.exec(x.inner)?.[1]; if (v == null || v === '') continue; t = (await this.isDateStyle(x.s)) ? '00/00/0000' : String(Number(v)); num = true; }
-      else continue;
+      const rich = x.t === 'inlineStr' && x.inner.includes('<r>');
+      const v = await textOf(x); if (!v) continue;
+      const { t, num } = v;
       if (!t.trim()) continue;
       const k = info(x.s); if (k.rot) continue;
       const { c, r } = splitRef(ref); const m = top.get(ref) || { c1: c, r1: r, c2: c, r2: r };
@@ -994,7 +1054,8 @@ export class Workbook {
     z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
     z.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
     z.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/></worksheet>');
-    return Workbook.open(await z.generateAsync({ type: 'nodebuffer' }));
+    const wb = await Workbook.open(await z.generateAsync({ type: 'nodebuffer' })); wb.widen = true;
+    return wb;
   }
 
   // Περιοχή εκτύπωσης και άλλα ονόματα του φύλλου
@@ -1075,7 +1136,7 @@ export class Workbook {
 
 // Αρχείο που έφτιαξε το ExcelJS: κάθε κελί με τιμή να φαίνεται ολόκληρο (fitSheet)
 export async function fitBook(buf: Buffer | Uint8Array): Promise<Buffer> {
-  const wb = await Workbook.open(buf);
+  const wb = await Workbook.open(buf); wb.widen = true;
   for (const n of wb.sheetNames()) (await wb.sheet(n)).markAll();
   return wb.save();
 }

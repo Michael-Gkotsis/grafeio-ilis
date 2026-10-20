@@ -108,7 +108,7 @@ function locateHead(ws: Sheet, rows: XlValue[][], r: Report): number {
 export type GroupKey = Omit<RepGroup, 'rows'>;
 export interface FillOpts { prefix?: string; stale?: GroupKey[] }
 export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[] }> {
-  const wb = await Workbook.open(tpl); const warnings: string[] = [];
+  const wb = await Workbook.open(tpl); wb.widen = true; const warnings: string[] = [];
   await unitWords(wb, s);
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
   const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
