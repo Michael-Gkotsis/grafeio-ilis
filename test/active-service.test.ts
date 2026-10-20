@@ -36,9 +36,9 @@ describe('ενεργή / ανενεργή υπηρεσία', () => {
     const filled = run(off, { t: 'autofill', date: D });
     expect(filled.guards[D][k]).toBeUndefined();
     expect(frouraLayout(filled, D).extra.some(x => x.k === k)).toBe(false);
-    const colE = async (x: AppState) => { const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), x, D)).data)).sheet(0); return JSON.stringify(Array.from({ length: 60 }, (_, r) => ws.get('E' + (r + 1)))); };
-    expect(await colE(run(s0, { t: 'autofill', date: D }))).toContain('ΠΥΛΗ');
-    expect(await colE(filled)).not.toContain('ΠΥΛΗ');
+    const cellsOf = async (x: AppState) => { const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), x, D)).data)).sheet(0); return JSON.stringify(Array.from({ length: 80 }, (_, r) => 'ABCDEFGHIJKLMNOP'.split('').map(c => ws.get(c + (r + 1))))); };
+    expect(await cellsOf(run(s0, { t: 'autofill', date: D }))).toContain('ΠΥΛΗ');
+    expect(await cellsOf(filled)).not.toContain('ΠΥΛΗ');
     const on = run(filled, { t: 'setBlock', phase: 'sven', id: gate, patch: { hidden: false } });
     expect(postsOf(on.settings).some(x => x.k === k)).toBe(true);
     expect(run(on, { t: 'autofill', date: D }).guards[D][k]).toBeTruthy();
@@ -57,7 +57,7 @@ describe('ενεργή / ανενεργή υπηρεσία', () => {
     expect(rows.find(x => x[2] === s.people[0].last)![c]).toBe(2);
   });
 
-  it('όταν γίνεται ανενεργή, βγαίνουν μόνο όσες είχαν μπει από αύριο και μετά', () => {
+  it('όταν γίνεται ανενεργή, βγαίνουν μόνο όσες είχαν μπει από αύριο και μετά', async () => {
     const { s: s0, gate, k } = withGate();
     s0.guards = { '2026-10-11': { [k]: 1 }, [D]: { [k]: 2, th1: 3 }, '2026-10-13': { [k]: 4, th1: 5 }, '2026-10-14': { [k]: 6 } };
     const r = apply(s0, { t: 'setBlock', phase: 'sven', id: gate, patch: { hidden: true } }, ctx);
@@ -66,6 +66,8 @@ describe('ενεργή / ανενεργή υπηρεσία', () => {
     // στο έντυπο που δεν ισχύει τώρα: τίποτα δεν βγαίνει (ίδια κλειδιά θέσεων με το άλλο έντυπο)
     const r2 = apply(s0, { t: 'setBlock', phase: 'spen', id: 'mg', patch: { hidden: true } }, ctx);
     expect(r2.state.guards).toBe(s0.guards);
+    // η σημερινή που έμεινε δεν γράφεται στη ΦΡΟΥΡΑ, με προειδοποίηση ότι είναι ανενεργή
+    expect((await fillFroura(T('froura.xlsx'), r.state, D)).warnings.join(' ')).toMatch(/Πύλη είναι ανενεργή/);
   });
 
   it('Λ/Υ και Δ/Υ μένουν πάντα ενεργοί· νέα υπηρεσία μπορεί να ξεκινά ανενεργή', () => {
