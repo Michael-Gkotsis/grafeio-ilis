@@ -61,7 +61,7 @@ export type Command =
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string }
+  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean }
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string> }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
@@ -722,9 +722,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
-      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
+      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
-      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + ')', files: [] };
+      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
       // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
@@ -754,8 +754,24 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setBlock': {
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       const list = blocksOf(s.settings, c.phase); const b = list.find(x => x.id === c.id); if (!b) throw new Error('Δεν βρέθηκε η υπηρεσία');
-      const what = c.patch.hidden != null ? (c.patch.hidden ? 'αφαιρέθηκε' : 'ξαναμπήκε') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
-      return { state: { ...s, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
+      // «Ενεργή» (Michael, 20/10): ανενεργή = hidden, δεν σβήνεται. Δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και
+      // στο έντυπο· οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών, στη δικαιοσύνη και στην καρτέλα. Όσες είχαν
+      // μπει για αύριο και μετά βγαίνουν (αλλιώς θα μετρούσαν χωρίς να φαίνονται)· η σημερινή μένει, μπορεί να έγινε ήδη.
+      // Μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά (θαλαμοφύλακες, μαγειρεία).
+      if (c.patch.hidden && b.kind === 'ly') throw new Error('Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)');
+      let guards = s.guards, gone = 0;
+      if (c.patch.hidden && !b.hidden && c.phase === (s.settings.phase || 'sven')) {
+        const ks = new Set(b.posts.map(p => p.k));
+        guards = { ...s.guards };
+        for (const d in guards) if (d > ctx.today) {
+          const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !ks.has(k)));
+          const n = Object.keys(g).length - Object.keys(left).length;
+          if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
+        }
+        if (!gone) guards = s.guards;
+      }
+      const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
+      return { state: { ...s, guards, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
     }
     case 'setNightTraining': {
       const nightTraining = { ...(s.nightTraining || {}) };

@@ -1661,7 +1661,7 @@ export function dutyCols(settings?: Settings): DutyCols {
   const own = new Map<string, number>();
   for (const b of [...(settings.blocks || []), ...(settings.blocksSpen || [])]) {
     let col = KIND_COL[b.kind];
-    if (col == null && b.custom && !b.hidden) {
+    if (col == null && b.custom) {   // και οι ανενεργές (Michael, 20/10): οι υπηρεσίες τους δεν χάνονται από τον έλεγχο
       const name = norm(b.name); col = own.get(name);
       if (col == null) { col = head.length; head.push(name); count.push([col, []]); own.set(name, col); }
     }
