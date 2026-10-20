@@ -8,6 +8,8 @@ import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
 import { byIds, fieldOf, fieldValue, type BuildOpts, type Report } from '../shared/reports';
+import { LAYOUT_SHEETS, type Block } from '../shared/layout';
+import { sigsSaved } from '../shared/sigs';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
@@ -183,6 +185,28 @@ export function mockApi(): Api {
       const head = cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('');
       const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text)) + '</td>').join('') + '</tr>').join('');
       return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
+    },
+    // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές
+    layoutPreview: async q => {
+      const sheets = 'report' in q ? [{ key: 'main', label: q.report.name }] : LAYOUT_SHEETS[q.form];
+      const sg = 'report' in q ? sigsSaved(state.settings, 'reports') : (q.sigs || sigsSaved(state.settings, q.form));
+      return { css: '', warnings: [], sheets: sheets.map(x => {
+        const mv = ('report' in q ? q.report.layout : q.layout?.[x.key]) || {};
+        const base: Block[] = [{ id: 'head', r1: 1, c1: 10, r2: 3, c2: 12 }, { id: 'date', r1: 19, c1: 9, r2: 19, c2: 12 }, ...sg.map((_, i) => ({ id: 's' + i, r1: 21, c1: 1 + Math.floor(i * 12 / sg.length), r2: 22, c2: Math.floor((i + 1) * 12 / sg.length) }))];
+        const blocks = base.map(b => { const m = mv[b.id] || [0, 0]; return { ...b, r1: b.r1 + m[0], r2: b.r2 + m[0], c1: b.c1 + m[1], c2: b.c2 + m[1] }; });
+        const text = (b: Block, r: number) => b.id === 'head' ? state.settings.unit[r - b.r1] : b.id === 'date' ? state.settings.place + ', 20 ΟΚΤ 26' : (r === b.r1 ? sg[+b.id.slice(1)].art : sg[+b.id.slice(1)].title);
+        let html = '<div class="pg" style="width:794px;height:700px;padding:40px"><table style="table-layout:fixed;width:714px">';
+        for (let r = 1; r <= 30; r++) {
+          html += '<tr style="height:20px">';
+          for (let c = 1; c <= 12; c++) {
+            const b = blocks.find(z => z.r1 <= r && r <= z.r2 && z.c1 === c);
+            if (b) { html += '<td data-a="' + String.fromCharCode(64 + c) + r + '" colspan="' + (b.c2 - b.c1 + 1) + '" style="text-align:center;font:11px Arial">' + (text(b, r) || '') + '</td>'; c = b.c2; continue; }
+            html += '<td data-a="' + String.fromCharCode(64 + c) + r + '" style="font:11px Arial">' + (r >= 6 && r <= 16 && c <= 8 ? r - 5 : '') + '</td>';
+          }
+          html += '</tr>';
+        }
+        return { key: x.key, sheet: x.label, blocks, html: html + '</table></div>', pages: 1 };
+      }) };
     },
     repRun: async (r, _f, ids) => ({ ok: true, file: '(δοκιμή) ' + r.name + ' (' + ids.length + ').xlsx', warnings: [] }),
     repTimes: async () => ({}),

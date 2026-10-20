@@ -57,6 +57,7 @@ const api: Api = {
   repInspect: (file, kind, sheet, head) => ipcRenderer.invoke('rep:inspect', file, kind, sheet, head),
   repBuild: (o, kind, file) => ipcRenderer.invoke('rep:build', o, kind, file),
   repPreview: (src, r, ids, date, raw) => ipcRenderer.invoke('rep:preview', src, r, ids, date, !!raw),
+  layoutPreview: q => ipcRenderer.invoke('layout:preview', q),
   repRun: (r, file, ids, date, print, force, opts) => ipcRenderer.invoke('rep:run', r, file, ids, date, !!print, !!force, opts || {}),
   repHist: id => ipcRenderer.invoke('rep:hist', id),
   repTimes: id => ipcRenderer.invoke('rep:times', id),

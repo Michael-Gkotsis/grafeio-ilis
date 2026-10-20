@@ -20,6 +20,8 @@ import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
 import { SigEditor } from '../sigs';
+import { LayoutDialog } from '../layout';
+import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
 import { XL_FONTS, XL_H, XL_LOOK, XL_SIZES, XL_V, sameLook, xlLook, type XlLook } from '../../shared/xlLook';
 import { SIG_FORMS, sameSigs, sigDefaults, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
@@ -112,19 +114,27 @@ function XlLookCard() {
 // το έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»).
 const SIG_LABEL = (f: SigForm) => (f === 'hkai' ? HK() : f === 'froura' ? 'ΦΡΟΥΡΑ' : f === 'outs' ? 'Εξοδούχοι' : 'Έντυπα');
 function SigsCard() {
-  const { state, run } = useStore(); const toast = useToast();
-  const [form, setForm] = useState<SigForm>('hkai');
+  const { state, run, today } = useStore(); const toast = useToast();
+  const [form, setForm] = useState<SigForm>('hkai'); const [lay, setLay] = useState(false);
+  const lf = form === 'reports' ? null : form as LayoutForm;
+  // άλλο πλήθος υπογραφών: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
+  const layoutFor = (n: number) => (lf && n !== saved.length && state.settings.layout?.[lf] ? { layout: { ...state.settings.layout, [lf]: dropSigMoves(state.settings.layout[lf]) } } : {});
+  const saveLayout = async (l: Layout | undefined) => {
+    if (!lf) return; const all = { ...(state.settings.layout || {}) }; if (l) all[lf] = l; else delete all[lf];
+    if (await run({ t: 'setSettings', settings: { layout: all }, text: 'θέσεις στο χαρτί: ' + SIG_LABEL(form) }, false)) toast({ text: 'Αποθηκεύτηκαν οι θέσεις: ' + SIG_LABEL(form) });
+  };
+  const movedAny = !!lf && Object.values(state.settings.layout?.[lf] || {}).some(ms => Object.values(ms).some(moved));
   const [edit, setEdit] = useState<Partial<Record<SigForm, Sig[]>>>({});
   const saved = sigsSaved(state.settings, form); const list = edit[form] ?? saved;
   const changed = !sameSigs(list, saved);
   const setList = (v: Sig[]) => setEdit({ ...edit, [form]: v });
   const save = async () => {
     const v = sigsClean(list);
-    if (await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: v } }, text: 'υπογραφές ' + SIG_LABEL(form) + ': ' + sigsText(v) }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Αποθηκεύτηκαν οι υπογραφές: ' + SIG_LABEL(form) }); }
+    if (await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: v }, ...layoutFor(v.length) }, text: 'υπογραφές ' + SIG_LABEL(form) + ': ' + sigsText(v) }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Αποθηκεύτηκαν οι υπογραφές: ' + SIG_LABEL(form) }); }
   };
   const reset = async () => {
     const all = { ...(state.settings.sigs || {}) }; delete all[form];
-    if (await run({ t: 'setSettings', settings: { sigs: all }, text: 'υπογραφές ' + SIG_LABEL(form) + ': όπως το έντυπο' }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Οι υπογραφές ' + SIG_LABEL(form) + ' είναι πάλι όπως το έντυπο' }); }
+    if (await run({ t: 'setSettings', settings: { sigs: all, ...layoutFor(sigDefaults(state.settings, form).length) }, text: 'υπογραφές ' + SIG_LABEL(form) + ': όπως το έντυπο' }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Οι υπογραφές ' + SIG_LABEL(form) + ' είναι πάλι όπως το έντυπο' }); }
   };
   return html`<${Card} title="Υπογραφές" actions=${html`<${Segmented} small=${true} value=${form} onChange=${setForm} items=${SIG_FORMS.map(f => ({ value: f, label: SIG_LABEL(f) + (edit[f] && !sameSigs(edit[f]!, sigsSaved(state.settings, f)) ? ' •' : '') }))}/>`}>
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
@@ -132,7 +142,10 @@ function SigsCard() {
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
     <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} onClick=${save}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setEdit({ ...edit, [form]: undefined })}>Άκυρο<//>`}
-      ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}</div>
+      ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}
+      ${lf ? html`<${Button} variant="outline" style=${{ marginLeft: 'auto' }} onClick=${() => setLay(true)} data-tip="Σύρε κεφαλίδα, ημερομηνία και υπογραφές όπου θέλεις πάνω στο χαρτί">Θέσεις στο χαρτί…${movedAny ? ' •' : ''}<//>` : html`<span className="muted" style=${{ marginLeft: 'auto', fontSize: '13px' }}>Θέσεις στο χαρτί: σε κάθε έντυπο, από το «Υπογραφές…»</span>`}</div>
+    ${lay && lf && html`<${LayoutDialog} title=${SIG_LABEL(form)} sigs=${sigsClean(list)} initial=${state.settings.layout?.[lf]} onClose=${() => setLay(false)} onSave=${saveLayout}
+      req=${(l: Layout) => ({ form: lf, date: today, sigs: changed ? sigsClean(list) : undefined, layout: l })}/>`}
   <//>`;
 }
 

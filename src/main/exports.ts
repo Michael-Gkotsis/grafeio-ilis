@@ -15,13 +15,15 @@ import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, lyLine } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { placeSigs } from './sigs';
+import { applyMoves, blockOf } from './layout';
+import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
-export interface ExportResult { name: string; data: Buffer; warnings: string[] }
+export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[] }
 
 // Λόχος/Τάγμα (Michael, 18/10): οι λέξεις της ίλης στα κείμενα του template («ΔΚΤΗΣ ΙΛΗΣ», «2Η ΕΠΧΙΑ») γίνονται του λόχου,
 // πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Και ανάποδα (20/10): δικό σου
@@ -36,9 +38,18 @@ export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs:
   const def = sigsFor(s.settings, sigsSaved(s.settings, form));
   return { sigs: over ? sigsFor(s.settings, over) : sigsCustom(s.settings, form) ? def : null, def };
 }
-async function signSheets(wb: Workbook, sheets: Sheet[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[]) {
-  const g = sigsOf(s, form, over);
-  for (const ws of sheets) await placeSigs(wb, ws, g.sigs, g.def, warnings);
+// Υπογραφές σε κάθε φύλλο, και μετά ό,τι μετακίνησες πάνω στο χαρτί (κεφαλίδα, ημερομηνία, υπογραφές: layout.ts).
+// more: τα άλλα κομμάτια του φύλλου (κεφαλίδα, τόπος και ημερομηνία)· key: ποιο φύλλο του εντύπου (LAYOUT_SHEETS)
+export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[] }
+export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
+  const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
+  const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
+  for (const x of sheets) {
+    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings);
+    const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
+    out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, blocks, mv(x.key)) });
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)
@@ -81,8 +92,8 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
     if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceOf(b.x)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
   }
-  await signSheets(wb, [ws], s, 'froura', sigs, warnings);
-  return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
+  const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', ['L1', 'L2', 'L3'])] }], s, 'froura', sigs, warnings);
+  return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
 }
 
 // ------------------------------------------------------------------ ΗΚΑΙ (δείγμα 15)
@@ -152,8 +163,10 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
   if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
   bk.set('L23', s.settings.place + ', ' + hkDate(d));
-  await signSheets(wb, fr === bk ? [fr] : [fr, bk], s, 'hkai', opts.sigs, warnings);
-  return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings };
+  const t = /^([A-Z]+)(\d+)$/.exec(m.title); const hr = t && Number(t[2]) >= 3 ? [t[1] + (Number(t[2]) - 3), t[1] + (Number(t[2]) - 2)] : [];
+  const front: SheetPart = { ws: fr, key: 'front', more: [blockOf(fr, 'head', hr), blockOf(fr, 'date', [m.date])] };
+  const layout = await signSheets(wb, fr === bk ? [front] : [front, { ws: bk, key: 'back', more: [blockOf(bk, 'date', ['L23'])] }], s, 'hkai', opts.sigs, warnings);
+  return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings, layout };
 }
 
 // Οι δικές σου γραμμές (βαθμοί) που δεν έχει το έντυπο: νέα γραμμή κάτω από αυτήν που διάλεξες, με τη μορφή και τους
@@ -236,14 +249,14 @@ export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): stri
 }
 // sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null): Promise<ExportResult> {
-  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = []; const done: Sheet[] = [];
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = []; const done: SheetPart[] = [];
   const { outs, stay } = outsAndStay(s, d);
   const lists: [string, { p: Person; note: string }[], string | undefined][] = [
     ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: outsNote(s, d, x.p.id, x.st) })), sheets.outs],
     ['ΠΑΡΑΜΕΝΟΝΤΕΣ', stay, sheets.stay]
   ];
   for (const [title, list, name] of lists) {
-    const ws = await wb.sheet(name && wb.hasSheet(name) ? name : title);
+    const ws = await wb.sheet(name && wb.hasSheet(name) ? name : title); const key = title === 'ΕΞΟΔΟΥΧΟΙ' ? 'outs' : 'stay';
     ws.set('H1', s.settings.unit[0]).set('H2', s.settings.unit[1]).set('H3', s.settings.unit[2]);
     ws.set('A5', title + ' ΤΗΣ ' + titleDate(d, false));
     if (list.length > 1) ws.insertRows(7, list.length - 1, 7, wb);
@@ -254,8 +267,8 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
     });
     const foot = 9 + Math.max(list.length - 1, 0);
     ws.set('G' + foot, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
-    if (!done.includes(ws)) done.push(ws);
+    if (!done.some(x => x.ws === ws)) done.push({ ws, key, more: [blockOf(ws, 'head', ['H1', 'H2', 'H3']), blockOf(ws, 'date', ['G' + foot])] });
   }
-  await signSheets(wb, done, s, 'outs', sigs, warnings);
-  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings };
+  const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
+  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
 }

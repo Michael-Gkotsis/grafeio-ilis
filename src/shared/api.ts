@@ -6,6 +6,7 @@ import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';
 import type { Sig } from './sigs';
+import type { Block, Layout, LayoutForm, LayoutSheet } from './layout';
 import type { BuildOpts, RepCell, RepCol, RepKind, Report, RepTpl } from './reports';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
@@ -60,6 +61,10 @@ export type EssoResult = { ok: true; archive: string; dir: string; files: string
 // Έντυπα: πρότυπο όπως το βρήκε η εφαρμογή (φύλλα, γραμμή επικεφαλίδων, στήλες, {ΕΤΙΚΕΤΕΣ})
 export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; prepared: number; guessed: boolean }
 export interface RepPreview { html: string; css: string; pages: number }
+// Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα
+export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout } | { report: Report; file: string; ids: (number | string)[]; date: ISODate };
+export interface LayoutPv { css: string; sheets: (LayoutSheet & { html: string; pages: number })[]; warnings: string[] }
+export type { Block };
 export interface TplFile { exists: boolean; mtime: number }
 // Πρόχειρο εντύπου για προεπισκόπηση: από αρχείο προτύπου, ή από τις επιλογές του «Φτιάξ' το εδώ» (χωρίς αρχείο ακόμα)
 export type RepSource = { file: string } | { build: BuildOpts };
@@ -121,6 +126,7 @@ export interface Api {
   repInspect(file: string, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect | Fail>;
   repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<{ ok: true; file: string; mtime: number; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] } | Fail>;
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
+  layoutPreview(q: LayoutReq): Promise<LayoutPv | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
   repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepRunResult>;
   repHist(id: string): Promise<RepHistEntry[]>;   // ιστορικό εκδόσεων: τα 10 τελευταία, νεότερο πρώτο
