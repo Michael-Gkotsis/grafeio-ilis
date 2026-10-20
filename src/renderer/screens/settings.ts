@@ -20,6 +20,7 @@ import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
 import { SigEditor } from '../sigs';
+import { XL_FONTS, XL_H, XL_LOOK, XL_SIZES, XL_V, sameLook, xlLook, type XlLook } from '../../shared/xlLook';
 import { SIG_FORMS, sameSigs, sigDefaults, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
 
@@ -74,6 +75,36 @@ function SettingsCard() {
       <dt>Δεδομένα</dt><dd>${boot.dataDir} <${Button} variant="link" onClick=${() => window.api.openFolder('data')}>Άνοιξε<//></dd>
       <dt>Αντίγραφα</dt><dd>Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). <${Button} variant="link" onClick=${async () => { const r = await window.api.backup(); toast({ text: r.ok ? 'Κρατήθηκε αντίγραφο της βάσης' : 'Δεν κρατήθηκε αντίγραφο: ' + r.error, actions: [{ label: 'Φάκελος', fn: () => window.api.openFolder('backups') }] }); }}>Αντίγραφο τώρα<//></dd>
       <dt>Έκδοση</dt><dd>${boot.version}</dd></dl>
+  <//>`;
+}
+
+// Γράμματα Excel (Michael, 20/10): γραμματοσειρά, μέγεθος και στοίχιση των κελιών σε ό,τι φτιάχνει η εφαρμογή στο Excel.
+// Προεπιλογή Arial 12, στο κέντρο οριζόντια και κάθετα. Τα έντυπα με σταθερή διάταξη και τα δικά σου Excel μένουν όπως είναι.
+const lookText = (x: XlLook) => x.font + ' ' + x.sz + ', ' + XL_H.find(o => o.value === x.h)!.label.toLowerCase() + ' / ' + XL_V.find(o => o.value === x.v)!.label.toLowerCase();
+function XlLookCard() {
+  const { state, run } = useStore(); const toast = useToast();
+  const saved = xlLook(state.settings);
+  const [x, setX] = useState<XlLook>(saved);
+  const changed = !sameLook(x, saved);
+  const save = async (v: XlLook) => {
+    if (await run({ t: 'setSettings', settings: { xl: v }, text: 'γράμματα Excel: ' + lookText(v) }, false)) { setX(v); toast({ text: 'Αποθηκεύτηκαν τα γράμματα Excel: ' + lookText(v) }); }
+  };
+  const row = (label: string, help: string, ctl: unknown) => html`<div className="pref"><div><b>${label}</b><small>${help}</small></div>${ctl}</div>`;
+  const cell = { fontFamily: x.font === 'Times New Roman' ? '"Times New Roman",serif' : x.font === 'Calibri' ? 'Calibri,Carlito,Arial,sans-serif' : 'Arial,"Liberation Sans",sans-serif', fontSize: x.sz + 'pt', textAlign: x.h, verticalAlign: x.v === 'center' ? 'middle' : x.v, border: '1px solid #9aa0a6', padding: '0 6px', height: (x.sz * 2.6) + 'pt', color: '#202124', background: '#fff' };
+  return html`<${Card} title="Γράμματα Excel">
+    <p className="note" style=${{ marginTop: 0 }}>Σε ό,τι φτιάχνει η εφαρμογή στο Excel: τα Excel που βγάζεις (Δυναμολόγιο και καταστάσεις, Συνολικό δυναμολόγιο, Στελέχη, Οπλισμός, Έλεγχος υπηρεσιών), τα νέα αρχεία και φύλλα στα <b>Αρχεία Excel</b> (π.χ. Ιατρικά, Ποινές, ΘΑΛΑΜΟΙ, νέος μήνας) και τα πρότυπα του «Φτιάξ' το εδώ» στα Έντυπα (εκεί το μέγεθος το διαλέγεις στο πρότυπο).
+      Οι ${HK()}, ΦΡΟΥΡΑ και Εξοδούχοι κρατούν τη διάταξη του εντύπου. Στα δικά σου Excel οι νέες γραμμές παίρνουν τη μορφή της γραμμής από πάνω. Ό,τι δεν χωρά μικραίνει λίγο ή αναδιπλώνεται, για να μην κόβεται.</p>
+    ${row('Γραμματοσειρά', 'Υπάρχουν σε κάθε PC με Windows 7.', html`<${Segmented} small=${true} value=${x.font} onChange=${(font: string) => setX({ ...x, font })} items=${XL_FONTS.map(f => ({ value: f, label: f }))}/>`)}
+    ${row('Μέγεθος', 'Ο τίτλος του φύλλου βγαίνει 2 μεγέθη μεγαλύτερος.', html`<select className="ui-select" aria-label="Μέγεθος γραμμάτων" value=${String(x.sz)} onChange=${(e: any) => setX({ ...x, sz: +e.target.value })}>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}</select>`)}
+    ${row('Οριζόντια στοίχιση', 'Στα κελιά του πίνακα και στις επικεφαλίδες. Ο τίτλος μένει στο κέντρο.', html`<${Segmented} small=${true} value=${x.h} onChange=${(h: XlLook['h']) => setX({ ...x, h })} items=${XL_H}/>`)}
+    ${row('Κάθετη στοίχιση', 'Πού κάθεται το κείμενο όταν η γραμμή είναι ψηλότερη.', html`<${Segmented} small=${true} value=${x.v} onChange=${(v: XlLook['v']) => setX({ ...x, v })} items=${XL_V}/>`)}
+    <div style=${{ overflowX: 'auto', margin: '8px 0 12px' }}><table style=${{ borderCollapse: 'collapse', minWidth: '360px' }} aria-label="Δείγμα"><tbody>
+      <tr>${['Α/Α', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ'].map(t => html`<td key=${t} style=${{ ...cell, fontWeight: 700, background: '#d9d9d9' }}>${t}</td>`)}</tr>
+      <tr>${['1', 'ΠΑΠΑΔΟΠΟΥΛΟΣ', 'ΓΕΩΡΓΙΟΣ'].map(t => html`<td key=${t} style=${cell}>${t}</td>`)}</tr>
+    </tbody></table></div>
+    <div className="toolbar"><${Button} disabled=${!changed} onClick=${() => save(x)}>Αποθήκευση<//>
+      ${changed && html`<${Button} variant="ghost" onClick=${() => setX(saved)}>Άκυρο<//>`}
+      ${!sameLook(x, XL_LOOK) && html`<${Button} variant="ghost" onClick=${() => (sameLook(saved, XL_LOOK) ? setX(XL_LOOK) : save(XL_LOOK))} data-tip=${'Προεπιλογή: ' + lookText(XL_LOOK)}>Προεπιλογή<//>`}</div>
   <//>`;
 }
 
@@ -191,7 +222,7 @@ function BackupsCard() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -204,7 +235,7 @@ export function TemplatesScreen() {
     </div>`;
   const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
+    : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">

@@ -6,6 +6,7 @@ import type { Esso } from './esso';
 import type { UnitKind } from './unit';
 import type { Report, RepTpl } from './reports';
 import type { Sig, SigForm } from './sigs';
+import type { XlLook } from './xlLook';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -252,6 +253,7 @@ export interface Settings {
   reportTpls?: RepTpl[];                 // Έντυπα: τα πρότυπά σου (αρχεία στον φάκελο «Πρότυπα εντύπων»), shared/reports.ts
   reports?: Report[];                    // Έντυπα: τα έτοιμα έντυπα (πρότυπο, στήλες, ποιοι μπαίνουν, πού βγαίνει)
   essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
+  xl?: Partial<XlLook>;                  // γράμματα και στοίχιση σε ό,τι φτιάχνει η εφαρμογή στο Excel (κενό = Arial 12, κέντρο), xlLook.ts
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.
 // rank: βαθμός από τον πίνακα του brand.ts · title: δικός σου τίτλος (κενό = του βαθμού)

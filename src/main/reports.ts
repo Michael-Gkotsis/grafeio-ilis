@@ -9,6 +9,7 @@ import { renderBook } from './print';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
+import { XL_LOOK, type XlLook } from '../shared/xlLook';
 import type { ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
 
@@ -194,19 +195,21 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
 
 // ------------------------------------------------------------------ «Φτιάξ' το εδώ»
 const WMUL = { auto: 1, narrow: 0.7, wide: 1.6 };
-// Το πρότυπο από τις επιλογές και πού μπήκαν τα πράγματα (για την αντιστοίχιση του εντύπου)
-export async function buildTemplate(o: BuildOpts, kind: RepKind): Promise<{ data: Buffer; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] }> {
+// Το πρότυπο από τις επιλογές και πού μπήκαν τα πράγματα (για την αντιστοίχιση του εντύπου). Γραμματοσειρά και στοίχιση
+// από τις Ρυθμίσεις › Γράμματα Excel (look)· το μέγεθος από τις επιλογές του προτύπου.
+export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = XL_LOOK): Promise<{ data: Buffer; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] }> {
   const sheet = 'ΚΑΤΑΣΤΑΣΗ';
   const wb = await Workbook.blank(sheet); const ws = await wb.sheet(0);
   const cols = o.cols.length ? o.cols : [{ f: 'name', h: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', w: 'auto' as const }];
   const n = cols.length; const L = (c: number) => colName(c);
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
+  const { font, h, v } = look;
   const st = {
-    hdr: await wb.style({ sz: 10, b: true, h: 'left' }), date: await wb.style({ sz: 10, b: true, h: 'right' }),
-    title: await wb.style({ sz: sz + 2, b: true, u: true, h: 'center' }),
-    head: await wb.style({ sz, b: true, border: true, h: 'center', wrap: true, fill }),
-    left: await wb.style({ sz, border: true, h: 'left' }), center: await wb.style({ sz, border: true, h: 'center' }),
-    sig: await wb.style({ sz, b: true, h: 'center' }), sigName: await wb.style({ sz, h: 'center' })
+    hdr: await wb.style({ font, sz: 10, b: true, h: 'left' }), date: await wb.style({ font, sz: 10, b: true, h: 'right' }),
+    title: await wb.style({ font, sz: sz + 2, b: true, u: true, h: 'center' }),
+    head: await wb.style({ font, sz, b: true, border: true, h, v, wrap: true, fill }),
+    cell: await wb.style({ font, sz, border: true, h, v }),
+    sig: await wb.style({ font, sz, b: true, h: 'center' }), sigName: await wb.style({ font, sz, h: 'center' })
   };
   let r = 1;
   if (o.head || o.date) {
@@ -227,7 +230,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind): Promise<{ data
   cols.forEach((c, i) => {
     const f = fieldOf(kind, c.f); const h = (c.h || f?.head || '').trim() || ' ';
     ws.set(L(i + 1) + head, h).setStyle(L(i + 1) + head, st.head);
-    ws.setStyle(L(i + 1) + data, f?.al === 'left' ? st.left : st.center);
+    ws.setStyle(L(i + 1) + data, st.cell);
     widths[i + 1] = Math.round(Math.max(4, Math.max(f?.w || 12, Math.min(40, h.length * 1.1 + 2)) * WMUL[c.w || 'auto'] * (sz / 11)) * 10) / 10;
     out.push({ c: i + 1, f: c.f, h: upper(h), ...(c.f === 'text' && c.text ? { text: c.text } : {}) });
   });
