@@ -164,6 +164,7 @@ export function shapePerson(x: NewPerson, id: number): Person {
   if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
   if (!p.dn) delete p.dn;
   if (!p.offDays?.length) delete p.offDays;
+  if (!(Number(x.monthMax) > 0)) delete p.monthMax; else p.monthMax = Math.floor(Number(x.monthMax));
   return p;
 }
 // διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
@@ -609,11 +610,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'updatePerson': {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
-      let next: AppState = { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)), settings: rememberChoices(s.settings, c.person, old) };
+      // όριο υπηρεσιών τον μήνα (ΕΠΟΠ/ΟΒΑ): ακέραιος πάνω από 0, αλλιώς χωρίς όριο
+      const person: Person = { ...c.person }; const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
+      let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
-      const gone = old.active && !c.person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
+      const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
       gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
-      const text = old.active && !c.person.active ? shortName(c.person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && c.person.active ? shortName(c.person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(c.person);
+      const text = old.active && !person.active ? shortName(person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && person.active ? shortName(person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'setWeapons': {

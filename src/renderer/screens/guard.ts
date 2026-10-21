@@ -8,7 +8,7 @@ import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintBut
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, dutyStartOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
-import { whyAll, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, dutyMin, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { whyAll, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, postOf, postsOf, ruleBlock, statusesFrom, outMin, dutyMin, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -28,7 +28,7 @@ const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.
 // Ώρες σε στενή μορφή («14-16 · 22-00») όταν είναι ακέραιες ώρες· αλλιώς όπως είναι
 const hrs = (x: Post) => (x.slots ? x.slots.map((t: string, i: number, all: string[]) => html`<span key=${i} className="nw">${t.replace(/:00/g, '') + (i < all.length - 1 ? '\u00a0·' : '')}</span>`) : x.hours);
 // Γραμμή του πίνακα θέσεων: Θέση με τις ώρες από κάτω | Ποιος (+ ολόκληρο το «Γιατί») | Είδ./Σύν. | ενέργειες
-function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen }: P) {
+function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen, hint }: P) {
   const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x, lists) || ruleWarn);
   // βάρδιες: όλες οι ώρες η μία κάτω από την άλλη, δίπλα στο νούμερο, όπως στο έντυπο (Michael, 20/10)
@@ -37,9 +37,9 @@ function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign,
   const kenh = html`<span className="post__who"><span className="kenh-tag">Κενή</span></span>`;
   if (locked) return html`<li className=${cx('post', !p && 'is-empty')}>${head}${p ? html`<span className="post__who"><button type="button" className="post__name linkish" data-tip="Άνοιξε την καρτέλα" onClick=${() => onOpen(p.id)}>${fullName(p)}</button>${r && html`<${Badge} tone="bad">⚠ ${r}<//>`}</span>` : kenh}<span className="duty">${duty}</span><span></span></li>`;
   if (p && swap) return html`<li className="post is-swap">${head}
-    <div className="post__wide"><div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gs-' + x.k} autoFocus=${true} placeholder=${'Αντί για ' + fullName(p) + '… (ή ⇄ ανταλλαγή με άλλη θέση)'} date=${date} unavailable=${(q: Person) => { const r = unavailable(q); return r && r.startsWith('Ήδη ') ? '⇄ Ανταλλαγή: ' + r.slice(5) : r; }} onBlocked=${(q: Person, why: string) => { setSwap(false); onBlocked(x.k, q, why); }} onChange=${(id: number) => { setSwap(false); onAssign(x.k, id, p.id); }}/></div>
+    <div className="post__wide"><div style=${{ flex: 1, minWidth: 0 }}><${PersonPicker} id=${'gs-' + x.k} autoFocus=${true} placeholder=${'Αντί για ' + fullName(p) + '… (ή ⇄ ανταλλαγή με άλλη θέση)'} date=${date} hint=${hint} unavailable=${(q: Person) => { const r = unavailable(q); return r && r.startsWith('Ήδη ') ? '⇄ Ανταλλαγή: ' + r.slice(5) : r; }} onBlocked=${(q: Person, why: string) => { setSwap(false); onBlocked(x.k, q, why); }} onChange=${(id: number) => { setSwap(false); onAssign(x.k, id, p.id); }}/></div>
     <${Button} variant="ghost" size="sm" onClick=${() => setSwap(false)}>Άκυρο<//></div></li>`;
-  if (!p) return html`<li className="post is-empty">${head}${kenh}<div className="post__pick"><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => onBlocked(x.k, q, why)} onChange=${(id: number) => onAssign(x.k, id)}/></div></li>`;
+  if (!p) return html`<li className="post is-empty">${head}${kenh}<div className="post__pick"><${PersonPicker} id=${'gp-' + x.k} placeholder="Διάλεξε άτομο…" date=${date} hint=${hint} unavailable=${unavailable} onBlocked=${(q: Person, why: string) => onBlocked(x.k, q, why)} onChange=${(id: number) => onAssign(x.k, id)}/></div></li>`;
   return html`<li className="post">${head}
     <span className="post__who"><span className="post__name"><button type="button" className="linkish" data-tip="Άνοιξε την καρτέλα" onClick=${() => onOpen(p.id)}>${fullName(p)}</button>${r && html` <${Badge} tone="warn" className="tag" data-tip="Πέρασε παρά τον κανόνα">⚠ ${r}<//>`}</span>${why && html`<small className="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">Γιατί: ${why}</small>`}</span>
     <span className="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">${duty}</span>
@@ -174,8 +174,11 @@ export function GuardScreen() {
     const cols = capCols(state.settings);
     const capped = people.filter(p => !p.post).map(p => ({ p, c: cols.map(col => ({ col, x: capCell(state, p, col) })).filter(o => !o.x.on) })).filter(o => o.c.length);
     const offDay = people.filter(p => !noDuty.some(x => x.p === p) && offDayBlock(state, date, p.id)).map(p => ({ p }));
-    return { noDuty, unarmed, posted, capped, offDay };
+    // ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι, με τις υπηρεσίες του μήνα
+    const epop = people.filter(p => isEpop(p, lists));
+    return { noDuty, unarmed, posted, capped, offDay, epop };
   }, [state.statuses, state.caps, state.people, state.settings, date]);
+  const epopHint = useCallback((p: Person) => monthTxt(state, date, p), [state.guards, state.dutyLog, state.settings, date]);   // eslint-disable-line react-hooks/exhaustive-deps
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
   const why = useMemo(() => whyAll(state, date), [state.guards, state.dutyLog, state.people, state.settings, state.baseline, state.statuses, state.caps, state.rules, date]);
@@ -285,7 +288,7 @@ export function GuardScreen() {
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
           <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span><span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
-          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
+          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
     ${seatless.length > 0 && html`<section className="ui-card seatless" aria-label="Υπηρεσίες χωρίς θέση">
@@ -301,6 +304,7 @@ export function GuardScreen() {
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.noDuty.length}</b> σε καμία υπηρεσία</button></li>
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.unarmed.length}</b> μόνο σε άοπλες</button></li>
         ${excluded.posted.length > 0 && html`<li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.posted.length}</b> με πόστο</button></li>`}
+        ${excluded.epop.length > 0 && html`<li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.epop.length}</b> ΕΠΟΠ/ΟΒΑ, μόνο με το χέρι</button></li>`}
         <li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.capped.length}</b> μόνιμα όχι σε κάποιες θέσεις</button></li>
         ${excluded.offDay.length > 0 && html`<li><button type="button" className="linkish" aria-expanded=${!!fold.ex} onClick=${() => flip('ex', !!fold.ex)}><b>${excluded.offDay.length}</b> όχι υπηρεσία ${DOW_FULL[weekday(date)]}</button></li>`}
       </ul>
@@ -308,6 +312,7 @@ export function GuardScreen() {
         <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
         <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
         ${excluded.posted.length > 0 && html`<h3 className="minihd">Με πόστο, μόνο Λ/Υ και Δ/Υ (${excluded.posted.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει. Με το χέρι μπαίνουν σε οποιαδήποτε θέση: διάλεξέ τον στη θέση και γράψε την αιτία.</p><div className="avail">${excluded.posted.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από το φύλλο ΠΟΣΤΑ (Αρχεία Excel)">${shortName(p)} <${Badge} tone="outline">${p.post}<//></button>`)}</div>`}
+        ${excluded.epop.length > 0 && html`<h3 className="minihd">ΕΠΟΠ/ΟΒΑ, μόνο με το χέρι (${excluded.epop.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει. Διάλεξέ τον στη θέση· πάνω από το όριο του μήνα ζητά αιτία. Την επόμενη μέρα έχει απαλλαγή στην ${HK()}.</p><div className="avail">${excluded.epop.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Το όριο αλλάζει στη «Διόρθωση στοιχείων» της καρτέλας">${shortName(p)} <${Badge} tone="outline">${epopHint(p)}<//></button>`)}</div>`}
         <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip=${c.map((o: P) => o.col.label + ': ' + o.x.why).join(' · ') + ' · Πάτα: «Ποιος κάνει τι»'}>${shortName(p)} <${Badge} tone="outline">όχι ${c.map((o: P) => o.col.block ? o.col.label : (KIND_LBL as P)[o.col.kind]).join(', ')}<//></button>`)}</div>
         ${excluded.offDay.length > 0 && html`<h3 className="minihd">Όχι υπηρεσία ${DOW_FULL[weekday(date)]} (${excluded.offDay.length})</h3><div className="avail">${excluded.offDay.map(({ p }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip="Πάτα: «Ποιος κάνει τι»">${shortName(p)}</button>`)}</div>`}
         <${Button} size="sm" variant="outline" onClick=${() => setProf(-1)} data-tip="Όλοι οι στρατιώτες: ποιες υπηρεσίες κάνει ο καθένας και ποιες μέρες (όπως το αρχείο «Δυνατότητα υπηρεσιών»)">Ποιος κάνει τι…<//>

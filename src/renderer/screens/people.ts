@@ -9,7 +9,7 @@ import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateField, Da
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { DEFAULT_HK_TIME, DEFAULT_OUT_TIME, awayNow, statusesNow, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
+import { DEFAULT_HK_TIME, DEFAULT_OUT_TIME, isEpop, monthTxt, awayNow, statusesNow, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, nowHM } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
@@ -243,6 +243,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
       <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p, state.settings)})</span></dd>
       <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
+      ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι, απαλλαγή την επόμενη μέρα)</span></dd>`}
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
     </dl>
@@ -380,6 +381,7 @@ function PersonFields({ x, setX, id, isNew }: P) {
     <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}<${RoomField} id=${id + '-room'} value=${x.room} onChange=${(v: number | null) => setX({ ...x, room: v })}/></div>
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
+    ${isEpop(x, state.settings.lists) && html`<div className="field"><label className="field__label" htmlFor=${id + '-mm'}>Υπηρεσίες τον μήνα (το πολύ)</label><input id=${id + '-mm'} className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${x.monthMax ?? ''} onChange=${(e: any) => setX({ ...x, monthMax: e.target.value ? Math.max(0, Math.floor(+e.target.value)) || undefined : undefined })}/><span className="field__help">ΕΠΟΠ/ΟΒΑ: δεν μπαίνει στην αυτόματη συμπλήρωση, μόνο με το χέρι. Πάνω από το όριο ζητά επιβεβαίωση. Κενό = χωρίς όριο.</span></div>`}
     <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ${HK()}.</small></span></label>
     ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ${HK()}. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.</small></span></label>`}
     ${F('notes', 'Σημειώσεις')}`;

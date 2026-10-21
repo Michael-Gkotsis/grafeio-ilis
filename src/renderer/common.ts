@@ -34,7 +34,8 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
 });
 
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
-export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked }: P) {
+// hint: μια μικρή σημείωση δίπλα στον βαθμό (π.χ. «2 από 4 τον μήνα» για ΕΠΟΠ/ΟΒΑ στις Υπηρεσίες)
+export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked, hint }: P) {
   const { state, today } = useStore();
   const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [sel, setSel] = useState(0);
   const dq = useDeferredValue(q);
@@ -56,7 +57,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}</small></div>
+        <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`, document.body)}
   </div>`;
