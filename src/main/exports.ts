@@ -15,6 +15,7 @@ import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { placeSigs } from './sigs';
+import { formPart, xlLook, type XlPart } from '../shared/xlLook';
 import { applyMoves, blockOf } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 export { FROURA_FORMS };
@@ -44,12 +45,24 @@ export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[] }
 export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
   const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
   const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
+  const L = xlLook(s.settings); const hdr = formPart(L, 'hdr'), sig = formPart(L, 'sig');
   for (const x of sheets) {
     const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings);
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
+    // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
+    for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
     out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, blocks, mv(x.key)) });
   }
   return out;
+}
+
+// Τα κελιά με κείμενο ενός κομματιού με άλλο μέγεθος, έντονα, πλάγια ή υπογράμμιση· στα κείμενα με μορφή ανά κομμάτι αλλάζει και το μέγεθός τους
+async function restyle(wb: Workbook, ws: Sheet, b: Block, o: XlPart) {
+  for (let r = b.r1; r <= b.r2; r++) for (let c = b.c1; c <= b.c2; c++) {
+    const ref = colName(c) + r; const x = ws.raw(ref); if (!x) continue;
+    ws.setStyle(ref, await wb.partStyle(x.s, o));
+    if (o.sz && x.inner.includes('<r>')) ws.sizeRuns(ref, o.sz);
+  }
 }
 
 // ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)

@@ -13,7 +13,7 @@ import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { fitBook } from './xlsx';
 import { widthChars } from './textfit';
-import { xlLook } from '../shared/xlLook';
+import { formPart, tablePart, xlLook, type XlPart } from '../shared/xlLook';
 
 // Γράμματα και στοίχιση από τις Ρυθμίσεις › Γράμματα Excel (προεπιλογή Arial 12, στο κέντρο). Η γραμματοσειρά με όνομα σε
 // κάθε κελί: χωρίς αυτό το LibreOffice (και ό,τι δεν είναι Excel) δείχνει άλλη, πιο φαρδιά. Τίτλος 2 μεγέθη μεγαλύτερος.
@@ -26,7 +26,13 @@ function lookOf(s: AppState) {
     Math.round(Math.min(max, Math.max(min * L.sz / 10, ...vals.map(v => (v == null || v === '' ? 0 : widthChars(upper(String(v)), { name: L.font, sz: L.sz, b }))))) * 10) / 10;
   // στήλη πίνακα: χωράει και την επικεφαλίδα (έντονη) στο μέγεθος των ρυθμίσεων, για να μη μικραίνει στο fitBook
   const colWidth = (min: number, head: string, vals: unknown[], b = false) => Math.max(fitWidth(min, vals, 40, b), fitWidth(0, [head], 30, true));
-  return { F: L.font, Z: L.sz, al, fitWidth, colWidth };
+  // γράμματα ανά κομμάτι (Ρυθμίσεις › Γράμματα Excel): τίτλος έντονος, υπογραμμισμένος, 2 μεγέθη πάνω· επικεφαλίδες έντονες·
+  // κεφαλίδα (γραμμές της μονάδας και ημερομηνία) έντονη στο μέγεθος των γραμμών
+  const font = (p: Required<XlPart>) => ({ name: L.font, size: p.sz, bold: p.b, italic: p.i, underline: p.u });
+  const hp = formPart(L, 'hdr') || {};
+  const hdr = (u: boolean) => font({ sz: hp.sz ?? L.sz, b: hp.b ?? true, i: hp.i ?? false, u: hp.u ?? u });
+  const FT = { title: font(tablePart(L, 'title', L.sz, { u: true })), head: font(tablePart(L, 'head')), data: font(tablePart(L, 'data')), unit: hdr(true), date: hdr(false) };
+  return { F: L.font, Z: L.sz, al, fitWidth, colWidth, FT };
 }
 
 const BASE_KINDS: DutyKind[] = ['th', 'mg', 'ly'];
@@ -48,7 +54,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
     const g = s.guards[d] || {};
     for (const k in g) { const p = postBy(s, k); if (p) set(g[k], d, { code: codeOf(s.settings, k, p.kind), kind: p.kind, own: ownOf.get(p.block) }); }
   }
-  const { F, Z, al, fitWidth, colWidth } = lookOf(s);
+  const { F, Z, al, fitWidth, colWidth, FT } = lookOf(s);
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   // Σταθερή ημερομηνία στις ιδιότητες του αρχείου: με τα ίδια δεδομένα βγαίνει το ίδιο αρχείο, οπότε η αυτόματη
   // ενημέρωση δεν το ξαναγράφει σε κάθε αλλαγή της εφαρμογής (αλλιώς άλλαζε μόνο το docProps/core.xml)
@@ -62,13 +68,13 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   const W = FIX.length + nd + TAIL.length;
   ws.mergeCells(1, 1, 1, W);
   ws.getCell(1, 1).value = 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y;
-  ws.getCell(1, 1).font = { name: F, bold: true, size: Z + 2, underline: true }; ws.getCell(1, 1).alignment = { horizontal: 'center' };
+  ws.getCell(1, 1).font = FT.title; ws.getCell(1, 1).alignment = { horizontal: 'center' };
   const thin = { style: 'thin' as const };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
   const gray = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD9D9D9' } };
   const head = ws.getRow(3);
   [...FIX, ...days.map(d => String(parseD(d).getDate())), ...TAIL].forEach((t, i) => {
-    const c = head.getCell(i + 1); c.value = t; c.font = { name: F, bold: true, size: Z }; c.alignment = { ...al, wrapText: true }; c.border = border;
+    const c = head.getCell(i + 1); c.value = t; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
     if (i >= FIX.length && i < FIX.length + nd && isHol(s.settings, days[i - FIX.length])) c.fill = gray;
   });
   const people = activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last));
@@ -85,12 +91,12 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
     }
     vals.push(p.room ?? '', x.size, hol, c.th || '', c.mg || '', c.ly || '', ...OWN.map(n => o[n] || ''));
     vals.forEach((v, j) => {
-      const cell = row.getCell(j + 1); cell.value = v; cell.border = border; cell.font = { name: F, size: Z };
+      const cell = row.getCell(j + 1); cell.value = v; cell.border = border; cell.font = FT.data;
       cell.alignment = al;
       if (j >= FIX.length && j < FIX.length + nd) {
         if (isHol(s.settings, days[j - FIX.length])) cell.fill = gray;
         if (typeof v === 'string' && v.includes('.')) cell.font = { name: F, size: Math.max(6, Z - 2), italic: true, color: { argb: 'FF666666' } };
-        else if (v) cell.font = { name: F, size: Z, bold: true };
+        else if (v) cell.font = { ...FT.data, bold: true };
       }
     });
   });
@@ -117,7 +123,7 @@ export async function cadreLists(s: AppState, d: ISODate): Promise<{ name: strin
   return { name: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, cadreSheets(s, d)) };
 }
 async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promise<Buffer> {
-  const { F, Z, al, colWidth } = lookOf(s);
+  const { F, Z, al, colWidth, FT } = lookOf(s);
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
   const thin = { style: 'thin' as const };
@@ -129,11 +135,11 @@ async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promi
     });
     const W = sh.head.length;
     ws.mergeCells(1, 1, 1, W);
-    const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = { name: F, bold: true, size: Z + 2, underline: true }; t.alignment = { horizontal: 'center' };
-    sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = { name: F, bold: true, size: Z }; c.alignment = { ...al, wrapText: true }; c.border = border; });
+    const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+    sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
     sh.rows.forEach((r, j) => r.forEach((v, i) => {
       const c = ws.getRow(4 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
-      c.font = { name: F, size: Z }; c.alignment = al; c.border = border;
+      c.font = FT.data; c.alignment = al; c.border = border;
     }));
     if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(ROSTER_W[h] || 12, h, sh.rows.map(r => r[i])); });
@@ -145,20 +151,20 @@ async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promi
 // Συνολικό Δυναμολόγιο για εκτύπωση (Michael, 17/10), με την κεφαλίδα της ΗΚΑΙ: οι 3 γραμμές της μονάδας πάνω αριστερά,
 // τόπος και ημερομηνία («14 ΟΚΤ 26») πάνω δεξιά, τίτλος στη μέση. Όλοι όσοι είναι σε δύναμη, κατά θάλαμο και επώνυμο.
 export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
-  const sh = rosterSheets(s, d)[0]; const { F, Z, al, colWidth } = lookOf(s);
+  const sh = rosterSheets(s, d)[0]; const { F, Z, al, colWidth, FT } = lookOf(s);
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
   const ws = wb.addWorksheet('ΔΥΝΑΜΟΛΟΓΙΟ', { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
   const W = sh.head.length; const T = Math.max(5, s.settings.unit.length + 2); const HEAD = T + 3;
-  s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = { name: F, bold: true, size: Z, underline: true }; c.alignment = { horizontal: 'center' }; });
-  ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = { name: F, bold: true, size: Z }; dc.alignment = { horizontal: 'right' };
-  ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = { name: F, bold: true, size: Z + 2, underline: true }; t.alignment = { horizontal: 'center' };
+  s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
+  ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
+  ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
   ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
-  sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = { name: F, bold: true, size: Z }; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
+  sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
   sh.rows.forEach((r, j) => r.forEach((v, i) => {
     const c = ws.getRow(HEAD + 1 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
-    c.font = { name: F, size: Z }; c.alignment = al; c.border = border;
+    c.font = FT.data; c.alignment = al; c.border = border;
   }));
   sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(ROSTER_W[h] || 12, h, sh.rows.map(r => r[i])); });
   ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
@@ -171,7 +177,7 @@ export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: stri
 // παραδώσουν) για έλεγχο. Όλα με κεφαλαία.
 const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΤΥΠΟΣ ΟΠΛΟΥ': 11, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΟΠΛΟΒΑΣΤΟΣ': 11, 'ΘΕΣΗ': 14, 'ΕΝΤΟΣ / ΕΚΤΟΣ': 28, 'ΥΠΟΓΡΑΦΗ': 20, 'ΛΟΓΟΣ ΕΞΟΔΟΥ': 14, 'ΕΞΟΔΟΣ': 17, 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ': 20, 'ΕΙΣΟΔΟΣ': 17 };
 export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
-  const { F, Z, al, colWidth } = lookOf(s);
+  const { F, Z, al, colWidth, FT } = lookOf(s);
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
@@ -180,19 +186,19 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: stri
     const W = sh.head.length; let HEAD = 3;
     if (k === 0) {
       const T = Math.max(5, s.settings.unit.length + 2); HEAD = T + 3;
-      s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = { name: F, bold: true, size: Z, underline: true }; c.alignment = { horizontal: 'center' }; });
-      ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = { name: F, bold: true, size: Z }; dc.alignment = { horizontal: 'right' };
-      ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = { name: F, bold: true, size: Z + 2, underline: true }; t.alignment = { horizontal: 'center' };
+      s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
+      ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
+      ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
       const armed = sh.rows.filter(r => r[W_NUM]).length;
       ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
     } else {
-      ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = { name: F, bold: true, size: Z + 2, underline: true }; t.alignment = { horizontal: 'center' };
+      ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
       ws.mergeCells(2, 1, 2, W); const n = ws.getCell(2, 1); n.value = upper(sh.note); n.font = { name: F, italic: true, size: Math.max(7, Z - 1) }; n.alignment = { horizontal: 'center' };
     }
-    sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = { name: F, bold: true, size: Z }; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
+    sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
     sh.rows.forEach((r, j) => { const row = ws.getRow(HEAD + 1 + j); if (k === 0) row.height = Math.max(20, Z * 2); r.forEach((v, i) => {
       const c = row.getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
-      c.font = { name: F, size: Z, bold: sh.head[i] === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' }; c.alignment = al; c.border = border;
+      c.font = { ...FT.data, bold: FT.data.bold || sh.head[i] === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' }; c.alignment = al; c.border = border;
     }); });
     if (!sh.rows.length) { ws.mergeCells(HEAD + 1, 1, HEAD + 1, W); const c = ws.getCell(HEAD + 1, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(WEAPON_W[h] || 12, h, sh.rows.map(r => r[i]), h === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ'); });

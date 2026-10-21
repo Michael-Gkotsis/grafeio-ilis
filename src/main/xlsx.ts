@@ -6,7 +6,7 @@ import JSZip from 'jszip';
 import { upper } from '../shared/text';
 import { digitPx, fitText, minSize, textPx, type Box, type Fit, type FontSpec } from './textfit';
 const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει μια στήλη πίνακα για να χωρά ό,τι γράφτηκε (fitSheet)
-import type { XlLook } from '../shared/xlLook';
+import { tablePart, type XlLook, type XlPart } from '../shared/xlLook';
 
 export const REPORT_MARK = 'GL_ENTYPO';
 export const sheetSafe = (name: string) => name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
@@ -476,7 +476,7 @@ export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
   private sst: string[] | null = null;
-  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number>; fitted?: Map<string, number> } | null = null;
+  private styles: { xml: string; fmt: number[]; codes: Map<number, string>; dirty: boolean; made: Map<number, number>; wrapped: Map<number, number>; centered: Map<number, number>; grayed?: Map<number, number>; fitted?: Map<string, number>; parted?: Map<string, number> } | null = null;
   // Οι στήλες των πινάκων φαρδαίνουν όσο χρειάζεται στην αποθήκευση (fitSheet): στα αρχεία που φτιάχνει η εφαρμογή και σε όσα
   // το ζητά ο καλών. Όχι στη ΗΚΑΙ: η διάταξη του εντύπου είναι σταθερή και οι στήλες της μοιράζονται πολλούς πίνακες.
   widen = false;
@@ -641,15 +641,17 @@ export class Workbook {
       return items.length;
     } };
   }
-  // Γραμματοσειρά όπως η id (ή η βασική του βιβλίου) με αλλαγές: άλλο όνομα, μέγεθος, έντονη, υπογράμμιση
-  private fontLike(id: number, o: { name?: string; sz?: number; b?: boolean; u?: boolean }): number {
+  // Γραμματοσειρά όπως η id (ή η βασική του βιβλίου) με αλλαγές: άλλο όνομα, μέγεθος, έντονη, πλάγια, υπογράμμιση
+  private fontLike(id: number, o: { name?: string; sz?: number; b?: boolean; i?: boolean; u?: boolean }): number {
     const fonts = this.part('fonts'); const base = fonts.items[id] || fonts.items[0] || '<font><sz val="11"/><name val="Calibri"/></font>';
     const parts = new Map<string, string>();
     for (const m of base.replace(/^<font\b[^>]*>/, '').matchAll(/<(\w+)\b[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g)) parts.set(m[1], m[0]);
     // άλλη γραμματοσειρά: χωρίς την οικογένεια και το θέμα της παλιάς (με scheme το Excel δείχνει τη γραμματοσειρά του θέματος)
     if (o.name) { parts.set('name', `<name val="${esc(o.name)}"/>`); parts.delete('family'); parts.delete('scheme'); }
     if (o.b) parts.set('b', '<b/>'); else if (o.b === false) parts.delete('b');
-    if (o.u) parts.set('u', '<u/>'); if (o.sz) parts.set('sz', `<sz val="${o.sz}"/>`);
+    if (o.i) parts.set('i', '<i/>'); else if (o.i === false) parts.delete('i');
+    if (o.u) parts.set('u', '<u/>'); else if (o.u === false) parts.delete('u');
+    if (o.sz) parts.set('sz', `<sz val="${o.sz}"/>`);
     return fonts.add('<font>' + FONT_ORDER.map(k => parts.get(k) || '').join('') + '</font>');
   }
   // Λεπτό πλαίσιο γύρω από το κελί
@@ -659,12 +661,24 @@ export class Workbook {
     return i >= 0 ? i : b.add('<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>');
   }
   // Στυλ για πίνακα που φτιάχνει η εφαρμογή (νέο αρχείο ή νέο φύλλο): τίτλος έντονος και 2 μεγέθη μεγαλύτερος, στο
-  // κέντρο, επικεφαλίδες έντονες με πλαίσιο, τιμές με πλαίσιο. Γράμματα και στοίχιση από τις Ρυθμίσεις › Γράμματα Excel.
+  // κέντρο, επικεφαλίδες έντονες με πλαίσιο, τιμές με πλαίσιο. Γράμματα και στοίχιση από τις Ρυθμίσεις › Γράμματα Excel,
+  // μέγεθος, έντονα, πλάγια και υπογράμμιση ανά κομμάτι (tablePart).
   async tableStyle(kind: 'title' | 'head' | 'data', look: XlLook): Promise<number> {
     await this.loadStyles();
-    const font = this.fontLike(0, { name: look.font, sz: kind === 'title' ? look.sz + 2 : look.sz, b: kind !== 'data' });
+    const font = this.fontLike(0, { name: look.font, ...tablePart(look, kind) });
     const border = kind === 'title' ? 0 : this.thinBorder();
     return this.addXf(`<xf numFmtId="0" fontId="${font}" fillId="0" borderId="${border}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${kind === 'title' ? 'center' : look.h}" vertical="${look.v}"${kind === 'head' ? ' wrapText="1"' : ''}/></xf>`);
+  }
+  // Στυλ όπως το base με άλλο μέγεθος, έντονα, πλάγια ή υπογράμμιση (κεφαλίδα και υπογραφές των εντύπων: Ρυθμίσεις › Γράμματα Excel).
+  // Κρατά γραμματοσειρά, πλαίσια, στοίχιση και γέμισμα του κελιού.
+  async partStyle(base: number | null, o: XlPart): Promise<number> {
+    const st = await this.loadStyles(); st.parted = st.parted || new Map();
+    const b = base ?? 0; const key = b + ':' + JSON.stringify([o.sz, o.b, o.i, o.u]);
+    if (st.parted.has(key)) return st.parted.get(key)!;
+    let x = this.xfList(st.xml)[b] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
+    const fid = this.fontLike(Number(attr(x.slice(0, x.indexOf('>') + 1), 'fontId') || 0), { sz: o.sz, b: o.b, i: o.i, u: o.u });
+    x = x.replace(/^<xf\b[^>]*?(?=\/?>)/, a => setAttr(setAttr(a, 'fontId', String(fid)), 'applyFont', '1'));
+    const idx = this.addXf(x); st.parted.set(key, idx); return idx;
   }
   // Στυλ όπως το base, με γκρι φόντο (ΣΚ και αργίες στον έλεγχο υπηρεσιών)
   async grayed(base: number): Promise<number> {
@@ -680,10 +694,10 @@ export class Workbook {
   }
 
   // Στυλ από απλές επιλογές, για πρότυπα που φτιάχνει η εφαρμογή (Έντυπα › «Φτιάξ' το εδώ»): γραμματοσειρά της βάσης του
-  // βιβλίου σε μέγεθος sz (έντονη, υπογραμμισμένη), γέμισμα (rgb χωρίς #), λεπτό πλαίσιο και στοίχιση. Ίδιες επιλογές → ίδιο στυλ.
-  async style(o: { font?: string; sz?: number; b?: boolean; u?: boolean; fill?: string; border?: boolean; h?: 'left' | 'center' | 'right'; v?: 'top' | 'center' | 'bottom'; wrap?: boolean }): Promise<number> {
+  // βιβλίου σε μέγεθος sz (έντονη, πλάγια, υπογραμμισμένη), γέμισμα (rgb χωρίς #), λεπτό πλαίσιο και στοίχιση. Ίδιες επιλογές → ίδιο στυλ.
+  async style(o: { font?: string; sz?: number; b?: boolean; i?: boolean; u?: boolean; fill?: string; border?: boolean; h?: 'left' | 'center' | 'right'; v?: 'top' | 'center' | 'bottom'; wrap?: boolean }): Promise<number> {
     await this.loadStyles();
-    const font = this.fontLike(0, { name: o.font, sz: o.sz, b: o.b, u: o.u });
+    const font = this.fontLike(0, { name: o.font, sz: o.sz, b: o.b, i: o.i, u: o.u });
     const fill = o.fill ? this.part('fills').add(`<fill><patternFill patternType="solid"><fgColor rgb="FF${o.fill.toUpperCase()}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
     const border = o.border ? this.thinBorder() : 0;
     const al = [o.h && `horizontal="${o.h}"`, `vertical="${o.v || 'center'}"`, o.wrap && 'wrapText="1"'].filter(Boolean).join(' ');

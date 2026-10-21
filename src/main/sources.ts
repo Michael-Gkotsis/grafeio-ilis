@@ -12,12 +12,12 @@ import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
-import { xlLook, type XlLook } from '../shared/xlLook';
+import { tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomList, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, capExtraCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 // Πλάτος στήλης νέου πίνακα για μία τιμή (Calibri 11 του νέου αρχείου), με τα πραγματικά πλάτη των κεφαλαίων γραμμάτων
 // πλάτος στήλης για το κείμενο, με τα γράμματα των Ρυθμίσεων (Γράμματα Excel)
-const colChars = (v: unknown, L: XlLook, b = false) => (v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: L.font, sz: L.sz, b })));
+const colChars = (v: unknown, L: XlLook, head = false) => { const p = tablePart(L, head ? 'head' : 'data'); return v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: L.font, sz: p.sz, b: p.b })); };
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
