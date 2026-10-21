@@ -6,7 +6,7 @@ import { norm, normGreek } from './text';
 import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { seatMap, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkRowClaim, hkRowList, itemKey, itemName, listRows, statusLbl, weaponBack, type HkRowDef, type ListId } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
@@ -164,6 +164,7 @@ export function shapePerson(x: NewPerson, id: number): Person {
   if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
   if (!p.dn) delete p.dn;
   if (!p.offDays?.length) delete p.offDays;
+  if (!(Number(x.monthMax) > 0)) delete p.monthMax; else p.monthMax = Math.floor(Number(x.monthMax));
   return p;
 }
 // διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
@@ -199,7 +200,7 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
 function run(s: AppState, c: Command, ctx: Ctx): Result {
-  const pm = personMap(s.people);
+  const pm = seatMap(s);   // στρατιώτες και στελέχη με υπηρεσίες (ΕΠΟΠ/ΟΒΑ)
   switch (c.t) {
     case 'declare': {
       const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
@@ -284,9 +285,15 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
       if (old?.pos != null) x.pos = old.pos;
+      // ΕΠΟΠ/ΟΒΑ με υπηρεσίες τον μήνα: αριθμός θέσης μία φορά (αρνητικός), και μένει ακόμα κι αν σβήσεις το όριο
+      const mx = Math.floor(Number(c0.monthMax)); if (mx > 0) x.monthMax = mx;
+      if (old?.pid != null) x.pid = old.pid; else if (mx > 0) x.pid = Math.min(0, ...s.cadreList.map(y => y.pid ?? 0)) - 1;
+      // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (όπως ο στρατιώτης)
+      let guards = s.guards;
+      if (old?.active && !x.active && x.pid != null) for (const d of Object.keys(guards)) if (d >= ctx.today && Object.values(guards[d] || {}).includes(x.pid)) { const g = { ...guards[d] }; for (const k in g) if (g[k] === x.pid) delete g[k]; guards = { ...guards, [d]: g }; }
       // σε χειροκίνητη σειρά το νέο μπαίνει κάτω από τους ίδιους ή ανώτερους βαθμούς (μετά το μετακινεί όπου θέλει)
       const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : isManualOrder(s.cadreList) ? insertCadre(s.cadreList, x) : [...s.cadreList, x];
-      return { state: { ...s, cadreList }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first, files: [HK()] };
+      return { state: { ...s, cadreList, guards }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
     }
     case 'orderCadre': {
       const ids = new Set(c.ids); const by = new Map(s.cadreList.map(x => [x.id, x]));
@@ -295,6 +302,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'deleteCadre': {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      if (x.pid != null && (Object.values(s.guards).some(g => Object.values(g || {}).includes(x.pid!)) || Object.values(s.dutyLog || {}).some(l => l.some(e => e.pid === x.pid))))
+        throw new Error('Ο ' + x.rank + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
       return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + x.rank + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
@@ -609,11 +618,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'updatePerson': {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
-      let next: AppState = { ...s, people: s.people.map(p => (p.id === c.person.id ? c.person : p)), settings: rememberChoices(s.settings, c.person, old) };
+      // όριο υπηρεσιών τον μήνα (ΕΠΟΠ/ΟΒΑ): ακέραιος πάνω από 0, αλλιώς χωρίς όριο
+      const person: Person = { ...c.person }; const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
+      let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
-      const gone = old.active && !c.person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
+      const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
       gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
-      const text = old.active && !c.person.active ? shortName(c.person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && c.person.active ? shortName(c.person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(c.person);
+      const text = old.active && !person.active ? shortName(person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && person.active ? shortName(person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'setWeapons': {

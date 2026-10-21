@@ -8,7 +8,7 @@ import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLi
 import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
-import { activePeople, personMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
+import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
 import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
@@ -115,7 +115,7 @@ function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: Frour
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
   const form = FROURA_FORMS[phase];
   // οι στήλες φαρδαίνουν όσο χρειάζεται: το έντυπο τυπώνεται σε μία σελίδα (fitToPage), απλώς λίγο μικρότερο
-  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = personMap(s.people);
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = seatMap(s);
   const warnings: string[] = [];
   const g = s.guards[d] || {};
   ws.set('L1', s.settings.unit[0]).set('L2', s.settings.unit[1]).set('L3', s.settings.unit[2]);
@@ -182,7 +182,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const pick = (n: string | undefined, i: number) => (n && wb.hasSheet(n) ? n : i);
   const fr = await wb.sheet(pick(opts.front, 0)); const bk = await wb.sheet(pick(opts.back, 1));
   const m0 = opts.map || hkaiMapOf(); const m: HkaiMap = { ...m0, rows: { ...m0.rows } };
-  const pm = personMap(s.people); const warnings: string[] = [];
+  const pm = seatMap(s); const warnings: string[] = [];
   const hk = hkaiCounts(s, d);
   const R = hkRowsOf(s.settings.lists); const ALL = [...R.off, ...R.nco];
   addHkRows(wb, fr, m, R, warnings);

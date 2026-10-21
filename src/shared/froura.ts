@@ -4,7 +4,7 @@ import { norm } from './text';
 import type { ISODate } from './dates';
 import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
-import { personMap, postsOf } from './rules';
+import { seatMap, postsOf } from './rules';
 
 export interface FrouraForm {
   file: string;
@@ -40,7 +40,7 @@ export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.p
 export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
 // Τι γράφεται πού: θέσεις με δικό τους κελί, και όσες δεν έχουν (π.χ. νέα υπηρεσία «Πύλη») σε γραμμές από κάτω
 export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s)): FrouraLayout {
-  const form = FROURA_FORMS[phase]; const g = s.guards[date] || {}; const pm = personMap(s.people);
+  const form = FROURA_FORMS[phase]; const g = s.guards[date] || {}; const pm = seatMap(s);
   const cells = new Map<string, string[]>(); const extra: FrouraLayout['extra'] = [];
   const posts = postsOf(s.settings);
   for (const x of posts) {

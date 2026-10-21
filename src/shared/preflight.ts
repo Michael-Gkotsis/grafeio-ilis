@@ -3,14 +3,15 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K
+  activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { hkRowList } from './ranks';
 import { hkRowLabel } from './unit';
+import { normGreek } from './text';
 import type { ExportKind } from './api';
 
-export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' }
+export interface Check { level: 'err' | 'warn'; text: string; go?: 'guard' | 'outs' | 'records' | 'settings' | 'people' | 'cadre' }
 
 export function preflight(kind: ExportKind, s: AppState, date: ISODate): Check[] {
   // ΠΣΚ: οι έλεγχοι των τριών ημερών, με την ημέρα μπροστά
@@ -25,7 +26,7 @@ const outOn = (s: AppState, pid: number, date: ISODate) => statusesOn(s.statuses
 const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(s.statuses, pid, date, outMin(s.rules));
 
 export function frouraChecks(s: AppState, date: ISODate): Check[] {
-  const out: Check[] = []; const pm = personMap(s.people);
+  const out: Check[] = []; const pm = seatMap(s);
   const g = s.guards[date] || {}; const posts = postsOf(s.settings);
   const empty = posts.filter(x => !g[x.k]);
   if (empty.length === posts.length) out.push({ level: 'warn', text: 'Δεν έχει οριστεί καμία υπηρεσία για ' + dm(date) + '. Θα βγει κενό έντυπο.', go: 'guard' });
@@ -59,6 +60,11 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   Object.values(h.cols).forEach(list => list.forEach(p => counted.set(p.id, (counted.get(p.id) || 0) + 1)));
   const twice = [...counted].filter(([, n]) => n > 1).map(([id]) => shortName(pm.get(id)!));
   if (twice.length) out.push({ level: 'err', text: 'Μετριούνται δύο φορές: ' + twice.join(', ') });
+  // ίδιο ονοματεπώνυμο στο Δυναμολόγιο και στα Στελέχη (π.χ. ΕΠΟΠ): μετρά δύο φορές στη δύναμη της ΗΚΑΙ
+  const key = (l: string, f: string) => normGreek(l + ' ' + f).replace(/[^Α-ΩA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const sold = new Set(s.people.filter(p => p.active).map(p => key(p.last, p.first)));
+  const both = (s.cadreList || []).filter(c => c.active && sold.has(key(c.last, c.first)));
+  if (both.length) out.push({ level: 'warn', text: 'Και στο Δυναμολόγιο και στα Στελέχη (μετρούν δύο φορές): ' + both.map(c => c.rank + ' ' + c.last + ' ' + c.first).join(', ') + '. Κράτησέ τους σε ένα από τα δύο.', go: 'cadre' });
   // ανά βαθμό: κωλυόμενοι + απόντες δεν ξεπερνούν τη δύναμη
   for (const r of hkRowList(s.settings.lists)) {
     const row = h.rank[r]; const used = [...HK_K, ...HK_A].reduce((a, [k]) => a + (row.c[k] || 0), 0);

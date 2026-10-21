@@ -153,7 +153,8 @@ function Shell() {
   const help = useCallback(() => { const r = cur.current.route; if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) }); }, [go]);
   const setParams = useCallback((params: Record<string, any>) => setRoute(r => ({ view: r.view, params: { ...r.params, ...params } })), []);
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
-  const openPerson = useCallback((id: number, list?: number[]) => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, []);
+  // στέλεχος σε θέση (ΕΠΟΠ/ΟΒΑ, αρνητικός αριθμός): η καρτέλα του στα Στελέχη
+  const openPerson = useCallback((id: number, list?: number[]) => { if (id < 0) { go('cadre', { seat: id }); return; } setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, [go]);
   const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, openPerson }), [route, personId, go, setParams, declare, openPerson]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

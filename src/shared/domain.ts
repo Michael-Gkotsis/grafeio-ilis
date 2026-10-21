@@ -35,6 +35,8 @@ export interface Person {
   wtype?: string;        // τύπος όπλου (G3A3…), από τη λίστα «Τύποι όπλων»: μόνο στην εφαρμογή και στο Excel «Οπλισμός»
   rack?: string;         // θέση στον οπλοβαστό (π.χ. Ε6)
   wpos?: string;         // «Θέση» του όπλου (Michael, 18/10: στήλη στον Οπλισμό), ελεύθερο κείμενο με κεφαλαία
+  monthMax?: number;     // ΕΠΟΠ/ΟΒΑ: πόσες υπηρεσίες τον μήνα το πολύ (rules.ts monthBlock)· μπαίνουν μόνο με το χέρι
+  cid?: string;          // στέλεχος σε θέση των Υπηρεσιών (rules.ts cadreSeat): όχι στο Δυναμολόγιο
   offDays?: number[];    // μέρες της εβδομάδας χωρίς υπηρεσία (0 = Κυριακή … 6 = Σάββατο), μόνιμα μέχρι να αλλάξουν
   inOn?: ISODate;        // μπήκε στη δύναμη αυτή τη μέρα («Νέος στρατιώτης» ή νέα γραμμή του Δυναμολογίου): 1. ΕΓΓΡΑΦΕΣ της ΗΚΑΙ
   outOn?: ISODate;       // βγήκε εκτός δύναμης αυτή τη μέρα: 2. ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ (φεύγει αν ξαναμπεί σε δύναμη)
@@ -407,7 +409,9 @@ export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate;
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
 // Στελέχη (καρτέλα «Στελέχη»): ονόματα, θέση, καταστάσεις της ΗΚΑΙ, που ταΐζουν και την ΗΚΑΙ
 // spec: Ο/Σ · am: αριθμός μητρώου · pos: η σειρά που όρισε ο χρήστης (ιεραρχία· χωρίς pos σε κανέναν, με τη σειρά της ΗΚΑΙ)
-export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number }
+// monthMax: ΕΠΟΠ/ΟΒΑ που κάνουν υπηρεσίες (Michael, 21/10): πόσες τον μήνα το πολύ· pid: ο αριθμός του στις θέσεις των
+// Υπηρεσιών (αρνητικός, για να μη συμπέσει με στρατιώτη), δίνεται μία φορά και μένει για το ιστορικό (rules.ts cadreSeat)
+export interface Cadre { id: string; rank: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
