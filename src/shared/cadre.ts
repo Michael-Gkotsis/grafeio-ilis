@@ -8,8 +8,8 @@ import { cadreAbsOn, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
 
-// οι γραμμές της ΗΚΑΙ όπου μπαίνει στέλεχος (αξιωματικοί, ανθυπασπιστές, ΔΕΑ, αρχιλοχίες, επιλοχίες, λοχίες)
-export const HK_CADRE = [...HK_OFFICERS, ...HK_NCO.slice(0, 3)];
+// οι γραμμές της ΗΚΑΙ όπου μπαίνει στέλεχος: όλες εκτός από τους Στρατιώτες (υπαξιωματικοί ως και ΟΒΑ, Michael 21/10)
+export const HK_CADRE = [...HK_OFFICERS, ...HK_NCO.filter(r => r !== 'Στρατιώτες')];
 // σειρά της ΗΚΑΙ (βαθμός), μετά επώνυμο
 export const byCadreRank = (a: Cadre, b: Cadre) => HK_CADRE.indexOf(a.hk) - HK_CADRE.indexOf(b.hk) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
 // Η σειρά των στελεχών (Michael, 18/10: «με χειροκίνητη διάταξη, με βάση την ιεραρχικότητα»): όπως τα έβαλε ο χρήστης,

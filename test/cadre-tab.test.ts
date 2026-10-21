@@ -143,3 +143,22 @@ describe('Στελέχη: στοιχεία όπως στο Δυναμολόγι�
     expect(dutyOfficers(s, D)).toBe('');
   });
 });
+
+describe('Στελέχη και στις γραμμές των υπαξιωματικών (Michael, 21/10)', () => {
+  it('όλες οι γραμμές εκτός από «Στρατιώτες» δέχονται στέλεχος, και μετρούν στους οπλίτες', async () => {
+    const { hkCadreRows, guessHk } = await import('../src/shared/ranks');
+    expect(hkCadreRows()).toEqual(['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'Ανθυπασπιστές', 'ΔΕΑ', 'Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες', 'Δεκανείς', 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης']);
+    expect([guessHk('ΕΠΟΠ'), guessHk('ΟΒΑ'), guessHk('ΔΝΕΑΣ'), guessHk('ΕΠΟΠ ΛΧΙΑΣ')]).toEqual(['ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης', 'Δεκανείς', 'Λοχίες']);
+    let s = withCadre();
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΕΠΑΓΓΕΛΜΑΤΙΑΣ', first: 'Α' } });
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΟΒΑ', hk: 'ΟΒΑ Στρατιώτης', last: 'ΕΘΕΛΟΝΤΗΣ', first: 'Β' } });
+    const [epop, oba] = s.cadreList.slice(2);
+    s = run(s, { t: 'addCadreAbs', abs: { cid: epop.id, kind: 'apal', from: D, to: D } });
+    s = run(s, { t: 'addCadreAbs', abs: { cid: oba.id, kind: 'ka', from: D, to: D } });
+    const h = hkaiCounts(s, D);
+    expect(h.rank['ΕΠΟΠ Στρατιώτης']).toMatchObject({ c: { apal: 1 } });
+    expect(h.rank['ΟΒΑ Στρατιώτης'].c.ka).toBe(1);
+    expect(h.rank['ΕΠΟΠ Στρατιώτης'].n).toBeGreaterThanOrEqual(1);
+    expect(h.cadre.apal.map(c => c.last)).toEqual(['ΕΠΑΓΓΕΛΜΑΤΙΑΣ']);
+  });
+});

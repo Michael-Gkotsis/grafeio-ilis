@@ -71,7 +71,7 @@ function SettingsCard() {
     <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ${HK()}</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
     <div className="field"><span className="field__label" style=${{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι») <${HkRowsButton}/></span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
-      <span className="field__help">Οι στρατιώτες, δεκανείς και λοχίες μετρώνται από το προσωπικό της εφαρμογής.</span></div>
+      <span className="field__help">Μόνο τα στελέχη, χωρίς ονόματα. Οι στρατιώτες του Δυναμολογίου μετρώνται μόνοι τους, στη γραμμή του βαθμού τους.</span></div>
     <p className="note" style=${{ margin: 0 }}>Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους <b>Θαλάμους και ουλαμούς</b>.</p>
     <div><${Button} onClick=${save}>Αποθήκευση ρυθμίσεων<//></div>
     <hr style=${{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }}/>
