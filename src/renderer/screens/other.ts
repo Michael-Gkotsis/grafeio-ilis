@@ -483,6 +483,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
+    { t: 'Οδηγός χρήσης (πώς δουλεύει, τι επηρεάζει τι)', k: 'ΟΔΗΓΟΣ ΟΔΗΓΙΕΣ ΒΟΗΘΕΙΑ ΣΧΕΤΙΚΑ ΕΚΔΟΣΗ HELP ABOUT ΠΩΣ', fn: () => nav.go('guide') },
     { t: 'Έντυπα (δικά σου Excel)', k: 'ΕΝΤΥΠΑ ΕΝΤΥΠΟ ΠΡΟΤΥΠΑ ΠΡΟΤΥΠΟ ΚΑΤΑΣΤΑΣΗ ΟΝΟΜΑΣΤΙΚΗ ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΤΥΧΑΙΑ ΑΓΓΑΡΕΙΑ EXCEL', fn: () => nav.go('reports') },
     ...(state.settings.reports || []).map(r => ({ t: 'Βγάλε: ' + r.name, k: 'ΕΝΤΥΠΟ ΕΝΤΥΠΑ ΒΓΑΛΕ ' + norm(r.name), fn: () => nav.go('reports', { repRun: r.id }) })),
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
