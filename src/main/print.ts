@@ -595,7 +595,6 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
   const rowsAll: number[] = [], colsAll: number[] = [];
   for (let r = area.r1; r <= area.r2; r++) if (rowH(r) > 0) rowsAll.push(r);
   for (let c = area.c1; c <= area.c2; c++) if (colW(c) > 0) colsAll.push(c);
-  const W = colsAll.reduce((a, c) => a + colW(c), 0);
   const titles = titleRows(definedName(book.wbXml, '_xlnm.Print_Titles', idx));
   const titleList = titles ? Array.from({ length: titles[1] - titles[0] + 1 }, (_, i) => titles[0] + i).filter(r => rowH(r) > 0) : [];
   const hdr = /<headerFooter\b[^>]*>([\s\S]*?)<\/headerFooter>/.exec(x)?.[1] || '';
@@ -604,17 +603,24 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
   // κελιά: τιμή, πλαίσιο, γραμματοσειρά (για τις ενότητες, τα μπλοκ και το «κυρίαρχο» μέγεθος γραμμάτων)
   const styleOf = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
   const shown = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v == null ? '' : v instanceof XErr ? v.code : String(v); };
-  const sizes = new Map<string, number>(); const framed = new Set<number>(); const blank = new Set<number>();
+  const sizes = new Map<string, number>(); const framed = new Set<number>(); const blank = new Set<number>(); const usedC = new Set<number>();
+  const painted = (f: string | null) => !!f && !/^#?F{6}$/i.test(f);   // λευκό γέμισμα = κενό
   for (const r of rowsAll) {
     let any = false;
     for (const c of colsAll) {
       const xf = st.xfs[styleOf(r, c)] || st.xfs[0]; const v = shown(r, c);
-      if (xf.border.l || xf.border.r || xf.border.t || xf.border.b) { framed.add(r); any = true; }
-      if (v !== '') { any = true; const f = st.fonts[xf.font] || st.fonts[0]; const k = f.name + '|' + f.sz; sizes.set(k, (sizes.get(k) || 0) + 1); }
+      if (xf.border.l || xf.border.r || xf.border.t || xf.border.b) { framed.add(r); any = true; usedC.add(c); }
+      if (painted(xf.fill)) { any = true; usedC.add(c); }
+      if (v !== '') { any = true; usedC.add(c); const f = st.fonts[xf.font] || st.fonts[0]; const k = f.name + '|' + f.sz; sizes.set(k, (sizes.get(k) || 0) + 1); }
     }
     if (!any) blank.add(r);
   }
-  for (const mg of sh.merges) if (mg.r1 !== mg.r2 || mg.c1 !== mg.c2) for (let r = mg.r1; r <= mg.r2; r++) if (shown(mg.r1, mg.c1) !== '') blank.delete(r);
+  for (const mg of sh.merges) if ((mg.r1 !== mg.r2 || mg.c1 !== mg.c2) && shown(mg.r1, mg.c1) !== '') { for (let r = mg.r1; r <= mg.r2; r++) blank.delete(r); for (let c = mg.c1; c <= mg.c2; c++) usedC.add(c); }
+  // κενές γραμμές και στήλες στο τέλος (τύποι που βγάζουν "", περιοχή εκτύπωσης μεγαλύτερη από τον πίνακα) δεν τυπώνονται,
+  // αλλιώς μικραίνουν τα γράμματα για να χωρέσει χαρτί που μένει άγραφο
+  while (rowsAll.length > 1 && blank.has(rowsAll[rowsAll.length - 1])) rowsAll.pop();
+  while (colsAll.length > 1 && !usedC.has(colsAll[colsAll.length - 1])) colsAll.pop();
+  const W = colsAll.reduce((a, c) => a + colW(c), 0);
   const top = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] || (st.fonts[0].name + '|' + st.fonts[0].sz);
   const dom = { name: top.split('|')[0], sz: +top.split('|')[1] || 11 };
 
@@ -1088,6 +1094,9 @@ const PREVIEW_SCRIPT = `
     go.textContent = 'Εκτύπωση'; dlg.hidden = false;
   });
   function blank(like){ var b = document.createElement('div'); b.className = 'pg'; b.style.width = like.style.width; b.style.height = like.style.height; b.setAttribute('data-land', like.getAttribute('data-land')); b.setAttribute('data-paper', like.getAttribute('data-paper')); return b; }
+  // η σελίδα για το χαρτί: λίγο πιο κοντή από το φύλλο, ώστε η στρογγυλοποίηση (και η κλίμακα των Windows) να μη σπρώχνει
+  // ένα κομματάκι της σε δεύτερο, κενό φύλλο
+  function sheetOf(p){ var x = p.cloneNode(true); x.style.height = Math.max(1, parseFloat(p.style.height) - 4) + 'px'; return x; }
   // μία «δουλειά» ανά χαρτί και προσανατολισμό: οι σελίδες αντιγράφονται στο #out, που είναι το μόνο που φαίνεται στο χαρτί
   async function send(list, useDialog, n, two){
     var groups = [];
@@ -1096,7 +1105,7 @@ const PREVIEW_SCRIPT = `
     try {
       for (var i = 0; i < groups.length && r.ok; i++) {
         var g = groups[i], land = g.list[0].getAttribute('data-land') === '1', paper = g.list[0].getAttribute('data-paper') || 'A4';
-        out.innerHTML = ''; g.list.forEach(function(p){ out.appendChild(p.cloneNode(true)); });
+        out.innerHTML = ''; g.list.forEach(function(p){ out.appendChild(sheetOf(p)); });
         $('page').textContent = '@page{size:' + paper + ' ' + (land ? 'landscape' : 'portrait') + ';margin:0}';
         r = await api.print({ landscape: land, pageSize: paper, part: groups.length > 1 ? (i + 1) + '/' + groups.length : '', device: device, copies: n, duplex: two ? (land ? 'shortEdge' : 'longEdge') : 'simplex' });
       }
@@ -1134,7 +1143,7 @@ const PREVIEW_SCRIPT = `
   dlg.addEventListener('click', function(){ printAll(true); });
   pdf.addEventListener('click', async function(){
     var list = pages(); if (!list.length) return; var out = $('out');
-    out.innerHTML = ''; list.forEach(function(p){ var x = p.cloneNode(true); x.style.page = p.getAttribute('data-land') === '1' ? 'land' : 'port'; out.appendChild(x); });
+    out.innerHTML = ''; list.forEach(function(p){ var x = sheetOf(p); x.style.page = p.getAttribute('data-land') === '1' ? 'land' : 'port'; out.appendChild(x); });
     var paper = list[0].getAttribute('data-paper') || 'A4', land = list[0].getAttribute('data-land') === '1';
     $('page').textContent = '@page{size:' + paper + ' ' + (land ? 'landscape' : 'portrait') + ';margin:0}@page land{size:' + paper + ' landscape;margin:0}@page port{size:' + paper + ' portrait;margin:0}';
     pdf.disabled = true;
@@ -1216,7 +1225,7 @@ button:focus-visible,.sheets label:focus-within{outline:2px solid #5b7a2b;outlin
 .flip h3{margin:0;font-size:16px}.flip p{margin:0}
 #out{display:none}
 ${doc.css}
-@media print{body{background:none;display:block}.bar,.wrap,.flip{display:none!important}#out{display:block}#out .pg{margin:0;box-shadow:none;break-after:page}#out .pg:last-child{break-after:auto}}
+@media print{html,body{height:auto;background:#fff}body{display:block}.bar,.wrap,.flip{display:none!important}#out{display:block}#out .pg{margin:0;box-shadow:none;break-after:page;contain:strict}#out .pg:last-child{break-after:auto}}
 </style><style id="cells"></style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body data-init="${esc(JSON.stringify(data))}">
 <div class="bar"><b>${esc(file)}</b><span class="meta" id="meta"></span><div class="sheets" id="sheets" role="group" aria-label="Φύλλα"></div></div>
 <div class="wrap">

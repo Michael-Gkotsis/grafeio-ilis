@@ -120,6 +120,28 @@ describe('εκτύπωση: διάταξη από το παράθυρο', async 
     const last = pagesOf(auto2.sheets[0].html).pop()!;
     expect(cells(last)).toContain('Ο ΛΟΧΙΑΣ'); expect(cells(last)).toContain('ΣΤΡ ΔΟΚΙΜΙΟΣ 7');
   });
+  it('κενές γραμμές και στήλες στο τέλος (τύποι με "", μεγάλη περιοχή εκτύπωσης) δεν μικραίνουν τα γράμματα (Michael 21/10)', async () => {
+    const book = async (tail: boolean, area: boolean) => {
+      const z = new JSZip();
+      const rows = ['<row r="1"><c r="A1" t="inlineStr" s="1"><is><t>Α/Α</t></is></c><c r="B1" t="inlineStr" s="1"><is><t>ΟΝΟΜΑ</t></is></c></row>',
+        ...Array.from({ length: 33 }, (_, i) => `<row r="${i + 2}"><c r="A${i + 2}" s="1"><v>${i + 1}</v></c><c r="B${i + 2}" t="inlineStr" s="1"><is><t>ΣΤΡ ΔΟΚΙΜΙΟΣ ${i}</t></is></c></row>`),
+        ...(tail ? Array.from({ length: 110 }, (_, i) => `<row r="${i + 40}"><c r="A${i + 40}" t="str"><f>IF(B${i + 40}="","",1)</f><v></v></c><c r="F${i + 40}" s="2"/></row>`) : [])].join('');
+      z.file('[Content_Types].xml', '<Types/>');
+      z.file('xl/workbook.xml', `<workbook><sheets><sheet name="Λίστα" sheetId="1" r:id="rId1"/></sheets>${area ? '<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Λίστα!$A$1:$H$160</definedName></definedNames>' : ''}</workbook>`);
+      z.file('xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
+      z.file('xl/worksheets/sheet1.xml', `<worksheet><cols><col min="1" max="1" width="6"/><col min="2" max="2" width="30"/></cols><sheetData>${rows}</sheetData></worksheet>`);
+      z.file('xl/styles.xml', '<styleSheet><fonts><font><sz val="11"/><name val="Calibri"/></font></fonts><fills><fill><patternFill/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill></fills><borders><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellXfs><xf fontId="0" fillId="0" borderId="0"/><xf fontId="0" fillId="0" borderId="1"/><xf fontId="0" fillId="2" borderId="0"/></cellXfs></styleSheet>');
+      const doc = await renderBook(await z.generateAsync({ type: 'nodebuffer' }), { file: 'σκηνάκια.xlsx', layout: O() });
+      return doc.sheets[0];
+    };
+    const clean = await book(false, false);
+    for (const [tail, area] of [[true, false], [false, true], [true, true]]) {
+      const sh = await book(tail, area);
+      expect(sh.pt).toBe(clean.pt);
+      expect(Math.max(...[...sh.html.matchAll(/<tr data-r="(\d+)"/g)].map(m => +m[1]))).toBe(34);
+      expect(sh.html.match(/<col /g)?.length).toBe(clean.html.match(/<col /g)?.length);
+    }
+  });
   it('το κλειδί του εντύπου αγνοεί ημερομηνίες και μήνες· οι ρυθμίσεις από το παράθυρο καθαρίζονται', () => {
     expect(printKey('C:\\x\\ΗΚΑΙ 2Η ΕΠΧΙΑ 21.10.26.xlsx')).toBe(printKey('ΗΚΑΙ 2Η ΕΠΧΙΑ 22.10.26.xlsx'));
     expect(printKey('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΟΚΤΩΒΡΙΟΣ 2026.xlsx')).toBe(printKey('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΝΟΕΜΒΡΙΟΣ 2026.xlsx'));
@@ -135,5 +157,7 @@ describe('εκτύπωση: διάταξη από το παράθυρο', async 
     for (const id of ['go', 'pdf', 'legible', 'manual', 'flip', 'out']) expect(html).toContain(`id="${id}"`);
     const init = JSON.parse(/data-init="([^"]*)"/.exec(html)![1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
     expect([init.opts.pages, init.duplex, init.info.total]).toEqual([2, true, 2]);
+    // στο χαρτί κάθε σελίδα είναι ένα φύλλο: ό,τι κρύβεται (ο πίνακας πριν μικρύνει) δεν βγάζει έξτρα κενά φύλλα (PDF Michael 21/10)
+    expect(/@media print\{[^\n]*#out \.pg\{[^}]*contain:strict/.test(html)).toBe(true);
   });
 });
