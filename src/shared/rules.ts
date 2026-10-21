@@ -632,7 +632,8 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const last = (p: Person) => (lastResort(s.statuses, date, p.id, x, s.settings.lists) || statusWarn(s, date, p.id) ? 1 : 0);
   // ΣΚ/αργία: πρώτα οι λιγότερες αργίες, χωρίς να μετρά ΔΝ, έξοδος ή θάλαμος (Michael, 17/10: «όλοι έχουν δικαίωμα
   // εξόδου»)· η σειρά δικαιοσύνης (fairCompare) το κάνει ήδη. Πριν από ΣΚ/αργία: όσοι χρωστάνε ΣΚ μπαίνουν τελευταίοι.
-  const due = h ? null : weekendDue(s, date, people, fair, fixed, idx);
+  // Και όποιος έχει ήδη υπηρεσία τις επόμενες 1-2 μέρες (π.χ. τον έβαλες με το χέρι Παρασκευή ή ΣΚ): τελευταίος.
+  const due = heldBack(s, date, h, people, fair, fixed, idx);
   const owes = (p: Person) => (due?.has(p.id) ? 1 : 0);
   const cmp = fairCompare(h, x.kind, date);
   // ποιοι περνούν τους κανόνες της θέσης: μία φορά ανά μέρα (memo), μετά μόνο όσοι δεν μπήκαν ήδη σήμερα
@@ -712,6 +713,25 @@ function rotate(s: AppState, date: ISODate, x: Post, list: Cand[], people: Perso
 // αν είναι περισσότερες) κρατιούνται στην άκρη όσοι θα έπαιρναν τις θέσεις της αργίας με τη σειρά δικαιοσύνης, δηλαδή
 // οι λιγότερες αργίες, όσοι χωρούν στις θέσεις όλων των συνεχόμενων ημερών της. Μπαίνουν μόνο αν δεν φτάνουν οι άλλοι.
 // Χωρίς ανάπαυση δεν χρειάζεται. Μία φορά ανά συμπλήρωση (κρατιέται με το fair της).
+// Όσοι έχουν ήδη υπηρεσία μέσα στις επόμενες μέρες (όσες η ανάπαυση, τουλάχιστον 2· π.χ. Τετάρτη τον έβαλες με το χέρι
+// Παρασκευή ή ΣΚ, Michael 21/10): μέσα στην ανάπαυση δεν μπαίνει καθόλου (ruleBlock), πιο πριν μπαίνει τελευταίος, όπως
+// όσοι χρωστάνε ΣΚ. Χωρίς ανάπαυση δεν χρειάζεται. Η πρώτη τέτοια μέρα, ή null.
+export const aheadDays = (r: Rules) => (r.restDays > 0 ? Math.max(2, r.restDays) : 0);
+export function dutyAhead(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): ISODate | null {
+  const n = aheadDays(s.rules); const ds = n ? (idx || dutyIndexOf(s)).get(pid) : undefined;
+  if (ds) for (let i = 1; i <= n; i++) { const d = addDays(date, i); if (ds.has(d)) return d; }
+  return null;
+}
+// Όσοι μπαίνουν τελευταίοι μια μέρα: όσοι χρωστάνε το ΣΚ που έρχεται και όσοι έχουν ήδη υπηρεσία τις επόμενες μέρες
+const heldCache = new WeakMap<object, Set<number> | null>();
+function heldBack(s: AppState, date: ISODate, h: boolean, people: Person[], fair: Map<number, Fair & { pid: number }>, fixed: Set<number>, idx: Map<number, Set<ISODate>>): Set<number> | null {
+  if (heldCache.has(fair)) return heldCache.get(fair)!;
+  const due = h ? null : weekendDue(s, date, people, fair, fixed, idx);
+  const soon = people.filter(p => !fixed.has(p.id) && dutyAhead(s, date, p.id, idx)).map(p => p.id);
+  const out = soon.length ? new Set([...(due || []), ...soon]) : due;
+  heldCache.set(fair, out);
+  return out;
+}
 const dueCache = new WeakMap<object, Set<number> | null>();
 function weekendDue(s: AppState, date: ISODate, people: Person[], fair: Map<number, Fair & { pid: number }>, fixed: Set<number>, idx: Map<number, Set<ISODate>>): Set<number> | null {
   if (dueCache.has(fair)) return dueCache.get(fair)!;
@@ -720,10 +740,13 @@ function weekendDue(s: AppState, date: ISODate, people: Person[], fair: Map<numb
   const ahead = rest > 0 ? [1, 2, 3, 4, 5, 6, 7].slice(0, Math.max(2, rest)).map(i => addDays(date, i)).find(d => isHol(s.settings, d)) : undefined;
   if (ahead) {
     const days: ISODate[] = []; for (let d = ahead; isHol(s.settings, d) && days.length < 5; d = addDays(d, 1)) days.push(d);
-    const seats = postsOf(s.settings).filter(x => x.kind !== 'ly').length * days.length;
+    // μόνο οι κενές θέσεις: όσους έβαλες ήδη στο ΣΚ (με το χέρι) δεν τους «χρωστά» κανείς άλλος
+    const posts = postsOf(s.settings).filter(x => x.kind !== 'ly');
+    const seats = days.reduce((a, d) => a + posts.filter(x => !(s.guards[d] || {})[x.k]).length, 0);
     const cmp = fairCompare(true, '', ahead);
+    const placed = (pid: number) => days.some(d => idx.get(pid)?.has(d));
     // όσοι μπορούν να μπουν την αργία (καταστάσεις, μέρες χωρίς υπηρεσία, κανόνες), χωρίς τη σημερινή μέρα που κρίνεται τώρα
-    const can = people.filter(p => !fixed.has(p.id) && !p.post && days.some(d => !dutyBlock(s.statuses, d, p.id, null, s.settings.lists) && !offDayBlock(s, d, p.id) && !ruleBlock(s, d, p.id, idx)));
+    const can = people.filter(p => !fixed.has(p.id) && !p.post && !placed(p.id) && days.some(d => !dutyBlock(s.statuses, d, p.id, null, s.settings.lists) && !offDayBlock(s, d, p.id) && !ruleBlock(s, d, p.id, idx)));
     out = new Set(can.map(p => fair.get(p.id)!).filter(Boolean).sort(cmp).slice(0, seats).map(f => f.pid));
   }
   dueCache.set(fair, out);
@@ -823,6 +846,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(f.lastBefore ?  (daysBetween(f.lastBefore, date) - 2) + ' μέρες χωρίς υπηρεσία' : 'καμία υπηρεσία ως τώρα');
     parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
+  const ah = isFixed(s, pid, k) ? null : dutyAhead(s, date, pid); if (ah) parts.push('έχει ήδη υπηρεσία ' + dm(ah));
   if (s.rules.rotate !== false && post.kind !== 'ly') { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }
   if (post.armed) parts.push('ένοπλος');
   else if (!s.rules.strictUnarmed && reservedFor(s, date, post, pid)) parts.push('προτιμήθηκε γιατί δεν κάνει ένοπλη και οι ένοπλες θέσεις δεν έφταναν');
