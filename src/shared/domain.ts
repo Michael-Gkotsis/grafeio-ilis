@@ -405,7 +405,8 @@ export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // Αίτηση στην ΗΚΑΙ (5. ΑΙΤΗΣΕΙΣ). Αίτηση άδειας (leave): ο Διοικητής την εγκρίνει ή την απορρίπτει· με την έγκριση γίνεται άδεια
 // (Status με req = το id της αίτησης). Στην ΗΚΑΙ γράφεται μόνο η αίτηση, μία φορά, όχι και στο 3. ΑΔΕΙΕΣ (Michael, 18/10).
 // text: ό,τι αιτείται· στην άδεια η αιτιολόγηση (μπορεί να είναι κενή)
-export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate }
+// Ώρες αναχώρησης/επιστροφής προαιρετικές (Michael, 21/10): γράφονται στην αίτηση και περνούν στην άδεια με το «Εγκρίθηκε»
+export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate; fromTime?: string; toTime?: string }
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
 // Στελέχη (καρτέλα «Στελέχη»): ονόματα, θέση, καταστάσεις της ΗΚΑΙ, που ταΐζουν και την ΗΚΑΙ
 // spec: Ο/Σ · am: αριθμός μητρώου · pos: η σειρά που όρισε ο χρήστης (ιεραρχία· χωρίς pos σε κανέναν, με τη σειρά της ΗΚΑΙ)

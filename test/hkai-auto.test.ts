@@ -137,6 +137,25 @@ describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/
     expect(() => run(fakeState(5), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-19', to: '2026-10-17' } } })).toThrow(/πριν/);
     expect(() => run(fakeState(5), { t: 'addRequest', req: { pid: 2, date: D, text: '' } })).toThrow(/Γράψε/);
   });
+  it('ώρες στην αίτηση (προαιρετικές): στην πρόταση της ΗΚΑΙ και στην άδεια με το «Εγκρίθηκε»', () => {
+    let s = run(fakeState(10), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-17', to: '2026-10-19', fromTime: '14', toTime: '2200' } } });
+    expect(s.requests[0].leave).toMatchObject({ fromTime: '14:00', toTime: '22:00' });
+    expect(linesText(hkaiReqLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΙΤΕΙΤΑΙ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ ΣΑΒ 17 ΟΚΤ 26 14:00 ΕΩΣ ΔΕΥ 19 ΟΚΤ 26 22:00.');
+    s = run(s, { t: 'decideRequest', id: s.requests[0].id, ok: true });
+    expect(s.statuses[0]).toMatchObject({ type: 'LEAVE', from: '2026-10-17', to: '2026-10-19', fromTime: '14:00', toTime: '22:00' });
+    expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);   // πάλι μόνο η αίτηση, μία φορά
+    // κενές ώρες: όπως πριν, χωρίς πεδία ώρας
+    const e = run(fakeState(10), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'HON', from: '2026-10-17', to: '2026-10-17', fromTime: '', toTime: '' } } });
+    expect(e.requests[0].leave).toEqual({ type: 'HON', from: '2026-10-17', to: '2026-10-17' });
+    // μία μέρα με μία μόνο ώρα
+    const one = run(fakeState(10), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'HON', from: '2026-10-17', to: '2026-10-17', fromTime: '14:00' } } });
+    expect(linesText(hkaiReqLines(one, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΙΤΕΙΤΑΙ ΤΙΜΗΤΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΣΑΒ 17 ΟΚΤ 26 ΑΠΟ 14:00.');
+    expect(hkRange({ from: D, to: D, toTime: '22:00' })).toBe('ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ 22:00');
+    // λάθος ώρες
+    const bad = (fromTime: string, toTime: string) => () => run(fakeState(5), { t: 'addRequest', req: { pid: 2, date: D, text: '', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-17', to: '2026-10-17', fromTime, toTime } } });
+    expect(bad('25:00', '')).toThrow(/δεν διαβάζεται/);
+    expect(bad('14:00', '10:00')).toThrow(/μετά την/);
+  });
   it('η εγκεκριμένη άδεια βγάζει το άτομο από την υπηρεσία εκείνης της μέρας', () => {
     let s = run(fakeState(30), { t: 'assign', date: '2026-10-17', k: 'th1', pid: 3 });
     s = ask(s, 3);

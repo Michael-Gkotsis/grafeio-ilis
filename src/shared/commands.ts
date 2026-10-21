@@ -9,7 +9,7 @@ import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkRowClaim, hkRowList, itemKey, itemName, listRows, statusLbl, weaponBack, type HkRowDef, type ListId } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
-import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
+import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
 import { isSat, isWk, WK } from './weekend';
@@ -338,16 +338,17 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(c.req.date || '')) throw new Error('Διάλεξε ημερομηνία για την αίτηση');
       if (lv && (!/^\d{4}-\d{2}-\d{2}$/.test(lv.from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(lv.to || ''))) throw new Error('Διάλεξε από πότε έως πότε είναι η άδεια');
       if (lv && lv.to < lv.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const tm = lv ? checkTimes({ type: lv.type === 'HON' ? 'HON' : 'LEAVE', from: lv.from, to: lv.to, fromTime: lv.fromTime, toTime: lv.toTime }) : {};
       const old = c.t === 'updateRequest' ? s.requests.find(x => x.id === c.req.id) : undefined;
       if (c.t === 'updateRequest' && !old) throw new Error('Δεν βρέθηκε η αίτηση');
       if (old?.decision) throw new Error('Η αίτηση έχει ήδη ' + (old.decision === 'ok' ? 'εγκριθεί' : 'απορριφθεί') + '. Αναίρεσε πρώτα την απόφαση.');
       const req: PersonRequest = { id: old?.id || 'r' + ctx.newId(), pid: p.id, date: c.req.date, text };
-      if (lv) req.leave = { type: lv.type === 'HON' ? 'HON' : 'LEAVE', ...(lv.type !== 'HON' && lv.kind ? { kind: lv.kind } : {}), from: lv.from, to: lv.to };
+      if (lv) req.leave = { type: lv.type === 'HON' ? 'HON' : 'LEAVE', ...(lv.type !== 'HON' && lv.kind ? { kind: lv.kind } : {}), from: lv.from, to: lv.to, ...tm };
       const same = (x: PersonRequest) => x.pid === req.pid && x.date === req.date && x.text === req.text && JSON.stringify(x.leave || null) === JSON.stringify(req.leave || null);
       // διπλό κλικ στην αποθήκευση: η ίδια αίτηση δεν γράφεται δεύτερη φορά
       if (!old && s.requests.some(same)) throw new Error(shortName(p) + ' έχει ήδη αυτή την αίτηση στις ' + dm(req.date));
       const requests = old ? s.requests.map(x => (x === old ? req : x)) : [...s.requests, req];
-      const what = req.leave ? 'άδεια ' + range(req.leave.from, req.leave.to) + (text ? ', ' + text : '') : text;
+      const what = req.leave ? 'άδεια ' + rangeHm(req.leave, dm) + (text ? ', ' + text : '') : text;
       return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + what + ' (' + dm(req.date) + ')', files: [HK()] };
     }
     case 'deleteRequest': {
@@ -371,7 +372,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const decided = r.date > ctx.today ? r.date : ctx.today;
       if (!c.ok) return { state: { ...s, requests: s.requests.map(x => (x === r ? { ...r, decision: 'no' as const, decided } : x)) }, text: 'Απορρίφθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [HK()] };
       // εγκρίθηκε: ίδια δήλωση με το «Δήλωσε κατάσταση» (ίδιοι έλεγχοι, βγαίνει από υπηρεσίες και εξόδους)
-      const d = run(s, { t: 'declare', cmd: { type: lv.type, pids: [p.id], from: lv.from, to: lv.to, ...(lv.kind ? { kind: lv.kind } : {}) } }, ctx);
+      const d = run(s, { t: 'declare', cmd: { type: lv.type, pids: [p.id], from: lv.from, to: lv.to, ...(lv.kind ? { kind: lv.kind } : {}), ...(lv.fromTime ? { fromTime: lv.fromTime } : {}), ...(lv.toTime ? { toTime: lv.toTime } : {}) } }, ctx);
       const had = new Set(s.statuses.map(x => x.id));
       const st = d.state.statuses.find(x => !had.has(x.id) && x.pid === p.id && x.type === lv.type && x.from === lv.from);
       if (!st) throw new Error('Δεν έγινε η άδεια');

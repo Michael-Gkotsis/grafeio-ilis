@@ -53,6 +53,8 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
   const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''), back = x.toTime && !x.open ? ' ' + x.toTime : '';
   if (x.open) return 'ΑΠΟ ' + a + ' (ΧΩΡΙΣ ΛΗΞΗ)';
   if (x.from === x.to && !x.fromTime && !back) return 'ΓΙΑ ΤΗΝ ' + a;
+  // μία μέρα με μόνο τη μία ώρα: «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 ΑΠΟ 14:00» / «… ΕΩΣ 22:00»
+  if (x.from === x.to && !(x.fromTime && back)) return 'ΓΙΑ ΤΗΝ ' + hkDay(x.from) + (x.fromTime ? ' ΑΠΟ ' + x.fromTime : ' ΕΩΣ' + back);
   return 'ΑΠΟ ' + a + ' ΕΩΣ ' + (x.from === x.to ? back.trim() : hkDay(x.to) + back);
 }
 // 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. Όσες ζητήθηκαν με αίτηση δεν ξαναγράφονται: στην πίσω σελίδα
