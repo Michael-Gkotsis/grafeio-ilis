@@ -1,13 +1,15 @@
 // Αρχεία Excel: για κάθε είδος από ποιο αρχείο, φύλλο και στήλες διαβάζει η εφαρμογή και πού γράφει τις αλλαγές της.
 // Αναγνώριση μόνη της· ό,τι δεν βρεθεί ο χρήστης το δείχνει με κλικ στο κελί, με την πρόταση σημειωμένη.
+import { HK } from '../../shared/unit';
 import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
-import { useNav, useStore } from '../store';
-import { PersonPicker, usePrintFile } from '../common';
+import { Select } from '../select';
+import { useStore } from '../store';
+import { MonthField, PersonPicker, usePrintFile } from '../common';
 import { TYPES, CAP_ACC, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
 import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
-import { MONTHS, addDays, dm, dow } from '../../shared/dates';
+import { addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
@@ -15,48 +17,13 @@ import {
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
+import { base, useSourceStatus } from './srcStatus';
+export { SourcesAlert } from './srcStatus';
 type P = any;
 
-const base = (f: string) => f.split(/[\\/]/).pop() || f;
 // Διαβάζονται και μαζί με το προσωπικό (από το ίδιο Δυναμολόγιο), αλλά και μόνα τους με δική τους προεπισκόπηση
 const WITH_PEOPLE: ListKind[] = ['posts', 'outside'];
 const SHEET_KINDS: ListKind[] = ['posts', 'outside', 'caps', 'duties'];
-
-// Κατάσταση των αρχείων: φρεσκάρεται όταν γράφει ο main, όταν γυρνάς στο παράθυρο και κάθε φορά που ανοίγει η οθόνη
-export function useSourceStatus() {
-  const { state, sync } = useStore();
-  const key = JSON.stringify([state.settings.sources || {}, state.settings.forms || {}]);
-  const [st, setSt] = useState<{ sources: SourceStatus[]; forms: FormOut[] }>({ sources: [], forms: [] });
-  useEffect(() => {
-    let on = true;
-    // ο main μπορεί να άλλαξε και την κατάσταση (π.χ. πίνακας που μετακινήθηκε μέσα στο φύλλο): φέρνουμε ό,τι άλλαξε
-    const load = () => window.api.srcStatus().then(x => { if (on) { setSt(x); sync(); } });
-    load(); const off = window.api.onSources(x => { setSt(x); sync(); }); window.addEventListener('focus', load);
-    return () => { on = false; off(); window.removeEventListener('focus', load); };
-  }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
-  return st;
-}
-// Για το «Σήμερα»: τι θέλει προσοχή στα αρχεία, ανά αρχείο (το Δυναμολόγιο έχει συνήθως πολλά είδη)
-export function SourcesAlert() {
-  const { state, today } = useStore(); const st = useSourceStatus(); const nav = useNav();
-  const go = () => nav.go('templates', { tab: 'files' });
-  const why = (x: SourceStatus) => !x.exists ? 'δεν βρέθηκε' : x.remap ? 'περιμένει αντιστοίχιση (Στήλες…): ' + x.remap : x.hold ? 'περιμένει «Ανανέωση από Excel»' : x.changed ? 'άλλαξε εκτός εφαρμογής' : x.locked ? 'είναι ανοιχτό στο Excel, η αλλαγή περιμένει' : x.error || '';
-  const files = new Map<string, Map<string, string[]>>();
-  for (const x of st.sources) {
-    const w = why(x); if (!w) continue;
-    const f = files.get(x.file) || new Map<string, string[]>(); files.set(x.file, f);
-    f.set(w, [...(f.get(w) || []), KIND[x.kind].label]);
-  }
-  const lines: string[] = [...files].map(([f, m]) => base(f) + ': ' + [...m].map(([w, ks]) => ks.join(', ') + ' · ' + w).join('; '));
-  for (const x of st.forms) if (x.error) lines.push(base(x.file) + ': ' + x.error);
-  // έλεγχος υπηρεσιών: από την 1η του μήνα, αν το φύλλο είναι ακόμα του προηγούμενου
-  const duties = st.sources.find(x => x.kind === 'duties'); const now = today.slice(0, 7);
-  const acc = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1].replace(/ς$/, '');
-  if (duties?.month && duties.month < now) lines.push('Ο έλεγχος υπηρεσιών δείχνει ακόμα ' + acc(duties.month) + '. Πάτα «Νέος μήνας» για να μπει φύλλο για τον ' + acc(now) + ' στο ίδιο αρχείο (ή Στήλες… / Άλλο αρχείο… αν το έχεις ήδη).');
-  if (!lines.length) return state.people.length && !state.settings.sources?.people
-    ? html`<div className="srcalert"><${Alert} tone="info"><span><b>Αρχεία Excel.</b> Οι διορθώσεις στα άτομα δεν γράφονται ακόμα σε κανένα Excel. <${Button} variant="link" onClick=${go}>Όρισε το Δυναμολόγιο<//></span><//></div>` : null;
-  return html`<div className="srcalert"><${Alert} tone="warn"><span><b>Αρχεία Excel.</b> ${lines.length === 1 ? lines[0] : html`<ul className="srcalert__list">${lines.map(l => html`<li key=${l}>${l}</li>`)}</ul>`} <${Button} variant="link" onClick=${go}>Δες τα<//></span><//></div>`;
-}
 
 export function SourcesView() {
   const { state, refresh } = useStore(); const toast = useToast();
@@ -182,10 +149,10 @@ function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () =
       return html`<li key=${i} className="srcrow">
         <div className="srcrow__main"><b>${h.sheet}${h.title && h.title !== h.sheet ? ' › ' + h.title : ''}</b><small>γραμμή ${h.header + 1} · ${n} ${n === 1 ? 'εγγραφή' : 'εγγραφές'}${cur && k ? ' · αντικαθιστά: ' + bindingText(cur) : ''}</small></div>
         <div className="srcrow__act">
-          <select className="ui-select" aria-label=${'Είδος για ' + h.sheet} value=${k} onChange=${(e: any) => setPick({ ...pick, [i]: e.target.value })}>
+          <${Select} className="ui-select" aria-label=${'Είδος για ' + h.sheet} value=${k} onChange=${(e: any) => setPick({ ...pick, [i]: e.target.value })}>
             <option value="">Δεν χρειάζεται</option>
             ${[...KINDS].sort((a, b) => (h.score[b.id] || 0) - (h.score[a.id] || 0)).map(x => html`<option key=${x.id} value=${x.id}>${x.label}${x.id === h.best ? ' (προτείνεται)' : ''}</option>`)}
-          </select>
+          <//>
           ${k && html`<${Button} size="sm" variant="ghost" onClick=${() => onMap(k, bindingFor(i, k))}>Στήλες…<//>`}
         </div></li>`;
     })}</ul>
@@ -238,15 +205,15 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
       ${!isNew && html`<${Button} disabled=${miss.length > 0} onClick=${() => save(true)}>Αποθήκευση και ανάγνωση<//>`}`}>
     <div className="field-row" style=${{ alignItems: 'flex-end' }}>
       <div className="field"><label className="field__label" htmlFor="mp-sh">Φύλλο</label>
-        <select id="mp-sh" className="ui-input" value=${isNew ? NEW_SHEET : b.sheet} onChange=${(e: any) => setSheet(e.target.value)}>
+        <${Select} id="mp-sh" className="ui-input" value=${isNew ? NEW_SHEET : b.sheet} onChange=${(e: any) => setSheet(e.target.value)}>
           ${book.sheets.map(s => html`<option key=${s.name} value=${s.name}>${s.name}</option>`)}
           ${isStatusKind(list) && html`<option value=${NEW_SHEET}>+ Νέο φύλλο «${KIND[list].title.slice(0, 31)}»</option>`}
-        </select></div>
+        <//></div>
       ${!isNew && html`<div className="field" style=${{ maxWidth: '170px' }}><label className="field__label" htmlFor="mp-hd">Γραμμή επικεφαλίδων</label>
         <input id="mp-hd" type="number" min="1" className="ui-input" value=${b.header + 1} onChange=${(e: any) => setHeader(Math.max(0, (+e.target.value || 1) - 1))}/></div>`}
       ${isStatusKind(list) && html`<div className="field"><span className="field__label">Τι γράφει η εφαρμογή</span>
-        <select className="ui-input" aria-label="Ποιες εγγραφές γράφονται" value=${b.scope || 'all'} onChange=${(e: any) => setB({ ...b, scope: e.target.value })}>
-          <option value="all">Όλες τις εγγραφές</option><option value="active">Μόνο όσες ισχύουν από σήμερα και μετά</option></select></div>`}
+        <${Select} className="ui-input" aria-label="Ποιες εγγραφές γράφονται" value=${b.scope || 'all'} onChange=${(e: any) => setB({ ...b, scope: e.target.value })}>
+          <option value="all">Όλες τις εγγραφές</option><option value="active">Μόνο όσες ισχύουν από σήμερα και μετά</option><//></div>`}
     </div>
     ${miss.length > 0 && html`<${Alert} tone="bad"><span>Λείπει: <b>${miss.join(', ')}</b>. Πάτα το πεδίο αριστερά και μετά ένα κελί της στήλης του στον πίνακα.</span><//>`}
     <div className="mapper">
@@ -255,10 +222,10 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
         const tag = c == null ? (f.req ? html`<${Badge} tone="bad">λείπει<//>` : null) : c === rec ? html`<${Badge} tone="ok" data-tip="Βρέθηκε από την επικεφαλίδα">αναγνωρίστηκε<//>` : html`<${Badge} tone="info">δική σου επιλογή<//>`;
         return html`<li key=${f.k} className=${cx('mapper__f', active === f.k && 'is-active')}>
           <button type="button" className="mapper__fb" aria-pressed=${active === f.k} onClick=${() => setActive(active === f.k ? null : f.k)}><b>${f.label}</b>${tag}</button>
-          <select className="ui-select" aria-label=${'Στήλη για ' + f.label} value=${c == null ? '' : String(c)} onChange=${(e: any) => setCol(f.k, e.target.value === '' ? null : +e.target.value)}>
+          <${Select} className="ui-select" aria-label=${'Στήλη για ' + f.label} value=${c == null ? '' : String(c)} onChange=${(e: any) => setCol(f.k, e.target.value === '' ? null : +e.target.value)}>
             <option value="">—</option>
             ${Array.from({ length: maxCol + 1 }, (_, i) => html`<option key=${i} value=${String(i)}>${colName(i)}${i === rec ? ' (προτείνεται)' : ''}</option>`)}
-          </select></li>`;
+          <//></li>`;
       })}</ul>
       <div className="mapper__grid">
         ${active && html`<div className="mapper__hint">Κάνε κλικ σε ένα κελί της στήλης για «${fields.find(f => f.k === active)?.label}»</div>`}
@@ -316,8 +283,8 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
       <div className="tile"><span className="tile__n">${d.same}</span><span className="tile__l">Ίδιες</span></div><div className="tile"><span className="tile__n">${d.unmatched.length}</span><span className="tile__l">Χωρίς άτομο</span></div></div>
     ${parsed.unknown.length > 0 && html`<div className="field"><span className="field__label">Είδη που δεν αναγνωρίστηκαν: τι είναι το καθένα;</span>
       ${parsed.unknown.map(u => html`<div key=${u} className="field-row" style=${{ alignItems: 'center' }}><span className="plan__fn" style=${{ minWidth: '160px' }}>${u}</span>
-        <select className="ui-select" aria-label=${'Είδος για ' + u} value=${b.values?.[valueKey(u)] || DEFAULT_TYPE[list]} onChange=${(e: any) => setB({ ...b, values: { ...(b.values || {}), [valueKey(u)]: e.target.value as TypeKey } })}>
-          ${types.map(t => html`<option key=${t} value=${t}>${TYPES[t].label}: ${TYPES[t].long}${t === DEFAULT_TYPE[list] ? ' (προτείνεται)' : ''}</option>`)}</select></div>`)}
+        <${Select} className="ui-select" aria-label=${'Είδος για ' + u} value=${b.values?.[valueKey(u)] || DEFAULT_TYPE[list]} onChange=${(e: any) => setB({ ...b, values: { ...(b.values || {}), [valueKey(u)]: e.target.value as TypeKey } })}>
+          ${types.map(t => html`<option key=${t} value=${t}>${TYPES[t].label}: ${TYPES[t].long}${t === DEFAULT_TYPE[list] ? ' (προτείνεται)' : ''}</option>`)}<//></div>`)}
       <span className="field__help">Το κείμενο του Excel κρατιέται ως «είδος» (π.χ. ΕΛ ΑΡΒ). Η επιλογή αποθηκεύεται για την επόμενη φορά.</span></div>`}
     ${all.length > 0 && html`<div className="field"><span className="field__label">Δεν βρέθηκαν στην εφαρμογή: ποιος είναι;</span>
       ${all.map(c => html`<div key=${c.r} className="unm"><span><b>${c.who}</b><small>γραμμή ${c.r + 1} · ${dm(c.from)}–${dm(c.to)}</small></span>
@@ -402,7 +369,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ανανέωση από Excel'} description=${bindingText(b)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" disabled=${busy} onClick=${go}>${res.n ? 'Πέρασε ' + res.n + (res.n === 1 ? ' αλλαγή' : ' αλλαγές') : 'Εντάξει'}<//>`}>
-    ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><input id="sd-m" type="month" className="ui-input" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
+    ${list === 'duties' && html`<div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="sd-m">Μήνας του φύλλου</label><${MonthField} id="sd-m" value=${month} onChange=${(e: any) => e.target.value && setMonth(e.target.value)}/></div>`}
     <${Tiles} items=${res.tiles}/>
     ${!res.n && !res.sp.unmatched.length && !res.duties?.errors.length && !res.duties?.days.length && html`<${Alert} tone="ok"><span>✓ Η εφαρμογή έχει ήδη ό,τι γράφει αυτό το φύλλο.</span><//>`}
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
@@ -445,11 +412,11 @@ function DutyAliases({ codes }: { codes: string[] }) {
   const save = (raw: string, v: string) => { if (!v) return; run({ t: 'setSettings', settings: { dutyCodeAliases: { ...(state.settings.dutyCodeAliases || {}), [codeKey(raw)]: v } }, text: 'ο κωδικός «' + raw + '» στον έλεγχο υπηρεσιών σημαίνει ' + (v === 'ignore' ? '«δεν είναι υπηρεσία»' : v.startsWith('kind:') ? KIND_NAME[v.slice(5) as DutyKind].toLowerCase() + ' χωρίς θέση' : postBy(state, v)?.label || v) }, false); };
   return html`<div className="field"><span className="field__label">Κωδικοί που δεν αναγνωρίστηκαν: τι σημαίνει ο καθένας;</span>
     ${codes.map(u => html`<div key=${u} className="field-row" style=${{ alignItems: 'center' }}><span className="plan__fn" style=${{ minWidth: '120px' }}>${u}</span>
-      <select className="ui-select" aria-label=${'Τι σημαίνει ο κωδικός ' + u} value="" onChange=${(e: any) => save(u, e.target.value)}>
+      <${Select} className="ui-select" aria-label=${'Τι σημαίνει ο κωδικός ' + u} value="" onChange=${(e: any) => save(u, e.target.value)}>
         <option value="">Παραλείπεται (διάλεξε…)</option><option value="ignore">Δεν είναι υπηρεσία</option>
         <optgroup label="Υπηρεσία χωρίς θέση">${(Object.keys(KIND_NAME) as DutyKind[]).map(k => html`<option key=${k} value=${'kind:' + k}>${KIND_NAME[k]}</option>`)}</optgroup>
         <optgroup label="Θέση">${posts.map(x => html`<option key=${x.k} value=${x.k}>${x.label}${x.code ? ' (' + x.code + ')' : ''}</option>`)}</optgroup>
-      </select></div>`)}
+      <//></div>`)}
     <span className="field__help">Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.</span></div>`;
 }
 
@@ -529,7 +496,7 @@ export function FoldersCard() {
     <p className="note" style=${{ marginTop: 0 }}>Πού φτιάχνει η εφαρμογή τα αρχεία της. Ό,τι δεν έχει δικό του φάκελο πάει στον <b>γενικό</b>. Τα αρχεία που έχουν ήδη φτιαχτεί μένουν εκεί που είναι· στον νέο φάκελο πηγαίνουν τα επόμενα.</p>
     <ul className="srclist">${row('output', 'output', 'Γενικός φάκελος', st.outputDir || undefined)}</ul>
     <h4 className="folders__h">Έντυπα</h4>
-    <ul className="srclist">${FORMS.map(([f, label]) => { const b = forms[f] || {};
+    <ul className="srclist">${FORMS().map(([f, label]) => { const b = forms[f] || {};
       return row(f, { form: f }, label, b.dir, html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => monthly(f, e.target.checked)}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`, b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ'); })}</ul>
     <h4 className="folders__h">Νέα Excel ανά είδος</h4>
     <p className="note" style=${{ marginTop: 0 }}>Όταν πατάς «Νέο αρχείο…» σε ένα είδος στα Αρχεία Excel, το Excel φτιάχνεται κατευθείαν σε αυτόν τον φάκελο. Όταν έχει οριστεί Δυναμολόγιο, οι καταστάσεις, τα πόστα, τα εκτός δύναμης και οι δυνατότητες μπαίνουν ως νέο φύλλο εκεί («Νέο φύλλο…»).</p>
@@ -539,7 +506,7 @@ export function FoldersCard() {
 }
 
 // ------------------------------------------------------------------ έντυπα: template, φύλλο, φάκελος
-const FORMS: [FormKind, string][] = [['froura', 'ΦΡΟΥΡΑ ΣΒΕΝ'], ['frouraSpen', 'ΦΡΟΥΡΑ ΣΠΕΝ'], ['hkai', 'ΗΚΑΙ'], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
+const FORMS = (): [FormKind, string][] => [['froura', 'ΦΡΟΥΡΑ ΣΒΕΝ'], ['frouraSpen', 'ΦΡΟΥΡΑ ΣΠΕΝ'], ['hkai', HK()], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
 function FormsCard({ outs }: { outs: FormOut[] }) {
   const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
@@ -550,7 +517,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
   const pickDir = async (f: FormKind) => { const d = await window.api.formDir(f); if (d) await save(f, { ...(forms[f] || {}), dir: d }, 'Το έντυπο θα βγαίνει στο ' + d); };
   return html`<${Card} title="Έντυπα: template και φάκελος">
     <p className="note" style=${{ marginTop: 0 }}>Κάθε έντυπο μπορεί να βγαίνει από δικό σου template (αρχείο και φύλλο) σε δικό του φάκελο. Ό,τι έχει ήδη βγει για σήμερα ή επόμενη μέρα <b>ενημερώνεται μόνο του</b> όταν αλλάξεις κάτι στην εφαρμογή.</p>
-    <ul className="srclist">${FORMS.map(([f, label]) => {
+    <ul className="srclist">${FORMS().map(([f, label]) => {
       const b = forms[f] || {}; const out = outs.filter(o => o.form === f);
       return html`<li key=${f} className="srcrow">
         <div className="srcrow__main"><b>${label}</b>${b.file && html` <${Badge} tone="info">δικό σου<//>`}
@@ -565,7 +532,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
         ${html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => save(f, { ...b, monthly: e.target.checked }, e.target.checked ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα')}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`}
       </li>`;
     })}</ul>
-    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS.find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
+    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS().find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
   <//>`;
 }
 function FormDialog({ form, info, current, onClose, onSave }: P) {
@@ -591,9 +558,9 @@ function FormDialog({ form, info, current, onClose, onSave }: P) {
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="fd-s1">${form === 'hkai' ? 'Μπροστινή σελίδα' : form === 'outs' ? 'Φύλλο εξοδούχων' : 'Φύλλο του εντύπου'}</label>
-        <select id="fd-s1" className="ui-input" value=${sheet} onChange=${(e: any) => setSheet(e.target.value)}>${i.sheets.map(s => html`<option key=${s} value=${s}>${s}</option>`)}</select></div>
+        <${Select} id="fd-s1" className="ui-input" value=${sheet} onChange=${(e: any) => setSheet(e.target.value)}>${i.sheets.map(s => html`<option key=${s} value=${s}>${s}</option>`)}<//></div>
       ${two && html`<div className="field"><label className="field__label" htmlFor="fd-s2">${form === 'hkai' ? 'Πίσω σελίδα' : 'Φύλλο παραμενόντων'}</label>
-        <select id="fd-s2" className="ui-input" value=${sheet2} onChange=${(e: any) => setSheet2(e.target.value)}>${i.sheets.map(s => html`<option key=${s} value=${s}>${s}</option>`)}</select></div>`}
+        <${Select} id="fd-s2" className="ui-input" value=${sheet2} onChange=${(e: any) => setSheet2(e.target.value)}>${i.sheets.map(s => html`<option key=${s} value=${s}>${s}</option>`)}<//></div>`}
     </div>
     ${form === 'froura' || form === 'frouraSpen' ? html`<p className="note">Η εφαρμογή γράφει στα ίδια κελιά με το έντυπο της μονάδας (θέσεις, Λ/Υ, Δ/Υ, τιμωρημένοι, απόντες). Κράτα τη διάταξη ίδια· άλλαξε ελεύθερα κεφαλίδες, γραμματοσειρές και περιθώρια.</p>` : null}
     ${form === 'outs' ? html`<p className="note">Η λίστα ξεκινά στη γραμμή 7 με στήλες Βαθμός, Ο-Σ, Επίθετο, Όνομα, Θάλαμος, Τηλέφωνο, Παρατηρήσεις (B έως H), όπως στο έντυπο της μονάδας.</p>` : null}

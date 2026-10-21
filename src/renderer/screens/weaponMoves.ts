@@ -6,8 +6,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, cx, Alert, Badge, Button, Dialog, Segmented, useEscape, useToast } from '../ui';
+import { Combo } from '../select';
 import { useNav, useStore } from '../store';
-import { ChoiceField, TimeField } from '../common';
+import { ChoiceField, DateField, TimeField, useTimeOptions } from '../common';
 import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
 import { personMap } from '../../shared/rules';
 import { listOf, weaponBack } from '../../shared/ranks';
@@ -38,8 +39,8 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
     <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${!r0} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
     ${reason.trim() && html`<p className="note" style=${{ margin: '-4px 0 10px' }}>Όταν μπει πάλι: <b>${weaponBack(reason, state.settings.lists)}</b></p>`}
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="wo-d">Μέρα</label><input id="wo-d" type="date" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
-      <${TimeField} id="wo-t" label="Ώρα εξόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν βγήκε νωρίτερα"/></div>
+      <div className="field"><label className="field__label" htmlFor="wo-d">Μέρα</label><${DateField} id="wo-d" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
+      <${TimeField} id="wo-t" now=${true} label="Ώρα εξόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν βγήκε νωρίτερα"/></div>
     <div className="field"><label className="field__label" htmlFor="wo-n">Παρατήρηση</label><input id="wo-n" className="ui-input" placeholder="π.χ. πεδίο βολής Σχιστού" value=${note} onChange=${(e: any) => setNote(e.target.value)}/></div>
     ${(noW.length > 0 || already.length > 0) && html`<${Alert} tone="warn"><span>${noW.length > 0 && html`<span>Χωρίς αριθμό όπλου, δεν βγαίνουν: ${names(noW)}.</span>`}${already.length > 0 && html`<span>${noW.length ? html`<br/>` : ''}Είναι ήδη εκτός: ${names(already)}.</span>`}</span><//>`}
   <//>`;
@@ -63,8 +64,8 @@ export function WeaponInDialog({ ids, onClose, onDone }: P) {
   return html`<${Dialog} title=${'Είσοδος όπλων' + (moves.length > 1 ? ' (' + moves.length + ')' : '')} description=${moves.length === 1 ? shortName(pm.get(moves[0].pid)!) + ' · όπλο ' + moves[0].weapon + ' · βγήκε ' + moves[0].reason + ' ' + dm(moves[0].outDay) + ' ' + moves[0].outTime : moves.length + ' όπλα που είναι εκτός'} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Είσοδος${moves.length > 1 ? ' (' + moves.length + ')' : ''}<//>`}>
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="wi-d">Μέρα</label><input id="wi-d" type="date" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
-      <${TimeField} id="wi-t" label="Ώρα εισόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν μπήκε νωρίτερα"/></div>
+      <div className="field"><label className="field__label" htmlFor="wi-d">Μέρα</label><${DateField} id="wi-d" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
+      <${TimeField} id="wi-t" now=${true} label="Ώρα εισόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν μπήκε νωρίτερα"/></div>
     <div className="field"><label className="field__label" htmlFor="wi-r">Λόγος εισαγωγής</label><input id="wi-r" className="ui-input" placeholder=${backs.length === 1 ? backs[0] : 'Αυτόματα: ' + backs.join(', ')} value=${reason} onChange=${(e: any) => setReason(e.target.value)}/>
       <span className="field__help">${reason.trim() ? 'Γράφεται σε όλα: ' + reason.trim().toUpperCase() : 'Κενό: ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (Ρυθμίσεις › Λίστες)'}</span></div>
     ${moves.length > 1 && html`<ul className="hist weapon-movelist">${moves.map(m => html`<li key=${m.id}><b>${shortName(pm.get(m.pid)!)}</b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${reason.trim().toUpperCase() || weaponBack(m.reason, lists)}</li>`)}</ul>`}
@@ -90,12 +91,12 @@ function EditMoveDialog({ m, onClose }: P) {
     footer=${html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">Σβήσε<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Αποθήκευση<//>`}>
     <${ChoiceField} id="we-r" label="Λόγος εξόδου *" value=${x.reason} options=${reasons} otherLabel="Άλλος λόγος (γράψε τον)…" onChange=${set('reason')}/>
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="we-od">Μέρα εξόδου</label><input id="we-od" type="date" className="ui-input" value=${x.outDay} onChange=${(e: any) => e.target.value && set('outDay')(e.target.value)}/></div>
-      <${TimeField} id="we-ot" label="Ώρα εξόδου *" value=${x.outTime} onChange=${set('outTime')}/></div>
+      <div className="field"><label className="field__label" htmlFor="we-od">Μέρα εξόδου</label><${DateField} id="we-od" className="ui-input" value=${x.outDay} onChange=${(e: any) => e.target.value && set('outDay')(e.target.value)}/></div>
+      <${TimeField} id="we-ot" now=${true} label="Ώρα εξόδου *" value=${x.outTime} onChange=${set('outTime')}/></div>
     <label className="ui-checkrow" style=${{ margin: '4px 0 10px' }}><input type="checkbox" className="ui-check" checked=${!x.inDay} onChange=${(e: any) => setX(o => (e.target.checked ? { ...o, inDay: '', inTime: '', inReason: '' } : { ...o, inDay: todayFn(), inTime: nowHM() }))}/> Είναι ακόμα εκτός (χωρίς είσοδο)</label>
     ${x.inDay && html`<div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="we-id">Μέρα εισόδου</label><input id="we-id" type="date" className="ui-input" min=${x.outDay} value=${x.inDay} onChange=${(e: any) => e.target.value && set('inDay')(e.target.value)}/></div>
-      <${TimeField} id="we-it" label="Ώρα εισόδου *" value=${x.inTime} onChange=${set('inTime')}/></div>
+      <div className="field"><label className="field__label" htmlFor="we-id">Μέρα εισόδου</label><${DateField} id="we-id" className="ui-input" min=${x.outDay} value=${x.inDay} onChange=${(e: any) => e.target.value && set('inDay')(e.target.value)}/></div>
+      <${TimeField} id="we-it" now=${true} label="Ώρα εισόδου *" value=${x.inTime} onChange=${set('inTime')}/></div>
       <div className="field"><label className="field__label" htmlFor="we-ir">Λόγος εισαγωγής</label><input id="we-ir" className="ui-input" placeholder=${weaponBack(x.reason, state.settings.lists)} value=${x.inReason} onChange=${(e: any) => set('inReason')(e.target.value)}/></div>`}
     <div className="field"><label className="field__label" htmlFor="we-n">Παρατήρηση</label><input id="we-n" className="ui-input" value=${x.note} onChange=${(e: any) => set('note')(e.target.value)}/></div>
   <//>`;
@@ -144,7 +145,8 @@ function Pop({ anchor, onClose, children, label }: P) {
     return () => { clearTimeout(t); window.removeEventListener('scroll', upd, true); window.removeEventListener('resize', upd); };
   }, []);
   useEffect(() => {
-    const out = (e: MouseEvent) => { const t = e.target as Node; if (!box.current?.contains(t) && !anchor.current?.contains(t)) onClose(); };
+    // η λίστα μιας ώρας ή μέρας (select.ts) είναι έξω από το παράθυρο αλλά ανήκει σε αυτό
+    const out = (e: MouseEvent) => { const t = e.target as Element; if (!box.current?.contains(t) && !anchor.current?.contains(t) && !t.closest?.('.ui-dd__pop')) onClose(); };
     document.addEventListener('mousedown', out); return () => document.removeEventListener('mousedown', out);
   }, [onClose]);
   useEffect(() => { (box.current?.querySelector('[data-autofocus]') as HTMLElement | null)?.focus(); }, []);
@@ -153,10 +155,10 @@ function Pop({ anchor, onClose, children, label }: P) {
 const when = (day: string, time: string, today: string) => (day === today ? '' : dm(day) + ' ') + time;
 // Ώρα και μέρα στο μικρό παράθυρο: η τωρινή, αλλάζουν
 function WhenRow({ day, time, setDay, setTime, label, focus }: P) {
-  const bad = !normTime(time);
-  return html`<div className="wpop__when"><label><span>${label}</span><input className="ui-input wpop__time" inputMode="numeric" autoComplete="off" value=${time} aria-invalid=${bad || undefined} aria-label=${label} data-autofocus=${focus ? '' : undefined}
+  const bad = !normTime(time); const opts = useTimeOptions(undefined, true);
+  return html`<div className="wpop__when"><label><span>${label}</span><${Combo} className="ui-input wpop__time" inputMode="numeric" options=${opts} value=${time} aria-invalid=${bad || undefined} aria-label=${label} data-autofocus=${focus ? '' : undefined}
       onChange=${(e: any) => setTime(e.target.value)} onBlur=${() => { const t = normTime(time); if (t && t !== time) setTime(t); }}/></label>
-    <label><span>Μέρα</span><input type="date" className="ui-input wpop__day" value=${day} aria-label="Μέρα" onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></label></div>`;
+    <label><span>Μέρα</span><${DateField} className="ui-input wpop__day" value=${day} aria-label="Μέρα" onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></label></div>`;
 }
 
 // Έξοδος ενός όπλου από τη γραμμή: ώρα (τώρα), παρατήρηση, και ένα κλικ στον λόγο
@@ -220,7 +222,7 @@ export function WeaponState({ p, info }: P) {
   const out = !!m || !!duty; const auto = !m && !!duty;
   const why = m ? html`<span className="wstate__why" data-tip=${'Βγήκε: ' + moveOutTxt(m) + (m.note ? ' · ' + m.note : '') + (duty ? ' · και ένοπλη υπηρεσία: ' + duty : '') + ' · μπαίνει με ' + weaponBack(m.reason, lists)}><b>${m.reason}</b> <span>${when(m.outDay, m.outTime, today)}</span>${m.note ? html` <i>· ${m.note}</i>` : ''}</span>`
     : auto ? html`<span className="wstate__why" data-tip=${'Αυτόματα: ένοπλη υπηρεσία ' + duty + '. Για να αλλάξει, άλλαξε τις υπηρεσίες.'}><b>ΥΠΗΡΕΣΙΑ</b> <span>${duty}</span></span>`
-    : html`<span className="wstate__why muted">στον οπλοβαστό</span>`;
+    : null;   // ΕΝΤΟΣ: το λέει ήδη ο διακόπτης
   const click = (want: boolean) => { if (auto || want === out) return; setOpen(true); };
   return html`<div className=${cx('wstate', out && 'is-out', auto && 'is-auto')}>
     <div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>

@@ -4,7 +4,7 @@ import { apply, type Command } from '../src/shared/commands';
 import { hkaiCounts, HK_A, HK_K } from '../src/shared/rules';
 import { CADRE_ABS, type AppState } from '../src/shared/domain';
 import { cadreAbsOf } from '../src/shared/ranks';
-import { cadreClash, cadreMatch, cadreSearch, cadreSheets, cadreStatusOn, hkOffText } from '../src/shared/cadre';
+import { cadreClash, cadreMatch, cadreSearch, cadreSheets, cadreStatusOn, hkOffText, dutyOfficers, orderedCadre } from '../src/shared/cadre';
 import { cadreLists } from '../src/main/excel';
 import { fakeState } from './fixtures';
 import ExcelJS from 'exceljs';
@@ -82,14 +82,14 @@ describe('Στελέχη: καταστάσεις της ΗΚΑΙ', () => {
     s = run(s, { t: 'addCadreAbs', abs: { cid: a.id, kind: 'yp', from: '2026-10-18', to: '2026-10-18' } });
     const sh = cadreSheets(s, D);
     expect(sh.map(x => x.name)).toEqual(['ΣΤΕΛΕΧΗ', 'ΚΑΤΑΣΤΑΣΕΙΣ']);
-    expect(sh[0].rows.map(r => [r[1], r[7]])).toEqual([['ΙΛΧΟΣ', 'Κανονική άδεια'], ['ΛΧΙΑΣ', 'ΠΑΡΩΝ']]);
-    expect(sh[1].rows.map(r => r[5])).toEqual(['ΑΠΟΝΤΕΣ · Κ.Άδ.', 'ΚΩΛΥΟΜΕΝΟΙ · Υπηρ.']);
+    expect(sh[0].rows.map(r => [r[1], r[9]])).toEqual([['ΙΛΧΟΣ', 'Κανονική άδεια'], ['ΛΧΙΑΣ', 'ΠΑΡΩΝ']]);
+    expect(sh[1].rows.map(r => r[6])).toEqual(['ΑΠΟΝΤΕΣ · Κ.Άδ.', 'ΚΩΛΥΟΜΕΝΟΙ · Υπηρ.']);
     const r = await cadreLists(s, D);
     expect(r.name).toBe('ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ 17-10-2026.xlsx');
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data as any);
     const ws = wb.getWorksheet('ΣΤΕΛΕΧΗ')!;
-    expect(ws.getRow(4).getCell(8).value).toBe('ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ');
-    expect(wb.getWorksheet('ΚΑΤΑΣΤΑΣΕΙΣ')!.getRow(4).getCell(9).value).toBe('ΓΟΝΙΚΗ');
+    expect(ws.getRow(4).getCell(10).value).toBe('ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ');
+    expect(wb.getWorksheet('ΚΑΤΑΣΤΑΣΕΙΣ')!.getRow(4).getCell(10).value).toBe('ΓΟΝΙΚΗ');
   });
 });
 
@@ -104,5 +104,42 @@ describe('ΗΚΑΙ: αξιωματικός υπηρεσίας από τα Στε
     expect(hkOffText(s, '2026-10-18')).toBe('');
     s = { ...s, hkaiManual: { [D]: { cells: {}, text: { off: 'ΑΝΘΛΓΟΣ ΑΛΛΟΣ' } } } };
     expect(hkOffText(s, D)).toBe('ΑΝΘΛΓΟΣ ΑΛΛΟΣ');
+  });
+});
+
+describe('Στελέχη: στοιχεία όπως στο Δυναμολόγιο και σειρά ιεραρχίας (Michael, 18/10)', () => {
+  it('Ο/Σ και ΑΜ με κεφαλαία, στη σειρά βαθμός, Ο/Σ, επίθετο, όνομα, ΑΜ, τηλέφωνο, θέση', () => {
+    let s = fakeState(5);
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'λχιας', hk: 'Λοχίες', spec: 'τθ', last: 'Δοκιμίδης', first: 'Νίκος', am: '12345α', phone: '6900000000', role: 'Γραφείο' } });
+    expect(s.cadreList[0]).toMatchObject({ rank: 'ΛΧΙΑΣ', spec: 'ΤΘ', am: '12345Α' });
+    expect(cadreSheets(s, D)[0].head.slice(0, 9)).toEqual(['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΑΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΕΣΗ', 'ΓΡΑΜΜΗ ΗΚΑΙ']);
+    expect(cadreSheets(s, D)[0].rows[0].slice(1, 8)).toEqual(['ΛΧΙΑΣ', 'ΤΘ', 'ΔΟΚΙΜΙΔΗΣ', 'ΝΙΚΟΣ', '12345Α', '6900000000', 'Γραφείο']);
+    expect(cadreSearch(s.cadreList[0], '12345')).toBe(true);
+  });
+  it('χωρίς μετακίνηση: με τη σειρά της ΗΚΑΙ· με μετακίνηση: όπως τα έβαλε, και στο Excel', () => {
+    let s = withCadre(); const [lx, il] = s.cadreList;
+    expect(orderedCadre(s.cadreList).map(c => c.last)).toEqual(['ΥΠΟΘΕΤΙΚΟΣ', 'ΔΟΚΙΜΙΔΗΣ']);
+    s = run(s, { t: 'orderCadre', ids: [lx.id, il.id] });
+    expect(orderedCadre(s.cadreList).map(c => c.last)).toEqual(['ΔΟΚΙΜΙΔΗΣ', 'ΥΠΟΘΕΤΙΚΟΣ']);
+    expect(cadreSheets(s, D)[0].rows.map(r => r[3])).toEqual(['ΔΟΚΙΜΙΔΗΣ', 'ΥΠΟΘΕΤΙΚΟΣ']);
+    expect(() => run(s, { t: 'orderCadre', ids: [lx.id] })).toThrow(/Άλλαξε η λίστα/);
+    // νέο στέλεχος: κάτω από τους ίδιους ή ανώτερους βαθμούς
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΕΠΙΛΧΟΣ', hk: 'Επίλαρχοι', last: 'ΠΡΩΤΟΣ', first: 'Α' } });
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΛΧΙΑΣ', hk: 'Λοχίες', last: 'ΤΕΛΕΥΤΑΙΟΣ', first: 'Β' } });
+    expect(orderedCadre(s.cadreList).map(c => c.last)).toEqual(['ΠΡΩΤΟΣ', 'ΔΟΚΙΜΙΔΗΣ', 'ΥΠΟΘΕΤΙΚΟΣ', 'ΤΕΛΕΥΤΑΙΟΣ']);
+    // αλλαγή στοιχείων κρατά τη θέση
+    const p = s.cadreList.find(c => c.last === 'ΥΠΟΘΕΤΙΚΟΣ')!;
+    s = run(s, { t: 'saveCadre', cadre: { ...p, phone: '6911111111' } });
+    expect(orderedCadre(s.cadreList).map(c => c.last)).toEqual(['ΠΡΩΤΟΣ', 'ΔΟΚΙΜΙΔΗΣ', 'ΥΠΟΘΕΤΙΚΟΣ', 'ΤΕΛΕΥΤΑΙΟΣ']);
+  });
+  it('ΗΚΑΙ: τα στελέχη με κατάσταση φαίνονται με όνομα στη στήλη τους (απαλλαγή, άδεια)', () => {
+    let s = withCadre(); const [a, b] = s.cadreList;
+    s = run(s, { t: 'addCadreAbs', abs: { cid: a.id, kind: 'apal', from: D, to: D } });
+    s = run(s, { t: 'addCadreAbs', abs: { cid: b.id, kind: 'ka', from: D, to: D } });
+    const h = hkaiCounts(s, D);
+    expect(h.cadre.apal.map(c => c.last)).toEqual(['ΔΟΚΙΜΙΔΗΣ']);
+    expect(h.cadre.ka.map(c => c.last)).toEqual(['ΥΠΟΘΕΤΙΚΟΣ']);
+    expect(h.rank['Λοχίες'].c.apal).toBe(1);
+    expect(dutyOfficers(s, D)).toBe('');
   });
 });

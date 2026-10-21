@@ -1,5 +1,5 @@
 // Η κατάσταση ζει στο main process· εδώ κρατάμε το τελευταίο αντίγραφο και στέλνουμε εντολές.
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext, useRef } from 'react';
 import { normGreek, translit, collator, norm } from '../shared/text';
 import type { AppState, AuditEntry, Person } from '../shared/domain';
 import type { Boot } from '../shared/api';
@@ -22,10 +22,17 @@ export interface Nav {
   go(view: string, params?: Record<string, any>): void;
   set(params: Record<string, any>): void;
   declare(data: Record<string, any>): void;
-  openPerson(id: number): void;
+  openPerson(id: number, list?: number[]): void;   // list: η λίστα που βλέπεις, για ↑/↓ μέσα στην καρτέλα
 }
 export const NavCtx = createContext<Nav>(null as unknown as Nav);
 export const useNav = () => useContext(NavCtx);
+// Άνοιγμα καρτέλας στρατιώτη από μια λίστα: η καρτέλα ξέρει τη λίστα (με τα φίλτρα και τη σειρά της) για το ↑/↓.
+// Σταθερή συνάρτηση (οι memo γραμμές δεν ξαναζωγραφίζονται)· η λίστα διαβάζεται τη στιγμή του κλικ.
+export function useOpenFrom(rows: { id: number }[]) {
+  const nav = useNav(); const ref = useRef(rows); ref.current = rows;
+  const open = nav.openPerson;
+  return useCallback((id: number) => open(id, ref.current.map(p => p.id)), [open]);
+}
 
 // Ευρετήριο αναζήτησης: χωρίς τόνους, λατινικοί χαρακτήρες που μοιάζουν, και αναζήτηση με λατινικά
 interface Indexed { p: Person; key: string; lat: string }

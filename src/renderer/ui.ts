@@ -25,9 +25,11 @@ export const Icon: Record<string, any> = {
   x: svg('<path d="M6 6l12 12M18 6L6 18"/>', '16'),
   shield: svg('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/>', '22'),
   back: svg('<path d="M19 12H5M11 18l-6-6 6-6"/>'),
-  chev: svg('<path d="M9 6l6 6-6 6"/>', '16'),
+  chev: svg('<path d="M9 6l6 6-6 6"/>', '16'), up: svg('<path d="M6 15l6-6 6 6"/>', '16'), down: svg('<path d="M6 9l6 6 6-6"/>', '16'),
   star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>', '14'),
   collapse: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>'),
+  // ερωτηματικό σε κύκλο: Οδηγός χρήσης
+  help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 4"/><circle cx="12" cy="17.2" r="0.6" fill="currentColor"/>'),
   // σταυρόνημα: Οπλισμός
   weapon: svg('<circle cx="12" cy="12" r="7.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
   expand: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>')
@@ -108,12 +110,12 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
       ${footer && html`<div className="ui-dialog__foot">${footer}</div>`}
     </div></div>`, document.body);
 }
-export function Sheet({ title, subtitle, onClose, children }: P) {
+export function Sheet({ title, subtitle, actions, onClose, children }: P) {
   useEscape(onClose);
   return createPortal(html`<${Fragment}>
     <div className="ui-sheet-overlay" onMouseDown=${onClose}></div>
     <aside className="ui-sheet" role="dialog" aria-modal="true" aria-label="Λεπτομέρειες">
-      <div className="ui-sheet__head"><div>${title}${subtitle}</div><${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
+      <div className="ui-sheet__head"><div>${title}${subtitle}</div>${actions && html`<div className="ui-sheet__acts">${actions}</div>`}<${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
       <div className="ui-sheet__body">${children}</div>
     </aside><//>`, document.body);
 }
@@ -134,14 +136,14 @@ export function ToastProvider({ children }: P) {
 // resetKey: πότε γυρνά στην αρχή (αλλαγή φίλτρου/αναζήτησης), όχι σε κάθε αλλαγή δεδομένων
 // Στην κατάσταση μόνο η πρώτη ορατή γραμμή: το κύλισμα μέσα στην ίδια γραμμή δεν ξαναζωγραφίζει τίποτα. Το στυλ κάθε
 // γραμμής μένει το ίδιο αντικείμενο, ώστε οι γραμμές με memo να μην ξαναζωγραφίζονται χωρίς λόγο.
-export function VirtualList({ items, rowHeight, height, renderRow, resetKey }: P) {
-  const ref = useRef<HTMLDivElement>(null); const [first, setFirst] = useState(0);
+export function VirtualList({ items, rowHeight, height, renderRow, resetKey, className, scrollRef }: P) {
+  const own = useRef<HTMLDivElement>(null); const ref = scrollRef || own; const [first, setFirst] = useState(0);
   const styles = useRef<{ h: number; m: Map<number, object> }>({ h: rowHeight, m: new Map() });
   if (styles.current.h !== rowHeight) styles.current = { h: rowHeight, m: new Map() };
   const styleOf = (i: number) => { let st = styles.current.m.get(i); if (!st) { st = { position: 'absolute', top: i * rowHeight, left: 0, right: 0, height: rowHeight }; styles.current.m.set(i, st); } return st; };
   const start = Math.max(0, first - 6); const end = Math.min(items.length, first + Math.ceil(height / rowHeight) + 7);
   useEffect(() => { if (ref.current) { ref.current.scrollTop = 0; setFirst(0); } }, [resetKey === undefined ? items.length : resetKey]);
-  return html`<div ref=${ref} className="vlist" style=${{ height: Math.min(height, items.length * rowHeight + 2) }} onScroll=${(e: any) => setFirst(Math.floor(e.currentTarget.scrollTop / rowHeight))}>
+  return html`<div ref=${ref} className=${cx('vlist', className)} data-rows=${items.length} style=${{ height: Math.min(height, items.length * rowHeight + 2) }} onScroll=${(e: any) => setFirst(Math.floor(e.currentTarget.scrollTop / rowHeight))}>
     <div className="vlist__inner" style=${{ height: items.length * rowHeight }}>
       ${items.slice(start, end).map((it: P, i: number) => renderRow(it, start + i, styleOf(start + i)))}
     </div></div>`;
@@ -182,4 +184,14 @@ export function Strip({ className, children, ...rest }: P) {
   });
   return html`<div ref=${ref} className=${cx('strip', className)} ...${rest}>${children}</div>`;
 }
-export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<p>${sub}</p>`}</div>${children}</div>`; }
+// Ο υπότιτλος σε μία γραμμή, για να μένει χώρος για τον πίνακα σε 1366×768. Αν δεν χωρά: όλος στη συμβουλή, και με κλικ ανοίγει.
+// Ο υπότιτλος σε μία γραμμή· αν κόβεται, ολόκληρος στο tooltip και με κλικ. Ο έλεγχος γίνεται μετά το layout
+// (ResizeObserver και requestAnimationFrame): μέσα στο render θα ανάγκαζε layout όλης της οθόνης (ΗΚΑΙ: ~0,4 δευτ.)
+function PageSub({ sub }: P) {
+  const ref = useRef<HTMLParagraphElement>(null); const [cut, setCut] = useState(''); const [open, setOpen] = useState(false);
+  const check = useCallback(() => { const el = ref.current; if (el) setCut(el.scrollWidth > el.clientWidth + 1 ? el.textContent || '' : ''); }, []);
+  useEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); return () => ro.disconnect(); }, [check]);
+  useEffect(() => { const id = requestAnimationFrame(check); return () => cancelAnimationFrame(id); });
+  return html`<p ref=${ref} className=${cx('page-head__sub', open && 'is-open', cut && 'is-cut')} data-tip=${cut && !open ? cut : undefined} onClick=${cut || open ? () => setOpen(!open) : undefined}>${sub}</p>`;
+}
+export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }

@@ -48,11 +48,23 @@ describe('δικά σου είδη άδειας', () => {
 });
 
 describe('νέες υπηρεσίες', () => {
-  it('ΦΡΟΥΡΑ: οι ώρες τους στις ΠΑΡ/ΣΕΙΣ των γραμμών τους', async () => {
+  it('ΦΡΟΥΡΑ: πίνακας η καθεμία, δύο δίπλα δίπλα, τίτλος το όνομά της, ώρες μόνο αν έχει (Michael, 20/10)', async () => {
     let { s } = withGate(); s = apply(s, { t: 'autofill', date: D }, ctx).state;
-    const ws = await (await Workbook.open((await fillFroura(T('froura.xlsx'), s, D)).data)).sheet(0);
-    expect([ws.get('E32'), ws.get('I32')]).toEqual(['ΠΥΛΗ 1Ο', '24ΩΡΗ']);
-    expect([ws.get('E34'), ws.get('I34')]).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄', 'ΗΜΕΡΑ']);
+    const r = await fillFroura(T('froura.xlsx'), s, D);
+    const ws = await (await Workbook.open(r.data)).sheet(0);
+    // μία κενή γραμμή κάτω από τα Μαγειρεία (31), μετά οι επικεφαλίδες
+    expect(['B32', 'C32', 'I32', 'J32'].map(c => ws.get(c))).toEqual([null, null, null, null]);
+    expect(['B33', 'C33', 'D33', 'E33'].map(c => ws.get(c))).toEqual(['Α/Α', 'ΠΥΛΗ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ']);
+    expect(['B34', 'D34', 'B35', 'D35'].map(c => ws.get(c))).toEqual(['1Ο', '24ΩΡΗ', '2Ο', '24ΩΡΗ']);
+    expect(ws.get('C34')).toBeTruthy();
+    // «ημέρα» = χωρίς ώρες: χωρίς στήλη ΩΡΕΣ, το όνομα πιάνει και τη στήλη τους
+    expect(['I33', 'J33', 'K33', 'L33'].map(c => ws.get(c))).toEqual(['Α/Α', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄', null, 'ΠΑΡ/ΣΕΙΣ']);
+    expect(ws.mergeAt('J33')).toEqual({ c1: 10, r1: 33, c2: 11, r2: 33 });
+    expect(ws.mergeAt('J34')).toEqual({ c1: 10, r1: 34, c2: 11, r2: 34 });
+    expect(ws.get('I34')).toBe('1Ο'); expect(ws.get('I35')).toBeNull();
+    // ίδιο πλαίσιο με τους θαλαμοφύλακες· οι τιμωρημένοι κατέβηκαν 4 γραμμές (κενή + επικεφαλίδα + 2)
+    expect(ws.style('B34')).toBe(ws.style('B13')); expect(ws.style('J33')).toBe(ws.style('C13'));
+    expect(ws.get('A38')).toBe('ΤΙΜΩΡΗΜΕΝΟΙ'); expect(ws.get('A40')).toBe('1');
   });
 
   it('Έλεγχος υπηρεσιών (νέος μήνας): στήλη ΠΥΛΗ μετά το Λ/Υ-Δ/Υ, και τα σύνολα μετρούν και τους κωδικούς Π1/Π2', async () => {
@@ -140,5 +152,18 @@ describe('θάλαμοι των Ρυθμίσεων στο νέο Δυναμολ�
     // η νέα γραμμή έχει τη μορφή γραμμής ατόμου, όχι των επικεφαλίδων
     const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΘΑΛΑΜΟΙ'); const r9 = blocks.find(x => x.room === 9)!.rows[0].r + 1;
     expect(ws.style('D' + r9)).toBe(ws.style('D3'));
+  });
+});
+
+describe('προεπισκόπηση ΦΡΟΥΡΑΣ', () => {
+  it('οι πίνακες των νέων υπηρεσιών όπως στο Excel: δύο δίπλα δίπλα, κάθε γραμμή 13 στήλες', async () => {
+    const { frouraSheet } = await import('../src/renderer/sheets');
+    let { s } = withGate(); s = apply(s, { t: 'autofill', date: D }, ctx).state;
+    const m = frouraSheet(s, D);
+    const at = m.rows.findIndex(r => r.some(c => c?.v === 'ΠΥΛΗ'));
+    expect(m.rows[at].map(c => c?.v).filter(Boolean)).toEqual(['Α/Α', 'ΠΥΛΗ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ', 'Α/Α', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄', 'ΠΑΡ/ΣΕΙΣ']);
+    expect(m.rows[at - 1].map(c => c?.v).join('')).toBe('');
+    expect(m.rows[at + 1].some(c => c?.v === '24ΩΡΗ')).toBe(true);
+    for (const r of m.rows.slice(at - 1, at + 3)) expect(r.reduce((a, c) => a + (c ? c.cs : 0), 0)).toBe(13);
   });
 });

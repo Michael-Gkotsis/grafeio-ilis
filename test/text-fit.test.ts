@@ -63,13 +63,13 @@ describe('έντυπα με μεγάλα ονόματα', () => {
     const r = await fillFroura(T('froura.xlsx'), longState('sven'), '2026-10-12');
     const ws = await (await Workbook.open(r.data)).sheet(0); const f = await fontOf(r.data);
     const tpl = await (await Workbook.open(T('froura.xlsx'))).sheet(0);
-    // θαλαμοφύλακες: ίδιο μέγεθος σε όλο το μπλοκ, και όλα χωράνε σε 3 γραμμές των 15
+    // θαλαμοφύλακες: ίδιο μέγεθος σε όλο το μπλοκ, και όλα χωράνε σε 3 γραμμές των 15 (η στήλη φαρδαίνει όσο χρειάζεται)
     const guards = ['C13', 'C16', 'C19', 'C22'];
     expect(new Set(guards.map(c => f(ws.style(c)).sz)).size).toBe(1);
     for (const c of guards) {
       const font = { name: 'Arial', ...f(ws.style(c)) };
       const h = [0, 1, 2].reduce((a, i) => a + ws.rowHeight(Number(c.slice(1)) + i), 0);
-      expect(fitText(ws.get(c)!, { ...font, b: false }, { w: Math.floor(25 * 7) - 6, h, wrap: true }), c).toBeNull();
+      expect(fitText(ws.get(c)!, { ...font, b: false }, { w: Math.floor(ws.colWidth(3) * 7) - 6, h, wrap: true }), c).toBeNull();
     }
     // μαγειρεία: όλα στο ίδιο μέγεθος
     expect(new Set(['F27', 'F28', 'F29', 'F30', 'F31'].map(c => f(ws.style(c)).sz)).size).toBe(1);
@@ -84,7 +84,7 @@ describe('έντυπα με μεγάλα ονόματα', () => {
       const x = f(ws.style(c));
       expect(x.wrap).toBe(true);
       const h = [0, 1, 2].reduce((a, i) => a + ws.rowHeight(Number(c.slice(1)) + i), 0);
-      expect(fitText(ws.get(c)!, { name: 'Arial', sz: x.sz, b: false }, { w: Math.floor(24.57 * 7) - 6, h, wrap: true }), c).toBeNull();
+      expect(fitText(ws.get(c)!, { name: 'Arial', sz: x.sz, b: false }, { w: Math.floor(ws.colWidth(10) * 7) - 6, h, wrap: true }), c).toBeNull();
     }
   });
   it('Έλεγχος υπηρεσιών (ExcelJS): οι στήλες ονομάτων φαρδαίνουν όσο χρειάζεται', async () => {

@@ -38,6 +38,7 @@ const api: Api = {
   srcWrite: kind => ipcRenderer.invoke('src:write', kind),
   srcNewFile: kind => ipcRenderer.invoke('src:new', kind),
   srcStatus: () => ipcRenderer.invoke('src:status'),
+  onBusy: cb => { const h = (_e: unknown, b: any) => cb(b); ipcRenderer.on('excel:busy', h); return () => { ipcRenderer.removeListener('excel:busy', h); }; },
   onSources: cb => { const h = (_e: unknown, st: any) => cb(st); ipcRenderer.on('sources', h); return () => { ipcRenderer.removeListener('sources', h); }; },
   formPick: form => ipcRenderer.invoke('form:pick', form),
   formInfo: form => ipcRenderer.invoke('form:info', form),
@@ -51,6 +52,18 @@ const api: Api = {
   essoStart: o => ipcRenderer.invoke('esso:start', o),
   essoPick: () => ipcRenderer.invoke('esso:pick'),
   essoRestore: dir => ipcRenderer.invoke('esso:restore', dir),
-  essoOpen: dir => ipcRenderer.invoke('esso:open', dir)
+  essoOpen: dir => ipcRenderer.invoke('esso:open', dir),
+  repUpload: kind => ipcRenderer.invoke('rep:upload', kind),
+  repInspect: (file, kind, sheet, head) => ipcRenderer.invoke('rep:inspect', file, kind, sheet, head),
+  repBuild: (o, kind, file) => ipcRenderer.invoke('rep:build', o, kind, file),
+  repPreview: (src, r, ids, date, raw) => ipcRenderer.invoke('rep:preview', src, r, ids, date, !!raw),
+  layoutPreview: q => ipcRenderer.invoke('layout:preview', q),
+  repRun: (r, file, ids, date, print, force, opts) => ipcRenderer.invoke('rep:run', r, file, ids, date, !!print, !!force, opts || {}),
+  repHist: id => ipcRenderer.invoke('rep:hist', id),
+  repTimes: id => ipcRenderer.invoke('rep:times', id),
+  repPickFile: () => ipcRenderer.invoke('rep:pickFile'),
+  repOpenTpl: file => ipcRenderer.invoke('rep:openTpl', file),
+  repFiles: files => ipcRenderer.invoke('rep:files', files),
+  repLast: () => ipcRenderer.invoke('rep:last')
 };
 contextBridge.exposeInMainWorld('api', api);

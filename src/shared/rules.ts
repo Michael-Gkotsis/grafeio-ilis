@@ -1,12 +1,13 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
+import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, hkOfRank, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkOfRank, hkRowClaim, hkRowList, hkRowsOf, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  KIND_NAME, type AppState, type CapKey, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -20,12 +21,12 @@ export function personMap(people: Person[]): Map<number, Person> {
 export const activePeople = (s: AppState) => s.people.filter(p => p.active);
 
 // Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ ή ΣΠΕΝ), χωρίς όσες έχουν αφαιρεθεί
-const postsIdx = new WeakMap<Settings['blocks'], Post[]>();
+const postsIdx = new WeakMap<Settings['blocks'], { start: string; p: Post[] }>();
 export function postsOf(settings: Settings): Post[] {
-  const blocks = blocksOf(settings) || settings.blocks;
-  let p = postsIdx.get(blocks);
-  if (!p) { p = buildPosts(blocks.filter(b => !b.hidden)).filter(x => !x.hidden); postsIdx.set(blocks, p); }
-  return p;
+  const blocks = blocksOf(settings) || settings.blocks; const start = dutyStartOf(settings);
+  let c = postsIdx.get(blocks);
+  if (!c || c.start !== start) { c = { start, p: buildPosts(blocks.filter(b => !b.hidden), start).filter(x => !x.hidden) }; postsIdx.set(blocks, c); }
+  return c.p;
 }
 // Όλες οι θέσεις που έχουν υπάρξει (και των δύο εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
 const allIdx = new WeakMap<Settings, Post[]>();
@@ -33,7 +34,7 @@ export function allPosts(settings: Settings): Post[] {
   let p = allIdx.get(settings);
   if (!p) {
     const seen = new Set<string>(); p = [];
-    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])])]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
+    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])], dutyStartOf(settings))]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
     allIdx.set(settings, p);
   }
   return p;
@@ -100,10 +101,11 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
 }
 // Ώρες επιστροφής (Michael, 18/10): η τελευταία μέρα μιας άδειας (ή νοσοκομείου, ΣΤΕΠ) με ώρα επιστροφής μετρά μόνο ως
 // εκείνη την ώρα. Κάθε έλεγχος έχει τη δική του στιγμή: η έξοδος ξεκινά στις rules.outTime, η ΗΚΑΙ μετρά στις
-// rules.hkTime, οι υπηρεσίες ξεκινούν 14:00 (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
+// rules.hkTime, οι υπηρεσίες στην αρχή του κύκλου, settings.dutyStart (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
 // και κάθε μέρα χωρίς ώρα.
 export const DEFAULT_OUT_TIME = '16:00', DEFAULT_HK_TIME = '08:00';
-export const DUTY_START = 14 * 60;
+// Αρχή του κύκλου των υπηρεσιών σε λεπτά (Ρυθμίσεις › Υπηρεσίες, προεπιλογή 14:00)
+export const dutyMin = (st?: Pick<Settings, 'dutyStart'> | null) => mins(dutyStartOf(st));
 const timeOr = (t: string | undefined, def: string) => (t && /^\d\d:\d\d$/.test(t) ? t : def);
 export const outMin = (r?: Pick<Rules, 'outTime'> | null) => mins(timeOr(r?.outTime, DEFAULT_OUT_TIME));
 export const hkMin = (r?: Pick<Rules, 'hkTime'> | null) => mins(timeOr(r?.hkTime, DEFAULT_HK_TIME));
@@ -112,6 +114,12 @@ export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: 
   const ss = statusesOn(statuses, pid, date);
   return ss.some(x => backBy(x, date, m)) ? ss.filter(x => !backBy(x, date, m)) : ss;
 }
+// Τώρα (Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό»): όποιος γύρισε σήμερα ως την ώρα
+// που είναι τώρα (now, λεπτά) δεν λείπει πια στο Δυναμολόγιο, στις Άδειες και στο «Σήμερα». Άλλες μέρες: ολόκληρη η μέρα.
+export const statusesNow = (statuses: Status[], pid: number, date: ISODate, today: ISODate, now: number) =>
+  (date === today ? statusesFrom(statuses, pid, date, now) : statusesOn(statuses, pid, date));
+// Άδεια που δεν έχει τελειώσει ακόμα τώρα (σήμερα, now λεπτά)
+export const awayNow = (s: Status, today: ISODate, now: number) => s.to > today || (s.to === today && !backBy(s, today, now));
 const untilTxt = (s: Status, date: ISODate) => (s.open ? ' (χωρίς λήξη)' : s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
@@ -203,7 +211,7 @@ export function capCell(s: AppState, p: Person, col: CapCol): CapCell {
   if (def) return v === null ? { on: true, src: 'force', why: def } : { on: false, src: 'auto', why: def };
   return { on: true, src: 'auto', why: '' };
 }
-// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος 14:00 → 14:00)
+// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος π.χ. 14:00 → 14:00)
 export function offDayBlock(s: AppState, date: ISODate, pid: number): string | null {
   const w = personMap(s.people).get(pid)?.offDays;
   if (!w || !w.length) return null;
@@ -228,7 +236,7 @@ export const capLabel = (k: DutyKind) => CAP_KINDS.find(x => x[0] === k)?.[1] ||
 
 // Κ-01, Κ-02, Κ-05: γιατί κάποιος ΔΕΝ μπαίνει σε μια θέση (null = μπαίνει). Χωρίς θέση: ελέγχει σαν ένοπλη.
 // lists: ό,τι άλλαξες στον πίνακα καταστάσεων (stat.ts)· χωρίς αυτό ισχύουν οι κανόνες του λοχία όπως πριν
-type DutyPost = { armed: boolean; kind?: DutyKind; block?: string; slots?: string[] | null; hrs?: string };
+type DutyPost = { armed: boolean; kind?: DutyKind; block?: string; slots?: string[] | null; hrs?: string; cyc?: number };
 export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null, lists?: UserLists): string | null {
   for (const s of statusesOn(statuses, pid, date)) {
     if (backBefore(s, date, post)) continue;
@@ -242,7 +250,7 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
   return leavesBefore(statuses, date, pid, post);
 }
 // --------------------------- ώρες στις άδειες (Michael, 13/10) ---------------------------
-// Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
+// Η μέρα της υπηρεσίας είναι από την αρχή του κύκλου (settings.dutyStart, π.χ. 14:00) ως την ίδια ώρα την επόμενη. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
 // της υπηρεσίας: από τις βάρδιες (14:00-16:00, 22:00-00:00, 06:00-08:00 → 14:00 ως 08:00 της επόμενης) ή από τις ώρες
 // της θέσης («14:00 → 14:00»). null = δεν ξέρουμε (μαγειρεία «ημέρα», ΤΑΕ χωρίς ώρες).
 const spanIdx = new WeakMap<object, { start: number | null; end: number | null }>();
@@ -253,7 +261,8 @@ export function postSpan(post: DutyPost): { start: number | null; end: number | 
   const times = (txt: string) => [...txt.matchAll(re)].map(m => +m[1] * 60 + +m[2]);
   r = { start: null, end: null };
   if (post.slots && post.slots.length) {
-    let day = 0, prev = -1;
+    // βάρδια που ξεκινά πριν την αρχή του κύκλου είναι της επόμενης μέρας (π.χ. κύκλος 14:00, βάρδιες από 06:00)
+    let day = post.cyc != null && (times(post.slots[0])[0] ?? 1440) < post.cyc ? 1440 : 0, prev = -1;
     for (const sl of post.slots) {
       const [a, b] = times(sl); if (a == null) continue;
       if (a < prev) day += 1440;
@@ -276,13 +285,13 @@ function backBefore(s: Status, date: ISODate, post?: DutyPost | null): boolean {
   return st != null && mins(s.toTime) <= st;
 }
 // Φεύγει για άδεια την επόμενη μέρα πριν τελειώσει η υπηρεσία που ξεκινά σήμερα (π.χ. αναχώρηση 10:00, η υπηρεσία
-// τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει 14:00 της επόμενης· η μαγειρεία είναι της ημέρας.
+// τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει στην αρχή του κύκλου της επόμενης· η μαγειρεία είναι της ημέρας.
 function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
   if (!post) return null;
   const next = addDays(date, 1);
   const s = statusesOf(statuses, pid).find(x => x.from === next && x.fromTime && !x.pending && hasTimes(x.type));
   if (!s) return null;
-  const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + 14 * 60);
+  const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + (post.cyc ?? 14 * 60));
   if (end == null || 1440 + mins(s.fromTime!) >= end) return null;
   return 'Φεύγει ' + TYPES[s.type].label + ' ' + dm(next) + ' στις ' + s.fromTime;
 }
@@ -443,7 +452,8 @@ export const dutyMonths = (s: AppState): string[] => [...new Set([...Object.keys
 //    (χωρίς αυτούς κάποια ένοπλη θα έμενε κενή). Όταν οι ένοπλοι περισσεύουν, ισχύει για όλους η σειρά δικαιοσύνης,
 //    και ο ΕΑ/ΕΟ δεν μπαίνει πρώτος σε κάθε άοπλη θέση (ΣΒΕΝ, σχέδιο 11/10).
 // 3. Αργία/ΣΚ: λιγότερες αργίες → παλιότερη τελευταία αργία. Καθημερινή: παλιότερη τελευταία υπηρεσία → λιγότερες υπηρεσίες.
-// 4. Λιγότερες φορές στο ίδιο είδος θέσης.
+// 4. Εναλλαγή υπηρεσιών (rotate): από όσους είναι η σειρά τους σήμερα, όποιος χρωστά αυτή την υπηρεσία. Μετά: λιγότερες
+//    φορές στο ίδιο είδος θέσης.
 // 5. Ισοπαλία: κλήρωση με σταθερό σπόρο την ημερομηνία (ίδια μέρα → ίδια πρόταση, όχι αλφαβητικά).
 export function seedRank(date: ISODate, pid: number): number {
   let h = 2166136261;
@@ -451,20 +461,28 @@ export function seedRank(date: ISODate, pid: number): number {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-export interface Fair { total: number; hol: number; byKind: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+export interface Fair { total: number; hol: number; byKind: Record<string, number>; byType: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+// Τύπος υπηρεσίας για την εναλλαγή: το είδος (θαλαμοφύλακας α΄ και β΄ πίνακα μαζί, σκοπιά, μαγειρεία…), κάθε δική σου
+// υπηρεσία χωριστά («b:» + id, όπως στο «Ποιος κάνει τι»). Υπηρεσία χωρίς θέση (από Excel): το είδος της.
+const typeIdx = new WeakMap<Settings, Map<string, string>>();
+export function dutyType(s: AppState, k: string, kind: DutyKind): string {
+  let m = typeIdx.get(s.settings);
+  if (!m) { const own = new Set(allBlocks(s.settings).filter(b => b.custom).map(b => b.id)); m = new Map(allPosts(s.settings).map(p => [p.k, own.has(p.block) ? 'b:' + p.block : p.kind])); typeIdx.set(s.settings, m); }
+  return (k && m.get(k)) || kind;
+}
 // Στοιχεία δικαιοσύνης ενός ατόμου για μια ημέρα: μετρά όλες τις υπηρεσίες εκτός από την ίδια την ημέρα
 export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   const st = statOf(s, pid);
-  const f: Fair = { total: 0, hol: 0, byKind: {}, lastBefore: '', lastHolBefore: '' };
+  const f: Fair = { total: 0, hol: 0, byKind: {}, byType: {}, lastBefore: '', lastHolBefore: '' };
   for (const e of st.log) {
     if (e.d === date) continue;
-    const kind = e.kind;
-    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1;
+    const kind = e.kind; const ty = dutyType(s, e.k, kind);
+    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1;
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
   }
   const b = s.baseline?.[pid];
-  if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) f.byKind[k] = (f.byKind[k] || 0) + n; f.total += baseTotal(b); f.hol += b.hol || 0; }
+  if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) { f.byKind[k] = (f.byKind[k] || 0) + n; f.byType[k] = (f.byType[k] || 0) + n; } f.total += baseTotal(b); f.hol += b.hol || 0; }
   return f;
 }
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
@@ -577,7 +595,7 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
 // Άοπλος για μια μέρα: ΕΑ/ΕΟ/ΣΤΕΠ (όχι ένοπλη θέση), Σ.Ι. χωρίς οπλοφύλακα και σκοπιά (Ι3 ΑΟΠΛΟ, Ι4, ή ό,τι όρισες στον πίνακα Σ.Ι.), ή «δεν κάνει» με το χέρι σε όλα τα ένοπλα είδη
 export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   const blocks = (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly');
-  if (statusesFrom(s.statuses, pid, date, DUTY_START).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
+  if (statusesFrom(s.statuses, pid, date, dutyMin(s.settings)).some(x => statIsUnarmed(x, blocks, s.settings.lists))) return true;
   const p = personMap(s.people).get(pid); if (!p) return false;
   if (siIsUnarmed(p, blocks, s.settings.lists)) return true;
   const armed = postsOf(s.settings).filter(x => x.armed && x.kind !== 'ly');
@@ -617,10 +635,77 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   const due = h ? null : weekendDue(s, date, people, fair, fixed, idx);
   const owes = (p: Person) => (due?.has(p.id) ? 1 : 0);
   const cmp = fairCompare(h, x.kind, date);
+  // ποιοι περνούν τους κανόνες της θέσης: μία φορά ανά μέρα (memo), μετά μόνο όσοι δεν μπήκαν ήδη σήμερα
+  memo = memo || new Map(); const busy = new Set(Object.values(s.guards[date] || {}));
+  const ok = new Set(allowedOn(s, date, x, people, fixed, idx, memo));
   // τα κλειδιά υπολογίζονται μία φορά ανά άτομο, όχι σε κάθε σύγκριση της ταξινόμησης (ίδια σειρά με πριν)
-  return people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, x.k, idx))
+  const list = people.filter(p => ok.has(p.id) && !busy.has(p.id))
     .map(p => ({ p, key: last(p) * 100 + reserve(p) * 10 + owes(p), f: fair.get(p.id)! }))
-    .sort((a, b) => a.key - b.key || cmp(a.f, b.f)).map(c => c.p);
+    .sort((a, b) => a.key - b.key || cmp(a.f, b.f));
+  return rotate(s, date, x, list, people, fair, idx, fixed, due, memo).map(c => c.p);
+}
+// --------------------------- Εναλλαγή υπηρεσιών (Michael, 18/10) ---------------------------
+// «να μην κάνει κάποιος τον ίδιο τύπο υπηρεσίας εάν υπάρχει κάποιος διαθέσιμος άλλος που δεν έχει κάνει, ώστε να
+// περνάνε όλοι οι διαθέσιμοι από όλες τις υπηρεσίες και μετά να ξανακάνουν την ίδια όταν έρθει η ώρα τους».
+// Ποιοι μπαίνουν σήμερα το κρίνει η σειρά δικαιοσύνης όπως πριν (αργίες, ΣΚ που χρωστάνε, μέρες χωρίς υπηρεσία, σύνολο):
+// «η σειρά τους» = οι πρώτοι στη σειρά ανάμεσα σε όσους μπορούν να μπουν κάπου σήμερα, όσες οι κενές θέσεις της μέρας.
+// Από αυτούς, τη θέση την παίρνει όποιος έχει κάνει τις λιγότερες φορές αυτόν τον τύπο υπηρεσίας. Μετρά μόνο ανάμεσα σε
+// όσους μπαίνουν στη θέση (Ποιος κάνει τι, Σ.Ι., καταστάσεις, κανόνες): όποιος δεν την κάνει δεν τη «χρωστά». Πρώτοι
+// μένουν όσοι είναι η σειρά τους και δεν χωρούν σε καμία άλλη κενή θέση, για να μη μείνουν σήμερα χωρίς υπηρεσία.
+// Οι προτεραιότητες της λίστας (τελευταία λύση, κράτηση ενόπλων, ΣΚ που χρωστάνε) δεν αλλάζουν.
+type Cand = { p: Person; key: number; f: Fair & { pid: number } };
+function allowedOn(s: AppState, date: ISODate, y: Post, people: Person[], fixed: Set<number>, idx: Map<number, Set<ISODate>>, memo: Map<string, number[]>): number[] {
+  let l = memo.get(y.k);
+  if (!l) { l = people.filter(p => !fixed.has(p.id) && !guardUnavailable(s, date, p.id, y.k, idx)).map(p => p.id); memo.set(y.k, l); }
+  return l;
+}
+// Όλοι με τη σειρά δικαιοσύνης χωρίς το είδος της θέσης (όσοι χρωστάνε ΣΚ τελευταίοι): μία φορά ανά συμπλήρωση
+const turnCache = new WeakMap<object, number[]>();
+function turnOrder(s: AppState, date: ISODate, fair: Map<number, Fair & { pid: number }>, due: Set<number> | null): number[] {
+  let o = turnCache.get(fair);
+  if (!o) {
+    const cmp = fairCompare(isHol(s.settings, date), '', date); const owes = (pid: number) => (due?.has(pid) ? 1 : 0);
+    o = [...fair.values()].sort((a, b) => owes(a.pid) - owes(b.pid) || cmp(a, b)).map(f => f.pid); turnCache.set(fair, o);
+  }
+  return o;
+}
+function rotate(s: AppState, date: ISODate, x: Post, list: Cand[], people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, due: Set<number> | null, memo = new Map<string, number[]>()): Cand[] {
+  if (s.rules.rotate === false || x.kind === 'ly' || list.length < 2) return list;
+  const g = s.guards[date] || {}; const busy = new Set(Object.values(g));
+  const open = postsOf(s.settings).filter(y => !g[y.k] && y.k !== x.k);
+  // Λ/Υ-Δ/Υ: ορίζονται με το χέρι και δεν μετρούν στην εναλλαγή (μετρούν μόνο ως κενές θέσεις της μέρας)
+  const ty = dutyType(s, x.k, x.kind);
+  const byTy = new Map<string, Set<number>>();   // οι άλλοι τύποι υπηρεσίας με κενή θέση σήμερα → ποιοι μπαίνουν
+  for (const y of open) {
+    if (y.kind === 'ly') continue;
+    const t = dutyType(s, y.k, y.kind); let o = byTy.get(t); if (!o) byTy.set(t, (o = new Set()));
+    for (const pid of allowedOn(s, date, y, people, fixed, idx, memo)) if (!busy.has(pid)) o.add(pid);
+  }
+  // όσοι μπαίνουν κάπου σήμερα, με τη σειρά δικαιοσύνης (χωρίς το είδος της θέσης)· οι πρώτοι, όσες οι κενές θέσεις
+  const inList = new Set(list.map(c => c.p.id)); const turn = new Set<number>();
+  for (const pid of turnOrder(s, date, fair, due)) {
+    if (turn.size > open.length) break;
+    if (inList.has(pid) || [...byTy.values()].some(o => o.has(pid))) turn.add(pid);
+  }
+  const top = list[0].key;
+  const win = list.filter(c => c.key === top && turn.has(c.p.id));
+  if (win.length < 2) return list;
+  // Πόσο «χρωστά» κάθε τύπο: φορές / μέσος όρος όσων τον κάνουν (οι υπηρεσίες με πολλές θέσεις γίνονται πιο συχνά). Στη
+  // θέση πάει πρώτα όποιος χρωστά αυτόν τον τύπο περισσότερο από κάθε άλλο που μπορεί να κάνει σήμερα (αλλιώς όποιος έχει
+  // λίγες φορές και από τα δύο θα έπαιρνε πάντα την υπηρεσία που γεμίζει πρώτη), μετά οι λιγότερες φορές σε αυτόν.
+  const mean = (t: string, ids: Iterable<number>) => { let n = 0, sum = 0; for (const pid of ids) { const f = fair.get(pid); if (f) { n++; sum += f.byType[t] || 0; } } return n ? sum / n : 0; };
+  const rel = (f: Fair, t: string, m: number) => ((f.byType[t] || 0) + 1) / (m + 1);
+  const mT = mean(ty, list.map(c => c.p.id)); const mU = new Map([...byTy].map(([t, o]) => [t, mean(t, o)]));
+  const pos = new Map(list.map((c, i) => [c, i]));
+  const v = new Map(win.map(c => {
+    const pid = c.p.id; const r = rel(c.f, ty, mT); let best = Infinity, only = 0;
+    for (const [t, o] of byTy) if (t !== ty && o.has(pid)) best = Math.min(best, rel(c.f, t, mU.get(t)!));
+    for (const o of byTy.values()) if (o.has(pid)) only = 1;
+    return [c, [only, Math.max(0, r - best), c.f.byType[ty] || 0, pos.get(c)!]];
+  }));
+  win.sort((a, b) => { const A = v.get(a)!, B = v.get(b)!; return A[0] - B[0] || A[1] - B[1] || A[2] - B[2] || A[3] - B[3]; });
+  const inWin = new Set(win);
+  return [...win, ...list.filter(c => !inWin.has(c))];
 }
 // Όσοι «χρωστάνε» το επόμενο ΣΚ/αργία (Michael, 17/10: «να κρατάει όσους δεν έχουν κάνει ΣΚ για το επόμενο και να μην
 // τους βάζει Πέμπτη-Παρασκευή, ώστε να τηρείται η ανάπαυση»): τις μέρες πριν από ΣΚ/αργία (ως 2 μέρες, ή όσες η ανάπαυση
@@ -722,6 +807,8 @@ function reservedFor(s: AppState, date: ISODate, post: Post, pid: number): boole
   const free = activePeople(s).filter(p => !busy.has(p.id) && !fixed.has(p.id) && !seatlessOn(s, date, p.id));
   return all.some(y => { const q = g[y.k]; return q != null && !fixed.has(q) && cmp({ ...fairOf(s, q, date), pid: q }, me) < 0 && can(q, post) && !free.some(f => can(f.id, y)); });
 }
+const TYPE_NAME: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακας', op: 'οπλοφύλακας', sk: 'σκοπιά', mg: 'μαγειρεία', tae: 'ΤΑΕ', other: 'άλλη υπηρεσία' };
+const typeName = (s: AppState, post: Post) => { const t = dutyType(s, post.k, post.kind); return t.startsWith('b:') ? allBlocks(s.settings).find(b => 'b:' + b.id === t)?.name || post.label : TYPE_NAME[post.kind] || post.kind; };
 export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number }): string {
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
@@ -736,6 +823,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(f.lastBefore ?  (daysBetween(f.lastBefore, date) - 2) + ' μέρες χωρίς υπηρεσία' : 'καμία υπηρεσία ως τώρα');
     parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
+  if (s.rules.rotate !== false && post.kind !== 'ly') { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }
   if (post.armed) parts.push('ένοπλος');
   else if (!s.rules.strictUnarmed && reservedFor(s, date, post, pid)) parts.push('προτιμήθηκε γιατί δεν κάνει ένοπλη και οι ένοπλες θέσεις δεν έφταναν');
   if (s.rules.strictUnarmed && strictTier(post) <= 3 && isUnarmed(s, date, pid)) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + TIER_TXT[strictTier(post)]);
@@ -745,7 +833,12 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
 // unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
 // force: ο χρήστης είδε ότι κάποιος δεν βγαίνει έξοδο (ποινή, υπηρεσία…) και το δήλωσε παρ' όλα αυτά (Michael, 17/10)
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean }
+// «Χωρίς λήξη» στη δήλωση (Michael, 19/10: «στα ΣΤΕΠ και καταστάσεις»): ιατρικά, ΣΤΕΠ και νοσοκομείο, όχι άδειες, ποινές,
+// εξοδούχοι. Ισχύει μέχρι «Σταμάτησε» (endStatus)· στο Excel το «έως» μένει κενό, όπως στις εγγραφές X4 από το Excel.
+export const canOpen = (type: TypeKey) => TYPES[type].cat === 'med' || TYPES[type].cat === 'other';
+const OPEN_END: ISODate = '9999-12-31';   // για τον σχεδιασμό: όλες οι μέρες από το «από» και μετά
+export const planTo = <T extends Pick<StatusCmd, 'type' | 'to' | 'toTime' | 'open'>>(cmd: T): T => (cmd.open && canOpen(cmd.type) ? { ...cmd, to: OPEN_END, toTime: undefined } : cmd);
 export interface PlanFile { fn: string; desc: string; warn?: boolean }
 export interface StatusPlan {
   files: PlanFile[];
@@ -781,8 +874,8 @@ function conflictFiles(s: AppState, conflicts: StatusPlan['conflicts']): PlanFil
 }
 const rangeTxt = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 // today: οι υπηρεσίες πριν από σήμερα δεν σβήνονται (έγιναν), μόνο αναφέρονται
-export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): StatusPlan {
-  const t = TYPES[cmd.type];
+export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate): StatusPlan {
+  const cmd = planTo(cmd0); const t = TYPES[cmd.type];
   const n = cmd.pids.length;
   const pm = personMap(s.people);
   const files: PlanFile[] = [];
@@ -824,10 +917,10 @@ export function planStatusChange(s: AppState, cmd: StatusCmd, today?: ISODate): 
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && meets(x)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
-  if (cmd.type === 'PUN') files.push({ fn: 'ΗΚΑΙ', desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
+  if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
-  else if (t.cat === 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
-  if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: 'ΗΚΑΙ', desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
+  else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
+  if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   files.push(...conflictFiles(s, conflicts));
@@ -871,11 +964,11 @@ export function planStatusChanges(s: AppState, cmds: StatusCmd[], today?: ISODat
 // (Michael, 13/10)· η στήλη Ο/Σ γράφεται με το χέρι.
 export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
 export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
-export const HK_OFFICERS = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'Ανθυπασπιστές', 'ΔΕΑ'];
-export const HK_NCO = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες', 'Δεκανείς', 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης', 'Στρατιώτες'];
+export { HK_OFFICERS, HK_NCO } from './ranks';
 // Βαθμός προσώπου → γραμμή της ΗΚΑΙ: πρώτα ό,τι όρισες στις Λίστες για δικό σου βαθμό, αλλιώς από το όνομα
 export function hkRankOf(rank: string, lists?: UserLists): string {
-  const own = hkOfRank(lists, 'soldierRanks', rank); if (own && HK_NCO.includes(own)) return own;
+  const claim = hkRowClaim(lists, rank, 'nco'); if (claim) return claim;
+  const own = hkOfRank(lists, 'soldierRanks', rank); if (own && hkRowsOf(lists).nco.includes(own)) return own;
   const r = rank.toUpperCase().replace(/\./g, '');
   if (/ΑΡΧΙΛΧ|ΑΡΧΙΛΟΧ/.test(r)) return 'Αρχιλοχίες';
   if (/ΕΠΙΛΧ|ΕΠΙΛΟΧ/.test(r)) return 'Επιλοχίες';
@@ -890,7 +983,8 @@ export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISO
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
-export interface Hkai { cols: Record<string, Person[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
+// cadre: τα στελέχη ανά στήλη (καρτέλα Στελέχη), για να φαίνονται με ονόματα όπως οι στρατιώτες
+export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
   const onDuty = new Map<number, DutyKind>();
@@ -900,14 +994,15 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const rank: Record<string, HkaiRow> = {};
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
   const cl = (s.cadreList || []).filter(c => c.active);
-  [...HK_OFFICERS, ...HK_NCO].forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
+  const lists = s.settings.lists;
+  hkRowList(lists).forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
   // κατάσταση στελέχους = στήλη της ΗΚΑΙ: στους κωλυόμενους (υπηρεσία, ΕΥ…) ή στους απόντες (άδειες…)
-  let cadreKol = 0, cadreAway = 0;
+  let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   for (const c of cl) {
-    const r = rank[c.hk] ? c.hk : 'Λοχίες'; rank[r].n++;
+    const hk = rank[c.hk] ? c.hk : guessHk(c.rank, lists); const r = rank[hk] ? hk : 'Λοχίες'; rank[r].n++;
     const a = cadreAbsOn(s, c.id, date);
     const col = a && cadreAbsOf(a.kind, s.settings.lists)?.[2];
-    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
+    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
   }
   let soldiers = 0; const at = hkMin(s.rules);
   for (const p of activePeople(s)) {
@@ -931,6 +1026,6 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
       if (HK_K.some(x => x[0] === k)) kol += v; else if (HK_A.some(x => x[0] === k)) apo += v;
     }
   }
-  const cadre = cl.length || Object.values(s.settings.cadre).reduce((a, b) => a + (b || 0), 0);
-  return { cols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
+  const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
+  return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
 }

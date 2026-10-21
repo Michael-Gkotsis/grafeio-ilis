@@ -1,15 +1,17 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
+import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, itemKey, itemName, listRows, statusLbl, weaponBack, type ListId } from './ranks';
+import { capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { cadreAbsOf, guessHk, hkRowClaim, hkRowList, itemKey, itemName, listRows, statusLbl, weaponBack, type HkRowDef, type ListId } from './ranks';
+import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
-import { normRack, normWeapon } from './weapons';
+import { normPos, normRack, normWeapon } from './weapons';
 import { isSat, isWk, WK } from './weekend';
 
 export type Command =
@@ -21,6 +23,7 @@ export type Command =
   | { t: 'endStatus'; id: string }
   | { t: 'saveCadre'; cadre: Omit<Cadre, 'id' | 'active'> & { id?: string; active?: boolean } }
   | { t: 'deleteCadre'; id: string }
+  | { t: 'orderCadre'; ids: string[] }   // η σειρά των στελεχών, όλα τα id με τη νέα σειρά
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> & { id?: string }; replace?: boolean }   // id: αλλαγή · replace: κόβει όσες πέφτουν στις ίδιες μέρες
   | { t: 'deleteCadreAbs'; id: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
@@ -31,6 +34,9 @@ export type Command =
   // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
+  // Άδεια (κανονική, τιμητική, αναρρωτική): ακύρωση = φεύγει όλη (δεν έφυγε ή μπήκε λάθος)· διακοπή = γύρισε νωρίτερα, στη μέρα και ώρα που λες
+  | { t: 'cancelLeave'; id: string }
+  | { t: 'endLeave'; id: string; date: ISODate; time: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string }
   | { t: 'autofill'; date: ISODate }
@@ -43,17 +49,20 @@ export type Command =
   // off: είδη που δεν κάνει (από τον λοχία)· on: είδη που ξανακάνει (φεύγει η εξαίρεση του λοχία)· reset: χωρίς καμία εξαίρεση του λοχία
   | { t: 'setDutyProfile'; pid: number; off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean; text: string }
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
+  // γραμμές της ΗΚΑΙ που πρόσθεσες: τα στελέχη με βαθμό που μαζεύει μια γραμμή πηγαίνουν σε αυτήν (και φεύγουν όταν σβηστεί)
+  | { t: 'setHkRows'; rows: HkRowDef[]; names?: Record<string, string>; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
   | { t: 'addPerson'; person: NewPerson }
+  | { t: 'addPeople'; people: NewPerson[] }
   | { t: 'setBaseline'; pid: number; baseline: Baseline }
   | { t: 'setBaselines'; baselines: Record<number, Baseline> }
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string }
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string> }
+  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
@@ -76,7 +85,7 @@ export type Command =
   | { t: 'deleteWeaponMove'; id: string };
 
 // Οπλισμός: μόνο τα πεδία που δόθηκαν αλλάζουν (αριθμός, τύπος, θέση οπλοβαστού)· κενό = σβήνεται
-export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string }
+export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
 
 // Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
 export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> { active?: boolean; post?: string | null; attached?: boolean; notes?: string }
@@ -114,6 +123,7 @@ const wReason = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUp
 function wTime(v: unknown, what: string): string {
   const t = normTime(v); if (!t) throw new Error('Γράψε την ώρα ' + what + ', π.χ. 08:15'); return t;
 }
+const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά');
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
 // Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
@@ -140,13 +150,39 @@ function rememberChoices(st: Settings, p: Person, old?: Person): Settings {
   return lists === st.lists ? st : { ...st, lists };
 }
 
+// Νέος στρατιώτης όπως τον γράφει η εισαγωγή του Δυναμολογίου (roster.ts), ώστε να ταιριάζει μετά
+export function shapePerson(x: NewPerson, id: number): Person {
+  const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
+  const p: Person = {
+    ...x, id, active: true, added: true,
+    rank: normGreek(t(x.rank)), spec: normGreek(t(x.spec)), last: norm(t(x.last)), first: norm(t(x.first)), father: norm(t(x.father)),
+    asm: t(x.asm).replace(/\s/g, ''), phone: t(x.phone).replace(/\s/g, ''), si: normGreek(t(x.si)), essos: t(x.essos),
+    room: x.room != null && x.room > 0 ? Math.floor(x.room) : null, post: t(x.post) ? norm(t(x.post)) : null, role: t(x.role) ? norm(t(x.role)) : null,
+    attached: !!x.attached, notes: t(x.notes)
+  };
+  if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
+  if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
+  if (!p.dn) delete p.dn;
+  if (!p.offDays?.length) delete p.offDays;
+  return p;
+}
+// διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
+export const twinText = (twin: Person, asm: string) => 'Υπάρχει ήδη ' + (twin.asm && twin.asm === asm ? 'άτομο με ΑΣΜ ' + asm + ': ' : 'ο ') + twin.rank + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)');
+function makePerson(s: AppState, x: NewPerson): Person {
+  const p = shapePerson(x, s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1);
+  if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
+  const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
+  if (twin) throw new Error(twinText(twin, p.asm));
+  return p;
+}
+
 // Εγγραφές και διαγραφές της ΗΚΑΙ (Michael, 17/10): όποιος βγαίνει εκτός δύναμης παίρνει τη σημερινή μέρα στο outOn
 // (φεύγει αν ξαναμπεί σε δύναμη)· ο «Νέος στρατιώτης» και οι νέες γραμμές του Δυναμολογίου στο inOn. Η πρώτη εισαγωγή
 // (χωρίς κανέναν σε δύναμη πριν) δεν είναι εγγραφές.
 function stampMoves(prev: AppState, next: AppState, c: Command, today: ISODate): AppState {
   if (prev.people === next.people) return next;
   const before = new Map(prev.people.map(p => [p.id, p]));
-  const joins = (c.t === 'addPerson' || c.t === 'importPeople') && prev.people.some(p => p.active);
+  const joins = (c.t === 'addPerson' || c.t === 'addPeople' || c.t === 'importPeople') && prev.people.some(p => p.active);
   let out: Person[] | null = null;
   next.people.forEach((p, i) => {
     const b = before.get(p.id); let q: Person | null = null;
@@ -168,17 +204,22 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'declare': {
       const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
-      if (cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
-      const tm = checkTimes(cmd);
+      if (cmd.open && !canOpen(cmd.type)) throw new Error('«Χωρίς λήξη» δηλώνονται μόνο ιατρικά, ΣΤΕΠ και νοσοκομείο');
+      // χωρίς λήξη: το «έως» είναι σήμερα (ή το «από») και προχωρά μόνο του κάθε μέρα (extendOpen)
+      const open = !!cmd.open; const to = open ? (cmd.from > ctx.today ? cmd.from : ctx.today) : cmd.to;
+      if (!open && cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const tm = checkTimes({ ...cmd, open });
       if (plan.blocked.length && !cmd.force) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
-      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && x.to === cmd.to && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
-      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + range(cmd.from, cmd.to));
+      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && (open ? !!x.open : !x.open && x.to === cmd.to) && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
+      const when = open ? 'από ' + dm(cmd.from) + ' χωρίς λήξη' : range(cmd.from, cmd.to);
+      if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + when);
       const drop = new Set(plan.cancels.map(x => x.id));
       let next: AppState = {
         ...s,
-        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, cmd), ctx.newId)), ...cmd.pids.map(pid => {
-          const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to: cmd.to };
+        statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, planTo(cmd)), ctx.newId)), ...cmd.pids.map(pid => {
+          const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to };
+          if (open) st.open = true;
           if (cmd.note) st.note = cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
           Object.assign(st, tm);
@@ -189,14 +230,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       };
       plan.conflicts.forEach(x => { next = setGuard(next, x.date, x.k, null); });
       const verb = cmd.type === 'PUN' ? 'Ποινή (' + punLbl(cmd.kind || PUN_KINDS[0]) + ')' : 'Δηλώθηκε ' + statusLbl(cmd, s.settings.lists);
-      return { state: next, text: verb + ' ' + range(cmd.from, cmd.to) + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
+      return { state: next, text: verb + ' ' + when + ': ' + who(s, cmd.pids), files: plan.files.map(f => f.fn) };
     }
     case 'declareMany': {
       if (!c.cmds.length) throw new Error('Δεν διάλεξες κατάσταση');
       let next = s; const files: string[] = [], texts: string[] = [];
       for (const cmd of c.cmds) { const r = run(next, { t: 'declare', cmd }, ctx); next = r.state; files.push(...r.files); texts.push(r.text); }
       const c0 = c.cmds[0];
-      const text = c.cmds.length === 1 ? texts[0] : 'Δηλώθηκαν ' + c.cmds.map(x => statusLbl(x, s.settings.lists)).join(' + ') + ' ' + range(c0.from, c0.to) + ': ' + who(s, c0.pids);
+      const text = c.cmds.length === 1 ? texts[0] : 'Δηλώθηκαν ' + c.cmds.map(x => statusLbl(x, s.settings.lists)).join(' + ') + ' ' + (c0.open ? 'από ' + dm(c0.from) + ' χωρίς λήξη' : range(c0.from, c0.to)) + ': ' + who(s, c0.pids);
       return { state: next, text, files: [...new Set(files)] };
     }
     case 'outs': {
@@ -233,20 +274,28 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
       }
       const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
-      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', 'ΗΚΑΙ'] };
+      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
     }
     case 'saveCadre': {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
       if (!last) throw new Error('Γράψε επώνυμο');
       const old = c0.id ? s.cadreList.find(x => x.id === c0.id) : undefined;
       const x: Cadre = { id: old?.id || 's' + ctx.newId(), rank: (c0.rank || '').trim().toUpperCase(), hk: c0.hk, last, first, active: c0.active ?? old?.active ?? true };
+      if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
-      const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : [...s.cadreList, x];
-      return { state: { ...s, cadreList }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first, files: ['ΗΚΑΙ'] };
+      if (old?.pos != null) x.pos = old.pos;
+      // σε χειροκίνητη σειρά το νέο μπαίνει κάτω από τους ίδιους ή ανώτερους βαθμούς (μετά το μετακινεί όπου θέλει)
+      const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : isManualOrder(s.cadreList) ? insertCadre(s.cadreList, x) : [...s.cadreList, x];
+      return { state: { ...s, cadreList }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first, files: [HK()] };
+    }
+    case 'orderCadre': {
+      const ids = new Set(c.ids); const by = new Map(s.cadreList.map(x => [x.id, x]));
+      if (ids.size !== c.ids.length || c.ids.length !== s.cadreList.length || c.ids.some(id => !by.has(id))) throw new Error('Άλλαξε η λίστα των στελεχών, δοκίμασε ξανά');
+      return { state: { ...s, cadreList: c.ids.map((id, pos) => ({ ...by.get(id)!, pos })) }, text: 'Άλλαξε η σειρά των στελεχών', files: [] };
     }
     case 'deleteCadre': {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
-      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + x.rank + ' ' + x.last, files: ['ΗΚΑΙ'] };
+      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + x.rank + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
       const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
@@ -266,12 +315,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const base = s.cadreAbs.filter(a => !clash.includes(a));
       const cadreAbs = old ? [...base.map(a => (a === old ? abs : a)), ...cut] : [...base, ...cut, abs];
       const lbl = cadreAbsOf(abs.kind, s.settings.lists)?.[1] || abs.kind;
-      return { state: { ...s, cadreAbs }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to) + (old ? ' (αλλαγή)' : '') + (clash.length ? ', στη θέση ' + (clash.length === 1 ? 'άλλης' : clash.length + ' άλλων') : ''), files: ['ΗΚΑΙ'] };
+      return { state: { ...s, cadreAbs }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to) + (old ? ' (αλλαγή)' : '') + (clash.length ? ', στη θέση ' + (clash.length === 1 ? 'άλλης' : clash.length + ' άλλων') : ''), files: [HK()] };
     }
     case 'deleteCadreAbs': {
       const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η κατάσταση');
       const x = s.cadreList.find(y => y.id === a.cid);
-      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: ['ΗΚΑΙ'] };
+      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: [HK()] };
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
@@ -290,14 +339,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!old && s.requests.some(same)) throw new Error(shortName(p) + ' έχει ήδη αυτή την αίτηση στις ' + dm(req.date));
       const requests = old ? s.requests.map(x => (x === old ? req : x)) : [...s.requests, req];
       const what = req.leave ? 'άδεια ' + range(req.leave.from, req.leave.to) + (text ? ', ' + text : '') : text;
-      return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + what + ' (' + dm(req.date) + ')', files: ['ΗΚΑΙ'] };
+      return { state: { ...s, requests }, text: (old ? 'Άλλαξε αίτηση: ' : 'Αίτηση: ') + shortName(p) + ' – ' + what + ' (' + dm(req.date) + ')', files: [HK()] };
     }
     case 'deleteRequest': {
       const r = s.requests.find(x => x.id === c.id); if (!r) throw new Error('Δεν βρέθηκε η αίτηση');
       const p = pm.get(r.pid);
       // εγκεκριμένη αίτηση άδειας: φεύγει μαζί και η άδεια που έγινε από αυτή
       const st = r.sid ? s.statuses.find(x => x.id === r.sid) : undefined;
-      return { state: { ...s, requests: s.requests.filter(x => x !== r), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Διαγράφηκε αίτηση' + (p ? ': ' + shortName(p) : '') + ' – ' + (r.leave ? 'άδεια ' + range(r.leave.from, r.leave.to) : r.text) + (st ? ', μαζί με την άδεια' : ''), files: st ? ['ΗΚΑΙ', 'Άδειες'] : ['ΗΚΑΙ'] };
+      return { state: { ...s, requests: s.requests.filter(x => x !== r), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Διαγράφηκε αίτηση' + (p ? ': ' + shortName(p) : '') + ' – ' + (r.leave ? 'άδεια ' + range(r.leave.from, r.leave.to) : r.text) + (st ? ', μαζί με την άδεια' : ''), files: st ? [HK(), 'Άδειες'] : [HK()] };
     }
     case 'decideRequest': {
       const r = s.requests.find(x => x.id === c.id); if (!r || !r.leave) throw new Error('Δεν βρέθηκε η αίτηση άδειας');
@@ -306,26 +355,26 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.ok === null) {
         const st = r.sid ? s.statuses.find(x => x.id === r.sid) : undefined;
         const nr: PersonRequest = { ...r }; delete nr.decision; delete nr.decided; delete nr.sid;
-        return { state: { ...s, requests: s.requests.map(x => (x === r ? nr : x)), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Αναίρεση απόφασης για την αίτηση άδειας του ' + shortName(p) + (st ? ': η άδεια ' + range(st.from, st.to) + ' βγήκε' : ''), files: st ? ['ΗΚΑΙ', 'Άδειες'] : ['ΗΚΑΙ'] };
+        return { state: { ...s, requests: s.requests.map(x => (x === r ? nr : x)), statuses: st ? s.statuses.filter(x => x !== st) : s.statuses }, text: 'Αναίρεση απόφασης για την αίτηση άδειας του ' + shortName(p) + (st ? ': η άδεια ' + range(st.from, st.to) + ' βγήκε' : ''), files: st ? [HK(), 'Άδειες'] : [HK()] };
       }
       if (r.decision) throw new Error('Η αίτηση έχει ήδη ' + (r.decision === 'ok' ? 'εγκριθεί' : 'απορριφθεί'));
       // η απόφαση γράφεται στην ΗΚΑΙ της μέρας που πατήθηκε (όχι πριν από την ίδια την αίτηση)
       const decided = r.date > ctx.today ? r.date : ctx.today;
-      if (!c.ok) return { state: { ...s, requests: s.requests.map(x => (x === r ? { ...r, decision: 'no' as const, decided } : x)) }, text: 'Απορρίφθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: ['ΗΚΑΙ'] };
+      if (!c.ok) return { state: { ...s, requests: s.requests.map(x => (x === r ? { ...r, decision: 'no' as const, decided } : x)) }, text: 'Απορρίφθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [HK()] };
       // εγκρίθηκε: ίδια δήλωση με το «Δήλωσε κατάσταση» (ίδιοι έλεγχοι, βγαίνει από υπηρεσίες και εξόδους)
       const d = run(s, { t: 'declare', cmd: { type: lv.type, pids: [p.id], from: lv.from, to: lv.to, ...(lv.kind ? { kind: lv.kind } : {}) } }, ctx);
       const had = new Set(s.statuses.map(x => x.id));
       const st = d.state.statuses.find(x => !had.has(x.id) && x.pid === p.id && x.type === lv.type && x.from === lv.from);
       if (!st) throw new Error('Δεν έγινε η άδεια');
       const statuses = d.state.statuses.map(x => (x === st ? { ...x, req: r.id } : x));
-      return { ...d, state: { ...d.state, statuses, requests: s.requests.map(x => (x === r ? { ...r, decision: 'ok' as const, decided, sid: st.id } : x)) }, text: 'Εγκρίθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [...new Set(['ΗΚΑΙ', ...d.files])] };
+      return { ...d, state: { ...d.state, statuses, requests: s.requests.map(x => (x === r ? { ...r, decision: 'ok' as const, decided, sid: st.id } : x)) }, text: 'Εγκρίθηκε η αίτηση άδειας του ' + shortName(p) + ' (' + range(lv.from, lv.to) + ')', files: [...new Set([HK(), ...d.files])] };
     }
     case 'setPersonMove': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       if (c.date && !/^\d{4}-\d{2}-\d{2}$/.test(c.date)) throw new Error('Λάθος ημερομηνία');
       const q: Person = { ...p }; if (c.date) q[c.field] = c.date; else delete q[c.field];
       const what = c.field === 'inOn' ? '1. Εγγραφές' : '2. Διαγραφές';
-      return { state: { ...s, people: s.people.map(x => (x === p ? q : x)) }, text: 'ΗΚΑΙ ' + what + ': ' + shortName(p) + (c.date ? ' στις ' + dm(c.date) : ', να μη γραφτεί'), files: ['ΗΚΑΙ'] };
+      return { state: { ...s, people: s.people.map(x => (x === p ? q : x)) }, text: HK() + ' ' + what + ': ' + shortName(p) + (c.date ? ' στις ' + dm(c.date) : ', να μη γραφτεί'), files: [HK()] };
     }
     case 'setPunInfo': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || st.type !== 'PUN') throw new Error('Δεν βρέθηκε η ποινή');
@@ -356,9 +405,28 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
     }
+    case 'cancelLeave': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      // από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια (δεν γράφεται πια στην ΗΚΑΙ ως άδεια)
+      const requests = s.requests.map(r => { if (r.sid !== st.id) return r; const n = { ...r }; delete n.sid; return n; });
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: (TYPES[st.type].cat === 'abs' ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + TYPES[st.type].long.toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
+    }
+    case 'endLeave': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
+      const abs = TYPES[st.type].cat === 'abs', tn = timeNames(st.type);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c.date)) throw new Error('Λάθος ημερομηνία');
+      const t = normTime(c.time); if (t == null) throw new Error('Η ώρα ' + tn.toG + ' «' + c.time + '» δεν διαβάζεται. Γράψε π.χ. 22:00.');
+      const was = st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '');
+      if (c.date < st.from || (c.date === st.from && st.fromTime && t && mins(t) <= mins(st.fromTime))) throw new Error((abs ? 'Η άδεια' : 'Η ' + TYPES[st.type].long.toLowerCase()) + ' ξεκινά ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + (abs ? '. Αν δεν έφυγε καθόλου, πάτα «Ακύρωση άδειας».' : '. Αν μπήκε λάθος, πάτα «Διαγραφή».'));
+      // ίδια ή μεταγενέστερη επιστροφή: δεν είναι διακοπή (για παράταση άλλαξε την άδεια)
+      if (!st.open && (c.date > st.to || (c.date === st.to && (!t || (!!st.toTime && mins(t) >= mins(st.toTime)))))) throw new Error((abs ? 'Η άδεια' : 'Η ' + TYPES[st.type].long.toLowerCase()) + ' είναι ήδη ' + was + '. Διάλεξε νωρίτερη ' + tn.to + '.');
+      const n: Status = { ...st, to: c.date }; delete n.open; delete n.days;
+      if (t) n.toTime = t; else delete n.toTime;
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + TYPES[st.type].long.toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', ' + tn.to + ' ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
+    }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');
-      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? { ...x, pending: false } : x)) }, text: 'Εγκρίθηκε από τον Διοικητή η ποινή (' + punLbl(st.kind) + ') του ' + shortName(pm.get(st.pid)!), files: ['ΗΚΑΙ', 'Ποινές'] };
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? { ...x, pending: false } : x)) }, text: 'Εγκρίθηκε από τον Διοικητή η ποινή (' + punLbl(st.kind) + ') του ' + shortName(pm.get(st.pid)!), files: [HK(), 'Ποινές'] };
     }
     case 'assign': {
       const post = postBy(s, c.k); if (!post) throw new Error('Άγνωστη θέση');
@@ -440,6 +508,22 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'setSettings':
       return { state: { ...s, settings: { ...s.settings, ...c.settings } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
+    case 'setHkRows': {
+      const before = s.settings.lists; const lists = { ...(before || {}), hkRows: c.rows };
+      const rows = new Set(hkRowList(lists));
+      // άλλα ονόματα: μόνο για γραμμές που υπάρχουν, χωρίς κενά
+      const names = Object.fromEntries(Object.entries(c.names || before?.hkNames || {}).map(([k, v]) => [k, (v || '').trim().replace(/\s+/g, ' ')]).filter(([k, v]) => v && rows.has(k)));
+      if (Object.keys(names).length) lists.hkNames = names; else delete lists.hkNames;
+      const cadreList = s.cadreList.map(x => {
+        const claim = hkRowClaim(lists, x.rank);
+        if (claim) return claim === x.hk ? x : { ...x, hk: claim };
+        // η γραμμή του σβήστηκε ή δεν μαζεύει πια τον βαθμό του: πάει εκεί που θα πήγαινε χωρίς αυτήν
+        return !rows.has(x.hk) || hkRowClaim(before, x.rank) === x.hk ? { ...x, hk: guessHk(x.rank, lists) } : x;
+      });
+      const only = (o: Record<string, number> | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => rows.has(k)));
+      const hkai = s.settings.hkai?.prov ? { ...s.settings.hkai, prov: only(s.settings.hkai.prov) } : s.settings.hkai;
+      return { state: { ...s, cadreList, settings: { ...s.settings, lists, cadre: only(s.settings.cadre)!, hkai } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
+    }
     case 'printed':
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };
     case 'importPeople':
@@ -533,20 +617,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'setWeapons': {
-      const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack } as const;
+      const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack, wpos: normPos } as const;
       const by = new Map<number, Person>();
       for (const ch of c.changes) {
         const p0 = pm.get(ch.pid); if (!p0) throw new Error('Δεν βρέθηκε το άτομο');
         const q: Person = { ...(by.get(p0.id) || p0) };
-        for (const f of ['weapon', 'wtype', 'rack'] as const) { if (ch[f] === undefined) continue; const v = F[f](ch[f]); if (v) q[f] = v; else delete q[f]; }
-        if (q.weapon !== p0.weapon || q.wtype !== p0.wtype || q.rack !== p0.rack) by.set(p0.id, q); else by.delete(p0.id);
+        for (const f of ['weapon', 'wtype', 'rack', 'wpos'] as const) { if (ch[f] === undefined) continue; const v = F[f](ch[f]); if (v) q[f] = v; else delete q[f]; }
+        if (q.weapon !== p0.weapon || q.wtype !== p0.wtype || q.rack !== p0.rack || q.wpos !== p0.wpos) by.set(p0.id, q); else by.delete(p0.id);
       }
       if (!by.size) return { state: s, text: '', files: [] };
       const people = s.people.map(p => by.get(p.id) || p);
       const [pid, q] = [...by][0]; const p = pm.get(pid)!;
       const one = [q.weapon !== p.weapon && (q.weapon ? 'όπλο ' + q.weapon : 'χωρίς όπλο' + (p.weapon ? ' (ήταν ' + p.weapon + ')' : '')),
-        q.wtype !== p.wtype && 'τύπος ' + (q.wtype || '—'), q.rack !== p.rack && 'οπλοβαστός ' + (q.rack || '—')].filter(Boolean).join(', ');
-      const onlyNum = q.wtype === p.wtype && q.rack === p.rack;
+        q.wtype !== p.wtype && 'τύπος ' + (q.wtype || '—'), q.rack !== p.rack && 'οπλοβαστός ' + (q.rack || '—'), q.wpos !== p.wpos && 'θέση ' + (q.wpos || '—')].filter(Boolean).join(', ');
+      const onlyNum = q.wtype === p.wtype && q.rack === p.rack && q.wpos === p.wpos;
       const text = by.size === 1 ? (onlyNum ? 'Όπλο ' + shortName(p) + ': ' + (q.weapon || 'χωρίς όπλο' + (p.weapon ? ' (ήταν ' + p.weapon + ')' : '')) : 'Οπλισμός ' + shortName(p) + ': ' + one) : 'Οπλισμός' + (c.what ? ', ' + c.what : '') + ': άλλαξε σε ' + by.size + ' άτομα';
       return { state: { ...s, people }, text, files: [] };
     }
@@ -601,23 +685,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, weaponLog: log.filter(x => x.id !== c.id) }, text: 'Σβήστηκε κίνηση όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + m.reason + ' ' + dm(m.outDay) + ' ' + m.outTime, files: [] };
     }
     case 'addPerson': {
-      const x = c.person; const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
-      const p: Person = {
-        ...x, id: s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1, active: true, added: true,
-        // όπως τα γράφει η εισαγωγή του Δυναμολογίου (roster.ts), ώστε να ταιριάζουν μετά
-        rank: normGreek(t(x.rank)), spec: normGreek(t(x.spec)), last: norm(t(x.last)), first: norm(t(x.first)), father: norm(t(x.father)),
-        asm: t(x.asm).replace(/\s/g, ''), phone: t(x.phone).replace(/\s/g, ''), si: normGreek(t(x.si)), essos: t(x.essos),
-        room: x.room != null && x.room > 0 ? Math.floor(x.room) : null, post: t(x.post) ? norm(t(x.post)) : null, role: t(x.role) ? norm(t(x.role)) : null,
-        attached: !!x.attached, notes: t(x.notes)
-      };
-      if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
-      if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
-      if (!p.dn) delete p.dn;
-      if (!p.offDays?.length) delete p.offDays;
-      if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
-      const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
-      if (twin) throw new Error('Υπάρχει ήδη ' + (twin.asm && twin.asm === p.asm ? 'άτομο με ΑΣΜ ' + p.asm + ': ' : 'ο ') + twin.rank + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)'));
+      const p = makePerson(s, c.person);
       return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (p.rank ? p.rank + ' ' : '') + p.last + ' ' + p.first, files: [] };
+    }
+    case 'addPeople': {
+      // Γρήγορη εισαγωγή (Νέα ΕΣΣΟ): όλοι μαζί, μία αναίρεση και μία εγγραφή στο Δυναμολόγιο· αν ένας δεν μπαίνει, δεν μπαίνει κανείς
+      if (!c.people.length) throw new Error('Δεν έγραψες κανέναν στρατιώτη');
+      let st = s; const added: Person[] = [];
+      c.people.forEach((x, i) => {
+        let p: Person;
+        try { p = makePerson(st, x); } catch (e) { throw new Error('Γραμμή ' + (i + 1) + ': ' + (e instanceof Error ? e.message : String(e))); }
+        added.push(p); st = { ...st, people: [...st.people, p], settings: rememberChoices(st.settings, p) };
+      });
+      const names = added.slice(0, 5).map(p => p.last + ' ' + p.first).join(', ') + (added.length > 5 ? ' και άλλοι ' + (added.length - 5) : '');
+      return { state: st, text: (added.length === 1 ? 'Νέος στρατιώτης: ' : added.length + ' νέοι στρατιώτες: ') + names, files: [] };
     }
     case 'setBaseline': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
@@ -631,7 +712,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'setHkaiManual': {
       const hkaiManual = { ...s.hkaiManual, [c.date]: c.manual };
-      return { state: { ...s, hkaiManual }, text: 'ΗΚΑΙ ' + dm(c.date) + ': χειροκίνητα στοιχεία', files: ['ΗΚΑΙ'] };
+      return { state: { ...s, hkaiManual }, text: HK() + ' ' + dm(c.date) + ': χειροκίνητα στοιχεία', files: [HK()] };
     }
     case 'setPhase':
       if (c.phase === s.settings.phase) return { state: s, text: '', files: [] };
@@ -641,9 +722,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
-      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
+      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
-      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + ')', files: [] };
+      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
       // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
@@ -665,7 +746,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         posts.forEach(p => { if (!p.hidden) delete p.hidden; });
       }
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
-      list[i] = { ...b, name, posts };
+      const nb: BlockDef = { ...b, name, posts };
+      // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
+      if (c.shift !== undefined) { if (c.shift && c.shift.every > 0) nb.shift = { every: Math.round(c.shift.every), ...(c.shift.from ? { from: c.shift.from } : {}), ...(c.shift.to ? { to: c.shift.to } : {}) }; else delete nb.shift; }
+      list[i] = nb;
       const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
       return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
@@ -673,8 +757,24 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setBlock': {
       const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       const list = blocksOf(s.settings, c.phase); const b = list.find(x => x.id === c.id); if (!b) throw new Error('Δεν βρέθηκε η υπηρεσία');
-      const what = c.patch.hidden != null ? (c.patch.hidden ? 'αφαιρέθηκε' : 'ξαναμπήκε') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
-      return { state: { ...s, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
+      // «Ενεργή» (Michael, 20/10): ανενεργή = hidden, δεν σβήνεται. Δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και
+      // στο έντυπο· οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών, στη δικαιοσύνη και στην καρτέλα. Όσες είχαν
+      // μπει για αύριο και μετά βγαίνουν (αλλιώς θα μετρούσαν χωρίς να φαίνονται)· η σημερινή μένει, μπορεί να έγινε ήδη.
+      // Μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά (θαλαμοφύλακες, μαγειρεία).
+      if (c.patch.hidden && b.kind === 'ly') throw new Error('Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)');
+      let guards = s.guards, gone = 0;
+      if (c.patch.hidden && !b.hidden && c.phase === (s.settings.phase || 'sven')) {
+        const ks = new Set(b.posts.map(p => p.k));
+        guards = { ...s.guards };
+        for (const d in guards) if (d > ctx.today) {
+          const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !ks.has(k)));
+          const n = Object.keys(g).length - Object.keys(left).length;
+          if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
+        }
+        if (!gone) guards = s.guards;
+      }
+      const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
+      return { state: { ...s, guards, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
     }
     case 'setNightTraining': {
       const nightTraining = { ...(s.nightTraining || {}) };

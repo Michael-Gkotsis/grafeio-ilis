@@ -3,6 +3,7 @@
 // Η «Δυνατότητα υπηρεσιών» του ατόμου μένει από πάνω.
 import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
+import { Select } from '../select';
 import { useStore } from '../store';
 import { blocksOf, PHASE_NAME, type BlockDef, type Person } from '../../shared/domain';
 import { type UserLists } from '../../shared/ranks';
@@ -29,15 +30,15 @@ export function SiField({ id, value, cat, onChange }: P) {
   };
   return html`<div className="field" style=${{ flex: 2 }}><label className="field__label" htmlFor=${id}>Σ.Ι.</label>
     <div style=${{ display: 'flex', gap: '6px' }}>
-      <select id=${id} className="ui-input" style=${{ flex: 1 }} value=${base} onChange=${(e: any) => setBase(e.target.value)}>
-        <option value="">—</option>${bases.map(b => html`<option key=${b} value=${b}>${b}</option>`)}<option value=${OTHER}>Άλλο (γράψε το)…</option>
-      </select>
-      ${!typing && subs.length > 0 && html`<select className="ui-input" style=${{ flex: 1.4 }} aria-label="Με όπλο ή άοπλος" value=${parts!.sub} onChange=${(e: any) => onChange(siLabel(parts!.base, e.target.value), cat || '')}>
+      <${Select} id=${id} className="ui-input" style=${{ flex: 1 }} value=${base} onChange=${(e: any) => setBase(e.target.value)}>
+        <option value="">—</option>${bases.map(b => html`<option key=${b} value=${b}>${b}</option>`)}<option value=${OTHER} data-keep>Άλλο (γράψε το)…</option>
+      <//>
+      ${!typing && subs.length > 0 && html`<${Select} className="ui-input" style=${{ flex: 1.4 }} aria-label="Με όπλο ή άοπλος" value=${parts!.sub} onChange=${(e: any) => onChange(siLabel(parts!.base, e.target.value), cat || '')}>
         <option value="">—</option>${subs.map(s => html`<option key=${s} value=${s}>${s}</option>`)}
-      </select>`}
-      ${hasCat && html`<select className="ui-input" style=${{ flex: 1.6 }} aria-label="Κατηγορία πάθησης" value=${cat || ''} onChange=${(e: any) => onChange(value, e.target.value)}>
+      <//>`}
+      ${hasCat && html`<${Select} className="ui-input" style=${{ flex: 1.6 }} aria-label="Κατηγορία πάθησης" value=${cat || ''} onChange=${(e: any) => onChange(value, e.target.value)}>
         <option value="">— πάθηση</option>${cats.map(c => html`<option key=${c} value=${c}>${c}</option>`)}
-      </select>`}
+      <//>`}
     </div>
     ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label="Σ.Ι. με το χέρι" placeholder="π.χ. Ι3 ΧΩΡΙΣ ΟΠΛΟ" value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value, '')}/>`}
   </div>`;
@@ -144,8 +145,8 @@ export function SiCard() {
     ${odd.size > 0 && html`<${Alert} tone="warn"><span><b>Σ.Ι. που δεν αναγνωρίζονται:</b> ${[...odd].map(([v, n]) => '«' + v + '» (' + n + ')').join(' · ')}. Για αυτούς ισχύει ο παλιός κανόνας (άοπλος όποιος έχει «ΑΟΠΛ» ή «ΧΩΡΙΣ ΟΠΛΟ» ή αρχίζει από «Ι4»). Διόρθωσέ τους από τη «Διόρθωση στοιχείων».</span><//>`}
     ${legacy && html`<p className="note">Η λίστα «Σ.Ι. άοπλων» στις Λίστες ισχύει ακόμα για το ποιος είναι αρχικά άοπλος.</p>`}
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
-      <div className="field" style=${{ maxWidth: '150px' }}><label className="field__label" htmlFor="si-cr">Δικοί κανόνες για</label><select id="si-cr" className="ui-input" value=${catRow} onChange=${(e: any) => setCatRow(e.target.value)}>${catRows.map(l => html`<option key=${l} value=${l}>${l}</option>`)}</select></div>
-      <div className="field"><label className="field__label" htmlFor="si-cp">με πάθηση</label><select id="si-cp" className="ui-input" value=${catPick} onChange=${(e: any) => { setCatPick(e.target.value); setErr(null); }}><option value="">—</option>${siCats(cfg).map(c => html`<option key=${c} value=${c}>${c}</option>`)}</select></div>
+      <div className="field" style=${{ maxWidth: '150px' }}><label className="field__label" htmlFor="si-cr">Δικοί κανόνες για</label><${Select} id="si-cr" className="ui-input" value=${catRow} onChange=${(e: any) => setCatRow(e.target.value)}>${catRows.map(l => html`<option key=${l} value=${l}>${l}</option>`)}<//></div>
+      <div className="field"><label className="field__label" htmlFor="si-cp">με πάθηση</label><${Select} id="si-cp" className="ui-input" value=${catPick} onChange=${(e: any) => { setCatPick(e.target.value); setErr(null); }}><option value="">—</option>${siCats(cfg).map(c => html`<option key=${c} value=${c}>${c}</option>`)}<//></div>
       <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!catPick} onClick=${addCatRow}>Πρόσθεσε γραμμή<//></div>
     </div>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '8px' }}>

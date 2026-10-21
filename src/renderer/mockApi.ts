@@ -7,6 +7,9 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
+import { byIds, fieldOf, fieldValue, type BuildOpts, type Report } from '../shared/reports';
+import { LAYOUT_SHEETS, type Block } from '../shared/layout';
+import { sigsSaved } from '../shared/sigs';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
@@ -34,7 +37,7 @@ function seed(): AppState {
   // στελέχη με φανταστικά ονόματα και καταστάσεις της ΗΚΑΙ (καρτέλα «Στελέχη»)
   s.cadreList = [['ΙΛΧΟΣ', 'Ίλαρχοι', 'ΥΠΟΘΕΤΙΚΟΣ', 'ΓΙΑΝΝΗΣ', 'Διοικητής Ίλης'], ['ΑΝΘΛΓΟΣ', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΟΚΙΜΑΚΗΣ', 'ΝΙΚΟΣ', 'Διοικητής ουλαμού'],
     ['ΑΛΧΙΑΣ', 'Αρχιλοχίες', 'ΠΑΡΑΔΕΙΓΜΑΤΑΣ', 'ΚΩΣΤΑΣ', 'Αρχιλοχίας'], ['ΕΠΧΙΑΣ', 'Επιλοχίες', 'ΔΕΙΓΜΑΤΙΔΗΣ', 'ΠΕΤΡΟΣ', 'Επιλοχίας'], ['ΛΧΙΑΣ', 'Λοχίες', 'ΤΥΧΑΙΟΥ', 'ΜΑΡΙΑ', 'Γραφείο']]
-    .map(([rank, hk, last, first, role], i) => ({ id: 's' + i, rank, hk, last, first, role, phone: '69000000' + (10 + i), active: true }));
+    .map(([rank, hk, last, first, role], i) => ({ id: 's' + i, rank, hk, last, first, role, spec: ['ΤΘ', 'ΠΖ', 'ΤΘ', 'ΔΒ', 'ΤΧ'][i], am: String(20450 + i * 113), phone: '69000000' + (10 + i), active: true }));
   s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
@@ -126,7 +129,7 @@ export function mockApi(): Api {
     dirOpen: async () => '',
     listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
     restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
-    diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1 }),
+    diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1, writes: [], worker: false }),
     setGpu: async () => {},
     usbCopy: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
     importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
@@ -157,6 +160,7 @@ export function mockApi(): Api {
     srcNewFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
     srcStatus: async () => ({ sources: (Object.entries(state.settings.sources || {}) as [ListKind, SourceBinding][]).map(([kind, b]) => ({ kind, file: b.file, exists: true, changed: kind === 'medical', synced: true, at: today() + ' 09:12' })), forms: [] }),
     onSources: () => () => {},
+    onBusy: () => () => {},
     formPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     formInfo: async f => ({ ok: true, file: f + '.xlsx', custom: false, sheets: f === 'hkai' ? ['μπροστινο', 'πισω'] : f === 'outs' ? ['ΕΞΟΔΟΥΧΟΙ', 'ΠΑΡΑΜΕΝΟΝΤΕΣ'] : ['ΦΡΟΥΡΑ ΣΒΕΝ'], sheet: f === 'hkai' ? 'μπροστινο' : f === 'outs' ? 'ΕΞΟΔΟΥΧΟΙ' : 'ΦΡΟΥΡΑ ΣΒΕΝ', sheet2: f === 'hkai' ? 'πισω' : f === 'outs' ? 'ΠΑΡΑΜΕΝΟΝΤΕΣ' : undefined, hkai: f === 'hkai' ? { map: hkaiMapOf(), found: 40, total: 40, missing: [] } : undefined }),
     formSave: async (f, b) => { const forms = { ...(state.settings.forms || {}) }; if (b) forms[f] = b; else delete forms[f]; state = { ...state, settings: { ...state.settings, forms } }; return res(''); },
@@ -169,6 +173,47 @@ export function mockApi(): Api {
     essoStart: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν ξεκινά νέα ΕΣΣΟ.' }),
     essoPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     essoRestore: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
-    essoOpen: async () => {}
+    essoOpen: async () => {},
+    // Έντυπα: στον browser δεν υπάρχει Excel· η προεπισκόπηση είναι ένας απλός πίνακας με τα στοιχεία
+    repUpload: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
+    repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: o.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '' })), cells: [] }),
+    repPreview: async (src, r: Report, ids, date) => {
+      const cols = 'build' in src ? src.build.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h, text: c.text })) : r.cols;
+      const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
+      const rows = byIds(state, r.kind, ids.slice(0, 40), date);
+      const head = cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('');
+      const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text)) + '</td>').join('') + '</tr>').join('');
+      return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
+    },
+    // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές
+    layoutPreview: async q => {
+      const sheets = 'report' in q ? [{ key: 'main', label: q.report.name }] : LAYOUT_SHEETS[q.form];
+      const sg = 'report' in q ? sigsSaved(state.settings, 'reports') : (q.sigs || sigsSaved(state.settings, q.form));
+      return { css: '', warnings: [], sheets: sheets.map(x => {
+        const mv = ('report' in q ? q.report.layout : q.layout?.[x.key]) || {};
+        const base: Block[] = [{ id: 'head', r1: 1, c1: 10, r2: 3, c2: 12 }, { id: 'date', r1: 19, c1: 9, r2: 19, c2: 12 }, ...sg.map((_, i) => ({ id: 's' + i, r1: 21, c1: 1 + Math.floor(i * 12 / sg.length), r2: 22, c2: Math.floor((i + 1) * 12 / sg.length) }))];
+        const blocks = base.map(b => { const m = mv[b.id] || [0, 0]; return { ...b, r1: b.r1 + m[0], r2: b.r2 + m[0], c1: b.c1 + m[1], c2: b.c2 + m[1] }; });
+        const text = (b: Block, r: number) => b.id === 'head' ? state.settings.unit[r - b.r1] : b.id === 'date' ? state.settings.place + ', 20 ΟΚΤ 26' : (r === b.r1 ? sg[+b.id.slice(1)].art : sg[+b.id.slice(1)].title);
+        let html = '<div class="pg" style="width:794px;height:700px;padding:40px"><table style="table-layout:fixed;width:714px">';
+        for (let r = 1; r <= 30; r++) {
+          html += '<tr style="height:20px">';
+          for (let c = 1; c <= 12; c++) {
+            const b = blocks.find(z => z.r1 <= r && r <= z.r2 && z.c1 === c);
+            if (b) { html += '<td data-a="' + String.fromCharCode(64 + c) + r + '" colspan="' + (b.c2 - b.c1 + 1) + '" style="text-align:center;font:11px Arial">' + (text(b, r) || '') + '</td>'; c = b.c2; continue; }
+            html += '<td data-a="' + String.fromCharCode(64 + c) + r + '" style="font:11px Arial">' + (r >= 6 && r <= 16 && c <= 8 ? r - 5 : '') + '</td>';
+          }
+          html += '</tr>';
+        }
+        return { key: x.key, sheet: x.label, blocks, html: html + '</table></div>', pages: 1 };
+      }) };
+    },
+    repRun: async (r, _f, ids) => ({ ok: true, file: '(δοκιμή) ' + r.name + ' (' + ids.length + ').xlsx', warnings: [] }),
+    repTimes: async () => ({}),
+    repHist: async () => [],
+    repPickFile: async () => null,
+    repOpenTpl: async () => {},
+    repFiles: async files => Object.fromEntries(files.map(f => [f, { exists: true, mtime: 0 }])),
+    repLast: async () => ({})
   };
 }

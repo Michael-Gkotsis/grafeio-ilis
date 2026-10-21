@@ -12,10 +12,12 @@ import type { RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
+import { xlLook, type XlLook } from '../shared/xlLook';
 import type { ISODate } from '../shared/dates';
 import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomList, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, capExtraCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 // Πλάτος στήλης νέου πίνακα για μία τιμή (Calibri 11 του νέου αρχείου), με τα πραγματικά πλάτη των κεφαλαίων γραμμάτων
-const colChars = (v: unknown) => (v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: 'Calibri', sz: 11, b: false })));
+// πλάτος στήλης για το κείμενο, με τα γράμματα των Ρυθμίσεων (Γράμματα Excel)
+const colChars = (v: unknown, L: XlLook, b = false) => (v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: L.font, sz: L.sz, b })));
 
 export interface SourceMeta { mtime: number; size: number; hash?: string; keys: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; at: string; error?: string; locked?: boolean; pending?: boolean;
   hold?: string;        // η εφαρμογή δεν γράφει μόνη της εδώ μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (μετά από αναίρεση ανάγνωσης ή επαναφορά βάσης)
@@ -116,12 +118,15 @@ export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS)
   return { sheets, mtime: Math.round(st.mtimeMs), size: st.size };
 }
 
+// Ο main βάζει εδώ την ανάγνωση από το νήμα των Excel (offload.ts), για να μην παγώνει το παράθυρο
+let readNow: (file: string) => Promise<{ sheets: RawSheet[]; mtime: number; size: number }> = f => readBook(f);
+export function setBookReader(f: typeof readNow) { readNow = f; }
 // Το βιβλίο όπως είναι τώρα στον δίσκο (ξαναδιαβάζεται μόνο όταν άλλαξε)
 const books = new Map<string, { mtime: number; size: number; sheets: RawSheet[] }>();
 export async function bookNow(file: string): Promise<{ mtime: number; size: number; sheets: RawSheet[] } | null> {
   const st = stamp(file); if (!st) return null;
   const c = books.get(file); if (c && c.mtime === st.mtime && c.size === st.size) return c;
-  const r = await readBook(file); books.set(file, r); if (books.size > 12) books.delete(books.keys().next().value!);
+  const r = await readNow(file); books.set(file, r); if (books.size > 12) books.delete(books.keys().next().value!);
   return r;
 }
 // Τι κρατιέται μετά από ανάγνωση ή εγγραφή: ώρα, μέγεθος και αποτύπωμα του πίνακα
@@ -215,8 +220,8 @@ export async function tidyPreview(kind: ListKind, b: SourceBinding, lists?: User
 // Νέος μήνας στον έλεγχο υπηρεσιών: φύλλο με όλη τη δομή (planDutiesNew), σε νέο ή στο ίδιο αρχείο με τους άλλους μήνες
 async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppState, today: ISODate, expect?: Record<string, { mtime: number; size: number }>): Promise<WriteOutcome> {
   if (!b.month) return { ok: false, error: 'Δεν ορίστηκε ο μήνας του ελέγχου υπηρεσιών' };
-  const lay = planDutiesNew(b, s, today);
-  const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: await wb.tableStyle('data'), code: 0 };
+  const lay = planDutiesNew(b, s, today); const L = xlLook(s.settings);
+  const st = { title: await wb.tableStyle('title', L), head: await wb.tableStyle('head', L), data: await wb.tableStyle('data', L), code: 0 };
   st.code = st.data;
   const gray = new Map<number, number>(); const grayOf = async (x: number) => { if (!gray.has(x)) gray.set(x, await wb.grayed(x)); return gray.get(x)!; };
   for (const x of lay.cells) {
@@ -226,9 +231,10 @@ async function newDutiesSheet(wb: Workbook, ws: Sheet, b: SourceBinding, s: AppS
     ws.setStyle(at, x.gray ? await grayOf(st[x.st]) : st[x.st]);
   }
   for (const m of lay.merges) ws.addMerge(colName(m.c1 + 1) + (m.r + 1) + ':' + colName(m.c2 + 1) + (m.r + 1));
-  // στήλες πριν από τις ημέρες (Α/Α, βαθμός, επώνυμο, όνομα, σύνολα): όσο θέλει το μεγαλύτερο κείμενο, για να φαίνεται ολόκληρο
+  // στήλες πριν από τις ημέρες (Α/Α, βαθμός, επώνυμο, όνομα, σύνολα): όσο θέλει το μεγαλύτερο κείμενο, για να φαίνεται ολόκληρο·
+  // οι ημέρες ως 8, για τους κωδικούς με μεγάλα γράμματα (Θ1α σε Arial 12)
   const widths = { ...lay.widths };
-  for (const x of lay.cells) if (x.c < b.cols.d1 && x.st !== 'title' && x.v != null && typeof x.v !== 'object') widths[x.c + 1] = Math.min(40, Math.max(widths[x.c + 1] || 6, colChars(x.v)));
+  for (const x of lay.cells) if (x.st !== 'title' && x.v != null && typeof x.v !== 'object') widths[x.c + 1] = Math.min(x.c < b.cols.d1 ? 40 : 8, Math.max(widths[x.c + 1] || 6, colChars(x.v, L, x.st === 'head')));
   ws.setColWidths(widths).setRowHeight(2, 30).setFreeze(b.cols.d1, 2).setPrintFit(true);
   const out = await writeAll([{ dir: path.dirname(b.file), name: path.basename(b.file), data: await wb.save() }], { prevEvery: PREV_EVERY, expect });
   return { ok: true, file: out[0], unchanged: false, created: true, added: lay.rows, changed: lay.filled, cleared: 0, foreign: 0, notFound: [], meta: { keys: lay.keys, ...(await syncStampNow({ ...b, file: out[0] })), error: undefined, locked: false, pending: false } };
@@ -243,7 +249,7 @@ export async function writeSource(kind: ListKind, b: SourceBinding, s: AppState,
     const st0 = exists ? stamp(b.file) : null; const expect = st0 ? { [path.join(path.dirname(b.file), path.basename(b.file))]: st0 } : undefined;
     const create = isStatusKind(kind) || (!!opts.create && canCreate(kind));
     if (!exists && !create) return { ok: false, error: 'Δεν βρέθηκε το ' + b.file };
-    const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet);
+    const wb = exists ? await Workbook.open(await fs.promises.readFile(b.file)) : await Workbook.blank(b.sheet); wb.widen = true;
     const a = await applyKind(wb, kind, b, s, meta, today, opts, create, !exists);
     if ('error' in a) return { ok: false, error: a.error };
     if ('ws' in a) return await newDutiesSheet(wb, a.ws, b, s, today, expect);
@@ -265,7 +271,7 @@ export async function writeGroup(jobs: { kind: ListKind; b: SourceBinding; meta?
   const file = jobs[0].b.file; const out = new Map<typeof jobs[number], WriteOutcome>();
   try {
     const st0 = stamp(file); const expect = st0 ? { [path.join(path.dirname(file), path.basename(file))]: st0 } : undefined;
-    const wb = await Workbook.open(await fs.promises.readFile(file));
+    const wb = await Workbook.open(await fs.promises.readFile(file)); wb.widen = true;
     const here = jobs.filter(j => wb.hasSheet(j.b.sheet));
     const done: { j: typeof jobs[number]; a: Extract<Applied, { keep: unknown }>; moved: boolean }[] = []; let touched = false;
     for (const j of here) {
@@ -339,15 +345,16 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     // νέες στήλες ωρών: επικεφαλίδα και κελιά με το στυλ της στήλης από αριστερά (πλαίσια, γραμματοσειρά)
     const newCols = new Set(tc.head.map(h => h.c));
     for (const h of tc.head) { const at = ref(h.r, h.c); ws.set(at, h.v); const st = ws.style(ref(h.r, h.c - 1)); if (st != null) ws.setStyle(at, st); }
-    const data = fresh ? await wb.tableStyle('data') : undefined;
+    const L = xlLook(s.settings);
+    const data = fresh ? await wb.tableStyle('data', L) : undefined;
     if (fresh) {
-      const head = await wb.tableStyle('head'), title = await wb.tableStyle('title');
+      const head = await wb.tableStyle('head', L), title = await wb.tableStyle('title', L);
       const c2 = Math.max(...Object.values(b.cols));
       const wide: Record<number, number> = {};
-      const fit = (c: number, v: unknown) => { const n = v != null && typeof v === 'object' ? 12 : colChars(v); wide[c + 1] = Math.min(40, Math.max(wide[c + 1] || 6, n)); };
+      const fit = (c: number, v: unknown, b = false) => { const n = v != null && typeof v === 'object' ? Math.ceil(12 * L.sz / 11) : colChars(v, L, b); wide[c + 1] = Math.min(40, Math.max(wide[c + 1] || 6, n)); };
       for (const h of plan.header) {
         ws.set(ref(h.r, h.c), h.v).setStyle(ref(h.r, h.c), h.title ? title : head);
-        if (h.title && c2 > h.c) ws.addMerge(ref(h.r, h.c) + ':' + ref(h.r, c2)); else if (!h.title) fit(h.c, h.v);
+        if (h.title && c2 > h.c) ws.addMerge(ref(h.r, h.c) + ':' + ref(h.r, c2)); else if (!h.title) fit(h.c, h.v, true);
       }
       for (const x of plan.sets) fit(x.c, x.v);
       ws.setColWidths(wide);
@@ -380,19 +387,20 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     for (const x of plan.sets) await put(x.r, x.c, x.v, data);
     // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα και το φύλλο ΘΑΛΑΜΟΙ (αν δεν υπάρχει ήδη)
     if (fresh && plan.extra?.length) {
-      const head = await wb.tableStyle('head');
+      const head = await wb.tableStyle('head', L);
       for (const x of plan.extra) { const at = ref(x.r, x.c); if (x.f) ws.setFormula(at, x.f); else ws.set(at, x.v ?? null); ws.setStyle(at, x.head ? head : data!); }
       for (const m of plan.merges || []) ws.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
     }
-    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x))) {
+    const reps = kind === 'people' ? wb.reportSheets() : new Set<string>();   // φύλλα των Εντύπων (π.χ. «ΘΑΛΑΜΟΙ Θ1») δεν είναι το φύλλο ΘΑΛΑΜΟΙ
+    if (fresh && kind === 'people' && !wb.sheetNames().some(x => x !== b.sheet && !reps.has(x) && /ΘΑΛΑΜ/i.test(x))) {
       const rs = roomSheetNew(s.people, roomList(s, s.people.filter(p => p.active)));
       if (rs.cells.length) {
-        const st = { title: await wb.tableStyle('title'), head: await wb.tableStyle('head'), data: data! };
+        const st = { title: await wb.tableStyle('title', L), head: await wb.tableStyle('head', L), data: data! };
         const ws2 = await wb.addSheet('ΘΑΛΑΜΟΙ');
         for (const x of rs.cells) { const at = ref(x.r, x.c); if (x.v != null) ws2.set(at, typeof x.v === 'object' ? null : x.v); ws2.setStyle(at, st[x.st]); }
         for (const m of rs.merges) ws2.addMerge(ref(m.r, m.c1) + ':' + ref(m.r, m.c2));
         ws2.setPrintFit(true);
-        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(40, Math.max(8, colChars(h), ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => colChars(x.v))))])));
+        ws2.setColWidths(Object.fromEntries(ROOM_HEAD.map((h, c) => [c + 1, Math.min(40, Math.max(8, colChars(h, L, true), ...rs.cells.filter(x => x.c === c && x.st === 'data').map(x => colChars(x.v, L))))])));
       }
     }
     // νέος που αναιρέθηκε: η γραμμή του φεύγει (σε φύλλο με πίνακα του Excel απλώς αδειάζει)
@@ -400,7 +408,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     // Θάλαμοι: στο φύλλο ΘΑΛΑΜΟΙ (ένας πίνακας ανά θάλαμο) ο νέος μπαίνει στο τέλος του θαλάμου του και ο αναιρεμένος φεύγει.
     // Όταν αλλάζει θάλαμος κάποιου που υπήρχε, ή δεν βρέθηκε πίνακας για τον θάλαμο, θυμίζουμε να γίνει με το χέρι.
     const rc = kind === 'people' ? b.cols.room : undefined;
-    const roomSheet = kind === 'people' ? wb.sheetNames().find(x => x !== b.sheet && /ΘΑΛΑΜ/i.test(x)) : undefined;
+    const roomSheet = kind === 'people' ? wb.sheetNames().find(x => x !== b.sheet && !reps.has(x) && /ΘΑΛΑΜ/i.test(x)) : undefined;
     const pm = new Map(s.people.map(p => [p.id, p]));
     const add = (plan.fresh || []).map(id => pm.get(id)!).filter(Boolean);
     let placed = 0, missing = add.filter(p => p.room != null).length;
