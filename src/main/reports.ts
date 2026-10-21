@@ -11,7 +11,7 @@ import { renderBook } from './print';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAG_RE, byIds, cellValue, fieldOf, fieldValue, groupsOf, guessField, repFileName, tagKey, type BuildOpts, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
-import { XL_LOOK, type XlLook } from '../shared/xlLook';
+import { XL_LOOK, formPart, tablePart, type XlLook } from '../shared/xlLook';
 import type { ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
 
@@ -218,12 +218,15 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   const n = cols.length; const L = (c: number) => colName(c);
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const { font, h, v } = look;
+  // κάθε κομμάτι με τα γράμματά του από τις Ρυθμίσεις (μέγεθος, έντονα, πλάγια, υπογράμμιση), αλλιώς όπως πριν
+  const T = tablePart(look, 'title', sz, { u: true }), H = tablePart(look, 'head', sz), C = tablePart(look, 'data', sz);
+  const hd = { sz: 10, b: true, ...formPart(look, 'hdr') }, sg = formPart(look, 'sig') || {};
   const st = {
-    hdr: await wb.style({ font, sz: 10, b: true, h: 'left' }), date: await wb.style({ font, sz: 10, b: true, h: 'right' }),
-    title: await wb.style({ font, sz: sz + 2, b: true, u: true, h: 'center' }),
-    head: await wb.style({ font, sz, b: true, border: true, h, v, wrap: true, fill }),
-    cell: await wb.style({ font, sz, border: true, h, v }),
-    sig: await wb.style({ font, sz, b: true, h: 'center' }), sigName: await wb.style({ font, sz, h: 'center' })
+    hdr: await wb.style({ font, ...hd, h: 'left' }), date: await wb.style({ font, ...hd, h: 'right' }),
+    title: await wb.style({ font, ...T, h: 'center' }),
+    head: await wb.style({ font, ...H, border: true, h, v, wrap: true, fill }),
+    cell: await wb.style({ font, ...C, border: true, h, v }),
+    sig: await wb.style({ font, sz, b: true, ...sg, h: 'center' }), sigName: await wb.style({ font, sz, ...sg, h: 'center' })
   };
   let r = 1;
   if (o.head || o.date) {
@@ -237,7 +240,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     r = o.head ? 5 : 3;
   }
   const tref = 'A' + r; ws.set(tref, o.title || ' ').setStyle(tref, st.title); if (n > 1) { ws.addMerge('A' + r + ':' + L(n) + r); for (let c = 2; c <= n; c++) ws.setStyle(L(c) + r, st.title); }
-  ws.setRowHeight(r, (sz + 2) * 1.6);
+  ws.setRowHeight(r, T.sz * 1.6);
   const head = r + 2, data = head + 1;
   const out: RepCol[] = [];
   const widths: Record<number, number> = {};
@@ -248,7 +251,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     widths[i + 1] = Math.round(Math.max(4, Math.max(f?.w || 12, Math.min(40, h.length * 1.1 + 2)) * WMUL[c.w || 'auto'] * (sz / 11)) * 10) / 10;
     out.push({ c: i + 1, f: c.f, h: upper(h), ...(c.f === 'text' && c.text ? { text: c.text } : {}) });
   });
-  ws.setRowHeight(head, sz * 2.4); ws.setRowHeight(data, sz * 1.9);
+  ws.setRowHeight(head, H.sz * 2.4); ws.setRowHeight(data, sz * 1.9);
   ws.setColWidths(widths);
   if (o.sig === 'list') {
     // μία γραμμή για όλες: γεμίζει όταν βγαίνει, με τις υπογραφές του εντύπου ή των Ρυθμίσεων

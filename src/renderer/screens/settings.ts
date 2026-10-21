@@ -24,7 +24,7 @@ import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows'
 import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
-import { XL_FONTS, XL_H, XL_LOOK, XL_SIZES, XL_V, sameLook, xlLook, type XlLook } from '../../shared/xlLook';
+import { XL_FONTS, XL_H, XL_LOOK, XL_PARTS, XL_SIZES, XL_STYLES, XL_V, sameLook, tablePart, xlLook, type XlLook, type XlPart, type XlPartKey } from '../../shared/xlLook';
 import { SIG_FORMS, sameSigs, sigDefaults, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
 
@@ -84,7 +84,21 @@ function SettingsCard() {
 
 // Γράμματα Excel (Michael, 20/10): γραμματοσειρά, μέγεθος και στοίχιση των κελιών σε ό,τι φτιάχνει η εφαρμογή στο Excel.
 // Προεπιλογή Arial 12, στο κέντρο οριζόντια και κάθετα. Τα έντυπα με σταθερή διάταξη και τα δικά σου Excel μένουν όπως είναι.
-const lookText = (x: XlLook) => x.font + ' ' + x.sz + ', ' + XL_H.find(o => o.value === x.h)!.label.toLowerCase() + ' / ' + XL_V.find(o => o.value === x.v)!.label.toLowerCase();
+// Κάθε κομμάτι με δικό του μέγεθος, έντονα, πλάγια, υπογράμμιση (Michael, 21/10): κεφαλίδα και υπογραφές και στα έντυπα.
+const lookText = (x: XlLook) => x.font + ' ' + x.sz + ', ' + XL_H.find(o => o.value === x.h)!.label.toLowerCase() + ' / ' + XL_V.find(o => o.value === x.v)!.label.toLowerCase() + (x.parts ? ', με δικά τους γράμματα σε κομμάτια' : '');
+const PART_LBL: Record<XlPartKey, [string, string]> = {
+  hdr: ['Κεφαλίδα', 'Οι γραμμές πάνω αριστερά (μονάδα, γραφείο). Σε όλα τα έντυπα.'],
+  title: ['Τίτλος', 'Ο τίτλος του φύλλου ή του εντύπου.'],
+  head: ['Επικεφαλίδες στηλών', 'Η γραμμή με τα ονόματα των στηλών.'],
+  data: ['Γραμμές του πίνακα', 'Τα στοιχεία κάτω από τις επικεφαλίδες.'],
+  sig: ['Υπογραφές', 'Λέξη, θέση και όνομα κάτω από τον πίνακα. Σε όλα τα έντυπα.']
+};
+const STYLE_BTN: [typeof XL_STYLES[number], string, string, Record<string, string>][] = [
+  ['b', 'Β', 'Έντονα', { fontWeight: '800' }], ['i', 'Π', 'Πλάγια', { fontStyle: 'italic', fontFamily: 'Georgia,serif' }], ['u', 'Υ', 'Υπογράμμιση', { textDecoration: 'underline' }]
+];
+const formLike = (k: XlPartKey) => k === 'hdr' || k === 'sig';
+// Πώς βγαίνει το κομμάτι: για κεφαλίδα και υπογραφές ό,τι όρισες (τα υπόλοιπα όπως το έντυπο), για τον πίνακα με τις προεπιλογές του
+const partNow = (x: XlLook, k: XlPartKey): XlPart => (formLike(k) ? x.parts?.[k] || {} : tablePart(x, k as 'title' | 'head' | 'data'));
 function XlLookCard() {
   const { state, run } = useStore(); const toast = useToast();
   const saved = xlLook(state.settings);
@@ -93,19 +107,48 @@ function XlLookCard() {
   const save = async (v: XlLook) => {
     if (await run({ t: 'setSettings', settings: { xl: v }, text: 'γράμματα Excel: ' + lookText(v) }, false)) { setX(v); toast({ text: 'Αποθηκεύτηκαν τα γράμματα Excel: ' + lookText(v) }); }
   };
+  // αλλαγή σε ένα κομμάτι (undefined: η προεπιλογή του)· τα κενά κομμάτια φεύγουν
+  const setPart = (k: XlPartKey, ch: XlPart) => {
+    const p: XlPart = { ...x.parts?.[k], ...ch }; (Object.keys(p) as (keyof XlPart)[]).forEach(f => p[f] === undefined && delete p[f]);
+    const parts = { ...x.parts, [k]: p }; if (!Object.keys(p).length) delete parts[k];
+    const { parts: _, ...rest } = x; setX(Object.keys(parts).length ? { ...rest, parts } : rest);
+  };
   const row = (label: string, help: string, ctl: unknown) => html`<div className="pref"><div><b>${label}</b><small>${help}</small></div>${ctl}</div>`;
-  const cell = { fontFamily: x.font === 'Times New Roman' ? '"Times New Roman",serif' : x.font === 'Calibri' ? 'Calibri,Carlito,Arial,sans-serif' : 'Arial,"Liberation Sans",sans-serif', fontSize: x.sz + 'pt', textAlign: x.h, verticalAlign: x.v === 'center' ? 'middle' : x.v, border: '1px solid #9aa0a6', padding: '0 6px', height: (x.sz * 2.6) + 'pt', color: '#202124', background: '#fff' };
+  const ff = x.font === 'Times New Roman' ? '"Times New Roman",serif' : x.font === 'Calibri' ? 'Calibri,Carlito,Arial,sans-serif' : 'Arial,"Liberation Sans",sans-serif';
+  // το δείγμα: κάθε κομμάτι με τα γράμματά του (κεφαλίδα και υπογραφές του δείγματος: 10 και 12 κανονικά όταν μένουν όπως το έντυπο)
+  const look = (k: XlPartKey) => { const p = partNow(x, k); const sz = k === 'data' ? x.sz : p.sz ?? (k === 'hdr' ? 10 : x.sz);
+    return { fontFamily: ff, fontSize: sz + 'pt', fontWeight: p.b ? 700 : 400, fontStyle: p.i ? 'italic' : 'normal', textDecoration: p.u ? 'underline' : 'none', color: '#202124' }; };
+  const cell = (k: XlPartKey) => ({ ...look(k), textAlign: x.h, verticalAlign: x.v === 'center' ? 'middle' : x.v, border: '1px solid #9aa0a6', padding: '0 6px', height: (x.sz * 2.6) + 'pt', background: k === 'head' ? '#d9d9d9' : '#fff' });
+  const sizeAuto = (k: XlPartKey) => (formLike(k) ? 'Όπως το έντυπο' : k === 'title' ? 'Αυτόματα (' + (x.sz + 2) + ')' : 'Όπως οι γραμμές (' + x.sz + ')');
+  const partRow = (k: XlPartKey) => {
+    const p = partNow(x, k); const own = x.parts?.[k];
+    const size = k === 'data'
+      ? html`<${Select} className="ui-select" aria-label="Μέγεθος: γραμμές του πίνακα" value=${String(x.sz)} onChange=${(e: any) => setX({ ...x, sz: +e.target.value })}>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}<//>`
+      : html`<${Select} className="ui-select" aria-label=${'Μέγεθος: ' + PART_LBL[k][0]} value=${own?.sz ? String(own.sz) : ''} onChange=${(e: any) => setPart(k, { sz: e.target.value ? +e.target.value : undefined })}>
+          <option value="">${sizeAuto(k)}</option>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}<//>`;
+    const btns = STYLE_BTN.map(([f, t, tip, css]) => html`<button key=${f} type="button" className="ui-chip" style=${{ ...css, minWidth: '34px', padding: '0 8px' }} aria-pressed=${!!p[f]} aria-label=${tip + ': ' + PART_LBL[k][0]} data-tip=${tip}
+      onClick=${() => setPart(k, { [f]: !p[f] })}>${t}</button>`);
+    const back = formLike(k) && own && html`<${Button} variant="ghost" size="sm" data-tip="Ξανά όπως είναι στο έντυπο" onClick=${() => setPart(k, { sz: undefined, b: undefined, i: undefined, u: undefined })}>Επαναφορά<//>`;
+    return html`<div key=${k} className="pref"><div><b>${PART_LBL[k][0]}</b><small>${PART_LBL[k][1]}</small></div>
+      <div style=${{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>${size}${btns}${back}</div></div>`;
+  };
   return html`<${Card} title="Γράμματα Excel">
-    <p className="note" style=${{ marginTop: 0 }}>Σε ό,τι φτιάχνει η εφαρμογή στο Excel: τα Excel που βγάζεις (Δυναμολόγιο και καταστάσεις, Συνολικό δυναμολόγιο, Στελέχη, Οπλισμός, Έλεγχος υπηρεσιών), τα νέα αρχεία και φύλλα στα <b>Αρχεία Excel</b> (π.χ. Ιατρικά, Ποινές, ΘΑΛΑΜΟΙ, νέος μήνας) και τα πρότυπα του «Φτιάξ' το εδώ» στα Έντυπα (εκεί το μέγεθος το διαλέγεις στο πρότυπο).
-      Οι ${HK()}, ΦΡΟΥΡΑ και Εξοδούχοι κρατούν τη διάταξη του εντύπου. Στα δικά σου Excel οι νέες γραμμές παίρνουν τη μορφή της γραμμής από πάνω. Ό,τι δεν χωρά μικραίνει λίγο ή αναδιπλώνεται, για να μην κόβεται.</p>
+    <p className="note" style=${{ marginTop: 0 }}>Σε ό,τι φτιάχνει η εφαρμογή στο Excel: τα Excel που βγάζεις (Δυναμολόγιο και καταστάσεις, Συνολικό δυναμολόγιο, Στελέχη, Οπλισμός, Έλεγχος υπηρεσιών), τα νέα αρχεία και φύλλα στα <b>Αρχεία Excel</b> (π.χ. Ιατρικά, Ποινές, ΘΑΛΑΜΟΙ, νέος μήνας) και τα πρότυπα του «Φτιάξ' το εδώ» στα Έντυπα (εκεί το μέγεθος των γραμμών το διαλέγεις στο πρότυπο).
+      Οι ${HK()}, ΦΡΟΥΡΑ και Εξοδούχοι κρατούν τη διάταξη του εντύπου· σε αυτά αλλάζουν μόνο η <b>κεφαλίδα</b> και οι <b>υπογραφές</b>, αν τους δώσεις δικά τους γράμματα. Στα δικά σου Excel οι νέες γραμμές παίρνουν τη μορφή της γραμμής από πάνω. Ό,τι δεν χωρά μικραίνει λίγο ή αναδιπλώνεται, για να μην κόβεται.</p>
     ${row('Γραμματοσειρά', 'Υπάρχουν σε κάθε PC με Windows 7.', html`<${Segmented} small=${true} value=${x.font} onChange=${(font: string) => setX({ ...x, font })} items=${XL_FONTS.map(f => ({ value: f, label: f }))}/>`)}
-    ${row('Μέγεθος', 'Ο τίτλος του φύλλου βγαίνει 2 μεγέθη μεγαλύτερος.', html`<${Select} className="ui-select" aria-label="Μέγεθος γραμμάτων" value=${String(x.sz)} onChange=${(e: any) => setX({ ...x, sz: +e.target.value })}>${XL_SIZES.map(n => html`<option key=${n} value=${String(n)}>${n}</option>`)}<//>`)}
     ${row('Οριζόντια στοίχιση', 'Στα κελιά του πίνακα και στις επικεφαλίδες. Ο τίτλος μένει στο κέντρο.', html`<${Segmented} small=${true} value=${x.h} onChange=${(h: XlLook['h']) => setX({ ...x, h })} items=${XL_H}/>`)}
     ${row('Κάθετη στοίχιση', 'Πού κάθεται το κείμενο όταν η γραμμή είναι ψηλότερη.', html`<${Segmented} small=${true} value=${x.v} onChange=${(v: XlLook['v']) => setX({ ...x, v })} items=${XL_V}/>`)}
-    <div style=${{ overflowX: 'auto', margin: '8px 0 12px' }}><table style=${{ borderCollapse: 'collapse', minWidth: '360px' }} aria-label="Δείγμα"><tbody>
-      <tr>${['Α/Α', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ'].map(t => html`<td key=${t} style=${{ ...cell, fontWeight: 700, background: '#d9d9d9' }}>${t}</td>`)}</tr>
-      <tr>${['1', 'ΠΑΠΑΔΟΠΟΥΛΟΣ', 'ΓΕΩΡΓΙΟΣ'].map(t => html`<td key=${t} style=${cell}>${t}</td>`)}</tr>
-    </tbody></table></div>
+    <h3 style=${{ fontSize: '15px', margin: '14px 0 2px' }}>Μέγεθος και μορφή ανά κομμάτι</h3>
+    ${XL_PARTS.map(partRow)}
+    <div style=${{ overflowX: 'auto', margin: '8px 0 12px', background: '#fff', padding: '10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }} aria-label="Δείγμα">
+      <div style=${look('hdr')}>${(state.settings.unit.filter(Boolean).slice(0, 2).length ? state.settings.unit.filter(Boolean).slice(0, 2) : ['ΚΕΘΤ', 'ΓΡΑΦΕΙΟ ΛΟΧΙΑ']).map((u: string, i: number) => html`<div key=${i}>${u.toUpperCase()}</div>`)}</div>
+      <div style=${{ ...look('title'), textAlign: 'center', margin: '6px 0' }}>ΚΑΤΑΣΤΑΣΗ ΠΡΟΣΩΠΙΚΟΥ</div>
+      <table style=${{ borderCollapse: 'collapse', minWidth: '360px', margin: '0 auto' }}><tbody>
+        <tr>${['Α/Α', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ'].map(t => html`<td key=${t} style=${cell('head')}>${t}</td>`)}</tr>
+        <tr>${['1', 'ΠΑΠΑΔΟΠΟΥΛΟΣ', 'ΓΕΩΡΓΙΟΣ'].map(t => html`<td key=${t} style=${cell('data')}>${t}</td>`)}</tr>
+      </tbody></table>
+      <div style=${{ ...look('sig'), textAlign: 'right', marginTop: '10px' }}>Ο<br/>ΔΙΟΙΚΗΤΗΣ</div>
+    </div>
     <div className="toolbar"><${Button} disabled=${!changed} onClick=${() => save(x)}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setX(saved)}>Άκυρο<//>`}
       ${!sameLook(x, XL_LOOK) && html`<${Button} variant="ghost" onClick=${() => (sameLook(saved, XL_LOOK) ? setX(XL_LOOK) : save(XL_LOOK))} data-tip=${'Προεπιλογή: ' + lookText(XL_LOOK)}>Προεπιλογή<//>`}</div>
