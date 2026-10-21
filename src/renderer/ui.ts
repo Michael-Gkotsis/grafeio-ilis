@@ -28,6 +28,8 @@ export const Icon: Record<string, any> = {
   chev: svg('<path d="M9 6l6 6-6 6"/>', '16'), up: svg('<path d="M6 15l6-6 6 6"/>', '16'), down: svg('<path d="M6 9l6 6 6-6"/>', '16'),
   star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>', '14'),
   collapse: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>'),
+  // ερωτηματικό σε κύκλο: Οδηγός χρήσης
+  help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 4"/><circle cx="12" cy="17.2" r="0.6" fill="currentColor"/>'),
   // σταυρόνημα: Οπλισμός
   weapon: svg('<circle cx="12" cy="12" r="7.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
   expand: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>')

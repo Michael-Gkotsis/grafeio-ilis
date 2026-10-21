@@ -242,7 +242,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .searchbtn .ui-kbd{background:transparent;border-color:var(--bar-line);color:var(--bar-muted)}
 /* στενή οθόνη (1024): μόνο ο φακός, όχι ένα σπασμένο «Ctrl K» */
-@media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}}
+@media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}.topbar{gap:10px}.topbar__right{gap:6px}}
 .topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .topbar .ui-btn--ghost{color:var(--bar-fg)}
 .topbar .ui-btn--ghost:hover{background:var(--bar-field)}
@@ -749,6 +749,33 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .setnav button[aria-current="page"]{background:var(--card);color:var(--foreground);box-shadow:var(--shadow-sm),inset 3px 0 0 var(--primary)}
 .setbody{min-width:0}
 @media (max-width:900px){.setgrid{grid-template-columns:minmax(0,1fr)}.setnav{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}.setnav button{flex:none}}
+/* Οδηγός χρήσης: περιεχόμενα αριστερά (με ομάδες), ένα θέμα τη φορά, κείμενο για ανάγνωση */
+.guide__grid{grid-template-columns:240px minmax(0,1fr)}
+.guide__search{width:320px;max-width:100%}
+.guidenav{max-height:calc(100vh - var(--top-h) - 32px);overflow-y:auto}
+.guidenav button{flex:none;height:auto;min-height:32px;padding:6px 12px;white-space:normal;line-height:1.3;font-size:13.5px}
+.guidenav__group{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-fg);padding:12px 12px 4px}
+.guidenav__group:first-child{padding-top:0}
+.guide__card{padding:20px 24px;max-width:860px;font-size:14.5px;line-height:1.6}
+.guide__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.guide__title{font-size:20px;margin:0}
+.guide__card h3{font-size:15.5px;margin:20px 0 6px}
+.guide__card p{margin:0 0 10px}
+.guide__card ul,.guide__card ol{margin:0 0 12px;padding-left:22px}
+.guide__card li{margin:3px 0}
+.guide__card .ui-alert{margin:10px 0 12px}
+.guide__table{overflow-x:auto;margin:4px 0 14px}
+.guide__table table.legend{font-size:13.5px}
+dl.kv.guide__kv{margin:0 0 16px;font-size:13px}
+.guide__link{background:none;border:0;padding:0;font:inherit;color:var(--info);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.guide__link:hover{color:var(--foreground)}
+.guide__hits{list-style:none;margin:8px 0 0;padding:0}
+.guide__hits li{padding:10px 0;border-top:1px solid var(--border)}
+.guide__hit{font-weight:600;font-size:15px}
+.guide__snip{margin:4px 0 0;font-size:13px;color:var(--muted-fg)}
+.guide mark{background:var(--warn-bg);color:inherit;border-radius:2px}
+.guide__pager{display:flex;justify-content:space-between;gap:8px;margin-top:20px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap}
+@media (max-width:900px){.guide__grid{grid-template-columns:minmax(0,1fr)}.guidenav{max-height:none}.guidenav__group{display:none}.guide__card{padding:16px}}
 .sigrid .statsel{padding:3px 4px 3px 6px;gap:2px;height:auto;min-height:0;font-size:12px;width:auto;min-width:0}
 .sigrid .statsel > svg{width:13px;height:13px}
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}

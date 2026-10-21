@@ -7,6 +7,8 @@ import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, 
 const TemplatesScreen = lazy(() => import('./screens/settings').then(m => ({ default: m.TemplatesScreen })));
 const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.DiagScreen })));
 const ReportsScreen = lazy(() => import('./screens/reports').then(m => ({ default: m.ReportsScreen })));
+const GuideScreen = lazy(() => import('./screens/guide').then(m => ({ default: m.GuideScreen })));
+import { topicFor } from './guideTopic';
 import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
@@ -26,16 +28,16 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen],
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 // το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
 const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
-const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates'];
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates', 'guide'];
 const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, το Ιστορικό μόνο από το μενού
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
 const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'history', 'templates'];
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'history', 'templates', 'guide'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());
@@ -147,6 +149,8 @@ function Shell() {
     const b = cur.current.back; if (!b.length) return;
     setBack(b.slice(0, -1)); moveTo(b[b.length - 1], false);
   }, [moveTo]);
+  // οδηγός χρήσης στο θέμα της οθόνης που βλέπεις· μέσα στον οδηγό μένει όπου είσαι
+  const help = useCallback(() => { const r = cur.current.route; if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) }); }, [go]);
   const setParams = useCallback((params: Record<string, any>) => setRoute(r => ({ view: r.view, params: { ...r.params, ...params } })), []);
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
   const openPerson = useCallback((id: number, list?: number[]) => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, []);
@@ -166,13 +170,14 @@ function Shell() {
         e.preventDefault(); const el = document.querySelector('.main input[type="search"]') as HTMLInputElement | null;
         if (el) { el.focus(); el.select(); } else setOver('palette');
       }
+      else if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); help(); }
       else if (e.key === 'F1') { e.preventDefault(); setOver('legend'); }
     };
     // πλαϊνό κουμπί «πίσω» του ποντικιού
     const m = (e: MouseEvent) => { if (e.button === 3) { e.preventDefault(); goBack(); } };
     document.addEventListener('keydown', h); document.addEventListener('mouseup', m);
     return () => { document.removeEventListener('keydown', h); document.removeEventListener('mouseup', m); };
-  }, [undo, go, goBack, toggleRail]);
+  }, [undo, go, goBack, toggleRail, help]);
   const Screen = SCREENS[route.view][2];
   // ο τίτλος (Ρυθμίσεις › Εμφάνιση) και στη γραμμή του παραθύρου
   const title = appTitle(state.settings);
@@ -182,7 +187,7 @@ function Shell() {
   const navItem = (v: string, inRail = false) => {
     const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
     const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
-    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : '';
+    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : v === 'guide' ? ' (Shift+F1)' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
       data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
       ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
@@ -198,6 +203,7 @@ function Shell() {
           <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
+          <${Button} variant="ghost" size="icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (Shift+F1)" data-tip-side="left" onClick=${help}>${Icon.help}<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
