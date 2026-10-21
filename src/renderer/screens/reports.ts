@@ -5,7 +5,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
-import { PersonPicker, usePrintFile } from '../common';
+import { DateField, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
@@ -313,7 +313,7 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
     <div className="field-row">
       <div className="field"><span className="field__label">Για ποια μέρα</span><div className="rep-inline">
         <${Segmented} small=${true} value=${d === today ? 't' : d === tomorrow ? 'm' : 'x'} onChange=${(v: string) => setD(v === 't' ? today : v === 'm' ? tomorrow : d)} items=${[{ value: 't', label: 'Σήμερα' }, { value: 'm', label: 'Αύριο' }, { value: 'x', label: 'Άλλη' }]}/>
-        <input type="date" className="ui-input rep-date" aria-label="Ημερομηνία" value=${d} onChange=${(e: any) => e.target.value && setD(e.target.value)}/></div></div>
+        <${DateField} className="ui-input rep-date" aria-label="Ημερομηνία" value=${d} onChange=${(e: any) => e.target.value && setD(e.target.value)}/></div></div>
       ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
     </div>
     <${PickList} p=${p} kind=${r.kind} onNever=${onNever}/>

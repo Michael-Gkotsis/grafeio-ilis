@@ -49,6 +49,13 @@ export const hkDay = (s: ISODate): string => HK_DOW[weekday(s)] + ' ' + hkDate(s
 
 export const dm = (s: ISODate): string => { const x = parseD(s); return String(x.getDate()).padStart(2, '0') + '/' + String(x.getMonth() + 1).padStart(2, '0'); };
 export const dmy = (s: ISODate): string => dm(s) + '/' + parseD(s).getFullYear();
+// «21/10», «21.10.26», «21-10-2026» → εεεε-μμ-ηη· χωρίς χρονιά: η χρονιά του ref. null αν δεν είναι σωστή μέρα (π.χ. 31/02)
+export function parseDmy(s: string, ref: ISODate): ISODate | null {
+  const m = /^\s*(\d{1,2})\s*[/.\- ]\s*(\d{1,2})(?:\s*[/.\- ]\s*(\d{2}|\d{4}))?\s*$/.exec(s); if (!m) return null;
+  const d = +m[1], mo = +m[2], y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : +ref.slice(0, 4);
+  if (mo < 1 || mo > 12 || d < 1 || d > new Date(y, mo, 0).getDate()) return null;
+  return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
 export const dmyy = (s: ISODate): string => dm(s) + '/' + String(parseD(s).getFullYear()).slice(2);
 export const milDate = (s: ISODate): string => { const x = parseD(s); return String(x.getDate()).padStart(2, '0') + ' ' + MON_MIL[x.getMonth()] + ' ' + String(x.getFullYear()).slice(2); };
 export const dow = (s: ISODate): string => DOW[parseD(s).getDay()];

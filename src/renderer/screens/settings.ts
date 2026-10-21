@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
-import { HoursField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
+import { DateField, HoursField, RangeField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
 import { PHASE_NAME, blocksOf, dutyStartOf, shiftGroups, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
@@ -203,7 +203,7 @@ function EditBlockDialog({ phase, b, onClose }: P) {
       ${errs.map((t: string) => html`<${Alert} key=${t} tone="bad"><span>${t}</span><//>`)}
       ${others.length > 0 && html`<${Alert} tone="warn"><span>Σε άλλες υπηρεσίες (δεν εμποδίζει την αποθήκευση): ${others.join(' · ')}</span><//>`}</div>
     ${b.kind !== 'ly' && html`<${HoursField} id="eb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${labels} rot=${rotB} start=${start}
-      fixed=${shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__help" htmlFor=${'eb-h-' + x.k}>${x.label}</label><input id=${'eb-h-' + x.k} className="ui-input" placeholder="π.χ. 07:30-08:00" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`)}/>`}
+      fixed=${shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__help" htmlFor=${'eb-h-' + x.k}>${x.label}</label><${RangeField} id=${'eb-h-' + x.k} placeholder="π.χ. 07:30-08:00" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`)}/>`}
   <//>`;
 }
 // Αργίες (10 §4β): ΣΚ μετρούν πάντα· οι επίσημες βγαίνουν μόνες τους κάθε χρονιά (και από το Πάσχα)· εδώ αφαιρείς όποια
@@ -224,7 +224,7 @@ function HolidaysCard() {
     <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Οι επίσημες αργίες (και οι κινητές από το Πάσχα) μπαίνουν μόνες τους κάθε χρονιά· αφαίρεσε όποια δεν ισχύει για τη μονάδα και πρόσθεσε δικές σου. Μετρούν στον έλεγχο υπηρεσιών και στον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
     <ul className="hist">${list.map(x => html`<li key=${x.k} className=${x.k < today ? 'muted' : ''}><span className="nw">${dow(x.k)} ${dmy(x.k)}</span> <b>${x.v}</b> ${x.gen ? html`<${Badge}>επίσημη<//>` : html`<${Badge} tone="info">δική σου<//>`} <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + x.v} onClick=${() => drop(x)}>✕<//></li>`)}</ul>
     ${removed.length > 0 && html`<details className="note"><summary>Επίσημες που αφαίρεσες (${removed.length})</summary><ul className="hist">${removed.map(([k, v]) => html`<li key=${k}><span className="nw">${dow(k)} ${dmy(k)}</span> ${v} <${Button} size="sm" variant="ghost" onClick=${() => save({ holidaysOff: off.filter(x => x !== k) }, 'ξανά αργία ' + v + ' ' + dmy(k))}>Επαναφορά<//></li>`)}</ul></details>`}
-    <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><input id="hol-d" type="date" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
+    <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><${DateField} id="hol-d" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Τοπική εορτή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
       <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ holidays: { ...st.holidays, [d]: n.trim() }, holidaysOff: off.filter(x => x !== d) }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
   <//>`;

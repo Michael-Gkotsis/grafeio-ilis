@@ -4,7 +4,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, dutyStartOf, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
@@ -83,7 +83,7 @@ function DutyCheck({ onOpen, m }: P) {
   const mon = MONTHS[+ym.slice(5) - 1];
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
-      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><input type="month" className="ui-input" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
+      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '200px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><${MonthField} aria-label="Μήνας" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(mon) + '.xlsx'} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Αναζήτηση…" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${MonthSelect} m=${m}/>
@@ -386,7 +386,7 @@ export function AddBlockDialog({ onClose }: P) {
       <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
     </div>
     <${HoursField} id="nb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${Array.from({ length: f.n }, (_, i) => (i + 1) + 'ος')} start=${dutyStartOf(state.settings)}
-      fixed=${html`<input id="nb-h" className="ui-input" aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/>`}/>
+      fixed=${html`<${RangeField} id="nb-h" aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/>`}/>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις Ρυθμίσεις › Σ.Ι.</small></span></label>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!f.off} onChange=${(e: any) => setF({ ...f, off: !e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις Ρυθμίσεις › Υπηρεσίες.</small></span></label>
   <//>`;
