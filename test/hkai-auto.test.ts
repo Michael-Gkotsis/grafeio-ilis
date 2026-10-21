@@ -95,7 +95,7 @@ describe('3. ΑΔΕΙΕΣ', () => {
   });
 });
 
-describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/απορρίφθηκε → 3. ΑΔΕΙΕΣ', () => {
+describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/απορρίφθηκε, γράφεται μία φορά', () => {
   const ask = (s: AppState, pid: number, extra: Record<string, unknown> = {}) =>
     run(s, { t: 'addRequest', req: { pid, date: D, text: 'για οικογενειακούς λόγους', leave: { type: 'LEAVE', kind: 'Κανονική', from: '2026-10-17', to: '2026-10-17' }, ...extra } as any });
   it('γράφεται στις αιτήσεις με είδος και ημέρα, και δεν είναι ακόμα άδεια', () => {
@@ -104,14 +104,14 @@ describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/
     expect(s.statuses).toHaveLength(0);
     expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);
   });
-  it('εγκρίθηκε: γίνεται άδεια και πάει στο 3. ΑΔΕΙΕΣ της μέρας της έγκρισης, όχι της έναρξης· αναίρεση τη βγάζει', () => {
+  it('εγκρίθηκε: γίνεται άδεια, αλλά δεν ξαναγράφεται στο 3. ΑΔΕΙΕΣ (μένει μόνο η αίτηση)· αναίρεση τη βγάζει', () => {
     let s = ask(fakeState(10), 3);
     const id = s.requests[0].id;
     s = run(s, { t: 'decideRequest', id, ok: true });
     const st = s.statuses.find(x => x.type === 'LEAVE')!;
     expect(st).toMatchObject({ pid: 3, from: '2026-10-17', to: '2026-10-17', kind: 'Κανονική', req: id });
     expect(s.requests[0]).toMatchObject({ decision: 'ok', decided: D, sid: st.id });
-    expect(linesText(hkaiLeaveLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΣΑΒ 17 ΟΚΤ 26.');
+    expect(hkaiLeaveLines(s, D)).toHaveLength(0);
     expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);
     expect(hkaiReqLines(s, D)).toHaveLength(1);   // η αίτηση μένει στην ΗΚΑΙ της μέρας της
     expect(() => run(s, { t: 'decideRequest', id, ok: false })).toThrow(/ήδη εγκριθεί/);

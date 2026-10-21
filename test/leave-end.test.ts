@@ -26,10 +26,10 @@ describe('ακύρωση άδειας', () => {
     expect(outBlock(r.state, '2026-10-16', 1)).toBeNull();
     expect(strengthOf(r.state, '2026-10-16').present).toBe(10);
   });
-  it('από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια, και βγαίνει από την ΗΚΑΙ', () => {
+  it('από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια (στο 3. ΑΔΕΙΕΣ δεν γράφεται ούτε πριν ούτε μετά)', () => {
     const req: PersonRequest = { id: 'r1', pid: 1, date: TODAY, text: '', leave: { type: 'LEAVE', from: '2026-10-16', to: '2026-10-20' }, decision: 'ok', decided: TODAY, sid: 'l1' };
     const s = with1(leave({ from: '2026-10-16', to: '2026-10-20', req: 'r1' }), { requests: [req] });
-    expect(hkaiLeaveLines(s, TODAY)).toHaveLength(1);
+    expect(hkaiLeaveLines(s, TODAY)).toHaveLength(0);
     const r = run(s, { t: 'cancelLeave', id: 'l1' }).state;
     expect(r.requests[0].decision).toBe('ok');
     expect(r.requests[0].sid).toBeUndefined();

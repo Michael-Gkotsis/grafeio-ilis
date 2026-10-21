@@ -401,7 +401,7 @@ export interface SeatlessDuty { pid: number; kind: DutyKind }
 export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // Αίτηση στρατιώτη για την ΗΚΑΙ: «Ο ΣΤΡ … αιτείται {text}.»
 // Αίτηση στην ΗΚΑΙ (5. ΑΙΤΗΣΕΙΣ). Αίτηση άδειας (leave): ο Διοικητής την εγκρίνει ή την απορρίπτει· με την έγκριση γίνεται άδεια
-// (Status με req = το id της αίτησης) και γράφεται στο 3. ΑΔΕΙΕΣ της ΗΚΑΙ της μέρας της έγκρισης (Michael, 17/10).
+// (Status με req = το id της αίτησης). Στην ΗΚΑΙ γράφεται μόνο η αίτηση, μία φορά, όχι και στο 3. ΑΔΕΙΕΣ (Michael, 18/10).
 // text: ό,τι αιτείται· στην άδεια η αιτιολόγηση (μπορεί να είναι κενή)
 export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate }
 export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
