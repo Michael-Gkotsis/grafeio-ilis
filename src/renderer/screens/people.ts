@@ -5,7 +5,7 @@ import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Segmented, Sheet, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
+import { ActiveFilter, ChangePlanList, ChoiceField, UnsavedDialog, DateField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { listOf, medKinds, optionsOf, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
@@ -326,7 +326,7 @@ export function LeaveEndDialog({ st, onClose }: P) {
     footer=${html`<${Button} variant="ghost" onClick=${() => setCancel(true)} data-tip="Μόνο αν μπήκε κατά λάθος: φεύγει ολόκληρη">${W.cancel}…<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${doEnd}>${W.go}<//>`}>
     <p style=${{ margin: '0 0 10px' }}>${W.intro} τη μέρα και ώρα που λες και από εκεί και πέρα μετρά κανονικά σε υπηρεσίες, εξόδους, ${HK()}, Δύναμη, Δυναμολόγιο και Excel.</p>
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="le-d">Μέρα ${tn.toG}</label><input id="le-d" type="date" className="ui-input" min=${st.from} max=${max} value=${day} onChange=${(e: any) => { if (e.target.value) { setDay(e.target.value); setErr(null); } }}/><span className="field__help">${dayName(day, today)}</span></div>
+      <div className="field"><label className="field__label" htmlFor="le-d">Μέρα ${tn.toG}</label><${DateField} id="le-d" className="ui-input" min=${st.from} max=${max} value=${day} onChange=${(e: any) => { if (e.target.value) { setDay(e.target.value); setErr(null); } }}/><span className="field__help">${dayName(day, today)}</span></div>
       <${TimeField} id="le-t" label=${'Ώρα ' + tn.toG} value=${time} onChange=${(v: string) => { setTime(v); setErr(null); }} help=${'Η τωρινή· άλλαξέ την αν ' + (abs ? 'γύρισε' : 'βγήκε') + ' άλλη ώρα'}/>
     </div>
     <span className="field__help">${effect}</span>
@@ -561,7 +561,7 @@ export function DeclareStatusDialog({ initial, onClose }: P) {
     ${dep && html`<span className="note">${daysBetween(cmd.from, cmd.to)} ${daysBetween(cmd.from, cmd.to) === 1 ? 'ημέρα' : 'ημέρες'} στέρηση εξόδου. Οι μέρες με υπηρεσία ή βραδινή εκπαίδευση δεν μετράνε: η λήξη μετακινείται μόνη της.</span>`}
     ${isPun && html`<div className="field-row">
       <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><${Combo} id="dpby" className="ui-input" options=${byList} placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/></div>
-      <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><input id="dpon" type="date" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
+      <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><${DateField} id="dpon" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
     <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Τον τιμωρήσαντα γράψε τον σε αιτιατική («ΛΧΙΑ ΔΟΚΙΜΙΟ») και στην ${HK()} μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
     <div className="field"><label className="field__label" htmlFor="dsn">${isPun ? 'Παρατήρηση' : 'Παρατήρηση (λόγος)'}</label><input id="dsn" className="ui-input" placeholder=${isPun ? 'Προαιρετικό, π.χ. αριθμός διαταγής' : 'Προαιρετικό, π.χ. γιατί ή αριθμός διαταγής'} value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/></div>
     ${err && html`<${Alert} tone=${ack ? 'warn' : 'bad'}><span>${err}</span><//>`}

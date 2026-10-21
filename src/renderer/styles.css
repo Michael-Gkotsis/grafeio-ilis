@@ -636,7 +636,7 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .ui-dd.is-open > svg{transform:rotate(180deg)}
 .ui-dd:disabled{cursor:not-allowed;opacity:.55}
 .ui-dd:disabled:hover{border-color:var(--input)}
-.ui-dd__pop{position:fixed;z-index:75;display:flex;flex-direction:column;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;font-size:14px;animation:fade .08s ease-out}
+.ui-dd__pop{position:fixed;z-index:85;display:flex;flex-direction:column;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;font-size:14px;animation:fade .08s ease-out}
 .ui-dd__q{flex:none;margin:6px 6px 2px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius);background:var(--background);font-size:14px}
 .ui-dd__q:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
 .ui-dd__list{list-style:none;margin:0;padding:4px;overflow:auto;flex:1;min-height:0}
@@ -647,6 +647,8 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .ui-dd__grp{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);padding:8px 10px 2px}
 .ui-dd__grp:first-child{padding-top:4px}
 .ui-dd__none{padding:8px 10px;color:var(--muted-fg);font-size:13px}
+/* DateField (common.ts): το κρυφό <input type="date"> που ανοίγει μόνο το ημερολόγιο («Άλλη μέρα από το ημερολόγιο…») */
+.datefld__cal{position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none}
 .actfilter .actfilter__act{font-weight:600;color:var(--info);white-space:nowrap}
 .ui-chip--view{border-style:dashed}
 .ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
@@ -872,7 +874,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wpop__when label,.wpop__field{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--muted-fg)}
 .wpop__field{margin-top:8px}
 .wpop__time{width:88px;height:32px;font-family:var(--f-mono);font-size:14px;font-weight:700}
-.wpop__day{height:32px;font-size:13px}
+.wpop__day{width:120px;height:32px;font-size:13px}
 .wpop__note{height:32px;font-size:13px}
 .wpop__lbl{font-size:12px;font-weight:600;color:var(--muted-fg);margin-top:2px}
 .wpop__reasons{display:flex;flex-wrap:wrap;gap:6px}

@@ -2,7 +2,7 @@
 import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Dialog, Icon, Kbd, Segmented, Strip } from './ui';
-import { Combo, Select, useFloat } from './select';
+import { Combo, Select, useFloat, type ComboOpt } from './select';
 import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
@@ -11,7 +11,7 @@ import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, plainName, shiftSlots, shortName, unitOf, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
-import { daysBetween, dayName, dm, dmy, dow, today as todayFn, type ISODate } from '../shared/dates';
+import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
 import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
@@ -81,22 +81,78 @@ export function DateRangeField({ from, to, onChange, open }: P) {
   const { today } = useStore();
   const n = daysBetween(from, to);
   if (open) return html`<div className="field"><div className="field-row">
-    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><input id="dr-from" type="date" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
+    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><${DateField} id="dr-from" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
     <div className="field"><span className="field__label">Έως</span><span className="ui-input ui-input--static">Χωρίς λήξη</span></div>
   </div></div>`;
   return html`<div className="field"><div className="field-row">
-    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><input id="dr-from" type="date" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
-    <div className="field"><label className="field__label" htmlFor="dr-to">Έως *</label><input id="dr-to" type="date" className="ui-input" min=${from} value=${to} onChange=${(e: any) => { const t = e.target.value; if (t) onChange(from, t < from ? from : t); }}/><span className="field__help">${dayName(to, today)}</span></div>
+    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><${DateField} id="dr-from" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
+    <div className="field"><label className="field__label" htmlFor="dr-to">Έως *</label><${DateField} id="dr-to" className="ui-input" min=${from} value=${to} onChange=${(e: any) => { const t = e.target.value; if (t) onChange(from, t < from ? from : t); }}/><span className="field__help">${dayName(to, today)}</span></div>
   </div><span className="field__help">Διάρκεια: ${n} ${n === 1 ? 'ημέρα' : 'ημέρες'} (μετρούν και οι δύο ημερομηνίες)</span></div>`;
 }
-// Ώρα ΩΩ:ΛΛ με λίστα συνηθισμένων ωρών· δέχεται και «14», «1400», «14.00» (γίνεται «14:00» μόλις φύγεις από το πεδίο)
-const COMMON_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '13:00', '14:00', '15:00', '16:00', '18:00', '20:00', '21:00', '22:00', '23:00'];
-export function TimeField({ id, label, value, onChange, help }: P) {
-  const bad = normTime(value) == null;
+// Ώρα ΩΩ:ΛΛ με λίστα (Michael, 21/10: «να έχουν values στη λίστα»): πρώτα οι ώρες που μετρούν στην εφαρμογή (αλλαγή υπηρεσίας,
+// έξοδος, ΗΚΑΙ) και ό,τι δίνει το πεδίο (quick, now: «τώρα»), μετά όλες ανά μισή ώρα. Γράφεται και με το χέρι: «14», «1400», «14.00»
+// γίνονται «14:00» μόλις φύγεις από το πεδίο. Γράφοντας «14» η λίστα δείχνει 14:00 και 14:30.
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => String(i >> 1).padStart(2, '0') + (i % 2 ? ':30' : ':00'));
+export type TimeQuick = [string, string][];   // [ώρα, τι είναι]
+export function useTimeOptions(quick?: TimeQuick, now?: boolean): ComboOpt[] {
+  const { state } = useStore(); const r = state.rules;
+  const base: TimeQuick = [[dutyStartOf(state.settings), 'αλλαγή υπηρεσίας'], [r.outTime || DEFAULT_OUT_TIME, 'ώρα εξόδου'], [r.hkTime || DEFAULT_HK_TIME, 'ώρα ' + HK()]];
+  const top = [...(now ? [[nowHM(), 'τώρα'] as [string, string]] : []), ...(quick || []), ...base].filter(([t], i, a) => a.findIndex(x => x[0] === t) === i);
+  return [...top.map(([t, l]) => ({ value: t, label: t + ' · ' + l, group: 'Συνηθισμένες' })), ...HALF_HOURS.map(t => ({ value: t, group: 'Όλες οι ώρες' }))];
+}
+export function TimeField({ id, label, value, onChange, help, quick, now }: P) {
+  const bad = normTime(value) == null; const opts = useTimeOptions(quick, now);
   return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
-    <${Combo} id=${id} className="ui-input" inputMode="numeric" options=${COMMON_TIMES} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
+    <${Combo} id=${id} className="ui-input" inputMode="numeric" options=${opts} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
       onChange=${(e: any) => onChange(e.target.value)} onBlur=${() => { const t = normTime(value); if (t != null && t !== value) onChange(t); }}/>
     <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
+}
+// Ώρες μιας θέσης «ΑΠΟ-ΕΩΣ» (π.χ. 08:00-20:00): οι συνηθισμένες σε λίστα, γράφονται και με το χέρι
+const HOUR_RANGES = ['06:00-08:00', '06:00-14:00', '07:30-08:00', '08:00-14:00', '08:00-16:00', '08:00-20:00', '14:00-20:00', '14:00-22:00', '16:00-24:00', '20:00-08:00', '22:00-06:00'];
+export const RangeField = (props: P) => html`<${Combo} className="ui-input" options=${HOUR_RANGES} ...${props}/>`;
+
+// Ημερομηνία ηη/μμ/εεεε (απόφαση 12/10) με λίστα: σήμερα, αύριο, μεθαύριο και οι γύρω μέρες με το όνομά τους και τις αργίες,
+// και «Ημερολόγιο…» για μέρα πιο μακριά. Γράφεται και με το χέρι: «21/10», «21.10.26», «21-10-2026».
+// Το onChange παίρνει { target: { value: 'εεεε-μμ-ηη' } } όπως το πεδίο ημερομηνίας του browser, μόνο με σωστή μέρα (και μέσα σε min/max).
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const CAL = '\u0001cal';
+const fake = (value: string) => ({ target: { value }, currentTarget: { value } });
+export function DateField({ value, onChange, min, max, className, ...rest }: P) {
+  const { state, today } = useStore();
+  const shown = value ? dmy(value) : '';
+  const [text, setText] = useState(shown);
+  useEffect(() => setText(shown), [shown]);
+  const cal = useRef<HTMLInputElement>(null);
+  const ok = (d: ISODate | null): d is ISODate => !!d && (!min || d >= min) && (!max || d <= max);
+  const anchor = value || today;
+  const opts = useMemo(() => {
+    const lbl = (d: ISODate, rel?: string) => { const h = holName(state.settings, d); return dow(d) + ' ' + dmy(d) + (rel ? ' · ' + rel : d === today ? ' · σήμερα' : '') + (h && h !== 'ΣΚ' ? ' · ' + h : ''); };
+    // «Έως» (με min): και πόσες μέρες κρατά, μετρώντας και τις δύο
+    const quick: [ISODate, string][] = [[today, 'σήμερα'], [addDays(today, 1), 'αύριο'], [addDays(today, 2), 'μεθαύριο'], [addDays(today, -1), 'χθες'],
+      ...(min ? [5, 7, 10, 14].map(n => [addDays(min, n - 1), n + ' μέρες'] as [ISODate, string]) : [])];
+    const days = Array.from({ length: 38 }, (_, i) => addDays(anchor, i - 7));
+    return [...quick.filter(([d]) => ok(d)).map(([d, rel]) => ({ value: dmy(d), label: lbl(d, rel), group: 'Γρήγορα' })),
+      ...days.filter(ok).map(d => ({ value: dmy(d), label: lbl(d), group: 'Μέρες' })), { value: CAL, label: 'Άλλη μέρα από το ημερολόγιο…', group: ' ' }];
+  }, [anchor, today, min, max, state.settings]);
+  const commit = (t: string) => { const d = parseDmy(t, anchor); if (ok(d)) { setText(dmy(d)); if (d !== value) onChange?.(fake(d)); } else setText(shown); };
+  const change = (e: P) => {
+    const t: string = e.target.value;
+    if (t === CAL) { try { cal.current?.showPicker(); } catch { cal.current?.focus(); } return; }
+    setText(t);
+    // με χρονιά ή από τη λίστα: αμέσως· αλλιώς όταν φύγεις από το πεδίο ή πατήσεις Enter
+    const d = parseDmy(t, anchor); if (ok(d) && /\d{4}\s*$/.test(t) && d !== value) onChange?.(fake(d));
+  };
+  return html`<${Fragment}>
+    <${Combo} ...${rest} className=${className || 'ui-input'} inputMode="numeric" placeholder="ηη/μμ/εεεε" options=${opts} value=${text} aria-invalid=${(text && !ok(parseDmy(text, anchor))) || undefined}
+      onChange=${change} onBlur=${() => commit(text)} onKeyDown=${(e: P) => { if (e.key === 'Enter') commit(text); }}/>
+    <input ref=${cal} type="date" className="datefld__cal" tabIndex=${-1} aria-hidden="true" value=${value || ''} min=${min} max=${max} onChange=${(e: P) => e.target.value && ok(e.target.value) && onChange?.(fake(e.target.value))}/><//>`;
+}
+// Μήνας (εεεε-μμ): οι 12 πριν και οι 3 μετά από τον τωρινό, ο πιο πρόσφατος πάνω
+export function MonthField({ value, onChange, ...rest }: P) {
+  const { today } = useStore();
+  const ms = Array.from({ length: 16 }, (_, i) => { const d = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1 + 3 - i, 1); return d.getFullYear() + '-' + pad2(d.getMonth() + 1); });
+  if (value && !ms.includes(value)) ms.push(value);
+  return html`<${Select} className="ui-input" value=${value} onChange=${onChange} ...${rest}>${ms.map(m => html`<option key=${m} value=${m}>${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</option>`)}<//>`;
 }
 // Τι κάνουν οι ώρες (Michael, 13/10 και 18/10): υπηρεσίες, έξοδος την ημέρα της επιστροφής, ΗΚΑΙ
 // Ώρες μιας υπηρεσίας (Michael, 20/10: «μια υπηρεσία μπορεί να μην έχει ωράρια»): όλη μέρα, ίδιες ώρες για κάθε θέση, ή
@@ -132,7 +188,7 @@ export function DateBar({ value, onChange, days, count }: P) {
     const tip = [hol && 'Αργία: ' + holName(state.settings, d), n != null && (n ? n + (n === 1 ? ' κενή θέση' : ' κενές θέσεις') : 'Πλήρης')].filter(Boolean).join(' · ');
     return html`<button key=${d} type="button" className=${cx('daybtn', hol && 'is-hol')} aria-pressed=${value === d} data-tip=${tip || undefined} onClick=${() => onChange(d)}><span className="daybtn__d">${dow(d)}${d === today ? ' σήμερα' : d === tomorrow ? ' αύριο' : ''}</span><span className="daybtn__n">${dm(d)}${n == null ? '' : n ? html` · <b>${n}</b>` : ' ✓'}</span></button>`;
   })}
-    <input type="date" className="ui-input datebar__pick" aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
+    <${DateField} className="ui-input datebar__pick" aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
 }
 
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */

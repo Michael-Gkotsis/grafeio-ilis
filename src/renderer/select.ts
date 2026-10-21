@@ -27,7 +27,8 @@ export function useFloat(ref: { current: HTMLElement | null }, open: boolean, mi
         const width = Math.min(Math.max(r.width, minWidth), vw - 16), left = Math.max(8, Math.min(r.left, vw - width - 8));
         setPos({ left, width, ...at }); return;
       }
-      const min = Math.min(Math.max(r.width, 160), vw - 16), left = Math.max(8, Math.min(r.left, vw - min - 8));
+      // κοντά στη δεξιά άκρη η λίστα πάει λίγο αριστερά, για να χωρούν οι επιλογές σε μία γραμμή
+      const min = Math.min(Math.max(r.width, 160), vw - 16), left = Math.max(8, Math.min(r.left, vw - Math.max(min, 280) - 8));
       setPos({ left, minWidth: min, maxWidth: Math.max(min, Math.min(520, vw - left - 8)), ...at });
     };
     upd();
@@ -143,28 +144,33 @@ export function Select({ value, onChange, children, className, disabled, search,
       </ul></div>`, document.body)}<//>`;
 }
 
-/* Combo: πεδίο κειμένου με προτάσεις από κάτω (π.χ. ώρες, «Ποιος τιμώρησε»). Γράφεις ό,τι θέλεις· η λίστα δείχνει όσες ταιριάζουν.
-   Ανοίγει με κλικ, με ↓ ή όταν γράφεις· ↑↓ και Enter διαλέγουν, Esc κλείνει. Τα υπόλοιπα πλήκτρα πάνε στο onKeyDown του πεδίου. */
+/* Combo: πεδίο κειμένου με προτάσεις από κάτω (π.χ. ώρες, ημερομηνίες, «Ποιος τιμώρησε»). Γράφεις ό,τι θέλεις· η λίστα δείχνει όσες ταιριάζουν.
+   Ανοίγει με κλικ, με ↓ ή όταν γράφεις· ↑↓ και Enter διαλέγουν, Esc κλείνει. Τα υπόλοιπα πλήκτρα πάνε στο onKeyDown του πεδίου.
+   options: κείμενα, ή { value, label, group } όταν η λίστα δείχνει κάτι παραπάνω (π.χ. «Τρί 21/10/2026 · σήμερα») ή έχει ομάδες. */
+export interface ComboOpt { value: string; label?: string; group?: string }
+const optOf = (o: string | ComboOpt): ComboOpt => (typeof o === 'string' ? { value: o } : o);
 export function Combo({ options, value, onChange, onKeyDown, onBlur, onClick, ...rest }: P) {
   const [open, setOpen] = useState(false); const [act, setAct] = useState(-1);
   const box = useRef<HTMLInputElement>(null); const lid = useRef('cb' + ++seq).current;
   const pos = useFloat(box, open);
   const v = value == null ? '' : String(value), nv = normGreek(v);
-  const opts: string[] = options || [];
-  // ό,τι είναι γραμμένο ήδη μία από τις επιλογές: δείχνει όλες, για να διαλέξεις άλλη
-  const vis = !open ? [] : !nv || opts.some(o => normGreek(o) === nv) ? opts : opts.filter(o => matches(o, v));
+  const opts: ComboOpt[] = (options || []).map(optOf);
+  // ό,τι είναι γραμμένο ήδη μία από τις επιλογές: δείχνει όλες, για να διαλέξεις άλλη· αλλιώς όσες ταιριάζουν, μία φορά την καθεμία
+  const vis = !open ? [] : !nv || opts.some(o => normGreek(o.value) === nv) ? opts
+    : opts.filter((o, i) => (matches(o.value, v) || (o.label != null && matches(o.label, v))) && opts.findIndex(x => x.value === o.value) === i);
+  const sel = vis.findIndex(o => o.value === v);
   // ανοίγει στην τιμή που είναι γραμμένη· μετά ακολουθεί τα βελάκια
-  useEffect(() => { (document.querySelector('#' + lid + (act < 0 ? ' [aria-selected="true"]' : '-' + act)) as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' }); }, [act, pos != null]);
+  useEffect(() => { (document.getElementById(lid + '-' + (act < 0 ? sel : act)) as HTMLElement | null)?.scrollIntoView?.({ block: act < 0 ? 'center' : 'nearest' }); }, [act, pos != null]);
   const set = (s: string) => { onChange?.(fakeEvent(s)); setOpen(false); setAct(-1); };
   const key = (e: P) => {
     const k = e.key;
     if (k === 'ArrowDown' || (e.altKey && k === 'ArrowUp')) {
       e.preventDefault();
-      if (!open) { setOpen(true); setAct(Math.max(0, opts.indexOf(v))); } else setAct(a => Math.min(vis.length - 1, a + 1));
+      if (!open) { setOpen(true); setAct(Math.max(0, opts.findIndex(o => o.value === v))); } else setAct(a => Math.min(vis.length - 1, a + 1));
       return;
     }
     if (open && k === 'ArrowUp') { e.preventDefault(); setAct(a => Math.max(0, a - 1)); return; }
-    if (open && k === 'Enter' && vis[act] != null) { e.preventDefault(); set(vis[act]); return; }
+    if (open && k === 'Enter' && vis[act] != null) { e.preventDefault(); set(vis[act].value); return; }
     if (open && k === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); return; }
     if (k === 'Tab' || k === 'Enter') setOpen(false);
     onKeyDown?.(e);
@@ -176,7 +182,9 @@ export function Combo({ options, value, onChange, onKeyDown, onBlur, onClick, ..
       onClick=${(e: P) => { setOpen(true); onClick?.(e); }} onBlur=${(e: P) => { setOpen(false); setAct(-1); onBlur?.(e); }}/>
     ${open && pos && vis.length > 0 && createPortal(html`<div className="ui-dd__pop" style=${pos}>
       <ul id=${lid} className="ui-dd__list" role="listbox" onMouseDown=${(e: P) => e.preventDefault()}>
-        ${vis.map((o, i) => html`<li key=${o} id=${lid + '-' + i} role="option" aria-selected=${o === v} className=${cx('ui-opt', i === act && 'is-act')}
-          onMouseMove=${() => i !== act && setAct(i)} onClick=${() => set(o)}>${o}</li>`)}
+        ${vis.map((o, i) => html`<${Fragment} key=${i}>
+          ${o.group && o.group !== vis[i - 1]?.group && html`<li className="ui-dd__grp" role="presentation">${o.group}</li>`}
+          <li id=${lid + '-' + i} role="option" aria-selected=${o.value === v} className=${cx('ui-opt', i === act && 'is-act')}
+            onMouseMove=${() => i !== act && setAct(i)} onClick=${() => set(o.value)}>${o.label ?? o.value}</li><//>`)}
       </ul></div>`, document.body)}<//>`;
 }
