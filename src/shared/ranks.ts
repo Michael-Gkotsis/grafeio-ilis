@@ -8,7 +8,7 @@ import type { StatConfig } from './stat';
 // Βαθμοί στρατιωτών (Δυναμολόγιο)
 export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΟΠ ΣΤΡ', 'ΕΠΟΠ ΔΝΕΑΣ', 'ΕΠΟΠ ΛΧΙΑΣ', 'ΔΕΑ'];
 // Βαθμοί στελεχών (από τον μικρότερο στον μεγαλύτερο)
-export const CADRE_RANKS = ['ΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΑΛΧΙΑΣ', 'ΑΝΘΣΤΗΣ', 'ΑΝΘΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΙΛΧΟΣ', 'ΑΝΘΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΛΓΟΣ', 'ΕΠΛΧΟΣ', 'ΤΧΗΣ', 'ΔΕΑ'];
+export const CADRE_RANKS = ['ΟΒΑ', 'ΕΠΟΠ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΑΛΧΙΑΣ', 'ΑΝΘΣΤΗΣ', 'ΑΝΘΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΙΛΧΟΣ', 'ΑΝΘΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΛΓΟΣ', 'ΕΠΛΧΟΣ', 'ΤΧΗΣ', 'ΔΕΑ'];
 // Τύποι όπλων (καρτέλα Οπλισμός, Michael 17/10)· οι άλλοι προστίθενται στις Λίστες
 export const WEAPON_TYPES = ['G3A3', 'G3A4', 'M16A2', 'M4'];
 // Λόγοι εξόδου όπλου από τον οπλοβαστό και ο λόγος εισαγωγής του καθενός (Michael, 18/10: «ΕΚΠ» → «ΛΗΞ ΕΚΠ»)· οι άλλοι στις Λίστες
@@ -107,10 +107,12 @@ export function hkRowsOf(lists?: UserLists): HkRows {
 }
 // όλες οι γραμμές με τη σειρά του εντύπου
 export const hkRowList = (lists?: UserLists) => { const r = hkRowsOf(lists); return [...r.off, ...r.nco]; };
-// γραμμές όπου μπαίνει στέλεχος: αξιωματικοί, ανθυπασπιστές, ΔΕΑ, αρχιλοχίες, επιλοχίες, λοχίες και όσες πρόσθεσες
-export const hkCadreRows = (lists?: UserLists) => { const r = hkRowsOf(lists); return [...r.off, ...r.nco.filter(x => HK_NCO.indexOf(x) < 3 && HK_NCO.indexOf(x) >= 0 || r.own.has(x))]; };
-// γραμμές όπου γράφεις πόσα στελέχη έχει, όταν δεν τα περνάς με ονόματα (οι λοχίες μετρώνται από το προσωπικό)
-export const cadreCountRows = (lists?: UserLists) => hkCadreRows(lists).filter(r => r !== 'Λοχίες');
+// γραμμές όπου μπαίνει στέλεχος: όλες εκτός από τους «Στρατιώτες» (Michael, 21/10: κάτω από το ΣΥΝΟΛΟ ΑΞΚΩΝ όλοι είναι
+// στελέχη, υπαξιωματικοί που μετρούν στο ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ· μόνο οι Στρατιώτες δεν είναι), και όσες πρόσθεσες
+export const HK_SOLDIERS_ROW = 'Στρατιώτες';
+export const hkCadreRows = (lists?: UserLists) => hkRowList(lists).filter(x => x !== HK_SOLDIERS_ROW);
+// γραμμές όπου γράφεις πόσα στελέχη έχει, όταν δεν τα περνάς με ονόματα
+export const cadreCountRows = (lists?: UserLists) => hkCadreRows(lists);
 // η δική σου γραμμή που μαζεύει έναν βαθμό (grp: μόνο από αυτή την ομάδα)
 export function hkRowClaim(lists: UserLists | undefined, rank: string, grp?: 'off' | 'nco'): string | undefined {
   const k = itemKey(rank || ''); if (!k || !lists?.hkRows?.length) return undefined;
@@ -208,5 +210,9 @@ export function guessHk(rank: string, lists?: UserLists): string {
   if (/ΔΕΑ/.test(r)) return 'ΔΕΑ';
   if (/ΑΡΧΙΛ|ΑΛΧΙ/.test(r)) return 'Αρχιλοχίες';
   if (/ΕΠΙΛ|ΕΠΛΧΙ/.test(r)) return 'Επιλοχίες';
+  if (/ΛΧΙΑΣ|ΛΟΧΙΑΣ/.test(r)) return 'Λοχίες';
+  if (/ΔΝΕΑΣ|ΔΕΚΑΝ/.test(r)) return 'Δεκανείς';
+  if (/ΕΠΟΠ/.test(r)) return 'ΕΠΟΠ Στρατιώτης';
+  if (/ΟΒΑ/.test(r)) return 'ΟΒΑ Στρατιώτης';
   return 'Λοχίες';
 }
