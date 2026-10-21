@@ -9,7 +9,7 @@ import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
 import { useNowMin } from './clock';
-import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, plainName, shiftSlots, shortName, unitOf, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
+import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, plainName, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
@@ -35,14 +35,16 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
 
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
 // hint: μια μικρή σημείωση δίπλα στον βαθμό (π.χ. «2 από 4 τον μήνα» για ΕΠΟΠ/ΟΒΑ στις Υπηρεσίες)
-export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked, hint }: P) {
+// people: άλλη λίστα από τους στρατιώτες (στις Υπηρεσίες και τα στελέχη ΕΠΟΠ/ΟΒΑ με υπηρεσίες)
+export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked, hint, people }: P) {
   const { state, today } = useStore();
   const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [sel, setSel] = useState(0);
   const dq = useDeferredValue(q);
   const chosen: number[] = multiple ? (value || []) : [];
-  const pm = useMemo(() => new Map(state.people.map(p => [p.id, p])), [state.people]);
+  const all: Person[] = people || state.people;
+  const pm = useMemo(() => new Map(all.map(p => [p.id, p])), [all]);
   // όλοι όσοι ταιριάζουν, όχι μόνο οι πρώτοι 8 (Michael, 17/10: «να τους βγάζεις όλους στο search»)· η λίστα κυλά
-  const items = useMemo(() => searchPeople(state.people, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, state.people]);
+  const items = useMemo(() => searchPeople(all, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, all]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
   const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open, 420); const list = useRef<HTMLUListElement>(null);
   // με τα βελάκια η επιλογή μένει μέσα στη λίστα που κυλά
@@ -57,7 +59,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b>${plainName(x.p)}</b><small>του ${x.p.father || '—'} · ${x.p.rank} · ${unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
+        <div><b>${plainName(x.p)}</b><small>${x.p.cid ? 'Στέλεχος · ' + x.p.rank : 'του ' + (x.p.father || '—') + ' · ' + x.p.rank + ' · ' + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`, document.body)}
   </div>`;
@@ -287,7 +289,7 @@ export function usePrintFile() {
 }
 export const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
   guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['hkai', { hkTab: 'pun' }],
-  settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}]
+  settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}], cadre: () => ['cadre', {}]
 };
 export function ExportProvider({ children }: P) {
   const toast = useToast(); const { sync } = useStore(); const nav = useNav(); const printFile = usePrintFile();

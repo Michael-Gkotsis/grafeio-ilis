@@ -243,7 +243,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
       <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p, state.settings)})</span></dd>
       <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
-      ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι, απαλλαγή την επόμενη μέρα)</span></dd>`}
+      ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι)</span></dd>`}
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
     </dl>

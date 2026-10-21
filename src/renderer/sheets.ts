@@ -2,7 +2,7 @@
 import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, activePeople, isHol, dutyMin, personMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, activePeople, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { hkRowsOf } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
@@ -27,7 +27,7 @@ function sigRows(s: AppState, form: SigForm, W: number, dash: boolean, base: (Ce
 
 // ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα): ίδια διάταξη με το template που θα βγει
 export function frouraSheet(s: AppState, date: ISODate): SheetModel {
-  const g = s.guards[date] || {}; const pm = personMap(s.people); const phase = phaseOf(s); const spen = phase === 'spen';
+  const g = s.guards[date] || {}; const pm = seatMap(s); const phase = phaseOf(s); const spen = phase === 'spen';
   const lay = frouraLayout(s, date, phase); const pos = FROURA_FORMS[phase].pos;
   const P = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
   const names = (k: string) => lay.cells.get(pos[k]) || [];
@@ -126,7 +126,7 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
 }
 // ΗΚΑΙ πίσω: ίδιοι κανόνες με την εξαγωγή (main/exports.ts)
 export function hkaiBack(s: AppState, date: ISODate): SheetModel {
-  const g = s.guards[date] || {}; const pm = personMap(s.people); const posts = postsOf(s.settings);
+  const g = s.guards[date] || {}; const pm = seatMap(s); const posts = postsOf(s.settings);
   let night = 0, day24 = 0;
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };

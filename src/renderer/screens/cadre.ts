@@ -10,6 +10,9 @@ import { hkRowLabel, HK, UNIT } from '../../shared/unit';
 import type { Cadre, CadreAbs } from '../../shared/domain';
 import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStatusOf, cadreStatusOn, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
 import { addDays, dayName, dm, dow } from '../../shared/dates';
+import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
+import type { AppState } from '../../shared/domain';
+const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
 type P = any;
 
 const TONE: Record<CadreGroup, string> = { kol: 'info', apo: 'warn', list: 'outline' };
@@ -27,7 +30,8 @@ export function CadreScreen() {
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
   const [stFor, setStFor] = useState<{ c: Cadre; abs?: CadreAbs } | null>(null);
-  const [card, setCard] = useState<string | null>(null);
+  // από τις Υπηρεσίες (στέλεχος σε θέση): ανοίγει η καρτέλα του
+  const [card, setCard] = useState<string | null>(() => (nav.params.seat != null ? state.cadreList.find(c => c.pid === nav.params.seat)?.id || null : null));
   const [xl, setXl] = useState(false);
   const all = useMemo(() => orderedCadre(state.cadreList), [state.cadreList]);
   // χειροκίνητη σειρά (ιεραρχία): σύρσιμο γραμμής ή Alt+↑/↓. Η θέση μετρά σε όλη τη λίστα, και με φίλτρο.
@@ -98,6 +102,7 @@ function CadreCard({ c, onClose, onEdit, onStatus, onDelete }: P) {
     footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(false)}>Άκυρο<//><${Button} onClick=${onDelete}>Διαγραφή<//>`}><//>`;
   return html`<${Dialog} size="lg" title=${c.rank + ' ' + c.last + ' ' + c.first} description=${[c.spec, c.am && 'ΑΜ ' + c.am, c.role, c.phone && 'ΤΗΛ ' + c.phone, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'εκτός δύναμης'].filter(Boolean).join(' · ')} onClose=${onClose}
     footer=${html`<${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή<//><${Button} variant="outline" onClick=${onEdit}>Στοιχεία<//>${c.active && html`<${Button} onClick=${() => onStatus()}>+ Κατάσταση<//>`}`}>
+    ${c.pid != null && c.monthMax && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${monthTxt(state, today, cadreSeat(c))}${lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : ''} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}
     <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today)) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
     <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
       ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
@@ -110,7 +115,9 @@ function CadreDialog({ c, onClose }: P) {
   const lists = state.settings.lists;
   const ranks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(x => x.rank)), [state.cadreList, lists]);
   const specs = useMemo(() => optionsOf(listOf(lists, 'specs'), state.cadreList.map(x => x.spec || '')), [state.cadreList, lists]);
-  const [f, setF] = useState({ rank: c.rank || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true });
+  const [f, setF] = useState({ rank: c.rank || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined });
+  // ΕΠΟΠ/ΟΒΑ (Michael, 21/10): πόσες υπηρεσίες τον μήνα· με όριο μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι
+  const duty = isEpop({ rank: f.rank }, lists) || EPOP_ROWS.includes(f.hk) || !!c.monthMax;
   const [hkTouched, setHkTouched] = useState(!!c.id);
   const save = async () => { if (await run({ t: 'saveCadre', cadre: { ...f, id: c.id } }, false)) { onClose(); toast({ text: (c.id ? 'Αποθηκεύτηκε: ' : 'Προστέθηκε: ') + f.rank.toUpperCase() + ' ' + f.last.toUpperCase() + (c.id && c.active !== f.active ? (f.active ? ', σε δύναμη' : ', εκτός δύναμης') : '') }); } };
   const fld = (k: string, label: string, ph = '') => html`<div className="field"><label className="field__label" htmlFor=${'cd-' + k}>${label}</label><input id=${'cd-' + k} className="ui-input" placeholder=${ph} value=${(f as P)[k]} onChange=${(e: any) => setF({ ...f, [k]: e.target.value })}/></div>`;
@@ -122,6 +129,7 @@ function CadreDialog({ c, onClose }: P) {
     <div className="field-row">${fld('am', 'ΑΜ', 'αριθμός μητρώου')}${fld('phone', 'Τηλέφωνο')}</div>
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής ' + UNIT().gen)}
       <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><${Select} id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div></div>
+    ${duty && html`<div className="field"><label className="field__label" htmlFor="cd-mm">Υπηρεσίες τον μήνα (το πολύ)</label><input id="cd-mm" className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${f.monthMax ?? ''} onChange=${(e: any) => setF({ ...f, monthMax: Math.max(0, Math.floor(+e.target.value)) || undefined })}/><span className="field__help">Με αριθμό μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι (ποτέ η αυτόματη συμπλήρωση). Πάνω από το όριο ζητά αιτία. Κενό = δεν κάνει υπηρεσίες.</span></div>`}
     ${c.id && html`<label className="field" style=${{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}><input type="checkbox" className="ui-check" checked=${f.active} onChange=${() => setF({ ...f, active: !f.active })}/>
       <span>Σε δύναμη <span className="field__help">(αν φύγει από τη μονάδα, βγάλ' το: μένει στη λίστα «Εκτός δύναμης» και δεν μετρά στην ${HK()})</span></span></label>`}
   <//>`;
