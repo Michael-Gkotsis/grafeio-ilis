@@ -25,7 +25,7 @@ import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
-import type { AppState, AuditEntry } from '../shared/domain';
+import { frouraFile, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
@@ -85,7 +85,7 @@ const tplPath = (file: string) => (fs.existsSync(path.join(USER_TPL, file)) ? pa
 // Έντυπα: ποιο template και ποιος φάκελος (Αρχεία Excel). Χωρίς επιλογή: τα templates της εφαρμογής.
 const FORM_FILE: Record<Exclude<FormKind, 'check'>, string> = { froura: 'froura.xlsx', frouraSpen: 'froura-spen.xlsx', hkai: 'hkai.xlsx', outs: 'exodouxoi.xlsx' };
 const formBinding = (f: FormKind): FormBinding => store.state.settings.forms?.[f] || {};
-const formOf = (kind: ExportKind, s: AppState): FormKind => (kind === 'froura' || kind === 'frouraPsk' ? (s.settings.phase === 'spen' ? 'frouraSpen' : 'froura') : kind === 'hkai' ? 'hkai' : kind === 'check' ? 'check' : 'outs');
+const formOf = (kind: ExportKind, s: AppState): FormKind => (kind === 'froura' || kind === 'frouraPsk' ? (phaseBase(s.settings) === 'spen' ? 'frouraSpen' : 'froura') : kind === 'hkai' ? 'hkai' : kind === 'check' ? 'check' : 'outs');
 function formTpl(f: Exclude<FormKind, 'check'>): string {
   const b = formBinding(f);
   if (b.file) { if (!fs.existsSync(b.file)) throw new Error('Δεν βρέθηκε το template ' + b.file + '. Διάλεξε άλλο στα «Αρχεία Excel» ή γύρνα στο template της εφαρμογής.'); return b.file; }
@@ -207,7 +207,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
     const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
     const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), fr ? b.sheet : undefined);
-    return { name: (fr ? 'ΦΡΟΥΡΑ ' + (s.settings.phase === 'spen' ? 'ΣΠΕΝ ' : '') : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
+    return { name: (fr ? frouraFile(s.settings) : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
   if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
   if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b), sigs });

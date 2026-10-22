@@ -5,14 +5,14 @@ import { dutyAt, isWk, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
 import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
 import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
@@ -137,7 +137,7 @@ function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: Frour
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
-  const form = FROURA_FORMS[phase];
+  const form = frouraForm(s, phase);
   // οι στήλες φαρδαίνουν όσο χρειάζεται: το έντυπο τυπώνεται σε μία σελίδα (fitToPage), απλώς λίγο μικρότερο
   const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = seatMap(s);
   const warnings: string[] = [];
@@ -158,7 +158,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const lay = frouraLayout(s, d, phase);
   for (const k of lay.foreign) {
     const x = postBy(s, k); const off = x && blocksOf(s.settings, phase).find(b => b.id === x.block)?.hidden;
-    warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ' : 'ΣΒΕΝ') + ' και δεν γράφτηκε');
+    warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + phaseName(s.settings, phase) + ' και δεν γράφτηκε');
   }
   lay.cells.forEach((names, ref) => { if (names.length) ws.set(at(ref), names.join('\n')); });
   // ώρες των νούμερων με βάρδιες: στη στήλη δεξιά από το όνομα, μία γραμμή ανά βάρδια (οι σκοποί της ΣΠΕΝ έχουν δίπλα
@@ -186,8 +186,11 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
     if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceOf(b.x)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
   }
+  // δικό σου έντυπο υπηρεσιών: το φύλλο του template («ΦΡΟΥΡΑ ΣΒΕΝ») παίρνει το όνομά του
+  const base = phaseBase(s.settings, phase);
+  if (base !== phase && ws.name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base]) wb.renameSheet(ws.name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase));
   const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', ['L1', 'L2', 'L3'])] }], s, 'froura', sigs, warnings);
-  return { name: 'ΦΡΟΥΡΑ ' + (phase === 'spen' ? 'ΣΠΕΝ ' : '') + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
+  return { name: frouraFile(s.settings, phase) + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
 }
 
 // ------------------------------------------------------------------ ΗΚΑΙ (δείγμα 15)

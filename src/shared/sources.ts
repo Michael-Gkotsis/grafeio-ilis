@@ -4,7 +4,7 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator, upper } from './text';
-import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
+import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
@@ -1659,7 +1659,7 @@ export function dutyCols(settings?: Settings): DutyCols {
   const hit = (list: string[], code: string) => list.some(w => (w.endsWith('*') ? codeKey(code).startsWith(codeKey(w.slice(0, -1))) : codeKey(w) === codeKey(code)));
   const crit = (code: string) => (isBareCode(code) ? code + '*' : code);
   const own = new Map<string, number>();
-  for (const b of [...(settings.blocks || []), ...(settings.blocksSpen || [])]) {
+  for (const b of everyBlock(settings)) {
     let col = KIND_COL[b.kind];
     if (col == null && b.custom) {   // και οι ανενεργές (Michael, 20/10): οι υπηρεσίες τους δεν χάνονται από τον έλεγχο
       const name = norm(b.name); col = own.get(name);

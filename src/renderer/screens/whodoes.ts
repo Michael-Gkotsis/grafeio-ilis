@@ -9,7 +9,7 @@ import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useV
 import { Select } from '../select';
 import { useOpenFrom, useStore } from '../store';
 import { ActiveFilter, GoLink } from '../common';
-import { PHASE_NAME, WEEK, blocksOf, dutyStartOf, platoonsOf, platoonShort, fullName, shortName, unitOf, type Person } from '../../shared/domain';
+import { WEEK, blocksOf, phaseList, phaseName, dutyStartOf, platoonsOf, platoonShort, fullName, shortName, unitOf, type Person, type Settings } from '../../shared/domain';
 import { capCell, capCols, statusesOn, type CapCell, type CapCol } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
 import { statusLbl } from '../../shared/ranks';
@@ -29,7 +29,7 @@ const FILTERS: [Filt, string, string][] = [
 ];
 // Δευτέρα πρώτη, με δύο γράμματα (Δε, Τρ, Τε…)
 const DAY2 = (d: number) => DOW[d].slice(0, 2);
-const colTip = (c: CapCol) => c.label + ' · ' + (c.phases.length === 2 ? 'ΣΒΕΝ και ΣΠΕΝ' : 'μόνο ' + PHASE_NAME[c.phases[0]]) + (c.armed ? ' · ένοπλη' : '') + (c.block ? ' · δική σου υπηρεσία' : '');
+const colTip = (c: CapCol, st: Settings) => c.label + ' · ' + (c.phases.length === phaseList(st).length ? (c.phases.length === 2 ? 'ΣΒΕΝ και ΣΠΕΝ' : 'όλα τα έντυπα') : (c.phases.length === 1 ? 'μόνο ' : '') + c.phases.map(ph => phaseName(st, ph)).join(', ')) + (c.armed ? ' · ένοπλη' : '') + (c.block ? ' · δική σου υπηρεσία' : '');
 const untilTxt = (s: { open?: boolean; to: string }, date: ISODate) => (s.open ? ' χωρίς λήξη' : s.to === date ? '' : ' έως ' + dm(s.to));
 
 // Κελί: ✓ κάνει · ✕ όχι (λοχίας) · — όχι από Σ.Ι./πόστο · ✓! κάνει παρά τη Σ.Ι./το πόστο
@@ -126,7 +126,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
     ${!cols.length ? html`<div className="ui-card empty">Δεν υπάρχουν υπηρεσίες στα έντυπα (εκτός από Λ/Υ και Δ/Υ).</div>` : rows.length === 0 ? html`<div className="ui-card empty">${people.length ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : 'Δεν υπάρχει κανείς σε δύναμη.'}</div>` :
     html`<div className="ptable ptable--whod" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: (190 + cols.length * 72 + 246) + 'px' }}>
       <div className="ptable__head whod__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Στρατιώτης</span>
-        ${cols.map((c, i) => html`<button key=${c.key} type="button" className="whod__colhd" aria-pressed=${colF === c.key} data-tip=${colTip(c) + '. Πάτα: μόνο όσοι δεν κάνουν ' + c.label.toLowerCase()} onClick=${() => setColF(colF === c.key ? null : c.key)}><span className="whod__lbl">${c.short}</span><small className=${cx(colN[i] > 0 && 'has-n')}>${colN[i] ? 'όχι ' + colN[i] : 'όλοι'}</small></button>`)}
+        ${cols.map((c, i) => html`<button key=${c.key} type="button" className="whod__colhd" aria-pressed=${colF === c.key} data-tip=${colTip(c, state.settings) + '. Πάτα: μόνο όσοι δεν κάνουν ' + c.label.toLowerCase()} onClick=${() => setColF(colF === c.key ? null : c.key)}><span className="whod__lbl">${c.short}</span><small className=${cx(colN[i] > 0 && 'has-n')}>${colN[i] ? 'όχι ' + colN[i] : 'όλοι'}</small></button>`)}
         <span className="whod__dayhd" data-tip=${'Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, ' + dutyStartOf(state.settings) + '.'}><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>
       <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${openP}/>`; }}/>
     </div></div></div>`}

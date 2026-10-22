@@ -1,6 +1,6 @@
 // Προεπισκόπηση των εντύπων στην οθόνη: ίδια διάταξη με τα templates, ίδια δεδομένα με την εξαγωγή.
 import { E, type Cell, type SheetModel } from './common';
-import { TYPES, coversDay, hkOn, fullName, type AppState, type DutyKind, type Status } from '../shared/domain';
+import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, activePeople, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { hkRowsOf } from '../shared/ranks';
@@ -10,7 +10,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, linesText, type Line } from '../shared/hkaiText';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
+import { absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
@@ -25,10 +25,10 @@ function sigRows(s: AppState, form: SigForm, W: number, dash: boolean, base: (Ce
 }
 
 
-// ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα): ίδια διάταξη με το template που θα βγει
+// ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) ή ΣΠΕΝ (φωτογραφία γραφέα), και τα δικά σου έντυπα με τη διάταξη ενός από τα δύο: ίδια διάταξη με το template που θα βγει
 export function frouraSheet(s: AppState, date: ISODate): SheetModel {
-  const g = s.guards[date] || {}; const pm = seatMap(s); const phase = phaseOf(s); const spen = phase === 'spen';
-  const lay = frouraLayout(s, date, phase); const pos = FROURA_FORMS[phase].pos;
+  const g = s.guards[date] || {}; const pm = seatMap(s); const phase = phaseOf(s); const spen = phaseBase(s.settings, phase) === 'spen';
+  const lay = frouraLayout(s, date, phase); const pos = frouraForm(s, phase).pos;
   const P = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
   const names = (k: string) => lay.cells.get(pos[k]) || [];
   const nm = (k: string, rs = 3, cs = 1): Cell => { const n = names(k); return n.length ? E(n.join('\n'), 'b c w pl', cs, rs) : E('ΚΕΝΗ', 'b c kenh', cs, rs); };

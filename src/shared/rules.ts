@@ -6,7 +6,7 @@ import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -91,7 +91,7 @@ export function monthTxt(s: AppState, date: ISODate, p: Person): string {
   return p.monthMax ? n + ' από ' + p.monthMax + ' τον μήνα' : n + ' τον μήνα';
 }
 
-// Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ ή ΣΠΕΝ), χωρίς όσες έχουν αφαιρεθεί
+// Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ, ΣΠΕΝ ή δικό σου), χωρίς όσες έχουν αφαιρεθεί
 const postsIdx = new WeakMap<Settings['blocks'], { start: string; p: Post[] }>();
 export function postsOf(settings: Settings): Post[] {
   const blocks = blocksOf(settings) || settings.blocks; const start = dutyStartOf(settings);
@@ -99,13 +99,13 @@ export function postsOf(settings: Settings): Post[] {
   if (!c || c.start !== start) { c = { start, p: buildPosts(blocks.filter(b => !b.hidden), start).filter(x => !x.hidden) }; postsIdx.set(blocks, c); }
   return c.p;
 }
-// Όλες οι θέσεις που έχουν υπάρξει (και των δύο εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
+// Όλες οι θέσεις που έχουν υπάρξει (όλων των εντύπων, και όσες αφαιρέθηκαν): για το ιστορικό και τον έλεγχο υπηρεσιών
 const allIdx = new WeakMap<Settings, Post[]>();
 export function allPosts(settings: Settings): Post[] {
   let p = allIdx.get(settings);
   if (!p) {
     const seen = new Set<string>(); p = [];
-    for (const x of [...postsOf(settings), ...buildPosts([...(settings.blocks || []), ...(settings.blocksSpen || [])], dutyStartOf(settings))]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
+    for (const x of [...postsOf(settings), ...buildPosts(everyBlock(settings), dutyStartOf(settings))]) if (!seen.has(x.k)) { seen.add(x.k); p.push(x); }
     allIdx.set(settings, p);
   }
   return p;
@@ -226,7 +226,7 @@ export function defaultCaps(p: Person, lists?: UserLists, blocks: BlockDef[] = [
 const blocksIdx = new WeakMap<Settings, BlockDef[]>();
 const allBlocks = (st: Settings): BlockDef[] => {
   let b = blocksIdx.get(st);
-  if (!b) { const seen = new Set<string>(); b = [...(blocksOf(st) || []), ...(st.blocks || []), ...(st.blocksSpen || [])].filter(x => !seen.has(x.id) && !!seen.add(x.id)); blocksIdx.set(st, b); }
+  if (!b) { const seen = new Set<string>(); b = [...(blocksOf(st) || []), ...everyBlock(st)].filter(x => !seen.has(x.id) && !!seen.add(x.id)); blocksIdx.set(st, b); }
   return b;
 };
 export function capsOf(s: AppState, pid: number): Partial<Record<DutyKind, string>> {
@@ -261,7 +261,7 @@ export function capsPerService(st: Settings, caps: Caps): Caps | null {
 
 // --------------------------- «Ποιος κάνει τι» (Υπηρεσίες, Michael 18/10) ---------------------------
 // Στήλες: τα είδη των υπηρεσιών του εντύπου (θαλαμοφύλακας, οπλοφύλακας, σκοπιά, μαγειρεία, ΤΑΕ) και κάθε δική σου
-// υπηρεσία χωριστά (πύλη…), από ΣΒΕΝ και ΣΠΕΝ μαζί. Όχι οι κρυμμένες, όχι Λ/Υ-Δ/Υ (ορίζονται με το χέρι). Νέα υπηρεσία
+// υπηρεσία χωριστά (πύλη…), από όλα τα έντυπα μαζί (ΣΒΕΝ, ΣΠΕΝ, δικά σου). Όχι οι κρυμμένες, όχι Λ/Υ-Δ/Υ (ορίζονται με το χέρι). Νέα υπηρεσία
 // μπαίνει μόνη της ως στήλη. Τα δεδομένα είναι τα ίδια με το αρχείο «Δυνατότητα υπηρεσιών» (s.caps).
 export interface CapCol { key: CapKey; kind: DutyKind; label: string; short: string; armed: boolean; phases: Phase[]; block?: BlockDef }
 const colsIdx = new WeakMap<Settings, CapCol[]>();
@@ -270,7 +270,7 @@ export function capCols(st: Settings): CapCol[] {
   let out = colsIdx.get(st);
   if (out) return out;
   const kinds = new Map<DutyKind, CapCol>(); const own = new Map<string, CapCol>();
-  for (const [ph, bs] of [['sven', st.blocks], ['spen', st.blocksSpen]] as [Phase, BlockDef[] | undefined][]) for (const b of bs || []) {
+  for (const [ph, bs] of phaseBlocks(st)) for (const b of bs) {
     if (b.hidden || b.kind === 'ly') continue;
     const m = b.custom ? own : kinds; const id = b.custom ? b.id : b.kind;
     let c = (m as Map<string, CapCol>).get(id);

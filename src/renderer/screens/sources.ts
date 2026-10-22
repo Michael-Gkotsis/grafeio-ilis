@@ -6,7 +6,7 @@ import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } fro
 import { Select } from '../select';
 import { useStore } from '../store';
 import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
-import { TYPES, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
+import { TYPES, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type Settings, type TypeKey } from '../../shared/domain';
 import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { addDays, dm, dow } from '../../shared/dates';
@@ -497,7 +497,7 @@ export function FoldersCard() {
     <p className="note" style=${{ marginTop: 0 }}>Πού φτιάχνει η εφαρμογή τα αρχεία της. Ό,τι δεν έχει δικό του φάκελο πάει στον <b>γενικό</b>. Τα αρχεία που έχουν ήδη φτιαχτεί μένουν εκεί που είναι· στον νέο φάκελο πηγαίνουν τα επόμενα.</p>
     <ul className="srclist">${row('output', 'output', 'Γενικός φάκελος', st.outputDir || undefined)}</ul>
     <h4 className="folders__h">Έντυπα</h4>
-    <ul className="srclist">${FORMS().map(([f, label]) => { const b = forms[f] || {};
+    <ul className="srclist">${FORMS(state.settings).map(([f, label]) => { const b = forms[f] || {};
       return row(f, { form: f }, label, b.dir, html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => monthly(f, e.target.checked)}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`, b.monthly === false ? '' : '\\ΕΕΕΕ-ΜΜ'); })}</ul>
     <h4 className="folders__h">Νέα Excel ανά είδος</h4>
     <p className="note" style=${{ marginTop: 0 }}>Όταν πατάς «Νέο αρχείο…» σε ένα είδος στα Αρχεία Excel, το Excel φτιάχνεται κατευθείαν σε αυτόν τον φάκελο. Όταν έχει οριστεί Δυναμολόγιο, οι καταστάσεις, τα πόστα, τα εκτός δύναμης και οι δυνατότητες μπαίνουν ως νέο φύλλο εκεί («Νέο φύλλο…»).</p>
@@ -507,7 +507,9 @@ export function FoldersCard() {
 }
 
 // ------------------------------------------------------------------ έντυπα: template, φύλλο, φάκελος
-const FORMS = (): [FormKind, string][] => [['froura', 'ΦΡΟΥΡΑ ΣΒΕΝ'], ['frouraSpen', 'ΦΡΟΥΡΑ ΣΠΕΝ'], ['hkai', HK()], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
+// τα δικά σου έντυπα υπηρεσιών βγαίνουν με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ: φαίνονται δίπλα του
+const withOwn = (st: Settings, base: string, label: string) => { const o = (st.phases || []).filter(x => x.base === base).map(x => x.name); return o.length ? label + ' (και ' + o.join(', ') + ')' : label; };
+const FORMS = (st: Settings): [FormKind, string][] => [['froura', withOwn(st, 'sven', 'ΦΡΟΥΡΑ ΣΒΕΝ')], ['frouraSpen', withOwn(st, 'spen', 'ΦΡΟΥΡΑ ΣΠΕΝ')], ['hkai', HK()], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
 function FormsCard({ outs }: { outs: FormOut[] }) {
   const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
@@ -518,7 +520,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
   const pickDir = async (f: FormKind) => { const d = await window.api.formDir(f); if (d) await save(f, { ...(forms[f] || {}), dir: d }, 'Το έντυπο θα βγαίνει στο ' + d); };
   return html`<${Card} title="Έντυπα: template και φάκελος">
     <p className="note" style=${{ marginTop: 0 }}>Κάθε έντυπο μπορεί να βγαίνει από δικό σου template (αρχείο και φύλλο) σε δικό του φάκελο. Ό,τι έχει ήδη βγει για σήμερα ή επόμενη μέρα <b>ενημερώνεται μόνο του</b> όταν αλλάξεις κάτι στην εφαρμογή.</p>
-    <ul className="srclist">${FORMS().map(([f, label]) => {
+    <ul className="srclist">${FORMS(state.settings).map(([f, label]) => {
       const b = forms[f] || {}; const out = outs.filter(o => o.form === f);
       return html`<li key=${f} className="srcrow">
         <div className="srcrow__main"><b>${label}</b>${b.file && html` <${Badge} tone="info">δικό σου<//>`}
@@ -533,7 +535,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
         ${html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => save(f, { ...b, monthly: e.target.checked }, e.target.checked ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα')}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`}
       </li>`;
     })}</ul>
-    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS().find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
+    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS(state.settings).find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
   <//>`;
 }
 function FormDialog({ form, info, current, onClose, onSave }: P) {

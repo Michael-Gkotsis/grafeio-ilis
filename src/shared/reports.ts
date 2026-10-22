@@ -3,7 +3,7 @@
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
 import { addDays, daysBetween, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
-import { TYPES, blocksOf, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
+import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
 import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, movesOn, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, statusLbl } from './ranks';
@@ -239,7 +239,7 @@ export type DutyRow = Omit<Person, 'id'> & { id: string; pid: number | null; p: 
 // Κινήσεις όπλων: μία γραμμή = μία έξοδος όπλου (id = της κίνησης)
 export type MoveRow = Omit<Person, 'id'> & { id: string; pid: number; p: Person; m: WeaponMove };
 export type Row = Person | Cadre | StatusRow | DutyRow | MoveRow;
-const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.settings.blocks).find(b => b.id === id) || [...(s.settings.blocks || []), ...(s.settings.blocksSpen || [])].find(b => b.id === id))?.name || '';
+const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.settings.blocks).find(b => b.id === id) || everyBlock(s.settings).find(b => b.id === id))?.name || '';
 // εντός/εκτός για όλους μαζί: μία φορά ανά κατάσταση και μέρα (καλείται για κάθε γραμμή)
 let wiMemo: { s: AppState; d: ISODate; info: WeaponInfo } | null = null;
 const wInfo = (s: AppState, d: ISODate) => { if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) }; return wiMemo.info; };
@@ -528,7 +528,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
   const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', ')].filter(Boolean).join(', ');
   const tail = rest ? ' (' + rest + ')' : '';
   if (r.kind === 'duty') {
-    const bl = pk.blocks?.length ? pk.blocks.map(id => [...(s.settings.blocks || []), ...(s.settings.blocksSpen || [])].find(b => b.id === id)?.name).filter(Boolean).join(', ') : '';
+    const bl = pk.blocks?.length ? pk.blocks.map(id => everyBlock(s.settings).find(b => b.id === id)?.name).filter(Boolean).join(', ') : '';
     return (bl ? 'Θέσεις: ' + bl : 'Όλες οι θέσεις υπηρεσίας') + (pk.empty ? ', και οι κενές' : '') + tail;
   }
   if (r.kind === 'wmove') return (pk.open ? 'Τα όπλα που είναι ακόμα έξω' : 'Οι κινήσεις όπλων της μέρας') + tail;
