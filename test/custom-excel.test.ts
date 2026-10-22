@@ -101,15 +101,15 @@ describe('νέες υπηρεσίες', () => {
     expect([r[c], r[head.indexOf('ΣΥΝ.')]]).toEqual([2, 2]);
   });
 
-  it('Δυνατότητα υπηρεσιών: στήλη για τη δική σου υπηρεσία όταν κάποιος δεν την κάνει, και ξαναδιαβάζεται', async () => {
+  it('Δυνατότητα υπηρεσιών: στήλη για κάθε δική σου υπηρεσία, με το όνομά της, και ξαναδιαβάζεται', async () => {
     const { s, gate } = withGate();
     expect(capExtras(s.settings).map(x => x.head)).toEqual(['ΠΥΛΗ', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄']);   // όπως οι στήλες του «Ποιος κάνει τι»
     s.caps = { 4: { ['b:' + gate]: 'ΠΟΝΟΣ ΓΟΝΑΤΟΥ' } as never };
     const file = path.join(tmp(), 'caps.xlsx'); const b = { ...defaultBinding('caps', file), write: true };
     const w = await writeSource('caps', b, s, undefined, D, { create: true }); expect(w.ok, JSON.stringify(w)).toBe(true);
     const sh = (await readBook(file)).sheets[0];
-    const head = sh.rows[1]; expect(head.slice(9)).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΕΙΑ', 'ΣΚΟΠΙΑ', 'ΤΑΕ', 'ΠΥΛΗ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ']);
-    expect([sh.rows[2][14], sh.rows[2][15]]).toEqual(['-', 'ΠΟΝΟΣ ΓΟΝΑΤΟΥ']);
+    const head = sh.rows[1]; expect(head.slice(9)).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΕΙΑ', 'ΣΚΟΠΙΑ', 'ΤΑΕ', 'ΠΥΛΗ', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄', 'ΠΑΡΑΤΗΡΗΣΕΙΣ']);
+    expect([sh.rows[2][14], sh.rows[2][15] ?? null, sh.rows[2][16]]).toEqual(['-', null, 'ΠΟΝΟΣ ΓΟΝΑΤΟΥ']);
     const found = bestFor('caps', [sh])!; const fb = { ...b, header: found.header, cols: found.cols };
     expect(planCaps(sh, fb, s).changes).toEqual([]);
     // στο Excel έβαλε «-» και σε άλλον: περνά στην εφαρμογή ως «δεν κάνει Πύλη»
@@ -118,18 +118,40 @@ describe('νέες υπηρεσίες', () => {
     expect(apply(s2, { t: 'importCaps', changes: planCaps(sh, fb, s2).changes, source: 'x' }, ctx).state.caps[4]).toEqual({ ['b:' + gate]: 'Από Excel: ΠΟΝΟΣ ΓΟΝΑΤΟΥ' });
   });
 
-  it('Δυνατότητα υπηρεσιών σε υπάρχον φύλλο χωρίς τη στήλη: μπαίνει στο τέλος του πίνακα, οι δικές σου στήλες μένουν', async () => {
-    const { s, gate } = withGate();
+  it('Δυνατότητα υπηρεσιών σε υπάρχον φύλλο: νέα υπηρεσία μπαίνει μόνη της στο τέλος του πίνακα, ακόμα κι αν όλοι την κάνουν (Michael, 22/10)', async () => {
+    const s0 = fakeState(20); s0.caps = { 2: { th: 'ΠΟΝΟΣ' } };
     const file = path.join(tmp(), 'caps.xlsx'); const b = { ...defaultBinding('caps', file), write: true };
-    s.caps = { 2: { th: 'ΠΟΝΟΣ' } };
-    expect((await writeSource('caps', b, s, undefined, D, { create: true })).ok).toBe(true);
-    const s2 = { ...s, caps: { 2: { th: 'ΠΟΝΟΣ' }, 5: { ['b:' + gate]: 'ΑΛΛΕΡΓΙΑ' } } as AppState['caps'] };
-    const w = await writeSource('caps', b, s2, undefined, D); expect(w.ok, JSON.stringify(w)).toBe(true);
+    expect((await writeSource('caps', b, s0, undefined, D, { create: true })).ok).toBe(true);
+    expect((await readBook(file)).sheets[0].rows[1].slice(9)).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΕΙΑ', 'ΣΚΟΠΙΑ', 'ΤΑΕ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ']);
+    // πρόσθεσε «Πύλη» και «Θαλαμοφύλακες γ΄»: κανείς δεν έχει εξαίρεση, οι στήλες μπαίνουν όμως
+    const { s, gate } = withGate(); s.caps = s0.caps;
+    const w = await writeSource('caps', b, s, undefined, D); expect(w.ok, JSON.stringify(w)).toBe(true);
     if (!w.ok) return;
     expect(w.binding?.cols['b:' + gate]).toBe(15);
-    const sh = (await readBook(file)).sheets[0];
-    expect(sh.rows[1].slice(9)).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΕΙΑ', 'ΣΚΟΠΙΑ', 'ΤΑΕ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΠΥΛΗ']);
-    const row = sh.rows.find(r => r[6] === 900004)!; expect([row[14], row[15]]).toEqual(['ΑΛΛΕΡΓΙΑ', '-']);
+    let sh = (await readBook(file)).sheets[0];
+    expect(sh.rows[1].slice(9)).toEqual(['ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'ΟΠΛΟΦΥΛΑΚΑΣ', 'ΜΑΓΕΙΡΕΙΑ', 'ΣΚΟΠΙΑ', 'ΤΑΕ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΠΥΛΗ', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄']);
+    // και μετά ένας δεν κάνει Πύλη: «-» στη στήλη της, νέα γραμμή γι' αυτόν
+    const b2 = w.binding!; const s2 = { ...s, caps: { 2: { th: 'ΠΟΝΟΣ' }, 5: { ['b:' + gate]: 'ΑΛΛΕΡΓΙΑ' } } as AppState['caps'] };
+    expect((await writeSource('caps', b2, s2, undefined, D)).ok).toBe(true);
+    sh = (await readBook(file)).sheets[0];
+    const row = sh.rows.find(r => r[6] === 900004)!; expect([row[14], row[15], row[16] ?? null]).toEqual(['ΑΛΛΕΡΓΙΑ', '-', null]);
+  });
+
+  it('Δυνατότητα υπηρεσιών: ανενεργή υπηρεσία δεν παίρνει στήλη, και η στήλη που έχει ήδη μένει όπως είναι', async () => {
+    const { s, gate } = withGate(); s.caps = { 3: { ['b:' + gate]: 'ΠΟΝΟΣ' } as never };
+    const off = apply(s, { t: 'setBlock', phase: 'sven', id: gate, patch: { hidden: true } }, ctx).state;
+    const file = path.join(tmp(), 'caps.xlsx'); const b = { ...defaultBinding('caps', file), write: true };
+    expect((await writeSource('caps', b, off, undefined, D, { create: true })).ok).toBe(true);
+    expect((await readBook(file)).sheets[0].rows[1]).not.toContain('ΠΥΛΗ');
+    // ενεργή: η στήλη της· ξανά ανενεργή: η στήλη και το «-» μένουν, και η ανάγνωση δεν σβήνει τίποτα στην εφαρμογή
+    const f2 = path.join(tmp(), 'caps2.xlsx'); const w = await writeSource('caps', { ...defaultBinding('caps', f2), write: true }, s, undefined, D, { create: true });
+    expect(w.ok).toBe(true); if (!w.ok) return;
+    const b2 = w.binding || { ...defaultBinding('caps', f2), write: true };
+    expect((await writeSource('caps', b2, { ...off, caps: {} }, undefined, D)).ok).toBe(true);
+    const sh = (await readBook(f2)).sheets[0]; const c = sh.rows[1].indexOf('ΠΥΛΗ');
+    expect(c).toBeGreaterThan(0);
+    expect(sh.rows.find(r => r[6] === 900002)![c]).toBe('-');
+    expect(planCaps(sh, { ...b2, ...bestFor('caps', [sh])! }, off).changes).toEqual([]);
   });
 });
 

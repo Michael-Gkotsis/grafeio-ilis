@@ -1,7 +1,7 @@
 // Υπηρεσίες › «Ποιος κάνει τι» (Michael, 18/10): στήλες από τις υπηρεσίες, κελιά από τα ίδια δεδομένα με το capBlock
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { capBlock, capCell, capCols, fillDay, postsOf } from '../src/shared/rules';
+import { capBlock, capCell, capCols, capsPerService, fillDay, postsOf } from '../src/shared/rules';
 import type { AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 
@@ -68,13 +68,43 @@ describe('δική σου υπηρεσία', () => {
     expect(g[post.k]).toBeDefined();
     expect(g[post.k]).not.toBe(3);
   });
-  it('το «Άλλες» του Excel ισχύει και σε αυτήν, μέχρι να τη ρυθμίσεις χωριστά', () => {
+  it('δεν ακολουθεί το είδος της: «Πύλη» με είδος μαγειρεία είναι σκέτο «Πύλη» (Michael, 22/10)', () => {
+    let s = run(fakeState(30), { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'mg', armed: false, n: 1, hrs: '' });
+    const b = s.settings.blocks.find(x => x.custom)!; const post = postsOf(s.settings).find(x => x.block === b.id)!;
+    const mg = postsOf(s.settings).find(x => x.block === 'mg')!;
+    s = run(s, { t: 'setCap', pid: 4, key: 'mg', v: 'off' });
+    expect(capBlock(s, D, 4, mg)).toContain('Δεν κάνει μαγειρεία');
+    expect(capCell(s, s.people[3], col(s, 'b:' + b.id))).toEqual({ on: true, src: 'auto', why: '' });
+    expect(capBlock(s, D, 4, post)).toBeNull();
+    s = run(s, { t: 'setCap', pid: 5, key: ('b:' + b.id) as any, v: 'off' });
+    expect(capBlock(s, D, 5, post)).toBe('Δεν κάνει Πύλη (Από τον λοχία)');
+    expect(capBlock(s, D, 5, mg)).toBeNull();
+    // και τα μηνύματα Σ.Ι./πόστου λένε το όνομά της, όχι «μαγειρεία»
+    expect(capBlock(s, D, 6, post)).toBe('Δεν κάνει Πύλη (Πόστο: ΚΨΜ)');
+  });
+  it('το «Άλλες» του Excel δεν ισχύει πια σε δική σου υπηρεσία: έχει δική της στήλη', () => {
     let { s, b, post } = withGate();
     s = run(s, { t: 'importCaps', changes: [{ pid: 4, kind: 'other', reason: 'Από Excel' }], source: 'x' });
-    expect(capCell(s, s.people[3], col(s, 'b:' + b.id))).toEqual({ on: false, src: 'kind', why: 'Από Excel' });
-    expect(capBlock(s, D, 4, post)).toContain('Από Excel');
-    s = run(s, { t: 'setCap', pid: 4, key: ('b:' + b.id) as any, v: 'on' });
     expect(capCell(s, s.people[3], col(s, 'b:' + b.id)).on).toBe(true);
     expect(capBlock(s, D, 4, post)).toBeNull();
+  });
+});
+
+describe('μία φορά, στην αναβάθμιση (capsPerService)', () => {
+  it('ό,τι ίσχυε μέσω του είδους γράφεται στη στήλη της υπηρεσίας· ό,τι όρισες χωριστά μένει', () => {
+    let s = run(fakeState(30), { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'mg', armed: false, n: 1, hrs: '' });
+    s = run(s, { t: 'addBlock', phase: 'sven', name: 'Σκοπιά ΤΑΕ', kind: 'sk', armed: true, n: 1, hrs: '' });
+    const [gate, sk] = s.settings.blocks.filter(x => x.custom);
+    const caps: AppState['caps'] = { 2: { mg: 'ΠΟΝΟΣ' }, 3: { mg: 'ΑΛΛΕΡΓΙΑ', ['b:' + gate.id]: null } as never, 4: { th: 'Χ' } };
+    const out = capsPerService(s.settings, caps)!;
+    expect(out[2]).toEqual({ mg: 'ΠΟΝΟΣ', ['b:' + gate.id]: 'ΠΟΝΟΣ' });
+    expect(out[3]).toEqual({ mg: 'ΑΛΛΕΡΓΙΑ', ['b:' + gate.id]: null });
+    expect(out[4]).toBe(caps[4]);
+    expect(Object.keys(out[2])).not.toContain('b:' + sk.id);
+    expect(capsPerService(s.settings, out)).toBeNull();   // δεύτερη φορά: τίποτα
+    expect(capsPerService(fakeState(3).settings, caps)).toBeNull();   // χωρίς δικές σου υπηρεσίες
+    // μετά: ίδιο αποτέλεσμα με πριν για την Πύλη
+    const post = postsOf(s.settings).find(x => x.block === gate.id)!;
+    expect(capBlock({ ...s, caps: out }, D, 2, post)).toBe('Δεν κάνει Πύλη (ΠΟΝΟΣ)');
   });
 });

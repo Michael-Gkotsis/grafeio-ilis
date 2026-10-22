@@ -100,7 +100,7 @@ export const KINDS: KindDef[] = [
     sheetRe: /ΠΟΣΤΑ/, titleRe: /ΠΟΣΤΑ/, fields: [F('post', 'Πόστο', 'Πόστο', /^ΠΟΣΤΟ$/, { req: true })] },
   { id: 'outside', label: 'Εκτός δύναμης', help: 'Αναβολές κ.λπ.· διαβάζονται μαζί με το προσωπικό', title: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ', write: false,
     sheetRe: /ΕΚΤΟΣ/, titleRe: /ΕΚΤΟΣ ΔΥΝΑΜ/, fields: [F('remarks', 'Παρατηρήσεις (λόγος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$|^ΑΙΤΙΑ$/)] },
-  { id: 'caps', label: 'Δυνατότητες υπηρεσιών', help: 'Ποιος δεν κάνει θαλαμοφύλακας, οπλοφύλακας, μαγειρεία, σκοπιά («-» στη στήλη)', title: 'ΔΥΝΑΤΟΤΗΤΑ ΥΠΗΡΕΣΙΩΝ', write: false,
+  { id: 'caps', label: 'Δυνατότητες υπηρεσιών', help: 'Ποιος δεν κάνει θαλαμοφύλακας, οπλοφύλακας, μαγειρεία, σκοπιά, ή μια δική σου υπηρεσία όπως η πύλη («-» στη στήλη της)', title: 'ΔΥΝΑΤΟΤΗΤΑ ΥΠΗΡΕΣΙΩΝ', write: false,
     sheetRe: /ΔΥΝΑΤΟΤ/, titleRe: /ΔΥΝΑΤΟΤ/,
     fields: [F('th', 'Θαλαμοφύλακας', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', /^ΘΑΛΑΜΟΦΥΛ/), F('op', 'Οπλοφύλακας', 'ΟΠΛΟΦΥΛΑΚΑΣ', /^ΟΠΛΟΦΥΛ/), F('mg', 'Μαγειρεία', 'ΜΑΓΕΙΡΕΙΑ', /^ΜΑΓΕΙΡ/),
       F('sk', 'Σκοπιά', 'ΣΚΟΠΙΑ', /^ΣΚΟΠ/), F('tae', 'ΤΑΕ', 'ΤΑΕ', /^ΤΑΕ$/), F('capnote', 'Παρατηρήσεις (λόγος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$|^ΛΟΓΟΣ$/)] },
@@ -1315,8 +1315,9 @@ export function planOutside(sheet: RawSheet, b: SourceBinding, s: AppState, choi
 // βάλει η εφαρμογή, ενώ τα αυτόματα (πόστο, Σ.Ι. Ι4/άοπλος) μένουν. Όσοι δεν είναι στο φύλλο δεν αλλάζουν.
 export const CAP_COLS: DutyKind[] = ['th', 'op', 'mg', 'sk', 'tae'];
 export const capNo = (t: string) => /^[-–—_.]+$|^ΟΧΙ|^ΔΕΝ|^0$/.test(normGreek(t).trim());
-// Οι στήλες του «Ποιος κάνει τι» που δεν έχει το δείγμα: οι δικές σου υπηρεσίες (με το όνομά τους) και οι «Άλλες»
-// (πύλη κ.λπ.), αν υπάρχει τέτοια υπηρεσία. Στο φύλλο μπαίνουν μόνο όταν κάποιος «δεν κάνει» μία από αυτές (capExtraCols).
+// Οι στήλες του «Ποιος κάνει τι» που δεν έχει το δείγμα: οι δικές σου υπηρεσίες (με το όνομά τους, π.χ. ΠΥΛΗ) και οι
+// «Άλλες», αν υπάρχει τέτοια υπηρεσία του εντύπου. Κάθε ενεργή μπαίνει στο φύλλο μόνη της (capExtraCols, Michael 22/10)·
+// ανενεργή δεν διαβάζεται ούτε γράφεται, και η στήλη της μένει στο Excel όπως είναι.
 export function capExtras(settings: Settings): { key: CapKey; head: string; acc: string }[] {
   return capCols(settings).filter(c => !(CAP_COLS as string[]).includes(c.key))
     .map(c => (c.block ? { key: c.key, head: norm(c.block.name), acc: c.block.name } : { key: c.key, head: 'ΑΛΛΕΣ ΥΠΗΡΕΣΙΕΣ', acc: CAP_ACC[c.kind] || c.label }));
@@ -1325,9 +1326,9 @@ export function capExtras(settings: Settings): { key: CapKey; head: string; acc:
 export const capAcc = (k: CapKey, settings: Settings) => CAP_ACC[k as DutyKind] || capExtras(settings).find(x => x.key === k)?.acc || k;
 const capKeys = (b: SourceBinding, settings: Settings): CapKey[] => [...CAP_COLS, ...capExtras(settings).map(x => x.key)].filter(k => b.cols[k] != null);
 // Στήλες για τις δικές σου υπηρεσίες στο φύλλο δυνατοτήτων: όσες έχουν ήδη στήλη με το όνομά τους βρίσκονται μόνες
-// τους· όσες λείπουν και κάποιος «δεν κάνει» αυτή την υπηρεσία μπαίνουν (grow) στις πρώτες κενές στήλες μετά τον πίνακα,
-// όπως οι στήλες ωρών (timeCols), ώστε να μη μετακινηθεί καμία δική σου στήλη. Σε καινούργιο πίνακα πριν από τις
-// ΠΑΡΑΤΗΡΗΣΕΙΣ. head: οι επικεφαλίδες που γράφονται (σε καινούργιο πίνακα τις γράφει το planSource).
+// τους· όσες λείπουν μπαίνουν (grow) στις πρώτες κενές στήλες μετά τον πίνακα, όπως οι στήλες ωρών (timeCols), ώστε να
+// μη μετακινηθεί καμία δική σου στήλη. Σε καινούργιο πίνακα πριν από τις ΠΑΡΑΤΗΡΗΣΕΙΣ. head: οι επικεφαλίδες που
+// γράφονται (σε καινούργιο πίνακα τις γράφει το planSource).
 export function capExtraCols(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, grow = true): { b: SourceBinding; head: { r: number; c: number; v: string }[] } {
   if (kind !== 'caps') return { b, head: [] };
   const ext = capExtras(s.settings); if (!ext.length) return { b, head: [] };
@@ -1335,8 +1336,7 @@ export function capExtraCols(kind: ListKind, sheet: RawSheet | null, b: SourceBi
   const fresh = !row.some(v => cellText(v));
   const cols = { ...b.cols }; const used = new Set(Object.values(cols));
   for (const x of ext) if (cols[x.key] == null) { const at = row.findIndex((v, c) => !used.has(c) && headText(v) === headText(x.head)); if (at >= 0) { cols[x.key] = at; used.add(at); } }
-  const active = new Set(s.people.filter(p => p.active).map(p => p.id));
-  const need = grow ? ext.filter(x => cols[x.key] == null && Object.entries(s.caps).some(([pid, c]) => active.has(Number(pid)) && typeof c[x.key] === 'string')) : [];
+  const need = grow ? ext.filter(x => cols[x.key] == null) : [];
   if (!need.length) return Object.keys(cols).length === Object.keys(b.cols).length ? { b, head: [] } : { b: { ...b, cols }, head: [] };
   const head: { r: number; c: number; v: string }[] = [];
   if (fresh && cols.capnote != null) {

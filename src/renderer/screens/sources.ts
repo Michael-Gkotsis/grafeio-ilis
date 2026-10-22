@@ -6,13 +6,13 @@ import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } fro
 import { Select } from '../select';
 import { useStore } from '../store';
 import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
-import { TYPES, CAP_ACC, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
+import { TYPES, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
 import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { addDays, dm, dow } from '../../shared/dates';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
-  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
+  parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capExtraCols, capExtras, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
@@ -189,7 +189,8 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
     if (isNew || miss.length) return [];
     if (isStatusKind(list)) return parseStatuses(list, sheet, b, state.people, today, state.settings.lists).cands.slice(0, 5).map(c => c.who + ' · ' + TYPES[c.type || DEFAULT_TYPE[list]].label + (c.kind && c.kind !== TYPES[c.type || DEFAULT_TYPE[list]].label ? ' (' + c.kind + ')' : '') + ' · ' + dm(c.from) + '–' + dm(c.to) + (c.pid == null ? ' · ⚠ δεν βρέθηκε στην εφαρμογή' : ''));
     if (list === 'duties') { const cols = dutyDays(sheet, b); return [(sheetMonth(sheet, b.header, today) ? 'Μήνας ' + sheetMonth(sheet, b.header, today) + ' · ' : '') + cols.length + ' στήλες ημερών', ...tableRows(sheet, b.header, b.cols).records.slice(0, 4).map(r => rowName(r.v) + ' · ' + cols.map(c => cellText((sheet.rows[r.r] || [])[c])).filter(x => typeof readDuty(x, state.settings) === 'object' && readDuty(x, state.settings) !== null).join(' ') || '—')]; }
-    if (list === 'caps') return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (CAP_COLS.filter(k => b.cols[k] != null && capNo(cellText(r.v[k]))).map(k => 'όχι ' + CAP_ACC[k]).join(', ') || 'κάνει όλες'));
+    if (list === 'caps') { const bx = capExtraCols('caps', sheet, b, state, false).b; const ks = [...CAP_COLS, ...capExtras(state.settings).map(x => x.key)].filter(k => bx.cols[k] != null);
+      return tableRows(sheet, bx.header, bx.cols).records.slice(0, 5).map(r => rowName(r.v) + ' · ' + (ks.filter(k => capNo(cellText(r.v[k]))).map(k => 'όχι ' + capAcc(k, state.settings)).join(', ') || 'κάνει όλες')); }
     return tableRows(sheet, b.header, b.cols).records.slice(0, 5).map(r => rowName(r.v) + (list === 'posts' ? ' · ' + cellText(r.v.post) : list === 'outside' && cellText(r.v.remarks) ? ' · ' + cellText(r.v.remarks) : ''));
   }, [b, sheet, list, isNew, miss.length]);
   const count = useMemo(() => (isNew ? 0 : tableRows(sheet, b.header, b.cols).records.length), [b, sheet, isNew]);

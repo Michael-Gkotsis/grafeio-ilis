@@ -25,6 +25,24 @@ describe('βάση δεδομένων', () => {
     st.revert(patch); expect(st.state.guards['2026-10-13']).toBeUndefined();
     st.close();
   });
+  it('αναβάθμιση (rev 6): η δική σου υπηρεσία παίρνει δική της δυνατότητα με ό,τι ίσχυε μέσω του είδους της', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
+    let st = new Store(dir, WASM); await st.open();
+    expect(st.state.settings.rev).toBe(6);
+    const rows = fakePeople(5).map(({ id, active, ...p }) => p);
+    let s = apply(st.state, { t: 'importPeople', rows, source: 't', deactivateMissing: false }, ctx).state;
+    s = apply(s, { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'mg', armed: false, n: 1, hrs: '' }, ctx).state;
+    const gate = 'b:' + s.settings.blocks.find(b => b.custom)!.id;
+    // όπως πριν την αναβάθμιση: «δεν κάνει μαγειρεία» ίσχυε και για την Πύλη
+    st.commit({ ...s, caps: { 2: { mg: 'ΠΟΝΟΣ' } }, settings: { ...s.settings, rev: 5 } }); st.close();
+    st = new Store(dir, WASM); await st.open();
+    expect(st.state.settings.rev).toBe(6);
+    expect(st.state.caps[2]).toEqual({ mg: 'ΠΟΝΟΣ', [gate]: 'ΠΟΝΟΣ' });
+    st.close();
+    st = new Store(dir, WASM); await st.open();   // γράφτηκε στη βάση, μία φορά
+    expect(st.state.caps[2]).toEqual({ mg: 'ΠΟΝΟΣ', [gate]: 'ΠΟΝΟΣ' });
+    st.close();
+  });
   it('χαλασμένο αρχείο: δεν ανοίγει σιωπηλά, και το αντίγραφο περνά τον έλεγχο', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
     const st = new Store(dir, WASM); await st.open();

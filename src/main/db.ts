@@ -6,6 +6,7 @@ import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
+import { capsPerService } from '../shared/rules';
 import { writeDurable } from './files';
 
 // empty: το αρχείο είναι άδειο (0 bytes) ή δεν έχει τους πίνακές μας (κόψιμο ρεύματος, μισή αντιγραφή φακέλου)
@@ -97,6 +98,12 @@ export class Store {
     if (exists && !this.hasTables()) { this.db.close(); throw new CorruptDbError('Το αρχείο δεν έχει τους πίνακες της εφαρμογής', true); }
     this.migrate(exists);
     this.load();
+    // rev 6, μία φορά: κάθε δική σου υπηρεσία (π.χ. Πύλη) παίρνει δική της δυνατότητα υπηρεσιών, με ό,τι ίσχυε ως τώρα
+    // μέσω του είδους της (capsPerService), ώστε να μην αλλάξει κανείς
+    if ((this.state.settings.rev || 0) < 6) {
+      const s0 = this.state; const caps = capsPerService(s0.settings, s0.caps);
+      this.commit({ ...s0, ...(caps ? { caps } : {}), settings: { ...s0.settings, rev: 6 } }); this.flush();
+    }
     // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου
     // υπηρεσιών, οπότε ο έλεγχος μετά την αναβάθμιση δεν χρειάζεται ποτέ
     const st = this.state;
