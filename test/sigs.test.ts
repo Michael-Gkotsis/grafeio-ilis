@@ -68,7 +68,7 @@ describe('υπογραφές', () => {
     const s = lochos(fakeState(5));
     expect(sigsFor(s.settings, [...three, { art: 'Ο', title: ' ' }]).map(x => x.title)).toEqual(['ΑΛΧΙΑΣ ΛΟΧΟΥ', 'ΥΔΚΤΗΣ ΛΟΧΟΥ', 'ΔΚΤΗΣ ΛΟΧΟΥ']);
     expect(sigsSaved({ signers: { sergeant: 'Χ', commander: '' } } as any, 'reports').map(x => x.name)).toEqual(['Χ', '']);
-    expect(sigFormOf('frouraPsk')).toBe('froura'); expect(sigFormOf('check')).toBeNull();
+    expect(sigFormOf('frouraPsk')).toBe('froura'); expect(sigFormOf('check')).toBe('check');
   });
 
   it('Έντυπα: {ΥΠΟΓΡΑΦΕΣ} γεμίζει με τη λίστα (των Ρυθμίσεων, ή του εντύπου)', async () => {

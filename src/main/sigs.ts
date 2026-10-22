@@ -3,6 +3,7 @@
 // Στα έντυπα της εφαρμογής (ΗΚΑΙ, ΦΡΟΥΡΑ, Εξοδούχοι) οι υπογραφές του εντύπου βρίσκονται από τα κείμενά τους: ίδιο
 // πλήθος, στις ίδιες θέσεις· άλλο πλήθος, μοιράζονται ανάμεσα στην πρώτη και την τελευταία. Σε δικό σου πρότυπο, ένα
 // κελί {ΥΠΟΓΡΑΦΕΣ} δείχνει τη γραμμή τους (απλώνονται στο πλάτος του κελιού αν είναι συγχωνευμένο, αλλιώς του πίνακα).
+// Έντυπο χωρίς τίποτα από τα δύο: μπαίνουν μία κενή γραμμή κάτω από ό,τι έχει το φύλλο (Michael, 22/10).
 import { colName, type Sheet, type Workbook, type XlValue } from './xlsx';
 import { normGreek } from '../shared/text';
 import type { Sig } from '../shared/sigs';
@@ -81,8 +82,9 @@ function anchorBlock(ws: Sheet, a: Anchor, i: number, r2 = a.tr): Block {
 }
 
 // sigs: οι υπογραφές που θέλεις (null = όπως το έντυπο). Το {ΥΠΟΓΡΑΦΕΣ} γεμίζει πάντα, με τις sigs ή, αν δεν δόθηκαν, με τις def.
+// tagOnly: μόνο στο {ΥΠΟΓΡΑΦΕΣ} (τα Excel της εφαρμογής: ένα «Ο» στα κελιά τους δεν είναι υπογραφή).
 // Γυρνά πού βρίσκεται η καθεμία (για τη μετακίνηση πάνω στο χαρτί, layout.ts)
-export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def: Sig[], warnings: string[]): Promise<Block[]> {
+export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def: Sig[], warnings: string[], opts: { tagOnly?: boolean } = {}): Promise<Block[]> {
   const rows = await wb.values(ws.name, 2000, 60);
   const tags: { r: number; c: number }[] = [];
   rows.forEach((row, i) => (row || []).forEach((v, j) => { if (TAG.test(normGreek(str(v)).trim())) tags.push({ r: i + 1, c: j + 1 }); }));
@@ -100,9 +102,10 @@ export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def
     }
     return out;
   }
+  if (opts.tagOnly) return [];
   const an = anchorsOf(ws, rows);
   if (!sigs) return an.map((a, i) => anchorBlock(ws, a, i));
-  if (!an.length) { if (sigs.length) warnings.push('Στο φύλλο «' + ws.name + '» δεν βρέθηκαν υπογραφές και έμειναν όπως είναι. Γράψε ' + SIG_TAG + ' σε ένα κελί για να μπουν εκεί.'); return []; }
+  if (!an.length) return sigs.length ? below(wb, ws, rows, sigs, warnings) : [];
   const st = { art: ws.style(colName(an[0].art) + an[0].r), title: ws.style(colName(an[0].title.c1) + an[0].tr), dash: an.some(a => a.dash) };
   const r = an[0].r;
   // ίδιο πλήθος: στις θέσεις του εντύπου (με τις συγχωνεύσεις του)
@@ -138,4 +141,18 @@ export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def
     spans = w.slots(sigs.map((_, i) => [a + (i - 0.5) * gap, a + (i + 0.5) * gap]));
   } else { const W = w.left[ws.lastCol() + 1], k = W / n; spans = w.slots(sigs.map((_, i) => [i * k, (i + 1) * k])); }
   return writeAt(wb, ws, rows, sigs, spans, r, st, warnings);
+}
+
+// Έντυπο χωρίς υπογραφές και χωρίς {ΥΠΟΓΡΑΦΕΣ} (Michael, 22/10: «σε κάθε έντυπο να βάζεις όποια υπογραφή θέλεις»): μπαίνουν
+// μία κενή γραμμή κάτω από ό,τι έχει το φύλλο, μοιρασμένες στο πλάτος του (της περιοχής εκτύπωσης, αν έχει)
+async function below(wb: Workbook, ws: Sheet, rows: XlValue[][], sigs: Sig[], warnings: string[]): Promise<Block[]> {
+  let last = 0;
+  rows.forEach((row, i) => { if ((row || []).some(v => v != null && String(v).trim() !== '')) last = i + 1; });
+  for (const m of ws.merges()) if (m.r1 <= last && m.r2 > last) last = m.r2;
+  const W = Math.max(1, Math.min(wb.printLastCol(ws.name), ws.lastCol()));
+  const w = widths(ws, W); const R = w.left[W + 1], k = R / sigs.length;
+  const r = last + 2;
+  const out = await writeAt(wb, ws, rows, sigs, w.slots(sigs.map((_, i) => [i * k, (i + 1) * k])), r, { art: null, title: null, dash: false }, warnings);
+  wb.printDownTo(ws.name, r + 1);
+  return out;
 }

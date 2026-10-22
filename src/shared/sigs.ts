@@ -2,6 +2,8 @@
 // Μία λίστα ανά έντυπο στις Ρυθμίσεις (η προεπιλογή του), και αλλαγή τη στιγμή που βγαίνει (μόνο για εκείνη τη φορά,
 // ή και για τις επόμενες). Οι λέξεις της μονάδας ακολουθούν τον τύπο της («ΔΚΤΗΣ ΙΛΗΣ» ↔ «ΔΚΤΗΣ ΛΟΧΟΥ»), ακόμα και
 // σε υπογραφές που έγραψες εσύ πριν αλλάξεις από ίλη σε λόχο.
+// Όλα τα έντυπα με τον ίδιο τρόπο (Michael, 22/10): και τα Excel που φτιάχνει η ίδια η εφαρμογή (Έλεγχος υπηρεσιών,
+// Δυναμολόγιο, Στελέχη, Οπλισμός) έχουν λίστα υπογραφών, κενή αρχικά, όπως ήταν.
 import type { Settings } from './domain';
 import type { ExportKind } from './api';
 import { unitKindOf, unitText } from './unit';
@@ -9,8 +11,10 @@ import { upper } from './text';
 
 // art: η λέξη από πάνω («Ο», «Η», «ΤΟ» ή κενό) · title: η θέση («ΑΛΧΙΑΣ ΙΛΗΣ») · name: όνομα κάτω από την υπογραφή (προαιρετικό)
 export interface Sig { art: string; title: string; name?: string }
-export type SigForm = 'hkai' | 'froura' | 'outs' | 'reports';
-export const SIG_FORMS: SigForm[] = ['hkai', 'froura', 'outs', 'reports'];
+export type SigForm = 'hkai' | 'froura' | 'outs' | 'check' | 'roster' | 'cadre' | 'weapons' | 'reports';
+export const SIG_FORMS: SigForm[] = ['hkai', 'froura', 'outs', 'check', 'roster', 'cadre', 'weapons', 'reports'];
+// Τα Excel που φτιάχνει η εφαρμογή από την αρχή (excel.ts): χωρίς υπογραφές μέχρι να βάλεις
+export const MADE_FORMS: SigForm[] = ['check', 'roster', 'cadre', 'weapons'];
 export const ARTS = ['Ο', 'Η', 'ΤΟ', ''];
 
 const S = (art: string, title: string): Sig => ({ art, title });
@@ -18,11 +22,14 @@ const S = (art: string, title: string): Sig => ({ art, title });
 const BASE: Record<Exclude<SigForm, 'reports'>, Sig[]> = {
   hkai: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ')],
   froura: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ'), S('ΤΟ', '2ο ΓΡΑΦΕΙΟ'), S('Ο', 'ΔΚΤΗΣ ΕΠΧΙΑΣ')],
-  outs: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')]
+  outs: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')],
+  check: [], roster: [], cadre: [], weapons: []
 };
-// Το έντυπο των υπογραφών για κάθε εξαγωγή (οι ΠΣΚ όπως τα μονά)· ο έλεγχος υπηρεσιών δεν έχει υπογραφές
-export const sigFormOf = (k: ExportKind): Exclude<SigForm, 'reports'> | null =>
-  k === 'hkai' ? 'hkai' : k === 'froura' || k === 'frouraPsk' ? 'froura' : k === 'outs' || k === 'outsPsk' ? 'outs' : null;
+// Το έντυπο των υπογραφών για κάθε εξαγωγή (οι ΠΣΚ όπως τα μονά)
+export const sigFormOf = (k: ExportKind): Exclude<SigForm, 'reports'> =>
+  k === 'hkai' ? 'hkai' : k === 'froura' || k === 'frouraPsk' ? 'froura' : k === 'check' ? 'check' : 'outs';
+// Τα ονόματα στις Ρυθμίσεις και στους διαλόγους (ΗΚΑΙ/ΗΚΑΛ: hk)
+export const sigLabel = (f: SigForm, hk = 'ΗΚΑΙ') => ({ hkai: hk, froura: 'ΦΡΟΥΡΑ', outs: 'Εξοδούχοι', check: 'Έλεγχος υπηρεσιών', roster: 'Δυναμολόγιο', cadre: 'Στελέχη', weapons: 'Οπλισμός', reports: 'Έντυπα' }[f]);
 
 // Η προεπιλογή όπως την έχει το έντυπο (στα Έντυπα: λοχίας και διοικητής, με τα ονόματα που είχες ήδη γράψει)
 export function sigDefaults(st: Pick<Settings, 'signers'>, form: SigForm): Sig[] {

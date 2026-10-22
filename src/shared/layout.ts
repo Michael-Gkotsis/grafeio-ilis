@@ -1,16 +1,22 @@
 // Θέσεις πάνω στο χαρτί (Michael, 20/10): οι υπογραφές, η κεφαλίδα και ο τόπος/ημερομηνία πάνε όπου τα σύρεις.
 // Κρατιέται πόσο μετακινήθηκε το καθένα από τη θέση του εντύπου (γραμμές κάτω, στήλες δεξιά), όχι το κελί: έτσι μένει
 // σωστό και όταν το έντυπο μακραίνει (π.χ. περισσότεροι εξοδούχοι σπρώχνουν τις υπογραφές πιο κάτω).
-import type { Sig } from './sigs';
+import type { Sig, SigForm } from './sigs';
 
 export type Move = [number, number];                 // [γραμμές κάτω, στήλες δεξιά]· αρνητικά = πάνω, αριστερά
-export type Moves = Record<string, Move>;            // ανά κομμάτι: 'head', 'date', 's0', 's1', …
-export type LayoutForm = 'hkai' | 'froura' | 'outs';
-// τα φύλλα κάθε εντύπου (το καθένα με τις δικές του θέσεις)
+export type Moves = Record<string, Move>;            // ανά κομμάτι: 'head', 'date', 'title', 's0', 's1', …
+// Κάθε έντυπο εκτός από τα «Έντυπα» (εκεί οι θέσεις είναι ανά έντυπο, Report.layout)
+export type LayoutForm = Exclude<SigForm, 'reports'>;
+// τα φύλλα κάθε εντύπου (το καθένα με τις δικές του θέσεις)· όπου πολλά φύλλα έχουν την ίδια μορφή (ένα ανά φίλτρο),
+// μοιράζονται ένα key και ό,τι μετακινείς πάει σε όλα
 export const LAYOUT_SHEETS: Record<LayoutForm, { key: string; label: string }[]> = {
   hkai: [{ key: 'front', label: 'Μπροστινό' }, { key: 'back', label: 'Πίσω' }],
   froura: [{ key: 'main', label: 'ΦΡΟΥΡΑ' }],
-  outs: [{ key: 'outs', label: 'Εξοδούχοι' }, { key: 'stay', label: 'Παραμένοντες' }]
+  outs: [{ key: 'outs', label: 'Εξοδούχοι' }, { key: 'stay', label: 'Παραμένοντες' }],
+  check: [{ key: 'main', label: 'Έλεγχος υπηρεσιών' }],
+  roster: [{ key: 'print', label: 'Συνολικό (εκτύπωση)' }, { key: 'lists', label: 'Φύλλα του Excel' }],
+  cadre: [{ key: 'main', label: 'Στελέχη' }],
+  weapons: [{ key: 'main', label: 'Κατάσταση οπλισμού' }, { key: 'rest', label: 'Τα άλλα φύλλα' }]
 };
 export type Layout = Record<string, Moves>;          // ανά φύλλο (key)
 
@@ -22,6 +28,7 @@ export interface LayoutSheet { key: string; sheet: string; blocks: Block[] }
 export const blockLabel = (id: string, sigs?: Sig[]) => {
   if (id === 'head') return 'Κεφαλίδα';
   if (id === 'date') return 'Τόπος και ημερομηνία';
+  if (id === 'title') return 'Τίτλος';
   const i = Number(id.slice(1)); const x = sigs?.[i];
   return 'Υπογραφή ' + (i + 1) + (x?.title ? ': ' + x.title : '');
 };

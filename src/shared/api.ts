@@ -75,10 +75,11 @@ export interface Api {
   sync(): Promise<CmdResult>;
   dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
   exportFile(kind: ExportKind, date: ISODate, opts?: ExportOpts): Promise<ExportResult>;
-  exportLists(date: ISODate): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
-  exportRoster(date: ISODate, print?: boolean): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
-  exportWeapons(date: ISODate, print?: boolean): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
-  exportCadre(date: ISODate): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
+  // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς Ρυθμίσεις › Υπογραφές)
+  exportLists(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
+  exportRoster(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
+  exportWeapons(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
+  exportCadre(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;

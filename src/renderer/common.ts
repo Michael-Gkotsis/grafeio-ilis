@@ -18,7 +18,7 @@ import type { ExportKind } from '../shared/api';
 import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
 import { SigsDialog } from './sigs';
 import { LayoutDialog } from './layout';
-import { dropSigMoves, type Layout } from '../shared/layout';
+import { dropSigMoves, type Layout, type LayoutForm } from '../shared/layout';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
@@ -334,23 +334,28 @@ export function ExportButton({ kind, date, label, variant, size, disabled }: P) 
 }
 /* «Υπογραφές…»: βγαίνει με άλλες υπογραφές αυτή τη φορά (ή και τις επόμενες, στις Ρυθμίσεις) */
 export function SigsButton({ kind, date, label, variant = 'ghost', size, disabled }: P) {
-  const ex = useExport(); const busy = useExportBusy(); const { state, run } = useStore(); const [open, setOpen] = useState(false);
+  const ex = useExport(); const busy = useExportBusy();
+  return html`<${SigsMenu} form=${sigFormOf(kind)} date=${date} label=${label} variant=${variant} size=${size} disabled=${!!busy || disabled} go=${(pr: boolean, sigs?: Sig[]) => ex(kind, date, label, pr, sigs)}/>`;
+}
+/* Το ίδιο σε κάθε έντυπο (Michael, 22/10): βάζεις, βγάζεις ή αλλάζεις σειρά στις υπογραφές, και «Θέσεις στο χαρτί…» για να
+   σύρεις κεφαλίδα, ημερομηνία, τίτλο και υπογραφές. go(εκτύπωση, υπογραφές μόνο για αυτή τη φορά)· print: έχει και εκτύπωση */
+export function SigsMenu({ form, date, label, go, print = true, variant = 'ghost', size, disabled }: { form: LayoutForm; date: ISODate; label: string; go: (print: boolean, sigs?: Sig[]) => unknown; print?: boolean; variant?: string; size?: string; disabled?: boolean }) {
+  const { state, run } = useStore(); const [open, setOpen] = useState(false);
   const [lay, setLay] = useState<Sig[] | null>(null);   // «Θέσεις στο χαρτί…» με τις υπογραφές που βλέπεις στον διάλογο
-  const form = sigFormOf(kind); if (!form) return null;
   const cur = sigsSaved(state.settings, form); const name = label.replace(/^(η|οι|το) /, '');
-  const go = async (sigs: Sig[], keep: boolean, print: boolean) => {
+  const onGo = async (sigs: Sig[], keep: boolean, pr: boolean) => {
     // άλλο πλήθος υπογραφών: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
     const l = sigs.length !== cur.length && state.settings.layout?.[form] ? { layout: { ...state.settings.layout, [form]: dropSigMoves(state.settings.layout[form]) } } : {};
     if (keep && !(await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: sigs }, ...l }, text: 'υπογραφές ' + name + ': ' + sigsText(sigs) }, false))) return;
-    ex(kind, date, label, print, keep ? undefined : sigs);
+    go(pr, keep ? undefined : sigs);
   };
   const saveLayout = async (l: Layout | undefined) => {
     const all = { ...(state.settings.layout || {}) }; if (l) all[form] = l; else delete all[form];
     await run({ t: 'setSettings', settings: { layout: all }, text: 'θέσεις στο χαρτί: ' + name }, 'Αποθηκεύτηκαν οι θέσεις: ' + name);
   };
-  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => setOpen(true)} data-tip=${'Υπογραφές: ' + sigsText(cur) + '. Άλλαξέ τες για αυτή τη φορά ή για πάντα, ή σύρε τες αλλού πάνω στο χαρτί.'}>Υπογραφές…<//>
-    ${open && html`<${SigsDialog} title=${name} initial=${cur} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onGo=${go} onClose=${() => setOpen(false)} onLayout=${setLay}/>`}
-    ${lay && html`<${LayoutDialog} title=${name} sigs=${lay} initial=${state.settings.layout?.[form]} onClose=${() => setLay(null)} onSave=${saveLayout}
+  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${disabled} onClick=${() => setOpen(true)} data-tip=${'Υπογραφές: ' + sigsText(cur) + '. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.'}>Υπογραφές…<//>
+    ${open && html`<${SigsDialog} title=${name} initial=${cur} print=${print} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onGo=${onGo} onClose=${() => setOpen(false)} onLayout=${setLay}/>`}
+    ${lay && html`<${LayoutDialog} title=${name} form=${form} sigs=${lay} initial=${state.settings.layout?.[form]} onClose=${() => setLay(null)} onSave=${saveLayout}
       req=${(l: Layout) => ({ form, date, sigs: lay, layout: l })}/>`}<//>`;
 }
 /* Εκτύπωση: βγαίνει το Excel όπως πάντα και ανοίγει προεπισκόπηση με τον διάλογο εκτυπωτή των Windows (χωρίς Excel) */

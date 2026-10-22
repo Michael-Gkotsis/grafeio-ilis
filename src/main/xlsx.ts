@@ -722,7 +722,7 @@ export class Workbook {
     const idx = this.addXf(x); st.fitted.set(key, idx); return idx;
   }
   // Τελευταία στήλη της περιοχής εκτύπωσης του φύλλου (Infinity αν δεν έχει)
-  private printLastCol(sheet: string): number {
+  printLastCol(sheet: string): number {
     const i = this.names.findIndex(x => x.name === sheet);
     const m = [...this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)].find(x => attr(x[1], 'name') === '_xlnm.Print_Area' && attr(x[1], 'localSheetId') === String(i));
     if (!m) return Infinity;

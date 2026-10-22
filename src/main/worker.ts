@@ -1,7 +1,7 @@
 // Το νήμα των Excel (offload.ts): ό,τι βαρύ γίνεται με τα αρχεία, με τα ίδια δεδομένα που έχει το παράθυρο.
 import { parentPort } from 'worker_threads';
 import path from 'path';
-import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
+import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
 import { LockedError, ChangedError } from './files';
 import { mergeFirstSheets } from './xlsx';
 import { OldFormatError, readBook, valuesHash, writeGroup } from './sources';
@@ -17,6 +17,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   fillFroura: (tpl, d, phase, sheet, sigs) => fillFroura(buf(tpl), state, d, phase, sheet, sigs),
   fillHkai: (tpl, d, opts) => fillHkai(buf(tpl), state, d, opts),
   fillOuts: (tpl, d, sheets, sigs) => fillOuts(buf(tpl), state, d, sheets, sigs),
+  signMade: (data, form, marks, sigs) => signMade(buf(data), state, form, marks, sigs),
   mergeFirstSheets: (bufs: Uint8Array[], names, pick) => mergeFirstSheets(bufs.map(buf), names, pick),
   fillReport: (tpl, r, ids, d, o) => fillReport(buf(tpl), state, r, ids, d, o),
   placeSheets: (target, out, pairs, mine) => placeSheets(buf(target), buf(out), pairs, mine),

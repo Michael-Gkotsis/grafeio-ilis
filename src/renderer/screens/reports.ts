@@ -9,10 +9,10 @@ import { DayFormsDialog } from './dayForms';
 import { HK } from '../../shared/unit';
 import { DateField, GoLink, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
-import { SigsDialog } from '../sigs';
+import { SigEditor, SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { dropSigMoves, type Layout } from '../../shared/layout';
-import { sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
+import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
 import { statusLbl } from '../../shared/ranks';
@@ -451,6 +451,10 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
     setBusy(true);
     try {
       let rr: Report = { ...r, name: r.name.trim() }; let list = [...tpls];
+      // δικές του υπογραφές (καθαρές)· άλλο πλήθος από πριν: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
+      if (rr.sigs) rr.sigs = sigsClean(rr.sigs); else delete rr.sigs;
+      const nSig = (x?: Report) => (x?.sigs ?? sigsSaved(state.settings, 'reports')).length;
+      if (rr.layout && initial && nSig(rr) !== nSig(initial)) { const l = dropSigMoves({ main: rr.layout })?.main; if (l) rr.layout = l; else delete rr.layout; }
       if (mode === 'build' && build) {
         const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
         const file = tpl && !shared ? tpl.file : undefined;
@@ -483,7 +487,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
       <div className="rep-wiz__main">
         ${step === 1 && html`<${StepTpl} mode=${mode} tpl=${tpl} build=${build} tpls=${tpls} upload=${upload} onBuild=${startBuild} onTpl=${(t: RepTpl) => { upd({ name: r.name || t.name }); useTpl(t, r.kind, false).then(() => setStep(2)); }}/>`}
         ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
-        ${step === 3 && mode === 'build' && build && html`<${Builder} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners}
+        ${step === 3 && mode === 'build' && build && html`<${Builder} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd}
           onExcel=${async () => {
             const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
             const b = await window.api.repBuild(build, r.kind, tpl && !shared ? tpl.file : undefined);
@@ -537,8 +541,26 @@ function SignerFields({ signers, setSigners, both }: P) {
     <p className="field__help" style=${{ width: '100%', margin: 0 }}>Κοινά για όλα τα έντυπα. Κενό: μένει χώρος να υπογράψει.</p></div>`;
 }
 
+// Υπογραφές του εντύπου μέσα στον οδηγό (Michael, 22/10: «να βάζεις και να βγάζεις όποια υπογραφή θέλεις»): καμία, οι κοινές
+// (Ρυθμίσεις › Υπογραφές › Έντυπα, ή στο ανεβασμένο πρότυπο όσες έχει), ή δικές του (Report.sigs). Στο «Φτιάξ' το εδώ»,
+// «Καμία» σημαίνει και χωρίς γραμμή υπογραφών στο πρότυπο (none/setNone)· στο ανεβασμένο, κενή λίστα που σβήνει όσες έχει.
+function RepSigs({ r, upd, none, setNone, upload }: P) {
+  const { state } = useStore(); const base = sigsSaved(state.settings, 'reports');
+  const [mode, setMode] = useState<'none' | 'base' | 'own'>(() => (r.sigs ? (r.sigs.length ? 'own' : 'none') : none ? 'none' : 'base'));
+  const to = (m: 'none' | 'base' | 'own') => {
+    setMode(m); setNone?.(m === 'none');
+    upd({ sigs: m === 'own' ? (r.sigs?.length ? r.sigs : base.map(x => ({ ...x }))) : m === 'none' && upload ? [] : undefined });
+  };
+  return html`<div className="stack" style=${{ gap: '8px' }}>
+    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${mode} onChange=${to} items=${[{ value: 'none', label: 'Καμία' }, { value: 'base', label: upload ? 'Όπως το πρότυπο' : 'Από τις Ρυθμίσεις' }, { value: 'own', label: 'Δικές του' }]}/></div>
+    ${mode === 'base' && html`<p className="note" style=${{ margin: 0 }}>${upload ? html`Όσες έχει το πρότυπο. Σε κελί με {ΥΠΟΓΡΑΦΕΣ} μπαίνουν οι κοινές: <b>${sigsText(base)}</b>.` : html`Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(base)}</b>.`} Οι κοινές αλλάζουν στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές<//> (Έντυπα).</p>`}
+    ${mode === 'own' && html`<p className="note" style=${{ margin: 0 }}>Μόνο για αυτό το έντυπο, από αριστερά προς τα δεξιά.${upload ? ' Μπαίνουν στη θέση των υπογραφών του προτύπου (ή στο {ΥΠΟΓΡΑΦΕΣ}), αλλιώς κάτω από τον πίνακα.' : ''} Τις μετακινείς στο χαρτί με «Υπογραφές…» › «Θέσεις στο χαρτί…» στη λίστα των εντύπων.</p>
+      <${SigEditor} value=${r.sigs || []} onChange=${(v: Sig[]) => upd({ sigs: v })} id="rep-sg"/>`}
+  </div>`;
+}
+
 // «Φτιάξ' το εδώ»: στήλες, τίτλος, κεφαλίδα, υπογραφές, σελίδα
-function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
+function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd }: P) {
   const { state } = useStore(); const custom = sigsCustom(state.settings, 'reports');
   const set = (x: Partial<BuildOpts>) => setO({ ...o, ...x });
   const setCol = (i: number, x: Partial<BuildCol>) => set({ cols: o.cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)) });
@@ -561,9 +583,8 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος και ημερομηνία πάνω δεξιά</label>
     </div>
-    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${o.sig === 'none' ? 'none' : 'list'} onChange=${(sig: BuildOpts['sig']) => set({ sig })} items=${[{ value: 'none', label: 'Καμία' }, { value: 'list', label: 'Από τις Ρυθμίσεις' }]}/></div>
-    ${o.sig !== 'none' && html`<p className="note" style=${{ margin: 0 }}>Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(sigsSaved(state.settings, 'reports'))}</b>. Τις αλλάζεις στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές<//> (Έντυπα), ή κάθε φορά που βγαίνει με το «Υπογραφές…».</p>`}
-    ${o.sig !== 'none' && !custom && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${true}/>`}
+    <${RepSigs} r=${r} upd=${upd} none=${o.sig === 'none'} setNone=${(none: boolean) => set({ sig: none ? 'none' : 'list' })}/>
+    ${o.sig !== 'none' && !r.sigs && !custom && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${true}/>`}
     <div className="rep-opts"><span className="field__label">Σελίδα</span><${Segmented} small=${true} value=${o.land ? 'l' : 'p'} onChange=${(v: string) => set({ land: v === 'l' })} items=${[{ value: 'p', label: 'Όρθια' }, { value: 'l', label: 'Οριζόντια' }]}/>
       <span className="field__label">Γράμματα</span><${Segmented} small=${true} value=${String(o.sz)} onChange=${(v: string) => set({ sz: +v as BuildOpts['sz'] })} items=${[{ value: '10', label: '10' }, { value: '11', label: '11' }, { value: '12', label: '12' }]}/>
       <span className="field__label">Επικεφαλίδες</span><${Segmented} small=${true} value=${o.fill} onChange=${(fill: BuildOpts['fill']) => set({ fill })} items=${[{ value: 'none', label: 'Λευκές' }, { value: 'gray', label: 'Γκρι' }, { value: 'olive', label: 'Λαδί' }]}/></div>
@@ -602,6 +623,7 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
       <${Select} className="ui-select" aria-label="Πρόσθεσε στοιχείο σε κελί" value="" onChange=${(e: any) => e.target.value && setPicking(e.target.value)}><option value="">+ Στοιχείο σε κελί (μετά κλικ στο κελί)…</option>${free.map(c => html`<option key=${c.k} value=${c.k}>${c.label}</option>`)}<//></div>
     ${keys.has('title') && html`<div className="field"><label className="field__label" htmlFor="m-title">Τίτλος</label><input id="m-title" className="ui-input" placeholder=${r.name} value=${r.title || ''} onChange=${(e: any) => upd({ title: e.target.value })}/></div>`}
     ${(keys.has('sgtName') || keys.has('cmdName')) && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${keys.has('cmdName')}/>`}
+    <${RepSigs} r=${r} upd=${upd} upload=${true}/>
     <div className="rep-opts"><span className="field__label">Προεπισκόπηση</span><${Segmented} small=${true} value=${picking ? 'tpl' : view} onChange=${setView} items=${[{ value: 'filled', label: 'Με στοιχεία' }, { value: 'tpl', label: 'Το πρότυπο' }]}/>
       <${Button} size="sm" variant="ghost" onClick=${() => tpl && window.api.repOpenTpl(tpl.file)}>Άνοιξέ το στο Excel<//><${Button} size="sm" variant="ghost" onClick=${reread} data-tip="Αφού το άλλαξες και το αποθήκευσες στο Excel">Ξαναδιάβασε το πρότυπο<//></div>
     <p className="note">Μπορείς και να γράψεις μέσα στο Excel ετικέτες σε αγκύλες, π.χ. {ΚΕΦΑΛΙΔΑ}, {ΗΜΕΡΟΜΗΝΙΑ}, {ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}, {ΣΥΝΟΛΟ}, {ΛΟΧΙΑΣ}, {ΔΙΟΙΚΗΤΗΣ}: γεμίζουν μόνες τους.</p>
