@@ -9,7 +9,7 @@ import { Workbook } from '../src/main/xlsx';
 import { hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
 import { withArticle, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
-import type { AppState } from '../src/shared/domain';
+import { hkOn, hkToggle, type AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
@@ -72,9 +72,30 @@ describe('4. ΠΟΙΝΕΣ', () => {
   });
 });
 
+// «Άδειες στο 3. Άδειες» ανοιχτό (κλειστό από προεπιλογή, Michael 22/10)
+const lvOn = (s: AppState): AppState => ({ ...s, settings: { ...s.settings, hkai: hkToggle(s.settings.hkai || {}, 'lv', true) } });
+
 describe('3. ΑΔΕΙΕΣ', () => {
-  it('αριθμημένες, μία ανά γραμμή, «ΓΙΑ ΤΗΝ …» για μία μέρα και «ΑΠΟ … ΕΩΣ …» για πολλές', async () => {
+  it('κλειστό από προεπιλογή: τίποτα στο 3. ΑΔΕΙΕΣ, ούτε στο Excel· ανοιγοκλείνει χωρίς να χαλά τις άλλες ενότητες', async () => {
     let s = fakeState(10);
+    s = run(s, { t: 'declare', cmd: { type: 'LEAVE', pids: [3], from: D, to: '2026-10-18', kind: 'Κανονική' } });
+    s = run(s, { t: 'declare', cmd: { type: 'SICK', pids: [4], from: D, to: '2026-10-18' } });
+    expect(hkOn(s.settings, 'lv')).toBe(false);
+    expect(hkaiLeaveLines(s, D)).toHaveLength(0);
+    const off = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
+    expect(off.get('G10') || '').toBe('');
+    const on = lvOn(s);
+    expect(hkOn(on.settings, 'lv')).toBe(true);
+    expect(hkOn(on.settings, 'veh')).toBe(true);
+    expect(hkaiLeaveLines(on, D)).toHaveLength(2);
+    expect((await (await Workbook.open((await fillHkai(T('hkai.xlsx'), on, D)).data)).sheet(1)).get('G10')!.split('\n')).toHaveLength(2);
+    // ξανά κλειστό, και οι ενότητες που ήταν κλειστές μένουν κλειστές
+    const h = hkToggle(hkToggle({ off: ['veh'] }, 'lv', true), 'lv', false);
+    expect(h).toEqual({ off: ['veh'], on: [] });
+    expect(hkToggle(h, 'veh', true)).toEqual({ off: [], on: [] });
+  });
+  it('αριθμημένες, μία ανά γραμμή, «ΓΙΑ ΤΗΝ …» για μία μέρα και «ΑΠΟ … ΕΩΣ …» για πολλές', async () => {
+    let s = lvOn(fakeState(10));
     s = run(s, { t: 'declare', cmd: { type: 'LEAVE', pids: [3], from: D, to: '2026-10-18', kind: 'Κανονική' } });
     s = run(s, { t: 'declare', cmd: { type: 'LEAVE', pids: [2], from: D, to: D, kind: 'ΑΜΔ' } });
     s = run(s, { t: 'declare', cmd: { type: 'HON', pids: [4], from: D, to: '2026-10-17', fromTime: '14:00', toTime: '22:00' } });
@@ -111,8 +132,8 @@ describe('αίτηση άδειας: 5. ΑΙΤΗΣΕΙΣ → εγκρίθηκε/
     const st = s.statuses.find(x => x.type === 'LEAVE')!;
     expect(st).toMatchObject({ pid: 3, from: '2026-10-17', to: '2026-10-17', kind: 'Κανονική', req: id });
     expect(s.requests[0]).toMatchObject({ decision: 'ok', decided: D, sid: st.id });
-    expect(hkaiLeaveLines(s, D)).toHaveLength(0);
-    expect(hkaiLeaveLines(s, '2026-10-17')).toHaveLength(0);
+    expect(hkaiLeaveLines(lvOn(s), D)).toHaveLength(0);   // ούτε με ανοιχτό το «3. Άδειες»
+    expect(hkaiLeaveLines(lvOn(s), '2026-10-17')).toHaveLength(0);
     expect(hkaiReqLines(s, D)).toHaveLength(1);   // η αίτηση μένει στην ΗΚΑΙ της μέρας της
     expect(() => run(s, { t: 'decideRequest', id, ok: false })).toThrow(/ήδη εγκριθεί/);
     expect(() => run(s, { t: 'updateRequest', req: { ...s.requests[0], text: 'άλλο' } })).toThrow(/Αναίρεσε πρώτα/);

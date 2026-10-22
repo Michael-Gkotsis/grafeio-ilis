@@ -1,7 +1,7 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { hkDay, type ISODate } from './dates';
-import { OUT_NOTE, TYPES, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { OUT_NOTE, TYPES, hkOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, norm, upper } from './text';
@@ -60,7 +60,9 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
 }
 // 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. Όσες ζητήθηκαν με αίτηση δεν ξαναγράφονται: στην πίσω σελίδα
 // μένει μόνο η αίτηση, μία φορά, και απλά εγκρίνεται (Michael, 18/10). «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ … ΕΩΣ ….»
+// Γράφονται μόνο αν είναι ανοιχτή η ενότητα «Άδειες στο 3. Άδειες» (κλειστή από προεπιλογή, Michael 22/10).
 export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
+  if (!hkOn(s.settings, 'lv')) return [];
   const pm = personMap(s.people);
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
   return numbered(s.statuses.filter(x => leave(x) && pm.has(x.pid) && !x.req && x.from === d)

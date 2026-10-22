@@ -12,7 +12,7 @@ import { DayFormsDialog } from './dayForms';
 import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, dutyStartOf, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
+import { HK_SECTIONS, dutyStartOf, hkOn, hkToggle, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
@@ -300,7 +300,7 @@ function HkaiMain() {
   <${HkaiManualCard} date=${date}/>
   <${HkaiSectionsCard}/></div>`;
   const sheets = html`<div>
-    ${!mobile && html`<div style=${{ marginBottom: '8px' }}><${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>`}
+    <div className="toolbar" style=${{ marginBottom: '8px' }}>${!mobile && html`<${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/>`}<${HkLeavesToggle} onToggle=${() => setSide('back')}/></div>
     ${side === 'back' ? html`<${ExcelSheet} model=${back} fileName=${fn} sheetName="πισω" meta="A4 οριζόντιο"/>` : html`<${ExcelSheet} model=${front} fileName=${fn} sheetName="μπροστινο" meta="A4 οριζόντιο · 1 σελίδα" footer="Γράφονται μόνο τα κελιά εισόδου· τα αθροίσματα μένουν τύποι του εντύπου."/>`}
     <${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
@@ -308,6 +308,18 @@ function HkaiMain() {
       <div className="page-head__acts"><${ExportButton} kind="hkai" date=${date} label="η ${HK()}"/></div><//>
     ${mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
   </div>`;
+}
+
+// 3. ΑΔΕΙΕΣ ναι/όχι, δίπλα στην προεπισκόπηση: γυρίζει στην πίσω σελίδα για να φανεί αμέσως η αλλαγή (Michael, 22/10)
+function HkLeavesToggle({ onToggle }: { onToggle: () => void }) {
+  const { state, run } = useStore(); const toast = useToast();
+  const on = hkOn(state.settings, 'lv');
+  const set = async (v: boolean) => {
+    if (await run({ t: 'setSettings', settings: { hkai: hkToggle(state.settings.hkai || {}, 'lv', v) }, text: HK() + ', ' + (v ? 'άνοιξε' : 'έκλεισε') + ': άδειες στο 3. άδειες' }, false)) {
+      onToggle(); toast({ text: v ? 'Οι άδειες γράφονται στο «3. Άδειες»' : 'Οι άδειες δεν γράφονται στο «3. Άδειες»' });
+    }
+  };
+  return html`<label className="rule" style=${{ margin: 0, alignItems: 'center' }} data-tip="Όσες δηλώνεις απευθείας, τη μέρα που ξεκινούν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις»."><input type="checkbox" className="ui-check" checked=${on} onChange=${(e: any) => set(e.target.checked)}/><span><b>Άδειες στο «3. Άδειες»</b></span></label>`;
 }
 
 // Στελέχη ανά βαθμό, μέσα στην ΗΚΑΙ (γραφέας, 10/10: «δεν έχει κάπου να τους προσθέσω»)
@@ -356,7 +368,7 @@ function HkaiManualCard({ date }: { date: string }) {
       ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => hkRowLabel(u.r) + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
     ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><${k === 'off' ? Combo : 'input'} id=${'hk-' + k} className="ui-input" placeholder=${k === 'off' && auto ? auto : ph} options=${k === 'off' ? offList : undefined} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/>${k === 'off' && html`<span className="field__help">${auto ? 'Κενό = από τα Στελέχη: ' + auto + '.' : 'Κενό = όποιος αξιωματικός έχει «Υπηρεσία» στα Στελέχη.'}</span>`}</div>`)}
     ${hkOn(state.settings, 'acc') && html`<div className="field"><span className="field__label">Ατυχήματα</span><div className="settings-grid">${HK_ACC_FIELDS.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" placeholder="Ø" value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></label>`)}</div><span className="field__help">Κενό = Ø, όπως στο έντυπο.</span></div>`}
-    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 3 (άδειες που ξεκινούν ή εγκρίθηκαν), 4 (ποινές της μέρας) και 5 (αιτήσεις) γράφονται μόνες τους. Οχήματα και «Προβλέπονται» στις «Ενότητες της ${HK()}» πιο κάτω.</p>
+    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 4 (ποινές της μέρας) και 5 (αιτήσεις, και όσες άδειες εγκρίθηκαν) γράφονται μόνες τους. Η 3 (άδειες που δήλωσες απευθείας) μόνο αν την ανοίξεις, πάνω από την προεπισκόπηση ή στις «Ενότητες της ${HK()}» πιο κάτω, όπου είναι και τα οχήματα και τα «Προβλέπονται».</p>
     <div className="toolbar"><${Button} disabled=${!dirty} why="Δεν άλλαξε κάτι" onClick=${saveM}>Αποθήκευση<//>${dirty && html`<${Button} variant="ghost" onClick=${() => setM(cur)}>Ακύρωση<//>`}</div>
   <//>`;
 }
@@ -382,7 +394,7 @@ function HkaiSectionsCard() {
   const [veh, setVeh] = useState<HkVehicle>(() => ({ type: '1/4 τόνων', ...(cur.veh || {}) }));
   const [prov, setProv] = useState<Record<string, number>>(() => ({ ...(cur.prov || {}) }));
   const save = (hkai: HkaiSettings, text: string) => run({ t: 'setSettings', settings: { hkai }, text: HK() + ', ' + text }, false);
-  const toggle = async (k: HkSection, on: boolean) => { const off = (cur.off || []).filter(x => x !== k); if (!on) off.push(k); if (await save({ ...cur, off }, (on ? 'άνοιξε: ' : 'έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1].toLowerCase())) toast({ text: (on ? 'Άνοιξε: ' : 'Έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1] }); };
+  const toggle = async (k: HkSection, on: boolean) => { if (await save(hkToggle(cur, k, on), (on ? 'άνοιξε: ' : 'έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1].toLowerCase())) toast({ text: (on ? 'Άνοιξε: ' : 'Έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1] }); };
   const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, +v || 0));
   const vehDirty = JSON.stringify(veh) !== JSON.stringify({ type: '1/4 τόνων', ...(cur.veh || {}) });
   const provDirty = JSON.stringify(prov) !== JSON.stringify(cur.prov || {});

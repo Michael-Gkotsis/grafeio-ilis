@@ -317,13 +317,22 @@ export const HK_SECTIONS: [HkSection, string, string][] = [
   ['veh', 'Κατάσταση οχημάτων', 'Είδος, προβλέπονται, σε κίνηση, προς επισκευή'],
   ['acc', 'Ατυχήματα', 'Ζημιές σε οχήματα και σε άνδρες (αλλιώς μένει το Ø του εντύπου)'],
   ['grd', 'Χορηγούμενες φρουρές', 'Νυκτοφρουρές και 24ωρες από τις υπηρεσίες της μέρας'],
-  ['prov', 'Προβλέπονται από τη σύνθεση', 'Ένας αριθμός ανά βαθμό, ίδιος κάθε μέρα']
+  ['prov', 'Προβλέπονται από τη σύνθεση', 'Ένας αριθμός ανά βαθμό, ίδιος κάθε μέρα'],
+  ['lv', 'Άδειες στο «3. Άδειες»', 'Όσες δηλώνεις απευθείας, τη μέρα που ξεκινούν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις».']
 ];
-export type HkSection = 'veh' | 'acc' | 'grd' | 'prov';
+export type HkSection = 'veh' | 'acc' | 'grd' | 'prov' | 'lv';
+// Κλειστές αν δεν τις ανοίξεις (hkai.on): οι άδειες στο 3. ΑΔΕΙΕΣ (Michael, 22/10: να μη γράφονται, αλλά να μένει η δυνατότητα)
+export const HK_DEFAULT_OFF: HkSection[] = ['lv'];
 export interface HkVehicle { type: string; prov?: number; kin?: number; maint?: number; dmg?: number }
 // head: η κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά, π.χ. ΚΕΤΘ / 2Η ΕΠΧΙΑ)· κενή = ό,τι έχει το έντυπο
-export interface HkaiSettings { off?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number>; head?: string[] }
-export const hkOn = (st: Settings, k: HkSection) => !(st.hkai?.off || []).includes(k);
+export interface HkaiSettings { off?: HkSection[]; on?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number>; head?: string[] }
+export const hkOn = (st: Settings, k: HkSection) => (HK_DEFAULT_OFF.includes(k) ? (st.hkai?.on || []).includes(k) : !(st.hkai?.off || []).includes(k));
+// Ανοίγει ή κλείνει μία ενότητα, στη λίστα που της αντιστοιχεί (off για όσες είναι ανοιχτές από προεπιλογή, on για τις άλλες)
+export function hkToggle(h: HkaiSettings, k: HkSection, on: boolean): HkaiSettings {
+  const key = HK_DEFAULT_OFF.includes(k) ? 'on' : 'off'; const add = key === 'on' ? on : !on;
+  const ls = (h[key] || []).filter(x => x !== k); if (add) ls.push(k);
+  return { ...h, [key]: ls };
+}
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
 export const DEFAULT_SETTINGS: Settings = {
