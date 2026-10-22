@@ -14,7 +14,7 @@ import { hkaiMapOf, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
-import { placeSigs } from './sigs';
+import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
 import { applyMoves, blockOf } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
@@ -41,19 +41,43 @@ export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs:
 }
 // Υπογραφές σε κάθε φύλλο, και μετά ό,τι μετακίνησες πάνω στο χαρτί (κεφαλίδα, ημερομηνία, υπογραφές: layout.ts).
 // more: τα άλλα κομμάτια του φύλλου (κεφαλίδα, τόπος και ημερομηνία)· key: ποιο φύλλο του εντύπου (LAYOUT_SHEETS)
-export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[] }
+// tagOnly: οι υπογραφές μόνο στο {ΥΠΟΓΡΑΦΕΣ} (Excel της εφαρμογής, χωρίς υπογραφές δικές τους)
+export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean }
 export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
   const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
   const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
   const L = xlLook(s.settings); const hdr = formPart(L, 'hdr'), sig = formPart(L, 'sig');
   for (const x of sheets) {
-    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings);
+    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings, { tagOnly: x.tagOnly });
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
     for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
     out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, blocks, mv(x.key)) });
   }
   return out;
+}
+
+// Τα Excel που φτιάχνει η εφαρμογή (excel.ts: Έλεγχος υπηρεσιών, Δυναμολόγιο, Στελέχη, Οπλισμός) όπως όλα τα έντυπα
+// (Michael, 22/10): οι υπογραφές της λίστας τους μία κενή γραμμή κάτω από κάθε φύλλο, σε όλο το πλάτος του, και μετά ό,τι
+// μετακίνησες (κεφαλίδα, ημερομηνία, τίτλος, υπογραφές). Χωρίς υπογραφές και μετακινήσεις το φύλλο μένει όπως ήταν.
+export interface MadeMark { sheet: string; key: string; head: string[]; date: string[]; title: string[]; foot: number; cols: number }
+export async function signMade(data: Buffer, s: AppState, form: SigForm, marks: MadeMark[], over?: Sig[] | null): Promise<{ data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+  const wb = await Workbook.open(data); wb.widen = true; const warnings: string[] = [];
+  const g = sigsOf(s, form, over); const list = g.sigs ?? g.def;
+  const L = xlLook(s.settings); const st = list.length ? await wb.style({ font: L.font, sz: L.sz, b: true, h: 'center', v: 'center' }) : 0;
+  const parts: SheetPart[] = [];
+  for (const m of marks) {
+    if (!wb.hasSheet(m.sheet)) continue;
+    const ws = await wb.sheet(m.sheet);
+    if (list.length) {
+      const r = m.foot + 2; ws.set('A' + r, SIG_TAG).setStyle('A' + r, st);
+      if (m.cols > 1) { for (let c = 2; c <= m.cols; c++) ws.setStyle(colName(c) + r, st); ws.addMerge('A' + r + ':' + colName(m.cols) + r); }
+    }
+    parts.push({ ws, key: m.key, tagOnly: true, more: [blockOf(ws, 'head', m.head), blockOf(ws, 'date', m.date), blockOf(ws, 'title', m.title)] });
+  }
+  const layout = await signSheets(wb, parts, s, form, over, warnings);
+  for (const p of parts) p.ws.markAll();
+  return { data: await wb.save(), warnings, layout };
 }
 
 // Τα κελιά με κείμενο ενός κομματιού με άλλο μέγεθος, έντονα, πλάγια ή υπογράμμιση· στα κείμενα με μορφή ανά κομμάτι αλλάζει και το μέγεθός τους

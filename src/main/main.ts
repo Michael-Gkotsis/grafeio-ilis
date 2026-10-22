@@ -19,14 +19,14 @@ import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from 
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
-import { fillFroura, fillHkai, fillOuts, TemplateError } from './exports';
+import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
 import type { AppState, AuditEntry } from '../shared/domain';
-import type { Sig } from '../shared/sigs';
+import type { Sig, SigForm } from '../shared/sigs';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
@@ -184,11 +184,22 @@ const X = {
   zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
 };
+// Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
+type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons';
+const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons' };
+async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+  const m = what === 'check' ? await off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s)
+    : what === 'lists' ? await excel().rosterLists(s, date) : what === 'rosterPrint' ? await excel().rosterPrint(s, date) : what === 'rosterPreview' ? await excel().rosterPreview(s, date)
+    : what === 'cadre' ? await excel().cadreLists(s, date) : await excel().weaponsBook(s, date);
+  const form = MADE_FORM[what];
+  const r = await off('signMade', [m.data, form, m.marks, sigs], () => signMade(m.data, s, form, m.marks, sigs), s);
+  return { name: m.name, ...r };
+}
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
 // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
 async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
   const form = formOf(kind, s);
-  if (kind === 'check') return off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s);
+  if (kind === 'check') return made('check', date, s, sigs);
   const b = formBinding(form);
   const buf = await fs.promises.readFile(formTpl(form as Exclude<FormKind, 'check'>));
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
@@ -1028,37 +1039,38 @@ else {
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
-    ipcMain.handle('export:lists', async (_e, date: ISODate) => {
+    // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
+    ipcMain.handle('export:lists', async (_e, date: ISODate, sigs?: Sig[]) => {
       try {
-        const r = await excel().rosterLists(store.state, date);
+        const r = await made('lists', date, store.state, sigs);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         shell.openPath(out);
-        return { ok: true, file: out, warnings: [] };
+        return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
-    ipcMain.handle('export:cadre', async (_e, date: ISODate) => {
+    ipcMain.handle('export:cadre', async (_e, date: ISODate, sigs?: Sig[]) => {
       try {
-        const r = await excel().cadreLists(store.state, date);
+        const r = await made('cadre', date, store.state, sigs);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         shell.openPath(out);
-        return { ok: true, file: out, warnings: [] };
+        return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
-    ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean) => {
+    ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
       try {
-        const r = await excel().rosterPrint(store.state, date);
+        const r = await made('rosterPrint', date, store.state, sigs);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
-    ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean) => {
+    ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
       try {
-        const r = await excel().weaponsBook(store.state, date);
+        const r = await made('weapons', date, store.state, sigs);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
@@ -1108,9 +1120,12 @@ else {
         if ('report' in q) { const buf = await tplBuf(q.file); out = await off('fillReport', [buf, q.report, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, q.report, q.ids.slice(0, 120), q.date), s); }
         else {
           const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
-          out = await produce(q.form, q.date, s2, q.sigs);
+          const f = q.form;
+          out = f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check' ? await produce(f, q.date, s2, q.sigs)
+            : await made(f === 'roster' ? 'rosterPreview' : f, q.date, s2, q.sigs);
         }
-        const ls = out.layout || []; const wb = await Workbook.open(out.data);
+        // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
+        const ls = (out.layout || []).filter((l, i, a) => a.findIndex(x => x.key === l.key) === i); const wb = await Workbook.open(out.data);
         for (const l of ls) { const r = wb.printLastRow(l.sheet); if (r) wb.printDownTo(l.sheet, r + 8); }
         const doc = await renderBook(await wb.save(), { file: 'προεπισκόπηση.xlsx', sheets: ls.map(l => l.sheet), refs: true, maxPages: 2 });
         return { css: doc.css, warnings: out.warnings || [], sheets: ls.map(l => { const sh = doc.sheets.find(x => x.name === l.sheet); return { ...l, html: sh?.html || '', pages: sh?.pages || 0 }; }) };

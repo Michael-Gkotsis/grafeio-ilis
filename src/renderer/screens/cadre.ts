@@ -4,7 +4,8 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Strip, useDirty, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
-import { ActiveFilter, ChoiceField, DateRangeField } from '../common';
+import { ActiveFilter, ChoiceField, DateRangeField, SigsMenu } from '../common';
+import type { Sig } from '../../shared/sigs';
 import { cadreAbsKinds, guessHk, hkCadreRows, listOf, optionsOf } from '../../shared/ranks';
 import { hkRowLabel, HK, UNIT } from '../../shared/unit';
 import type { Cadre, CadreAbs } from '../../shared/domain';
@@ -51,17 +52,18 @@ export function CadreScreen() {
   const setFilter = (f: CadreFilter) => nav.set({ filter: f === 'all' ? undefined : f });
   const clear = () => { setQ(''); nav.set({ filter: undefined }); };
   const dateLbl = date === today ? '' : dayName(date, today) + ' ' + dm(date);
-  const exportXl = async () => {
+  const exportXl = async (sigs?: Sig[]) => {
     setXl(true);
     try {
-      const r = await window.api.exportCadre(date);
+      const r = await window.api.exportCadre(date, sigs);
       toast({ text: r.ok ? 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': στελέχη, καταστάσεις' + (all.some(c => !c.active) ? ', εκτός δύναμης' : '') + (date === today ? ', για σήμερα.' : ', για ' + dayName(date, today).toLowerCase() + ' ' + dm(date) + '.') : html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
     } finally { setXl(false); }
   };
   const cardOf = card ? all.find(c => c.id === card) : undefined;
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
-      <${Button} variant="outline" disabled=${xl || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${exportXl} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
+      <${Button} variant="outline" disabled=${xl || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${() => exportXl()} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
+      <${SigsMenu} form="cadre" date=${date} label="τα Στελέχη" print=${false} disabled=${xl || !all.length} go=${(_: boolean, sigs?: Sig[]) => exportXl(sigs)}/>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Select} className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//></div>

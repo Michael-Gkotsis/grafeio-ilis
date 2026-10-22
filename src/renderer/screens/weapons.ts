@@ -9,7 +9,8 @@ import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Ta
 import { Select } from '../select';
 import { MovesView, WeaponInDialog, WeaponOutDialog, WeaponState } from './weaponMoves';
 import { useNav, useOpenFrom, useStore } from '../store';
-import { ActiveFilter, DateBar } from '../common';
+import { ActiveFilter, DateBar, SigsMenu } from '../common';
+import type { Sig } from '../../shared/sigs';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
@@ -191,10 +192,10 @@ export function WeaponsScreen() {
     setReset(n => n + 1);
     save(changes, { warn: warn || undefined, what: 'επικόλληση', msg: 'Επικόλληση: ' + changes.length + (changes.length === 1 ? ' αριθμός όπλου' : ' αριθμοί όπλων') + ' από ' + shortName(rows[i]) + ' και κάτω' });
   }, [rows, state.people, save]);
-  const exportXl = async (print: boolean) => {
+  const exportXl = async (print: boolean, sigs?: Sig[]) => {
     setXl(true);
     try {
-      const r = await window.api.exportWeapons(date, print);
+      const r = await window.api.exportWeapons(date, print, sigs);
       if (!r.ok) toast({ text: html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο.' });
@@ -212,7 +213,8 @@ export function WeaponsScreen() {
     <${PageHeader} title="Οπλισμός" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'σήμερα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
       <${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
-      <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//><//>
+      <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//>
+      <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} go=${exportXl}/><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (info.moves.size ? ' · εκτός ' + info.moves.size : '') }]}/></div>
     ${tab === 'moves' ? html`<${MovesView} date=${date} onIn=${setInFor}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>

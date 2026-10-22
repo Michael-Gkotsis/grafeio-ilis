@@ -11,7 +11,8 @@ import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
-import { fitBook } from './xlsx';
+import { colName, fitBook } from './xlsx';
+import type { MadeMark } from './exports';
 import { widthChars } from './textfit';
 import { formPart, tablePart, xlLook, type XlPart } from '../shared/xlLook';
 
@@ -35,9 +36,16 @@ function lookOf(s: AppState) {
   return { F: L.font, Z: L.sz, al, fitWidth, colWidth, FT };
 }
 
+// Πού είναι σε κάθε φύλλο η κεφαλίδα (γραμμές της μονάδας), ο τόπος/ημερομηνία και ο τίτλος, και η τελευταία γραμμή
+// του (foot): από κάτω μπαίνουν οι υπογραφές, και όλα μετακινούνται πάνω στο χαρτί (exports.ts signMade, Michael 22/10).
+// key: ποιες θέσεις του εντύπου ισχύουν (LAYOUT_SHEETS)· τα φύλλα με την ίδια μορφή έχουν το ίδιο key
+type MadeSheet = MadeMark;
+export interface Made { name: string; data: Buffer; marks: MadeSheet[] }
+const unitRefs = (s: AppState) => s.settings.unit.map((_, i) => 'A' + (i + 1));
+
 const BASE_KINDS: DutyKind[] = ['th', 'mg', 'ly'];
 // Μηνιαίο πλέγμα «Έλεγχος υπηρεσιών» (δείγμα 03): άτομα × ημέρες με κωδικό θέσης, γκρι ΣΚ/αργίες
-export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string; data: Buffer }> {
+export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   const [y, m] = ym.split('-').map(Number);
   const nd = new Date(y, m, 0).getDate();
   const days: ISODate[] = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
@@ -109,23 +117,29 @@ export async function dutyCheck(s: AppState, ym: string): Promise<{ name: string
   ws.getCell(foot, 1).font = { name: F, size: Math.max(7, Z - 2), italic: true };
   ws.pageSetup.printTitlesRow = '3:3';
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y + '.xlsx', data };
+  return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y + '.xlsx', data, marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot, cols: W }] };
 }
 
 // Δυναμολόγιο και καταστάσεις (Michael, 17/10): ένα Excel, ένα φύλλο ανά φίλτρο της οθόνης (Όλοι, Άδειες, Τιμωρημένοι,
 // Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ), για μία ημερομηνία. Όλα με κεφαλαία, όπως ό,τι γράφει η εφαρμογή στα Excel.
 const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22, 'ΘΕΣΗ': 20, 'ΓΡΑΜΜΗ ΗΚΑΙ': 16, 'ΓΡΑΜΜΗ ΗΚΑΛ': 16, 'ΚΑΤΑΣΤΑΣΗ': 22, 'ΣΤΗΛΗ ΗΚΑΙ': 18, 'ΣΤΗΛΗ ΗΚΑΛ': 18 };
-export async function rosterLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
-  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, rosterSheets(s, d, d === today() ? nowMin() : undefined)) };
+export async function rosterLists(s: AppState, d: ISODate): Promise<Made> {
+  const wb = newBook(d); const marks = addSheets(wb, s, rosterSheets(s, d, d === today() ? nowMin() : undefined), 'lists');
+  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Στελέχη (Michael, 17/10): ίδια μορφή, με τα φύλλα του cadre.ts (στελέχη, καταστάσεις της ΗΚΑΙ, εκτός δύναμης)
-export async function cadreLists(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
-  return { name: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await sheetsBook(s, d, cadreSheets(s, d)) };
+export async function cadreLists(s: AppState, d: ISODate): Promise<Made> {
+  const wb = newBook(d); const marks = addSheets(wb, s, cadreSheets(s, d), 'main');
+  return { name: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
-async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promise<Buffer> {
-  const { F, Z, al, colWidth, FT } = lookOf(s);
+// Σταθερή ημερομηνία στις ιδιότητες: ίδια δεδομένα, ίδιο αρχείο
+function newBook(d: ISODate) {
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   wb.created = wb.modified = new Date(d + 'T00:00:00Z');
+  return wb;
+}
+function addSheets(wb: ExcelJS.Workbook, s: AppState, sheets: RosterSheet[], key: string): MadeSheet[] {
+  const { F, Z, al, colWidth, FT } = lookOf(s); const marks: MadeSheet[] = [];
   const thin = { style: 'thin' as const };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
   for (const sh of sheets) {
@@ -144,16 +158,26 @@ async function sheetsBook(s: AppState, d: ISODate, sheets: RosterSheet[]): Promi
     if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(ROSTER_W[h] || 12, h, sh.rows.map(r => r[i])); });
     ws.pageSetup.printTitlesRow = '3:3';
+    marks.push({ sheet: ws.name, key, head: [], date: [], title: ['A1'], foot: 3 + Math.max(1, sh.rows.length), cols: W });
   }
-  return fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
+  return marks;
 }
 
 // Συνολικό Δυναμολόγιο για εκτύπωση (Michael, 17/10), με την κεφαλίδα της ΗΚΑΙ: οι 3 γραμμές της μονάδας πάνω αριστερά,
 // τόπος και ημερομηνία («14 ΟΚΤ 26») πάνω δεξιά, τίτλος στη μέση. Όλοι όσοι είναι σε δύναμη, κατά θάλαμο και επώνυμο.
-export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+export async function rosterPrint(s: AppState, d: ISODate): Promise<Made> {
+  const wb = newBook(d); const mark = addRosterPrint(wb, s, d);
+  const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
+  return { name: 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data, marks: [mark] };
+}
+// «Θέσεις στο χαρτί» του Δυναμολογίου: το συνολικό και ένα από τα φύλλα του Excel, στο ίδιο αρχείο
+export async function rosterPreview(s: AppState, d: ISODate): Promise<Made> {
+  const wb = newBook(d); const mark = addRosterPrint(wb, s, d);
+  const marks = addSheets(wb, s, rosterSheets(s, d).slice(0, 1).map(x => ({ ...x, name: x.name + ' (ΦΥΛΛΟ)' })), 'lists');
+  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ.xlsx', data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks: [mark, ...marks] };
+}
+function addRosterPrint(wb: ExcelJS.Workbook, s: AppState, d: ISODate): MadeSheet {
   const sh = rosterSheets(s, d)[0]; const { F, Z, al, colWidth, FT } = lookOf(s);
-  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
-  wb.created = wb.modified = new Date(d + 'T00:00:00Z');
   const ws = wb.addWorksheet('ΔΥΝΑΜΟΛΟΓΙΟ', { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
   const W = sh.head.length; const T = Math.max(5, s.settings.unit.length + 2); const HEAD = T + 3;
@@ -168,24 +192,22 @@ export async function rosterPrint(s: AppState, d: ISODate): Promise<{ name: stri
   }));
   sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(ROSTER_W[h] || 12, h, sh.rows.map(r => r[i])); });
   ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
-  const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
+  return { sheet: ws.name, key: 'print', head: unitRefs(s), date: [colName(W - 3) + 1], title: ['A' + T, 'A' + (T + 1)], foot: HEAD + Math.max(1, sh.rows.length), cols: W };
 }
 
 // Οπλισμός: ένα Excel, ένα φύλλο ανά φίλτρο της καρτέλας. Το πρώτο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ και στήλη
 // υπογραφής, για να τυπωθεί ως κατάσταση χρέωσης όπλων· τα υπόλοιπα (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να
 // παραδώσουν) για έλεγχο. Όλα με κεφαλαία.
 const WEAPON_W: Record<string, number> = { ...ROSTER_W, 'ΤΥΠΟΣ ΟΠΛΟΥ': 11, 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ': 16, 'ΟΠΛΟΒΑΣΤΟΣ': 11, 'ΘΕΣΗ': 14, 'ΕΝΤΟΣ / ΕΚΤΟΣ': 28, 'ΥΠΟΓΡΑΦΗ': 20, 'ΛΟΓΟΣ ΕΞΟΔΟΥ': 14, 'ΕΞΟΔΟΣ': 17, 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ': 20, 'ΕΙΣΟΔΟΣ': 17 };
-export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: string; data: Buffer }> {
+export async function weaponsBook(s: AppState, d: ISODate): Promise<Made> {
   const { F, Z, al, colWidth, FT } = lookOf(s);
-  const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
-  wb.created = wb.modified = new Date(d + 'T00:00:00Z');
+  const wb = newBook(d); const marks: MadeSheet[] = [];
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
   weaponSheets(s, d).forEach((sh, k) => {
     const ws = wb.addWorksheet(sh.name, { pageSetup: { paperSize: 9, orientation: k === 0 ? 'portrait' : 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
-    const W = sh.head.length; let HEAD = 3;
+    const W = sh.head.length; let HEAD = 3; let title = ['A1', 'A2'];
     if (k === 0) {
-      const T = Math.max(5, s.settings.unit.length + 2); HEAD = T + 3;
+      const T = Math.max(5, s.settings.unit.length + 2); HEAD = T + 3; title = ['A' + T, 'A' + (T + 1)];
       s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
       ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
       ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
@@ -204,7 +226,8 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<{ name: stri
     sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(WEAPON_W[h] || 12, h, sh.rows.map(r => r[i]), h === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ'); });
     ws.views = [{ state: 'frozen', ySplit: HEAD }];
     ws.pageSetup.printTitlesRow = HEAD + ':' + HEAD;
+    marks.push({ sheet: ws.name, key: k === 0 ? 'main' : 'rest', head: k === 0 ? unitRefs(s) : [], date: k === 0 ? [colName(W - 3) + 1] : [], title, foot: HEAD + Math.max(1, sh.rows.length), cols: W });
   });
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΟΠΛΙΣΜΟΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data };
+  return { name: 'ΟΠΛΙΣΜΟΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data, marks };
 }

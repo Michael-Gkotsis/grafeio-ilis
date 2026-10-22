@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, Segmented } from './ui';
 import { PAGE_CSS } from './pageCss';
-import { LAYOUT_SHEETS, blockLabel, cleanLayout, moved, type Layout, type Move } from '../shared/layout';
+import { LAYOUT_SHEETS, blockLabel, cleanLayout, moved, type Layout, type LayoutForm, type Move } from '../shared/layout';
 import type { LayoutPv, LayoutReq } from '../shared/api';
 import type { Sig } from '../shared/sigs';
 
@@ -16,8 +16,8 @@ const LAY_CSS = `.wrap{transform-origin:0 0;width:max-content;margin:0 auto}.lay
 const cellOf = (a: string) => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (!m) return null; return { c: m[1].split('').reduce((x, ch) => x * 26 + ch.charCodeAt(0) - 64, 0), r: +m[2] }; };
 type Rect = { r1: number; c1: number; r2: number; c2: number };
 
-// req: η αίτηση για την προεπισκόπηση με τις θέσεις που βλέπεις τώρα· onSave: οι θέσεις ανά φύλλο (key)
-export function LayoutDialog({ title, req, initial, sigs, onSave, onClose }: { title: string; req: (l: Layout) => LayoutReq; initial?: Layout; sigs?: Sig[]; onSave: (l: Layout | undefined) => unknown; onClose: () => void }) {
+// req: η αίτηση για την προεπισκόπηση με τις θέσεις που βλέπεις τώρα· onSave: οι θέσεις ανά φύλλο (key)· form: για τα ονόματα των φύλλων
+export function LayoutDialog({ title, req, initial, sigs, form, onSave, onClose }: { title: string; req: (l: Layout) => LayoutReq; initial?: Layout; sigs?: Sig[]; form?: LayoutForm; onSave: (l: Layout | undefined) => unknown; onClose: () => void }) {
   const [layout, setLayout] = useState<Layout>(() => JSON.parse(JSON.stringify(initial || {})));
   const [pv, setPv] = useState<LayoutPv | null>(null); const [busy, setBusy] = useState(true); const [err, setErr] = useState('');
   const [tab, setTab] = useState(''); const sel = useRef('');   // το κουτάκι που διάλεξες (μένει διαλεγμένο μετά την ανανέωση)
@@ -96,9 +96,9 @@ export function LayoutDialog({ title, req, initial, sigs, onSave, onClose }: { t
   const mine = layout[tab] || {};
   const any = Object.values(mine).some(moved);
   const save = () => { onClose(); onSave(cleanLayout(layout)); };
-  return html`<${Dialog} title=${'Θέσεις στο χαρτί: ' + title} description="Σύρε την κεφαλίδα, την ημερομηνία ή μια υπογραφή όπου θέλεις. Κουμπώνει στα κελιά του Excel. Με το πληκτρολόγιο: Tab σε ένα κουτάκι και βελάκια." onClose=${onClose} size="xl"
+  return html`<${Dialog} title=${'Θέσεις στο χαρτί: ' + title} description="Σύρε την κεφαλίδα, την ημερομηνία, τον τίτλο ή μια υπογραφή όπου θέλεις. Κουμπώνει στα κελιά του Excel. Με το πληκτρολόγιο: Tab σε ένα κουτάκι και βελάκια." onClose=${onClose} size="xl"
     footer=${html`<${Button} variant="ghost" disabled=${!any} why="Όλα είναι ήδη στη θέση του εντύπου" onClick=${() => setLayout(l => { const x = { ...l }; delete x[tab]; return x; })} style=${{ marginRight: 'auto' }} data-tip="Όλα στη θέση του εντύπου, σε αυτό το φύλλο">Αρχικό<//><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
-    ${pv && pv.sheets.length > 1 && html`<div><${Segmented} small=${true} value=${tab} onChange=${(v: string) => { setTab(v); sel.current = ''; }} items=${pv.sheets.map(s => ({ value: s.key, label: (Object.values(LAYOUT_SHEETS).flat().find(x => x.key === s.key)?.label || s.sheet) + (Object.values(layout[s.key] || {}).some(moved) ? ' •' : '') }))}/></div>`}
+    ${pv && pv.sheets.length > 1 && html`<div><${Segmented} small=${true} value=${tab} onChange=${(v: string) => { setTab(v); sel.current = ''; }} items=${pv.sheets.map(s => ({ value: s.key, label: ((form ? LAYOUT_SHEETS[form] : []).find(x => x.key === s.key)?.label || s.sheet) + (Object.values(layout[s.key] || {}).some(moved) ? ' •' : '') }))}/></div>`}
     ${err && html`<${Alert} variant="destructive">${err}<//>`}
     <div className=${cx('rep-pv', 'lay-pv', busy && 'is-busy')}>
       <div ref=${host} className="rep-pv__page lay-pv__page"></div>

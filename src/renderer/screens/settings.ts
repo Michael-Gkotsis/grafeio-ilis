@@ -26,7 +26,7 @@ import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
 import { XL_FONTS, XL_H, XL_LOOK, XL_PARTS, XL_SIZES, XL_STYLES, XL_V, sameLook, tablePart, xlLook, type XlLook, type XlPart, type XlPartKey } from '../../shared/xlLook';
-import { SIG_FORMS, sameSigs, sigDefaults, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
+import { MADE_FORMS, SIG_FORMS, sameSigs, sigDefaults, sigLabel, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
 
 function ImportCard() {
@@ -164,8 +164,8 @@ function XlLookCard() {
 }
 
 // Υπογραφές ανά έντυπο (Michael, 20/10): όσες θέλεις, από αριστερά προς τα δεξιά. Αλλάζουν και τη στιγμή που βγαίνει
-// το έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»).
-const SIG_LABEL = (f: SigForm) => (f === 'hkai' ? HK() : f === 'froura' ? 'ΦΡΟΥΡΑ' : f === 'outs' ? 'Εξοδούχοι' : 'Έντυπα');
+// το έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»). Σε όλα τα έντυπα, και στα Excel της εφαρμογής (Michael, 22/10).
+const SIG_LABEL = (f: SigForm) => sigLabel(f, HK());
 function SigsCard() {
   const { state, run, today } = useStore(); const toast = useToast();
   const [form, setForm] = useState<SigForm>('hkai'); const [lay, setLay] = useState(false);
@@ -202,15 +202,16 @@ function SigsCard() {
     const all = { ...(state.settings.sigs || {}) }; delete all[form];
     if (await run({ t: 'setSettings', settings: { sigs: all, ...layoutFor(sigDefaults(state.settings, form).length) }, text: 'υπογραφές ' + SIG_LABEL(form) + ': όπως το έντυπο' }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Οι υπογραφές ' + SIG_LABEL(form) + ' είναι πάλι όπως το έντυπο' }); }
   };
-  return html`<${Card} title="Υπογραφές" actions=${html`<${Segmented} small=${true} value=${form} onChange=${setForm} items=${SIG_FORMS.map(f => ({ value: f, label: SIG_LABEL(f) + (edit[f] && !sameSigs(edit[f]!, sigsSaved(state.settings, f)) ? ' •' : '') }))}/>`}>
+  const made = MADE_FORMS.includes(form);
+  return html`<${Card} title="Υπογραφές" actions=${html`<${Select} className="ui-select" aria-label="Έντυπο" value=${form} onChange=${(e: any) => setForm(e.target.value)}>${SIG_FORMS.map(f => html`<option key=${f} value=${f}>${SIG_LABEL(f) + (edit[f] && !sameSigs(edit[f]!, sigsSaved(state.settings, f)) ? ' •' : '')}</option>`)}<//>`}>
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
-      ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} (στο «Φτιάξ\' το εδώ»: «Υπογραφές: Ναι»), εκτός αν το έντυπο έχει δικές του.' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
+      ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} ή υπογραφές του προτύπου (αλλιώς κάτω από τον πίνακα), εκτός αν το έντυπο έχει δικές του.' : made ? ' Αρχικά καμία. Μπαίνουν μία γραμμή κάτω από κάθε φύλλο, μοιρασμένες στο πλάτος του. Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
     <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setEdit({ ...edit, [form]: undefined })}>Άκυρο<//>`}
       ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}
-      ${lf ? html`<${Button} variant="outline" style=${{ marginLeft: 'auto' }} onClick=${() => setLay(true)} data-tip="Σύρε κεφαλίδα, ημερομηνία και υπογραφές όπου θέλεις πάνω στο χαρτί">Θέσεις στο χαρτί…${movedAny ? ' •' : ''}<//>` : html`<span className="muted" style=${{ marginLeft: 'auto', fontSize: '13px' }}>Θέσεις στο χαρτί: σε κάθε έντυπο, από το «Υπογραφές…»</span>`}</div>
-    ${lay && lf && html`<${LayoutDialog} title=${SIG_LABEL(form)} sigs=${sigsClean(list)} initial=${state.settings.layout?.[lf]} onClose=${() => setLay(false)} onSave=${saveLayout}
+      ${lf ? html`<${Button} variant="outline" style=${{ marginLeft: 'auto' }} onClick=${() => setLay(true)} data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί">Θέσεις στο χαρτί…${movedAny ? ' •' : ''}<//>` : html`<span className="muted" style=${{ marginLeft: 'auto', fontSize: '13px' }}>Θέσεις στο χαρτί: σε κάθε έντυπο, από το «Υπογραφές…»</span>`}</div>
+    ${lay && lf && html`<${LayoutDialog} title=${SIG_LABEL(form)} form=${lf} sigs=${sigsClean(list)} initial=${state.settings.layout?.[lf]} onClose=${() => setLay(false)} onSave=${saveLayout}
       req=${(l: Layout) => ({ form: lf, date: today, sigs: changed ? sigsClean(list) : undefined, layout: l })}/>`}
   <//>`;
 }
