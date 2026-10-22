@@ -1,7 +1,7 @@
 // Έντυπα (Michael, 19/10): δικά σου πρότυπα Excel (ανεβασμένα ή φτιαγμένα στην εφαρμογή) που γεμίζουν με στοιχεία της
 // εφαρμογής. Πρότυπο = το αρχείο (εμφάνιση)· Έντυπο = πρότυπο + τι αφορά + ποια στήλη παίρνει τι + ποιοι μπαίνουν.
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
-import { addDays, daysBetween, dmy, parseD, MON_SHORT, type ISODate } from './dates';
+import { addDays, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
 import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
@@ -41,7 +41,12 @@ const SOLDIER = [
   F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
   F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
   F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8)];
-const TAIL = [F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18), F('text', 'Σταθερό κείμενο', '', 12)];
+// Καταστάσεις της μέρας σε στήλη, κάθε είδος χωριστά (Michael, 22/10: «να διαλέξω ιατρικές καταστάσεις, άδεια κτλπ»),
+// με τη μορφή που διαλέγεις (ColOpts.sf: ΕΑ, ΕΥ, ΑΔΕΙΑ…)
+const STATUS = [F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12), F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12), F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
+  F('sother', 'ΣΤΕΠ ή νοσοκομείο τη μέρα', 'ΣΤΕΠ / ΝΟΣ.', 12), F('sout', 'Έξοδος τη μέρα (εξοδούχος, ΔΝ)', 'ΕΞΟΔΟΣ', 11)];
+// Συνδυασμός: πολλά στοιχεία σε μία στήλη, με τη μορφή που γράφεις (ColOpts.parts, fmt: «{1} ({2})» → ΣΤΡ (ΜΧ))
+const TAIL = [F('combo', 'Συνδυασμός στοιχείων (π.χ. ΣΤΡ (ΜΧ))', 'ΒΑΘΜΟΣ (Ο/Σ)', 16), F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18), F('text', 'Σταθερό κείμενο', '', 12)];
 export const FIELDS: Record<RepKind, FieldDef[]> = {
   people: [...COMMON,
     F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
@@ -49,7 +54,7 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
     F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
-    F('status', 'Κατάσταση την ημέρα (ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
+    F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
     ...TAIL],
   cadre: [...COMMON,
     F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
@@ -65,19 +70,79 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
   duty: [...COMMON,
     F('seat', 'Θέση (π.χ. Θαλαμοφύλακας 1ος)', 'ΘΕΣΗ', 24, 'left'), F('code', 'Κωδικός θέσης (Θ1α, Μ2…)', 'ΚΩΔ.', 7), F('block', 'Υπηρεσία (ομάδα θέσεων)', 'ΥΠΗΡΕΣΙΑ', 20, 'left'),
     F('hours', 'Ώρες', 'ΩΡΕΣ', 16), F('armed', 'Ένοπλη (ΝΑΙ)', 'ΕΝΟΠΛΗ', 8),
-    ...SOLDIER, F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    ...SOLDIER, F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), ...STATUS,
     ...TAIL],
   weapon: [...COMMON, ...SOLDIER,
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
-    F('inout', 'Εντός ή εκτός (με τον λόγο)', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 26, 'left'),
+    F('inout', 'Εντός ή εκτός (με τον λόγο)', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 26, 'left'), ...STATUS,
     ...TAIL],
   wmove: [...COMMON, ...SOLDIER,
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
     F('mreason', 'Λόγος εξόδου (ΕΚΠ, βολή…)', 'ΛΟΓΟΣ ΕΞΟΔΟΥ', 16), F('mout', 'Έξοδος (ημερομηνία και ώρα)', 'ΕΞΟΔΟΣ', 17),
-    F('minr', 'Λόγος εισόδου', 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ', 16), F('min', 'Είσοδος (ημερομηνία και ώρα)', 'ΕΙΣΟΔΟΣ', 17), F('mnote', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'),
+    F('minr', 'Λόγος εισόδου', 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ', 16), F('min', 'Είσοδος (ημερομηνία και ώρα)', 'ΕΙΣΟΔΟΣ', 17), F('mnote', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'), ...STATUS,
     ...TAIL]
 };
 export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find(x => x.k === k);
+
+// ------------------------------------------------------------------ μορφή στήλης (καταστάσεις, συνδυασμός)
+// sf: πώς γράφεται κάθε κατάσταση, με {ΕΤΙΚΕΤΕΣ} (ST_TAGS)· parts/fmt: τα στοιχεία του συνδυασμού και η μορφή του με {1}, {2}…
+export interface ColOpts { sf?: string; parts?: string[]; fmt?: string }
+// στήλες με καταστάσεις της μέρας: ποιες κατηγορίες παίρνει η καθεμία (null: όλες)
+const ST_FIELD: Record<string, StCat[] | null> = { status: null, smed: ['med'], sabs: ['abs'], spun: ['pun'], sother: ['other'], sout: ['out'] };
+export const isStatusField = (f: string) => f === 'stype' || Object.prototype.hasOwnProperty.call(ST_FIELD, f);
+const CAT_WORD: Partial<Record<string, string>> = { med: 'ΙΑΤΡΙΚΟ', abs: 'ΑΔΕΙΑ', pun: 'ΠΟΙΝΗ', out: 'ΕΞΟΔΟΣ' };
+export const ST_TAGS: { tag: string; help: string }[] = [
+  { tag: 'ΚΩΔ', help: 'ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ' }, { tag: 'ΣΥΝΤΟΜΑ', help: 'ΕΑ, ΕΥ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΟΝΟΜΑ', help: 'ΕΛΕΥΘΕΡΟΣ ΑΣΚΗΣΕΩΝ' },
+  { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΑΠΟ', help: '20/10' }, { tag: 'ΕΩΣ', help: '24/10' }, { tag: 'ΗΜΕΡΕΣ', help: '5' }
+];
+// έτοιμες μορφές· ό,τι άλλο γράψεις είναι «δική σου»
+export const ST_FMTS = ['{ΚΩΔ}', '{ΣΥΝΤΟΜΑ}', '{ΟΝΟΜΑ}', '{ΚΑΤΗΓΟΡΙΑ}', '{ΚΩΔ} ΕΩΣ {ΕΩΣ}', '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}', '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)', 'ΝΑΙ'];
+// Μία κατάσταση με τη μορφή fmt (χωρίς: ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ, όπως πριν)
+export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'>, fmt: string | undefined, lists?: AppState['settings']['lists']): string {
+  const lbl = statusLbl(st, lists); if (!fmt || fmt === '{ΚΩΔ}') return lbl;
+  const t = TYPES[st.type]; const cat = t?.cat || '';
+  const tag = (name: string): string | null => {
+    switch (normGreek(name).replace(/\s+/g, '')) {
+      case 'ΚΩΔ': case 'ΚΩΔΙΚΟΣ': return lbl;
+      case 'ΣΥΝΤΟΜΑ': return cat === 'abs' || cat === 'pun' ? CAT_WORD[cat]! : st.type === 'OUT' ? 'ΕΞΟΔΟΣ' : lbl;
+      case 'ΟΝΟΜΑ': return st.type === 'PUN' || lbl !== t?.label ? lbl : st.type === 'LEAVE' && st.kind ? st.kind + ' άδεια' : t?.long || lbl;
+      case 'ΚΑΤΗΓΟΡΙΑ': return CAT_WORD[cat] || lbl;
+      case 'ΑΠΟ': return dm(st.from);
+      case 'ΕΩΣ': return st.open ? '…' : dm(st.to);
+      case 'ΗΜΕΡΕΣ': return st.open ? '…' : String(daysBetween(st.from, st.to));
+    }
+    return null;
+  };
+  return fmt.replace(/\{([^{}]{1,20})\}/g, (m, n: string) => tag(n) ?? m).trim();
+}
+// Οι καταστάσεις ενός στρατιώτη τη μέρα d (κατηγορίες cats, null: όλες), μία φορά η καθεμία, με κόμμα
+function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string): string {
+  const on = statusesOn(s.statuses, pid, d).filter(x => !cats || cats.includes(TYPES[x.type]?.cat as StCat));
+  return [...new Set(on.map(x => stText(x, fmt, s.settings.lists)).filter(Boolean))].join(', ');
+}
+// Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
+const COMBO_NO = new Set(['aa', 'blank', 'text', 'combo']);
+export const comboFields = (kind: RepKind) => FIELDS[kind].filter(f => !COMBO_NO.has(f.k));
+export const DEF_COMBO: Required<Pick<ColOpts, 'parts' | 'fmt'>> = { parts: ['rank1', 'spec'], fmt: '{1} ({2})' };
+export function comboFmts(n: number): string[] {
+  const p = Array.from({ length: Math.max(1, n) }, (_, i) => '{' + (i + 1) + '}');
+  if (p.length === 1) return ['{1}'];
+  return [p.join(' '), p[0] + ' (' + p.slice(1).join(' ') + ')', p.join(' - '), p.join('/'), p.join(', ')];
+}
+export const comboOf = (o?: ColOpts) => (o?.parts?.length ? { parts: o.parts, fmt: o.fmt ?? comboFmts(o.parts.length)[0] } : DEF_COMBO);
+// Γέμισμα της μορφής· αν κάποιο στοιχείο είναι κενό, φεύγουν οι άδειες παρενθέσεις και τα διπλά/ακραία διαχωριστικά
+// («ΣΤΡ ()» → «ΣΤΡ», «Α - - Γ» → «Α - Γ»)
+export function fillFmt(fmt: string, vals: string[]): string {
+  let empty = false;
+  const out = fmt.replace(/\{(\d{1,2})\}/g, (_m, n: string) => { const v = vals[+n - 1] ?? ''; if (!v) empty = true; return v; });
+  if (!empty) return out.trim();
+  let t = out;
+  for (let i = 0; i < 3; i++) t = t.replace(/\(\s*\)|\[\s*\]/g, '');
+  t = t.replace(/([,/\-–·])(?:\s*\1)+/g, '$1').replace(/\s+/g, ' ').replace(/\s+([,)\]])/g, '$1').replace(/([([])\s+/g, '$1');
+  return t.replace(/^[\s,/\-–·]+|[\s,/\-–·]+$/g, '').trim();
+}
+// Η επικεφαλίδα του συνδυασμού από τα ονόματα των στοιχείων (ΒΑΘΜΟΣ (Ο/Σ))· και για τις έτοιμες μορφές στη λίστα
+export const comboHead = (kind: RepKind, o?: ColOpts, fmt?: string) => { const c = comboOf(o); return fillFmt(fmt ?? c.fmt, c.parts.map(k => fieldOf(kind, k)?.head || '')); };
 
 // Στοιχεία εντύπου: ένα κελί (κεφαλίδα, ημερομηνία, υπογραφές…), είτε με κλικ στο κελί είτε με {ΕΤΙΚΕΤΑ} μέσα στο Excel
 export interface CellDef { k: string; label: string; tag: string }
@@ -100,7 +165,7 @@ export const cellOf = (k: string) => CELLS.find(x => x.k === k);
 const TAG_KEY = new Map(CELLS.map(c => [normGreek(c.tag), c.k]));
 export const TAG_RE = /\{([^{}]{1,40})\}/g;
 
-export interface RepCol { c: number; f: string; text?: string; h?: string }   // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
+export interface RepCol { c: number; f: string; text?: string; h?: string; o?: ColOpts }   // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
 export interface RepCell { ref: string; k: string }
 export interface RepPick {
   from: 'all' | 'present' | RosterFilter;   // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
@@ -187,12 +252,27 @@ export interface Report {
   daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
   sigs?: Sig[];                               // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
   layout?: Moves;                             // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
+  more?: RepTable[];                          // κι άλλοι πίνακες κάτω από τον πρώτο, με δικές τους στήλες και δικούς τους ποιοι μπαίνουν
+  fixed?: boolean;                            // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
 }
+// Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
+// επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
+export interface RepTable { id: string; title?: string; kind: RepKind; head: number; cols: RepCol[]; pick: RepPick; sort: RepSort }
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
-export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string }
+export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string; o?: ColOpts }
+// «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
+export interface BuildTable { id: string; title: string; kind: RepKind; cols: BuildCol[]; lay?: TabLay }
+// Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
+// στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
+export interface TabLay { w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4'; at?: 'left' | 'center' | 'right'; even?: boolean; gap?: number }
+export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: number }[] = [
+  { value: 'auto', label: 'Όσο χρειάζονται οι στήλες', f: 0 }, { value: 'full', label: 'Όλο το πλάτος', f: 1 }, { value: '3/4', label: 'Τα 3/4', f: 3 / 4 },
+  { value: '2/3', label: 'Τα 2/3', f: 2 / 3 }, { value: '1/2', label: 'Το μισό', f: 1 / 2 }, { value: '1/3', label: 'Το 1/3', f: 1 / 3 }, { value: '1/4', label: 'Το 1/4', f: 1 / 4 }];
+// Με κάποιον πίνακα σε δικό του πλάτος ή θέση, το φύλλο στήνεται σε πλέγμα στηλών (κάθε στήλη πίνακα = συγχωνευμένα κελιά)
+export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'>) => [o.lay, ...(o.more || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even));
 // sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive' }
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay }
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
@@ -217,7 +297,8 @@ const GUESS: [string, RegExp][] = [
   ['stype', /^ΕΙΔΟΣ$|^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣΑΔΕΙΑΣ$|^ΠΟΙΝΗ$/], ['from', /^ΑΠΟ$|^ΕΝΑΡΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΑΠΟ$/], ['to', /^ΕΩΣ$|^ΜΕΧΡΙ$|^ΛΗΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΕΩΣ$/],
   ['days', /^ΗΜΕΡΕΣ$|^ΗΜΕΡΩΝ$|^ΗΜ$/], ['note', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['by', /ΤΙΜΩΡΗΣΕ|^ΥΠΟ$/], ['reason', /^ΔΙΟΤΙ$|^ΑΙΤΙΟΛΟΓΙΑ$|^ΑΙΤΙΑ$/], ['on', /^ΗΜΤΙΜΩΡΙΑΣ$|^ΗΜΕΡΟΜΗΝΙΑΤΙΜΩΡΙΑΣ$/],
   ['seat', /^ΘΕΣΗ$|^ΘΕΣΗΥΠΗΡΕΣΙΑΣ$/], ['hours', /^ΩΡΕΣ$|^ΩΡΑ$/], ['block', /^ΥΠΗΡΕΣΙΑ$/], ['armed', /^ΕΝΟΠΛΗ$|^ΕΝΟΠΛΟΣ$/], ['code', /^ΚΩΔ$|^ΚΩΔΙΚΟΣ$/],
-  ['inout', /^ΕΝΤΟΣΕΚΤΟΣ$|^ΕΝΤΟΣ$|^ΕΚΤΟΣ$/], ['mreason', /^ΛΟΓΟΣΕΞΟΔΟΥ$|^ΛΟΓΟΣ$/], ['mout', /^ΕΞΟΔΟΣ$|^ΩΡΑΕΞΟΔΟΥ$/], ['minr', /^ΛΟΓΟΣΕΙΣΟΔΟΥ$/], ['min', /^ΕΙΣΟΔΟΣ$|^ΩΡΑΕΙΣΟΔΟΥ$/], ['mnote', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/]
+  ['inout', /^ΕΝΤΟΣΕΚΤΟΣ$|^ΕΝΤΟΣ$|^ΕΚΤΟΣ$/], ['mreason', /^ΛΟΓΟΣΕΞΟΔΟΥ$|^ΛΟΓΟΣ$/], ['mout', /^ΕΞΟΔΟΣ$|^ΩΡΑΕΞΟΔΟΥ$/], ['minr', /^ΛΟΓΟΣΕΙΣΟΔΟΥ$/], ['min', /^ΕΙΣΟΔΟΣ$|^ΩΡΑΕΙΣΟΔΟΥ$/], ['mnote', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/],
+  ['smed', /^ΙΑΤΡΙΚΟ$|^ΙΑΤΡΙΚΑ$/], ['sabs', /^ΑΔΕΙΑ$|^ΑΔΕΙΕΣ$/], ['spun', /^ΠΟΙΝΗ$|^ΠΟΙΝΕΣ$/], ['sother', /^ΣΤΕΠ|^ΝΟΣΟΚΟΜΕΙΟ$/], ['sout', /^ΕΞΟΔΟΣ$|^ΕΞΟΔΟΥΧΟΣ$/]
 ];
 // Ποιο στοιχείο ταιριάζει σε μια επικεφαλίδα (ή σε {ΕΤΙΚΕΤΑ} μέσα στη γραμμή)· null = δεν το ξέρω
 export function guessField(kind: RepKind, head: unknown): string | null {
@@ -246,18 +327,24 @@ const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.setti
 let wiMemo: { s: AppState; d: ISODate; info: WeaponInfo } | null = null;
 const wInfo = (s: AppState, d: ISODate) => { if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) }; return wiMemo.info; };
 const when = (day?: ISODate, t?: string) => (day ? dmy(day) + (t ? ' ' + t : '') : '');
-export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string): string | number | null {
+// o: μορφή της στήλης (καταστάσεις, συνδυασμός)
+export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string, o?: ColOpts): string | number | null {
   if (f === 'aa') return i + 1;
   if (f === 'blank') return null;
   if (f === 'text') return text || null;
+  if (f === 'combo') {
+    const c = comboOf(o);
+    const vals = c.parts.map(k => { const v = COMBO_NO.has(k) ? null : fieldValue(s, kind, x, k, i, d, undefined, o); return v == null ? '' : String(v); });
+    return fillFmt(c.fmt, vals) || null;
+  }
   if (kind === 'status') {
     const r = x as StatusRow; const st = r.st;
     switch (f) {
-      case 'stype': return statusLbl(st, s.settings.lists); case 'from': return dmy(st.from); case 'to': return st.open ? '' : dmy(st.to);
+      case 'stype': return stText(st, o?.sf, s.settings.lists); case 'from': return dmy(st.from); case 'to': return st.open ? '' : dmy(st.to);
       case 'days': return st.open ? '' : daysBetween(st.from, st.to); case 'note': return st.note || ''; case 'by': return st.by || ''; case 'reason': return st.reason || '';
       case 'on': return st.type === 'PUN' ? dmy(st.on || st.from) : '';
     }
-    return fieldValue(s, 'people', r.p, f, i, d, text);
+    return fieldValue(s, 'people', r.p, f, i, d, text, o);
   }
   if (kind === 'duty') {
     const r = x as DutyRow; const po = r.seat;
@@ -265,7 +352,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
       case 'seat': return po.label; case 'code': return po.code || ''; case 'block': return blockName(s, po.block); case 'hours': return po.hours || '';
       case 'armed': return po.armed ? 'ΝΑΙ' : '';
     }
-    return r.p ? fieldValue(s, 'people', r.p, f, i, d, text) : null;
+    return r.p ? fieldValue(s, 'people', r.p, f, i, d, text, o) : null;
   }
   if (kind === 'wmove') {
     const r = x as MoveRow; const m = r.m;
@@ -273,7 +360,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
       case 'weapon': return m.weapon || r.p.weapon || ''; case 'mreason': return m.reason; case 'mout': return when(m.outDay, m.outTime);
       case 'minr': return m.inReason || ''; case 'min': return when(m.inDay, m.inTime); case 'mnote': return m.note || '';
     }
-    return fieldValue(s, 'people', r.p, f, i, d, text);
+    return fieldValue(s, 'people', r.p, f, i, d, text, o);
   }
   if (kind === 'weapon' && f === 'inout') return inOutText(x as Person, wInfo(s, d));
   if (kind === 'cadre') {
@@ -286,6 +373,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     return null;
   }
   const p = x as Person;
+  if (f !== 'stype' && isStatusField(f)) return stCol(s, p.id, d, ST_FIELD[f], o?.sf);
   switch (f) {
     case 'rank': return rankTxt(p); case 'rank1': return p.rank; case 'origin': return p.origin || ''; case 'spec': return p.spec; case 'name': return fullName(p);
     case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -293,7 +381,6 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
     case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
-    case 'status': return statusesOn(s.statuses, p.id, d).map(x => statusLbl(x, s.settings.lists)).join(', ');
     case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
     case 'notes': return p.notes;
   }
@@ -425,17 +512,23 @@ export function replaceOne<T extends Row>(picked: T[], i: number, pool: T[], rnd
 }
 // Χωρισμός σε φύλλα: ομάδες με τη σειρά θαλάμου / ουλαμού / Σ.Ι., και μέσα στην καθεμία η σειρά της λίστας
 export interface RepGroup { key: string; label: string; short: string; rows: Row[] }
+// η ομάδα μιας γραμμής (θάλαμος, ουλαμός ή Σ.Ι. του στρατιώτη)
+export function groupOf(s: Pick<AppState, 'settings'>, x: Row, split: RepSplit): Omit<RepGroup, 'rows'> {
+  const p = x as Person; let key: string, label: string, short: string;
+  if (split === 'room') { key = p.room == null ? '~' : String(p.room).padStart(3, '0'); label = p.room == null ? 'ΧΩΡΙΣ ΘΑΛΑΜΟ' : 'ΘΑΛΑΜΟΣ ' + p.room; short = p.room == null ? 'ΧΩΡΙΣ ΘΑΛ' : 'Θ' + p.room; }
+  else if (split === 'unit') { const u = unitOf(p, s.settings); key = u === '—' ? '~' : u; label = u === '—' ? 'ΧΩΡΙΣ ΟΥΛΑΜΟ' : 'ΟΥΛΑΜΟΣ ' + u; short = u === '—' ? 'ΧΩΡΙΣ ΟΥΛ' : u; }
+  else { const si = (p.si || '').trim(); key = si || '~'; label = si || 'ΧΩΡΙΣ Σ.Ι.'; short = si || 'ΧΩΡΙΣ ΣΙ'; }
+  return { key, label: label.toUpperCase(), short: short.toUpperCase() };
+}
+export const byGroup = (a: { key: string }, b: { key: string }) => Number(a.key === '~') - Number(b.key === '~') || collator.compare(a.key, b.key);   // «χωρίς» στο τέλος
 export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row[], split: RepSplit | undefined): RepGroup[] {
   if (!split || split === 'none' || kind === 'cadre') return [{ key: '', label: '', short: '', rows }];
   const by = new Map<string, RepGroup>();
   for (const x of rows) {
-    const p = x as Person; let key: string, label: string, short: string;
-    if (split === 'room') { key = p.room == null ? '~' : String(p.room).padStart(3, '0'); label = p.room == null ? 'ΧΩΡΙΣ ΘΑΛΑΜΟ' : 'ΘΑΛΑΜΟΣ ' + p.room; short = p.room == null ? 'ΧΩΡΙΣ ΘΑΛ' : 'Θ' + p.room; }
-    else if (split === 'unit') { const u = unitOf(p, s.settings); key = u === '—' ? '~' : u; label = u === '—' ? 'ΧΩΡΙΣ ΟΥΛΑΜΟ' : 'ΟΥΛΑΜΟΣ ' + u; short = u === '—' ? 'ΧΩΡΙΣ ΟΥΛ' : u; }
-    else { const si = (p.si || '').trim(); key = si || '~'; label = si || 'ΧΩΡΙΣ Σ.Ι.'; short = si || 'ΧΩΡΙΣ ΣΙ'; }
-    const g = by.get(key); if (g) g.rows.push(x); else by.set(key, { key, label: label.toUpperCase(), short: short.toUpperCase(), rows: [x] });
+    const k = groupOf(s, x, split);
+    const g = by.get(k.key); if (g) g.rows.push(x); else by.set(k.key, { ...k, rows: [x] });
   }
-  return [...by.values()].sort((a, b) => Number(a.key === '~') - Number(b.key === '~') || collator.compare(a.key, b.key));   // «χωρίς» στο τέλος
+  return [...by.values()].sort(byGroup);
 }
 // Τι θα γίνει όταν πατηθεί «Βγάλε», σε απλά λόγια (οδηγός, «Βγάλε…»): πόσα φύλλα/σελίδες, ποια, πού
 export const repFileName = (r: Pick<Report, 'name'>, d: ISODate) => upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
@@ -551,4 +644,39 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
   const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
   return head + (extra ? ' (' + extra + ')' : '');
 }
+// Σειρές ανά είδος (οι «Ημερομηνία» μόνο στις καταστάσεις και στις κινήσεις όπλων, η «Σειρά ΦΡΟΥΡΑΣ» μόνο στις υπηρεσίες)
+const SORTS: { value: RepSort; label: string }[] = [{ value: 'seat', label: 'Σειρά ΦΡΟΥΡΑΣ' }, { value: 'name', label: 'Αλφαβητικά' }, { value: 'room', label: 'Θάλαμος' }, { value: 'rank', label: 'Βαθμός' }, { value: 'from', label: 'Ημερομηνία' }, { value: 'pick', label: 'Όπως βγήκαν' }];
+export const sortsOf = (kind: RepKind) => SORTS.filter(s => (kind !== 'cadre' || s.value !== 'room') && ((kind === 'status' || kind === 'wmove') || s.value !== 'from') && (kind === 'duty' || s.value !== 'seat')
+  && !((kind === 'duty' || kind === 'wmove') && s.value === 'pick')).map(s => (kind === 'wmove' && s.value === 'from' ? { ...s, label: 'Ώρα εξόδου' } : s));
+// Άλλαξε «Τι αφορά»: κάθε είδος κρατά μόνο τα δικά του φίλτρα· θάλαμοι, Σ.Ι. και λίστα μένουν σε όσα έχουν στρατιώτες
+export function pickForKind(from: RepKind, pk: RepPick, sort: RepSort, kind: RepKind): { pick: RepPick; sort: RepSort } {
+  const { cats, when, blocks, empty, wf, open, ...rest } = pk;
+  const base = { ...rest, from: 'all' as const, noDuty: false };
+  const pick: RepPick = kind === 'cadre' ? { from: pk.from === 'present' ? 'present' : 'all', mode: pk.mode, n: pk.n }
+    : kind === 'status' ? { ...base, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' }
+    : kind === 'duty' ? { ...base, mode: 'all', blocks, empty } : kind === 'wmove' ? { ...base, mode: 'all', open }
+    : kind === 'weapon' ? { ...rest, from: isLinked(from) ? 'all' : rest.from, wf: wf || 'with' } : { ...rest, from: isLinked(from) ? 'all' : rest.from };
+  const so: RepSort = kind === 'duty' ? 'seat' : kind === 'wmove' ? 'from' : sortsOf(kind).some(x => x.value === sort) ? sort : kind === 'cadre' ? 'rank' : 'name';
+  return { pick, sort: so };
+}
+// Νέος πίνακας 2, 3…: όλοι, χωρίς φίλτρα, με τη σειρά που ταιριάζει στο είδος
+export function newTable(kind: RepKind, id: string): RepTable {
+  const x = pickForKind('people', defaultPick(), 'name', kind);
+  return { id, kind, head: 1, cols: [], pick: x.pick, sort: x.sort };
+}
+// Οι πίνακες 2, 3… χωρίς τυχαίους: η κλήρωση είναι μόνο του πρώτου
+export const subPick = (pk: RepPick): RepPick => (pk.mode === 'random' ? { ...pk, mode: 'all', even: undefined, fair: undefined, gap: undefined } : pk);
+// Μετά το «Φτιάξ' το εδώ»: πού κατέληξαν οι πίνακες στο πρότυπο, μαζί με ό,τι διάλεξες για τον καθένα (ποιοι, σειρά)
+export interface BuiltOut { sheet: string; head: number; cols: RepCol[]; cells: RepCell[]; more?: { id: string; head: number; cols: RepCol[] }[]; fixed?: boolean }
+export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
+  const more = (o.more || []).map(t => {
+    const prev = r.more?.find(x => x.id === t.id); const got = b.more?.find(x => x.id === t.id);
+    const base = !prev ? newTable(t.kind, t.id) : prev.kind === t.kind ? prev : { ...prev, ...pickForKind(prev.kind, prev.pick, prev.sort, t.kind) };
+    return { ...base, title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [] };
+  });
+  const { more: _, fixed: _f, ...rest } = r;
+  return { ...rest, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}) };
+}
+// Οι γραμμές των πινάκων 2, 3… (όλες ή οι πρώτες Ν, με τη σειρά τους)
+export const moreRows = (s: AppState, r: Pick<Report, 'more'>, d: ISODate): Row[][] => (r.more || []).map(t => rowsOf(s, { ...t, pick: subPick(t.pick) }, d));
 export const roomList = (s: Pick<AppState, 'settings'>) => Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1);

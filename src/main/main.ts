@@ -23,7 +23,7 @@ import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './expor
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
-import { repDate, rowsOf, type BuildOpts, type RepKind, type Report } from '../shared/reports';
+import { repDate, rowsOf, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
 import { frouraFile, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
@@ -1093,13 +1093,13 @@ else {
         await fs.promises.mkdir(TPL_DIR, { recursive: true }); const f = path.join(TPL_DIR, name);
         if (isLocked(f)) return fail('Το πρότυπο είναι ανοιχτό στο Excel. Κλείσε το Excel και ξαναπάτα.');
         await fs.promises.writeFile(f, b.data);
-        return { ok: true, file: name, mtime: Math.round(fs.statSync(f).mtimeMs), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells };
+        return { ok: true, file: name, mtime: Math.round(fs.statSync(f).mtimeMs), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(b.more ? { more: b.more } : {}), ...(b.fixed ? { fixed: true } : {}) };
       } catch (e) { return fail(e); }
     });
     ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean) => {
       try {
         const s = store.state;
-        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind, xlLook(s.settings)); return previewReport(b.data, s, { ...r, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells }, ids, date); }, s);
+        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind, xlLook(s.settings)); return previewReport(b.data, s, withBuilt(r, b, src.build!), ids, date); }, s);
         const buf = await tplBuf(src.file || '');
         if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
         return await off('previewReport', [buf, r, ids, date], () => previewReport(buf, s, r, ids, date), s);
@@ -1115,7 +1115,7 @@ else {
         if ('report' in q) {
           // «Φτιάξ' το εδώ» μέσα στον οδηγό: το πρότυπο από τις επιλογές, χωρίς αρχείο ακόμα (όπως η προεπισκόπηση)
           const b = q.build ? await buildTemplate(q.build, q.report.kind, xlLook(s.settings)) : null;
-          const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? { ...q.report, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells } : q.report;
+          const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? withBuilt(q.report, b, q.build!) : q.report;
           out = await off('fillReport', [buf, rep, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date), s);
         }
         else {

@@ -9,6 +9,7 @@ import { zipHash } from './ziphash';
 import { buildTemplate, fillReport, placeSheets, previewReport, previewTemplate } from './reports';
 import type { AppState } from '../shared/domain';
 import { xlLook } from '../shared/xlLook';
+import { withBuilt } from '../shared/reports';
 
 const nodeRequire: NodeRequire = require;
 let state: AppState;
@@ -23,7 +24,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   placeSheets: (target, out, pairs, mine) => placeSheets(buf(target), buf(out), pairs, mine),
   previewReport: (tpl, r, ids, d) => previewReport(buf(tpl), state, r, ids, d),
   previewTemplate: (tpl, sheet) => previewTemplate(buf(tpl), sheet),
-  previewBuilt: async (o, r, ids, d) => { const b = await buildTemplate(o, r.kind, xlLook(state.settings)); return previewReport(b.data, state, { ...r, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells }, ids, d); },
+  previewBuilt: async (o, r, ids, d) => { const b = await buildTemplate(o, r.kind, xlLook(state.settings)); return previewReport(b.data, state, withBuilt(r, b, o), ids, d); },
   zipHash: b => zipHash(buf(b)),
   valuesHash: b => valuesHash(buf(b)),
   readBook: (file, rows, cols) => readBook(file, rows, cols),

@@ -7,7 +7,7 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
-import { byIds, fieldOf, fieldValue, type BuildOpts, type Report } from '../shared/reports';
+import { byIds, fieldOf, fieldValue, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
 import { rankTxt } from '../shared/ranks';
@@ -180,13 +180,14 @@ export function mockApi(): Api {
     // Έντυπα: στον browser δεν υπάρχει Excel· η προεπισκόπηση είναι ένας απλός πίνακας με τα στοιχεία
     repUpload: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
-    repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: o.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '' })), cells: [] }),
+    repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: o.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
+      more: (o.more || []).map((t, j) => ({ id: t.id, head: 11 + j * 4, cols: t.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(t.kind, c.f)?.head || '', o: c.o })) })) }),
     repPreview: async (src, r: Report, ids, date) => {
-      const cols = 'build' in src ? src.build.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h, text: c.text })) : r.cols;
+      const cols: { c: number; f: string; h?: string; text?: string; o?: ColOpts }[] = 'build' in src ? src.build.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h, text: c.text, o: c.o })) : r.cols;
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const rows = byIds(state, r.kind, ids.slice(0, 40), date);
       const head = cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('');
-      const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text)) + '</td>').join('') + '</tr>').join('');
+      const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>').join('');
       return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
     },
     // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές

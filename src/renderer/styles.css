@@ -1028,6 +1028,19 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-cols .ui-input{width:150px;height:32px}
 .rep-cols__l{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 4px;border-radius:4px;background:var(--muted);color:var(--muted-fg);font:600 12px var(--f-mono)}
 .rep-cols__mv{display:inline-flex;margin-left:auto}
+/* μορφή στήλης: καταστάσεις (ΕΑ, ΑΔΕΙΑ…) και συνδυασμός (ΣΤΡ (ΜΧ)), κάτω από τη στήλη */
+.rep-colopt{display:flex;align-items:center;flex-wrap:wrap;gap:5px 6px;flex-basis:100%;padding:4px 0 2px 27px;font-size:12px}
+.rep-table--map .rep-colopt{padding-left:0;margin-top:5px}
+.rep-colopt .ui-select{width:auto;min-width:150px}
+.rep-colopt__l{color:var(--muted-fg);font-weight:600}
+.rep-colopt__n{font:600 12px var(--f-mono);color:var(--muted-fg)}
+.rep-colopt__fmt.ui-input{width:200px;height:30px}
+.rep-colopt__help{flex-basis:100%;line-height:1.4}
+.rep-colopt--combo + .rep-colopt, .rep-colopt--combo .rep-colopt{padding-left:0}
+/* πίνακες του εντύπου (1 · Στρατιώτες, 2 · Καταστάσεις, + Πίνακας) */
+.rep-tables{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--muted)}
+.rep-tables .field__label{margin:0 4px 0 0}
+.rep-wiz__main > .rep-tables{margin-bottom:10px}
 .rep-cells{list-style:none;margin:6px 0 8px;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
 .rep-cells li{display:flex;align-items:center;gap:6px}
 .rep-cells b{font-family:var(--f-mono);min-width:44px}
