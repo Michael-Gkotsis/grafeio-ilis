@@ -2,7 +2,7 @@
 // στοιχεία της εφαρμογής. Ένα έντυπο το στήνεις μία φορά (οδηγός 5 βημάτων) και μετά βγαίνει με ένα κλικ.
 // Η τυχαία επιλογή γίνεται εδώ, ώστε να βγει ακριβώς ό,τι είδες· ο main παίρνει μόνο τη λίστα των ατόμων.
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
+import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { DayFormsDialog } from './dayForms';
@@ -139,25 +139,34 @@ function usePick(r: Report, d: string, init?: (number | string)[] | null) {
   return { pool, rows, random, manual, times: fair ? times : null, recent: recent ? recent.size : 0, reroll: () => setSeed(x => x + 1), replace, remove, add };
 }
 
-const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times }: P) {
+const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times, style }: P) {
   const t = times ? times[x.id] || 0 : -1; const nm = nameOf(x);
-  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small>${[rankTxt(x), kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
-    kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ')}</small>
+  const info = [rankTxt(x), kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
+    kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ');
+  return html`<div role="listitem" className="rep-picks__row" style=${style}><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small data-tip=${info.length > 40 ? info : undefined}>${info}</small>
     <span className="rep-picks__acts">
       ${onNever && html`<button type="button" className="rep-picks__never" aria-label=${'Ποτέ ο ' + nm} data-tip="Να μη μπαίνει ποτέ σε αυτό το έντυπο" onClick=${() => onNever(x.id)}>Ποτέ</button>`}
       ${onSwap && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλος τυχαίος αντί για ' + nm} data-tip="Άλλος τυχαίος στη θέση του" onClick=${() => onSwap(x.id)}>⟳</button>`}
-      ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Βγάλε τον ' + nm} data-tip="Βγάλ' τον (αυτή τη φορά)" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</span></li>`;
+      ${onX && html`<button type="button" className="rep-picks__x" aria-label=${'Βγάλε τον ' + nm} data-tip="Βγάλ' τον (αυτή τη φορά)" onClick=${() => onX(x.id)}>${Icon.x}</button>`}</span></div>`;
 });
+const PICK_H = 30;   // ύψος γραμμής της λίστας (σταθερό: μόνο όσες φαίνονται ζωγραφίζονται)
 // onNever: «Ποτέ σε αυτό το έντυπο» (ο οδηγός ή το «Βγάλε…» το κρατούν στο έντυπο)
 function PickList({ p, kind, onNever }: P) {
   const who = rowNoun(kind);
   const inList = useMemo(() => new Set(p.rows.map((x: Row) => x.id)), [p.rows]);
   const na = useCallback((x: Person) => (inList.has(x.id) ? 'Είναι ήδη μέσα' : null), [inList]);
+  // σταθερά κουμπιά για κάθε γραμμή: όταν αλλάζει ένα φίλτρο ξαναζωγραφίζονται μόνο οι γραμμές που άλλαξαν
+  const cb = useRef({ p, onNever }); cb.current = { p, onNever };
+  const swap = useCallback((id: number | string) => cb.current.p.replace(id), []);
+  const out = useCallback((id: number | string) => cb.current.p.remove(id), []);
+  const never = useCallback((id: number) => cb.current.onNever?.(id), []);
+  const height = Math.round(useViewportHeight(0) * 0.46);
   return html`<div className="rep-picks">
     <div className="rep-picks__head"><b>${p.rows.length} ${who}</b><span className="muted">${p.random ? 'τυχαία από ' + p.pool.length + ' που περνούν τα φίλτρα' : p.rows.length < p.pool.length ? 'από ' + p.pool.length + ' που περνούν τα φίλτρα' : ''}${p.recent ? ' (εκτός ' + p.recent + ' που βγήκαν πρόσφατα)' : ''}</span>
       ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση για όλους">⟳ Ξανά τυχαία<//>`}</div>
-    ${p.rows.length ? html`<ol className="rep-picks__list">${p.rows.map((x: Row, i: number) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} times=${p.times}
-      onSwap=${p.random ? p.replace : null} onX=${p.random || p.manual ? p.remove : null} onNever=${p.manual && onNever ? onNever : null}/>`)}</ol>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
+    ${p.rows.length ? html`<div role="list" aria-label=${'Μπαίνουν: ' + p.rows.length}><${VirtualList} className="rep-picks__list" items=${p.rows} rowHeight=${PICK_H} height=${height}
+      renderRow=${(x: Row, i: number, style: P) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} times=${p.times} style=${style}
+        onSwap=${p.random ? swap : null} onX=${p.random || p.manual ? out : null} onNever=${p.manual && onNever ? never : null}/>`}/></div>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
     ${p.manual && html`<div className="rep-picks__add"><${PersonPicker} placeholder="Βάλε συγκεκριμένο: επώνυμο, όνομα ή ΑΣΜ…" unavailable=${na} onChange=${(id: number) => p.add(id)}/></div>`}
   </div>`;
 }
@@ -196,12 +205,17 @@ function Preview({ pv, busy, picking, marks, heads, onPick }: P) {
 function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean) {
   const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, r.sigs, r.layout, r.more, ids.slice(0, 120), d, raw]);
+  // μία προεπισκόπηση τη φορά: όσες αλλαγές γίνουν όσο φτιάχνεται μία, ζητείται μόνο η τελευταία (στο Atom κάθε μία θέλει χρόνο)
+  const inflight = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
     if (!src) { setPv(null); return; }
     let live = true; setBusy(true);
     const t = setTimeout(async () => {
       try {
-        const x = await window.api.repPreview(src, r, ids.slice(0, 120), d, raw);
+        while (inflight.current) { await inflight.current.catch(() => {}); if (!live) return; }
+        const req = window.api.repPreview(src, r, ids.slice(0, 120), d, raw);
+        inflight.current = req; req.finally(() => { if (inflight.current === req) inflight.current = null; }).catch(() => {});
+        const x = await req;
         if (!live) return;
         if ('ok' in x && !x.ok) { setErr(x.error); setPv(null); } else { setErr(''); setPv(x as RepPreview); }
       } catch (e) { if (live) setErr(String(e)); } finally { if (live) setBusy(false); }

@@ -1059,10 +1059,11 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-picks{border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .rep-picks__head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
 .rep-picks__head .ui-btn{margin-left:auto}
-.rep-picks__list{list-style:none;margin:0;padding:4px 0;max-height:46vh;overflow:auto;font-size:13px}
-.rep-picks__list li{display:flex;align-items:center;gap:8px;padding:3px 10px;contain:content}
-.rep-picks__list li:hover{background:var(--hover)}
-.rep-picks__list small{color:var(--muted-fg)}
+.rep-picks__list{font-size:13px}
+.rep-picks__row{display:flex;align-items:center;gap:8px;padding:0 10px;contain:strict;white-space:nowrap}
+.rep-picks__row:hover{background:var(--hover)}
+.rep-picks__row b{flex:none}
+.rep-picks__row small{color:var(--muted-fg);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .rep-picks__n{width:26px;text-align:right;color:var(--muted-fg);font:12px var(--f-mono)}
 .rep-picks__acts{margin-left:auto;display:inline-flex;gap:2px;align-items:center}
 .rep-picks__never{height:22px;padding:0 6px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted-fg);font-size:11px;cursor:pointer}
