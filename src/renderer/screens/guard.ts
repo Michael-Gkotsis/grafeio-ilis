@@ -1,7 +1,7 @@
 // features/guard (Κατάσταση υπηρεσιών, έλεγχος) και features/outs (εξοδούχοι, ΔΝ)
 import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
+import { html, cx, Alert, Badge, Button, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
@@ -112,12 +112,13 @@ function RulesDialog({ onClose }: P) {
   const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME });
   const [ds, setDs] = useState(dutyStartOf(state.settings));
   const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds);
+  const [r0] = useState(() => JSON.stringify([r, ds])); const dirty = JSON.stringify([r, ds]) !== r0;
   const save = async () => {
     const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! }; const nds = normTime(ds)!;
     if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
     if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
   };
-  return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose}
+  return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose} dirty=${dirty && 'Οι αλλαγές στους κανόνες δεν αποθηκεύτηκαν. Αν κλείσεις, μένουν οι παλιοί.'}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} onClick=${save}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
     <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία (Κ-14)</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => setR({ ...r, restDays: v })} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
@@ -189,6 +190,7 @@ export function GuardScreen() {
   const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
   const locked = date < today && !unlocked[date];
   const [addOpen, setAddOpen] = useState(false);
+  const [clearAsk, setClearAsk] = useState(false);
   const [fixedOpen, setFixedOpen] = useState(false);
   // κάρτες που κλείνουν: πλήρη μπλοκ κλειστά, με κενά ανοιχτά. Ό,τι αλλάξεις με το χέρι μένει όσο δουλεύεις.
   const [fold, setFold] = useState<Record<string, boolean>>({});
@@ -276,8 +278,10 @@ export function GuardScreen() {
     <div className=${cx('guard__bar', stuck && 'is-stuck')}><span className="gb-stuck"><b>${dow(date)} ${dm(date)}</b></span><${Segmented} small=${true} value=${phase} onChange=${(v: Phase) => run({ t: 'setPhase', phase: v })} items=${[{ value: 'sven', label: 'ΦΡΟΥΡΑ ΣΒΕΝ', tip: '2 πίνακες θαλαμοφυλάκων και μαγειρεία' }, { value: 'spen', label: 'ΦΡΟΥΡΑ ΣΠΕΝ', tip: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' }]}/>${empty.length ? html`<${Badge} tone="bad">${empty.length} κενές από ${posts.length}<//>` : html`<${Badge} tone="ok">Πλήρης<//>`}${!locked && empty.length > 0 && html`<${Button} size="sm" variant="outline" className="gb-keep" onClick=${nextEmpty} data-tip="Πάει στην επόμενη κενή θέση και ανοίγει την επιλογή ατόμου (πλήκτρο Ν)">Επόμενη κενή<//>`}
       <span className="gb-stuck"><${Button} size="sm" disabled=${locked || !empty.length || !people.length} onClick=${autofill}>Αυτόματη συμπλήρωση<//><${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//></span>
       <span className="guard__rules">${isHol(state.settings, date) && html`<${Badge} tone="warn" data-tip="Μετρά ως αργία στον έλεγχο υπηρεσιών">Αργία: ${holName(state.settings, date)}<//>`}</span>
-      ${!locked && Object.keys(g).length > 0 && html`<${Button} size="sm" variant="ghost" onClick=${async () => { if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Καθαρίστηκαν οι θέσεις ' + dm(date), actions: [undoMark()] }); }}>Καθάρισε<//>`}
-      <${MonthSelect} m=${mon} width="160px" small=${true}/><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
+      <span className="gb-mon"><span className="gb-mon__lbl" data-tip="Από ποιον μήνα μετρά τις υπηρεσίες (στήλη Είδ./Σύν. και σειρά)">Μετρά:</span><${MonthSelect} m=${mon} width="150px" small=${true}/></span><${Button} variant="outline" size="sm" onClick=${() => setAddOpen(true)} data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">+ Νέα υπηρεσία<//></div>
+    ${clearAsk && html`<${Dialog} role="alertdialog" title=${'Να αδειάσει η ' + dow(date) + ' ' + dm(date) + ';'} onClose=${() => setClearAsk(false)}
+      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setClearAsk(false)}>Όχι<//><${Button} variant="destructive" onClick=${async () => { setClearAsk(false); if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Άδειασαν οι θέσεις ' + dow(date) + ' ' + dm(date), actions: [undoMark()] }); }}>Ναι, άδειασέ τη<//>`}>
+      <p style=${{ margin: 0 }}>Βγαίνουν και οι <b>${Object.values(g).filter(Boolean).length}</b> από τις θέσεις αυτής της μέρας (μένουν κενές). Μπορείς να το αναιρέσεις αμέσως μετά.</p><//>`}
     ${psk && html`<div className="psk"><div><b>Φρουρά ΠΣΚ</b><small>${psk.map(d => dow(d) + ' ' + dm(d) + ': ' + (pskEmpty(d) ? pskEmpty(d) + ' κενές' : 'πλήρης')).join(' · ')}</small></div>
       <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)) }, false)) toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ<//>
       <${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${() => ex('frouraPsk', psk[0], 'η ΦΡΟΥΡΑ του ΠΣΚ')} data-tip="Ένα Excel με τρία φύλλα: Παρ, Σαβ, Κυρ">${xb === 'frouraPsk' ? 'Δημιουργία…' : 'Excel ΠΣΚ'}<//>
@@ -291,6 +295,7 @@ export function GuardScreen() {
           ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${state.statuses} duty=${d ? (d.byKind[x.kind] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${seatPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
+    ${!locked && Object.values(g).some(Boolean) && html`<div className="gb-clear"><${Button} size="sm" variant="ghost" onClick=${() => setClearAsk(true)} data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">Άδειασε τη μέρα…<//></div>`}
     ${seatless.length > 0 && html`<section className="ui-card seatless" aria-label="Υπηρεσίες χωρίς θέση">
       <h2 className="minihd">Υπηρεσίες χωρίς θέση (από Excel) · ${seatless.length}</h2>
       <p className="note" style=${{ margin: '0 0 6px' }}>Σκέτο «Θ», «Μ», «Σ» στον έλεγχο υπηρεσιών: μετρούν στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου. Όταν μπει ο ίδιος σε θέση του ίδιου είδους, φεύγει από εδώ.</p>
@@ -382,9 +387,10 @@ export function AddBlockDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const phase: Phase = state.settings.phase || 'sven';
   const [f, setF] = useState({ name: '', kind: 'other' as DutyKind, armed: false, n: 1, hrs: '', off: false });
-  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState({ every: 120, from: '', to: '' });
+  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState({ every: 120, from: '', to: '' }); const dirty = useDirty([f, mode, sh]);
   const save = async () => { if (await run({ t: 'addBlock', phase, ...f, hrs: mode === 'fixed' ? f.hrs : '', shift: mode === 'shift' ? shiftOf(sh) : null }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : '. Τη βλέπεις στις θέσεις και στο έντυπο.') }); } };
   return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + PHASE_NAME[phase] + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
+    dirty=${dirty && 'Η υπηρεσία δεν προστέθηκε. Αν κλείσεις, χάνεται.'}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.name.trim() || (mode === 'shift' && shiftBad(sh))} onClick=${save}>Προσθήκη<//>`}>
     <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
     <div className="field-row">

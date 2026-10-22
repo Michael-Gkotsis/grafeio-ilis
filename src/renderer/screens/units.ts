@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { html, Alert, Button, Card, Logo, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
+import { usePending } from '../pending';
 import { makePlatoons, platoonsOf, roomCfg, type Person, type Platoon, type RoomSettings } from '../../shared/domain';
 import { BRAND_RANKS, DEFAULT_TITLE, LOGO_KINDS, appLogo, appTitle, type LogoKind } from '../../shared/brand';
 type P = any;
@@ -36,15 +37,20 @@ export function RoomsCard() {
   const beyond = useMemo(() => state.people.filter((p: Person) => p.active && p.room != null && p.room > n), [state.people, n]);
   const perRoom = useMemo(() => { const m = new Map<number, number>(); state.people.forEach((p: Person) => { if (p.active && p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return m; }, [state.people]);
   const bad = names.some(x => !x) ? 'Κάθε ουλαμός θέλει όνομα.' : dupName ? 'Δύο ουλαμοί λέγονται «' + dupName + '».' : null;
+  // ό,τι είναι αποθηκευμένο: με αυτό συγκρίνεται η φόρμα (μπάρα «Δεν αποθηκεύτηκαν» και ερώτηση πριν φύγεις)
+  const stored = () => ({ n: cfg.n, per: cfg.per, pl: platoonsOf(state.settings), out: { 6: [...(state.rules.outRooms[6] || [])], 0: [...(state.rules.outRooms[0] || [])] } });
+  const dirty = JSON.stringify({ n, per, pl, out }) !== JSON.stringify(stored());
   const save = async () => {
-    if (bad) return;
+    if (bad) return false;
     const clean = pl.map(u => ({ name: u.name.trim().replace(/\s+/g, ' '), rooms: u.rooms }));
     const rooms: RoomSettings = { n, per, ...(same(clean, makePlatoons(n, per)) ? {} : { platoons: clean }) };
     const ok = await run({ t: 'setSettings', settings: { rooms }, text: 'θάλαμοι ' + n + ', ουλαμοί ' + clean.map(u => u.name + ' (' + roomsTxt(u.rooms) + ')').join(', ') }, false);
     const nr = { ...state.rules, outRooms: { ...state.rules.outRooms, 6: out[6], 0: out[0] } };
     if (ok && JSON.stringify(nr.outRooms) !== JSON.stringify(state.rules.outRooms)) await run({ t: 'setRules', rules: nr, text: 'θάλαμοι εξόδου ΣΑΒ ' + roomsTxt(out[6]) + ', ΚΥΡ ' + roomsTxt(out[0]) }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι θάλαμοι και οι ουλαμοί' });
+    return ok;
   };
+  usePending(dirty, { label: 'Θάλαμοι και ουλαμοί', save, discard: () => { const x = stored(); setN(x.n); setPer(x.per); setPl(x.pl); setOut(x.out); } });
   const chip = (r: number, on: boolean, fn: () => void, label: string) => html`<button key=${r} type="button" className="ui-chip ui-chip--sm" aria-pressed=${on} aria-label=${label} data-tip=${perRoom.get(r) ? perRoom.get(r) + ' στρατιώτες' : 'Κανένας στρατιώτης ακόμα'} onClick=${fn}>Θ${r}</button>`;
   return html`<${Card} title="Θάλαμοι και ουλαμοί">
     <div className="field-row">
@@ -126,10 +132,14 @@ export function BrandCard() {
     if (!f) return;
     try { const d = await shrink(f); setUpl(d); setLogo(d); } catch (err) { toast({ text: err instanceof Error ? err.message : String(err) }); }
   };
+  const dirty = rank !== (b.rank || BRAND_RANKS[0].rank) || title.trim().replace(/\s+/g, ' ') !== (b.title || '') || logo !== (b.logo || '');
   const save = async () => {
     const brand = { ...(rank !== BRAND_RANKS[0].rank ? { rank } : {}), ...(title.trim() ? { title: title.trim().replace(/\s+/g, ' ') } : {}), ...(logo ? { logo } : {}) };
-    if (await run({ t: 'setSettings', settings: { brand }, text: 'τίτλος «' + appTitle({ brand }) + '»' + (custom ? ', δικό σου λογότυπο' : '') }, false)) toast({ text: 'Αποθηκεύτηκε ο τίτλος και το λογότυπο' });
+    const ok = await run({ t: 'setSettings', settings: { brand }, text: 'τίτλος «' + appTitle({ brand }) + '»' + (custom ? ', δικό σου λογότυπο' : '') }, false);
+    if (ok) toast({ text: 'Αποθηκεύτηκε ο τίτλος και το λογότυπο' });
+    return ok;
   };
+  usePending(dirty, { label: 'Τίτλος και λογότυπο', save, discard: () => { setRank(b.rank || BRAND_RANKS[0].rank); setTitle(b.title || ''); setLogo(b.logo || ''); } });
   const opt = (k: string, label: string, kind: LogoKind, src?: string) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${logo === k} style=${{ height: 'auto', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '8px' }} onClick=${() => setLogo(k)}><${Logo} size=${26} kind=${kind} src=${src}/>${label}</button>`;
   return html`<${Card} title="Τίτλος και λογότυπο">
     <div className="field-row">

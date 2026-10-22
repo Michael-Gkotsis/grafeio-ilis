@@ -10,7 +10,7 @@ export interface StoreValue {
   state: AppState; audit: AuditEntry[]; boot: Boot; today: ISODate; tomorrow: ISODate;
   run(cmd: Command, okText?: string | false): Promise<AppState | null>;   // η νέα κατάσταση, ή null αν δεν έγινε
   undo(id?: number): Promise<void>;   // id: μόνο αν είναι ακόμα η τελευταία ενέργεια που αναιρείται
-  undoMark(): { label: string; fn: () => void };   // «Αναίρεση» για μήνυμα: αναιρεί την ενέργεια που μόλις έγινε, όχι όποια είναι τελευταία όταν πατηθεί
+  undoMark(): { label: string; fn: () => void; undoId?: number };   // «Αναίρεση» για μήνυμα: αναιρεί την ενέργεια που μόλις έγινε, όχι όποια είναι τελευταία όταν πατηθεί
   refresh(): Promise<void>;   // όλα από την αρχή (νέα μέρα, εισαγωγή)
   sync(): Promise<void>;      // μόνο ό,τι άλλαξε (μετά από εξαγωγή κ.λπ.)
 }

@@ -1,6 +1,7 @@
 // app/AppShell: πλοήγηση, συντομεύσεις, επίπεδα (dialogs/sheets), σύνδεση με το main process
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Icon, Kbd, Logo, Sheet, ToastProvider, useToast } from './ui';
+import { html, cx, Badge, Button, Dialog, Icon, Kbd, Logo, Sheet, ToastProvider, useToast, useToastPrune } from './ui';
+import { closeLeaveAsk, discardAll, requestLeave, saveAll, useLeaveAsk, usePendingList } from './pending';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, CommandPalette } from './screens/other';
 // Ρυθμίσεις και Διάγνωση φορτώνουν όταν τις ανοίξεις: λιγότερος κώδικας να διαβαστεί στο άνοιγμα της εφαρμογής
@@ -106,7 +107,7 @@ function Root({ boot: initial }: { boot: Boot }) {
   }, [toast, merge]);
   const undoMark = useCallback(() => {
     const id = cur.current.audit.find(a => a.undoable && !a.undone)?.id ?? -1;
-    return { label: 'Αναίρεση', fn: () => { undo(id); } };
+    return { label: 'Αναίρεση', fn: () => { undo(id); }, undoId: id };
   }, [undo]);
   const sync = useCallback(async () => { const r = await window.api.sync(); if (r.ok) merge(r); }, [merge]);
   const store = useMemo<StoreValue>(() => ({ state, audit, boot, today, tomorrow: addDays(today, 1), run, undo, undoMark, refresh, sync }), [state, audit, boot, today, run, undo, undoMark, refresh, sync]);
@@ -115,6 +116,9 @@ function Root({ boot: initial }: { boot: Boot }) {
 
 function Shell() {
   const { state, audit, today, tomorrow, undo, boot } = useStore();
+  // «Αναίρεση» σε παλιό μήνυμα: μόνο όσο η ενέργειά του είναι ακόμα η τελευταία
+  const prune = useToastPrune();
+  useEffect(() => { prune(audit.find(a => a.undoable && !a.undone)?.id ?? -1); }, [audit, prune]);
   // τι θα αναιρέσει το κουμπί: όπως ο main (db.lastUndoable), μέσα στις 50 πιο πρόσφατες ενέργειες που αναιρούνται
   const lastUndo = useMemo(() => audit.filter(a => a.undoable).slice(0, 50).find(a => !a.undone), [audit]);
   // η ΕΣΣΟ των Ρυθμίσεων (Νέα ΕΣΣΟ), αλλιώς η πιο συχνή όσων είναι σε δύναμη
@@ -134,10 +138,15 @@ function Shell() {
   useEffect(() => { memory.current[route.view] = route.params; if (route.view === 'people') save(PEOPLE_KEY, pick(route.params, PEOPLE_KEEP)); }, [route]);
   useEffect(() => { memory.current = { people: load(PEOPLE_KEY, {}) }; }, [today]);   // νέα μέρα: οι ημερομηνίες ξεκινούν από σήμερα
   const cur = useRef({ route, back }); cur.current = { route, back };
-  const moveTo = useCallback((next: Route, push: boolean) => {
+  // σε άλλη οθόνη: αν μια κάρτα έχει αλλαγές που δεν αποθηκεύτηκαν, πρώτα ρωτά (pending.ts)
+  const moveTo = useCallback((next: Route, push: boolean, before?: () => void) => {
     const r = cur.current.route;
-    if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
-    setRoute(next); setLayer(null); setOver(null); setPersonId(null); window.scrollTo(0, 0);
+    const doIt = () => {
+      before?.();
+      if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
+      setRoute(next); setLayer(null); setOver(null); setPersonId(null); window.scrollTo(0, 0);
+    };
+    if (next.view === r.view) doIt(); else requestLeave(doIt);
   }, []);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.
   const go = useCallback((view: string, params?: Record<string, any>) => {
@@ -147,7 +156,7 @@ function Shell() {
   }, [moveTo]);
   const goBack = useCallback(() => {
     const b = cur.current.back; if (!b.length) return;
-    setBack(b.slice(0, -1)); moveTo(b[b.length - 1], false);
+    moveTo(b[b.length - 1], false, () => setBack(b.slice(0, -1)));
   }, [moveTo]);
   // οδηγός χρήσης στο θέμα της οθόνης που βλέπεις· μέσα στον οδηγό μένει όπου είσαι
   const help = useCallback(() => { const r = cur.current.route; if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) }); }, [go]);
@@ -211,7 +220,7 @@ function Shell() {
       </header>
       <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
         <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
-      <main className="main"><${Suspense} fallback=${html`<div className="empty">Φόρτωση…</div>`}><${Screen} key=${route.view}/><//></main>
+      <main className="main"><${Suspense} fallback=${html`<div className="empty">Φόρτωση…</div>`}><${Screen} key=${route.view}/><//><${PendingBar}/></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">
       ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
@@ -224,6 +233,19 @@ function Shell() {
     ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}
     ${over === 'palette' && html`<${CommandPalette} onClose=${() => setOver(null)}/>`}
   <//><//><//>`;
+}
+
+// Κάτω μπάρα όσο μια κάρτα έχει αλλαγές που δεν αποθηκεύτηκαν (π.χ. στις Ρυθμίσεις, όπου το «Αποθήκευση» μπορεί να είναι
+// πιο κάτω από ό,τι φαίνεται), και η ερώτηση πριν φύγεις από τη σελίδα
+function PendingBar() {
+  const list = usePendingList(); const asking = useLeaveAsk(); const [busy, setBusy] = useState(false);
+  const names = [...new Set(list.map(p => p.label))].join(', ');
+  const saveThen = async (go?: () => void) => { setBusy(true); const ok = await saveAll(); setBusy(false); if (ok && go) { closeLeaveAsk(); go(); } else if (!ok) closeLeaveAsk(); };
+  return html`${list.length > 0 && html`<div className="pendbar" role="status"><span>Δεν αποθηκεύτηκαν οι αλλαγές: <b>${names}</b></span>
+      <${Button} variant="ghost" size="sm" disabled=${busy} data-tip="Γυρίζουν όπως ήταν πριν τις αλλάξεις" onClick=${discardAll}>Άκυρο<//><${Button} size="sm" disabled=${busy} onClick=${() => saveThen()}>Αποθήκευση<//></div>`}
+    ${asking && list.length > 0 && html`<${Dialog} role="alertdialog" title="Δεν αποθηκεύτηκαν οι αλλαγές" onClose=${closeLeaveAsk}
+      footer=${html`<${Button} variant="ghost" onClick=${closeLeaveAsk}>Μείνε εδώ<//><${Button} variant="outline" disabled=${busy} onClick=${() => { discardAll(); closeLeaveAsk(); asking(); }}>Πέτα τις αλλαγές<//><${Button} data-autofocus="" disabled=${busy} onClick=${() => saveThen(asking)}>Αποθήκευση και συνέχεια<//>`}>
+      <p style=${{ margin: 0 }}>Άλλαξες <b>${names}</b> και δεν το αποθήκευσες. Αν συνεχίσεις χωρίς αποθήκευση, οι αλλαγές χάνονται.</p><//>`}`;
 }
 
 // Πάνω μπάρα: οι εγγραφές στο Excel γίνονται στο παρασκήνιο, εδώ φαίνεται πότε γράφει και πότε τελείωσε

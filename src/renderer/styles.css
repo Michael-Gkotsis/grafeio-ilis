@@ -143,9 +143,14 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 @keyframes pop{from{transform:translateY(6px) scale(.985);opacity:0}}
 @keyframes slidein{from{transform:translateX(24px);opacity:.6}}
 @keyframes slideup{from{transform:translateY(32px);opacity:.6}}
-.ui-toasts{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;z-index:80;max-width:calc(100% - 32px);width:420px;pointer-events:none}
+.ui-toasts{position:fixed;left:calc(var(--side-w) + 16px);bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;z-index:80;max-width:calc(100% - 32px);width:420px;pointer-events:none}
 .ui-toast{pointer-events:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--foreground);color:var(--background);padding:12px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;animation:slideup .16s ease-out}
 .ui-toast > div{flex:1;min-width:180px}
+/* μηνύματα κάτω αριστερά, δίπλα στο μενού: όχι πάνω από τα «Αποθήκευση» που είναι δεξιά */
+body:has(.shell.is-rail) .ui-toasts{left:calc(var(--rail-w) + 16px)}
+body:has(.pendbar) .ui-toasts{bottom:80px}
+.pendbar{position:sticky;bottom:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px -4px 0;padding:10px 14px;background:var(--warn-bg);color:var(--foreground);border:1px solid var(--warn);border-radius:12px;box-shadow:var(--shadow)}
+.pendbar > span{flex:1;min-width:200px}
 .ui-toast button{background:none;border:1px solid currentColor;color:inherit;border-radius:6px;height:30px;padding:0 10px;cursor:pointer;font-weight:600;white-space:nowrap}
 
 /* ---------- components/common ---------- */
@@ -483,8 +488,10 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .typegrid__row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;align-items:center}
 .typegrid__lbl{font-size:12px;font-weight:600;color:var(--muted-fg)}
 .guard__bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;position:sticky;top:var(--top-h);z-index:20;background:var(--background);padding:6px 0;margin:-6px 0}
+.gb-clear{display:flex;justify-content:flex-end;margin-top:6px}
 /* όταν κολλά πάνω: μέρα, κενές, «Επόμενη κενή», αυτόματη συμπλήρωση, Excel */
 .guard__bar .gb-stuck{display:none}
+.gb-mon{display:inline-flex;gap:6px;align-items:center}.gb-mon__lbl{font-size:13px;color:var(--muted-fg);white-space:nowrap}
 .guard__bar.is-stuck{box-shadow:0 8px 12px -10px rgba(0,0,0,.35)}
 .guard__bar.is-stuck > :not(.gb-stuck):not(.gb-keep):not(.ui-badge){display:none}
 .guard__bar.is-stuck .gb-stuck{display:flex;gap:8px;align-items:center}
@@ -570,7 +577,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
   .ui-dialog,.ui-dialog--lg{width:100%;max-height:92vh;border-radius:18px 18px 0 0;animation:slideup .18s ease-out;padding-bottom:env(safe-area-inset-bottom,0px)}
   .ui-dialog__foot .ui-btn{flex:1}
   .ui-sheet{top:auto;left:0;width:100%;max-height:88vh;border-left:0;border-top:1px solid var(--border);border-radius:16px 16px 0 0;animation:slideup .18s ease-out}
-  .ui-toasts{left:16px;right:16px;width:auto;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px))}
+  .ui-toasts,body:has(.shell.is-rail) .ui-toasts{left:16px;right:16px;width:auto;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px))}
   .post{grid-template-columns:minmax(0,1fr);gap:4px}.gtable__head{display:none}.post__who,.post__pick,.post__acts,.post__wide{grid-column:1/-1}.post .duty{grid-column:1/-1}
   .palette{border-radius:16px 16px 0 0;align-self:stretch;margin-top:8vh}
 }

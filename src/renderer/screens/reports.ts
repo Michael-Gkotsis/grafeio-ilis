@@ -358,6 +358,8 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const [view, setView] = useState<'filled' | 'tpl'>('filled');
   const [signers, setSigners] = useState(state.settings.signers || { sergeant: '', commander: '' });
   const [busy, setBusy] = useState(false);
+  // κάτι διαλέχτηκε ή άλλαξε: Esc και ✕ ρωτούν πριν πεταχτεί το έντυπο
+  const [r0] = useState(() => JSON.stringify(r)); const dirty = !busy && (!!mode || JSON.stringify(r) !== r0);
   const d = repDate(r, today);
   const inspect = async (t: RepTpl, kind: RepKind, sheet?: string, head?: number, keepCols = false) => {
     const x = await window.api.repInspect(t.file, kind, sheet, head);
@@ -465,7 +467,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
     ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} data-tip=${missing(step + 1) || undefined} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
       : html`<${Button} variant="outline" disabled=${busy || !canGo(6)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(6)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
   const showPv = step === 3 || step === 5;
-  return html`<${Dialog} size="xl" title=${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'} closeOnOverlay=${false} onClose=${onClose} footer=${foot}>
+  return html`<${Dialog} size="xl" title=${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'} closeOnOverlay=${false} onClose=${onClose} dirty=${dirty && (editing ? 'Οι αλλαγές στο έντυπο δεν αποθηκεύτηκαν. Αν κλείσεις, μένει όπως ήταν.' : 'Το έντυπο δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.')} footer=${foot}>
     <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} onClick=${() => setStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
     ${note && html`<${Alert} tone="warn">${note}<//>`}
     <div className=${cx('rep-wiz', showPv && 'rep-wiz--pv')}>

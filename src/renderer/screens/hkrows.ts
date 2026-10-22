@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
+import { usePending } from '../pending';
 import { guessHk, hkRowsOf, itemKey, listOf, optionsOf, type HkRowDef } from '../../shared/ranks';
 import { hkaiCounts, hkRankOf } from '../../shared/rules';
 import { HK, HK_HEAD_FORM, UNIT_KINDS, formText, hkRowLabel, hkRowName, type UnitKind } from '../../shared/unit';
@@ -111,8 +112,11 @@ export function HkHeadCard() {
   const [v, setV] = useState(saved); useEffect(() => setV(saved), [saved.join('\n')]); const dirty = v.some((x, i) => x !== saved[i]);
   const save = async () => {
     const head = v.map(x => x.trim()); const hkai = { ...cur }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
-    if (await run({ t: 'setSettings', settings: { hkai }, text: 'κεφαλίδα της ' + HK() }, false)) toast({ text: head.some(Boolean) ? 'Η ' + HK() + ' θα βγαίνει με κεφαλίδα «' + head.filter(Boolean).join(' / ') + '».' : 'Η ' + HK() + ' κρατά την κεφαλίδα του εντύπου.' });
+    const ok = await run({ t: 'setSettings', settings: { hkai }, text: 'κεφαλίδα της ' + HK() }, false);
+    if (ok) toast({ text: head.some(Boolean) ? 'Η ' + HK() + ' θα βγαίνει με κεφαλίδα «' + head.filter(Boolean).join(' / ') + '».' : 'Η ' + HK() + ' κρατά την κεφαλίδα του εντύπου.' });
+    return ok;
   };
+  usePending(dirty, { label: 'Κεφαλίδα της ' + HK(), save, discard: () => setV(saved) });
   return html`<${Card} title=${'Κεφαλίδα της ' + HK()}>
     <${HkHeadFields} value=${v} onChange=${setV} kind=${state.settings.unitKind}/>
     ${dirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${save}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => setV(saved)}>Άκυρο<//></div>`}
