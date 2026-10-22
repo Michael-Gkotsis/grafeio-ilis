@@ -5,10 +5,10 @@
 // με ώρα (τώρα) και τους λόγους ως κουμπιά: ένα κλικ στον λόγο και βγήκε. Για είσοδο: ώρα και λόγος εισαγωγής έτοιμα, Enter.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { html, cx, Alert, Badge, Button, Dialog, Segmented, useEscape, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Segmented, useEscape, useToast } from '../ui';
 import { Combo } from '../select';
 import { useNav, useStore } from '../store';
-import { ChoiceField, DateField, TimeField, useTimeOptions } from '../common';
+import { ChoiceField, DateField, GoLink, TimeField, useTimeOptions } from '../common';
 import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
 import { personMap } from '../../shared/rules';
 import { listOf, weaponBack } from '../../shared/ranks';
@@ -28,6 +28,7 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
   const ps: Person[] = pids.map((id: number) => pm.get(id)).filter(Boolean);
   const go = ps.filter(p => p.weapon && !open.has(p.id)); const noW = ps.filter(p => !p.weapon); const already = ps.filter(p => p.weapon && open.has(p.id));
   const ok = !!reason.trim() && !!normTime(time) && go.length > 0;
+  const miss = !go.length ? 'Κανένα όπλο για έξοδο' : missingOf([['Λόγος', reason.trim()], ['Ώρα', normTime(time)]]);
   const save = async () => {
     if (!ok) return;
     if (!(await run({ t: 'weaponOut', pids: go.map(p => p.id), reason, day, time: normTime(time)!, note }, false))) return;
@@ -35,7 +36,7 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
     onDone?.(); onClose();
   };
   return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? go[0].rank + ' ' + plainName(go[0]) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Έξοδος${go.length > 1 ? ' (' + go.length + ')' : ''}<//>`}>
+    footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Έξοδος${go.length > 1 ? ' (' + go.length + ')' : ''}<//>`}>
     <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${!r0} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
     ${reason.trim() && html`<p className="note" style=${{ margin: '-4px 0 10px' }}>Όταν μπει πάλι: <b>${weaponBack(reason, state.settings.lists)}</b></p>`}
     <div className="field-row">
@@ -55,6 +56,7 @@ export function WeaponInDialog({ ids, onClose, onDone }: P) {
   const backs = [...new Set(moves.map(m => weaponBack(m.reason, lists)))];
   const early = moves.filter(m => day + ' ' + (normTime(time) || '') < m.outDay + ' ' + m.outTime);
   const ok = moves.length > 0 && !!normTime(time) && !early.length;
+  const miss = !moves.length ? 'Κανένα όπλο εκτός' : !normTime(time) ? 'Λείπει: Ώρα' : early.length ? 'Η ώρα είναι πριν την έξοδο' : '';
   const save = async () => {
     if (!ok) return;
     if (!(await run({ t: 'weaponIn', ids: moves.map(m => m.id), day, time: normTime(time)!, reason: reason.trim() || undefined }, false))) return;
@@ -62,12 +64,12 @@ export function WeaponInDialog({ ids, onClose, onDone }: P) {
     onDone?.(); onClose();
   };
   return html`<${Dialog} title=${'Είσοδος όπλων' + (moves.length > 1 ? ' (' + moves.length + ')' : '')} description=${moves.length === 1 ? shortName(pm.get(moves[0].pid)!) + ' · όπλο ' + moves[0].weapon + ' · βγήκε ' + moves[0].reason + ' ' + dm(moves[0].outDay) + ' ' + moves[0].outTime : moves.length + ' όπλα που είναι εκτός'} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Είσοδος${moves.length > 1 ? ' (' + moves.length + ')' : ''}<//>`}>
+    footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Είσοδος${moves.length > 1 ? ' (' + moves.length + ')' : ''}<//>`}>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="wi-d">Μέρα</label><${DateField} id="wi-d" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
       <${TimeField} id="wi-t" now=${true} label="Ώρα εισόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν μπήκε νωρίτερα"/></div>
     <div className="field"><label className="field__label" htmlFor="wi-r">Λόγος εισαγωγής</label><input id="wi-r" className="ui-input" placeholder=${backs.length === 1 ? backs[0] : 'Αυτόματα: ' + backs.join(', ')} value=${reason} onChange=${(e: any) => setReason(e.target.value)}/>
-      <span className="field__help">${reason.trim() ? 'Γράφεται σε όλα: ' + reason.trim().toUpperCase() : 'Κενό: ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (Ρυθμίσεις › Λίστες)'}</span></div>
+      <span className="field__help">${reason.trim() ? 'Γράφεται σε όλα: ' + reason.trim().toUpperCase() : html`Κενό: ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (<${GoLink} view="templates" params=${{ tab: 'lists' }}>Ρυθμίσεις › Λίστες<//>)`}</span></div>
     ${moves.length > 1 && html`<ul className="hist weapon-movelist">${moves.map(m => html`<li key=${m.id}><b>${shortName(pm.get(m.pid)!)}</b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${reason.trim().toUpperCase() || weaponBack(m.reason, lists)}</li>`)}</ul>`}
     ${early.length > 0 && html`<${Alert} tone="bad"><span>Η ώρα εισόδου είναι πριν την έξοδο για ${early.map(m => shortName(pm.get(m.pid)!) + ' (' + dm(m.outDay) + ' ' + m.outTime + ')').join(', ')}.</span><//>`}
   <//>`;
@@ -80,6 +82,7 @@ function EditMoveDialog({ m, onClose }: P) {
   const [x, setX] = useState({ reason: m.reason, outDay: m.outDay, outTime: m.outTime, inDay: m.inDay || '', inTime: m.inTime || '', inReason: m.inReason || '', note: m.note || '' });
   const p = personMap(state.people).get(m.pid);
   const ok = !!x.reason.trim() && !!normTime(x.outTime) && (!x.inDay || !!normTime(x.inTime));
+  const miss = missingOf([['Λόγος', x.reason.trim()], ['Ώρα εξόδου', normTime(x.outTime)], ['Ώρα εισόδου', !x.inDay || normTime(x.inTime)]]);
   const save = async () => {
     if (!ok) return;
     const patch = { reason: x.reason, outDay: x.outDay, outTime: normTime(x.outTime)!, note: x.note, ...(x.inDay ? { inDay: x.inDay, inTime: normTime(x.inTime)!, inReason: x.inReason } : { inDay: '' }) };
@@ -88,7 +91,7 @@ function EditMoveDialog({ m, onClose }: P) {
   const del = async () => { if (await run({ t: 'deleteWeaponMove', id: m.id }, false)) { toast({ text: 'Σβήστηκε η κίνηση' + (p ? ' ' + shortName(p) : ''), actions: [undoMark()] }); onClose(); } };
   const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
   return html`<${Dialog} title="Διόρθωση κίνησης όπλου" description=${(p ? p.rank + ' ' + plainName(p) : '') + ' · όπλο ' + m.weapon} onClose=${onClose}
-    footer=${html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">Σβήσε<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">Σβήσε<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Αποθήκευση<//>`}>
     <${ChoiceField} id="we-r" label="Λόγος εξόδου *" value=${x.reason} options=${reasons} otherLabel="Άλλος λόγος (γράψε τον)…" onChange=${set('reason')}/>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="we-od">Μέρα εξόδου</label><${DateField} id="we-od" className="ui-input" value=${x.outDay} onChange=${(e: any) => e.target.value && set('outDay')(e.target.value)}/></div>
@@ -183,8 +186,8 @@ function OutPop({ p, anchor, onClose }: P) {
       onMouseEnter=${() => setHover(r)} onMouseLeave=${() => setHover('')} onFocus=${() => setHover(r)} onBlur=${() => setHover('')} onClick=${() => go(r)}>${r}</button>`)}</div>
     <form className="wpop__other" onSubmit=${(e: any) => { e.preventDefault(); go(other); }}>
       <input className="ui-input" placeholder="Άλλος λόγος…" value=${other} onChange=${(e: any) => setOther(e.target.value)} aria-label="Άλλος λόγος"/>
-      <${Button} size="sm" type="submit" disabled=${!other.trim() || !normTime(time)}>Έξοδος<//></form>
-    <p className="wpop__foot">${tip ? html`<span>Όταν μπει πάλι: <b>${weaponBack(tip, lists)}</b></span>` : 'Κάθε λόγος έχει τον λόγο εισαγωγής του (Ρυθμίσεις › Λίστες › Λόγοι εξόδου όπλου).'}</p>
+      <${Button} size="sm" type="submit" disabled=${!other.trim() || !normTime(time)} why=${!normTime(time) ? 'Λείπει: Ώρα' : 'Γράψε πρώτα τον λόγο'}>Έξοδος<//></form>
+    <p className="wpop__foot">${tip ? html`<span>Όταν μπει πάλι: <b>${weaponBack(tip, lists)}</b></span>` : html`Κάθε λόγος έχει τον λόγο εισαγωγής του (<${GoLink} view="templates" params=${{ tab: 'lists' }}>Ρυθμίσεις › Λίστες<//> › Λόγοι εξόδου όπλου).`}</p>
   <//>`;
 }
 // Είσοδος από τη γραμμή: ώρα (τώρα) και λόγος εισαγωγής από τη λίστα, έτοιμα· Enter και μπήκε
@@ -207,7 +210,7 @@ function InPop({ p, m, anchor, onClose, onEdit }: P) {
       <label className="wpop__field"><span>Λόγος εισαγωγής</span><input className="ui-input" value=${reason} placeholder=${auto} onChange=${(e: any) => setReason(e.target.value)} aria-label="Λόγος εισαγωγής"/></label>
       ${early && html`<p className="wpop__err">Η ώρα είναι πριν την έξοδο (${dm(m.outDay)} ${m.outTime}).</p>`}
       <div className="wpop__acts"><${Button} variant="ghost" size="sm" onClick=${() => { onClose(); onEdit(m); }} data-tip="Άλλαξε λόγο, ώρα εξόδου ή παρατήρηση, ή σβήσε την κίνηση">Διόρθωση εξόδου…<//>
-        <${Button} size="sm" type="submit" disabled=${!ok} data-autofocus="">Μπαίνει ΕΝΤΟΣ<//></div>
+        <${Button} size="sm" type="submit" disabled=${!ok} why=${!t ? 'Λείπει: Ώρα' : 'Η ώρα είναι πριν την έξοδο'} data-autofocus="">Μπαίνει ΕΝΤΟΣ<//></div>
     </form>
   <//>`;
 }

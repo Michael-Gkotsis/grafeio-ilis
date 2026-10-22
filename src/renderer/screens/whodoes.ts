@@ -8,8 +8,8 @@ import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useOpenFrom, useStore } from '../store';
-import { ActiveFilter } from '../common';
-import { PHASE_NAME, WEEK, blocksOf, dutyStartOf, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
+import { ActiveFilter, GoLink } from '../common';
+import { PHASE_NAME, WEEK, blocksOf, dutyStartOf, platoonsOf, platoonShort, fullName, shortName, unitOf, type Person } from '../../shared/domain';
 import { capCell, capCols, statusesOn, type CapCell, type CapCol } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
 import { statusLbl } from '../../shared/ranks';
@@ -46,7 +46,7 @@ const Row = memo(function Row({ p, own, cols, cells, odd, grid, hintTxt, hintTip
   const hint = hintTxt ? { txt: hintTxt, tip: hintTip, bad: hintBad } : null;
   const days: number[] = p.offDays || [];
   return html`<div className=${cx('ptable__row', 'whod__row', odd && 'is-odd')} role="row" style=${{ ...style, gridTemplateColumns: grid }}>
-    <span className="whod__name"><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b> ${p.first}</button>
+    <span className="whod__name"><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip=${fullName(p) + " · καρτέλα οπλίτη"}><b>${shortName(p)}</b></button>
       <small>${[p.room != null && 'Θ' + p.room, p.si && 'Σ.Ι. ' + siOf(p, lists).text, p.post && 'πόστο ' + p.post].filter(Boolean).join(' · ')}${hint && html`<span className=${cx('whod__hint', hint.bad && 'is-bad')} data-tip=${hint.tip}>${hint.txt}</span>`}</small></span>
     ${cols.map((col: CapCol, i: number) => { const v = cellView(cells[i], col); return html`<span key=${col.key} className="whod__c"><button type="button" className=${cx('whod__cell', v.cls)} aria-label=${shortName(p) + ', ' + col.label + ': ' + v.tip.split('.')[0]} data-tip=${v.tip} onClick=${() => onCell(p, col, cells[i])}>${v.sym}</button></span>`; })}
     <span className="whod__days" role="group" aria-label=${'Μέρες υπηρεσίας ' + shortName(p)}>${WEEK.map(d => { const off = days.includes(d); return html`<button key=${d} type="button" className=${cx('whod__day', off && 'is-off', (d === 6 || d === 0) && 'is-we')} aria-pressed=${!off} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: κάνει' : 'Κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: όχι ' + DOW_FULL[d]} onClick=${() => onDay(p, d)}>${DAY2(d)}</button>`; })}</span>
@@ -117,7 +117,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const colLbl = ci >= 0 ? 'όχι ' + cols[ci].label.toLowerCase() : null;
 
   return html`<div className="whod">
-    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στρατιώτη" placeholder="Όνομα, ΑΣΜ, θάλαμος, Σ.Ι., πόστο (χωρίς τόνους)" value=${q} onChange=${(e: any) => { setQ(e.target.value); setOnly(null); }}/>
+    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στρατιώτη" placeholder="Όνομα, ΑΣΜ, θάλαμος, Σ.Ι., πόστο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => { setQ(e.target.value); setOnly(null); }}/>
       <${Segmented} small=${true} value=${unit} onChange=${(u: string) => { setUnit(u); if (room != null && u !== 'all' && unitOf({ room }, state.settings) !== u) setRoom(null); }} items=${UNITS}/>
       <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; setRoom(r); if (r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit) setUnit('all'); }}>
         <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}<//></div>
@@ -131,7 +131,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
         <span className="whod__dayhd" data-tip=${'Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, ' + dutyStartOf(state.settings) + '.'}><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>
       <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${openP}/>`; }}/>
     </div></div></div>`}
-    <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (Ρυθμίσεις › Σ.Ι.) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
+    <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (<${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//>) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
       Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.</p>
     ${ask && html`<${Dialog} title=${'Να κάνει ' + ask.col.label.toLowerCase() + ' ο ' + shortName(ask.p) + ';'} description=${'Κανονικά δεν μπαίνει: ' + ask.why + '.'} onClose=${() => setAsk(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setAsk(null)}>Άκυρο<//><${Button} data-autofocus="" onClick=${() => { const a = ask; setAsk(null); setCap(a.p, a.col, 'on', 'κάνει ' + a.col.label.toLowerCase() + ' παρά το «' + a.why + '»'); }}>Να κάνει παρ’ όλα αυτά<//>`}>

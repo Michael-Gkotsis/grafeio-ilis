@@ -1,7 +1,8 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, Icon, Kbd, Segmented, Strip } from './ui';
+import { html, cx, Alert, Badge, Button, Dialog, DialogLeave, Icon, Kbd, Segmented, Strip } from './ui';
+import { requestLeave } from './pending';
 import { Combo, Select, useFloat, type ComboOpt } from './select';
 import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
@@ -415,4 +416,12 @@ export function UnsavedDialog({ title, children, saveLabel, canSave, onSave, dis
     <${Button} disabled=${!canSave} data-autofocus=${canSave ? '' : undefined} onClick=${onSave}>${saveLabel}<//>`}>
     ${children}
   <//>`;
+}
+
+// «Ρυθμίσεις › …» ως σύνδεσμος που ανοίγει το σωστό σημείο (UX Χ5, 22/10· πριν ήταν απλό κείμενο). Μέσα σε παράθυρο το κλείνει
+// πρώτα· αν έχει αλλαγές, ρωτά όπως το ✕. Στην ίδια οθόνη (π.χ. άλλη ενότητα των Ρυθμίσεων) ρωτά για όσα δεν αποθηκεύτηκαν.
+export function GoLink({ view, params, children }: { view: string; params?: Record<string, any>; children: any }) {
+  const nav = useNav(); const leave = useContext(DialogLeave);
+  const go = () => { if (view === nav.view) requestLeave(() => nav.go(view, params)); else nav.go(view, params); };
+  return html`<${Button} variant="link" className="golink" onClick=${() => (leave ? leave(go) : go())}>${children}<//>`;
 }

@@ -97,7 +97,7 @@ export function LayoutDialog({ title, req, initial, sigs, onSave, onClose }: { t
   const any = Object.values(mine).some(moved);
   const save = () => { onClose(); onSave(cleanLayout(layout)); };
   return html`<${Dialog} title=${'Θέσεις στο χαρτί: ' + title} description="Σύρε την κεφαλίδα, την ημερομηνία ή μια υπογραφή όπου θέλεις. Κουμπώνει στα κελιά του Excel. Με το πληκτρολόγιο: Tab σε ένα κουτάκι και βελάκια." onClose=${onClose} size="xl"
-    footer=${html`<${Button} variant="ghost" disabled=${!any} onClick=${() => setLayout(l => { const x = { ...l }; delete x[tab]; return x; })} style=${{ marginRight: 'auto' }} data-tip="Όλα στη θέση του εντύπου, σε αυτό το φύλλο">Αρχικό<//><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="ghost" disabled=${!any} why="Όλα είναι ήδη στη θέση του εντύπου" onClick=${() => setLayout(l => { const x = { ...l }; delete x[tab]; return x; })} style=${{ marginRight: 'auto' }} data-tip="Όλα στη θέση του εντύπου, σε αυτό το φύλλο">Αρχικό<//><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
     ${pv && pv.sheets.length > 1 && html`<div><${Segmented} small=${true} value=${tab} onChange=${(v: string) => { setTab(v); sel.current = ''; }} items=${pv.sheets.map(s => ({ value: s.key, label: (Object.values(LAYOUT_SHEETS).flat().find(x => x.key === s.key)?.label || s.sheet) + (Object.values(layout[s.key] || {}).some(moved) ? ' •' : '') }))}/></div>`}
     ${err && html`<${Alert} variant="destructive">${err}<//>`}
     <div className=${cx('rep-pv', 'lay-pv', busy && 'is-busy')}>

@@ -5,7 +5,9 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
-import { DateField, PersonPicker, usePrintFile } from '../common';
+import { DayFormsDialog } from './dayForms';
+import { HK } from '../../shared/unit';
+import { DateField, GoLink, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
@@ -203,12 +205,13 @@ function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], 
 
 // ------------------------------------------------------------------ οθόνη
 export function ReportsScreen() {
-  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const runReport = useRunReport();
+  const { state, today, tomorrow, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const runReport = useRunReport();
   const tab: string = nav.params.repTab || 'ready';
   const reports = repsOf(state); const tpls = tplsOf(state);
   const [last, setLast] = useState<Record<string, string>>({});
   const loadLast = useCallback(() => { window.api.repLast().then(setLast, () => {}); }, []);
   useEffect(loadLast, [loadLast]);
+  const [dayForms, setDayForms] = useState(false);
   const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
   const [ask, setAsk] = useState<{ r: Report; print: boolean; init?: { ids: (number | string)[]; d: string } } | null>(null);
   const [hist, setHist] = useState<Report | null>(null);
@@ -256,7 +259,13 @@ export function ReportsScreen() {
     <${PageHeader} title="Έντυπα" sub="Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.">
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setWiz({ start: 'upload' })} data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">Ανέβασε Excel…<//>
       <${Button} onClick=${() => setWiz({})}>+ Νέο έντυπο<//></div><//>
-    <${Tabs} value=${tab} onChange=${(v: string) => nav.set({ repTab: v === 'ready' ? undefined : v })} items=${[{ value: 'ready', label: 'Έτοιμα έντυπα (' + reports.length + ')' }, { value: 'tpls', label: 'Πρότυπα (' + tpls.length + ')' }]}/>
+    <div className="dayrow" role="group" aria-label="Έντυπα της μέρας"><span className="dayrow__lbl">Της μέρας (βγαίνουν από την οθόνη τους):</span>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.go('guard', { guardDate: tomorrow })}>ΦΡΟΥΡΑ αύριο<//>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today, hkTab: undefined })}>${HK()} σήμερα<//>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>
+      <${Button} size="sm" variant="outline" onClick=${() => setDayForms(true)} data-tip="Αυριανή ΦΡΟΥΡΑ, σημερινή ${HK()} και Εξοδούχοι: ένας έλεγχος για όλα">${Icon.print}Έντυπα ημέρας<//></div>
+    ${dayForms && html`<${DayFormsDialog} onClose=${() => setDayForms(false)}/>`}
+    <${Tabs} value=${tab} onChange=${(v: string) => nav.set({ repTab: v === 'ready' ? undefined : v })} items=${[{ value: 'ready', label: 'Τα έντυπά μου (' + reports.length + ')' }, { value: 'tpls', label: 'Πρότυπα (' + tpls.length + ')' }]}/>
     ${tab === 'ready' && (reports.length ? html`<div className="ui-card"><table className="rep-table"><thead><tr><th>Έντυπο</th><th>Ποιοι μπαίνουν</th><th>Τελευταία φορά</th><th></th></tr></thead><tbody>
       ${reports.map(r => html`<tr key=${r.id}>
         <td><b>${r.name}</b><small>${tpls.find(t => t.id === r.tpl)?.name || 'χωρίς πρότυπο'} · ${outText(r)}${r.day === 'tomorrow' ? ' · για αύριο' : r.day === 'ask' ? ' · ρωτά μέρα' : ''}</small></td>
@@ -269,7 +278,7 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
           <${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + r.name} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => del(r)}>${Icon.x}<//></td>
       </tr>`)}</tbody></table></div>` : html`<div className="ui-card"><div className="rep-empty">
-        <h2>Ξεκίνα από ένα έτοιμο</h2><p className="muted">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις. Αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
+        <h2>Ξεκίνα από ένα υπόδειγμα</h2><p className="muted">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις. Αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
         <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => setWiz({ start: 'build', preset: p.id })}><b>${p.name}</b><small>${p.help}</small></button>`)}
           <button type="button" className="rep-preset rep-preset--up" onClick=${() => setWiz({ start: 'upload' })}><b>Δικό σου Excel</b><small>Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.</small></button></div>
       </div></div>`)}
@@ -308,8 +317,8 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
   const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr)) onDone(); };
   return html`<${Dialog} size="lg" title=${r.name} description=${pickText(rr, state)} onClose=${onClose} footer=${html`
     <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
-    <${Button} variant=${print ? 'default' : 'outline'} disabled=${!p.rows.length} onClick=${() => out(true)}>${Icon.print}Τύπωσε<//>
-    ${!print && html`<${Button} disabled=${!p.rows.length} onClick=${() => out(false)}>Βγάλε το Excel<//>`}`}>
+    <${Button} variant=${print ? 'default' : 'outline'} disabled=${!p.rows.length} why="Δεν μπαίνει κανείς με αυτές τις επιλογές" onClick=${() => out(true)}>${Icon.print}Τύπωσε<//>
+    ${!print && html`<${Button} disabled=${!p.rows.length} why="Δεν μπαίνει κανείς με αυτές τις επιλογές" onClick=${() => out(false)}>Βγάλε το Excel<//>`}`}>
     <div className="field-row">
       <div className="field"><span className="field__label">Για ποια μέρα</span><div className="rep-inline">
         <${Segmented} small=${true} value=${d === today ? 't' : d === tomorrow ? 'm' : 'x'} onChange=${(v: string) => setD(v === 't' ? today : v === 'm' ? tomorrow : d)} items=${[{ value: 't', label: 'Σήμερα' }, { value: 'm', label: 'Αύριο' }, { value: 'x', label: 'Άλλη' }]}/>
@@ -463,9 +472,9 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const foot = html`<span className="rep-wiz__why">${missing(step + 1)}</span>
     <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
     ${step > 1 && html`<${Button} variant="outline" onClick=${() => setStep(step - 1)}>Πίσω<//>`}
-    ${step === 4 && html`<${Button} variant="outline" disabled=${busy || !canGo(6)} data-tip=${'Χωρίς το βήμα 5: ' + outText(r)} onClick=${() => save(true)}>Αποθήκευση και Βγάλε<//>`}
-    ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} data-tip=${missing(step + 1) || undefined} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
-      : html`<${Button} variant="outline" disabled=${busy || !canGo(6)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(6)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
+    ${step === 4 && html`<${Button} variant="outline" disabled=${busy || !canGo(6)} why=${missing(6)} data-tip=${'Χωρίς το βήμα 5: ' + outText(r)} onClick=${() => save(true)}>Αποθήκευση και Βγάλε<//>`}
+    ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} why=${missing(step + 1)} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
+      : html`<${Button} variant="outline" disabled=${busy || !canGo(6)} why=${missing(6)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(6)} why=${missing(6)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
   const showPv = step === 3 || step === 5;
   return html`<${Dialog} size="xl" title=${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'} closeOnOverlay=${false} onClose=${onClose} dirty=${dirty && (editing ? 'Οι αλλαγές στο έντυπο δεν αποθηκεύτηκαν. Αν κλείσεις, μένει όπως ήταν.' : 'Το έντυπο δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.')} footer=${foot}>
     <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} onClick=${() => setStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
@@ -545,15 +554,15 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel }: P) {
         ${c.f === 'text' && html`<input className="ui-input" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(i, { text: e.target.value })}/>`}
         <${Select} className="ui-select rep-cols__w" aria-label=${'Πλάτος στήλης ' + (i + 1)} value=${c.w} onChange=${(e: any) => setCol(i, { w: e.target.value })}><option value="narrow">Στενή</option><option value="auto">Κανονική</option><option value="wide">Φαρδιά</option><//>
         <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${i === 0} onClick=${() => move(i, -1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${i === o.cols.length - 1} onClick=${() => move(i, 1)}>${Icon.down}<//>
-          <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${o.cols.length < 2} onClick=${() => set({ cols: o.cols.filter((_: BuildCol, j: number) => j !== i) })}>${Icon.x}<//></span>
+          <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${o.cols.length < 2} why="Χρειάζεται τουλάχιστον μία στήλη" onClick=${() => set({ cols: o.cols.filter((_: BuildCol, j: number) => j !== i) })}>${Icon.x}<//></span>
       </li>`)}</ul>
-      <${Button} size="sm" variant="outline" disabled=${o.cols.length >= 16} onClick=${add}>+ Στήλη<//></div>
+      <${Button} size="sm" variant="outline" disabled=${o.cols.length >= 16} why="Ως 16 στήλες" onClick=${add}>+ Στήλη<//></div>
     <div className="rep-opts">
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος και ημερομηνία πάνω δεξιά</label>
     </div>
     <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${o.sig === 'none' ? 'none' : 'list'} onChange=${(sig: BuildOpts['sig']) => set({ sig })} items=${[{ value: 'none', label: 'Καμία' }, { value: 'list', label: 'Από τις Ρυθμίσεις' }]}/></div>
-    ${o.sig !== 'none' && html`<p className="note" style=${{ margin: 0 }}>Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(sigsSaved(state.settings, 'reports'))}</b>. Τις αλλάζεις στις Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές (Έντυπα), ή κάθε φορά που βγαίνει με το «Υπογραφές…».</p>`}
+    ${o.sig !== 'none' && html`<p className="note" style=${{ margin: 0 }}>Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(sigsSaved(state.settings, 'reports'))}</b>. Τις αλλάζεις στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές<//> (Έντυπα), ή κάθε φορά που βγαίνει με το «Υπογραφές…».</p>`}
     ${o.sig !== 'none' && !custom && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${true}/>`}
     <div className="rep-opts"><span className="field__label">Σελίδα</span><${Segmented} small=${true} value=${o.land ? 'l' : 'p'} onChange=${(v: string) => set({ land: v === 'l' })} items=${[{ value: 'p', label: 'Όρθια' }, { value: 'l', label: 'Οριζόντια' }]}/>
       <span className="field__label">Γράμματα</span><${Segmented} small=${true} value=${String(o.sz)} onChange=${(v: string) => set({ sz: +v as BuildOpts['sz'] })} items=${[{ value: '10', label: '10' }, { value: '11', label: '11' }, { value: '12', label: '12' }]}/>

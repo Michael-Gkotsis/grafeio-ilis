@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
+import { requestLeave } from '../pending';
 import { collator, normGreek } from '../../shared/text';
 import { CADRE_ABS, TYPES, shortName, type Person, type TypeKey } from '../../shared/domain';
 import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, listRows, weaponBack, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
@@ -89,7 +90,7 @@ export function ListsCard() {
     return { ...lists, [id]: u };
   };
   const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setBack(''); setErr(null); };
-  const toDuty = () => nav.set({ tab: 'duty' });
+  const toDuty = () => requestLeave(() => nav.set({ tab: 'duty', dsub: 'stat' }));
   const select = (v: ListId) => { setId(v); reset(); setWho(null); };
   const n = itemName(name, id); const key = keyOf(id); const isUsed = (r: ListRow) => used.has(key(r.name));
   const usedN = (r: ListRow) => { const e = used.get(key(r.name)); return e ? e.pids.size + e.names.size : 0; };
@@ -170,7 +171,7 @@ export function ListsCard() {
       ${id === 'weaponOut' && html`<div className="field"><label className="field__label" htmlFor="ls-b">Λόγος εισαγωγής</label><input id="ls-b" className="ui-input" placeholder=${n ? 'ΛΗΞ ' + n : 'π.χ. ΛΗΞ ΦΡΟΥΡΑΣ'} value=${back} onChange=${(e: any) => setBack(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>`}
       ${id === 'medKinds' && html`<div className="field" style=${{ maxWidth: '130px' }}><label className="field__label" htmlFor="ls-k">Κωδικός</label><input id="ls-k" className="ui-input" placeholder="π.χ. Ε.Γ" value=${code} onChange=${(e: any) => { setCode(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') add(); }}/></div>
         <div className="field" style=${{ flex: 'none' }}><label className="ui-checkrow" style=${{ height: '38px' }}><input id="ls-w" type="checkbox" className="ui-check" checked=${warn} onChange=${(e: any) => setWarn(e.target.checked)}/> Μόνο προειδοποίηση</label></div>`}
-      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!name.trim()} onClick=${add}>Πρόσθεσε<//></div></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!name.trim()} why="Γράψε πρώτα το όνομα" onClick=${add}>Πρόσθεσε<//></div></div>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }

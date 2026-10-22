@@ -1,7 +1,7 @@
 // features/cadre · «Στελέχη» (Michael, 17/10): δική τους καρτέλα στο μενού, χωριστά από το Δυναμολόγιο των οπλιτών.
 // Οι καταστάσεις τους είναι οι στήλες της ΗΚΑΙ (κωλυόμενοι, απόντες) και ταΐζουν την ΗΚΑΙ όπως πριν.
 import { useDeferredValue, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, PageHeader, Strip, useDirty, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Strip, useDirty, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateRangeField } from '../common';
@@ -61,7 +61,7 @@ export function CadreScreen() {
   const cardOf = card ? all.find(c => c.id === card) : undefined;
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
-      <${Button} variant="outline" disabled=${xl || !all.length} onClick=${exportXl} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
+      <${Button} variant="outline" disabled=${xl || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${exportXl} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Select} className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//></div>
@@ -122,7 +122,7 @@ function CadreDialog({ c, onClose }: P) {
   const save = async () => { if (await run({ t: 'saveCadre', cadre: { ...f, id: c.id } }, false)) { onClose(); toast({ text: (c.id ? 'Αποθηκεύτηκε: ' : 'Προστέθηκε: ') + f.rank.toUpperCase() + ' ' + f.last.toUpperCase() + (c.id && c.active !== f.active ? (f.active ? ', σε δύναμη' : ', εκτός δύναμης') : '') }); } };
   const fld = (k: string, label: string, ph = '') => html`<div className="field"><label className="field__label" htmlFor=${'cd-' + k}>${label}</label><input id=${'cd-' + k} className="ui-input" placeholder=${ph} value=${(f as P)[k]} onChange=${(e: any) => setF({ ...f, [k]: e.target.value })}/></div>`;
   return html`<${Dialog} title=${c.id ? 'Στοιχεία στελέχους' : 'Νέο στέλεχος'} onClose=${onClose} dirty=${dirty && 'Τα στοιχεία δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.last.trim()} onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Why} text=${!f.last.trim() && 'Λείπει: Επώνυμο'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.last.trim()} why="Λείπει: Επώνυμο" onClick=${save}>Αποθήκευση<//>`}>
     <div className="field-row"><${ChoiceField} id="cd-rank" label="Βαθμός" value=${f.rank} options=${ranks} placeholder="π.χ. ΛΧΙΑΣ" autoFocus onChange=${(v: string) => setF({ ...f, rank: v, ...(!hkTouched ? { hk: guessHk(v, lists) } : {}) })}/>
       <${ChoiceField} id="cd-spec" label="Ο/Σ" value=${f.spec} options=${specs} placeholder="π.χ. ΤΘ" onChange=${(v: string) => setF({ ...f, spec: v })}/></div>
     <div className="field-row">${fld('last', 'Επώνυμο *')}${fld('first', 'Όνομα')}</div>
@@ -152,7 +152,7 @@ function StatusDialog({ c, abs, onClose }: P) {
   };
   const group = (g: CadreGroup) => opts.filter(k => groupOfCol(k[2]) === g);
   return html`<${Dialog} title=${(abs ? 'Αλλαγή κατάστασης: ' : 'Κατάσταση: ') + c.rank + ' ' + c.last} onClose=${onClose} dirty=${dirty && 'Η κατάσταση δεν αποθηκεύτηκε. Αν κλείσεις, χάνεται.'}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${bad} onClick=${save}>${clash.length ? 'Αποθήκευση στη θέση της' : 'Αποθήκευση'}<//>`}>
+    footer=${html`<${Why} text=${bad && '«Έως» πριν από «Από»'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${bad} why="«Έως» πριν από «Από»" onClick=${save}>${clash.length ? 'Αποθήκευση στη θέση της' : 'Αποθήκευση'}<//>`}>
     <div className="field"><label className="field__label" htmlFor="ca-k">Κατάσταση (στήλη της ${HK()})</label><${Select} id="ca-k" className="ui-input" data-autofocus="" value=${f.kind} onChange=${(e: any) => setF({ ...f, kind: e.target.value })}>
       ${(['kol', 'apo', 'list'] as CadreGroup[]).map(g => group(g).length > 0 && html`<optgroup key=${g} label=${g === 'kol' ? 'Κωλυόμενοι' : g === 'apo' ? 'Απόντες' : 'Μόνο στη λίστα'}>${group(g).map(([k, l, col]) => html`<option key=${k} value=${k}>${l}${col ? ' (' + colShort(col) + ')' : ''}</option>`)}</optgroup>`)}<//>
       <span className="field__help">${st.group === 'list' ? 'Δεν μετρά στην ' + HK() + ', φαίνεται μόνο στη λίστα.' : 'Μετρά στην ' + HK() + ' στους ' + (st.group === 'kol' ? 'κωλυόμενους' : 'απόντες') + ', στήλη «' + colShort(st.col) + '», γραμμή «' + hkRowLabel(c.hk) + '».'}</span></div>

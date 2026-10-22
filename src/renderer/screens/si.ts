@@ -107,7 +107,7 @@ export function SiCard() {
   const addCatRow = async () => {
     if (!catPick) return;
     const k = siRowKey(catRow, catPick); if (cells[k]) { setErr('Το ' + catRow + ' ' + catPick + ' έχει ήδη δικούς του κανόνες.'); return; }
-    if (await save({ ...cfg, cells: { ...cells, [k]: {} } }, catRow + ' ' + catPick + ': δικοί του κανόνες')) { setCatPick(''); setErr(null); toast({ text: 'Άλλαξε τα τσεκ στη γραμμή ' + catRow + ' ' + catPick + '. Μέχρι τότε ισχύει ό,τι και για το ' + catRow + '.' }); }
+    if (await save({ ...cfg, cells: { ...cells, [k]: {} } }, catRow + ' ' + catPick + ': δικοί του κανόνες')) { setCatPick(''); setErr(null); toast({ text: 'Άλλαξε τα Ναι/Όχι στη γραμμή ' + catRow + ' ' + catPick + '. Μέχρι τότε ισχύει ό,τι και για το ' + catRow + '.' }); }
   };
   const addBase = async () => {
     const n = siName(nb); if (!n) return;
@@ -128,7 +128,7 @@ export function SiCard() {
   const ownCats = siCats(cfg).filter(c => !SI_CATS.includes(c));
 
   return html`<${Card} title="Σ.Ι.: σε ποιες υπηρεσίες μπαίνει">
-    <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία. Αρχικά ο άοπλος (Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4) δεν μπαίνει σε ένοπλη υπηρεσία και όλοι οι άλλοι μπαίνουν παντού· αν κάνεις μια υπηρεσία ένοπλη ή άοπλη (κάρτα Υπηρεσίες), αλλάζει και εδώ. Ό,τι ξετσεκάρεις, η αυτόματη συμπλήρωση δεν τον βάζει· με το χέρι μπαίνει μόνο με αιτία. Η «Δυνατότητα υπηρεσιών» στην κάρτα κάθε ατόμου ισχύει από πάνω. Λ/Υ και Δ/Υ ορίζονται με το χέρι, όπως πριν.</p>
+    <p className="note" style=${{ marginTop: 0 }}>Μία στήλη για κάθε υπηρεσία. Αρχικά ο άοπλος (Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4) δεν μπαίνει σε ένοπλη υπηρεσία και όλοι οι άλλοι μπαίνουν παντού· αν κάνεις μια υπηρεσία ένοπλη ή άοπλη (κάρτα Υπηρεσίες), αλλάζει και εδώ. Όπου βάλεις «Όχι», η αυτόματη συμπλήρωση δεν τον βάζει· με το χέρι μπαίνει μόνο με αιτία. Η «Δυνατότητα υπηρεσιών» στην κάρτα κάθε ατόμου ισχύει από πάνω. Λ/Υ και Δ/Υ ορίζονται με το χέρι, όπως πριν.</p>
     <div style=${{ overflowX: 'auto' }}><table className="sigrid">
       <thead><tr><th>Σ.Ι.</th><th>Άτομα</th>${cols.map(colHead)}<th></th></tr></thead>
       <tbody>${rows.map(({ label, cat }) => {
@@ -137,7 +137,7 @@ export function SiCard() {
         return html`<tr key=${k} className=${cat ? 'is-cat' : sub ? 'is-sub' : ''}>
           <td>${cat ? html`<span className="muted">${label}</span> <b>${cat}</b>` : html`<b>${label}</b>`}${!cat && ownBase(label) && html` <${Badge} tone="info">δική σου<//>`}</td>
           <td className="num">${n || ''}</td>
-          ${cols.map(b => { const c = siCellOf(lists, label, cat, b); return html`<td key=${b.id} className=${c.from === (cat ? 'cat' : 'row') ? 'is-set' : ''}><input type="checkbox" className="ui-check" aria-label=${(cat ? label + ' ' + cat : label) + ': ' + b.name} checked=${c.ok} onChange=${() => toggle(label, cat, b)}/></td>`; })}
+          ${cols.map(b => { const c = siCellOf(lists, label, cat, b); return html`<td key=${b.id} className=${c.from === (cat ? 'cat' : 'row') ? 'is-set' : ''}><${Select} className=${'ui-input statsel is-' + (c.ok ? 'yes' : 'no')} aria-label=${(cat ? label + ' ' + cat : label) + ': ' + b.name} value=${c.ok ? 'yes' : 'no'} onChange=${(e: any) => { if ((e.target.value === 'yes') !== c.ok) toggle(label, cat, b); }}><option value="yes">✓ Ναι</option><option value="no">✕ Όχι</option><//></td>`; })}
           <td style=${{ textAlign: 'right' }}>${custom && html`<${Button} size="sm" variant="ghost" data-tip=${cat ? 'Ό,τι και για το ' + label : 'Όπως στην αρχή: ο άοπλος όχι σε ένοπλη υπηρεσία'} onClick=${() => resetRow(label, cat)}>Επαναφορά<//>`}${cat && html`<${Button} size="sm" variant="ghost" aria-label=${'Χωρίς δικούς κανόνες: ' + label + ' ' + cat} data-tip=${'Να ισχύει ό,τι και για το ' + label} onClick=${() => removeCatRow(label, cat)}>✕<//>`}${!cat && ownBase(label) && !n && html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + label} onClick=${() => removeBase(label)}>✕<//>`}</td>
         </tr>`;
       })}</tbody>
@@ -147,13 +147,13 @@ export function SiCard() {
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
       <div className="field" style=${{ maxWidth: '150px' }}><label className="field__label" htmlFor="si-cr">Δικοί κανόνες για</label><${Select} id="si-cr" className="ui-input" value=${catRow} onChange=${(e: any) => setCatRow(e.target.value)}>${catRows.map(l => html`<option key=${l} value=${l}>${l}</option>`)}<//></div>
       <div className="field"><label className="field__label" htmlFor="si-cp">με πάθηση</label><${Select} id="si-cp" className="ui-input" value=${catPick} onChange=${(e: any) => { setCatPick(e.target.value); setErr(null); }}><option value="">—</option>${siCats(cfg).map(c => html`<option key=${c} value=${c}>${c}</option>`)}<//></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!catPick} onClick=${addCatRow}>Πρόσθεσε γραμμή<//></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!catPick} why="Διάλεξε πρώτα πάθηση" onClick=${addCatRow}>Πρόσθεσε γραμμή<//></div>
     </div>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '8px' }}>
       <div className="field"><label className="field__label" htmlFor="si-b">Νέα Σ.Ι.</label><input id="si-b" className="ui-input" placeholder="π.χ. Ι5" value=${nb} onChange=${(e: any) => { setNb(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') addBase(); }}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nb.trim()} onClick=${addBase}>Πρόσθεσε<//></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nb.trim()} why="Γράψε πρώτα το όνομα" onClick=${addBase}>Πρόσθεσε<//></div>
       <div className="field"><label className="field__label" htmlFor="si-c">Νέα κατηγορία πάθησης</label><input id="si-c" className="ui-input" placeholder="π.χ. ΓΑΣΤΡΕΝΤΕΡΟΛΟΓΙΚΟ" value=${nc} onChange=${(e: any) => { setNc(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') addCat(); }}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nc.trim()} onClick=${addCat}>Πρόσθεσε<//></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nc.trim()} why="Γράψε πρώτα το όνομα" onClick=${addCat}>Πρόσθεσε<//></div>
     </div>
     ${ownCats.length > 0 && html`<p className="note">Δικές σου κατηγορίες: ${ownCats.map((c, i) => html`<span key=${c}>${i ? ', ' : ''}${c}${!usedCat(c) && html` <${Button} variant="link" aria-label=${'Σβήσε ' + c} onClick=${() => removeCat(c)}>✕<//>`}</span>`)}</p>`}
     <p className="note">Οι κατηγορίες πάθησης ακολουθούν τις ενότητες του Γενικού Πίνακα Νοσημάτων (π.δ. 11/2014). Μένουν μόνο στην εφαρμογή: στο Excel η Σ.Ι. γράφεται χωρίς αυτήν (π.χ. «Ι3 ΧΩΡΙΣ ΟΠΛΟ»), για να μη χαλάσει κάποιος τύπος που τη μετράει.</p>

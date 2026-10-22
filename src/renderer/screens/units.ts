@@ -79,7 +79,7 @@ export function RoomsCard() {
       <span className="field__help">Από αυτούς προτείνει τους εξοδούχους στις Εξόδους.</span>
     </div>
     ${bad && html`<${Alert} tone="bad">${bad}<//>`}
-    <div><${Button} disabled=${!!bad} onClick=${save}>Αποθήκευση<//></div>
+    <div><${Button} disabled=${!!bad} why=${bad || undefined} onClick=${save}>Αποθήκευση<//></div>
   <//>`;
 }
 
