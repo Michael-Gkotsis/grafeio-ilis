@@ -194,21 +194,32 @@ export const awayNow = (s: Status, today: ISODate, now: number) => s.to > today 
 const untilTxt = (s: Status, date: ISODate) => (s.open ? ' (χωρίς λήξη)' : s.to === date ? '' : ' έως ' + dm(s.to));
 export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD_CATS.includes(TYPES[s.type].cat) && s.to === addDays(date, -1);
 
-export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]> }
+// Κάθε άτομο μετριέται μία φορά (Michael, 22/10: «δεν βγαίνουν τα μαθηματικά»): counts/lists ανά είδος, ένας άνθρωπος
+// μία φορά ανά είδος· away/awayLists μόνο οι απόντες, ο καθένας στον πρώτο λόγο που λείπει (νοσοκομείο, άδεια, μετά
+// έξοδος/ΔΝ), ώστε τα νούμερά τους να κάνουν ακριβώς absent = total − present.
+export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]>; away: Record<TypeKey, number>; awayLists: Record<TypeKey, Person[]> }
 // at: η στιγμή της μέρας που μετρά (λεπτά)· προεπιλογή η ώρα της ΗΚΑΙ (οι Εξοδούχοι μετρούν από την ώρα εξόδου)
 export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Strength {
   const people = activePeople(s);
-  const counts = {} as Record<TypeKey, number>;
-  const lists = { present: [] } as unknown as Strength['lists'];
-  TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; });
+  const counts = {} as Record<TypeKey, number>, away = {} as Record<TypeKey, number>;
+  const lists = { present: [] } as unknown as Strength['lists'], awayLists = {} as Strength['awayLists'];
+  TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; away[k] = 0; awayLists[k] = []; });
   let present = 0;
   for (const p of people) {
     const ss = statusesFrom(s.statuses, p.id, date, at);
-    ss.forEach(x => { counts[x.type]++; lists[x.type].push(p); });
-    if (!ss.some(x => TYPES[x.type].away)) { present++; lists.present.push(p); }
+    // διπλή εγγραφή του ίδιου είδους (π.χ. δύο έξοδοι την ίδια μέρα): μία φορά
+    new Set(ss.map(x => x.type)).forEach(k => { counts[k]++; lists[k].push(p); });
+    // οι καταστάσεις είναι ταξινομημένες: πρώτα οι απουσίες, με τη σειρά των ειδών
+    const a = ss.find(x => TYPES[x.type].away);
+    if (a) { away[a.type]++; awayLists[a.type].push(p); } else { present++; lists.present.push(p); }
   }
-  return { total: people.length, present, absent: people.length - present, counts, lists };
+  return { total: people.length, present, absent: people.length - present, counts, lists, away, awayLists };
 }
+// Η στιγμή που μετρά η Δύναμη μιας μέρας: σήμερα όπως η ΗΚΑΙ ως τις 08:00 και μετά όποιος γύρισε ως τώρα (το «Σήμερα»,
+// η Δύναμη και το Δυναμολόγιο το ίδιο)· άλλες μέρες η ώρα της ΗΚΑΙ.
+export const strengthAt = (r: Rules | null | undefined, date: ISODate, today: ISODate, now: number) => (date === today ? Math.max(hkMin(r), now) : hkMin(r));
+// Σύνοψη των απόντων: «24 έξοδος · 29 ΔΝ · 4 ΚΑ», με τη σειρά των ειδών· αθροίζει στους Απόντες
+export const awayText = (c: Strength) => TYPE_KEYS.filter(k => c.away[k] > 0).map(k => c.away[k] + ' ' + (k === 'OUT' ? 'έξοδος' : TYPES[k].label)).join(' · ');
 
 // --------------------------- Δυνατότητα υπηρεσιών (Κ-15) ---------------------------
 // Για την κάρτα του ατόμου (ανά είδος): πόστο, ή Σ.Ι. που δεν μπαίνει σε καμία υπηρεσία αυτού του είδους (blocks: και των
