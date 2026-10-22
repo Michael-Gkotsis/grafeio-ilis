@@ -1,6 +1,6 @@
-// Φορητό πακέτο για Windows 7 x64: φάκελος με GrafeioIlis.exe, zip για το USB.
+// Φορητό πακέτο για Windows 7 (64 ή 32 bit): φάκελος με GrafeioIlis.exe, zip για το USB.
 // Electron 22 είναι η τελευταία έκδοση που τρέχει σε Windows 7.
-// Χρήση: npm run build && npm run package:win
+// Χρήση: npm run build && npm run package:win [x64|ia32]   (χωρίς όρισμα: x64)
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -8,7 +8,9 @@ import { execFileSync } from 'child_process';
 import * as ResEdit from 'resedit';
 
 const EV = '22.3.27';
-const ZIP = `electron-v${EV}-win32-x64.zip`;
+const ARCH = process.argv[2] || 'x64';
+if (!['x64', 'ia32'].includes(ARCH)) throw new Error(`Άγνωστη αρχιτεκτονική «${ARCH}»: x64 ή ia32`);
+const ZIP = `electron-v${EV}-win32-${ARCH}.zip`;
 const BASE = `https://github.com/electron/electron/releases/download/v${EV}/`;
 const CACHE = '.cache';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -82,7 +84,7 @@ fs.writeFileSync(path.join(OUT, 'ΔΙΑΒΑΣΕ ΜΕ.txt'), [
   ''
 ].join('\r\n'));
 
-const zipOut = path.resolve('release', `GrafeioIlis-win7-x64-${pkg.version}.zip`);
+const zipOut = path.resolve('release', `GrafeioIlis-win7-${ARCH}-${pkg.version}.zip`);
 fs.rmSync(zipOut, { force: true });
 execFileSync('zip', ['-qr9', zipOut, 'GrafeioIlis'], { cwd: 'release' });
 console.log('OK:', path.relative('.', zipOut), (fs.statSync(zipOut).size / 1048576).toFixed(1) + ' MB');

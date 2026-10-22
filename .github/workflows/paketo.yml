@@ -30,17 +30,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npm run package:win
+      - run: npm run package:win -- x64
+      - run: npm run package:win -- ia32
       - name: Ανέβασμα στα Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           V=$(node -p "require('./package.json').version")
-          ZIP="release/GrafeioIlis-win7-x64-$V.zip"
-          NOTES="Γραφείο Λοχία $V για Windows 7 64-bit, από το commit ${GITHUB_SHA::7}. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
+          ZIP64="release/GrafeioIlis-win7-x64-$V.zip"
+          ZIP32="release/GrafeioIlis-win7-ia32-$V.zip"
+          NOTES="Γραφείο Λοχία $V για Windows 7, από το commit ${GITHUB_SHA::7}. Δύο zip: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "$ZIP" --clobber
+            gh release upload "v$V" "$ZIP64" "$ZIP32" --clobber
             gh release edit "v$V" --notes "$NOTES"
           else
-            gh release create "v$V" "$ZIP" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V (Windows 7)" --notes "$NOTES"
+            gh release create "v$V" "$ZIP64" "$ZIP32" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V (Windows 7)" --notes "$NOTES"
           fi
