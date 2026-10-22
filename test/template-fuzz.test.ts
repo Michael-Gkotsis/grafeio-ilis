@@ -241,6 +241,27 @@ describe('ΗΚΑΙ / ΗΚΑΛ σε τυχαία templates', () => {
   }
 });
 
+// Δικό σου έντυπο υπηρεσιών (αντίγραφο της ΣΠΕΝ ή της ΣΒΕΝ): ίδιο template, οι δικές του θέσεις
+describe('ΦΡΟΥΡΑ δικού σου εντύπου σε τυχαία templates', () => {
+  for (let seed = 1; seed <= Math.ceil(N / 3); seed++) {
+    const base = seed % 2 ? 'spen' : 'sven';
+    it(base + ' → ΑΣΚΗΣΗ #' + seed, async () => {
+      const gen = await genFroura(seed * 13 + 77, base); const why = gen.desc.join(' · ');
+      let s = busy(base);
+      s = apply(s, { t: 'addPhase', name: 'Άσκηση', from: base }, ctx).state; const id = s.settings.phases!.at(-1)!.id;
+      s = apply(s, { t: 'setPhase', phase: id }, ctx).state; s = apply(s, { t: 'autofill', date: D }, ctx).state;
+      const res = await fillFroura(gen.buf, s, D, id);
+      expect(res.name, why).toMatch(/^ΦΡΟΥΡΑ ΑΣΚΗΣΗ /);
+      const wb = await Workbook.open(res.data); const txt = cellsOf(await wb.values(res.sheet!, 400, 40)).map(x => N0(x.t)).join('\n');
+      const pm = seatMap(s); const g = s.guards[D] || {};
+      const names = Object.entries(g).filter(([k]) => k !== 'ly' && k !== 'dy').map(([, v]) => pm.get(v)).filter(Boolean).map(p => N0(dutyName(p!)));
+      expect(names.length, why).toBeGreaterThan(3);
+      for (const n of names) expect(txt, why + ' ' + n).toContain(n);
+      expect(res.warnings.filter(w => /δεν ανήκει/.test(w)), why).toEqual([]);
+    });
+  }
+});
+
 // ------------------------------------------------------------------ Έντυπα: δικά σου πρότυπα
 describe('Έντυπα σε τυχαία πρότυπα', () => {
   const S = (() => { let s = busy(); s = { ...s, settings: { ...s.settings, place: 'Αυλώνας' } }; return s; })();
