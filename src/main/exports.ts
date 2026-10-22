@@ -5,14 +5,15 @@ import { dutyAt, isWk, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
-import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
-import { hkaiMapOf, type HkaiMap } from '../shared/sources';
+import { Workbook, colName, colNum, sheetSafe, unesc, type Sheet, type XlValue } from './xlsx';
+import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { FROURA_FORMS, absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, rows3, tableRowSpan, frouraPer, NUM_ROWS, type FrouraForm, type FrouraTable, type TableCols } from '../shared/froura';
+import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
+import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
@@ -24,7 +25,7 @@ export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '',
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
-export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[] }
+export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string }   // sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)
 
 // Λόχος/Τάγμα (Michael, 18/10): οι λέξεις της ίλης στα κείμενα του template («ΔΚΤΗΣ ΙΛΗΣ», «2Η ΕΠΧΙΑ») γίνονται του λόχου,
 // πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Και ανάποδα (20/10): δικό σου
@@ -90,7 +91,6 @@ async function restyle(wb: Workbook, ws: Sheet, b: Block, o: XlPart) {
 }
 
 // ------------------------------------------------------------------ ΦΡΟΥΡΑ ΣΒΕΝ (δείγμα 01) και ΦΡΟΥΡΑ ΣΠΕΝ (φωτογραφία γραφέα)
-const FROURA_ROWS = 6; // γραμμές τιμωρημένων και απόντων στο κενό έντυπο
 export function punishedOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => x.type === 'PUN' && !x.pending && coversDay(x, d));
 }
@@ -99,16 +99,18 @@ export function absentOn(s: AppState, d: ISODate): Status[] {
   return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, dutyMin(s.settings)));
 }
 
-// Πίνακες των δικών σου υπηρεσιών κάτω από τους πίνακες του εντύπου, ανά δύο δίπλα δίπλα (στις στήλες των θαλαμοφυλάκων),
-// με μία κενή γραμμή πριν από κάθε σειρά πινάκων. Επιστρέφει πόσες γραμμές μπήκαν.
-function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: FrouraTable[]): number {
+// Πίνακες των δικών σου υπηρεσιών κάτω από τους πίνακες του εντύπου, ανά δύο δίπλα δίπλα (στις στήλες των δύο πρώτων
+// πινάκων του εντύπου), με μία κενή γραμμή πριν από κάθε σειρά πινάκων. Επιστρέφει πόσες γραμμές μπήκαν.
+interface ExtraAt { after: number; look: TableCols | null; left: TableCols; right: TableCols | null }
+function frouraTablesInto(wb: Workbook, ws: Sheet, at0: ExtraAt, tabs: FrouraTable[]): number {
   if (!tabs.length) return 0;
-  const lk = form.tables.look; const st = { aa: ws.style(lk.aa), name: ws.style(lk.name), hours: ws.style(lk.hours), note: ws.style(lk.note) };
+  const lk = at0.look; const st = lk ? { aa: ws.style(lk.aa), name: ws.style(lk.name), hours: ws.style(lk.hours), note: ws.style(lk.note) } : { aa: null, name: null, hours: null, note: null };
   const groups: { t: FrouraTable; at: TableCols }[][] = [];
-  for (let i = 0; i < tabs.length; i += 2) groups.push([{ t: tabs[i], at: form.tables.left }, ...(tabs[i + 1] ? [{ t: tabs[i + 1], at: form.tables.right }] : [])]);
+  const step = at0.right ? 2 : 1;
+  for (let i = 0; i < tabs.length; i += step) groups.push([{ t: tabs[i], at: at0.left }, ...(at0.right && tabs[i + 1] ? [{ t: tabs[i + 1], at: at0.right }] : [])]);
   const height = (t: FrouraTable) => t.rows.reduce((a, x) => a + tableRowSpan(x), 0);
   const n = groups.reduce((a, g) => a + 2 + Math.max(...g.map(x => height(x.t))), 0);
-  const after = form.extra.after; ws.insertRows(after, n, after + 1, wb);
+  const after = at0.after; ws.insertRows(after, n, after + 1, wb);
   const put = (ref: string, v: string | null, style: number | null) => { ws.set(ref, v); if (style != null) ws.setStyle(ref, style); };
   // ένα νούμερο σε rs γραμμές (μία ανά βάρδια): Α/Α, όνομα και ΠΑΡ/ΣΕΙΣ ενωμένα κάθετα, οι ώρες μία σε κάθε γραμμή
   const line = (at: TableCols, t: FrouraTable, r: number, v: { aa: string; name: string; hours: string[]; note: string }) => {
@@ -135,152 +137,269 @@ function frouraTablesInto(wb: Workbook, ws: Sheet, form: FrouraForm, tabs: Frour
   return n;
 }
 
-// sheet: φύλλο του template (Αρχεία Excel)· κενό = το πρώτο
+// Το φύλλο ενός εντύπου μέσα στο template: αυτό που διάλεξες, αλλιώς το πρώτο που έχει κάποιο από τα κείμενα του εντύπου
+async function sheetWith(wb: Workbook, want: string | undefined, re: RegExp): Promise<string> {
+  if (want && wb.hasSheet(want)) return want;
+  const names = wb.sheetNames();
+  for (const n of names) if (re.test(tnorm(n))) return n;
+  for (const n of names) if (textCells(await wb.values(n, 60, 30)).some(x => re.test(x.t))) return n;
+  return names[0];
+}
+// «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ» → «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ 12 ΟΚΤ 2026»· χωρίς άρθρο στο τέλος μπαίνει «ΤΗΝ»
+const withDate = (raw: string, date: string, art = 'ΤΗΝ') => {
+  const t = raw.replace(/\s+/g, ' ').trim().replace(/\s*\d{1,2}([/.\-]\d{1,2}[/.\-]\d{2,4}| [Α-ΩA-Zα-ω]{3,} \d{2,4})\s*$/, '').trim();
+  return /(^|\s)(ΤΗΝ|ΤΗΣ|ΓΙΑ|ΣΤΙΣ|ΗΜΕΡΑΣ|ΗΜΕΡΟΜΗΝΙΑ:?)$/i.test(t) || !t ? (t + ' ' + date).trim() : t + ' ' + art + ' ' + date;
+};
+const refOf = (c: number, r: number) => colName(c) + r;
+
+// Οι θέσεις της φρουράς στα κελιά του template: κάθε πίνακας παίρνει τις θέσεις του είδους του (θαλαμοφύλακες, οπλοφύλακες,
+// μαγειρεία, σκοποί ή δική σου υπηρεσία με το όνομά της), με τη σειρά, μία σε κάθε νούμερο· οι σκοποί ανά ζεύγος, στο νούμερο
+// της σκοπιάς τους («3η»). Ό,τι δεν βρίσκει θέση μπαίνει σε δικό του πίνακα από κάτω (frouraTables).
+interface Seat { ref: string; t: FTable | null; n: FNum | null }
+function seatFroura(map: FrouraMap, posts: Post[]): Map<string, Seat> {
+  const out = new Map<string, Seat>();
+  const kindOfPost = (x: Post, own: Set<string>) => (own.has('b:' + x.block) ? 'b:' + x.block : x.kind);
+  const own = new Set(map.tables.map(t => t.kind).concat(map.single.map(x => x.kind)).filter(k => k.startsWith('b:')));
+  const groupsOf = (ps: Post[]) => { const g: Post[][] = []; for (const p of ps) { const k = p.rot != null && p.kind === 'sk' ? 'r' + p.rot : p.k; const x = g.find(y => (y[0].rot != null && y[0].kind === 'sk' ? 'r' + y[0].rot : y[0].k) === k); if (x) x.push(p); else g.push([p]); } return g; };
+  const kinds = [...new Set(posts.filter(x => x.k !== 'ly' && x.k !== 'dy').map(x => kindOfPost(x, own)))];
+  for (const kind of kinds) {
+    const groups = groupsOf(posts.filter(x => x.k !== 'ly' && x.k !== 'dy' && kindOfPost(x, own) === kind));
+    const slots: Seat[] = [...map.tables.filter(t => t.kind === kind).flatMap(t => t.nums.map(n => ({ ref: refOf(t.name, n.r), t, n }))),
+      ...map.single.filter(x => x.kind === kind).map(x => ({ ref: refOf(x.c, x.r), t: null, n: null }))];
+    // σκοποί: «3η» → το ζεύγος της 3ης σκοπιάς (αν τα νούμερα του εντύπου ταιριάζουν με των θέσεων)
+    const numOf = (x: string) => Number((/^(\d+)/.exec(x) || [])[1] || NaN);
+    const byNum = kind === 'sk' && slots.some(sl => sl.n && groups.some(g => numOf(g[0].short) === numOf(sl.n!.label)));
+    groups.forEach((g, i) => {
+      const sl = byNum ? slots.find(x => x.n && numOf(x.n.label) === numOf(g[0].short)) : slots[i];
+      if (sl) for (const p of g) out.set(p.k, sl);
+    });
+  }
+  return out;
+}
+
+// sheet: φύλλο του template (Αρχεία Excel)· κενό = αυτό που έχει την «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ» (ή τους πίνακες)
+// Κάθε στοιχείο γράφεται εκεί που το έχει το template (tplmap.ts): κεφαλίδα, τίτλος, Λ/Υ, Δ/Υ, πίνακες, τιμωρημένοι και απόντες
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null): Promise<ExportResult> {
-  const form = frouraForm(s, phase);
   // οι στήλες φαρδαίνουν όσο χρειάζεται: το έντυπο τυπώνεται σε μία σελίδα (fitToPage), απλώς λίγο μικρότερο
-  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const ws = await wb.sheet(sheet && wb.hasSheet(sheet) ? sheet : 0); const pm = seatMap(s);
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s);
+  const name = await sheetWith(wb, sheet, /^ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ|^ΘΑΛΑΜΟΦΥΛΑΚ|^ΦΡΟΥΡΑ/);
+  const ws = await wb.sheet(name); const pm = seatMap(s);
   const warnings: string[] = [];
+  const blocks = blocksOf(s.settings, phase);
+  const ownNames: Record<string, string> = {};
+  for (const b of blocks) if (b.custom || !['ly', 'th', 'op', 'mg', 'sk', 'tae'].includes(b.kind)) ownNames[tnorm(b.name)] = 'b:' + b.id;
+  const vals = await wb.values(name, 400, 40); const raw = (c: TCell) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
+  const map = mapFroura(vals, ws.merges(), ownNames);
   const g = s.guards[d] || {};
-  ws.set('L1', s.settings.unit[0]).set('L2', s.settings.unit[1]).set('L3', s.settings.unit[2]);
-  ws.set('A5', 'ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΝ ' + titleDate(d, true));
-  const p = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
-  ws.set('A9', 'Λ/Υ: ' + (p('ly') ? lyLine(p('ly')!) : ''));
-  ws.set('A10', 'Δ/Υ: ' + (p('dy') ? lyLine(p('dy')!) : ''));
-  // νούμερα με άλλο πλήθος βαρδιών (frouraPer): γραμμές μπαίνουν μέσα στο κουτί (το όνομα, το Α/Α και οι ΠΑΡ/ΣΕΙΣ
-  // μεγαλώνουν μαζί) ή όσες περισσεύουν κρύβονται. at(): πού πήγε κάθε κελί του template από κάτω.
-  const per = frouraPer(s, phase);
-  const ins = per.map((k, i) => ({ after: NUM_ROWS[i] + 1, n: Math.max(0, k - 3) })).filter(x => x.n > 0);
-  for (const x of [...ins].reverse()) ws.insertRows(x.after, x.n, x.after, wb);
+  const posts = postsOf(s.settings); const seats = seatFroura(map, posts);
+  // γραμμές που μπαίνουν (σε γραμμές του template): down() = πού πήγε μια γραμμή του template
+  const ins: { after: number; n: number }[] = [];
   const down = (r: number) => r + ins.filter(x => x.after < r).reduce((a, x) => a + x.n, 0);
+  const insert = (after: number, n: number, tpl0 = after) => { if (n <= 0) return; ws.insertRows(down(after), n, down(tpl0), wb); ins.push({ after, n }); };
+  // νούμερα με άλλο πλήθος βαρδιών: στους πίνακες με ΩΡΕΣ που είναι δίπλα δίπλα με ίδιες γραμμές, μπαίνουν γραμμές μέσα στο
+  // κουτί (το όνομα, το Α/Α και οι ΠΑΡ/ΣΕΙΣ μεγαλώνουν μαζί) ή όσες περισσεύουν κρύβονται· αλλιώς οι ώρες χωράνε στις γραμμές του
+  const allNums = map.tables.flatMap(t => t.nums);
+  const rowsOf = new Map<number, { h: number; aligned: boolean; need: number | null }>();
+  for (const t of map.tables) for (const n of t.nums) {
+    if (rowsOf.has(n.r)) continue;
+    const touch = allNums.filter(m => m.r <= n.r + n.h - 1 && m.r + m.h - 1 >= n.r);
+    rowsOf.set(n.r, { h: n.h, aligned: touch.every(m => m.r === n.r && m.h === n.h), need: null });
+  }
+  const shiftsOwn = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || !!blocks.find(b => b.id === id)?.shift;
+  for (const x of posts) { const st = seats.get(x.k); if (!st?.n || !st.t?.hours || !x.slots) continue; const k = rowsOf.get(st.n.r)!; k.need = Math.max(k.need || 1, x.slots.length); }
+  const grow = [...rowsOf.entries()].filter(([, k]) => k.aligned && k.need != null && k.need !== k.h).sort((a, b) => a[0] - b[0]);
+  for (const [r, k] of grow) if (k.need! > k.h) insert(k.h >= 2 ? r + k.h - 2 : r, k.need! - k.h);
+  for (const [r, k] of grow) for (let j = k.need!; j < k.h; j++) ws.setRowHidden(down(r) + j);
   const at = (ref: string) => { const m = /^([A-Z]+)(\d+)$/.exec(ref)!; return m[1] + down(+m[2]); };
-  per.forEach((k, i) => { for (let j = k; j < 3; j++) ws.setRowHidden(down(NUM_ROWS[i]) + j); });
-  const lay = frouraLayout(s, d, phase);
+  // κεφαλίδα: στα κελιά του template· αν έχει λιγότερες γραμμές, οι υπόλοιπες στα κενά κελιά από κάτω (πάνω από τον τίτλο)
+  const head = headCells(map.head, map.title?.r ?? map.ly?.r ?? 0, (r, c) => ws.get(refOf(c, r)) != null);
+  s.settings.unit.forEach((u, i) => { const h = head[i]; if (h && (i < map.head.length || u)) ws.set(refOf(h.c, h.r), u); });
+  if (map.title) ws.set(refOf(map.title.c, map.title.r), withDate(raw(map.title), titleDate(d, true)));
+  else warnings.push('Το template δεν έχει τίτλο «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ»: η ημερομηνία δεν γράφτηκε');
+  const p = (k: string) => (g[k] ? pm.get(g[k]) : undefined);
+  for (const [k, cell, l] of [['ly', map.ly, 'Λ/Υ'], ['dy', map.dy, 'Δ/Υ']] as const) {
+    if (!cell) { if (p(k)) warnings.push('Το template δεν έχει «' + l + ':»: ο ' + l + ' δεν γράφτηκε'); continue; }
+    const t = (raw(cell) || l + ':').replace(/\s+$/, ''); const lab = t.includes(':') ? t.slice(0, t.indexOf(':') + 1) : t + ':';
+    ws.set(refOf(cell.c, cell.r), lab + ' ' + (p(k) ? lyLine(p(k)!) : ''));
+  }
+  const pos: Record<string, string> = {}; seats.forEach((st, k) => { pos[k] = st.ref; });
+  const lay = frouraLayout(s, d, phase, pos);
   for (const k of lay.foreign) {
-    const x = postBy(s, k); const off = x && blocksOf(s.settings, phase).find(b => b.id === x.block)?.hidden;
+    const x = postBy(s, k); const off = x && blocks.find(b => b.id === x.block)?.hidden;
     warnings.push(off ? 'Η υπηρεσία ' + x!.label + ' είναι ανενεργή (Ρυθμίσεις › Υπηρεσίες) και δεν γράφτηκε' : 'Η θέση ' + (x?.label || k) + ' δεν ανήκει στη ΦΡΟΥΡΑ ' + phaseName(s.settings, phase) + ' και δεν γράφτηκε');
   }
   lay.cells.forEach((names, ref) => { if (names.length) ws.set(at(ref), names.join('\n')); });
-  // ώρες των νούμερων με βάρδιες: στη στήλη δεξιά από το όνομα, μία γραμμή ανά βάρδια (οι σκοποί της ΣΠΕΝ έχουν δίπλα
-  // τη μαγειρεία, οπότε μένουν 3 γραμμές: περισσότερες βάρδιες μπαίνουν δύο-δύο). Με τις βάρδιες του εντύπου (2 ώρες από
-  // τις 14:00) μένουν όπως είναι στο template.
-  const done = new Set<string>(); const own = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || !!blocksOf(s.settings, phase).find(b => b.id === id)?.shift;
-  for (const x of postsOf(s.settings)) {
-    const ref = form.pos[x.k]; if (!ref || !x.slots || done.has(ref)) continue;
-    const m = /^([A-Z]+)(\d+)$/.exec(ref)!; const hc = colName(colNum(m[1]) + 1); const i = NUM_ROWS.indexOf(+m[2]);
-    if (!own(x.block) && !(i >= 0 && per[i] !== 3)) continue; done.add(ref);   // το κουτί άλλαξε από τον διπλανό πίνακα: ξαναγράφονται κι αυτές
-    const hs = i >= 0 ? Array.from({ length: per[i] }, (_, j) => x.slots![j] || '') : rows3(x.slots);
-    hs.forEach((h, j) => ws.set(hc + (down(+m[2]) + j), h));
+  // ώρες των νούμερων με βάρδιες: στη στήλη ΩΡΕΣ του πίνακα, μία γραμμή ανά βάρδια. Με τις βάρδιες του εντύπου (2 ώρες από
+  // τις 14:00) μένουν όπως είναι στο template, εκτός αν το template δεν τις έχει γραμμένες.
+  const done = new Set<string>();
+  for (const x of posts) {
+    const st = seats.get(x.k); if (!st?.t?.hours || !st.n || !x.slots || done.has(st.ref)) continue;
+    const k = rowsOf.get(st.n.r)!; const resized = k.aligned && k.need != null && k.need !== k.h;
+    const blank = Array.from({ length: st.n.h }, (_, j) => ws.get(refOf(st.t!.hours!, down(st.n!.r) + j))).every(v => v == null || !String(v).trim());
+    if (!shiftsOwn(x.block) && !resized && !blank) continue; done.add(st.ref);
+    const n = resized ? k.need! : st.n.h;
+    const hs = resized || x.slots.length <= n ? Array.from({ length: n }, (_, j) => x.slots![j] || '') : rowsN(x.slots, n);
+    hs.forEach((h, j) => ws.set(refOf(st.t!.hours!, down(st.n!.r) + j), h));
   }
-  const added = frouraTablesInto(wb, ws, { ...form, extra: { after: down(form.extra.after) } }, frouraTables(s, lay, phase));
-  const first = down(form.list) + added;
+  // δικές σου υπηρεσίες χωρίς θέση στο template: πίνακες κάτω από τους πίνακες του εντύπου, στις στήλες των δύο πρώτων
+  const firstRow = map.tables.length ? Math.min(...map.tables.map(t => t.hr)) : 0;
+  const lr = map.tables.filter(t => t.hr === firstRow).sort((a, b) => a.name - b.name);
+  const colsOf = (t: FTable): TableCols => { const aa = t.aa ?? Math.max(1, t.name - 1); const name = t.aa == null && t.name === aa ? t.name + 1 : t.name; const hours = t.hours ?? (t.note ?? name + 1); return { aa: colName(aa), name: colName(name), hours: colName(hours), note: colName(t.hours == null ? hours + (t.note == null ? 0 : 1) : t.note ?? hours + 1) }; };
+  const left = lr[0] ? colsOf(lr[0]) : { aa: 'B', name: 'C', hours: 'D', note: 'E' };
+  const right = lr[1] ? colsOf(lr[1]) : null;
+  const look = lr[0] ? (() => { const r = down(lr[0].nums[0].r); return { aa: left.aa + r, name: left.name + r, hours: left.hours + r, note: left.note + r }; })() : null;
+  const after = map.bottom || Math.max(map.dy?.r || 0, map.ly?.r || 0, map.title?.r || 0, ...map.head.map(h => h.r)) + 1;
+  const tabs = frouraTables(s, lay, phase);
+  const added = frouraTablesInto(wb, ws, { after: down(after), look, left, right }, tabs);
+  if (added) ins.push({ after, n: added });
+  // τιμωρημένοι και απόντες: στις στήλες του πίνακά τους· όσοι δεν χωράνε στις έτοιμες γραμμές παίρνουν νέες (με την αρίθμηση)
   const pun = punishedOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
   const abs = absentOn(s, d).map(x => ({ x, p: pm.get(x.pid)! })).filter(y => y.p).sort((a, b) => byName(a.p, b.p));
-  const rows = Math.max(pun.length, abs.length);
-  const last = first + FROURA_ROWS - 1;
-  if (rows > FROURA_ROWS) ws.insertRows(last, rows - FROURA_ROWS, last, wb);
-  for (let i = 0; i < Math.max(rows, FROURA_ROWS); i++) {
-    const r = first + i;
-    ws.set('A' + r, i + 1).set('H' + r, i + 1);
-    const a = pun[i], b = abs[i];
-    if (a) ws.set('B' + r, dutyName(a.p)).set('C' + r, norm(a.x.kind || 'Ποινή')).set('D' + r, dm(a.x.from)).set('E' + r, a.x.open ? '' : dm(a.x.to)).set('F' + r, a.x.note || '');
-    if (b) ws.set('I' + r, dutyName(b.p)).set('J' + r, absenceOf(b.x)).set('K' + r, dm(b.x.from)).set('L' + r, b.x.open ? '' : dm(b.x.to)).set('M' + r, b.x.note || '');
+  const lists: { l: FList; rows: { name: string; kind: string; from: string; to: string; note: string }[] }[] = [];
+  for (const [l, data, what] of [[map.pun, pun, 'ΤΙΜΩΡΗΜΕΝΟΙ'], [map.abs, abs, 'ΑΠΟΝΤΕΣ']] as const) {
+    const rows = data.map(({ x, p: q }) => ({ name: dutyName(q), kind: what === 'ΤΙΜΩΡΗΜΕΝΟΙ' ? norm(x.kind || 'Ποινή') : absenceOf(x), from: dm(x.from), to: x.open ? '' : dm(x.to), note: x.note || '' }));
+    if (l) lists.push({ l, rows }); else if (rows.length) warnings.push('Το template δεν έχει πίνακα «' + what + '»: ' + rows.length + ' δεν γράφτηκαν');
+  }
+  const byFirst = [...new Set(lists.map(x => x.l.first))].sort((a, b) => a - b);
+  for (const f of byFirst) {
+    const grp = lists.filter(x => x.l.first === f);
+    const ready = Math.min(...grp.map(x => x.l.ready)); const need = Math.max(...grp.map(x => x.rows.length));
+    const top = down(f);
+    if (need > ready) insert(f + ready - 1, need - ready);
+    for (let i = 0; i < Math.max(need, ready); i++) {
+      const r = top + i;
+      for (const { l, rows } of grp) {
+        const c = l.cols; const set = (cc: number | undefined, v: string | number) => { if (cc != null && !ws.hasFormula(refOf(cc, r))) ws.set(refOf(cc, r), v); };
+        if (i < Math.max(need, l.ready)) set(c.aa, i + 1);
+        const x = rows[i]; if (!x) continue;
+        set(c.name, x.name); set(c.kind, x.kind); set(c.from, x.from); set(c.to, x.to); set(c.note, x.note);
+      }
+    }
   }
   // δικό σου έντυπο υπηρεσιών: το φύλλο του template («ΦΡΟΥΡΑ ΣΒΕΝ») παίρνει το όνομά του
   const base = phaseBase(s.settings, phase);
-  if (base !== phase && ws.name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base]) wb.renameSheet(ws.name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase));
-  const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', ['L1', 'L2', 'L3'])] }], s, 'froura', sigs, warnings);
-  return { name: frouraFile(s.settings, phase) + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
+  const shName = base !== phase && name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base] ? wb.renameSheet(name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase)) : name;
+  const headRefs = head.slice(0, Math.max(map.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
+  const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
+  return { name: frouraFile(s.settings, phase) + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: shName };
+}
+// Τα κελιά της κεφαλίδας: του template, και (αν έχει λιγότερες από 3) τα κενά από κάτω της, πάνω από τη γραμμή stop
+function headCells(head: { r: number; c: number }[], stop: number, busy: (r: number, c: number) => boolean): { r: number; c: number }[] {
+  const out = [...head];
+  while (out.length && out.length < 3) { const l = out[out.length - 1]; const r = l.r + 1; if ((stop && r >= stop) || busy(r, l.c)) break; out.push({ r, c: l.c }); }
+  return out;
+}
+// Βάρδιες σε n γραμμές: λιγότερες αφήνουν κενό, περισσότερες μπαίνουν μαζί («14:00-16:00 · 22:00-00:00»)
+function rowsN(sl: string[], n: number): string[] {
+  if (sl.length <= n) return Array.from({ length: n }, (_, i) => sl[i] || '');
+  const k = Math.ceil(sl.length / n); return Array.from({ length: n }, (_, i) => sl.slice(i * k, i * k + k).join(' · '));
 }
 
 // ------------------------------------------------------------------ ΗΚΑΙ (δείγμα 15)
 // στήλες ανά είδος κωλυομένων/απόντων (τα κλειδιά του hkaiCounts)
 const HK_KEYS = ['yp', 'ey', 'tim', 'bl', 'os', 'mag', 'sid', 'kin', 'ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fp', 'fyl', 'apal', 'ekp', 'allh'];
 export class TemplateError extends Error {}
-// 5. ΑΙΤΗΣΕΙΣ (G12): το ελεύθερο κείμενο γράφεται μαζί με τις αριθμημένες αιτήσεις, στο τέλος
-// 1. ΕΓΓΡΑΦΕΣ και 2. ΔΙΑΓΡΑΦΕΣ (G8, G9): το ελεύθερο κείμενο μετά από όσους μπήκαν ή βγήκαν από τη δύναμη τη μέρα
-// Αξιωματικός υπηρεσίας (A18): ό,τι γράφτηκε, αλλιώς από τα Στελέχη (hkOffText)
-export const HK_TEXT: Record<string, string> = { loi: 'G19' };
-// Ατυχήματα (K5 ολικές ζημιές, L5 μερικές, M5 σε άνδρες): ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς μένει το Ø του εντύπου
-export const HK_ACC: Record<string, string> = { accT: 'K5', accP: 'L5', accM: 'M5' };
-// front/back: φύλλα μπροστινής και πίσω σελίδας· map: πού μπαίνει κάθε αριθμός (Αρχεία Excel → ΗΚΑΙ)
-export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap; sigs?: Sig[] | null } = {}): Promise<ExportResult> {
+// front/back: φύλλα μπροστινής και πίσω σελίδας (κενά: όποιο μοιάζει περισσότερο)· map: πού μπαίνει κάθε αριθμός· χωρίς
+// αυτό βρίσκεται από τα κείμενα του εντύπου (detectHkai) και από πάνω ό,τι διόρθωσες (cells, Αρχεία Excel → ΗΚΑΙ)
+// Η πίσω σελίδα από τις ετικέτες της (tplmap.ts): «1. ΕΓΓΡΑΦΕΣ:» … «6. ΛΟΙΠΑ:», «Υπαξιωματικοί:», φρουρές, οχήματα
+export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap; cells?: Partial<HkaiMap>; sigs?: Sig[] | null } = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); await unitWords(wb, s);
-  const pick = (n: string | undefined, i: number) => (n && wb.hasSheet(n) ? n : i);
-  const fr = await wb.sheet(pick(opts.front, 0)); const bk = await wb.sheet(pick(opts.back, 1));
-  const m0 = opts.map || hkaiMapOf(); const m: HkaiMap = { ...m0, rows: { ...m0.rows } };
+  const names = wb.sheetNames(); const place = s.settings.place;
+  const own = [...hkRowsOf(s.settings.lists).own], hkNames = s.settings.lists?.hkNames;
+  const det = new Map<string, ReturnType<typeof detectHkai>>();
+  for (const n of names) det.set(n, detectHkai({ name: n, rows: await wb.values(n, 120, 40) }, place, own, hkNames));
+  const frName = opts.front && wb.hasSheet(opts.front) ? opts.front : [...names].sort((a, b) => det.get(b)!.found - det.get(a)!.found)[0];
+  const backRe = /^\d\s*\.?\s*ΕΓΓΡΑΦΕΣ|^ΧΟΡΗΓΟΥΜΕΝΕΣ ΦΡΟΥΡΕΣ|^ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|^ΑΠΟΦΑΣΕΙΣ/;
+  let bkName = opts.back && wb.hasSheet(opts.back) ? opts.back : undefined;
+  if (!bkName) for (const n of names) if (textCells(await wb.values(n, 120, 40)).some(x => backRe.test(x.t))) { bkName = n; break; }
+  if (!bkName) bkName = names.find(n => n !== frName && det.get(n)!.found === 0) || frName;
+  const fr = await wb.sheet(frName); const bk = await wb.sheet(bkName);
+  const c = opts.cells; const m0 = opts.map || det.get(frName)!.map;
+  const m: HkaiMap = { title: c?.title || m0.title, date: c?.date || m0.date, rows: { ...m0.rows, ...(c?.rows || {}) }, cols: { ...m0.cols, ...(c?.cols || {}) } };
   const pm = seatMap(s); const warnings: string[] = [];
   const hk = hkaiCounts(s, d);
   const R = hkRowsOf(s.settings.lists); const ALL = [...R.off, ...R.nco];
-  addHkRows(wb, fr, m, R, warnings);
+  const prov = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
+  addHkRows(wb, fr, m, R, warnings, k => hk.rank[k]?.n > 0 || prov[k] > 0);
   hkRowLabels(fr, m, ALL, s);
   hkHead(fr, m, s);
-  fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(d));
-  fr.set(m.date, s.settings.place + ', ' + hkDate(d));
+  if (m.title) fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(d));
+  else warnings.push('Το template δεν έχει τίτλο «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ…»: η ημερομηνία δεν γράφτηκε');
+  if (m.date) fr.set(m.date, place + ', ' + hkDate(d));
   const rowsOf: [string, number][] = ALL.map(r => [r, m.rows[r]] as [string, number]).filter(([, r]) => r > 0);
   // Προέλεγχος template (έρευνα §3.6): τα αθροίσματα πρέπει να είναι τύποι, όχι γραμμένοι αριθμοί
   const lost = rowsOf.flatMap(([, r]) => [m.cols.sum, m.cols.sumK, m.cols.sumA, m.cols.avail].filter(Boolean).map(c => c + r)).filter(ref => !fr.hasFormula(ref));
   if (lost.length) throw new TemplateError('Το template της ' + reportOf(s.settings) + ' έχει χάσει τύπους στα κελιά ' + lost.slice(0, 6).join(', ') + (lost.length > 6 ? ' κ.ά.' : '') + '. Τα αθροίσματα δεν θα ήταν σωστά. Βάλε ξανά τους τύπους ή σβήσε το δικό σου hkai.xlsx από τον φάκελο templates (ή διάλεξε άλλο template στα Αρχεία Excel).');
-  const prov = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
+  // στήλες που δεν έχει το έντυπο: ό,τι θα έμπαινε εκεί δεν γράφεται, και το λέει
+  const miss = new Map<string, number>();
   for (const [rank, r] of rowsOf) {
     const x = hk.rank[rank];
-    if (prov[rank] > 0) fr.set((m.cols.prov || 'B') + r, prov[rank]);
-    fr.set(m.cols.placed + r, x.n - x.attached).set(m.cols.attached + r, x.attached);
-    for (const k of HK_KEYS) if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null);
+    if (prov[rank] > 0) { if (m.cols.prov) fr.set(m.cols.prov + r, prov[rank]); else miss.set('prov', (miss.get('prov') || 0) + prov[rank]); }
+    if (m.cols.placed) fr.set(m.cols.placed + r, x.n - x.attached);
+    if (m.cols.attached) fr.set(m.cols.attached + r, x.attached);
+    for (const k of HK_KEYS) { if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null); else if (x.c[k]) miss.set(k, (miss.get(k) || 0) + x.c[k]); }
     if (m.cols.ab && !fr.hasFormula(m.cols.ab + r)) fr.set(m.cols.ab + r, x.c.ab || null);
   }
+  for (const [k, n] of miss) warnings.push('Το template δεν έχει στήλη «' + (HK_COLS.find(x => x[0] === k)?.[1] || 'Προβλέπονται') + '»: ' + n + ' δεν γράφτηκαν');
   // «Προβλέπονται» στις γραμμές των συνόλων: το έντυπο δεν έχει τύπο εκεί, οπότε γράφεται το άθροισμα
-  if (Object.values(prov).some(n => n > 0)) {
-    const pc = m.cols.prov || 'B'; const sumOf = (list: string[]) => list.reduce((a, r) => a + (prov[r] || 0), 0);
+  if (m.cols.prov && Object.values(prov).some(n => n > 0)) {
+    const pc = m.cols.prov; const sumOf = (list: string[]) => list.reduce((a, r) => a + (prov[r] || 0), 0);
+    const vals = await wb.values(fr.name, 200, 8);
     const last = (list: string[]) => Math.max(...list.map(r => m.rows[r] || 0));
-    const tot = (r: number, n: number) => { if (r > 0 && /ΣΥΝΟΛΟ/.test(norm(fr.get('A' + r) || '')) && !fr.hasFormula(pc + r)) fr.set(pc + r, n || null); };
+    const tot = (r: number, n: number) => { if (r > 0 && (vals[r - 1] || []).slice(0, 4).some(v => /ΣΥΝΟΛΟ/.test(norm(v ?? ''))) && !fr.hasFormula(pc + r)) fr.set(pc + r, n || null); };
     tot(last(R.off) + 1, sumOf(R.off)); tot(last(R.nco) + 1, sumOf(R.nco)); tot(last(R.nco) + 2, sumOf(ALL));
   }
-  // κείμενα που γράφει ο χρήστης στην οθόνη ΗΚΑΙ (πίσω σελίδα)
+  // Πίσω όψη: κάθε κείμενο στη θέση της ετικέτας του
+  const B = mapHkBack(await wb.values(bk.name, 400, 40), bk.merges(), place);
+  const put = (ref: string | undefined, v: string | number | null, what: string) => { if (ref) bk.set(ref, v); else if (v != null && v !== '') warnings.push('Το template δεν έχει «' + what + '»: δεν γράφτηκε'); };
   const tx = s.hkaiManual?.[d]?.text || {};
-  for (const [k, ref] of Object.entries(HK_TEXT)) if (tx[k]) bk.set(ref, tx[k]);
-  const off = hkOffText(s, d); if (off) bk.set('A18', off);
-  // Πίσω όψη: φρουρές της ημέρας, αποφάσεις Διοικητή, όργανα υπηρεσίας
+  if (tx.loi) put(B.loi, tx.loi, '6. ΛΟΙΠΑ');
+  const off = hkOffText(s, d); if (off) put(B.off, off, 'Αξιωματικοί:');
+  // φρουρές της ημέρας, αποφάσεις Διοικητή, όργανα υπηρεσίας
   const g = s.guards[d] || {};
   let night = 0, day24 = 0;
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
-  if (hkOn(s.settings, 'grd')) bk.set('D5', night || null).set('D8', day24 || null);
+  if (hkOn(s.settings, 'grd')) { put(B.night, night || null, 'Νυκτοφρουρές'); put(B.day24, day24 || null, '24ώρες'); }
   // Κατάσταση οχημάτων (μία γραμμή στο έντυπο) και ατυχήματα, όταν η Ίλη τα χρησιμοποιεί
   const v = s.settings.hkai?.veh;
-  if (hkOn(s.settings, 'veh') && v) { if (v.type) bk.set('F5', v.type); bk.set('G5', v.prov ?? null).set('H5', v.kin ?? null).set('I5', v.maint ?? null).set('J5', v.dmg ?? null); }
-  if (hkOn(s.settings, 'acc')) for (const [k, ref] of Object.entries(HK_ACC)) if (tx[k]?.trim()) bk.set(ref, tx[k].trim());
+  if (hkOn(s.settings, 'veh') && v) {
+    if (v.type) put(B.vType, v.type, 'Είδη οχημάτων');
+    for (const [ref, x, w] of [[B.vProv, v.prov, 'Προβλέπονται'], [B.vKin, v.kin, 'Σε κίνηση'], [B.vMaint, v.maint, 'Για συντήρηση'], [B.vDmg, v.dmg, 'Λόγω βλάβης']] as const) put(ref, x ?? null, w + ' (οχήματα)');
+  }
+  if (hkOn(s.settings, 'acc')) for (const [k, ref, w] of [['accT', B.accT, 'Ολικές'], ['accP', B.accP, 'Μερικές'], ['accM', B.accM, 'Σε άνδρες']] as const) if (tx[k]?.trim()) put(ref, tx[k].trim(), w + ' (ατυχήματα)');
   // 1. ΕΓΓΡΑΦΕΣ, 2. ΔΙΑΓΡΑΦΕΣ, 3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες («1.»), μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
-  const egr = hkaiEgrLines(s, d), dia = hkaiDiaLines(s, d), leaves = hkaiLeaveLines(s, d), puns = hkaiPunLines(s, d), reqs = hkaiReqLines(s, d);
-  if (egr.length) await wb.setRich(bk, 'G8', egr);
-  if (dia.length) await wb.setRich(bk, 'G9', dia);
-  if (leaves.length) await wb.setRich(bk, 'G10', leaves);
-  if (puns.length) await wb.setRich(bk, 'G11', puns);
-  if (reqs.length) await wb.setRich(bk, 'G12', reqs);
+  const lines: [string | undefined, ReturnType<typeof hkaiEgrLines>, string][] = [[B.egr, hkaiEgrLines(s, d), '1. ΕΓΓΡΑΦΕΣ'], [B.dia, hkaiDiaLines(s, d), '2. ΔΙΑΓΡΑΦΕΣ'], [B.leaves, hkaiLeaveLines(s, d), '3. ΑΔΕΙΕΣ'], [B.puns, hkaiPunLines(s, d), '4. ΠΟΙΝΕΣ'], [B.reqs, hkaiReqLines(s, d), '5. ΑΙΤΗΣΕΙΣ']];
+  for (const [ref, ls, w] of lines) if (ls.length) { if (ref) await wb.setRich(bk, ref, ls); else warnings.push('Το template δεν έχει «' + w + ':»: ' + ls.length + ' δεν γράφτηκαν'); }
   const og = hkOrgans(s, d); const ly = og.ly && pm.get(og.ly), dy = og.dy && pm.get(og.dy);
-  if (ly) bk.set('A22', 'Λ/Υ: ' + who(ly));
-  if (dy) bk.set('A23', 'Δ/Υ: ' + who(dy));
-  bk.set('L23', s.settings.place + ', ' + hkDate(d));
+  if (ly) put(B.ly, 'Λ/Υ: ' + who(ly), 'Υπαξιωματικοί:');
+  if (dy) put(B.dy, 'Δ/Υ: ' + who(dy), 'Υπαξιωματικοί:');
+  if (B.date && (bk !== fr || B.date !== m.date)) bk.set(B.date, place + ', ' + hkDate(d));
   const t = /^([A-Z]+)(\d+)$/.exec(m.title); const hr = t && Number(t[2]) >= 3 ? [t[1] + (Number(t[2]) - 3), t[1] + (Number(t[2]) - 2)] : [];
-  const front: SheetPart = { ws: fr, key: 'front', more: [blockOf(fr, 'head', hr), blockOf(fr, 'date', [m.date])] };
-  const layout = await signSheets(wb, fr === bk ? [front] : [front, { ws: bk, key: 'back', more: [blockOf(bk, 'date', ['L23'])] }], s, 'hkai', opts.sigs, warnings);
-  return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings, layout };
+  const front: SheetPart = { ws: fr, key: 'front', more: [blockOf(fr, 'head', hr), blockOf(fr, 'date', m.date ? [m.date] : [])] };
+  const layout = await signSheets(wb, fr === bk ? [front] : [front, { ws: bk, key: 'back', more: [blockOf(bk, 'date', B.date ? [B.date] : [])] }], s, 'hkai', opts.sigs, warnings);
+  return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings, layout, sheet: frName };
 }
 
 // Οι δικές σου γραμμές (βαθμοί) που δεν έχει το έντυπο: νέα γραμμή κάτω από αυτήν που διάλεξες, με τη μορφή και τους
 // τύπους της από πάνω (Σύνολο, κωλυόμενοι, απόντες, διαθέσιμοι), μέσα στο σύνολο της ομάδας. Ό,τι είναι από κάτω
 // (σύνολα, υπογραφές, ημερομηνία) κατεβαίνει μία γραμμή, και οι αριθμημένες λίστες στο πλάι συνεχίζουν σωστά.
-function addHkRows(wb: Workbook, fr: Sheet, m: HkaiMap, R: HkRows, warnings: string[]) {
+// need: η γραμμή έχει κάτι να γράψει (βασική γραμμή που λείπει από το έντυπο μπαίνει μόνο τότε· οι δικές σου πάντα)
+function addHkRows(wb: Workbook, fr: Sheet, m: HkaiMap, R: HkRows, warnings: string[], need: (k: string) => boolean = () => true) {
   for (const group of [R.off, R.nco]) group.forEach((key, i) => {
     if (m.rows[key] > 0) return;
+    if (!R.own.has(key) && !need(key)) return;
+    // κάτω από την προηγούμενη της ομάδας· αν λείπουν όλες από πάνω (π.χ. Αρχιλοχίες), πάνω από την επόμενη: η νέα γραμμή
+    // μπαίνει κάτω από αυτήν, με τους τύπους της, και οι δύο αλλάζουν θέση (τα ονόματα γράφονται από το hkRowLabels)
     const prev = group.slice(0, i).reverse().find(k => m.rows[k] > 0);
-    if (!prev) { warnings.push('Η γραμμή «' + key + '» δεν μπήκε στο έντυπο: δεν βρέθηκε γραμμή από πάνω της'); return; }
+    const next = prev ? undefined : group.slice(i + 1).find(k => m.rows[k] > 0);
+    if (!prev && !next) { warnings.push('Η γραμμή «' + key + '» δεν μπήκε στο έντυπο: δεν βρέθηκε άλλη γραμμή της ομάδας της'); return; }
     const rowsNow = group.map(k => m.rows[k]).filter(r => r > 0);
-    const after = m.rows[prev], first = Math.min(...rowsNow), last = Math.max(...rowsNow), r = after + 1;
+    const after = m.rows[(prev || next)!], first = Math.min(...rowsNow), last = Math.max(...rowsNow), r = after + 1;
     fr.insertRows(after, 1, after, wb);
     for (const k in m.rows) if (m.rows[k] > after) m.rows[k]++;
     const down = (ref: string) => ref.replace(/(\d+)$/, (_x, n: string) => String(Number(n) > after ? Number(n) + 1 : Number(n)));
-    m.title = down(m.title); m.date = down(m.date);
-    m.rows[key] = r;
+    if (m.title) m.title = down(m.title); if (m.date) m.date = down(m.date);
+    if (next) { m.rows[key] = after; m.rows[next] = r; } else m.rows[key] = r;
     // στο τέλος της ομάδας: τα σύνολα (SUM ως την τελευταία) φτάνουν και στη νέα, και η παχιά γραμμή από κάτω πάει σε αυτήν
     if (after === last) {
       fr.growFormulas(fr.name, first, last, r);
@@ -344,28 +463,76 @@ export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): stri
   const auto = [st.type === 'DN' ? outLbl(st) : isWk(st) ? 'ΔΝ ΣΚ' : '', duty && 'ΥΠΗΡΕΣΙΑ ' + DOW_FULL[parseD(addDays(d, 1)).getDay()] + ' ' + duty.label + (duty.time ? ' ' + duty.time : '')].filter(Boolean).join(', ');
   return norm(withNote(auto, outNoteOf(s, d, pid)));
 }
-// sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)
+// Πού είναι κάθε λίστα: φύλλο (αυτό που διάλεξες, αλλιώς με το όνομα ή τον τίτλο της), και το κομμάτι του αν το φύλλο
+// έχει και τις δύο. Χωρίς φύλλο παραμενόντων: αντίγραφο του φύλλου των εξοδούχων.
+interface OutsLoc { sheet: string; from: number; to: number; rename?: boolean }
+async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, place: string): Promise<[OutsLoc, OutsLoc]> {
+  const names = wb.sheetNames(); const info = new Map<string, { vals: XlValue[][]; cs: ReturnType<typeof textCells>; list: boolean }>();
+  for (const n of names) { const vals = await wb.values(n, 200, 40); const ws = await wb.sheet(n); info.set(n, { vals, cs: textCells(vals), list: !!mapOuts(vals, ws.merges(), place) }); }
+  const titled = (re: RegExp) => names.find(n => re.test(tnorm(n))) || names.find(n => info.get(n)!.cs.some(x => re.test(x.t) && x.r < 40));
+  const outs = (want.outs && wb.hasSheet(want.outs) ? want.outs : null) || titled(/^ΕΞΟΔΟΥΧ/) || names.find(n => info.get(n)!.list) || names[0];
+  let stay = (want.stay && wb.hasSheet(want.stay) ? want.stay : null) || names.find(n => /^ΠΑΡΑΜΕΝ/.test(tnorm(n))) || names.find(n => n !== outs && info.get(n)!.cs.some(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t)));
+  const end = 2000;
+  if (!stay && info.get(outs)!.cs.some(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t))) stay = outs;
+  if (!stay) stay = names.find(n => n !== outs && info.get(n)!.list && !/^ΕΞΟΔΟΥΧ/.test(tnorm(n)));
+  if (!stay) { stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ'); let i = 2; while (wb.hasSheet(stay)) stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ ' + i++); await wb.cloneSheet(outs, stay); return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end, rename: true }]; }
+  if (stay !== outs) return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end }];
+  // και οι δύο λίστες στο ίδιο φύλλο: χωρίζονται στον τίτλο της δεύτερης
+  const cs = info.get(outs)!.cs; const t1 = cs.find(x => /^ΕΞΟΔΟΥΧ/.test(x.t))?.r ?? 1, t2 = cs.find(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t))!.r;
+  return t1 < t2 ? [{ sheet: outs, from: 1, to: t2 - 1 }, { sheet: outs, from: t2, to: end }] : [{ sheet: outs, from: t1, to: end }, { sheet: outs, from: 1, to: t1 - 1 }];
+}
+// sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)· κάθε στήλη από την επικεφαλίδα της (tplmap.ts)
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null): Promise<ExportResult> {
-  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = []; const done: SheetPart[] = [];
+  const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = [];
+  const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] } }[] = [];
   const { outs, stay } = outsAndStay(s, d);
-  const lists: [string, { p: Person; note: string }[], string | undefined][] = [
-    ['ΕΞΟΔΟΥΧΟΙ', outs.map(x => ({ p: x.p, note: outsNote(s, d, x.p.id, x.st) })), sheets.outs],
-    ['ΠΑΡΑΜΕΝΟΝΤΕΣ', stay, sheets.stay]
+  const locs = await outsPlaces(wb, sheets, s.settings.place);
+  const lists: { title: string; list: { p: Person; note: string }[]; at: OutsLoc; key: string }[] = [
+    { title: 'ΕΞΟΔΟΥΧΟΙ', list: outs.map(x => ({ p: x.p, note: outsNote(s, d, x.p.id, x.st) })), at: locs[0], key: 'outs' },
+    { title: 'ΠΑΡΑΜΕΝΟΝΤΕΣ', list: stay, at: locs[1], key: 'stay' }
   ];
-  for (const [title, list, name] of lists) {
-    const ws = await wb.sheet(name && wb.hasSheet(name) ? name : title); const key = title === 'ΕΞΟΔΟΥΧΟΙ' ? 'outs' : 'stay';
-    ws.set('H1', s.settings.unit[0]).set('H2', s.settings.unit[1]).set('H3', s.settings.unit[2]);
-    ws.set('A5', title + ' ΤΗΣ ' + titleDate(d, false));
-    if (list.length > 1) ws.insertRows(7, list.length - 1, 7, wb);
+  // από κάτω προς τα πάνω: οι γραμμές που μπαίνουν σε μια λίστα δεν μετακινούν όσα δεν έχουν γραφτεί ακόμα
+  for (const { title, list, at: loc, key } of [...lists].sort((a, b) => (a.at.sheet === b.at.sheet ? b.at.from - a.at.from : 0))) {
+    const ws = await wb.sheet(loc.sheet); const vals = await wb.values(loc.sheet, 2000, 40);
+    const m = mapOuts(vals, ws.merges(), s.settings.place, loc.from, loc.to);
+    if (!m) { warnings.push('Στο φύλλο «' + loc.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας (ΒΑΘΜΟΣ, ΕΠΩΝΥΜΟ, ΟΝΟΜΑ…): οι ' + title + ' δεν γράφτηκαν'); continue; }
+    const raw = (c: { r: number; c: number }) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
+    const head = headCells(m.head, m.title?.r ?? m.hr, (r, c) => vals[r - 1]?.[c - 1] != null);
+    s.settings.unit.forEach((u, i) => { const h = head[i]; if (h && (i < m.head.length || u)) ws.set(refOf(h.c, h.r), u); });
+    if (m.title) { const t = loc.rename ? raw(m.title).replace(/ΕΞΟΔΟΥΧΟΙ/i, title) : raw(m.title); ws.set(refOf(m.title.c, m.title.r), withDate(t, titleDate(d, false), 'ΤΗΣ')); }
+    // έτοιμες γραμμές του πίνακα: όσες έχουν τη μορφή της πρώτης, ως πριν τον τόπο/ημερομηνία (μία κενή γραμμή πριν μένει)
+    const cols = Object.values(m.cols); const c0 = Math.min(...cols); const s0 = ws.style(refOf(c0, m.first));
+    const stop = m.place ? m.place.r - 1 : loc.to;
+    let ready = 1;
+    while (m.first + ready < stop && ws.style(refOf(c0, m.first + ready)) === s0 && s0 != null && !cols.some(c => { const x = ws.raw(refOf(c, m.first + ready)); return x && x.inner && !x.inner.includes('<f'); })) ready++;
+    const n = list.length;
+    if (n > ready) {
+      ws.insertRows(m.first + ready - 1, n - ready, m.first + ready - 1, wb);
+      // ό,τι σημειώθηκε πιο κάτω στο ίδιο φύλλο (κεφαλίδα, ημερομηνία της λίστας από κάτω) κατεβαίνει μαζί
+      const mv = (x: string) => x.replace(/(\d+)$/, (_q, rr: string) => String(+rr > m.first + ready - 1 ? +rr + n - ready : +rr));
+      for (const k of marks) if (k.ws === ws) { k.refs.head = k.refs.head.map(mv); k.refs.date = k.refs.date.map(mv); }
+      // η αρίθμηση =ROW()-k της λίστας από κάτω (στο ίδιο φύλλο) μένει 1, 2, 3… αφού κατέβηκε
+      if (loc.to < 2000) for (const x of [...ws.cells()].filter(y => y.r > loc.to + n - ready)) {
+        const ref = refOf(x.c, x.r); const f = /^ROW\(\)\s*-\s*(\d+)$/.exec(unesc(ws.formula(ref) || '')); if (f) ws.setFormula(ref, 'ROW()-' + (+f[1] + n - ready));
+      }
+      if (m.cols.aa != null) ws.chainAa(m.cols.aa, m.first + ready - 1, n - ready);
+    }
+    const C = m.cols;
     list.forEach(({ p, note }, i) => {
-      const r = 7 + i;
-      ws.set('B' + r, rankTxt(p)).set('C' + r, p.spec).set('D' + r, p.last).set('E' + r, p.first + fatherTxt(p))
-        .set('F' + r, p.room ?? '').set('G' + r, p.phone).set('H' + r, note);
+      const r = m.first + i; const set = (k: string, v: string | number | null | undefined) => { const c = C[k]; if (c != null && !ws.hasFormula(refOf(c, r))) ws.set(refOf(c, r), v ?? ''); };
+      set('aa', i + 1); set('rank', rankTxt(p)); set('spec', p.spec); set('last', p.last); set('first', p.first + (C.father != null ? '' : fatherTxt(p)));
+      set('father', p.father); set('name', fullName(p)); set('who', who(p)); set('room', p.room ?? ''); set('phone', p.phone); set('asm', p.asm); set('si', p.si); set('note', note);
     });
-    const foot = 9 + Math.max(list.length - 1, 0);
-    ws.set('G' + foot, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
-    if (!done.some(x => x.ws === ws)) done.push({ ws, key, more: [blockOf(ws, 'head', ['H1', 'H2', 'H3']), blockOf(ws, 'date', ['G' + foot])] });
+    const extra = Math.max(0, n - ready);
+    const dateRef = m.place ? refOf(m.place.c, m.place.r + extra) : null;
+    if (dateRef) ws.set(dateRef, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
+    const headRefs = head.slice(0, Math.max(m.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
+    const had = marks.find(x => x.ws === ws);
+    if (had) { had.refs.head.push(...headRefs); if (dateRef) had.refs.date.push(dateRef); had.key = key; }
+    else marks.push({ ws, key, refs: { head: headRefs, date: dateRef ? [dateRef] : [] } });
   }
+  // ένα φύλλο με τις δύο λίστες: μία κεφαλίδα και μία ημερομηνία για τη μετακίνηση (της πρώτης λίστας / της τελευταίας)
+  const done: SheetPart[] = marks.map(x => ({ ws: x.ws, key: x.key, more: [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] }));
   const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
-  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout };
+  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
 }

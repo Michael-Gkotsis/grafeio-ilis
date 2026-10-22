@@ -904,7 +904,8 @@ export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: strin
     const h = headText(v); if (!h) return;
     for (const [k, , re] of HK_COLS) if (at[k] == null && k !== 'bl' && re.test(h)) { at[k] = c; break; }
   });
-  if (at.tim != null && at.os != null && at.os - at.tim === 2) at.bl = at.tim + 1;
+  // κενή στήλη ανάμεσα σε Τιμωρημένους και Ο/Σ (δείγμα): μόνο αν δεν είναι άλλης επικεφαλίδας
+  if (at.tim != null && at.os != null && at.os - at.tim === 2 && !Object.values(at).includes(at.tim + 1)) at.bl = at.tim + 1;
   // «Προβλέπονται από τη σύνθεση»: προαιρετική στήλη (Ρυθμίσεις της ΗΚΑΙ), δεν μετρά στα «βρέθηκαν»
   let pv: string | null = null;
   for (let r = Math.max(0, top - 14); r < top && !pv; r++) (rows[r] || []).forEach((v, c) => { if (!pv && /^ΠΡΟΒΛΕΠΟΝΤΑΙ/.test(headText(v))) pv = colLetter(c); });
@@ -914,6 +915,14 @@ export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: strin
   const t = cell(/ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ/); if (t) { map.title = t; found++; } else missing.push('Τίτλος');
   const pl = normGreek(place).replace(/[^Α-ΩA-Z]/g, '');
   const d = pl ? cell(new RegExp('^' + pl + '\\s*,')) : null; if (d) { map.date = d; found++; } else missing.push('Τόπος και ημερομηνία');
+  // ό,τι δεν έχει ένα έντυπο που αναγνωρίστηκε δεν γράφεται «στα τυφλά» στη θέση του δείγματος (εκεί μπορεί να είναι άλλη
+  // στήλη ή γραμμή): γραμμή 0 (μπαίνει από την εφαρμογή αν έχει άτομα), στήλη χωρίς γράμμα, τίτλος/ημερομηνία κενά
+  if (found) {
+    for (const r of HK_RANKS) if (missing.includes(r)) map.rows[r] = 0;
+    for (const [k] of HK_COLS) if (at[k] == null) delete map.cols[k];
+    if (!pv) delete map.cols.prov;
+    if (!t) map.title = ''; if (!d) map.date = '';
+  }
   return { map, found, total: HK_RANKS.length + HK_COLS.length + 2, missing };
 }
 export const hkaiMapOf = (cells?: Partial<HkaiMap>): HkaiMap => ({
