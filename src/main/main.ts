@@ -1112,7 +1112,12 @@ else {
     ipcMain.handle('layout:preview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
       try {
         const s = store.state; let out: { data: Buffer; warnings?: string[]; layout?: LayoutSheet[] };
-        if ('report' in q) { const buf = await tplBuf(q.file); out = await off('fillReport', [buf, q.report, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, q.report, q.ids.slice(0, 120), q.date), s); }
+        if ('report' in q) {
+          // «Φτιάξ' το εδώ» μέσα στον οδηγό: το πρότυπο από τις επιλογές, χωρίς αρχείο ακόμα (όπως η προεπισκόπηση)
+          const b = q.build ? await buildTemplate(q.build, q.report.kind, xlLook(s.settings)) : null;
+          const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? { ...q.report, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells } : q.report;
+          out = await off('fillReport', [buf, rep, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date), s);
+        }
         else {
           const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
           const f = q.form;

@@ -4,7 +4,7 @@
 // πλήθος, στις ίδιες θέσεις· άλλο πλήθος, μοιράζονται ανάμεσα στην πρώτη και την τελευταία. Σε δικό σου πρότυπο, ένα
 // κελί {ΥΠΟΓΡΑΦΕΣ} δείχνει τη γραμμή τους (απλώνονται στο πλάτος του κελιού αν είναι συγχωνευμένο, αλλιώς του πίνακα).
 // Έντυπο χωρίς τίποτα από τα δύο: μπαίνουν μία κενή γραμμή κάτω από ό,τι έχει το φύλλο (Michael, 22/10).
-import { colName, type Sheet, type Workbook, type XlValue } from './xlsx';
+import { colName, colNum, type Sheet, type Workbook, type XlValue } from './xlsx';
 import { normGreek } from '../shared/text';
 import type { Sig } from '../shared/sigs';
 import type { Block } from '../shared/layout';
@@ -14,15 +14,24 @@ export const NAME_GAP = 4;   // το όνομα 4 γραμμές κάτω από
 const ART = /^-?\s*(Ο|Η|ΤΟ|ΟΙ|ΤΑ)\s*-?$/;
 const TAG = /^\{\s*ΥΠΟΓΡΑΦΕΣ\s*\}$/;
 const str = (v: XlValue | undefined) => (typeof v === 'string' ? v : '');
+// «Ο ΛΟΧΙΑΣ» σε ένα κελί: η λέξη και η θέση μαζί (λίγες λέξεις, όχι πρόταση)
+const ONE = /^-?\s*(Ο|Η|ΤΟ|ΟΙ|ΤΑ)\s*-?\s+[Α-ΩΪΫA-Z0-9][Α-ΩΪΫA-Z0-9 ./()\-]{1,30}$/;
 type Span = { c1: number; c2: number };
-interface Anchor { r: number; art: number; dash: boolean; tr: number; title: Span }
+const at = (ref: string) => { const m = /^([A-Z]+)(\d+)$/.exec(ref); return m ? { r: +m[2], c: colNum(m[1]) } : { r: 0, c: 0 }; };
+interface Anchor { r: number; art: number; dash: boolean; tr: number; title: Span; one?: boolean }
 
-// Οι υπογραφές του εντύπου: κάθε «Ο» (ή «-Ο-», «ΤΟ») που έχει από κάτω τη θέση· μόνο της πιο κάτω γραμμής του φύλλου
-function anchorsOf(ws: Sheet, rows: XlValue[][]): Anchor[] {
+// Οι υπογραφές του εντύπου: κάθε «Ο» (ή «-Ο-», «ΤΟ») που έχει από κάτω τη θέση· μόνο της πιο κάτω γραμμής του φύλλου.
+// after: και τα κελιά «Ο ΛΟΧΙΑΣ» (λέξη και θέση στο ίδιο κελί) κάτω από αυτή τη γραμμή (το τέλος του πίνακα στα Έντυπα)
+function anchorsOf(ws: Sheet, rows: XlValue[][], after?: number): Anchor[] {
   const out: Anchor[] = [];
   rows.forEach((row, i) => (row || []).forEach((v, j) => {
-    const t = normGreek(str(v)); if (!ART.test(t)) return;
-    const r = i + 1, c = j + 1;
+    const t = normGreek(str(v)); const r = i + 1, c = j + 1;
+    if (after != null && r > after && !ART.test(t) && ONE.test(t) && t.split(/\s+/).length <= 5 && !ws.hasFormula(colName(c) + r)) {
+      const m = ws.mergeAt(colName(c) + r);
+      out.push({ r, art: c, dash: t.startsWith('-'), tr: r, title: m ? { c1: m.c1, c2: m.c2 } : { c1: c, c2: c }, one: true });
+      return;
+    }
+    if (!ART.test(t)) return;
     const below = (rows[r] || []).map((x, k) => ({ c: k + 1, t: str(x).trim() })).filter(x => x.t && !ART.test(normGreek(x.t)) && !ws.hasFormula(colName(x.c) + (r + 1)));
     const spanOf = (k: number): Span => { const m = ws.mergeAt(colName(k) + (r + 1)); return m ? { c1: m.c1, c2: m.c2 } : { c1: k, c2: k }; };
     const hit = below.find(x => { const s = spanOf(x.c); return s.c1 <= c && c <= s.c2; }) || below.filter(x => Math.abs(x.c - c) <= 3).sort((a, b) => Math.abs(a.c - c) - Math.abs(b.c - c))[0];
@@ -83,8 +92,10 @@ function anchorBlock(ws: Sheet, a: Anchor, i: number, r2 = a.tr): Block {
 
 // sigs: οι υπογραφές που θέλεις (null = όπως το έντυπο). Το {ΥΠΟΓΡΑΦΕΣ} γεμίζει πάντα, με τις sigs ή, αν δεν δόθηκαν, με τις def.
 // tagOnly: μόνο στο {ΥΠΟΓΡΑΦΕΣ} (τα Excel της εφαρμογής: ένα «Ο» στα κελιά τους δεν είναι υπογραφή).
+// after: η τελευταία γραμμή του πίνακα (Έντυπα): από κάτω μετρούν και τα «Ο ΛΟΧΙΑΣ» σε ένα κελί· names: κελιά με τα ονόματα
+// των υπογραφών του προτύπου ({ΛΟΧΙΑΣ}, {ΔΙΟΙΚΗΤΗΣ}), που φεύγουν μαζί τους όταν μπαίνουν άλλες.
 // Γυρνά πού βρίσκεται η καθεμία (για τη μετακίνηση πάνω στο χαρτί, layout.ts)
-export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def: Sig[], warnings: string[], opts: { tagOnly?: boolean } = {}): Promise<Block[]> {
+export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def: Sig[], warnings: string[], opts: { tagOnly?: boolean; after?: number; names?: string[] } = {}): Promise<Block[]> {
   const rows = await wb.values(ws.name, 2000, 60);
   const tags: { r: number; c: number }[] = [];
   rows.forEach((row, i) => (row || []).forEach((v, j) => { if (TAG.test(normGreek(str(v)).trim())) tags.push({ r: i + 1, c: j + 1 }); }));
@@ -103,13 +114,20 @@ export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def
     return out;
   }
   if (opts.tagOnly) return [];
-  const an = anchorsOf(ws, rows);
+  const an = anchorsOf(ws, rows, opts.after);
   if (!sigs) return an.map((a, i) => anchorBlock(ws, a, i));
   if (!an.length) return sigs.length ? below(wb, ws, rows, sigs, warnings) : [];
   const st = { art: ws.style(colName(an[0].art) + an[0].r), title: ws.style(colName(an[0].title.c1) + an[0].tr), dash: an.some(a => a.dash) };
   const r = an[0].r;
-  // ίδιο πλήθος: στις θέσεις του εντύπου (με τις συγχωνεύσεις του)
-  if (sigs.length === an.length) {
+  // τα ονόματα των υπογραφών του προτύπου (λίγο πιο κάτω από αυτές) φεύγουν: ανήκαν στις παλιές
+  const empty = (ref: string) => { ws.set(ref, null); const { r: y, c } = at(ref); if (rows[y - 1]) rows[y - 1][c - 1] = null; };
+  const clear = (ref: string) => { const m = ws.mergeAt(ref); if (m) ws.removeMerge(m); empty(ref); };
+  const names = (opts.names || []).filter(ref => { const y = at(ref).r; return y > r && y <= r + 1 + NAME_GAP && !ws.hasFormula(ref); });
+  names.forEach(empty);
+  // το κελί του ονόματος μιας υπογραφής του προτύπου (στις στήλες της), για να μπει εκεί το νέο όνομα
+  const nameOf = (a: Anchor) => names.find(ref => { const { c } = at(ref); return (c >= a.title.c1 && c <= a.title.c2) || c === a.art; });
+  // ίδιο πλήθος: στις θέσεις του εντύπου (με τις συγχωνεύσεις του)· «Ο ΛΟΧΙΑΣ» σε ένα κελί: λέξη και θέση σε δύο γραμμές, όπως παρακάτω
+  if (sigs.length === an.length && !an.some(a => a.one)) {
     for (const a of an) { ws.set(colName(a.art) + a.r, null); ws.set(colName(a.title.c1) + a.tr, null); }
     const nr = r + 1 + NAME_GAP;
     return sigs.map((x, i) => {
@@ -117,6 +135,8 @@ export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def
       ws.set(colName(a.art) + a.r, x.art ? (a.dash ? '-' + x.art + '-' : x.art) : null);
       ws.set(T + a.tr, x.title || null);
       if (!x.name) return anchorBlock(ws, a, i);
+      const own = nameOf(a);
+      if (own) { ws.set(own, x.name); wb.printDownTo(ws.name, at(own).r); return anchorBlock(ws, a, i, Math.max(a.tr, at(own).r)); }
       if (ws.hasFormula(T + nr) || str(rows[nr - 1]?.[a.title.c1 - 1]).trim()) { warnings.push('Το όνομα «' + x.name + '» δεν μπήκε κάτω από την υπογραφή: το κελί ' + T + nr + ' έχει ήδη κάτι'); return anchorBlock(ws, a, i); }
       const s = ws.style(T + a.tr); ws.set(T + nr, x.name); if (s != null) ws.setStyle(T + nr, s); wb.printDownTo(ws.name, nr);
       if (a.title.c2 > a.title.c1 && !ws.merges().some(m => m.r1 <= nr && nr <= m.r2 && m.c1 <= a.title.c2 && a.title.c1 <= m.c2)) {
@@ -128,13 +148,12 @@ export async function placeSigs(wb: Workbook, ws: Sheet, sigs: Sig[] | null, def
   }
   // άλλο πλήθος: λιγότερες μοιράζονται ανάμεσα στην πρώτη και την τελευταία υπογραφή του εντύπου (μία μόνη: δεξιά),
   // περισσότερες σε όλο το πλάτος του φύλλου
-  for (const a of an) {
-    for (const ref of [colName(a.art) + a.r, colName(a.title.c1) + a.tr]) { const m = ws.mergeAt(ref); if (m) ws.removeMerge(m); ws.set(ref, null); }
-  }
+  for (const a of an) for (const ref of [colName(a.art) + a.r, colName(a.title.c1) + a.tr]) clear(ref);
   if (!sigs.length) return [];
   const w = widths(ws, ws.lastCol()); const n = sigs.length;
   let spans: Span[];
-  if (n === 1) spans = [an[an.length - 1].title];
+  if (n === an.length) spans = an.map(a => a.title);
+  else if (n === 1) spans = [an[an.length - 1].title];
   else if (an.length >= 2 && n < an.length) {
     // τα κέντρα από την πρώτη ως την τελευταία του εντύπου, και η καθεμία πιάνει ως τη μέση της απόστασης από τις διπλανές
     const a = w.center(an[0].title), b = w.center(an[an.length - 1].title), gap = (b - a) / (n - 1);

@@ -62,7 +62,7 @@ export type EssoResult = { ok: true; archive: string; dir: string; files: string
 export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; prepared: number; guessed: boolean }
 export interface RepPreview { html: string; css: string; pages: number }
 // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα
-export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout } | { report: Report; file: string; ids: (number | string)[]; date: ISODate };
+export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout } | { report: Report; file?: string; build?: BuildOpts; ids: (number | string)[]; date: ISODate };
 export interface LayoutPv { css: string; sheets: (LayoutSheet & { html: string; pages: number })[]; warnings: string[] }
 export type { Block };
 export interface TplFile { exists: boolean; mtime: number }

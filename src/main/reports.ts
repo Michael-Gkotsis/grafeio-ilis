@@ -180,11 +180,14 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
   const val = (k: string) => { const v = cellValue(s, k, d, r, n, group); return k === 'title' && group && !hasGroup && v ? v + ' - ' + group : v; };
   // ο τίτλος του «Φτιάξ' το εδώ» είναι κείμενο του προτύπου (GTITLE): παίρνει μόνο την ομάδα
   for (const c of r.cells) if (c.k === GTITLE && group && !hasGroup && !r.cells.some(x => x.k === 'title')) { const t = ws.get(c.ref); if (t != null && String(t).trim()) ws.set(c.ref, String(t).trim() + ' - ' + group); }
-  // κεφαλίδα και τόπος/ημερομηνία: για τη μετακίνηση πάνω στο χαρτί (layout.ts)
-  const parts: Record<'head' | 'date', string[]> = { head: [], date: [] };
+  // κεφαλίδα, τόπος/ημερομηνία και τίτλος: για τη μετακίνηση πάνω στο χαρτί (layout.ts)· names: τα ονόματα κάτω από τις
+  // υπογραφές του προτύπου ({ΛΟΧΙΑΣ}, {ΔΙΟΙΚΗΤΗΣ}), που φεύγουν αν το έντυπο έχει άλλες υπογραφές
+  const parts: Record<'head' | 'date' | 'title' | 'names', string[]> = { head: [], date: [], title: [], names: [] };
   const mark = (k: string | null | undefined, ref: string) => {
     const m = /^([A-Z]+)(\d+)$/.exec(ref); if (!k || !m) return;
     if (k === 'placeDate') parts.date.push(ref);
+    else if (k === 'title' || k === GTITLE) parts.title.push(ref);
+    else if (k === 'sgtName' || k === 'cmdName') parts.names.push(ref);
     else if (/^head\d?$/.test(k)) parts.head.push(...(k === 'head' ? [0, 1, 2] : [0]).map(i => m[1] + (+m[2] + i)));
   };
   for (const t of tags) {
@@ -195,12 +198,12 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
     if (whole && tagKey(whole[1])) await put(t.ref, val(tagKey(whole[1])!));
     else ws.set(t.ref, t.text.replace(TAG_RE, (m, tg: string) => { const kk = tagKey(tg); if (!kk) return m; const v = val(kk); return v == null ? '' : String(v).replace(/\n/g, ' '); }));
   }
-  for (const c of r.cells) if (c.k !== GTITLE && /^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) { mark(c.k, c.ref); if (c.k === 'sigs') ws.set(c.ref, SIG_TAG); else await put(c.ref, val(c.k)); }
+  for (const c of r.cells) if (/^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) { mark(c.k, c.ref); if (c.k === GTITLE) continue; if (c.k === 'sigs') ws.set(c.ref, SIG_TAG); else await put(c.ref, val(c.k)); }
   // ο πίνακας: όσες γραμμές χρειάζονται, με τη μορφή της γραμμής-προτύπου
   const aa = cols.find(c => c.f === 'aa');
   const k = preparedRows(ws, data, cols.map(c => c.c), aa?.c);
   // ό,τι είναι κάτω από τον πίνακα κατεβαίνει ή ανεβαίνει μαζί του
-  const shift = (by: number) => { for (const key of ['head', 'date'] as const) parts[key] = parts[key].map(x => x.replace(/(\d+)$/, (_m, nn: string) => String(+nn > data + k - 1 ? Math.max(1, +nn + by) : +nn))); };
+  const shift = (by: number) => { for (const key of ['head', 'date', 'title', 'names'] as const) parts[key] = parts[key].map(x => x.replace(/(\d+)$/, (_m, nn: string) => String(+nn > data + k - 1 ? Math.max(1, +nn + by) : +nn))); };
   if (n > k) shift(n - k);
   else if (n < k && r.trim) shift(-(k - Math.max(n, 1)));
   if (n > k) {
@@ -219,7 +222,9 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
     }
   }
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
-  const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date)] }], s, 'reports', r.sigs, warnings, () => r.layout);
+  const end = n > k || r.trim ? data + Math.max(n, 1) - 1 : data + k - 1;   // η τελευταία γραμμή του πίνακα
+  const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
+  const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names }], s, 'reports', r.sigs, warnings, () => r.layout);
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
   wb.setPrintTitles(sheet, head, data - 1);
   ws.setPrintFit(false);
