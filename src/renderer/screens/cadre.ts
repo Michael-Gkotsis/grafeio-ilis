@@ -18,7 +18,7 @@ type P = any;
 const TONE: Record<CadreGroup, string> = { kol: 'info', apo: 'warn', list: 'outline' };
 // στήλες όπως στο Δυναμολόγιο (Michael, 18/10): βαθμός, Ο/Σ, επίθετο, όνομα, ΑΜ, τηλέφωνο, θέση. Χωρά σε οθόνη 1024 χωρίς
 // κύλιση· η γραμμή της ΗΚΑΙ φαίνεται στην καρτέλα του στελέχους και στο Excel
-const GRID = '28px 30px 74px 52px minmax(100px,1.2fr) minmax(84px,1fr) 84px 100px minmax(100px,1.1fr) minmax(160px,1.6fr) 52px';
+const GRID = '28px 30px 84px 52px minmax(100px,1.2fr) minmax(84px,1fr) 84px 100px minmax(100px,1.1fr) minmax(160px,1.6fr) 118px';
 const range = (a: CadreAbs) => dm(a.from) + (a.to !== a.from ? '–' + dm(a.to) : '');
 const stBadge = (st: CadreStatus | undefined) => (st ? html`<${Badge} tone=${TONE[st.group]} data-tip=${st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ' στην ' + HK() + ', στήλη «' + colShort(st.col) + '»'}>${st.label} · ${range(st.abs)}<//>` : html`<${Badge} tone="ok">Παρών<//>`);
 
@@ -60,7 +60,7 @@ export function CadreScreen() {
   };
   const cardOf = card ? all.find(c => c.id === card) : undefined;
   return html`<div>
-    <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Οι καταστάσεις τους είναι οι στήλες της ' + HK() + ' και μπαίνουν μόνες τους στην ' + HK() + '. Σύρε μια γραμμή (ή Alt+↑/↓) για να τα βάλεις με τη σειρά της ιεραρχίας.'}>
+    <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
       <${Button} variant="outline" disabled=${xl || !all.length} onClick=${exportXl} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
@@ -69,7 +69,7 @@ export function CadreScreen() {
       <${ActiveFilter} parts=${[filter !== 'all' && (CADRE_FILTERS.find(([k]) => k === filter) || [, ''])[1], dateLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}/>
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : active}</span></div>
     ${rows.length === 0 ? html`<div className="ui-card empty">${!all.length ? html`Δεν έχουν μπει στελέχη. Αν δεν τα περάσεις, η ${HK()} παίρνει τους αριθμούς ανά βαθμό που γράφεις στην οθόνη της. <${Button} variant="link" onClick=${() => setEdit({ hk: 'Λοχίες' })}>Πέρασε το πρώτο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
-    html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '864px' }}>
+    html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '964px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span></span><span>Α/Α</span><span>Βαθμός</span><span>Ο/Σ</span><span>Επίθετο</span><span>Όνομα</span><span>ΑΜ</span><span>Τηλέφωνο</span><span>Θέση</span><span>${'Κατάσταση' + (dateLbl ? ' · ' + dateLbl : '')}</span><span></span></div>
       ${rows.map((c, i) => { const st = stOf.get(c.id); return html`<div key=${c.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', card === c.id && 'is-sel', drag === c.id && 'is-drag', over?.id === c.id && drag !== c.id && (over.after ? 'is-drop-after' : 'is-drop-before'))} style=${{ gridTemplateColumns: GRID }} role="row" tabIndex="0"
         draggable="true" onDragStart=${(e: any) => { setDrag(c.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); }} onDragEnd=${end}
@@ -78,7 +78,7 @@ export function CadreScreen() {
         onClick=${() => setCard(c.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setCard(c.id); else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const nb = rows[i + (e.key === 'ArrowUp' ? -1 : 1)]; if (nb) move(c.id, nb.id, e.key === 'ArrowDown'); } }}>
         <span className="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">⠿</span><span className="num muted">${i + 1}</span><span>${c.rank}</span><span>${c.spec || ''}</span><span><b>${c.last}</b></span><span>${c.first}</span><span className="num">${c.am || ''}</span><span className="num">${c.phone || ''}</span><span>${c.role || ''}</span>
         <span className="badges">${c.active ? stBadge(st) : html`<${Badge} tone="outline">Εκτός δύναμης<//>`}</span>
-        <span onClick=${(e: any) => e.stopPropagation()}>${c.active && html`<${Button} size="sm" variant="outline" aria-label=${'Κατάσταση: ' + c.rank + ' ' + c.last} onClick=${() => setStFor({ c })} data-tip="Κατάσταση της ${HK()}: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">+<//>`}</span></div>`; })}
+        <span onClick=${(e: any) => e.stopPropagation()}>${c.active && html`<${Button} size="sm" variant="outline" aria-label=${'Κατάσταση: ' + c.rank + ' ' + c.last} onClick=${() => setStFor({ c })} data-tip="Κατάσταση της ${HK()}: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">Κατάσταση…<//>`}</span></div>`; })}
     </div></div></div>`}
     ${cardOf && html`<${CadreCard} c=${cardOf} onClose=${() => setCard(null)} onEdit=${() => setEdit(cardOf)} onStatus=${(abs?: CadreAbs) => setStFor({ c: cardOf, abs })}
       onDelete=${async () => { const x = cardOf; setCard(null); if (await run({ t: 'deleteCadre', id: x.id }, false)) toast({ text: 'Διαγράφηκε: ' + x.rank + ' ' + x.last, actions: [undoMark()] }); }}/>`}

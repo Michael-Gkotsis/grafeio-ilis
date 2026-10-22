@@ -158,10 +158,10 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   const [fix, setFix] = useState<Status | null>(null);
   const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [undoMark()] }); };
   return html`<div>
-    ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα και γράφεται στο Ιστορικό. Μετράνε στη Δύναμη και στην ${HK()} (ΕΥ, νοσοκομείο).">
+    ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.">
       <${Button} onClick=${() => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Σε ισχύ (' + nMed + ')' }, { value: 'expired', label: 'Έληξαν' }]}/></div>`
-    : html`<${PageHeader} title="Ποινές" sub="Οι ποινές ισχύουν αμέσως και γράφονται στην ${HK()} (4. Ποινές) της μέρας που επιβλήθηκαν. Όταν λήξει μια ποινή, αφαιρείται μόνη της την επόμενη μέρα.">
+    : html`<${PageHeader} title="Ποινές" sub="Ισχύουν αμέσως και γράφονται στην ${HK()} της μέρας που επιβλήθηκαν.">
       <${Button} onClick=${() => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) })}>+ Ποινή<//><//>
     <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ punTab: v })} items=${[{ value: 'pun', label: 'Ισχύουν (' + nPun + ')' }, { value: 'expired', label: 'Έληξαν' }, { value: 'allpun', label: 'Όλες οι ποινές' }]}/></div>`}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${mode === 'med' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
@@ -220,7 +220,7 @@ export function StrengthScreen() {
   // οι κατηγορίες χωρίς κανέναν σε μία γραμμή στο τέλος, για να χωρά η Δύναμη σε μία οθόνη
   const zeros = TYPE_KEYS.filter(k => !c.counts[k]);
   return html`<div>
-    <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει αυτόματα από τα ιατρικά, τις άδειες, τις εξόδους και τις ποινές. Απόντες: άδεια, αναρρωτική, νοσοκομείο, εξοδούχοι."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
+    <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
     <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//>`}>
       <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Οργανική</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
       ${TYPE_KEYS.filter(k => c.counts[k] > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${c.counts[k]}</span></div>
@@ -250,7 +250,7 @@ function RequestsTab() {
   const { today } = useStore(); const nav = useNav();
   const date = nav.params.hkaiDate || today;
   return html`<div>
-    <${PageHeader} title="Αιτήσεις" sub="Γράφονται μία φορά, στην ${HK()} της μέρας τους (5. Αιτήσεις). Η άδεια, όταν εγκριθεί, μπαίνει στην καρτέλα Άδειες χωρίς να ξαναγραφτεί στην ${HK()}."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
+    <${PageHeader} title="Αιτήσεις" sub="Γράφονται μία φορά, στην ${HK()} της μέρας τους (5. Αιτήσεις)."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
     <div style=${{ maxWidth: '960px' }}><${RequestsCard} date=${date}/></div>
   </div>`;
 }
@@ -292,9 +292,10 @@ function HkaiMain() {
   const sheets = html`<div>
     ${!mobile && html`<div style=${{ marginBottom: '8px' }}><${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>`}
     ${side === 'back' ? html`<${ExcelSheet} model=${back} fileName=${fn} sheetName="πισω" meta="A4 οριζόντιο"/>` : html`<${ExcelSheet} model=${front} fileName=${fn} sheetName="μπροστινο" meta="A4 οριζόντιο · 1 σελίδα" footer="Γράφονται μόνο τα κελιά εισόδου· τα αθροίσματα μένουν τύποι του εντύπου."/>`}
-    <div className="toolbar" style=${{ marginTop: '10px' }}><${ExportButton} kind="hkai" date=${date} label="η ${HK()}"/></div><${TemplateNote} ids=${['hkai']}/></div>`;
+    <${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
-    <${PageHeader} title=${HK() + ' της ' + dmy(date)} sub="Κατάσταση Ημερήσιας Αναφοράς. Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/><//>
+    <${PageHeader} title=${HK() + ' της ' + dmy(date)} sub="Βγαίνει μόνη της· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/>
+      <div className="page-head__acts"><${ExportButton} kind="hkai" date=${date} label="η ${HK()}"/></div><//>
     ${mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
   </div>`;
 }
