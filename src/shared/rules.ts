@@ -3,7 +3,7 @@ import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, leaveCol, medWarns, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
-import { statIsUnarmed, statNoOut, statOn } from './stat';
+import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
@@ -259,6 +259,26 @@ export function capsPerService(st: Settings, caps: Caps): Caps | null {
   return out;
 }
 
+// Μία φορά (settings.rev 7, Michael 22/10: «κάθε υπηρεσία να μετρά ως δική της»): οι δικές σου υπηρεσίες που είχαν
+// είδος του εντύπου (π.χ. Πύλη ως μαγειρεία) γίνονται «άλλη»: δική τους στήλη στον έλεγχο και στη σειρά, όχι πια
+// στα σύνολα των μαγειρείων. Οι κωδικοί τους μένουν (διαβάζονται τα παλιά Excel). Όπου ο πίνακας Καταστάσεων έλεγε
+// κάτι άλλο λόγω του είδους (ΕΑ/ΕΟ όχι σε μαγειρεία, σε σκοπιά μόνο αν δεν υπάρχει άλλος) γράφεται ρητά, ώστε να μην
+// αλλάξει ποιος μπαίνει. Πρώτα το capsPerService (θέλει το παλιό είδος). null = καμία αλλαγή.
+export function ownKinds(st: Settings): Settings | null {
+  const conv = everyBlock(st).filter(b => b.custom && b.kind !== 'other' && b.kind !== 'ly');
+  if (!conv.length) return null;
+  const old = st.lists?.stat?.cells || {}; const cells: Record<string, Record<string, StatCell>> = { ...old };
+  for (const b of conv) for (const t of STAT_ROWS) {
+    const was = statDefault(TYPES[t], b), now = statDefault(TYPES[t], { kind: 'other', armed: b.armed });
+    if (was !== now && !cells[t]?.[b.id]) cells[t] = { ...(cells[t] || {}), [b.id]: was };
+  }
+  const ids = new Set(conv.map(b => b.id));
+  const fix = (list: BlockDef[] | undefined) => list && list.map(b => (ids.has(b.id) && b.custom ? { ...b, kind: 'other' as DutyKind } : b));
+  const out: Settings = { ...st, blocks: fix(st.blocks)!, blocksSpen: fix(st.blocksSpen)!, ...(st.phases ? { phases: st.phases.map(x => ({ ...x, blocks: fix(x.blocks)! })) } : {}) };
+  if (JSON.stringify(cells) !== JSON.stringify(old)) out.lists = { ...(st.lists || {}), stat: { ...(st.lists?.stat || {}), cells } };
+  return out;
+}
+
 // --------------------------- «Ποιος κάνει τι» (Υπηρεσίες, Michael 18/10) ---------------------------
 // Στήλες: τα είδη των υπηρεσιών του εντύπου (θαλαμοφύλακας, οπλοφύλακας, σκοπιά, μαγειρεία, ΤΑΕ) και κάθε δική σου
 // υπηρεσία χωριστά (πύλη…), από όλα τα έντυπα μαζί (ΣΒΕΝ, ΣΠΕΝ, δικά σου). Όχι οι κρυμμένες, όχι Λ/Υ-Δ/Υ (ορίζονται με το χέρι). Νέα υπηρεσία
@@ -475,7 +495,8 @@ export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.o
 
 // --------------------------- Έλεγχος υπηρεσιών (από το ημερολόγιο υπηρεσιών) ---------------------------
 // log: k = θέση, κενό για υπηρεσία χωρίς θέση (από Excel)· kind = είδος
-export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean }[] }
+// byKind: ανά είδος, και ανά δική σου υπηρεσία («b:» + id, μετρά ως δική της) · log.t: η δική σου υπηρεσία της θέσης
+export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean; t?: string }[] }
 // ανά ημερολόγιο υπηρεσιών, υπηρεσίες χωρίς θέση και λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
 const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; off: Settings['holidaysOff']; log: DutyLog; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
@@ -486,8 +507,9 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
   const one = (pid: number, d: ISODate, k: string, kind: DutyKind, h: boolean) => {
     let x = st.get(pid); if (!x) { x = emptyStat(); st.set(pid, x); }
     x.byKind[kind] = (x.byKind[kind] || 0) + 1; x.total++;
+    const t = k ? dutyType(s, k, kind) : kind; if (t !== kind) x.byKind[t] = (x.byKind[t] || 0) + 1;
     if (h) { x.hol++; x.lastHol = d; }
-    x.last = d; x.log.push({ d, k, kind, h });
+    x.last = d; x.log.push(t !== kind ? { d, k, kind, h, t } : { d, k, kind, h });
   };
   for (const d of [...new Set([...Object.keys(s.guards), ...Object.keys(log)])].sort()) {
     const g = s.guards[d] || {}; const h = isHol(s.settings, d);
@@ -523,7 +545,7 @@ export function monthStats(st: Map<number, DutyStat>, ym: string): Map<number, D
     for (const e of x.log) {
       if (e.d.slice(0, 7) !== ym) continue;
       if (!m) { m = emptyStat(); out.set(pid, m); }
-      m.byKind[e.kind] = (m.byKind[e.kind] || 0) + 1; m.total++;
+      m.byKind[e.kind] = (m.byKind[e.kind] || 0) + 1; m.total++; if (e.t) m.byKind[e.t] = (m.byKind[e.t] || 0) + 1;
       if (e.h) { m.hol++; m.lastHol = e.d; }
       m.last = e.d; m.log.push(e);
     }
@@ -564,7 +586,7 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   for (const e of st.log) {
     if (e.d === date) continue;
     const kind = e.kind; const ty = dutyType(s, e.k, kind);
-    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1;
+    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1; if (ty !== kind && ty.startsWith('b:')) f.byKind[ty] = (f.byKind[ty] || 0) + 1;
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
   }
@@ -572,6 +594,8 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) { f.byKind[k] = (f.byKind[k] || 0) + n; f.byType[k] = (f.byType[k] || 0) + n; } f.total += baseTotal(b); f.hol += b.hol || 0; }
   return f;
 }
+// Με ποιο σύνολο συγκρίνονται στη σειρά: το είδος της θέσης, ή η ίδια η δική σου υπηρεσία («b:» + id)
+export const fairKey = (s: AppState, x: Pick<Post, 'k' | 'kind'>): string => { const t = dutyType(s, x.k, x.kind); return t.startsWith('b:') ? t : x.kind; };
 export function fairCompare(h: boolean, kind: string, date: ISODate) {
   const seed = new Map<number, number>(); const sr = (pid: number) => { let v = seed.get(pid); if (v === undefined) { v = seedRank(date, pid); seed.set(pid, v); } return v; };
   return (a: Fair & { pid: number }, b: Fair & { pid: number }) =>
@@ -645,7 +669,7 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
     if (v == null) { v = !fixed.has(pid) && !dutyBlock(s.statuses, date, pid, x, lists) && !capBlock(s, date, pid, x) && !seatlessOn(s, date, pid) && !ruleBlock(s, date, pid, idx, x.k) && !(strict && x.kind === 'sk' && isUnarmed(s, date, pid)); okMemo.set(key, v); }
     return v;
   };
-  const byFair = (x: Post) => { const cmp = fairCompare(h, x.kind, date); return (a: number, b: number) => cmp(fair.get(a)!, fair.get(b)!); };
+  const byFair = (x: Post) => { const cmp = fairCompare(h, fairKey(s, x), date); return (a: number, b: number) => cmp(fair.get(a)!, fair.get(b)!); };
   let free = new Map<string, number[]>();   // ανά θέση: όσοι δεν έχουν θέση σήμερα και μπαίνουν, με τη σειρά δικαιοσύνης
   const freeFor = (x: Post) => {
     let l = free.get(x.k);
@@ -724,7 +748,7 @@ function candidates(s: AppState, date: ISODate, x: Post, people: Person[], fair:
   // Και όποιος έχει ήδη υπηρεσία τις επόμενες 1-2 μέρες (π.χ. τον έβαλες με το χέρι Παρασκευή ή ΣΚ): τελευταίος.
   const due = heldBack(s, date, h, people, fair, fixed, idx);
   const owes = (p: Person) => (due?.has(p.id) ? 1 : 0);
-  const cmp = fairCompare(h, x.kind, date);
+  const cmp = fairCompare(h, fairKey(s, x), date);
   // ποιοι περνούν τους κανόνες της θέσης: μία φορά ανά μέρα (memo), μετά μόνο όσοι δεν μπήκαν ήδη σήμερα
   memo = memo || new Map(); const busy = new Set(Object.values(s.guards[date] || {}));
   const ok = new Set(allowedOn(s, date, x, people, fixed, idx, memo));
@@ -914,7 +938,7 @@ function reservedFor(s: AppState, date: ISODate, post: Post, pid: number): boole
   const no = (q: number, y: Post) => !!(dutyBlock(s.statuses, date, q, y, lists) || capBlock(s, date, q, y));
   if (!all.length || !all.every(y => no(pid, y))) return false;
   const can = (q: number, y: Post) => !no(q, y) && !ruleBlock(s, date, q, undefined, y.k);
-  const cmp = fairCompare(isHol(s.settings, date), post.kind, date); const me = { ...fairOf(s, pid, date), pid };
+  const cmp = fairCompare(isHol(s.settings, date), fairKey(s, post), date); const me = { ...fairOf(s, pid, date), pid };
   const busy = new Set(Object.values(g)); const fixed = fixedIds(s);
   const free = dutyPool(s).filter(p => !busy.has(p.id) && !fixed.has(p.id) && !seatlessOn(s, date, p.id));
   return all.some(y => { const q = g[y.k]; return q != null && !fixed.has(q) && cmp({ ...fairOf(s, q, date), pid: q }, me) < 0 && can(q, post) && !free.some(f => can(f.id, y)); });

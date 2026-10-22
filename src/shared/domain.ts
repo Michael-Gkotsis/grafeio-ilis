@@ -338,7 +338,7 @@ export const DEFAULT_SETTINGS: Settings = {
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 6
+  rev: 7
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
@@ -361,7 +361,8 @@ export function migrateSettings(st: Settings): Settings {
     const ren = (k: string) => (k === old || k.startsWith(old + ' · ') ? now + k.slice(old.length) : k);
     st = { ...st, rev: 5, ...(cells && Object.keys(cells).some(k => ren(k) !== k) ? { lists: { ...st.lists, si: { ...st.lists!.si, cells: Object.fromEntries(Object.entries(cells).map(([k, v]) => [ren(k), { ...(cells[ren(k)] || {}), ...v }])) } } } : {}) };
   }
-  // rev 6 (δική της δυνατότητα υπηρεσιών για κάθε δική σου υπηρεσία) θέλει και τα s.caps: γίνεται στο db.ts (capsPerService)
+  // rev 6 (δική της δυνατότητα υπηρεσιών για κάθε δική σου υπηρεσία) θέλει και τα s.caps: γίνεται στο db.ts (capsPerService),
+  // μαζί με το rev 7 (κάθε δική σου υπηρεσία μετρά ως δική της, ownKinds), που πρέπει να γίνει μετά από αυτό
   return st;
 }
 // Κωδικοί θέσεων (rev 3): όσες θέσεις δεν έχουν κωδικό παίρνουν τον προεπιλεγμένο του εντύπου (Θ1α…Θ4β στη ΣΒΕΝ,
