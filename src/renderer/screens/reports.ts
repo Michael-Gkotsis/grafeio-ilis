@@ -187,7 +187,7 @@ function Preview({ pv, busy, picking, marks, head, onPick }: P) {
 // ζητά προεπισκόπηση λίγο μετά την τελευταία αλλαγή (όχι σε κάθε πλήκτρο: το Atom φτιάχνει ένα xlsx κάθε φορά)
 function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean) {
   const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, ids.slice(0, 120), d, raw]);
+  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, r.sigs, r.layout, ids.slice(0, 120), d, raw]);
   useEffect(() => {
     if (!src) { setPv(null); return; }
     let live = true; setBusy(true);
@@ -272,7 +272,7 @@ export function ReportsScreen() {
         <td>${pickText(r, state)}</td><td className="nw muted">${lastTxt(last[r.id], today)}</td>
         <td className="rep-table__acts"><${Button} size="sm" onClick=${() => go(r)} data-tip=${needsAsk(r) ? 'Δείχνει πρώτα ποιοι μπαίνουν' : 'Βγαίνει τώρα, για ' + (r.day === 'tomorrow' ? 'αύριο' : 'σήμερα')}>${needsAsk(r) ? 'Βγάλε…' : 'Βγάλε'}<//>
           <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
-          <${Button} size="sm" variant="ghost" onClick=${() => setSigFor(r)} data-tip=${'Υπογραφές' + (r.sigs ? ' (δικές του)' : '') + ': ' + sigsText(r.sigs ?? sigsSaved(state.settings, 'reports')) + '. Αλλάζεις, προσθέτεις ή αλλάζεις σειρά πριν βγει.'}>Υπογραφές…<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => setSigFor(r)} data-tip=${'Υπογραφές' + (r.sigs ? ' (δικές του)' : '') + ': ' + sigsText(r.sigs ?? sigsSaved(state.settings, 'reports')) + '. Αλλάζεις, προσθέτεις ή αλλάζεις σειρά πριν βγει, ή σέρνεις κεφαλίδα, τίτλο και υπογραφές αλλού («Θέσεις στο χαρτί…»).'}>Υπογραφές…<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setHist(r)} data-tip="Πότε βγήκε και ποιοι μπήκαν· ξαναβγαίνει ίδιο αν χαθεί το χαρτί">Ιστορικό<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setWiz({ r })}>Αλλαγή<//>
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
@@ -367,6 +367,10 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const [view, setView] = useState<'filled' | 'tpl'>('filled');
   const [signers, setSigners] = useState(state.settings.signers || { sergeant: '', commander: '' });
   const [busy, setBusy] = useState(false);
+  // «Θέσεις στο χαρτί…» μέσα στον οδηγό· layN: για πόσες υπογραφές είναι οι θέσεις που έσυρες (άλλο πλήθος: δεν ταιριάζουν πια)
+  const [lay, setLay] = useState(false);
+  const sigN = (x?: Report) => (x?.sigs ? sigsClean(x.sigs) : sigsSaved(state.settings, 'reports')).length;
+  const layN = useRef(initial ? sigN(initial) : 0);
   // κάτι διαλέχτηκε ή άλλαξε: Esc και ✕ ρωτούν πριν πεταχτεί το έντυπο
   const [r0] = useState(() => JSON.stringify(r)); const dirty = !busy && (!!mode || JSON.stringify(r) !== r0);
   const d = repDate(r, today);
@@ -453,8 +457,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
       let rr: Report = { ...r, name: r.name.trim() }; let list = [...tpls];
       // δικές του υπογραφές (καθαρές)· άλλο πλήθος από πριν: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
       if (rr.sigs) rr.sigs = sigsClean(rr.sigs); else delete rr.sigs;
-      const nSig = (x?: Report) => (x?.sigs ?? sigsSaved(state.settings, 'reports')).length;
-      if (rr.layout && initial && nSig(rr) !== nSig(initial)) { const l = dropSigMoves({ main: rr.layout })?.main; if (l) rr.layout = l; else delete rr.layout; }
+      if (rr.layout && sigN(rr) !== layN.current) { const l = dropSigMoves({ main: rr.layout })?.main; if (l) rr.layout = l; else delete rr.layout; }
       if (mode === 'build' && build) {
         const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
         const file = tpl && !shared ? tpl.file : undefined;
@@ -487,7 +490,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
       <div className="rep-wiz__main">
         ${step === 1 && html`<${StepTpl} mode=${mode} tpl=${tpl} build=${build} tpls=${tpls} upload=${upload} onBuild=${startBuild} onTpl=${(t: RepTpl) => { upd({ name: r.name || t.name }); useTpl(t, r.kind, false).then(() => setStep(2)); }}/>`}
         ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
-        ${step === 3 && mode === 'build' && build && html`<${Builder} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd}
+        ${step === 3 && mode === 'build' && build && html`<${Builder} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd} onLayout=${() => setLay(true)}
           onExcel=${async () => {
             const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
             const b = await window.api.repBuild(build, r.kind, tpl && !shared ? tpl.file : undefined);
@@ -498,7 +501,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
             setNote('Άνοιξε στο Excel. Άλλαξε ό,τι θέλεις, αποθήκευσε, και πάτα «Ξαναδιάβασε το πρότυπο». Οι {ΕΤΙΚΕΤΕΣ} μέσα στο Excel γεμίζουν μόνες τους.');
           }}/>`}
         ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
-          signers=${signers} setSigners=${setSigners} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
+          signers=${signers} setSigners=${setSigners} onLayout=${() => setLay(true)} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
         ${step === 4 && quick && html`<${Alert} tone="info">Ξεκίνησες από το έτοιμο «${r.name}»: οι στήλες είναι έτοιμες. Διάλεξε ποιοι μπαίνουν και πάτα «Αποθήκευση και Βγάλε», ή «Επόμενο» για το πού βγαίνει. Τις στήλες τις αλλάζεις από το βήμα 3.<//>`}
         ${step === 4 && html`<${StepPick} r=${r} upd=${upd} p=${p}/>`}
         ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
@@ -510,6 +513,9 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
         <${Preview} pv=${prev.pv} busy=${prev.busy} picking=${!!picking} head=${raw ? r.head : 0} marks=${raw ? [...r.cells.map(c => c.ref), ...(insp?.tags || []).map(t => t.ref)] : []} onPick=${onPick}/>
       </div>`}
     </div>
+    ${lay && src && html`<${LayoutDialog} title=${r.name || 'Νέο έντυπο'} sigs=${r.sigs ? sigsClean(r.sigs) : mode === 'build' ? sigsSaved(state.settings, 'reports') : undefined} initial=${r.layout ? { main: r.layout } : undefined}
+      onClose=${() => setLay(false)} onSave=${(l: Layout | undefined) => { layN.current = sigN(r); upd({ layout: l?.main }); }}
+      req=${(l: Layout) => ({ report: { ...r, ...(r.sigs ? { sigs: sigsClean(r.sigs) } : {}), layout: l.main }, ...('build' in src ? { build: src.build } : { file: src.file }), ids: pvIds, date: d })}/>`}
   <//>`;
 }
 
@@ -544,7 +550,7 @@ function SignerFields({ signers, setSigners, both }: P) {
 // Υπογραφές του εντύπου μέσα στον οδηγό (Michael, 22/10: «να βάζεις και να βγάζεις όποια υπογραφή θέλεις»): καμία, οι κοινές
 // (Ρυθμίσεις › Υπογραφές › Έντυπα, ή στο ανεβασμένο πρότυπο όσες έχει), ή δικές του (Report.sigs). Στο «Φτιάξ' το εδώ»,
 // «Καμία» σημαίνει και χωρίς γραμμή υπογραφών στο πρότυπο (none/setNone)· στο ανεβασμένο, κενή λίστα που σβήνει όσες έχει.
-function RepSigs({ r, upd, none, setNone, upload }: P) {
+function RepSigs({ r, upd, none, setNone, upload, onLayout }: P) {
   const { state } = useStore(); const base = sigsSaved(state.settings, 'reports');
   const [mode, setMode] = useState<'none' | 'base' | 'own'>(() => (r.sigs ? (r.sigs.length ? 'own' : 'none') : none ? 'none' : 'base'));
   const to = (m: 'none' | 'base' | 'own') => {
@@ -552,15 +558,16 @@ function RepSigs({ r, upd, none, setNone, upload }: P) {
     upd({ sigs: m === 'own' ? (r.sigs?.length ? r.sigs : base.map(x => ({ ...x }))) : m === 'none' && upload ? [] : undefined });
   };
   return html`<div className="stack" style=${{ gap: '8px' }}>
-    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${mode} onChange=${to} items=${[{ value: 'none', label: 'Καμία' }, { value: 'base', label: upload ? 'Όπως το πρότυπο' : 'Από τις Ρυθμίσεις' }, { value: 'own', label: 'Δικές του' }]}/></div>
+    <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${mode} onChange=${to} items=${[{ value: 'none', label: 'Καμία' }, { value: 'base', label: upload ? 'Όπως το πρότυπο' : 'Από τις Ρυθμίσεις' }, { value: 'own', label: 'Δικές του' }]}/>
+      ${onLayout && html`<${Button} size="sm" variant="outline" onClick=${onLayout} data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί. Ισχύει και στο Excel και στην εκτύπωση.">Θέσεις στο χαρτί…${r.layout && Object.keys(r.layout).length ? ' •' : ''}<//>`}</div>
     ${mode === 'base' && html`<p className="note" style=${{ margin: 0 }}>${upload ? html`Όσες έχει το πρότυπο. Σε κελί με {ΥΠΟΓΡΑΦΕΣ} μπαίνουν οι κοινές: <b>${sigsText(base)}</b>.` : html`Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(base)}</b>.`} Οι κοινές αλλάζουν στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές<//> (Έντυπα).</p>`}
-    ${mode === 'own' && html`<p className="note" style=${{ margin: 0 }}>Μόνο για αυτό το έντυπο, από αριστερά προς τα δεξιά.${upload ? ' Μπαίνουν στη θέση των υπογραφών του προτύπου (ή στο {ΥΠΟΓΡΑΦΕΣ}), αλλιώς κάτω από τον πίνακα.' : ''} Τις μετακινείς στο χαρτί με «Υπογραφές…» › «Θέσεις στο χαρτί…» στη λίστα των εντύπων.</p>
+    ${mode === 'own' && html`<p className="note" style=${{ margin: 0 }}>Μόνο για αυτό το έντυπο, από αριστερά προς τα δεξιά.${upload ? ' Μπαίνουν στη θέση των υπογραφών του προτύπου (ή στο {ΥΠΟΓΡΑΦΕΣ}), αλλιώς κάτω από τον πίνακα.' : ''} Τις μετακινείς στο χαρτί με «Θέσεις στο χαρτί…».</p>
       <${SigEditor} value=${r.sigs || []} onChange=${(v: Sig[]) => upd({ sigs: v })} id="rep-sg"/>`}
   </div>`;
 }
 
 // «Φτιάξ' το εδώ»: στήλες, τίτλος, κεφαλίδα, υπογραφές, σελίδα
-function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd }: P) {
+function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout }: P) {
   const { state } = useStore(); const custom = sigsCustom(state.settings, 'reports');
   const set = (x: Partial<BuildOpts>) => setO({ ...o, ...x });
   const setCol = (i: number, x: Partial<BuildCol>) => set({ cols: o.cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)) });
@@ -583,7 +590,7 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd }: P) {
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος και ημερομηνία πάνω δεξιά</label>
     </div>
-    <${RepSigs} r=${r} upd=${upd} none=${o.sig === 'none'} setNone=${(none: boolean) => set({ sig: none ? 'none' : 'list' })}/>
+    <${RepSigs} r=${r} upd=${upd} none=${o.sig === 'none'} setNone=${(none: boolean) => set({ sig: none ? 'none' : 'list' })} onLayout=${onLayout}/>
     ${o.sig !== 'none' && !r.sigs && !custom && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${true}/>`}
     <div className="rep-opts"><span className="field__label">Σελίδα</span><${Segmented} small=${true} value=${o.land ? 'l' : 'p'} onChange=${(v: string) => set({ land: v === 'l' })} items=${[{ value: 'p', label: 'Όρθια' }, { value: 'l', label: 'Οριζόντια' }]}/>
       <span className="field__label">Γράμματα</span><${Segmented} small=${true} value=${String(o.sz)} onChange=${(v: string) => set({ sz: +v as BuildOpts['sz'] })} items=${[{ value: '10', label: '10' }, { value: '11', label: '11' }, { value: '12', label: '12' }]}/>
@@ -593,7 +600,7 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd }: P) {
 }
 
 // Ανεβασμένο πρότυπο: φύλλο, γραμμή επικεφαλίδων, ποια στήλη παίρνει τι, στοιχεία σε κελιά
-function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signers, setSigners, reread, sheetTo }: P) {
+function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signers, setSigners, reread, sheetTo, onLayout }: P) {
   if (!insp) return html`<div className="empty">Διαβάζεται το πρότυπο…</div>`;
   const colOf = (c: number) => r.cols.find((x: RepCol) => x.c === c);
   const setCol = (h: TplInspect['headers'][number], f: string, text?: string) => {
@@ -623,7 +630,7 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
       <${Select} className="ui-select" aria-label="Πρόσθεσε στοιχείο σε κελί" value="" onChange=${(e: any) => e.target.value && setPicking(e.target.value)}><option value="">+ Στοιχείο σε κελί (μετά κλικ στο κελί)…</option>${free.map(c => html`<option key=${c.k} value=${c.k}>${c.label}</option>`)}<//></div>
     ${keys.has('title') && html`<div className="field"><label className="field__label" htmlFor="m-title">Τίτλος</label><input id="m-title" className="ui-input" placeholder=${r.name} value=${r.title || ''} onChange=${(e: any) => upd({ title: e.target.value })}/></div>`}
     ${(keys.has('sgtName') || keys.has('cmdName')) && html`<${SignerFields} signers=${signers} setSigners=${setSigners} both=${keys.has('cmdName')}/>`}
-    <${RepSigs} r=${r} upd=${upd} upload=${true}/>
+    <${RepSigs} r=${r} upd=${upd} upload=${true} onLayout=${onLayout}/>
     <div className="rep-opts"><span className="field__label">Προεπισκόπηση</span><${Segmented} small=${true} value=${picking ? 'tpl' : view} onChange=${setView} items=${[{ value: 'filled', label: 'Με στοιχεία' }, { value: 'tpl', label: 'Το πρότυπο' }]}/>
       <${Button} size="sm" variant="ghost" onClick=${() => tpl && window.api.repOpenTpl(tpl.file)}>Άνοιξέ το στο Excel<//><${Button} size="sm" variant="ghost" onClick=${reread} data-tip="Αφού το άλλαξες και το αποθήκευσες στο Excel">Ξαναδιάβασε το πρότυπο<//></div>
     <p className="note">Μπορείς και να γράψεις μέσα στο Excel ετικέτες σε αγκύλες, π.χ. {ΚΕΦΑΛΙΔΑ}, {ΗΜΕΡΟΜΗΝΙΑ}, {ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}, {ΣΥΝΟΛΟ}, {ΛΟΧΙΑΣ}, {ΔΙΟΙΚΗΤΗΣ}: γεμίζουν μόνες τους.</p>

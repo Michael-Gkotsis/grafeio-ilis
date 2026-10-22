@@ -42,14 +42,14 @@ export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs:
 }
 // Υπογραφές σε κάθε φύλλο, και μετά ό,τι μετακίνησες πάνω στο χαρτί (κεφαλίδα, ημερομηνία, υπογραφές: layout.ts).
 // more: τα άλλα κομμάτια του φύλλου (κεφαλίδα, τόπος και ημερομηνία)· key: ποιο φύλλο του εντύπου (LAYOUT_SHEETS)
-// tagOnly: οι υπογραφές μόνο στο {ΥΠΟΓΡΑΦΕΣ} (Excel της εφαρμογής, χωρίς υπογραφές δικές τους)
-export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean }
+// tagOnly: οι υπογραφές μόνο στο {ΥΠΟΓΡΑΦΕΣ} (Excel της εφαρμογής, χωρίς υπογραφές δικές τους)· after, names: Έντυπα (placeSigs)
+export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean; after?: number; names?: string[] }
 export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
   const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
   const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
   const L = xlLook(s.settings); const hdr = formPart(L, 'hdr'), sig = formPart(L, 'sig');
   for (const x of sheets) {
-    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings, { tagOnly: x.tagOnly });
+    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings, { tagOnly: x.tagOnly, after: x.after, names: x.names });
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
     for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
