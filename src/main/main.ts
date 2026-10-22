@@ -16,7 +16,7 @@ import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
@@ -206,21 +206,14 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
     const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
-    const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), fr ? b.sheet : undefined);
+    const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), parts[0].sheet || (fr ? b.sheet : undefined));
     return { name: (fr ? frouraFile(s.settings) : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
   if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
-  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, map: await hkaiMap(buf, b), sigs });
+  // ΗΚΑΙ: οι θέσεις βρίσκονται από τα κείμενα του εντύπου (και του δικού σου στον φάκελο templates), και από πάνω ό,τι διόρθωσες
+  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, cells: b.cells, sigs });
   return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 }, sigs);
 }
-// ΗΚΑΙ σε δικό του template: οι θέσεις βρίσκονται από τα κείμενα του εντύπου, και από πάνω ό,τι διόρθωσε ο χρήστης
-async function hkaiMap(buf: Buffer, b: FormBinding) {
-  if (!b.file) return hkaiMapOf(b.cells);
-  const wb = await Workbook.open(buf); const front = b.sheet && wb.hasSheet(b.sheet) ? b.sheet : wb.sheetNames()[0];
-  const det = detectHkai({ name: front, rows: await wb.values(front, 120, 40) }, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own], store.state.settings.lists?.hkNames).map;
-  return { title: b.cells?.title || det.title, date: b.cells?.date || det.date, rows: { ...det.rows, ...(b.cells?.rows || {}) }, cols: { ...det.cols, ...(b.cells?.cols || {}) } };
-}
-
 // Ένα γράψιμο αρχείων τη φορά: η αυτόματη ενημέρωση, το «Ενημέρωση Excel» και η εξαγωγή εντύπου δεν διαβάζουν και
 // γράφουν το ίδιο Excel ή το forms.json ταυτόχρονα (αλλιώς χάνεται ό,τι έγραψε ο ένας)
 let ioChain: Promise<unknown> = Promise.resolve();

@@ -86,6 +86,8 @@ export class Sheet {
   private head = ''; private tail = ''; private rows: Row[] = [];
   // Κελιά που έγραψε η εφαρμογή: στην αποθήκευση ελέγχεται αν χωράει το κείμενό τους (Workbook.fitSheet)
   readonly wrote = new Set<string>();
+  // Τα κοινά κείμενα του βιβλίου: το get() δίνει το κείμενο, όχι τον αριθμό του (templates από Excel/LibreOffice)
+  sst: string[] = [];
   constructor(public name: string, public path: string, xml: string) {
     const a = xml.indexOf('<sheetData'); const b = xml.indexOf('</sheetData>');
     if (a < 0) throw new Error('Το φύλλο ' + name + ' δεν έχει δεδομένα');
@@ -312,6 +314,7 @@ export class Sheet {
   get(ref: string): string | null {
     const x = this.cell(ref, false); if (!x || !x.inner) return null;
     if (x.inner.startsWith('<is>')) return texts(x.inner);
+    if (attr(x.attrs, 't') === 's') { const v = /<v>([^<]*)<\/v>/.exec(x.inner)?.[1]; return v == null ? null : this.sst[Number(v)] ?? null; }
     const t = /<t[^>]*>([\s\S]*?)<\/t>/.exec(x.inner) || /<v>([\s\S]*?)<\/v>/.exec(x.inner);
     return t ? t[1].replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&') : null;
   }
@@ -505,7 +508,7 @@ export class Workbook {
     if (!e) throw new Error('Δεν υπάρχει φύλλο ' + nameOrIndex + ' στο template');
     let s = this.sheets.get(e.path);
     if (!s) {
-      s = new Sheet(e.name, e.path, await this.zip.file(e.path)!.async('string')); this.sheets.set(e.path, s);
+      s = new Sheet(e.name, e.path, await this.zip.file(e.path)!.async('string')); s.sst = await this.sharedStrings(); this.sheets.set(e.path, s);
       for (const x of this.moved) if (x.sheet !== e.name) s.shiftForeign(x.sheet, x.after, x.n);
     }
     return s;

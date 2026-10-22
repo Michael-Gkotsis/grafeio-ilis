@@ -28,16 +28,23 @@ function dataRowOf(ws: Sheet, head: number): number {
   for (const m of ws.merges()) if (m.r1 === head && m.r2 > last && m.r2 - head < 4) last = m.r2;
   return last + 1;
 }
+// Επικεφαλίδες σε δύο γραμμές με τη γραμμή των υπότιτλων ως «γραμμή επικεφαλίδων»: οι στήλες που είναι συγχωνευμένες
+// κάθετα ξεκινούν πιο πάνω, οπότε ο πίνακας ξεκινά από εκεί (αλλιώς χάνονται οι τίτλοι τους)
+function headTop(ws: Sheet, head: number): number {
+  let top = head;
+  for (const m of ws.merges()) if (m.r1 < head && m.r2 >= head && head - m.r1 < 4) top = Math.min(top, m.r1);
+  return top;
+}
 // Η γραμμή των επικεφαλίδων: όπου τα περισσότερα κείμενα μοιάζουν με γνωστά ονόματα (ΒΑΘΜΟΣ, ΑΣΜ…), αλλιώς η πρώτη με 3+ κείμενα
-function findHead(rows: XlValue[][], kind: RepKind): { head: number; guessed: boolean } {
+function findHead(rows: XlValue[][], kind: RepKind): { head: number; guessed: boolean; score: number } {
   let best = -1, score = 1;
   for (let r = 0; r < Math.min(rows.length, 60); r++) {
     const n = (rows[r] || []).filter(v => typeof v === 'string' && guessField(kind, v)).length;
     if (n > score) { best = r; score = n; }
   }
-  if (best >= 0) return { head: best + 1, guessed: true };
-  for (let r = 0; r < Math.min(rows.length, 60); r++) if ((rows[r] || []).filter(v => typeof v === 'string' && v.trim()).length >= 3) return { head: r + 1, guessed: false };
-  return { head: 1, guessed: false };
+  if (best >= 0) return { head: best + 1, guessed: true, score };
+  for (let r = 0; r < Math.min(rows.length, 60); r++) if ((rows[r] || []).filter(v => typeof v === 'string' && v.trim()).length >= 3) return { head: r + 1, guessed: false, score: 0 };
+  return { head: 1, guessed: false, score: 0 };
 }
 // Οι επικεφαλίδες κάθε στήλης (από τη γραμμή head ως πριν τα δεδομένα: η πιο κάτω που έχει κείμενο)
 function headersOf(ws: Sheet, rows: XlValue[][], head: number, data: number, kind: RepKind) {
@@ -57,8 +64,9 @@ function headersOf(ws: Sheet, rows: XlValue[][], head: number, data: number, kin
   if (out.some(h => h.f === 'origin')) out.forEach(h => { if (h.f === 'rank') h.f = 'rank1'; });
   return out;
 }
-// Πόσες έτοιμες κενές γραμμές έχει το πρότυπο κάτω από τις επικεφαλίδες (τουλάχιστον 1: η γραμμή-πρότυπο)
-function preparedRows(ws: Sheet, data: number, cols: number[]): number {
+// Πόσες έτοιμες κενές γραμμές έχει το πρότυπο κάτω από τις επικεφαλίδες (τουλάχιστον 1: η γραμμή-πρότυπο). Έτοιμη
+// γραμμή μπορεί να έχει ήδη τον αύξοντα αριθμό της στη στήλη Α/Α (aa: 2, 3, 4…, όπως τα αριθμούν πολλοί στο Excel)
+function preparedRows(ws: Sheet, data: number, cols: number[], aa?: number): number {
   if (!cols.length) return 1;
   const s0 = ws.style(colName(cols[0]) + data);
   let k = 1;
@@ -66,7 +74,7 @@ function preparedRows(ws: Sheet, data: number, cols: number[]): number {
     const ref0 = colName(cols[0]) + r;
     if (!ws.raw(ref0) && ws.style(ref0) == null) break;   // η γραμμή δεν υπάρχει
     if (ws.style(ref0) !== s0) break;
-    if (cols.some(c => { const x = ws.raw(colName(c) + r); return x && !x.inner.includes('<f'); })) break;
+    if (cols.some(c => { const x = ws.raw(colName(c) + r); if (!x || x.inner.includes('<f') || !/<v>|<is>/.test(x.inner)) return false; return !(c === aa && Number((ws.get(colName(c) + r) || '').trim()) === k + 1); })) break;
     k++;
   }
   return k;
@@ -85,12 +93,20 @@ const tagCells = (rows: XlValue[][]) => {
 };
 export async function inspectTemplate(buf: Buffer | Uint8Array, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect> {
   const wb = await Workbook.open(buf);
-  const sheets = wb.sheetNames(); const name = sheet && wb.hasSheet(sheet) ? sheet : sheets[0];
+  const sheets = wb.sheetNames();
+  // χωρίς φύλλο: αυτό με τις περισσότερες γνωστές επικεφαλίδες (όχι ένα φύλλο οδηγιών μπροστά), αλλιώς το πρώτο
+  let name = sheet && wb.hasSheet(sheet) ? sheet : sheets[0];
+  if (!sheet || !wb.hasSheet(sheet)) {
+    const score = (rows: XlValue[][]) => findHead(rows, kind).score * 100 + rows.flat().filter(v => typeof v === 'string' && (guessField(kind, v) || /\{[^{}]+\}/.test(v))).length;
+    let top = 0;
+    for (const n of sheets) { const sc = score(await wb.values(n, SCAN_ROWS, SCAN_COLS)); if (sc > top) { top = sc; name = n; } }
+  }
   const ws = await wb.sheet(name); const rows = await wb.values(name, SCAN_ROWS, SCAN_COLS);
   const found = head ? { head, guessed: false } : findHead(rows, kind);
+  found.head = headTop(ws, found.head);
   const data = dataRowOf(ws, found.head);
   const headers = headersOf(ws, rows, found.head, data, kind);
-  return { sheets, sheet: name, head: found.head, data, headers, tags: tagsOf(rows, data), prepared: preparedRows(ws, data, headers.map(h => h.c)), guessed: found.guessed };
+  return { sheets, sheet: name, head: found.head, data, headers, tags: tagsOf(rows, data), prepared: preparedRows(ws, data, headers.map(h => h.c), headers.find(h => h.f === 'aa')?.c), guessed: found.guessed };
 }
 
 // Αν άλλαξε το πρότυπο στο Excel (π.χ. μπήκε γραμμή πάνω από τον πίνακα), οι επικεφαλίδες ξαναβρίσκονται από τα κείμενά τους
@@ -181,8 +197,8 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
   }
   for (const c of r.cells) if (c.k !== GTITLE && /^[A-Z]{1,3}\d+$/.test(c.ref) && !inTable.has(c.ref)) { mark(c.k, c.ref); if (c.k === 'sigs') ws.set(c.ref, SIG_TAG); else await put(c.ref, val(c.k)); }
   // ο πίνακας: όσες γραμμές χρειάζονται, με τη μορφή της γραμμής-προτύπου
-  const k = preparedRows(ws, data, cols.map(c => c.c));
   const aa = cols.find(c => c.f === 'aa');
+  const k = preparedRows(ws, data, cols.map(c => c.c), aa?.c);
   // ό,τι είναι κάτω από τον πίνακα κατεβαίνει ή ανεβαίνει μαζί του
   const shift = (by: number) => { for (const key of ['head', 'date'] as const) parts[key] = parts[key].map(x => x.replace(/(\d+)$/, (_m, nn: string) => String(+nn > data + k - 1 ? Math.max(1, +nn + by) : +nn))); };
   if (n > k) shift(n - k);
@@ -198,6 +214,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ro
     const row = data + i;
     for (const c of cols) {
       const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
+      if (i >= n && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
       ws.set(ref, i < n ? fieldValue(s, r.kind, rows[i], c.f, i, d, c.text) : null);
     }
   }

@@ -42,13 +42,14 @@ export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.p
 
 export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
 // Τι γράφεται πού: θέσεις με δικό τους κελί, και όσες δεν έχουν (π.χ. νέα υπηρεσία «Πύλη») σε γραμμές από κάτω
-export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s)): FrouraLayout {
-  const form = frouraForm(s, phase); const g = s.guards[date] || {}; const pm = seatMap(s);
+// pos: τα κελιά των θέσεων στο template που βγαίνει (tplmap.ts)· χωρίς αυτά, όπως στο template της εφαρμογής (οθόνη)
+export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s), pos: Record<string, string> = frouraForm(s, phase).pos): FrouraLayout {
+  const g = s.guards[date] || {}; const pm = seatMap(s);
   const cells = new Map<string, string[]>(); const extra: FrouraLayout['extra'] = [];
   const posts = postsOf(s.settings);
   for (const x of posts) {
     if (x.k === 'ly' || x.k === 'dy') continue;
-    const person = g[x.k] ? pm.get(g[x.k]) : undefined; const at = form.pos[x.k];
+    const person = g[x.k] ? pm.get(g[x.k]) : undefined; const at = pos[x.k];
     if (at) { if (!cells.has(at)) cells.set(at, []); if (person) cells.get(at)!.push(dutyName(person)); continue; }
     const same = posts.filter(y => y.block === x.block); const b = blocksOf(s.settings, phase).find(y => y.id === x.block);
     const label = norm(b ? b.name : x.label) + (same.length > 1 ? ' ' + (same.indexOf(x) + 1) + 'ο' : '');
