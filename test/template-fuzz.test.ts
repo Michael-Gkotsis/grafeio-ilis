@@ -189,7 +189,7 @@ describe('ΗΚΑΙ / ΗΚΑΛ σε τυχαία templates', () => {
       let s = busy();
       // ένας λοχίας και ένας επιλοχίας (γραμμές που μπορεί να λείπουν από το template), στελέχη, οχήματα, ατυχήματα
       s = { ...s, people: s.people.map(p => (p.id === 3 ? { ...p, rank: 'ΛΧΙΑΣ' } : p.id === 4 ? { ...p, rank: 'ΕΠΙΛΧΙΑΣ' } : p)) };
-      s = { ...s, settings: { ...s.settings, ...(lochos ? unitSettingsFor(s.settings, 'lochos') : {}), unitKind: lochos ? 'lochos' : undefined, cadre: { ...s.settings.cadre, 'Ίλαρχοι': 2, 'Ανθυπασπιστές': 1 }, hkai: { veh: { type: '1/4 ΤΟΝ', prov: 3, kin: 2, maint: 1, dmg: 0 } } } };
+      s = { ...s, settings: { ...s.settings, ...(lochos ? unitSettingsFor(s.settings, 'lochos') : {}), unitKind: lochos ? 'lochos' : undefined, cadre: { ...s.settings.cadre, 'Ίλαρχοι': 2, 'Ανθυπασπιστές': 1 }, hkai: { veh: { type: '1/4 ΤΟΝ', prov: 3, kin: 2, maint: 1, dmg: 0 }, on: ['lv'] } } };
       s = apply(s, { t: 'declare', cmd: { type: 'LEAVE', pids: [26], from: D, to: '2026-10-15' } }, ctx).state;
       s = apply(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { accT: 'ΟΧΙ', accP: '1', accM: 'ΟΧΙ', loi: 'ΤΙΠΟΤΑ ΑΞΙΟΣΗΜΕΙΩΤΟ' } } }, ctx).state;
       const why = gen.desc.join(' · ');
