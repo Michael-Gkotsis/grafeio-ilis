@@ -206,11 +206,8 @@ export function Strip({ className, children, ...rest }: P) {
 // Ο υπότιτλος σε μία γραμμή, για να μένει χώρος για τον πίνακα σε 1366×768. Αν δεν χωρά: όλος στη συμβουλή, και με κλικ ανοίγει.
 // Ο υπότιτλος σε μία γραμμή· αν κόβεται, ολόκληρος στο tooltip και με κλικ. Ο έλεγχος γίνεται μετά το layout
 // (ResizeObserver και requestAnimationFrame): μέσα στο render θα ανάγκαζε layout όλης της οθόνης (ΗΚΑΙ: ~0,4 δευτ.)
+// μία σύντομη πρόταση, ολόκληρη (όχι κομμένη με «…»)· τα υπόλοιπα στον Οδηγό της οθόνης (F1)
 function PageSub({ sub }: P) {
-  const ref = useRef<HTMLParagraphElement>(null); const [cut, setCut] = useState(''); const [open, setOpen] = useState(false);
-  const check = useCallback(() => { const el = ref.current; if (el) setCut(el.scrollWidth > el.clientWidth + 1 ? el.textContent || '' : ''); }, []);
-  useEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); return () => ro.disconnect(); }, [check]);
-  useEffect(() => { const id = requestAnimationFrame(check); return () => cancelAnimationFrame(id); });
-  return html`<p ref=${ref} className=${cx('page-head__sub', open && 'is-open', cut && 'is-cut')} data-tip=${cut && !open ? cut : undefined} onClick=${cut || open ? () => setOpen(!open) : undefined}>${sub}</p>`;
+  return html`<p className="page-head__sub">${sub}</p>`;
 }
 export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }

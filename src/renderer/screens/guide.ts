@@ -97,7 +97,7 @@ export function searchGuide(q: string): Hit[] {
 export function GuideScreen() {
   const nav = useNav(); const { boot, state } = useStore();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
-  const topic = byId.get(nav.params.topic) || GUIDE[0];
+  const topic = byId.get(nav.params.topic) || byId.get('about') || GUIDE[0];
   const open = (id: string) => { setQ(''); nav.set({ topic: id }); };
   useEffect(() => { window.scrollTo(0, 0); }, [topic.id]);
   const hits = useMemo(() => searchGuide(dq), [dq]);

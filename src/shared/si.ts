@@ -64,6 +64,8 @@ export interface SiOf { label: string; cat: string; known: boolean; text: string
 // ρωτιέται για κάθε υποψήφιο σε κάθε θέση της αυτόματης συμπλήρωσης: κρατιέται ανά ρυθμίσεις Λιστών, Σ.Ι. και κατηγορία
 const ofIdx = new WeakMap<object, Map<string, SiOf>>();
 const NO_LISTS = {};
+// σύντομα για στενές στήλες: «Ι3 ΧΩΡΙΣ ΟΠΛΟ» → «Ι3 άοπλος», «Ι3 ΜΕ ΟΠΛΟ» → «Ι3 ένοπλος» (όλο το κείμενο στη συμβουλή)
+export const siShort = (text: string) => text.replace(/ ΧΩΡΙΣ ΟΠΛΟ(?=$|\s)/, ' άοπλος').replace(/ ΜΕ ΟΠΛΟ(?=$|\s)/, ' ένοπλος');
 export function siOf(p: { si?: string; siCat?: string }, lists?: UserLists): SiOf {
   let m = ofIdx.get(lists || NO_LISTS); if (!m) { m = new Map(); ofIdx.set(lists || NO_LISTS, m); }
   const k = (p.si || '') + '\u0001' + (p.siCat || ''); let r = m.get(k);

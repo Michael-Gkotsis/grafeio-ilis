@@ -34,7 +34,7 @@ const SCREENS: Record<string, [string, any, any]> = {
 };
 // το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
 const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
-const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates', 'guide'];
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1 (το μενού χωρά σε 1366×768)
 const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, το Ιστορικό μόνο από το μενού
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
 const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
@@ -125,7 +125,7 @@ function Shell() {
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
   const [layer, setLayer] = useState<any>(null);
-  // Υπόμνημα (F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
+  // Υπόμνημα (Shift+F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
   const [personList, setPersonList] = useState<number[] | null>(null);   // ↑/↓ στην καρτέλα: η λίστα από την οποία άνοιξε
@@ -180,8 +180,9 @@ function Shell() {
         e.preventDefault(); const el = document.querySelector('.main input[type="search"]') as HTMLInputElement | null;
         if (el) { el.focus(); el.select(); } else setOver('palette');
       }
-      else if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); help(); }
-      else if (e.key === 'F1') { e.preventDefault(); setOver('legend'); }
+      // F1 = οδηγός στο θέμα της οθόνης (όπως σε κάθε πρόγραμμα), Shift+F1 = υπόμνημα κωδικών
+      else if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); setOver('legend'); }
+      else if (e.key === 'F1') { e.preventDefault(); help(); }
     };
     // πλαϊνό κουμπί «πίσω» του ποντικιού
     const m = (e: MouseEvent) => { if (e.button === 3) { e.preventDefault(); goBack(); } };
@@ -197,7 +198,7 @@ function Shell() {
   const navItem = (v: string, inRail = false) => {
     const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
     const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
-    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : v === 'guide' ? ' (Shift+F1)' : '';
+    const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : v === 'guide' ? ' (F1)' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
       data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
       ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
@@ -212,8 +213,8 @@ function Shell() {
         <div className="topbar__right">
           <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
-          <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
-          <${Button} variant="ghost" size="icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (Shift+F1)" data-tip-side="left" onClick=${help}>${Icon.help}<//>
+          <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
+          <${Button} variant="ghost" size="icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (F1)" data-tip-side="left" onClick=${help}>${Icon.help}<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>

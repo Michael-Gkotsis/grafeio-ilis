@@ -40,7 +40,7 @@ export function LeavesTab() {
     const n = daysBetween(today, s.to) - 1; return n === 0 ? 'τελευταία μέρα σήμερα' : n === 1 ? 'τελευταία μέρα αύριο' : 'λείπει ακόμα ' + (n + 1) + ' ημ.';
   };
   return html`<div>
-    <${PageHeader} title="Άδειες" sub="Κανονικές, τιμητικές και αναρρωτικές. Γράφονται στην ${HK()} (3. Άδειες, Απόντες) και στη Δύναμη. Οι αιτήσεις άδειας είναι στην καρτέλα Αιτήσεις.">
+    <${PageHeader} title="Άδειες" sub="Κανονικές, τιμητικές και αναρρωτικές· γράφονται στην ${HK()} και στη Δύναμη.">
       <${Button} variant="outline" onClick=${() => nav.set({ hkTab: 'req' })}>Αιτήσεις<//><${Button} onClick=${() => nav.declare({ cat: 'abs' })}>+ Άδεια<//><//>
     <div style=${{ marginBottom: '12px' }}><${Segmented} value=${view} onChange=${(v: string) => nav.set({ leaveTab: v })} items=${[{ value: 'now', label: 'Τώρα και επόμενες (' + nNow + ')' }, { value: 'back', label: 'Γύρισαν (14 ημ.)' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, είδος άδειας ή σημείωση · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>${dq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>

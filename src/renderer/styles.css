@@ -184,13 +184,12 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .empty{padding:28px 16px;text-align:center;color:var(--muted-fg)}
 .page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
 .page-head > div{flex:1 1 260px;min-width:220px}
+@media (max-width:1279px){.page-head > div{flex-basis:180px;min-width:180px}}
 .page-head > .datebar,.page-head > .page-head__acts{flex:0 1 auto;min-width:0}
 .page-head > .page-head__acts{justify-content:flex-end;margin-left:auto}
 .page-head h1{font-size:25px;font-weight:700;line-height:1.2}
 .page-head p{margin:4px 0 0;color:var(--muted-fg)}
-.page-head__sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.page-head__sub.is-cut{cursor:pointer}
-.page-head__sub.is-open{white-space:normal}
+.page-head__sub{max-width:70ch}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
@@ -272,7 +271,7 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
 .is-rail .sidenav{padding:10px 6px}
 /* 11 οθόνες + σύμπτυξη χωρούν σε ύψος 768 (1366×768) χωρίς να κυλά το μενού· κάθε όνομα σε μία γραμμή */
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:52px;padding:6px 0;position:relative;text-align:center}
+.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:48px;padding:5px 0;position:relative;text-align:center}
 .is-rail .navbtn[aria-current="page"]{box-shadow:none}
 .is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.3px}
 .is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
@@ -828,7 +827,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 4px 0 6px;gap:2px;width:100%}.weapon-type > svg{width:14px;height:14px}
 .weapon-out{display:flex;align-items:center;gap:6px;min-width:0}.weapon-out small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.weapon-notes{display:flex;gap:6px;align-items:center}
+.weapon-notes{display:flex;gap:6px;align-items:center;min-width:0}
+.weapon-notes .ui-badge{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
 /* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
