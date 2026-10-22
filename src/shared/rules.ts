@@ -1,7 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkOfRank, hkRowClaim, hkRowList, hkRowsOf, leaveCol, medWarns, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, leaveCol, medWarns, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { statIsUnarmed, statNoOut, statOn } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -22,10 +22,10 @@ export const activePeople = (s: AppState) => s.people.filter(p => p.active);
 // ΕΠΟΠ και ΟΒΑ στρατιώτες (Michael, 21/10): μετρούν σαν στελέχη (καταστάσεις, απαλλαγή με το χέρι) αλλά κάνουν
 // ορισμένες υπηρεσίες τον μήνα (όριο monthMax), μόνο με το χέρι, ποτέ από την αυτόματη συμπλήρωση. Συνήθως είναι στα
 // Στελέχη: όποιο στέλεχος έχει όριο παίρνει αριθμό θέσης (Cadre.pid, αρνητικός) και μπαίνει στις θέσεις σαν άτομο (cadreSeat).
-// Αν κάποιος ΕΠΟΠ είναι στο Δυναμολόγιο (από το Excel): όποιος έχει ΕΠΟΠ ή ΟΒΑ στον βαθμό, ή δικό σου βαθμό που στην ΗΚΑΙ
-// μπαίνει στη γραμμή «ΕΠΟΠ/ΟΒΑ Στρατιώτης», ισχύουν τα ίδια.
+// Αν κάποιος ΕΠΟΠ είναι στο Δυναμολόγιο (από το Excel): όποιος έχει προέλευση ΕΠΟΠ ή ΟΒΑ (ή, από παλιά, ΕΠΟΠ/ΟΒΑ μέσα
+// στον βαθμό), ή δικό σου βαθμό που στην ΗΚΑΙ μπαίνει στη γραμμή «ΕΠΟΠ/ΟΒΑ Στρατιώτης», ισχύουν τα ίδια.
 export const EPOP_ROWS = ['ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης'];
-export const isEpop = (p: Pick<Person, 'rank'>, lists?: UserLists) => /(^|[^Α-Ω])(ΕΠΟΠ|ΟΒΑ)([^Α-Ω]|$)/.test((p.rank || '').toUpperCase().replace(/\./g, '')) || EPOP_ROWS.includes(hkRankOf(p.rank || '', lists));
+export const isEpop = (p: Pick<Person, 'rank' | 'origin'>, lists?: UserLists) => isEpopOrigin(p.origin) || /(^|[^Α-Ω])(ΕΠΟΠ|ΟΒΑ)([^Α-Ω]|$)/.test((p.rank || '').toUpperCase().replace(/\./g, '')) || EPOP_ROWS.includes(hkRankOf(p.rank || '', lists, p.origin));
 // Όσοι μπαίνουν στην αυτόματη συμπλήρωση και στη σειρά δικαιοσύνης: όλοι σε δύναμη εκτός από ΕΠΟΠ/ΟΒΑ
 const poolIdx = new WeakMap<Person[], { lists?: UserLists; out: Person[] }>();
 export function dutyPool(s: AppState): Person[] {
@@ -34,7 +34,7 @@ export function dutyPool(s: AppState): Person[] {
   return out;
 }
 export const cadreSeat = (c: Cadre): Person => ({
-  id: c.pid!, cid: c.id, rank: c.rank, spec: c.spec || '', last: c.last, first: c.first, father: '', asm: c.am || '', phone: c.phone || '',
+  id: c.pid!, cid: c.id, rank: c.rank, ...(c.origin ? { origin: c.origin } : {}), spec: c.spec || '', last: c.last, first: c.first, father: '', asm: c.am || '', phone: c.phone || '',
   room: null, si: '', post: null, role: c.role || null, essos: '', attached: false, active: c.active, notes: '', ...(c.monthMax ? { monthMax: c.monthMax } : {})
 });
 const seatsIdx = new WeakMap<Cadre[], Person[]>();
@@ -1080,9 +1080,10 @@ export function planStatusChanges(s: AppState, cmds: StatusCmd[], today?: ISODat
 export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
 export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
 export { HK_OFFICERS, HK_NCO } from './ranks';
-// Βαθμός προσώπου → γραμμή της ΗΚΑΙ: πρώτα ό,τι όρισες στις Λίστες για δικό σου βαθμό, αλλιώς από το όνομα
-export function hkRankOf(rank: string, lists?: UserLists): string {
-  const claim = hkRowClaim(lists, rank, 'nco'); if (claim) return claim;
+// Βαθμός (και προέλευση) προσώπου → γραμμή της ΗΚΑΙ: πρώτα ό,τι όρισες στις Λίστες για δικό σου βαθμό, αλλιώς από το
+// όνομα· ΕΠΟΠ/ΟΒΑ στρατιώτης στη δική του γραμμή, ο ΕΠΟΠ ΛΧΙΑΣ στους Λοχίες
+export function hkRankOf(rank: string, lists?: UserLists, origin?: string): string {
+  const claim = hkClaimOf(lists, rank, origin, 'nco'); if (claim) return claim;
   const own = hkOfRank(lists, 'soldierRanks', rank); if (own && hkRowsOf(lists).nco.includes(own)) return own;
   const r = rank.toUpperCase().replace(/\./g, '');
   if (/ΑΡΧΙΛΧ|ΑΡΧΙΛΟΧ/.test(r)) return 'Αρχιλοχίες';
@@ -1091,7 +1092,7 @@ export function hkRankOf(rank: string, lists?: UserLists): string {
   if (/ΔΝΕΑΣ|ΔΕΚΑΝ/.test(r)) return 'Δεκανείς';
   if (/ΕΠΟΠ/.test(r)) return 'ΕΠΟΠ Στρατιώτης';
   if (/ΟΒΑ/.test(r)) return 'ΟΒΑ Στρατιώτης';
-  return 'Στρατιώτες';
+  return originRow(origin) || 'Στρατιώτες';
 }
 // Η κατάσταση ενός στελέχους μια μέρα (η πρώτη, αν κατά λάθος επικαλύπτονται)
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
@@ -1114,7 +1115,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   // κατάσταση στελέχους = στήλη της ΗΚΑΙ: στους κωλυόμενους (υπηρεσία, ΕΥ…) ή στους απόντες (άδειες…)
   let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   for (const c of cl) {
-    const hk = rank[c.hk] ? c.hk : guessHk(c.rank, lists); const r = rank[hk] ? hk : 'Λοχίες'; rank[r].n++;
+    const hk = rank[c.hk] ? c.hk : guessHk(c.rank, lists, c.origin); const r = rank[hk] ? hk : 'Λοχίες'; rank[r].n++;
     const a = cadreAbsOn(s, c.id, date);
     // ΕΠΟΠ/ΟΒΑ με υπηρεσίες: η κατάσταση που έγραψες, αλλιώς η θέση της μέρας στις Υπηρεσίες (η απαλλαγή μόνο με το χέρι)
     const dk = c.pid != null ? onDuty.get(c.pid) : undefined;
@@ -1124,7 +1125,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   let soldiers = 0; const at = hkMin(s.rules);
   for (const p of activePeople(s)) {
     soldiers++;
-    const r = hkRankOf(p.rank, s.settings.lists); rank[r].n++; if (p.attached) rank[r].attached++;
+    const r = hkRankOf(p.rank, s.settings.lists, p.origin); rank[r].n++; if (p.attached) rank[r].attached++;
     // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)
     const ss = statusesFrom(s.statuses, p.id, date, at);
     const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);

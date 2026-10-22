@@ -8,6 +8,7 @@ import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, D
 import { daysBetween, today } from '../shared/dates';
 import { capsPerService } from '../shared/rules';
 import { writeDurable } from './files';
+import { splitOrigins } from '../shared/ranks';
 
 // empty: το αρχείο είναι άδειο (0 bytes) ή δεν έχει τους πίνακές μας (κόψιμο ρεύματος, μισή αντιγραφή φακέλου)
 export class CorruptDbError extends Error { constructor(msg: string, public empty = false) { super(msg); } }
@@ -104,6 +105,8 @@ export class Store {
       const s0 = this.state; const caps = capsPerService(s0.settings, s0.caps);
       this.commit({ ...s0, ...(caps ? { caps } : {}), settings: { ...s0.settings, rev: 6 } }); this.flush();
     }
+    // προέλευση (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» στον βαθμό γίνεται βαθμός ΛΧΙΑΣ με προέλευση ΕΠΟΠ (μόνο όσοι το έχουν)
+    const so = splitOrigins(this.state); if (so) { this.commit(so); this.flush(); }
     // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου
     // υπηρεσιών, οπότε ο έλεγχος μετά την αναβάθμιση δεν χρειάζεται ποτέ
     const st = this.state;

@@ -3,7 +3,7 @@ import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, activePeople, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
-import { hkRowsOf } from '../shared/ranks';
+import { hkRowsOf, rankTxt } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
@@ -129,7 +129,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   const g = s.guards[date] || {}; const pm = seatMap(s); const posts = postsOf(s.settings);
   let night = 0, day24 = 0;
   for (const k in g) { const p = posts.find(x => x.k === k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
-  const name = (pid: number) => { const p = pm.get(pid); return p ? [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };
+  const name = (pid: number) => { const p = pm.get(pid); return p ? [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };
   const egr = hkaiEgrLines(s, date), dia = hkaiDiaLines(s, date), leaves = hkaiLeaveLines(s, date), puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
   // ενότητες που η Ίλη έκλεισε: κενές, όπως στο έντυπο
   const grd = hkOn(s.settings, 'grd'), v = hkOn(s.settings, 'veh') ? s.settings.hkai?.veh : undefined, acc = hkOn(s.settings, 'acc');

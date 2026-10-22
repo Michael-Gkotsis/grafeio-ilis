@@ -6,7 +6,7 @@ import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
 import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, movesOn, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
-import { listOf, statusLbl } from './ranks';
+import { listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
@@ -33,7 +33,9 @@ export const rowNoun = (k: RepKind) => (k === 'cadre' ? 'στελέχη' : k ===
 export type Align = 'left' | 'center';
 export interface FieldDef { k: string; label: string; head: string; w: number; al: Align }
 const F = (k: string, label: string, head: string, w: number, al: Align = 'center'): FieldDef => ({ k, label, head, w, al });
-const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός', 'ΒΑΘΜΟΣ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
+// Βαθμός: με την προέλευση μπροστά (ΕΠΟΠ ΛΧΙΑΣ), όπως το ονοματεπώνυμο ενώνει επώνυμο και όνομα· και χωριστά (Michael, 22/10)
+const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός (με την προέλευση, π.χ. ΕΠΟΠ ΛΧΙΑΣ)', 'ΒΑΘΜΟΣ', 11), F('rank1', 'Μόνο βαθμός (χωρίς προέλευση)', 'ΒΑΘΜΟΣ', 10),
+  F('origin', 'Προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ…)', 'ΠΡΟΕΛΕΥΣΗ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
 // τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
 const SOLDIER = [
   F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
@@ -206,7 +208,7 @@ export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols:
 const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');
 const GUESS: [string, RegExp][] = [
   ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/], ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
-  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
+  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
   ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
   ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
@@ -277,7 +279,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
   if (kind === 'cadre') {
     const c = x as Cadre; const nm = [c.last, c.first].filter(Boolean).join(' ');
     switch (f) {
-      case 'rank': return c.rank; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [c.rank, c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
+      case 'rank': return rankTxt(c); case 'rank1': return c.rank; case 'origin': return c.origin || ''; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
       case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
       case 'status': return cadreStatusOn(s, c.id, d)?.label || '';
     }
@@ -285,8 +287,8 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
   }
   const p = x as Person;
   switch (f) {
-    case 'rank': return p.rank; case 'spec': return p.spec; case 'name': return fullName(p);
-    case 'who': return [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
+    case 'rank': return rankTxt(p); case 'rank1': return p.rank; case 'origin': return p.origin || ''; case 'spec': return p.spec; case 'name': return fullName(p);
+    case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
     case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
@@ -370,7 +372,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
   const { need, not } = condsOf(pk);
   if (need.length || not.length) { const t = condTest(s, d); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
-  if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.post, p.role].join(' ')).includes(normGreek(view.q))));
+  if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.origin, p.post, p.role].join(' ')).includes(normGreek(view.q))));
   if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
   if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }

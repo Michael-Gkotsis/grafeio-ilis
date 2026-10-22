@@ -1,7 +1,7 @@
 // Κείμενο ποινής για το Word (από την εφαρμογή του άλλου γραφέα): «Ο ΣΤΡ (ΠΖ) … τιμωρήθηκε την … από τον … με δύο (02) ημέρες κράτηση, διότι …»
 import { addDays, daysBetween, hkDate, type ISODate } from './dates';
 import { fullName, type AppState, type Person, type Status } from './domain';
-import { itemKey, userItem, type UserLists } from './ranks';
+import { itemKey, rankTxt, userItem, type UserLists } from './ranks';
 import { dutyIndexOf } from './rules';
 import { upper } from './text';
 import { withArticle } from './greek';
@@ -29,7 +29,7 @@ export const punAcc = (kind: string | undefined, lists?: UserLists): string => b
 export const overMax = (kind: string | undefined, days: number, lists?: UserLists) => { const m = punMax(kind, lists); return m && days > m ? m : 0; };
 export interface PunText { before: string; dur: string; after: string; plain: string; html: string }
 // «ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ», όπως γράφεται στις προτάσεις της ΗΚΑΙ
-export const hkWho = (p: Person) => p.rank + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p);
+export const hkWho = (p: Person) => rankTxt(p) + (p.spec ? ' (' + p.spec + ')' : '') + ' ' + fullName(p);
 // «Α», «Α και Β», «Α, Β και Γ»
 export const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' και ' + xs[xs.length - 1]);
 // Η διάρκεια χωριστά, για να μπει υπογραμμισμένη στο Word και στην ΗΚΑΙ. Πολλοί με την ίδια ποινή (ίδιο είδος,
@@ -54,7 +54,7 @@ function caps(t: { before: string; dur: string; after: string }, esc: (t: string
 export function punBySuggestions(s: AppState): string[] {
   const out = new Set<string>();
   for (const st of s.statuses) if (st.type === 'PUN' && st.by) out.add(st.by);
-  for (const c of s.cadreList || []) if (c.active) out.add((c.rank + ' ' + c.last).trim());
+  for (const c of s.cadreList || []) if (c.active) out.add((rankTxt(c) + ' ' + c.last).trim());
   return [...out].sort((a, b) => a.localeCompare(b, 'el'));
 }
 

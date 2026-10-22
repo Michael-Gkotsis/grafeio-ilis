@@ -10,6 +10,7 @@ import { preflight, hasErrors } from '../shared/preflight';
 import { byIds, fieldOf, fieldValue, type BuildOpts, type Report } from '../shared/reports';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
+import { rankTxt } from '../shared/ranks';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
@@ -17,7 +18,7 @@ const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨ
 function seed(): AppState {
   const s = emptyState();
   s.people = Array.from({ length: 120 }, (_, i): Person => ({
-    id: i + 1, rank: i % 23 === 4 ? 'ΕΠΟΠ ΛΧΙΑΣ' : i % 9 === 2 ? 'ΔΝΕΑΣ' : 'ΣΤΡ', spec: ['ΤΘ', 'ΤΧ', 'ΔΒ', 'ΠΖ'][i % 4],
+    id: i + 1, rank: i % 23 === 4 ? 'ΛΧΙΑΣ' : i % 9 === 2 ? 'ΔΝΕΑΣ' : 'ΣΤΡ', ...(i % 23 === 4 ? { origin: 'ΕΠΟΠ' } : {}), spec: ['ΤΘ', 'ΤΧ', 'ΔΒ', 'ΠΖ'][i % 4],
     last: SUR[i % SUR.length] + (i >= SUR.length ? ' ' + String.fromCharCode(913 + Math.floor(i / SUR.length)) : ''), first: FIRST[(i * 3) % FIRST.length], father: 'ΠΑΤΕΡΑΣ',
     asm: String(100000 + i * 37), phone: '6900' + String(100000 + i * 7919).slice(0, 6), room: (i % 8) + 1,
     si: i % 17 === 3 ? 'Ι3 ΑΟΠΛΟ' : i % 13 === 5 ? 'Ι4' : 'Ι1', post: i === 8 ? 'ΚΨΜ' : i === 50 ? 'ΙΑΤΡΟΣ ΣΤΕΠ' : null,
@@ -39,7 +40,7 @@ function seed(): AppState {
     ['ΑΛΧΙΑΣ', 'Αρχιλοχίες', 'ΠΑΡΑΔΕΙΓΜΑΤΑΣ', 'ΚΩΣΤΑΣ', 'Αρχιλοχίας'], ['ΕΠΧΙΑΣ', 'Επιλοχίες', 'ΔΕΙΓΜΑΤΙΔΗΣ', 'ΠΕΤΡΟΣ', 'Επιλοχίας'], ['ΛΧΙΑΣ', 'Λοχίες', 'ΤΥΧΑΙΟΥ', 'ΜΑΡΙΑ', 'Γραφείο']]
     .map(([rank, hk, last, first, role], i) => ({ id: 's' + i, rank, hk, last, first, role, spec: ['ΤΘ', 'ΠΖ', 'ΤΘ', 'ΔΒ', 'ΤΧ'][i], am: String(20450 + i * 113), phone: '69000000' + (10 + i), active: true }));
   // ΕΠΟΠ με υπηρεσίες τον μήνα: μπαίνει στις θέσεις μόνο με το χέρι
-  s.cadreList.push({ id: 's5', rank: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΥΠΟΔΕΙΓΜΑΤΑΚΗΣ', first: 'ΛΕΩΝ', spec: 'ΠΖ', active: true, monthMax: 4, pid: -1 });
+  s.cadreList.push({ id: 's5', rank: 'ΣΤΡ', origin: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΥΠΟΔΕΙΓΜΑΤΑΚΗΣ', first: 'ΛΕΩΝ', spec: 'ΠΖ', active: true, monthMax: 4, pid: -1 });
   s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
@@ -55,7 +56,7 @@ function seed(): AppState {
 // Φανταστικό βιβλίο με τη δομή του Δυναμολογίου (ΣΥΝΟΛΙΚΟ, ΤΙΜΩΡΗΜΕΝΟΙ, IATRIKA με 3 πίνακες): μόνο ψεύτικα ονόματα
 function fakeBook(s: AppState): SourceBook {
   const head = ['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος'];
-  const pr = (p: AppState['people'][number], i: number) => [i + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm || null, p.phone || null, p.room];
+  const pr = (p: AppState['people'][number], i: number) => [i + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm || null, p.phone || null, p.room];
   const D = (iso: string) => new Date(iso + 'T00:00:00Z');
   const ppl = s.people.slice(0, 60);
   const sheets: RawSheet[] = [
@@ -73,7 +74,7 @@ function fakeBook(s: AppState): SourceBook {
       const mon = ['ΙΑΝΟΥΑΡΙΟΥ', 'ΦΕΒΡΟΥΑΡΙΟΥ', 'ΜΑΡΤΙΟΥ', 'ΑΠΡΙΛΙΟΥ', 'ΜΑΪΟΥ', 'ΙΟΥΝΙΟΥ', 'ΙΟΥΛΙΟΥ', 'ΑΥΓΟΥΣΤΟΥ', 'ΣΕΠΤΕΜΒΡΙΟΥ', 'ΟΚΤΩΒΡΙΟΥ', 'ΝΟΕΜΒΡΙΟΥ', 'ΔΕΚΕΜΒΡΙΟΥ'][+ym.slice(5) - 1];
       const days = Array.from({ length: nd }, (_, i) => i + 1);
       return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', rows: [['ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + mon + ' ' + ym.slice(0, 4)], ['Α/Α', 'ΒΘΜ', 'Ο-Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΘΑΛΑΜΟΣ', 'ΑΡΓΕΙΑ', 'ΚΑΘΗΜΕΡΙΝΗ', 'ΣΥΝΟΛΟ', ...days.map(String)],
-        ...ppl.map((p, i) => [i + 1, p.rank, p.spec, p.last, p.first, p.room, null, null, null, ...days.map(d => ((d * 7 + i) % 13 === 0 ? (i % 3 ? 'Θ' + ((d + i) % 4 + 1) + 'α' : 'Θ') : (d * 5 + i) % 17 === 0 ? (i % 2 ? 'Μ' + ((d + i) % 5 + 1) : 'Μ') : null))])] };
+        ...ppl.map((p, i) => [i + 1, rankTxt(p), p.spec, p.last, p.first, p.room, null, null, null, ...days.map(d => ((d * 7 + i) % 13 === 0 ? (i % 3 ? 'Θ' + ((d + i) % 4 + 1) + 'α' : 'Θ') : (d * 5 + i) % 17 === 0 ? (i % 2 ? 'Μ' + ((d + i) % 5 + 1) : 'Μ') : null))])] };
     })()
   ];
   return { ok: true, file: 'C:\\Γραφείο\\ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', name: 'ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm', mtime: 0, size: 0, sheets, hits: detectTables(sheets) };

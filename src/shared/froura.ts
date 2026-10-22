@@ -5,6 +5,7 @@ import type { ISODate } from './dates';
 import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { seatMap, postsOf } from './rules';
+import { rankTxt } from './ranks';
 
 export interface FrouraForm {
   file: string;
@@ -34,7 +35,7 @@ export const phaseOf = (s: AppState): Phase => s.settings.phase || 'sven';
 // Τα κελιά του εντύπου: της ΣΒΕΝ ή της ΣΠΕΝ (και για τα δικά σου έντυπα, με όποιο από τα δύο βγαίνουν)
 export const frouraForm = (s: AppState, phase: Phase = phaseOf(s)): FrouraForm => FROURA_FORMS[phaseBase(s.settings, phase)];
 
-export const rankName = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
+export const rankName = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 // Στο έντυπο υπηρεσιών: μόνο επώνυμο και όνομα. Λ/Υ και Δ/Υ: βαθμός, όνομα, κινητό και όπλο (γραφέας, 10/10).
 export const dutyName = (p: Person) => fullName(p);
 export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '') + (p.weapon ? ', ΟΠΛΟ: ' + p.weapon : '');

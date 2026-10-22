@@ -3,7 +3,7 @@
 import { formText, hkRowLabel } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
-import { cadreAbsOf, hkRowsOf, type UserLists } from './ranks';
+import { cadreAbsOf, hkRowsOf, rankTxt, type UserLists } from './ranks';
 import { cadreAbsOn, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
@@ -58,11 +58,11 @@ export function cadreMatch(f: CadreFilter, c: Cadre, st: CadreStatus | undefined
 export function dutyOfficers(s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings'>, d: ISODate): string {
   const off = hkRowsOf(s.settings.lists).off;
   return orderedCadre(s.cadreList || []).filter(c => c.active && off.includes(c.hk) && cadreStatusOn(s, c.id, d)?.col === 'yp')
-    .map(c => [c.rank, c.last, c.first].filter(Boolean).join(' ')).join(', ');
+    .map(c => [rankTxt(c), c.last, c.first].filter(Boolean).join(' ')).join(', ');
 }
 export const hkOffText = (s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'hkaiManual'>, d: ISODate) => s.hkaiManual?.[d]?.text?.off?.trim() || dutyOfficers(s, d);
 // αναζήτηση χωρίς τόνους: βαθμός, Ο/Σ, όνομα, ΑΜ, θέση, τηλέφωνο
-export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).trim(); return !k || normGreek([c.rank, c.spec, c.last, c.first, c.am, c.role, c.phone, c.hk].join(' ')).includes(k); };
+export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).trim(); return !k || normGreek([c.rank, c.origin, c.spec, c.last, c.first, c.am, c.role, c.phone, c.hk].join(' ')).includes(k); };
 
 // Excel «Δυναμικό στελεχών»: όσοι είναι σε δύναμη με την κατάσταση της μέρας, όλες οι καταστάσεις από εκείνη τη μέρα
 // και μετά, και όσοι είναι εκτός δύναμης (αν υπάρχουν). Τα κεφαλαία τα βάζει το excel.ts, όπως σε κάθε Excel της εφαρμογής.
@@ -70,7 +70,7 @@ export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).tri
 export const CADRE_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΑΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΕΣΗ', 'ΓΡΑΜΜΗ ΗΚΑΙ'];
 export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const lists = s.settings.lists; const all = orderedCadre(s.cadreList || []);
-  const cells = (c: Cadre) => [c.rank, c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, s.settings)];
+  const cells = (c: Cadre) => [rankTxt(c), c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, s.settings)];
   const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col));
   const active = all.filter(c => c.active);
   const now = active.map((c, i) => {
@@ -80,7 +80,7 @@ export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const rows: (string | number)[][] = [];
   for (const c of active) for (const a of cadreAbsFrom(s, c.id, d)) {
     const st = cadreStatusOf(a, lists);
-    rows.push([rows.length + 1, c.rank, c.spec || '', c.last, c.first, st.label, where(st), dmy(a.from), dmy(a.to), a.note || '']);
+    rows.push([rows.length + 1, rankTxt(c), c.spec || '', c.last, c.first, st.label, where(st), dmy(a.from), dmy(a.to), a.note || '']);
   }
   const out: RosterSheet[] = [
     { name: 'ΣΤΕΛΕΧΗ', title: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d), head: [...CADRE_COLS, 'ΚΑΤΑΣΤΑΣΗ', 'ΑΠΟ', 'ΕΩΣ'], rows: now },

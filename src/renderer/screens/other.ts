@@ -25,7 +25,7 @@ import { GUIDE_TITLES } from '../guideTopic';
 import { SourcesAlert } from './srcStatus';
 import { appTitle } from '../../shared/brand';
 import { LeavesTab } from './leaves';
-import { cadreCountRows, hkRowList, listOf, statusLbl } from '../../shared/ranks';
+import { cadreCountRows, hkRowList, listOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
@@ -283,7 +283,7 @@ function HkaiMain() {
   const sum = html`<div className="stack"><${Card} title="Από πού βγαίνει κάθε αριθμός">
     <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main" data-tip=${'Η δύναμη της ' + HK() + ': στρατιώτες και στελέχη, με τον κανόνα των ' + (state.rules?.hkTime || '08:00') + '. Το Σήμερα και η Δύναμη μετρούν μόνο στρατιώτες, τώρα.'}><span className="tile__n">${h.total}</span><span className="tile__l">Δύναμη</span></div><div className="tile"><span className="tile__n">${h.kol}</span><span className="tile__l">Κωλυόμενοι</span></div><div className="tile"><span className="tile__n">${h.apo}</span><span className="tile__l">Απόντες</span></div><div className="tile"><span className="tile__n">${h.avail}</span><span className="tile__l">Διαθέσιμοι</span></div></div>
     <p className="note" style=${{ margin: '-4px 0 12px' }}>Δύναμη = <b>${h.soldiers}</b> στρατιώτες + <b>${h.cadreN}</b> στελέχη · μετρά με τις ${state.rules?.hkTime || '08:00'} (όποιος γυρίσει ως τότε είναι παρών).</p>
-    <ul className="hk-src">${src.map(([k, , full]) => html`<li key=${k}><b>${full}</b>: <span className="num">${h.cols[k].length + (h.cadre[k]?.length || 0)}</span><div className="cat__names">${cadreOf(k).map(c => html`<button key=${c.id} type="button" data-tip="Στέλεχος· η κατάσταση αλλάζει στην καρτέλα Στελέχη" onClick=${() => nav.go('cadre')}>${c.rank} ${c.last}</button>`)}${h.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div></li>`)}</ul>
+    <ul className="hk-src">${src.map(([k, , full]) => html`<li key=${k}><b>${full}</b>: <span className="num">${h.cols[k].length + (h.cadre[k]?.length || 0)}</span><div className="cat__names">${cadreOf(k).map(c => html`<button key=${c.id} type="button" data-tip="Στέλεχος· η κατάσταση αλλάζει στην καρτέλα Στελέχη" onClick=${() => nav.go('cadre')}>${rankTxt(c)} ${c.last}</button>`)}${h.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div></li>`)}</ul>
     <p className="note" style=${{ margin: '8px 0 0' }}>Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο· τα στελέχη από τις καταστάσεις τους στην καρτέλα Στελέχη. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.</p>
   <//>
   <${CadreCard} warn=${!cadre}/>
@@ -340,7 +340,7 @@ function HkaiManualCard({ date }: { date: string }) {
   const used = Object.entries(m.cells).flatMap(([r, row]) => Object.entries(row).map(([k, v]) => ({ r, k, v })));
   const lbl = (k: string) => HK_MANUAL.find(x => x[0] === k)?.[1] || k;
   const auto = dutyOfficers(state, date);   // αξιωματικός υπηρεσίας από τα Στελέχη, όταν το πεδίο μένει κενό
-  const offList = state.cadreList.filter(c => c.active).map(c => (c.rank + ' ' + c.last + ' ' + c.first).trim());
+  const offList = state.cadreList.filter(c => c.active).map(c => (rankTxt(c) + ' ' + c.last + ' ' + c.first).trim());
   return html`<${Card} title=${'Συμπληρώνεις εσύ (' + (date === today ? 'σήμερα' : dm(date)) + ')'}>
     <p className="note" style=${{ marginTop: 0 }}>Ό,τι δεν βγαίνει από τις καταστάσεις. Οι αριθμοί προστίθενται στη στήλη του βαθμού και τα σύνολα βγαίνουν από τους τύπους του εντύπου.</p>
     <div className="field"><span className="field__label">Αριθμοί ανά βαθμό</span>
@@ -563,11 +563,11 @@ export function CommandPalette({ onClose }: P) {
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); runI(sel); } }}/>
     <ul className="picker__list" role="listbox">
       ${recent.length > 0 && html`<li className="picker__hd">Πρόσφατα</li>`}
-      ${recent.map(p => { i++; const j = i; return html`<li key=${'r' + p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
+      ${recent.map(p => { i++; const j = i; return html`<li key=${'r' + p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${rankTxt(p)} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
       ${acts.length > 0 && html`<li className="picker__hd">Ενέργειες</li>`}
       ${acts.map(a => { i++; const j = i; return html`<li key=${a.t} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${a.t}</b></div></li>`; })}
       ${ppl.length > 0 && html`<li className="picker__hd">Πρόσωπα</li>`}
-      ${ppl.map(p => { i++; const j = i; return html`<li key=${p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${p.rank} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
+      ${ppl.map(p => { i++; const j = i; return html`<li key=${p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${rankTxt(p)} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
       ${!items.length && html`<li className="picker__hd">Δεν βρέθηκε τίποτα για «${q}».</li>`}
     </ul>
     <div className="note" style=${{ padding: '6px 4px 0' }}>↑↓ επιλογή · Enter άνοιγμα · Esc κλείσιμο · ψάχνει χωρίς τόνους και με λατινικά (π.χ. «papad»)</div>

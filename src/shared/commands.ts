@@ -7,7 +7,7 @@ import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, guessHk, hkRowClaim, hkRowList, itemKey, itemName, listRows, statusLbl, weaponBack, type HkRowDef, type ListId } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, itemName, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
@@ -160,12 +160,12 @@ function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: s
 }
 
 // Μετά από κάθε ενέργεια: η λήξη κάθε στέρησης εξόδου ξαναβγαίνει από τις ημέρες της (υπηρεσίες, βραδινή εκπαίδευση)
-// Νέος βαθμός ή Ο/Σ γραμμένος με το χέρι στη φόρμα του στρατιώτη μένει στις Λίστες (Ρυθμίσεις › Λίστες), για να
+// Νέος βαθμός, προέλευση ή Ο/Σ γραμμένος με το χέρι στη φόρμα του στρατιώτη μένει στις Λίστες (Ρυθμίσεις › Λίστες), για να
 // προτείνεται από εδώ και πέρα (Michael, 17/10: «έτοιμη η εισαγωγή νέου βαθμού και να την αποθηκεύει»).
 // Στη διόρθωση μόνο αν άλλαξε: όσα ήρθαν από το Δυναμολόγιο προτείνονται έτσι κι αλλιώς.
 function rememberChoices(st: Settings, p: Person, old?: Person): Settings {
   let lists = st.lists;
-  for (const [id, v, was] of [['soldierRanks', p.rank, old?.rank], ['specs', p.spec, old?.spec]] as [ListId, string, string | undefined][]) {
+  for (const [id, v, was] of [['soldierRanks', p.rank, old?.rank], ['origins', p.origin, old?.origin], ['specs', p.spec, old?.spec]] as [ListId, string | undefined, string | undefined][]) {
     const n = itemName(v || '', id); if (!n || (old && itemKey(n) === itemKey(was || ''))) continue;
     if (/[,"]/.test(n) || listRows(lists, id).some(r => itemKey(r.name) === itemKey(n))) continue;
     lists = { ...lists, [id]: { ...(lists?.[id] || {}), add: [...(lists?.[id]?.add || []), { name: n }] } };
@@ -173,16 +173,17 @@ function rememberChoices(st: Settings, p: Person, old?: Person): Settings {
   return lists === st.lists ? st : { ...st, lists };
 }
 
-// Νέος στρατιώτης όπως τον γράφει η εισαγωγή του Δυναμολογίου (roster.ts), ώστε να ταιριάζει μετά
-export function shapePerson(x: NewPerson, id: number): Person {
+// Νέος στρατιώτης όπως τον γράφει η εισαγωγή του Δυναμολογίου (roster.ts), ώστε να ταιριάζει μετά· «ΕΠΟΠ ΣΤΡ» στον
+// βαθμό γίνεται βαθμός ΣΤΡ με προέλευση ΕΠΟΠ
+export function shapePerson(x: NewPerson, id: number, lists?: UserLists): Person {
   const t = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
-  const p: Person = {
+  const p: Person = withOrigin({
     ...x, id, active: true, added: true,
     rank: normGreek(t(x.rank)), spec: normGreek(t(x.spec)), last: norm(t(x.last)), first: norm(t(x.first)), father: norm(t(x.father)),
     asm: t(x.asm).replace(/\s/g, ''), phone: t(x.phone).replace(/\s/g, ''), si: normGreek(t(x.si)), essos: t(x.essos),
     room: x.room != null && x.room > 0 ? Math.floor(x.room) : null, post: t(x.post) ? norm(t(x.post)) : null, role: t(x.role) ? norm(t(x.role)) : null,
     attached: !!x.attached, notes: t(x.notes)
-  };
+  }, lists);
   if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
   if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
   if (!p.dn) delete p.dn;
@@ -191,9 +192,9 @@ export function shapePerson(x: NewPerson, id: number): Person {
   return p;
 }
 // διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
-export const twinText = (twin: Person, asm: string) => 'Υπάρχει ήδη ' + (twin.asm && twin.asm === asm ? 'άτομο με ΑΣΜ ' + asm + ': ' : 'ο ') + twin.rank + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)');
+export const twinText = (twin: Person, asm: string) => 'Υπάρχει ήδη ' + (twin.asm && twin.asm === asm ? 'άτομο με ΑΣΜ ' + asm + ': ' : 'ο ') + rankTxt(twin) + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)');
 function makePerson(s: AppState, x: NewPerson): Person {
-  const p = shapePerson(x, s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1);
+  const p = shapePerson(x, s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1, s.settings.lists);
   if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
   const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
   if (twin) throw new Error(twinText(twin, p.asm));
@@ -304,7 +305,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
       if (!last) throw new Error('Γράψε επώνυμο');
       const old = c0.id ? s.cadreList.find(x => x.id === c0.id) : undefined;
-      const x: Cadre = { id: old?.id || 's' + ctx.newId(), rank: (c0.rank || '').trim().toUpperCase(), hk: c0.hk, last, first, active: c0.active ?? old?.active ?? true };
+      const ro = withOrigin({ rank: (c0.rank || '').trim().replace(/\s+/g, ' ').toUpperCase(), origin: c0.origin }, s.settings.lists);
+      const x: Cadre = { id: old?.id || 's' + ctx.newId(), rank: ro.rank, ...(ro.origin ? { origin: ro.origin } : {}), hk: c0.hk, last, first, active: c0.active ?? old?.active ?? true };
       if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
       if (old?.pos != null) x.pos = old.pos;
@@ -316,7 +318,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (old?.active && !x.active && x.pid != null) for (const d of Object.keys(guards)) if (d >= ctx.today && Object.values(guards[d] || {}).includes(x.pid)) { const g = { ...guards[d] }; for (const k in g) if (g[k] === x.pid) delete g[k]; guards = { ...guards, [d]: g }; }
       // σε χειροκίνητη σειρά το νέο μπαίνει κάτω από τους ίδιους ή ανώτερους βαθμούς (μετά το μετακινεί όπου θέλει)
       const cadreList = old ? s.cadreList.map(y => (y === old ? x : y)) : isManualOrder(s.cadreList) ? insertCadre(s.cadreList, x) : [...s.cadreList, x];
-      return { state: { ...s, cadreList, guards }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + x.rank + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
+      // νέα προέλευση γραμμένη με το χέρι: μένει στις Λίστες, όπως στον στρατιώτη
+      const o = x.origin; const lists0 = s.settings.lists;
+      const settings = o && !/[,"]/.test(o) && itemKey(o) !== itemKey(old?.origin || '') && !listRows(lists0, 'origins').some(r => itemKey(r.name) === itemKey(o)) ? { ...s.settings, lists: { ...lists0, origins: { ...(lists0?.origins || {}), add: [...(lists0?.origins?.add || []), { name: o }] } } } : s.settings;
+      return { state: { ...s, cadreList, guards, settings }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + rankTxt(x) + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
     }
     case 'orderCadre': {
       const ids = new Set(c.ids); const by = new Map(s.cadreList.map(x => [x.id, x]));
@@ -326,8 +331,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'deleteCadre': {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       if (x.pid != null && (Object.values(s.guards).some(g => Object.values(g || {}).includes(x.pid!)) || Object.values(s.dutyLog || {}).some(l => l.some(e => e.pid === x.pid))))
-        throw new Error('Ο ' + x.rank + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
-      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + x.rank + ' ' + x.last, files: [HK()] };
+        throw new Error('Ο ' + rankTxt(x) + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
+      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
       const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
@@ -347,12 +352,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const base = s.cadreAbs.filter(a => !clash.includes(a));
       const cadreAbs = old ? [...base.map(a => (a === old ? abs : a)), ...cut] : [...base, ...cut, abs];
       const lbl = cadreAbsOf(abs.kind, s.settings.lists)?.[1] || abs.kind;
-      return { state: { ...s, cadreAbs }, text: 'Στέλεχος: ' + x.rank + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to) + (old ? ' (αλλαγή)' : '') + (clash.length ? ', στη θέση ' + (clash.length === 1 ? 'άλλης' : clash.length + ' άλλων') : ''), files: [HK()] };
+      return { state: { ...s, cadreAbs }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', ' + lbl.toLowerCase() + ' ' + range(abs.from, abs.to) + (old ? ' (αλλαγή)' : '') + (clash.length ? ', στη θέση ' + (clash.length === 1 ? 'άλλης' : clash.length + ' άλλων') : ''), files: [HK()] };
     }
     case 'deleteCadreAbs': {
       const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η κατάσταση');
       const x = s.cadreList.find(y => y.id === a.cid);
-      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + x.rank + ' ' + x.last : ''), files: [HK()] };
+      return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + rankTxt(x) + ' ' + x.last : ''), files: [HK()] };
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
@@ -557,10 +562,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const names = Object.fromEntries(Object.entries(c.names || before?.hkNames || {}).map(([k, v]) => [k, (v || '').trim().replace(/\s+/g, ' ')]).filter(([k, v]) => v && rows.has(k)));
       if (Object.keys(names).length) lists.hkNames = names; else delete lists.hkNames;
       const cadreList = s.cadreList.map(x => {
-        const claim = hkRowClaim(lists, x.rank);
+        const claim = hkClaimOf(lists, x.rank, x.origin);
         if (claim) return claim === x.hk ? x : { ...x, hk: claim };
         // η γραμμή του σβήστηκε ή δεν μαζεύει πια τον βαθμό του: πάει εκεί που θα πήγαινε χωρίς αυτήν
-        return !rows.has(x.hk) || hkRowClaim(before, x.rank) === x.hk ? { ...x, hk: guessHk(x.rank, lists) } : x;
+        return !rows.has(x.hk) || hkClaimOf(before, x.rank, x.origin) === x.hk ? { ...x, hk: guessHk(x.rank, lists, x.origin) } : x;
       });
       const only = (o: Record<string, number> | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => rows.has(k)));
       const hkai = s.settings.hkai?.prov ? { ...s.settings.hkai, prov: only(s.settings.hkai.prov) } : s.settings.hkai;
@@ -652,7 +657,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'updatePerson': {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
       // όριο υπηρεσιών τον μήνα (ΕΠΟΠ/ΟΒΑ): ακέραιος πάνω από 0, αλλιώς χωρίς όριο
-      const person: Person = { ...c.person }; const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
+      const person: Person = withOrigin({ ...c.person }, s.settings.lists); const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
       let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
       const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
@@ -730,7 +735,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'addPerson': {
       const p = makePerson(s, c.person);
-      return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (p.rank ? p.rank + ' ' : '') + p.last + ' ' + p.first, files: [] };
+      return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (rankTxt(p) ? rankTxt(p) + ' ' : '') + p.last + ' ' + p.first, files: [] };
     }
     case 'addPeople': {
       // Γρήγορη εισαγωγή (Νέα ΕΣΣΟ): όλοι μαζί, μία αναίρεση και μία εγγραφή στο Δυναμολόγιο· αν ένας δεν μπαίνει, δεν μπαίνει κανείς
@@ -871,11 +876,11 @@ function mergeRow(ex: Person, r: ImportRow): Person {
   const auto = ex.notes.startsWith(OUT_NOTE);
   const active = r.active ?? (ex.active || !auto);
   const next: Person = { ...ex, ...r, id: ex.id, active };
-  delete next.added;
+  delete next.added; if (!next.origin) delete next.origin;
   if (active && r.notes === undefined && auto) next.notes = '';
   return next;
 }
-const newPerson = (r: ImportRow, id: number): Person => ({ post: null, attached: false, notes: '', ...r, id, active: r.active ?? true });
+const newPerson = (r: ImportRow, id: number): Person => { const p: Person = { post: null, attached: false, notes: '', ...r, id, active: r.active ?? true }; if (!p.origin) delete p.origin; return p; };
 function importPeople(s: AppState, rows: ImportRow[], source: string, deactivateMissing: boolean): Result {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
   const byName = new Map(s.people.map(p => [personKey(p), p]));
@@ -906,7 +911,7 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
 }
 
 // Τι αλλάζει στον καθένα με μια εισαγωγή προσωπικού (για την προεπισκόπηση: «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»)
-const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
+const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['origin', 'προέλευση'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
   ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη']];
 const rv = (v: unknown) => (v == null || v === '' ? '—' : v === true ? 'ναι' : v === false ? 'όχι' : String(v));
 export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who: string; what: string }[]; same: number } {

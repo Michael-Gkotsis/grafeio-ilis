@@ -39,13 +39,16 @@ export function HkRowsCard({ bare }: { bare?: boolean }) {
   // κάθε βαθμός (των λιστών και όσων υπάρχουν ήδη) στη γραμμή όπου μετρά: στελέχη με τη «Γραμμή» τους, στρατιώτες από τον βαθμό
   const cadreRanks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(c => c.rank)), [lists, state.cadreList]);
   const soldierRanks = useMemo(() => optionsOf(listOf(lists, 'soldierRanks'), state.people.filter(p => p.active).map(p => p.rank)), [lists, state.people]);
+  // προελεύσεις: μια δική σου γραμμή μπορεί να μαζεύει και όλους μιας προέλευσης (π.χ. ΣΜΥ)
+  const origins = useMemo(() => optionsOf(listOf(lists, 'origins'), [...state.cadreList.map(c => c.origin), ...state.people.map(p => p.origin)]), [lists, state.cadreList, state.people]);
   const ranksOf = useMemo(() => {
     const m = new Map<string, Set<string>>(); const add = (row: string, r: string) => { if (!m.has(row)) m.set(row, new Set()); m.get(row)!.add(r); };
     cadreRanks.forEach(r => add(guessHk(r, lists), r)); soldierRanks.forEach(r => add(hkRankOf(r, lists), r));
+    origins.forEach(o => { const r = hkRankOf('ΣΤΡ', lists, o); if (r !== hkRankOf('ΣΤΡ', lists)) add(r, o + ' ΣΤΡ'); });
     return m;
-  }, [cadreRanks, soldierRanks, lists]);
+  }, [cadreRanks, soldierRanks, origins, lists]);
   const counts = useMemo(() => hkaiCounts(state, today).rank, [state, today]);
-  const allRanks = useMemo(() => optionsOf(f.grp === 'off' ? cadreRanks : [...soldierRanks, ...cadreRanks], []), [f.grp, cadreRanks, soldierRanks]);
+  const allRanks = useMemo(() => optionsOf(f.grp === 'off' ? cadreRanks : [...soldierRanks, ...cadreRanks, ...origins], []), [f.grp, cadreRanks, soldierRanks, origins]);
 
   const save = async (rows: HkRowDef[], text: string, nm?: Record<string, string>) => run({ t: 'setHkRows', rows, ...(nm ? { names: nm } : {}), text: 'γραμμές της ' + HK() + ': ' + text }, false);
   // ίδιο όνομα με άλλη γραμμή (όπως φαίνεται τώρα ή στον λόχο) ή «ΣΥΝΟΛΟ»

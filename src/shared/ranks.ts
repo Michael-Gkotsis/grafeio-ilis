@@ -1,14 +1,19 @@
-// Λίστες επιλογής για βαθμό και Ο/Σ (όπλο/σώμα): στις φόρμες της εφαρμογής και ως dropdown στα Excel.
+// Λίστες επιλογής για βαθμό, προέλευση και Ο/Σ (όπλο/σώμα): στις φόρμες της εφαρμογής και ως dropdown στα Excel.
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
 import { collator, normGreek, upper } from './text';
-import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type Status, type TypeKey } from './domain';
+import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type AppState, type Status, type TypeKey } from './domain';
 import type { SiConfig } from './si';
 import type { StatConfig } from './stat';
 
-// Βαθμοί στρατιωτών (Δυναμολόγιο)
-export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΟΠ ΣΤΡ', 'ΕΠΟΠ ΔΝΕΑΣ', 'ΕΠΟΠ ΛΧΙΑΣ', 'ΔΕΑ'];
-// Βαθμοί στελεχών (από τον μικρότερο στον μεγαλύτερο)
-export const CADRE_RANKS = ['ΟΒΑ', 'ΕΠΟΠ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΑΛΧΙΑΣ', 'ΑΝΘΣΤΗΣ', 'ΑΝΘΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΙΛΧΟΣ', 'ΑΝΘΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΛΓΟΣ', 'ΕΠΛΧΟΣ', 'ΤΧΗΣ', 'ΔΕΑ'];
+// Βαθμοί στρατιωτών (Δυναμολόγιο)· η προέλευση (ΕΠΟΠ, ΟΒΑ…) είναι δικό της πεδίο, όχι μέρος του βαθμού (Michael, 22/10)
+export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΔΕΑ'];
+// Βαθμοί στελεχών (από τον μικρότερο στον μεγαλύτερο)· ο ΕΠΟΠ/ΟΒΑ στρατιώτης είναι ΣΤΡ με προέλευση ΕΠΟΠ/ΟΒΑ
+export const CADRE_RANKS = ['ΣΤΡ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΑΛΧΙΑΣ', 'ΑΝΘΣΤΗΣ', 'ΑΝΘΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΙΛΧΟΣ', 'ΑΝΘΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΛΓΟΣ', 'ΕΠΛΧΟΣ', 'ΤΧΗΣ', 'ΔΕΑ'];
+// Προέλευση (Michael, 22/10): στρατιώτες και στελέχη, δική της λίστα. Στα έντυπα γράφεται μπροστά από τον βαθμό
+// (ΕΠΟΠ ΛΧΙΑΣ), όπως το ονοματεπώνυμο ενώνει επώνυμο και όνομα (rankTxt)· οι άλλες προστίθενται στις Λίστες
+export const ORIGINS = ['ΕΠΟΠ', 'ΟΒΑ', 'ΣΜΥ', 'ΣΣΕ'];
+// ΕΠΟΠ και ΟΒΑ: υπηρεσίες μόνο με το χέρι, ως το όριο του μήνα (rules.ts isEpop), και ως στρατιώτες στη δική τους γραμμή της ΗΚΑΙ
+export const EPOP_ORIGINS = ['ΕΠΟΠ', 'ΟΒΑ'];
 // Τύποι όπλων (καρτέλα Οπλισμός, Michael 17/10)· οι άλλοι προστίθενται στις Λίστες
 export const WEAPON_TYPES = ['G3A3', 'G3A4', 'M16A2', 'M4'];
 // Λόγοι εξόδου όπλου από τον οπλοβαστό και ο λόγος εισαγωγής του καθενός (Michael, 18/10: «ΕΚΠ» → «ΛΗΞ ΕΚΠ»)· οι άλλοι στις Λίστες
@@ -32,7 +37,7 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
@@ -46,18 +51,18 @@ export interface UserList { add?: ListItem[]; hide?: string[] }
 // hkNames: άλλο όνομα για μια γραμμή (κλειδί → όνομα), π.χ. «Ίλαρχοι» → «Ίλαρχοι-Λοχαγοί»· το κλειδί δεν αλλάζει
 export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkNames?: Record<string, string> };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
-  soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
+  soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, origins: ORIGINS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
   medKinds: ['EA', 'EY', 'EO', 'EARV'].map(k => TYPES[k as TypeKey].label),
   siUnarmed: ['ΑΟΠΛ', 'Ι4'],   // Σ.Ι. που περιέχει «ΑΟΠΛ» ή αρχίζει από «Ι4» (όπως πριν τις Λίστες)
   weaponTypes: WEAPON_TYPES,
   weaponOut: WEAPON_OUT.map(x => x[0])
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου' };
+export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', origins: 'Προελεύσεις', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
-// βαθμοί, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
-const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut'];
+// βαθμοί, προελεύσεις, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
+const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut'];
 export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
@@ -73,6 +78,62 @@ export function listRows(lists: UserLists | undefined, id: ListId): ListRow[] {
 }
 // Ό,τι προτείνεται στις φόρμες και στα dropdown του Excel: οι βασικές που δεν έκρυψες και οι δικές σου
 export const listOf = (lists: UserLists | undefined, id: ListId): string[] => (lists?.[id] ? listRows(lists, id).filter(x => !x.hidden).map(x => x.name) : [...LIST_BASE[id]]);
+// ---------------------------------------------------------------------------
+// Προέλευση: ό,τι παλιά γραφόταν μέσα στον βαθμό («ΕΠΟΠ ΛΧΙΑΣ», «Ο.Β.Α. ΣΤΡ») χωρίζει σε προέλευση και βαθμό, μπροστά ή
+// πίσω από τον βαθμό, με τελείες ή χωρίς. Μετρούν και όσες έκρυψες ή πρόσθεσες, για να μη μείνει τίποτα μέσα στον βαθμό.
+// ---------------------------------------------------------------------------
+const oKey = (v: string) => itemKey(v.replace(/[()]/g, ' '));
+const originIdx = new WeakMap<object, string[]>(); const NO_ORIGINS = {};
+function originNames(lists?: UserLists): string[] {
+  const key = lists?.origins || NO_ORIGINS; let v = originIdx.get(key);
+  if (!v) { v = listRows(lists, 'origins').map(r => r.name).sort((a, b) => oKey(b).split(' ').length - oKey(a).split(' ').length); originIdx.set(key, v); }
+  return v;
+}
+export function splitRank(raw: string | null | undefined, lists?: UserLists): { rank: string; origin: string } {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim(); if (!t) return { rank: '', origin: '' };
+  const words = t.split(' '); const keys = words.map(oKey);
+  for (const o of originNames(lists)) {
+    const ok = oKey(o); const n = ok.split(' ').length; if (!ok || words.length < n) continue;
+    if (keys.slice(0, n).join(' ') === ok) return { origin: o, rank: words.slice(n).join(' ') };
+    if (keys.slice(-n).join(' ') === ok) return { origin: o, rank: words.slice(0, -n).join(' ') };
+  }
+  return { rank: t, origin: '' };
+}
+// Βαθμός με την προέλευση μπροστά, όπως γράφεται στα έντυπα: «ΕΠΟΠ ΛΧΙΑΣ», «ΛΧΙΑΣ» χωρίς προέλευση
+export const rankTxt = (x: { rank?: string | null; origin?: string | null } | null | undefined) => (x ? [x.origin, x.rank].filter(Boolean).join(' ') : '');
+export const isEpopOrigin = (origin: string | null | undefined) => { const k = oKey(origin || ''); return !!k && EPOP_ORIGINS.some(o => o === k); };
+// Βαθμός και προέλευση όπως αποθηκεύονται: η προέλευση με κεφαλαία· αν ο βαθμός γράφει μέσα του προέλευση (και δεν
+// δόθηκε άλλη), βγαίνει από εκεί. ΕΠΟΠ/ΟΒΑ χωρίς βαθμό = ΣΤΡ (το παλιό «ΕΠΟΠ» στα Στελέχη ήταν ο ΕΠΟΠ στρατιώτης).
+export function withOrigin<T extends { rank: string; origin?: string }>(x: T, lists?: UserLists): T {
+  let origin = itemName(x.origin || '', 'origins'); let rank = x.rank || '';
+  const sp = splitRank(rank, lists);
+  if (sp.origin && (!origin || oKey(sp.origin) === oKey(origin))) { origin = origin || sp.origin; rank = sp.rank || (isEpopOrigin(origin) ? 'ΣΤΡ' : ''); }
+  const known = originNames(lists).find(o => oKey(o) === oKey(origin)); if (known) origin = known;
+  const out = { ...x, rank }; if (origin) out.origin = origin; else delete out.origin;
+  return out;
+}
+// Στο άνοιγμα της βάσης (db.ts), όσες φορές κι αν τρέξει: ό,τι γράφει προέλευση μέσα στον βαθμό («ΕΠΟΠ ΛΧΙΑΣ», το παλιό
+// «ΕΠΟΠ» των Στελεχών) χωρίζει σε βαθμό και προέλευση. Οι δικοί σου βαθμοί με προέλευση μέσα κρατούν μόνο τον βαθμό (με
+// τη γραμμή της ΗΚΑΙ που τους όρισες), ή φεύγουν αν ο βαθμός υπάρχει ήδη. Η γραμμή της ΗΚΑΙ κάθε στελέχους μένει ίδια.
+// null: τίποτα να αλλάξει
+export function splitOrigins(s: AppState): AppState | null {
+  const lists = s.settings.lists;
+  const fix = <T extends { rank: string; origin?: string }>(x: T): T => (splitRank(x.rank, lists).origin ? withOrigin(x, lists) : x);
+  const people = s.people.map(fix); const cadreList = (s.cadreList || []).map(fix);
+  let next = lists;
+  for (const id of ['soldierRanks', 'cadreRanks'] as const) {
+    const add = lists?.[id]?.add; if (!add?.some(x => splitRank(x.name, lists).origin)) continue;
+    const have = new Set(LIST_BASE[id].map(itemKey)); const out: ListItem[] = [];
+    for (const x of add) {
+      const name = splitRank(x.name, lists).origin ? splitRank(x.name, lists).rank : x.name;
+      if (!name || have.has(itemKey(name))) continue;
+      have.add(itemKey(name)); out.push({ ...x, name });
+    }
+    next = { ...next, [id]: { ...next![id], add: out } };
+  }
+  const same = people.every((p, i) => p === s.people[i]) && cadreList.every((c, i) => c === (s.cadreList || [])[i]) && next === lists;
+  return same ? null : { ...s, people, cadreList, settings: next === lists ? s.settings : { ...s.settings, lists: next } };
+}
 // Λόγος εισαγωγής όπλου για έναν λόγο εξόδου: του βασικού (ΕΚΠ → ΛΗΞ ΕΚΠ), όποιον όρισες στον δικό σου, αλλιώς «ΛΗΞ <λόγος>»
 export function weaponBack(reason: string, lists?: UserLists): string {
   const k = itemKey(reason || ''); if (!k) return '';
@@ -198,9 +259,13 @@ function siUnarmedRaw(si: string, lists?: UserLists): boolean {
   return (u?.add || []).some(x => { const a = siKey(x.name || ''); return !!a && !hide.has(itemKey(x.name)) && k.startsWith(a); });
 }
 
-// Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό που γράφει ο χρήστης· πρώτα ό,τι όρισες στις Λίστες
-export function guessHk(rank: string, lists?: UserLists): string {
-  const claim = hkRowClaim(lists, rank); if (claim) return claim;
+// Η δική σου γραμμή που μαζεύει κάποιον: με βαθμό και προέλευση μαζί («ΕΠΟΠ ΛΧΙΑΣ»), μόνο τον βαθμό ή μόνο την προέλευση
+export const hkClaimOf = (lists: UserLists | undefined, rank: string, origin?: string, grp?: 'off' | 'nco') =>
+  (origin ? hkRowClaim(lists, rankTxt({ rank, origin }), grp) : undefined) || hkRowClaim(lists, rank, grp) || (origin ? hkRowClaim(lists, origin, grp) : undefined);
+// Μαντεύει την κατηγορία της ΗΚΑΙ από τον βαθμό (και την προέλευση) που γράφει ο χρήστης· πρώτα ό,τι όρισες στις Λίστες.
+// ΕΠΟΠ/ΟΒΑ μετρούν στη δική τους γραμμή μόνο ως στρατιώτες: ο ΕΠΟΠ ΛΧΙΑΣ είναι στους Λοχίες.
+export function guessHk(rank: string, lists?: UserLists, origin?: string): string {
+  const claim = hkClaimOf(lists, rank, origin); if (claim) return claim;
   const own = hkOfRank(lists, 'cadreRanks', rank); if (own && hkCadreRows(lists).includes(own)) return own;
   const r = rank.toUpperCase().replace(/[.\s]/g, '');
   if (/ΕΠΧ|ΕΠΙΛΑΡΧ|ΕΠΛΧΟ|ΤΧΗΣ/.test(r)) return 'Επίλαρχοι';
@@ -214,5 +279,9 @@ export function guessHk(rank: string, lists?: UserLists): string {
   if (/ΔΝΕΑΣ|ΔΕΚΑΝ/.test(r)) return 'Δεκανείς';
   if (/ΕΠΟΠ/.test(r)) return 'ΕΠΟΠ Στρατιώτης';
   if (/ΟΒΑ/.test(r)) return 'ΟΒΑ Στρατιώτης';
-  return 'Λοχίες';
+  // στέλεχος στρατιώτης: ΕΠΟΠ ή ΟΒΑ (η προέλευση λέει ποιο)
+  if (/^ΣΤΡ$|^ΣΤΡΑΤΙΩΤ/.test(r)) return originRow(origin) || 'ΕΠΟΠ Στρατιώτης';
+  return originRow(origin) || 'Λοχίες';
 }
+// ΕΠΟΠ/ΟΒΑ στρατιώτης → «ΕΠΟΠ Στρατιώτης» / «ΟΒΑ Στρατιώτης»
+export const originRow = (origin?: string) => { const k = oKey(origin || ''); return k === 'ΕΠΟΠ' ? 'ΕΠΟΠ Στρατιώτης' : k === 'ΟΒΑ' ? 'ΟΒΑ Στρατιώτης' : undefined; };
