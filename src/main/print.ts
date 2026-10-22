@@ -473,7 +473,8 @@ const PAPER: Record<number, { name: string; w: number; h: number }> = {
 // pt: το μέγεθος στο χαρτί της γραμματοσειράς των περισσότερων κελιών (font, size στο Excel)· titles: έχει γραμμές τίτλων
 export interface PrintSheet { name: string; paper: string; landscape: boolean; pages: number; scale: number; html: string; pt: number; font: string; size: number; titles: boolean }
 // total: όλες οι σελίδες· sug: σε πόσες σελίδες τα γράμματα βγαίνουν καθαρά (όταν είναι μικρά)
-export interface PrintDoc { sheets: PrintSheet[]; all: string[]; css: string; total: number; sug?: { n: number; pt: number } }
+// cols: οι στήλες των πινάκων που ταξινομούνται (για το «Ταξινόμηση» του παραθύρου)
+export interface PrintDoc { sheets: PrintSheet[]; all: string[]; css: string; total: number; sug?: { n: number; pt: number }; cols?: SortCol[] }
 
 function definedName(wbx: string, name: string, idx: number): string | null {
   for (const m of wbx.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)) if (attr(m[1], 'name') === name && attr(m[1], 'localSheetId') === String(idx)) return unesc(m[2]);
@@ -534,8 +535,12 @@ export async function renderOpen(book: Book, opts: RenderOpts): Promise<PrintDoc
   // χωρίς επιλογή (ή φύλλο που δεν υπάρχει πια): όλα τα φύλλα αν είναι λίγα (έντυπα), αλλιώς το ενεργό φύλλο του βιβλίου.
   // Άδεια λίστα = ο χρήστης ξετσέκαρε όλα τα φύλλα.
   if (!want.length && !(opts.sheets && !opts.sheets.length)) want = all.length <= 4 ? all : [book.sheets[book.activeTab] && !book.sheets[book.activeTab].hidden ? book.sheets[book.activeTab].name : all[0]];
-  const geos: Geo[] = [];
-  for (const name of want) geos.push(await geoOf(book, name, book.sheets.findIndex(x => x.name === name)));
+  const geos: Geo[] = []; const cols: SortCol[] = [];
+  for (const name of want) {
+    const g = await geoOf(book, name, book.sheets.findIndex(x => x.name === name));
+    for (const t of g.tables) for (const c of t.cols) if (!cols.some(x => x.k === c.k)) cols.push({ k: c.k, label: c.label, kind: c.kind });
+    geos.push(opts.layout?.sort?.length ? sortedGeo(book, g, opts.layout.sort) : g);
+  }
   const used = new Set<number>();
   let plans: Plan[]; let sug: { n: number; pt: number } | undefined;
   if (opts.layout) {
@@ -560,7 +565,7 @@ export async function renderOpen(book: Book, opts: RenderOpts): Promise<PrintDoc
     const p = plans[i]; const s = drawSheet(book, g, p, opts.file, used, opts, at, total); at += p.order.length; return s;
   });
   const css = [...used].map(i => { const x = book.styles.xfs[i] || book.styles.xfs[0]; return `.s${i}{${fontCss(book.styles.fonts[x.font] || book.styles.fonts[0])}${x.fill ? 'background:' + x.fill + ';' : ''}}`; }).join('\n');
-  return { sheets, all, css, total, sug };
+  return { sheets, all, css, total, sug, cols };
 }
 
 // ------------------------------------------------------------------ το φύλλο: περιοχή, γραμμές, στήλες, τίτλοι
@@ -572,7 +577,15 @@ interface Geo {
   dom: { name: string; sz: number };      // η γραμματοσειρά των περισσότερων κελιών (για «Arial 12 → 10 pt»)
   units: number[][][];                    // μπλοκ (θάλαμος, πίνακας ανάμεσα σε κενές γραμμές) από ενότητες (γραμμές με κάθετη συγχώνευση)
   framed: Set<number>;                    // γραμμές με πλαίσιο (μόνο αυτές ψηλώνουν στο «Ψηλότερες γραμμές»)
+  tables: Table[];                        // πίνακες με γραμμή επικεφαλίδων, που ταξινομούνται στην εκτύπωση
+  regroup: (rows: number[]) => number[][][];
+  fix?: Map<number, number>;              // ταξινομημένο: κελί του Α/Α (key) → η γραμμή που είχε αυτή τη θέση (το Α/Α μένει 1, 2, 3…)
 }
+// Ένας πίνακας του φύλλου: η γραμμή επικεφαλίδων, οι γραμμές του από κάτω (ως τα σύνολα ή το πρώτο κελί χωρίς πλαίσιο),
+// οι στήλες που ταξινομούνται (με το κλειδί της επικεφαλίδας: «Ο/Σ» → «ΟΣ») και οι στήλες Α/Α που μένουν στη θέση τους
+export type SortKind = 'text' | 'num' | 'date' | 'rank';
+export interface SortCol { k: string; label: string; kind: SortKind }
+interface Table { head: number; rows: number[]; cols: (SortCol & { c: number })[]; fixed: number[] }
 const geoCache = new WeakMap<Book, Map<string, Geo>>();
 const normHead = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω]/g, '');
 async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
@@ -625,37 +638,137 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
   const dom = { name: top.split('|')[0], sz: +top.split('|')[1] || 11 };
 
   // ενότητες: γραμμές που ενώνει κάθετη συγχώνευση δεν χωρίζονται ποτέ
-  const at = new Map(rowsAll.map((r, i) => [r, i])); const link = new Array(rowsAll.length).fill(false);
-  for (const mg of sh.merges) if (mg.r2 > mg.r1) for (let r = mg.r1; r < mg.r2; r++) { const i = at.get(r); if (i != null) link[i] = true; }
-  const unitList: number[][] = [];
-  rowsAll.forEach((r, i) => { if (i && link[i - 1]) unitList[unitList.length - 1].push(r); else unitList.push([r]); });
+  const unitsOf = (list: number[]) => {
+    const at = new Map(list.map((r, i) => [r, i])); const link = new Array(list.length).fill(false);
+    for (const mg of sh.merges) if (mg.r2 > mg.r1) for (let r = mg.r1; r < mg.r2; r++) { const i = at.get(r); if (i != null) link[i] = true; }
+    const out: number[][] = [];
+    list.forEach((r, i) => { if (i && link[i - 1]) out[out.length - 1].push(r); else out.push([r]); });
+    return out;
+  };
   // μπλοκ: ανάμεσα σε κενές γραμμές (πίνακες της ΦΡΟΥΡΑΣ) ή όπου αλλάζει ο θάλαμος/ουλαμός (στήλη στη γραμμή τίτλων)
   const groupCol = titleList.length ? colsAll.find(c => titleList.some(r => /^(ΘΑΛΑΜΟΣ|ΘΑΛ|ΟΥΛΑΜΟΣ)$/.test(normHead(shown(r, c))))) : undefined;
   const after = titles ? titles[1] : 0;
-  const units: number[][][] = []; let cur: number[][] = []; let prevG: string | null = null; let prevBlank = false;
-  for (const u of unitList) {
-    const r = u[0]; const isBlank = u.every(y => blank.has(y));
-    const g = groupCol != null && r > after ? shown(r, groupCol) : null;
-    const brk = cur.length && ((prevBlank && !isBlank) || (g != null && prevG != null && g !== prevG));
-    if (brk) { units.push(cur); cur = []; }
-    cur.push(u); prevBlank = isBlank; if (g != null) prevG = g;
-  }
-  if (cur.length) units.push(cur);
-  // υπογραφές: το τελευταίο μπλοκ χωρίς πλαίσια μένει μαζί με τις 2 τελευταίες γραμμές του πίνακα από πάνω
-  if (units.length > 1) {
-    const last = units[units.length - 1]; const rows = last.flat();
-    if (rows.length <= 12 && !rows.some(r => framed.has(r))) {
-      const prev = units[units.length - 2]; let n = 0; const glue: number[][] = [];
-      while (prev.length && n < 2) { const u = prev.pop()!; glue.unshift(u); if (!u.every(y => blank.has(y))) n++; }
-      if (!prev.length) units.splice(units.length - 2, 1);
-      units[units.length - 1] = [[...glue.flat(), ...rows]];
+  const regroup = (list: number[]) => {
+    const units: number[][][] = []; let cur: number[][] = []; let prevG: string | null = null; let prevBlank = false;
+    for (const u of unitsOf(list)) {
+      const r = u[0]; const isBlank = u.every(y => blank.has(y));
+      const g = groupCol != null && r > after ? shown(r, groupCol) : null;
+      const brk = cur.length && ((prevBlank && !isBlank) || (g != null && prevG != null && g !== prevG));
+      if (brk) { units.push(cur); cur = []; }
+      cur.push(u); prevBlank = isBlank; if (g != null) prevG = g;
     }
-  }
+    if (cur.length) units.push(cur);
+    // υπογραφές: το τελευταίο μπλοκ χωρίς πλαίσια μένει μαζί με τις 2 τελευταίες γραμμές του πίνακα από πάνω
+    if (units.length > 1) {
+      const last = units[units.length - 1]; const rows = last.flat();
+      if (rows.length <= 12 && !rows.some(r => framed.has(r))) {
+        const prev = units[units.length - 2]; let n = 0; const glue: number[][] = [];
+        while (prev.length && n < 2) { const u = prev.pop()!; glue.unshift(u); if (!u.every(y => blank.has(y))) n++; }
+        if (!prev.length) units.splice(units.length - 2, 1);
+        units[units.length - 1] = [[...glue.flat(), ...rows]];
+      }
+    }
+    return units;
+  };
   const g: Geo = { sh, idx, ps, pm, po, rowsAll, colsAll, rowH, colW, W, titles, titleList, titleH: titleList.reduce((a, r) => a + rowH(r), 0),
     oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
-    grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units, framed };
+    grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units: regroup(rowsAll), framed,
+    tables: tablesOf(book, sh, unitsOf(rowsAll), colsAll, framed), regroup };
   m.set(name, g);
   return g;
+}
+
+// ------------------------------------------------------------------ ταξινόμηση στην εκτύπωση (Michael, 22/10)
+// «Πρώτα θάλαμος, μετά αλφαβητικά…»: ταξινομούνται μόνο οι γραμμές κάθε πίνακα. Κεφαλίδα, τίτλοι, σύνολα και υπογραφές
+// μένουν στη θέση τους, και το Α/Α (1, 2, 3… ή 1ο, 2ο…) μένει στη σειρά. Πίνακες με γραμμές που ενώνει κάθετη συγχώνευση
+// (ΦΡΟΥΡΑ) ή με δύο πίνακες δίπλα-δίπλα (ίδια επικεφαλίδα δύο φορές) δεν ταξινομούνται.
+export const sortKey = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω0-9]/g, '');
+// βαθμοί από τον ανώτερο στον κατώτερο: «Ανώτεροι πρώτα»
+const RANKS = ['ΤΧΗΣ', 'ΕΠΛΧΟΣ', 'ΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΑΝΘΛΓΟΣ', 'ΙΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΑΝΘΛΧΟΣ', 'ΔΕΑ', 'ΑΝΘΣΤΗΣ', 'ΑΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΛΧΙΑΣ', 'ΔΝΕΑΣ', 'ΥΔΝΕΑΣ', 'ΣΤΡ'];
+const NUMERIC = /^[-+]?\d+(?:[.,]\d+)?$/, DATE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?!\d)/;
+const SEQ = /^(\d+)\s*(?:ο|η|\.|\))?$/i;
+const greekOrder = new Intl.Collator('el', { numeric: true, sensitivity: 'base' });
+function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[], framed: Set<number>): Table[] {
+  const raw = (r: number, c: number): Val => { const k = sh.cells.get(key(r, c)); if (!k) return null; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? null : v; };
+  const text = (r: number, c: number) => { const v = raw(r, c); return v == null ? '' : String(v).trim(); };
+  const dateFmt = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; if (!xf || !xf.fmt) return false; const code = book.styles.codes.get(xf.fmt) ?? BUILTIN[xf.fmt] ?? ''; return isDateFmt(code); };
+  const out: Table[] = [];
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i]; if (u.length !== 1 || !framed.has(u[0])) continue;
+    const h = u[0];
+    const heads = cols.map(c => ({ c, t: text(h, c) })).filter(x => /\p{L}/u.test(x.t));
+    if (heads.length < 2) continue;
+    const keys = heads.map(x => sortKey(x.t));
+    // κάθε επικεφαλίδα μία φορά (όχι πίνακες δίπλα-δίπλα, όχι γραμμή με 0 | 0 | 0 όπως οι βαθμοί της ΗΚΑΙ)
+    const all = cols.map(c => text(h, c)).filter(Boolean);
+    if (new Set(keys).size !== keys.length || new Set(all).size !== all.length || keys.some(k => !k || /^ΣΥΝΟΛ/.test(k))) continue;
+    // τίτλοι πινάκων πάνω από τις επικεφαλίδες («ΤΙΜΩΡΗΜΕΝΟΙ», «ΑΠΟΝΤΕΣ» σε συγχωνευμένα κελιά): όχι επικεφαλίδα
+    if (heads.filter(x => sh.merges.some(m => m.r1 === h && m.c1 === x.c && m.c2 > m.c1)).length * 2 >= heads.length) continue;
+    const rows: number[] = []; let multi = false; let j = i + 1;
+    for (; j < units.length; j++) {
+      const v = units[j]; if (!v.every(r => framed.has(r))) break;
+      if (cols.some(c => /^ΣΥΝΟΛ/.test(sortKey(text(v[0], c))))) break;
+      if (v.length > 1) multi = true;
+      rows.push(...v);
+    }
+    if (multi || rows.length < 2) { i = j - 1; continue; }
+    const list: (SortCol & { c: number })[] = []; const fixed: number[] = [];
+    heads.forEach((x, n) => {
+      const k = keys[n]; const full = rows.filter(r => raw(r, x.c) != null && raw(r, x.c) !== ''); const vals = full.map(r => raw(r, x.c));
+      // Α/Α: η επικεφαλίδα, ή αριθμοί που ανεβαίνουν ένα-ένα από πάνω προς τα κάτω
+      const seq = rows.map(r => SEQ.exec(text(r, x.c))?.[1]);
+      if (/^(ΑΑ|ΑΡ|ΑΡΙΘ|NO|ΝΟ)$/.test(k) || (seq.length >= 2 && seq.every((v, m) => v != null && +v === +seq[0]! + m))) { fixed.push(x.c); return; }
+      if (/^\d+$/.test(k) || !vals.length) return;   // στήλες-μέρες του Ελέγχου (1, 2… 31) και άδειες στήλες (ΥΠΟΓΡΑΦΗ)
+      const kind: SortKind = /^ΒΑΘΜ/.test(k) ? 'rank'
+        : vals.length && full.every((r, m) => (typeof vals[m] === 'string' && DATE.test(String(vals[m]).trim())) || (typeof vals[m] === 'number' && dateFmt(r, x.c))) ? 'date'
+        : vals.length && vals.every(v => typeof v === 'number' || NUMERIC.test(String(v).trim())) ? 'num' : 'text';
+      list.push({ c: x.c, k, label: x.t.replace(/\s+/g, ' '), kind });
+    });
+    if (list.length) out.push({ head: h, rows, cols: list, fixed });
+    i = j - 1;
+  }
+  return out;
+}
+// τιμή για σύγκριση: αριθμός (και «12/10/2026» → 20261012, βαθμός → θέση στη λίστα) ή κείμενο· κενό = null (πάντα στο τέλος)
+function sortVal(v: Val, kind: SortKind): number | string | null {
+  if (v == null || v === '' || v instanceof XErr) return null;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'number') return v;
+  const s = v.trim(); if (!s) return null;
+  if (kind === 'rank') { const i = RANKS.indexOf(sortKey(s.split(/[\s(]/)[0])); if (i >= 0) return i; }
+  if (NUMERIC.test(s)) return +s.replace(',', '.');
+  const d = DATE.exec(s); if (d) { const y = +d[3] < 100 ? 2000 + +d[3] : +d[3]; return y * 10000 + +d[2] * 100 + +d[1]; }
+  return s;
+}
+const cmpVal = (a: number | string, b: number | string) => (typeof a === 'number' ? (typeof b === 'number' ? a - b : -1) : typeof b === 'number' ? 1 : greekOrder.compare(a, b));
+// το φύλλο με τις γραμμές των πινάκων στη νέα σειρά (οι στήλες που δεν έχει ο πίνακας δεν μετράνε)
+const sortCache = new WeakMap<Geo, Map<string, Geo>>();
+function sortedGeo(book: Book, g: Geo, sort: PrintSort[]): Geo {
+  const sig = sort.map(x => x.c + (x.d ? '-' : '+')).join('|');
+  let m = sortCache.get(g); if (!m) { m = new Map(); sortCache.set(g, m); }
+  const hit = m.get(sig); if (hit) return hit;
+  const out = sortRows(book, g, sort); m.set(sig, out); return out;
+}
+function sortRows(book: Book, g: Geo, sort: PrintSort[]): Geo {
+  const rowsAll = g.rowsAll.slice(); const fix = new Map<number, number>(); let moved = false;
+  for (const t of g.tables) {
+    const lv = sort.map(s => ({ s, col: t.cols.find(c => c.k === s.c) })).filter(x => x.col) as { s: PrintSort; col: SortCol & { c: number } }[];
+    if (!lv.length) continue;
+    const vals = new Map(t.rows.map(r => [r, lv.map(x => { const k = g.sh.cells.get(key(r, x.col.c)); const v = k ? (k.f ? book.value(g.sh.name, r, x.col.c) : k.v) : null; return sortVal(v, x.col.kind); })]));
+    const sorted = t.rows.slice().sort((a, b) => {
+      const A = vals.get(a)!, B = vals.get(b)!;
+      for (let i = 0; i < lv.length; i++) {
+        if (A[i] == null || B[i] == null) { if (A[i] == null && B[i] == null) continue; return A[i] == null ? 1 : -1; }
+        const d = cmpVal(A[i]!, B[i]!); if (d) return lv[i].s.d ? -d : d;
+      }
+      return 0;
+    });
+    if (sorted.every((r, i) => r === t.rows[i])) continue;
+    moved = true;
+    const at = rowsAll.indexOf(t.rows[0]); rowsAll.splice(at, sorted.length, ...sorted);
+    sorted.forEach((r, i) => { for (const c of t.fixed) if (r !== t.rows[i]) fix.set(key(r, c), t.rows[i]); });
+  }
+  return moved ? { ...g, rowsAll, units: g.regroup(rowsAll), fix } : g;
 }
 
 // ------------------------------------------------------------------ το σχέδιο: χαρτί, κλίμακα, ποιες γραμμές σε κάθε σελίδα
@@ -724,7 +837,10 @@ export interface PrintOpts {
   side: 'new' | 'back';                   // η επόμενη σελίδα στην πίσω όψη ή σε νέο φύλλο
   same: boolean;                          // ίδια γράμματα σε όλα τα φύλλα του Excel
   breaks?: Record<string, number[]>;      // ανά φύλλο: γραμμές του Excel από όπου ξεκινά νέα σελίδα (κλικ στην προεπισκόπηση)
+  sort?: PrintSort[];                     // ταξινόμηση των γραμμών κάθε πίνακα: 1η, 2η, 3η στήλη
 }
+// c: η επικεφαλίδα της στήλης ως κλειδί (sortKey), l: όπως γράφεται, d: φθίνουσα (Ω→Α, 9→1, κατώτεροι πρώτα)
+export interface PrintSort { c: string; l?: string; d?: boolean }
 export const PRINT_DEFAULT: PrintOpts = { pages: 1, size: 12, or: 'auto', paper: 'A4', m: 'normal', sp: 'top', stretch: true, repeat: true, keep: true, pno: true, side: 'new', same: true };
 const MARGIN = { narrow: 0.5, normal: 1.2, wide: 2.5 };   // εκ.
 const pick = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
@@ -739,10 +855,18 @@ export function cleanOpts(x: unknown, base: PrintOpts = PRINT_DEFAULT): PrintOpt
     breaks = {};
     for (const [k, v] of Object.entries(o.breaks as Record<string, unknown>).slice(0, 50)) if (Array.isArray(v)) breaks[String(k)] = [...new Set(v.filter(n => Number.isInteger(n) && n > 0 && n < 1048577) as number[])].sort((a, b) => a - b).slice(0, 500);
   }
+  const sort = Array.isArray(o.sort) ? o.sort : base.sort;
+  const sorts: PrintSort[] = [];
+  for (const x of (sort || []).slice(0, 3)) {
+    if (!x || typeof x !== 'object') continue; const c = sortKey(String((x as PrintSort).c ?? '')).slice(0, 60);
+    if (!c || sorts.some(y => y.c === c)) continue;
+    const l = typeof (x as PrintSort).l === 'string' ? (x as PrintSort).l!.slice(0, 60) : '';
+    sorts.push({ c, ...(l ? { l } : {}), ...((x as PrintSort).d === true ? { d: true } : {}) });
+  }
   return {
     pages, size, or: pick(o.or, ['auto', 'p', 'l'] as const, base.or), paper: pick(o.paper, ['A4', 'A3'] as const, base.paper), m: pick(o.m, ['narrow', 'normal', 'wide'] as const, base.m),
     sp: pick(o.sp, ['top', 'center', 'fill'] as const, base.sp), stretch: bool('stretch'), repeat: bool('repeat'), keep: bool('keep'), pno: bool('pno'),
-    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {})
+    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {}), ...(sorts.length ? { sort: sorts } : {})
   };
 }
 const hasBreaks = (o: PrintOpts) => !!o.breaks && Object.values(o.breaks).some(b => b.length);
@@ -846,13 +970,15 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
   const colInfo = (c: number) => sh.cols.find(k => c >= k.min && c <= k.max);
   const cellOf = (r: number, c: number) => sh.cells.get(key(r, c));
   const styleOf = (r: number, c: number) => { const k = cellOf(r, c); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
-  const shown = (r: number, c: number) => { const k = cellOf(r, c); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? v.code : v; };
+  // ταξινομημένο: το Α/Α δείχνει τον αριθμό της θέσης (της γραμμής που ήταν εκεί πριν)
+  const shown = (r0: number, c: number) => { const r = g.fix?.get(key(r0, c)) ?? r0; const k = cellOf(r, c); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? v.code : v; };
   const rowH = (r: number) => g.rowH(r) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
   const colW = (c: number) => g.colW(c) * P.cs;
   const withTitles = (first: number) => P.repeat && !!g.titles && first > g.titles[1];
 
   const pages = (opt.maxPages ? P.order.slice(0, opt.maxPages) : P.order).map(([rp, cp], pi) => {
-    const rows = withTitles(rp[0]) ? [...g.titleList, ...rp] : rp;
+    const rep = new Set(withTitles(rp[0]) ? g.titleList : []);   // οι γραμμές τίτλων που επαναλαμβάνονται (δεν είναι για κλικ)
+    const rows = rep.size ? [...rep, ...rp] : rp;
     const rowIx = new Map(rows.map((r, i) => [r, i])); const colIx = new Map(cp.map((c, i) => [c, i]));
     const tw = cp.reduce((a, c) => a + colW(c), 0), th = rows.reduce((a, r) => a + rowH(r), 0);
     let body = '';
@@ -895,7 +1021,7 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
         }
         tr += `<td class="s${s}"${opt.refs ? ` data-a="${colName(ac)}${ar}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
       }
-      body += `<tr${fit ? ` data-r="${r}"` : ''} style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
+      body += `<tr${fit ? ` data-r="${r}"${rep.has(r) ? ' data-t="1"' : ''}` : ''} style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
     }
     const cg = '<colgroup>' + cp.map(c => `<col style="width:${colW(c).toFixed(2)}px">`).join('') + '</colgroup>';
     const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
@@ -931,8 +1057,8 @@ export function printDefaults(key: string, sheets: string[]): PrintOpts {
 
 // ------------------------------------------------------------------ το παράθυρο «Εκτύπωση»
 // Τα στοιχεία που χρειάζεται η στήλη ρυθμίσεων: σελίδες, προσανατολισμός και γράμματα κάθε φύλλου
-export interface PrintInfo { sheets: { name: string; pages: number; landscape: boolean; pt: number; font: string; size: number; titles: boolean; scale: number }[]; all: string[]; total: number; sug?: { n: number; pt: number } }
-export const infoOf = (doc: PrintDoc): PrintInfo => ({ sheets: doc.sheets.map(s => ({ name: s.name, pages: s.pages, landscape: s.landscape, pt: s.pt, font: s.font, size: s.size, titles: s.titles, scale: s.scale })), all: doc.all, total: doc.total, ...(doc.sug ? { sug: doc.sug } : {}) });
+export interface PrintInfo { sheets: { name: string; pages: number; landscape: boolean; pt: number; font: string; size: number; titles: boolean; scale: number }[]; all: string[]; total: number; sug?: { n: number; pt: number }; cols: SortCol[] }
+export const infoOf = (doc: PrintDoc): PrintInfo => ({ sheets: doc.sheets.map(s => ({ name: s.name, pages: s.pages, landscape: s.landscape, pt: s.pt, font: s.font, size: s.size, titles: s.titles, scale: s.scale })), all: doc.all, total: doc.total, ...(doc.sug ? { sug: doc.sug } : {}), cols: doc.cols || [] });
 export const sectionsHtml = (doc: PrintDoc) => doc.sheets.map((s, i) => `<section data-i="${i}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)}</h2>` : ''}${s.html}</section>`).join('') || '<p class="empty">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>';
 
 // Το script της προεπισκόπησης. Είναι το μόνο που επιτρέπει το CSP (με το hash του), ώστε ό,τι άλλο βρεθεί μέσα στη σελίδα
@@ -964,7 +1090,7 @@ const PREVIEW_SCRIPT = `
       });
     }, 40);
   }
-  function set(k, v, save){ o[k] = v; if (k === 'pages') delete o.breaks; request(save !== false); }
+  function set(k, v, save){ o[k] = v; if (k === 'pages' || k === 'sort') delete o.breaks; request(save !== false); }
 
   // ---------------------------------------------------------------- στήλη ρυθμίσεων
   function radios(name, val){ [].forEach.call(document.querySelectorAll('input[name="' + name + '"]'), function(i){ i.checked = !hasBreaks() || name !== 'pages' ? i.value === String(val) : false; }); }
@@ -1008,8 +1134,77 @@ const PREVIEW_SCRIPT = `
     var sheetsOf = o.side === 'back' ? Math.ceil(info.total / 2) : info.total;
     $('meta').textContent = info.total ? plural(info.total, 'σελίδα', 'σελίδες') + ' σε ' + plural(sheetsOf, 'φύλλο', 'φύλλα') + ' χαρτί' + (o.side === 'back' && info.total > 1 ? ' (μπρος-πίσω)' : '') + ' · ' + o.paper + ' ' + (land ? 'οριζόντια' : port ? 'κατακόρυφα' : 'κατακόρυφα και οριζόντια') : '';
     go.disabled = dlg.disabled = pdf.disabled = !info.total;
+    sorts();
   }
   function esc(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  // ---------------------------------------------------------------- ταξινόμηση: 1η, 2η, 3η στήλη (κουμπί με λίστα, όχι το select των Windows)
+  var DIR = { text: ['Α → Ω', 'Ω → Α'], num: ['1 → 9', '9 → 1'], date: ['Παλιά πρώτα', 'Νέα πρώτα'], rank: ['Ανώτεροι πρώτα', 'Κατώτεροι πρώτα'] };
+  var menu = $('menu'), menuAt = null, want = null;
+  function colOf(k){ return (info.cols || []).filter(function(c){ return c.k === k; })[0]; }
+  function sorts(){
+    var list = o.sort || [], cols = info.cols || [], a = document.activeElement, keep = want;
+    // το πλήκτρο που είχε την εστίαση μένει με την εστίαση και μετά τη νέα διάταξη
+    if (!keep && a && $('sorts').contains(a)) ['data-i', 'data-d', 'data-x'].forEach(function(n){ if (a.hasAttribute(n)) keep = '#sorts [' + n + '="' + a.getAttribute(n) + '"]'; });
+    want = null;
+    $('sortGrp').hidden = !cols.length && !list.length;
+    $('sorts').innerHTML = list.map(function(s, i){
+      var c = colOf(s.c), kind = c ? c.kind : 'text';
+      return '<div class="srt"><span class="no">' + (i + 1) + 'η</span><button type="button" class="dd" data-i="' + i + '" aria-haspopup="listbox" aria-label="' + (i + 1) + 'η ταξινόμηση: ' + esc(c ? c.label : s.l || s.c) + '"' + (c ? '' : ' title="Δεν υπάρχει αυτή η στήλη σε αυτό το έντυπο"') + '><span>' + esc(c ? c.label : s.l || s.c) + '</span></button>'
+        + '<button type="button" class="sm dir" data-d="' + i + '" title="Αλλαγή φοράς">' + DIR[kind][s.d ? 1 : 0] + '</button>'
+        + '<button type="button" class="sm x" data-x="' + i + '" aria-label="Χωρίς την ' + (i + 1) + 'η ταξινόμηση" title="Βγάλε την">✕</button></div>';
+    }).join('');
+    var free = cols.filter(function(c){ return !list.some(function(s){ return s.c === c.k; }); });
+    $('sortAdd').hidden = list.length >= 3 || !free.length;
+    $('sortAdd').textContent = list.length ? '+ Μετά κατά…' : '+ Ταξινόμηση κατά…';
+    if (keep) { var f = document.querySelector(keep); if (!f || f.hidden) f = document.querySelector('#sorts .dd') || $('sortAdd'); if (f && !f.hidden) f.focus(); }
+    $('sortHelp').textContent = list.length ? 'Αλλάζει μόνο η σειρά των γραμμών του πίνακα. Κεφαλίδα, σύνολα και υπογραφές μένουν στη θέση τους, και το Α/Α μετράει ξανά από το 1.' : 'Όπως είναι στο Excel. Διάλεξε στήλη, π.χ. πρώτα θάλαμος και μετά επίθετο.';
+  }
+  function putSort(list){ set('sort', list); }
+  function closeMenu(focus){ if (menu.hidden) return; menu.hidden = true; var b = menuAt && menuAt.btn; menuAt = null; if (focus && b && document.body.contains(b)) b.focus(); }
+  function openMenu(btn, at){
+    var list = o.sort || [], cur = at >= 0 ? list[at].c : null;
+    var opts = (info.cols || []).filter(function(c){ return c.k === cur || !list.some(function(s){ return s.c === c.k; }); });
+    if (!opts.length) return;
+    menu.innerHTML = opts.map(function(c){ return '<button type="button" role="option" data-k="' + esc(c.k) + '" aria-selected="' + (c.k === cur) + '">' + esc(c.label) + '</button>'; }).join('');
+    menu.hidden = false; menuAt = { btn: btn, at: at };
+    var r = btn.getBoundingClientRect(), h = menu.offsetHeight, w = Math.max(r.width, menu.offsetWidth);
+    menu.style.minWidth = r.width + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    menu.style.top = (r.bottom + h + 8 > window.innerHeight && r.top - h - 2 > 8 ? r.top - h - 2 : r.bottom + 2) + 'px';
+    (menu.querySelector('[aria-selected="true"]') || menu.firstChild).focus();
+  }
+  function pickCol(k){
+    var at = menuAt ? menuAt.at : -1, c = colOf(k), list = (o.sort || []).slice(); closeMenu(false);
+    if (!c) return;
+    if (at >= 0) list[at] = { c: k, l: c.label, d: list[at].d && list[at].c === k ? true : undefined };
+    else list.push({ c: k, l: c.label });
+    want = '#sorts [data-i="' + (at >= 0 ? at : list.length - 1) + '"]'; putSort(list);
+  }
+  $('sortAdd').addEventListener('click', function(){ openMenu($('sortAdd'), -1); });
+  $('sorts').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    var list = (o.sort || []).slice();
+    if (b.hasAttribute('data-i')) openMenu(b, +b.getAttribute('data-i'));
+    else if (b.hasAttribute('data-d')) { var i = +b.getAttribute('data-d'); list[i] = { c: list[i].c, l: list[i].l, d: !list[i].d || undefined }; putSort(list); }
+    else if (b.hasAttribute('data-x')) { list.splice(+b.getAttribute('data-x'), 1); want = '#sortAdd'; putSort(list.length ? list : undefined); }
+  });
+  menu.addEventListener('click', function(e){ var b = e.target.closest('[data-k]'); if (b) pickCol(b.getAttribute('data-k')); });
+  menu.addEventListener('keydown', function(e){
+    var items = [].slice.call(menu.querySelectorAll('[data-k]')), i = items.indexOf(document.activeElement);
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+    else if (e.key === 'Tab') closeMenu(false);
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); items[e.key === 'Home' ? 0 : items.length - 1].focus(); }
+    else if (e.key.length === 1 && e.key !== ' ') {
+      // πληκτρολογείς το πρώτο γράμμα: πάει στην επόμενη στήλη που ξεκινά από αυτό (χωρίς τόνους)
+      var plain = function(t){ return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }, ch = plain(e.key);
+      for (var n = 1; n <= items.length; n++) { var x = items[(i + n) % items.length]; if (plain(x.textContent).indexOf(ch) === 0) { x.focus(); break; } }
+    }
+  });
+  document.addEventListener('mousedown', function(e){ if (!menu.hidden && !menu.contains(e.target) && (!menuAt || !menuAt.btn.contains(e.target))) closeMenu(false); });
+  view.addEventListener('scroll', function(){ closeMenu(false); });
 
   // ---------------------------------------------------------------- σελίδες: με λεζάντα, ανά δύο σε «φύλλο» στο μπρος-πίσω
   function pages(){ return [].slice.call(pagesEl.querySelectorAll('.pg')); }
@@ -1050,17 +1245,20 @@ const PREVIEW_SCRIPT = `
   // ---------------------------------------------------------------- κλικ σε γραμμή: η σελίδα αλλάζει από εκεί
   view.addEventListener('click', function(e){
     var tr = e.target.closest && e.target.closest('tr[data-r]'), pg = tr && tr.closest('.pg'); if (!pg) return;
-    var r = +tr.getAttribute('data-r'), sheet = pg.getAttribute('data-sheet'), first = +pg.getAttribute('data-first');
+    var r = +tr.getAttribute('data-r'), sheet = pg.getAttribute('data-sheet');
     var ofSheet = pages().filter(function(p){ return p.getAttribute('data-sheet') === sheet; });
-    if (r < first || r <= +ofSheet[0].getAttribute('data-first')) return;   // γραμμή τίτλων που επαναλαμβάνεται, ή η πρώτη γραμμή
+    if (tr.hasAttribute('data-t') || r <= +ofSheet[0].getAttribute('data-first')) return;   // γραμμή τίτλων που επαναλαμβάνεται, ή η πρώτη γραμμή
+    // η σειρά των γραμμών όπως τυπώνονται (με ταξινόμηση δεν είναι η σειρά του Excel)
+    var order = []; ofSheet.forEach(function(p){ [].forEach.call(p.querySelectorAll('tr[data-r]:not([data-t])'), function(t){ order.push(+t.getAttribute('data-r')); }); });
+    var pos = function(x){ return order.indexOf(x); };
     var had = hasBreaks();
     if (!had) { o.breaks = {}; info.sheets.forEach(function(s){ o.breaks[s.name] = pages().filter(function(p){ return p.getAttribute('data-sheet') === s.name; }).slice(1).map(function(p){ return +p.getAttribute('data-first'); }); }); }
     var starts = (o.breaks[sheet] || []).slice(), at = starts.indexOf(r);
     if (at >= 0) starts.splice(at, 1);                                          // πρώτη γραμμή σελίδας: ενώνεται με την προηγούμενη
     else if (!had && o.pages !== 'auto' && starts.length) {                      // 2 ή 3 σελίδες: μετακινείται η πιο κοντινή αλλαγή
-      var best = 0; starts.forEach(function(s, i){ if (Math.abs(s - r) < Math.abs(starts[best] - r)) best = i; }); starts[best] = r;
+      var best = 0; starts.forEach(function(s, i){ if (Math.abs(pos(s) - pos(r)) < Math.abs(pos(starts[best]) - pos(r))) best = i; }); starts[best] = r;
     } else starts.push(r);
-    o.breaks[sheet] = starts.filter(function(v, i, a){ return a.indexOf(v) === i; }).sort(function(a, b){ return a - b; });
+    o.breaks[sheet] = starts.filter(function(v, i, a){ return a.indexOf(v) === i; }).sort(function(a, b){ return pos(a) - pos(b); });
     request(false);
   });
 
@@ -1078,7 +1276,7 @@ const PREVIEW_SCRIPT = `
   $('reset').addEventListener('click', function(){ api.forget().then(function(d){ o = d; request(remember); say('Επανήλθαν οι αρχικές ρυθμίσεις.', true); }); });
   $('close').addEventListener('click', function(){ api.close(); });
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') { if (!$('flip').hidden) { flipDone(false); return; } api.close(); return; }
+    if (e.key === 'Escape') { if (!$('flip').hidden) { flipDone(false); return; } if (!menu.hidden) { closeMenu(true); return; } api.close(); return; }
     if (e.ctrlKey && (e.key === 'p' || e.key === 'P' || e.key === 'π' || e.key === 'Π')) { e.preventDefault(); if (!go.disabled) go.click(); return; }
     if (e.ctrlKey || e.altKey || e.metaKey || (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'radio' && e.target.type !== 'checkbox')) return;
     if (e.key === '1' || e.key === '2' || e.key === '3') set('pages', +e.key);
@@ -1224,8 +1422,14 @@ button:focus-visible,.sheets label:focus-within{outline:2px solid #5b7a2b;outlin
 .flip>div{background:#fff;border-radius:12px;padding:18px 20px;max-width:440px;display:flex;flex-direction:column;gap:12px;box-shadow:0 16px 40px rgba(0,0,0,.3)}
 .flip h3{margin:0;font-size:16px}.flip p{margin:0}
 #out{display:none}
+.sorts{display:flex;flex-direction:column;gap:5px}.sorts:empty{display:none}
+.srt{display:flex;gap:5px;align-items:center}.srt .no{font-size:12px;color:#596050;min-width:20px}
+.srt .dd{flex:1;min-width:0;display:flex;justify-content:space-between;gap:6px;padding:4px 8px;text-align:left}.srt .dd span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srt .dd::after{content:"▾";color:#596050}.srt .sm{align-self:auto;white-space:nowrap}.srt .x{padding:3px 7px}
+.menu{position:fixed;z-index:6;background:#fff;border:1px solid #c2c8b5;border-radius:7px;box-shadow:0 8px 22px rgba(0,0,0,.25);max-height:min(320px,70vh);overflow:auto;padding:3px;display:flex;flex-direction:column}
+.menu button{border:0;border-radius:5px;text-align:left;padding:5px 10px;font-size:13px}.menu button:hover,.menu button:focus{background:#e3e7d8;outline:none}.menu button[aria-selected="true"]{font-weight:700}
 ${doc.css}
-@media print{html,body{height:auto;background:#fff}body{display:block}.bar,.wrap,.flip{display:none!important}#out{display:block}#out .pg{margin:0;box-shadow:none;break-after:page;contain:strict}#out .pg:last-child{break-after:auto}}
+@media print{html,body{height:auto;background:#fff}body{display:block}.bar,.wrap,.flip,.menu{display:none!important}#out{display:block}#out .pg{margin:0;box-shadow:none;break-after:page;contain:strict}#out .pg:last-child{break-after:auto}}
 </style><style id="cells"></style><style id="page">${one ? `@page{size:${one.paper} ${one.landscape ? 'landscape' : 'portrait'};margin:0}` : ''}</style></head><body data-init="${esc(JSON.stringify(data))}">
 <div class="bar"><b>${esc(file)}</b><span class="meta" id="meta"></span><div class="sheets" id="sheets" role="group" aria-label="Φύλλα"></div></div>
 <div class="wrap">
@@ -1236,6 +1440,7 @@ ${seg('pages', 'Σε πόσες σελίδες', [['1', '1'], ['2', '2'], ['3', 
 <p class="help" id="pagesHelp"></p></div>
 <div class="legible" id="legible" role="status"></div>
 <div class="grp" id="sizeGrp" hidden><span class="lbl" id="l-size">Μέγεθος γραμμάτων</span><div class="range"><input type="range" id="size" min="6" max="16" step="0.5" aria-labelledby="l-size"><output id="sizeOut" for="size"></output></div><p class="help">Οι στήλες χωράνε πάντα στο πλάτος: αν δεν χωράει, σταματά στο μέγιστο που χωράει.</p></div>
+<div class="grp" id="sortGrp" hidden><span class="lbl">Ταξινόμηση</span><div id="sorts" class="sorts"></div><button type="button" class="sm" id="sortAdd" aria-haspopup="listbox"></button><p class="help" id="sortHelp"></p></div>
 ${seg('side', 'Η σελίδα 2 τυπώνεται', [['back', 'Στην πίσω όψη'], ['new', 'Σε νέο φύλλο']])}
 <label class="chk" id="duplexRow"><input type="checkbox" id="duplex"> <span>Ο εκτυπωτής γυρίζει μόνος του το χαρτί</span></label>
 <p class="help" id="sideHelp"></p></div>
@@ -1260,6 +1465,7 @@ ${seg('pa', 'Χαρτί', [['A4', 'A4'], ['A3', 'A3']])}</div>
 <p>Τυπώθηκαν οι μπροστινές σελίδες (<span id="flipCount"></span>). Πάρε τα φύλλα όπως βγήκαν και βάλ' τα ξανά στον δίσκο του εκτυπωτή με την τυπωμένη πλευρά από την άλλη μεριά. Μετά πάτα «Τύπωσε τις πίσω».</p>
 <label class="chk"><input type="checkbox" id="flipRev"> <span>Αντίστροφη σειρά (αν την προηγούμενη φορά βγήκαν ανακατεμένες)</span></label>
 <div class="row"><button type="button" class="pri" id="flipGo">Τύπωσε τις πίσω</button><button type="button" id="flipNo">Άκυρο</button></div></div></div>
+<div class="menu" id="menu" role="listbox" aria-label="Στήλες" hidden></div>
 <div id="out"></div>
 <script>${PREVIEW_SCRIPT}</script></body></html>`;
 }
