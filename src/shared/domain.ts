@@ -188,8 +188,12 @@ export function shiftSlots(start: string, sh: ShiftDef, n: number): string[][] {
 // code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
 export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
 export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null }
-export type Phase = 'sven' | 'spen';
-export const PHASE_NAME: Record<Phase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
+// Έντυπο υπηρεσιών: ΣΒΕΝ, ΣΠΕΝ ή δικό σου (Michael, 22/10: «dropdown και λίστα»). Το δικό σου έχει δικές του
+// υπηρεσίες και βγαίνει στο Excel με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ (base), με το όνομά του.
+export type BasePhase = 'sven' | 'spen';
+export type Phase = string;
+export const PHASE_NAME: Record<BasePhase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
+export interface PhaseDef { id: string; name: string; base: BasePhase; blocks: BlockDef[] }
 export interface Post extends PostDef { block: string; kind: DutyKind; armed: boolean; slots: string[] | null; hours: string; cyc?: number }
 
 // Προεπιλογή = το πραγματικό έντυπο «ΦΡΟΥΡΑ ΣΒΕΝ» (δείγμα 01): Λ/Υ, Δ/Υ, 2 μπλοκ θαλαμοφυλάκων 4×3, μαγειρεία ×5.
@@ -212,7 +216,25 @@ export const DEFAULT_BLOCKS_SPEN: BlockDef[] = [
   // ΤΑΕ: ένοπλη, χωρίς σταθερές ώρες (λοχίας, 10/10)
   { id: 'tae', kind: 'tae', name: 'ΤΑΕ', armed: true, posts: [{ k: 'tae', label: 'ΤΑΕ', short: 'ΤΑΕ', hrs: '', code: 'ΤΑΕ' }] }
 ];
-export const blocksOf = (settings: Settings, phase: Phase = settings.phase) => (phase === 'spen' ? settings.blocksSpen : settings.blocks);
+const ownPhase = (st: Settings, ph: Phase) => (ph === 'sven' || ph === 'spen' ? undefined : (st.phases || []).find(x => x.id === ph));
+export const blocksOf = (settings: Settings, phase: Phase = settings.phase): BlockDef[] => (phase === 'spen' ? settings.blocksSpen : ownPhase(settings, phase)?.blocks || settings.blocks);
+// Με ποιο έντυπο της εφαρμογής βγαίνει (ΣΒΕΝ ή ΣΠΕΝ): για το template, τα κελιά, τις υπογραφές
+export const phaseBase = (st: Settings, ph: Phase = st.phase): BasePhase => (ph === 'spen' ? 'spen' : ownPhase(st, ph)?.base || 'sven');
+export const phaseName = (st: Settings, ph: Phase = st.phase): string => (ph === 'sven' || ph === 'spen' ? PHASE_NAME[ph] : ownPhase(st, ph)?.name || PHASE_NAME.sven);
+// Όλα τα έντυπα υπηρεσιών με τη σειρά: ΣΒΕΝ, ΣΠΕΝ, τα δικά σου
+export const phaseList = (st: Settings): { id: Phase; name: string; base: BasePhase; custom: boolean }[] =>
+  [{ id: 'sven', name: PHASE_NAME.sven, base: 'sven' as BasePhase, custom: false }, { id: 'spen', name: PHASE_NAME.spen, base: 'spen' as BasePhase, custom: false }, ...(st.phases || []).map(x => ({ id: x.id, name: x.name, base: x.base, custom: true }))];
+// Αρχή του ονόματος του Excel: «ΦΡΟΥΡΑ », «ΦΡΟΥΡΑ ΣΠΕΝ », «ΦΡΟΥΡΑ ΑΣΚΗΣΗ »
+export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' ? '' : phaseName(st, ph) + ' ');
+// Οι υπηρεσίες κάθε εντύπου (ΣΒΕΝ, ΣΠΕΝ, δικά σου), για ό,τι κοιτά όλα τα έντυπα μαζί (κωδικοί, ιστορικό, στήλες)
+export const phaseBlocks = (st: Settings): [Phase, BlockDef[]][] => [['sven', st.blocks || []], ['spen', st.blocksSpen || []], ...(st.phases || []).map(x => [x.id, x.blocks || []] as [Phase, BlockDef[]])];
+export const everyBlock = (st: Settings): BlockDef[] => phaseBlocks(st).flatMap(([, b]) => b);
+// Οι ρυθμίσεις με νέες υπηρεσίες σε ένα έντυπο
+export function withBlocks(st: Settings, ph: Phase, list: BlockDef[]): Settings {
+  if (ph === 'spen') return { ...st, blocksSpen: list };
+  if (ph === 'sven' || !ownPhase(st, ph)) return { ...st, blocks: list };
+  return { ...st, phases: (st.phases || []).map(x => (x.id === ph ? { ...x, blocks: list } : x)) };
+}
 
 // Νούμερα μιας υπηρεσίας με βάρδιες: οι θέσεις με το ίδιο rot είναι ένα νούμερο (ζεύγος σκοπών)· οι δικές σου, ένα η καθεμία
 export const shiftGroups = (b: BlockDef) => { const ps = b.posts.filter(p => !p.hidden); const keys: string[] = []; for (const p of ps) { const k = p.rot != null ? 'r' + p.rot : p.k; if (!keys.includes(k)) keys.push(k); } return keys; };
@@ -258,6 +280,7 @@ export interface Settings {
   place: string;                         // Αυλώνας
   blocks: BlockDef[];                    // ΣΒΕΝ
   blocksSpen: BlockDef[];                // ΣΠΕΝ
+  phases?: PhaseDef[];                   // δικά σου έντυπα υπηρεσιών (αντίγραφο της ΣΒΕΝ ή της ΣΠΕΝ στην αρχή)
   phase: Phase;                          // ποιο έντυπο υπηρεσιών ισχύει τώρα
   holidays: Record<ISODate, string>;     // αργίες που πρόσθεσες (οι επίσημες βγαίνουν μόνες τους κάθε χρονιά, rules.ts)
   holidaysOff?: ISODate[];               // επίσημες αργίες που αφαίρεσες
@@ -346,9 +369,9 @@ export function migrateSettings(st: Settings): Settings {
 // δική σου υπηρεσία θαλαμοφυλάκων στη ΣΒΕΝ θα έπαιρνε τα Θ1, Θ2 της ΣΠΕΝ και οι θαλαμοφύλακες της ΣΠΕΝ θα γίνονταν Θ3…Θ6
 export function withCodes(st: Settings): Settings {
   const owner = new Map<string, string>();   // κλειδί κωδικού → θέση που τον έχει
-  for (const b of [...(st.blocks || []), ...(st.blocksSpen || [])]) for (const p of b.posts) if (p.code) owner.set(codeKey(p.code), p.k);
+  for (const b of everyBlock(st)) for (const p of b.posts) if (p.code) owner.set(codeKey(p.code), p.k);
   const free = (c: string, k: string) => { const o = owner.get(codeKey(c)); return o == null || o === k; };
-  const fill = (ph: Phase, list: BlockDef[] | undefined, own: boolean) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
+  const fill = (ph: BasePhase, list: BlockDef[] | undefined, own: boolean) => (list || []).map(b => ({ ...b, posts: b.posts.map((p, i) => {
     if (p.code) return p;
     let c = defaultCode(ph, b.id, p.k);
     if (!c || !free(c, p.k)) { if (!own) return p; let n = i + 1; do c = KIND_CODE[b.kind] + n++; while (!free(c, p.k)); }
@@ -356,12 +379,13 @@ export function withCodes(st: Settings): Settings {
     return { ...p, code: c };
   }) }));
   const blocks = fill('sven', st.blocks, false), blocksSpen = fill('spen', st.blocksSpen, false);
-  return { ...st, blocks: fill('sven', blocks, true), blocksSpen: fill('spen', blocksSpen, true) };
+  const own = (st.phases || []).map(x => ({ ...x, blocks: fill(x.base, x.blocks, false) }));
+  return { ...st, blocks: fill('sven', blocks, true), blocksSpen: fill('spen', blocksSpen, true), ...(st.phases ? { phases: own.map(x => ({ ...x, blocks: fill(x.base, x.blocks, true) })) } : {}) };
 }
 // Ο κωδικός του εντύπου για μια θέση (ΣΒΕΝ/ΣΠΕΝ, υπηρεσία, θέση), όπως στις προεπιλογές
 const DEF_CODES = new Map<string, string>();
 for (const [ph, list] of [['sven', DEFAULT_BLOCKS], ['spen', DEFAULT_BLOCKS_SPEN]] as const) for (const b of list) for (const p of b.posts) if (p.code) DEF_CODES.set(ph + '|' + b.id + '|' + p.k, p.code);
-export const defaultCode = (ph: Phase, block: string, k: string) => DEF_CODES.get(ph + '|' + block + '|' + k);
+export const defaultCode = (ph: BasePhase, block: string, k: string) => DEF_CODES.get(ph + '|' + block + '|' + k);
 // Κλειδί σύγκρισης κωδικών: κεφαλαία, χωρίς τόνους, λατινικά που μοιάζουν → ελληνικά, χωρίς κενά και παύλες
 export const codeKey = (raw: unknown) => normGreek(raw).replace(/[\s\-–—]+/g, '');
 

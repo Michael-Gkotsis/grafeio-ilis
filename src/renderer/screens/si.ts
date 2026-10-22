@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
-import { blocksOf, PHASE_NAME, type BlockDef, type Person } from '../../shared/domain';
+import { blocksOf, phaseList, type BlockDef, type Person } from '../../shared/domain';
 import { type UserLists } from '../../shared/ranks';
 import { parseSi, siBases, siCats, siCellOf, siCombos, siLabel, siName, siOf, siRowKey, siSubs, SI_BASES, SI_CAT_BASES, SI_CATS, type SiConfig } from '../../shared/si';
 type P = any;
@@ -45,15 +45,15 @@ export function SiField({ id, value, cat, onChange }: P) {
 }
 
 const CAT_SEP = ' · ';
-// Στήλες των πινάκων «ποιος κάνει τι»: οι υπηρεσίες του εντύπου που ισχύει και μετά όσες έχει μόνο το άλλο έντυπο
+// Στήλες των πινάκων «ποιος κάνει τι»: οι υπηρεσίες του εντύπου που ισχύει και μετά όσες έχουν μόνο τα άλλα έντυπα
 // (χωρίς Λ/Υ-Δ/Υ, που ορίζονται με το χέρι, και όσες αφαιρέθηκαν)
 export function useDutyCols(): (BlockDef & { only?: string })[] {
   const { state } = useStore();
   return useMemo(() => {
-    const st = state.settings; const other = st.phase === 'spen' ? 'sven' : 'spen';
+    const st = state.settings; const cur = st.phase || 'sven';
     const seen = new Set<string>(); const out: (BlockDef & { only?: string })[] = [];
     for (const b of blocksOf(st) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push(b); }
-    for (const b of blocksOf(st, other) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push({ ...b, only: PHASE_NAME[other] }); }
+    for (const ph of phaseList(st)) if (ph.id !== cur) for (const b of blocksOf(st, ph.id) || []) if (b.kind !== 'ly' && !b.hidden && !seen.has(b.id)) { seen.add(b.id); out.push({ ...b, only: ph.name }); }
     return out;
   }, [state.settings]);
 }

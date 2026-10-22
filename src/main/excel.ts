@@ -7,7 +7,7 @@ import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
 import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { norm, collator, upper } from '../shared/text';
-import { fatherTxt, type AppState, type DutyKind } from '../shared/domain';
+import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
@@ -51,9 +51,9 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   const days: ISODate[] = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
   // ο κωδικός της θέσης (Θ1α, Μ2…) και το είδος της, για τα σύνολα· υπηρεσία χωρίς θέση (από Excel): το σκέτο γράμμα
   // δικές σου υπηρεσίες που δεν μετρούν σε καμία από τις στήλες Θ, Μ, ΛΥ (π.χ. «Πύλη»): δική τους στήλη στο τέλος, με το
-  // όνομά τους (ίδιο όνομα στα δύο έντυπα = μία στήλη)· και οι ανενεργές, για να μη χάνονται οι υπηρεσίες που έγιναν
+  // όνομά τους (ίδιο όνομα σε δύο έντυπα = μία στήλη)· και οι ανενεργές, για να μη χάνονται οι υπηρεσίες που έγιναν
   const ownOf = new Map<string, string>();
-  for (const b of [...(s.settings.blocks || []), ...(s.settings.blocksSpen || [])]) if (b.custom && !BASE_KINDS.includes(b.kind)) ownOf.set(b.id, norm(b.name));
+  for (const b of everyBlock(s.settings)) if (b.custom && !BASE_KINDS.includes(b.kind)) ownOf.set(b.id, norm(b.name));
   const OWN = [...new Set(ownOf.values())];
   const per = new Map<number, Map<ISODate, { code: string; kind: DutyKind; own?: string }>>();
   const set = (pid: number, d: ISODate, v: { code: string; kind: DutyKind; own?: string }) => { if (!per.has(pid)) per.set(pid, new Map()); per.get(pid)!.set(d, v); };

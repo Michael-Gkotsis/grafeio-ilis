@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, type AppState, type Person, type Phase, type Status } from './domain';
+import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { seatMap, postsOf } from './rules';
 
@@ -18,7 +18,7 @@ export interface TableCols { aa: string; name: string; hours: string; note: stri
 // Δύο δίπλα δίπλα (Michael, 20/10): αριστερά στις στήλες του α΄ πίνακα θαλαμοφυλάκων, δεξιά στις στήλες του β΄ (ή των οπλοφυλάκων)
 const TABLES: FrouraForm['tables'] = { look: { aa: 'B13', name: 'C13', hours: 'D13', note: 'E13' }, left: { aa: 'B', name: 'C', hours: 'D', note: 'E' }, right: { aa: 'I', name: 'J', hours: 'K', note: 'L' } };
 const range4 = (k: string, col: string) => Object.fromEntries([0, 1, 2, 3].map(i => [k + (i + 1), col + (13 + 3 * i)]));
-export const FROURA_FORMS: Record<Phase, FrouraForm> = {
+export const FROURA_FORMS: Record<BasePhase, FrouraForm> = {
   sven: {
     file: 'froura.xlsx',
     pos: { ...range4('th', 'C'), th5: 'J13', th6: 'J16', th7: 'J19', th8: 'J22', mg1: 'F27', mg2: 'F28', mg3: 'F29', mg4: 'F30', mg5: 'F31' },
@@ -31,6 +31,8 @@ export const FROURA_FORMS: Record<Phase, FrouraForm> = {
   }
 };
 export const phaseOf = (s: AppState): Phase => s.settings.phase || 'sven';
+// Τα κελιά του εντύπου: της ΣΒΕΝ ή της ΣΠΕΝ (και για τα δικά σου έντυπα, με όποιο από τα δύο βγαίνουν)
+export const frouraForm = (s: AppState, phase: Phase = phaseOf(s)): FrouraForm => FROURA_FORMS[phaseBase(s.settings, phase)];
 
 export const rankName = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 // Στο έντυπο υπηρεσιών: μόνο επώνυμο και όνομα. Λ/Υ και Δ/Υ: βαθμός, όνομα, κινητό και όπλο (γραφέας, 10/10).
@@ -40,7 +42,7 @@ export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.p
 export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
 // Τι γράφεται πού: θέσεις με δικό τους κελί, και όσες δεν έχουν (π.χ. νέα υπηρεσία «Πύλη») σε γραμμές από κάτω
 export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s)): FrouraLayout {
-  const form = FROURA_FORMS[phase]; const g = s.guards[date] || {}; const pm = seatMap(s);
+  const form = frouraForm(s, phase); const g = s.guards[date] || {}; const pm = seatMap(s);
   const cells = new Map<string, string[]>(); const extra: FrouraLayout['extra'] = [];
   const posts = postsOf(s.settings);
   for (const x of posts) {
@@ -83,7 +85,7 @@ export const absenceOf = (x: Pick<Status, 'type' | 'kind'>) => (x.type === 'LEAV
 export const NUM_ROWS = [13, 16, 19, 22];
 export function frouraPer(s: AppState, phase: Phase = phaseOf(s)): number[] {
   const ps = buildPosts(blocksOf(s.settings, phase).filter(b => !b.hidden), dutyStartOf(s.settings));
-  const right = phase === 'spen' ? 'op' : 'th', off = phase === 'spen' ? 1 : 5;
+  const spen = phaseBase(s.settings, phase) === 'spen'; const right = spen ? 'op' : 'th', off = spen ? 1 : 5;
   return [0, 1, 2, 3].map(i => {
     const ns = [ps.find(x => x.k === 'th' + (i + 1)), ps.find(x => x.k === right + (i + off))].filter(x => x && !x.hidden && x.slots).map(x => x!.slots!.length);
     return ns.length ? Math.max(1, ...ns) : 3;

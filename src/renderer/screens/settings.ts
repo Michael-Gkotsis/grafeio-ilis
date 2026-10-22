@@ -7,8 +7,9 @@ import { requestLeave, usePending } from '../pending';
 import { DateField, HoursField, RangeField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
-import { PHASE_NAME, blocksOf, dutyStartOf, shiftGroups, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
-import { AddBlockDialog } from './guard';
+import { PHASE_NAME, blocksOf, dutyStartOf, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
+import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
+import { phaseDelWhy } from '../../shared/commands';
 import { dmy, dow, greekHolidays } from '../../shared/dates';
 import { codeErrors } from '../../shared/codes';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
@@ -216,22 +217,28 @@ function SigsCard() {
   <//>`;
 }
 
-// Υπηρεσίες ανά έντυπο (ΣΒΕΝ/ΣΠΕΝ): ενεργές ή όχι (Michael, 20/10), ένοπλες ή άοπλες (Κ-Υ1), νέες υπηρεσίες
+// Υπηρεσίες ανά έντυπο (ΣΒΕΝ, ΣΠΕΝ, δικά σου, από λίστα: Michael 22/10): ενεργές ή όχι (Michael, 20/10), ένοπλες ή άοπλες (Κ-Υ1), νέες υπηρεσίες
 function BlocksCard() {
-  const { state, run } = useStore();
-  const [phase, setPhase] = useState<Phase>(state.settings.phase || 'sven'); const [add, setAdd] = useState(false); const [ed, setEd] = useState<string | null>(null);
+  const { state, run } = useStore(); const toast = useToast();
+  const [pick, setPick] = useState<Phase>(state.settings.phase || 'sven'); const [add, setAdd] = useState(false); const [ed, setEd] = useState<string | null>(null); const [ren, setRen] = useState(false);
+  const phases = phaseList(state.settings); const cur = phases.find(x => x.id === pick) || phases[0]; const phase = cur.id;
   const list = blocksOf(state.settings, phase) || [];
   const bad = useMemo(() => codeErrors(state.settings), [state.settings]);
-  return html`<${Card} title="Υπηρεσίες" actions=${html`<${Segmented} small=${true} value=${phase} onChange=${setPhase} items=${[{ value: 'sven', label: 'ΣΒΕΝ' }, { value: 'spen', label: 'ΣΠΕΝ' }]}/>`}>
+  const delWhy = cur.custom ? phaseDelWhy(state, phase) : '';
+  const del = async () => { if (await run({ t: 'delPhase', id: phase }, false)) { setPick(state.settings.phase || 'sven'); toast({ text: 'Διαγράφηκε η ΦΡΟΥΡΑ ' + cur.name }); } };
+  return html`<${Card} title="Υπηρεσίες" actions=${html`<${PhaseSelect} value=${phase} onChange=${setPick}/>`}>
     ${bad.length > 0 && html`<${Alert} tone="warn"><span><b>Κωδικοί που θέλουν διόρθωση</b> (Επεξεργασία στην υπηρεσία τους): ${bad.join(' · ')}</span><//>`}
-    <p className="note" style=${{ marginTop: 0 }}>Τώρα ισχύει η <b>ΦΡΟΥΡΑ ${PHASE_NAME[state.settings.phase || 'sven']}</b> (αλλάζει από τις Υπηρεσίες). Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ.</p>
+    <p className="note" style=${{ marginTop: 0 }}>Τώρα ισχύει η <b>ΦΡΟΥΡΑ ${phaseName(state.settings)}</b> (αλλάζει από τις Θέσεις). Διάλεξε πάνω δεξιά ποιου εντύπου τις υπηρεσίες βλέπεις, ή «+ Νέο έντυπο υπηρεσιών…». Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ.</p>
+    ${cur.custom && html`<div className="toolbar" style=${{ marginBottom: '8px' }}><span className="muted" style=${{ fontSize: '13px' }}>Δικό σου έντυπο · βγαίνει στο Excel με το έντυπο της ${PHASE_NAME[cur.base]}</span>
+      <${Button} size="sm" variant="ghost" style=${{ marginLeft: 'auto' }} onClick=${() => setRen(true)}>Μετονομασία…<//><${Button} size="sm" variant="ghost" disabled=${!!delWhy} why=${delWhy} onClick=${del}>Διαγραφή<//></div>`}
     ${list.map(b => { const ps = b.posts.filter(x => !x.hidden); const ly = b.kind === 'ly';
       return html`<div key=${b.id} className="rule" style=${{ alignItems: 'center', padding: '3px 0' }}><span style=${{ flex: 1, ...(b.hidden ? { opacity: 0.6 } : {}) }}><b>${b.name}</b><small>${ps.length} ${ps.length === 1 ? 'θέση' : 'θέσεις'} · ${b.hidden ? 'ανενεργή' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''} · κωδικοί ${ps.map(x => x.code || '?').join(', ')}</small></span>
       <label className="ui-checkrow" data-tip=${ly ? 'Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)' : b.hidden ? 'Ανενεργή: δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών. Τσέκαρε για να ξαναμπεί.' : 'Ξετσέκαρε για να μη μπαίνει πια στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, χωρίς να σβηστεί. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών.'}><input type="checkbox" className="ui-check" aria-label=${'Ενεργή: ' + b.name} disabled=${ly} checked=${!b.hidden} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { hidden: !e.target.checked } })}/> Ενεργή</label>
       <label className="ui-checkrow" data-tip=${ly ? undefined : 'Σε ένοπλη θέση δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.)'}><input type="checkbox" className="ui-check" aria-label=${'Ένοπλη: ' + b.name} disabled=${b.hidden || ly} checked=${b.armed} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armed: e.target.checked } })}/> Ένοπλη</label>
       <span style=${{ display: 'flex', ...(ly || b.hidden ? { visibility: 'hidden' } : {}) }}><${Button} size="sm" variant="ghost" aria-label=${'Πιο πάνω: ' + b.name} data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)" onClick=${() => run({ t: 'editBlock', phase, id: b.id, name: b.name, n: 0, hrs: {}, move: -1 })}>↑<//><${Button} size="sm" variant="ghost" onClick=${() => setEd(b.id)}>Επεξεργασία<//></span></div>`; })}
-    <div style=${{ marginTop: '8px' }}><${Button} variant="outline" size="sm" disabled=${phase !== (state.settings.phase || 'sven')} data-tip=${phase !== (state.settings.phase || 'sven') ? 'Πρόσθεσε στο έντυπο που ισχύει τώρα' : undefined} onClick=${() => setAdd(true)}>+ Νέα υπηρεσία<//></div>
-    ${add && html`<${AddBlockDialog} onClose=${() => setAdd(false)}/>`}
+    <div style=${{ marginTop: '8px' }}><${Button} variant="outline" size="sm" onClick=${() => setAdd(true)}>+ Νέα υπηρεσία στη ΦΡΟΥΡΑ ${cur.name}<//></div>
+    ${add && html`<${AddBlockDialog} phase=${phase} onClose=${() => setAdd(false)}/>`}
+    ${ren && html`<${PhaseDialog} edit=${phase} onClose=${() => setRen(false)}/>`}
     ${ed && html`<${EditBlockDialog} phase=${phase} b=${list.find(x => x.id === ed)} onClose=${() => setEd(null)}/>`}
   <//>`;
 }
@@ -245,9 +252,8 @@ function EditBlockDialog({ phase, b, onClose }: P) {
   // λάθη στους κωδικούς αυτής της υπηρεσίας όπως θα ήταν μετά την αποθήκευση (ίδιος κωδικός αλλού, σκέτο γράμμα…):
   // εμποδίζουν την αποθήκευση. Λάθη σε άλλες υπηρεσίες μόνο φαίνονται.
   const [errs, others] = useMemo(() => {
-    const key = phase === 'spen' ? 'blocksSpen' : 'blocks';
     const list = blocksOf(state.settings, phase).map((x: P) => (x.id === b.id ? { ...x, posts: x.posts.map((p: P) => (codes[p.k] != null && codes[p.k].trim() ? { ...p, code: codes[p.k].trim() } : p)) } : x));
-    const st = { ...state.settings, [key]: list }; const mine = codeErrors(st, { phase, id: b.id });
+    const st = withBlocks(state.settings, phase, list); const mine = codeErrors(st, { phase, id: b.id });
     return [mine, codeErrors(st).filter(t => !mine.includes(t))];
   }, [codes, state.settings, phase, b.id]);
   // Ώρες (Michael, 20/10): όλη μέρα, ίδιες ώρες για κάθε θέση, ή βάρδιες. Οι υπηρεσίες του εντύπου με νούμερα

@@ -10,7 +10,7 @@ import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
 import { useNowMin } from './clock';
-import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, plainName, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
+import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, phaseBase, plainName, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
 import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
@@ -365,7 +365,7 @@ export function PrintButton({ kind, date, label, variant = 'ghost', size, disabl
 }
 export function TemplateNote({ ids }: { ids: string[] }) {
   const { boot, state } = useStore(); const nav = useNav();
-  const spen = state.settings.phase === 'spen';
+  const spen = phaseBase(state.settings) === 'spen';
   const ts = ids.map(id => boot.templates.find(t => t.id === id && (id !== 'froura' || (t.file === 'froura-spen.xlsx') === spen))).filter(Boolean) as Boot['templates'];
   return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.file}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'templates' })}>Templates<//></span>`;
 }

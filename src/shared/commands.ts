@@ -2,8 +2,8 @@
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
-import { norm, normGreek } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, PHASE_NAME, blocksOf, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
+import { norm, normGreek, upper } from './text';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -63,6 +63,9 @@ export type Command =
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setPhase'; phase: Phase }
+  | { t: 'addPhase'; name: string; from: Phase }
+  | { t: 'renamePhase'; id: Phase; name: string }
+  | { t: 'delPhase'; id: Phase }
   | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
@@ -104,14 +107,32 @@ const who = (s: AppState, pids: number[]) => {
 };
 // θέσεις μιας υπηρεσίας χωρίς κωδικό (νέες, ή σβησμένος κωδικός): ο επόμενος ελεύθερος (Υ1, Υ2…)
 function fillCodes(settings: Settings, phase: Phase, id: string): Settings {
-  const key = phase === 'spen' ? 'blocksSpen' : 'blocks';
   let st = settings;
   for (;;) {
     const list = blocksOf(st, phase); const i = list.findIndex(x => x.id === id); const b = list[i];
     const j = b ? b.posts.findIndex(p => !p.code) : -1; if (j < 0) return st;
     const posts = b.posts.map((p, q) => (q === j ? { ...p, code: freeCode(st, b.kind, j + 1) } : p));
-    st = { ...st, [key]: list.map((x, q) => (q === i ? { ...b, posts } : x)) };
+    st = withBlocks(st, phase, list.map((x, q) => (q === i ? { ...b, posts } : x)));
   }
+}
+// Όνομα δικού σου εντύπου υπηρεσιών: κεφαλαία (γράφεται στο όνομα του Excel), όχι ίδιο με άλλο, όχι «ΦΡΟΥΡΑ …»
+function phaseNameOk(st: Settings, raw: string, self?: Phase): string {
+  const name = upper(raw).replace(/\s+/g, ' ').replace(/^ΦΡΟΥΡΑ\s+/, '').trim();
+  if (!name) throw new Error('Γράψε όνομα για το έντυπο υπηρεσιών');
+  if (/[\\/:*?"<>|]/.test(name)) throw new Error('Το όνομα μπαίνει στο όνομα του αρχείου Excel: χωρίς \\ / : * ? " < > |');
+  if (phaseList(st).some(x => x.id !== self && norm(x.name) === norm(name))) throw new Error('Υπάρχει ήδη έντυπο υπηρεσιών ' + name);
+  return name;
+}
+// Γιατί δεν διαγράφεται ένα δικό σου έντυπο υπηρεσιών ('' = διαγράφεται): όχι αυτό που ισχύει, όχι αν υπηρεσίες που
+// έχει μόνο αυτό έχουν μπει σε κάποια μέρα (θα χανόταν το όνομά τους από το ιστορικό)
+export function phaseDelWhy(s: AppState, id: Phase): string {
+  if ((s.settings.phase || 'sven') === id) return 'Ισχύει τώρα: διάλεξε πρώτα άλλο έντυπο στις Θέσεις';
+  const mine = new Set(blocksOf(s.settings, id).flatMap(b => b.posts.map(p => p.k)));
+  const rest = { ...s.settings, phases: (s.settings.phases || []).filter(x => x.id !== id) };
+  for (const b of everyBlock(rest)) for (const p of b.posts) mine.delete(p.k);
+  if (!mine.size) return '';
+  const used = Object.values(s.guards).some(g => Object.keys(g).some(k => mine.has(k)));
+  return used ? 'Έχει υπηρεσίες που έγιναν και υπάρχουν μόνο σε αυτό· μένει για το ιστορικό' : '';
 }
 const setGuard = (s: AppState, date: ISODate, k: string, pid: number | null): AppState => {
   const g = { ...(s.guards[date] || {}) };
@@ -739,25 +760,43 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'setPhase':
       if (c.phase === s.settings.phase) return { state: s, text: '', files: [] };
-      return { state: { ...s, settings: { ...s.settings, phase: c.phase } }, text: 'Έντυπο υπηρεσιών: ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase], files: [] };
+      if (!phaseList(s.settings).some(x => x.id === c.phase)) throw new Error('Δεν βρέθηκε το έντυπο υπηρεσιών');
+      return { state: { ...s, settings: { ...s.settings, phase: c.phase } }, text: 'Έντυπο υπηρεσιών: ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase), files: [] };
+    // Δικά σου έντυπα υπηρεσιών (Michael, 22/10): ξεκινούν ως αντίγραφο ενός άλλου, με τις ίδιες υπηρεσίες και θέσεις
+    // (ίδια κλειδιά = ίδιο ιστορικό και δικαιοσύνη), και βγαίνουν στο Excel με το έντυπο εκείνου (ΣΒΕΝ ή ΣΠΕΝ)
+    case 'addPhase': {
+      const name = phaseNameOk(s.settings, c.name);
+      if (!phaseList(s.settings).some(x => x.id === c.from)) throw new Error('Δεν βρέθηκε το έντυπο υπηρεσιών');
+      const id = 'f' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
+      const phases = [...(s.settings.phases || []), { id, name, base: phaseBase(s.settings, c.from), blocks: blocksOf(s.settings, c.from).map(b => ({ ...b, posts: b.posts.map(p => ({ ...p })) })) }];
+      return { state: { ...s, settings: { ...s.settings, phases } }, text: 'Νέο έντυπο υπηρεσιών: ΦΡΟΥΡΑ ' + name + ' (αντίγραφο της ΦΡΟΥΡΑ ' + phaseName(s.settings, c.from) + ')', files: [] };
+    }
+    case 'renamePhase': {
+      const f = (s.settings.phases || []).find(x => x.id === c.id); if (!f) throw new Error('Η ΣΒΕΝ και η ΣΠΕΝ δεν αλλάζουν όνομα');
+      const name = phaseNameOk(s.settings, c.name, c.id); if (name === f.name) return { state: s, text: '', files: [] };
+      return { state: { ...s, settings: { ...s.settings, phases: s.settings.phases!.map(x => (x.id === c.id ? { ...x, name } : x)) } }, text: 'ΦΡΟΥΡΑ ' + f.name + ': λέγεται πια ΦΡΟΥΡΑ ' + name, files: [] };
+    }
+    case 'delPhase': {
+      const f = (s.settings.phases || []).find(x => x.id === c.id); if (!f) throw new Error('Η ΣΒΕΝ και η ΣΠΕΝ δεν διαγράφονται');
+      const why = phaseDelWhy(s, c.id); if (why) throw new Error(why);
+      return { state: { ...s, settings: { ...s.settings, phases: s.settings.phases!.filter(x => x.id !== c.id) } }, text: 'Διαγράφηκε το έντυπο υπηρεσιών ΦΡΟΥΡΑ ' + f.name, files: [] };
+    }
     case 'addBlock': {
       const name = c.name.trim(); if (!name) throw new Error('Γράψε όνομα για τη νέα υπηρεσία');
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
       const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
-      const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
-      return { state: { ...s, settings: fillCodes({ ...s.settings, [key]: [...blocksOf(s.settings, c.phase), b] }, c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
+      return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
       // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
-      const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       const list = [...blocksOf(s.settings, c.phase)]; const i = list.findIndex(x => x.id === c.id); if (i < 0) throw new Error('Δεν βρέθηκε η υπηρεσία');
       const b = list[i];
       if (c.move) {
         const j = i + c.move; if (j < 0 || j >= list.length || list[j].kind === 'ly' || b.kind === 'ly') return { state: s, text: '', files: [] };
         [list[i], list[j]] = [list[j], list[i]];
-        return { state: { ...s, settings: { ...s.settings, [key]: list } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': άλλαξε σειρά', files: [] };
+        return { state: { ...s, settings: withBlocks(s.settings, c.phase, list) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': άλλαξε σειρά', files: [] };
       }
       const name = (b.custom && c.name.trim()) || b.name;
       let posts = b.posts.map(p => (p.rot == null && c.hrs[p.k] != null ? { ...p, hrs: c.hrs[p.k].trim() || 'ημέρα' } : p));
@@ -773,12 +812,11 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
       if (c.shift !== undefined) { if (c.shift && c.shift.every > 0) nb.shift = { every: Math.round(c.shift.every), ...(c.shift.from ? { from: c.shift.from } : {}), ...(c.shift.to ? { to: c.shift.to } : {}) }; else delete nb.shift; }
       list[i] = nb;
-      const settings = fillCodes({ ...s.settings, [key]: list }, c.phase, b.id);
+      const settings = fillCodes(withBlocks(s.settings, c.phase, list), c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
-      return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
+      return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
     }
     case 'setBlock': {
-      const key = c.phase === 'spen' ? 'blocksSpen' : 'blocks';
       const list = blocksOf(s.settings, c.phase); const b = list.find(x => x.id === c.id); if (!b) throw new Error('Δεν βρέθηκε η υπηρεσία');
       // «Ενεργή» (Michael, 20/10): ανενεργή = hidden, δεν σβήνεται. Δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και
       // στο έντυπο· οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών, στη δικαιοσύνη και στην καρτέλα. Όσες είχαν
@@ -797,7 +835,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (!gone) guards = s.guards;
       }
       const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
-      return { state: { ...s, guards, settings: { ...s.settings, [key]: list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x)) } }, text: 'ΦΡΟΥΡΑ ' + PHASE_NAME[c.phase] + ', ' + b.name + ': ' + what, files: [] };
+      return { state: { ...s, guards, settings: withBlocks(s.settings, c.phase, list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x))) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': ' + what, files: [] };
     }
     case 'setNightTraining': {
       const nightTraining = { ...(s.nightTraining || {}) };
