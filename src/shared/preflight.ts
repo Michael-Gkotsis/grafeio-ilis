@@ -7,7 +7,7 @@ import {
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { hkRowList } from './ranks';
-import { hkRowLabel } from './unit';
+import { HK, hkRowLabel } from './unit';
 import { normGreek } from './text';
 import type { ExportKind } from './api';
 
@@ -73,7 +73,9 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   const sum = Object.values(h.rank).reduce((a, r) => a + r.n, 0);
   if (sum !== h.total) out.push({ level: 'err', text: 'Το σύνολο ανά βαθμό (' + sum + ') δεν συμφωνεί με τη δύναμη (' + h.total + ')' });
   if (h.avail !== h.total - h.apo) out.push({ level: 'err', text: 'Διαθέσιμοι ≠ Δύναμη − Απόντες' });
-  if (!Object.values(s.settings.cadre).some(n => n > 0)) out.push({ level: 'warn', text: 'Τα στελέχη ανά βαθμό είναι όλα 0. Συμπλήρωσέ τα στις Ρυθμίσεις.', go: 'settings' });
+  // στελέχη: από την καρτέλα Στελέχη ή, χωρίς αυτήν, από τους αριθμούς ανά βαθμό (UX Π6: πριν προειδοποιούσε κάθε μέρα
+  // ακόμα κι όταν η καρτέλα Στελέχη είχε ανθρώπους και η ΗΚΑΙ τους μετρούσε σωστά)
+  if (!(s.cadreList || []).some(c => c.active) && !Object.values(s.settings.cadre).some(n => n > 0)) out.push({ level: 'warn', text: 'Δεν υπάρχουν στελέχη: πέρασέ τα στην καρτέλα Στελέχη (ή γράψε πόσοι είναι ανά βαθμό στην ' + HK() + ').', go: 'cadre' });
   if (!Object.keys(s.guards[date] || {}).length) out.push({ level: 'warn', text: 'Δεν έχουν οριστεί υπηρεσίες για ' + dm(date) + ': η στήλη «Υπηρεσία» θα είναι 0.', go: 'guard' });
   for (const [ls, what] of [[hkaiEgrLines(s, date), '1. Εγγραφές'], [hkaiDiaLines(s, date), '2. Διαγραφές'], [hkaiLeaveLines(s, date), '3. Άδειες'], [hkaiPunLines(s, date), '4. Ποινές'], [hkaiReqLines(s, date), '5. Αιτήσεις']] as const) {
     const n = paperLines(ls);

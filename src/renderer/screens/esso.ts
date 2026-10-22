@@ -1,12 +1,13 @@
 // Ρυθμίσεις › ΕΣΣΟ: η τωρινή ΕΣΣΟ, «Νέα ΕΣΣΟ» σε βήματα και «Επαναφορά ΕΣΣΟ» από τον φάκελο του αρχείου της (Michael, 17/10)
 import { useEffect, useState } from 'react';
-import { html, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
+import { html, Alert, Badge, Button, Why, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { ESSO_SERIES, currentEsso, essoName, nextEsso, parseEsso, type Esso, type EssoSeries } from '../../shared/esso';
 import { dmy } from '../../shared/dates';
 import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../../shared/api';
 import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
 import { UnitKindField } from './hkrows';
+import { GoLink } from '../common';
 type P = any;
 
 const join = (dir: string, name: string) => dir.replace(/[\\/]+$/, '') + (dir.includes('\\') ? '\\' : '/') + name;
@@ -85,7 +86,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   const back = html`<${Button} variant="outline" disabled=${busy} onClick=${() => { setErr(null); setStep(step - 1); }}>Πίσω<//>`;
   const foot = step === 1 ? html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${() => setStep(2)}>Συνέχεια<//>`
     : step < 4 ? html`${back}<${Button} onClick=${() => setStep(step + 1)}>Συνέχεια<//>`
-    : html`${back}<${Button} variant="destructive" disabled=${!ack || busy} onClick=${start}>${busy ? 'Γίνεται…' : 'Ξεκίνα τη ' + essoName(e)}<//>`;
+    : html`<${Why} text=${!ack && !busy && 'Τσέκαρε πρώτα το κουτάκι πιο πάνω'}/>${back}<${Button} variant="destructive" disabled=${!ack || busy} why=${!ack ? 'Τσέκαρε πρώτα το κουτάκι πιο πάνω' : undefined} onClick=${start}>${busy ? 'Γίνεται…' : 'Ξεκίνα τη ' + essoName(e)}<//>`;
   return html`<${Dialog} title="Νέα ΕΣΣΟ" description=${desc} size="lg" onClose=${busy ? () => {} : onClose} closeOnOverlay=${false} footer=${foot}>
     ${step === 1 && html`
       <div className="field"><span className="field__label">Ποια ΕΣΣΟ ξεκινά;</span><${EssoFields} v=${e} onChange=${setE} id="ne-y"/>
@@ -138,7 +139,7 @@ function EssoDone({ r, onClose }: P) {
       <dt>Φάκελος</dt><dd><span className="plan__fn">${r.dir}</span> <${Button} variant="link" onClick=${() => window.api.essoOpen(r.dir)}>Άνοιξε<//></dd>
       <dt>Excel</dt><dd>${r.files.length ? r.files.map((f: string) => html`<div key=${f}><${Button} variant="link" onClick=${() => window.api.openPath(f)}>${f.split(/[\\/]/).pop()}<//></div>`) : 'κανένα'}</dd></dl>
     ${r.warnings.map((w: string) => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
-    ${r.warnings.length > 0 && html`<p className="note">Ό,τι δεν φτιάχτηκε το φτιάχνεις από Ρυθμίσεις › Αρχεία Excel › «Νέο αρχείο…».</p>`}
+    ${r.warnings.length > 0 && html`<p className="note">Ό,τι δεν φτιάχτηκε το φτιάχνεις από <${GoLink} view="templates" params=${{ tab: 'files' }}>Ρυθμίσεις › Αρχεία Excel<//> › «Νέο αρχείο…».</p>`}
   <//>`;
 }
 

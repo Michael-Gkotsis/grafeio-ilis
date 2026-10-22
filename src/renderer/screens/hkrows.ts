@@ -7,6 +7,7 @@ import { html, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '.
 import { Select } from '../select';
 import { useStore } from '../store';
 import { usePending } from '../pending';
+import { GoLink } from '../common';
 import { guessHk, hkRowsOf, itemKey, listOf, optionsOf, type HkRowDef } from '../../shared/ranks';
 import { hkaiCounts, hkRankOf } from '../../shared/rules';
 import { HK, HK_HEAD_FORM, UNIT_KINDS, formText, hkRowLabel, hkRowName, type UnitKind } from '../../shared/unit';
@@ -101,10 +102,11 @@ export function HkRowsCard({ bare }: { bare?: boolean }) {
 }
 
 // Κεφαλίδα της ΗΚΑΙ (Michael, 18/10): οι 2 γραμμές πάνω αριστερά στο έντυπο. Κενό = ό,τι έχει το έντυπο (ΚΕΤΘ / 2Η ΕΠΧΙΑ).
-export function HkHeadFields({ value, onChange, kind }: { value: string[]; onChange: (v: string[]) => void; kind?: UnitKind }) {
+// inSettings: στις Ρυθμίσεις › Μονάδα και έντυπα η κεφαλίδα των άλλων εντύπων είναι ακριβώς πιο πάνω (UX Χ5)
+export function HkHeadFields({ value, onChange, kind, inSettings }: { value: string[]; onChange: (v: string[]) => void; kind?: UnitKind; inSettings?: boolean }) {
   return html`<div className="field"><span className="field__label">Κεφαλίδα της ${HK()} (2 γραμμές πάνω αριστερά)</span>
     <div className="field-row">${[0, 1].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} aria-label=${'Κεφαλίδα της ' + HK() + ', γραμμή ' + (i + 1)} placeholder=${formText({ unitKind: kind }, HK_HEAD_FORM[i])} value=${value[i] || ''} onChange=${(e: P) => { const v = [value[0] || '', value[1] || '']; v[i] = e.target.value; onChange(v); }}/>`)}</div>
-    <span className="field__help">Κενό: μένει αυτή του εντύπου (φαίνεται αχνά). Η κεφαλίδα των άλλων εντύπων (ΦΡΟΥΡΑ, εξοδούχοι) είναι στις Ρυθμίσεις › Μονάδα και έντυπα.</span></div>`;
+    <span className="field__help">Κενό: μένει αυτή του εντύπου (φαίνεται αχνά). Η κεφαλίδα των άλλων εντύπων (ΦΡΟΥΡΑ, εξοδούχοι) ${inSettings ? 'είναι τα τρία πεδία πιο πάνω.' : html`είναι στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα<//>.`}</span></div>`;
 }
 export function HkHeadCard() {
   const { state, run } = useStore(); const toast = useToast();

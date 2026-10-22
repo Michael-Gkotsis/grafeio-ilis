@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
-import { MonthField, PersonPicker, usePrintFile } from '../common';
+import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
 import { TYPES, CAP_ACC, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type TypeKey } from '../../shared/domain';
 import { personMap, postBy, postsOf } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
@@ -139,7 +139,7 @@ function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () =
     toast({ text: 'Ορίστηκαν ' + chosen.length + ' είδη από το ' + book.name + '. Πάτα «Ανανέωση από Excel» σε όποιο θέλεις να διαβαστεί τώρα.' });
   };
   return html`<${Dialog} size="lg" title=${'Τι έχει το ' + book.name} description="Η εφαρμογή βρήκε αυτούς τους πίνακες. Διάλεξε σε ποιο είδος πάει ο καθένας· η πρόταση της αναγνώρισης είναι ήδη επιλεγμένη." onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!chosen.length || !!dupe} onClick=${save}>Αποθήκευση (${chosen.length})<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!chosen.length || !!dupe} why=${dupe ? 'Το «' + KIND[dupe].label + '» διαλέχτηκε σε δύο πίνακες' : 'Διάλεξε είδος σε τουλάχιστον έναν πίνακα'} onClick=${save}>Αποθήκευση (${chosen.length})<//>`}>
     ${!book.hits.length && html`<${Alert} tone="warn"><span>Δεν βρέθηκε πίνακας με επικεφαλίδες ατόμων (Επώνυμο, Όνομα, ΑΣΜ). Διάλεξε είδος και δείξε τις στήλες με το χέρι:</span><//>
       <div className="toolbar" style=${{ flexWrap: 'wrap' }}>${KINDS.map(k => html`<${Button} key=${k.id} size="sm" variant="outline" onClick=${() => onMap(k.id, defaultBinding(k.id, book.file, book.sheets[0]?.name || k.title))}>${k.label}<//>`)}</div>`}
     <ul className="srclist">${book.hits.map((h, i) => {
@@ -201,8 +201,8 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
   const fieldAt = (c: number) => fields.find(f => b.cols[f.k] === c);
   return html`<${Dialog} size="xl" title=${KIND[list].label + ': πού βρίσκεται στο Excel'} description=${book.name} onClose=${onClose}
     footer=${html`<span className="note" style=${{ marginRight: 'auto' }}>${isNew ? 'Το φύλλο θα φτιαχτεί με την πρώτη ενημέρωση.' : count + ' ' + (count === 1 ? 'εγγραφή' : 'εγγραφές') + ' στον πίνακα'}</span>
-      <${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} variant="outline" disabled=${miss.length > 0} onClick=${() => save(false)}>Αποθήκευση<//>
-      ${!isNew && html`<${Button} disabled=${miss.length > 0} onClick=${() => save(true)}>Αποθήκευση και ανάγνωση<//>`}`}>
+      <${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} variant="outline" disabled=${miss.length > 0} why=${'Λείπει: ' + miss.join(', ')} onClick=${() => save(false)}>Αποθήκευση<//>
+      ${!isNew && html`<${Button} disabled=${miss.length > 0} why=${'Λείπει: ' + miss.join(', ')} onClick=${() => save(true)}>Αποθήκευση και ανάγνωση<//>`}`}>
     <div className="field-row" style=${{ alignItems: 'flex-end' }}>
       <div className="field"><label className="field__label" htmlFor="mp-sh">Φύλλο</label>
         <${Select} id="mp-sh" className="ui-input" value=${isNew ? NEW_SHEET : b.sheet} onChange=${(e: any) => setSheet(e.target.value)}>
@@ -417,7 +417,7 @@ function DutyAliases({ codes }: { codes: string[] }) {
         <optgroup label="Υπηρεσία χωρίς θέση">${(Object.keys(KIND_NAME) as DutyKind[]).map(k => html`<option key=${k} value=${'kind:' + k}>${KIND_NAME[k]}</option>`)}</optgroup>
         <optgroup label="Θέση">${posts.map(x => html`<option key=${x.k} value=${x.k}>${x.label}${x.code ? ' (' + x.code + ')' : ''}</option>`)}</optgroup>
       <//></div>`)}
-    <span className="field__help">Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις Ρυθμίσεις › Υπηρεσίες.</span></div>`;
+    <span className="field__help">Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</span></div>`;
 }
 
 // Ενημέρωση Excel: τι θα γραφτεί, γραμμή-γραμμή, πριν γραφτεί
@@ -434,7 +434,7 @@ function WriteDialog({ list, onClose }: { list: ListKind; onClose: () => void })
     } finally { setBusy(false); }
   };
   return html`<${Dialog} size="lg" title=${KIND[list].label + ': ενημέρωση Excel'} description=${pv && pv.ok ? base(pv.file) : ''} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${busy || !pv || !pv.ok || (!pv.total && !pv.create && !pv.tidy?.length)} onClick=${go}>${busy ? 'Γράφεται…' : 'Γράψε στο Excel'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${busy || !pv || !pv.ok || (!pv.total && !pv.create && !pv.tidy?.length)} why=${pv && pv.ok ? 'Το Excel έχει ήδη όσα ξέρει η εφαρμογή· δεν χρειάζεται αλλαγή' : 'Το Excel δεν διαβάστηκε'} onClick=${go}>${busy ? 'Γράφεται…' : 'Γράψε στο Excel'}<//>`}>
     ${!pv ? html`<p>Ανάγνωση…</p>` : !pv.ok ? html`<${Alert} tone="bad"><span>${pv.error}</span><//>` : html`<div>
       ${pv.create && html`<${Alert} tone="info"><span>Δεν υπάρχει ακόμα· θα φτιαχτεί με τίτλο και επικεφαλίδες στο ${base(pv.file)}.</span><//>`}
       ${!pv.total && !pv.create ? html`<${Alert} tone="ok"><span>✓ Το Excel έχει ήδη ό,τι έχει η εφαρμογή.</span><//>` : html`<p style=${{ marginTop: 0 }}><b>${pv.total}</b> ${pv.total === 1 ? 'αλλαγή θα γραφτεί' : 'αλλαγές θα γραφτούν'}. Η προηγούμενη έκδοση μένει στο _προηγούμενα.</p>
@@ -469,7 +469,7 @@ export function RosterPreview({ pv, onDone, onCancel }: { pv: ImportPreview; onD
     ${pv.suspicious.length > 0 && html`<${Alert} tone="warn"><span>${pv.suspicious.length} γραμμές δεν έχουν ούτε ΑΣΜ, ούτε τηλέφωνο, ούτε θάλαμο. Είναι σίγουρα άτομα; ${pv.suspicious.slice(0, 12).join(' · ')}${pv.suspicious.length > 12 ? ' …' : ''}</span><//>`}
     ${doubt && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${okd} onChange=${(e: any) => setOkd(e.target.checked)}/><span><b>Το έλεγξα, συνέχισε</b><small>Χρειάζεται επειδή κάτι δεν ταιριάζει παραπάνω.</small></span></label>`}
     <label className="rule"><input type="checkbox" className="ui-check" checked=${deact} onChange=${(e: any) => setDeact(e.target.checked)}/><span><b>Όσοι δεν είναι στο αρχείο → εκτός δύναμης</b><small>${pv.missing ? pv.missing + ' άτομα της εφαρμογής δεν βρέθηκαν στο αρχείο.' : 'Όλοι της εφαρμογής βρέθηκαν στο αρχείο.'} Όσοι έχουν ιστορικό κρατιούνται· όσοι δεν έχουν καμία καταχώρηση (π.χ. λάθος γραμμές παλιάς εισαγωγής) σβήνονται.</small></span></label>
-    <div style=${{ display: 'flex', gap: '8px' }}><${Button} variant="outline" onClick=${onCancel}>Άκυρο<//><${Button} disabled=${busy || (doubt && !okd)} onClick=${go}>Εισαγωγή ${pv.total} ατόμων<//></div>
+    <div style=${{ display: 'flex', gap: '8px' }}><${Button} variant="outline" onClick=${onCancel}>Άκυρο<//><${Button} disabled=${busy || (doubt && !okd)} why="Τσέκαρε πρώτα «Το έλεγξα, συνέχισε»" onClick=${go}>Εισαγωγή ${pv.total} ατόμων<//></div>
     <span className="note">Πριν την εισαγωγή κρατιέται αντίγραφο της βάσης. Αναιρείται από το Ιστορικό. Από εκεί και πέρα οι διορθώσεις σου στα άτομα γράφονται και στο ίδιο αρχείο (ρυθμίζεται στα «Αρχεία Excel»).</span>
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   </div>`;

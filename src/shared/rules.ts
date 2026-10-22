@@ -1083,7 +1083,7 @@ export interface HkaiRow { n: number; attached: number; c: Record<string, number
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
 // cadre: τα στελέχη ανά στήλη (καρτέλα Στελέχη), για να φαίνονται με ονόματα όπως οι στρατιώτες
-export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number }
+export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number; soldiers: number; cadreN: number }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
   const onDuty = new Map<number, DutyKind>();
@@ -1128,5 +1128,5 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     }
   }
   const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
-  return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length };
+  return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length, soldiers, cadreN: cadre };
 }

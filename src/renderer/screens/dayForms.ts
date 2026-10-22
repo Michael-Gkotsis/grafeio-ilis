@@ -2,7 +2,7 @@
 // μετά «Βγάλε όλα» (ανοίγουν στο Excel) ή «Τύπωσε όλα» (μία προεπισκόπηση εκτύπωσης μετά την άλλη).
 // Μαζί και τα δικά σου έντυπα (Έντυπα) που έχουν «Βγαίνει και από τα Έντυπα ημέρας».
 import { useMemo, useState } from 'react';
-import { html, cx, Button, Dialog, Icon } from '../ui';
+import { html, cx, Button, Why, Dialog, Icon } from '../ui';
 import { useNav, useStore } from '../store';
 import { GO } from '../common';
 import { preflight, type Check } from '../../shared/preflight';
@@ -63,9 +63,9 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
   const finished = Object.keys(done).length > 0 && !busy;
   return html`<${Dialog} title="Έντυπα ημέρας" description=${'Έλεγχος πριν βγουν. ' + (nWarn ? 'Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.' : '')} onClose=${busy ? () => {} : onClose} size="lg"
     footer=${finished ? html`<${Button} variant="outline" onClick=${() => window.api.openFolder('output')}>Φάκελος<//><${Button} data-autofocus="" onClick=${onClose}>Κλείσιμο<//>`
-      : html`<${Button} variant="outline" disabled=${!!busy} onClick=${onClose}>Άκυρο<//>
-        <${Button} variant="outline" disabled=${!!busy || !pick.length} onClick=${() => go(true)} data-tip="Βγαίνουν τα Excel και ανοίγει η προεπισκόπηση εκτύπωσης του καθενός, το ένα μετά το άλλο. Δεν χρειάζεται Excel.">${Icon.print}${busy === 'print' ? 'Τυπώνονται…' : 'Τύπωσε όλα'}<//>
-        <${Button} data-autofocus="" disabled=${!!busy || !pick.length} onClick=${() => go(false)}>${busy === 'xl' ? 'Βγαίνουν…' : pick.length === items.length ? 'Βγάλε όλα' : 'Βγάλε τα ' + pick.length}<//>`}>
+      : html`<${Why} text=${!busy && !pick.length && 'Διάλεξε τουλάχιστον ένα έντυπο'}/><${Button} variant="outline" disabled=${!!busy} onClick=${onClose}>Άκυρο<//>
+        <${Button} variant="outline" disabled=${!!busy || !pick.length} why=${!busy ? 'Διάλεξε τουλάχιστον ένα έντυπο' : undefined} onClick=${() => go(true)} data-tip="Βγαίνουν τα Excel και ανοίγει η προεπισκόπηση εκτύπωσης του καθενός, το ένα μετά το άλλο. Δεν χρειάζεται Excel.">${Icon.print}${busy === 'print' ? 'Τυπώνονται…' : 'Τύπωσε όλα'}<//>
+        <${Button} data-autofocus="" disabled=${!!busy || !pick.length} why=${!busy ? 'Διάλεξε τουλάχιστον ένα έντυπο' : undefined} onClick=${() => go(false)}>${busy === 'xl' ? 'Βγαίνουν…' : pick.length === items.length ? 'Βγάλε όλα' : 'Βγάλε τα ' + pick.length}<//>`}>
     <div className="dayforms">${items.map((it, i) => {
       const cs = checks[i]; const d = done[i];
       return html`<section key=${it.rep ? it.rep.id : it.kind} className=${cx('dayforms__item', !on[i] && 'is-off')}>

@@ -1,6 +1,6 @@
 // Ρυθμίσεις (μενού Ρυθμίσεις): φορτώνεται όταν ανοίξει η οθόνη, για να ανοίγει πιο γρήγορα η εφαρμογή.
 import { useEffect, useMemo, useState } from 'react';
-import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
+import { html, Alert, Badge, Button, Why, missingOf, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
@@ -72,7 +72,7 @@ function SettingsCard() {
   return html`<${Card} title="Μονάδα και έντυπα">
     <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
-    <${HkHeadFields} value=${s.head} onChange=${(head: string[]) => setS({ ...s, head })} kind=${s.unitKind}/>
+    <${HkHeadFields} value=${s.head} onChange=${(head: string[]) => setS({ ...s, head })} kind=${s.unitKind} inSettings=${true}/>
     <div className="field-row"><div className="field"><label className="field__label" htmlFor="st-un">Μονάδα στον τίτλο της ${HK()}</label><input id="st-un" className="ui-input" value=${s.unitName} onChange=${(e: any) => setS({ ...s, unitName: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor="st-pl">Τόπος (υπογραφές)</label><input id="st-pl" className="ui-input" value=${s.place} onChange=${(e: any) => setS({ ...s, place: e.target.value })}/></div></div>
     <div className="field"><span className="field__label" style=${{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>Στελέχη ανά βαθμό (${HK()}, στήλη «Τοποθετημένοι») <${HkRowsButton}/></span><div className="settings-grid">${cadreCountRows(state.settings.lists).map(r => html`<label key=${r} className="field"><span className="field__help">${hkRowLabel(r)}</span><input className="ui-input" type="number" min="0" value=${s.cadre[r] || 0} onChange=${(e: any) => setS({ ...s, cadre: { ...s.cadre, [r]: Math.max(0, +e.target.value || 0) } })}/></label>`)}</div>
@@ -157,7 +157,7 @@ function XlLookCard() {
       </tbody></table>
       <div style=${{ ...look('sig'), textAlign: 'right', marginTop: '10px' }}>Ο<br/>ΔΙΟΙΚΗΤΗΣ</div>
     </div>
-    <div className="toolbar"><${Button} disabled=${!changed} onClick=${() => save(x)}>Αποθήκευση<//>
+    <div className="toolbar"><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${() => save(x)}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setX(saved)}>Άκυρο<//>`}
       ${!sameLook(x, XL_LOOK) && html`<${Button} variant="ghost" onClick=${() => (sameLook(saved, XL_LOOK) ? setX(XL_LOOK) : save(XL_LOOK))} data-tip=${'Προεπιλογή: ' + lookText(XL_LOOK)}>Προεπιλογή<//>`}</div>
   <//>`;
@@ -206,7 +206,7 @@ function SigsCard() {
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
       ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} (στο «Φτιάξ\' το εδώ»: «Υπογραφές: Ναι»), εκτός αν το έντυπο έχει δικές του.' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
-    <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} onClick=${save}>Αποθήκευση<//>
+    <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setEdit({ ...edit, [form]: undefined })}>Άκυρο<//>`}
       ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}
       ${lf ? html`<${Button} variant="outline" style=${{ marginLeft: 'auto' }} onClick=${() => setLay(true)} data-tip="Σύρε κεφαλίδα, ημερομηνία και υπογραφές όπου θέλεις πάνω στο χαρτί">Θέσεις στο χαρτί…${movedAny ? ' •' : ''}<//>` : html`<span className="muted" style=${{ marginLeft: 'auto', fontSize: '13px' }}>Θέσεις στο χαρτί: σε κάθε έντυπο, από το «Υπογραφές…»</span>`}</div>
@@ -258,8 +258,9 @@ function EditBlockDialog({ phase, b, onClose }: P) {
   const labels = b.custom || !rotB ? Array.from({ length: b.custom ? n : shown.length }, (_, i) => (i + 1) + 'ος') : shiftGroups(b).map(k => (+k.slice(1) + 1) + (b.kind === 'sk' ? 'η' : 'ος'));
   const shiftOut = (): ShiftDef | null => (mode !== 'shift' ? null : rotB && sh.every === 120 && !normTime(sh.from) && !normTime(sh.to) ? null : shiftOf(sh));
   const save = async () => { const h = mode === 'day' ? Object.fromEntries(Object.keys(hrs).map(k => [k, ''])) : hrs; if (await run({ t: 'editBlock', phase, id: b.id, name, n, hrs: h, codes, shift: shiftOut() }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.custom ? name : b.name) }); } };
+  const ebWhy = errs.length ? errs[0] : mode === 'shift' && shiftBad(sh) ? 'Οι βάρδιες δεν είναι σωστές' : '';
   return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.custom ? 'Δική σου υπηρεσία: αλλάζουν όνομα, πλήθος και ώρες.' : 'Υπηρεσία του εντύπου: οι θέσεις είναι σταθερές· αλλάζουν οι κωδικοί και οι ώρες.'} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${errs.length > 0 || (mode === 'shift' && shiftBad(sh))} onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Why} text=${ebWhy}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!ebWhy} why=${ebWhy} onClick=${save}>Αποθήκευση<//>`}>
     ${b.custom && html`<div className="field-row"><div className="field"><label className="field__label" htmlFor="eb-n">Όνομα</label><input id="eb-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="eb-c">Πόσα άτομα</label><input id="eb-c" type="number" min="1" max="10" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, Math.min(10, +e.target.value || 1)))}/><span className="field__help">Όσες θέσεις φύγουν κρατούν το ιστορικό τους.</span></div></div>`}
     <div className="field"><span className="field__label">Κωδικός στον έλεγχο υπηρεσιών</span><div className="settings-grid">${coded.map((x: P) => html`<label key=${x.k} className="field"><span className="field__help">${x.label}</span><input className="ui-input" maxLength="8" value=${codes[x.k] ?? ''} placeholder="αυτόματα" onChange=${(e: any) => setCodes({ ...codes, [x.k]: e.target.value })}/></label>`)}</div>
@@ -274,10 +275,12 @@ function EditBlockDialog({ phase, b, onClose }: P) {
 // δεν ισχύει για τη μονάδα και προσθέτεις δικές σου
 function HolidaysCard() {
   const { state, run, today } = useStore();
-  const [d, setD] = useState(''); const [n, setN] = useState('');
+  const [d, setD] = useState(''); const [n, setN] = useState(''); const [old, setOld] = useState(false);
   const st = state.settings; const off = st.holidaysOff || []; const y = +today.slice(0, 4);
   const gen = [y, y + 1].flatMap(yy => Object.entries(greekHolidays(yy)));
-  const list = [...gen.filter(([k]) => !off.includes(k) && !st.holidays[k]).map(([k, v]) => ({ k, v, gen: true })), ...Object.entries(st.holidays).map(([k, v]) => ({ k, v, gen: false }))].sort((a, b) => a.k.localeCompare(b.k));
+  const all = [...gen.filter(([k]) => !off.includes(k) && !st.holidays[k]).map(([k, v]) => ({ k, v, gen: true })), ...Object.entries(st.holidays).map(([k, v]) => ({ k, v, gen: false }))].sort((a, b) => a.k.localeCompare(b.k));
+  // οι περασμένες κρυμμένες (UX Μ4): μένουν μόνο από σήμερα και μετά, με «Δείξε και τις παλιές»
+  const past = all.filter(x => x.k < today).length; const list = old ? all : all.filter(x => x.k >= today);
   const removed = gen.filter(([k]) => off.includes(k));
   const save = (settings: Partial<Settings>, text: string) => run({ t: 'setSettings', settings, text });
   const drop = (x: { k: string; v: string; gen: boolean }) => {
@@ -286,11 +289,12 @@ function HolidaysCard() {
   };
   return html`<${Card} title="Αργίες">
     <p className="note" style=${{ marginTop: 0 }}>Σάββατο και Κυριακή μετρούν πάντα ως αργία. Οι επίσημες αργίες (και οι κινητές από το Πάσχα) μπαίνουν μόνες τους κάθε χρονιά· αφαίρεσε όποια δεν ισχύει για τη μονάδα και πρόσθεσε δικές σου. Μετρούν στον έλεγχο υπηρεσιών και στον κανόνα «όχι αργία δύο φορές στη σειρά».</p>
-    <ul className="hist">${list.map(x => html`<li key=${x.k} className=${x.k < today ? 'muted' : ''}><span className="nw">${dow(x.k)} ${dmy(x.k)}</span> <b>${x.v}</b> ${x.gen ? html`<${Badge}>επίσημη<//>` : html`<${Badge} tone="info">δική σου<//>`} <${Button} size="sm" variant="ghost" aria-label=${'Αφαίρεση ' + x.v} onClick=${() => drop(x)}>✕<//></li>`)}</ul>
-    ${removed.length > 0 && html`<details className="note"><summary>Επίσημες που αφαίρεσες (${removed.length})</summary><ul className="hist">${removed.map(([k, v]) => html`<li key=${k}><span className="nw">${dow(k)} ${dmy(k)}</span> ${v} <${Button} size="sm" variant="ghost" onClick=${() => save({ holidaysOff: off.filter(x => x !== k) }, 'ξανά αργία ' + v + ' ' + dmy(k))}>Επαναφορά<//></li>`)}</ul></details>`}
+    <ul className="hist">${list.map(x => html`<li key=${x.k} className=${x.k < today ? 'muted' : ''}><span className="nw">${dow(x.k)} ${dmy(x.k)}</span> <b>${x.v}</b> ${x.gen ? html`<${Badge}>επίσημη<//>` : html`<${Badge} tone="info">δική σου<//>`} ${x.gen ? html`<${Button} size="sm" variant="ghost" onClick=${() => drop(x)} data-tip="Δεν μετρά ως αργία για τη μονάδα (επαναφέρεται από κάτω)">Δεν ισχύει για εμάς<//>` : html`<${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + x.v} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => drop(x)}>✕<//>`}</li>`)}</ul>
+    ${past > 0 && html`<${Button} variant="link" onClick=${() => setOld(!old)}>${old ? 'Κρύψε τις παλιές' : 'Δείξε και τις παλιές (' + past + ')'}<//>`}
+    ${removed.length > 0 && html`<details className="note"><summary>Επίσημες που δεν ισχύουν για εμάς (${removed.length})</summary><ul className="hist">${removed.map(([k, v]) => html`<li key=${k}><span className="nw">${dow(k)} ${dmy(k)}</span> ${v} <${Button} size="sm" variant="ghost" onClick=${() => save({ holidaysOff: off.filter(x => x !== k) }, 'ξανά αργία ' + v + ' ' + dmy(k))}>Επαναφορά<//></li>`)}</ul></details>`}
     <div className="field-row" style=${{ alignItems: 'flex-end' }}><div className="field"><label className="field__label" htmlFor="hol-d">Ημερομηνία</label><${DateField} id="hol-d" className="ui-input" value=${d} onChange=${(e: any) => setD(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="hol-n">Όνομα</label><input id="hol-n" className="ui-input" placeholder="π.χ. Τοπική εορτή" value=${n} onChange=${(e: any) => setN(e.target.value)}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} onClick=${async () => { if (await save({ holidays: { ...st.holidays, [d]: n.trim() }, holidaysOff: off.filter(x => x !== d) }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
+      <div className="field" style=${{ flex: 0 }}><${Button} disabled=${!d || !n.trim()} why=${missingOf([['Ημερομηνία', d], ['Όνομα', n.trim()]])} onClick=${async () => { if (await save({ holidays: { ...st.holidays, [d]: n.trim() }, holidaysOff: off.filter(x => x !== d) }, 'νέα αργία ' + n.trim() + ' ' + dmy(d))) { setD(''); setN(''); } }}>Πρόσθεσε<//></div></div>
   <//>`;
 }
 // Επαναφορά από αντίγραφο (έρευνα §4.2): πριν την επαναφορά κρατιέται αντίγραφο της τωρινής βάσης
@@ -311,8 +315,17 @@ function BackupsCard() {
   <//>`;
 }
 
+// Υπηρεσίες και αργίες σε τέσσερα κομμάτια (UX Μ4: πριν μία σελίδα 3.000 px): οι δύο πίνακες «μπαίνει ή όχι» δίπλα δίπλα
+const DUTY_SUBS: [string, string][] = [['blocks', 'Υπηρεσίες'], ['si', 'Σ.Ι.'], ['stat', 'Καταστάσεις'], ['hol', 'Αργίες']];
+function DutySection() {
+  const nav = useNav();
+  const sub: string = DUTY_SUBS.some(([k]) => k === nav.params.dsub) ? nav.params.dsub : 'blocks';
+  return html`<div className="stack"><${Segmented} value=${sub} onChange=${(v: string) => requestLeave(() => nav.set({ dsub: v === 'blocks' ? undefined : v }))} items=${DUTY_SUBS.map(([value, label]) => ({ value, label }))}/>
+    ${sub === 'si' ? html`<${SiCard}/>` : sub === 'stat' ? html`<${StatCard}/>` : sub === 'hol' ? html`<${HolidaysCard}/>` : html`<${BlocksCard}/>`}</div>`;
+}
+
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Templates'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -323,7 +336,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα και κράτα τα κελιά στις ίδιες θέσεις. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<div className="stack"><${BlocksCard}/><${SiCard}/><${StatCard}/><${HolidaysCard}/></div>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
   return html`<div>

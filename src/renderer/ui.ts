@@ -55,7 +55,8 @@ export const Logo = ({ size = 32, kind = 'chev', src }: P) => (src
 
 // Όσο τρέχει ό,τι ξεκίνησε το κλικ (onClick που επιστρέφει Promise), το κουμπί δεν ξαναπατιέται:
 // διπλό κλικ στην «Αποθήκευση» δεν γράφει δύο φορές
-export function Button({ variant = 'default', size, className, children, onClick, disabled, ...rest }: P) {
+// why: γιατί είναι γκρι (UX Μ5, 22/10). Όσο το κουμπί είναι γκρι, η συμβουλή του λέει αυτό αντί για ό,τι κάνει.
+export function Button({ variant = 'default', size, className, children, onClick, disabled, why, ...rest }: P) {
   const [busy, setBusy] = useState(false); const running = useRef(false); const live = useRef(true);
   useEffect(() => () => { live.current = false; }, []);
   const click = onClick && ((e: any) => {
@@ -66,8 +67,13 @@ export function Button({ variant = 'default', size, className, children, onClick
     const done = () => { running.current = false; if (live.current) setBusy(false); };
     r.then(done, (err: unknown) => { done(); console.error(err); });
   });
-  return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} disabled=${disabled || busy} aria-busy=${busy || undefined} onClick=${click} ...${rest}>${children}</button>`;
+  const tip = disabled && why ? { 'data-tip': why, 'aria-description': why } : null;
+  return html`<button type="button" className=${cx('ui-btn', 'ui-btn--' + variant, size && 'ui-btn--' + size, className)} disabled=${disabled || busy} aria-busy=${busy || undefined} onClick=${click} ...${rest} ...${tip}>${children}</button>`;
 }
+// Στα παράθυρα: δίπλα στο γκρι κουμπί, τι λείπει (π.χ. «Λείπει: Επώνυμο, Όνομα»)· τίποτα όταν δεν λείπει κάτι
+export const Why = ({ text }: { text?: string | false | null }) => (text ? html`<span className="btn-why" role="status">${text}</span>` : null);
+// «Λείπει: Α, Β» από ζεύγη [όνομα πεδίου, είναι συμπληρωμένο]
+export const missingOf = (fields: [string, unknown][]) => { const m = fields.filter(([, ok]) => !ok).map(([n]) => n); return m.length ? 'Λείπει: ' + m.join(', ') : ''; };
 export const Badge = ({ tone, className, children, ...rest }: P) => html`<span className=${cx('ui-badge', tone && 'ui-badge--' + tone, className)} ...${rest}>${children}</span>`;
 export const Kbd = ({ children }: P) => html`<kbd className="ui-kbd">${children}</kbd>`;
 // Card με open/onToggle: κλείνει με κλικ στην επικεφαλίδα· κλειστή δείχνει μόνο τη σύνοψη και δεν φτιάχνει το περιεχόμενο
@@ -99,10 +105,13 @@ export function useEscape(fn: () => void) {
 export function useDirty(v: unknown) { const [v0] = useState(() => JSON.stringify(v)); return JSON.stringify(v) !== v0; }
 // dirty: κάτι γράφτηκε και δεν αποθηκεύτηκε. Τότε Esc, ✕ και κλικ έξω ρωτούν πριν κλείσουν (ένα Esc παραπάνω για να κλείσει
 // μια λίστα δεν πετάει πια τη φόρμα). Κείμενο στη θέση του true: τι ακριβώς χάνεται. Το «Άκυρο» του παραθύρου κλείνει χωρίς ερώτηση.
+// Σύνδεσμος μέσα σε παράθυρο (GoLink): κλείνει πρώτα το παράθυρο, με την ίδια ερώτηση αν έχει αλλαγές, και μετά πάει εκεί
+export const DialogLeave = createContext<((after: () => void) => void) | null>(null);
 export function Dialog({ title, description, onClose, children, footer, size, closeOnOverlay = true, role = 'dialog', dirty }: P) {
   const ref = useRef<HTMLDivElement>(null);
-  const [asking, setAsking] = useState(false);
-  const tryClose = () => { if (dirty) setAsking(true); else onClose(); };
+  const [asking, setAsking] = useState<false | { after?: () => void }>(false);
+  const tryClose = () => { if (dirty) setAsking({}); else onClose(); };
+  const leave = (after: () => void) => { if (dirty) setAsking({ after }); else { onClose(); after(); } };
   useEscape(tryClose);
   useEffect(() => {
     const el = ref.current; const f = el && (el.querySelector('[data-autofocus]') || el.querySelector('.ui-dialog__foot .ui-btn--default,.ui-dialog__body input')) as HTMLElement | null;
@@ -112,11 +121,11 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
     <div ref=${ref} className=${cx('ui-dialog', size && 'ui-dialog--' + size)} role=${role} aria-modal="true" aria-labelledby="dlg-t">
       <div className="ui-dialog__head"><div><h2 id="dlg-t">${title}</h2>${description && html`<div className="ui-dialog__desc">${description}</div>`}</div>
         <${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${tryClose}>${Icon.x}<//></div>
-      <div className="ui-dialog__body">${children}</div>
+      <div className="ui-dialog__body"><${DialogLeave.Provider} value=${leave}>${children}<//></div>
       ${footer && html`<div className="ui-dialog__foot">${footer}</div>`}
     </div>
     ${asking && html`<${Dialog} role="alertdialog" title="Να κλείσει χωρίς αποθήκευση;" onClose=${() => setAsking(false)}
-      footer=${html`<${Button} variant="ghost" onClick=${() => { setAsking(false); onClose(); }}>Κλείσε χωρίς αποθήκευση<//><${Button} data-autofocus="" onClick=${() => setAsking(false)}>Πίσω στη φόρμα<//>`}>
+      footer=${html`<${Button} variant="ghost" onClick=${() => { const a = asking && asking.after; setAsking(false); onClose(); a?.(); }}>Κλείσε χωρίς αποθήκευση<//><${Button} data-autofocus="" onClick=${() => setAsking(false)}>Πίσω στη φόρμα<//>`}>
       <p style=${{ margin: 0 }}>${typeof dirty === 'string' ? dirty : 'Όσα έγραψες εδώ δεν έχουν αποθηκευτεί. Αν κλείσεις, χάνονται.'}</p><//>`}
     </div>`, document.body);
 }
