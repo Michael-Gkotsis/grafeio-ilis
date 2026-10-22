@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
+import { requestLeave, usePending } from '../pending';
 import { DateField, HoursField, RangeField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
@@ -56,14 +57,18 @@ function AppearanceCard() {
 
 function SettingsCard() {
   const { state, run, boot } = useStore(); const toast = useToast();
-  const [s, setS] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre }, head: [state.settings.hkai?.head?.[0] || '', state.settings.hkai?.head?.[1] || ''] }));
+  const fromState = () => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre }, head: [state.settings.hkai?.head?.[0] || '', state.settings.hkai?.head?.[1] || ''] });
+  const [s, setS] = useState(fromState);
+  const dirty = JSON.stringify(s) !== JSON.stringify(fromState());
   // άλλος τύπος μονάδας: η κεφαλίδα και ο τίτλος αλλάζουν μαζί («4η ΙΛΗ» → «4ος ΛΟΧΟΣ»), για να τα δεις πριν την αποθήκευση
   const setKind = (k: UnitKind) => setS({ ...s, unitKind: k, ...unitSettingsFor(s, k), head: s.head.map(x => unitText(x, k)) });
   const save = async () => {
     const head = s.head.map(x => x.trim()); const hkai = { ...(state.settings.hkai || {}) }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
     const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre, hkai }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
     if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
+    return ok;
   };
+  usePending(dirty, { label: 'Μονάδα και έντυπα', save, discard: () => setS(fromState()) });
   return html`<${Card} title="Μονάδα και έντυπα">
     <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
@@ -105,8 +110,11 @@ function XlLookCard() {
   const [x, setX] = useState<XlLook>(saved);
   const changed = !sameLook(x, saved);
   const save = async (v: XlLook) => {
-    if (await run({ t: 'setSettings', settings: { xl: v }, text: 'γράμματα Excel: ' + lookText(v) }, false)) { setX(v); toast({ text: 'Αποθηκεύτηκαν τα γράμματα Excel: ' + lookText(v) }); }
+    const ok = await run({ t: 'setSettings', settings: { xl: v }, text: 'γράμματα Excel: ' + lookText(v) }, false);
+    if (ok) { setX(v); toast({ text: 'Αποθηκεύτηκαν τα γράμματα Excel: ' + lookText(v) }); }
+    return ok;
   };
+  usePending(changed, { label: 'Γράμματα Excel', save: () => save(x), discard: () => setX(saved) });
   // αλλαγή σε ένα κομμάτι (undefined: η προεπιλογή του)· τα κενά κομμάτια φεύγουν
   const setPart = (k: XlPartKey, ch: XlPart) => {
     const p: XlPart = { ...x.parts?.[k], ...ch }; (Object.keys(p) as (keyof XlPart)[]).forEach(f => p[f] === undefined && delete p[f]);
@@ -173,6 +181,19 @@ function SigsCard() {
   const saved = sigsSaved(state.settings, form); const list = edit[form] ?? saved;
   const changed = !sameSigs(list, saved);
   const setList = (v: Sig[]) => setEdit({ ...edit, [form]: v });
+  // αλλαγές σε όποιο έντυπο (και σε όσα δεν φαίνονται τώρα): μπάρα «Δεν αποθηκεύτηκαν» και ερώτηση πριν φύγεις
+  const dirtyForms = SIG_FORMS.filter(f => edit[f] && !sameSigs(edit[f]!, sigsSaved(state.settings, f)));
+  const saveForms = async () => {
+    const sigs = { ...(state.settings.sigs || {}) }; let layout = state.settings.layout;
+    for (const f of dirtyForms) {
+      const v = sigsClean(edit[f]!); sigs[f] = v; const l = f === 'reports' ? null : f as LayoutForm;
+      if (l && layout?.[l] && v.length !== sigsSaved(state.settings, f).length) layout = { ...layout, [l]: dropSigMoves(layout[l]!) };
+    }
+    const ok = await run({ t: 'setSettings', settings: { sigs, ...(layout !== state.settings.layout ? { layout } : {}) }, text: 'υπογραφές ' + dirtyForms.map(SIG_LABEL).join(', ') }, false);
+    if (ok) setEdit({});
+    return ok;
+  };
+  usePending(dirtyForms.length > 0, { label: 'Υπογραφές', save: saveForms, discard: () => setEdit({}) });
   const save = async () => {
     const v = sigsClean(list);
     if (await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: v }, ...layoutFor(v.length) }, text: 'υπογραφές ' + SIG_LABEL(form) + ': ' + sigsText(v) }, false)) { setEdit({ ...edit, [form]: undefined }); toast({ text: 'Αποθηκεύτηκαν οι υπογραφές: ' + SIG_LABEL(form) }); }
@@ -308,7 +329,7 @@ export function TemplatesScreen() {
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
-      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => nav.set({ tab: k })}>${l}</button>`)}</nav>
+      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => tab !== k && requestLeave(() => nav.set({ tab: k }))}>${l}</button>`)}</nav>
       <div className="setbody">${body}</div>
     </div>
   </div>`;

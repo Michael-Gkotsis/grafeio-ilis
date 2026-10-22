@@ -34,6 +34,8 @@ export type Command =
   // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
+  // διόρθωση ιατρικού/ποινής που μπήκε λάθος: φεύγει η παλιά και γίνεται η δήλωση από την αρχή (ίδιοι έλεγχοι), μία αναίρεση
+  | { t: 'replaceStatus'; id: string; cmds: StatusCmd[] }
   // Άδεια (κανονική, τιμητική, αναρρωτική): ακύρωση = φεύγει όλη (δεν έφυγε ή μπήκε λάθος)· διακοπή = γύρισε νωρίτερα, στη μέρα και ώρα που λες
   | { t: 'cancelLeave'; id: string }
   | { t: 'endLeave'; id: string; date: ISODate; time: string }
@@ -413,7 +415,16 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'deleteStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
-      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [] };
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε (μπήκε λάθος): ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + (st.open ? 'από ' + dm(st.from) + ' χωρίς λήξη' : range(st.from, st.to)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά', HK()] };
+    }
+    case 'replaceStatus': {
+      const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
+      if (!RECORD_CATS.includes(TYPES[st.type].cat)) throw new Error('Διορθώνονται εδώ μόνο ιατρικά και ποινές');
+      if (!c.cmds.length) throw new Error('Δεν διάλεξες κατάσταση');
+      const base: AppState = { ...s, statuses: s.statuses.filter(x => x !== st) };
+      const r = run(base, c.cmds.length > 1 ? { t: 'declareMany', cmds: c.cmds } : { t: 'declare', cmd: c.cmds[0] }, ctx);
+      const was = (st.type === 'PUN' ? 'ποινή (' + punLbl(st.kind || PUN_KINDS[0]) + ')' : statusLbl(st, s.settings.lists)) + ' ' + (st.open ? 'από ' + dm(st.from) + ' χωρίς λήξη' : range(st.from, st.to));
+      return { state: r.state, text: 'Διόρθωση: ' + r.text + ' (ήταν ' + was + ')', files: [...new Set([st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά', ...r.files])] };
     }
     case 'cancelLeave': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');

@@ -95,20 +95,30 @@ export function useEscape(fn: () => void) {
     return () => { const i = escStack.lastIndexOf(ref); if (i >= 0) escStack.splice(i, 1); if (!escStack.length) document.removeEventListener('keydown', onEsc); };
   }, []);
 }
-export function Dialog({ title, description, onClose, children, footer, size, closeOnOverlay = true, role = 'dialog' }: P) {
+// άλλαξε κάτι από την πρώτη τιμή της φόρμας (για το dirty του Dialog)
+export function useDirty(v: unknown) { const [v0] = useState(() => JSON.stringify(v)); return JSON.stringify(v) !== v0; }
+// dirty: κάτι γράφτηκε και δεν αποθηκεύτηκε. Τότε Esc, ✕ και κλικ έξω ρωτούν πριν κλείσουν (ένα Esc παραπάνω για να κλείσει
+// μια λίστα δεν πετάει πια τη φόρμα). Κείμενο στη θέση του true: τι ακριβώς χάνεται. Το «Άκυρο» του παραθύρου κλείνει χωρίς ερώτηση.
+export function Dialog({ title, description, onClose, children, footer, size, closeOnOverlay = true, role = 'dialog', dirty }: P) {
   const ref = useRef<HTMLDivElement>(null);
-  useEscape(onClose);
+  const [asking, setAsking] = useState(false);
+  const tryClose = () => { if (dirty) setAsking(true); else onClose(); };
+  useEscape(tryClose);
   useEffect(() => {
     const el = ref.current; const f = el && (el.querySelector('[data-autofocus]') || el.querySelector('.ui-dialog__foot .ui-btn--default,.ui-dialog__body input')) as HTMLElement | null;
     f && f.focus(); const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; };
   }, []);
-  return createPortal(html`<div className="ui-overlay" onMouseDown=${(e: MouseEvent) => { if (e.target === e.currentTarget && closeOnOverlay) onClose(); }}>
+  return createPortal(html`<div className="ui-overlay" onMouseDown=${(e: MouseEvent) => { if (e.target === e.currentTarget && closeOnOverlay) tryClose(); }}>
     <div ref=${ref} className=${cx('ui-dialog', size && 'ui-dialog--' + size)} role=${role} aria-modal="true" aria-labelledby="dlg-t">
       <div className="ui-dialog__head"><div><h2 id="dlg-t">${title}</h2>${description && html`<div className="ui-dialog__desc">${description}</div>`}</div>
-        <${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
+        <${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${tryClose}>${Icon.x}<//></div>
       <div className="ui-dialog__body">${children}</div>
       ${footer && html`<div className="ui-dialog__foot">${footer}</div>`}
-    </div></div>`, document.body);
+    </div>
+    ${asking && html`<${Dialog} role="alertdialog" title="Να κλείσει χωρίς αποθήκευση;" onClose=${() => setAsking(false)}
+      footer=${html`<${Button} variant="ghost" onClick=${() => { setAsking(false); onClose(); }}>Κλείσε χωρίς αποθήκευση<//><${Button} data-autofocus="" onClick=${() => setAsking(false)}>Πίσω στη φόρμα<//>`}>
+      <p style=${{ margin: 0 }}>${typeof dirty === 'string' ? dirty : 'Όσα έγραψες εδώ δεν έχουν αποθηκευτεί. Αν κλείσεις, χάνονται.'}</p><//>`}
+    </div>`, document.body);
 }
 export function Sheet({ title, subtitle, actions, onClose, children }: P) {
   useEscape(onClose);
@@ -120,15 +130,24 @@ export function Sheet({ title, subtitle, actions, onClose, children }: P) {
     </aside><//>`, document.body);
 }
 
-export interface ToastAction { label: string; fn: () => void }
+// undoId: η ενέργεια (Ιστορικό) που αναιρεί το κουμπί· όταν γίνει άλλη ενέργεια μετά, το κουμπί φεύγει από το παλιό μήνυμα
+// (πριν έμενε και έβγαζε «Έγινε άλλη ενέργεια μετά…»)
+export interface ToastAction { label: string; fn: () => void; undoId?: number }
 export type Toast = (t: { text: any; actions?: ToastAction[] }) => void;
 const ToastCtx = createContext<Toast>(() => {});
+const PruneCtx = createContext<(live: number) => void>(() => {});
 export const useToast = () => useContext(ToastCtx);
+export const useToastPrune = () => useContext(PruneCtx);
 export function ToastProvider({ children }: P) {
   const [items, setItems] = useState<any[]>([]);
   const remove = useCallback((id: string) => setItems(x => x.filter(t => t.id !== id)), []);
   const push = useCallback((t: any) => { const id = Math.random().toString(36).slice(2); setItems(x => [...x.slice(-1), { id, ...t }]); setTimeout(() => remove(id), t.actions ? 8000 : 5000); }, [remove]);
-  return html`<${ToastCtx.Provider} value=${push}>${children}
+  const prune = useCallback((live: number) => setItems(x => {
+    let ch = false;
+    const y = x.map(t => { const a = (t.actions || []).filter((a: ToastAction) => a.undoId == null || a.undoId === live); if (a.length === (t.actions || []).length) return t; ch = true; return { ...t, actions: a }; });
+    return ch ? y : x;
+  }), []);
+  return html`<${ToastCtx.Provider} value=${push}><${PruneCtx.Provider} value=${prune}>${children}<//>
     <div className="ui-toasts" aria-live="polite">${items.map(t => html`<div key=${t.id} className="ui-toast" role="status"><div>${t.text}</div>${(t.actions || []).map((a: ToastAction) => html`<button key=${a.label} type="button" onClick=${() => { a.fn(); remove(t.id); }}>${a.label}</button>`)}</div>`)}</div><//>`;
 }
 
