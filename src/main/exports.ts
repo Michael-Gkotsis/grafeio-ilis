@@ -6,7 +6,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Status } from '../shared/domain';
-import { hkRowsOf, itemKey, statusLbl, type HkRows } from '../shared/ranks';
+import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
 import { Workbook, colName, colNum, unesc, type Sheet } from './xlsx';
@@ -20,7 +20,7 @@ import { applyMoves, blockOf } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 export { FROURA_FORMS };
 
-export const who = (p: Person) => [p.rank, p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
+export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 
@@ -359,7 +359,7 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
     if (list.length > 1) ws.insertRows(7, list.length - 1, 7, wb);
     list.forEach(({ p, note }, i) => {
       const r = 7 + i;
-      ws.set('B' + r, p.rank).set('C' + r, p.spec).set('D' + r, p.last).set('E' + r, p.first + fatherTxt(p))
+      ws.set('B' + r, rankTxt(p)).set('C' + r, p.spec).set('D' + r, p.last).set('E' + r, p.first + fatherTxt(p))
         .set('F' + r, p.room ?? '').set('G' + r, p.phone).set('H' + r, note);
     });
     const foot = 9 + Math.max(list.length - 1, 0);

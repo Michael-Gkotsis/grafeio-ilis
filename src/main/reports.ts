@@ -53,6 +53,8 @@ function headersOf(ws: Sheet, rows: XlValue[][], head: number, data: number, kin
     if (!text && !tm) continue;
     out.push({ c, text: text || tag, f: guessField(kind, tm ? tm[1] : text) ?? (tm ? null : guessField(kind, text)) });
   }
+  // με δική του στήλη «Προέλευση», ο «Βαθμός» είναι μόνο ο βαθμός (αλλιώς ΕΠΟΠ ΛΧΙΑΣ, με την προέλευση μπροστά)
+  if (out.some(h => h.f === 'origin')) out.forEach(h => { if (h.f === 'rank') h.f = 'rank1'; });
   return out;
 }
 // Πόσες έτοιμες κενές γραμμές έχει το πρότυπο κάτω από τις επικεφαλίδες (τουλάχιστον 1: η γραμμή-πρότυπο)

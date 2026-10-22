@@ -9,15 +9,16 @@ import { useNav, useStore } from '../store';
 import { requestLeave } from '../pending';
 import { collator, normGreek } from '../../shared/text';
 import { CADRE_ABS, TYPES, shortName, type Person, type TypeKey } from '../../shared/domain';
-import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, listRows, weaponBack, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, listRows, rankTxt, weaponBack, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed'];
 const HELP = (): Record<ListId, string> => ({
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ' + HK() + ' μετρά.',
   cadreRanks: 'Στη φόρμα «Νέο στέλεχος». Ο βαθμός διαλέγει μόνος του τη γραμμή της ' + HK() + ' (αλλάζει και στη φόρμα).',
+  origins: 'Στο πεδίο «Προέλευση» του στρατιώτη και του στελέχους, και στο dropdown «Προέλευση» του Δυναμολογίου όταν έχει τέτοια στήλη. Στα έντυπα γράφεται μπροστά από τον βαθμό (π.χ. ΕΠΟΠ ΛΧΙΑΣ). ΕΠΟΠ και ΟΒΑ κάνουν υπηρεσίες μόνο με το χέρι, ως το όριο του μήνα, και ως στρατιώτες μετρούν στη δική τους γραμμή της ' + HK() + '.',
   specs: 'Στη φόρμα στρατιώτη και στο dropdown «Ο/Σ» του Δυναμολογίου.',
   weaponTypes: 'Στη στήλη «Τύπος» της καρτέλας Οπλισμός και στο Excel «Οπλισμός».',
   weaponOut: 'Στην «Έξοδο όπλων» της καρτέλας Οπλισμός. Κάθε λόγος εξόδου έχει τον λόγο εισαγωγής του (π.χ. ΕΚΠ → ΛΗΞ ΕΚΠ), που μπαίνει μόνος του όταν επιστρέφει το όπλο.',
@@ -73,9 +74,10 @@ export function ListsCard() {
       if (!v) return; const kk = k(v); let e = m.get(kk); if (!e) m.set(kk, e = { pids: new Set(), names: new Set() });
       if (pid != null) e.pids.add(pid); if (name) e.names.add(name);
     };
-    const cName = (c?: { rank: string; last: string; first: string }) => (c ? c.rank + ' ' + c.last + ' ' + c.first : '');
+    const cName = (c?: { rank: string; origin?: string; last: string; first: string }) => (c ? rankTxt(c) + ' ' + c.last + ' ' + c.first : '');
     const cm = new Map(state.cadreList.map(c => [c.id, c]));
     if (id === 'cadreRanks') state.cadreList.forEach(c => add(c.rank, undefined, cName(c)));
+    else if (id === 'origins') { state.people.forEach(p => add(p.origin, p.id)); state.cadreList.forEach(c => add(c.origin, undefined, cName(c))); }
     else if (id === 'cadreAbs') state.cadreAbs.forEach(a => add(a.kind, undefined, cName(cm.get(a.cid))));
     else if (id === 'punKinds' || id === 'leaveKinds' || id === 'medKinds') { const ok = (t: TypeKey) => (id === 'punKinds' ? t === 'PUN' : id === 'leaveKinds' ? t === 'LEAVE' : MED_LIKE.includes(t)); state.statuses.forEach(x => { if (ok(x.type)) add(x.kind || '', x.pid); }); }
     else if (id === 'weaponTypes') state.people.forEach(p => add(p.wtype, p.id));
@@ -142,7 +144,7 @@ export function ListsCard() {
   };
 
   return html`<${Card} title="Λίστες" actions=${html`<${Select} className="ui-select" aria-label="Ποια λίστα" value=${id} onChange=${(e: any) => select(e.target.value)}>${ids.map(v => html`<option key=${v} value=${v}>${LIST_NAME[v]}</option>`)}<//>`}>
-    <p className="note" style=${{ marginTop: 0 }}>${HELP()[id]}${id === 'siUnarmed' ? ' Όποιο βασικό απενεργοποιήσεις δεν ισχύει πια.' : ' Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.'}${id === 'soldierRanks' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
+    <p className="note" style=${{ marginTop: 0 }}>${HELP()[id]}${id === 'siUnarmed' ? ' Όποιο βασικό απενεργοποιήσεις δεν ισχύει πια.' : ' Ό,τι κρύψεις δεν προτείνεται πια, αλλά όσοι το έχουν ήδη το κρατούν.'}${id === 'soldierRanks' || id === 'origins' || id === 'specs' ? ' Στο Excel η λίστα μπαίνει με την επόμενη εγγραφή ή με «Ενημέρωση Excel».' : ''}</p>
     <ul className="hist">${rows.map(r => html`<li key=${r.name} className=${r.hidden ? 'muted' : ''}>
       <b style=${r.hidden ? { textDecoration: 'line-through' } : undefined}>${r.name}</b>
       ${r.builtin ? html`<${Badge} tone="outline">βασικό<//>` : html`<${Badge} tone="info">δικό σου<//>`}
@@ -159,7 +161,7 @@ export function ListsCard() {
       ${id !== 'siUnarmed' && (usedN(r) ? html`<button type="button" className="linkish lists__n" aria-expanded=${who === key(r.name)} data-tip=${who === key(r.name) ? 'Κλείσε' : 'Δες ποιοι'} onClick=${() => setWho(who === key(r.name) ? null : key(r.name))}>${(STAT_IDS.includes(id) ? 'Δηλώθηκε σε ' : 'Το έχουν ') + usedN(r)}</button>` : html`<span className="muted lists__n">Κανείς</span>`)}
       ${id === 'medKinds' && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>βασικός τύπος</span>`
         : r.builtin || isUsed(r)
-        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει ξανά' : 'Να μη θεωρείται άοπλος όποιος έχει αυτό το Σ.Ι.') : r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'specs' ? ' και στο Excel' : '')}>${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει' : 'Να μην ισχύει') : r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
+        ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει ξανά' : 'Να μη θεωρείται άοπλος όποιος έχει αυτό το Σ.Ι.') : r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'origins' || id === 'specs' ? ' και στο Excel' : '')}>${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει' : 'Να μην ισχύει') : r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + r.name} onClick=${() => remove(r)}>✕<//>`}
       ${who === key(r.name) && html`<${WhoHas} e=${used.get(key(r.name))}/>`}
     </li>`)}</ul>
@@ -185,4 +187,4 @@ function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
   const ids = ps.map(p => p.id);
   return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${shortName(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };

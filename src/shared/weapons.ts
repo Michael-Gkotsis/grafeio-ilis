@@ -9,6 +9,7 @@ import { postBy, postsOf } from './rules';
 import { siIsUnarmed, siOf } from './si';
 import { byRoomName } from './rosterLists';
 import { normGreek, upper } from './text';
+import { rankTxt } from './ranks';
 
 // Όπως γράφεται στα Excel: κεφαλαία, ένα κενό το πολύ
 export const normWeapon = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ' ').trim());
@@ -100,7 +101,7 @@ export interface WeaponSheet { name: string; title: string; head: string[]; rows
 export function weaponSheets(s: AppState, d: ISODate): WeaponSheet[] {
   const info = weaponInfo(s, d); const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
   return WEAPON_FILTERS.map(([f, , name, note], i) => {
-    const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
+    const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
     if (f === 'dup') rows.sort((a, b) => weaponKey(a[W_NUM]).localeCompare(weaponKey(b[W_NUM])) || 0).forEach((r, j) => { r[0] = j + 1; });
     return { name, title: name + ' ' + dmy(d), head: i === 0 ? [...WEAPON_COLS, 'ΥΠΟΓΡΑΦΗ'] : WEAPON_COLS, rows: i === 0 ? rows.map(r => [...r, '']) : rows, note };
   }).concat([moveSheet(s, d)]);
@@ -113,7 +114,7 @@ function moveSheet(s: AppState, d: ISODate): WeaponSheet {
   const pm = new Map(s.people.map(p => [p.id, p]));
   const rows = movesOn(s.weaponLog, d).sort(byOut).map((m, j) => {
     const p = pm.get(m.pid);
-    return [j + 1, p?.rank || '', p?.last || '', p?.first || '', normWeapon(m.weapon), m.reason, dmy(m.outDay) + ' ' + m.outTime, m.inReason || '', m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : 'ΕΚΤΟΣ', m.note || ''];
+    return [j + 1, rankTxt(p), p?.last || '', p?.first || '', normWeapon(m.weapon), m.reason, dmy(m.outDay) + ' ' + m.outTime, m.inReason || '', m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : 'ΕΚΤΟΣ', m.note || ''];
   });
   return { name: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ', title: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ' + dmy(d), head: MOVE_COLS, rows, note: 'Έξοδοι και είσοδοι όπλων από τον οπλοβαστό τη μέρα, και όσα είναι ακόμα εκτός' };
 }

@@ -545,7 +545,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
     const book0 = await readBook(file); const book = { ...book0, sheets: notReports(file, book0.sheets) };
     if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
-    const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) });
+    const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists);
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
     // ποιος πίνακας διαβάστηκε: για να γράφονται εκεί οι διορθώσεις (Michael, 11/10)
     const det = b || (() => { const x = bestFor('people', book.sheets.filter(sh => sh.name === r.main)); return x ? { file, sheet: x.sheet, header: x.header, cols: x.cols, write: true } as SourceBinding : null; })();

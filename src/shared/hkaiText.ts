@@ -6,6 +6,7 @@ import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, norm, upper } from './text';
 import { genitive } from './greek';
+import { rankTxt } from './ranks';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
 export interface Run { t: string; u?: boolean }
@@ -70,7 +71,7 @@ export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
 // 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: όσοι μπήκαν στη δύναμη ή βγήκαν εκτός δύναμης τη μέρα, με τα στοιχεία τους από το Δυναμολόγιο,
 // και μετά ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ. «1. ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ ΤΟΥ ΠΑΤΡΩΝΥΜΟΥ, ΑΣΜ …, ΕΣΣΟ …: <λόγος>.»
 export function personLine(p: Person): string {
-  return upper([p.rank, p.spec ? '(' + p.spec + ')' : '', p.last, p.first, p.father ? 'του ' + genitive(p.father) : ''].filter(Boolean).join(' ')
+  return upper([rankTxt(p), p.spec ? '(' + p.spec + ')' : '', p.last, p.first, p.father ? 'του ' + genitive(p.father) : ''].filter(Boolean).join(' ')
     + (p.asm ? ', ΑΣΜ ' + p.asm : '') + (p.essos ? ', ΕΣΣΟ ' + p.essos : ''));
 }
 // Ο λόγος της διαγραφής: από το φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» («Εκτός δύναμης: μετάθεση») ή οι σημειώσεις του

@@ -16,7 +16,7 @@ import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
 import { WEAPON_FILTERS, isOut, normPos, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
-import { listOf } from '../../shared/ranks';
+import { listOf, rankTxt } from '../../shared/ranks';
 import { collator, normGreek, translit, norm } from '../../shared/text';
 import { dm, dow } from '../../shared/dates';
 type P = any;
@@ -90,7 +90,7 @@ function notes(p: Person, info: WeaponInfo, lists: P) {
 
 const matchText = (p: Person, q: string) => {
   const n = normGreek(q.trim()); if (!n) return true;
-  const key = normGreek([p.last, p.first, p.father, p.asm, p.rank, p.spec, p.room != null ? 'Θ' + p.room : '', p.wtype || '', p.rack || '', p.wpos || ''].join(' '));
+  const key = normGreek([p.last, p.first, p.father, p.asm, p.rank, p.origin || '', p.spec, p.room != null ? 'Θ' + p.room : '', p.wtype || '', p.rack || '', p.wpos || ''].join(' '));
   const wk = weaponKey(q);
   return n.split(/\s+/).every(t => key.includes(t)) || translit(p.last + ' ' + p.first).includes(norm(q.trim())) || (!!wk && weaponKey(p.weapon).includes(wk));
 };
@@ -99,7 +99,7 @@ const matchText = (p: Person, q: string) => {
 const WRow = memo(function WRow({ p, i, style, selected, info, types, lists, reset, onToggle, onOpen, save, commit, paste }: P) {
   return html`<div className=${cx('ptable__row', i % 2 === 1 && 'is-odd', info.moves.has(p.id) && 'is-wout')} style=${{ ...style, gridTemplateColumns: GRID, cursor: 'default' }} role="row">
         <span><input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + fullName(p)} checked=${selected} onChange=${() => onToggle(p.id)}/></span>
-        <span className="num muted">${i + 1}</span><span>${p.rank}</span>
+        <span className="num muted">${i + 1}</span><span>${rankTxt(p)}</span>
         <span><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip="Καρτέλα οπλίτη"><b>${p.last}</b></button></span><span>${p.first}</span>
         <span className="num">${p.asm}</span><span>${p.room ?? ''}</span><span data-tip=${p.si ? siOf(p, lists).text : undefined}>${p.si ? siShort(siOf(p, lists).text) : ''}</span>
         <span className="weapon-cell"><${TypeSelect} p=${p} types=${types} onPick=${(q: Person, t: string) => save([{ pid: q.id, wtype: t }])}/></span>
@@ -238,7 +238,7 @@ export function WeaponsScreen() {
     ${outFor && html`<${WeaponOutDialog} pids=${outFor} reason=${outReason} onClose=${() => setOutFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${ask && html`<${Dialog} title=${'Το όπλο ' + ask.w + ' είναι ήδη χρεωμένο'} onClose=${() => { setAsk(null); setReset(n => n + 1); }}
-      description=${html`<span>Ο αριθμός <b>${ask.w}</b> είναι στον ${ask.others.map(x => html`<b key=${x.id}>${x.rank} ${plainName(x)}</b>${x.active ? '' : ' (εκτός δύναμης)'}`).reduce((a: any[], x: any, j: number) => (j ? [...a, ', ', x] : [x]), [])}. Να μεταφερθεί στον ${ask.p.rank} ${plainName(ask.p)};</span>`}
+      description=${html`<span>Ο αριθμός <b>${ask.w}</b> είναι στον ${ask.others.map(x => html`<b key=${x.id}>${rankTxt(x)} ${plainName(x)}</b>${x.active ? '' : ' (εκτός δύναμης)'}`).reduce((a: any[], x: any, j: number) => (j ? [...a, ', ', x] : [x]), [])}. Να μεταφερθεί στον ${ask.p.rank} ${plainName(ask.p)};</span>`}
       footer=${html`<${Button} variant="outline" onClick=${() => { setAsk(null); setReset(n => n + 1); }}>Άκυρο<//>
         <${Button} variant="outline" onClick=${async () => { const a = ask; setAsk(null); await save([{ pid: a.p.id, weapon: a.w }], { warn: 'ο ίδιος αριθμός μένει και σε ' + a.others.map(shortName).join(', ') + '.' }); }}>Κράτα και στους δύο<//>
         <${Button} data-autofocus="" onClick=${async () => { const a = ask; setAsk(null); await save([...a.others.map(x => ({ pid: x.id, weapon: '' })), { pid: a.p.id, weapon: a.w }], { what: 'μεταφορά όπλου ' + a.w, msg: 'Το όπλο ' + a.w + ' πήγε στον ' + shortName(a.p) + ' (σβήστηκε από ' + a.others.map(shortName).join(', ') + ')', warn: info.unarmed.has(a.p.id) ? 'είναι άοπλος κατά τη Σ.Ι. (' + siOf(a.p, lists).text + ').' : undefined }); }}>Μεταφορά<//>`}>

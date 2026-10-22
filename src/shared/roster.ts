@@ -3,6 +3,7 @@
 import { norm, normGreek } from './text';
 import { OUT_NOTE } from './domain';
 import type { ImportRow } from './commands';
+import { withOrigin, type UserLists } from './ranks';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
 export interface RawSheet { name: string; rows: CellValue[][]; fx?: Set<string>; countif?: string[] }   // fx: κελιά με τύπο («γραμμή:στήλη» από 0)· countif: κελιά με COUNTIF σκέτου γράμματος (π.χ. «L3»)
@@ -21,9 +22,9 @@ export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
 export const isDnYes = (v: string) => { const t = normGreek(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|ΝΟ|Ν\/Α|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
 export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
-export type Field = 'rank' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
+export type Field = 'rank' | 'origin' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
 export const HEADERS: [Field, RegExp][] = [
-  ['rank', /^ΒΑΘΜΟΣ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
+  ['rank', /^ΒΑΘΜΟΣ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
   ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD]
 ];
@@ -67,7 +68,7 @@ export function isPersonRow(last: string, first: string, father: string): boolea
   return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(F);
 }
 
-interface Rec { rank: string; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null }
+interface Rec { rank: string; origin: string | null; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null }
 function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
   const h = headerOf(sheet); if (!h) return [];
   const get = (row: CellValue[], f: Field) => (h.cols[f] == null ? '' : txt(row[h.cols[f]!]));
@@ -80,7 +81,7 @@ function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
     const roomN = parseInt(get(row, 'room'), 10);
     out.push({
       // βαθμός, Ο/Σ και Σ.Ι. με λατινικά που μοιάζουν (I4, AOΠΛΟ) γράφονται ελληνικά· τα ονόματα μένουν όπως ήταν για να ταιριάζουν με τα υπάρχοντα
-      rank: normGreek(get(row, 'rank')), spec: normGreek(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
+      rank: normGreek(get(row, 'rank')), origin: h.cols.origin == null ? null : normGreek(get(row, 'origin')), spec: normGreek(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
       asm: get(row, 'asm').replace(/\s/g, ''), phone: get(row, 'phone').replace(/\s/g, ''),
       room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: normGreek(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
       dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn'))
@@ -117,11 +118,12 @@ export function essosOf(title: string): string {
   return m ? m[2] + ' ' + m[1] + '΄' : '';
 }
 
-export function parseRoster(sheets: RawSheet[], ov: RosterOverrides = {}): RosterResult {
+// lists: οι Λίστες των Ρυθμίσεων, για να βγαίνουν και οι δικές σου προελεύσεις από τον βαθμό
+export function parseRoster(sheets: RawSheet[], ov: RosterOverrides = {}, lists?: UserLists): RosterResult {
   OV = [ov.main, ov.posts, ov.outside].filter((o): o is RosterOverride => !!o && sheets.some(s => s.name === o.sheet));
-  try { return parse(sheets, ov); } finally { OV = []; }
+  try { return parse(sheets, ov, lists); } finally { OV = []; }
 }
-function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
+function parse(sheets: RawSheet[], ov: RosterOverrides, lists?: UserLists): RosterResult {
   const warnings: string[] = [];
   const named = (o?: RosterOverride) => (o ? sheets.find(s => s.name === o.sheet) : undefined);
   const byName = (re: RegExp) => sheets.find(s => re.test(norm(s.name)));
@@ -164,8 +166,11 @@ function parse(sheets: RawSheet[], ov: RosterOverrides): RosterResult {
     // ο λόγος για τους εκτός δύναμης είναι οι παρατηρήσεις του φύλλου «ΕΚΤΟΣ ΔΥΝΑΜΗΣ», όχι ο ρόλος του ΣΥΝΟΛΙΚΟΥ
     const dnWord = !off && DN_WORD.test(norm(r.remarks));
     const role = !off && r.remarks ? stripDn(r.remarks) || null : null;
+    // προέλευση: από τη στήλη «ΠΡΟΕΛΕΥΣΗ» αν υπάρχει (κενή = χωρίς), αλλιώς από τον βαθμό («ΕΠΟΠ ΛΧΙΑΣ»)· αν το
+    // αρχείο δεν λέει τίποτα, μένει όποια όρισες στην εφαρμογή
+    const ro = withOrigin({ rank: r.rank || 'ΣΤΡ', origin: r.origin || undefined }, lists);
     const row: ImportRow = {
-      rank: r.rank || 'ΣΤΡ', spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
+      rank: ro.rank || 'ΣΤΡ', ...(ro.origin || r.origin != null ? { origin: ro.origin || '' } : {}), spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
       si: r.si, role, essos
     };
     // Πόστο, προσκολλημένος και σημειώσεις μόνο όταν το αρχείο τα γράφει: αλλιώς μένει ό,τι έχει η εφαρμογή

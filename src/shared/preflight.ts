@@ -6,7 +6,7 @@ import {
   activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
-import { hkRowList } from './ranks';
+import { hkRowList, rankTxt } from './ranks';
 import { HK, hkRowLabel } from './unit';
 import { normGreek } from './text';
 import type { ExportKind } from './api';
@@ -64,7 +64,7 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   const key = (l: string, f: string) => normGreek(l + ' ' + f).replace(/[^Α-ΩA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
   const sold = new Set(s.people.filter(p => p.active).map(p => key(p.last, p.first)));
   const both = (s.cadreList || []).filter(c => c.active && sold.has(key(c.last, c.first)));
-  if (both.length) out.push({ level: 'warn', text: 'Και στο Δυναμολόγιο και στα Στελέχη (μετρούν δύο φορές): ' + both.map(c => c.rank + ' ' + c.last + ' ' + c.first).join(', ') + '. Κράτησέ τους σε ένα από τα δύο.', go: 'cadre' });
+  if (both.length) out.push({ level: 'warn', text: 'Και στο Δυναμολόγιο και στα Στελέχη (μετρούν δύο φορές): ' + both.map(c => rankTxt(c) + ' ' + c.last + ' ' + c.first).join(', ') + '. Κράτησέ τους σε ένα από τα δύο.', go: 'cadre' });
   // ανά βαθμό: κωλυόμενοι + απόντες δεν ξεπερνούν τη δύναμη
   for (const r of hkRowList(s.settings.lists)) {
     const row = h.rank[r]; const used = [...HK_K, ...HK_A].reduce((a, [k]) => a + (row.c[k] || 0), 0);

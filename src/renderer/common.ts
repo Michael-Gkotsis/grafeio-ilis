@@ -11,7 +11,7 @@ import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, dutyStartOf, effects, phaseBase, plainName, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type Status } from '../shared/domain';
-import { MED_LIKE, statusLbl, type UserLists } from '../shared/ranks';
+import { MED_LIKE, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
@@ -60,7 +60,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b>${plainName(x.p)}</b><small>${x.p.cid ? 'Στέλεχος · ' + x.p.rank : 'του ' + (x.p.father || '—') + ' · ' + x.p.rank + ' · ' + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
+        <div><b>${plainName(x.p)}</b><small>${x.p.cid ? 'Στέλεχος · ' + rankTxt(x.p) : 'του ' + (x.p.father || '—') + ' · ' + rankTxt(x.p) + ' · ' + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`, document.body)}
   </div>`;

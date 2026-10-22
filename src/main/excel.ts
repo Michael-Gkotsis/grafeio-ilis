@@ -8,7 +8,7 @@ import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
-import { absCode } from '../shared/ranks';
+import { absCode, rankTxt } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { colName, fitBook } from './xlsx';
@@ -89,7 +89,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   people.forEach((p, i) => {
     const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, { code: string; kind: DutyKind; own?: string }>();
     let hol = 0; const c: Record<string, number> = {}; const o: Record<string, number> = {};
-    const vals: (string | number)[] = [i + 1, upper(p.rank), upper(p.last), upper(p.first + fatherTxt(p))];
+    const vals: (string | number)[] = [i + 1, upper(rankTxt(p)), upper(p.last), upper(p.first + fatherTxt(p))];
     for (const d of days) {
       const v = x.get(d);
       if (v) { if (isHol(s.settings, d)) hol++; c[v.kind] = (c[v.kind] || 0) + 1; if (v.own) o[v.own] = (o[v.own] || 0) + 1; vals.push(v.code); continue; }
@@ -108,7 +108,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
       }
     });
   });
-  ws.getColumn(1).width = fitWidth(4, [people.length]); [7, 18, 13].forEach((w, j) => { ws.getColumn(j + 2).width = Math.min(30, colWidth(w, FIX[j + 1], people.map(p => [p.rank, p.last, p.first + fatherTxt(p)][j]))); });
+  ws.getColumn(1).width = fitWidth(4, [people.length]); [7, 18, 13].forEach((w, j) => { ws.getColumn(j + 2).width = Math.min(30, colWidth(w, FIX[j + 1], people.map(p => [rankTxt(p), p.last, p.first + fatherTxt(p)][j]))); });
   // ημέρες: όσο θέλει ο μεγαλύτερος κωδικός της στήλης (έντονος), ως 8
   for (let j = 0; j < nd; j++) { const d = days[j]; ws.getColumn(FIX.length + 1 + j).width = fitWidth(3.2, people.map(p => per.get(p.id)?.get(d)?.code), 8, true); }
   for (let j = 0; j < TAIL.length; j++) ws.getColumn(FIX.length + nd + 1 + j).width = j < 6 ? fitWidth(4.5, [TAIL[j]], 8, true) : fitWidth(4.5, [TAIL[j]], 14, true);

@@ -15,7 +15,7 @@ import { dropSigMoves, type Layout } from '../../shared/layout';
 import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
-import { statusLbl } from '../../shared/ranks';
+import { rankTxt, statusLbl } from '../../shared/ranks';
 import { blocksOf, type AppState, type Person } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
@@ -134,7 +134,7 @@ function usePick(r: Report, d: string, init?: (number | string)[] | null) {
 
 const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times }: P) {
   const t = times ? times[x.id] || 0 : -1; const nm = nameOf(x);
-  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small>${[x.rank, kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
+  return html`<li><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small>${[rankTxt(x), kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
     kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ')}</small>
     <span className="rep-picks__acts">
       ${onNever && html`<button type="button" className="rep-picks__never" aria-label=${'Ποτέ ο ' + nm} data-tip="Να μη μπαίνει ποτέ σε αυτό το έντυπο" onClick=${() => onNever(x.id)}>Ποτέ</button>`}

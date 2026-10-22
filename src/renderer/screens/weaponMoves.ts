@@ -11,7 +11,7 @@ import { useNav, useStore } from '../store';
 import { ChoiceField, DateField, GoLink, TimeField, useTimeOptions } from '../common';
 import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
 import { personMap } from '../../shared/rules';
-import { listOf, weaponBack } from '../../shared/ranks';
+import { listOf, rankTxt, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
 import { dm, dmy, nowHM, today as todayFn } from '../../shared/dates';
 import { byOut, moveOutTxt, movesOn, openMoves } from '../../shared/weapons';
@@ -35,7 +35,7 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
     toast({ text: 'Έξοδος όπλων (' + reason.trim().toUpperCase() + ') ' + normTime(time) + ': ' + (go.length === 1 ? shortName(go[0]) : go.length + ' όπλα'), actions: [undoMark()] });
     onDone?.(); onClose();
   };
-  return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? go[0].rank + ' ' + plainName(go[0]) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
+  return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? rankTxt(go[0]) + ' ' + plainName(go[0]) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Έξοδος${go.length > 1 ? ' (' + go.length + ')' : ''}<//>`}>
     <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${!r0} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
     ${reason.trim() && html`<p className="note" style=${{ margin: '-4px 0 10px' }}>Όταν μπει πάλι: <b>${weaponBack(reason, state.settings.lists)}</b></p>`}
@@ -90,7 +90,7 @@ function EditMoveDialog({ m, onClose }: P) {
   };
   const del = async () => { if (await run({ t: 'deleteWeaponMove', id: m.id }, false)) { toast({ text: 'Σβήστηκε η κίνηση' + (p ? ' ' + shortName(p) : ''), actions: [undoMark()] }); onClose(); } };
   const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
-  return html`<${Dialog} title="Διόρθωση κίνησης όπλου" description=${(p ? p.rank + ' ' + plainName(p) : '') + ' · όπλο ' + m.weapon} onClose=${onClose}
+  return html`<${Dialog} title="Διόρθωση κίνησης όπλου" description=${(p ? rankTxt(p) + ' ' + plainName(p) : '') + ' · όπλο ' + m.weapon} onClose=${onClose}
     footer=${html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">Σβήσε<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Αποθήκευση<//>`}>
     <${ChoiceField} id="we-r" label="Λόγος εξόδου *" value=${x.reason} options=${reasons} otherLabel="Άλλος λόγος (γράψε τον)…" onChange=${set('reason')}/>
     <div className="field-row">
@@ -122,7 +122,7 @@ export function MovesView({ date, onIn }: P) {
     html`<div className="ptable ptable--moves" role="table"><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1140px' }}>
       <div className="ptable__head" role="row"><span>Στρατιώτης</span><span>Όπλο</span><span>Λόγος εξόδου</span><span>Έξοδος</span><span>Λόγος εισόδου</span><span>Είσοδος</span><span>Παρατήρηση</span><span></span></div>
       <div className="weapons__body">${rows.map((m, i) => { const p = pm.get(m.pid); return html`<div key=${m.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd')} role="row" style=${{ cursor: 'default' }}>
-        <span>${p ? html`<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><b>${p.rank} ${shortName(p)}</b></button>` : '—'}</span>
+        <span>${p ? html`<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>` : '—'}</span>
         <span className="num">${m.weapon}</span><span><${Badge} tone="warn">${m.reason}<//></span><span className="num">${dmy(m.outDay)} ${m.outTime}</span>
         <span>${m.inDay ? html`<${Badge} tone="ok">${m.inReason || weaponBack(m.reason, state.settings.lists)}<//>` : html`<${Badge} tone="bad">Εκτός<//>`}</span>
         <span className="num">${m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : '—'}</span><span className="muted">${m.note || ''}</span>
@@ -178,7 +178,7 @@ function OutPop({ p, anchor, onClose }: P) {
   };
   const tip = hover || other.trim();
   return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Έξοδος όπλου ' + p.weapon}>
-    <div className="wpop__head"><b>Έξοδος όπλου ${p.weapon}</b><small>${p.rank} ${plainName(p)}</small></div>
+    <div className="wpop__head"><b>Έξοδος όπλου ${p.weapon}</b><small>${rankTxt(p)} ${plainName(p)}</small></div>
     <${WhenRow} label="Ώρα εξόδου" focus=${true} day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
     <input className="ui-input wpop__note" placeholder="Παρατήρηση (αν θες), π.χ. πεδίο βολής" value=${note} onChange=${(e: any) => setNote(e.target.value)} aria-label="Παρατήρηση"/>
     <div className="wpop__lbl">Γιατί βγαίνει; Πάτα τον λόγο:</div>
@@ -204,7 +204,7 @@ function InPop({ p, m, anchor, onClose, onEdit }: P) {
     onClose();
   };
   return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Είσοδος όπλου ' + m.weapon}>
-    <div className="wpop__head"><b>Είσοδος όπλου ${m.weapon}</b><small>${p.rank} ${plainName(p)} · βγήκε ${m.reason} ${when(m.outDay, m.outTime, today)}</small></div>
+    <div className="wpop__head"><b>Είσοδος όπλου ${m.weapon}</b><small>${rankTxt(p)} ${plainName(p)} · βγήκε ${m.reason} ${when(m.outDay, m.outTime, today)}</small></div>
     <form onSubmit=${go}>
       <${WhenRow} label="Ώρα εισόδου" day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
       <label className="wpop__field"><span>Λόγος εισαγωγής</span><input className="ui-input" value=${reason} placeholder=${auto} onChange=${(e: any) => setReason(e.target.value)} aria-label="Λόγος εισαγωγής"/></label>

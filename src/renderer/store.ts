@@ -41,7 +41,7 @@ function indexOf(people: Person[]): Indexed[] {
   let x = idxCache.get(people);
   if (!x) {
     // και βαθμός, ρόλος, πόστο, ειδικότητα, ΕΣΣΟ: «θαλαμαρχ», «ΚΨΜ», «2026 Γ» (για τις αποθηκευμένες λίστες)
-    x = people.filter(p => p.active).map(p => ({ p, key: normGreek([p.last, p.first, p.father, p.asm, p.room != null ? 'Θ' + p.room : '', p.rank, p.role, p.post, p.spec, p.essos].filter(Boolean).join(' ')), lat: translit(p.last + ' ' + p.first) }));
+    x = people.filter(p => p.active).map(p => ({ p, key: normGreek([p.last, p.first, p.father, p.asm, p.room != null ? 'Θ' + p.room : '', p.rank, p.origin, p.role, p.post, p.spec, p.essos].filter(Boolean).join(' ')), lat: translit(p.last + ' ' + p.first) }));
     x.sort((a, b) => collator.compare(a.p.last, b.p.last) || collator.compare(a.p.first, b.p.first));
     idxCache.set(people, x);
   }
