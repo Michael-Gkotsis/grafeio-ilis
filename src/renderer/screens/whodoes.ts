@@ -38,7 +38,7 @@ function cellView(c: CapCell, col: CapCol): { sym: string; cls: string; tip: str
   if (c.src === 'force') return { sym: '✓!', cls: 'is-force', tip: 'Κάνει ' + what + ' παρά το «' + c.why + '». Πάτα: πίσω σε ό,τι λέει η Σ.Ι./το πόστο' };
   if (c.on) return { sym: '✓', cls: 'is-on', tip: 'Κάνει ' + what + '. Πάτα: δεν κάνει' };
   if (c.src === 'auto') return { sym: '—', cls: 'is-auto', tip: 'Δεν κάνει ' + what + ' (' + c.why + '). Πάτα για να κάνει παρ’ όλα αυτά' };
-  return { sym: '✕', cls: 'is-off', tip: 'Δεν κάνει ' + what + (c.why !== SERGEANT ? ' (' + c.why + ')' : '') + (c.src === 'kind' ? ' · ορίστηκε για όλες τις «Άλλες»' : '') + '. Πάτα: κάνει' };
+  return { sym: '✕', cls: 'is-off', tip: 'Δεν κάνει ' + what + (c.why !== SERGEANT ? ' (' + c.why + ')' : '') + '. Πάτα: κάνει' };
 }
 
 // Ξαναζωγραφίζεται μόνο όταν αλλάξει κάτι δικό της (memo): ένα κλικ σε κελί δεν ξαναφτιάχνει και τις 180 γραμμές
@@ -100,7 +100,6 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
     if (c.on) return setCap(p, col, 'off', 'δεν κάνει ' + what);
     if (c.src === 'auto') { setAsk({ p, col, why: c.why }); return; }
     // ✕ του λοχία: σβήνεται· αν από κάτω η Σ.Ι./το πόστο λένε «όχι», μένει «—»
-    if (c.src === 'kind') return setCap(p, col, 'on', 'κάνει ' + what);
     return setCap(p, col, 'clear', 'κάνει ξανά ' + what);
   };
   const onDay = async (p: Person, d: number) => {

@@ -16,7 +16,7 @@ import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, hkaiMapOf, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
@@ -419,11 +419,13 @@ async function syncFileAuto(kinds: ListKind[]) {
 // Μετά από κάθε αλλαγή: τα είδη που άλλαξαν γράφονται στα Excel τους και τα έντυπα που έχουν βγει ενημερώνονται
 const dirty = new Set<ListKind>(); let formsDirty = false; let autoTimer: NodeJS.Timeout | undefined; let autoBusy = false;
 // Ποια είδη αφορά μια αλλαγή: ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται στα φύλλα που έχουν στήλη γι' αυτό
+const capSig = (st: AppState['settings']) => capExtras(st).map(x => x.key + '=' + x.head).join('|');
 function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
   const out = new Set<ListKind>();
   if (prev.people !== next.people) kindsForPeople(prev.people, next.people, next.settings.sources || {}).forEach(k => out.add(k));
   if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => out.add(k));
-  if (prev.caps !== next.caps) out.add('caps');
+  // και νέα (ή ξανά ενεργή) δική σου υπηρεσία: παίρνει μόνη της στήλη στο φύλλο δυνατοτήτων (capExtraCols)
+  if (prev.caps !== next.caps || (prev.settings !== next.settings && capSig(prev.settings) !== capSig(next.settings))) out.add('caps');
   if (prev.guards !== next.guards || prev.dutyLog !== next.dutyLog) out.add('duties');
   return out;
 }
