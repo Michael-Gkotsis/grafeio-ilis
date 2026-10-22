@@ -24,7 +24,8 @@ export function LeavesTab() {
   const since = addDays(today, -14);
   // γύρισε σήμερα και πέρασε η ώρα επιστροφής: πάει στους «Γύρισαν» (Michael, 20/10)
   const now = useNowMin(); const away = (s: Status) => awayNow(s, today, now);
-  const nNow = useMemo(() => state.statuses.filter(s => isLeave(s) && away(s) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // όσοι λείπουν τώρα και, χωριστά, όσοι φεύγουν τις επόμενες μέρες (το «6» δεν είναι 6 απόντες σήμερα, Michael 22/10)
+  const [nNow, nSoon] = useMemo(() => { let a = 0, b = 0; for (const s of state.statuses) if (isLeave(s) && away(s) && pm.has(s.pid)) { if (s.from > today) b++; else a++; } return [a, b]; }, [state.statuses, today, pm, now]);   // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => {
     const qq = normGreek(dq.trim());
     const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + statusLbl(s, state.settings.lists) + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '')).includes(qq));
@@ -42,7 +43,7 @@ export function LeavesTab() {
   return html`<div>
     <${PageHeader} title="Άδειες" sub="Κανονικές, τιμητικές και αναρρωτικές· γράφονται στην ${HK()} και στη Δύναμη.">
       <${Button} variant="outline" onClick=${() => nav.set({ hkTab: 'req' })}>Αιτήσεις<//><${Button} onClick=${() => nav.declare({ cat: 'abs' })}>+ Άδεια<//><//>
-    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${view} onChange=${(v: string) => nav.set({ leaveTab: v })} items=${[{ value: 'now', label: 'Τώρα (' + nNow + ')', tip: 'Σε άδεια τώρα και όσες ξεκινούν τις επόμενες μέρες' }, { value: 'back', label: 'Έληξαν', tip: 'Όσοι γύρισαν τις τελευταίες 14 μέρες' }]}/></div>
+    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${view} onChange=${(v: string) => nav.set({ leaveTab: v })} items=${[{ value: 'now', label: 'Τώρα (' + nNow + (nSoon ? ' + ' + nSoon + ' φεύγουν' : '') + ')', tip: nNow + ' σε άδεια τώρα' + (nSoon ? ' και ' + nSoon + ' που φεύγουν τις επόμενες μέρες (δεν μετρούν ακόμα στους απόντες)' : '') }, { value: 'back', label: 'Έληξαν', tip: 'Όσοι γύρισαν τις τελευταίες 14 μέρες' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, είδος άδειας ή σημείωση · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>${dq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; const tt = timesTxt(s); return html`<li key=${s.id}>
       <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>

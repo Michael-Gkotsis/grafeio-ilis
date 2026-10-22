@@ -12,9 +12,9 @@ import { DayFormsDialog } from './dayForms';
 import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, dutyStartOf, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status } from '../../shared/domain';
+import { HK_SECTIONS, dutyStartOf, hkOn, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, hkMin, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
@@ -38,12 +38,12 @@ export function TodayScreen() {
   const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
   const pm = personMap(state.people);
   const now = useNowMin();
-  const c = useMemo(() => strengthOf(state, today, Math.max(hkMin(state.rules), now)), [state, today, now]);
+  const c = useMemo(() => strengthOf(state, today, strengthAt(state.rules, today, today, now)), [state, today, now]);
   // Απόντες σήμερα με τον λόγο και ως πότε· η λίστα τελειώνει στους 12, οι υπόλοιποι στη Δύναμη
   const away = useMemo(() => {
     const out: { p: Person; s: Status }[] = [];
     // όπως η ΗΚΑΙ (ως τις 08:00 παρών), και μετά όποιος γύρισε ως τώρα (Michael, 20/10)
-    const at = Math.max(hkMin(state.rules), now); activePeople(state).forEach(p => { const x = statusesFrom(state.statuses, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
+    const at = strengthAt(state.rules, today, today, now); activePeople(state).forEach(p => { const x = statusesFrom(state.statuses, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
   }, [state.statuses, state.people, state.rules, today, now]);
   const empty = frouraEmpty(state, tomorrow);
@@ -97,7 +97,7 @@ export function TodayScreen() {
     <div className="kpis">
       ${kpi('Στρατιώτες', c.total, () => nav.go('people', { filter: 'all' }), undefined, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη, με τις 08:00')}
       ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
-      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, 'Ιατρικά σε ισχύ: ' + nRec)}
+      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
       ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
       ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
     </div>
@@ -218,15 +218,21 @@ function PunTextDialog({ st, onClose }: P) {
 export function StrengthScreen() {
   const { state, today, tomorrow } = useStore(); const nav = useNav();
   const date = nav.params.strengthDate || today;
-  const c = useMemo(() => strengthOf(state, date), [state, date]);
+  const now = useNowMin();
+  // σήμερα με την ίδια στιγμή που μετρά το «Σήμερα» (όποιος γύρισε ως τώρα είναι παρών), για να βγαίνουν ίδια νούμερα
+  const c = useMemo(() => strengthOf(state, date, strengthAt(state.rules, date, today, now)), [state, date, today, now]);
+  // οι απουσίες με κάθε άτομο μία φορά (στον πρώτο λόγο), ώστε να αθροίζουν στους Απόντες· τα υπόλοιπα όλα
+  const nOf = (k: TypeKey) => (TYPES[k].away ? c.away[k] : c.counts[k]);
+  const listOf = (k: TypeKey) => (TYPES[k].away ? c.awayLists[k] : c.lists[k]);
   // οι κατηγορίες χωρίς κανέναν σε μία γραμμή στο τέλος, για να χωρά η Δύναμη σε μία οθόνη
-  const zeros = TYPE_KEYS.filter(k => !c.counts[k]);
+  const zeros = TYPE_KEYS.filter(k => !nOf(k));
   return html`<div>
     <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
     <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//>`}>
       <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Στρατιώτες</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
-      ${TYPE_KEYS.filter(k => c.counts[k] > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${c.counts[k]}</span></div>
-        ${c.counts[k] > 0 && html`<div className="cat__names">${c.lists[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
+      ${c.absent > 0 && html`<p className="note" style=${{ margin: '0 0 10px' }}>Απόντες ${c.absent} = ${awayText(c)}. Κάθε άτομο μετριέται μία φορά: όποιος έχει και άδεια και έξοδο μετρά στην άδεια.${date === today ? ' Όποιος γύρισε σήμερα ως τώρα είναι παρών.' : ''}</p>`}
+      ${TYPE_KEYS.filter(k => nOf(k) > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${nOf(k)}</span></div>
+        ${nOf(k) > 0 && html`<div className="cat__names">${listOf(k).map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
       ${zeros.length > 0 && html`<p className="cat__zero"><b>Κανείς σε:</b> ${zeros.map(k => TYPES[k].label).join(', ')}</p>`}
     <//>
   </div>`;
@@ -240,7 +246,8 @@ export function HkaiScreen() {
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const nPun = useMemo(() => state.statuses.filter(s => s.type === 'PUN' && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
   const now = useNowMin();
-  const nLeave = useMemo(() => state.statuses.filter(s => TYPES[s.type].cat === 'abs' && awayNow(s, today, now) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);
+  // όσοι λείπουν με άδεια τώρα· όχι όσοι φεύγουν τις επόμενες μέρες (αλλιώς δεν συμφωνεί με τους Απόντες)
+  const nLeave = useMemo(() => state.statuses.filter(s => TYPES[s.type].cat === 'abs' && s.from <= today && awayNow(s, today, now) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);
   const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
   const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
   return html`<div>
