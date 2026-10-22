@@ -8,7 +8,7 @@
 
 Το τελευταίο zip κατεβαίνει από τα [Releases](https://github.com/Michael-Gkotsis/grafeio-ilis/releases/latest), και από κινητό. Φτιάχνεται μόνο του σε κάθε merge στο main. Κάθε πακέτο έχει δικό του αριθμό (π.χ. `0.1.7`) στο όνομα του zip· ποια έκδοση τρέχει φαίνεται αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία» και στις Ρυθμίσεις. Για ενημέρωση, αποσυμπίεσε το νέο zip πάνω στον ίδιο φάκελο: το `data\` δεν αγγίζεται.
 
-1. Αντέγραψε το `GrafeioIlis-win7-x64-<έκδοση>.zip` από το USB και κάνε αποσυμπίεση, π.χ. στο `C:\GrafeioIlis`.
+1. Αντέγραψε το `GrafeioIlis-win7-x64-<έκδοση>.zip` (ή το `…-ia32-…` για Windows 32-bit) από το USB και κάνε αποσυμπίεση, π.χ. στο `C:\GrafeioIlis`.
 2. Διπλό κλικ στο `GrafeioIlis.exe`. Δεν χρειάζεται εγκατάσταση ούτε δικαιώματα διαχειριστή.
 3. Πρώτη φορά: **Εισαγωγή Δυναμολογίου** (το .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»), μετά **Ρυθμίσεις** για τα στελέχη της ΗΚΑΙ.
 
@@ -79,7 +79,8 @@ npm run dev          # Vite + Electron με hot reload
 npm test             # vitest: κάθε κανόνας (επιτρέπεται/απαγορεύεται), ημερομηνίες-παγίδες, golden files εντύπων, βάση, αρχεία
 npm run typecheck
 npm run build        # dist/
-npm run package:win  # release/GrafeioIlis-win7-x64-<έκδοση>.zip (κατεβάζει Electron 22 win32-x64, ελέγχει SHA256)
+npm run package:win            # release/GrafeioIlis-win7-x64-<έκδοση>.zip (κατεβάζει Electron 22 win32-x64, ελέγχει SHA256)
+npm run package:win -- ia32    # release/GrafeioIlis-win7-ia32-<έκδοση>.zip (32-bit)
 ```
 
 Το UI ανοίγει και σε απλό browser (`npx vite`) με ψεύτικα δεδομένα (`src/renderer/mockApi.ts`).
