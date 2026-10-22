@@ -6,7 +6,7 @@ import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { daysBetween, today } from '../shared/dates';
-import { capsPerService } from '../shared/rules';
+import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
 import { splitOrigins } from '../shared/ranks';
 
@@ -99,11 +99,13 @@ export class Store {
     if (exists && !this.hasTables()) { this.db.close(); throw new CorruptDbError('Το αρχείο δεν έχει τους πίνακες της εφαρμογής', true); }
     this.migrate(exists);
     this.load();
-    // rev 6, μία φορά: κάθε δική σου υπηρεσία (π.χ. Πύλη) παίρνει δική της δυνατότητα υπηρεσιών, με ό,τι ίσχυε ως τώρα
-    // μέσω του είδους της (capsPerService), ώστε να μην αλλάξει κανείς
-    if ((this.state.settings.rev || 0) < 6) {
-      const s0 = this.state; const caps = capsPerService(s0.settings, s0.caps);
-      this.commit({ ...s0, ...(caps ? { caps } : {}), settings: { ...s0.settings, rev: 6 } }); this.flush();
+    // μία φορά: κάθε δική σου υπηρεσία (π.χ. Πύλη) παίρνει δική της δυνατότητα υπηρεσιών, με ό,τι ίσχυε ως τώρα μέσω
+    // του είδους της (rev 6, capsPerService), και μετά μετρά ως δική της (rev 7, ownKinds), ώστε να μην αλλάξει κανείς
+    const rev = this.state.settings.rev || 0;
+    if (rev < 7) {
+      const s0 = this.state; const caps = rev < 6 ? capsPerService(s0.settings, s0.caps) : null;
+      const settings = { ...(ownKinds(s0.settings) || s0.settings), rev: 7 };
+      this.commit({ ...s0, ...(caps ? { caps } : {}), settings }); this.flush();
     }
     // προέλευση (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» στον βαθμό γίνεται βαθμός ΛΧΙΑΣ με προέλευση ΕΠΟΠ (μόνο όσοι το έχουν)
     const so = splitOrigins(this.state); if (so) { this.commit(so); this.flush(); }

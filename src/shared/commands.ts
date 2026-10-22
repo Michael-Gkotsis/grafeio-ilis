@@ -66,7 +66,7 @@ export type Command =
   | { t: 'addPhase'; name: string; from: Phase }
   | { t: 'renamePhase'; id: Phase; name: string }
   | { t: 'delPhase'; id: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
+  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
@@ -791,7 +791,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
-      const b: BlockDef = { id, kind: c.kind, name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
+      // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
+      const b: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
