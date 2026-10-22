@@ -7,7 +7,7 @@ import type { Esso } from './esso';
 import type { RawSheet } from './roster';
 import type { Sig } from './sigs';
 import type { Block, Layout, LayoutForm, LayoutSheet } from './layout';
-import type { BuildOpts, RepCell, RepCol, RepKind, Report, RepTpl } from './reports';
+import type { BuildOpts, BuiltOut, RepCell, RepKind, Report, RepTpl } from './reports';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
@@ -125,7 +125,7 @@ export interface Api {
   // Έντυπα (file: όνομα αρχείου στον φάκελο «Πρότυπα εντύπων»)
   repUpload(kind: RepKind): Promise<{ ok: true; tpl: RepTpl; insp: TplInspect } | Fail | null>;
   repInspect(file: string, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect | Fail>;
-  repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<{ ok: true; file: string; mtime: number; sheet: string; head: number; cols: RepCol[]; cells: RepCell[] } | Fail>;
+  repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<({ ok: true; file: string; mtime: number } & BuiltOut) | Fail>;
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
   layoutPreview(q: LayoutReq): Promise<LayoutPv | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
