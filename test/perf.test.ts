@@ -10,6 +10,9 @@ import { dutyStats, fillDay, hkaiCounts, strengthOf, activePeople, outBlock } fr
 import { preflight } from '../src/shared/preflight';
 import { returnsOn } from '../src/shared/weekend';
 import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
+import { buildTemplate, fillReport } from '../src/main/reports';
+import { PRINT_DEFAULT, renderBook } from '../src/main/print';
+import { PRESETS, defaultPick, withBuilt } from '../src/shared/reports';
 import { benchState } from '../bench/state';
 
 const END = '2026-10-16';
@@ -38,9 +41,19 @@ describe('απόδοση με ρεαλιστικά δεδομένα', () => {
     expect(await ams(() => fillHkai(T('hkai.xlsx'), s, END))).toBeLessThan(1500);
     expect(await ams(() => fillOuts(T('exodouxoi.xlsx'), s, END))).toBeLessThan(1500);
   }, 20_000);
+  it('Έντυπα: πρότυπο, γέμισμα και εκτύπωση σε 1 σελίδα μένουν γρήγορα', async () => {
+    const o = PRESETS.find(p => p.id === 'onomastiki')!.opts;
+    const b = await buildTemplate({ ...o, cols: [...o.cols, { f: 'smed', h: 'ΙΑΤΡΙΚΟ', w: 'auto' }, { f: 'phone', h: 'ΤΗΛ', w: 'wide' }] }, 'people');
+    const r = withBuilt({ id: 'r', name: 'Α', tpl: 't', kind: 'people', sheet: '', head: 1, cols: [], cells: [], pick: defaultPick(), sort: 'name', day: 'today', out: 'file' }, b, o);
+    const ids = s.people.map(p => p.id); let data: Buffer | null = null;
+    expect(await ams(async () => { data = (await fillReport(b.data, s, r, ids, END)).data; })).toBeLessThan(1500);
+    // η σελιδοποίηση ψάχνει κλίμακα με δεκάδες δοκιμές και προτείνει σελίδες (ως 8): μετρά σελίδες χωρίς να τις φτιάχνει
+    expect(await ams(() => renderBook(data!, { file: 'x.xlsx', layout: PRINT_DEFAULT }))).toBeLessThan(1500);
+  }, 20_000);
   it('οι μεγάλοι πίνακες δεν στήνουν τις γραμμές εκτός οθόνης', () => {
     // Οπλισμός ~3 δευτ. → ~0,8 (content-visibility, 18/10) → ~0,2 (VirtualList, 19/10) με 180 άτομα (bench/ui)
     // από 19/10 στήνονται μόνο οι γραμμές που φαίνονται (VirtualList), όπως στο Δυναμολόγιο
-    for (const f of ['weapons.ts', 'whodoes.ts']) expect(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'screens', f), 'utf8')).toMatch(/<\$\{VirtualList\}/);
+    // Έντυπα (22/10): η λίστα «ποιοι μπαίνουν» του βήματος 4 (300 άτομα: ~6.000 κόμβοι → ~2.400)
+    for (const f of ['weapons.ts', 'whodoes.ts', 'reports.ts']) expect(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'screens', f), 'utf8')).toMatch(/<\$\{VirtualList\}/);
   });
 });

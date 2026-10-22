@@ -14,7 +14,10 @@
     "package:win": "node scripts/package-win.mjs",
     "bench": "esbuild bench/bench.ts --bundle --platform=node --target=node16 --outfile=dist/bench.js --log-level=warning && node dist/bench.js",
     "bench:full": "esbuild bench/full.ts --bundle --platform=node --target=node16 --outfile=dist/bench-full.js --log-level=warning --external:electron && node dist/bench-full.js",
-    "bench:ui": "node bench/ui/run.mjs --electron"
+    "bench:ui": "node bench/ui/run.mjs --electron",
+    "bench:reports": "esbuild bench/reports.ts --bundle --platform=node --target=node16 --outfile=dist/bench-reports.js --log-level=warning --external:electron && node dist/bench-reports.js",
+    "bench:golden": "esbuild bench/golden-reports.ts --bundle --platform=node --target=node16 --outfile=dist/golden.js --log-level=warning --external:electron && node dist/golden.js",
+    "bench:ui:reports": "node bench/ui/reports.mjs"
   },
   "engines": {
     "node": ">=16"

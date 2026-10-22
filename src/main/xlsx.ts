@@ -26,7 +26,10 @@ export const splitRef = (ref: string) => { const m = /^\$?([A-Z]+)\$?(\d+)$/.exe
 interface Cell { col: number; attrs: string; inner: string; selfClose: boolean }
 interface Row { r: number; attrs: string; cells: Cell[] }
 
-const attr = (attrs: string, name: string) => { const m = new RegExp('\\s' + name + '="([^"]*)"').exec(attrs); return m ? m[1] : null; };
+// μία κανονική έκφραση για κάθε όνομα (το attr καλείται για κάθε κελί)
+const ATTR_RE = new Map<string, RegExp>();
+export const attrRe = (name: string) => { let re = ATTR_RE.get(name); if (!re) { re = new RegExp('\\s' + name + '="([^"]*)"'); ATTR_RE.set(name, re); } return re; };
+const attr = (attrs: string, name: string) => { const m = attrRe(name).exec(attrs); return m ? m[1] : null; };
 const setAttr = (attrs: string, name: string, v: string | null) => {
   const re = new RegExp('\\s' + name + '="[^"]*"');
   if (v == null) return attrs.replace(re, '');
@@ -297,13 +300,18 @@ export class Sheet {
     return this;
   }
   // Πλάτος στήλης σε χαρακτήρες του Excel (<cols>, αλλιώς το προεπιλεγμένο του φύλλου)
+  // τα πλάτη διαβάζονται μία φορά για κάθε μορφή του <cols> (το fitSheet ρωτά για κάθε κελί)
+  private cwHead: string | null = null; private cw = new Map<number, number>();
   colWidth(c: number): number {
+    if (this.cwHead !== this.head) { this.cwHead = this.head; this.cw.clear(); }
+    const hit = this.cw.get(c); if (hit != null) return hit;
+    let out: number | null = null;
     for (const m of this.head.matchAll(/<col\b[^>]*>/g)) {
       const min = Number(attr(m[0], 'min')), max = Number(attr(m[0], 'max')), w = attr(m[0], 'width');
-      if (c >= min && c <= max && w != null) return attr(m[0], 'hidden') === '1' ? 0 : Number(w);
+      if (c >= min && c <= max && w != null) { out = attr(m[0], 'hidden') === '1' ? 0 : Number(w); break; }
     }
-    const f = /<sheetFormatPr\b[^>]*>/.exec(this.head)?.[0] || '';
-    return Number(attr(f, 'defaultColWidth') || 8.43);
+    if (out == null) { const f = /<sheetFormatPr\b[^>]*>/.exec(this.head)?.[0] || ''; out = Number(attr(f, 'defaultColWidth') || 8.43); }
+    this.cw.set(c, out); return out;
   }
   rowHeight(r: number): number {
     const ht = attr(this.row(r, false)?.attrs || '', 'ht');
@@ -461,7 +469,7 @@ export const toSerial = (iso: string, y1904 = false) => { const [y, m, d] = iso.
 // Ενσωματωμένες μορφές ημερομηνίας του Excel και δικές μας με d/y μέσα (όχι μόνο ώρα)
 const DATE_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
 const isDateCode = (code: string) => /[dy]/i.test(code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, ''));
-export const unesc = (t: string) => t.replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16)))
+export const unesc = (t: string) => t.indexOf('&') < 0 ? t : t.replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16)))
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 export const texts = (xml: string) => [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?\/>|<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(m => unesc(m[1] || '')).join('');
 export type XlValue = string | number | boolean | Date | null;
@@ -741,11 +749,15 @@ export class Workbook {
   private async fitSheet(ws: Sheet, refs: Iterable<string>): Promise<void> {
     const st = await this.loadStyles();
     const xfs = this.xfList(st.xml); const fonts = this.part('fonts').items; const borders = this.part('borders').items;
-    const fontOf = (i: number): FontSpec => {
+    // ανά στυλ μία φορά (fontOf: αντίγραφο, γιατί τα κελιά με πλούσιο κείμενο αλλάζουν το μέγεθος)
+    const fontMemo = new Map<number, FontSpec>(), infoMemo = new Map<number, ReturnType<typeof info0>>();
+    const fontOf = (i: number): FontSpec => { let f = fontMemo.get(i); if (!f) { f = fontOf0(i); fontMemo.set(i, f); } return { ...f }; };
+    const info = (s: number | null) => { const k = s ?? 0; let x = infoMemo.get(k); if (!x) { x = info0(k); infoMemo.set(k, x); } return x; };
+    const fontOf0 = (i: number): FontSpec => {
       const f = fonts[i] ?? fonts[0] ?? '';
       return { name: attr(/<name\b[^>]*>/.exec(f)?.[0] || '', 'val') || 'Calibri', sz: Number(attr(/<sz\b[^>]*>/.exec(f)?.[0] || '', 'val') || 11), b: /<b\/>|<b val="(1|true)"\/>/.test(f) };
     };
-    const info = (s: number | null) => {
+    const info0 = (s: number | null) => {
       const x = xfs[s ?? 0] || ''; const open = x.slice(0, x.indexOf('>') + 1); const al = /<alignment\b[^>]*>/.exec(x)?.[0] || '';
       const bd = borders[Number(attr(open, 'borderId') || 0)] || '';
       return { fontId: Number(attr(open, 'fontId') || 0), h: attr(al, 'horizontal') || 'general', wrap: /^(1|true)$/.test(attr(al, 'wrapText') || ''),

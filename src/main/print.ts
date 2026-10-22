@@ -5,9 +5,9 @@
 // (SUM, ROW()-6, E17-Z17…), γιατί τα αρχεία που γράφει η εφαρμογή έχουν τις παλιές τιμές μέχρι να τα ανοίξει ο Excel.
 import crypto from 'crypto';
 import JSZip from 'jszip';
-import { FIXED_MARK, colName, colNum, texts, unesc } from './xlsx';
+import { FIXED_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
 
-const attr = (s: string, n: string) => { const m = new RegExp('\\s' + n + '="([^"]*)"').exec(s); return m ? unesc(m[1]) : null; };
+const attr = (s: string, n: string) => { const m = attrRe(n).exec(s); return m ? unesc(m[1]) : null; };
 const num = (s: string, n: string, d: number) => { const v = attr(s, n); return v == null || v === '' || isNaN(+v) ? d : +v; };
 const on = (s: string, tag: string) => { const m = new RegExp('<' + tag + '\\b([^>]*)/?>').exec(s); return !!m && !/val="(0|false)"/.test(m[1]); };
 const block = (xml: string, tag: string) => new RegExp('<' + tag + '\\b[^>]*>([\\s\\S]*?)</' + tag + '>').exec(xml)?.[1] || '';
@@ -592,6 +592,13 @@ interface Geo {
 // πόσο μεγαλώνει ένα σταθερό κομμάτι μέσα σε φύλλο με κλίμακα s, ώστε να βγει στο μέγεθός του (με όρια, για τα άκρα)
 const fixK = (s: number) => Math.min(6, Math.max(0.4, 1 / s));
 const rowAt = (g: Geo, r: number, s: number) => g.rowH(r) * (g.fixR?.has(r) ? fixK(s) : 1);
+// ύψος μιας ομάδας γραμμών: [κανονικές, σταθερές], μία φορά για κάθε ομάδα (η σελιδοποίηση ψάχνει κλίμακα με πολλές δοκιμές)
+const sums = new WeakMap<number[], [number, number]>();
+function sumsOf(g: Geo, rows: number[]): [number, number] {
+  let x = sums.get(rows);
+  if (!x) { let a = 0, f = 0; for (const r of rows) { const h = g.rowH(r); if (g.fixR?.has(r)) f += h; else a += h; } x = [a, f]; sums.set(rows, x); }
+  return x;
+}
 // Ένας πίνακας του φύλλου: η γραμμή επικεφαλίδων, οι γραμμές του από κάτω (ως τα σύνολα ή το πρώτο κελί χωρίς πλαίσιο),
 // οι στήλες που ταξινομούνται (με το κλειδί της επικεφαλίδας: «Ο/Σ» → «ΟΣ») και οι στήλες Α/Α που μένουν στη θέση τους
 export type SortKind = 'text' | 'num' | 'date' | 'rank';
@@ -901,7 +908,7 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
   const repeat = o.repeat && !!g.titles;
   const tH = (first: number) => (repeat && g.titles && first > g.titles[1] ? g.titleH : 0);
   // ύψος γραμμών με κλίμακα s (τα σταθερά κομμάτια πιάνουν πάντα τον ίδιο χώρο στο χαρτί)
-  const hOf = (rows: number[], s: number) => rows.reduce((a, r) => a + rowAt(g, r, s), 0);
+  const hOf = (rows: number[], s: number) => { const [a, f] = sumsOf(g, rows); return f ? a + f * fixK(s) : a; };
   const blocks = o.keep ? g.units : g.units.flat().map(u => [u]);
   // γεμίζει σελίδες με τη σειρά· limit = μέγιστο ύψος ανά σελίδα (για ισόποσο μοίρασμα)
   const split = (s: number, limit: number): number[][] => {
@@ -915,6 +922,24 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
     }
     if (cur.length || !pages.length) pages.push(cur);
     return pages;
+  };
+  // πόσες σελίδες βγάζει το split, χωρίς να φτιάχνει τις σελίδες (το ψάξιμο της κλίμακας το καλεί δεκάδες φορές)·
+  // ίδιοι υπολογισμοί με την ίδια σειρά, άρα πάντα ίδιο αποτέλεσμα με το split(s, limit).length
+  const flat = blocks.map(b => ({ first: b[0][0], us: b.map(u => ({ first: u[0], ab: sumsOf(g, u) })) }));
+  const count = (s: number, limit: number): number => {
+    const cap = availH / s; const k = fixK(s); let n = 0, has = false, first = 0, h = 0;
+    const room = (r: number) => Math.min(limit, cap - tH(r));
+    for (const b of flat) {
+      let bh = 0; for (const u of b.us) bh += u.ab[1] ? u.ab[0] + u.ab[1] * k : u.ab[0];
+      if (has && h + bh > room(first) + 0.5 && bh <= room(b.first) + 0.5) { n++; has = false; h = 0; }
+      for (const u of b.us) {
+        const uh = u.ab[1] ? u.ab[0] + u.ab[1] * k : u.ab[0];
+        if (has && h + uh > room(first) + 0.5) { n++; has = false; h = 0; }
+        if (!has) { has = true; first = u.first; }
+        h += uh;
+      }
+    }
+    return has || !n ? n + 1 : n;
   };
   const fitsAll = (s: number, pages: number[][]) => pages.every(p => tH(p[0] ?? 0) + hOf(p, s) <= availH / s + 0.5);
   let s: number; let pages: number[][];
@@ -939,17 +964,17 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
   } else {
     const N = o.pages;
     if (sFix) s = Math.min(sFix, maxScale);
-    else if (split(maxScale, Infinity).length <= N) s = maxScale;
+    else if (count(maxScale, Infinity) <= N) s = maxScale;
     else {
       let lo = 0.02, hi = maxScale;
-      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (split(mid, Infinity).length <= N) lo = mid; else hi = mid; }
+      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (count(mid, Infinity) <= N) lo = mid; else hi = mid; }
       s = lo;
     }
     s = Math.max(0.02, Math.floor(s * 1000) / 1000);
     // ισόποσο μοίρασμα: το μικρότερο όριο ανά σελίδα που κρατά τις ίδιες σελίδες
-    const need = split(s, Infinity).length; const total = hOf(g.rowsAll, s);
+    const need = count(s, Infinity); const total = hOf(g.rowsAll, s);
     let a = total / Math.max(1, need), b = availH / s;
-    for (let i = 0; i < 22; i++) { const L = (a + b) / 2; if (split(s, L).length <= need) b = L; else a = L; }
+    for (let i = 0; i < 22; i++) { const L = (a + b) / 2; if (count(s, L) <= need) b = L; else a = L; }
     pages = split(s, b + 0.5);
     if (pages.length > need || !fitsAll(s, pages)) pages = split(s, Infinity);
   }
