@@ -5,7 +5,7 @@
 // (SUM, ROW()-6, E17-Z17…), γιατί τα αρχεία που γράφει η εφαρμογή έχουν τις παλιές τιμές μέχρι να τα ανοίξει ο Excel.
 import crypto from 'crypto';
 import JSZip from 'jszip';
-import { colName, colNum, texts, unesc } from './xlsx';
+import { FIXED_MARK, colName, colNum, texts, unesc } from './xlsx';
 
 const attr = (s: string, n: string) => { const m = new RegExp('\\s' + n + '="([^"]*)"').exec(s); return m ? unesc(m[1]) : null; };
 const num = (s: string, n: string, d: number) => { const v = attr(s, n); return v == null || v === '' || isNaN(+v) ? d : +v; };
@@ -487,6 +487,11 @@ function areaOf(body: string | null): { r1: number; c1: number; r2: number; c2: 
   const m = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i.exec(first); if (!m) return null;
   return { c1: colNum(m[1].toUpperCase()), r1: +m[2], c2: colNum((m[3] || m[1]).toUpperCase()), r2: +(m[4] || m[2]) };
 }
+// όλες οι περιοχές ενός ονόματος (π.χ. τα σταθερά κομμάτια: κεφαλίδα, ημερομηνία, υπογραφές)
+function areasOf(body: string | null): { r1: number; c1: number; r2: number; c2: number }[] {
+  if (!body) return [];
+  return body.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(areaOf).filter((a): a is NonNullable<typeof a> => !!a);
+}
 function titleRows(body: string | null): [number, number] | null {
   if (!body) return null;
   for (const part of body.split(',')) { const m = /!?\$?(\d+):\$?(\d+)$/.exec(part.trim()); if (m) return [+m[1], +m[2]]; }
@@ -580,7 +585,13 @@ interface Geo {
   tables: Table[];                        // πίνακες με γραμμή επικεφαλίδων, που ταξινομούνται στην εκτύπωση
   regroup: (rows: number[]) => number[][][];
   fix?: Map<number, number>;              // ταξινομημένο: κελί του Α/Α (key) → η γραμμή που είχε αυτή τη θέση (το Α/Α μένει 1, 2, 3…)
+  // Έντυπα (Michael, 22/10): κεφαλίδα, ημερομηνία, τίτλος, υπογραφές (FIXED_MARK) τυπώνονται στο μέγεθός τους, όποια κι αν
+  // είναι η κλίμακα του πίνακα· fixC: τα κελιά τους, fixR: οι γραμμές που έχουν μόνο αυτά (ψηλώνουν/κονταίνουν μαζί τους)
+  fixC?: Set<number>; fixR?: Set<number>;
 }
+// πόσο μεγαλώνει ένα σταθερό κομμάτι μέσα σε φύλλο με κλίμακα s, ώστε να βγει στο μέγεθός του (με όρια, για τα άκρα)
+const fixK = (s: number) => Math.min(6, Math.max(0.4, 1 / s));
+const rowAt = (g: Geo, r: number, s: number) => g.rowH(r) * (g.fixR?.has(r) ? fixK(s) : 1);
 // Ένας πίνακας του φύλλου: η γραμμή επικεφαλίδων, οι γραμμές του από κάτω (ως τα σύνολα ή το πρώτο κελί χωρίς πλαίσιο),
 // οι στήλες που ταξινομούνται (με το κλειδί της επικεφαλίδας: «Ο/Σ» → «ΟΣ») και οι στήλες Α/Α που μένουν στη θέση τους
 export type SortKind = 'text' | 'num' | 'date' | 'rank';
@@ -674,6 +685,14 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
     oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
     grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units: regroup(rowsAll), framed,
     tables: tablesOf(book, sh, unitsOf(rowsAll), colsAll, framed), regroup };
+  const fixed = areasOf(definedName(book.wbXml, FIXED_MARK, idx));
+  if (fixed.length) {
+    const fixC = new Set<number>(), near = new Set<number>();
+    for (const a of fixed) for (let r = a.r1; r <= a.r2; r++) { near.add(r); for (let c = a.c1; c <= a.c2; c++) fixC.add(key(r, c)); }
+    // γραμμή μόνο με σταθερά κομμάτια (και κενά): χωρίς πλαίσιο και χωρίς τίποτα άλλο γραμμένο
+    const fixR = new Set([...near].filter(r => rowH(r) > 0 && !framed.has(r) && colsAll.every(c => fixC.has(key(r, c)) || shown(r, c) === '')));
+    g.fixC = fixC; g.fixR = fixR;
+  }
   m.set(name, g);
   return g;
 }
@@ -811,7 +830,7 @@ function planFile(g: Geo): Plan {
     return out;
   };
   const withT = (first: number) => !!g.titles && first > g.titles[1];
-  const rowPages = split(g.rowsAll, g.rowH, f => availH / scale - (withT(f) ? g.titleH : 0), rowBrk);
+  const rowPages = split(g.rowsAll, r => rowAt(g, r, scale), f => availH / scale - (withT(f) ? g.titleH : 0), rowBrk);
   const colPages = split(g.colsAll, g.colW, () => availW / scale, colBrk);
   const order: [number[], number[]][] = [];
   if (attr(ps, 'pageOrder') === 'overThenDown') rowPages.forEach(rp => colPages.forEach(cp => order.push([rp, cp])));
@@ -881,29 +900,38 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
   const maxScale = Math.min(availW / Math.max(1, g.W), 2, 16 / g.dom.sz);
   const repeat = o.repeat && !!g.titles;
   const tH = (first: number) => (repeat && g.titles && first > g.titles[1] ? g.titleH : 0);
-  const hOf = (rows: number[]) => rows.reduce((a, r) => a + g.rowH(r), 0);
+  // ύψος γραμμών με κλίμακα s (τα σταθερά κομμάτια πιάνουν πάντα τον ίδιο χώρο στο χαρτί)
+  const hOf = (rows: number[], s: number) => rows.reduce((a, r) => a + rowAt(g, r, s), 0);
   const blocks = o.keep ? g.units : g.units.flat().map(u => [u]);
   // γεμίζει σελίδες με τη σειρά· limit = μέγιστο ύψος ανά σελίδα (για ισόποσο μοίρασμα)
   const split = (s: number, limit: number): number[][] => {
     const cap = availH / s; const pages: number[][] = []; let cur: number[] = []; let h = 0;
     const room = (first: number) => Math.min(limit, cap - tH(first));
-    const put = (u: number[]) => { const uh = hOf(u); if (cur.length && h + uh > room(cur[0]) + 0.5) { pages.push(cur); cur = []; h = 0; } cur.push(...u); h += uh; };
+    const put = (u: number[]) => { const uh = hOf(u, s); if (cur.length && h + uh > room(cur[0]) + 0.5) { pages.push(cur); cur = []; h = 0; } cur.push(...u); h += uh; };
     for (const b of blocks) {
-      const bh = b.reduce((a, u) => a + hOf(u), 0);
+      const bh = b.reduce((a, u) => a + hOf(u, s), 0);
       if (cur.length && h + bh > room(cur[0]) + 0.5 && bh <= room(b[0][0]) + 0.5) { pages.push(cur); cur = []; h = 0; }
       b.forEach(put);
     }
     if (cur.length || !pages.length) pages.push(cur);
     return pages;
   };
-  const fitsAll = (s: number, pages: number[][]) => pages.every(p => tH(p[0] ?? 0) + hOf(p) <= availH / s + 0.5);
+  const fitsAll = (s: number, pages: number[][]) => pages.every(p => tH(p[0] ?? 0) + hOf(p, s) <= availH / s + 0.5);
   let s: number; let pages: number[][];
   const br = (o.breaks?.[g.sh.name] || []).filter(r => r > g.rowsAll[0] && g.rowsAll.includes(r));
   if (br.length) {
     pages = []; let cur: number[] = [];
     for (const r of g.rowsAll) { if (cur.length && br.includes(r)) { pages.push(cur); cur = []; } cur.push(r); }
     pages.push(cur);
-    s = Math.min(maxScale, ...pages.map(p => availH / Math.max(1, tH(p[0]) + hOf(p))));
+    // η μεγαλύτερη κλίμακα που χωρά κάθε σελίδα (με σταθερά κομμάτια το ύψος δεν είναι ανάλογο της κλίμακας: ψάξιμο)
+    const fitOne = (p: number[]) => {
+      if (!g.fixR?.size) return availH / Math.max(1, tH(p[0]) + hOf(p, 1));
+      let lo = 0.02, hi = maxScale;
+      if (hi * (tH(p[0]) + hOf(p, hi)) <= availH) return hi;
+      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (mid * (tH(p[0]) + hOf(p, mid)) <= availH) lo = mid; else hi = mid; }
+      return lo;
+    };
+    s = Math.min(maxScale, ...pages.map(fitOne));
     if (sFix) s = Math.min(s, sFix);
   } else if (o.pages === 'auto') {
     s = Math.min(maxScale, o.size / g.dom.sz); if (sFix) s = Math.min(s, sFix);
@@ -919,7 +947,7 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
     }
     s = Math.max(0.02, Math.floor(s * 1000) / 1000);
     // ισόποσο μοίρασμα: το μικρότερο όριο ανά σελίδα που κρατά τις ίδιες σελίδες
-    const need = split(s, Infinity).length; const total = hOf(g.rowsAll);
+    const need = split(s, Infinity).length; const total = hOf(g.rowsAll, s);
     let a = total / Math.max(1, need), b = availH / s;
     for (let i = 0; i < 22; i++) { const L = (a + b) / 2; if (split(s, L).length <= need) b = L; else a = L; }
     pages = split(s, b + 0.5);
@@ -934,8 +962,8 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
     f = 1.9;
     pages.forEach((p, i) => {
       if (pages.length > 1 && i === pages.length - 1) return;
-      const grow = p.filter(r => g.framed.has(r)); const gh = hOf(grow); if (!gh) return;
-      f = Math.min(f, (availH / s - tH(p[0]) - (hOf(p) - gh)) / gh);
+      const grow = p.filter(r => g.framed.has(r)); const gh = hOf(grow, s); if (!gh) return;
+      f = Math.min(f, (availH / s - tH(p[0]) - (hOf(p, s) - gh)) / gh);
     });
     f = Math.max(1, Math.floor(f * 100) / 100);
   }
@@ -972,7 +1000,8 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
   const styleOf = (r: number, c: number) => { const k = cellOf(r, c); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
   // ταξινομημένο: το Α/Α δείχνει τον αριθμό της θέσης (της γραμμής που ήταν εκεί πριν)
   const shown = (r0: number, c: number) => { const r = g.fix?.get(key(r0, c)) ?? r0; const k = cellOf(r, c); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? v.code : v; };
-  const rowH = (r: number) => g.rowH(r) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
+  const fk = fixK(scale);   // σταθερά κομμάτια: όσο μίκρυνε ο πίνακας, τόσο μεγαλώνουν μέσα του
+  const rowH = (r: number) => rowAt(g, r, scale) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
   const colW = (c: number) => g.colW(c) * P.cs;
   const withTitles = (first: number) => P.repeat && !!g.titles && first > g.titles[1];
 
@@ -1017,7 +1046,9 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
           const just = hal === 'left' ? 'flex-start' : hal === 'right' ? 'flex-end' : 'center';
           const pad = xf.indent ? `padding-${hal === 'right' ? 'right' : 'left'}:${xf.indent * 9 + 2}px;` : '';
           const rot = xf.rot === 90 || xf.rot === 180 || xf.rot === 255 ? 'writing-mode:vertical-rl;' + (xf.rot === 90 ? 'transform:rotate(180deg);' : '') : '';
-          inner = `<div class="x${xf.wrap ? ' w' : ''}${spill ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span>${rich ? richHtml(rich) : esc(txt)}</span></div>`;
+          // σταθερό κομμάτι: στο μέγεθός του, και ό,τι δεν χωρά στο (μικρότερο πια) κελί του φαίνεται δίπλα
+          const fx = g.fixC?.has(key(ar, ac)) && Math.abs(fk - 1) > 0.005;
+          inner = `<div class="x${xf.wrap ? ' w' : ''}${spill || fx ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span${fx ? ` style="font-size:${fk.toFixed(3)}em"` : ''}>${rich ? richHtml(rich) : esc(txt)}</span></div>`;
         }
         tr += `<td class="s${s}"${opt.refs ? ` data-a="${colName(ac)}${ar}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${style ? ` style="${style}"` : ''}>${inner}</td>`;
       }

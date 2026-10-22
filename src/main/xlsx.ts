@@ -9,6 +9,8 @@ const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει �
 import { tablePart, type XlLook, type XlPart } from '../shared/xlLook';
 
 export const REPORT_MARK = 'GL_ENTYPO';
+// Κομμάτια του φύλλου με σταθερό μέγεθος στην εκτύπωση (κεφαλίδα, ημερομηνία, τίτλος, υπογραφές: print.ts)
+export const FIXED_MARK = 'GL_STATHERA';
 export const sheetSafe = (name: string) => name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
@@ -1026,6 +1028,18 @@ export class Workbook {
   markReport(name: string) {
     const i = this.sheetIndex(name); if (i < 0 || this.reportSheets().has(name)) return;
     const dn = `<definedName name="${REPORT_MARK}" localSheetId="${i}" hidden="1">TRUE</definedName>`;
+    if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('</definedNames>', dn + '</definedNames>');
+    else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+  }
+  // Κεφαλίδα, ημερομηνία, τίτλος και υπογραφές μένουν στο μέγεθός τους όταν η εκτύπωση μικραίνει ή μεγαλώνει τον πίνακα
+  // (Michael, 22/10): κρυφό όνομα του φύλλου με τις περιοχές τους, που το διαβάζει η εκτύπωση της εφαρμογής (print.ts)
+  markFixed(name: string, areas: { r1: number; c1: number; r2: number; c2: number }[]) {
+    const i = this.sheetIndex(name); if (i < 0) return;
+    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>[^<]*<\/definedName>/g, (m, a: string) => (attr(a, 'name') === FIXED_MARK && attr(a, 'localSheetId') === String(i) ? '' : m));
+    if (!areas.length) return;
+    const q = "'" + name.replace(/'/g, "''") + "'!";
+    const body = areas.map(b => q + '$' + colName(b.c1) + '$' + b.r1 + ':$' + colName(b.c2) + '$' + b.r2).join(',');
+    const dn = `<definedName name="${FIXED_MARK}" localSheetId="${i}" hidden="1">${esc(body).replace(/'/g, '&apos;')}</definedName>`;
     if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('</definedNames>', dn + '</definedNames>');
     else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
   }
