@@ -1214,3 +1214,15 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .shiftown__row .ui-dd.ui-input{padding-right:6px}
 .shiftown__head{font-size:12px;color:var(--muted-fg)}
 .shiftown .shiftown__x{height:30px;width:36px;padding:0}
+
+/* Οπλισμός: σύνθημα κάτω από τον τίτλο, επιλογή (σάρωση, ξανά οι ίδιοι, από υπηρεσία) και μπάρα επιλογής */
+.page-head__quote{margin:2px 0 0;font-size:12px;line-height:1.35;font-style:italic;color:var(--muted-fg)}
+.wpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.wpick__scan{flex:0 1 380px;min-width:240px;height:32px;font-size:13px}
+.wpick__msg{font-size:13px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.wpick__msg--ok{color:var(--ok)}.wpick__msg--warn{color:var(--warn)}.wpick__msg--bad{color:var(--bad)}
+.wmenu{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}
+.wmenu__item{display:flex;justify-content:space-between;gap:12px;width:100%;padding:7px 10px;border:0;border-radius:8px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.wmenu__item:hover,.wmenu__item:focus-visible{background:var(--secondary)}
+.bulkbar__sel{flex:1 1 auto;min-width:160px;display:flex;align-items:center;flex-wrap:wrap;gap:0 6px}
+.bulkbar .bulkbar__hid{flex:none;min-width:0;font-weight:500;color:var(--muted-fg)}

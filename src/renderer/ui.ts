@@ -250,4 +250,5 @@ export function Strip({ className, children, ...rest }: P) {
 function PageSub({ sub }: P) {
   return html`<p className="page-head__sub">${sub}</p>`;
 }
-export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }
+// quote: σύνθημα της οθόνης σε πλάγια, διακριτικά, πριν από τον υπότιτλο
+export function PageHeader({ title, sub, quote, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${quote && html`<p className="page-head__quote">${quote}</p>`}${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }
