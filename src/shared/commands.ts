@@ -114,6 +114,12 @@ const who = (s: AppState, pids: number[]) => {
   const pm = personMap(s.people);
   return pids.length === 1 ? shortName(pm.get(pids[0])!) : pids.length + ' άτομα';
 };
+// Ομαδικές κινήσεις όπλων: «10 άτομα (Α, Β… και 4 ακόμα)», για να φαίνεται στο Ιστορικό ποιοι ήταν (Michael, 24/10)
+const whoNames = (s: AppState, pids: number[]) => {
+  if (pids.length === 1) return who(s, pids);
+  const pm = personMap(s.people); const ns = pids.map(id => pm.get(id)).filter(Boolean).map(p => shortName(p!));
+  return pids.length + ' άτομα (' + ns.slice(0, 6).join(', ') + (ns.length > 6 ? ' και ' + (ns.length - 6) + ' ακόμα' : '') + ')';
+};
 // Σημειώσεις: καθαρές εντολές χωρίς Excel (files: [])· το κείμενο στο Ιστορικό είναι η αρχή της σημείωσης
 function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 'doneNote' | 'deleteNote' }>, ctx: Ctx): Result {
   const notes = s.notes || [];
@@ -766,7 +772,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       }
       if (!add.length) throw new Error(noW.length && !already.length ? 'Δεν έχει αριθμό όπλου: ' + noW.join(', ') : 'Είναι ήδη εκτός: ' + already.join(', ') + (noW.length ? ' · χωρίς αριθμό όπλου: ' + noW.join(', ') : ''));
       const skip = [noW.length && 'χωρίς αριθμό όπλου: ' + noW.join(', '), already.length && 'ήδη εκτός: ' + already.join(', ')].filter(Boolean).join(' · ');
-      return { state: { ...s, weaponLog: [...log, ...add] }, text: 'Έξοδος όπλων (' + reason + ') ' + dm(c.day) + ' ' + time + ': ' + who(s, add.map(m => m.pid)) + (skip ? ' (δεν βγήκαν, ' + skip + ')' : ''), files: [] };
+      return { state: { ...s, weaponLog: [...log, ...add] }, text: 'Έξοδος όπλων (' + reason + ') ' + dm(c.day) + ' ' + time + ': ' + whoNames(s, add.map(m => m.pid)) + (skip ? ' (δεν βγήκαν, ' + skip + ')' : ''), files: [] };
     }
     case 'weaponIn': {
       const time = wTime(c.time, 'εισόδου'); const ids = new Set(c.ids); const lists = s.settings.lists;
@@ -778,7 +784,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       });
       if (!done.length) return { state: s, text: '', files: [] };
       const rs = [...new Set(done.map(m => m.inReason))];
-      return { state: { ...s, weaponLog }, text: 'Είσοδος όπλων (' + rs.join(', ') + ') ' + dm(c.day) + ' ' + time + ': ' + who(s, done.map(m => m.pid)), files: [] };
+      return { state: { ...s, weaponLog }, text: 'Είσοδος όπλων (' + rs.join(', ') + ') ' + dm(c.day) + ' ' + time + ': ' + whoNames(s, done.map(m => m.pid)), files: [] };
     }
     case 'editWeaponMove': {
       const log = s.weaponLog || []; const m = log.find(x => x.id === c.id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
