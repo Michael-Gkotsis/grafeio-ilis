@@ -238,11 +238,11 @@ describe('σύνδεση στην εφαρμογή', () => {
     expect(a).toMatch(/notes: \['Σημειώσεις', Icon\.notes, NotesScreen\]/);
     expect(a).toMatch(/v === 'notes' \? notesDue/);
   });
-  it('Ctrl+Shift+N (νέα σημείωση) προηγείται του Ctrl+N (δήλωση), και δένει στην ανοιχτή καρτέλα στρατιώτη ', () => {
+  it('Ctrl+Shift+N (νέα σημείωση) προηγείται του Ctrl+N (δήλωση), και δένει στην ανοιχτή καρτέλα στρατιώτη ή στελέχους', () => {
     const a = src('renderer/app.ts');
     const note = a.indexOf("mod && e.shiftKey && (k === 'n'"), declare = a.indexOf("else if (mod && (k === 'n'");
     expect(note).toBeGreaterThan(0); expect(declare).toBeGreaterThan(note);
-    expect(a).toMatch(/kind: 'note', data: pid != null && pid > 0 \? \{ pid \} : \{\}/);
+    expect(a).toMatch(/kind: 'note', data: pid != null && pid > 0 \? \{ pid \} : cur\.current\.cadre \? \{ cid: cur\.current\.cadre \} : \{\}/);
   });
   it('οι σημειώσεις δεν ξαναγράφουν Excel ή έντυπα, και έχουν δική τους ρύθμιση στη βάση (αναίρεση)', () => {
     expect(src('main/main.ts')).toMatch(/k !== 'lastExpire' && k !== 'notes'/);
@@ -257,17 +257,21 @@ describe('σύνδεση στην εφαρμογή', () => {
     expect(src('renderer/screens/other.ts')).toMatch(/key: 'notes'[^\n]*\n[^\n]*\n[^\n]*nfilter: 'rem'/);
     expect(src('renderer/screens/people.ts')).toContain('<${NotesTab} key=${pid} who=${{ pid }}/>');
     expect(src('renderer/screens/people.ts')).toContain('NoteDot');
-    expect(src('renderer/screens/cadre.ts')).toContain('<${NotesTab} who=${{ cid: c.id }}/>');
+    expect(src('renderer/screens/cadre.ts')).toContain('<${NotesTab} key=${cid} who=${{ cid }}/>');
   });
-  it('κάρτα στρατιώτη: 4η καρτέλα Σημειώσεις, χωρίς το παλιό μπλοκ, χωρίς αυτόματο focus στο πλαίσιο', () => {
-    const pe = src('renderer/screens/people.ts'), no = src('renderer/screens/notes.ts');
+  it('κάρτες ατόμου: 4η καρτέλα Σημειώσεις στον στρατιώτη, 3 καρτέλες στο στέλεχος, πλαϊνό φύλλο πάνω από κάθε οθόνη, χωρίς αυτόματο focus', () => {
+    const pe = src('renderer/screens/people.ts'), ca = src('renderer/screens/cadre.ts'), no = src('renderer/screens/notes.ts'), ap = src('renderer/app.ts');
     expect(pe).toContain("{ value: 'notes', label: 'Σημειώσεις' }"); expect(pe).not.toContain('PersonNotes');
+    expect(ca).toMatch(/CADRE_TABS = \[\{ value: 'abs', label: 'Καταστάσεις' \}, \{ value: 'info', label: 'Στοιχεία' \}, \{ value: 'notes', label: 'Σημειώσεις' \}\]/);
+    expect(ca).toContain('<${Sheet} onClose'); expect(ca).not.toContain('size="lg"'); expect(ca).toContain('Διαγραφή στελέχους…');
+    expect(ap).toContain('<${CadreSheet} cid=${cadreId}'); expect(ap).toMatch(/if \(id < 0\) \{[^\n]*openCadre/);
     expect(no).toContain('<${NoteComposer} draft=${draft} ns="np" compact=${true}/>');
   });
   it('μη αποθηκευμένο πρόχειρο: ρωτά πριν από άλλο άτομο, κλείσιμο, άλλη καρτέλα ή οθόνη', () => {
     const ap = src('renderer/app.ts');
     expect(ap).toContain('onMove=${(id: number) => guard(() => setPersonId(id))}'); expect(ap).toContain('onClose=${() => guard(() => setPersonId(null))}');
-    expect(ap).toContain('guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); })');
+    expect(ap).toContain('onMove=${(id: string) => guard(() => setCadreId(id))}'); expect(ap).toContain('guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); })');
     expect(src('renderer/screens/people.ts')).toContain('onChange=${(t: string) => nav.guard(() => setTab(t))}');
+    expect(src('renderer/screens/cadre.ts')).toContain('onChange=${(t: string) => nav.guard(() => setTab(t))}');
   });
 });

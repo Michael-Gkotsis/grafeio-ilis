@@ -10,7 +10,7 @@ const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.D
 const ReportsScreen = lazy(() => import('./screens/reports').then(m => ({ default: m.ReportsScreen })));
 const GuideScreen = lazy(() => import('./screens/guide').then(m => ({ default: m.GuideScreen })));
 import { topicFor } from './guideTopic';
-import { CadreScreen } from './screens/cadre';
+import { CadreScreen, CadreSheet } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { NoteDialog, NotesScreen } from './screens/notes';
@@ -131,6 +131,8 @@ function Shell() {
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
   const [personList, setPersonList] = useState<number[] | null>(null);   // ↑/↓ στην καρτέλα: η λίστα από την οποία άνοιξε
+  const [cadreId, setCadreId] = useState<string | null>(null);   // η καρτέλα στελέχους, πλαϊνή όπως του στρατιώτη
+  const [cadreOrder, setCadreOrder] = useState<string[] | null>(null);
   // σημείωση που γράφεται σε κάρτα ατόμου και δεν έχει αποθηκευτεί: πριν αλλάξει άτομο, καρτέλα ή κλείσει η κάρτα, ρωτά
   const noteDirty = useRef(false); const [leaveNote, setLeaveNote] = useState<(() => void) | null>(null);
   const setDirty = useCallback((on: boolean) => { noteDirty.current = on; }, []);
@@ -143,14 +145,14 @@ function Shell() {
   const [back, setBack] = useState<Route[]>([]);
   useEffect(() => { memory.current[route.view] = route.params; if (route.view === 'people') save(PEOPLE_KEY, pick(route.params, PEOPLE_KEEP)); }, [route]);
   useEffect(() => { memory.current = { people: load(PEOPLE_KEY, {}) }; }, [today]);   // νέα μέρα: οι ημερομηνίες ξεκινούν από σήμερα
-  const cur = useRef({ route, back, person: personId }); cur.current = { route, back, person: personId };
+  const cur = useRef({ route, back, person: personId, cadre: cadreId }); cur.current = { route, back, person: personId, cadre: cadreId };
   // σε άλλη οθόνη: αν μια κάρτα έχει αλλαγές που δεν αποθηκεύτηκαν, πρώτα ρωτά (pending.ts)
   const moveTo = useCallback((next: Route, push: boolean, before?: () => void) => {
     const r = cur.current.route;
     const doIt = () => {
       before?.();
       if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
-      setRoute(next); setLayer(null); setOver(null); setPersonId(null); window.scrollTo(0, 0);
+      setRoute(next); setLayer(null); setOver(null); setPersonId(null); setCadreId(null); window.scrollTo(0, 0);
     };
     guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); });
   }, [guard]);
@@ -169,15 +171,19 @@ function Shell() {
   const setParams = useCallback((params: Record<string, any>) => setRoute(r => ({ view: r.view, params: { ...r.params, ...params } })), []);
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
   const note = useCallback((data?: any) => setLayer({ kind: 'note', data: data || {} }), []);
-  // στέλεχος σε θέση (ΕΠΟΠ/ΟΒΑ, αρνητικός αριθμός): η καρτέλα του στα Στελέχη
-  const openPerson = useCallback((id: number, list?: number[]) => { if (id < 0) { go('cadre', { seat: id }); return; } guard(() => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }); }, [go, guard]);
-  const openCadre = useCallback((id: string) => go('cadre', { ccard: id }), [go]);
-  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, note, openPerson, openCadre, guard, setDirty }), [route, personId, go, setParams, declare, note, openPerson, openCadre, guard, setDirty]);
+  // η καρτέλα στελέχους ανοίγει πάνω από κάθε οθόνη (και αντίστροφα με του στρατιώτη: μία κάρτα τη φορά)
+  const openCadre = useCallback((id: string, list?: string[]) => guard(() => { setCadreId(id); setCadreOrder(list && list.includes(id) ? list : null); setPersonId(null); setLayer(null); }), [guard]);
+  // στέλεχος σε θέση (ΕΠΟΠ/ΟΒΑ, αρνητικός αριθμός): η καρτέλα του στελέχους
+  const openPerson = useCallback((id: number, list?: number[]) => {
+    if (id < 0) { const c = state.cadreList.find(x => x.pid === id); if (c) openCadre(c.id); else go('cadre'); return; }
+    guard(() => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setCadreId(null); setLayer(null); pushRecent(id); });
+  }, [go, guard, openCadre, state.cadreList]);
+  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId, cadre: cadreId }, go, set: setParams, declare, note, openPerson, openCadre, guard, setDirty }), [route, personId, cadreId, go, setParams, declare, note, openPerson, openCadre, guard, setDirty]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase(); const mod = e.ctrlKey || e.metaKey; const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName || '');
       if (mod && (k === 'k' || k === 'κ')) { e.preventDefault(); setOver('palette'); }
-      else if (mod && e.shiftKey && (k === 'n' || k === 'ν')) { e.preventDefault(); const pid = cur.current.person; setLayer({ kind: 'note', data: pid != null && pid > 0 ? { pid } : {} }); }   // νέα σημείωση, δεμένη στην ανοιχτή καρτέλα στρατιώτη
+      else if (mod && e.shiftKey && (k === 'n' || k === 'ν')) { e.preventDefault(); const pid = cur.current.person; setLayer({ kind: 'note', data: pid != null && pid > 0 ? { pid } : cur.current.cadre ? { cid: cur.current.cadre } : {} }); }   // νέα σημείωση, δεμένη στην ανοιχτή καρτέλα στρατιώτη ή στελέχους
       else if (mod && (k === 'n' || k === 'ν')) { e.preventDefault(); setLayer({ kind: 'declare', data: {} }); }
       else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); if (!e.repeat) undo(); }
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
@@ -240,6 +246,7 @@ function Shell() {
       <button type="button" aria-current=${MOBILE_MORE.includes(route.view) ? 'page' : undefined} onClick=${() => setLayer({ kind: 'more' })}>${Icon.more}Άλλα</button>
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${(id: number) => guard(() => setPersonId(id))} onClose=${() => guard(() => setPersonId(null))}/>`}
+    ${cadreId != null && html`<${CadreSheet} cid=${cadreId} list=${cadreOrder} onMove=${(id: string) => guard(() => setCadreId(id))} onClose=${() => guard(() => setCadreId(null))}/>`}
     ${leaveNote && html`<${DiscardAsk} title="Να φύγεις χωρίς αποθήκευση;" text="Η σημείωση δεν αποθηκεύτηκε. Αν συνεχίσεις, χάνεται." leave="Συνέχισε χωρίς αποθήκευση" stay="Πίσω στη σημείωση" onStay=${() => setLeaveNote(null)} onLeave=${() => { const go = leaveNote; setLeaveNote(null); go(); }}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'note' && html`<${NoteDialog} start=${layer.data} onClose=${() => setLayer(null)}/>`}
