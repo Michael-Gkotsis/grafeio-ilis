@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { ChangedError, copyDurable, dataDirOf, writeAll, writeDurable } from '../src/main/files';
+import { ChangedError, copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeDurable } from '../src/main/files';
 import { SourceMetaStore } from '../src/main/sources';
 import { Workbook } from '../src/main/xlsx';
 
@@ -58,5 +58,31 @@ describe('γνωστά αρχεία (S9)', () => {
     expect(Object.keys(m.all())).toEqual(['punish']);
     m.set('leave', { at: 'y' });
     expect(new SourceMetaStore(f).allowed('/x/y.xlsx')).toBe(true);
+  });
+});
+
+describe('ownOsDir: φάκελος από άλλο λειτουργικό', () => {
+  it('σε Linux/macOS αγνοεί διαδρομές Windows', () => {
+    expect(ownOsDir('C:\\Users\\x\\Έγγραφα\\Γραφείο Ίλης', 'linux')).toBe('');
+    expect(ownOsDir('D:/Excel', 'darwin')).toBe('');
+    expect(ownOsDir('\\\\server\\share', 'linux')).toBe('');
+    expect(ownOsDir('/home/x/Documents', 'linux')).toBe('/home/x/Documents');
+    expect(ownOsDir(undefined, 'linux')).toBe('');
+  });
+  it('στα Windows μένει όπως είναι', () => {
+    expect(ownOsDir('C:\\Users\\x', 'win32')).toBe('C:\\Users\\x');
+  });
+});
+
+describe('ownBinding: ρυθμίσεις εντύπου από Windows', () => {
+  const win = { file: 'C:\\Users\\x\\ΦΡΟΥΡΑ.xlsx', sheet: 'ΦΥΛΛΟ', dir: 'D:\\Excel', monthly: false };
+  it('σε Linux πετά το template και τον φάκελο, κρατά τα υπόλοιπα', () => {
+    expect(ownBinding(win, 'linux')).toEqual({ monthly: false, file: undefined, sheet: undefined, sheet2: undefined, cells: undefined, dir: undefined });
+  });
+  it('κρατά ό,τι ισχύει στο λειτουργικό', () => {
+    const b = { file: '/home/x/hkai.xlsx', dir: '/home/x/Excel', sheet: 'A' };
+    expect(ownBinding(b, 'linux')).toEqual(b);
+    expect(ownBinding(win, 'win32')).toEqual(win);
+    expect(ownBinding(undefined, 'linux')).toEqual({});
   });
 });
