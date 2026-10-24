@@ -14,7 +14,8 @@ import { personMap } from '../../shared/rules';
 import { listOf, rankTxt, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
 import { dm, dmy, nowHM, today as todayFn } from '../../shared/dates';
-import { byOut, moveOutTxt, movesOn, openMoves } from '../../shared/weapons';
+import { armedRows, armWhen, calDay, hmOf, stampMin, stampOf, type ArmRow } from '../../shared/armed';
+import { armTxt, byOut, dutyMove, isAuto, moveInCell, moveOutCell, moveOutTxt, movesOn, openMoves, type ArmInfo } from '../../shared/weapons';
 type P = any;
 
 const names = (ps: Person[], n = 6) => ps.slice(0, n).map(shortName).join(', ') + (ps.length > n ? ' και ' + (ps.length - n) + ' ακόμα' : '');
@@ -105,30 +106,63 @@ function EditMoveDialog({ m, onClose }: P) {
   <//>`;
 }
 
-// Κινήσεις: «Εκτός τώρα», της μέρας (και όσα ήταν εκτός εκείνη τη μέρα), ή όλες, νεότερες πρώτα
-export function MovesView({ date, onIn }: P) {
+// Διόρθωση ώρας ενός ένοπλου νούμερου (Michael, 24/10): οι ώρες βγαίνουν από τις υπηρεσίες· εδώ αλλάζουν για αυτό το νούμερο, με λόγο
+function DutyFixDialog({ row, onClose }: P) {
+  const { state, run, undoMark } = useStore(); const toast = useToast();
+  const pm = personMap(state.people); const p = pm.get(row.who); const owner = pm.get(row.owner);
+  const [x, setX] = useState(() => ({ od: calDay(row.day, row.out), ot: hmOf(row.out), id: calDay(row.day, row.in), it: hmOf(row.in), why: row.fix?.why || '' }));
+  const ot = normTime(x.ot), it = normTime(x.it); const out = ot ? x.od + ' ' + ot : '', inn = it ? x.id + ' ' + it : '';
+  const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
+  const why = !ot ? 'Λείπει: Ώρα εξόδου' : !it ? 'Λείπει: Ώρα εισόδου' : stampMin(row.day, inn) < stampMin(row.day, out) ? 'Η είσοδος είναι πριν την έξοδο' : !x.why.trim() ? 'Λείπει: Λόγος διόρθωσης' : out === stampOf(row.day, row.out) && inn === stampOf(row.day, row.in) && x.why.trim() === (row.fix?.why || '') ? 'Άλλαξε μια ώρα' : '';
+  const done = (text: string) => { toast({ text, actions: [undoMark()] }); onClose(); };
+  const save = async () => { if (!why && await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, out, in: inn, why: x.why }, false)) done('Διορθώθηκαν οι ώρες: ' + row.reason + (p ? ' ' + shortName(p) : '')); };
+  const reset = async () => { if (await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, why: '', reset: true }, false)) done('Οι ώρες γύρισαν στο αυτόματο: ' + row.reason + (p ? ' ' + shortName(p) : '')); };
+  return html`<${Dialog} title="Διόρθωση ώρας ένοπλης υπηρεσίας" description=${row.reason + (p ? ' · ' + rankTxt(p) + ' ' + plainName(p) : '') + ' · αυτόματα ' + hmOf(row.autoOut) + '–' + hmOf(row.autoIn)} onClose=${onClose}
+    footer=${html`${row.fix && html`<${Button} variant="ghost" onClick=${reset} data-tip="Σβήνει τη διόρθωση: οι ώρες ξαναβγαίνουν από τις υπηρεσίες (αναιρείται με Ctrl+Z)">Πίσω στο αυτόματο<//>`}<span style=${{ flex: 1 }}></span><${Why} text=${why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!why} why=${why} onClick=${save}>Αποθήκευση<//>`}>
+    <div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="df-od">Μέρα εξόδου</label><${DateField} id="df-od" className="ui-input" value=${x.od} onChange=${(e: any) => e.target.value && set('od')(e.target.value)}/></div>
+      <${TimeField} id="df-ot" now=${true} label="Ώρα εξόδου *" value=${x.ot} onChange=${set('ot')} help=${row.take ? 'Πότε παραλαμβάνει το όπλο' : 'Πότε βγαίνει το όπλο από τον οπλοβαστό'}/></div>
+    <div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="df-id">Μέρα εισόδου</label><${DateField} id="df-id" className="ui-input" min=${x.od} value=${x.id} onChange=${(e: any) => e.target.value && set('id')(e.target.value)}/></div>
+      <${TimeField} id="df-it" now=${true} label="Ώρα εισόδου *" value=${x.it} onChange=${set('it')} help=${row.give ? 'Πότε το παραδίδει στον επόμενο' : 'Πότε μπαίνει πάλι στον οπλοβαστό'}/></div>
+    <div className="field"><label className="field__label" htmlFor="df-w">Λόγος της διόρθωσης *</label><input id="df-w" className="ui-input" placeholder="π.χ. άργησε η αλλαγή φρουράς" value=${x.why} onChange=${(e: any) => set('why')(e.target.value)}/>
+      <span className="field__help">Γράφεται στο Ιστορικό και στην Παρατήρηση του Excel κινήσεων.</span></div>
+    ${row.mode === 'post' && html`<${Alert} tone="info"><span>Όπλο της θέσης${owner ? ' (' + shortName(owner) + ')' : ''}: αλλάζει μόνο αυτή η γραμμή· οι άλλες μένουν όπως είναι.</span><//>`}
+  <//>`;
+}
+
+// Κινήσεις: «Εκτός τώρα», της μέρας (και όσα ήταν εκτός εκείνη τη μέρα), ή όλες, νεότερες πρώτα. Οι ένοπλες υπηρεσίες φαίνονται
+// ως αυτόματες γραμμές με τις ώρες τους (εκτός τώρα και της μέρας)· διορθώνονται μόνο με «Διόρθωση…»
+export function MovesView({ date, info, pm, outN, onIn }: P) {
   const { state, today } = useStore(); const nav = useNav();
   const view: string = nav.params.wmoves || 'open';
-  const [edit, setEdit] = useState<WeaponMove | null>(null);
-  const pm = personMap(state.people); const log = state.weaponLog || [];
+  const [edit, setEdit] = useState<WeaponMove | null>(null); const [fix, setFix] = useState<ArmRow | null>(null);
+  const log = state.weaponLog || [];
   const openN = log.filter(m => !m.inDay).length;
-  const rows = useMemo(() => (view === 'open' ? log.filter(m => !m.inDay) : view === 'day' ? movesOn(log, date) : [...log]).sort(byOut).reverse(), [log, view, date]);
+  const rows = useMemo(() => {
+    const auto = (view === 'open' ? (info.arm.live ? [...info.arm.cur.values()] : info.arm.rows) : view === 'day' ? armedRows(state, date) : []).map((r: ArmRow) => dutyMove(state, r));
+    return [...(view === 'open' ? log.filter(m => !m.inDay) : view === 'day' ? movesOn(log, date) : [...log]), ...auto].sort(byOut).reverse();
+  }, [log, view, date, info, state.people, state.guards, state.dutyLog, state.settings, state.rules, state.dutyFix]);
   const dayLbl = date === today ? 'Σήμερα' : dm(date);
   return html`<div>
-    <div className="toolbar"><${Segmented} small=${true} value=${view} onChange=${(v: string) => nav.set({ wmoves: v })} items=${[{ value: 'open', label: 'Εκτός τώρα (' + openN + ')' }, { value: 'day', label: dayLbl, tip: 'Όσα βγήκαν ή μπήκαν τη μέρα, και όσα ήταν εκτός' }, { value: 'all', label: 'Όλες (' + log.length + ')' }]}/>
+    <div className="toolbar"><${Segmented} small=${true} value=${view} onChange=${(v: string) => nav.set({ wmoves: v })} items=${[{ value: 'open', label: 'Εκτός τώρα (' + outN + ')', tip: 'Κινήσεις που δεν έχουν είσοδο και ένοπλες υπηρεσίες που τρέχουν: όσους μετράει και ο τίτλος της σελίδας' }, { value: 'day', label: dayLbl, tip: 'Όσα βγήκαν ή μπήκαν τη μέρα, όσα ήταν εκτός, και τα νούμερα των ένοπλων υπηρεσιών' }, { value: 'all', label: 'Όλες (' + log.length + ')' }]}/>
       ${view === 'open' && openN > 0 && html`<${Button} size="sm" variant="outline" onClick=${() => onIn(log.filter(m => !m.inDay).map(m => m.id))}>Είσοδος όλων (${openN})…<//>`}
       <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'κίνηση' : 'κινήσεις'}</span></div>
     ${rows.length === 0 ? html`<div className="ui-card empty">${view === 'open' ? 'Όλα τα όπλα είναι μέσα στον οπλοβαστό. Για έξοδο: τσέκαρε άτομα στα «Όπλα» ή πάτα «Έξοδος» στη γραμμή του.' : 'Καμία κίνηση.'}</div>` :
-    html`<div className="ptable ptable--moves" role="table"><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1140px' }}>
+    html`<div className="ptable ptable--moves" role="table"><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: '1190px' }}>
       <div className="ptable__head" role="row"><span>Στρατιώτης</span><span>Όπλο</span><span>Λόγος εξόδου</span><span>Έξοδος</span><span>Λόγος εισόδου</span><span>Είσοδος</span><span>Παρατήρηση</span><span></span></div>
-      <div className="weapons__body">${rows.map((m, i) => { const p = pm.get(m.pid); return html`<div key=${m.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd')} role="row" style=${{ cursor: 'default' }}>
+      <div className="weapons__body">${rows.map((m, i) => { const p = pm.get(m.pid); const auto = isAuto(m); const owner = auto && m.row.owner !== m.pid ? pm.get(m.row.owner) : null;
+        return html`<div key=${m.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', auto && 'is-auto')} role="row" style=${{ cursor: 'default' }}>
         <span>${p ? html`<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>` : '—'}</span>
-        <span className="num">${m.weapon}</span><span><${Badge} tone="warn">${m.reason}<//></span><span className="num">${dmy(m.outDay)} ${m.outTime}</span>
-        <span>${m.inDay ? html`<${Badge} tone="ok">${m.inReason || weaponBack(m.reason, state.settings.lists)}<//>` : html`<${Badge} tone="bad">Εκτός<//>`}</span>
-        <span className="num">${m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : '—'}</span><span className="muted">${m.note || ''}</span>
-        <span className="weapon-acts">${!m.inDay && html`<${Button} size="sm" variant="outline" onClick=${() => onIn([m.id])}>Είσοδος<//>`}<${Button} size="sm" variant="ghost" onClick=${() => setEdit(m)} data-tip="Ώρες, λόγοι, παρατήρηση, ή σβήσιμο">Διόρθωση<//></span>
+        <span className="num">${m.weapon || '—'}</span><span data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
+        <span className="num">${auto ? moveOutCell(m) : dmy(m.outDay) + ' ' + m.outTime}</span>
+        <span data-tip=${m.inDay ? m.inReason || undefined : undefined}>${m.inDay ? html`<${Badge} tone="ok">${m.inReason || weaponBack(m.reason, state.settings.lists)}<//>` : html`<${Badge} tone="bad">Εκτός<//>`}</span>
+        <span className="num" data-tip=${auto ? 'Η ώρα που προβλέπεται από τις υπηρεσίες' : undefined}>${auto ? moveInCell(m) : m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : '—'}</span>
+        <span className="muted" data-tip=${auto ? [owner ? 'Όπλο της θέσης του ' + shortName(owner) : m.row.mode === 'post' ? 'Όπλο της θέσης' : '', m.note].filter(Boolean).join(' · ') : m.note || undefined}>${auto ? html`<i className="wmv__auto" data-tip="Βγαίνει από τις ένοπλες υπηρεσίες: οι ώρες μπαίνουν μόνες τους (Ρυθμίσεις › Υπηρεσίες, Κανόνες)">αυτόματα</i>${[owner ? ' · όπλο της θέσης του ' + shortName(owner) : m.row.mode === 'post' ? ' · όπλο της θέσης' : '', m.note ? ' · ' + m.note : ''].join('')}` : m.note || ''}</span>
+        <span className="weapon-acts">${!auto && !m.inDay && html`<${Button} size="sm" variant="outline" onClick=${() => onIn([m.id])}>Είσοδος<//>`}<${Button} size="sm" variant="ghost" onClick=${() => (auto ? setFix(m.row) : setEdit(m))} data-tip=${auto ? 'Άλλαξε την ώρα εξόδου ή εισόδου, με λόγο' : 'Ώρες, λόγοι, παρατήρηση, ή σβήσιμο'}>Διόρθωση${auto ? '…' : ''}<//></span>
       </div>`; })}</div></div></div></div>`}
     ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}
+    ${fix && html`<${DutyFixDialog} row=${fix} onClose=${() => setFix(null)}/>`}
   </div>`;
 }
 
@@ -215,24 +249,36 @@ function InPop({ p, m, anchor, onClose, onEdit }: P) {
   <//>`;
 }
 
-// Κατάσταση του όπλου στη γραμμή: ΕΝΤΟΣ | ΕΚΤΟΣ, και δίπλα γιατί και από πότε. Ένοπλη υπηρεσία: εκτός αυτόματα.
-export function WeaponState({ p, info }: P) {
+// Κατάσταση του όπλου στη γραμμή: ΕΝΤΟΣ | ΕΚΤΟΣ, και από κάτω γιατί και πότε (όλος ο λόγος). Ένοπλη υπηρεσία: εκτός αυτόματα, με τις ώρες
+// του νούμερου· πριν ή μετά το νούμερο φαίνεται πότε βγαίνει ή γύρισε (Michael, 24/10).
+export function WeaponState({ p, info, pm }: P) {
   const { state, today } = useStore(); const lists = state.settings.lists;
-  const ref = useRef<HTMLDivElement>(null); const [open, setOpen] = useState(false); const [edit, setEdit] = useState<WeaponMove | null>(null);
+  const ref = useRef<HTMLDivElement>(null); const [open, setOpen] = useState(false); const [edit, setEdit] = useState<WeaponMove | null>(null); const [fix, setFix] = useState<ArmRow | null>(null);
   const m: WeaponMove | undefined = info.moves.get(p.id); const duty: string | undefined = info.out.get(p.id);
-  const has = !!p.weapon;
-  if (!m && !duty && !(p.active && has)) return html`<span className="muted wstate__none">${has ? '—' : 'χωρίς όπλο'}</span>`;
+  const arm: ArmInfo = info.arm; const has = !!p.weapon;
+  const cur = arm.cur.get(p.id); const day = !arm.live && duty ? arm.rows.filter((r: ArmRow) => r.owner === p.id) : [];   // τρέχον νούμερο, ή όλα της μέρας
+  const nxt = arm.next.get(p.id), prv = arm.prev.get(p.id), hold = arm.holding.get(p.id);
+  const pn = (id: number) => (pm.get(id) ? shortName(pm.get(id)) : '—');
+  const when2 = (r: ArmRow, m: number) => (calDay(r.day, m) === today ? '' : dm(calDay(r.day, m)) + ' ') + hmOf(m);
+  if (!m && !duty && !(p.active && has) && !nxt) return html`<span className="muted wstate__none">${has ? '—' : 'χωρίς όπλο'}</span>`;
   const out = !!m || !!duty; const auto = !m && !!duty;
+  const first = cur || day[0];
+  const autoTip = first ? 'Αυτόματα από τις ένοπλες υπηρεσίες: ' + first.reason + ' ' + (arm.live ? armWhen(first) : armTxt(day)) + (first.mode === 'post' ? '. Όπλο της θέσης: περνά από χέρι σε χέρι στις αλλαγές' : '') + '. Για άλλες ώρες: Διόρθωση…' : '';
   const why = m ? html`<span className="wstate__why" data-tip=${'Βγήκε: ' + moveOutTxt(m) + (m.note ? ' · ' + m.note : '') + (duty ? ' · και ένοπλη υπηρεσία: ' + duty : '') + ' · μπαίνει με ' + weaponBack(m.reason, lists)}><b>${m.reason}</b> <span>${when(m.outDay, m.outTime, today)}</span>${m.note ? html` <i>· ${m.note}</i>` : ''}</span>`
-    : auto ? html`<span className="wstate__why" data-tip=${'Αυτόματα: ένοπλη υπηρεσία ' + duty + '. Για να αλλάξει, άλλαξε τις υπηρεσίες.'}><b>ΥΠΗΡΕΣΙΑ</b> <span>${duty}</span></span>`
+    : auto && first ? html`<span className="wstate__why" data-tip=${autoTip}><b>${first.reason}</b>${cur && cur.who !== cur.owner ? html` <i>· ${pn(cur.who)}</i>` : ''}</span>`
+    : hold ? html`<span className="wstate__soon" data-tip=${'Κρατά το όπλο της θέσης (' + hold.label + ') του ' + pn(hold.owner) + ' ως τις ' + hmOf(hold.in)}>κρατά το όπλο του ${pn(hold.owner)} ως ${hmOf(hold.in)}</span>`
+    : nxt || (prv && calDay(prv.day, prv.in) === today) ? html`<span className="wstate__soon" data-tip=${[nxt && 'Ένοπλη υπηρεσία: ' + nxt.reason + ' ' + armWhen(nxt), prv && 'Προηγούμενο νούμερο: ' + prv.reason + ' ' + armWhen(prv)].filter(Boolean).join(' · ')}>${[nxt && 'βγαίνει ' + when2(nxt, nxt.out), prv && calDay(prv.day, prv.in) === today && 'γύρισε ' + hmOf(prv.in)].filter(Boolean).join(' · ')}</span>`
     : null;   // ΕΝΤΟΣ: το λέει ήδη ο διακόπτης
   const click = (want: boolean) => { if (auto || want === out) return; setOpen(true); };
+  const canFix = auto && (cur || day.length === 1);
+  const times = first ? (arm.live ? armWhen(first) : day.length > 1 && first.mode === 'own' ? day.map(armWhen).join(' ') : armWhen({ out: first.out, in: day[day.length - 1].in })) : '';
   return html`<div className=${cx('wstate', out && 'is-out', auto && 'is-auto')}>
-    <div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>
+    <div className="wstate__row"><div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>
       <button type="button" aria-pressed=${!out} disabled=${auto} onClick=${() => click(false)} data-tip=${out && !auto ? 'Μπαίνει στον οπλοβαστό: ώρα και λόγος εισαγωγής' : undefined}>ΕΝΤΟΣ</button>
       <button type="button" aria-pressed=${out} disabled=${auto} onClick=${() => click(true)} data-tip=${!out ? 'Βγαίνει από τον οπλοβαστό: ώρα και λόγος' : undefined}>ΕΚΤΟΣ</button>
-    </div>${why}
+    </div>${auto && first && (canFix ? html`<button type="button" className="wstate__fix" onClick=${() => setFix(cur || day[0])} aria-label=${'Διόρθωση…: ' + first.reason} data-tip="Διόρθωση…: άλλαξε την ώρα εξόδου ή εισόδου αυτού του νούμερου, με λόγο">${times} ✎</button>` : html`<span className="wstate__time" data-tip="Για να αλλάξει μία ώρα: Κινήσεις › Διόρθωση…">${times}</span>`)}</div>${why}
     ${open && (m ? html`<${InPop} p=${p} m=${m} anchor=${ref} onClose=${() => setOpen(false)} onEdit=${setEdit}/>` : html`<${OutPop} p=${p} anchor=${ref} onClose=${() => setOpen(false)}/>`)}
     ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}
+    ${fix && html`<${DutyFixDialog} row=${fix} onClose=${() => setFix(null)}/>`}
   </div>`;
 }

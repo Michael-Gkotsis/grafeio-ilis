@@ -885,12 +885,16 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapon-out{display:flex;gap:6px;align-items:center;min-width:0}
 .weapon-out small{overflow:hidden;text-overflow:ellipsis}
 .weapon-out .weapon-io{margin-left:auto;flex:none}
-.ptable--moves .ptable__head,.ptable--moves .ptable__row{grid-template-columns:minmax(170px,1.3fr) 100px 120px 160px 160px 160px minmax(110px,1fr) 190px}
+.ptable--moves .ptable__head,.ptable--moves .ptable__row{grid-template-columns:minmax(130px,1fr) 84px minmax(190px,1.7fr) 160px minmax(150px,1fr) 160px minmax(90px,.8fr) 190px}
 .weapon-acts{display:flex;gap:6px;justify-content:flex-end}
 .weapon-movelist{max-height:220px;overflow-y:auto}
 
 /* Οπλισμός: διακόπτης ΕΝΤΟΣ | ΕΚΤΟΣ στη γραμμή και το μικρό παράθυρο εξόδου/εισόδου */
-.wstate{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+.wstate{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:0;width:100%}
+.wstate__row{display:flex;align-items:center;gap:8px;max-width:100%}
+.wstate__fix,.wstate__time{border:0;background:none;padding:0;font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--warn);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wstate__fix{text-decoration:underline dotted;cursor:pointer}
+.wstate__fix:hover{text-decoration:none}
 .wstate__sw{display:inline-flex;flex:none;border:1px solid var(--input);border-radius:8px;overflow:hidden;background:var(--card)}
 .wstate__sw button{height:28px;padding:0 9px;border:0;background:none;cursor:pointer;font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--muted-fg)}
 .wstate__sw button + button{border-left:1px solid var(--input)}
@@ -904,7 +908,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wstate.is-auto .wstate__sw button{cursor:default}
 .wstate.is-auto .wstate__sw button + button{border-left-color:var(--warn)}
 .wstate.is-auto .wstate__sw button[aria-pressed="true"]:last-child{background:var(--warn-bg);color:var(--warn)}
-.wstate__why{min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wstate__why{min-width:0;max-width:100%;font-size:11px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wstate__soon{min-width:0;max-width:100%;font-size:11px;line-height:15px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wstate__why b{font-weight:700}.wstate.is-out:not(.is-auto) .wstate__why b{color:var(--bad)}.wstate.is-auto .wstate__why b{color:var(--warn)}
 .wstate__why span{font-family:var(--f-mono)}.wstate__why i{font-style:normal;color:var(--muted-fg)}
 .wstate__none{font-size:12px}
@@ -1227,3 +1232,11 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .bulkbar .bulkbar__sel{flex:0 1 auto;min-width:160px;display:flex;align-items:center;flex-wrap:wrap;gap:0 6px}
 .bulkbar .bulkbar__hid{flex:none;min-width:0;font-weight:500;color:var(--muted-fg)}
 .bulkbar .bulkbar__reasons{flex:1 1 320px;justify-content:flex-end}
+
+/* Οπλισμός: λωρίδα «Εκτός τώρα» ανά λόγο, αυτόματες γραμμές ένοπλων υπηρεσιών (Michael, 24/10) */
+.wreasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;font-size:13px}
+.wreasons > b{margin-right:2px}
+.ui-chip--auto:not([aria-pressed="true"]){border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.wmv__auto{font-style:normal;font-size:11px;color:var(--warn);font-weight:600}
+.ptable--moves .ptable__row.is-auto{box-shadow:inset 3px 0 0 var(--warn)}
+.weapon-notes .ui-badge:first-child{flex:none}

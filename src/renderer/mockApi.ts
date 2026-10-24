@@ -42,6 +42,8 @@ function seed(): AppState {
   // ΕΠΟΠ με υπηρεσίες τον μήνα: μπαίνει στις θέσεις μόνο με το χέρι
   s.cadreList.push({ id: 's5', rank: 'ΣΤΡ', origin: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΥΠΟΔΕΙΓΜΑΤΑΚΗΣ', first: 'ΛΕΩΝ', spec: 'ΠΖ', active: true, monthMax: 4, pid: -1 });
   s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
+  // ΦΡΟΥΡΑ ΣΠΕΝ: σκοποί «δικό τους όπλο», οπλοφύλακες «όπλο της θέσης», ΤΑΕ όλη μέρα (ένοπλες υπηρεσίες ανά νούμερο)
+  s.settings = { ...s.settings, phase: 'spen', blocksSpen: s.settings.blocksSpen.map(b => (b.id === 'op' ? { ...b, armWeapon: 'post' as const } : b)) };
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
