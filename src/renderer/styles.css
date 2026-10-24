@@ -1098,3 +1098,23 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .post__slots{display:flex;flex-direction:column;font-family:var(--f-mono);font-size:12px;line-height:1.4;color:var(--muted-fg);white-space:nowrap;padding:2px 0 2px 10px;border-left:2px solid var(--border)}
 .dayrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}.dayrow__lbl{font-size:13px;color:var(--muted-fg)}
 .golink{font-size:inherit;font-weight:inherit;display:inline;vertical-align:baseline;line-height:inherit;min-height:0;text-align:left;white-space:normal}
+
+/* ---------- Υπηρεσίες › Εξαιρέσεις (Michael, 24/10) ---------- */
+.skips{display:flex;flex-direction:column;gap:14px;max-width:1000px}
+.skips__lead{margin:0;color:var(--muted-fg);font-size:14px;max-width:80ch}
+.skips__form{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr) auto;gap:12px;align-items:start;background:var(--band);padding:12px;border-radius:var(--radius)}
+.skips__f-btn{display:flex;gap:8px;align-self:start;margin-top:22px}
+.skips__chosen{height:40px;align-self:flex-start;padding-left:12px}
+.skips__chosen button{width:26px;height:26px}
+.skips__quick{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted-fg)}
+.skips__empty{margin:0;padding:18px;border:1px dashed var(--border);border-radius:var(--radius);color:var(--muted-fg)}
+.skips__list{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.skips__row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,1.5fr) auto;gap:12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border)}
+.skips__row:last-child{border-bottom:0}
+.skips__row.is-edit{background:var(--hover)}
+.skips__row small{display:block;color:var(--muted-fg);font-size:12px}
+.skips__who .linkish{font-size:14px}
+.skips__when{font-size:13px}
+.skips__why{min-width:0;overflow-wrap:anywhere;font-size:14px}
+.skips__act{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+@media (max-width:800px){.skips__form{grid-template-columns:1fr 1fr}.skips__f-who,.skips__f-why{grid-column:1/-1}.skips__row{grid-template-columns:1fr 1fr}.skips__act{justify-content:flex-start}}

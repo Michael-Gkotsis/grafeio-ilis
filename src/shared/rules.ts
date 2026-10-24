@@ -7,7 +7,7 @@ import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell
 import { backBy, hasTimes, mins } from './hours';
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -327,9 +327,14 @@ export function capCell(s: AppState, p: Person, col: CapCol): CapCell {
   if (def) return v === null ? { on: true, src: 'force', why: def } : { on: false, src: 'auto', why: def };
   return { on: true, src: 'auto', why: '' };
 }
-// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10): μετρά η μέρα της υπηρεσίας (κύκλος π.χ. 14:00 → 14:00)
+// Μέρες της εβδομάδας χωρίς υπηρεσία (λοχίας, 12/10) και εφάπαξ εξαιρέσεις από–έως (Michael, 24/10): μετρά η μέρα της
+// υπηρεσίας (κύκλος π.χ. 14:00 → 14:00). Εδώ περνούν και η αυτόματη συμπλήρωση, ο «Επόμενος», η εναλλαγή και το ΣΚ που «χρωστά»
+export const skipTxt = (k: Skip) => 'Εξαίρεση ' + dm(k.from) + (k.to > k.from ? '-' + dm(k.to) : '') + (k.why ? ': ' + k.why : '');
+export function skipOn(p: Person | undefined, date: ISODate): Skip | undefined { return p?.skips?.find(k => k.from <= date && date <= k.to); }
 export function offDayBlock(s: AppState, date: ISODate, pid: number): string | null {
-  const w = personMap(s.people).get(pid)?.offDays;
+  const p = personMap(s.people).get(pid); if (!p) return null;
+  const k = skipOn(p, date); if (k) return skipTxt(k);
+  const w = p.offDays;
   if (!w || !w.length) return null;
   const d = weekday(date);
   return w.includes(d) ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] : null;

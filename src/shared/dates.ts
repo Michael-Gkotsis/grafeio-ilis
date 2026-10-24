@@ -87,3 +87,11 @@ export function greekHolidays(y: number): Record<ISODate, string> {
   const e = orthodoxEaster(y); for (const [k, n] of EASTER_HOL) out[addDays(e, k)] = n;
   return out;
 }
+// Το πρώτο Σάββατο–Κυριακή που δεν έχει περάσει (Κυριακή: μόνο η σημερινή μέρα), και το επόμενο
+export function weekendFrom(today: ISODate, next: boolean): [ISODate, ISODate] {
+  const w = weekday(today);
+  const sat = w === 6 ? today : w === 0 ? addDays(today, -1) : addDays(today, 6 - w);
+  const from = (w === 0 ? today : sat) as ISODate; const to = addDays(sat, 1);
+  return next ? [addDays(sat, 7), addDays(sat, 8)] : [from, to];
+}
+

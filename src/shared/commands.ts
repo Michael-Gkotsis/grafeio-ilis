@@ -3,10 +3,10 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { seatMap, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, itemName, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -47,6 +47,9 @@ export type Command =
   // v: off = δεν κάνει (λοχίας), on = ρητά κάνει (και παρά Σ.Ι./πόστο), clear = ό,τι λένε Σ.Ι. και πόστο
   | { t: 'setCap'; pid: number; key: CapKey; v: 'off' | 'on' | 'clear' }
   | { t: 'setOffDays'; pid: number; days: number[] }
+  // εφάπαξ εξαίρεση από υπηρεσίες από–έως (id: αλλαγή υπάρχουσας)· delSkip: σβήσιμο
+  | { t: 'setSkip'; pid: number; id?: string; from: ISODate; to: ISODate; why?: string }
+  | { t: 'delSkip'; pid: number; id: string }
   // συντομεύσεις της καρτέλας (π.χ. «Όχι ΣΚ», «Μόνο μαγειρεία»): ίδια δεδομένα με τα κουτάκια, μία αναίρεση.
   // off: είδη που δεν κάνει (από τον λοχία)· on: είδη που ξανακάνει (φεύγει η εξαίρεση του λοχία)· reset: χωρίς καμία εξαίρεση του λοχία
   | { t: 'setDutyProfile'; pid: number; off?: DutyKind[]; on?: DutyKind[]; days?: number[]; reset?: boolean; text: string }
@@ -537,6 +540,21 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const days = WEEK.filter(d => c.days.includes(d));
       const next: Person = { ...p }; if (days.length) next.offDays = days; else delete next.offDays;
       return { state: { ...s, people: s.people.map(x => (x.id === p.id ? next : x)) }, text: 'Μέρες υπηρεσίας: ' + shortName(p) + (days.length ? ' όχι ' + days.map(d => DOW_FULL[d]).join(', ') : ' όλες τις μέρες'), files: [] };
+    }
+    case 'setSkip': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      if (!c.from || !c.to) throw new Error('Βάλε από ποια μέρα και έως ποια');
+      if (c.to < c.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const why = c.why?.trim(); const old = c.id ? p.skips?.find(k => k.id === c.id) : undefined;
+      if (c.id && !old) throw new Error('Δεν βρέθηκε η εξαίρεση');
+      const k: Skip = { id: old?.id || ctx.newId(), from: c.from, to: c.to, ...(why ? { why } : {}) };
+      const skips = [...(p.skips || []).filter(x => x.id !== k.id), k].sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
+      return { state: { ...s, people: s.people.map(x => (x.id === p.id ? { ...p, skips } : x)) }, text: (old ? 'Άλλαξε η εξαίρεση από υπηρεσίες: ' : 'Εξαίρεση από υπηρεσίες: ') + shortName(p) + ' ' + skipTxt(k), files: [] };
+    }
+    case 'delSkip': {
+      const p = pm.get(c.pid); const old = p?.skips?.find(k => k.id === c.id); if (!p || !old) throw new Error('Δεν βρέθηκε η εξαίρεση');
+      const next: Person = { ...p, skips: p.skips!.filter(k => k.id !== c.id) }; if (!next.skips!.length) delete next.skips;
+      return { state: { ...s, people: s.people.map(x => (x.id === p.id ? next : x)) }, text: 'Σβήστηκε η εξαίρεση από υπηρεσίες: ' + shortName(p) + ' ' + skipTxt(old), files: [] };
     }
     case 'setDutyProfile': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
