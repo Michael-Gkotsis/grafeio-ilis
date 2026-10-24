@@ -1177,6 +1177,12 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .who-chip svg{width:13px;height:13px;flex:none}
 .who-chip.is-gen{border-style:dashed;color:var(--muted-fg);cursor:default}
 .who-chip.is-off{color:var(--muted-fg)}
+.note-who{align-items:flex-start}
+.note-pick--multi{flex-direction:column;align-items:stretch;max-width:520px;gap:6px}
+.note-pick--multi .picker__chips{margin:0}
+.note-pick--multi .picker__chip.is-off{color:var(--muted-fg)}
+.note-pick__add{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.note-card__with{font-size:12px;color:var(--muted-fg)}
 .who-chip:not(.is-gen):hover{border-color:var(--primary)}
 .notedot{display:inline-grid;place-items:center;vertical-align:middle;margin-left:6px;width:20px;height:20px;border-radius:6px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--gold)}
 .notedot svg{width:12px;height:12px}

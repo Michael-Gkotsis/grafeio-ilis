@@ -7,31 +7,42 @@ import { normGreek } from './text';
 import { rankTxt } from './ranks';
 
 export const NOTE_MAX = 2000;
-export type NoteKind = 'gen' | 'sol' | 'cad';
+export type NoteKind = 'gen' | 'sol' | 'cad' | 'mix';
 type S = Pick<AppState, 'people' | 'cadreList'>;
 
-export const noteKind = (n: Pick<Note, 'pid' | 'cid'>): NoteKind => (n.pid != null ? 'sol' : n.cid ? 'cad' : 'gen');
+type Links = Pick<Note, 'pids' | 'cids' | 'pid' | 'cid'>;
+/** Σε ποιους είναι δεμένη μια σημείωση (και οι σημειώσεις της πρώτης έκδοσης με pid/cid). */
+export function noteLinks(n: Links): { pids: number[]; cids: string[] } {
+  const pids = [...(n.pids || [])]; const cids = [...(n.cids || [])];
+  if (n.pid != null && !pids.includes(n.pid)) pids.push(n.pid);
+  if (n.cid && !cids.includes(n.cid)) cids.push(n.cid);
+  return { pids, cids };
+}
+/** Η σημείωση όπως αποθηκεύεται: pids/cids μόνο όταν έχουν κάτι. */
+export function normNote(n: Note): Note {
+  const { pid, cid, pids: _a, cids: _b, ...rest } = n; const l = noteLinks(n);
+  return { ...rest, ...(l.pids.length ? { pids: l.pids } : {}), ...(l.cids.length ? { cids: l.cids } : {}) };
+}
+/** Γενική (κανένας), για στρατιώτες, για στελέχη, ή μικτή. */
+export const noteKind = (n: Links): NoteKind => { const l = noteLinks(n); return l.pids.length && l.cids.length ? 'mix' : l.pids.length ? 'sol' : l.cids.length ? 'cad' : 'gen'; };
 /** Υπενθύμιση που έφτασε (σήμερα ή νωρίτερα) και δεν έχει ολοκληρωθεί. */
 export const noteDue = (n: Note, today: ISODate): boolean => !n.done && !!n.rem && n.rem <= today;
 export const dueCount = (notes: Note[] | undefined, today: ISODate): number => (notes || []).reduce((c, n) => c + (noteDue(n, today) ? 1 : 0), 0);
 /** Οι ανοιχτές σημειώσεις ενός ατόμου. */
 export const notesOf = (notes: Note[] | undefined, who: { pid: number } | { cid: string }): Note[] =>
-  (notes || []).filter(n => !n.done && ('pid' in who ? n.pid === who.pid : n.cid === who.cid));
+  (notes || []).filter(n => { if (n.done) return false; const l = noteLinks(n); return 'pid' in who ? l.pids.includes(who.pid) : l.cids.includes(who.cid); });
 /** Μικρό κείμενο για το Ιστορικό και τα μηνύματα. */
 export const noteHead = (text: string, max = 60): string => { const t = text.replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t; };
 
-export interface NoteWho { kind: NoteKind; label: string; active: boolean }
-/** Για ποιον είναι: όνομα όπως στην εφαρμογή· «εκτός δύναμης» όταν έφυγε ή σβήστηκε. */
+export interface NoteWhoItem { key: string; kind: 'sol' | 'cad'; label: string; active: boolean }
+export interface NoteWho { kind: NoteKind; label: string; active: boolean; items: NoteWhoItem[] }
+/** Για ποιους είναι: ονόματα όπως στην εφαρμογή (χωρισμένα με κόμμα)· «εκτός δύναμης» όταν έφυγε ή σβήστηκε κάποιος. */
 export function noteWho(s: S, n: Note, pm = personMap(s.people)): NoteWho {
-  if (n.pid != null) {
-    const p = pm.get(n.pid);
-    return p ? { kind: 'sol', label: p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : ''), active: p.active } : { kind: 'sol', label: 'Άγνωστος στρατιώτης', active: false };
-  }
-  if (n.cid) {
-    const c = s.cadreList.find(x => x.id === n.cid);
-    return c ? { kind: 'cad', label: [rankTxt(c), c.last, c.first ? c.first.charAt(0) + '.' : ''].filter(Boolean).join(' '), active: c.active } : { kind: 'cad', label: 'Άγνωστο στέλεχος', active: false };
-  }
-  return { kind: 'gen', label: 'Γενική', active: true };
+  const l = noteLinks(n); const items: NoteWhoItem[] = [];
+  for (const id of l.pids) { const p = pm.get(id); items.push({ key: 'p' + id, kind: 'sol', label: p ? p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '') : 'Άγνωστος στρατιώτης', active: !!p && p.active }); }
+  for (const id of l.cids) { const c = s.cadreList.find(x => x.id === id); items.push({ key: 'c' + id, kind: 'cad', label: c ? [rankTxt(c), c.last, c.first ? c.first.charAt(0) + '.' : ''].filter(Boolean).join(' ') : 'Άγνωστο στέλεχος', active: !!c && c.active }); }
+  if (!items.length) return { kind: 'gen', label: 'Γενική', active: true, items };
+  return { kind: noteKind(n), label: items.map(x => x.label).join(', '), active: items.every(x => x.active), items };
 }
 
 export interface RemLabel { text: string; tone: 'bad' | 'warn' | 'info' | 'muted' }
@@ -49,7 +60,11 @@ export const NOTE_FILTERS: [NoteFilter, string][] = [['all', 'Όλες'], ['rem'
 export function noteIn(f: NoteFilter, n: Note): boolean {
   if (f === 'done') return !!n.done;
   if (n.done) return false;
-  return f === 'all' || (f === 'rem' ? !!n.rem : f === 'star' ? !!n.star : noteKind(n) === f);
+  if (f === 'all') return true;
+  if (f === 'rem') return !!n.rem;
+  if (f === 'star') return !!n.star;
+  const k = noteKind(n);   // μικτή: φαίνεται και στους στρατιώτες και στα στελέχη
+  return f === 'gen' ? k === 'gen' : f === 'sol' ? k === 'sol' || k === 'mix' : k === 'cad' || k === 'mix';
 }
 
 export interface NoteGroups { due: Note[]; soon: Note[]; rest: Note[] }
@@ -85,10 +100,11 @@ export interface NoteMark { n: number; hot: boolean }
 export function noteIndex(notes: Note[] | undefined, today: ISODate): Map<string, NoteMark> {
   const m = new Map<string, NoteMark>();
   for (const n of notes || []) {
-    if (n.done || (n.pid == null && !n.cid)) continue;
-    const k = n.pid != null ? 'p' + n.pid : 'c' + n.cid; const x = m.get(k) || { n: 0, hot: false };
-    x.n++; if (noteDue(n, today)) x.hot = true; m.set(k, x);
+    if (n.done) continue;
+    for (const k of noteKeys(n)) { const x = m.get(k) || { n: 0, hot: false }; x.n++; if (noteDue(n, today)) x.hot = true; m.set(k, x); }
   }
   return m;
 }
-export const noteKey = (n: Pick<Note, 'pid' | 'cid'>): string => (n.pid != null ? 'p' + n.pid : n.cid ? 'c' + n.cid : '');
+/** Τα κλειδιά των ατόμων μιας σημείωσης ('p1', 'cs1'). */
+export const noteKeys = (n: Links): string[] => { const l = noteLinks(n); return [...l.pids.map(id => 'p' + id), ...l.cids.map(id => 'c' + id)]; };
+export const whoKey = (w: { pid?: number; cid?: string }): string => (w.pid != null ? 'p' + w.pid : w.cid ? 'c' + w.cid : '');

@@ -13,7 +13,7 @@ import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours'
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
 import { isSat, isWk, WK } from './weekend';
-import { NOTE_MAX, noteHead, noteWho } from './notes';
+import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -35,9 +35,9 @@ export type Command =
   // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
-  // σημειώσεις του γραφείου (shared/notes.ts): who χωρίς pid/cid = γενική· rem '' = χωρίς υπενθύμιση
-  | { t: 'addNote'; note: { text: string; pid?: number; cid?: string; rem?: ISODate; star?: boolean } }
-  | { t: 'editNote'; id: string; patch: { text?: string; who?: { pid: number } | { cid: string } | null; rem?: ISODate | ''; star?: boolean } }
+  // σημειώσεις του γραφείου (shared/notes.ts): who χωρίς pids/cids = γενική· μία σημείωση δένεται σε πολλά άτομα· rem '' = χωρίς υπενθύμιση
+  | { t: 'addNote'; note: { text: string; pids?: number[]; cids?: string[]; rem?: ISODate; star?: boolean } }
+  | { t: 'editNote'; id: string; patch: { text?: string; who?: { pids?: number[]; cids?: string[] } | null; rem?: ISODate | ''; star?: boolean } }
   | { t: 'doneNote'; id: string; done: boolean }
   | { t: 'deleteNote'; id: string }
   // διόρθωση ιατρικού/ποινής που μπήκε λάθος: φεύγει η παλιά και γίνεται η δήλωση από την αρχή (ίδιοι έλεγχοι), μία αναίρεση
@@ -117,17 +117,20 @@ const who = (s: AppState, pids: number[]) => {
 // Σημειώσεις: καθαρές εντολές χωρίς Excel (files: [])· το κείμενο στο Ιστορικό είναι η αρχή της σημείωσης
 function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 'doneNote' | 'deleteNote' }>, ctx: Ctx): Result {
   const notes = s.notes || [];
-  const checkWho = (w: { pid?: number; cid?: string }) => {
-    if (w.pid != null && !s.people.some(p => p.id === w.pid)) throw new Error('Δεν βρέθηκε ο στρατιώτης');
-    if (w.cid && !s.cadreList.some(x => x.id === w.cid)) throw new Error('Δεν βρέθηκε το στέλεχος');
+  const uniq = <T,>(a: T[] | undefined): T[] => [...new Set(a || [])];
+  const setWho = (n: Note, w: { pids?: number[]; cids?: string[] }) => {
+    const pids = uniq(w.pids); const cids = uniq(w.cids);
+    if (pids.some(id => !s.people.some(p => p.id === id))) throw new Error('Δεν βρέθηκε ο στρατιώτης');
+    if (cids.some(id => !s.cadreList.some(x => x.id === id))) throw new Error('Δεν βρέθηκε το στέλεχος');
+    delete n.pids; delete n.cids; delete n.pid; delete n.cid;
+    if (pids.length) n.pids = pids; if (cids.length) n.cids = cids;
   };
   const checkRem = (rem: string) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(rem)) throw new Error('Η ημερομηνία υπενθύμισης δεν είναι σωστή'); };
   const text = (raw: string) => { const t = (raw || '').replace(/\r\n/g, '\n').trim(); if (!t) throw new Error('Γράψε τη σημείωση'); if (t.length > NOTE_MAX) throw new Error('Η σημείωση είναι πολύ μεγάλη (το πολύ ' + NOTE_MAX + ' γράμματα)'); return t; };
   const label = (n: Note) => { const w = noteWho(s, n); return (w.kind === 'gen' ? '' : ' (' + w.label + ')') + ': «' + noteHead(n.text) + '»'; };
   if (c.t === 'addNote') {
-    const x = c.note; if (x.pid != null && x.cid) throw new Error('Η σημείωση είναι για στρατιώτη ή για στέλεχος, όχι και για τα δύο');
-    checkWho(x); const n: Note = { id: 'n' + ctx.newId(), text: text(x.text), at: ctx.today };
-    if (x.pid != null) n.pid = x.pid; else if (x.cid) n.cid = x.cid;
+    const x = c.note; const n: Note = { id: 'n' + ctx.newId(), text: text(x.text), at: ctx.today };
+    setWho(n, x);
     if (x.rem) { checkRem(x.rem); if (x.rem < ctx.today) throw new Error('Η υπενθύμιση είναι σε μέρα που πέρασε'); n.rem = x.rem; }
     if (x.star) n.star = true;
     return { state: { ...s, notes: [...notes, n] }, text: 'Σημείωση' + label(n) + (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ''), files: [] };
@@ -140,11 +143,10 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
     const n = { ...old }; if (c.done) n.done = ctx.today; else delete n.done;
     return put(n, (c.done ? 'Ολοκληρώθηκε σημείωση' : 'Ξανάνοιξε σημείωση') + label(old));
   }
-  const p = c.patch; const n: Note = { ...old };
+  const p = c.patch; const n: Note = normNote(old);
   if (p.text !== undefined) n.text = text(p.text);
   if (p.who !== undefined) {
-    delete n.pid; delete n.cid;
-    if (p.who) { checkWho(p.who); if ('pid' in p.who) n.pid = p.who.pid; else n.cid = p.who.cid; }
+    setWho(n, p.who || {});
   }
   if (p.rem !== undefined) { if (p.rem) { checkRem(p.rem); if (p.rem !== old.rem && p.rem < ctx.today) throw new Error('Η υπενθύμιση είναι σε μέρα που πέρασε'); n.rem = p.rem; } else delete n.rem; }
   if (p.star !== undefined) { if (p.star) n.star = true; else delete n.star; }
