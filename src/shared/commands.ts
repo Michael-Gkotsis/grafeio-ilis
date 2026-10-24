@@ -281,18 +281,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       let statuses = [...s.statuses.filter(x => !hit(x)), ...s.statuses.filter(hit).flatMap(x => splitOut(x, c.date, c.date, ctx.newId))];
       const wk = isSat(c.date) ? c.changes.filter(x => x.wk && x.to === 'DN') : [];
       const added: Status[] = c.changes.filter(x => x.to).map(x => ({ id: ctx.newId(), pid: x.pid, type: x.to!, from: c.date, to: c.date, ...(wk.includes(x) ? { kind: WK } : {}) }));
-      // ΔΝ ΣΚ (Michael, 18/10): την Κυριακή μπαίνει μόνος του στους εξοδούχους, εκτός αν εκείνη τη μέρα έχει ήδη
-      // έξοδο/ΔΝ, λείπει, ή κάτι τον κρατά μέσα (υπηρεσία, ποινή…): τότε μένει η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί.
-      // Όποιος δεν είναι πια ΔΝ ΣΚ το Σάββατο χάνει και την έξοδο της Κυριακής που είχε μπει μόνη της.
-      const sun = addDays(c.date, 1); const kept: string[] = [];
+      // ΔΝ ΣΚ (Michael, 18/10, 24/10): την Κυριακή μπαίνει μόνος του ΔΝ κι εκείνη τη μέρα, εκτός αν έχει ήδη έξοδο/ΔΝ,
+      // λείπει, ή κάτι τον κρατά μέσα (υπηρεσία, ποινή…): τότε μένει η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί.
+      // Αν η άδειά του ξεκινά την Κυριακή, δεν γυρίζει: φεύγει για άδεια.
+      // Όποιος δεν είναι πια ΔΝ ΣΚ το Σάββατο χάνει και τη ΔΝ της Κυριακής που είχε μπει μόνη της.
+      const sun = addDays(c.date, 1); const kept: string[] = []; const leaving: string[] = [];
       if (isSat(c.date)) {
         const wkIds = new Set(wk.map(x => x.pid));
-        statuses = statuses.filter(x => !(pids.has(x.pid) && !wkIds.has(x.pid) && isWk(x) && x.type === 'OUT' && x.from === sun && x.to === sun));
+        statuses = statuses.filter(x => !(pids.has(x.pid) && !wkIds.has(x.pid) && isWk(x) && x.from === sun && x.to === sun));
         for (const x of wk) {
           const onSun = statusesOn(statuses, x.pid, sun);
           if (onSun.some(y => TYPES[y.type].cat === 'out')) continue;
+          if (onSun.some(y => TYPES[y.type].cat === 'abs' && y.from >= c.date)) { leaving.push(shortName(pm.get(x.pid)!)); continue; }
           if (onSun.some(y => TYPES[y.type].away) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }
-          added.push({ id: ctx.newId(), pid: x.pid, type: 'OUT', from: sun, to: sun, kind: WK });
+          added.push({ id: ctx.newId(), pid: x.pid, type: 'DN', from: sun, to: sun, kind: WK });
         }
       }
       let outNotes = s.outNotes;
@@ -301,7 +303,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         for (const n of c.notes) { const v = norm(n.note).trim(); if (v) day[n.pid] = v; else delete day[n.pid]; }
         outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
       }
-      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
+      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), leaving.length && 'άδεια από Κυριακή: ' + leaving.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
       return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
     }
     case 'saveCadre': {

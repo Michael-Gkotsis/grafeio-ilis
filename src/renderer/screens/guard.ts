@@ -447,21 +447,21 @@ export function AddBlockDialog({ onClose, phase: ph }: P) {
 
 /* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
 const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
-// Σάββατο: και «ΔΝ ΣΚ» = ΔΝ σήμερα και εξοδούχος την Κυριακή (Michael, 18/10)
+// Σάββατο: και «ΔΝ ΣΚ» = ΔΝ σήμερα και ΔΝ την Κυριακή (Michael, 18/10, 24/10)
 const OUT_OPTS_SAT = [...OUT_OPTS, { value: 'DNSK', label: 'ΔΝ ΣΚ' }];
 type OutVal = TypeKey | 'DNSK';
-const DNSK_TIP = 'ΔΝ το Σάββατο και εξοδούχος την Κυριακή (μπαίνει μόνος του). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ και γυρίζει Κυριακή πρωί.';
+const DNSK_TIP = 'ΔΝ το Σάββατο και ΔΝ την Κυριακή (μπαίνει μόνη της). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί· αν ξεκινά άδεια, φεύγει για άδεια.';
 const valLbl = (v: OutVal | null | undefined) => (v === 'DNSK' ? 'ΔΝ ΣΚ' : v ? TYPES[v].label : 'Μένει');
 const valTone = (v: OutVal) => TYPES[v === 'DNSK' ? 'DN' : v].tone;
 // 1–4 αν είναι συνεχόμενοι, αλλιώς 1, 3, 5 (Ρυθμίσεις › Θάλαμοι και ουλαμοί)
 const roomsTxt = (rs: number[]) => (rs.length > 2 && rs[rs.length - 1] - rs[0] === rs.length - 1 ? rs[0] + '–' + rs[rs.length - 1] : rs.join(', '));
 // Όποιος δεν βγαίνει σύμφωνα με τους κανόνες (υπηρεσία, ποινή, ΕΥ…) ή δεν έχει δικαίωμα ΔΝ επιλέγεται κι αυτός, με
 // προειδοποίηση· στην αποθήκευση ζητείται επιβεβαίωση (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
-// sun: ΔΝ ΣΚ και την Κυριακή κάτι τον κρατά (υπηρεσία, ποινή…): γυρίζει Κυριακή πρωί· wkNote: «από ΔΝ ΣΚ» την Κυριακή
+// sun: ΔΝ ΣΚ και την Κυριακή κάτι τον κρατά (υπηρεσία, ποινή…): γυρίζει Κυριακή πρωί, ή ξεκινά άδεια (leave)· wkNote: «από ΔΝ ΣΚ» την Κυριακή
 // note: παρατήρηση της μέρας, γράφεται σε παρένθεση δίπλα στην κατάσταση («ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», Michael 18/10)
 const OutRow = memo(function OutRow({ p, unit, style, reason, value, changed, onSet, onOpen, noDn, sat, sun, wkNote, note, onNote }: P) {
   return html`<div className=${cx('orow', changed && 'is-changed', reason && 'is-blocked')} style=${style}>
-    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unit}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${wkNote && ' · από ΔΝ ΣΚ'}${reason && html` · <span className="orow__warn" data-tip="Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">⚠ ${reason}</span>`}${value === 'DNSK' && sun && html` · <span className="orow__warn" data-tip="Την Κυριακή δεν μπαίνει στους εξοδούχους: μένει μόνο η ΔΝ του Σαββάτου">Κυριακή: ${sun}, γυρίζει Κυριακή πρωί</span>`}</small></div>
+    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${fullName(p)}</b></button><small>${roomTxt(p)} · ${unit}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${wkNote && ' · από ΔΝ ΣΚ'}${reason && html` · <span className="orow__warn" data-tip="Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">⚠ ${reason}</span>`}${value === 'DNSK' && sun && html` · <span className="orow__warn" data-tip=${sun.leave ? 'Την Κυριακή ξεκινά η άδειά του: μένει μόνο η ΔΝ του Σαββάτου' : 'Την Κυριακή δεν μπαίνει ΔΝ: μένει μόνο η ΔΝ του Σαββάτου'}>Κυριακή: ${sun.why}${sun.leave ? '' : ', γυρίζει Κυριακή πρωί'}</span>`}</small></div>
     <input className="ui-input orow__note" aria-label=${'Παρατήρηση ' + fullName(p)} placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=${note} onChange=${(e: any) => onNote(p.id, e.target.value)}/>
     <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${(sat ? OUT_OPTS_SAT : OUT_OPTS).map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : (o.value === 'DN' || o.value === 'DNSK') && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; return html`<button key=${o.value} type="button" className=${warn ? 'is-warn' : undefined} data-tip=${warn || (o.value === 'DNSK' ? DNSK_TIP : undefined)} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
   </div>`;
@@ -487,7 +487,7 @@ export function OutsScreen() {
   const sat = isSat(date);
   const saved = useMemo(() => { const m: Record<number, OutVal> = {}; state.statuses.forEach(s => { if (TYPES[s.type].cat === 'out' && s.from <= date && date <= s.to) m[s.pid] = sat && s.type === 'DN' && isWk(s) ? 'DNSK' : s.type; }); return m; }, [state.statuses, date]);
   // την Κυριακή: όσοι μπήκαν μόνοι τους από τη ΔΝ ΣΚ του Σαββάτου
-  const wkSun = useMemo(() => new Set(state.statuses.filter(s => s.type === 'OUT' && isWk(s) && s.from <= date && date <= s.to).map(s => s.pid)), [state.statuses, date]);
+  const wkSun = useMemo(() => new Set(sat ? [] : state.statuses.filter(s => isWk(s) && s.from <= date && date <= s.to).map(s => s.pid)), [state.statuses, date, sat]);
   const savedNotes = state.outNotes?.[date] || NO_NOTES;
   const [notes, setNotes] = useState<Record<number, string>>(savedNotes);
   useEffect(() => setNotes(savedNotes), [savedNotes]);
@@ -521,7 +521,14 @@ export function OutsScreen() {
   const nChanges = diffs.length + noteChanges.length;
   // ΔΝ ΣΚ: τι τον κρατά μέσα την Κυριακή (υπηρεσία, ποινή…), οπότε δεν μπαίνει στους εξοδούχους της Κυριακής
   const sunday = addDays(date, 1);
-  const sunWhy = useCallback((pid: number) => { if (!sat) return null; const d = dutyAt(state, sunday, pid); return d ? d.label + (d.time ? ' από ' + d.time : '') : outBlock(state, sunday, pid); }, [state, sat, sunday]);
+  // ή ξεκινά άδεια (leave): τότε φεύγει, δεν γυρίζει
+  const sunWhy = useCallback((pid: number): { why: string; leave: boolean } | null => {
+    if (!sat) return null;
+    const lv = state.statuses.find(x => x.pid === pid && TYPES[x.type].cat === 'abs' && x.from === sunday);
+    if (lv) return { why: 'ξεκινά ' + statusLbl(lv, state.settings.lists), leave: true };
+    const d = dutyAt(state, sunday, pid); const why = d ? d.label + (d.time ? ' από ' + d.time : '') : outBlock(state, sunday, pid);
+    return why ? { why, leave: false } : null;
+  }, [state, sat, sunday]);
   const backs = useMemo(() => returnsOn(state, date), [state, date]);
   const backEarly = backs.some(b => b.duty), backN = backs.length;
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
@@ -544,8 +551,9 @@ export function OutsScreen() {
   const pmO = useMemo(() => personMap(state.people), [state.people]);
   const warns = changes.filter(c => c.to && (reasons[c.pid] || (c.to === 'DN' && dnSet && !pmO.get(c.pid)?.dn))).map(c => ({ pid: c.pid, why: reasons[c.pid] || 'χωρίς δικαίωμα ΔΝ' }));
   // ΔΝ ΣΚ που γυρίζουν Κυριακή πρωί (υπηρεσία ή κάτι άλλο την Κυριακή)
-  const sunBack = diffs.filter(c => c.to === 'DNSK').map(c => ({ pid: c.pid, why: sunWhy(c.pid) })).filter(x => x.why);
-  const save = async () => { if (await run({ t: 'outs', date, changes, notes: noteChanges.length ? noteChanges : undefined, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + nChanges + ' αλλαγές)' + (sunBack.length ? '. Γυρίζουν Κυριακή πρωί: ' + sunBack.map(x => shortName(pmO.get(x.pid)!)).join(', ') : ''), actions: [undoMark()] }); } };
+  const sunBack = diffs.filter(c => c.to === 'DNSK').map(c => ({ pid: c.pid, ...sunWhy(c.pid)! })).filter(x => x.why);
+  const sunBackOnly = sunBack.filter(x => !x.leave), sunLeave = sunBack.filter(x => x.leave);
+  const save = async () => { if (await run({ t: 'outs', date, changes, notes: noteChanges.length ? noteChanges : undefined, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + nChanges + ' αλλαγές)' + (sunBackOnly.length ? '. Γυρίζουν Κυριακή πρωί: ' + sunBackOnly.map(x => shortName(pmO.get(x.pid)!)).join(', ') : '') + (sunLeave.length ? '. Άδεια από Κυριακή: ' + sunLeave.map(x => shortName(pmO.get(x.pid)!)).join(', ') : ''), actions: [undoMark()] }); } };
   const rh = useRowH(mobile ? 136 : 52, mobile ? 136 : 44);
   // Βραδινή εκπαίδευση (Michael, 13/10): η μέρα δεν μετρά στη στέρηση εξόδου κανενός· η λήξη τους μετακινείται μόνη της
   const night = !!state.nightTraining?.[date];
@@ -571,8 +579,9 @@ export function OutsScreen() {
     <p className="note" style=${{ margin: '8px 0 0' }}><${TemplateNote} ids=${['outs']}/></p>
     ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>${warns.length ? 'Αποθήκευση παρά τους κανόνες' : 'Αποθήκευση'}<//>`}>
       ${warns.length > 0 && html`<${Alert} tone="warn"><span><b>Παρά τους κανόνες:</b>${warns.map(w => html`<span key=${w.pid}><br/>${shortName(pmO.get(w.pid)!)}: ${w.why}</span>`)}<br/>Με την αποθήκευση το επιβεβαιώνεις.</span><//>`}
-      ${sunBack.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, γυρίζουν Κυριακή πρωί</b> (δεν μπαίνουν στους εξοδούχους της Κυριακής):${sunBack.map(x => html`<span key=${x.pid}><br/>${shortName(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
-      <ul className="hist">${diffs.map(c => html`<li key=${c.pid}><b>${shortName(pmO.get(c.pid)!)}</b> <span className="muted">${valLbl(c.from)} →</span> ${c.to ? html`<${Badge} tone=${valTone(c.to)}>${valLbl(c.to)}<//>` : 'Μένει'}${c.to === 'DNSK' && !sunWhy(c.pid) ? html` <span className="muted">και Κυριακή εξοδούχος</span>` : null}</li>`)}
+      ${sunBackOnly.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, γυρίζουν Κυριακή πρωί</b> (δεν μπαίνει ΔΝ την Κυριακή):${sunBackOnly.map(x => html`<span key=${x.pid}><br/>${shortName(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
+      ${sunLeave.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, ξεκινά άδεια την Κυριακή</b> (μένει μόνο η ΔΝ του Σαββάτου· γράφεται στις Παρατηρήσεις):${sunLeave.map(x => html`<span key=${x.pid}><br/>${shortName(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
+      <ul className="hist">${diffs.map(c => html`<li key=${c.pid}><b>${shortName(pmO.get(c.pid)!)}</b> <span className="muted">${valLbl(c.from)} →</span> ${c.to ? html`<${Badge} tone=${valTone(c.to)}>${valLbl(c.to)}<//>` : 'Μένει'}${c.to === 'DNSK' && !sunWhy(c.pid) ? html` <span className="muted">και ΔΝ την Κυριακή</span>` : null}</li>`)}
         ${noteChanges.map(n => html`<li key=${'n' + n.pid}><b>${shortName(pmO.get(n.pid)!)}</b> <span className="muted">παρατήρηση →</span> ${n.note ? '«' + n.note + '»' : html`<span className="muted">καμία</span>`}</li>`)}</ul>
       <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>
     <//>`}
