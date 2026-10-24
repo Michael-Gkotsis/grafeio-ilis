@@ -1,6 +1,6 @@
-# Φτιάχνει το πακέτο για Windows 7 και το ανεβάζει στα Releases του GitHub,
+# Φτιάχνει τα πακέτα (Windows 7, Ubuntu .deb, macOS) και τα ανεβάζει στα Releases του GitHub,
 # ώστε να κατεβαίνει από οποιοδήποτε κινητό ή PC: github.com/Michael-Gkotsis/grafeio-ilis/releases/latest
-name: Πακέτο Windows 7
+name: Πακέτα Windows, Ubuntu, macOS
 
 on:
   push:
@@ -32,6 +32,7 @@ jobs:
       - run: npm run build
       - run: npm run package:win -- x64
       - run: npm run package:win -- ia32
+      - run: npm run package:linux
       - name: Ανέβασμα στα Releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,10 +40,33 @@ jobs:
           V=$(node -p "require('./package.json').version")
           ZIP64="release/GrafeioIlis-win7-x64-$V.zip"
           ZIP32="release/GrafeioIlis-win7-ia32-$V.zip"
-          NOTES="Γραφείο Λοχία $V για Windows 7, από το commit ${GITHUB_SHA::7}. Δύο zip: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
+          DEB="release/GrafeioIlis-ubuntu-amd64-$V.deb"
+          NOTES="Γραφείο Λοχία $V, από το commit ${GITHUB_SHA::7}. Windows 7: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Ubuntu 64-bit: GrafeioIlis-ubuntu-amd64-$V.deb (sudo apt install ./GrafeioIlis-ubuntu-amd64-$V.deb). macOS: GrafeioIlis-mac-arm64-$V.zip (Apple Silicon) ή GrafeioIlis-mac-x64-$V.zip (Intel), ανεβαίνουν 2-3 λεπτά αργότερα· οδηγίες στο ΔΙΑΒΑΣΕ ΜΕ μέσα στο zip. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "$ZIP64" "$ZIP32" --clobber
+            gh release upload "v$V" "$ZIP64" "$ZIP32" "$DEB" --clobber
             gh release edit "v$V" --notes "$NOTES"
           else
-            gh release create "v$V" "$ZIP64" "$ZIP32" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V (Windows 7)" --notes "$NOTES"
+            gh release create "v$V" "$ZIP64" "$ZIP32" "$DEB" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V" --notes "$NOTES"
           fi
+
+  # macOS: χρειάζεται runner macOS (codesign, iconutil)· δωρεάν σε δημόσιο repo. Ανεβαίνει στο release που έφτιαξε η δουλειά παραπάνω.
+  mac:
+    needs: paketo
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm version "0.1.${{ github.run_number }}" --no-git-tag-version
+      - run: npm run build
+      - run: npm run package:mac -- arm64
+      - run: npm run package:mac -- x64
+      - name: Ανέβασμα στα Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          gh release upload "v$V" "release/GrafeioIlis-mac-arm64-$V.zip" "release/GrafeioIlis-mac-x64-$V.zip" --clobber

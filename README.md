@@ -82,6 +82,8 @@ npm run typecheck
 npm run build        # dist/
 npm run package:win            # release/GrafeioIlis-win7-x64-<έκδοση>.zip (κατεβάζει Electron 22 win32-x64, ελέγχει SHA256)
 npm run package:win -- ia32    # release/GrafeioIlis-win7-ia32-<έκδοση>.zip (32-bit)
+npm run package:linux          # release/GrafeioIlis-ubuntu-amd64-<έκδοση>.deb (Ubuntu/Debian 64-bit, χρειάζεται dpkg-deb)
+npm run package:mac -- arm64   # release/GrafeioIlis-mac-arm64-<έκδοση>.zip (μόνο σε macOS· το ίδιο με x64 για Intel· χωρίς πιστοποιητικό Apple)
 ```
 
 Το UI ανοίγει και σε απλό browser (`npx vite`) με ψεύτικα δεδομένα (`src/renderer/mockApi.ts`).

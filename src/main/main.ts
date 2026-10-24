@@ -33,7 +33,6 @@ import { hkRowsOf } from '../shared/ranks';
 import { setUnitKind, unitKindOf, unitText } from '../shared/unit';
 
 const DEV = !app.isPackaged;
-const ROOT = DEV ? process.cwd() : path.dirname(process.execPath);
 const BUNDLED = DEV ? process.cwd() : path.join(process.resourcesPath, 'app');
 
 // Φορητή εγκατάσταση: τα δεδομένα δίπλα στο .exe αν ο φάκελος γράφεται, αλλιώς στο προφίλ του χρήστη
@@ -42,6 +41,8 @@ function writableDir(dir: string): boolean {
 }
 // Το όνομα άλλαξε σε «Γραφείο Λοχία» (11/10). Το προφίλ μένει στον παλιό φάκελο για να βρίσκει τα δεδομένα και τις προτιμήσεις.
 app.setPath('userData', path.join(app.getPath('appData'), 'Γραφείο Ίλης'));
+// Windows: φορητός φάκελος δίπλα στο .exe. Linux (/opt) και macOS (μέσα στο .app) δεν γράφονται ή χαλάνε με τις ενημερώσεις, οπότε data\ και templates\ μένουν στο προφίλ του χρήστη.
+const ROOT = DEV ? process.cwd() : process.platform === 'win32' ? path.dirname(process.execPath) : app.getPath('userData');
 // Όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe): μια στιγμιαία αποτυχία του ελέγχου εγγραφής δεν χωρίζει πια τα δεδομένα στα δύο
 const DATA_AT = dataDirOf(path.join(ROOT, 'data'), path.join(app.getPath('userData'), 'data'), writableDir);
 const DATA = DATA_AT.dir;
