@@ -8,7 +8,7 @@ import { Store } from '../src/main/db';
 import { apply, type Command } from '../src/shared/commands';
 import type { AppState, Note } from '../src/shared/domain';
 import { freshState } from '../src/shared/esso';
-import { NOTE_MAX, dueCount, noteKind, noteLinks, normNote, noteDue, noteGroups, noteHead, noteIn, noteIndex, noteSearch, noteWho, notesOf, quickRems, remLabel } from '../src/shared/notes';
+import { NOTE_MAX, dueCount, noteKind, noteLinks, normNote, noteDue, noteGroups, noteHead, noteIn, noteIndex, noteSearch, noteWho, personGroups, quickRems, remLabel, remLine } from '../src/shared/notes';
 import { fakeState } from './fixtures';
 
 const D = '2026-10-24';   // Σάββατο
@@ -123,7 +123,7 @@ describe('ονόματα, αναζήτηση, ένδειξη στους πίνα
     const m = noteIndex(s.notes, D);
     expect(m.get('p2')).toEqual({ n: 1, hot: false }); expect(m.get('cs1')).toEqual({ n: 1, hot: true });
     expect(m.has('cu1')).toBe(false);   // η γενική δεν μετρά σε κανέναν
-    expect(notesOf(s.notes, { pid: 2 })).toHaveLength(1); expect(notesOf(s.notes, { cid: 's1' })).toHaveLength(1);
+    expect(personGroups(s.notes, { pid: 2 }, D).open).toBe(1); expect(personGroups(s.notes, { cid: 's1' }, D).open).toBe(1);
     const done = run(s, { t: 'doneNote', id: s.notes[1].id, done: true }).state;
     expect(noteIndex(done.notes, D).has('cs1')).toBe(false);
   });
@@ -169,8 +169,8 @@ describe('σημείωση για πολλά άτομα', () => {
     const s = add(base(), { text: 'Κοινή', pids: [1, 2], cids: ['s1'], rem: D });
     const m = noteIndex(s.notes, D);
     for (const k of ['p1', 'p2', 'cs1']) expect(m.get(k)).toEqual({ n: 1, hot: true });
-    expect(notesOf(s.notes, { pid: 1 })).toHaveLength(1); expect(notesOf(s.notes, { pid: 2 })).toHaveLength(1); expect(notesOf(s.notes, { cid: 's1' })).toHaveLength(1);
-    expect(notesOf(s.notes, { pid: 3 })).toHaveLength(0);
+    expect(personGroups(s.notes, { pid: 1 }, D).open).toBe(1); expect(personGroups(s.notes, { pid: 2 }, D).open).toBe(1); expect(personGroups(s.notes, { cid: 's1' }, D).open).toBe(1);
+    expect(personGroups(s.notes, { pid: 3 }, D).open).toBe(0);
     expect(noteIn('sol', s.notes[0])).toBe(true); expect(noteIn('cad', s.notes[0])).toBe(true); expect(noteIn('gen', s.notes[0])).toBe(false);
     expect(noteWho(s, s.notes[0]).items.map(x => x.key)).toEqual(['p1', 'p2', 'cs1']);
     expect(noteSearch(s, s.notes[0], 'δοκιμιδ')).toBe(true);
@@ -197,6 +197,34 @@ describe('σημείωση για πολλά άτομα', () => {
   });
 });
 
+describe('καρτέλα «Σημειώσεις» ενός ατόμου', () => {
+  const mk = (id: string, x: Partial<Note> = {}): Note => ({ id, text: id, at: '2026-10-20', pids: [1], ...x });
+  const all: Note[] = [mk('a'), mk('b', { rem: '2026-10-22' }), mk('c', { rem: D }), mk('d', { rem: '2026-10-27' }), mk('f', { star: true }),
+    mk('g', { rem: D, done: '2026-10-21' }), mk('h', { done: '2026-10-23' }), mk('x', { pids: [2], rem: D }), mk('y', { pids: undefined, cids: ['s1'] }), mk('z', { pids: [2, 1], cids: ['s1'] })];
+  it('ομαδοποίηση ανά άτομο: ίδιες ομάδες με τη σελίδα, ολοκληρωμένες χωριστά (πιο πρόσφατες πρώτα)', () => {
+    const g = personGroups(all, { pid: 1 }, D);
+    expect(g.due.map(n => n.id)).toEqual(['b', 'c']); expect(g.soon.map(n => n.id)).toEqual(['d']); expect(g.rest.map(n => n.id)).toEqual(['f', 'z', 'a']);
+    expect(g.done.map(n => n.id)).toEqual(['h', 'g']);
+  });
+  it('μετρητές: ανοιχτές (χωρίς ολοκληρωμένες) και όσες ζητούν προσοχή σήμερα· κοινή σημείωση μετρά σε όλους', () => {
+    expect(personGroups(all, { pid: 1 }, D)).toMatchObject({ open: 6, dueN: 2 });
+    expect(personGroups(all, { pid: 2 }, D)).toMatchObject({ open: 2, dueN: 1 });
+    expect(personGroups(all, { cid: 's1' }, D)).toMatchObject({ open: 2, dueN: 0 });
+    expect(personGroups(all, { pid: 3 }, D)).toMatchObject({ open: 0, dueN: 0, done: [] });
+    expect(personGroups(undefined, { pid: 1 }, D).open).toBe(0);
+  });
+  it('γραμμή «Υπενθύμιση» στο «Σήμερα:»: κενή, μία (με την αρχή του κειμένου), ή πόσες είναι', () => {
+    expect(remLine(all, { pid: 3 }, D)).toBe(''); expect(remLine(all, { cid: 's1' }, D)).toBe(''); expect(remLine(undefined, { pid: 1 }, D)).toBe('');
+    expect(remLine(all, { pid: 2 }, D)).toBe('Υπενθύμιση: «x»');
+    expect(remLine([mk('p', { text: 'Να πάρει το δελτίο', rem: '2026-10-22' })], { pid: 1 }, D)).toBe('Υπενθύμιση: «Να πάρει το δελτίο» (εκπρόθεσμη)');
+    expect(remLine(all, { pid: 1 }, D)).toBe('2 υπενθυμίσεις');
+    expect(remLine([mk('q', { rem: '2026-10-25' })], { pid: 1 }, D)).toBe('');   // μελλοντική: καμία γραμμή
+  });
+  it('μεγάλο κείμενο στη γραμμή κόβεται', () => {
+    expect(remLine([mk('p', { text: 'α'.repeat(120), rem: D })], { pid: 1 }, D).length).toBeLessThan(80);
+  });
+});
+
 describe('σύνδεση στην εφαρμογή', () => {
   const src = (f: string) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
   it('το @όνομα μπαίνει στο κείμενο και δένει το άτομο, χωρίς να ξεχνά τους προηγούμενους', () => {
@@ -210,11 +238,11 @@ describe('σύνδεση στην εφαρμογή', () => {
     expect(a).toMatch(/notes: \['Σημειώσεις', Icon\.notes, NotesScreen\]/);
     expect(a).toMatch(/v === 'notes' \? notesDue/);
   });
-  it('Ctrl+Shift+N (νέα σημείωση) προηγείται του Ctrl+N (δήλωση), και δένει στην ανοιχτή καρτέλα στρατιώτη', () => {
+  it('Ctrl+Shift+N (νέα σημείωση) προηγείται του Ctrl+N (δήλωση), και δένει στην ανοιχτή καρτέλα στρατιώτη ή στελέχους', () => {
     const a = src('renderer/app.ts');
     const note = a.indexOf("mod && e.shiftKey && (k === 'n'"), declare = a.indexOf("else if (mod && (k === 'n'");
     expect(note).toBeGreaterThan(0); expect(declare).toBeGreaterThan(note);
-    expect(a).toMatch(/kind: 'note', data: pid != null && pid > 0 \? \{ pid \} : \{\}/);
+    expect(a).toMatch(/kind: 'note', data: pid != null && pid > 0 \? \{ pid \} : cur\.current\.cadre \? \{ cid: cur\.current\.cadre \} : \{\}/);
   });
   it('οι σημειώσεις δεν ξαναγράφουν Excel ή έντυπα, και έχουν δική τους ρύθμιση στη βάση (αναίρεση)', () => {
     expect(src('main/main.ts')).toMatch(/k !== 'lastExpire' && k !== 'notes'/);
@@ -227,8 +255,25 @@ describe('σύνδεση στην εφαρμογή', () => {
   });
   it('Σήμερα: γραμμή στο «Πρέπει σήμερα»· Δυναμολόγιο και Στελέχη: ένδειξη και ενότητα στην καρτέλα', () => {
     expect(src('renderer/screens/other.ts')).toMatch(/key: 'notes'[^\n]*\n[^\n]*\n[^\n]*nfilter: 'rem'/);
-    expect(src('renderer/screens/people.ts')).toContain('<${PersonNotes} who=${{ pid }}/>');
+    expect(src('renderer/screens/people.ts')).toContain('<${NotesTab} key=${pid} who=${{ pid }}/>');
     expect(src('renderer/screens/people.ts')).toContain('NoteDot');
-    expect(src('renderer/screens/cadre.ts')).toContain('<${PersonNotes} who=${{ cid: c.id }}/>');
+    expect(src('renderer/screens/cadre.ts')).toContain('<${NotesTab} key=${cid} who=${{ cid }}/>');
+  });
+  it('κάρτες ατόμου: 4η καρτέλα Σημειώσεις στον στρατιώτη, 3 καρτέλες στο στέλεχος, πλαϊνό φύλλο πάνω από κάθε οθόνη, χωρίς αυτόματο focus', () => {
+    const pe = src('renderer/screens/people.ts'), ca = src('renderer/screens/cadre.ts'), no = src('renderer/screens/notes.ts'), ap = src('renderer/app.ts');
+    expect(pe).toContain("{ value: 'notes', label: 'Σημειώσεις' }"); expect(pe).not.toContain('PersonNotes');
+    expect(ca).toMatch(/CADRE_TABS = \[\{ value: 'abs', label: 'Καταστάσεις' \}, \{ value: 'info', label: 'Στοιχεία' \}, \{ value: 'notes', label: 'Σημειώσεις' \}\]/);
+    expect(ca).toContain('<${Sheet} onClose'); expect(ca).not.toContain('size="lg"'); expect(ca).toContain('Διαγραφή στελέχους…');
+    expect(ap).toContain('<${CadreSheet} cid=${cadreId}'); expect(ap).toMatch(/if \(id < 0\) \{[^\n]*openCadre/);
+    expect(no).toContain('<${NoteComposer} draft=${draft} ns="np" compact=${true}/>');
+    const ot = src('renderer/screens/other.ts');   // ΗΚΑΙ, «Από πού βγαίνει κάθε αριθμός»: το όνομα στελέχους ανοίγει την κάρτα με ▲▼ στη σειρά της στήλης, όχι τη σελίδα Στελέχη
+    expect(ot).toContain('nav.openCadre(c.id, cadreSeen)'); expect(ot).not.toMatch(/cadreOf\(k\)\.map\([^\n]*nav\.go\('cadre'\)/);
+  });
+  it('μη αποθηκευμένο πρόχειρο: ρωτά πριν από άλλο άτομο, κλείσιμο, άλλη καρτέλα ή οθόνη', () => {
+    const ap = src('renderer/app.ts');
+    expect(ap).toContain('onMove=${(id: number) => guard(() => setPersonId(id))}'); expect(ap).toContain('onClose=${() => guard(() => setPersonId(null))}');
+    expect(ap).toContain('onMove=${(id: string) => guard(() => setCadreId(id))}'); expect(ap).toContain('guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); })');
+    expect(src('renderer/screens/people.ts')).toContain('onChange=${(t: string) => nav.guard(() => setTab(t))}');
+    expect(src('renderer/screens/cadre.ts')).toContain('onChange=${(t: string) => nav.guard(() => setTab(t))}');
   });
 });

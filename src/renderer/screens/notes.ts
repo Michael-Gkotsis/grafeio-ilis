@@ -1,7 +1,7 @@
 // features/notes · «Σημειώσεις» (Michael, 24/10: «γράφουμε χαρτάκια και τα ξεχνάμε»): γενικές, ανά στρατιώτη, ανά στέλεχος, με
-// προαιρετική υπενθύμιση. Γρήγορη προσθήκη πάνω πάνω (Ctrl+Enter), εύκολη ανάγνωση από κάτω, ίδια σημείωση στην καρτέλα του ατόμου.
+// προαιρετική υπενθύμιση. Γρήγορη προσθήκη πάνω πάνω (Ctrl+Enter), εύκολη ανάγνωση από κάτω, ίδια σημείωση στην καρτέλα «Σημειώσεις» του ατόμου.
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Why, useDirty, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Why, useDirty, useToast } from '../ui';
 import { Select } from '../select';
 import { searchPeople, useNav, useStore } from '../store';
 import { DateField, PersonPicker } from '../common';
@@ -10,7 +10,7 @@ import { orderedCadre, cadreSearch } from '../../shared/cadre';
 import { rankTxt } from '../../shared/ranks';
 import { dm } from '../../shared/dates';
 import type { Note } from '../../shared/domain';
-import { NOTE_FILTERS, NOTE_MAX, dueCount, noteGroups, noteIn, noteKeys, noteLinks, noteSearch, noteWho, notesOf, quickRems, remLabel, whoKey, type NoteFilter, type NoteWhoItem } from '../../shared/notes';
+import { NOTE_FILTERS, NOTE_MAX, dueCount, noteGroups, noteIn, noteKeys, noteLinks, noteSearch, noteWho, personGroups, quickRems, remLabel, whoKey, type NoteFilter, type NoteWhoItem, type PersonGroups } from '../../shared/notes';
 type P = any;
 
 interface Draft { text: string; pids: number[]; cids: string[]; rem: string; star: boolean }
@@ -44,8 +44,8 @@ function RemPick({ value, onChange, id }: P) {
     <div className="note-rem__date"><${DateField} id=${id} aria-label="Άλλη μέρα υπενθύμισης" value=${value} min=${today} onChange=${(e: P) => onChange(e.target.value)}/></div></div>`;
 }
 
-// Για ποιους: κανένας (γενική) ή όσοι στρατιώτες και στελέχη θες· ο καθένας φεύγει με το ✕
-function WhoField({ d, set }: P) {
+// Για ποιους: κανένας (γενική) ή όσοι στρατιώτες και στελέχη θες· ο καθένας φεύγει με το ✕. ns: πρόθεμα των id, για να μη συμπίπτουν η σελίδα και η κάρτα ατόμου
+function WhoField({ d, set, ns = 'nt', compact }: P) {
   const { state } = useStore();
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const cm = useMemo(() => new Map(state.cadreList.map(c => [c.id, c])), [state.cadreList]);
@@ -58,8 +58,8 @@ function WhoField({ d, set }: P) {
         ${d.pids.map((id: number) => { const p = pm.get(id); return chip('p' + id, p ? p.last + ' ' + p.first : 'Άγνωστος στρατιώτης', !p || !p.active, () => set({ pids: d.pids.filter((x: number) => x !== id) })); })}
         ${d.cids.map((id: string) => { const c = cm.get(id); return chip('c' + id, c ? rankTxt(c) + ' ' + c.last + ' ' + c.first : 'Άγνωστο στέλεχος', !c || !c.active, () => set({ cids: d.cids.filter((x: string) => x !== id) })); })}</div>
       <div className="note-pick__add">
-        <${PersonPicker} id="nt-pid" placeholder="+ Στρατιώτης: επώνυμο, όνομα ή ΑΣΜ…" people=${free} onChange=${(pid: number) => set({ pids: [...d.pids, pid] })}/>
-        <${Select} id="nt-cid" className="ui-input" aria-label="Πρόσθεσε στέλεχος" value="" onChange=${(e: P) => { if (e.target.value) set({ cids: [...d.cids, e.target.value] }); }}>
+        <${PersonPicker} id=${ns + '-pid'} placeholder=${compact ? '+ Στρατιώτης…' : '+ Στρατιώτης: επώνυμο, όνομα ή ΑΣΜ…'} people=${free} onChange=${(pid: number) => set({ pids: [...d.pids, pid] })}/>
+        <${Select} id=${ns + '-cid'} className="ui-input" aria-label="Πρόσθεσε στέλεχος" value="" onChange=${(e: P) => { if (e.target.value) set({ cids: [...d.cids, e.target.value] }); }}>
           <option value="">+ Στέλεχος…</option>${cadre.map(c => html`<option key=${c.id} value=${c.id}>${rankTxt(c)} ${c.last} ${c.first}</option>`)}<//></div></div></div>`;
 }
 
@@ -94,17 +94,18 @@ function useMention(text: string, setText: (t: string) => void, pick: (x: { kind
   return { onKey, list };
 }
 
-// Το πλαίσιο γρήγορης προσθήκης της σελίδας και του παραθύρου Ctrl+Shift+N
-function NoteComposer({ draft, autoFocus, onSaved, fixedWho }: P) {
+// Το πλαίσιο γρήγορης προσθήκης της σελίδας, του παραθύρου Ctrl+Shift+N και της καρτέλας ατόμου
+// compact: στην κάρτα ατόμου (480px), με πιο σύντομα κείμενα
+function NoteComposer({ draft, autoFocus, onSaved, ns = 'nt', compact }: P) {
   const { d, set, why, save } = draft;
   const men = useMention(d.text, (text: string) => set({ text }), (x: P) => (x.kind === 'sol' ? set({ pids: d.pids.includes(x.id) ? d.pids : [...d.pids, x.id] }) : set({ cids: d.cids.includes(x.id) ? d.cids : [...d.cids, x.id] })));
   const go = async () => { if (await save()) onSaved?.(); };
   return html`<div className="note-comp">
-    <div className="note-comp__box"><textarea id="nt-text" className="ui-input note-text" rows="2" maxLength=${NOTE_MAX} data-autofocus=${autoFocus ? '' : undefined} aria-label="Κείμενο σημείωσης"
-      placeholder=${'Γράψε τη σημείωση εδώ… (Ctrl+Enter για αποθήκευση)\nΜε @ δένεις το όνομα (όσα θες) με τη σημείωση, π.χ. @Παπαδ'} value=${d.text} onChange=${(e: P) => set({ text: e.target.value })}
+    <div className="note-comp__box"><textarea id=${ns + '-text'} className="ui-input note-text" rows="2" maxLength=${NOTE_MAX} data-autofocus=${autoFocus ? '' : undefined} aria-label="Κείμενο σημείωσης"
+      placeholder=${compact ? 'Γράψε τη σημείωση εδώ… (Ctrl+Enter)\nΜε @ δένεις κι άλλο άτομο, π.χ. @Παπαδ' : 'Γράψε τη σημείωση εδώ… (Ctrl+Enter για αποθήκευση)\nΜε @ δένεις το όνομα (όσα θες) με τη σημείωση, π.χ. @Παπαδ'} value=${d.text} onChange=${(e: P) => set({ text: e.target.value })}
       onKeyDown=${(e: P) => { if (men.onKey(e)) return; if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); go(); } }}/>${men.list}</div>
-    ${!fixedWho && html`<${WhoField} d=${d} set=${set}/>`}
-    <${RemPick} id="nt-rem" value=${d.rem} onChange=${(rem: string) => set({ rem })}/>
+    <${WhoField} d=${d} set=${set} ns=${ns} compact=${compact}/>
+    <${RemPick} id=${ns + '-rem'} value=${d.rem} onChange=${(rem: string) => set({ rem })}/>
     <div className="note-comp__foot">
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${d.star} onChange=${() => set({ star: !d.star })}/>Σημαντική</label>
       <span className="note-comp__sp"></span><${Why} text=${why}/>
@@ -125,27 +126,26 @@ export function NoteDot({ m }: P) {
 }
 
 const whoIcon = (k: string) => (k === 'cad' ? Icon.shield : k === 'sol' ? Icon.people : Icon.notes);
-function WhoChip({ n, onOpen }: P) {
+// self: στην κάρτα ενός ατόμου δεν ξαναγράφεται το ίδιο, μόνο όσοι άλλοι είναι δεμένοι με τη σημείωση
+function WhoChip({ n, onOpen, self }: P) {
   const { state } = useStore();
   const w = noteWho(state, n);
   if (!w.items.length) return html`<span className="who-chip is-gen">${Icon.notes}Γενική</span>`;
-  return html`${w.items.map((x: NoteWhoItem) => html`<button key=${x.key} type="button" className=${cx('who-chip', !x.active && 'is-off')} data-tip=${x.active ? 'Άνοιγμα καρτέλας' : 'Εκτός δύναμης · άνοιγμα καρτέλας'} onClick=${() => onOpen(x)}>${whoIcon(x.kind)}${x.label}${!x.active && ' (εκτός δύναμης)'}</button>`)}`;
+  return html`${w.items.filter((x: NoteWhoItem) => x.key !== self).map((x: NoteWhoItem) => html`<button key=${x.key} type="button" className=${cx('who-chip', !x.active && 'is-off')} data-tip=${x.active ? 'Άνοιγμα καρτέλας' : 'Εκτός δύναμης · άνοιγμα καρτέλας'} onClick=${() => onOpen(x)}>${whoIcon(x.kind)}${x.label}${!x.active && ' (εκτός δύναμης)'}</button>`)}`;
 }
 
 // Μία σημείωση: τσεκάρεις όταν τελειώσει, επεξεργασία και διαγραφή (με Αναίρεση) στο hover/focus
-function NoteCard({ n, compact, self, onEdit, onOpen }: P) {
-  const { state, today, run, undoMark } = useStore(); const toast = useToast();
+function NoteCard({ n, self, onEdit, onOpen }: P) {
+  const { today, run, undoMark } = useStore(); const toast = useToast();
   const due = !n.done && !!n.rem && n.rem <= today;
-  const withOthers = compact ? noteWho(state, n).items.filter((x: NoteWhoItem) => x.key !== self).map((x: NoteWhoItem) => x.label).join(', ') : '';
   const rl = n.rem ? remLabel(n.rem, today, !!n.done) : null;
   const done = async () => { await run({ t: 'doneNote', id: n.id, done: !n.done }, false); };
   const star = () => run({ t: 'editNote', id: n.id, patch: { star: !n.star } }, false);
   const del = async () => { if (await run({ t: 'deleteNote', id: n.id }, false)) toast({ text: 'Σβήστηκε η σημείωση.', actions: [undoMark()] }); };
-  return html`<article className=${cx('note-card', due && 'is-due', n.star && !n.done && 'is-star', n.done && 'is-done', compact && 'is-compact')}>
+  return html`<article className=${cx('note-card', due && 'is-due', n.star && !n.done && 'is-star', n.done && 'is-done')}>
     <div className="note-card__top"><button type="button" className="note-ck" role="checkbox" aria-checked=${!!n.done} aria-label=${n.done ? 'Ξανάνοιξε τη σημείωση' : 'Ολοκληρώθηκε'} data-tip=${n.done ? 'Ξανάνοιξε' : 'Ολοκληρώθηκε'} onClick=${done}>${n.done ? Icon.check : null}</button>
       <div className="note-card__txt">${n.text}</div></div>
-    <div className="note-card__meta">${!compact && html`<${WhoChip} n=${n} onOpen=${onOpen}/>`}
-      ${compact && withOthers && html`<span className="note-card__with">και ${withOthers}</span>`}
+    <div className="note-card__meta"><${WhoChip} n=${n} onOpen=${onOpen} self=${self}/>
       ${rl && html`<${Badge} tone=${rl.tone === 'muted' ? undefined : rl.tone} className="note-rem-badge">${Icon.bell}${rl.text}<//>`}
       <span className="note-card__date">${n.done ? 'Ολοκληρώθηκε ' + dm(n.done) : dm(n.at)}</span>
       <span className="note-card__acts">
@@ -169,6 +169,12 @@ function EditDialog({ note, onClose }: P) {
       <${WhoField} d=${f} set=${set}/>
       <${RemPick} id="ne-rem" value=${f.rem} onChange=${(rem: string) => set({ rem })}/>
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${f.star} onChange=${() => set({ star: !f.star })}/>Σημαντική</label></div><//>`;
+}
+
+// Chip ατόμου σε σημείωση: ανοίγει την καρτέλα του επί τόπου, πάνω από όποια οθόνη
+function useOpenWho() {
+  const nav = useNav();
+  return (x: NoteWhoItem) => (x.kind === 'sol' ? nav.openPerson(Number(x.key.slice(1))) : nav.openCadre(x.key.slice(1)));
 }
 
 function Group({ title, list, ...rest }: P) {
@@ -200,7 +206,7 @@ export function NotesScreen() {
   const rows = useMemo(() => notes.filter(n => noteIn(filter, n) && (!who || noteKeys(n).includes(who)) && noteSearch(state, n, dq)), [notes, filter, who, dq, state.people, state.cadreList]);
   const g = useMemo(() => noteGroups(rows, today), [rows, today]);
   const done = filter === 'done' ? [...rows].sort((a, b) => (b.done || '').localeCompare(a.done || '')) : [];
-  const openWho = (x: NoteWhoItem) => { if (x.kind === 'sol') nav.openPerson(Number(x.key.slice(1))); else nav.go('cadre', { ccard: x.key.slice(1) }); };
+  const openWho = useOpenWho();
   const setFilter = (f: NoteFilter) => nav.set({ nfilter: f === 'all' ? undefined : f, nwho: undefined });
   const filtered = filter !== 'all' || !!who || !!dq.trim();
   const clear = () => { setQ(''); nav.set({ nfilter: undefined, nwho: undefined, nq: undefined }); };
@@ -229,26 +235,35 @@ export function NotesScreen() {
   </div>`;
 }
 
-// Στην καρτέλα στρατιώτη/στελέχους: οι ανοιχτές σημειώσεις του και γρήγορη προσθήκη με Enter. who: { pid } ή { cid }
-export function PersonNotes({ who }: P) {
-  const { state, today } = useStore(); const nav = useNav();
-  const list = notesOf(state.notes, who);
+// Η καρτέλα «Σημειώσεις» στην κάρτα στρατιώτη/στελέχους: ό,τι έχει η σελίδα (πλαίσιο, ομάδες, ολοκληρωμένες), για ένα άτομο.
+// Ίδια δεδομένα με τη σελίδα, άρα ό,τι γίνεται εδώ φαίνεται εκεί και αντίστροφα. who: { pid } ή { cid }. Να μπαίνει με key ανά άτομο.
+export function NotesTab({ who }: P) {
+  const { state, today } = useStore(); const nav = useNav(); const openWho = useOpenWho();
   const draft = useNoteDraft(who);
-  const [more, setMore] = useState(false); const [rem, setRem] = useState(false);
-  const [edit, setEdit] = useState<Note | null>(null);
-  const { d, set, why, save } = draft;
-  const sorted = useMemo(() => { const g = noteGroups(list, today); return [...g.due, ...g.soon, ...g.rest]; }, [state.notes, today, who.pid, who.cid]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const shown = more ? sorted : sorted.slice(0, 3);
-  const go = async () => { if (await save()) setRem(false); };
-  return html`<section className="note-person" aria-label="Σημειώσεις">
-    <div className="note-person__h"><h3>Σημειώσεις${list.length > 0 && ' · ' + list.length}</h3>
-      <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Όλες οι σημειώσεις στη σελίδα Σημειώσεις" onClick=${() => nav.go('notes', { nwho: whoKey(who) })}>Άνοιγμα στη σελίδα</button></div>
-    <div className="note-person__add"><input className="ui-input" aria-label="Νέα σημείωση για αυτό το άτομο" maxLength=${NOTE_MAX} placeholder="Γράψε σημείωση και πάτα Enter" value=${d.text} onChange=${(e: P) => set({ text: e.target.value })}
-        onKeyDown=${(e: P) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}/>
-      <${Button} variant=${rem || d.rem ? 'secondary' : 'outline'} data-tip=${d.rem ? 'Υπενθύμιση ' + dm(d.rem) : 'Πρόσθεσε υπενθύμιση (ημερομηνία)'} aria-label="Υπενθύμιση" onClick=${() => setRem(!rem)}>${Icon.bell}${d.rem ? dm(d.rem) : ''}<//>
-      <${Button} disabled=${!!why} why=${why} onClick=${go}>Πρόσθεσε<//></div>
-    ${(rem || d.rem) && html`<${RemPick} id="np-rem" value=${d.rem} onChange=${(r: string) => set({ rem: r })}/>`}
-    ${shown.map(n => html`<${NoteCard} key=${n.id} n=${n} compact=${true} self=${whoKey(who)} onEdit=${setEdit} onOpen=${() => {}}/>`)}
-    ${sorted.length > 3 && html`<button type="button" className="ui-btn ui-btn--link" onClick=${() => setMore(!more)}>${more ? 'Λιγότερες' : 'Και ' + (sorted.length - 3) + ' ακόμα'}</button>`}
-    ${edit && html`<${EditDialog} note=${edit} onClose=${() => setEdit(null)}/>`}</section>`;
+  const [edit, setEdit] = useState<Note | null>(null); const [showDone, setShowDone] = useState(false);
+  const g = useMemo(() => personGroups(state.notes, who, today), [state.notes, today, who.pid, who.cid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const self = whoKey(who);
+  // η κάρτα ρωτά πριν φύγει (άλλο άτομο, καρτέλα, κλείσιμο) όσο το πρόχειρο δεν έχει αποθηκευτεί
+  useEffect(() => { nav.setDirty(draft.dirty); return () => nav.setDirty(false); }, [draft.dirty]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const rest = { self, onEdit: setEdit, onOpen: openWho };
+  return html`<div className="note-tab">
+    <div className="note-tab__bar"><span className="muted">${g.open} ${g.open === 1 ? 'ανοιχτή' : 'ανοιχτές'}</span>
+      <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Όλες οι σημειώσεις του στη σελίδα Σημειώσεις" onClick=${() => nav.go('notes', { nwho: self })}>Άνοιγμα στη σελίδα</button></div>
+    <div className="ui-card note-quick"><${NoteComposer} draft=${draft} ns="np" compact=${true}/></div>
+    <${Group} title="Πρέπει σήμερα" list=${g.due} ...${rest}/>
+    <${Group} title="Με υπενθύμιση" list=${g.soon} ...${rest}/>
+    <${Group} title="Χωρίς υπενθύμιση" list=${g.rest} ...${rest}/>
+    ${g.open + g.done.length === 0 && html`<p className="muted note-tab__empty">Δεν υπάρχει καμία σημείωση για αυτό το άτομο ακόμα. Γράψε την πρώτη από πάνω.</p>`}
+    ${g.done.length > 0 && html`<section className="note-group"><div className="note-group__h"><button type="button" className="note-group__fold" aria-expanded=${showDone} onClick=${() => setShowDone(!showDone)}>${showDone ? '▾' : '▸'} Ολοκληρωμένες · ${g.done.length}</button><span className="note-group__line"></span></div>
+      ${showDone && html`<div className="note-list">${g.done.map((n: Note) => html`<${NoteCard} key=${n.id} n=${n} ...${rest}/>`)}</div>`}</section>`}
+    ${edit && html`<${EditDialog} note=${edit} onClose=${() => setEdit(null)}/>`}</div>`;
+}
+
+// Το όνομα της καρτέλας στην κάρτα ατόμου: πόσες ανοιχτές, και κόκκινο όταν κάποια υπενθύμιση ζητά προσοχή σήμερα
+export const notesTabLabel = (g: PersonGroups) => html`<span>Σημειώσεις (${g.open})${g.dueN > 0 && html` <${Badge} tone="bad" data-tip=${g.dueN === 1 ? '1 υπενθύμιση ζητά προσοχή σήμερα' : g.dueN + ' υπενθυμίσεις ζητούν προσοχή σήμερα'}>${g.dueN}<//>`}</span>`;
+
+// «Σήμερα:» στην κάρτα ατόμου: οι κανόνες που ισχύουν και, αν έφτασε υπενθύμιση (shared/notes remLine), η γραμμή της με σύνδεσμο στην καρτέλα Σημειώσεις
+export function TodayAlert({ rules, rem, onRem }: P) {
+  if (!rules.length && !rem) return null;
+  return html`<${Alert} tone="warn"><span><b>Σήμερα:</b> ${rules.join(' · ')}${rem && rules.length > 0 && html`<br/>`}${rem && html`<button type="button" className="linkish today-rem" data-tip="Άνοιγμα των σημειώσεων" onClick=${onRem}>${Icon.bell}${rem}</button>`}</span><//>`;
 }

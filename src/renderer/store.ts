@@ -24,6 +24,9 @@ export interface Nav {
   declare(data: Record<string, any>): void;
   note(data?: { pid?: number; cid?: string }): void;   // νέα σημείωση (Ctrl+Shift+N), δεμένη σε άτομο αν δοθεί
   openPerson(id: number, list?: number[]): void;   // list: η λίστα που βλέπεις, για ↑/↓ μέσα στην καρτέλα
+  openCadre(id: string, list?: string[]): void;   // η καρτέλα στελέχους ανοίγει πάνω από κάθε οθόνη, όπως του στρατιώτη
+  guard(go: () => void): void;   // πριν φύγεις από κάρτα με σημείωση που δεν αποθηκεύτηκε: ρωτά, αλλιώς κάνει αμέσως το go
+  setDirty(on: boolean): void;   // η κάρτα δηλώνει ότι έχει σημείωση που δεν αποθηκεύτηκε
 }
 export const NavCtx = createContext<Nav>(null as unknown as Nav);
 export const useNav = () => useContext(NavCtx);
@@ -34,7 +37,6 @@ export function useOpenFrom(rows: { id: number }[]) {
   const open = nav.openPerson;
   return useCallback((id: number) => open(id, ref.current.map(p => p.id)), [open]);
 }
-
 // Ευρετήριο αναζήτησης: χωρίς τόνους, λατινικοί χαρακτήρες που μοιάζουν, και αναζήτηση με λατινικά
 interface Indexed { p: Person; key: string; lat: string }
 const idxCache = new WeakMap<Person[], Indexed[]>();

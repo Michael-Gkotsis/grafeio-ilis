@@ -1,7 +1,7 @@
 // features/cadre · «Στελέχη» (Michael, 17/10): δική τους καρτέλα στο μενού, χωριστά από το Δυναμολόγιο των οπλιτών.
 // Οι καταστάσεις τους είναι οι στήλες της ΗΚΑΙ (κωλυόμενοι, απόντες) και ταΐζουν την ΗΚΑΙ όπως πριν.
-import { useDeferredValue, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Strip, useDirty, useToast } from '../ui';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Sheet, SheetNav, Strip, Tabs, useDirty, useSheetNav, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateRangeField, SigsMenu } from '../common';
@@ -13,8 +13,8 @@ import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadr
 import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import type { AppState } from '../../shared/domain';
-import { NoteDot, PersonNotes } from './notes';
-import { noteIndex } from '../../shared/notes';
+import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
+import { noteIndex, personGroups, remLine } from '../../shared/notes';
 const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
 type P = any;
 
@@ -26,15 +26,13 @@ const range = (a: CadreAbs) => dm(a.from) + (a.to !== a.from ? '–' + dm(a.to) 
 const stBadge = (st: CadreStatus | undefined) => (st ? html`<${Badge} tone=${TONE[st.group]} data-tip=${st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ' στην ' + HK() + ', στήλη «' + colShort(st.col) + '»'}>${st.label} · ${range(st.abs)}<//>` : html`<${Badge} tone="ok">Παρών<//>`);
 
 export function CadreScreen() {
-  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast();
+  const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   const filter: CadreFilter = nav.params.filter || 'all';
   const date: string = nav.params.cdate || today;
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
   const [stFor, setStFor] = useState<{ c: Cadre; abs?: CadreAbs } | null>(null);
-  // από τις Υπηρεσίες (στέλεχος σε θέση): ανοίγει η καρτέλα του
-  const [card, setCard] = useState<string | null>(() => (nav.params.ccard ? state.cadreList.find(c => c.id === nav.params.ccard)?.id || null : nav.params.seat != null ? state.cadreList.find(c => c.pid === nav.params.seat)?.id || null : null));
   const [xl, setXl] = useState(false);
   const all = useMemo(() => orderedCadre(state.cadreList), [state.cadreList]);
   const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);
@@ -62,7 +60,8 @@ export function CadreScreen() {
       toast({ text: r.ok ? 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': στελέχη, καταστάσεις' + (all.some(c => !c.active) ? ', εκτός δύναμης' : '') + (date === today ? ', για σήμερα.' : ', για ' + dayName(date, today).toLowerCase() + ' ' + dm(date) + '.') : html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
     } finally { setXl(false); }
   };
-  const cardOf = card ? all.find(c => c.id === card) : undefined;
+  // η καρτέλα του στελέχους είναι πλαϊνή κάρτα του Shell (πάνω από κάθε οθόνη)· εδώ μόνο η επιλεγμένη γραμμή και η σειρά ↑/↓
+  const card: string | null = nav.params.cadre ?? null; const openCard = (id: string) => nav.openCadre(id, rows.map(r => r.id));
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
       <${Button} variant="outline" disabled=${xl || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${() => exportXl()} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
@@ -80,39 +79,58 @@ export function CadreScreen() {
         draggable="true" onDragStart=${(e: any) => { setDrag(c.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); }} onDragEnd=${end}
         onDragOver=${(e: any) => { if (!drag) return; e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; if (over?.id !== c.id || over.after !== after) setOver({ id: c.id, after }); }}
         onDrop=${(e: any) => { e.preventDefault(); if (drag && over) move(drag, over.id, over.after); end(); }}
-        onClick=${() => setCard(c.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setCard(c.id); else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const nb = rows[i + (e.key === 'ArrowUp' ? -1 : 1)]; if (nb) move(c.id, nb.id, e.key === 'ArrowDown'); } }}>
+        onClick=${() => openCard(c.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') openCard(c.id); else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const nb = rows[i + (e.key === 'ArrowUp' ? -1 : 1)]; if (nb) move(c.id, nb.id, e.key === 'ArrowDown'); } }}>
         <span className="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">⠿</span><span className="num muted">${i + 1}</span><span data-tip=${c.origin ? rankTxt(c) : undefined}>${rankTxt(c)}</span><span>${c.spec || ''}</span><span><b>${c.last}</b>${marks.get('c' + c.id) && html`<${NoteDot} m=${marks.get('c' + c.id)}/>`}</span><span>${c.first}</span><span className="num">${c.am || ''}</span><span className="num">${c.phone || ''}</span><span>${c.role || ''}</span>
         <span className="badges">${c.active ? stBadge(st) : html`<${Badge} tone="outline">Εκτός δύναμης<//>`}</span>
         <span onClick=${(e: any) => e.stopPropagation()}>${c.active && html`<${Button} size="sm" variant="outline" aria-label=${'Κατάσταση: ' + rankTxt(c) + ' ' + c.last} onClick=${() => setStFor({ c })} data-tip="Κατάσταση της ${HK()}: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">Κατάσταση…<//>`}</span></div>`; })}
     </div></div></div>`}
-    ${cardOf && html`<${CadreCard} c=${cardOf} onClose=${() => setCard(null)} onEdit=${() => setEdit(cardOf)} onStatus=${(abs?: CadreAbs) => setStFor({ c: cardOf, abs })}
-      onDelete=${async () => { const x = cardOf; setCard(null); if (await run({ t: 'deleteCadre', id: x.id }, false)) toast({ text: 'Διαγράφηκε: ' + rankTxt(x) + ' ' + x.last, actions: [undoMark()] }); }}/>`}
     ${edit && html`<${CadreDialog} c=${edit} onClose=${() => setEdit(null)}/>`}
     ${stFor && html`<${StatusDialog} c=${stFor.c} abs=${stFor.abs} onClose=${() => setStFor(null)}/>`}
   </div>`;
 }
 
-// Καρτέλα στελέχους: στοιχεία, κατάσταση σήμερα, όσες έρχονται και οι προηγούμενες
-function CadreCard({ c, onClose, onEdit, onStatus, onDelete }: P) {
-  const { state, today, run, undoMark } = useStore(); const toast = useToast();
-  const [del, setDel] = useState(false);
+// Καρτέλα στελέχους, πλαϊνή όπως του στρατιώτη (Michael, 24/10): ανοίγει πάνω από κάθε οθόνη (Shell), ▲▼/↑↓ στη λίστα από όπου άνοιξε.
+// Καρτέλες: Καταστάσεις (σήμερα, όσες έρχονται, προηγούμενες), Στοιχεία (+ Διαγραφή), Σημειώσεις. list: τα id της λίστας που βλέπεις
+const CADRE_TABS = [{ value: 'abs', label: 'Καταστάσεις' }, { value: 'info', label: 'Στοιχεία' }, { value: 'notes', label: 'Σημειώσεις' }];
+export function CadreSheet({ cid, list, onMove, onClose }: P) {
+  const { state, today, run, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
+  const c: Cadre | undefined = state.cadreList.find(x => x.id === cid);
+  const [tab, setTab] = useState('abs');
+  const [edit, setEdit] = useState(false); const [stFor, setStFor] = useState<{ abs?: CadreAbs } | null>(null); const [del, setDel] = useState(false);
+  const order: string[] = useMemo(() => list || orderedCadre(state.cadreList).map(x => x.id), [list, state.cadreList]);
+  const { at, n: total, move } = useSheetNav(order, cid, onMove, edit || !!stFor || del);
+  useEffect(() => { setEdit(false); setStFor(null); setDel(false); const b = document.querySelector('.ui-sheet__body'); if (b) b.scrollTop = 0; }, [cid]);
+  if (!c) return null;
   const lists = state.settings.lists;
   const next = cadreAbsFrom(state, c.id, today);
   const past = state.cadreAbs.filter(a => a.cid === c.id && a.to < today).sort((a, b) => b.from.localeCompare(a.from)).slice(0, 8);
+  const ng = personGroups(state.notes, { cid }, today); const rem = remLine(state.notes, { cid }, today);
   const delAbs = async (a: CadreAbs) => { if (await run({ t: 'deleteCadreAbs', id: a.id }, false)) toast({ text: 'Διαγράφηκε η κατάσταση', actions: [undoMark()] }); };
   const line = (a: CadreAbs, edit: boolean) => { const st = cadreStatusOf(a, lists); return html`<li key=${a.id}><div><${Badge} tone=${TONE[st.group]}>${st.label}<//> <b>${dow(a.from)} ${range(a)}</b>
       <small>${st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ', στήλη «' + colShort(st.col) + '»'}${a.note ? ' · ' + a.note : ''}</small></div>
-    ${edit && html`<${Button} size="sm" variant="ghost" onClick=${() => onStatus(a)}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => delAbs(a)}>Διαγραφή<//></li>`; };
-  if (del) return html`<${Dialog} role="alertdialog" title=${'Διαγραφή: ' + rankTxt(c) + ' ' + c.last + ';'} description="Φεύγει από τη λίστα και από την ${HK()}, μαζί με τις καταστάσεις του. Αν απλώς έφυγε από τη μονάδα, βάλ' τον «εκτός δύναμης» από τα «Στοιχεία»." onClose=${() => setDel(false)}
-    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(false)}>Άκυρο<//><${Button} onClick=${onDelete}>Διαγραφή<//>`}><//>`;
-  return html`<${Dialog} size="lg" title=${rankTxt(c) + ' ' + c.last + ' ' + c.first} description=${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.am && 'ΑΜ ' + c.am, c.role, c.phone && 'ΤΗΛ ' + c.phone, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'εκτός δύναμης'].filter(Boolean).join(' · ')} onClose=${onClose}
-    footer=${html`<${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή<//><${Button} variant="outline" onClick=${onEdit}>Στοιχεία<//>${c.active && html`<${Button} onClick=${() => onStatus()}>+ Κατάσταση<//>`}`}>
-    ${c.pid != null && c.monthMax && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${monthTxt(state, today, cadreSeat(c))}${lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : ''} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}
-    <${PersonNotes} who=${{ cid: c.id }}/>
-    <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today)) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
-    <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
-      ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
-    ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
+    ${edit && html`<${Button} size="sm" variant="ghost" onClick=${() => setStFor({ abs: a })}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => delAbs(a)}>Διαγραφή<//></li>`; };
+  const doDelete = async () => { setDel(false); onClose(); if (await run({ t: 'deleteCadre', id: c.id }, false)) toast({ text: 'Διαγράφηκε: ' + rankTxt(c) + ' ' + c.last, actions: [undoMark()] }); };
+  const month = c.pid != null && c.monthMax ? monthTxt(state, today, cadreSeat(c)) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '';
+  return html`<${Sheet} onClose=${onClose} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
+    subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.role, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ'].filter(Boolean).join(' · ')}</div>`}>
+    <${TodayAlert} rules=${[]} rem=${rem} onRem=${() => setTab('notes')}/>
+    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>${c.active && html`<${Button} onClick=${() => setStFor({})}>+ Κατάσταση<//>`}<${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
+    <${Tabs} value=${tab} onChange=${(t: string) => nav.guard(() => setTab(t))} items=${CADRE_TABS.map(t => (t.value === 'notes' ? { ...t, label: notesTabLabel(ng) } : t))}/>
+    ${tab === 'abs' && html`<div style=${{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today)) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
+      <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
+        ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
+      ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
+      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${month} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}</div>`}
+    ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
+      <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>
+      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd></dl>
+      <div><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
+    ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}
+    ${edit && html`<${CadreDialog} c=${c} onClose=${() => setEdit(false)}/>`}
+    ${stFor && html`<${StatusDialog} c=${c} abs=${stFor.abs} onClose=${() => setStFor(null)}/>`}
+    ${del && html`<${Dialog} role="alertdialog" title=${'Διαγραφή: ' + rankTxt(c) + ' ' + c.last + ';'} description="Φεύγει από τη λίστα και από την ${HK()}, μαζί με τις καταστάσεις του. Αν απλώς έφυγε από τη μονάδα, βάλ' τον «εκτός δύναμης» από τα «Στοιχεία»." onClose=${() => setDel(false)}
+      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(false)}>Άκυρο<//><${Button} onClick=${doDelete}>Διαγραφή<//>`}><//>`}
   <//>`;
 }
 
