@@ -430,9 +430,13 @@ export interface AppState {
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
   weaponLog: WeaponMove[];               // έξοδοι και είσοδοι όπλων από τον οπλοβαστό (καρτέλα Οπλισμός)
+  notes: Note[];                         // σημειώσεις του γραφείου: γενικές ή για στρατιώτη/στέλεχος, με προαιρετική υπενθύμιση (shared/notes.ts)
   outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
+// Σημείωση (Michael, 24/10: «γράφουμε χαρτάκια και τα ξεχνάμε»). Χωρίς pid και cid είναι γενική. rem: μέρα υπενθύμισης·
+// βγαίνει στο «Σήμερα» από εκείνη τη μέρα και μετά, μέχρι να ολοκληρωθεί. done: πότε ολοκληρώθηκε (μένει στις «Ολοκληρωμένες»)
+export interface Note { id: string; text: string; at: ISODate; pid?: number; cid?: string; rem?: ISODate; star?: boolean; done?: ISODate }
 // Κίνηση όπλου (Michael, 18/10: «όπως οι εξοδούχοι»): βγαίνει από τον οπλοβαστό με λόγο από τη λίστα «Λόγοι εξόδου όπλου»
 // (ΕΚΠ, ΒΟΛΗ…) και ώρα, και μπαίνει με τον λόγο εισαγωγής του (ΛΗΞ ΕΚΠ…) και ώρα. Χωρίς inDay: είναι ακόμα εκτός.
 // weapon: ο αριθμός όπλου τη στιγμή της εξόδου. Ώρες ΩΩ:ΛΛ, γράφονται μόνες τους (τώρα) και διορθώνονται.
@@ -469,5 +473,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], dutyLog: {}, nightTraining: {}, weaponLog: [], outNotes: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], outNotes: {}, lastExpire: ''
 });

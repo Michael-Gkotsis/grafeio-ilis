@@ -13,6 +13,8 @@ import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadr
 import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import type { AppState } from '../../shared/domain';
+import { NoteDot, PersonNotes } from './notes';
+import { noteIndex } from '../../shared/notes';
 const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
 type P = any;
 
@@ -32,9 +34,10 @@ export function CadreScreen() {
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
   const [stFor, setStFor] = useState<{ c: Cadre; abs?: CadreAbs } | null>(null);
   // από τις Υπηρεσίες (στέλεχος σε θέση): ανοίγει η καρτέλα του
-  const [card, setCard] = useState<string | null>(() => (nav.params.seat != null ? state.cadreList.find(c => c.pid === nav.params.seat)?.id || null : null));
+  const [card, setCard] = useState<string | null>(() => (nav.params.ccard ? state.cadreList.find(c => c.id === nav.params.ccard)?.id || null : nav.params.seat != null ? state.cadreList.find(c => c.pid === nav.params.seat)?.id || null : null));
   const [xl, setXl] = useState(false);
   const all = useMemo(() => orderedCadre(state.cadreList), [state.cadreList]);
+  const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);
   // χειροκίνητη σειρά (ιεραρχία): σύρσιμο γραμμής ή Alt+↑/↓. Η θέση μετρά σε όλη τη λίστα, και με φίλτρο.
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
@@ -78,7 +81,7 @@ export function CadreScreen() {
         onDragOver=${(e: any) => { if (!drag) return; e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; if (over?.id !== c.id || over.after !== after) setOver({ id: c.id, after }); }}
         onDrop=${(e: any) => { e.preventDefault(); if (drag && over) move(drag, over.id, over.after); end(); }}
         onClick=${() => setCard(c.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setCard(c.id); else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const nb = rows[i + (e.key === 'ArrowUp' ? -1 : 1)]; if (nb) move(c.id, nb.id, e.key === 'ArrowDown'); } }}>
-        <span className="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">⠿</span><span className="num muted">${i + 1}</span><span data-tip=${c.origin ? rankTxt(c) : undefined}>${rankTxt(c)}</span><span>${c.spec || ''}</span><span><b>${c.last}</b></span><span>${c.first}</span><span className="num">${c.am || ''}</span><span className="num">${c.phone || ''}</span><span>${c.role || ''}</span>
+        <span className="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">⠿</span><span className="num muted">${i + 1}</span><span data-tip=${c.origin ? rankTxt(c) : undefined}>${rankTxt(c)}</span><span>${c.spec || ''}</span><span><b>${c.last}</b>${marks.get('c' + c.id) && html`<${NoteDot} m=${marks.get('c' + c.id)}/>`}</span><span>${c.first}</span><span className="num">${c.am || ''}</span><span className="num">${c.phone || ''}</span><span>${c.role || ''}</span>
         <span className="badges">${c.active ? stBadge(st) : html`<${Badge} tone="outline">Εκτός δύναμης<//>`}</span>
         <span onClick=${(e: any) => e.stopPropagation()}>${c.active && html`<${Button} size="sm" variant="outline" aria-label=${'Κατάσταση: ' + rankTxt(c) + ' ' + c.last} onClick=${() => setStFor({ c })} data-tip="Κατάσταση της ${HK()}: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">Κατάσταση…<//>`}</span></div>`; })}
     </div></div></div>`}
@@ -105,6 +108,7 @@ function CadreCard({ c, onClose, onEdit, onStatus, onDelete }: P) {
   return html`<${Dialog} size="lg" title=${rankTxt(c) + ' ' + c.last + ' ' + c.first} description=${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.am && 'ΑΜ ' + c.am, c.role, c.phone && 'ΤΗΛ ' + c.phone, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'εκτός δύναμης'].filter(Boolean).join(' · ')} onClose=${onClose}
     footer=${html`<${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή<//><${Button} variant="outline" onClick=${onEdit}>Στοιχεία<//>${c.active && html`<${Button} onClick=${() => onStatus()}>+ Κατάσταση<//>`}`}>
     ${c.pid != null && c.monthMax && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${monthTxt(state, today, cadreSeat(c))}${lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : ''} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}
+    <${PersonNotes} who=${{ cid: c.id }}/>
     <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today)) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
     <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
       ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>

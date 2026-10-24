@@ -23,6 +23,8 @@ import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, ty
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
+import { NoteDot, PersonNotes } from './notes';
+import { noteIndex } from '../../shared/notes';
 type P = any;
 
 const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσίες'], ['out', 'Έξοδος'], ['other', 'Άλλα'], ['pun', 'Ποινή']];
@@ -65,10 +67,10 @@ function gridOf(narrow: boolean, withSt: boolean): [string, number] {
   return [cols.join(' '), 44 + ks.reduce((a, k) => a + w(k)[1], 0) + (withSt ? 220 : 0) + 18];
 }
 const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
-const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow }: P) {
+const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm }: P) {
   const si = p.si ? siOf(p, lists).text : '';
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
-    <span className="num muted">${n}</span><span data-tip=${p.origin ? rankTxt(p) : undefined}>${rankTxt(p)}</span><span>${p.spec}</span><span><b>${p.last}</b></span><span>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
+    <span className="num muted">${n}</span><span data-tip=${p.origin ? rankTxt(p) : undefined}>${rankTxt(p)}</span><span>${p.spec}</span><span><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}</span><span>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
     ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
     <span className="num">${p.asm}</span>${!narrow && html`<span className="num">${p.phone}</span>`}<span>${p.room ?? ''}</span><span data-tip=${p.post && p.post.length > 9 ? p.post : undefined}>${p.post || ''}</span><span data-tip=${p.role && p.role.length > 9 ? p.role : undefined}>${p.role || ''}</span>
     <span data-tip=${si !== siShort(si) ? si : undefined}>${siShort(si)}</span><span>${p.dn ? '✓' : ''}</span></div>`;
@@ -86,6 +88,7 @@ const legacyMatch = (f: string, ss: Status[]) => { const away = ss.some(s => TYP
 export function PeopleScreen() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
+  const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);   // ένδειξη «έχει σημειώσεις» δίπλα στο όνομα
   // φίλτρα στα params της οθόνης, ώστε να τα θυμάται όταν γυρνάς (Shell)
   const filter: string = nav.params.filter || 'all'; const unitP: string = nav.params.unit || 'all';
   // ουλαμός που θυμόταν η οθόνη αλλά δεν υπάρχει πια (άλλαξε όνομα στις Ρυθμίσεις): όλη η Ίλη
@@ -188,7 +191,7 @@ export function PeopleScreen() {
     mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
     html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: gridMin + 'px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Α/Α</span>${cols.filter(([k]) => HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${cols.filter(([k]) => !HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}</div>
-      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} onOpen=${open}/>`}/>
+      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} nm=${marks.get('p' + p.id)} onOpen=${open}/>`}/>
     </div></div></div>`}
     ${adding === 'one' && html`<${NewPersonDialog} onClose=${() => setAdding(false)} onMany=${() => setAdding('many')}/>`}
     ${adding === 'many' && html`<${QuickAddDialog} onClose=${() => setAdding(false)}/>`}
@@ -254,6 +257,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   return html`<${Sheet} onClose=${onClose} actions=${order.length > 1 && at >= 0 && html`<span className="sheetnav"><span className="muted num" data-tip="Η θέση του στη λίστα από την οποία άνοιξε">${at + 1} / ${order.length}</span><${Button} variant="ghost" size="icon" aria-label="Προηγούμενος" data-tip="Προηγούμενος (↑)" disabled=${at <= 0} onClick=${() => move(-1)}>${Icon.up}<//><${Button} variant="ghost" size="icon" aria-label="Επόμενος" data-tip="Επόμενος (↓)" disabled=${at >= order.length - 1} onClick=${() => move(1)}>${Icon.down}<//></span>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${plainName(p)}</h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${rankTxt(p)} · ${unitOf(p, state.settings)}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
     ${rules.length > 0 && html`<${Alert} tone="warn"><span><b>Σήμερα:</b> ${rules.join(' · ')}</span><//>`}
     <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
+    <${PersonNotes} who=${{ pid }}/>
     <${Tabs} value=${tab} onChange=${setTab} items=${SHEET_TABS.map(t => ({ ...t, label: t.value === 'duty' ? t.label + ' (' + dd.total + ')' : t.value === 'hist' ? t.label + ' (' + hist.length + ')' : t.label }))}/>
     ${tab === 'info' && html`
     <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Προέλευση</dt><dd>${p.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
@@ -261,7 +265,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
       <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
       ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι)</span></dd>`}
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: shortName(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
-      ${p.notes && html`<dt>Σημειώσεις</dt><dd>${p.notes}</dd>`}
+      ${p.notes && html`<dt>Σημ. Δυναμολογίου</dt><dd>${p.notes}</dd>`}
     </dl>
     `}
     ${tab === 'duty' && html`

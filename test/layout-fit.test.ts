@@ -17,10 +17,11 @@ describe('διάταξη', () => {
     expect(ex - head).toBeLessThan(600);
     expect(o.match(/ExportButton\} kind="hkai"/g)).toHaveLength(1);
   });
-  it('μενού: ο Οδηγός βγήκε (ανοίγει με ? και F1), κουμπιά 48/44 px ώστε να χωρά και σε ύψος 638', () => {
+  it('μενού: ο Οδηγός και το Ιστορικό βγήκαν (? και F1, ρολόι πάνω δεξιά), μπήκαν οι Σημειώσεις· κουμπιά 48/44 px ώστε να χωρά και σε ύψος 638', () => {
     const a = src('app.ts');
-    expect(a).toMatch(/NAV_MORE = \['history', 'templates'\]/);
-    const nMenu = (a.match(/NAV_MAIN = \[([^\]]+)\]/)![1].split(',').length) + 2;
+    expect(a).toMatch(/NAV_MORE = \['templates'\]/);
+    expect(a).toMatch(/aria-label="Ιστορικό ενεργειών"/);
+    const nMenu = (a.match(/NAV_MAIN = \[([^\]]+)\]/)![1].split(',').length) + 1;
     // στενό μενού: κουμπιά, ο διακόπτης, η γραμμή και τα περιθώρια. 1366×768 χωρίς γραμμή εργασιών: 708 px για το μενού·
     // στο PC με τη γραμμή εργασιών (698 ύψος): 638, όπου τα κουμπιά γίνονται 44 px
     const fit = (h: number) => nMenu * h + 42 + 9 + 20 + (nMenu + 1) * 2;

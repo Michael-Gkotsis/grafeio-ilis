@@ -50,6 +50,15 @@ function seed(): AppState {
   s.weaponLog = [1, 2, 3].map(i => ({ id: id(), pid: s.people[i].id, weapon: s.people[i].weapon!, reason: 'ΕΚΠ', outDay: t, outTime: '07:40' }))
     .concat([{ id: id(), pid: s.people[11].id, weapon: s.people[11].weapon!, reason: 'ΕΠΙΣΚΕΥΗ', outDay: addDays(t, -1), outTime: '10:05', note: 'ΒΛΑΒΗ ΣΤΟΝ ΟΠΛΟΦΟΡΕΑ' } as any,
       { id: id(), pid: s.people[12].id, weapon: s.people[12].weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '06:30', inDay: t, inTime: '11:20', inReason: 'ΛΗΞ ΒΟΛΗΣ' } as any]);
+  // σημειώσεις γραφείου: μία γενική με υπενθύμιση που έφτασε, μία για στρατιώτη, μία για στέλεχος, μία ολοκληρωμένη
+  s.notes = [
+    { id: 'n1', text: 'Έλεγχος κλειδιών οπλοστασίου με τον υπαξιωματικό υπηρεσίας.', at: addDays(t, -4), rem: addDays(t, -2) },
+    { id: 'n2', text: 'Ζήτησε να μην μπει ΣΚ αυτό τον μήνα. Να το δω πριν φτιάξω τη νέα ΦΡΟΥΡΑ.', at: addDays(t, -2), pid: s.people[4].id, rem: t, star: true },
+    { id: 'n3', text: 'Λείπει στο σεμινάριο 2–6 του επόμενου μήνα. Να μην μπει Υπεύθυνος.', at: addDays(t, -1), cid: 's1', rem: addDays(t, 5), star: true },
+    { id: 'n4', text: 'Να ζητήσω νέα στρώματα για τον 2ο ουλαμό.', at: addDays(t, -3), rem: addDays(t, 3) },
+    { id: 'n5', text: 'Παρουσιάστηκε με πονόλαιμο. Αν ξανασυμβεί να πάει ΚΕΠΙ.', at: addDays(t, -9), pid: s.people[4].id },
+    { id: 'n6', text: 'Επιστροφή χαρτιών από το Στρατολογικό.', at: addDays(t, -20), pid: s.people[6].id, done: addDays(t, -6) }
+  ];
   return s;
 }
 

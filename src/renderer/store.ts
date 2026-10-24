@@ -22,6 +22,7 @@ export interface Nav {
   go(view: string, params?: Record<string, any>): void;
   set(params: Record<string, any>): void;
   declare(data: Record<string, any>): void;
+  note(data?: { pid?: number; cid?: string }): void;   // νέα σημείωση (Ctrl+Shift+N), δεμένη σε άτομο αν δοθεί
   openPerson(id: number, list?: number[]): void;   // list: η λίστα που βλέπεις, για ↑/↓ μέσα στην καρτέλα
 }
 export const NavCtx = createContext<Nav>(null as unknown as Nav);
