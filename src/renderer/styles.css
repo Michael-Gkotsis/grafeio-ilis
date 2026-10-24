@@ -1237,6 +1237,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .wreasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;font-size:13px}
 .wreasons > b{margin-right:2px}
 .ui-chip--auto:not([aria-pressed="true"]){border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.wmv__who{display:flex;flex-direction:column;min-width:0;line-height:1.25}.wmv__who small{font-size:11px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wmv__auto{font-style:normal;font-size:11px;color:var(--warn);font-weight:600}
 .ptable--moves .ptable__row.is-auto{box-shadow:inset 3px 0 0 var(--warn)}
 .weapon-notes .ui-badge:first-child{flex:none}

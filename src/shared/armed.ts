@@ -6,7 +6,8 @@
 // Δύο τρόποι ανά υπηρεσία (BlockDef.armWeapon):
 //  - «δικό του» (προεπιλογή): κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του· διαδοχικά νούμερα του ίδιου ατόμου ενώνονται σε μία γραμμή.
 //  - «της θέσης»: βγαίνει το όπλο του ατόμου του 1ου νούμερου (πριν το 1ο, μπαίνει μετά το τελευταίο) και περνά από χέρι σε χέρι στις αλλαγές·
-//    τα όπλα των άλλων μένουν ΕΝΤΟΣ. Σε ζεύγος θέσεων την ίδια ώρα (α/β) μετρά η πρώτη.
+//    τα όπλα των άλλων μένουν ΕΝΤΟΣ. Παράλληλες γραμμές την ίδια ώρα (α/β της ίδιας υπηρεσίας) έχουν η καθεμία το δικό της όπλο θέσης:
+//    του 1ου νούμερου της γραμμής της, που περνά στα επόμενα νούμερα της ίδιας γραμμής.
 import { addDays, daysBetween, type ISODate } from './dates';
 import { everyBlock, type AppState, type BlockDef, type DutyFix, type Post, type Rules } from './domain';
 import { dutyMin, postBy, postSpan, postsOf, slotSpans } from './rules';
@@ -52,7 +53,7 @@ const dayNo = (d: ISODate) => daysBetween('2000-01-01', d);
 // «15:45–18:15»
 export const armWhen = (r: Pick<ArmRow, 'out' | 'in'>) => hmOf(r.out) + '–' + hmOf(r.in);
 
-interface Step { k: string; label: string; block: string; mode: ArmWeapon; pid: number; n: number; from: number; to: number; ord: number }
+interface Step { k: string; label: string; block: string; mode: ArmWeapon; pid: number; n: number; from: number; to: number; ord: number; lane: number }
 // Οι ώρες των νούμερων μιας θέσης: βάρδιες (slotSpans), αλλιώς «ίδιες ώρες» (postSpan), αλλιώς όλος ο κύκλος
 function windowsOf(post: Post, cyc: number): { start: number; end: number }[] {
   const sl = slotSpans(post); if (sl.length) return sl;
@@ -63,17 +64,21 @@ function windowsOf(post: Post, cyc: number): { start: number; end: number }[] {
 function stepsOf(s: ArmState, day: ISODate): Step[] {
   const cyc = dutyMin(s.settings); const blocks = everyBlock(s.settings); const out: Step[] = []; let ord = 0;
   const g = s.guards?.[day] || {};
-  for (const k in g) {
+  // γραμμή (lane) = η σειρά της θέσης ανάμεσα σε όσες της υπηρεσίας ξεκινούν την ίδια ώρα (α=0, β=1)· σταθερή για όλα τα νούμερά της
+  const seen = new Map<string, number>(); const lane = (block: string, start: number) => { const q = block + '|' + start, n = seen.get(q) || 0; seen.set(q, n + 1); return n; };
+  const order = new Map(postsOf(s.settings).map((x, i) => [x.k, i] as const));
+  for (const k of Object.keys(g).sort((x, y) => (order.get(x) ?? 1e9) - (order.get(y) ?? 1e9))) {
     const x = postBy(s as AppState, k); if (!x?.armed || g[k] == null) continue;
-    const mode = armModeOf(blocks.find(b => b.id === x.block));
-    windowsOf(x, cyc).forEach((w, n) => out.push({ k, label: x.label, block: x.block, mode, pid: g[k], n, from: w.start, to: w.end, ord }));
+    const mode = armModeOf(blocks.find(b => b.id === x.block)); const ws = windowsOf(x, cyc); const ln = lane(x.block, ws[0].start);
+    ws.forEach((w, n) => out.push({ k, label: x.label, block: x.block, mode, pid: g[k], n, from: w.start, to: w.end, ord, lane: ln }));
     ord++;
   }
   // υπηρεσία χωρίς θέση (σκέτο «Σ» από Excel) σε ένοπλο είδος: όλος ο κύκλος
   const kinds = new Map(postsOf(s.settings).filter(x => x.armed).map(x => [x.kind, x] as const));
   for (const e of s.dutyLog?.[day] || []) {
     const x = kinds.get(e.kind); if (!x) continue;
-    out.push({ k: '~' + e.kind + ':' + e.pid, label: (blocks.find(b => b.id === x.block)?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(blocks.find(b => b.id === x.block)), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++ });
+    const bd = blocks.find(b => b.id === x.block);
+    out.push({ k: '~' + e.kind + ':' + e.pid, label: (bd?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(bd), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++, lane: lane(x.block, cyc) });
   }
   return out;
 }
@@ -110,11 +115,10 @@ export function armedRows(s: ArmState, day: ISODate): ArmRow[] {
     }
     if (cur) rows.push(rowOf(day, cur, { mode: 'own' }, fixes));
   }
-  // της θέσης: ανά υπηρεσία, η αλυσίδα των νούμερων με τη σειρά της ώρας· ίδιο άτομο συνεχόμενα = μία γραμμή
-  const blocks = [...new Set(steps.filter(x => x.mode === 'post').map(x => x.block))];
-  for (const b of blocks) {
-    const list = steps.filter(x => x.mode === 'post' && x.block === b).sort((a, c) => a.from - c.from || a.ord - c.ord);
-    const chain: Step[] = list.filter((x, i) => i === 0 || x.from !== list[i - 1].from);
+  // της θέσης: ανά υπηρεσία και γραμμή, η αλυσίδα των νούμερων με τη σειρά της ώρας· ίδιο άτομο συνεχόμενα = μία γραμμή
+  const lanes = [...new Set(steps.filter(x => x.mode === 'post').map(x => x.block + '|' + x.lane))];
+  for (const b of lanes) {
+    const chain = steps.filter(x => x.mode === 'post' && x.block + '|' + x.lane === b).sort((x, y) => x.from - y.from || x.ord - y.ord);
     const gs: Grp[] = [];
     for (const x of chain) { const g = gs[gs.length - 1]; if (g && g.who === x.pid) { g.last = x; } else gs.push({ first: x, last: x, who: x.pid, out: 0, in: 0 }); }
     gs.forEach((g, i) => { g.out = i === 0 ? g.first.from - before : g.first.from; g.in = i === gs.length - 1 ? g.last.to + after : gs[i + 1].first.from; });

@@ -153,8 +153,8 @@ export function MovesView({ date, info, pm, outN, onIn }: P) {
       <div className="ptable__head" role="row"><span>Στρατιώτης</span><span>Όπλο</span><span>Λόγος εξόδου</span><span>Έξοδος</span><span>Λόγος εισόδου</span><span>Είσοδος</span><span>Παρατήρηση</span><span></span></div>
       <div className="weapons__body">${rows.map((m, i) => { const p = pm.get(m.pid); const auto = isAuto(m); const owner = auto && m.row.owner !== m.pid ? pm.get(m.row.owner) : null;
         return html`<div key=${m.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', auto && 'is-auto')} role="row" style=${{ cursor: 'default' }}>
-        <span>${p ? html`<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>` : '—'}</span>
-        <span className="num">${m.weapon || '—'}</span><span data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
+        <span className="wmv__who">${p ? html`<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
+        <span className="num wmv__w">${m.weapon || (auto ? html`<${Badge} tone="bad" data-tip=${'Ένοπλη υπηρεσία χωρίς αριθμό όπλου' + (pm.get(m.row.owner) ? ': ο ' + shortName(pm.get(m.row.owner)) + ' δεν έχει' : '')}>Χωρίς όπλο<//>` : '—')}</span><span data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
         <span className="num">${auto ? moveOutCell(m) : dmy(m.outDay) + ' ' + m.outTime}</span>
         <span data-tip=${m.inDay ? m.inReason || undefined : undefined}>${m.inDay ? html`<${Badge} tone="ok">${m.inReason || weaponBack(m.reason, state.settings.lists)}<//>` : html`<${Badge} tone="bad">Εκτός<//>`}</span>
         <span className="num" data-tip=${auto ? 'Η ώρα που προβλέπεται από τις υπηρεσίες' : undefined}>${auto ? moveInCell(m) : m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : '—'}</span>

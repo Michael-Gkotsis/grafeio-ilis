@@ -95,10 +95,37 @@ describe('Ένοπλες υπηρεσίες: δικό του και της θέ�
     const rows = armedRows(post(base({ op1: 1, op2: 1, op3: 2, op4: 2 })), D);
     expect(rows.slice(0, 3).map(r => [r.who, win(r), r.last])).toEqual([[1, '13:45–18:00', 0], [2, '18:00–22:00', 0], [1, '22:00–02:00', 1]]);
   });
-  it('της θέσης: ζεύγος την ίδια ώρα (α/β) μετρά η πρώτη θέση', () => {
-    const s = run(base({ sk3a: 1, sk3b: 2 }), { t: 'setBlock', phase: 'spen', id: 'sk', patch: { armWeapon: 'post' } }).state;
-    expect(armedRows(s, D).map(r => [r.who, win(r)])).toEqual([[1, '17:45–12:15']]);   // το ίδιο άτομο όλη την ώρα: μία γραμμή
-    expect(armedRows(s, D).map(r => r.who)).not.toContain(2);
+  it('της θέσης: παράλληλες γραμμές (α/β) έχουν η καθεμία το δικό της όπλο, από το 1ο νούμερο της γραμμής της', () => {
+    const sk = (g: Record<string, number>) => run(base(g), { t: 'setBlock', phase: 'spen', id: 'sk', patch: { armWeapon: 'post' } }).state;
+    // ίδιο άτομο όλη την ώρα σε κάθε γραμμή: δύο γραμμές, δύο ιδιοκτήτες
+    const rows = armedRows(sk({ sk3a: 1, sk3b: 2 }), D);
+    expect(rows.map(r => r.owner).sort()).toEqual([1, 2]); expect(rows.map(r => win(r))).toEqual(['17:45–12:15', '17:45–12:15']);
+    // α: 1 → 3 → 1 → 3 …, β: 2 → 4 → 2 → 4: το όπλο του 1 περνά μόνο στους 3 και 1, του 2 στους 4 και 2
+    const s = sk({ sk3a: 1, sk3b: 2, sk4a: 3, sk4b: 4 });
+    const r2 = armedRows(s, D);
+    expect(r2).toHaveLength(12);
+    const line = (owner: number) => r2.filter(r => r.owner === owner).map(r => [r.who, win(r)]);
+    expect(line(1)).toEqual([[1, '17:45–20:00'], [3, '20:00–02:00'], [1, '02:00–04:00'], [3, '04:00–10:00'], [1, '10:00–12:00'], [3, '12:00–14:15']]);
+    expect(line(2)).toEqual([[2, '17:45–20:00'], [4, '20:00–02:00'], [2, '02:00–04:00'], [4, '04:00–10:00'], [2, '10:00–12:00'], [4, '12:00–14:15']]);
+    expect(r2.filter(r => r.owner === 2).every(r => r.take === (r.post !== 'sk3b' || r.n > 0) && r.mode === 'post')).toBe(true);
+    // και τα δύο όπλα βγαίνουν: 101 και 102 εκτός, τα 103 και 104 ΕΝΤΟΣ (τα κρατούν χωρίς να είναι δικά τους)
+    const i = weaponInfo(s, D, '21:00');
+    expect([...i.out.keys()].sort()).toEqual([1, 2]);
+    expect(i.arm.holding.get(3)!.owner).toBe(1); expect(i.arm.holding.get(4)!.owner).toBe(2);
+    // Excel: κάθε γραμμή με το όπλο του δικού της 1ου νούμερου
+    const sh = weaponSheets(s, D).find(x => x.name === 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ')!;
+    expect(sh.rows).toHaveLength(12);
+    expect(sh.rows.filter(r => r[4] === '101')).toHaveLength(6); expect(sh.rows.filter(r => r[4] === '102')).toHaveLength(6);
+    expect(sh.rows.filter(r => r[4] === '102').map(r => r[3])).toEqual(['ΒΗΤΑΣ', 'ΔΕΛΤΑΣ', 'ΒΗΤΑΣ', 'ΔΕΛΤΑΣ', 'ΒΗΤΑΣ', 'ΔΕΛΤΑΣ']);
+    // Έντυπο: τα ίδια
+    const mv = rowsOf(s, rep({ kind: 'wmove', pick: { from: 'all', mode: 'all' }, sort: 'from' }), D) as MoveRow[];
+    expect(mv).toHaveLength(12);
+    expect(mv.map(m => fieldValue(s, 'wmove', m, 'weapon', 0, D)).sort()).toEqual([...Array(6).fill('101'), ...Array(6).fill('102')]);
+  });
+  it('της θέσης: η σειρά των γραμμών ακολουθεί τη σειρά των θέσεων, όχι τη σειρά που μπήκαν στη μέρα', () => {
+    const s = run(base({ sk3b: 2, sk3a: 1 }), { t: 'setBlock', phase: 'spen', id: 'sk', patch: { armWeapon: 'post' } }).state;
+    expect(armedRows(s, D).find(r => r.post === 'sk3a')!.owner).toBe(1);
+    expect(armedRows(s, D).find(r => r.post === 'sk3b')!.owner).toBe(2);
   });
   it('η ρύθμιση «της θέσης» γράφεται μόνο όταν δεν είναι η προεπιλογή', () => {
     const s = post(fakeState(3));
