@@ -97,6 +97,7 @@ export type Command =
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
   | { t: 'weaponIn'; ids: string[]; day: ISODate; time: string; reason?: string }
   | { t: 'editWeaponMove'; id: string; patch: Partial<Pick<WeaponMove, 'reason' | 'outDay' | 'outTime' | 'inDay' | 'inTime' | 'inReason' | 'note'>> }
+  | { t: 'editWeaponMoves'; ids: string[]; patch: Partial<Pick<WeaponMove, 'reason' | 'outDay' | 'outTime'>> }   // ομαδική διόρθωση λόγου/ώρας εξόδου: μία εντολή, μία αναίρεση
   | { t: 'deleteWeaponMove'; id: string }
   // Διόρθωση ώρας ενός ένοπλου νούμερου (Michael, 24/10): γραμμή = μέρα κύκλου + θέση + πρώτο νούμερο (n). out/in «ΕΕΕΕ-ΜΜ-ΗΗ ΩΩ:ΛΛ»,
   // όποια λείπει μένει αυτόματη· why υποχρεωτικό· reset: πίσω στο αυτόματο
@@ -209,6 +210,23 @@ export const reqText = (t: string) => t.trim().replace(/^αιτ[εέ][ιί]τα�
 const wReason = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
 function wTime(v: unknown, what: string): string {
   const t = normTime(v); if (!t) throw new Error('Γράψε την ώρα ' + what + ', π.χ. 08:15'); return t;
+}
+// Η κίνηση όπλου μετά από διόρθωση (μία ή πολλές μαζί): ίδιοι έλεγχοι· σφάλμα αν η είσοδος βγαίνει πριν την έξοδο ή ο στρατιώτης έχει άλλη ανοιχτή
+function editedMove(s: AppState, m: WeaponMove, pt: Partial<Pick<WeaponMove, 'reason' | 'outDay' | 'outTime' | 'inDay' | 'inTime' | 'inReason' | 'note'>>): WeaponMove {
+  const x: WeaponMove = { ...m };
+  if (pt.reason !== undefined) { const r = wReason(pt.reason); if (!r) throw new Error('Ο λόγος εξόδου δεν μένει κενός'); x.reason = r; }
+  if (pt.outDay) x.outDay = pt.outDay;
+  if (pt.outTime !== undefined) x.outTime = wTime(pt.outTime, 'εξόδου');
+  if (pt.note !== undefined) { if (pt.note.trim()) x.note = pt.note.trim(); else delete x.note; }
+  if (pt.inDay === '') { delete x.inDay; delete x.inTime; delete x.inReason; }
+  else {
+    if (pt.inDay) x.inDay = pt.inDay;
+    if (pt.inTime !== undefined && x.inDay) x.inTime = wTime(pt.inTime, 'εισόδου');
+    if (pt.inReason !== undefined && x.inDay) x.inReason = wReason(pt.inReason) || weaponBack(x.reason, s.settings.lists);
+  }
+  if (x.inDay && (x.inDay + ' ' + (x.inTime || '')) < x.outDay + ' ' + x.outTime) throw new Error('Η είσοδος είναι πριν την έξοδο');
+  if (!x.inDay && (s.weaponLog || []).some(y => y.id !== x.id && y.pid === x.pid && !y.inDay)) throw new Error('Το όπλο του έχει ήδη άλλη έξοδο χωρίς είσοδο');
+  return x;
 }
 const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά');
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
@@ -796,22 +814,25 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'editWeaponMove': {
       const log = s.weaponLog || []; const m = log.find(x => x.id === c.id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
-      const pt = c.patch; const x: WeaponMove = { ...m };
-      if (pt.reason !== undefined) { const r = wReason(pt.reason); if (!r) throw new Error('Ο λόγος εξόδου δεν μένει κενός'); x.reason = r; }
-      if (pt.outDay) x.outDay = pt.outDay;
-      if (pt.outTime !== undefined) x.outTime = wTime(pt.outTime, 'εξόδου');
-      if (pt.note !== undefined) { if (pt.note.trim()) x.note = pt.note.trim(); else delete x.note; }
-      if (pt.inDay === '') { delete x.inDay; delete x.inTime; delete x.inReason; }
-      else {
-        if (pt.inDay) x.inDay = pt.inDay;
-        if (pt.inTime !== undefined && x.inDay) x.inTime = wTime(pt.inTime, 'εισόδου');
-        if (pt.inReason !== undefined && x.inDay) x.inReason = wReason(pt.inReason) || weaponBack(x.reason, s.settings.lists);
-      }
-      if (x.inDay && (x.inDay + ' ' + (x.inTime || '')) < x.outDay + ' ' + x.outTime) throw new Error('Η είσοδος είναι πριν την έξοδο');
-      if (!x.inDay && log.some(y => y.id !== x.id && y.pid === x.pid && !y.inDay)) throw new Error('Το όπλο του έχει ήδη άλλη έξοδο χωρίς είσοδο');
+      const x = editedMove(s, m, c.patch);
       if (JSON.stringify(x) === JSON.stringify(m)) return { state: s, text: '', files: [] };
       const p = pm.get(m.pid);
       return { state: { ...s, weaponLog: log.map(y => (y.id === x.id ? x : y)) }, text: 'Διόρθωση κίνησης όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + x.reason + ' ' + dm(x.outDay) + ' ' + x.outTime + (x.inDay ? ' → ' + (x.inReason || '') + ' ' + dm(x.inDay) + ' ' + x.inTime : ' (εκτός)'), files: [] };
+    }
+    case 'editWeaponMoves': {
+      // Όλες μαζί ή καμία: αν μία δεν βγαίνει (π.χ. η νέα ώρα είναι μετά την είσοδό της), το μήνυμα λέει ποια
+      const log = s.weaponLog || []; const pt = c.patch; const ids = [...new Set(c.ids)];
+      if (!ids.length) throw new Error('Διάλεξε κινήσεις');
+      if (pt.reason === undefined && pt.outDay === undefined && pt.outTime === undefined) throw new Error('Άλλαξε τον λόγο ή την ώρα εξόδου');
+      const by = new Map<string, WeaponMove>();
+      for (const id of ids) {
+        const m = log.find(y => y.id === id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
+        try { const x = editedMove(s, m, pt); if (JSON.stringify(x) !== JSON.stringify(m)) by.set(id, x); }
+        catch (e: any) { throw new Error((pm.get(m.pid) ? shortName(pm.get(m.pid)!) + ': ' : '') + e.message); }
+      }
+      if (!by.size) return { state: s, text: '', files: [] };
+      const part = [pt.reason !== undefined && 'λόγος ' + wReason(pt.reason), (pt.outDay || pt.outTime !== undefined) && 'έξοδος ' + [pt.outDay && dm(pt.outDay), pt.outTime !== undefined && wTime(pt.outTime, 'εξόδου')].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      return { state: { ...s, weaponLog: log.map(y => by.get(y.id) || y) }, text: 'Διόρθωση κινήσεων όπλων (' + part + '): ' + whoNames(s, [...by.values()].map(m => m.pid)), files: [] };
     }
     case 'deleteWeaponMove': {
       const log = s.weaponLog || []; const m = log.find(x => x.id === c.id); if (!m) throw new Error('Δεν βρέθηκε η κίνηση');
