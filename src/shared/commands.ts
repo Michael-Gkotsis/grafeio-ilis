@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -150,6 +150,12 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
   if (p.star !== undefined) { if (p.star) n.star = true; else delete n.star; }
   if (JSON.stringify(n) === JSON.stringify(old)) return { state: s, text: '', files: [] };
   return put(n, 'Άλλαξε σημείωση' + label(n) + (n.rem !== old.rem ? (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ' · χωρίς υπενθύμιση') : ''));
+}
+// Οι βάρδιες μιας υπηρεσίας όπως αποθηκεύονται (cleanShift). Λίστα που δεν έχει ούτε μία σωστή βάρδια δεν γίνεται σιωπηλά «κάθε τόσες ώρες»
+function blockShift(sh: ShiftDef | null | undefined, count: number): ShiftDef | null {
+  const r = cleanShift(sh, count);
+  if (sh?.list?.length && !r?.list) throw new Error('Οι δικές μου βάρδιες δεν είναι σωστές: κάθε βάρδια θέλει Από και Ως, διαφορετικές ώρες');
+  return r;
 }
 // θέσεις μιας υπηρεσίας χωρίς κωδικό (νέες, ή σβησμένος κωδικός): ο επόμενος ελεύθερος (Υ1, Υ2…)
 function fillCodes(settings: Settings, phase: Phase, id: string): Settings {
@@ -855,8 +861,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
       const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
+      const sh = blockShift(c.shift, n);
       // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
-      const b: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(c.shift && c.shift.every > 0 ? { shift: c.shift } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
+      const b: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
       return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
@@ -880,7 +887,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
       const nb: BlockDef = { ...b, name, posts };
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
-      if (c.shift !== undefined) { if (c.shift && c.shift.every > 0) nb.shift = { every: Math.round(c.shift.every), ...(c.shift.from ? { from: c.shift.from } : {}), ...(c.shift.to ? { to: c.shift.to } : {}) }; else delete nb.shift; }
+      // δικές μου βάρδιες (Michael, 24/10): το νούμερο κάθε βάρδιας μέσα στα νούμερα της υπηρεσίας
+      if (c.shift !== undefined) { const sh = blockShift(c.shift, shiftGroups(nb).length); if (sh) nb.shift = sh; else delete nb.shift; }
       list[i] = nb;
       const settings = fillCodes(withBlocks(s.settings, c.phase, list), c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);

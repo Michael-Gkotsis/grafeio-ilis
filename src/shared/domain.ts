@@ -1,5 +1,6 @@
 import { greekHolidays, type ISODate } from './dates';
 import { normGreek } from './text';
+import { normTime } from './hours';
 import type { FormBinding, FormKind, ListKind, SourceBinding } from './sources';
 import type { UserLists } from './ranks';
 import type { Esso } from './esso';
@@ -174,20 +175,73 @@ export const ROT = [
 ];
 // Βάρδιες ανά υπηρεσία (Michael, 20/10): κάθε πόσα λεπτά αλλάζει το νούμερο, μέσα σε ποιες ώρες του κύκλου (κενό = όλος
 // ο κύκλος, από την αρχή της υπηρεσίας ως την ίδια ώρα την επόμενη μέρα). Τα νούμερα μοιράζονται τις βάρδιες με τη σειρά.
-export interface ShiftDef { every: number; from?: string; to?: string }
+// «Δικές μου βάρδιες» (Michael, 24/10): με list, ο λοχίας γράφει μόνος τις βάρδιες και διαλέγει ποιο νούμερο (n, από 0) κάνει
+// την καθεμία· η list νικά τα every/from/to, που μένουν μόνο για να γυρίσει στο «κάθε τόσες ώρες» χωρίς να τα ξαναγράψει.
+export interface ShiftOwn { from: string; to: string; n: number }
+export interface ShiftDef { every: number; from?: string; to?: string; list?: ShiftOwn[] }
+export const MAX_SHIFT_OWN = 48;
+export const hasShift = (sh?: ShiftDef | null): sh is ShiftDef => !!sh && (sh.every > 0 || !!sh.list?.length);
 export const DEFAULT_DUTY_START = '14:00';
 export const SHIFT_EVERY = [60, 90, 120, 180, 240, 360, 480, 720];
 const hhmm = (m: number) => String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(((m % 60) + 60) % 60).padStart(2, '0');
 const toMin = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
 const okT = (t?: string) => !!t && /^\d\d:\d\d$/.test(t);
 export const dutyStartOf = (st?: Pick<Settings, 'dutyStart'> | null) => (okT(st?.dutyStart) ? st!.dutyStart! : DEFAULT_DUTY_START);
+// Σωστή δική μου βάρδια: δύο ώρες ΩΩ:ΛΛ, διαφορετικές (η ίδια ώρα θα ήταν 0 ή 24 ώρες: αμφίβολο, δεν γίνεται δεκτό)
+export const okOwn = (x: ShiftOwn) => okT(x.from) && okT(x.to) && x.from !== x.to;
+// Λεπτά από την αρχή του κύκλου (start) ως την ώρα t, 0..1439: η σειρά μέσα στον κύκλο
+const cycPos = (start: string, t: string) => ((toMin(t) - toMin(start)) % 1440 + 1440) % 1440;
+const ownLen = (x: ShiftOwn) => ((toMin(x.to) - toMin(x.from)) % 1440 + 1440) % 1440;
+// Καθαρισμός πριν την αποθήκευση: ώρες σε ΩΩ:ΛΛ, κακές γραμμές φεύγουν, το νούμερο μέσα στα νούμερα της υπηρεσίας (count), ως 48 γραμμές.
+// null = χωρίς βάρδιες (ούτε every ούτε λίστα).
+export function cleanShift(sh: ShiftDef | null | undefined, count: number): ShiftDef | null {
+  if (!sh) return null;
+  const list = (sh.list || []).flatMap(x => { const a = normTime(x.from), b = normTime(x.to); return a && b && a !== b ? [{ from: a, to: b, n: Math.min(Math.max(0, Math.round(+x.n) || 0), Math.max(0, count - 1)) }] : []; }).slice(0, MAX_SHIFT_OWN);
+  const every = Math.round(sh.every); if (!(every > 0) && !list.length) return null;
+  return { every: every > 0 ? every : 120, ...(normTime(sh.from) ? { from: normTime(sh.from)! } : {}), ...(normTime(sh.to) ? { to: normTime(sh.to)! } : {}), ...(list.length ? { list } : {}) };
+}
 // Οι βάρδιες όλων των νούμερων: [νούμερο][βάρδια] = «14:00-16:00». Η τελευταία κόβεται στο τέλος των ωρών.
+// Με δικές μου βάρδιες: ανά νούμερο, με τη σειρά του κύκλου από start· νούμερο χωρίς βάρδια παίρνει [].
 export function shiftSlots(start: string, sh: ShiftDef, n: number): string[][] {
+  const out: string[][] = Array.from({ length: Math.max(1, n) }, () => []);
+  if (sh.list?.length) {
+    const own = sh.list.filter(x => okOwn(x) && x.n >= 0 && x.n < out.length).sort((a, b) => cycPos(start, a.from) - cycPos(start, b.from));
+    for (const x of own) out[Math.floor(x.n)].push(x.from + '-' + x.to);
+    return out;
+  }
   const a = toMin(okT(sh.from) ? sh.from! : start); const b0 = toMin(okT(sh.to) ? sh.to! : (okT(sh.from) ? sh.from! : start));
   const len = ((b0 - a) % 1440 + 1440) % 1440 || 1440; const ev = Math.max(15, sh.every || 120);
-  const out: string[][] = Array.from({ length: Math.max(1, n) }, () => []);
   for (let t = 0, j = 0; t < len; t += ev, j++) out[j % out.length].push(hhmm(a + t) + '-' + hhmm(a + Math.min(len, t + ev)));
   return out;
+}
+// «Ξεκίνα από “κάθε 2 ώρες”»: οι βάρδιες του κάθε-τόσες-ώρες ως λίστα, με τη σειρά της ώρας (από το «Από» ή την αρχή), με το νούμερό τους
+export function shiftList(start: string, sh: ShiftDef, n: number): ShiftOwn[] {
+  const every = { ...sh }; delete every.list; const from = okT(sh.from) ? sh.from! : start;
+  return shiftSlots(start, every, n).flatMap((t, i) => t.map(x => ({ from: x.slice(0, 5), to: x.slice(6), n: i }))).sort((a, b) => cycPos(from, a.from) - cycPos(from, b.from)).slice(0, MAX_SHIFT_OWN);
+}
+// Ώρες με ελληνική υποδιαστολή: 7 ώρες, 2,5 ώρες, 1 ώρα
+export const hoursTxt = (min: number) => { const h = Math.round(min / 60 * 100) / 100; return String(h).replace('.', ',') + (h === 1 ? ' ώρα' : ' ώρες'); };
+// Έλεγχος των δικών μου βαρδιών (Michael, 24/10: προειδοποίηση, δεν εμποδίζει): ποιες πέφτουν μαζί, ποια ώρα του κύκλου δεν
+// φυλάει κανείς, ποιο νούμερο δεν έχει βάρδια, και πόσες βάρδιες/ώρες έχει το κάθε νούμερο. a, b = θέσεις στη λίστα.
+export interface ShiftReport { overlaps: { a: number; b: number; from: string; to: string }[]; gaps: { from: string; to: string }[]; empty: number[]; per: { n: number; count: number; min: number }[] }
+export function shiftReport(start: string, list: ShiftOwn[], count: number): ShiftReport {
+  const ok = list.map((x, i) => [x, i] as const).filter(([x]) => okOwn(x));
+  const seg = ([x]: readonly [ShiftOwn, number]) => { const a = cycPos(start, x.from); return [a, a + ownLen(x)] as const; };
+  const overlaps: ShiftReport['overlaps'] = [];
+  for (let i = 0; i < ok.length; i++) for (let j = i + 1; j < ok.length; j++) {
+    const [a1, e1] = seg(ok[i]), [a2, e2] = seg(ok[j]);
+    // κύκλος: η δεύτερη βάρδια και μια μέρα πριν ή μετά (βάρδια που περνά το τέλος του κύκλου πέφτει πάνω στην αρχή του)
+    for (const d of [-1440, 0, 1440]) { const lo = Math.max(a1, a2 + d), hi = Math.min(e1, e2 + d); if (hi > lo) overlaps.push({ a: ok[i][1], b: ok[j][1], from: hhmm(toMin(start) + lo), to: hhmm(toMin(start) + hi) }); }
+  }
+  const cov = new Uint8Array(1440);
+  for (const o of ok) { const [a, e] = seg(o); for (let m = a; m < e; m++) cov[m % 1440] = 1; }
+  const runs: [number, number][] = []; // [αρχή, τέλος) ασκέπαστων λεπτών
+  for (let m = 0; m < 1440; m++) if (!cov[m]) { const r = runs[runs.length - 1]; if (r && r[1] === m) r[1] = m + 1; else runs.push([m, m + 1]); }
+  // το κενό που κρατά από το τέλος του κύκλου ως την αρχή του επόμενου είναι ένα
+  if (runs.length > 1 && runs[0][0] === 0 && runs[runs.length - 1][1] === 1440) { const f = runs.shift()!; runs[runs.length - 1][1] = 1440 + f[1]; }
+  const gaps = ok.length ? runs.map(([a, e]) => ({ from: hhmm(toMin(start) + a), to: hhmm(toMin(start) + e) })) : [];
+  const per = Array.from({ length: Math.max(1, count) }, (_, n) => { const own = ok.filter(([x]) => Math.floor(x.n) === n); return { n, count: own.length, min: own.reduce((t, [x]) => t + ownLen(x), 0) }; });
+  return { overlaps, gaps, empty: per.filter(x => !x.count).map(x => x.n), per };
 }
 // code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
 export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
@@ -246,10 +300,12 @@ const groupKey = (p: PostDef) => (p.rot != null ? 'r' + p.rot : p.k);
 export function buildPosts(blocks: BlockDef[], start: string = DEFAULT_DUTY_START): Post[] {
   const def = start === DEFAULT_DUTY_START ? ROT : shiftSlots(start, { every: 120 }, 4);
   return blocks.flatMap(b => {
-    const sh = b.shift && b.shift.every > 0 ? b.shift : null;
+    const sh = hasShift(b.shift) ? b.shift : null;
     const groups = sh ? shiftGroups(b) : []; const sl = sh ? shiftSlots(start, sh, groups.length) : null;
     return b.posts.map(p => {
-      const slots = sl ? (sl[groups.indexOf(groupKey(p))] || null) : p.rot != null ? def[p.rot] : null;
+      // με δικές μου βάρδιες, νούμερο χωρίς καμία βάρδια δεν έχει ώρες (null), όχι άδεια λίστα
+      const mine = sl ? sl[groups.indexOf(groupKey(p))] : undefined;
+      const slots = sl ? (sh!.list?.length && !mine?.length ? null : mine || null) : p.rot != null ? def[p.rot] : null;
       const hrs = p.hrs === '14:00 → 14:00' ? start + ' → ' + start : p.hrs;   // Λ/Υ, Δ/Υ: όλος ο κύκλος
       return { ...p, ...(hrs !== p.hrs ? { hrs } : {}), block: b.id, kind: b.kind, armed: b.armed, slots, hours: slots ? slots.join(' · ') : (hrs || ''), cyc: toMin(start) };
     });
