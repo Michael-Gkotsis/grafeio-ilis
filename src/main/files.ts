@@ -6,6 +6,7 @@ import { threadId } from 'worker_threads';
 const fsp = fs.promises;
 import path from 'path';
 import JSZip from 'jszip';
+import type { FormBinding } from '../shared/sources';
 
 export const PREV_DIR = '_προηγούμενα';
 export const KEEP_PREV = 10;
@@ -31,6 +32,18 @@ export function dataDirOf(local: string, profile: string, writable: (dir: string
   const dir = has(local) ? local : has(profile) ? profile : writable(local) ? local : profile;
   return { dir, fallback: dir === profile };
 }
+
+// Φάκελος που ορίστηκε σε Windows («C:\\Users\\…») δεν υπάρχει σε Linux/macOS (π.χ. βάση που μεταφέρθηκε από το PC του γραφείου):
+// το mkdir θα έφτιαχνε φάκελο με όνομα «C:\\Users\\…» στον τρέχοντα φάκελο. Τον αγνοούμε και παίρνει η προεπιλογή (Έγγραφα).
+export const ownOsDir = (dir: string | undefined, platform: string = process.platform): string => (dir && (platform === 'win32' || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(dir)) ? dir : '');
+
+// Ρυθμίσεις εντύπου από άλλο λειτουργικό (βάση από το PC του γραφείου με «C:\\…»): το template και ο φάκελος δεν υπάρχουν εδώ,
+// οπότε το έντυπο έβγαζε «Δεν βρέθηκε το template C:\\…» και δεν δημιουργούσε φάκελο ούτε αρχείο. Μένουν τα της εφαρμογής.
+export const ownBinding = (b: FormBinding | undefined, platform: string = process.platform): FormBinding => {
+  if (!b) return {};
+  const own = { ...b, dir: ownOsDir(b.dir, platform) || undefined };
+  return b.file && !ownOsDir(b.file, platform) ? { ...own, file: undefined, sheet: undefined, sheet2: undefined, cells: undefined } : own;
+};
 
 export class LockedError extends Error {
   constructor(public file: string) { super('Το αρχείο «' + path.basename(file) + '» είναι ανοιχτό στο Excel. Κλείσ\' το και πάτα «Ξανά». Δεν άλλαξε τίποτα.'); }

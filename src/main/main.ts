@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { copyDurable, dataDirOf, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
+import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
@@ -85,7 +85,7 @@ const TPL: { id: ExportKind; name: string; file: string }[] = [
 const tplPath = (file: string) => (fs.existsSync(path.join(USER_TPL, file)) ? path.join(USER_TPL, file) : path.join(BUNDLED, 'templates', file));
 // Έντυπα: ποιο template και ποιος φάκελος (Αρχεία Excel). Χωρίς επιλογή: τα templates της εφαρμογής.
 const FORM_FILE: Record<Exclude<FormKind, 'check'>, string> = { froura: 'froura.xlsx', frouraSpen: 'froura-spen.xlsx', hkai: 'hkai.xlsx', outs: 'exodouxoi.xlsx' };
-const formBinding = (f: FormKind): FormBinding => store.state.settings.forms?.[f] || {};
+const formBinding = (f: FormKind): FormBinding => ownBinding(store.state.settings.forms?.[f]);
 const formOf = (kind: ExportKind, s: AppState): FormKind => (kind === 'froura' || kind === 'frouraPsk' ? (phaseBase(s.settings) === 'spen' ? 'frouraSpen' : 'froura') : kind === 'hkai' ? 'hkai' : kind === 'check' ? 'check' : 'outs');
 function formTpl(f: Exclude<FormKind, 'check'>): string {
   const b = formBinding(f);
@@ -96,10 +96,10 @@ function formTpl(f: Exclude<FormKind, 'check'>): string {
 }
 const formDir = (f: FormKind, date: ISODate) => { const b = formBinding(f); const dir = b.dir || outputDir(); return b.monthly === false ? dir : path.join(dir, date.slice(0, 7)); };
 // Νέα Excel ανά είδος: στον φάκελο του είδους (Ρυθμίσεις → Φάκελοι), αλλιώς στον γενικό
-const newDir = (k: ListKind) => store.state.settings.newDirs?.[k] || outputDir();
+const newDir = (k: ListKind) => ownOsDir(store.state.settings.newDirs?.[k]) || outputDir();
 const dirOf = (t: DirTarget) => (t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind));
 const templates = (): TemplateInfo[] => [
-  ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = store?.state.settings.forms?.[f];
+  ...TPL.map(t => { const f: FormKind = t.file === 'froura.xlsx' ? 'froura' : t.file === 'froura-spen.xlsx' ? 'frouraSpen' : t.id === 'hkai' ? 'hkai' : 'outs'; const b = ownBinding(store?.state.settings.forms?.[f]);
     const name = unitText(t.name, unitKindOf(store?.state.settings));
     return b?.file ? { id: t.id, name, file: b.file, ok: fs.existsSync(b.file), custom: true } : { id: t.id, name, file: t.file, ok: fs.existsSync(tplPath(t.file)), custom: fs.existsSync(path.join(USER_TPL, t.file)) }; }),
   { id: 'check', name: 'Έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', file: 'δημιουργείται από την εφαρμογή', ok: true, custom: false }
@@ -109,7 +109,7 @@ let store: Store;
 let seenUntil = 0, sessionStart = 0;   // «Τι άλλαξε από το προηγούμενο άνοιγμα»: ενέργειες με id σε (seenUntil, sessionStart]
 let win: BrowserWindow | null = null;
 const ctx = () => ({ today: today(), newId: () => crypto.randomUUID() });
-const outputDir = () => store.state.settings.outputDir || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
+const outputDir = () => ownOsDir(store.state.settings.outputDir) || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
 // Τι έχει ήδη το UI: η κατάσταση και η τελευταία γραμμή ιστορικού που του στάλθηκαν. Οι εντολές δεν αλλάζουν
 // αντικείμενα, φτιάχνουν νέα, οπότε ό,τι έχει την ίδια αναφορά με πριν δεν άλλαξε και δεν ξαναστέλνεται.
 let sent: AppState | null = null, sentAudit = 0;
