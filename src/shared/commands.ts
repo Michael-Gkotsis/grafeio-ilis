@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -13,6 +13,7 @@ import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours'
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
 import { isSat, isWk, WK } from './weekend';
+import { NOTE_MAX, noteHead, noteWho } from './notes';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -34,6 +35,11 @@ export type Command =
   // αίτηση άδειας: ok = εγκρίθηκε (γίνεται άδεια), false = απορρίφθηκε, null = αναίρεση της απόφασης
   | { t: 'decideRequest'; id: string; ok: boolean | null }
   | { t: 'deleteStatus'; id: string }
+  // σημειώσεις του γραφείου (shared/notes.ts): who χωρίς pid/cid = γενική· rem '' = χωρίς υπενθύμιση
+  | { t: 'addNote'; note: { text: string; pid?: number; cid?: string; rem?: ISODate; star?: boolean } }
+  | { t: 'editNote'; id: string; patch: { text?: string; who?: { pid: number } | { cid: string } | null; rem?: ISODate | ''; star?: boolean } }
+  | { t: 'doneNote'; id: string; done: boolean }
+  | { t: 'deleteNote'; id: string }
   // διόρθωση ιατρικού/ποινής που μπήκε λάθος: φεύγει η παλιά και γίνεται η δήλωση από την αρχή (ίδιοι έλεγχοι), μία αναίρεση
   | { t: 'replaceStatus'; id: string; cmds: StatusCmd[] }
   // Άδεια (κανονική, τιμητική, αναρρωτική): ακύρωση = φεύγει όλη (δεν έφυγε ή μπήκε λάθος)· διακοπή = γύρισε νωρίτερα, στη μέρα και ώρα που λες
@@ -108,6 +114,43 @@ const who = (s: AppState, pids: number[]) => {
   const pm = personMap(s.people);
   return pids.length === 1 ? shortName(pm.get(pids[0])!) : pids.length + ' άτομα';
 };
+// Σημειώσεις: καθαρές εντολές χωρίς Excel (files: [])· το κείμενο στο Ιστορικό είναι η αρχή της σημείωσης
+function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 'doneNote' | 'deleteNote' }>, ctx: Ctx): Result {
+  const notes = s.notes || [];
+  const checkWho = (w: { pid?: number; cid?: string }) => {
+    if (w.pid != null && !s.people.some(p => p.id === w.pid)) throw new Error('Δεν βρέθηκε ο στρατιώτης');
+    if (w.cid && !s.cadreList.some(x => x.id === w.cid)) throw new Error('Δεν βρέθηκε το στέλεχος');
+  };
+  const checkRem = (rem: string) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(rem)) throw new Error('Η ημερομηνία υπενθύμισης δεν είναι σωστή'); };
+  const text = (raw: string) => { const t = (raw || '').replace(/\r\n/g, '\n').trim(); if (!t) throw new Error('Γράψε τη σημείωση'); if (t.length > NOTE_MAX) throw new Error('Η σημείωση είναι πολύ μεγάλη (το πολύ ' + NOTE_MAX + ' γράμματα)'); return t; };
+  const label = (n: Note) => { const w = noteWho(s, n); return (w.kind === 'gen' ? '' : ' (' + w.label + ')') + ': «' + noteHead(n.text) + '»'; };
+  if (c.t === 'addNote') {
+    const x = c.note; if (x.pid != null && x.cid) throw new Error('Η σημείωση είναι για στρατιώτη ή για στέλεχος, όχι και για τα δύο');
+    checkWho(x); const n: Note = { id: 'n' + ctx.newId(), text: text(x.text), at: ctx.today };
+    if (x.pid != null) n.pid = x.pid; else if (x.cid) n.cid = x.cid;
+    if (x.rem) { checkRem(x.rem); if (x.rem < ctx.today) throw new Error('Η υπενθύμιση είναι σε μέρα που πέρασε'); n.rem = x.rem; }
+    if (x.star) n.star = true;
+    return { state: { ...s, notes: [...notes, n] }, text: 'Σημείωση' + label(n) + (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ''), files: [] };
+  }
+  const old = notes.find(x => x.id === c.id); if (!old) throw new Error('Δεν βρέθηκε η σημείωση');
+  const put = (n: Note, t: string): Result => ({ state: { ...s, notes: notes.map(x => (x === old ? n : x)) }, text: t, files: [] });
+  if (c.t === 'deleteNote') return { state: { ...s, notes: notes.filter(x => x !== old) }, text: 'Σβήστηκε σημείωση' + label(old), files: [] };
+  if (c.t === 'doneNote') {
+    if (!!old.done === c.done) return { state: s, text: '', files: [] };
+    const n = { ...old }; if (c.done) n.done = ctx.today; else delete n.done;
+    return put(n, (c.done ? 'Ολοκληρώθηκε σημείωση' : 'Ξανάνοιξε σημείωση') + label(old));
+  }
+  const p = c.patch; const n: Note = { ...old };
+  if (p.text !== undefined) n.text = text(p.text);
+  if (p.who !== undefined) {
+    delete n.pid; delete n.cid;
+    if (p.who) { checkWho(p.who); if ('pid' in p.who) n.pid = p.who.pid; else n.cid = p.who.cid; }
+  }
+  if (p.rem !== undefined) { if (p.rem) { checkRem(p.rem); if (p.rem !== old.rem && p.rem < ctx.today) throw new Error('Η υπενθύμιση είναι σε μέρα που πέρασε'); n.rem = p.rem; } else delete n.rem; }
+  if (p.star !== undefined) { if (p.star) n.star = true; else delete n.star; }
+  if (JSON.stringify(n) === JSON.stringify(old)) return { state: s, text: '', files: [] };
+  return put(n, 'Άλλαξε σημείωση' + label(n) + (n.rem !== old.rem ? (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ' · χωρίς υπενθύμιση') : ''));
+}
 // θέσεις μιας υπηρεσίας χωρίς κωδικό (νέες, ή σβησμένος κωδικός): ο επόμενος ελεύθερος (Υ1, Υ2…)
 function fillCodes(settings: Settings, phase: Phase, id: string): Settings {
   let st = settings;
@@ -753,6 +796,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const p = pm.get(m.pid);
       return { state: { ...s, weaponLog: log.filter(x => x.id !== c.id) }, text: 'Σβήστηκε κίνηση όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + m.reason + ' ' + dm(m.outDay) + ' ' + m.outTime, files: [] };
     }
+    case 'addNote': case 'editNote': case 'doneNote': case 'deleteNote': return noteCmd(s, c, ctx);
     case 'addPerson': {
       const p = makePerson(s, c.person);
       return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (rankTxt(p) ? rankTxt(p) + ' ' : '') + p.last + ' ' + p.first, files: [] };

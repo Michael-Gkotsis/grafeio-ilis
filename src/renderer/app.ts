@@ -13,6 +13,7 @@ import { topicFor } from './guideTopic';
 import { CadreScreen } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
+import { NoteDialog, NotesScreen } from './screens/notes';
 import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
@@ -20,6 +21,7 @@ import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, typ
 import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
 import { noteNamesakes } from '../shared/domain';
+import { dueCount } from '../shared/notes';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
 import { essoPersonTxt } from '../shared/esso';
@@ -29,16 +31,16 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], notes: ['Σημειώσεις', Icon.notes, NotesScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 // το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
 const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
-const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports'], NAV_MORE = ['history', 'templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1 (το μενού χωρά σε 1366×768)
-const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, το Ιστορικό μόνο από το μενού
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes'], NAV_MORE = ['templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1, το Ιστορικό: κουμπί πάνω δεξιά (το μενού χωρά σε 1366×768 και με τις Σημειώσεις)
+const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, Σημειώσεις: από το μενού, νέα σημείωση με Ctrl+Shift+N
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
 const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'history', 'templates', 'guide'];
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes', 'history', 'templates', 'guide'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());
@@ -137,7 +139,7 @@ function Shell() {
   const [back, setBack] = useState<Route[]>([]);
   useEffect(() => { memory.current[route.view] = route.params; if (route.view === 'people') save(PEOPLE_KEY, pick(route.params, PEOPLE_KEEP)); }, [route]);
   useEffect(() => { memory.current = { people: load(PEOPLE_KEY, {}) }; }, [today]);   // νέα μέρα: οι ημερομηνίες ξεκινούν από σήμερα
-  const cur = useRef({ route, back }); cur.current = { route, back };
+  const cur = useRef({ route, back, person: personId }); cur.current = { route, back, person: personId };
   // σε άλλη οθόνη: αν μια κάρτα έχει αλλαγές που δεν αποθηκεύτηκαν, πρώτα ρωτά (pending.ts)
   const moveTo = useCallback((next: Route, push: boolean, before?: () => void) => {
     const r = cur.current.route;
@@ -162,13 +164,15 @@ function Shell() {
   const help = useCallback(() => { const r = cur.current.route; if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) }); }, [go]);
   const setParams = useCallback((params: Record<string, any>) => setRoute(r => ({ view: r.view, params: { ...r.params, ...params } })), []);
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
+  const note = useCallback((data?: any) => setLayer({ kind: 'note', data: data || {} }), []);
   // στέλεχος σε θέση (ΕΠΟΠ/ΟΒΑ, αρνητικός αριθμός): η καρτέλα του στα Στελέχη
   const openPerson = useCallback((id: number, list?: number[]) => { if (id < 0) { go('cadre', { seat: id }); return; } setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, [go]);
-  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, openPerson }), [route, personId, go, setParams, declare, openPerson]);
+  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, note, openPerson }), [route, personId, go, setParams, declare, note, openPerson]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase(); const mod = e.ctrlKey || e.metaKey; const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName || '');
       if (mod && (k === 'k' || k === 'κ')) { e.preventDefault(); setOver('palette'); }
+      else if (mod && e.shiftKey && (k === 'n' || k === 'ν')) { e.preventDefault(); const pid = cur.current.person; setLayer({ kind: 'note', data: pid != null && pid > 0 ? { pid } : {} }); }   // νέα σημείωση, δεμένη στην ανοιχτή καρτέλα στρατιώτη
       else if (mod && (k === 'n' || k === 'ν')) { e.preventDefault(); setLayer({ kind: 'declare', data: {} }); }
       else if (mod && (k === 'z' || k === 'ζ') && !typing) { e.preventDefault(); if (!e.repeat) undo(); }
       else if (mod && e.shiftKey && (k === 'd' || k === 'δ')) { e.preventDefault(); go('diag'); }
@@ -195,13 +199,15 @@ function Shell() {
   useEffect(() => { document.title = title; }, [title]);
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
   const waiting = useMemo(() => state.requests.filter(r => r.leave && !r.decision && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
+  const notesDue = useMemo(() => dueCount(state.notes, today), [state.notes, today]);
   const navItem = (v: string, inRail = false) => {
-    const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : 0;
-    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
+    const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : v === 'notes' ? notesDue : 0;
+    const what = v === 'guard' ? 'κενές θέσεις αύριο' : v === 'notes' ? 'υπενθυμίσεις σημειώσεων' : 'αιτήσεις άδειας περιμένουν';
+    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : v === 'notes' ? 'Υπενθυμίσεις σημειώσεων που έφτασαν' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
     const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : v === 'guide' ? ' (F1)' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
-      data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + (v === 'guard' ? 'κενές θέσεις αύριο' : 'αιτήσεις άδειας περιμένουν') : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
-      ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
+      data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + what : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>
+      ${icon}<span className="navbtn__lbl">${label}</span>${n > 0 && html`<${Badge} tone=${v === 'guard' || v === 'notes' ? 'bad' : 'warn'} data-tip=${inRail ? undefined : tip} data-tip-side="left">${n}<//>`}</button>`;
   };
   return html`<${PrefsCtx.Provider} value=${prefsV}><${NavCtx.Provider} value=${nav}><${ExportProvider}>
     <div className=${cx('shell', rail && 'is-rail')}>
@@ -214,6 +220,7 @@ function Shell() {
           <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
+          <${Button} variant="ghost" size="icon" aria-label="Ιστορικό ενεργειών" data-tip="Ιστορικό ενεργειών και αναίρεση" data-tip-side="bottom" className=${route.view === 'history' ? 'is-on' : undefined} onClick=${() => go('history')}>${Icon.history}<//>
           <${Button} variant="ghost" size="icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (F1)" data-tip-side="left" onClick=${help}>${Icon.help}<//>
           <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
           <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
@@ -229,6 +236,7 @@ function Shell() {
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${setPersonId} onClose=${() => setPersonId(null)}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
+    ${layer && layer.kind === 'note' && html`<${NoteDialog} start=${layer.data} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
     ${!baseLater && !layer && state && needsBaselineReview(state) && html`<${BaselineReviewDialog} onClose=${() => setBaseLater(true)}/>`}
     ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}

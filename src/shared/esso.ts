@@ -50,7 +50,8 @@ export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: stri
   const st = s.settings;
   const forms = Object.fromEntries(Object.entries(st.forms || {}).map(([k, b]) => { const c = { ...b }; delete c.dir; return [k, c]; }).filter(([, b]) => Object.values(b as object).some(v => v !== undefined && v !== '')));
   const settings: Settings = { ...st, essos: { s: e.s, y: e.y, from: today }, sources: {}, newDirs: {}, forms, outputDir, fixed: {}, phase: 'sven', baselineReviewed: true, ...(unit || {}) };
-  return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs };
+  // σημειώσεις: μένουν οι γενικές και των στελεχών· των στρατιωτών της παλιάς ΕΣΣΟ μένουν στο αρχείο της
+  return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).filter(n => n.pid == null) };
 }
 
 // ------------------------------------------------------------------ αρχείο ΕΣΣΟ (φάκελος με βάση, Excel και ΕΣΣΟ.json)

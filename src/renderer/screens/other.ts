@@ -11,6 +11,7 @@ import { hasTimes, normTime, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
 import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
+import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, dutyStartOf, hkOn, hkToggle, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
@@ -82,6 +83,11 @@ export function TodayScreen() {
   if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις ' + dutyStartOf(state.settings), urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
   const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
   if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση άδειας περιμένει απάντηση' : waiting.length + ' αιτήσεις άδειας περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
+  // σημειώσεις με υπενθύμιση που έφτασε (Michael, 24/10): πρώτες οι πιο παλιές
+  const remNotes = noteGroups((state.notes || []).filter(n => noteDue(n, today)), today).due;
+  if (remNotes.length) tasks.push({ key: 'notes', title: remNotes.length === 1 ? 'Σημείωση με υπενθύμιση' : remNotes.length + ' σημειώσεις με υπενθύμιση',
+    sub: remNotes.slice(0, 2).map(n => { const w = noteWho(state, n); return (w.kind === 'gen' ? '' : w.label + ': ') + '«' + noteHead(n.text, 46) + '»' + (n.rem! < today ? ' (εκπρόθεσμη)' : ''); }).join(' · ') + (remNotes.length > 2 ? ' · και ' + (remNotes.length - 2) + ' ακόμα' : ''),
+    urgent: remNotes.some(n => n.rem! < today), btn: 'Δες τις', fn: () => nav.go('notes', { nfilter: 'rem' }) });
   if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
   const ends = [
     ...expired.map(s => ({ s, when: 'έληξε χθες, αφαιρέθηκε αυτόματα', tip: 'Από σήμερα δεν ισχύει· γράφτηκε στο Ιστορικό' })),
@@ -523,6 +529,9 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
+    { t: 'Νέα σημείωση (Ctrl+Shift+N)', k: 'ΝΕΑ ΣΗΜΕΙΩΣΗ ΣΗΜΕΙΩΣΕΙΣ ΧΑΡΤΑΚΙ ΥΠΕΝΘΥΜΙΣΗ ΘΥΜΗΣΟΥ', fn: () => nav.note({}) },
+    { t: 'Σημειώσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΧΑΡΤΑΚΙΑ ΥΠΕΝΘΥΜΙΣΕΙΣ', fn: () => nav.go('notes') },
+    { t: 'Σημειώσεις › Υπενθυμίσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΥΠΕΝΘΥΜΙΣΕΙΣ ΥΠΕΝΘΥΜΙΣΗ ΣΗΜΕΡΑ', fn: () => nav.go('notes', { nfilter: 'rem' }) },
     { t: 'Οδηγός χρήσης (πώς δουλεύει, τι επηρεάζει τι)', k: 'ΟΔΗΓΟΣ ΟΔΗΓΙΕΣ ΒΟΗΘΕΙΑ ΣΧΕΤΙΚΑ ΕΚΔΟΣΗ HELP ABOUT ΠΩΣ', fn: () => nav.go('guide') },
     { t: 'Έντυπα (δικά σου Excel)', k: 'ΕΝΤΥΠΑ ΕΝΤΥΠΟ ΠΡΟΤΥΠΑ ΠΡΟΤΥΠΟ ΚΑΤΑΣΤΑΣΗ ΟΝΟΜΑΣΤΙΚΗ ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΤΥΧΑΙΑ ΑΓΓΑΡΕΙΑ EXCEL', fn: () => nav.go('reports') },
     ...(state.settings.reports || []).map(r => ({ t: 'Βγάλε: ' + r.name, k: 'ΕΝΤΥΠΟ ΕΝΤΥΠΑ ΒΓΑΛΕ ' + norm(r.name), fn: () => nav.go('reports', { repRun: r.id }) })),
@@ -569,13 +578,14 @@ export function CommandPalette({ onClose }: P) {
   const n = norm(dq.trim());
   const acts = ACTIONS.filter(a => !n || a.k.includes(n) || norm(a.t).includes(n));
   const ppl = n ? searchPeople(state.people, dq).slice(0, 6) : [];
+  const nts = n.length > 1 ? (state.notes || []).filter(x => !x.done && noteSearch(state, x, dq)).slice(0, 4) : [];
   // με άδειο πεδίο: πρώτα οι 5 τελευταίοι που άνοιξες
   const pm = personMap(state.people);
   const rec = useMemo(() => recentPeople().map(id => pm.get(id)).filter((p): p is Person => !!p && p.active), [pm]);
   const recent = n ? [] : rec;
-  const items: P[] = [...recent.map(p => ({ p })), ...acts.map(a => ({ a })), ...ppl.map(p => ({ p }))];
+  const items: P[] = [...recent.map(p => ({ p })), ...acts.map(a => ({ a })), ...ppl.map(p => ({ p })), ...nts.map(x => ({ x }))];
   useEffect(() => setSel(0), [dq]);
-  const runI = (i: number) => { const x = items[i]; if (!x) return; onClose(); if (x.a) x.a.fn(); else nav.openPerson(x.p.id); };
+  const runI = (i: number) => { const x = items[i]; if (!x) return; onClose(); if (x.a) x.a.fn(); else if (x.x) nav.go('notes', { nq: dq.trim(), nfilter: undefined, nwho: undefined }); else nav.openPerson(x.p.id); };
   useEscape(onClose);
   let i = -1;
   return createPortal(html`<div className="ui-overlay" onMouseDown=${(e: any) => { if (e.target === e.currentTarget) onClose(); }}><div className="palette" role="dialog" aria-modal="true" aria-label="Αναζήτηση">
@@ -588,6 +598,8 @@ export function CommandPalette({ onClose }: P) {
       ${acts.map(a => { i++; const j = i; return html`<li key=${a.t} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${a.t}</b></div></li>`; })}
       ${ppl.length > 0 && html`<li className="picker__hd">Πρόσωπα</li>`}
       ${ppl.map(p => { i++; const j = i; return html`<li key=${p.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${fullName(p)}</b><small>του ${p.father} · ${rankTxt(p)} · ${unitOf(p, state.settings)}</small></div><${StatusBadge} statuses=${state.statuses} pid=${p.id} date=${today} lists=${state.settings.lists}/></li>`; })}
+      ${nts.length > 0 && html`<li className="picker__hd">Σημειώσεις</li>`}
+      ${nts.map(x => { i++; const j = i; const w = noteWho(state, x); return html`<li key=${x.id} role="option" aria-selected=${sel === j} className="picker__opt" onMouseDown=${(e: any) => { e.preventDefault(); runI(j); }} onMouseEnter=${() => setSel(j)}><div><b>${noteHead(x.text, 70)}</b><small>${w.kind === 'gen' ? 'Γενική σημείωση' : w.label}${x.rem ? ' · υπενθύμιση ' + dm(x.rem) : ''}</small></div></li>`; })}
       ${!items.length && html`<li className="picker__hd">Δεν βρέθηκε τίποτα για «${q}».</li>`}
     </ul>
     <div className="note" style=${{ padding: '6px 4px 0' }}>↑↓ επιλογή · Enter άνοιγμα · Esc κλείσιμο · ψάχνει χωρίς τόνους και με λατινικά (π.χ. «papad»)</div>
