@@ -82,7 +82,12 @@ describe('Οπλισμός', () => {
     expect(normRack('ε 6')).toBe('Ε6');
     const s = W(r.state, [{ pid: 2, weapon: '200' }]);
     const s2 = run(s, { t: 'setWeapons', changes: [{ pid: 2, rack: 'E6' }] }).state;
-    expect(s2.people.filter(p => weaponMatch('dup', p, weaponInfo(s2))).map(p => p.id)).toEqual([1, 2]);
+    // Ε6 σε δύο χωρίς Θέση: μόνο «Χωρίς θέση», ποτέ «Ίδια θέση» (Michael, 24/10, και για παλιά δεδομένα)
+    expect(s2.people.filter(p => weaponMatch('dup', p, weaponInfo(s2))).map(p => p.id)).toEqual([]);
+    expect(sameRack(weaponInfo(s2), s2.people[0])).toEqual([]);
+    expect(s2.people.slice(0, 2).map(noSeat)).toEqual([true, true]);
+    const s3 = run(s2, { t: 'setWeapons', changes: [{ pid: 1, wpos: '1' }, { pid: 2, wpos: '1' }] }).state;
+    expect(s3.people.filter(p => weaponMatch('dup', p, weaponInfo(s3))).map(p => p.id)).toEqual([1, 2]);
     expect(run(s2, { t: 'setWeapons', changes: [{ pid: 1, wtype: '' }] }).state.people[0].wtype).toBeUndefined();
   });
   it('«Θέση» όπλου: ελεύθερο κείμενο με κεφαλαία, στο Excel μετά τον οπλοβαστό', () => {

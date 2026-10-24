@@ -22,9 +22,10 @@ export const normRack = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ''
 export const normPos = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ' ').trim());
 export const rackKey = (v: unknown) => normGreek(normRack(v)).replace(/[.\-/]/g, '');
 // Θέση του ζεύγους (Michael, 24/10): Οπλοβ. + Θέση μαζί, «Ε 23» όπως «Ε23» (ίδια κανονικοποίηση και για τα δύο μέρη).
-// Ε+22 και Ε+23 είναι άλλες θέσεις· ίδια θέση μόνο όταν και τα δύο ίδια. Κενό όταν δεν έχει οπλοβαστό.
+// Ε+22 και Ε+23 είναι άλλες θέσεις· ίδια θέση μόνο όταν και τα δύο ίδια. Κενό όταν λείπει ο οπλοβαστός ή η Θέση:
+// οπλοβαστός χωρίς Θέση παίρνει μόνο το «Χωρίς θέση», ποτέ το «Ίδια θέση» (Michael, 24/10, και για παλιά δεδομένα όπως «Ε6» σε δύο).
 export const posKey = (v: unknown) => rackKey(v);
-export const seatKey = (rack: unknown, wpos: unknown) => { const r = rackKey(rack); return r ? r + '|' + posKey(wpos) : ''; };
+export const seatKey = (rack: unknown, wpos: unknown) => { const r = rackKey(rack), p = posKey(wpos); return r && p ? r + '|' + p : ''; };
 // «Ε 23» (ή «Ε» όταν λείπει η Θέση), για μηνύματα
 export const seatTxt = (rack: unknown, wpos: unknown) => [normRack(rack), normPos(wpos)].filter(Boolean).join(' ');
 const seatCollator = new Intl.Collator('el', { sensitivity: 'base', numeric: true });
