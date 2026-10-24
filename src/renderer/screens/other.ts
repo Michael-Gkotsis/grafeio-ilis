@@ -13,7 +13,7 @@ import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportBut
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, dutyStartOf, hkOn, hkToggle, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
+import { HK_SECTIONS, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
@@ -311,7 +311,7 @@ function HkaiMain() {
   <${HkaiManualCard} date=${date}/>
   <${HkaiSectionsCard}/></div>`;
   const sheets = html`<div>
-    <div className="toolbar" style=${{ marginBottom: '8px' }}>${!mobile && html`<${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/>`}<${HkLeavesToggle} onToggle=${() => setSide('back')}/></div>
+    <div className="toolbar" style=${{ marginBottom: '8px' }}>${!mobile && html`<${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/>`}<${HkLeavesToggle} date=${date} onToggle=${() => setSide('back')}/></div>
     ${side === 'back' ? html`<${ExcelSheet} model=${back} fileName=${fn} sheetName="πισω" meta="A4 οριζόντιο"/>` : html`<${ExcelSheet} model=${front} fileName=${fn} sheetName="μπροστινο" meta="A4 οριζόντιο · 1 σελίδα" footer="Γράφονται μόνο τα κελιά εισόδου· τα αθροίσματα μένουν τύποι του εντύπου."/>`}
     <${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
@@ -321,16 +321,15 @@ function HkaiMain() {
   </div>`;
 }
 
-// 3. ΑΔΕΙΕΣ ναι/όχι, δίπλα στην προεπισκόπηση: γυρίζει στην πίσω σελίδα για να φανεί αμέσως η αλλαγή (Michael, 22/10)
-function HkLeavesToggle({ onToggle }: { onToggle: () => void }) {
+// 3. ΑΔΕΙΕΣ ναι/όχι για τη μέρα που βλέπεις, δίπλα στην προεπισκόπηση: γυρίζει στην πίσω σελίδα για να φανεί αμέσως η αλλαγή
+// (Michael, 22/10). Ισχύει μόνο για αυτή τη μέρα· η προεπιλογή για τις άλλες είναι στις «Ενότητες της ΗΚΑΙ» (Michael, 24/10)
+function HkLeavesToggle({ date, onToggle }: { date: string; onToggle: () => void }) {
   const { state, run } = useStore(); const toast = useToast();
-  const on = hkOn(state.settings, 'lv');
+  const on = hkLvOn(state, date); const def = hkOn(state.settings, 'lv'); const own = state.hkaiManual[date]?.lv !== undefined;
   const set = async (v: boolean) => {
-    if (await run({ t: 'setSettings', settings: { hkai: hkToggle(state.settings.hkai || {}, 'lv', v) }, text: HK() + ', ' + (v ? 'άνοιξε' : 'έκλεισε') + ': άδειες στο 3. άδειες' }, false)) {
-      onToggle(); toast({ text: v ? 'Οι άδειες γράφονται στο «3. Άδειες»' : 'Οι άδειες δεν γράφονται στο «3. Άδειες»' });
-    }
+    if (await run({ t: 'setHkaiLv', date, on: v }, false)) { onToggle(); toast({ text: (v ? 'Οι άδειες γράφονται στο «3. Άδειες» της ' : 'Οι άδειες δεν γράφονται στο «3. Άδειες» της ') + dm(date) }); }
   };
-  return html`<label className="rule" style=${{ margin: 0, alignItems: 'center' }} data-tip="Όσες δηλώνεις απευθείας, τη μέρα που ξεκινούν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις»."><input type="checkbox" className="ui-check" checked=${on} onChange=${(e: any) => set(e.target.checked)}/><span><b>Άδειες στο «3. Άδειες»</b></span></label>`;
+  return html`<label className="rule" style=${{ margin: 0, alignItems: 'center' }} data-tip=${'Μόνο για τη ' + dm(date) + ': άδειες που δηλώνεις απευθείας (στρατιωτών και στελεχών), τη μέρα που ξεκινούν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις». ' + (own ? 'Η προεπιλογή των άλλων ημερών είναι ' + (def ? 'ανοιχτή' : 'κλειστή') + ' (Ενότητες της ΗΚΑΙ).' : 'Τώρα ακολουθεί την προεπιλογή (Ενότητες της ΗΚΑΙ).')}><input type="checkbox" className="ui-check" checked=${on} onChange=${(e: any) => set(e.target.checked)}/><span><b>Άδειες στο «3. Άδειες»</b> <small>για αυτή τη μέρα</small></span></label>`;
 }
 
 // Στελέχη ανά βαθμό, μέσα στην ΗΚΑΙ (γραφέας, 10/10: «δεν έχει κάπου να τους προσθέσω»)
@@ -356,13 +355,15 @@ function CadreCard({ warn }: { warn: boolean }) {
   <//>`;
 }
 // Ό,τι στην ΗΚΑΙ δεν το ξέρει η εφαρμογή: αριθμοί ανά βαθμό και κείμενα της πίσω σελίδας, για τη συγκεκριμένη μέρα
-const HK_TEXT_FIELDS: [string, string, string][] = [['egr', '1. Εγγραφές (επιπλέον, μετά από όσους μπήκαν στη δύναμη)', ''], ['dia', '2. Διαγραφές (επιπλέον, μετά από όσους βγήκαν εκτός δύναμης)', ''], ['ait', '5. Αιτήσεις (ελεύθερο κείμενο, μετά τις αριθμημένες)', ''], ['loi', '6. Λοιπά', ''], ['off', 'Αξιωματικός υπηρεσίας', 'π.χ. ΑΝΘΛΓΟΣ …']];
+const HK_TEXT_FIELDS: [string, string, string][] = [['egr', '1. Εγγραφές (επιπλέον, μετά από όσους μπήκαν στη δύναμη)', ''], ['dia', '2. Διαγραφές (επιπλέον, μετά από όσους βγήκαν εκτός δύναμης)', ''], ['lv', '3. Άδειες (ελεύθερο κείμενο, μετά τις αριθμημένες)', ''], ['ait', '5. Αιτήσεις (ελεύθερο κείμενο, μετά τις αριθμημένες)', ''], ['loi', '6. Λοιπά', ''], ['off', 'Αξιωματικός υπηρεσίας', 'π.χ. ΑΝΘΛΓΟΣ …']];
 const HK_ACC_FIELDS: [string, string][] = [['accT', 'Ζημιές σε οχήματα: ολικές'], ['accP', 'Ζημιές σε οχήματα: μερικές'], ['accM', 'Σε άνδρες']];
+// χωρίς το lv (3. ΑΔΕΙΕΣ ναι/όχι): αυτό αλλάζει από τον διακόπτη της μέρας, όχι από την Αποθήκευση εδώ
+const manualOf = (x?: HkaiManual): HkaiManual => ({ cells: x?.cells || {}, text: x?.text || {} });
 function HkaiManualCard({ date }: { date: string }) {
   const { state, run, today } = useStore(); const toast = useToast();
-  const cur = state.hkaiManual[date] || { cells: {}, text: {} };
+  const cur = manualOf(state.hkaiManual[date]); const curKey = JSON.stringify(cur); const lvOn = hkLvOn(state, date);
   const [m, setM] = useState(cur); const [rk, setRk] = useState('Στρατιώτες');
-  useEffect(() => setM(state.hkaiManual[date] || { cells: {}, text: {} }), [date, state.hkaiManual]);
+  useEffect(() => setM(manualOf(state.hkaiManual[date])), [date, curKey]);
   const dirty = JSON.stringify(m) !== JSON.stringify(cur);
   const saveM = async () => { const ok = await run({ t: 'setHkaiManual', date, manual: m }, false); if (ok) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ' + HK() + ' ' + dm(date) }); return ok; };
   usePending(dirty, { label: 'Στοιχεία της ' + HK() + ' ' + dm(date), save: saveM, discard: () => setM(cur) });
@@ -377,9 +378,9 @@ function HkaiManualCard({ date }: { date: string }) {
       <div className="field-row"><${Select} className="ui-input" aria-label="Βαθμός" value=${rk} onChange=${(e: any) => setRk(e.target.value)}>${hkRowList(state.settings.lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div>
       <div className="settings-grid" style=${{ marginTop: '6px' }}>${HK_MANUAL.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" placeholder="0" value=${m.cells[rk]?.[k] || ''} onChange=${(e: any) => setCell(rk, k, Math.max(0, +e.target.value || 0))}/></label>`)}</div>
       ${used.length > 0 && html`<span className="field__help">Έχεις γράψει: ${used.map(u => hkRowLabel(u.r) + ' ' + lbl(u.k) + ' ' + u.v).join(' · ')}</span>`}</div>
-    ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><${k === 'off' ? Combo : 'input'} id=${'hk-' + k} className="ui-input" placeholder=${k === 'off' && auto ? auto : ph} options=${k === 'off' ? offList : undefined} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/>${k === 'off' && html`<span className="field__help">${auto ? 'Κενό = από τα Στελέχη: ' + auto + '.' : 'Κενό = όποιος αξιωματικός έχει «Υπηρεσία» στα Στελέχη.'}</span>`}</div>`)}
+    ${HK_TEXT_FIELDS.map(([k, l, ph]) => html`<div key=${k} className="field"><label className="field__label" htmlFor=${'hk-' + k}>${l}</label><${k === 'off' ? Combo : 'input'} id=${'hk-' + k} className="ui-input" placeholder=${k === 'off' && auto ? auto : ph} options=${k === 'off' ? offList : undefined} disabled=${k === 'lv' && !lvOn} value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/>${k === 'lv' && !lvOn && html`<span className="field__help">Γράφεται μόνο όταν είναι ανοιχτό το «3. Άδειες» για αυτή τη μέρα: άνοιξέ το με τον διακόπτη πάνω από την προεπισκόπηση.</span>`}${k === 'off' && html`<span className="field__help">${auto ? 'Κενό = από τα Στελέχη: ' + auto + '.' : 'Κενό = όποιος αξιωματικός έχει «Υπηρεσία» στα Στελέχη.'}</span>`}</div>`)}
     ${hkOn(state.settings, 'acc') && html`<div className="field"><span className="field__label">Ατυχήματα</span><div className="settings-grid">${HK_ACC_FIELDS.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" placeholder="Ø" value=${m.text[k] || ''} onChange=${(e: any) => setM({ ...m, text: { ...m.text, [k]: e.target.value } })}/></label>`)}</div><span className="field__help">Κενό = Ø, όπως στο έντυπο.</span></div>`}
-    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 4 (ποινές της μέρας) και 5 (αιτήσεις, και όσες άδειες εγκρίθηκαν) γράφονται μόνες τους. Η 3 (άδειες που δήλωσες απευθείας) μόνο αν την ανοίξεις, πάνω από την προεπισκόπηση ή στις «Ενότητες της ${HK()}» πιο κάτω, όπου είναι και τα οχήματα και τα «Προβλέπονται».</p>
+    <p className="note">Οι αποφάσεις 1 (όσοι μπήκαν στη δύναμη), 2 (όσοι βγήκαν εκτός δύναμης), 4 (ποινές της μέρας) και 5 (αιτήσεις, και όσες άδειες εγκρίθηκαν) γράφονται μόνες τους. Η 3 (άδειες στρατιωτών και στελεχών που δήλωσες απευθείας) μόνο αν την ανοίξεις για αυτή τη μέρα, με τον διακόπτη πάνω από την προεπισκόπηση· η προεπιλογή για τις νέες μέρες είναι στις «Ενότητες της ${HK()}» πιο κάτω, όπου είναι και τα οχήματα και τα «Προβλέπονται».</p>
     <div className="toolbar"><${Button} disabled=${!dirty} why="Δεν άλλαξε κάτι" onClick=${saveM}>Αποθήκευση<//>${dirty && html`<${Button} variant="ghost" onClick=${() => setM(cur)}>Ακύρωση<//>`}</div>
   <//>`;
 }

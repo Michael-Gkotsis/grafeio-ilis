@@ -25,7 +25,7 @@ import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import type { ImportRow } from '../shared/commands';
-import { frouraFile, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
+import { frouraFile, hkLvOn, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
@@ -236,6 +236,8 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
       rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}), ...(opts.sigs ? { sigs: opts.sigs } : {}) });
       return { r, out };
     });
+    // ΗΚΑΙ: το «3. Άδειες» που χρησιμοποιήθηκε μένει για τη μέρα (αλλιώς μια νέα προεπιλογή θα άλλαζε το ξαναβγάλσιμο)
+    if (kind === 'hkai') runCmd({ t: 'freezeHkaiLv', date, on: hkLvOn(s, date) });
     for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date]) runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
     for (const c of checks) store.addAudit({ at: nowHM(), day: today(), text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text, files: [], source: 'app', undoable: false }, null, false);
     if (checks.length) store.flush();
