@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { W_NUM, inOutText, normRack, normWeapon, rackKey, weaponInfo, weaponKey, weaponMatch, weaponSheets } from '../src/shared/weapons';
+import { W_NUM, bySeat, inOutText, noSeat, normRack, normWeapon, rackKey, sameRack, seatKey, seatTxt, weaponInfo, weaponKey, weaponMatch, weaponSheets } from '../src/shared/weapons';
 import { weaponsBook } from '../src/main/excel';
 import { weaponBack } from '../src/shared/ranks';
 import { lyLine } from '../src/shared/froura';
@@ -156,5 +156,45 @@ describe('Έξοδοι και είσοδοι όπλων', () => {
     expect(day18.rows.map(r => [r[4], r[8]])).toEqual([['222', 'ΕΚΤΟΣ']]);
     const day17 = weaponSheets(s, '2026-10-17').find(x => x.name === 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ')!;
     expect(day17.rows.map(r => [r[4], r[5], r[6], r[7], r[8]])).toEqual([['111', 'ΕΚΠ', '17/10/2026 08:00', 'ΛΗΞ ΕΚΠ', '17/10/2026 13:00'], ['222', 'ΕΚΠ', '17/10/2026 08:00', '', 'ΕΚΤΟΣ']]);
+  });
+});
+
+describe('Οπλοβαστός + Θέση = ζεύγος', () => {
+  const seats = (rows: [number, string, string][]) => {
+    const base = W(fakeState(8), rows.map(([pid]) => ({ pid, weapon: String(900 + pid) })));
+    return run(base, { t: 'setWeapons', changes: rows.map(([pid, rack, wpos]) => ({ pid, rack, wpos })) }).state;
+  };
+  const dupIds = (s: AppState) => { const info = weaponInfo(s); return s.people.filter(p => weaponMatch('dup', p, info)).map(p => p.id); };
+  it('Ε+22 και Ε+23 είναι άλλες θέσεις· Ε+23 σε δύο είναι ίδια (και «Ε 23» = «ε23» = «E-23»)', () => {
+    expect(dupIds(seats([[1, 'Ε', '22'], [2, 'Ε', '23']]))).toEqual([]);
+    expect(seatKey('Ε', '23')).toBe(seatKey(' ε ', '23'));
+    expect(seatKey('E', '2-3')).toBe(seatKey('Ε', '23'));      // λατινικό E, παύλα
+    expect(seatKey('Ε', '23')).not.toBe(seatKey('Δ', '23'));
+    expect(seatKey('', '23')).toBe('');
+    const s = seats([[1, 'Ε', '23'], [2, 'ε', ' 23 '], [3, 'Δ', '23']]);
+    expect(dupIds(s)).toEqual([1, 2]);
+    const info = weaponInfo(s);
+    expect(sameRack(info, s.people[0]).map(p => p.id)).toEqual([2]);
+    expect(sameRack(info, s.people[0], 'Δ', '23').map(p => p.id)).toEqual([3]);
+    expect(seatTxt(s.people[1].rack, s.people[1].wpos)).toBe('Ε 23');
+  });
+  it('εκτός δύναμης δεν μετράει στη θέση', () => {
+    const s0 = seats([[1, 'Ε', '5'], [2, 'Ε', '5']]);
+    const s = { ...s0, people: s0.people.map(p => (p.id === 2 ? { ...p, active: false } : p)) };
+    expect(dupIds(s)).toEqual([]);
+  });
+  it('οπλοβαστός χωρίς θέση: «Χωρίς θέση» μόνο για σε δύναμη με όπλο', () => {
+    const s = seats([[1, 'Ε', ''], [2, 'Ε', '3']]);
+    expect(noSeat(s.people[0])).toBe(true);
+    expect(noSeat(s.people[1])).toBe(false);
+    expect(noSeat({ ...s.people[0], weapon: undefined })).toBe(false);
+    expect(noSeat({ ...s.people[0], active: false })).toBe(false);
+    expect(noSeat(s.people[2])).toBe(false);      // χωρίς οπλοβαστό
+    expect(noSeat({ ...s.people[0], wpos: 'Α' })).toBe(false);
+  });
+  it('ταξινόμηση «Οπλοβ.»: οπλοβαστός, μετά θέση αριθμητικά (Ε 2 πριν Ε 10), χωρίς οπλοβαστό στο τέλος', () => {
+    const s = seats([[1, 'Ε', '10'], [2, 'Ε', '2'], [3, 'Δ', '7'], [4, 'Ε', '']]);
+    const ids = [...s.people.slice(0, 6)].sort(bySeat).map(p => p.id);
+    expect(ids).toEqual([3, 4, 2, 1, 5, 6]);
   });
 });

@@ -21,6 +21,18 @@ export const normRack = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ''
 // «Θέση» όπλου: ελεύθερο κείμενο, με κεφαλαία
 export const normPos = (v: unknown) => upper(String(v ?? '').replace(/\s+/g, ' ').trim());
 export const rackKey = (v: unknown) => normGreek(normRack(v)).replace(/[.\-/]/g, '');
+// Θέση του ζεύγους (Michael, 24/10): Οπλοβ. + Θέση μαζί, «Ε 23» όπως «Ε23» (ίδια κανονικοποίηση και για τα δύο μέρη).
+// Ε+22 και Ε+23 είναι άλλες θέσεις· ίδια θέση μόνο όταν και τα δύο ίδια. Κενό όταν δεν έχει οπλοβαστό.
+export const posKey = (v: unknown) => rackKey(v);
+export const seatKey = (rack: unknown, wpos: unknown) => { const r = rackKey(rack); return r ? r + '|' + posKey(wpos) : ''; };
+// «Ε 23» (ή «Ε» όταν λείπει η Θέση), για μηνύματα
+export const seatTxt = (rack: unknown, wpos: unknown) => [normRack(rack), normPos(wpos)].filter(Boolean).join(' ');
+const seatCollator = new Intl.Collator('el', { sensitivity: 'base', numeric: true });
+// Ταξινόμηση «Οπλοβ.»: οπλοβαστός, μετά θέση αριθμητικά (Ε 2 πριν από Ε 10)· χωρίς οπλοβαστό στο τέλος
+export const bySeat = (a: Pick<Person, 'rack' | 'wpos'>, b: Pick<Person, 'rack' | 'wpos'>) =>
+  (rackKey(a.rack) ? 0 : 1) - (rackKey(b.rack) ? 0 : 1) || seatCollator.compare(rackKey(a.rack), rackKey(b.rack)) || seatCollator.compare(posKey(a.wpos), posKey(b.wpos));
+// Οπλοβαστός χωρίς Θέση, σε δύναμη και με όπλο: προειδοποίηση «Χωρίς θέση»
+export const noSeat = (p: Pick<Person, 'active' | 'weapon' | 'rack' | 'wpos'>) => !!p.active && !!weaponKey(p.weapon) && !!rackKey(p.rack) && !posKey(p.wpos);
 
 export type WeaponFilter = 'all' | 'with' | 'out' | 'without' | 'unarmed' | 'dup' | 'return';
 export const WEAPON_FILTERS: [WeaponFilter, string, string, string][] = [
@@ -36,7 +48,7 @@ export const WEAPON_FILTERS: [WeaponFilter, string, string, string][] = [
 export interface WeaponInfo {
   unarmed: Set<number>;               // άοπλοι κατά τη Σ.Ι. (μόνιμα, όχι ΕΑ/ΕΟ της μέρας)
   holders: Map<string, Person[]>;     // weaponKey → όσοι έχουν αυτό το όπλο (και εκτός δύναμης, αφού δεν το παρέδωσαν)
-  racks: Map<string, Person[]>;       // rackKey → όσοι έχουν αυτή τη θέση οπλοβαστού (μόνο σε δύναμη)
+  racks: Map<string, Person[]>;       // seatKey (οπλοβαστός + θέση) → όσοι έχουν αυτή τη θέση (μόνο σε δύναμη)
   out: Map<number, string>;           // εκτός οπλοβαστού τη μέρα d: pid → η ένοπλη υπηρεσία (π.χ. «Σκοπός 3ης (α)»)
   moves: Map<number, WeaponMove>;     // βγήκε από τον οπλοβαστό (Έξοδος όπλων) και δεν μπήκε ακόμα: pid → η κίνηση
 }
@@ -66,15 +78,15 @@ export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pi
   const push = (m: Map<string, Person[]>, k: string, p: Person) => { const l = m.get(k); if (l) l.push(p); else m.set(k, [p]); };
   for (const p of s.people) {
     if (p.si && siIsUnarmed(p, blocks, s.settings.lists)) unarmed.add(p.id);
-    const r = rackKey(p.rack); if (r && p.active) push(racks, r, p);
+    const r = seatKey(p.rack, p.wpos); if (r && p.active) push(racks, r, p);
     const k = weaponKey(p.weapon); if (k) push(holders, k, p);
   }
   const out = d ? armedDuties({ guards: s.guards || {}, dutyLog: s.dutyLog || {}, settings: s.settings }, d) : new Map<number, string>();
   return { unarmed, holders, racks, out, moves: openMoves(s.weaponLog) };
 }
-// Οι άλλοι (σε δύναμη) με την ίδια θέση οπλοβαστού
-export const sameRack = (info: WeaponInfo, p: Pick<Person, 'id' | 'rack'>, rack = p.rack) =>
-  (info.racks.get(rackKey(rack)) || []).filter(x => x.id !== p.id);
+// Οι άλλοι (σε δύναμη) με την ίδια θέση (οπλοβαστός + θέση)
+export const sameRack = (info: WeaponInfo, p: Pick<Person, 'id' | 'rack' | 'wpos'>, rack = p.rack, wpos = p.wpos) =>
+  (info.racks.get(seatKey(rack, wpos)) || []).filter(x => x.id !== p.id);
 // «ΕΝΤΟΣ» ή «ΕΚΤΟΣ: ΣΚΟΠΟΣ …»· κενό για όποιον δεν έχει όπλο ούτε ένοπλη υπηρεσία
 // Πρώτα η έξοδος με λόγο (ΕΚΠ…), μετά η ένοπλη υπηρεσία
 export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) ? 'ΕΚΤΟΣ: ' + moveOutTxt(info.moves.get(p.id)!) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : weaponKey(p.weapon) && p.active ? 'ΕΝΤΟΣ' : '');

@@ -14,7 +14,7 @@ import type { Sig } from '../../shared/sigs';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
-import { WEAPON_FILTERS, isOut, normPos, normRack, normWeapon, rackKey, sameRack, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
+import { WEAPON_FILTERS, bySeat, isOut, noSeat, normPos, normRack, normWeapon, posKey, rackKey, sameRack, seatTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { listOf, rankTxt } from '../../shared/ranks';
 import { collator, normGreek, translit, norm } from '../../shared/text';
@@ -80,8 +80,10 @@ function notes(p: Person, info: WeaponInfo, lists: P) {
   if (has && info.unarmed.has(p.id)) out.push({ tone: 'warn', text: 'Άοπλος', tip: 'Άοπλος κατά τη Σ.Ι. (' + siOf(p, lists).text + ')' });
   const same = has ? sameWeapon(info, p) : [];
   if (same.length) out.push({ tone: 'bad', text: 'Ίδιος με ' + shortName(same[0]) + (same.length > 1 ? ' +' + (same.length - 1) : ''), tip: 'Ο ίδιος αριθμός: ' + same.map(x => shortName(x) + (x.active ? '' : ' (εκτός δύναμης)')).join(', ') });
+  // θέση = οπλοβαστός + θέση μαζί (Ε 22 και Ε 23 δεν προειδοποιούν)
   const rk = p.active && rackKey(p.rack) ? sameRack(info, p) : [];
-  if (rk.length) out.push({ tone: 'warn', text: 'Ίδια θέση ×' + (rk.length + 1), tip: 'Η ίδια θέση οπλοβαστού (' + p.rack + '): ' + rk.map(shortName).join(', ') });
+  if (rk.length) out.push({ tone: 'warn', text: 'Ίδια θέση ×' + (rk.length + 1), tip: 'Η ίδια θέση (' + seatTxt(p.rack, p.wpos) + '): ' + rk.map(shortName).join(', ') });
+  if (noSeat(p)) out.push({ tone: 'warn', text: 'Χωρίς θέση', tip: 'Έχει οπλοβαστό (' + normRack(p.rack) + ') αλλά όχι θέση: γράψε τη Θέση' });
   if (!has && isOut(info, p.id)) out.push({ tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + info.out.get(p.id) + ') χωρίς αριθμό όπλου' });
   if (out.length < 2) return out.map(n => html`<${Badge} key=${n.text} tone=${n.tone} data-tip=${n.tip}>${n.text}<//>`);
   const tone = out.some(n => n.tone === 'bad') ? 'bad' : 'warn';
@@ -143,7 +145,7 @@ export function WeaponsScreen() {
   const rooms = useMemo(() => { const m = new Map<number, number>(); state.people.forEach(p => { if (p.active && p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [state.people]);
   const rows = useMemo(() => {
     const r = state.people.filter(p => place(p) && weaponMatch(filter, p, info) && matchText(p, dq));
-    const cmp = sort.k === 'rack' ? (a: Person, b: Person) => (rackKey(a.rack) ? 0 : 1) - (rackKey(b.rack) ? 0 : 1) || collator.compare(rackKey(a.rack), rackKey(b.rack)) * sort.dir || byRoomName(a, b)
+    const cmp = sort.k === 'rack' ? (a: Person, b: Person) => (rackKey(a.rack) ? 0 : 1) - (rackKey(b.rack) ? 0 : 1) || bySeat(a, b) * sort.dir || byRoomName(a, b)
       : sort.k === 'weapon' ? (a: Person, b: Person) => (weaponKey(a.weapon) ? 0 : 1) - (weaponKey(b.weapon) ? 0 : 1) || collator.compare(weaponKey(a.weapon), weaponKey(b.weapon)) * sort.dir || byRoomName(a, b)
       : sort.k === 'last' ? (a: Person, b: Person) => (collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) * sort.dir
       : (a: Person, b: Person) => (byRoomName(a, b)) * sort.dir;
@@ -162,13 +164,15 @@ export function WeaponsScreen() {
   const save = useCallback(async (changes: WeaponChange[], o: { warn?: string; what?: string; msg?: string } = {}) => {
     if (await run({ t: 'setWeapons', changes, what: o.what }, false) === null) { setReset(n => n + 1); return; }
     const c0 = changes[0]; const one = changes.length === 1 ? state.people.find(p => p.id === c0.pid) : null;
-    const part = c0 && (c0.weapon !== undefined ? (normWeapon(c0.weapon) ? 'όπλο ' + normWeapon(c0.weapon) : 'χωρίς όπλο') : c0.rack !== undefined ? (normRack(c0.rack) ? 'οπλοβαστός ' + normRack(c0.rack) : 'χωρίς θέση οπλοβαστού') : c0.wpos !== undefined ? (normPos(c0.wpos) ? 'θέση ' + normPos(c0.wpos) : 'χωρίς θέση') : (c0.wtype ? 'τύπος ' + c0.wtype : 'χωρίς τύπο όπλου'));
+    const seatMsg = (rack: unknown, wpos: unknown) => (rackKey(rack) && posKey(wpos) ? 'θέση ' + seatTxt(rack, wpos) : rackKey(rack) ? 'οπλοβαστός ' + normRack(rack) : 'θέση ' + normPos(wpos));
+    const part = c0 && (c0.weapon !== undefined ? (normWeapon(c0.weapon) ? 'όπλο ' + normWeapon(c0.weapon) : 'χωρίς όπλο') : c0.rack !== undefined ? (normRack(c0.rack) ? seatMsg(c0.rack, c0.wpos !== undefined ? c0.wpos : one?.wpos) : 'χωρίς οπλοβαστό') : c0.wpos !== undefined ? (normPos(c0.wpos) ? seatMsg(c0.rack !== undefined ? c0.rack : one?.rack, c0.wpos) : 'χωρίς θέση') : (c0.wtype ? 'τύπος ' + c0.wtype : 'χωρίς τύπο όπλου'));
     const msg = o.msg || (one ? shortName(one) + ': ' + part : 'Οπλισμός: ' + changes.length + ' άτομα');
     toast({ text: html`<span>${msg}${o.warn && html`<br/><b>Προσοχή:</b> ${o.warn}`}</span>`, actions: [undoMark()] });
   }, [run, toast, undoMark, state.people]);
   const commit = useCallback((p: Person, raw: string, f: WF = 'weapon') => {
-    if (f === 'wpos') { save([{ pid: p.id, wpos: raw }]); return; }
-    if (f === 'rack') { const r = normRack(raw); const o = r && p.active ? sameRack(info, p, r) : []; save([{ pid: p.id, rack: r }], { warn: o.length ? 'η θέση ' + r + ' είναι και του ' + o.map(shortName).join(', ') + '.' : undefined }); return; }
+    // ζεύγος Οπλοβ. + Θέση: προειδοποίηση μόνο όταν και τα δύο ίδια σε άλλον (σε δύναμη)
+    if (f === 'wpos') { const o = normPos(raw) && rackKey(p.rack) && p.active ? sameRack(info, p, p.rack, raw) : []; save([{ pid: p.id, wpos: raw }], { warn: o.length ? 'η θέση ' + seatTxt(p.rack, raw) + ' είναι και του ' + o.map(shortName).join(', ') + '.' : undefined }); return; }
+    if (f === 'rack') { const r = normRack(raw); const o = r && p.active && posKey(p.wpos) ? sameRack(info, p, r, p.wpos) : []; save([{ pid: p.id, rack: r }], { warn: o.length ? 'η θέση ' + seatTxt(r, p.wpos) + ' είναι και του ' + o.map(shortName).join(', ') + '.' : r && p.active && weaponKey(p.weapon) && !posKey(p.wpos) ? 'χωρίς θέση: γράψε και τη Θέση.' : undefined }); return; }
     const w = normWeapon(raw);
     const others = w ? sameWeapon(info, p, w) : [];
     if (others.length) { setAsk({ p, w, others }); return; }
