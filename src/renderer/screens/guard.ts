@@ -4,7 +4,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftBad, shiftOf, type HoursMode, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftForm, shiftOf, shiftWhy, type HoursMode, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
@@ -429,9 +429,9 @@ export function AddBlockDialog({ onClose, phase: ph }: P) {
   const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
   const phase: Phase = ph || state.settings.phase || 'sven'; const now = phase === (state.settings.phase || 'sven');
   const [f, setF] = useState({ name: '', armed: false, n: 1, hrs: '', off: false });
-  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState({ every: 120, from: '', to: '' }); const dirty = useDirty([f, mode, sh]);
+  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState(() => shiftForm()); const dirty = useDirty([f, mode, sh]);
   const save = async () => { if (await run({ t: 'addBlock', phase, ...f, hrs: mode === 'fixed' ? f.hrs : '', shift: mode === 'shift' ? shiftOf(sh) : null }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : now ? '. Τη βλέπεις στις θέσεις και στο έντυπο.' : '. Τη βλέπεις όταν ισχύει η ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '.'), ...(f.off ? { actions: [{ label: 'Άνοιξε', fn: () => nav.go('templates', { tab: 'duty', dsub: 'blocks' }) }] } : {}) }); } };
-  const nbWhy = !f.name.trim() ? 'Λείπει: Όνομα' : mode === 'shift' && shiftBad(sh) ? 'Οι βάρδιες δεν είναι σωστές' : '';
+  const nbWhy = !f.name.trim() ? 'Λείπει: Όνομα' : mode === 'shift' ? shiftWhy(sh) : '';
   return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
     dirty=${dirty && 'Η υπηρεσία δεν προστέθηκε. Αν κλείσεις, χάνεται.'}
     footer=${html`<${Why} text=${nbWhy}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!nbWhy} why=${nbWhy} onClick=${save}>Προσθήκη<//>`}>

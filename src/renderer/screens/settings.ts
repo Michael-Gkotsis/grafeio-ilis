@@ -4,7 +4,7 @@ import { html, Alert, Badge, Button, Why, missingOf, Card, Dialog, PageHeader, S
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
-import { DateField, HoursField, RangeField, shiftBad, shiftOf, useUsbCopy, type HoursMode } from '../common';
+import { DateField, HoursField, RangeField, shiftForm, shiftOf, shiftWhy, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
 import { PHASE_NAME, blocksOf, dutyStartOf, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
@@ -260,12 +260,12 @@ function EditBlockDialog({ phase, b, onClose }: P) {
   // (θαλαμοφύλακες, οπλοφύλακες, σκοποί) έχουν πάντα βάρδιες· οι 2 ώρες από την αρχή της υπηρεσίας είναι οι βάρδιες του εντύπου.
   const rotB = b.posts.some((x: P) => x.rot != null); const start = dutyStartOf(state.settings);
   const [mode, setMode] = useState<HoursMode>(rotB || b.shift ? 'shift' : shown.some((x: P) => x.hrs && x.hrs !== 'ημέρα') ? 'fixed' : 'day');
-  const [sh, setSh] = useState(() => ({ every: b.shift?.every || 120, from: b.shift?.from || '', to: b.shift?.to || '' }));
+  const [sh, setSh] = useState(() => shiftForm(b));
   // νούμερα: 1ος, 2ος… (σκοποί: 3η, 4η σκοπιά)
   const labels = b.custom || !rotB ? Array.from({ length: b.custom ? n : shown.length }, (_, i) => (i + 1) + 'ος') : shiftGroups(b).map(k => (+k.slice(1) + 1) + (b.kind === 'sk' ? 'η' : 'ος'));
-  const shiftOut = (): ShiftDef | null => (mode !== 'shift' ? null : rotB && sh.every === 120 && !normTime(sh.from) && !normTime(sh.to) ? null : shiftOf(sh));
+  const shiftOut = (): ShiftDef | null => (mode !== 'shift' ? null : rotB && !sh.own && sh.every === 120 && !normTime(sh.from) && !normTime(sh.to) ? null : shiftOf(sh));
   const save = async () => { const h = mode === 'day' ? Object.fromEntries(Object.keys(hrs).map(k => [k, ''])) : hrs; if (await run({ t: 'editBlock', phase, id: b.id, name, n, hrs: h, codes, shift: shiftOut() }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.custom ? name : b.name) }); } };
-  const ebWhy = errs.length ? errs[0] : mode === 'shift' && shiftBad(sh) ? 'Οι βάρδιες δεν είναι σωστές' : '';
+  const ebWhy = errs.length ? errs[0] : mode === 'shift' ? shiftWhy(sh) : '';
   return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.custom ? 'Δική σου υπηρεσία: αλλάζουν όνομα, πλήθος και ώρες.' : 'Υπηρεσία του εντύπου: οι θέσεις είναι σταθερές· αλλάζουν οι κωδικοί και οι ώρες.'} onClose=${onClose}
     footer=${html`<${Why} text=${ebWhy}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!ebWhy} why=${ebWhy} onClick=${save}>Αποθήκευση<//>`}>
     ${b.custom && html`<div className="field-row"><div className="field"><label className="field__label" htmlFor="eb-n">Όνομα</label><input id="eb-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>

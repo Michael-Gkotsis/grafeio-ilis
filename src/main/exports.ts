@@ -5,7 +5,7 @@ import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
@@ -205,8 +205,10 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     const touch = allNums.filter(m => m.r <= n.r + n.h - 1 && m.r + m.h - 1 >= n.r);
     rowsOf.set(n.r, { h: n.h, aligned: touch.every(m => m.r === n.r && m.h === n.h), need: null });
   }
-  const shiftsOwn = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || !!blocks.find(b => b.id === id)?.shift;
-  for (const x of posts) { const st = seats.get(x.k); if (!st?.n || !st.t?.hours || !x.slots) continue; const k = rowsOf.get(st.n.r)!; k.need = Math.max(k.need || 1, x.slots.length); }
+  const shiftsOwn = (id: string) => dutyStartOf(s.settings) !== DEFAULT_DUTY_START || hasShift(blocks.find(b => b.id === id)?.shift);
+  // νούμερο χωρίς καμία δική μου βάρδια (slots null) σε υπηρεσία του εντύπου: οι ώρες του template σβήνονται, δεν μένουν οι παλιές
+  const slotsOf = (x: Post) => x.slots || (x.rot != null && hasShift(blocks.find(b => b.id === x.block)?.shift) ? [] : null);
+  for (const x of posts) { const st = seats.get(x.k); const sl = slotsOf(x); if (!st?.n || !st.t?.hours || !sl) continue; const k = rowsOf.get(st.n.r)!; k.need = Math.max(k.need || 1, sl.length); }
   const grow = [...rowsOf.entries()].filter(([, k]) => k.aligned && k.need != null && k.need !== k.h).sort((a, b) => a[0] - b[0]);
   for (const [r, k] of grow) if (k.need! > k.h) insert(k.h >= 2 ? r + k.h - 2 : r, k.need! - k.h);
   for (const [r, k] of grow) for (let j = k.need!; j < k.h; j++) ws.setRowHidden(down(r) + j);
@@ -233,12 +235,12 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   // τις 14:00) μένουν όπως είναι στο template, εκτός αν το template δεν τις έχει γραμμένες.
   const done = new Set<string>();
   for (const x of posts) {
-    const st = seats.get(x.k); if (!st?.t?.hours || !st.n || !x.slots || done.has(st.ref)) continue;
+    const st = seats.get(x.k); const sl = slotsOf(x); if (!st?.t?.hours || !st.n || !sl || done.has(st.ref)) continue;
     const k = rowsOf.get(st.n.r)!; const resized = k.aligned && k.need != null && k.need !== k.h;
     const blank = Array.from({ length: st.n.h }, (_, j) => ws.get(refOf(st.t!.hours!, down(st.n!.r) + j))).every(v => v == null || !String(v).trim());
     if (!shiftsOwn(x.block) && !resized && !blank) continue; done.add(st.ref);
     const n = resized ? k.need! : st.n.h;
-    const hs = resized || x.slots.length <= n ? Array.from({ length: n }, (_, j) => x.slots![j] || '') : rowsN(x.slots, n);
+    const hs = resized || sl.length <= n ? Array.from({ length: n }, (_, j) => sl[j] || '') : rowsN(sl, n);
     hs.forEach((h, j) => ws.set(refOf(st.t!.hours!, down(st.n!.r) + j), h));
   }
   // δικές σου υπηρεσίες χωρίς θέση στο template: πίνακες κάτω από τους πίνακες του εντύπου, στις στήλες των δύο πρώτων

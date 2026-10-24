@@ -1195,3 +1195,10 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
   .notes-sep,.notes-people{display:none}
 }
 @media (max-width:640px){.note-list{grid-template-columns:1fr}}
+/* Δικές μου βάρδιες (HoursField): γραμμές Νούμερο · Από · Ως · ✕, πιο χαμηλές από τα πεδία των φορμών */
+.shiftown{display:grid;gap:6px;margin:6px 0}
+.shiftown__row{display:grid;grid-template-columns:110px 1fr 1fr 36px;gap:8px;align-items:center}
+.shiftown__row .ui-input{height:30px;padding:0 8px;font-size:13px}
+.shiftown__row .ui-dd.ui-input{padding-right:6px}
+.shiftown__head{font-size:12px;color:var(--muted-fg)}
+.shiftown .shiftown__x{height:30px;width:36px;padding:0}
