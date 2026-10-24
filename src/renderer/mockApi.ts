@@ -52,6 +52,10 @@ function seed(): AppState {
   s.weaponLog = [1, 2, 3].map(i => ({ id: id(), pid: s.people[i].id, weapon: s.people[i].weapon!, reason: 'ΕΚΠ', outDay: t, outTime: '07:40' }))
     .concat([{ id: id(), pid: s.people[11].id, weapon: s.people[11].weapon!, reason: 'ΕΠΙΣΚΕΥΗ', outDay: addDays(t, -1), outTime: '10:05', note: 'ΒΛΑΒΗ ΣΤΟΝ ΟΠΛΟΦΟΡΕΑ' } as any,
       { id: id(), pid: s.people[12].id, weapon: s.people[12].weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '06:30', inDay: t, inTime: '11:20', inReason: 'ΛΗΞ ΒΟΛΗΣ' } as any]);
+  // ομαδική ΒΟΛΗ από το πρωί (ανοιχτή) και ο σκοπός 3ης (α) που βγήκε και για βολή (να μένει ΕΚΤΟΣ λόγω υπηρεσίας)· ο ιδιοκτήτης του όπλου θέσης έχει αριθμό
+  const g0 = s.guards[t] || {}; const owner = s.people.find(p => p.id === g0.op1); if (owner && !owner.weapon) owner.weapon = '4819999';
+  const volley = [...s.people.slice(20, 30).filter(p => p.weapon && p.id !== g0.op1), ...s.people.filter(p => p.id === g0.sk3a && p.weapon)];
+  s.weaponLog.push(...volley.map(p => ({ id: id(), pid: p.id, weapon: p.weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '08:00' }) as any));
   // σημειώσεις γραφείου: μία γενική με υπενθύμιση που έφτασε, μία για στρατιώτη, μία για στέλεχος, μία ολοκληρωμένη
   s.notes = [
     { id: 'n1', text: 'Έλεγχος κλειδιών οπλοστασίου με τον υπαξιωματικό υπηρεσίας.', at: addDays(t, -4), rem: addDays(t, -2) },

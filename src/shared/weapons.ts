@@ -194,7 +194,7 @@ export function skipTxt(x: ReturnType<typeof outSplit>) {
   return n ? n + (n === 1 ? ' παραλείφθηκε' : ' παραλείφθηκαν') + ' (' + t + ')' : '';
 }
 // Shift-click: τα id ανάμεσα στα δύο (και τα δύο μέσα), με τη σειρά που φαίνονται· κενό αν το ένα δεν φαίνεται
-export function idRange(ids: number[], a: number, b: number): number[] {
+export function idRange<T extends string | number>(ids: T[], a: T, b: T): T[] {
   const i = ids.indexOf(a), j = ids.indexOf(b); if (i < 0 || j < 0) return [];
   return ids.slice(Math.min(i, j), Math.max(i, j) + 1);
 }

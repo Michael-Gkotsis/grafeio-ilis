@@ -148,7 +148,7 @@ export function Sheet({ title, subtitle, actions, onClose, children }: P) {
     </aside><//>`, document.body);
 }
 
-const typing = (el: Element | null) => !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
+export const typing = (el: Element | null) => !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
 // ↑/↓ (και PageUp/PageDown) στις κάρτες ατόμου: ο προηγούμενος/επόμενος της λίστας από την οποία άνοιξε η κάρτα, όχι όταν γράφεις σε πεδίο ή είναι ανοιχτός διάλογος (busy)
 export function useSheetNav<T>(order: T[], id: T, onMove: (id: T) => void, busy: boolean) {
   const at = order.indexOf(id);

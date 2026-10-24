@@ -7,17 +7,18 @@ import { HK, UNIT } from '../../shared/unit';
 import { Fragment, useCallback, useDeferredValue, useMemo, useRef, useState, useEffect, memo } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
-import { MovesView, Pop, WeaponInDialog, WeaponOutDialog, WeaponState } from './weaponMoves';
+import { MovesView, Pop, WeaponInDialog, WeaponOutDialog, WeaponState, reasonLbl } from './weaponMoves';
 import { useNav, useOpenFrom, useStore } from '../store';
 import { ActiveFilter, DateBar, SigsMenu } from '../common';
 import type { Sig } from '../../shared/sigs';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
+import { personMatch } from '../../shared/weaponView';
 import { AUTO_KEY, WEAPON_FILTERS, bySeat, canOut, dutyPicks, idRange, isOut, noSeat, normPos, normRack, normWeapon, outPeople, outReasonOf, outReasons as byReason, posKey, outSplit, rackKey, redoGroups, sameRack, scanFind, seatTxt, skipTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { listOf, rankTxt } from '../../shared/ranks';
-import { collator, normGreek, translit, norm } from '../../shared/text';
+import { collator } from '../../shared/text';
 import { dm, dow, nowHM, today as todayFn } from '../../shared/dates';
 import { armWhen, hmOf } from '../../shared/armed';
 type P = any;
@@ -97,14 +98,7 @@ function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>) {
   return [...auto, html`<${Badge} key="n" tone=${tone} data-tip=${out.map(n => n.tip).join(' · ')}>⚠ ${out.length}<//>`];
 }
 
-// Στη λωρίδα και στο φίλτρο: ο λόγος όπως γράφτηκε, και «Υπηρεσία (αυτόματα)» για τις ένοπλες υπηρεσίες (ξεχωριστό από τον χειροκίνητο λόγο ΥΠΗΡΕΣΙΑ)
-const reasonLbl = (r: string) => (r === AUTO_KEY ? 'Υπηρεσία (αυτόματα)' : r);
-const matchText = (p: Person, q: string) => {
-  const n = normGreek(q.trim()); if (!n) return true;
-  const key = normGreek([p.last, p.first, p.father, p.asm, p.rank, p.origin || '', p.spec, p.room != null ? 'Θ' + p.room : '', p.wtype || '', p.rack || '', p.wpos || ''].join(' '));
-  const wk = weaponKey(q);
-  return n.split(/\s+/).every(t => key.includes(t)) || translit(p.last + ' ' + p.first).includes(norm(q.trim())) || (!!wk && weaponKey(p.weapon).includes(wk));
-};
+
 
 // Μία γραμμή του πίνακα. Ξαναζωγραφίζεται μόνο όταν αλλάξει κάτι δικό της ή ο οπλισμός (info), όχι σε κάθε πλήκτρο της αναζήτησης.
 const WRow = memo(function WRow({ p, i, style, selected, info, pm, types, lists, reset, onToggle, onOpen, save, commit, paste }: P) {
@@ -180,7 +174,7 @@ export function WeaponsScreen() {
   const rooms = useMemo(() => { const m = new Map<number, number>(); state.people.forEach(p => { if (p.active && p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [state.people]);
   const onlyS = onlySel && sel.size > 0;
   const rows = useMemo(() => {
-    const r = onlyS ? state.people.filter(p => sel.has(p.id)) : state.people.filter(p => place(p) && weaponMatch(filter, p, info) && matchText(p, dq) && (!reasonF || (p.active && isOut(info, p.id) && outReasonOf(info, p.id) === reasonF)));
+    const r = onlyS ? state.people.filter(p => sel.has(p.id)) : state.people.filter(p => place(p) && weaponMatch(filter, p, info) && personMatch(p, dq) && (!reasonF || (p.active && isOut(info, p.id) && outReasonOf(info, p.id) === reasonF)));
     const cmp = sort.k === 'rack' ? (a: Person, b: Person) => (rackKey(a.rack) ? 0 : 1) - (rackKey(b.rack) ? 0 : 1) || bySeat(a, b) * sort.dir || byRoomName(a, b)
       : sort.k === 'weapon' ? (a: Person, b: Person) => (weaponKey(a.weapon) ? 0 : 1) - (weaponKey(b.weapon) ? 0 : 1) || collator.compare(weaponKey(a.weapon), weaponKey(b.weapon)) * sort.dir || byRoomName(a, b)
       : sort.k === 'last' ? (a: Person, b: Person) => (collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) * sort.dir
@@ -292,7 +286,7 @@ export function WeaponsScreen() {
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//>
       <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} go=${exportXl}/><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }]}/></div>
-    ${tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN} onIn=${setInFor}/>` : html`<${Fragment}>
+    ${tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${(u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room })} items=${UNITS}/>
       <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit }); }}>
