@@ -14,12 +14,39 @@ const dnsk = (s: AppState, pid: number) => run(s, { t: 'outs', date: SAT, change
 const on = (s: AppState, pid: number, d: string) => s.statuses.filter(x => x.pid === pid && x.from <= d && d <= x.to);
 
 describe('ΔΝ ΣΚ', () => {
-  it('ΔΝ το Σάββατο και μόνος του εξοδούχος την Κυριακή, γυρίζει Κυριακή βράδυ', () => {
+  it('ΔΝ και το Σάββατο και την Κυριακή (μπαίνει μόνη της), γυρίζει Δευτέρα πρωί', () => {
     const s = dnsk(fakeState(10), 2);
     expect(on(s, 2, SAT)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
-    expect(on(s, 2, SUN)).toMatchObject([{ type: 'OUT', kind: 'ΣΚ' }]);
+    expect(on(s, 2, SUN)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
     const b = returnsOn(s, SAT).find(x => x.p.id === 2)!;
-    expect(backTxt(b)).toBe('Κυριακή 18/10 βράδυ · τέλος ΔΝ ΣΚ');
+    expect(backTxt(b)).toBe('Δευτέρα 19/10 πρωί · μετά τη ΔΝ');
+    expect(outsNote(s, SUN, 2, on(s, 2, SUN)[0])).toBe('ΔΝ ΣΚ');
+  });
+  it('όπως παλιά: η έξοδος της Κυριακής που είχε μπει μόνη της από ΔΝ ΣΚ φεύγει αν αλλάξει το Σάββατο', () => {
+    let s = fakeState(10);
+    s = { ...s, statuses: [{ id: 'o1', pid: 2, type: 'DN', from: SAT, to: SAT, kind: 'ΣΚ' }, { id: 'o2', pid: 2, type: 'OUT', from: SUN, to: SUN, kind: 'ΣΚ' }] };
+    s = run(s, { t: 'outs', date: SAT, changes: [{ pid: 2, from: 'DN', to: 'DN' }] });
+    expect(on(s, 2, SUN)).toEqual([]);
+  });
+  it('άδεια που ξεκινά την Κυριακή: μένει η ΔΝ του Σαββάτου και γράφεται στις παρατηρήσεις', () => {
+    let s = fakeState(10); s = { ...s, statuses: [{ id: 'l1', pid: 2, type: 'LEAVE', from: SUN, to: '2026-10-22', fromTime: '14:00' }] };
+    s = dnsk(s, 2);
+    expect(on(s, 2, SAT)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
+    expect(on(s, 2, SUN).map(x => x.type)).toEqual(['LEAVE']);
+    expect(outsNote(s, SAT, 2, on(s, 2, SAT)[0])).toBe('ΔΝ ΣΚ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10 14:00');
+  });
+  it('άδεια που ξεκινά τη μέρα της ΔΝ ή την επόμενη μπαίνει στις παρατηρήσεις μαζί με την υπηρεσία· όχι αν ξεκινά αργότερα', () => {
+    const lv = (from: string) => ({ id: 'l' + from, pid: 2, type: 'LEAVE' as const, from, to: '2026-10-25' });
+    const base = fakeState(10);
+    const dn = { id: 'd1', pid: 2, type: 'DN' as const, from: SAT, to: SAT };
+    let s = { ...base, statuses: [dn, lv(MON)] };
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ');
+    s = { ...base, statuses: [dn, lv(SUN)] };
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10');
+    s = { ...base, statuses: [dn, lv(SAT)] };
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΣΑΒΒΑΤΟ 17/10');
+    const out = { ...dn, type: 'OUT' as const };
+    expect(outsNote({ ...base, statuses: [out, lv(SUN)] }, SAT, 2, out)).toBe('');
   });
   it('με υπηρεσία την Κυριακή: μόνο η ΔΝ, γυρίζει Κυριακή πρωί για την υπηρεσία', () => {
     let s = run(fakeState(10), { t: 'assign', date: SUN, k: 'ly', pid: 2, force: 'x' });
