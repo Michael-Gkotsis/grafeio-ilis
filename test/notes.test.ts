@@ -266,6 +266,8 @@ describe('σύνδεση στην εφαρμογή', () => {
     expect(ca).toContain('<${Sheet} onClose'); expect(ca).not.toContain('size="lg"'); expect(ca).toContain('Διαγραφή στελέχους…');
     expect(ap).toContain('<${CadreSheet} cid=${cadreId}'); expect(ap).toMatch(/if \(id < 0\) \{[^\n]*openCadre/);
     expect(no).toContain('<${NoteComposer} draft=${draft} ns="np" compact=${true}/>');
+    const ot = src('renderer/screens/other.ts');   // ΗΚΑΙ, «Από πού βγαίνει κάθε αριθμός»: το όνομα στελέχους ανοίγει την κάρτα με ▲▼ στη σειρά της στήλης, όχι τη σελίδα Στελέχη
+    expect(ot).toContain('nav.openCadre(c.id, cadreSeen)'); expect(ot).not.toMatch(/cadreOf\(k\)\.map\([^\n]*nav\.go\('cadre'\)/);
   });
   it('μη αποθηκευμένο πρόχειρο: ρωτά πριν από άλλο άτομο, κλείσιμο, άλλη καρτέλα ή οθόνη', () => {
     const ap = src('renderer/app.ts');
