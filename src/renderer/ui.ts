@@ -148,7 +148,9 @@ export function Sheet({ title, subtitle, actions, onClose, children }: P) {
     </aside><//>`, document.body);
 }
 
-const typing = (el: Element | null) => !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
+// Γράφεις κείμενο (όχι τσεκ ή κουμπί): τα πλήκτρα 1-9 των λόγων δεν πρέπει να χαθούν σε πεδίο
+export const typingText = (el: Element | null) => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || (el as HTMLElement).isContentEditable || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file)$/i.test((el as HTMLInputElement).type)));
+export const typing = (el: Element | null) => !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
 // ↑/↓ (και PageUp/PageDown) στις κάρτες ατόμου: ο προηγούμενος/επόμενος της λίστας από την οποία άνοιξε η κάρτα, όχι όταν γράφεις σε πεδίο ή είναι ανοιχτός διάλογος (busy)
 export function useSheetNav<T>(order: T[], id: T, onMove: (id: T) => void, busy: boolean) {
   const at = order.indexOf(id);
@@ -250,4 +252,5 @@ export function Strip({ className, children, ...rest }: P) {
 function PageSub({ sub }: P) {
   return html`<p className="page-head__sub">${sub}</p>`;
 }
-export function PageHeader({ title, sub, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }
+// quote: σύνθημα της οθόνης σε πλάγια, διακριτικά, πριν από τον υπότιτλο
+export function PageHeader({ title, sub, quote, children }: P) { return html`<div className="page-head"><div><h1>${title}</h1>${quote && html`<p className="page-head__quote">${quote}</p>`}${sub && html`<${PageSub} sub=${sub}/>`}</div>${children}</div>`; }

@@ -2,11 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { W_NUM, inOutText, normRack, normWeapon, rackKey, weaponInfo, weaponKey, weaponMatch, weaponSheets } from '../src/shared/weapons';
+import { W_NUM, bySeat, canOut, dutyPicks, idRange, inOutText, outSplit, redoGroups, scanFind, skipTxt, noSeat, normRack, normWeapon, rackKey, sameRack, seatKey, seatTxt, weaponInfo, weaponKey, weaponMatch, weaponSheets } from '../src/shared/weapons';
 import { weaponsBook } from '../src/main/excel';
 import { weaponBack } from '../src/shared/ranks';
 import { lyLine } from '../src/shared/froura';
-import type { AppState } from '../src/shared/domain';
+import { shortName, type AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 
 let seq = 0;
@@ -82,7 +82,12 @@ describe('Οπλισμός', () => {
     expect(normRack('ε 6')).toBe('Ε6');
     const s = W(r.state, [{ pid: 2, weapon: '200' }]);
     const s2 = run(s, { t: 'setWeapons', changes: [{ pid: 2, rack: 'E6' }] }).state;
-    expect(s2.people.filter(p => weaponMatch('dup', p, weaponInfo(s2))).map(p => p.id)).toEqual([1, 2]);
+    // Ε6 σε δύο χωρίς Θέση: μόνο «Χωρίς θέση», ποτέ «Ίδια θέση» (Michael, 24/10, και για παλιά δεδομένα)
+    expect(s2.people.filter(p => weaponMatch('dup', p, weaponInfo(s2))).map(p => p.id)).toEqual([]);
+    expect(sameRack(weaponInfo(s2), s2.people[0])).toEqual([]);
+    expect(s2.people.slice(0, 2).map(noSeat)).toEqual([true, true]);
+    const s3 = run(s2, { t: 'setWeapons', changes: [{ pid: 1, wpos: '1' }, { pid: 2, wpos: '1' }] }).state;
+    expect(s3.people.filter(p => weaponMatch('dup', p, weaponInfo(s3))).map(p => p.id)).toEqual([1, 2]);
     expect(run(s2, { t: 'setWeapons', changes: [{ pid: 1, wtype: '' }] }).state.people[0].wtype).toBeUndefined();
   });
   it('«Θέση» όπλου: ελεύθερο κείμενο με κεφαλαία, στο Excel μετά τον οπλοβαστό', () => {
@@ -156,5 +161,119 @@ describe('Έξοδοι και είσοδοι όπλων', () => {
     expect(day18.rows.map(r => [r[4], r[8]])).toEqual([['222', 'ΕΚΤΟΣ']]);
     const day17 = weaponSheets(s, '2026-10-17').find(x => x.name === 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ')!;
     expect(day17.rows.map(r => [r[4], r[5], r[6], r[7], r[8]])).toEqual([['111', 'ΕΚΠ', '17/10/2026 08:00', 'ΛΗΞ ΕΚΠ', '17/10/2026 13:00'], ['222', 'ΕΚΠ', '17/10/2026 08:00', '', 'ΕΚΤΟΣ']]);
+  });
+});
+
+describe('Οπλοβαστός + Θέση = ζεύγος', () => {
+  const seats = (rows: [number, string, string][]) => {
+    const base = W(fakeState(8), rows.map(([pid]) => ({ pid, weapon: String(900 + pid) })));
+    return run(base, { t: 'setWeapons', changes: rows.map(([pid, rack, wpos]) => ({ pid, rack, wpos })) }).state;
+  };
+  const dupIds = (s: AppState) => { const info = weaponInfo(s); return s.people.filter(p => weaponMatch('dup', p, info)).map(p => p.id); };
+  it('Ε+22 και Ε+23 είναι άλλες θέσεις· Ε+23 σε δύο είναι ίδια (και «Ε 23» = «ε23» = «E-23»)', () => {
+    expect(dupIds(seats([[1, 'Ε', '22'], [2, 'Ε', '23']]))).toEqual([]);
+    expect(seatKey('Ε', '23')).toBe(seatKey(' ε ', '23'));
+    expect(seatKey('E', '2-3')).toBe(seatKey('Ε', '23'));      // λατινικό E, παύλα
+    expect(seatKey('Ε', '23')).not.toBe(seatKey('Δ', '23'));
+    expect(seatKey('', '23')).toBe('');
+    const s = seats([[1, 'Ε', '23'], [2, 'ε', ' 23 '], [3, 'Δ', '23']]);
+    expect(dupIds(s)).toEqual([1, 2]);
+    const info = weaponInfo(s);
+    expect(sameRack(info, s.people[0]).map(p => p.id)).toEqual([2]);
+    expect(sameRack(info, s.people[0], 'Δ', '23').map(p => p.id)).toEqual([3]);
+    expect(seatTxt(s.people[1].rack, s.people[1].wpos)).toBe('Ε 23');
+  });
+  it('εκτός δύναμης δεν μετράει στη θέση', () => {
+    const s0 = seats([[1, 'Ε', '5'], [2, 'Ε', '5']]);
+    const s = { ...s0, people: s0.people.map(p => (p.id === 2 ? { ...p, active: false } : p)) };
+    expect(dupIds(s)).toEqual([]);
+  });
+  it('οπλοβαστός χωρίς θέση: «Χωρίς θέση» μόνο για σε δύναμη με όπλο', () => {
+    const s = seats([[1, 'Ε', ''], [2, 'Ε', '3']]);
+    expect(noSeat(s.people[0])).toBe(true);
+    expect(noSeat(s.people[1])).toBe(false);
+    expect(noSeat({ ...s.people[0], weapon: undefined })).toBe(false);
+    expect(noSeat({ ...s.people[0], active: false })).toBe(false);
+    expect(noSeat(s.people[2])).toBe(false);      // χωρίς οπλοβαστό
+    expect(noSeat({ ...s.people[0], wpos: 'Α' })).toBe(false);
+  });
+  it('ταξινόμηση «Οπλοβ.»: οπλοβαστός, μετά θέση αριθμητικά (Ε 2 πριν Ε 10), χωρίς οπλοβαστό στο τέλος', () => {
+    const s = seats([[1, 'Ε', '10'], [2, 'Ε', '2'], [3, 'Δ', '7'], [4, 'Ε', '']]);
+    const ids = [...s.people.slice(0, 6)].sort(bySeat).map(p => p.id);
+    expect(ids).toEqual([3, 4, 2, 1, 5, 6]);
+  });
+});
+
+describe('Επιλογή για ομαδική έξοδο', () => {
+  const D = '2026-10-18';
+  // 1..6 με όπλο· ο 4 χωρίς όπλο· ο 5 εκτός δύναμης· ο 6 ήδη εκτός (ΕΚΠ)· ο 3 με ένοπλη υπηρεσία
+  const base = () => {
+    let s = W(fakeState(8), [1, 2, 3, 5, 6].map(pid => ({ pid, weapon: 'G' + pid })));
+    s = run(s, { t: 'setWeapons', changes: [{ pid: 1, rack: 'Ε', wpos: '23' }, { pid: 2, rack: 'Ε', wpos: '24' }, { pid: 7, rack: 'Ε' }] }).state;
+    s = { ...s, people: s.people.map(p => (p.id === 5 ? { ...p, active: false } : p)), guards: { [D]: { sk3a: 3 } } };
+    return run(s, { t: 'weaponOut', pids: [6], reason: 'ΕΚΠ', day: D, time: '07:00' }).state;
+  };
+  it('canOut / outSplit: σε δύναμη, με αριθμό, όχι ήδη εκτός (κίνηση ή ένοπλη υπηρεσία)', () => {
+    const s = base(); const info = weaponInfo(s, D); const ps = s.people.slice(0, 7);
+    expect(ps.filter(p => canOut(p, info)).map(p => p.id)).toEqual([1, 2]);
+    const x = outSplit(ps, info);
+    expect([x.go, x.noW, x.already, x.gone].map(l => l.map(p => p.id))).toEqual([[1, 2], [4, 7], [3, 6], [5]]);
+    expect(skipTxt(x)).toBe('5 παραλείφθηκαν (2 χωρίς αριθμό, 2 ήδη εκτός, 1 εκτός δύναμης)');
+    expect(skipTxt(outSplit([ps[0]], info))).toBe('');
+    expect(skipTxt(outSplit([ps[3]], info))).toBe('1 παραλείφθηκε (1 χωρίς αριθμό)');
+    // χωρίς μέρα δεν υπάρχουν ένοπλες υπηρεσίες: ο 3 μπορεί να βγει
+    expect(canOut(ps[2], weaponInfo(s))).toBe(true);
+  });
+  it('shift-click: εύρος με τη σειρά που φαίνεται, προς οποιαδήποτε κατεύθυνση', () => {
+    const ids = [10, 11, 12, 13, 14];
+    expect(idRange(ids, 11, 13)).toEqual([11, 12, 13]);
+    expect(idRange(ids, 14, 12)).toEqual([12, 13, 14]);
+    expect(idRange(ids, 12, 12)).toEqual([12]);
+    expect(idRange(ids, 12, 99)).toEqual([]);
+  });
+  it('κουτί σάρωσης: ΑΣΜ, αριθμός όπλου, θέση (Ε 23 = ε23), όλοι σε δύναμη', () => {
+    const s = base(); const ids = (q: string) => scanFind(q, s.people).hits.map(p => p.id);
+    expect(scanFind('Ε 23', s.people)).toMatchObject({ by: 'seat' });
+    expect(ids('Ε 23')).toEqual([1]);
+    expect(ids('e24')).toEqual([2]);              // λατινικό e
+    expect(ids('Ε')).toEqual([7]);                // σκέτο Ε: όσοι έχουν Ε χωρίς θέση
+    expect(ids('Ε 99')).toEqual([]);
+    expect(scanFind('g2', s.people)).toMatchObject({ by: 'weapon' });
+    expect(ids('g2')).toEqual([2]);
+    expect(ids(s.people[2].asm)).toEqual([3]);
+    expect(scanFind(s.people[2].asm, s.people)).toMatchObject({ by: 'asm' });
+    expect(ids('G5')).toEqual([]);                // εκτός δύναμης: δεν βρίσκεται
+    expect(ids('  ')).toEqual([]);
+  });
+  it('«Ξανά οι ίδιοι»: ομαδικές έξοδοι (2+ άτομα, ίδιος λόγος/μέρα/ώρα), νεότερη πρώτη, το πολύ 5', () => {
+    let s = W(fakeState(10), Array.from({ length: 10 }, (_, i) => ({ pid: i + 1, weapon: 'K' + (i + 1) })));
+    const out = (pids: number[], reason: string, day: string, time: string) => { s = run(s, { t: 'weaponOut', pids, reason, day, time }).state; };
+    out([1, 2, 3], 'ΕΚΠ', '2026-10-17', '08:00'); out([4], 'ΒΟΛΗ', '2026-10-17', '09:00');
+    out([5, 6], 'ΒΟΛΗ', '2026-10-18', '07:30'); out([7, 8], 'ΒΟΛΗ', '2026-10-18', '07:40');
+    const g = redoGroups(s.weaponLog);
+    expect(g.map(x => [x.reason, x.day, x.time, x.pids])).toEqual([['ΒΟΛΗ', '2026-10-18', '07:40', [7, 8]], ['ΒΟΛΗ', '2026-10-18', '07:30', [5, 6]], ['ΕΚΠ', '2026-10-17', '08:00', [1, 2, 3]]]);
+    expect(redoGroups(s.weaponLog, 2)).toHaveLength(2);
+    expect(redoGroups(undefined)).toEqual([]);
+    expect(redoGroups([...s.weaponLog, ...s.weaponLog])[2].pids).toEqual([1, 2, 3]);      // ο ίδιος άνθρωπος μία φορά
+  });
+  it('«Από υπηρεσία»: οι άνθρωποι κάθε μπλοκ της μέρας, ένοπλα πρώτα', () => {
+    let s = fakeState(8);
+    s = { ...s, guards: { [D]: { th1: 1, th2: 2, sk3a: 3, mg1: 4 } } };
+    const d = dutyPicks(s, D);
+    expect(d[0]).toMatchObject({ armed: true, pids: [3] });
+    expect(d.slice(1).map(x => x.pids)).toEqual(expect.arrayContaining([[1, 2], [4]]));
+    expect(d.every((x, i) => i === 0 || !x.armed)).toBe(true);
+    expect(dutyPicks(s, '2026-10-19')).toEqual([]);
+  });
+  it('Ιστορικό ομαδικής κίνησης: ονόματα (6 πρώτα και «και N ακόμα»)', () => {
+    const s = W(fakeState(10), Array.from({ length: 10 }, (_, i) => ({ pid: i + 1, weapon: 'N' + (i + 1) })));
+    const r = run(s, { t: 'weaponOut', pids: s.people.map(p => p.id), reason: 'ΒΟΛΗ', day: D, time: '08:00' });
+    expect(r.text).toMatch(/: 10 άτομα \(.+, .+, .+, .+, .+, .+ και 4 ακόμα\)$/);
+    expect(r.text).toContain(shortName(s.people[0]));
+    expect(r.text).not.toContain(shortName(s.people[9]));
+    const one = run(s, { t: 'weaponOut', pids: [2], reason: 'ΒΟΛΗ', day: D, time: '08:00' });
+    expect(one.text).toBe('Έξοδος όπλων (ΒΟΛΗ) 18/10 08:00: ' + shortName(s.people[1]));
+    const back = run(r.state, { t: 'weaponIn', ids: r.state.weaponLog.slice(0, 3).map(m => m.id), day: D, time: '12:00' });
+    expect(back.text).toMatch(/: 3 άτομα \(.+\)$/);
   });
 });

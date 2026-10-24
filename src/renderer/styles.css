@@ -885,12 +885,28 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapon-out{display:flex;gap:6px;align-items:center;min-width:0}
 .weapon-out small{overflow:hidden;text-overflow:ellipsis}
 .weapon-out .weapon-io{margin-left:auto;flex:none}
-.ptable--moves .ptable__head,.ptable--moves .ptable__row{grid-template-columns:minmax(170px,1.3fr) 100px 120px 160px 160px 160px minmax(110px,1fr) 190px}
+.ptable--moves .ptable__head > *,.ptable--moves .ptable__row > *{padding-left:7px;padding-right:7px}
+.ptable--moves .ptable__row{align-items:center}
+.wmv__search{flex:1 1 260px;max-width:420px;height:32px;font-size:13px}
+.wmv__w{display:flex;flex-direction:column;min-width:0;line-height:1.25}.wmv__w small{font-size:11px;color:var(--muted-fg);white-space:nowrap}
+.wmv__reason{min-width:0;display:flex}
+.wmv__reason .ui-badge{height:auto;min-height:22px;padding:2px 8px;white-space:normal;line-height:1.15;font-size:11px;text-align:left;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.wmv__post{white-space:normal;line-height:1.2;font-size:12px}
+.wmv__note{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wkey{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;margin-right:6px;padding:0 3px;border-radius:4px;border:1px solid currentColor;font:700 10px/1 var(--f-mono);opacity:.75;vertical-align:1px}
+.wpop__reasons .wpop__reason--pick{border-color:var(--input);background:var(--card);color:var(--foreground);font-weight:600}
+.wpop__reasons .wpop__reason--pick[aria-pressed="true"]{border-color:var(--bad-line);background:var(--bad-line);color:var(--on-bad)}
+.kpi--warn{background:var(--warn-bg);border-color:var(--warn)}
+.kpi--warn .kpi__l,.kpi--warn .kpi__n{color:var(--warn)}
 .weapon-acts{display:flex;gap:6px;justify-content:flex-end}
 .weapon-movelist{max-height:220px;overflow-y:auto}
 
 /* Οπλισμός: διακόπτης ΕΝΤΟΣ | ΕΚΤΟΣ στη γραμμή και το μικρό παράθυρο εξόδου/εισόδου */
-.wstate{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+.wstate{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:0;width:100%}
+.wstate__row{display:flex;align-items:center;gap:8px;max-width:100%}
+.wstate__fix,.wstate__time{border:0;background:none;padding:0;font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--warn);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wstate__fix{text-decoration:underline dotted;cursor:pointer}
+.wstate__fix:hover{text-decoration:none}
 .wstate__sw{display:inline-flex;flex:none;border:1px solid var(--input);border-radius:8px;overflow:hidden;background:var(--card)}
 .wstate__sw button{height:28px;padding:0 9px;border:0;background:none;cursor:pointer;font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--muted-fg)}
 .wstate__sw button + button{border-left:1px solid var(--input)}
@@ -904,7 +920,8 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wstate.is-auto .wstate__sw button{cursor:default}
 .wstate.is-auto .wstate__sw button + button{border-left-color:var(--warn)}
 .wstate.is-auto .wstate__sw button[aria-pressed="true"]:last-child{background:var(--warn-bg);color:var(--warn)}
-.wstate__why{min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wstate__why{min-width:0;max-width:100%;font-size:11px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wstate__soon{min-width:0;max-width:100%;font-size:11px;line-height:15px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wstate__why b{font-weight:700}.wstate.is-out:not(.is-auto) .wstate__why b{color:var(--bad)}.wstate.is-auto .wstate__why b{color:var(--warn)}
 .wstate__why span{font-family:var(--f-mono)}.wstate__why i{font-style:normal;color:var(--muted-fg)}
 .wstate__none{font-size:12px}
@@ -925,6 +942,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wpop__other{display:flex;gap:6px}.wpop__other .ui-input{height:32px;font-size:13px;flex:1}
 .wpop__foot{margin:0;font-size:12px;color:var(--muted-fg)}
 .wpop__err{margin:6px 0 0;font-size:12px;color:var(--bad);font-weight:600}
+.wpop__err--warn{color:var(--warn)}
 .wpop__acts{display:flex;justify-content:space-between;gap:8px;margin-top:10px}
 .bulkbar__reasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .bulkbar__reasons small{font-size:12px;font-weight:600}
@@ -1214,3 +1232,29 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .shiftown__row .ui-dd.ui-input{padding-right:6px}
 .shiftown__head{font-size:12px;color:var(--muted-fg)}
 .shiftown .shiftown__x{height:30px;width:36px;padding:0}
+
+/* Οπλισμός: σύνθημα κάτω από τον τίτλο, επιλογή (σάρωση, ξανά οι ίδιοι, από υπηρεσία) και μπάρα επιλογής */
+.page-head__quote{margin:2px 0 0;font-size:12px;line-height:1.35;font-style:italic;color:var(--muted-fg)}
+.wpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.wpick__scan{flex:0 1 380px;min-width:240px;height:32px;font-size:13px}
+.wpick__msg{font-size:13px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.wpick__msg--ok{color:var(--ok)}.wpick__msg--warn{color:var(--warn)}.wpick__msg--bad{color:var(--bad)}
+.wmenu{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}
+.wmenu__item{display:flex;justify-content:space-between;gap:12px;width:100%;padding:7px 10px;border:0;border-radius:8px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.wmenu__item:hover,.wmenu__item:focus-visible{background:var(--secondary)}
+.bulkbar .bulkbar__sel{flex:0 1 auto;min-width:160px;display:flex;align-items:center;flex-wrap:wrap;gap:0 6px}
+.bulkbar .bulkbar__hid{flex:none;min-width:0;font-weight:500;color:var(--muted-fg)}
+.bulkbar .bulkbar__reasons{flex:1 1 320px;justify-content:flex-end}
+
+/* Οπλισμός: λωρίδα «Εκτός τώρα» ανά λόγο, αυτόματες γραμμές ένοπλων υπηρεσιών (Michael, 24/10) */
+.wreasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;font-size:13px}
+.wreasons > b{margin-right:2px}
+.ui-chip--auto:not([aria-pressed="true"]){border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.wmv__who{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.25}.wmv__who .linkish{white-space:normal;text-align:left;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.wmv__who small{font-size:11px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wmv__auto{font-style:normal;font-size:11px;color:var(--warn);font-weight:600}
+.ptable--moves .ptable__row.is-auto{box-shadow:inset 3px 0 0 var(--warn)}
+.weapon-notes .ui-badge:first-child{flex:none}
+/* μπάρα επιλογής: οι αριθμοί των λόγων (1-9) δεν σπάνε τη γραμμή στα 1366 */
+.bulkbar__reasons .wkey{margin-right:4px;min-width:14px;height:14px;font-size:9px}
+.bulkbar__reasons{gap:4px}.bulkbar__reasons .ui-btn--sm{padding-left:7px;padding-right:7px;flex:none}
+.bulkbar .bulkbar__sel{min-width:100px}

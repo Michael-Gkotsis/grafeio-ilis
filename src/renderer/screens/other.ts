@@ -16,7 +16,8 @@ import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, dutyStartOf, hkOn, hkToggle, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesFrom, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
+import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
+import { outCountOn } from '../../shared/weaponView';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
@@ -48,6 +49,8 @@ export function TodayScreen() {
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
   }, [state.statuses, state.people, state.rules, today, now]);
   const empty = frouraEmpty(state, tomorrow);
+  // Όπλα εκτός τώρα: όσους μετράει και η κεφαλίδα του Οπλισμού (κινήσεις και ένοπλες υπηρεσίες)
+  const wOut = useMemo(() => outCountOn(state, today, nowHM()), [state.people, state.settings, state.rules, state.guards, state.dutyLog, state.weaponLog, state.dutyFix, today, now]);   // eslint-disable-line react-hooks/exhaustive-deps
   // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
   const { ending, endTom, expired, nRec } = useMemo(() => {
     const o = { ending: [] as Status[], endTom: [] as Status[], expired: [] as Status[], nRec: 0 };
@@ -105,6 +108,7 @@ export function TodayScreen() {
       ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
       ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
       ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
+      ${wOut > 0 && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
       ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
     </div>
     <div className="cols">
@@ -562,6 +566,8 @@ export function CommandPalette({ onClose }: P) {
     { t: HK() + ' (η αναφορά)', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΕΚΤΥΠΩΣΗ ΜΠΡΟΣΤΙΝΟ ΠΙΣΩ', fn: () => nav.go('hkai', { hkTab: 'hkai' }) },
     { t: 'Οπλισμός', k: 'ΟΠΛΙΣΜΟΣ ΟΠΛΑ ΟΠΛΟ ΟΠΛΟΣΤΑΣΙΟ ΤΥΦΕΚΙΟ', fn: () => nav.go('weapons') },
     { t: 'Οπλισμός › Κινήσεις', k: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ΕΝΤΟΣ ΕΚΤΟΣ ΧΡΕΩΣΗ', fn: () => nav.go('weapons', { wtab: 'moves' }) },
+    { t: 'Έξοδος όπλων…', k: 'ΕΞΟΔΟΣ ΟΠΛΩΝ ΟΠΛΙΣΜΟΣ ΕΚΤΟΣ ΒΓΑΛΕ ΟΠΛΑ ΣΑΡΩΣΗ ΘΕΣΗ ΑΡΙΘΜΟΣ ΟΠΛΟΥ', fn: () => nav.go('weapons', { wtab: 'weapons', wfocus: 'scan' }) },
+    { t: 'Είσοδος όλων…', k: 'ΕΙΣΟΔΟΣ ΟΠΛΩΝ ΟΛΩΝ ΟΠΛΙΣΜΟΣ ΕΝΤΟΣ ΕΠΙΣΤΡΟΦΗ ΟΠΛΑ ΚΙΝΗΣΕΙΣ ΕΚΤΟΣ ΤΩΡΑ', fn: () => nav.go('weapons', { wtab: 'moves', wmoves: 'open', wmreason: undefined, wfocus: 'in' }) },
     { t: 'Εκτύπωση (ΦΡΟΥΡΑ, ' + HK() + ', Εξοδούχοι, Έντυπα)', k: 'ΕΚΤΥΠΩΣΗ ΕΚΤΥΠΩΣΕ ΤΥΠΩΣΕ ΧΑΡΤΙ ΕΚΤΥΠΩΤΗΣ PDF PRINT ΣΕΛΙΔΕΣ', fn: () => nav.go('reports') },
     { t: 'Τα έντυπά μου', k: 'ΤΑ ΕΝΤΥΠΑ ΜΟΥ ΔΙΚΑ ΜΟΥ ΑΠΟΘΗΚΕΥΜΕΝΑ', fn: () => nav.go('reports', { repTab: undefined }) },
     { t: 'Ρυθμίσεις › Μονάδα και έντυπα', k: 'ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΙΛΗ ΛΟΧΟΣ ΔΙΟΙΚΗΤΗΣ ΣΕΙΡΕΣ ' + HK(), fn: () => nav.go('templates', { tab: 'unit' }) },

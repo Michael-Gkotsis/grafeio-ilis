@@ -376,24 +376,35 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
 // της υπηρεσίας: από τις βάρδιες (14:00-16:00, 22:00-00:00, 06:00-08:00 → 14:00 ως 08:00 της επόμενης) ή από τις ώρες
 // της θέσης («14:00 → 14:00»). null = δεν ξέρουμε (μαγειρεία «ημέρα», ΤΑΕ χωρίς ώρες).
 const spanIdx = new WeakMap<object, { start: number | null; end: number | null }>();
+const timesIn = (txt: string) => [...txt.matchAll(/(\d{1,2}):(\d{2})/g)].map(m => +m[1] * 60 + +m[2]);
+// Η ώρα κάθε βάρδιας της θέσης (post.slots), στα ίδια λεπτά με το postSpan: από τα μεσάνυχτα της μέρας υπηρεσίας, +1440 μετά τα
+// μεσάνυχτα (ένοπλες υπηρεσίες ανά νούμερο, armed.ts). Θέση χωρίς βάρδιες: [].
+const slotIdx = new WeakMap<object, { start: number; end: number }[]>();
+export function slotSpans(post: DutyPost): { start: number; end: number }[] {
+  let r = slotIdx.get(post);
+  if (r) return r;
+  r = [];
+  if (post.slots && post.slots.length) {
+    // βάρδια που ξεκινά πριν την αρχή του κύκλου είναι της επόμενης μέρας (π.χ. κύκλος 14:00, βάρδιες από 06:00)
+    let day = post.cyc != null && (timesIn(post.slots[0])[0] ?? 1440) < post.cyc ? 1440 : 0, prev = -1;
+    for (const sl of post.slots) {
+      const [a, b] = timesIn(sl); if (a == null || b == null) continue;
+      if (a < prev) day += 1440;
+      prev = a;
+      r.push({ start: a + day, end: b + day + (b <= a ? 1440 : 0) });
+    }
+  }
+  slotIdx.set(post, r);
+  return r;
+}
 export function postSpan(post: DutyPost): { start: number | null; end: number | null } {
   let r = spanIdx.get(post);
   if (r) return r;
-  const re = /(\d{1,2}):(\d{2})/g;
-  const times = (txt: string) => [...txt.matchAll(re)].map(m => +m[1] * 60 + +m[2]);
   r = { start: null, end: null };
-  if (post.slots && post.slots.length) {
-    // βάρδια που ξεκινά πριν την αρχή του κύκλου είναι της επόμενης μέρας (π.χ. κύκλος 14:00, βάρδιες από 06:00)
-    let day = post.cyc != null && (times(post.slots[0])[0] ?? 1440) < post.cyc ? 1440 : 0, prev = -1;
-    for (const sl of post.slots) {
-      const [a, b] = times(sl); if (a == null) continue;
-      if (a < prev) day += 1440;
-      prev = a;
-      if (r.start == null) r.start = a + day;
-      if (b != null) r.end = b + day + (b <= a ? 1440 : 0);
-    }
-  } else if (post.hrs) {
-    const [a, b] = times(post.hrs);
+  const sp = slotSpans(post);
+  if (sp.length) { r.start = sp[0].start; r.end = sp[sp.length - 1].end; }
+  else if (post.hrs) {
+    const [a, b] = timesIn(post.hrs);
     if (a != null) { r.start = a; if (b != null) r.end = b + (b <= a ? 1440 : 0); }
   }
   spanIdx.set(post, r);

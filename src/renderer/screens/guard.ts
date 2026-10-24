@@ -3,6 +3,7 @@ import { HK } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
+import { ARM_AFTER, ARM_BEFORE, ARM_MAX, armMargin } from '../../shared/armed';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftForm, shiftOf, shiftWhy, type HoursMode, useExport, useExportBusy } from '../common';
 import { normTime } from '../../shared/hours';
@@ -20,7 +21,7 @@ import { WhoDoes } from './whodoes';
 import { SkipsView } from './skips';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : ''].filter(Boolean).join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : '', (r.armBefore ?? ARM_BEFORE) !== ARM_BEFORE || (r.armAfter ?? ARM_AFTER) !== ARM_AFTER ? 'το όπλο ένοπλης υπηρεσίας βγαίνει ' + (r.armBefore ?? ARM_BEFORE) + '′ πριν και μπαίνει ' + (r.armAfter ?? ARM_AFTER) + '′ μετά' : ''].filter(Boolean).join(', ');
 const ROTATE_TXT = 'Κανείς δεν ξανακάνει την ίδια υπηρεσία (σκοπιά, μαγειρεία, θαλαμοφύλακα…) όσο κάποιος άλλος, που είναι η σειρά του σήμερα, δεν την έχει κάνει. Έτσι περνούν όλοι από όλες τις υπηρεσίες που μπορούν να κάνουν και μετά ξαναρχίζουν. Ποιοι μπαίνουν σήμερα το κρίνει η σειρά δικαιοσύνης, όπως πριν· όποιος δεν κάνει μια υπηρεσία (Ποιος κάνει τι, Σ.Ι., ιατρικά) δεν τη χρωστά.';
 const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
@@ -113,12 +114,12 @@ function DaysSelect({ id, value, onChange, opts, txt }: P) {
 }
 function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
-  const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME });
+  const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) });
   const [ds, setDs] = useState(dutyStartOf(state.settings));
   const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds);
   const [r0] = useState(() => JSON.stringify([r, ds])); const dirty = JSON.stringify([r, ds]) !== r0;
   const save = async () => {
-    const nr = { ...r, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)! }; const nds = normTime(ds)!;
+    const { before, after, ...rest } = r as any; const nr = { ...rest, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after }; const nds = normTime(ds)!;
     if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
     if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
   };
@@ -135,6 +136,10 @@ function RulesDialog({ onClose }: P) {
       <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
       <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
     </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
+    <div className="field"><span className="field__label">Ένοπλη υπηρεσία: πότε βγαίνει το όπλο</span><div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="rab">Βγαίνει πριν (λεπτά)</label><input id="rab" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.before} onChange=${(e: any) => setR({ ...r, before: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
+      <div className="field"><label className="field__label" htmlFor="raa">Μπαίνει μετά (λεπτά)</label><input id="raa" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.after} onChange=${(e: any) => setR({ ...r, after: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
+    </div><span className="note">Το όπλο βγαίνει ${r.before}′ πριν ξεκινήσει το νούμερο και μπαίνει ${r.after}′ μετά το τέλος του (προεπιλογή 15′ και 15′). Ποιο όπλο βγαίνει, δικό του ή της θέσης, το ορίζεις σε κάθε ένοπλη υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.rotate !== false} onChange=${(e: any) => setR({ ...r, rotate: e.target.checked })}/><span><b>Εναλλαγή υπηρεσιών</b><small>${ROTATE_TXT} Όταν είναι κλειστό, μετρούν μόνο τα νούμερα.</small></span></label>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => setR({ ...r, strictUnarmed: e.target.checked })}/><span><b>Αυστηρά Άοπλοι</b><small>${STRICT_TXT}${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''} Όταν είναι κλειστό, ισχύει η κανονική σειρά.</small></span></label>
     <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · ΕΥ και ΣΤΕΠ σε καμία υπηρεσία · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>

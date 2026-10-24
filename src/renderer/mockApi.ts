@@ -27,8 +27,8 @@ function seed(): AppState {
   // αριθμοί όπλων: λίγοι χωρίς, ένας διπλός, ένας άοπλος (Ι4) με όπλο
   s.people.forEach((p, i) => { if (i % 19 !== 6 && !(i % 13 === 5 && i !== 18)) p.weapon = String(4810000 + i * 137); });
   s.people[30].weapon = s.people[32].weapon;
-  s.people.forEach((p, i) => { if (p.weapon && i % 4 !== 3) p.wtype = 'G3A3'; if (p.weapon && i < 24) p.rack = 'Ε' + (i + 1); });
-  s.people[5].rack = 'Ε3';
+  s.people.forEach((p, i) => { if (p.weapon && i % 4 !== 3) p.wtype = 'G3A3'; if (p.weapon && i < 24) { p.rack = i < 12 ? 'Ε' : 'Δ'; if (i !== 7) p.wpos = String(i % 12 + 1); } });
+  s.people[5].rack = 'Ε'; s.people[5].wpos = '3';   // ίδια θέση με τον 2ο· ο 7ος έχει οπλοβαστό χωρίς θέση
   const t = today(); let n = 0; const id = () => 'm' + ++n;
   const st = (pid: number, type: any, a: number, b: number, extra: any = {}) => ({ id: id(), pid, type, from: addDays(t, a), to: addDays(t, b), ...extra });
   s.statuses = [st(5, 'LEAVE', -3, 0), st(10, 'LEAVE', -4, 2), st(12, 'SICK', -1, 2), st(47, 'NOS', -2, 3), st(18, 'EY', 0, 0), st(21, 'EA', -5, 4), st(44, 'EO', -10, 20), st(52, 'EA', -3, 0, { open: true }),
@@ -42,6 +42,8 @@ function seed(): AppState {
   // ΕΠΟΠ με υπηρεσίες τον μήνα: μπαίνει στις θέσεις μόνο με το χέρι
   s.cadreList.push({ id: 's5', rank: 'ΣΤΡ', origin: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΥΠΟΔΕΙΓΜΑΤΑΚΗΣ', first: 'ΛΕΩΝ', spec: 'ΠΖ', active: true, monthMax: 4, pid: -1 });
   s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
+  // ΦΡΟΥΡΑ ΣΠΕΝ: σκοποί (α/β παράλληλες γραμμές) και οπλοφύλακες «όπλο της θέσης», ΤΑΕ όλη μέρα (ένοπλες υπηρεσίες ανά νούμερο)
+  s.settings = { ...s.settings, phase: 'spen', blocksSpen: s.settings.blocksSpen.map(b => (b.id === 'op' || b.id === 'sk' ? { ...b, armWeapon: 'post' as const } : b)) };
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
@@ -50,6 +52,10 @@ function seed(): AppState {
   s.weaponLog = [1, 2, 3].map(i => ({ id: id(), pid: s.people[i].id, weapon: s.people[i].weapon!, reason: 'ΕΚΠ', outDay: t, outTime: '07:40' }))
     .concat([{ id: id(), pid: s.people[11].id, weapon: s.people[11].weapon!, reason: 'ΕΠΙΣΚΕΥΗ', outDay: addDays(t, -1), outTime: '10:05', note: 'ΒΛΑΒΗ ΣΤΟΝ ΟΠΛΟΦΟΡΕΑ' } as any,
       { id: id(), pid: s.people[12].id, weapon: s.people[12].weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '06:30', inDay: t, inTime: '11:20', inReason: 'ΛΗΞ ΒΟΛΗΣ' } as any]);
+  // ομαδική ΒΟΛΗ από το πρωί (ανοιχτή) και ο σκοπός 3ης (α) που βγήκε και για βολή (να μένει ΕΚΤΟΣ λόγω υπηρεσίας)· ο ιδιοκτήτης του όπλου θέσης έχει αριθμό
+  const g0 = s.guards[t] || {}; const owner = s.people.find(p => p.id === g0.op1); if (owner && !owner.weapon) owner.weapon = '4819999';
+  const volley = [...s.people.slice(20, 30).filter(p => p.weapon && p.id !== g0.op1), ...s.people.filter(p => p.id === g0.sk3a && p.weapon)];
+  s.weaponLog.push(...volley.map(p => ({ id: id(), pid: p.id, weapon: p.weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '08:00' }) as any));
   // σημειώσεις γραφείου: μία γενική με υπενθύμιση που έφτασε, μία για στρατιώτη, μία για στέλεχος, μία ολοκληρωμένη
   s.notes = [
     { id: 'n1', text: 'Έλεγχος κλειδιών οπλοστασίου με τον υπαξιωματικό υπηρεσίας.', at: addDays(t, -4), rem: addDays(t, -2) },

@@ -5,7 +5,7 @@ import { addDays, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from '
 import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
 import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
-import { WEAPON_FILTERS, byOut, inOutText, movesOn, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
+import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
@@ -357,8 +357,8 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
   if (kind === 'wmove') {
     const r = x as MoveRow; const m = r.m;
     switch (f) {
-      case 'weapon': return m.weapon || r.p.weapon || ''; case 'mreason': return m.reason; case 'mout': return when(m.outDay, m.outTime);
-      case 'minr': return m.inReason || ''; case 'min': return when(m.inDay, m.inTime); case 'mnote': return m.note || '';
+      case 'weapon': return m.weapon || r.p.weapon || ''; case 'mreason': return m.reason; case 'mout': return isAuto(m) ? moveOutCell(m) : when(m.outDay, m.outTime);
+      case 'minr': return m.inReason || ''; case 'min': return isAuto(m) ? moveInCell(m) : when(m.inDay, m.inTime); case 'mnote': return isAuto(m) ? 'ΑΥΤΟΜΑΤΑ' + (m.note ? ' · ' + m.note : '') : m.note || '';
     }
     return fieldValue(s, 'people', r.p, f, i, d, text, o);
   }
@@ -439,7 +439,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   if (r.kind === 'wmove') {
     const ok = soldiersOf(s, pk, d); const pm = personMap(s.people);
     const out: MoveRow[] = [];
-    for (const m of [...movesOn(s.weaponLog, d)].sort(byOut)) {
+    for (const m of movesAll(s, d)) {
       if (pk.open && m.inDay && m.inDay <= d) continue;
       const p = pm.get(m.pid); if (p && ok.has(p.id)) out.push({ ...p, id: m.id, pid: p.id, p, m });
     }
@@ -601,8 +601,8 @@ export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: 
     return ids.map(k => { const po = postBy(s, String(k)); return po ? dutyRow(pm, po, g[po.k]) : null; }).filter((x): x is DutyRow => !!x);
   }
   if (kind === 'wmove') {
-    const pm = personMap(s.people); const mm = new Map((s.weaponLog || []).map(m => [m.id, m]));
-    return ids.map(id => { const m = mm.get(id as string); const p = m && pm.get(m.pid); return m && p ? { ...p, id: m.id, pid: p.id, p, m } as MoveRow : null; }).filter((x): x is MoveRow => !!x);
+    const pm = personMap(s.people);
+    return ids.map(id => { const m = moveById(s, id as string); const p = m && pm.get(m.pid); return m && p ? { ...p, id: m.id, pid: p.id, p, m } as MoveRow : null; }).filter((x): x is MoveRow => !!x);
   }
   if (kind === 'status') {
     const pm = personMap(s.people); const sm = new Map(s.statuses.map(x => [x.id, x]));

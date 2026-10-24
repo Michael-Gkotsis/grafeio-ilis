@@ -245,7 +245,9 @@ export function shiftReport(start: string, list: ShiftOwn[], count: number): Shi
 }
 // code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
 export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
-export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null }
+// armWeapon (Michael, 24/10): στις ένοπλες υπηρεσίες, «own» (προεπιλογή, χωρίς πεδίο) = κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του·
+// «post» = ένα όπλο της θέσης, που περνά από χέρι σε χέρι στις αλλαγές (armed.ts)
+export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post' }
 // Έντυπο υπηρεσιών: ΣΒΕΝ, ΣΠΕΝ ή δικό σου (Michael, 22/10: «dropdown και λίστα»). Το δικό σου έχει δικές του
 // υπηρεσίες και βγαίνει στο Excel με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ (base), με το όνομά του.
 export type BasePhase = 'sven' | 'spen';
@@ -330,6 +332,8 @@ export interface Rules {
   rotate?: boolean;                      // εναλλαγή υπηρεσιών (Michael, 18/10): όλοι περνούν από όλες τις υπηρεσίες πριν ξανακάνουν την ίδια· false = κλειστό
   outTime?: string;                      // ώρα που ξεκινά η έξοδος (ΩΩ:ΛΛ, προεπιλογή 16:00): όποιος γυρίσει ως τότε βγαίνει κανονικά
   hkTime?: string;                       // ώρα της ΗΚΑΙ (ΩΩ:ΛΛ, προεπιλογή 08:00): όποιος γυρίσει ως τότε μετρά παρών εκείνη τη μέρα
+  armBefore?: number;                    // ένοπλη υπηρεσία (Michael, 24/10): το όπλο βγαίνει τόσα λεπτά πριν από το νούμερο (προεπιλογή 15, armed.ts)
+  armAfter?: number;                     // ... και μπαίνει τόσα λεπτά μετά (προεπιλογή 15)
 }
 export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
@@ -486,6 +490,7 @@ export interface AppState {
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
   weaponLog: WeaponMove[];               // έξοδοι και είσοδοι όπλων από τον οπλοβαστό (καρτέλα Οπλισμός)
+  dutyFix: DutyFix[];                    // διορθώσεις με το χέρι στις ώρες των ένοπλων υπηρεσιών, με λόγο (kv «dutyFix», shared/armed.ts)
   notes: Note[];                         // σημειώσεις του γραφείου: γενικές ή για στρατιώτη/στέλεχος, με προαιρετική υπενθύμιση (shared/notes.ts)
   outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
@@ -498,6 +503,9 @@ export interface Note { id: string; text: string; at: ISODate; pids?: number[]; 
 // (ΕΚΠ, ΒΟΛΗ…) και ώρα, και μπαίνει με τον λόγο εισαγωγής του (ΛΗΞ ΕΚΠ…) και ώρα. Χωρίς inDay: είναι ακόμα εκτός.
 // weapon: ο αριθμός όπλου τη στιγμή της εξόδου. Ώρες ΩΩ:ΛΛ, γράφονται μόνες τους (τώρα) και διορθώνονται.
 export interface WeaponMove { id: string; pid: number; weapon: string; reason: string; outDay: ISODate; outTime: string; inDay?: ISODate; inTime?: string; inReason?: string; note?: string }
+// Διόρθωση ώρας ένοπλου νούμερου (Michael, 24/10): πάνω στο αυτόματο, για τη γραμμή (μέρα κύκλου, θέση, πρώτο νούμερο). out/in:
+// «ΕΕΕΕ-ΜΜ-ΗΗ ΩΩ:ΛΛ» (η ώρα μπορεί να πέφτει την άλλη μέρα)· λείπει = όπως βγαίνει αυτόματα. Χωρίς αντίστοιχο νούμερο, αγνοείται.
+export interface DutyFix { id: string; day: ISODate; post: string; n: number; out?: string; in?: string; why: string }
 // Υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες· όχι στον κανόνα του ίδιου νούμερου
 export interface SeatlessDuty { pid: number; kind: DutyKind }
 export type DutyLog = Record<ISODate, SeatlessDuty[]>;
@@ -530,5 +538,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], outNotes: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], outNotes: {}, lastExpire: ''
 });
