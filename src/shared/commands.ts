@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -12,6 +12,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
+import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, WK } from './weekend';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
@@ -77,7 +78,7 @@ export type Command =
   | { t: 'delPhase'; id: Phase }
   | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
-  | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden'>> }
+  | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
@@ -96,7 +97,10 @@ export type Command =
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
   | { t: 'weaponIn'; ids: string[]; day: ISODate; time: string; reason?: string }
   | { t: 'editWeaponMove'; id: string; patch: Partial<Pick<WeaponMove, 'reason' | 'outDay' | 'outTime' | 'inDay' | 'inTime' | 'inReason' | 'note'>> }
-  | { t: 'deleteWeaponMove'; id: string };
+  | { t: 'deleteWeaponMove'; id: string }
+  // Διόρθωση ώρας ενός ένοπλου νούμερου (Michael, 24/10): γραμμή = μέρα κύκλου + θέση + πρώτο νούμερο (n). out/in «ΕΕΕΕ-ΜΜ-ΗΗ ΩΩ:ΛΛ»,
+  // όποια λείπει μένει αυτόματη· why υποχρεωτικό· reset: πίσω στο αυτόματο
+  | { t: 'fixDutyWeapon'; day: ISODate; post: string; n: number; out?: string; in?: string; why: string; reset?: boolean };
 
 // Οπλισμός: μόνο τα πεδία που δόθηκαν αλλάζουν (αριθμός, τύπος, θέση οπλοβαστού)· κενό = σβήνεται
 export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
@@ -581,8 +585,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const guards = { ...s.guards }; delete guards[c.date];
       return { state: { ...s, guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': καθαρίστηκαν όλες οι θέσεις', files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
-    case 'setRules':
-      return { state: { ...s, rules: c.rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
+    case 'setRules': {
+      // περιθώριο ένοπλης υπηρεσίας (Michael, 24/10): λεπτά, από 0 ως 240 (ARM_MAX)
+      const rules = { ...c.rules };
+      for (const k of ['armBefore', 'armAfter'] as const) if (rules[k] != null) { const n = Math.round(Number(rules[k])); if (!(n >= 0 && n <= ARM_MAX)) throw new Error('Το περιθώριο του όπλου είναι από 0 έως ' + ARM_MAX + ' λεπτά'); rules[k] = n; }
+      return { state: { ...s, rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
+    }
     case 'setCap': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       const cur = { ...(s.caps[c.pid] || {}) };
@@ -810,6 +818,27 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const p = pm.get(m.pid);
       return { state: { ...s, weaponLog: log.filter(x => x.id !== c.id) }, text: 'Σβήστηκε κίνηση όπλου' + (p ? ' ' + shortName(p) : '') + ': ' + m.reason + ' ' + dm(m.outDay) + ' ' + m.outTime, files: [] };
     }
+    case 'fixDutyWeapon': {
+      const row = armedRows(s, c.day).find(r => r.post === c.post && r.n === c.n);
+      if (!row) throw new Error('Δεν υπάρχει αυτό το νούμερο ένοπλης υπηρεσίας (άλλαξαν οι υπηρεσίες;)');
+      const fixes = s.dutyFix || []; const old = fixes.find(x => x.id === row.id);
+      const pm = personMap(s.people); const who = pm.get(row.who);
+      const lbl = row.reason + ' ' + dm(c.day) + (who ? ' (' + shortName(who) + ')' : '');
+      if (c.reset) {
+        if (!old) return { state: s, text: '', files: [] };
+        return { state: { ...s, dutyFix: fixes.filter(x => x.id !== row.id) }, text: 'Ώρες ένοπλης υπηρεσίας ' + lbl + ': πίσω στο αυτόματο', files: [] };
+      }
+      const why = String(c.why ?? '').replace(/\s+/g, ' ').trim(); if (!why) throw new Error('Γράψε τον λόγο της διόρθωσης');
+      for (const v of [c.out, c.in]) if (v != null && !okStamp(v)) throw new Error('Η ώρα δεν είναι σωστή');
+      // ό,τι είναι ίδιο με το αυτόματο δεν γράφεται
+      const out = c.out != null && stampMin(c.day, c.out) !== row.autoOut ? c.out : undefined, inn = c.in != null && stampMin(c.day, c.in) !== row.autoIn ? c.in : undefined;
+      if (!out && !inn) throw new Error('Άλλαξε την ώρα εξόδου ή εισόδου (ή πάτα «Πίσω στο αυτόματο»)');
+      if ((inn ? stampMin(c.day, inn) : row.autoIn) < (out ? stampMin(c.day, out) : row.autoOut)) throw new Error('Η είσοδος είναι πριν την έξοδο');
+      const fix: DutyFix = { id: row.id, day: c.day, post: row.post, n: row.n, ...(out ? { out } : {}), ...(inn ? { in: inn } : {}), why };
+      if (old && JSON.stringify(old) === JSON.stringify(fix)) return { state: s, text: '', files: [] };
+      const t = (st: string | undefined, m: number) => dm(calDay(c.day, st ? stampMin(c.day, st) : m)) + ' ' + (st ? st.slice(11) : hmOf(m));
+      return { state: { ...s, dutyFix: [...fixes.filter(x => x.id !== row.id), fix] }, text: 'Διόρθωση ωρών ένοπλης υπηρεσίας ' + lbl + ': έξοδος ' + t(out, row.autoOut) + ', είσοδος ' + t(inn, row.autoIn) + ' · λόγος: ' + why, files: [] };
+    }
     case 'addNote': case 'editNote': case 'doneNote': case 'deleteNote': return noteCmd(s, c, ctx);
     case 'addPerson': {
       const p = makePerson(s, c.person);
@@ -920,8 +949,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         }
         if (!gone) guards = s.guards;
       }
-      const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : 'άλλαξε';
-      return { state: { ...s, guards, settings: withBlocks(s.settings, c.phase, list.map(x => (x.id === c.id ? { ...x, ...c.patch } : x))) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': ' + what, files: [] };
+      const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : c.patch.armWeapon != null ? (c.patch.armWeapon === 'post' ? 'το όπλο είναι της θέσης (περνά από χέρι σε χέρι)' : 'το κάθε άτομο βγάζει το δικό του όπλο') : 'άλλαξε';
+      // «δικό του» είναι η προεπιλογή: δεν γράφεται στις ρυθμίσεις
+      const nb = (x: BlockDef): BlockDef => { const y = { ...x, ...c.patch }; if (y.armWeapon !== 'post') delete y.armWeapon; return y; };
+      return { state: { ...s, guards, settings: withBlocks(s.settings, c.phase, list.map(x => (x.id === c.id ? nb(x) : x))) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': ' + what, files: [] };
     }
     case 'setNightTraining': {
       const nightTraining = { ...(s.nightTraining || {}) };

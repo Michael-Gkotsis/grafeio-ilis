@@ -69,11 +69,11 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'weaponLog', 'notes', 'outNotes', 'lastExpire'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'weaponLog', 'dutyFix', 'notes', 'outNotes', 'lastExpire'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
 // dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
-const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', notes: 'ids', outNotes: 'obj' };
+const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', dutyFix: 'ids', notes: 'ids', outNotes: 'obj' };
 const entriesOf = (k: string, v: unknown): Map<string, unknown> =>
   KV_ENTRIES[k] === 'ids' ? new Map(((v as { id: string }[]) || []).map(x => [x.id, x])) : new Map(Object.entries((v as Record<string, unknown>) || {}));
 
@@ -171,6 +171,7 @@ export class Store {
     s.dutyLog = kv.get('dutyLog') || {};
     s.nightTraining = kv.get('nightTraining') || {};
     s.weaponLog = kv.get('weaponLog') || [];
+    s.dutyFix = kv.get('dutyFix') || [];
     s.notes = (kv.get('notes') || []).map(normNote);
     s.outNotes = kv.get('outNotes') || {};
     s.lastExpire = kv.get('lastExpire') || '';
