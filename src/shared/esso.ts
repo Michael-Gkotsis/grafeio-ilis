@@ -2,6 +2,7 @@
 // Η τωρινή ΕΣΣΟ κρατιέται στις Ρυθμίσεις (settings.essos)· αν δεν έχει οριστεί, βγαίνει από την πιο συχνή ΕΣΣΟ όσων
 // είναι σε δύναμη (το «2026 Γ΄» που γράφει το Δυναμολόγιο). Το essoLabel() είναι ό,τι δείχνει η εφαρμογή (πάνω δεξιά κ.λπ.).
 import { emptyState, type AppState, type Person, type Settings } from './domain';
+import { normNote } from './notes';
 import type { ISODate } from './dates';
 import { norm } from './text';
 
@@ -51,7 +52,7 @@ export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: stri
   const forms = Object.fromEntries(Object.entries(st.forms || {}).map(([k, b]) => { const c = { ...b }; delete c.dir; return [k, c]; }).filter(([, b]) => Object.values(b as object).some(v => v !== undefined && v !== '')));
   const settings: Settings = { ...st, essos: { s: e.s, y: e.y, from: today }, sources: {}, newDirs: {}, forms, outputDir, fixed: {}, phase: 'sven', baselineReviewed: true, ...(unit || {}) };
   // σημειώσεις: μένουν οι γενικές και των στελεχών· των στρατιωτών της παλιάς ΕΣΣΟ μένουν στο αρχείο της
-  return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).filter(n => n.pid == null) };
+  return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).map(normNote).filter(n => !n.pids || n.cids).map(({ pids: _x, ...n }) => n) };
 }
 
 // ------------------------------------------------------------------ αρχείο ΕΣΣΟ (φάκελος με βάση, Excel και ΕΣΣΟ.json)

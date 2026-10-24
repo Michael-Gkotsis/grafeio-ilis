@@ -492,7 +492,8 @@ export interface AppState {
 }
 // Σημείωση (Michael, 24/10: «γράφουμε χαρτάκια και τα ξεχνάμε»). Χωρίς pid και cid είναι γενική. rem: μέρα υπενθύμισης·
 // βγαίνει στο «Σήμερα» από εκείνη τη μέρα και μετά, μέχρι να ολοκληρωθεί. done: πότε ολοκληρώθηκε (μένει στις «Ολοκληρωμένες»)
-export interface Note { id: string; text: string; at: ISODate; pid?: number; cid?: string; rem?: ISODate; star?: boolean; done?: ISODate }
+// pids/cids: οι στρατιώτες και τα στελέχη στα οποία δένεται (καθόλου = γενική)· pid/cid: μόνο της πρώτης έκδοσης, μετατρέπονται στη φόρτωση (normNote)
+export interface Note { id: string; text: string; at: ISODate; pids?: number[]; cids?: string[]; pid?: number; cid?: string; rem?: ISODate; star?: boolean; done?: ISODate }
 // Κίνηση όπλου (Michael, 18/10: «όπως οι εξοδούχοι»): βγαίνει από τον οπλοβαστό με λόγο από τη λίστα «Λόγοι εξόδου όπλου»
 // (ΕΚΠ, ΒΟΛΗ…) και ώρα, και μπαίνει με τον λόγο εισαγωγής του (ΛΗΞ ΕΚΠ…) και ώρα. Χωρίς inDay: είναι ακόμα εκτός.
 // weapon: ο αριθμός όπλου τη στιγμή της εξόδου. Ώρες ΩΩ:ΛΛ, γράφονται μόνες τους (τώρα) και διορθώνονται.

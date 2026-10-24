@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { normNote } from '../shared/notes';
 import { daysBetween, today } from '../shared/dates';
 import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
@@ -170,7 +171,7 @@ export class Store {
     s.dutyLog = kv.get('dutyLog') || {};
     s.nightTraining = kv.get('nightTraining') || {};
     s.weaponLog = kv.get('weaponLog') || [];
-    s.notes = kv.get('notes') || [];
+    s.notes = (kv.get('notes') || []).map(normNote);
     s.outNotes = kv.get('outNotes') || {};
     s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));

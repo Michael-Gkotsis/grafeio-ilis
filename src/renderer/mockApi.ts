@@ -53,11 +53,11 @@ function seed(): AppState {
   // σημειώσεις γραφείου: μία γενική με υπενθύμιση που έφτασε, μία για στρατιώτη, μία για στέλεχος, μία ολοκληρωμένη
   s.notes = [
     { id: 'n1', text: 'Έλεγχος κλειδιών οπλοστασίου με τον υπαξιωματικό υπηρεσίας.', at: addDays(t, -4), rem: addDays(t, -2) },
-    { id: 'n2', text: 'Ζήτησε να μην μπει ΣΚ αυτό τον μήνα. Να το δω πριν φτιάξω τη νέα ΦΡΟΥΡΑ.', at: addDays(t, -2), pid: s.people[4].id, rem: t, star: true },
-    { id: 'n3', text: 'Λείπει στο σεμινάριο 2–6 του επόμενου μήνα. Να μην μπει Υπεύθυνος.', at: addDays(t, -1), cid: 's1', rem: addDays(t, 5), star: true },
+    { id: 'n2', text: 'Ζήτησε να μην μπει ΣΚ αυτό τον μήνα. Να το δω πριν φτιάξω τη νέα ΦΡΟΥΡΑ.', at: addDays(t, -2), pids: [s.people[4].id], rem: t, star: true },
+    { id: 'n3', text: 'Λείπει στο σεμινάριο 2–6 του επόμενου μήνα. Να μην μπει Υπεύθυνος.', at: addDays(t, -1), cids: ['s1'], rem: addDays(t, 5), star: true },
     { id: 'n4', text: 'Να ζητήσω νέα στρώματα για τον 2ο ουλαμό.', at: addDays(t, -3), rem: addDays(t, 3) },
-    { id: 'n5', text: 'Παρουσιάστηκε με πονόλαιμο. Αν ξανασυμβεί να πάει ΚΕΠΙ.', at: addDays(t, -9), pid: s.people[4].id },
-    { id: 'n6', text: 'Επιστροφή χαρτιών από το Στρατολογικό.', at: addDays(t, -20), pid: s.people[6].id, done: addDays(t, -6) }
+    { id: 'n5', text: 'Παρουσιάστηκε με πονόλαιμο. Αν ξανασυμβεί να πάει ΚΕΠΙ.', at: addDays(t, -9), pids: [s.people[4].id, s.people[5].id] },
+    { id: 'n6', text: 'Επιστροφή χαρτιών από το Στρατολογικό.', at: addDays(t, -20), pids: [s.people[6].id], done: addDays(t, -6) }
   ];
   return s;
 }

@@ -8,7 +8,7 @@ import { Store } from '../src/main/db';
 import { apply, type Command } from '../src/shared/commands';
 import type { AppState, Note } from '../src/shared/domain';
 import { freshState } from '../src/shared/esso';
-import { NOTE_MAX, dueCount, noteDue, noteGroups, noteHead, noteIn, noteIndex, noteSearch, noteWho, notesOf, quickRems, remLabel } from '../src/shared/notes';
+import { NOTE_MAX, dueCount, noteKind, noteLinks, normNote, noteDue, noteGroups, noteHead, noteIn, noteIndex, noteSearch, noteWho, notesOf, quickRems, remLabel } from '../src/shared/notes';
 import { fakeState } from './fixtures';
 
 const D = '2026-10-24';   // Σάββατο
@@ -26,34 +26,33 @@ describe('εντολές σημειώσεων', () => {
     expect(r.text).toBe('Σημείωση: «Έλεγχος κλειδιών οπλοστασίου»');
   });
   it('για στρατιώτη και για στέλεχος, με υπενθύμιση και αστέρι· το Ιστορικό λέει για ποιον', () => {
-    const a = run(base(), { t: 'addNote', note: { text: 'Ζήτησε να μην μπει ΣΚ', pid: 2, rem: '2026-10-26', star: true } });
-    expect(a.state.notes[0]).toMatchObject({ pid: 2, rem: '2026-10-26', star: true });
+    const a = run(base(), { t: 'addNote', note: { text: 'Ζήτησε να μην μπει ΣΚ', pids: [2], rem: '2026-10-26', star: true } });
+    expect(a.state.notes[0]).toMatchObject({ pids: [2], rem: '2026-10-26', star: true });
     expect(a.text).toContain('Ζήτησε να μην μπει ΣΚ');
     expect(a.text).toContain('υπενθύμιση 26/10');
-    const b = add(a.state, { text: 'Λείπει σε σεμινάριο', cid: 's1' });
-    expect(b.notes[1]).toMatchObject({ cid: 's1' }); expect(b.notes[1].pid).toBeUndefined();
+    const b = add(a.state, { text: 'Λείπει σε σεμινάριο', cids: ['s1'] });
+    expect(b.notes[1]).toMatchObject({ cids: ['s1'] }); expect(b.notes[1].pids).toBeUndefined();
   });
-  it('σφάλματα: κενό, πολύ μεγάλο, άγνωστο άτομο, και στρατιώτης μαζί με στέλεχος', () => {
+  it('σφάλματα: κενό, πολύ μεγάλο, άγνωστο άτομο', () => {
     const s = base();
     expect(() => run(s, { t: 'addNote', note: { text: '   ' } })).toThrow(/Γράψε τη σημείωση/);
     expect(() => run(s, { t: 'addNote', note: { text: 'x'.repeat(NOTE_MAX + 1) } })).toThrow(/πολύ μεγάλη/);
-    expect(() => run(s, { t: 'addNote', note: { text: 'α', pid: 999 } })).toThrow(/στρατιώτη/);
-    expect(() => run(s, { t: 'addNote', note: { text: 'α', cid: 'zz' } })).toThrow(/στέλεχος/);
-    expect(() => run(s, { t: 'addNote', note: { text: 'α', pid: 1, cid: 's1' } })).toThrow(/όχι και για τα δύο/);
+    expect(() => run(s, { t: 'addNote', note: { text: 'α', pids: [999] } })).toThrow(/στρατιώτη/);
+    expect(() => run(s, { t: 'addNote', note: { text: 'α', cids: ['zz'] } })).toThrow(/στέλεχος/);
     expect(() => run(s, { t: 'addNote', note: { text: 'α', rem: '2026-10-23' } })).toThrow(/μέρα που πέρασε/);
     expect(() => run(s, { t: 'addNote', note: { text: 'α', rem: '24/10' } })).toThrow(/ημερομηνία/);
     expect(run(s, { t: 'addNote', note: { text: 'α', rem: D } }).state.notes[0].rem).toBe(D);   // σήμερα επιτρέπεται
   });
   it('ολοκλήρωση, επαναφορά, επεξεργασία και διαγραφή', () => {
-    let s = add(base(), { text: 'Α', pid: 1, rem: '2026-10-25' });
+    let s = add(base(), { text: 'Α', pids: [1], rem: '2026-10-25' });
     const id = s.notes[0].id;
     s = run(s, { t: 'doneNote', id, done: true }).state;
     expect(s.notes[0].done).toBe(D);
     expect(run(s, { t: 'doneNote', id, done: true })).toMatchObject({ text: '', state: s });   // ίδιο: τίποτα δεν αλλάζει
     s = run(s, { t: 'doneNote', id, done: false }).state; expect(s.notes[0].done).toBeUndefined();
     // άλλαξε το κείμενο, πέρασε σε άλλο άτομο, έφυγε η υπενθύμιση, έγινε σημαντική
-    s = run(s, { t: 'editNote', id, patch: { text: 'Β', who: { cid: 's1' }, rem: '', star: true } }).state;
-    expect(s.notes[0]).toEqual({ id, text: 'Β', at: D, cid: 's1', star: true });
+    s = run(s, { t: 'editNote', id, patch: { text: 'Β', who: { cids: ['s1'] }, rem: '', star: true } }).state;
+    expect(s.notes[0]).toEqual({ id, text: 'Β', at: D, cids: ['s1'], star: true });
     s = run(s, { t: 'editNote', id, patch: { who: null, star: false } }).state;
     expect(s.notes[0]).toEqual({ id, text: 'Β', at: D });
     const same = run(s, { t: 'editNote', id, patch: { text: 'Β' } }); expect(same.state).toBe(s); expect(same.text).toBe('');
@@ -79,7 +78,7 @@ describe('ομαδοποίηση και υπενθυμίσεις', () => {
     expect(g.rest.map(x => x.id)).toEqual(['f', 'a']);   // σημαντική πρώτη, μετά νεότερες
   });
   it('φίλτρα', () => {
-    const ppl = [mk('p', { pid: 1 }), mk('q', { cid: 's1' }), mk('r'), mk('s', { done: D, pid: 1 })];
+    const ppl = [mk('p', { pids: [1] }), mk('q', { cids: ['s1'] }), mk('r'), mk('s', { done: D, pids: [1] })];
     const ids = (f: Parameters<typeof noteIn>[0]) => ppl.filter(x => noteIn(f, x)).map(x => x.id);
     expect(ids('all')).toEqual(['p', 'q', 'r']);
     expect(ids('sol')).toEqual(['p']); expect(ids('cad')).toEqual(['q']); expect(ids('gen')).toEqual(['r']); expect(ids('done')).toEqual(['s']);
@@ -104,14 +103,14 @@ describe('ομαδοποίηση και υπενθυμίσεις', () => {
 });
 
 describe('ονόματα, αναζήτηση, ένδειξη στους πίνακες', () => {
-  const s = (() => { let x = base(); x = add(x, { text: 'Ζήτησε άδεια τιμητική', pid: 2 }); x = add(x, { text: 'Σεμινάριο', cid: 's1', rem: D }); x = add(x, { text: 'Γενικό θέμα' }); x = add(x, { text: 'Του εκτός', cid: 's2' }); return x; })();
+  const s = (() => { let x = base(); x = add(x, { text: 'Ζήτησε άδεια τιμητική', pids: [2] }); x = add(x, { text: 'Σεμινάριο', cids: ['s1'], rem: D }); x = add(x, { text: 'Γενικό θέμα' }); x = add(x, { text: 'Του εκτός', cids: ['s2'] }); return x; })();
   it('όνομα και «εκτός δύναμης»', () => {
     const w = s.notes.map(x => noteWho(s, x));
     expect(w[0]).toMatchObject({ kind: 'sol', active: true }); expect(w[0].label).toMatch(/^\S+ \S\.$/);
     expect(w[1]).toMatchObject({ kind: 'cad', label: 'ΛΧΙΑΣ ΔΟΚΙΜΙΔΗΣ Δ.' });
-    expect(w[2]).toEqual({ kind: 'gen', label: 'Γενική', active: true });
+    expect(w[2]).toEqual({ kind: 'gen', label: 'Γενική', active: true, items: [] });
     expect(w[3].active).toBe(false);
-    expect(noteWho(s, { id: 'x', text: '', at: D, pid: 999 }).active).toBe(false);
+    expect(noteWho(s, { id: 'x', text: '', at: D, pids: [999] }).active).toBe(false);
   });
   it('αναζήτηση χωρίς τόνους, στο κείμενο και στο όνομα', () => {
     const f = (q: string) => s.notes.filter(x => noteSearch(s, x, q)).map(x => x.text);
@@ -151,15 +150,60 @@ describe('αποθήκευση, αναίρεση, νέα ΕΣΣΟ', () => {
   });
   it('νέα ΕΣΣΟ: μένουν οι γενικές και των στελεχών, των στρατιωτών μένουν στο αρχείο της παλιάς', () => {
     let s = base();
-    s = add(s, { text: 'Γενική' }); s = add(s, { text: 'Στρατιώτη', pid: 1 }); s = add(s, { text: 'Στελέχους', cid: 's1' });
+    s = add(s, { text: 'Γενική' }); s = add(s, { text: 'Στρατιώτη', pids: [1] }); s = add(s, { text: 'Στελέχους', cids: ['s1'] });
     const f = freshState(s, { s: 'Δ', y: 2026 }, D, 'C:\\Νέος');
     expect(f.notes.map(x => x.text)).toEqual(['Γενική', 'Στελέχους']);
     expect(f.people).toEqual([]);
   });
 });
 
+describe('σημείωση για πολλά άτομα', () => {
+  it('δένεται σε πολλούς στρατιώτες και στελέχη μαζί, χωρίς διπλά', () => {
+    const r = run(base(), { t: 'addNote', note: { text: 'Συνάντηση με Α και Β', pids: [1, 2, 2], cids: ['s1'] } });
+    expect(r.state.notes[0]).toMatchObject({ pids: [1, 2], cids: ['s1'] });
+    expect(noteKind(r.state.notes[0])).toBe('mix');
+    expect(r.text).toMatch(/\(.+, .+, .+\)/);   // το Ιστορικό λέει και τους τρεις
+    expect(() => run(base(), { t: 'addNote', note: { text: 'α', pids: [1, 999] } })).toThrow(/στρατιώτη/);
+  });
+  it('φαίνεται σε όλους: ένδειξη, καρτέλα, φίλτρα· ολοκλήρωση το κλείνει για όλους', () => {
+    const s = add(base(), { text: 'Κοινή', pids: [1, 2], cids: ['s1'], rem: D });
+    const m = noteIndex(s.notes, D);
+    for (const k of ['p1', 'p2', 'cs1']) expect(m.get(k)).toEqual({ n: 1, hot: true });
+    expect(notesOf(s.notes, { pid: 1 })).toHaveLength(1); expect(notesOf(s.notes, { pid: 2 })).toHaveLength(1); expect(notesOf(s.notes, { cid: 's1' })).toHaveLength(1);
+    expect(notesOf(s.notes, { pid: 3 })).toHaveLength(0);
+    expect(noteIn('sol', s.notes[0])).toBe(true); expect(noteIn('cad', s.notes[0])).toBe(true); expect(noteIn('gen', s.notes[0])).toBe(false);
+    expect(noteWho(s, s.notes[0]).items.map(x => x.key)).toEqual(['p1', 'p2', 'cs1']);
+    expect(noteSearch(s, s.notes[0], 'δοκιμιδ')).toBe(true);
+    const done = run(s, { t: 'doneNote', id: s.notes[0].id, done: true }).state;
+    expect(noteIndex(done.notes, D).size).toBe(0);
+  });
+  it('επεξεργασία: προσθέτεις και αφαιρείς άτομα', () => {
+    let s = add(base(), { text: 'Α', pids: [1] }); const id = s.notes[0].id;
+    s = run(s, { t: 'editNote', id, patch: { who: { pids: [1, 3], cids: ['s1'] } } }).state;
+    expect(s.notes[0]).toMatchObject({ pids: [1, 3], cids: ['s1'] });
+    s = run(s, { t: 'editNote', id, patch: { who: { pids: [3] } } }).state;
+    expect(s.notes[0].pids).toEqual([3]); expect(s.notes[0].cids).toBeUndefined();
+  });
+  it('σημειώσεις της πρώτης έκδοσης (pid/cid) διαβάζονται και μετατρέπονται', () => {
+    const old: Note = { id: 'o', text: 'Παλιά', at: D, pid: 2, cid: 's1' };
+    expect(noteLinks(old)).toEqual({ pids: [2], cids: ['s1'] });
+    expect(normNote(old)).toEqual({ id: 'o', text: 'Παλιά', at: D, pids: [2], cids: ['s1'] });
+    expect(noteIndex([old], D).get('p2')).toEqual({ n: 1, hot: false });
+  });
+  it('νέα ΕΣΣΟ: μικτή σημείωση μένει στα στελέχη χωρίς τους στρατιώτες', () => {
+    const s = add(add(base(), { text: 'Μικτή', pids: [1], cids: ['s1'] }), { text: 'Δύο στρατιώτες', pids: [1, 2] });
+    const f = freshState(s, { s: 'Δ', y: 2026 }, D, 'C:\\Νέος');
+    expect(f.notes).toHaveLength(1); expect(f.notes[0]).toMatchObject({ text: 'Μικτή', cids: ['s1'] }); expect(f.notes[0].pids).toBeUndefined();
+  });
+});
+
 describe('σύνδεση στην εφαρμογή', () => {
   const src = (f: string) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
+  it('το @όνομα μπαίνει στο κείμενο και δένει το άτομο, χωρίς να ξεχνά τους προηγούμενους', () => {
+    const a = src('renderer/screens/notes.ts');
+    expect(a).toContain("setText(text.replace(/@([^\\s@]*)$/, () => '@' + x.label + ' '))");
+    expect(a).toContain('set({ pids: d.pids.includes(x.id) ? d.pids : [...d.pids, x.id] })');
+  });
   it('μενού: Σημειώσεις μετά τα Έντυπα, με αριθμό υπενθυμίσεων· Ιστορικό από την πάνω μπάρα', () => {
     const a = src('renderer/app.ts');
     expect(a).toMatch(/NAV_MAIN = \[[^\]]*'reports', 'notes'\]/);
