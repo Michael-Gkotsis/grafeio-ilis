@@ -1,6 +1,6 @@
 // app/AppShell: πλοήγηση, συντομεύσεις, επίπεδα (dialogs/sheets), σύνδεση με το main process
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Badge, Button, Dialog, Icon, Kbd, Logo, Sheet, ToastProvider, useToast, useToastPrune } from './ui';
+import { html, cx, Badge, Button, Dialog, DiscardAsk, Icon, Kbd, Logo, Sheet, ToastProvider, useToast, useToastPrune } from './ui';
 import { closeLeaveAsk, discardAll, requestLeave, saveAll, useLeaveAsk, usePendingList } from './pending';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, CommandPalette } from './screens/other';
@@ -131,6 +131,10 @@ function Shell() {
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
   const [personId, setPersonId] = useState<number | null>(null);
   const [personList, setPersonList] = useState<number[] | null>(null);   // ↑/↓ στην καρτέλα: η λίστα από την οποία άνοιξε
+  // σημείωση που γράφεται σε κάρτα ατόμου και δεν έχει αποθηκευτεί: πριν αλλάξει άτομο, καρτέλα ή κλείσει η κάρτα, ρωτά
+  const noteDirty = useRef(false); const [leaveNote, setLeaveNote] = useState<(() => void) | null>(null);
+  const setDirty = useCallback((on: boolean) => { noteDirty.current = on; }, []);
+  const guard = useCallback((go: () => void) => { if (noteDirty.current) setLeaveNote(() => go); else go(); }, []);
   const [baseLater, setBaseLater] = useState(false);
   const prefsV = usePrefsState(); const { rail } = prefsV;
   const toggleRail = useCallback(() => prefsV.set('nav', rail ? 'full' : 'rail'), [prefsV.set, rail]);
@@ -148,8 +152,8 @@ function Shell() {
       if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
       setRoute(next); setLayer(null); setOver(null); setPersonId(null); window.scrollTo(0, 0);
     };
-    if (next.view === r.view) doIt(); else requestLeave(doIt);
-  }, []);
+    guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); });
+  }, [guard]);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.
   const go = useCallback((view: string, params?: Record<string, any>) => {
     const r = cur.current.route; let base = view === r.view ? r.params : params ? {} : memory.current[view] || {};
@@ -166,8 +170,9 @@ function Shell() {
   const declare = useCallback((data: any) => setLayer({ kind: 'declare', data }), []);
   const note = useCallback((data?: any) => setLayer({ kind: 'note', data: data || {} }), []);
   // στέλεχος σε θέση (ΕΠΟΠ/ΟΒΑ, αρνητικός αριθμός): η καρτέλα του στα Στελέχη
-  const openPerson = useCallback((id: number, list?: number[]) => { if (id < 0) { go('cadre', { seat: id }); return; } setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }, [go]);
-  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, note, openPerson }), [route, personId, go, setParams, declare, note, openPerson]);
+  const openPerson = useCallback((id: number, list?: number[]) => { if (id < 0) { go('cadre', { seat: id }); return; } guard(() => { setPersonId(id); setPersonList(list && list.includes(id) ? list : null); setLayer(null); pushRecent(id); }); }, [go, guard]);
+  const openCadre = useCallback((id: string) => go('cadre', { ccard: id }), [go]);
+  const nav = useMemo(() => ({ view: route.view, params: { ...route.params, person: personId }, go, set: setParams, declare, note, openPerson, openCadre, guard, setDirty }), [route, personId, go, setParams, declare, note, openPerson, openCadre, guard, setDirty]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase(); const mod = e.ctrlKey || e.metaKey; const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName || '');
@@ -234,7 +239,8 @@ function Shell() {
       ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
       <button type="button" aria-current=${MOBILE_MORE.includes(route.view) ? 'page' : undefined} onClick=${() => setLayer({ kind: 'more' })}>${Icon.more}Άλλα</button>
     </nav>
-    ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${setPersonId} onClose=${() => setPersonId(null)}/>`}
+    ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${(id: number) => guard(() => setPersonId(id))} onClose=${() => guard(() => setPersonId(null))}/>`}
+    ${leaveNote && html`<${DiscardAsk} title="Να φύγεις χωρίς αποθήκευση;" text="Η σημείωση δεν αποθηκεύτηκε. Αν συνεχίσεις, χάνεται." leave="Συνέχισε χωρίς αποθήκευση" stay="Πίσω στη σημείωση" onStay=${() => setLeaveNote(null)} onLeave=${() => { const go = leaveNote; setLeaveNote(null); go(); }}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'note' && html`<${NoteDialog} start=${layer.data} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}

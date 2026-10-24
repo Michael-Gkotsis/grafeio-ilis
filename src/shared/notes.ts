@@ -28,9 +28,23 @@ export const noteKind = (n: Links): NoteKind => { const l = noteLinks(n); return
 /** Υπενθύμιση που έφτασε (σήμερα ή νωρίτερα) και δεν έχει ολοκληρωθεί. */
 export const noteDue = (n: Note, today: ISODate): boolean => !n.done && !!n.rem && n.rem <= today;
 export const dueCount = (notes: Note[] | undefined, today: ISODate): number => (notes || []).reduce((c, n) => c + (noteDue(n, today) ? 1 : 0), 0);
-/** Οι ανοιχτές σημειώσεις ενός ατόμου. */
-export const notesOf = (notes: Note[] | undefined, who: { pid: number } | { cid: string }): Note[] =>
-  (notes || []).filter(n => { if (n.done) return false; const l = noteLinks(n); return 'pid' in who ? l.pids.includes(who.pid) : l.cids.includes(who.cid); });
+type NoteOwner = { pid: number } | { cid: string };
+const linked = (n: Note, who: NoteOwner): boolean => { const l = noteLinks(n); return 'pid' in who ? l.pids.includes(who.pid) : l.cids.includes(who.cid); };
+
+export interface PersonGroups extends NoteGroups { done: Note[]; open: number; dueN: number }
+/** Η καρτέλα «Σημειώσεις» ενός ατόμου: οι ίδιες ομάδες με τη σελίδα, και οι ολοκληρωμένες (πιο πρόσφατες πρώτα) χωριστά. open: ανοιχτές, dueN: όσες ζητούν προσοχή σήμερα. */
+export function personGroups(notes: Note[] | undefined, who: NoteOwner, today: ISODate): PersonGroups {
+  const mine = (notes || []).filter(n => linked(n, who)); const g = noteGroups(mine.filter(n => !n.done), today);
+  const done = mine.filter(n => n.done).sort((a, b) => b.done!.localeCompare(a.done!));
+  return { ...g, done, open: g.due.length + g.soon.length + g.rest.length, dueN: g.due.length };
+}
+/** Η γραμμή υπενθύμισης του «Σήμερα:» στην κάρτα ατόμου (κενό αν δεν έφτασε καμία): η αρχή του κειμένου, ή πόσες είναι. */
+export function remLine(notes: Note[] | undefined, who: NoteOwner, today: ISODate): string {
+  const due = noteGroups((notes || []).filter(n => linked(n, who) && noteDue(n, today)), today).due;
+  if (!due.length) return '';
+  if (due.length > 1) return due.length + ' υπενθυμίσεις';
+  return 'Υπενθύμιση: «' + noteHead(due[0].text, 50) + '»' + (due[0].rem! < today ? ' (εκπρόθεσμη)' : '');
+}
 /** Μικρό κείμενο για το Ιστορικό και τα μηνύματα. */
 export const noteHead = (text: string, max = 60): string => { const t = text.replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t; };
 

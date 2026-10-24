@@ -129,10 +129,14 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
       <div className="ui-dialog__body"><${DialogLeave.Provider} value=${leave}>${children}<//></div>
       ${footer && html`<div className="ui-dialog__foot">${footer}</div>`}
     </div>
-    ${asking && html`<${Dialog} role="alertdialog" title="Να κλείσει χωρίς αποθήκευση;" onClose=${() => setAsking(false)}
-      footer=${html`<${Button} variant="ghost" onClick=${() => { const a = asking && asking.after; setAsking(false); onClose(); a?.(); }}>Κλείσε χωρίς αποθήκευση<//><${Button} data-autofocus="" onClick=${() => setAsking(false)}>Πίσω στη φόρμα<//>`}>
-      <p style=${{ margin: 0 }}>${typeof dirty === 'string' ? dirty : 'Όσα έγραψες εδώ δεν έχουν αποθηκευτεί. Αν κλείσεις, χάνονται.'}</p><//>`}
+    ${asking && html`<${DiscardAsk} text=${typeof dirty === 'string' ? dirty : 'Όσα έγραψες εδώ δεν έχουν αποθηκευτεί. Αν κλείσεις, χάνονται.'} onStay=${() => setAsking(false)} onLeave=${() => { const a = asking && asking.after; setAsking(false); onClose(); a?.(); }}/>`}
     </div>`, document.body);
+}
+// Η ερώτηση «να χαθεί αυτό που έγραψες;»: από το Dialog (dirty) και από τις κάρτες ατόμου με σημείωση που δεν αποθηκεύτηκε
+export function DiscardAsk({ text, onStay, onLeave, title = 'Να κλείσει χωρίς αποθήκευση;', leave = 'Κλείσε χωρίς αποθήκευση', stay = 'Πίσω στη φόρμα' }: P) {
+  return html`<${Dialog} role="alertdialog" title=${title} onClose=${onStay}
+    footer=${html`<${Button} variant="ghost" onClick=${onLeave}>${leave}<//><${Button} data-autofocus="" onClick=${onStay}>${stay}<//>`}>
+    <p style=${{ margin: 0 }}>${text}</p><//>`;
 }
 export function Sheet({ title, subtitle, actions, onClose, children }: P) {
   useEscape(onClose);
@@ -142,6 +146,28 @@ export function Sheet({ title, subtitle, actions, onClose, children }: P) {
       <div className="ui-sheet__head"><div>${title}${subtitle}</div>${actions && html`<div className="ui-sheet__acts">${actions}</div>`}<${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
       <div className="ui-sheet__body">${children}</div>
     </aside><//>`, document.body);
+}
+
+const typing = (el: Element | null) => !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
+// ↑/↓ (και PageUp/PageDown) στις κάρτες ατόμου: ο προηγούμενος/επόμενος της λίστας από την οποία άνοιξε η κάρτα, όχι όταν γράφεις σε πεδίο ή είναι ανοιχτός διάλογος (busy)
+export function useSheetNav<T>(order: T[], id: T, onMove: (id: T) => void, busy: boolean) {
+  const at = order.indexOf(id);
+  const move = useCallback((d: number) => { const i = order.indexOf(id) + d; if (i >= 0 && i < order.length) onMove(order[i]); }, [order, id, onMove]);
+  useEffect(() => {
+    if (busy) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || typing(document.activeElement)) return;
+      const d = e.key === 'ArrowDown' || e.key === 'PageDown' ? 1 : e.key === 'ArrowUp' || e.key === 'PageUp' ? -1 : 0;
+      if (d) { e.preventDefault(); move(d); }
+    };
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+  }, [move, busy]);
+  return { at, n: order.length, move };
+}
+// «5 / 119» και ▲▼ στην κεφαλίδα της κάρτας
+export function SheetNav({ at, n, move }: P) {
+  if (n < 2 || at < 0) return null;
+  return html`<span className="sheetnav"><span className="muted num" data-tip="Η θέση του στη λίστα από την οποία άνοιξε">${at + 1} / ${n}</span><${Button} variant="ghost" size="icon" aria-label="Προηγούμενος" data-tip="Προηγούμενος (↑)" disabled=${at <= 0} onClick=${() => move(-1)}>${Icon.up}<//><${Button} variant="ghost" size="icon" aria-label="Επόμενος" data-tip="Επόμενος (↓)" disabled=${at >= n - 1} onClick=${() => move(1)}>${Icon.down}<//></span>`;
 }
 
 // undoId: η ενέργεια (Ιστορικό) που αναιρεί το κουμπί· όταν γίνει άλλη ενέργεια μετά, το κουμπί φεύγει από το παλιό μήνυμα

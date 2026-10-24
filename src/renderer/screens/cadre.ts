@@ -13,7 +13,7 @@ import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadr
 import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import type { AppState } from '../../shared/domain';
-import { NoteDot, PersonNotes } from './notes';
+import { NoteDot, NotesTab } from './notes';
 import { noteIndex } from '../../shared/notes';
 const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
 type P = any;
@@ -108,7 +108,7 @@ function CadreCard({ c, onClose, onEdit, onStatus, onDelete }: P) {
   return html`<${Dialog} size="lg" title=${rankTxt(c) + ' ' + c.last + ' ' + c.first} description=${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.am && 'ΑΜ ' + c.am, c.role, c.phone && 'ΤΗΛ ' + c.phone, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'εκτός δύναμης'].filter(Boolean).join(' · ')} onClose=${onClose}
     footer=${html`<${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή<//><${Button} variant="outline" onClick=${onEdit}>Στοιχεία<//>${c.active && html`<${Button} onClick=${() => onStatus()}>+ Κατάσταση<//>`}`}>
     ${c.pid != null && c.monthMax && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${monthTxt(state, today, cadreSeat(c))}${lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : ''} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}
-    <${PersonNotes} who=${{ cid: c.id }}/>
+    <${NotesTab} who=${{ cid: c.id }}/>
     <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today)) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
     <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
       ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
