@@ -8,7 +8,7 @@ import { apply } from '../src/shared/commands';
 import { addDays } from '../src/shared/dates';
 import { dutyStats, fillDay, hkaiCounts, strengthOf, activePeople, outBlock } from '../src/shared/rules';
 import { preflight } from '../src/shared/preflight';
-import { returnsOn } from '../src/shared/weekend';
+import { returnsOn } from '../src/shared/returns';
 import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
 import { buildTemplate, fillReport } from '../src/main/reports';
 import { PRINT_DEFAULT, renderBook } from '../src/main/print';

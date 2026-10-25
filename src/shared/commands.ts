@@ -14,7 +14,7 @@ import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
-import { baseOf, defaultRow, weekRow, type WeekRow } from './returns';
+import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
 export type Command =
@@ -95,6 +95,8 @@ export type Command =
   | { t: 'setWeekRules'; week: Partial<Record<number, DayPlan>> }
   // Αλλαγή ωρών/εκπαίδευσης για μία μέρα· plan κενό = πίσω στην ημέρα εβδομάδας
   | { t: 'setDayPlan'; date: ISODate; plan: DayPlan }
+  // ... δύο μέρες μαζί (οθόνη Εξοδούχοι: η έξοδος της μέρας και η επιστροφή ΔΝ της επόμενης), μία αναίρεση
+  | { t: 'setDayPlans'; plans: { date: ISODate; plan: DayPlan }[] }
   // Διόρθωση επιστροφής ενός ατόμου (ΔΝ/εξοδούχος της μέρας day): stay = δεν γυρνά, συνεχίζει· at = γυρνά τότε· why υποχρεωτικό
   | { t: 'setBackFix'; pid: number; day: ISODate; stay?: boolean; at?: { day: ISODate; time: string }; why: string }
   | { t: 'delBackFix'; id: string }
@@ -408,8 +410,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         for (const n of c.notes) { const v = norm(n.note).trim(); if (v) day[n.pid] = v; else delete day[n.pid]; }
         outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
       }
-      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), leaving.length && 'άδεια από Κυριακή: ' + leaving.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
-      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
+      // ΔΝ που δεν ξέρουμε πότε γυρνά (η επόμενη μέρα δεν έχει δηλωθεί, χωρίς εκπαίδευση): το λέμε στο Ιστορικό και στην οθόνη
+      const next = { ...s, statuses: [...statuses, ...added], outNotes };
+      const pend = new Map<string, string[]>();
+      for (const x of c.changes) { const r = x.to === 'DN' ? returnOf(next, x.pid, c.date) : null; if (r?.pending) pend.set(r.why, [...(pend.get(r.why) || []), shortName(pm.get(x.pid)!)]); }
+      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), leaving.length && 'άδεια από Κυριακή: ' + leaving.join(', '), ...[...pend].map(([why, who]) => why + ': ' + who.join(', ')), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
+      return { state: next, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
     }
     case 'saveCadre': {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
@@ -1040,6 +1046,11 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const dayPlan = { ...(s.dayPlan || {}) }; if (Object.keys(row).length) dayPlan[c.date] = row; else delete dayPlan[c.date];
       const what = Object.keys(row).length ? planDiff(base, nx).map(x => x.replace(/^(.*) (\S+) → (\S+)$/, '$1 $3 (αντί $2)')).join(', ') : 'πίσω στην προεπιλογή';
       return { state: { ...s, dayPlan }, text: 'Ώρες εξόδου ' + day + ': ' + what, files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'setDayPlans': {
+      let next = s; const files: string[] = [], texts: string[] = [];
+      for (const x of c.plans) { const r = run(next, { t: 'setDayPlan', date: x.date, plan: x.plan }, ctx); next = r.state; if (r.text) { texts.push(r.text); files.push(...r.files); } }
+      return { state: next, text: texts.join(' · '), files: [...new Set(files)] };
     }
     case 'setBackFix': {
       const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');

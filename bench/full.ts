@@ -10,7 +10,7 @@ import { apply, type Command } from '../src/shared/commands';
 import { addDays, pskDays, today as todayFn, type ISODate } from '../src/shared/dates';
 import { dutyStats, fillDay, hkaiCounts, strengthOf, whyAll, fairAvg, monthStats, dutyMonths, activePeople, outBlock, capCols, capCell } from '../src/shared/rules';
 import { preflight } from '../src/shared/preflight';
-import { returnsOn } from '../src/shared/weekend';
+import { returnsOn } from '../src/shared/returns';
 import { fillFroura, fillHkai, fillOuts, outsAndStay } from '../src/main/exports';
 import { mergeFirstSheets } from '../src/main/xlsx';
 import { dutyCheck, rosterLists, cadreLists, rosterPrint, weaponsBook } from '../src/main/excel';

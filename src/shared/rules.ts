@@ -5,6 +5,7 @@ import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOr
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
+import { outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
@@ -185,6 +186,14 @@ export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: 
   const ss = statusesOn(statuses, pid, date);
   return ss.some(x => backBy(x, date, m)) ? ss.filter(x => !backBy(x, date, m)) : ss;
 }
+// Οι καταστάσεις της μέρας date στη στιγμή at (λεπτά) όπως τις μετρά η Δύναμη: οι άδειες όπως στο statusesFrom, η έξοδος και η ΔΝ με την
+// ώρα (Michael, 24/10): ο εξοδούχος παρών ως την αρχή εξόδου, ο ΔΝ απών ως την επιστροφή του, ακόμα και την επόμενη μέρα.
+export function statusesAt(s: AppState, pid: number, date: ISODate, at: number): Status[] {
+  const ss = statusesFrom(s.statuses, pid, date, at), held = outHeld(s, pid, date, at);
+  if (held === undefined) return ss;
+  const rest = ss.filter(x => TYPES[x.type].cat !== 'out');
+  return held ? [...rest, held].sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type)) : rest;
+}
 // Τώρα (Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό»): όποιος γύρισε σήμερα ως την ώρα
 // που είναι τώρα (now, λεπτά) δεν λείπει πια στο Δυναμολόγιο, στις Άδειες και στο «Σήμερα». Άλλες μέρες: ολόκληρη η μέρα.
 export const statusesNow = (statuses: Status[], pid: number, date: ISODate, today: ISODate, now: number) =>
@@ -206,7 +215,7 @@ export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Str
   TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; away[k] = 0; awayLists[k] = []; });
   let present = 0;
   for (const p of people) {
-    const ss = statusesFrom(s.statuses, p.id, date, at);
+    const ss = statusesAt(s, p.id, date, at);
     // διπλή εγγραφή του ίδιου είδους (π.χ. δύο έξοδοι την ίδια μέρα): μία φορά
     new Set(ss.map(x => x.type)).forEach(k => { counts[k]++; lists[k].push(p); });
     // οι καταστάσεις είναι ταξινομημένες: πρώτα οι απουσίες, με τη σειρά των ειδών

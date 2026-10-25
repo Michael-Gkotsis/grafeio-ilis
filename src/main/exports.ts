@@ -1,6 +1,7 @@
 // Συμπλήρωση των εντύπων της Ίλης από την κατάσταση της εφαρμογής (06, 11).
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { addDays, dm, dmy, dmyy, hkDate, parseD, DOW_FULL, MON_SHORT, type ISODate } from '../shared/dates';
+import { returnOf } from '../shared/returns';
 import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
@@ -459,12 +460,14 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
   return { outs, stay };
 }
 // Παρατηρήσεις εξοδούχου: ΔΝ / ΔΝ ΣΚ, η υπηρεσία της επόμενης μέρας (γυρίζει το πρωί γι' αυτήν), η άδεια που ξεκινά
-// τη μέρα της ΔΝ ή την επόμενη, και η παρατήρηση της μέρας σε παρένθεση:
-// «ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00, ΑΔΕΙΑ ΑΠΟ ΔΕΥΤΕΡΑ 19/10 (ΙΑΤΡΟΣ ΣΤΕΠ)»
+// τη μέρα της ΔΝ ή την επόμενη, η διόρθωση επιστροφής του γραφείου (αν υπάρχει),
+// και η παρατήρηση της μέρας σε παρένθεση: «ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00, ΑΔΕΙΑ ΑΠΟ ΔΕΥΤΕΡΑ 19/10 (ΙΑΤΡΟΣ ΣΤΕΠ)»
 export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): string {
   const duty = st.type === 'DN' ? dutyAt(s, addDays(d, 1), pid) : null;
   const lv = st.type === 'DN' ? leaveStart(s, d, pid) : undefined;
-  const auto = [st.type === 'DN' ? outLbl(st) : isWk(st) ? 'ΔΝ ΣΚ' : '', duty && 'ΥΠΗΡΕΣΙΑ ' + DOW_FULL[parseD(addDays(d, 1)).getDay()] + ' ' + duty.label + (duty.time ? ' ' + duty.time : ''), lv && leaveText(lv)].filter(Boolean).join(', ');
+  const r = returnOf(s, pid, d);
+  const back = !r?.fix ? '' : r.open ? 'ΔΕΝ ΓΥΡΝΑ' : 'ΕΠΙΣΤΡΟΦΗ ' + DOW_FULL[parseD(r.day).getDay()] + ' ' + r.time;
+  const auto = [st.type === 'DN' ? outLbl(st) : isWk(st) ? 'ΔΝ ΣΚ' : '', duty && 'ΥΠΗΡΕΣΙΑ ' + DOW_FULL[parseD(addDays(d, 1)).getDay()] + ' ' + duty.label + (duty.time ? ' ' + duty.time : ''), lv && leaveText(lv), back].filter(Boolean).join(', ');
   return norm(withNote(auto, outNoteOf(s, d, pid)));
 }
 // Πού είναι κάθε λίστα: φύλλο (αυτό που διάλεξες, αλλιώς με το όνομα ή τον τίτλο της), και το κομμάτι του αν το φύλλο

@@ -160,13 +160,15 @@ describe('awayAt: παρουσία με την ώρα', () => {
     expect(awayAt(s, 2, SUN, '09:00')).toBe(true); expect(awayAt(s, 2, SUN, '23:00')).toBe(true);
     expect(awayAt(s, 2, MON, '05:00')).toBe(true); expect(awayAt(s, 2, MON, '06:00')).toBe(false);
   });
-  it('αλλαγή μιας μέρας στην αρχή εξόδου: 14:00 σήμερα, δεν αλλάζει τις άλλες μέρες· δηλωμένη επιστροφή «δεν έχει δηλωθεί» μετρά παρών', () => {
+  it('αλλαγή μιας μέρας στην αρχή εξόδου: 14:00 σήμερα, δεν αλλάζει τις άλλες μέρες· επιστροφή «δεν έχει δηλωθεί» μετρά απών ως να δηλωθεί (Michael, 25/10)', () => {
     let s = with_(st(2, 'OUT', FRI), st(2, 'OUT', SAT));
     s = run(s, { t: 'setDayPlan', date: FRI, plan: { out: '14:00' } });
     expect(awayAt(s, 2, FRI, '15:00')).toBe(true);
     expect(awayAt(s, 2, SAT, '15:00')).toBe(false);
     const p = run(with_(st(3, 'DN', FRI)), { t: 'setDayPlan', date: SAT, plan: { train: false } });
-    expect(awayAt(p, 3, SAT, '10:00')).toBe(false);
+    expect(awayAt(p, 3, SAT, '10:00')).toBe(true);
+    const q = { ...p, statuses: [...p.statuses, decl(SAT)] };   // δηλώνεται η μέρα: μένει, γυρνά 06:00
+    expect(awayAt(q, 3, SAT, '05:00')).toBe(true); expect(awayAt(q, 3, SAT, '06:00')).toBe(false);
   });
   it('διόρθωση «γυρνά …» κρατά τον απόντα ως τότε', () => {
     const s = run(with_(st(2, 'DN', FRI)), { t: 'setBackFix', pid: 2, day: FRI, at: { day: SAT, time: '12:00' }, why: 'ΓΙΑΤΡΟΣ' });

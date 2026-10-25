@@ -1,5 +1,7 @@
 // Δύναμη που αθροίζει (Michael, 22/10: «29 ΔΝ, 24 απλούς, 6 άδειους, μου βγάζει 73 παρόντες και 57 απόντες από 130,
 // δεν βγαίνουν τα μαθηματικά»). Κάθε άτομο μετριέται μία φορά. Μόνο ψεύτικα ονόματα.
+// Έξοδος και ΔΝ μετρούν με την ώρα (Michael, 24/10): απών από την αρχή εξόδου (17:00), γι' αυτό τα τεστ μετρούν στις 18:00.
+const EVE = 18 * 60;
 import { describe, it, expect } from 'vitest';
 import type { AppState, Status, TypeKey } from '../src/shared/domain';
 import { TYPE_KEYS } from '../src/shared/domain';
@@ -15,7 +17,7 @@ const sum = (r: Record<TypeKey, number>) => TYPE_KEYS.reduce((a, k) => a + r[k],
 describe('Δύναμη: κάθε απών μία φορά', () => {
   it('άδεια και έξοδος στον ίδιο: ένας απών, στην άδεια· τα νούμερα αθροίζουν', () => {
     const s = withSt([st(1, 'OUT'), st(2, 'DN'), st(3, 'LEAVE', { from: '2026-10-20', to: '2026-10-25' }), st(3, 'OUT')]);
-    const c = strengthOf(s, TODAY);
+    const c = strengthOf(s, TODAY, EVE);
     expect(c.absent).toBe(3);
     expect(c.away).toMatchObject({ OUT: 1, DN: 1, LEAVE: 1 });
     expect(sum(c.away)).toBe(c.absent);
@@ -26,7 +28,7 @@ describe('Δύναμη: κάθε απών μία φορά', () => {
     expect(c.counts.OUT).toBe(2);
   });
   it('διπλή εγγραφή εξόδου του ίδιου: μία φορά', () => {
-    const c = strengthOf(withSt([st(1, 'OUT'), st(1, 'OUT')]), TODAY);
+    const c = strengthOf(withSt([st(1, 'OUT'), st(1, 'OUT')]), TODAY, EVE);
     expect(c.counts.OUT).toBe(1);
     expect(c.lists.OUT).toHaveLength(1);
     expect(c.absent).toBe(1);
@@ -66,7 +68,9 @@ describe('Δύναμη σήμερα: η ίδια στιγμή παντού', () 
     expect(strengthAt(s.rules, TODAY, TODAY, 18 * 60)).toBe(18 * 60);
     expect(strengthAt(s.rules, TODAY, TODAY, 6 * 60)).toBe(hkMin(s.rules));     // πριν τις 08:00 όπως η ΗΚΑΙ
     expect(strengthAt(s.rules, '2026-10-23', TODAY, 18 * 60)).toBe(hkMin(s.rules));
-    expect(strengthOf(s, TODAY, strengthAt(s.rules, TODAY, TODAY, 10 * 60)).absent).toBe(58);   // ο 60 δεν γύρισε ακόμα
-    expect(strengthOf(s, TODAY, strengthAt(s.rules, TODAY, TODAY, 13 * 60)).absent).toBe(57);
+    // πριν από την αρχή εξόδου (17:00) οι εξοδούχοι και οι ΔΝ της μέρας είναι παρόντες: απόντες μόνο οι 4 σε άδεια και ο 60 που δεν γύρισε ακόμα
+    expect(strengthOf(s, TODAY, strengthAt(s.rules, TODAY, TODAY, 10 * 60)).absent).toBe(5);
+    expect(strengthOf(s, TODAY, strengthAt(s.rules, TODAY, TODAY, 13 * 60)).absent).toBe(4);
+    expect(strengthOf(s, TODAY, strengthAt(s.rules, TODAY, TODAY, 17 * 60)).absent).toBe(57);
   });
 });

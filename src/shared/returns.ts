@@ -2,13 +2,15 @@
 //  - dayTimes: αρχή εξόδου, επιστροφή εξοδούχων, επιστροφή ΔΝ και πρωινή εκπαίδευση μιας μέρας
 //    (αλλαγή μιας μέρας ?? ημέρα εβδομάδας ?? προεπιλογή· οι αργίες δεν έχουν εκπαίδευση)
 //  - returnOf: πότε και γιατί γυρνά όποιος είναι εξοδούχος ή ΔΝ τη μέρα d
-//  - awayOn/awayAt: λείπει εκείνη την ώρα; (η Δύναμη και το «Σήμερα» με την ώρα)
+//  - outHeld/awayAt: λείπει εκείνη την ώρα; (η Δύναμη και το «Σήμερα» με την ώρα)
+//  - returnsOn, retDay/retWhen/retTxt: «Ποιοι γυρίζουν και πότε» (Εξοδούχοι, Σήμερα)
 // Η «Ώρα εξόδου» 16:00 των Κανόνων (rules.outTime) είναι άλλο πράγμα: ισχύει μόνο για όσους γυρίζουν από άδεια.
-import { TYPES, type AppState, type DayPlan, type Rules, type Status } from './domain';
-import { addDays, weekday, DOW_FULL, type ISODate } from './dates';
+// Κυκλική εξάρτηση με το rules.ts (η Δύναμη με την ώρα καλεί το outHeld): όλα χρησιμοποιούνται μέσα σε συναρτήσεις, όχι στην αρχή του αρχείου.
+import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
+import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { hasTimes, mins } from './hours';
-import { holOf, statusesOn } from './rules';
-import { dutyAt } from './weekend';
+import { activePeople, holOf, statusesOn } from './rules';
+import { dutyAt, isSat, isWk } from './weekend';
 
 export interface WeekRow { out: string; backOut: string; backDn: string; train: boolean }
 // Προεπιλογές: έξοδος 17:00, εξοδούχοι πίσω 22:00, ΔΝ πίσω 06:00, εκπαίδευση Δευτέρα ως Σάββατο (η Κυριακή όχι)
@@ -45,13 +47,14 @@ export interface Ret { day: ISODate; time: string; why: string; pending?: true; 
 const MAX_DAYS = 120;
 const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
 // Μέρα «δηλωμένη» = κάποιος έχει έξοδο ή ΔΝ εκείνη τη μέρα (ή παρατήρηση εξοδούχου): οι Εξοδούχοι της μέρας έχουν συμπληρωθεί και όποιος
-// δεν έχει έξοδο/ΔΝ μένει. Αλλιώς δεν ξέρουμε αν ο ΔΝ μένει (η αλλαγή ωρών της μέρας δεν μετρά: μπορεί να μπει από πριν).
+// δεν έχει έξοδο/ΔΝ μένει. Αλλιώς δεν ξέρουμε αν ο ΔΝ μένει (η αλλαγή ωρών της μέρας δεν μετρά: μπορεί να μπει από πριν). Η «ΔΝ ΣΚ» του
+// Σαββάτου δηλώνει και την Κυριακή, ακόμα κι αν εκείνος δεν μπήκε στη ΔΝ της (υπηρεσία, ποινή…).
 const declIdx = new WeakMap<Status[], Map<ISODate, boolean>>();
 function declared(s: AppState, d: ISODate): boolean {
   if (s.outNotes?.[d] && Object.keys(s.outNotes[d]).length) return true;
   let m = declIdx.get(s.statuses); if (!m) { m = new Map(); declIdx.set(s.statuses, m); }
   let r = m.get(d);
-  if (r === undefined) { r = s.statuses.some(x => !x.pending && TYPES[x.type].cat === 'out' && x.from <= d && d <= x.to); m.set(d, r); }
+  if (r === undefined) { const prev = addDays(d, -1); r = s.statuses.some(x => !x.pending && TYPES[x.type].cat === 'out' && ((x.from <= d && d <= x.to) || (isWk(x) && isSat(prev) && x.from <= prev && prev <= x.to))); m.set(d, r); }
   return r;
 }
 // Επιστροφή τη μέρα r.day: αν έχει υπηρεσία, γυρνά για αυτήν (και νωρίτερα αν η υπηρεσία ξεκινά πριν από την ώρα)
@@ -99,15 +102,61 @@ export function returnOf(s: AppState, pid: number, d: ISODate): Ret | null {
   return { day: cur, time: '', why: 'χωρίς λήξη', open: true };
 }
 
-// Λείπει το άτομο τη μέρα d στις time (ΩΩ:ΛΛ) λόγω εξόδου/ΔΝ; Εξοδούχος: από την αρχή εξόδου ως την επιστροφή· ΔΝ: από την
-// αρχή εξόδου ως την ώρα που γυρνά (πιθανώς μέρες μετά). Ό,τι δεν είναι έξοδος/ΔΝ (άδειες, νοσοκομείο) μετρά αλλού.
-// Αν η επιστροφή δεν έχει δηλωθεί (pending), μετράει ότι έχει γυρίσει.
-export function awayAt(s: AppState, pid: number, d: ISODate, time: string): boolean {
-  const m = mins(time);
-  const gone = (r: Ret | null, from: ISODate) => !!r && !r.pending && (!!r.open || r.day > from || (r.day === from && m < mins(r.time)));
-  if (awayOn(s, pid, d).some(hasOut) && m >= mins(dayTimes(s, d).out)) {
-    const r = returnOf(s, pid, d);
-    if (r && (r.pending || gone(r, d))) return true;
+// Μετρά ως απών ο ΔΝ/εξοδούχος που δεν έχει γυρίσει ακόμα στη στιγμή m (λεπτά) της μέρας from; Όποιος δεν έχει δηλωθεί πότε γυρνά (pending) μένει απών.
+const gone = (r: Ret | null, from: ISODate, m: number) => !!r && (!!r.pending || !!r.open || r.day > from || (r.day === from && m < mins(r.time)));
+// Η έξοδος/ΔΝ που κρατά το άτομο έξω τη μέρα d στις m (λεπτά): η δική της μέρας από την αρχή εξόδου ως την επιστροφή, ή της προηγούμενης
+// μέρας (ΔΝ που γυρνά το πρωί, διόρθωση που γυρνά αργότερα). null: δεν είναι έξω. undefined: δεν κρίνεται με ώρες (άδεια την ίδια μέρα
+// με την έξοδο: μετρά όπως πριν, ολόκληρη η μέρα). Ό,τι δεν είναι έξοδος/ΔΝ (άδειες, νοσοκομείο) μετρά αλλού.
+export function outHeld(s: AppState, pid: number, d: ISODate, m: number): Status | null | undefined {
+  const own = awayOn(s, pid, d), outs = own.filter(hasOut);
+  if (outs.length) {
+    if (own.some(x => !hasOut(x))) return undefined;
+    if (m >= mins(dayTimes(s, d).out) && gone(returnOf(s, pid, d), d, m)) return outs.find(x => x.type === 'DN') || outs[0];
   }
-  return gone(returnOf(s, pid, addDays(d, -1)), d);
+  // η προηγούμενη μέρα και οι διορθώσεις παλαιότερων ημερών που γυρνούν αργότερα
+  const prev = addDays(d, -1), days = [prev];
+  for (const f of s.backFix || []) if (f.pid === pid && f.at && f.day < prev) days.push(f.day);
+  for (const x of days) { const o = awayOn(s, pid, x).find(hasOut); if (o && gone(returnOf(s, pid, x), d, m)) return o; }
+  return null;
 }
+export const awayAt = (s: AppState, pid: number, d: ISODate, time: string): boolean => !!outHeld(s, pid, d, mins(time));
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// «Ποιοι γυρίζουν και πότε»: όλοι όσοι λείπουν τη μέρα d, με πότε και γιατί γυρνά ο καθένας (Εξοδούχοι, Σήμερα)
+// Εξοδούχοι/ΔΝ: returnOf. Όποιος λείπει με άδεια ή νοσοκομείο: ως τη λήξη τους (όπως πριν), νωρίτερα αν έχει υπηρεσία.
+export interface Back { p: Person; st: Status; r: Ret }
+function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
+  let last = d, lastSt: Status | undefined, back: Ret | null = null;
+  for (let i = 0, x = d; i < MAX_DAYS; i++, x = addDays(x, 1)) {
+    const a = awayOn(s, pid, x); if (!a.length) break;
+    last = x; lastSt = a.find(y => !hasOut(y)) || a[0];
+    if (lastSt.open) { back = { day: x, time: '', why: 'χωρίς λήξη', open: true }; break; }
+    // υπηρεσία μέσα στις μέρες που λείπει: γυρίζει γι' αυτήν
+    const duty = i > 0 && dutyAt(s, x, pid);
+    if (duty) { back = { day: x, time: duty.time, why: 'υπηρεσία', duty: duty.label }; break; }
+  }
+  if (back) return back;
+  const t = TYPES[lastSt!.type];
+  if (hasOut(lastSt!)) back = lastSt!.type === 'OUT' ? { day: last, time: dayTimes(s, last).backOut, why: 'τέλος εξόδου' } : { day: addDays(last, 1), time: dayTimes(s, addDays(last, 1)).backDn, why: 'μετά τη ΔΝ' };
+  else if (lastSt!.toTime && hasTimes(lastSt!.type)) back = { day: last, time: lastSt!.toTime, why: 'τέλος ' + t.label };
+  else back = { day: addDays(last, 1), time: '', why: 'τέλος ' + t.label };
+  return withDuty(s, pid, back);
+}
+export function returnsOn(s: AppState, d: ISODate): Back[] {
+  const out: Back[] = [];
+  for (const p of activePeople(s)) {
+    const now = awayOn(s, p.id, d); if (!now.length) continue;
+    out.push({ p, st: now.find(y => !hasOut(y)) || now[0], r: returnOf(s, p.id, d) || leaveBack(s, p.id, d) });
+  }
+  const ord = (b: Back) => (b.r.open ? '9' : b.r.day + (b.r.duty ? '0' : b.r.pending ? '2' : '1') + (b.r.time || '23:59'));
+  return out.sort((a, b) => ord(a).localeCompare(ord(b)) || a.p.last.localeCompare(b.p.last, 'el'));
+}
+// «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»
+export const retDay = (r: Ret) => (r.open ? 'Χωρίς λήξη' : DOW_FULL[weekday(r.day)] + ' ' + dm(r.day));
+export const retWhen = (r: Ret) => {
+  if (r.pending) return r.why;
+  if (r.open) return 'δεν γυρνά, συνεχίζει' + (r.fix ? ' · ' + r.why : '');
+  const why = r.duty ? r.duty + (r.dutyTime && r.dutyTime !== r.time ? ' από ' + r.dutyTime : '') : r.leaveAt ? r.why + ', φεύγει για άδεια ' + r.leaveAt : r.why;
+  return (r.time || 'πρωί') + ' · ' + why;
+};
+export const retTxt = (r: Ret) => (r.pending ? r.why : r.open ? 'χωρίς λήξη' + (r.fix ? ' · ' + r.why : '') : retDay(r) + ' ' + retWhen(r));
