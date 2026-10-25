@@ -11,7 +11,7 @@ export const pvCap = (n: number) => (n > 0 ? n : PV_MAX);
 export const cutSample = <T>(rows: T[], n: number): T[] => rows.slice(0, pvCap(n));
 export interface PvCount { shown: number; total: number }
 // «Δείγμα: 5 από 130»· τίποτα όταν φαίνονται όλοι
-export const sampleText = (c?: PvCount) => (c && c.shown < c.total ? 'Δείγμα: ' + c.shown + ' από ' + c.total : '');
+export const sampleLabel = (c?: PvCount) => (c && c.shown < c.total ? 'Δείγμα: ' + c.shown + ' από ' + c.total : '');
 // ανά έντυπο, μέσα στη συνεδρία (όχι στο αρχείο του εντύπου)
 const samples = new Map<string, number>();
 export const getSample = (id: string) => samples.get(id) ?? PV_SAMPLE_DEF;

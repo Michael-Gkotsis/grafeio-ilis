@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport, previewReport } from '../src/main/reports';
 import { defaultPick, withBuilt, type BuildOpts, type Report } from '../src/shared/reports';
-import { FORM_PARAM, PV_MAX, PV_PAGES, PV_SAMPLES, PV_SAMPLE_DEF, clampPage, cutSample, editForm, formOpen, getSample, newForm, noForm, pageText, sampleName, sampleText, setSample, shownPages } from '../src/shared/repPage';
+import { FORM_PARAM, PV_MAX, PV_PAGES, PV_SAMPLES, PV_SAMPLE_DEF, clampPage, cutSample, editForm, formOpen, getSample, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../src/shared/repPage';
 import { fakeState } from './fixtures';
 
 const D = '2026-10-19';
@@ -26,7 +26,7 @@ describe('Δείγμα προεπισκόπησης', () => {
     expect(PV_SAMPLES).toEqual([5, 10, 20, 0]); expect(sampleName(0)).toBe('Όλοι'); expect(sampleName(5)).toBe('5');
     expect(cutSample([1, 2, 3, 4, 5, 6, 7], 5)).toEqual([1, 2, 3, 4, 5]); expect(cutSample([1, 2], 5)).toEqual([1, 2]);
     expect(cutSample(Array.from({ length: PV_MAX + 50 }, (_, i) => i), 0).length).toBe(PV_MAX);
-    expect(sampleText({ shown: 5, total: 130 })).toBe('Δείγμα: 5 από 130'); expect(sampleText({ shown: 7, total: 7 })).toBe(''); expect(sampleText()).toBe('');
+    expect(sampleLabel({ shown: 5, total: 130 })).toBe('Δείγμα: 5 από 130'); expect(sampleLabel({ shown: 7, total: 7 })).toBe(''); expect(sampleLabel()).toBe('');
     expect(getSample('x1')).toBe(PV_SAMPLE_DEF); setSample('x1', 20); expect(getSample('x1')).toBe(20); expect(getSample('x2')).toBe(PV_SAMPLE_DEF);
   });
 
@@ -100,5 +100,22 @@ describe('Διαδρομή της σελίδας δημιουργίας', () => 
     expect(formOpen({ [FORM_PARAM]: { start: 'hack', preset: 5, tpl: 't' } }, reports)!.arg).toEqual({ tpl: 't' });
     expect(formOpen({ [FORM_PARAM]: 'x' }, reports)).toBeNull();
     const a = formOpen({ [FORM_PARAM]: { n: 1 } }, reports)!, b = formOpen({ [FORM_PARAM]: { n: 2 } }, reports)!; expect(a.key).not.toBe(b.key);
+  });
+});
+
+describe('Σελίδα δημιουργίας: σύνδεση με την εφαρμογή', () => {
+  const src = (f: string) => fs.readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
+  it('δεν είναι πια παράθυρο· μη αποθηκευμένες αλλαγές ρωτούν σε πίσω, Esc και αλλαγή οθόνης', () => {
+    const r = src('renderer/screens/reports.ts');
+    expect(r).not.toMatch(/ReportWizard/); expect(r).toMatch(/function ReportPage/);
+    expect(r).toMatch(/usePending\(dirty,/); expect(r).toMatch(/useEscape\(/); expect(r).toMatch(/<\$\{DiscardAsk\}/);
+    const a = src('renderer/app.ts');
+    expect(a).toMatch(/reports: FORM_PARAM/);   // από το μενού: η λίστα, όχι η σελίδα που είχε μείνει
+    expect(a).toMatch(/r\.params\[FORM_PARAM\] && !next\.params\[FORM_PARAM\]\) \{ guard\(\(\) => requestLeave\(doIt\)\)/);
+  });
+  it('το δείγμα και η σελίδα μένουν έξω από το έντυπο που αποθηκεύεται', () => {
+    const r = src('renderer/screens/reports.ts');
+    const save = r.slice(r.indexOf('const save = async (andRun'), r.indexOf('const canGo = '));
+    expect(save).not.toMatch(/sample|setPage|PV_/);
   });
 });

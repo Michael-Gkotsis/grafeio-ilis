@@ -1,8 +1,9 @@
 // features/reports · «Έντυπα» (Michael, 19/10): δικά σου πρότυπα Excel (ανεβασμένα ή φτιαγμένα εδώ) που γεμίζουν με
-// στοιχεία της εφαρμογής. Ένα έντυπο το στήνεις μία φορά (οδηγός 5 βημάτων) και μετά βγαίνει με ένα κλικ.
+// στοιχεία της εφαρμογής. Ένα έντυπο το στήνεις μία φορά (σελίδα με 5 βήματα) και μετά βγαίνει με ένα κλικ.
 // Η τυχαία επιλογή γίνεται εδώ, ώστε να βγει ακριβώς ό,τι είδες· ο main παίρνει μόνο τη λίστα των ατόμων.
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Button, Dialog, Icon, PageHeader, Segmented, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
+import { html, cx, Alert, Button, Dialog, DiscardAsk, Icon, PageHeader, Segmented, Tabs, VirtualList, useEscape, useToast, useViewportHeight } from '../ui';
+import { usePending } from '../pending';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { DayFormsDialog } from './dayForms';
@@ -18,6 +19,7 @@ import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
 import { blocksOf, type AppState, type Person, type Status } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
+import { PV_MAX, PV_SAMPLES, clampPage, editForm, formOpen, getSample, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
@@ -172,7 +174,7 @@ function PickList({ p, kind, onNever }: P) {
 }
 
 // ------------------------------------------------------------------ προεπισκόπηση (σελίδα όπως θα τυπωθεί, κελιά με κλικ)
-function Preview({ pv, busy, picking, marks, heads, onPick }: P) {
+function Preview({ pv, busy, picking, marks, heads, onPick, page = 1, none }: P) {
   const host = useRef<HTMLDivElement>(null); const root = useRef<ShadowRoot | null>(null);
   const pick = useRef(onPick); pick.current = onPick;
   useEffect(() => {
@@ -183,7 +185,7 @@ function Preview({ pv, busy, picking, marks, heads, onPick }: P) {
   // η σελίδα σε όλο το πλάτος του πλαισίου (zoom): οι αριθμοί του renderBook είναι σε px της σελίδας
   const fit = useCallback(() => {
     const r = root.current; const el = host.current; if (!r || !el) return;
-    const w = r.querySelector('.wrap') as HTMLElement | null; const pg = r.querySelector('.pg') as HTMLElement | null;
+    const w = r.querySelector('.wrap') as HTMLElement | null; const pg = r.querySelector('.pg:not([hidden])') as HTMLElement | null;
     if (w) (w.style as P).zoom = pg ? String(Math.min(1, (el.clientWidth - 4) / pg.offsetWidth)) : '1';
   }, []);
   useEffect(() => {
@@ -192,19 +194,22 @@ function Preview({ pv, busy, picking, marks, heads, onPick }: P) {
     (marks || []).forEach((a: string) => r.querySelectorAll('td[data-a="' + a + '"]').forEach(td => td.classList.add('on')));
     const hs = new Set((heads || []).map(String));
     if (hs.size) r.querySelectorAll('td[data-a]').forEach(td => { if (hs.has((td.getAttribute('data-a') || '').replace(/^[A-Z]+/, ''))) td.classList.add('hd'); });
+    // μία σελίδα τη φορά (όλες ήρθαν μαζί): οι άλλες κρύβονται
+    r.querySelectorAll('.pg').forEach((pg, i, all) => { (pg as HTMLElement).hidden = all.length > 1 && i !== clampPage(page, all.length) - 1; });
     fit();
-  }, [pv, picking, (marks || []).join(), (heads || []).join(), fit]);
+  }, [pv, picking, page, (marks || []).join(), (heads || []).join(), fit]);
   useEffect(() => { const el = host.current; if (!el) return; const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect(); }, [fit]);
   return html`<div className=${cx('rep-pv', busy && 'is-busy')}>
     <div ref=${host} className="rep-pv__page"></div>
-    ${!pv && html`<div className="empty">${busy ? 'Φτιάχνεται η προεπισκόπηση…' : 'Η προεπισκόπηση φαίνεται εδώ.'}</div>`}
-    ${pv && pv.pages > 1 && html`<div className="note rep-pv__more">Φαίνεται η 1η σελίδα από ${pv.pages}.</div>`}
+    ${!pv && html`<div className="empty">${busy ? 'Φτιάχνεται η προεπισκόπηση…' : none || 'Η προεπισκόπηση φαίνεται εδώ.'}</div>`}
+    ${pv && pv.pages > shownPages(pv.pages) && html`<div className="note rep-pv__more">Φαίνονται οι πρώτες ${shownPages(pv.pages)} σελίδες από ${pv.pages}.</div>`}
   </div>`;
 }
 // ζητά προεπισκόπηση λίγο μετά την τελευταία αλλαγή (όχι σε κάθε πλήκτρο: το Atom φτιάχνει ένα xlsx κάθε φορά)
-function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean) {
+// sample: πόσες γραμμές δείχνει κάθε πίνακας (0: όλοι)· χωρίς αυτό (undefined) όπως πριν
+function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean, sample?: number) {
   const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, r.sigs, r.layout, r.more, ids.slice(0, 120), d, raw]);
+  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, r.sigs, r.layout, r.more, ids.length, ids.slice(0, sample == null ? 120 : sample || PV_MAX), d, raw, sample]);
   // μία προεπισκόπηση τη φορά: όσες αλλαγές γίνουν όσο φτιάχνεται μία, ζητείται μόνο η τελευταία (στο Atom κάθε μία θέλει χρόνο)
   const inflight = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
@@ -213,7 +218,7 @@ function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], 
     const t = setTimeout(async () => {
       try {
         while (inflight.current) { await inflight.current.catch(() => {}); if (!live) return; }
-        const req = window.api.repPreview(src, r, ids.slice(0, 120), d, raw);
+        const req = window.api.repPreview(src, r, sample == null ? ids.slice(0, 120) : ids, d, raw, sample == null ? undefined : { sample });
         inflight.current = req; req.finally(() => { if (inflight.current === req) inflight.current = null; }).catch(() => {});
         const x = await req;
         if (!live) return;
@@ -234,7 +239,8 @@ export function ReportsScreen() {
   const loadLast = useCallback(() => { window.api.repLast().then(setLast, () => {}); }, []);
   useEffect(loadLast, [loadLast]);
   const [dayForms, setDayForms] = useState(false);
-  const [wiz, setWiz] = useState<{ r?: Report; start?: 'upload' | 'build' | 'tpl'; preset?: string; tpl?: string } | null>(null);
+  // η σελίδα δημιουργίας (Νέο / Αλλαγή εντύπου) είναι διαδρομή της οθόνης: param repForm (shared/repPage)
+  const form = formOpen(nav.params, reports); const openForm = (p: Record<string, any>) => nav.set(p);
   const [ask, setAsk] = useState<{ r: Report; print: boolean; init?: { ids: (number | string)[]; d: string } } | null>(null);
   const [hist, setHist] = useState<Report | null>(null);
   const [sigFor, setSigFor] = useState<Report | null>(null);
@@ -258,7 +264,7 @@ export function ReportsScreen() {
   }, [nav.params.repRun]);   // eslint-disable-line react-hooks/exhaustive-deps
   const save = (settings: { reports?: Report[]; reportTpls?: RepTpl[] }, text: string) => run({ t: 'setSettings', settings, text }, false);
   const del = async (r: Report) => { if (await save({ reports: reports.filter(x => x.id !== r.id) }, 'Διαγραφή εντύπου «' + r.name + '»')) toast({ text: 'Σβήστηκε το έντυπο «' + r.name + '».', actions: [undoMark()] }); };
-  const copy = async (r: Report) => { const c = { ...r, id: uid(), name: r.name + ' (αντίγραφο)' }; if (await save({ reports: [...reports, c] }, 'Αντίγραφο εντύπου «' + r.name + '»')) setWiz({ r: c }); };
+  const copy = async (r: Report) => { const c = { ...r, id: uid(), name: r.name + ' (αντίγραφο)' }; if (await save({ reports: [...reports, c] }, 'Αντίγραφο εντύπου «' + r.name + '»')) openForm(editForm(c.id)); };
   const delTpl = async (t: RepTpl) => { if (await save({ reportTpls: tpls.filter(x => x.id !== t.id) }, 'Διαγραφή προτύπου «' + t.name + '»')) toast({ text: 'Σβήστηκε το πρότυπο «' + t.name + '».', actions: [undoMark()] }); };
   const usedBy = (t: RepTpl) => reports.filter(r => r.tpl === t.id);
   // «Υπογραφές…»: άλλες για αυτή τη φορά, ή (keep) για αυτό το έντυπο από εδώ και πέρα
@@ -277,10 +283,11 @@ export function ReportsScreen() {
     if (await save({ reports: reports.map(x => (x.id === r.id ? next : x)) }, 'Θέσεις στο χαρτί: «' + r.name + '»')) toast({ text: 'Αποθηκεύτηκαν οι θέσεις του «' + r.name + '».' });
   };
   const sigsReset = async (r: Report) => { const { sigs: _, ...rest } = r; if (await save({ reports: reports.map(x => (x.id === r.id ? rest : x)) }, 'Υπογραφές εντύπου «' + r.name + '»')) toast({ text: 'Το «' + r.name + '» παίρνει ξανά τις υπογραφές των Ρυθμίσεων.' }); };
+  if (form) return html`<${ReportPage} key=${form.key} r=${form.r} start=${form.arg.start} preset=${form.arg.preset} tpl=${form.arg.tpl} onClose=${() => openForm(noForm())} onRun=${fromWizard}/>`;
   return html`<div>
     <${PageHeader} title="Έντυπα" sub="Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.">
-      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setWiz({ start: 'upload' })} data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">Ανέβασε Excel…<//>
-      <${Button} onClick=${() => setWiz({})}>+ Νέο έντυπο<//></div><//>
+      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => openForm(newForm({ start: 'upload' }))} data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">Ανέβασε Excel…<//>
+      <${Button} onClick=${() => openForm(newForm())}>+ Νέο έντυπο<//></div><//>
     <div className="dayrow" role="group" aria-label="Έντυπα της μέρας"><span className="dayrow__lbl">Της μέρας (βγαίνουν από την οθόνη τους):</span>
       <${Button} size="sm" variant="outline" onClick=${() => nav.go('guard', { guardDate: tomorrow })}>ΦΡΟΥΡΑ αύριο<//>
       <${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today, hkTab: undefined })}>${HK()} σήμερα<//>
@@ -296,17 +303,17 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setSigFor(r)} data-tip=${'Υπογραφές' + (r.sigs ? ' (δικές του)' : '') + ': ' + sigsText(r.sigs ?? sigsSaved(state.settings, 'reports')) + '. Αλλάζεις, προσθέτεις ή αλλάζεις σειρά πριν βγει, ή σέρνεις κεφαλίδα, τίτλο και υπογραφές αλλού («Θέσεις στο χαρτί…»).'}>Υπογραφές…<//>
           <${Button} size="sm" variant="ghost" onClick=${() => setHist(r)} data-tip="Πότε βγήκε και ποιοι μπήκαν· ξαναβγαίνει ίδιο αν χαθεί το χαρτί">Ιστορικό<//>
-          <${Button} size="sm" variant="ghost" onClick=${() => setWiz({ r })}>Αλλαγή<//>
+          <${Button} size="sm" variant="ghost" onClick=${() => openForm(editForm(r.id))}>Αλλαγή<//>
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
           <${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + r.name} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => del(r)}>${Icon.x}<//></td>
       </tr>`)}</tbody></table></div>` : html`<div className="ui-card"><div className="rep-empty">
         <h2>Ξεκίνα από ένα υπόδειγμα</h2><p className="muted">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις. Αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
-        <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => setWiz({ start: 'build', preset: p.id })}><b>${p.name}</b><small>${p.help}</small></button>`)}
-          <button type="button" className="rep-preset rep-preset--up" onClick=${() => setWiz({ start: 'upload' })}><b>Δικό σου Excel</b><small>Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.</small></button></div>
+        <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => openForm(newForm({ start: 'build', preset: p.id }))}><b>${p.name}</b><small>${p.help}</small></button>`)}
+          <button type="button" className="rep-preset rep-preset--up" onClick=${() => openForm(newForm({ start: 'upload' }))}><b>Δικό σου Excel</b><small>Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.</small></button></div>
       </div></div>`)}
     ${tab === 'tpls' && (tpls.length ? html`<div className="ui-card"><table className="rep-table"><thead><tr><th>Πρότυπο</th><th>Από πού</th><th>Έντυπα</th><th></th></tr></thead><tbody>
       ${tpls.map(t => { const u = usedBy(t); return html`<tr key=${t.id}><td><b>${t.name}</b></td><td>${t.built ? 'Φτιαγμένο εδώ' : 'Ανεβασμένο Excel'}</td><td>${u.length ? u.map(r => r.name).join(', ') : html`<span className="muted">κανένα</span>`}</td>
-        <td className="rep-table__acts"><${Button} size="sm" variant="outline" onClick=${() => setWiz({ start: 'tpl', tpl: t.id })}>Νέο έντυπο από αυτό<//>
+        <td className="rep-table__acts"><${Button} size="sm" variant="outline" onClick=${() => openForm(newForm({ start: 'tpl', tpl: t.id }))}>Νέο έντυπο από αυτό<//>
           <${Button} size="sm" variant="ghost" onClick=${() => window.api.repOpenTpl(t.file)} data-tip="Άλλαξε μορφή, λογότυπο, στήλες στο Excel. Οι αλλαγές ισχύουν από το επόμενο έντυπο.">Άνοιξέ το στο Excel<//>
           <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
@@ -314,7 +321,6 @@ export function ReportsScreen() {
       onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} onLayout=${(sigs: Sig[]) => setLayFor({ r: sigFor, sigs })} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
     ${layFor && html`<${LayoutDialog} title=${layFor.r.name} sigs=${layFor.sigs} initial=${layFor.r.layout ? { main: layFor.r.layout } : undefined} onClose=${() => setLayFor(null)} onSave=${(l: Layout | undefined) => layoutSave(layFor.r, l)}
       req=${(l: Layout) => { const d = repDate(layFor.r, today); return { report: { ...layFor.r, sigs: layFor.sigs, layout: l.main }, file: tpls.find(t => t.id === layFor.r.tpl)?.file || '', ids: rowsOf(state, layFor.r, d).map(x => x.id), date: d }; }}/>`}
-    ${wiz && html`<${ReportWizard} ...${wiz} onClose=${() => setWiz(null)} onRun=${fromWizard}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
     ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
   </div>`;
@@ -379,7 +385,8 @@ const syncMore = (more: RepTable[] | undefined, bm: BuildTable[] | undefined): R
   return out.length ? out : undefined;
 };
 
-function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P) {
+// Η σελίδα δημιουργίας (Νέο / Αλλαγή εντύπου): όλη η οθόνη, αριστερά τα 5 βήματα ως καρτέλες, δεξιά η προεπισκόπηση πάντα ορατή
+function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P) {
   const { state, today, run } = useStore(); const toast = useToast();
   const tpls = tplsOf(state); const editing = !!initial && repsOf(state).some(x => x.id === initial.id);
   const [step, setStep] = useState(initial ? 3 : 1);
@@ -400,8 +407,14 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const layN = useRef(initial ? sigN(initial) : 0);
   const [ti, setTi] = useState(0);   // ποιος πίνακας φαίνεται στα βήματα 3 και 4 (0: ο πρώτος, 1…: r.more)
   const [subInsp, setSubInsp] = useState<Record<string, TplInspect>>({});   // ανεβασμένο: οι επικεφαλίδες των πινάκων 2, 3…
-  // κάτι διαλέχτηκε ή άλλαξε: Esc και ✕ ρωτούν πριν πεταχτεί το έντυπο
-  const [r0] = useState(() => JSON.stringify(r)); const dirty = !busy && (!!mode || JSON.stringify(r) !== r0);
+  // κάτι άλλαξε από τότε που άνοιξε η σελίδα (σε υπάρχον έντυπο: αφού διαβαστεί το πρότυπό του): πίσω, Esc και αλλαγή οθόνης ρωτούν πριν πεταχτεί
+  const [ready, setReady] = useState(!initial); const [base, setBase] = useState<string | null>(null);
+  const snap = JSON.stringify([r, build, mode, signers]);   // το πρότυπο (tpl) μπαίνει με καθυστέρηση στο άνοιγμα υπάρχοντος εντύπου: αλλάζοντάς το αλλάζουν και τα mode/build/r
+  useEffect(() => { if (ready && base == null) setBase(snap); }, [ready, base, snap]);
+  const dirty = !busy && base != null && snap !== base;
+  // δείγμα και σελίδα της προεπισκόπησης (το δείγμα το θυμάται η συνεδρία ανά έντυπο, δεν μπαίνει στο έντυπο)
+  const [sample, setSampleS] = useState(() => getSample(r.id)); const [page, setPage] = useState(1);
+  const pickSample = (n: number) => { setSampleS(n); setSample(r.id, n); setPage(1); };
   const d = repDate(r, today);
   const inspect = async (t: RepTpl, kind: RepKind, sheet?: string, head?: number, keepCols = false) => {
     const x = await window.api.repInspect(t.file, kind, sheet, head);
@@ -442,7 +455,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   const [quick, setQuick] = useState(false);
   const startBuild = (o: BuildOpts, name: string, jump = false) => { const b: BuildOpts = JSON.parse(JSON.stringify(o)); setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote(''); upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more) }); setTi(0); setQuick(jump); setStep(jump ? 4 : 2); };
   useEffect(() => {
-    if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true); else setStep(1); }
+    if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true).finally(() => setReady(true)); else { setStep(1); setReady(true); } }
     else if (start === 'upload') upload();
     else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p); }
     else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)); } }
@@ -456,14 +469,15 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
   };
   const p = usePick(r, d);
   const ids = useMemo(() => p.rows.map(x => x.id), [p.rows]);
-  const raw = mode === 'upload' && (view === 'tpl' || !!picking);
-  const src: RepSource | null = step < 3 ? null : mode === 'build' && build ? { build } : mode === 'upload' && tpl ? { file: tpl.file } : null;
+  const raw = step === 3 && mode === 'upload' && (view === 'tpl' || !!picking);
+  const src: RepSource | null = mode === 'build' && build ? { build } : mode === 'upload' && tpl ? { file: tpl.file } : null;
   // χωρισμένο ανά θάλαμο/ουλαμό/Σ.Ι.: η προεπισκόπηση δείχνει την ομάδα που διαλέγεις
   const groups = useMemo(() => (r.kind !== 'cadre' && r.split && r.split !== 'none' ? groupsOf(state, r.kind, p.rows, r.split) : []), [state, r.kind, r.split, p.rows]);
   const [pvG, setPvG] = useState('');
   const g = groups.find(x => x.key === pvG) || groups[0];
   const pvIds = useMemo(() => (g ? g.rows.map(x => x.id) : ids), [g, ids]);
-  const prev = usePreview(src, r, pvIds, d, raw);
+  const prev = usePreview(src, r, pvIds, d, raw, raw ? undefined : sample);
+  const pages = prev.pv ? shownPages(prev.pv.pages) : 1; const pg = clampPage(page, pages);
   const onPick = async (ref: string) => {
     if (!picking || !tpl) return;
     const row = +ref.replace(/^[A-Z]+/, '');
@@ -485,11 +499,11 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
     if (i >= 3 && mode === 'build' && !build?.cols.length) return 'Βάλε τουλάχιστον μία στήλη.';
     if (i >= 3 && mode === 'upload' && !r.cols.length) return 'Δείξε ποια στήλη παίρνει τι (τουλάχιστον μία).';
     if (i >= 3) { const n = (mode === 'build' ? (build?.more || []).map(t => t.cols.length) : (r.more || []).map(t => t.cols.length)).findIndex(x => !x); if (n >= 0) return 'Ο πίνακας ' + (n + 2) + ' δεν έχει στήλες.'; }
-    if (i >= 6 && !r.name.trim()) return 'Δώσε όνομα στο έντυπο.';   // 6 = αποθήκευση (το όνομα γράφεται στο βήμα 5)
+    if (i >= 6 && !r.name.trim()) return 'Δώσε όνομα στο έντυπο (στο βήμα «Πού βγαίνει»).';   // 6 = αποθήκευση (το όνομα γράφεται στο βήμα 5)
     return '';
   };
   const save = async (andRun: boolean) => {
-    const why = missing(6); if (why) { toast({ text: why }); return; }
+    const why = missing(6); if (why) { toast({ text: why }); return false; }
     setBusy(true);
     try {
       let rr: Report = { ...r, name: r.name.trim() }; let list = [...tpls];
@@ -500,7 +514,7 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
         const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
         const file = tpl && !shared ? tpl.file : undefined;
         const b = await window.api.repBuild(build, r.kind, file);
-        if (!b.ok) { toast({ text: html`<span><b>Δεν αποθηκεύτηκε.</b> ${b.error}</span>` }); return; }
+        if (!b.ok) { toast({ text: html`<span><b>Δεν αποθηκεύτηκε.</b> ${b.error}</span>` }); return false; }
         const t: RepTpl = { id: file && tpl ? tpl.id : uid(), name: rr.name, file: b.file, built: build, mtime: b.mtime };
         list = [...list.filter(x => x.id !== t.id), t];
         rr = { ...withBuilt(rr, b, build), tpl: t.id };
@@ -509,22 +523,34 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
       const sg = state.settings.signers || { sergeant: '', commander: '' };
       const sChanged = sg.sergeant !== signers.sergeant || sg.commander !== signers.commander;
       const next = await run({ t: 'setSettings', settings: { reportTpls: list, reports: exists ? reps.map(x => (x.id === rr.id ? rr : x)) : [...reps, rr], ...(sChanged ? { signers: { sergeant: signers.sergeant.trim(), commander: signers.commander.trim() } } : {}) }, text: (exists ? 'Αλλαγή' : 'Νέο') + ' έντυπο «' + rr.name + '»' }, (exists ? 'Αποθηκεύτηκε' : 'Έτοιμο') + ' το έντυπο «' + rr.name + '».');
-      if (!next) return;
+      if (!next) return false;
       onClose(); if (andRun) onRun(rr, next, ids, d);
+      return true;
     } finally { setBusy(false); }
   };
   const canGo = (i: number) => !missing(i);
-  const foot = html`<span className="rep-wiz__why">${missing(step + 1)}</span>
-    <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
-    ${step > 1 && html`<${Button} variant="outline" onClick=${() => setStep(step - 1)}>Πίσω<//>`}
-    ${step === 4 && html`<${Button} variant="outline" disabled=${busy || !canGo(6)} why=${missing(6)} data-tip=${'Χωρίς το βήμα 5: ' + outText(r)} onClick=${() => save(true)}>Αποθήκευση και Βγάλε<//>`}
-    ${step < 5 ? html`<${Button} disabled=${!canGo(step + 1)} why=${missing(step + 1)} onClick=${() => setStep(step + 1)}>Επόμενο<//>`
-      : html`<${Button} variant="outline" disabled=${busy || !canGo(6)} why=${missing(6)} onClick=${() => save(false)}>Αποθήκευση<//><${Button} disabled=${busy || !canGo(6)} why=${missing(6)} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>`}`;
-  const showPv = step === 3 || step === 5;
-  return html`<${Dialog} size="xl" title=${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'} closeOnOverlay=${false} onClose=${onClose} dirty=${dirty && (editing ? 'Οι αλλαγές στο έντυπο δεν αποθηκεύτηκαν. Αν κλείσεις, μένει όπως ήταν.' : 'Το έντυπο δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.')} footer=${foot}>
-    <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} onClick=${() => setStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
+  // μη αποθηκευμένες αλλαγές: η μπάρα κάτω και η ερώτηση σε αλλαγή οθόνης (pending.ts)· «Πέτα» κλείνει τη σελίδα
+  const [leaving, setLeaving] = useState(false);
+  usePending(dirty, { label: 'Έντυπο «' + (r.name.trim() || 'χωρίς όνομα') + '»', save: () => save(false), discard: onClose });
+  const back = () => { if (dirty) setLeaving(true); else onClose(); };
+  useEscape(() => { if (picking) setPicking(null); else back(); });
+  const goStep = (i: number) => { setPicking(null); setStep(i); };
+  const tname = (i: number) => (i === 0 ? kindLbl(r.kind) : (r.more?.[i - 1]?.title || '').slice(0, 18) || kindLbl(r.more?.[i - 1]?.kind || r.kind));
+  const lbls = (prev.pv?.counts || []).map((c, i) => ({ i, t: sampleLabel(c) })).filter(x => x.t);
+  const why6 = missing(6);
+  return html`<div className="rep-page" data-dirty=${dirty ? 'true' : undefined}>
+    <div className="rep-page__bar">
+      <${Button} variant="ghost" onClick=${back} data-tip="Πίσω στη λίστα των εντύπων (Esc)">← Έντυπα<//>
+      <h2 className="rep-page__title">${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'}</h2>
+      <span className="rep-wiz__why">${why6}</span>
+      <${Button} variant="outline" onClick=${onClose} data-tip="Κλείνει χωρίς αποθήκευση">Άκυρο<//>
+      <${Button} variant="outline" disabled=${busy || !!why6} why=${why6} data-tip=${'Αποθήκευση χωρίς να βγει. Πού βγαίνει: ' + outText(r)} onClick=${() => save(false)}>Αποθήκευση<//>
+      <${Button} disabled=${busy || !!why6} why=${why6} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>
+    </div>
+    <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} data-tip=${!canGo(i + 1) && step < i + 1 ? missing(i + 1) : undefined} onClick=${() => goStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
     ${note && html`<${Alert} tone="warn">${note}<//>`}
-    <div className=${cx('rep-wiz', showPv && 'rep-wiz--pv')}>
+    <div className="rep-page__cols">
+      <div className="rep-page__main">
       <div className="rep-wiz__main">
         ${step === 1 && html`<${StepTpl} mode=${mode} tpl=${tpl} build=${build} tpls=${tpls} upload=${upload} onBuild=${startBuild} onTpl=${(t: RepTpl) => { upd({ name: r.name || t.name }); useTpl(t, r.kind, false).then(() => setStep(2)); }}/>`}
         ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
@@ -547,17 +573,25 @@ function ReportWizard({ r: initial, start, preset, tpl: tplId, onClose, onRun }:
         ${step === 4 && (ti > 0 && r.more?.[ti - 1] ? html`<${SubPick} key=${r.more[ti - 1].id} r=${r} t=${r.more[ti - 1]} n=${ti + 1} d=${d} set=${(t: RepTable) => upd({ more: (r.more || []).map(x => (x.id === t.id ? t : x)) })}/>` : html`<${StepPick} r=${r} upd=${upd} p=${p}/>`)}
         ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
       </div>
-      ${showPv && html`<div className="rep-wiz__pv">
+      <div className="rep-page__nav"><${Button} variant="outline" disabled=${step < 2} why="Είσαι στο πρώτο βήμα" onClick=${() => goStep(step - 1)}>‹ Πίσω<//><${Button} variant="outline" disabled=${step > 4 || !canGo(step + 1)} why=${missing(step + 1)} onClick=${() => goStep(step + 1)}>Επόμενο ›<//></div>
+      </div>
+      <div className="rep-page__pv">
+        <div className="rep-pvbar">
+          ${!raw && html`<span className="rep-pvbar__lbl">Δείγμα:</span><${Segmented} small=${true} value=${String(sample)} onChange=${(v: string) => pickSample(+v)} items=${PV_SAMPLES.map(n => ({ value: String(n), label: sampleName(n), tip: n ? 'Κάθε πίνακας δείχνει ως ' + n + ' γραμμές στην προεπισκόπηση. Το έντυπο βγαίνει πάντα με όλους.' : 'Κάθε πίνακας δείχνει όλες τις γραμμές του (ως ' + PV_MAX + ')' }))}/>`}
+          ${pages > 1 && html`<span className="rep-pvbar__pg"><${Button} size="icon" variant="ghost" aria-label="Προηγούμενη σελίδα" data-tip="Προηγούμενη σελίδα" disabled=${pg <= 1} onClick=${() => setPage(pg - 1)}>‹<//><span role="status">${pageText(pg, prev.pv!.pages)}</span><${Button} size="icon" variant="ghost" aria-label="Επόμενη σελίδα" data-tip="Επόμενη σελίδα" disabled=${pg >= pages} onClick=${() => setPage(pg + 1)}>›<//></span>`}
+        </div>
+        ${!raw && lbls.length > 0 && html`<div className="rep-pvbar__cnt" role="status">${lbls.map(x => html`<span key=${x.i}>${(r.more?.length ? x.i + 1 + ' · ' + tname(x.i) + ': ' : '') + x.t}</span>`)}</div>`}
         ${prev.err && html`<${Alert} tone="bad">${prev.err}<//>`}
         ${picking && html`<div className="rep-pickhint" role="status"><b>Κάνε κλικ σε ένα κελί</b> ${picking === '#head' ? 'της γραμμής με τις επικεφαλίδες' : picking.startsWith('#head:') ? 'της γραμμής με τις επικεφαλίδες του ' + (picking === '#head:+' ? 'νέου πίνακα' : 'πίνακα') : 'για «' + (cellOf(picking)?.label || '') + '»'} <${Button} size="sm" variant="ghost" onClick=${() => setPicking(null)}>Άκυρο<//></div>`}
-        ${groups.length > 1 && !raw && html`<div className="rep-chips rep-pvgroups" role="group" aria-label="Ποια ομάδα δείχνει η προεπισκόπηση">${groups.map(x => html`<button key=${x.key} type="button" className="ui-chip ui-chip--sm" aria-pressed=${x === g} onClick=${() => setPvG(x.key)}>${x.short} (${x.rows.length})</button>`)}</div>`}
-        <${Preview} pv=${prev.pv} busy=${prev.busy} picking=${!!picking} heads=${raw ? [r.head, ...(r.more || []).map(t => t.head)] : []} marks=${raw ? [...r.cells.map(c => c.ref), ...(insp?.tags || []).map(t => t.ref)] : []} onPick=${onPick}/>
-      </div>`}
+        ${groups.length > 1 && !raw && html`<div className="rep-chips rep-pvgroups" role="group" aria-label="Ποια ομάδα δείχνει η προεπισκόπηση">${groups.map(x => html`<button key=${x.key} type="button" className="ui-chip ui-chip--sm" aria-pressed=${x === g} onClick=${() => { setPvG(x.key); setPage(1); }}>${x.short} (${x.rows.length})</button>`)}</div>`}
+        <${Preview} pv=${prev.pv} busy=${prev.busy} page=${pg} none=${src ? undefined : 'Διάλεξε πρότυπο (βήμα 1) και η προεπισκόπηση φαίνεται εδώ.'} picking=${!!picking} heads=${raw ? [r.head, ...(r.more || []).map(t => t.head)] : []} marks=${raw ? [...r.cells.map(c => c.ref), ...(insp?.tags || []).map(t => t.ref)] : []} onPick=${onPick}/>
+      </div>
     </div>
+    ${leaving && html`<${DiscardAsk} text=${editing ? 'Οι αλλαγές στο έντυπο δεν αποθηκεύτηκαν. Αν κλείσεις, μένει όπως ήταν.' : 'Το έντυπο δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.'} onStay=${() => setLeaving(false)} onLeave=${onClose}/>`}
     ${lay && src && html`<${LayoutDialog} title=${r.name || 'Νέο έντυπο'} sigs=${r.sigs ? sigsClean(r.sigs) : mode === 'build' ? sigsSaved(state.settings, 'reports') : undefined} initial=${r.layout ? { main: r.layout } : undefined}
       onClose=${() => setLay(false)} onSave=${(l: Layout | undefined) => { layN.current = sigN(r); upd({ layout: l?.main }); }}
       req=${(l: Layout) => ({ report: { ...r, ...(r.sigs ? { sigs: sigsClean(r.sigs) } : {}), layout: l.main }, ...('build' in src ? { build: src.build } : { file: src.file }), ids: pvIds, date: d })}/>`}
-  <//>`;
+  </div>`;
 }
 
 function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
