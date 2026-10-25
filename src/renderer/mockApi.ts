@@ -7,7 +7,8 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
-import { byIds, fieldOf, fieldValue, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
+import { byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
+import { PV_PAGES, cutSample } from '../shared/repPage';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
 import { rankTxt } from '../shared/ranks';
@@ -197,13 +198,27 @@ export function mockApi(): Api {
     repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
     repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: o.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
       more: (o.more || []).map((t, j) => ({ id: t.id, head: 11 + j * 4, cols: t.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(t.kind, c.f)?.head || '', o: c.o })) })) }),
-    repPreview: async (src, r: Report, ids, date) => {
-      const cols: { c: number; f: string; h?: string; text?: string; o?: ColOpts }[] = 'build' in src ? src.build.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h, text: c.text, o: c.o })) : r.cols;
+    // προεπισκόπηση: απλοί πίνακες (ένας ανά πίνακα του εντύπου) σε σελίδες των 30 γραμμών, με το ίδιο δείγμα και counts όπως ο main
+    repPreview: async (src, r: Report, ids, date, _raw, opts) => {
+      type Col = { f: string; h?: string; text?: string; o?: ColOpts };
+      const build = 'build' in src ? src.build : null;
+      const cols1: Col[] = build ? build.cols : r.cols;
+      const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
-      const rows = byIds(state, r.kind, ids.slice(0, 40), date);
-      const head = cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('');
-      const body = rows.map((x, i) => '<tr>' + cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, r.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>').join('');
-      return { html: '<div style="background:#fff;padding:24px;width:794px"><h3 style="text-align:center">' + esc('build' in src ? src.build.title : r.title || r.name) + '</h3><table style="border-collapse:collapse;font:12px Calibri,Arial">' + head + body + '</table></div>', css: '', pages: 1 };
+      const extra = moreRows(state, r, date);
+      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: cols1, rows: byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
+        ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: t.cols as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
+      const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
+      // γραμμές της σελίδας: τίτλος, επικεφαλίδες, δεδομένα
+      const lines: string[] = [];
+      for (const t of tabs) {
+        lines.push('<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>');
+        lines.push('<tr>' + t.cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('') + '</tr>');
+        cut(t.rows).forEach((x, i) => lines.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
+        lines.push('<tr><td style="border:0">&nbsp;</td></tr>');
+      }
+      const pages: string[] = []; for (let i = 0; i < lines.length; i += 30) pages.push('<div class="pg" style="width:794px;height:760px;padding:24px"><table class="mock" style="font:12px Calibri,Arial">' + lines.slice(i, i + 30).join('') + '</table></div>');
+      return { html: pages.slice(0, PV_PAGES).join(''), css: '', pages: pages.length || 1, ...(sample == null ? {} : { counts }) };
     },
     // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές
     layoutPreview: async q => {

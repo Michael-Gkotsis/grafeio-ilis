@@ -8,6 +8,7 @@ import { blockOf } from './layout';
 import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
+import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAB_WIDTHS, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, tagKey, type BuildOpts, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
@@ -128,7 +129,10 @@ function locateHead(ws: Sheet, rows: XlValue[][], cols: RepCol[], head: number, 
 // μείνουν παλιά ονόματα)
 export type GroupKey = Omit<RepGroup, 'rows'>;
 export interface FillOpts { prefix?: string; stale?: GroupKey[] }
-export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[]; layout: LayoutSheet[] }> {
+// Δείγμα της προεπισκόπησης (Έντυπα › σελίδα δημιουργίας): κάθε πίνακας δείχνει ως sample γραμμές (0: ως PV_MAX). Το βγάλσιμο (rep:run, αυτόματη
+// ενημέρωση) δεν το περνά ποτέ: μπαίνει μόνο από το previewReport, και τότε το αποτέλεσμα έχει counts (πόσες από πόσες, ανά πίνακα του 1ου φύλλου)
+export interface PvOpts { sample: number }
+export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}, pv?: PvOpts): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[]; layout: LayoutSheet[]; counts?: PvCount[] }> {
   const wb = await Workbook.open(tpl); wb.widen = !r.fixed; const warnings: string[] = [];
   await unitWords(wb, s);
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
@@ -150,7 +154,10 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows },
     ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))];
   const names: string[] = []; const layout: LayoutSheet[] = [];
-  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, tabs(null), d, '', warnings)); names.push(sheet); }
+  const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
+  const t0 = pv ? tabs(split ? groups[0] : null) : null;
+  const counts = t0 ? t0.map(x => ({ shown: cutSample(x.rows, pv!.sample).length, total: x.rows.length })) : undefined;
+  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings)); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -158,11 +165,11 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, tabs(groups[i]), d, groups[i].label, warnings); if (!i) layout.push(...l); }
+    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
   const name = repFileName(r, d);
-  return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [], layout };
+  return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [], layout, ...(counts ? { counts } : {}) };
 }
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[] }
@@ -375,11 +382,12 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
 }
 
 // Προεπισκόπηση: η πρώτη σελίδα όπως θα τυπωθεί, με τα κελιά σημαδεμένα (data-a) για να διαλέγεις με κλικ
-export async function previewReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, pages = 1): Promise<{ html: string; css: string; pages: number; error?: string }> {
-  const out = await fillReport(tpl, s, r, ids.slice(0, 120), d);
+// sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας (0: όλοι)· τότε το αποτέλεσμα έχει και counts. Χωρίς sample: οι πρώτοι 120 του 1ου πίνακα, όπως πριν.
+export async function previewReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, pages = 1, sample?: number): Promise<{ html: string; css: string; pages: number; counts?: PvCount[]; error?: string }> {
+  const out = sample == null ? await fillReport(tpl, s, r, ids.slice(0, 120), d) : await fillReport(tpl, s, r, ids, d, {}, { sample });
   const doc = await renderBook(out.data, { file: out.name, sheets: [out.sheets[0]], refs: true, maxPages: pages });
   const sh = doc.sheets[0];
-  return { html: sh ? sh.html : '', css: doc.css, pages: sh ? sh.pages : 0 };
+  return { html: sh ? sh.html : '', css: doc.css, pages: sh ? sh.pages : 0, ...(out.counts ? { counts: out.counts } : {}) };
 }
 // Μόνο το πρότυπο όπως είναι (χωρίς στοιχεία): για να δείξεις τη γραμμή των επικεφαλίδων και τα κελιά πριν την αντιστοίχιση
 export async function previewTemplate(tpl: Buffer | Uint8Array, sheet: string, pages = 1): Promise<{ html: string; css: string; pages: number }> {

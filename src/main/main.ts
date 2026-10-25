@@ -24,6 +24,7 @@ import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rend
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { repDate, rowsOf, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
+import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
 import { frouraFile, hkLvOn, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
@@ -1099,13 +1100,14 @@ else {
         return { ok: true, file: name, mtime: Math.round(fs.statSync(f).mtimeMs), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(b.more ? { more: b.more } : {}), ...(b.fixed ? { fixed: true } : {}) };
       } catch (e) { return fail(e); }
     });
-    ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean) => {
+    // opts.sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας· τότε και πολλές σελίδες. Μόνο εδώ, ποτέ στο rep:run
+    ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean, opts?: { sample?: number }) => {
       try {
-        const s = store.state;
-        if (src.build) return await off('previewBuilt', [src.build, r, ids, date], async () => { const b = await buildTemplate(src.build!, r.kind, xlLook(s.settings)); return previewReport(b.data, s, withBuilt(r, b, src.build!), ids, date); }, s);
+        const s = store.state; const sample = typeof opts?.sample === 'number' ? opts.sample : undefined; const pages = sample == null ? 1 : PV_PAGES;
+        if (src.build) return await off('previewBuilt', [src.build, r, ids, date, pages, sample], async () => { const b = await buildTemplate(src.build!, r.kind, xlLook(s.settings)); return previewReport(b.data, s, withBuilt(r, b, src.build!), ids, date, pages, sample); }, s);
         const buf = await tplBuf(src.file || '');
         if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
-        return await off('previewReport', [buf, r, ids, date], () => previewReport(buf, s, r, ids, date), s);
+        return await off('previewReport', [buf, r, ids, date, pages, sample], () => previewReport(buf, s, r, ids, date, pages, sample), s);
       } catch (e) { return fail(e); }
     });
     // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
