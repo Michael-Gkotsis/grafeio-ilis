@@ -9,7 +9,7 @@ import { Workbook } from '../src/main/xlsx';
 import { hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, hkRange, leaveName, linesText } from '../src/shared/hkaiText';
 import { withArticle, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
-import { hkOn, hkToggle, type AppState } from '../src/shared/domain';
+import { hkLvOn, hkOn, hkToggle, type AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
@@ -243,5 +243,108 @@ describe('ΗΚΑΙ: όργανα υπηρεσίας με μόνιμους Λ/Υ 
     expect(hkOrgans(s, D)).toEqual({ ly: a.id, dy: c.id });
     s = run(s, { t: 'declare', cmd: { pids: [a.id], type: 'LEAVE', from: D, to: D } } as Command);
     expect(hkOrgans(s, D)).toEqual({ dy: c.id });
+  });
+});
+
+// 3. ΑΔΕΙΕΣ: στελέχη, εκτός δύναμης, ελεύθερο κείμενο και ανά μέρα (Michael, 24/10)
+describe('3. ΑΔΕΙΕΣ: στελέχη, ελεύθερο κείμενο, ανά μέρα', () => {
+  // δύο στελέχη (ο Λοχίας μπαίνει πρώτος, αλλά ο Ίλαρχος προηγείται στην ιεραρχία) και δύο στρατιώτες με άδεια σήμερα
+  function base(): AppState {
+    let s = fakeState(10);
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΛΧΙΑΣ', origin: 'ΕΠΟΠ', spec: 'ΜΧ', hk: 'Λοχίες', last: 'ΔΟΚΙΜΙΔΗΣ', first: 'ΔΟΚΙΜΟΣ' } });
+    s = run(s, { t: 'saveCadre', cadre: { rank: 'ΙΛΧΟΣ', hk: 'Ίλαρχοι', last: 'ΥΠΟΘΕΤΙΚΟΣ', first: 'ΓΙΑΝΝΗΣ' } });
+    s = run(s, { t: 'declare', cmd: { type: 'LEAVE', pids: [3], from: D, to: '2026-10-18', kind: 'Κανονική' } });
+    s = run(s, { t: 'declare', cmd: { type: 'SICK', pids: [2], from: D, to: D } });
+    return s;
+  }
+  const cid = (s: AppState, last: string) => s.cadreList.find(c => c.last === last)!.id;
+  const cabs = (s: AppState, last: string, kind: string, from = D, to = D) => run(s, { t: 'addCadreAbs', abs: { cid: cid(s, last), kind, from, to } });
+  const lvDay = (s: AppState, on: boolean | undefined, d = D): AppState => ({ ...s, hkaiManual: { ...s.hkaiManual, [d]: { cells: {}, text: {}, ...(on === undefined ? {} : { lv: on }) } } });
+
+  it('στελέχη πρώτα (σειρά ιεραρχίας), μετά στρατιώτες, μία αρίθμηση· μόνο οι ΚΑ, ειδική και αναρρωτική που ξεκινούν τη μέρα', () => {
+    let s = lvDay(base(), true);
+    s = cabs(s, 'ΔΟΚΙΜΙΔΗΣ', 'ka', D, '2026-10-18');
+    s = cabs(s, 'ΥΠΟΘΕΤΙΚΟΣ', 'an');
+    expect(linesText(hkaiLeaveLines(s, D))).toBe([
+      '1. ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ ΓΙΑΝΝΗΣ: ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26.',
+      '2. ΕΠΟΠ ΛΧΙΑΣ (ΜΧ) ΔΟΚΙΜΙΔΗΣ ΔΟΚΙΜΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26.',
+      '3. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26.',
+      '4. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26.'].join('\n'));
+  });
+  it('στέλεχος: ειδική γράφεται· υπηρεσία, εκπαίδευση, νοσοκομείο, φύλλο πορείας όχι· ούτε όταν η άδεια ξεκίνησε άλλη μέρα', () => {
+    let s = lvDay(base(), true);
+    const only = (kind: string, from = D) => linesText(hkaiLeaveLines(cabs(s, 'ΥΠΟΘΕΤΙΚΟΣ', kind, from, '2026-10-20'), D)).split('\n').filter(l => /ΥΠΟΘΕΤΙΚΟΣ/.test(l));
+    expect(only('eid')).toEqual(['1. ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ ΓΙΑΝΝΗΣ: ΕΙΔΙΚΗ ΑΔΕΙΑ ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΤΡΙ 20 ΟΚΤ 26.']);
+    for (const k of ['yp', 'ey', 'ekp', 'nos', 'fp', 'allh', 'apal', 'other']) expect(only(k)).toEqual([]);
+    expect(only('ka', '2026-10-15')).toEqual([]);
+    s = cabs(s, 'ΥΠΟΘΕΤΙΚΟΣ', 'ka', '2026-10-15', '2026-10-20');
+    expect(linesText(hkaiLeaveLines(s, '2026-10-15'))).toBe('');   // η μέρα 15 δεν έχει δική της τιμή: προεπιλογή, κλειστό
+    expect(linesText(hkaiLeaveLines(lvDay(s, true, '2026-10-15'), '2026-10-15'))).toMatch(/^1\. ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ/);
+    expect(hkaiLeaveLines(s, D).filter(l => /ΥΠΟΘΕΤΙΚΟΣ/.test(linesText([l])))).toHaveLength(0);
+  });
+  it('εκτός δύναμης (στρατιώτης ή στέλεχος): δεν γράφονται', () => {
+    let s = lvDay(base(), true);
+    s = cabs(s, 'ΔΟΚΙΜΙΔΗΣ', 'ka');
+    expect(hkaiLeaveLines(s, D)).toHaveLength(3);
+    const out = { ...s, people: s.people.map(p => (p.id === 3 ? { ...p, active: false } : p)), cadreList: s.cadreList.map(c => (c.last === 'ΔΟΚΙΜΙΔΗΣ' ? { ...c, active: false } : c)) };
+    expect(linesText(hkaiLeaveLines(out, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26.');
+  });
+  it('ελεύθερο κείμενο: τελευταίο, χωρίς αριθμό· γράφεται μόνο όταν η μέρα έχει ανοιχτό το 3. (και στο Excel)', async () => {
+    let s = lvDay(base(), true);
+    s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { lv: '  ΕΠΙΠΛΕΟΝ: ΑΔΕΙΑ ΣΤΟ ΕΞΩΤΕΡΙΚΟ.  ' } } });
+    expect(s.hkaiManual[D].lv).toBe(true);   // η Αποθήκευση των κειμένων δεν χάνει τον διακόπτη της μέρας
+    expect(hkaiLeaveLines(s, D).map(l => linesText([l]))).toEqual([
+      '1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26.',
+      '2. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26.',
+      'ΕΠΙΠΛΕΟΝ: ΑΔΕΙΑ ΣΤΟ ΕΞΩΤΕΡΙΚΟ.']);
+    const g10 = async (x: AppState) => (await (await Workbook.open((await fillHkai(T('hkai.xlsx'), x, D)).data)).sheet(1)).get('G10') || '';
+    expect((await g10(s)).split('\n')).toHaveLength(3);
+    // κλειστό για τη μέρα: ούτε το κείμενο
+    const off = run(s, { t: 'setHkaiLv', date: D, on: false });
+    expect(hkaiLeaveLines(off, D)).toHaveLength(0);
+    expect(await g10(off)).toBe('');
+    expect(off.hkaiManual[D].text.lv).toContain('ΕΠΙΠΛΕΟΝ');   // το κείμενο μένει για όταν ξανανοίξει
+    // μόνο κείμενο, χωρίς άδειες: μία γραμμή χωρίς αριθμό
+    expect(linesText(hkaiLeaveLines({ ...fakeState(3), hkaiManual: { [D]: { cells: {}, text: { lv: 'ΚΑΤΙ' }, lv: true } } }, D))).toBe('ΚΑΤΙ');
+  });
+  it('ανά μέρα: η τιμή της μέρας νικά την προεπιλογή, οι άλλες μέρες την ακολουθούν', () => {
+    const s0 = base(); const next = '2026-10-17';
+    let s = run(s0, { t: 'declare', cmd: { type: 'LEAVE', pids: [4], from: next, to: next, kind: 'Κανονική' } });
+    expect([hkLvOn(s, D), hkLvOn(s, next)]).toEqual([false, false]);
+    s = run(s, { t: 'setHkaiLv', date: D, on: true });   // μόνο η D
+    expect([hkLvOn(s, D), hkLvOn(s, next)]).toEqual([true, false]);
+    expect(hkaiLeaveLines(s, D)).toHaveLength(2);
+    expect(hkaiLeaveLines(s, next)).toHaveLength(0);
+    // η προεπιλογή ανοίγει: η D μένει όπως είναι, η επόμενη ακολουθεί
+    const def = lvOn(s);
+    expect([hkLvOn(def, D), hkLvOn(def, next)]).toEqual([true, true]);
+    expect(hkaiLeaveLines(def, next)).toHaveLength(1);
+    // προεπιλογή ανοιχτή, η D κλειστή
+    const closed = run(def, { t: 'setHkaiLv', date: D, on: false });
+    expect(hkaiLeaveLines(closed, D)).toHaveLength(0);
+    expect(hkaiLeaveLines(closed, next)).toHaveLength(1);
+    // το setHkaiLv δεν πειράζει τα κείμενα και τους αριθμούς της μέρας
+    const m = run(closed, { t: 'setHkaiManual', date: D, manual: { cells: { 'Στρατιώτες': { sid: 2 } }, text: { loi: 'Χ' } } });
+    expect(run(m, { t: 'setHkaiLv', date: D, on: true }).hkaiManual[D]).toEqual({ cells: { 'Στρατιώτες': { sid: 2 } }, text: { loi: 'Χ' }, lv: true });
+  });
+  it('Excel ή εκτύπωση: η τιμή που χρησιμοποιήθηκε μένει για τη μέρα· δεύτερη φορά δεν αλλάζει· αθόρυβα', () => {
+    const s = lvOn(base());   // προεπιλογή: ανοιχτό, η D χωρίς δική της τιμή
+    expect(s.hkaiManual[D]).toBeUndefined();
+    const r = apply(s, { t: 'freezeHkaiLv', date: D, on: hkLvOn(s, D) }, ctx);
+    expect(r).toMatchObject({ text: '', undoable: false });
+    expect(r.state.hkaiManual[D]).toEqual({ cells: {}, text: {}, lv: true });
+    // η προεπιλογή κλείνει αργότερα: το ξαναβγάλσιμο της D βγαίνει όπως βγήκε
+    const later = { ...r.state, settings: { ...r.state.settings, hkai: hkToggle(r.state.settings.hkai || {}, 'lv', false) } };
+    expect(hkLvOn(later, D)).toBe(true);
+    expect(hkaiLeaveLines(later, D)).toHaveLength(2);
+    // ήδη αποθηκευμένη τιμή: δεν γράφεται πάνω της (ίδιο αντικείμενο state)
+    const again = apply(r.state, { t: 'freezeHkaiLv', date: D, on: false }, ctx).state;
+    expect(again).toBe(r.state);
+    // κλειστό όταν βγήκε: μένει κλειστό και αν ανοίξει η προεπιλογή
+    const c = apply(base(), { t: 'freezeHkaiLv', date: D, on: false }, ctx).state;
+    expect(hkaiLeaveLines(lvOn(c), D)).toHaveLength(0);
+    // κείμενα της μέρας δεν χάνονται
+    const t = apply(run(base(), { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { loi: 'ΧΧ' } } }), { t: 'freezeHkaiLv', date: D, on: true }, ctx).state;
+    expect(t.hkaiManual[D]).toEqual({ cells: {}, text: { loi: 'ΧΧ' }, lv: true });
   });
 });

@@ -72,6 +72,8 @@ export type Command =
   | { t: 'setBaselines'; baselines: Record<number, Baseline> }
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
+  | { t: 'setHkaiLv'; date: ISODate; on: boolean }
+  | { t: 'freezeHkaiLv'; date: ISODate; on: boolean }
   | { t: 'setPhase'; phase: Phase }
   | { t: 'addPhase'; name: string; from: Phase }
   | { t: 'renamePhase'; id: Phase; name: string }
@@ -283,6 +285,8 @@ function makePerson(s: AppState, x: NewPerson): Person {
   return p;
 }
 
+// Η μέρα της ΗΚΑΙ με το «3. Άδειες» ναι/όχι (hkaiManual[d].lv), χωρίς να πειράζονται τα υπόλοιπα στοιχεία της
+const withLv = (s: AppState, d: ISODate, lv: boolean): HkaiManual => ({ cells: s.hkaiManual[d]?.cells ?? {}, text: s.hkaiManual[d]?.text ?? {}, lv });
 // Εγγραφές και διαγραφές της ΗΚΑΙ (Michael, 17/10): όποιος βγαίνει εκτός δύναμης παίρνει τη σημερινή μέρα στο outOn
 // (φεύγει αν ξαναμπεί σε δύναμη)· ο «Νέος στρατιώτης» και οι νέες γραμμές του Δυναμολογίου στο inOn. Η πρώτη εισαγωγή
 // (χωρίς κανέναν σε δύναμη πριν) δεν είναι εγγραφές.
@@ -888,8 +892,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: { ...s, baseline, settings }, text: 'Προηγούμενες υπηρεσίες ' + shortName(p) + ': ' + txt, files: ['Έλεγχος υπηρεσιών'] };
     }
     case 'setHkaiManual': {
-      const hkaiManual = { ...s.hkaiManual, [c.date]: c.manual };
+      // το «3. Άδειες» της μέρας (lv) μένει όπως είναι, αν δεν ήρθε μαζί
+      const lv = c.manual.lv ?? s.hkaiManual[c.date]?.lv; const manual: HkaiManual = lv === undefined ? c.manual : { ...c.manual, lv };
+      const hkaiManual = { ...s.hkaiManual, [c.date]: manual };
       return { state: { ...s, hkaiManual }, text: HK() + ' ' + dm(c.date) + ': χειροκίνητα στοιχεία', files: [HK()] };
+    }
+    case 'setHkaiLv': {
+      const hkaiManual = { ...s.hkaiManual, [c.date]: withLv(s, c.date, c.on) };
+      return { state: { ...s, hkaiManual }, text: HK() + ' ' + dm(c.date) + (c.on ? ': οι άδειες γράφονται στο 3. άδειες' : ': οι άδειες δεν γράφονται στο 3. άδειες'), files: [HK()] };
+    }
+    case 'freezeHkaiLv': {
+      // Βγήκε Excel ή εκτύπωση: η τιμή που χρησιμοποιήθηκε μένει για τη μέρα, ώστε να ξαναβγεί ίδιο και αν αλλάξει η προεπιλογή. Αθόρυβα.
+      if (s.hkaiManual[c.date]?.lv !== undefined) return { state: s, text: '', files: [], undoable: false };
+      const hkaiManual = { ...s.hkaiManual, [c.date]: withLv(s, c.date, c.on) };
+      return { state: { ...s, hkaiManual }, text: '', files: [], undoable: false };
     }
     case 'setPhase':
       if (c.phase === s.settings.phase) return { state: s, text: '', files: [] };

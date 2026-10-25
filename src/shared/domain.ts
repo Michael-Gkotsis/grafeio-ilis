@@ -381,7 +381,7 @@ export const HK_SECTIONS: [HkSection, string, string][] = [
   ['acc', 'Ατυχήματα', 'Ζημιές σε οχήματα και σε άνδρες (αλλιώς μένει το Ø του εντύπου)'],
   ['grd', 'Χορηγούμενες φρουρές', 'Νυκτοφρουρές και 24ωρες από τις υπηρεσίες της μέρας'],
   ['prov', 'Προβλέπονται από τη σύνθεση', 'Ένας αριθμός ανά βαθμό, ίδιος κάθε μέρα'],
-  ['lv', 'Άδειες στο «3. Άδειες»', 'Όσες δηλώνεις απευθείας, τη μέρα που ξεκινούν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις».']
+  ['lv', 'Άδειες στο «3. Άδειες»: προεπιλογή για νέες μέρες', 'Άδειες που δηλώνεις απευθείας (στρατιωτών και στελεχών), τη μέρα που ξεκινούν. Κάθε μέρα αλλάζει χωριστά από τον διακόπτη πάνω από την προεπισκόπηση· όσες μέρες έχουν βγει στο Excel κρατούν ό,τι είχαν. Οι αιτήσεις που εγκρίθηκαν μένουν μόνο στο «5. Αιτήσεις».']
 ];
 export type HkSection = 'veh' | 'acc' | 'grd' | 'prov' | 'lv';
 // Κλειστές αν δεν τις ανοίξεις (hkai.on): οι άδειες στο 3. ΑΔΕΙΕΣ (Michael, 22/10: να μη γράφονται, αλλά να μένει η δυνατότητα)
@@ -396,6 +396,8 @@ export function hkToggle(h: HkaiSettings, k: HkSection, on: boolean): HkaiSettin
   const ls = (h[key] || []).filter(x => x !== k); if (add) ls.push(k);
   return { ...h, [key]: ls };
 }
+// 3. ΑΔΕΙΕΣ ανά μέρα (Michael, 24/10): ό,τι ορίστηκε για τη μέρα (hkaiManual[d].lv), αλλιώς η προεπιλογή της ενότητας «lv»
+export const hkLvOn = (s: Pick<AppState, 'settings' | 'hkaiManual'>, d: ISODate): boolean => s.hkaiManual?.[d]?.lv ?? hkOn(s.settings, 'lv');
 // Αποθηκευμένη λίστα: ουλαμός, θάλαμος, φίλτρο κατάστασης και κείμενο αναζήτησης
 export interface SavedView { id: string; name: string; unit: string; room: number | null; filter: string; q: string }
 export const DEFAULT_SETTINGS: Settings = {
@@ -535,7 +537,8 @@ export const CADRE_ABS: [string, string, string][] = [
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας
-export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string> }
+// lv: 3. ΑΔΕΙΕΣ ναι/όχι για τη μέρα (λείπει = η προεπιλογή των Ενοτήτων)· μπαίνει με τον διακόπτη της μέρας ή όταν βγαίνει το Excel
+export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string>; lv?: boolean }
 
 export const emptyState = (): AppState => ({
   people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], outNotes: {}, lastExpire: ''

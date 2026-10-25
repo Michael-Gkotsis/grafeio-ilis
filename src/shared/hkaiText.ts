@@ -1,12 +1,13 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { hkDay, type ISODate } from './dates';
-import { OUT_NOTE, TYPES, hkOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { OUT_NOTE, TYPES, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, norm, upper } from './text';
 import { genitive } from './greek';
 import { rankTxt } from './ranks';
+import { cadreStatusOf, orderedCadre } from './cadre';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
 export interface Run { t: string; u?: boolean }
@@ -60,14 +61,26 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
 }
 // 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. Όσες ζητήθηκαν με αίτηση δεν ξαναγράφονται: στην πίσω σελίδα
 // μένει μόνο η αίτηση, μία φορά, και απλά εγκρίνεται (Michael, 18/10). «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΑΠΟ … ΕΩΣ ….»
-// Γράφονται μόνο αν είναι ανοιχτή η ενότητα «Άδειες στο 3. Άδειες» (κλειστή από προεπιλογή, Michael 22/10).
+// Γράφονται μόνο αν είναι ανοιχτό το «Άδειες στο 3. Άδειες» της μέρας (hkLvOn: της μέρας, αλλιώς η προεπιλογή· Michael 24/10).
+// Πρώτα τα στελέχη σε δύναμη (σειρά ιεραρχίας) με άδεια στις στήλες Κ.Άδ., Ειδ. ή Αναρρωτική της ΗΚΑΙ, μετά οι στρατιώτες σε δύναμη,
+// με μία αρίθμηση· στο τέλος το ελεύθερο κείμενο της οθόνης, χωρίς αριθμό.
+const CADRE_LEAVE_COLS = ['ka', 'eid', 'an'];
 export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
-  if (!hkOn(s.settings, 'lv')) return [];
+  if (!hkLvOn(s, d)) return [];
   const pm = personMap(s.people);
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
-  return numbered(s.statuses.filter(x => leave(x) && pm.has(x.pid) && !x.req && x.from === d)
-    .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }]));
+  const cadre = orderedCadre(s.cadreList || []).filter(c => c.active).flatMap(c => (s.cadreAbs || []).filter(a => a.cid === c.id && a.from === d)
+    .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => CADRE_LEAVE_COLS.includes(x.st.col))
+    .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)));
+  const out = numbered([
+    ...cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + leaveName({ type: 'LEAVE', kind: st.label }) + ' ' + hkRange(st.abs) + '.') }]),
+    ...s.statuses.filter(x => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
+      .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
+      .map(({ x, p }): Line => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }])
+  ]);
+  const free = s.hkaiManual?.[d]?.text?.lv?.trim();
+  if (free) out.push([{ t: free }]);
+  return out;
 }
 
 // 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: όσοι μπήκαν στη δύναμη ή βγήκαν εκτός δύναμης τη μέρα, με τα στοιχεία τους από το Δυναμολόγιο,
