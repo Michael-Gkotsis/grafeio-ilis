@@ -69,11 +69,11 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'weaponLog', 'dutyFix', 'notes', 'outNotes', 'lastExpire'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'dutyLog', 'nightTraining', 'weaponLog', 'dutyFix', 'notes', 'outNotes', 'dayPlan', 'backFix', 'lastExpire'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
-// dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
-const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', dutyFix: 'ids', notes: 'ids', outNotes: 'obj' };
+// dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση, dayPlan: ώρες μιας μέρας, backFix: διορθώσεις επιστροφής· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
+const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', dutyFix: 'ids', notes: 'ids', outNotes: 'obj', dayPlan: 'obj', backFix: 'ids' };
 const entriesOf = (k: string, v: unknown): Map<string, unknown> =>
   KV_ENTRIES[k] === 'ids' ? new Map(((v as { id: string }[]) || []).map(x => [x.id, x])) : new Map(Object.entries((v as Record<string, unknown>) || {}));
 
@@ -174,6 +174,8 @@ export class Store {
     s.dutyFix = kv.get('dutyFix') || [];
     s.notes = (kv.get('notes') || []).map(normNote);
     s.outNotes = kv.get('outNotes') || {};
+    s.dayPlan = kv.get('dayPlan') || {};
+    s.backFix = kv.get('backFix') || [];
     s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
     this.state = s; noteNamesakes(s.people);

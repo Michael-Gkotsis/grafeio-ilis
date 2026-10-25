@@ -136,7 +136,7 @@ export function holidaysOf(settings: Settings, year: number): Map<ISODate, strin
   }
   return m;
 }
-const holOf = (settings: Settings, d: ISODate) => holidaysOf(settings, +d.slice(0, 4)).get(d);
+export const holOf = (settings: Settings, d: ISODate) => holidaysOf(settings, +d.slice(0, 4)).get(d);
 export const isHol = (settings: Settings, d: ISODate) => isWeekend(d) || holOf(settings, d) != null;
 export const holName = (settings: Settings, d: ISODate) => holOf(settings, d) || (isWeekend(d) ? 'ΣΚ' : '');
 
