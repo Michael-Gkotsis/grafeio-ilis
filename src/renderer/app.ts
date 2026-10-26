@@ -2,6 +2,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Badge, Button, Dialog, DiscardAsk, Icon, Kbd, Logo, Sheet, ToastProvider, useToast, useToastPrune } from './ui';
 import { closeLeaveAsk, discardAll, requestLeave, saveAll, useLeaveAsk, usePendingList } from './pending';
+import { FORM_PARAM } from '../shared/repPage';
 import { StoreCtx, NavCtx, useStore, type StoreValue } from './store';
 import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen, CommandPalette } from './screens/other';
 // Ρυθμίσεις και Διάγνωση φορτώνουν όταν τις ανοίξεις: λιγότερος κώδικας να διαβαστεί στο άνοιγμα της εφαρμογής
@@ -39,7 +40,7 @@ const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
 const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes'], NAV_MORE = ['templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1, το Ιστορικό: κουμπί πάνω δεξιά (το μενού χωρά σε 1366×768 και με τις Σημειώσεις)
 const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, Σημειώσεις: από το μενού, νέα σημείωση με Ctrl+Shift+N
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
-const MENU_TAB: Record<string, string> = { hkai: 'hkTab' };
+const MENU_TAB: Record<string, string> = { hkai: 'hkTab', reports: FORM_PARAM };   // από το μενού: η ΗΚΑΙ ανοίγει στην πρώτη καρτέλα, τα Έντυπα στη λίστα (όχι στη σελίδα δημιουργίας)
 const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes', 'history', 'templates', 'guide'];
 
 function useToday() {
@@ -151,9 +152,11 @@ function Shell() {
     const r = cur.current.route;
     const doIt = () => {
       before?.();
-      if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r]);
+      if (push && !sameRoute(r, next)) setBack(b => [...b.slice(-29), r.params[FORM_PARAM] ? { ...r, params: { ...r.params, [FORM_PARAM]: undefined } } : r]);   // το «Πίσω» δεν ξανανοίγει σελίδα δημιουργίας εντύπου
       setRoute(next); setLayer(null); setOver(null); setPersonId(null); setCadreId(null); window.scrollTo(0, 0);
     };
+    // το κλείσιμο της σελίδας δημιουργίας εντύπου (πάτημα «Έντυπα» στο μενού) ρωτά κι αυτό αν έχει αλλαγές που δεν αποθηκεύτηκαν
+    if (r.params[FORM_PARAM] && !next.params[FORM_PARAM]) { guard(() => requestLeave(doIt)); return; }
     guard(() => { if (next.view === r.view) doIt(); else requestLeave(doIt); });
   }, [guard]);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.

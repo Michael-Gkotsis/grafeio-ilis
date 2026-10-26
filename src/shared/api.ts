@@ -60,7 +60,8 @@ export type EssoResult = { ok: true; archive: string; dir: string; files: string
 
 // Έντυπα: πρότυπο όπως το βρήκε η εφαρμογή (φύλλα, γραμμή επικεφαλίδων, στήλες, {ΕΤΙΚΕΤΕΣ})
 export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; prepared: number; guessed: boolean }
-export interface RepPreview { html: string; css: string; pages: number }
+// counts: ανά πίνακα, πόσες γραμμές φαίνονται από πόσες (μόνο όταν ζητήθηκε δείγμα)
+export interface RepPreview { html: string; css: string; pages: number; counts?: { shown: number; total: number }[] }
 // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα
 export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout } | { report: Report; file?: string; build?: BuildOpts; ids: (number | string)[]; date: ISODate };
 export interface LayoutPv { css: string; sheets: (LayoutSheet & { html: string; pages: number })[]; warnings: string[] }
@@ -126,7 +127,7 @@ export interface Api {
   repUpload(kind: RepKind): Promise<{ ok: true; tpl: RepTpl; insp: TplInspect } | Fail | null>;
   repInspect(file: string, kind: RepKind, sheet?: string, head?: number): Promise<TplInspect | Fail>;
   repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<({ ok: true; file: string; mtime: number } & BuiltOut) | Fail>;
-  repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean): Promise<RepPreview | Fail>;
+  repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean, opts?: { sample?: number }): Promise<RepPreview | Fail>;
   layoutPreview(q: LayoutReq): Promise<LayoutPv | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
   repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepRunResult>;
