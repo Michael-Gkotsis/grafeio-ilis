@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fakeState } from './fixtures';
-import { backTxt, returnsOn } from '../src/shared/weekend';
+import { retTxt, returnsOn } from '../src/shared/returns';
 import { outsAndStay, outsNote } from '../src/main/exports';
 import type { AppState } from '../src/shared/domain';
 
@@ -19,8 +19,8 @@ describe('ΔΝ ΣΚ', () => {
     expect(on(s, 2, SAT)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
     expect(on(s, 2, SUN)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
     const b = returnsOn(s, SAT).find(x => x.p.id === 2)!;
-    expect(backTxt(b)).toBe('Δευτέρα 19/10 πρωί · μετά τη ΔΝ');
-    expect(outsNote(s, SUN, 2, on(s, 2, SUN)[0])).toBe('ΔΝ ΣΚ');
+    expect(retTxt(b.r)).toBe('Δευτέρα 19/10 06:00 · ΔΝ ως την Κυριακή');
+    expect(outsNote(s, SUN, 2, on(s, 2, SUN)[0])).toBe('ΔΝ ΣΚ, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 19/10 06:00 (ΠΡΩΙΝΗ ΕΚΠΑΙΔΕΥΣΗ)');
   });
   it('όπως παλιά: η έξοδος της Κυριακής που είχε μπει μόνη της από ΔΝ ΣΚ φεύγει αν αλλάξει το Σάββατο', () => {
     let s = fakeState(10);
@@ -33,29 +33,29 @@ describe('ΔΝ ΣΚ', () => {
     s = dnsk(s, 2);
     expect(on(s, 2, SAT)).toMatchObject([{ type: 'DN', kind: 'ΣΚ' }]);
     expect(on(s, 2, SUN).map(x => x.type)).toEqual(['LEAVE']);
-    expect(outsNote(s, SAT, 2, on(s, 2, SAT)[0])).toBe('ΔΝ ΣΚ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10 14:00');
+    expect(outsNote(s, SAT, 2, on(s, 2, SAT)[0])).toBe('ΔΝ ΣΚ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10 14:00, ΓΥΡΝΑ ΚΥΡΙΑΚΗ 18/10 06:00, ΦΕΥΓΕΙ ΓΙΑ ΑΔΕΙΑ 14:00');
   });
   it('άδεια που ξεκινά τη μέρα της ΔΝ ή την επόμενη μπαίνει στις παρατηρήσεις μαζί με την υπηρεσία· όχι αν ξεκινά αργότερα', () => {
     const lv = (from: string) => ({ id: 'l' + from, pid: 2, type: 'LEAVE' as const, from, to: '2026-10-25' });
     const base = fakeState(10);
     const dn = { id: 'd1', pid: 2, type: 'DN' as const, from: SAT, to: SAT };
     let s = { ...base, statuses: [dn, lv(MON)] };
-    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ');
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΔΕΝ ΕΧΕΙ ΔΗΛΩΘΕΙ Η ΚΥΡΙΑΚΗ 18/10');
     s = { ...base, statuses: [dn, lv(SUN)] };
-    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10');
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 06:00 (ΤΕΛΟΣ ΚΑ)');
     s = { ...base, statuses: [dn, lv(SAT)] };
     expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΣΑΒΒΑΤΟ 17/10');
     const out = { ...dn, type: 'OUT' as const };
-    expect(outsNote({ ...base, statuses: [out, lv(SUN)] }, SAT, 2, out)).toBe('');
+    expect(outsNote({ ...base, statuses: [out, lv(SUN)] }, SAT, 2, out)).toBe('ΓΥΡΝΑ ΣΑΒΒΑΤΟ 17/10 22:00');
   });
   it('με υπηρεσία την Κυριακή: μόνο η ΔΝ, γυρίζει Κυριακή πρωί για την υπηρεσία', () => {
     let s = run(fakeState(10), { t: 'assign', date: SUN, k: 'ly', pid: 2, force: 'x' });
     s = dnsk(s, 2);
     expect(on(s, 2, SUN).filter(x => x.type === 'OUT')).toEqual([]);
     const b = returnsOn(s, SAT).find(x => x.p.id === 2)!;
-    expect(b).toMatchObject({ day: SUN, part: 'πρωί', duty: 'Λ/Υ', dutyTime: '14:00' });
-    expect(backTxt(b)).toBe('Κυριακή 18/10 πρωί · Λ/Υ από 14:00');
-    expect(outsNote(s, SAT, 2, on(s, 2, SAT)[0])).toBe('ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00');
+    expect(b.r).toMatchObject({ day: SUN, time: '06:00', why: 'υπηρεσία', duty: 'Λ/Υ', dutyTime: '14:00' });
+    expect(retTxt(b.r)).toBe('Κυριακή 18/10 06:00 · Λ/Υ από 14:00');
+    expect(outsNote(s, SAT, 2, on(s, 2, SAT)[0])).toBe('ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00, ΓΥΡΝΑ ΚΥΡΙΑΚΗ 18/10 06:00 (Λ/Υ ΑΠΟ 14:00)');
   });
   it('αν φύγει η ΔΝ ΣΚ το Σάββατο, φεύγει και η έξοδος της Κυριακής που μπήκε μόνη της· η χειροκίνητη μένει', () => {
     let s = dnsk(fakeState(10), 2);
@@ -70,13 +70,13 @@ describe('ΔΝ ΣΚ', () => {
     let s = run(fakeState(10), { t: 'outs', date: SUN, changes: [{ pid: 2, from: null, to: 'DN' }] });
     s = dnsk(s, 2);
     expect(on(s, 2, SUN)).toMatchObject([{ type: 'DN' }]);
-    expect(backTxt(returnsOn(s, SAT).find(x => x.p.id === 2)!)).toBe('Δευτέρα 19/10 πρωί · μετά τη ΔΝ');
+    expect(retTxt(returnsOn(s, SAT).find(x => x.p.id === 2)!.r)).toBe('Δευτέρα 19/10 06:00 · ΔΝ ως την Κυριακή');
   });
   it('έξοδος με υπηρεσία μέσα (με επιβεβαίωση): γυρίζει ως την ώρα της υπηρεσίας', () => {
     let s = dnsk(fakeState(10), 2);
     s = run(s, { t: 'assign', date: SUN, k: 'ly', pid: 2, force: 'x' });
     const b = returnsOn(s, SAT).find(x => x.p.id === 2)!;
-    expect(backTxt(b)).toBe('Κυριακή 18/10 ως 14:00 · Λ/Υ');
+    expect(retTxt(b.r)).toBe('Κυριακή 18/10 06:00 · Λ/Υ από 14:00');
     expect(returnsOn(s, MON).find(x => x.p.id === 2)).toBeUndefined();
   });
 });
@@ -86,8 +86,8 @@ describe('παρατηρήσεις εξοδούχων και παραμενόν�
     let s = run(fakeState(10), { t: 'outs', date: SAT, changes: [{ pid: 2, from: null, to: 'DN' }, { pid: 3, from: null, to: 'OUT' }], notes: [{ pid: 2, note: 'Ιατρος Στεπ' }, { pid: 3, note: 'γάμος' }, { pid: 4, note: 'ΓΡΑΦΕΙΟ' }] });
     expect(s.outNotes![SAT]).toEqual({ 2: 'ΙΑΤΡΟΣ ΣΤΕΠ', 3: 'ΓΑΜΟΣ', 4: 'ΓΡΑΦΕΙΟ' });
     const { outs, stay } = outsAndStay(s, SAT);
-    expect(outsNote(s, SAT, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)');
-    expect(outsNote(s, SAT, 3, outs.find(x => x.p.id === 3)!.st)).toBe('ΓΑΜΟΣ');
+    expect(outsNote(s, SAT, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ), ΔΕΝ ΕΧΕΙ ΔΗΛΩΘΕΙ Η ΚΥΡΙΑΚΗ 18/10');
+    expect(outsNote(s, SAT, 3, outs.find(x => x.p.id === 3)!.st)).toBe('ΓΑΜΟΣ, ΓΥΡΝΑ ΣΑΒΒΑΤΟ 17/10 22:00');
     expect(stay.find(x => x.p.id === 4)!.note).toMatch(/ΓΡΑΦΕΙΟ$/);
     s = run(s, { t: 'outs', date: SAT, changes: [], notes: [{ pid: 2, note: '' }, { pid: 3, note: ' ' }, { pid: 4, note: '' }] });
     expect(s.outNotes![SAT]).toBeUndefined();

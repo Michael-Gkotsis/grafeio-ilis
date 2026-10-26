@@ -6,7 +6,7 @@ import { Select } from '../select';
 import { ARM_AFTER, ARM_BEFORE, ARM_MAX, armMargin } from '../../shared/armed';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftForm, shiftOf, shiftWhy, type HoursMode, useExport, useExportBusy } from '../common';
-import { normTime } from '../../shared/hours';
+import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, PHASE_NAME, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
 import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, postOf, postsOf, ruleBlock, statusesFrom, outMin, dutyMin, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
@@ -15,7 +15,9 @@ import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
-import { backDay, backWhen, dutyAt, isSat, isWk, outLbl, returnsOn } from '../../shared/weekend';
+import { dutyAt, isSat, isWk, outLbl } from '../../shared/weekend';
+import { dayTimes, theDay, retDay, retWhen, returnsOn, type Back } from '../../shared/returns';
+import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 import { SkipsView } from './skips';
@@ -116,15 +118,20 @@ function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) });
   const [ds, setDs] = useState(dutyStartOf(state.settings));
-  const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds);
-  const [r0] = useState(() => JSON.stringify([r, ds])); const dirty = JSON.stringify([r, ds]) !== r0;
+  // ώρες εξόδου/επιστροφής και εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10), γράφονται με το setWeekRules
+  const [wk, setWk] = useState<WeekDraft>(() => weekDraft(state.rules)); const wkBad = weekIssue(wk);
+  const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds) || !!wkBad;
+  const [r0] = useState(() => JSON.stringify([r, ds, wk])); const dirty = JSON.stringify([r, ds, wk]) !== r0;
   const save = async () => {
     const { before, after, ...rest } = r as any; const nr = { ...rest, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after }; const nds = normTime(ds)!;
     if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
-    if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) { onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) }); }
+    if (!(await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false))) return;
+    const week = Object.fromEntries(WEEK_ORDER.map(w => [w, { out: normTime(wk[w].out)!, backOut: normTime(wk[w].backOut)!, backDn: normTime(wk[w].backDn)!, train: wk[w].train }]));
+    if (!(await run({ t: 'setWeekRules', week }, false))) return;
+    onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) });
   };
   return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose} dirty=${dirty && 'Οι αλλαγές στους κανόνες δεν αποθηκεύτηκαν. Αν κλείσεις, μένουν οι παλιοί.'}
-    footer=${html`<${Why} text=${badT && 'Μια ώρα δεν είναι σωστή (π.χ. 16:00)'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} why="Μια ώρα δεν είναι σωστή (π.χ. 16:00)" onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Why} text=${badT && (wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00)')}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} why=${wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00)'} onClick=${save}>Αποθήκευση<//>`}>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
     <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία (Κ-14)</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => setR({ ...r, restDays: v })} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
     <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><${DaysSelect} id="rnum" value=${r.numRest || 0} onChange=${(v: number) => setR({ ...r, numRest: v })} opts=${[[0, 'Χωρίς περιορισμό'], [3, 'Ξανά στο ίδιο νούμερο μετά από 3 ημέρες'], [4, 'Μετά από 4 ημέρες']]} txt=${(n: number) => 'Μετά από ' + n + ' ημέρες'}/><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
@@ -136,6 +143,9 @@ function RulesDialog({ onClose }: P) {
       <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
       <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
     </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
+    <div className="field"><span className="field__label">Εξοδούχοι: ώρες ανά ημέρα</span>
+      <${WeekTable} draft=${wk} onChange=${(w: number, k: string, v: string | boolean) => setWk(d => ({ ...d, [w]: { ...d[w], [k]: v } }))}/>
+      <span className="note">Ισχύουν στους <${GoLink} view="outs">Εξοδούχους<//>: «Επιστροφή ΔΝ» της Δευτέρας = πότε γυρνά το πρωί της Δευτέρας όποιος είχε ΔΝ την Κυριακή. Αν η Δευτέρα δεν έχει εκπαίδευση και δεν έχει δηλωθεί, δεν ξέρουμε πότε γυρνά και η οθόνη Εξοδούχοι ζητά να δηλωθεί. Οι αργίες της εβδομάδας δεν έχουν εκπαίδευση. Για μία μέρα αλλάζουν από την ίδια την οθόνη Εξοδούχοι. Η «Ώρα εξόδου» πιο πάνω είναι άλλο πράγμα: μόνο για όσους γυρίζουν από άδεια.</span></div>
     <div className="field"><span className="field__label">Ένοπλη υπηρεσία: πότε βγαίνει το όπλο</span><div className="field-row">
       <div className="field"><label className="field__label" htmlFor="rab">Βγαίνει πριν (λεπτά)</label><input id="rab" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.before} onChange=${(e: any) => setR({ ...r, before: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
       <div className="field"><label className="field__label" htmlFor="raa">Μπαίνει μετά (λεπτά)</label><input id="raa" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.after} onChange=${(e: any) => setR({ ...r, after: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
@@ -455,7 +465,7 @@ const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έ
 // Σάββατο: και «ΔΝ ΣΚ» = ΔΝ σήμερα και ΔΝ την Κυριακή (Michael, 18/10, 24/10)
 const OUT_OPTS_SAT = [...OUT_OPTS, { value: 'DNSK', label: 'ΔΝ ΣΚ' }];
 type OutVal = TypeKey | 'DNSK';
-const DNSK_TIP = 'ΔΝ το Σάββατο και ΔΝ την Κυριακή (μπαίνει μόνη της). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί· αν ξεκινά άδεια, φεύγει για άδεια.';
+const DNSK_TIP = 'ΔΝ το Σάββατο και ΔΝ την Κυριακή (μπαίνει μόνη της). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί· αν ξεκινά άδεια, φεύγει για άδεια. Τη Δευτέρα γυρνά στην ώρα επιστροφής ΔΝ.';
 const valLbl = (v: OutVal | null | undefined) => (v === 'DNSK' ? 'ΔΝ ΣΚ' : v ? TYPES[v].label : 'Μένει');
 const valTone = (v: OutVal) => TYPES[v === 'DNSK' ? 'DN' : v].tone;
 // 1–4 αν είναι συνεχόμενοι, αλλιώς 1, 3, 5 (Ρυθμίσεις › Θάλαμοι και ουλαμοί)
@@ -471,15 +481,20 @@ const OutRow = memo(function OutRow({ p, unit, style, reason, value, changed, on
     <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + fullName(p)}>${(sat ? OUT_OPTS_SAT : OUT_OPTS).map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : (o.value === 'DN' || o.value === 'DNSK') && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; return html`<button key=${o.value} type="button" className=${warn ? 'is-warn' : undefined} data-tip=${warn || (o.value === 'DNSK' ? DNSK_TIP : undefined)} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
   </div>`;
 });
-// Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία
-export function ReturnsList({ date, limit }: { date: string; limit?: number }) {
+// Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία.
+// fixable (οθόνη Εξοδούχοι): «Διόρθωση…» ανά εξοδούχο/ΔΝ. Όσοι δεν ξέρουμε πότε γυρίζουν (δεν έχει δηλωθεί η επόμενη μέρα) στο τέλος, με προειδοποίηση.
+const PENDING = 'Να δηλωθεί η επόμενη μέρα';
+export function ReturnsList({ date, limit, fixable }: { date: string; limit?: number; fixable?: boolean }) {
   const { state } = useStore(); const nav = useNav();
   const list = useMemo(() => returnsOn(state, date), [state, date]);
+  const [fix, setFix] = useState<Back | null>(null);
   if (!list.length) return html`<div className="empty">Κανείς δεν λείπει.</div>`;
   const shown = limit ? list.slice(0, limit) : list;
-  const days = [...new Set(shown.map(backDay))];
-  return html`<div className="backs">${days.map(d => html`<div key=${d}><div className="backs__day">${d}</div><ul className="rows">${shown.filter(b => backDay(b) === d).map(b => html`<li key=${b.p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(b.p.id)}>${shortName(b.p)}</button><span className=${b.duty ? 'txt-bad' : 'muted'}><${Badge} tone=${TYPES[b.st.type].tone} className="tag">${TYPES[b.st.type].cat === 'out' ? outLbl(b.st) : statusLbl(b.st, state.settings.lists)}<//> ${backWhen(b)}</span></li>`)}</ul></div>`)}
-    ${limit && list.length > limit && html`<p className="note rows__more">Και άλλοι ${list.length - limit} στους Εξοδούχους.</p>`}</div>`;
+  const grp = (b: Back) => (b.r.pending ? PENDING : retDay(b.r));
+  const days = [...new Set(shown.map(grp))];
+  return html`<div className="backs">${days.map(d => html`<div key=${d}><div className=${cx('backs__day', d === PENDING && 'txt-bad')}>${d}</div><ul className="rows">${shown.filter(b => grp(b) === d).map(b => html`<li key=${b.p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(b.p.id)}>${shortName(b.p)}</button><span className=${b.r.duty || b.r.pending ? 'txt-bad' : 'muted'}><${Badge} tone=${TYPES[b.st.type].tone} className="tag">${TYPES[b.st.type].cat === 'out' ? outLbl(b.st) : statusLbl(b.st, state.settings.lists)}<//> ${retWhen(b.r)}${b.r.fix ? html` <${Badge} tone="outline" data-tip="Διόρθωση του γραφείου">διόρθωση<//>` : null}${fixable && TYPES[b.st.type].cat === 'out' ? html`<${Button} size="sm" variant="ghost" onClick=${() => setFix(b)} data-tip="Άλλαξε πότε γυρνά, με λόγο">Διόρθωση…<//>` : null}</span></li>`)}</ul></div>`)}
+    ${limit && list.length > limit && html`<p className="note rows__more">Και άλλοι ${list.length - limit} στους Εξοδούχους.</p>`}
+    ${fix && html`<${BackFixDialog} b=${fix} date=${date} onClose=${() => setFix(null)}/>`}</div>`;
 }
 const NO_NOTES: Record<number, string> = {};
 export function OutsScreen() {
@@ -535,7 +550,9 @@ export function OutsScreen() {
     return why ? { why, leave: false } : null;
   }, [state, sat, sunday]);
   const backs = useMemo(() => returnsOn(state, date), [state, date]);
-  const backEarly = backs.some(b => b.duty), backN = backs.length;
+  const backEarly = backs.some(b => b.r.duty), backN = backs.length;
+  // ΔΝ που δεν ξέρουμε πότε γυρνούν: η επόμενη μέρα δεν έχει δηλωθεί (και δεν έχει εκπαίδευση)
+  const pendDays = useMemo(() => { const m = new Map<string, string[]>(); backs.forEach(b => { if (b.r.pending) m.set(b.r.day, [...(m.get(b.r.day) || []), shortName(b.p)]); }); return [...m]; }, [backs]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
   const blockedN = people.filter(p => reasons[p.id]).length;
   const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
@@ -550,7 +567,7 @@ export function OutsScreen() {
   };
   const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
   const height = useViewportHeight(mobile ? 380 : 330);
-  const c0 = strengthOf(state, date, outMin(state.rules));   // «Παρόντες απόψε»: από την ώρα εξόδου
+  const c0 = strengthOf(state, date, mins(dayTimes(state, date).out));   // «Παρόντες απόψε»: από την αρχή εξόδου της μέρας
   const awayDelta = diffs.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
   // όσοι βγαίνουν παρά τους κανόνες ή με ΔΝ χωρίς δικαίωμα: φαίνονται στο «Τι θα αλλάξει» και η αποθήκευση τους επιβεβαιώνει
   const pmO = useMemo(() => personMap(state.people), [state.people]);
@@ -572,8 +589,10 @@ export function OutsScreen() {
   const NIGHT_TIP = 'Όταν έχει βραδινή εκπαίδευση, η μέρα δεν μετρά στη στέρηση εξόδου (όπως και οι μέρες με υπηρεσία): η λήξη μετακινείται μία μέρα. Δεν αλλάζει τους εξοδούχους.';
   return html`<div>
     <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ· όσοι έχουν ⚠ βγαίνουν μόνο με επιβεβαίωση."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
+    <${OutsDayBar} date=${date}/>
+    ${pendDays.map(([d, who]) => html`<${Alert} key=${d} tone="warn"><span><b>Δεν έχει δηλωθεί ${theDay(d)}</b> και δεν έχει εκπαίδευση το πρωί, οπότε δεν ξέρουμε πότε γυρνούν (${who.join(', ')}). Δήλωσε τους εξοδούχους εκείνης της μέρας ή άλλαξε το «Αύριο εκπαίδευση». <${Button} size="sm" variant="secondary" onClick=${() => nav.set({ outDate: d })}>Άνοιγμα ${dayName(d, today).toLowerCase()}<//></span><//>`)}
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
-    <details className="note backs-box"><summary>Ποιοι γυρίζουν και πότε <span className="cnt">${backN}</span>${backEarly ? html` <${Badge} tone="bad">κάποιοι για υπηρεσία<//>` : null}</summary><${ReturnsList} date=${date}/></details>
+    <details className="note backs-box"><summary>Ποιοι γυρίζουν και πότε <span className="cnt">${backN}</span>${backEarly ? html` <${Badge} tone="bad">κάποιοι για υπηρεσία<//>` : null}${pendDays.length ? html` <${Badge} tone="warn">να δηλωθεί η επόμενη μέρα<//>` : null}</summary><${ReturnsList} date=${date} fixable=${true}/></details>
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b>${sat ? html` · ΔΝ ΣΚ <b>${cnt('DNSK')}</b>` : null} · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
       ${nChanges ? html`<${Button} size="sm" variant="ghost" onClick=${() => { setDraft(saved); setNotes(savedNotes); }}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${nChanges})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}
       <span className="outbar__xl">${nChanges > 0 ? html`<span className="note">Αποθήκευσε πρώτα για Excel.</span>` : html`<${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm"/>`}</span></div>

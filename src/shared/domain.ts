@@ -334,7 +334,14 @@ export interface Rules {
   hkTime?: string;                       // ώρα της ΗΚΑΙ (ΩΩ:ΛΛ, προεπιλογή 08:00): όποιος γυρίσει ως τότε μετρά παρών εκείνη τη μέρα
   armBefore?: number;                    // ένοπλη υπηρεσία (Michael, 24/10): το όπλο βγαίνει τόσα λεπτά πριν από το νούμερο (προεπιλογή 15, armed.ts)
   armAfter?: number;                     // ... και μπαίνει τόσα λεπτά μετά (προεπιλογή 15)
+  week?: Record<number, DayPlan>;        // ώρες εξόδου/επιστροφής και εκπαίδευση ανά ημέρα εβδομάδας (getDay), μόνο όσα διαφέρουν από την προεπιλογή (shared/returns.ts)
 }
+// Ώρες μιας μέρας (Michael, 24/10): out = αρχή εξόδου, backOut = επιστροφή εξοδούχων (ίδιο βράδυ), backDn = επιστροφή ΔΝ (το πρωί),
+// train = πρωινή εκπαίδευση. Ως αλλαγή μιας μέρας (state.dayPlan) όσα λείπουν μένουν όπως η ημέρα εβδομάδας.
+export interface DayPlan { out?: string; backOut?: string; backDn?: string; train?: boolean }
+// Διόρθωση επιστροφής ενός ατόμου (Michael, 24/10), όταν άλλαξε κάτι προφορικά: day = η μέρα της ΔΝ/εξόδου του· stay = δεν γυρνά,
+// συνεχίζει· at = γυρνά τη μέρα και την ώρα που λέει. id: «pid:day» (μία διόρθωση ανά άτομο και μέρα). why υποχρεωτικό.
+export interface BackFix { id: string; pid: number; day: ISODate; stay?: true; at?: { day: ISODate; time: string }; why: string }
 export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
 export interface Settings {
@@ -494,6 +501,8 @@ export interface AppState {
   weaponLog: WeaponMove[];               // έξοδοι και είσοδοι όπλων από τον οπλοβαστό (καρτέλα Οπλισμός)
   dutyFix: DutyFix[];                    // διορθώσεις με το χέρι στις ώρες των ένοπλων υπηρεσιών, με λόγο (kv «dutyFix», shared/armed.ts)
   notes: Note[];                         // σημειώσεις του γραφείου: γενικές ή για στρατιώτη/στέλεχος, με προαιρετική υπενθύμιση (shared/notes.ts)
+  dayPlan?: Record<ISODate, DayPlan>;    // αλλαγή ωρών/εκπαίδευσης για μία μέρα, πάνω από την ημέρα εβδομάδας (shared/returns.ts)
+  backFix?: BackFix[];                   // διορθώσεις επιστροφής ανά άτομο, με λόγο (kv «backFix», shared/returns.ts)
   outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
@@ -541,5 +550,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string>; lv?: boolean }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], outNotes: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], dayPlan: {}, backFix: [], outNotes: {}, lastExpire: ''
 });

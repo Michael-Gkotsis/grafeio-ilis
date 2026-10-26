@@ -1,9 +1,9 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { HK } from './unit';
-import { addDays, dayName, daysBetween, dm, DOW_FULL, type ISODate } from './dates';
+import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type CapKey, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -13,7 +13,8 @@ import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours'
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
-import { isSat, isWk, WK } from './weekend';
+import { isSat, isWk, outLbl, WK } from './weekend';
+import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
 export type Command =
@@ -90,6 +91,15 @@ export type Command =
   | { t: 'expire' }
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean }
+  // Ώρες εξόδου/επιστροφής και πρωινή εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10): week[getDay] = όσα αλλάζουν
+  | { t: 'setWeekRules'; week: Partial<Record<number, DayPlan>> }
+  // Αλλαγή ωρών/εκπαίδευσης για μία μέρα· plan κενό = πίσω στην ημέρα εβδομάδας
+  | { t: 'setDayPlan'; date: ISODate; plan: DayPlan }
+  // ... δύο μέρες μαζί (οθόνη Εξοδούχοι: η έξοδος της μέρας και η επιστροφή ΔΝ της επόμενης), μία αναίρεση
+  | { t: 'setDayPlans'; plans: { date: ISODate; plan: DayPlan }[] }
+  // Διόρθωση επιστροφής ενός ατόμου (ΔΝ/εξοδούχος της μέρας day): stay = δεν γυρνά, συνεχίζει· at = γυρνά τότε· why υποχρεωτικό
+  | { t: 'setBackFix'; pid: number; day: ISODate; stay?: boolean; at?: { day: ISODate; time: string }; why: string }
+  | { t: 'delBackFix'; id: string }
   // ΗΚΑΙ 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: άλλη μέρα, ή null = να μη γραφτεί
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
@@ -105,6 +115,20 @@ export type Command =
   // όποια λείπει μένει αυτόματη· why υποχρεωτικό· reset: πίσω στο αυτόματο
   | { t: 'fixDutyWeapon'; day: ISODate; post: string; n: number; out?: string; in?: string; why: string; reset?: boolean };
 
+// Ώρες εξόδου/επιστροφής: ΩΩ:ΛΛ, μόνο όσα δόθηκαν (η εκπαίδευση ναι/όχι)· άκυρη ώρα δεν περνά
+const TIME_NAME = { out: 'αρχή εξόδου', backOut: 'επιστροφή εξοδούχων', backDn: 'επιστροφή ΔΝ' } as const;
+function timesOf(p: DayPlan, where: string): Partial<WeekRow> {
+  const r: Partial<WeekRow> = {};
+  for (const k of ['out', 'backOut', 'backDn'] as const) if (p[k] != null) { const t = normTime(p[k]); if (!t) throw new Error(where + ': η ώρα (' + TIME_NAME[k] + ') δεν είναι σωστή'); r[k] = t; }
+  if (p.train != null) r.train = !!p.train;
+  return r;
+}
+const checkOrder = (r: WeekRow, where: string) => { if (mins(r.backOut) <= mins(r.out)) throw new Error(where + ': οι εξοδούχοι γυρνούν (' + r.backOut + ') πριν ή όταν ξεκινά η έξοδος (' + r.out + ')'); };
+// Τι άλλαξε: «αρχή εξόδου 17:00 → 14:00», «πρωινή εκπαίδευση ναι → όχι»
+const planDiff = (a: WeekRow, b: WeekRow): string[] => [
+  ...(['out', 'backOut', 'backDn'] as const).filter(k => a[k] !== b[k]).map(k => TIME_NAME[k] + ' ' + a[k] + ' → ' + b[k]),
+  ...(a.train !== b.train ? ['πρωινή εκπαίδευση ' + (a.train ? 'ναι' : 'όχι') + ' → ' + (b.train ? 'ναι' : 'όχι')] : [])
+];
 // Οπλισμός: μόνο τα πεδία που δόθηκαν αλλάζουν (αριθμός, τύπος, θέση οπλοβαστού)· κενό = σβήνεται
 export interface WeaponChange { pid: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
 
@@ -386,8 +410,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         for (const n of c.notes) { const v = norm(n.note).trim(); if (v) day[n.pid] = v; else delete day[n.pid]; }
         outNotes = { ...(s.outNotes || {}) }; if (Object.keys(day).length) outNotes[c.date] = day; else delete outNotes[c.date];
       }
-      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), leaving.length && 'άδεια από Κυριακή: ' + leaving.join(', '), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
-      return { state: { ...s, statuses: [...statuses, ...added], outNotes }, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
+      // ΔΝ που δεν ξέρουμε πότε γυρνά (η επόμενη μέρα δεν έχει δηλωθεί, χωρίς εκπαίδευση): το λέμε στο Ιστορικό και στην οθόνη
+      const next = { ...s, statuses: [...statuses, ...added], outNotes };
+      const pend = new Map<string, string[]>();
+      for (const x of c.changes) { const r = x.to === 'DN' ? returnOf(next, x.pid, c.date) : null; if (r?.pending) pend.set(r.why, [...(pend.get(r.why) || []), shortName(pm.get(x.pid)!)]); }
+      const parts = [c.changes.length && c.changes.length + ' αλλαγές', wk.length && 'ΔΝ ΣΚ ' + wk.length, kept.length && 'γυρίζουν Κυριακή πρωί: ' + kept.join(', '), leaving.length && 'άδεια από Κυριακή: ' + leaving.join(', '), ...[...pend].map(([why, who]) => why + ': ' + who.join(', ')), c.notes?.length && c.notes.length + ' παρατηρήσεις'].filter(Boolean);
+      return { state: next, text: 'Εξοδούχοι ' + dm(c.date) + ': ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες', HK()] };
     }
     case 'saveCadre': {
       const c0 = c.cadre; const last = normGreek(c0.last || '').trim(), first = normGreek(c0.first || '').trim();
@@ -996,6 +1024,54 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.on === !!nightTraining[c.date]) return { state: s, text: '', files: [] };
       if (c.on) nightTraining[c.date] = true; else delete nightTraining[c.date];
       return { state: { ...s, nightTraining }, text: (c.on ? 'Βραδινή εκπαίδευση ' : 'Βγήκε η βραδινή εκπαίδευση ') + dayName(c.date, ctx.today).toLowerCase() + ' ' + dm(c.date) + (c.on ? ' (δεν μετρά στη στέρηση εξόδου)' : ''), files: [] };
+    }
+    case 'setWeekRules': {
+      const week: Record<number, DayPlan> = {}; const parts: string[] = [];
+      for (let w = 0; w < 7; w++) {
+        const cur = weekRow(s.rules, w), nx: WeekRow = { ...cur, ...timesOf(c.week[w] || {}, DOW_FULL[w]) }; const def = defaultRow(w);
+        checkOrder(nx, DOW_FULL[w]);
+        parts.push(...planDiff(cur, nx).map(x => DOW_FULL[w] + ' ' + x));
+        const row: DayPlan = {}; for (const k of ['out', 'backOut', 'backDn', 'train'] as const) if (nx[k] !== def[k]) (row as any)[k] = nx[k];
+        if (Object.keys(row).length) week[w] = row;
+      }
+      if (!parts.length) return { state: s, text: '', files: [] };
+      const rules = { ...s.rules }; if (Object.keys(week).length) rules.week = week; else delete rules.week;
+      return { state: { ...s, rules }, text: 'Ώρες εξόδου και επιστροφής: ' + parts.join(' · '), files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'setDayPlan': {
+      const base = baseOf(s, c.date), old = s.dayPlan?.[c.date];
+      const day = DOW_FULL[weekday(c.date)] + ' ' + dm(c.date), nx: WeekRow = { ...base, ...timesOf(c.plan, day) }; checkOrder(nx, day);
+      const row: DayPlan = {}; for (const k of ['out', 'backOut', 'backDn', 'train'] as const) if (nx[k] !== base[k]) (row as any)[k] = nx[k];
+      if (JSON.stringify(row) === JSON.stringify(old || {})) return { state: s, text: '', files: [] };
+      const dayPlan = { ...(s.dayPlan || {}) }; if (Object.keys(row).length) dayPlan[c.date] = row; else delete dayPlan[c.date];
+      const what = Object.keys(row).length ? planDiff(base, nx).map(x => x.replace(/^(.*) (\S+) → (\S+)$/, '$1 $3 (αντί $2)')).join(', ') : 'πίσω στην προεπιλογή';
+      return { state: { ...s, dayPlan }, text: 'Ώρες εξόδου ' + day + ': ' + what, files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'setDayPlans': {
+      let next = s; const files: string[] = [], texts: string[] = [];
+      for (const x of c.plans) { const r = run(next, { t: 'setDayPlan', date: x.date, plan: x.plan }, ctx); next = r.state; if (r.text) { texts.push(r.text); files.push(...r.files); } }
+      return { state: next, text: texts.join(' · '), files: [...new Set(files)] };
+    }
+    case 'setBackFix': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const o = statusesOn(s.statuses, c.pid, c.day).find(x => TYPES[x.type].cat === 'out'); if (!o) throw new Error(shortName(p) + ' δεν είναι εξοδούχος ή ΔΝ ' + dm(c.day));
+      const why = String(c.why ?? '').replace(/\s+/g, ' ').trim(); if (!why) throw new Error('Γράψε τον λόγο της διόρθωσης');
+      if (!!c.stay === !!c.at) throw new Error('Διάλεξε «δεν γυρνά, συνεχίζει» ή πότε γυρνά');
+      let at: BackFix['at'];
+      if (c.at) {
+        const time = normTime(c.at.time); if (!time) throw new Error('Η ώρα επιστροφής δεν είναι σωστή');
+        if (c.at.day < (o.type === 'DN' ? addDays(c.day, 1) : c.day)) throw new Error('Η επιστροφή είναι πριν από την έξοδο');
+        at = { day: c.at.day, time };
+      }
+      const fix: BackFix = { id: c.pid + ':' + c.day, pid: c.pid, day: c.day, ...(at ? { at } : { stay: true as const }), why };
+      const fixes = s.backFix || []; const old = fixes.find(x => x.id === fix.id);
+      if (old && JSON.stringify(old) === JSON.stringify(fix)) return { state: s, text: '', files: [] };
+      return { state: { ...s, backFix: [...fixes.filter(x => x.id !== fix.id), fix] }, text: 'Διόρθωση επιστροφής ' + shortName(p) + ' (' + outLbl(o) + ' ' + dm(c.day) + '): ' + (at ? 'γυρνά ' + DOW_FULL[weekday(at.day)] + ' ' + dm(at.day) + ' ' + at.time : 'δεν γυρνά, συνεχίζει') + ' · λόγος: ' + why, files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'delBackFix': {
+      const fixes = s.backFix || []; const old = fixes.find(x => x.id === c.id); if (!old) return { state: s, text: '', files: [] };
+      const p = pm.get(old.pid);
+      return { state: { ...s, backFix: fixes.filter(x => x.id !== c.id) }, text: 'Διόρθωση επιστροφής' + (p ? ' ' + shortName(p) : '') + ' ' + dm(old.day) + ': πίσω στο αυτόματο', files: ['Εξοδούχοι-Παραμένοντες'] };
     }
     case 'extendOpen': {
       // Εγγραφές χωρίς λήξη (κενό «έως» στο Excel): ισχύουν και σήμερα. Χωρίς γραμμή ιστορικού, δεν αναιρείται.

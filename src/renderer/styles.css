@@ -825,6 +825,17 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .backs__day{padding:8px 16px 4px;font-size:12px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.03em}
 .backs .rows li > span{display:flex;align-items:center;gap:6px;font-size:13px;text-align:right}
 .backs-box{margin:0 0 12px}
+/* Εξοδούχοι: οι ώρες της μέρας (αρχή εξόδου, επιστροφές, εκπαίδευση) και ο πίνακας ωρών των Κανόνων */
+.daybar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-start;margin:0 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.daybar .field{margin:0;min-width:0}
+.daybar .ui-input{width:104px}
+.daybar .field__help{min-height:1.2em}
+.daybar__acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;align-self:center;margin-left:auto}
+.weekt{border-collapse:collapse;font-size:13px;width:100%}
+.weekt th,.weekt td{padding:3px 6px;text-align:left;font-weight:500;border-bottom:1px solid var(--border)}
+.weekt thead th{font-size:12px;color:var(--muted-fg)}
+.weekt tbody th{font-weight:600}
+.weekt .weekt__in{width:78px;height:30px;padding:0 6px;font-family:var(--f-mono)}
 .backs-box summary{cursor:pointer;font-weight:600}
 @media (max-width:767px){.orow__note{flex:1;width:auto;min-width:120px}}
 .ui-seg button.is-warn{color:var(--warn)}
