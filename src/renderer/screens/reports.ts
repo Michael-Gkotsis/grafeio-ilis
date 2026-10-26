@@ -19,7 +19,7 @@ import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
 import { blocksOf, type AppState, type Person, type Status } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
-import { PV_MAX, PV_SAMPLES, clampPage, editForm, formOpen, getSample, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
+import { PV_MAX, PV_SAMPLES, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
@@ -408,10 +408,11 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const [ti, setTi] = useState(0);   // ποιος πίνακας φαίνεται στα βήματα 3 και 4 (0: ο πρώτος, 1…: r.more)
   const [subInsp, setSubInsp] = useState<Record<string, TplInspect>>({});   // ανεβασμένο: οι επικεφαλίδες των πινάκων 2, 3…
   // κάτι άλλαξε από τότε που άνοιξε η σελίδα (σε υπάρχον έντυπο: αφού διαβαστεί το πρότυπό του): πίσω, Esc και αλλαγή οθόνης ρωτούν πριν πεταχτεί
-  const [ready, setReady] = useState(!initial); const [base, setBase] = useState<string | null>(null);
-  const snap = JSON.stringify([r, build, mode, signers]);   // το πρότυπο (tpl) μπαίνει με καθυστέρηση στο άνοιγμα υπάρχοντος εντύπου: αλλάζοντάς το αλλάζουν και τα mode/build/r
+  // Η αφετηρία παίρνεται όταν τελειώσει η αρχικοποίηση από τη διαδρομή (υπάρχον έντυπο, προεπιλογή, πρότυπο, Excel): ό,τι μπαίνει από εκεί δεν το άλλαξε ο χρήστης. Βήμα, δείγμα και σελίδα δεν είναι περιεχόμενο (repPage.formSnap).
+  const [ready, setReady] = useState(!initial && !start); const [base, setBase] = useState<string | null>(null);
+  const snap = formSnap(r, build, mode, signers);   // το πρότυπο (tpl) μπαίνει με καθυστέρηση στο άνοιγμα υπάρχοντος εντύπου: αλλάζοντάς το αλλάζουν και τα mode/build/r
   useEffect(() => { if (ready && base == null) setBase(snap); }, [ready, base, snap]);
-  const dirty = !busy && base != null && snap !== base;
+  const dirty = isFormDirty(base, snap, busy);
   // δείγμα και σελίδα της προεπισκόπησης (το δείγμα το θυμάται η συνεδρία ανά έντυπο, δεν μπαίνει στο έντυπο)
   const [sample, setSampleS] = useState(() => getSample(r.id)); const [page, setPage] = useState(1);
   const pickSample = (n: number) => { setSampleS(n); setSample(r.id, n); setPage(1); };
@@ -456,9 +457,9 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const startBuild = (o: BuildOpts, name: string, jump = false) => { const b: BuildOpts = JSON.parse(JSON.stringify(o)); setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote(''); upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more) }); setTi(0); setQuick(jump); setStep(jump ? 4 : 2); };
   useEffect(() => {
     if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true).finally(() => setReady(true)); else { setStep(1); setReady(true); } }
-    else if (start === 'upload') upload();
-    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p); }
-    else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)); } }
+    else if (start === 'upload') upload().finally(() => setReady(true));
+    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p); setReady(true); }
+    else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)).finally(() => setReady(true)); } else setReady(true); }
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
   const setKind = async (kind: RepKind) => {

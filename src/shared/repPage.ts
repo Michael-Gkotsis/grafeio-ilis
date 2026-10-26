@@ -41,3 +41,8 @@ export function formOpen(params: Record<string, any>, reports: Report[]): FormOp
 export const newForm = (arg: Omit<FormArg, 'id'> = {}): Record<string, any> => ({ [FORM_PARAM]: { ...arg, n: Date.now() } });
 export const editForm = (id: string): Record<string, any> => ({ [FORM_PARAM]: { id } });
 export const noForm = (): Record<string, any> => ({ [FORM_PARAM]: undefined });
+
+// «Μη αποθηκευμένες αλλαγές» της σελίδας δημιουργίας: μόνο το περιεχόμενο του εντύπου (έντυπο, στήλες που φτιάχνονται, είδος προτύπου, υπογράφοντες).
+// Βήμα, δείγμα, σελίδα προεπισκόπησης και ό,τι άλλο είναι οθόνη ΔΕΝ μπαίνουν. Η αφετηρία (base) παίρνεται μετά την αρχικοποίηση από τη διαδρομή.
+export const formSnap = (r: unknown, build: unknown, mode: unknown, signers: unknown): string => JSON.stringify([r, build, mode, signers]);
+export const isFormDirty = (base: string | null, cur: string, busy = false): boolean => !busy && base != null && base !== cur;
