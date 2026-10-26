@@ -3,9 +3,10 @@
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fakeState } from './fixtures';
-import { retTxt, returnsOn } from '../src/shared/returns';
+import { retDay, retTxt, returnsOn } from '../src/shared/returns';
 import { activePeople, hkaiCounts, statusesAt, strengthOf } from '../src/shared/rules';
 import { outsAndStay, outsNote } from '../src/main/exports';
+import { norm } from '../src/shared/text';
 import type { AppState, Status, TypeKey } from '../src/shared/domain';
 
 let seq = 0;
@@ -55,10 +56,10 @@ describe('«Ποιοι γυρίζουν και πότε»: μέρα, ώρα κα
     expect(txt(s, FRI, 2)).toBe('Δευτέρα 26/10 10:00 · διόρθωση: ΕΞΕΤΑΣΕΙΣ');
     expect(txt(s, FRI, 3)).toBe('χωρίς λήξη · διόρθωση: ΕΙΠΕ Ο ΛΟΧΑΓΟΣ');
     const { outs } = outsAndStay(s, FRI);
-    expect(outsNote(s, FRI, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ, ΕΠΙΣΤΡΟΦΗ ΔΕΥΤΕΡΑ 10:00');
-    expect(outsNote(s, FRI, 3, outs.find(x => x.p.id === 3)!.st)).toBe('ΔΕΝ ΓΥΡΝΑ');
+    expect(outsNote(s, FRI, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 10:00 (ΔΙΟΡΘΩΣΗ: ΕΞΕΤΑΣΕΙΣ)');
+    expect(outsNote(s, FRI, 3, outs.find(x => x.p.id === 3)!.st)).toBe('ΔΕΝ ΓΥΡΝΑ (ΔΙΟΡΘΩΣΗ: ΕΙΠΕ Ο ΛΟΧΑΓΟΣ)');
     s = run(s, { t: 'delBackFix', id: '2:' + FRI });
-    expect(outsNote(s, FRI, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ');
+    expect(outsNote(s, FRI, 2, outs.find(x => x.p.id === 2)!.st)).toBe('ΔΝ, ΓΥΡΝΑ ΣΑΒΒΑΤΟ 24/10 06:00 (ΠΡΩΙΝΗ ΕΚΠΑΙΔΕΥΣΗ)');
   });
 });
 
@@ -113,5 +114,42 @@ describe('Δύναμη και Σήμερα με την ώρα (OUT/DN)', () => {
     const a = hkaiCounts(s, FRI);
     const b = hkaiCounts(run(s, { t: 'setWeekRules', week: { 5: { out: '12:00' } } }), FRI);
     expect(b).toEqual(a);
+  });
+});
+
+// Παρατηρήσεις Excel (Εξοδούχοι και ΠΣΚ): στο τέλος πότε γυρνά, από το returnOf με τις λέξεις της οθόνης (Michael, 26/10)
+describe('Παρατηρήσεις Excel: πότε γυρνά', () => {
+  const note = (s: AppState, d: string, pid: number) => outsNote(s, d, pid, outsAndStay(s, d).outs.find(x => x.p.id === pid)!.st);
+  it('εξοδούχος: την ίδια μέρα, χωρίς το αυτονόητο «γιατί»', () => {
+    expect(note(with_(st(2, 'OUT', MON)), MON, 2)).toBe('ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 22:00');
+  });
+  it('ΔΝ: την επόμενη το πρωί, με τον λόγο σε παρένθεση', () => {
+    expect(note(with_(st(2, 'DN', MON)), MON, 2)).toBe('ΔΝ, ΓΥΡΝΑ ΤΡΙΤΗ 27/10 06:00 (ΠΡΩΙΝΗ ΕΚΠΑΙΔΕΥΣΗ)');
+  });
+  it('ΔΝ ΣΚ: ως την Κυριακή, γυρνά Δευτέρα', () => {
+    const s = run(fakeState(10), { t: 'outs', date: SAT, changes: [{ pid: 2, from: null, to: 'DN', wk: true }], force: true });
+    expect(note(s, SAT, 2)).toBe('ΔΝ ΣΚ, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 06:00 (ΔΝ ΩΣ ΤΗΝ ΚΥΡΙΑΚΗ)');
+  });
+  it('ΔΝ και άδεια αύριο 14:00: γυρνά και φεύγει για άδεια', () => {
+    const s = with_(st(2, 'DN', FRI), st(2, 'LEAVE', SAT, { to: '2026-10-30', fromTime: '14:00' }));
+    expect(note(s, FRI, 2)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΣΑΒΒΑΤΟ 24/10 14:00, ΓΥΡΝΑ ΣΑΒΒΑΤΟ 24/10 06:00, ΦΕΥΓΕΙ ΓΙΑ ΑΔΕΙΑ 14:00');
+  });
+  it('δεν έχει δηλωθεί η επόμενη μέρα: «ΔΕΝ ΕΧΕΙ ΔΗΛΩΘΕΙ Η <ΜΕΡΑ> <ηη/μμ>»', () => {
+    const s = run(with_(st(2, 'DN', FRI)), { t: 'setDayPlan', date: SAT, plan: { train: false } });
+    expect(note(s, FRI, 2)).toBe('ΔΝ, ΔΕΝ ΕΧΕΙ ΔΗΛΩΘΕΙ ΤΟ ΣΑΒΒΑΤΟ 24/10');
+  });
+  it('η υπάρχουσα παρατήρηση μένει πρώτη, η επιστροφή μπαίνει μετά', () => {
+    let s = with_(st(2, 'DN', MON), st(3, 'OUT', MON));
+    s = run(s, { t: 'outs', date: MON, changes: [], notes: [{ pid: 2, note: 'Ιατρος Στεπ' }, { pid: 3, note: 'γάμος' }] });
+    expect(note(s, MON, 2)).toBe('ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ), ΓΥΡΝΑ ΤΡΙΤΗ 27/10 06:00 (ΠΡΩΙΝΗ ΕΚΠΑΙΔΕΥΣΗ)');
+    expect(note(s, MON, 3)).toBe('ΓΑΜΟΣ, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 22:00');
+  });
+  it('ίδια λέξεις με την οθόνη (retDay και ώρα) και πάντα ένα κείμενο ανά εξοδούχο/ΔΝ', () => {
+    const s = with_(st(2, 'DN', FRI), st(2, 'LEAVE', SAT, { to: '2026-10-30', fromTime: '14:00' }), st(3, 'DN', MON), st(4, 'OUT', MON));
+    for (const [d, pid] of [[FRI, 2], [MON, 3], [MON, 4]] as const) {
+      const r = returnsOn(s, d).find(b => b.p.id === pid)!.r;
+      expect(retTxt(r)).toContain(retDay(r) + ' ' + r.time);
+      expect(note(s, d, pid)).toContain(norm(retDay(r) + ' ' + r.time));
+    }
   });
 });

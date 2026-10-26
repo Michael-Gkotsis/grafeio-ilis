@@ -153,10 +153,22 @@ export function returnsOn(s: AppState, d: ISODate): Back[] {
 }
 // «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»
 export const retDay = (r: Ret) => (r.open ? 'Χωρίς λήξη' : DOW_FULL[weekday(r.day)] + ' ' + dm(r.day));
+// Γιατί γυρνά (why) και τι κάνει μετά (leave): οι ίδιες λέξεις στην οθόνη και στις Παρατηρήσεις του Excel
+const retWhy = (r: Ret) => ({ why: r.duty ? r.duty + (r.dutyTime && r.dutyTime !== r.time ? ' από ' + r.dutyTime : '') : r.why, leave: !r.duty && r.leaveAt ? 'φεύγει για άδεια ' + r.leaveAt : '' });
 export const retWhen = (r: Ret) => {
   if (r.pending) return r.why;
   if (r.open) return 'δεν γυρνά, συνεχίζει' + (r.fix ? ' · ' + r.why : '');
-  const why = r.duty ? r.duty + (r.dutyTime && r.dutyTime !== r.time ? ' από ' + r.dutyTime : '') : r.leaveAt ? r.why + ', φεύγει για άδεια ' + r.leaveAt : r.why;
-  return (r.time || 'πρωί') + ' · ' + why;
+  const { why, leave } = retWhy(r);
+  return (r.time || 'πρωί') + ' · ' + why + (leave ? ', ' + leave : '');
 };
 export const retTxt = (r: Ret) => (r.pending ? r.why : r.open ? 'χωρίς λήξη' + (r.fix ? ' · ' + r.why : '') : retDay(r) + ' ' + retWhen(r));
+// Στις Παρατηρήσεις του Excel (πεζά, τα κεφαλαία τα βάζει ο γράφων): «γυρνά Δευτέρα 27/10 06:00 (ΔΝ ως την Κυριακή)»,
+// «γυρνά Τρίτη 28/10 06:00, φεύγει για άδεια 14:00», «δεν έχει δηλωθεί η Δευτέρα 27/10». Ο εξοδούχος που γυρνά το βράδυ και η ΔΝ
+// πριν από άδεια δεν λένε το αυτονόητο «γιατί» (η γραμμή λέει ήδη εξοδούχος/ΔΝ).
+export function retNote(r: Ret): string {
+  if (r.pending) return r.why + ' ' + dm(r.day);
+  if (r.open) return 'δεν γυρνά (' + r.why + ')';
+  const { why, leave } = retWhy(r);
+  const obvious = !r.duty && (/^εξοδούχος /.test(why) || (!!leave && why === 'μετά τη ΔΝ'));
+  return 'γυρνά ' + retDay(r) + ' ' + (r.time || 'πρωί') + (obvious ? '' : ' (' + why + ')') + (leave ? ', ' + leave : '');
+}
