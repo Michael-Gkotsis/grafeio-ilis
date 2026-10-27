@@ -81,8 +81,12 @@ fs.writeFileSync(path.join(OUT, 'ΔΙΑΒΑΣΕ ΜΕ.txt'), [
   'Δικά σου έντυπα: βάλε froura.xlsx / hkai.xlsx / exodouxoi.xlsx σε φάκελο templates\\ δίπλα στο exe.',
   'Τα Excel βγαίνουν στα Έγγραφα\\Γραφείο Ίλης\\ (αλλάζει από τις Ρυθμίσεις).',
   'Για μεταφορά σε άλλο PC: αντέγραψε όλο τον φάκελο μαζί με το data\\.',
+  'Εναλλακτικά, το GrafeioIlis-win7-<x64|ia32>-Setup-<έκδοση>.exe (στα Releases) εγκαθιστά με συντομεύσεις και ενημερώνει χωρίς να πειράξει το data\\.',
   ''
 ].join('\r\n'));
+
+// Για ποια αρχιτεκτονική είναι ο φάκελος (έξω από τον φάκελο, ώστε να μη μπει στο zip): το package:setup το ελέγχει
+fs.writeFileSync(path.join('release', 'GrafeioIlis.arch'), ARCH);
 
 const zipOut = path.resolve('release', `GrafeioIlis-win7-${ARCH}-${pkg.version}.zip`);
 fs.rmSync(zipOut, { force: true });

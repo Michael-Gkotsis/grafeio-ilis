@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "package:win": "node scripts/package-win.mjs",
+    "package:setup": "node scripts/package-win-setup.mjs",
     "package:linux": "node scripts/package-linux.mjs",
     "package:mac": "node scripts/package-mac.mjs",
     "bench": "esbuild bench/bench.ts --bundle --platform=node --target=node16 --outfile=dist/bench.js --log-level=warning && node dist/bench.js",
