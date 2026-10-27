@@ -30,8 +30,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Το Setup.exe φτιάχνεται με το makensis (NSIS)
+      - run: sudo apt-get update && sudo apt-get install -y nsis
       - run: npm run package:win -- x64
+      - run: npm run package:setup -- x64
       - run: npm run package:win -- ia32
+      - run: npm run package:setup -- ia32
       - run: npm run package:linux
       - name: Ανέβασμα στα Releases
         env:
@@ -40,13 +44,15 @@ jobs:
           V=$(node -p "require('./package.json').version")
           ZIP64="release/GrafeioIlis-win7-x64-$V.zip"
           ZIP32="release/GrafeioIlis-win7-ia32-$V.zip"
+          SETUP64="release/GrafeioIlis-win7-x64-Setup-$V.exe"
+          SETUP32="release/GrafeioIlis-win7-ia32-Setup-$V.exe"
           DEB="release/GrafeioIlis-ubuntu-amd64-$V.deb"
-          NOTES="Γραφείο Λοχία $V, από το commit ${GITHUB_SHA::7}. Windows 7: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Ubuntu 64-bit: GrafeioIlis-ubuntu-amd64-$V.deb (sudo apt install ./GrafeioIlis-ubuntu-amd64-$V.deb). macOS: GrafeioIlis-mac-arm64-$V.zip (Apple Silicon) ή GrafeioIlis-mac-x64-$V.zip (Intel), ανεβαίνουν 2-3 λεπτά αργότερα· οδηγίες στο ΔΙΑΒΑΣΕ ΜΕ μέσα στο zip. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
+          NOTES="Γραφείο Λοχία $V, από το commit ${GITHUB_SHA::7}. Windows 7: GrafeioIlis-win7-x64-Setup-$V.exe (64-bit) ή GrafeioIlis-win7-ia32-Setup-$V.exe (32-bit): εγκατάσταση και ενημέρωση· αν το έχεις ήδη, το ενημερώνει και κρατά τα δεδομένα. Αν δουλεύεις με το φορητό zip, διάλεξε τον φάκελό του στην εγκατάσταση. Φορητό zip: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Ubuntu 64-bit: GrafeioIlis-ubuntu-amd64-$V.deb (sudo apt install ./GrafeioIlis-ubuntu-amd64-$V.deb). macOS: GrafeioIlis-mac-arm64-$V.zip (Apple Silicon) ή GrafeioIlis-mac-x64-$V.zip (Intel), ανεβαίνουν 2-3 λεπτά αργότερα· οδηγίες στο ΔΙΑΒΑΣΕ ΜΕ μέσα στο zip. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "$ZIP64" "$ZIP32" "$DEB" --clobber
+            gh release upload "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" --clobber
             gh release edit "v$V" --notes "$NOTES"
           else
-            gh release create "v$V" "$ZIP64" "$ZIP32" "$DEB" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V" --notes "$NOTES"
+            gh release create "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V" --notes "$NOTES"
           fi
 
   # macOS: χρειάζεται runner macOS (codesign, iconutil)· δωρεάν σε δημόσιο repo. Ανεβαίνει στο release που έφτιαξε η δουλειά παραπάνω.
