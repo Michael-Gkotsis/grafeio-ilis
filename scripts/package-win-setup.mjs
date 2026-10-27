@@ -23,7 +23,6 @@ const BOM = '﻿'; // το NSIS Unicode διαβάζει UTF-8 μόνο με BOM
 fs.writeFileSync(inc, BOM + uninstallScript(walkTree(SRC)), 'utf8');
 
 const out = path.resolve('release', `GrafeioIlis-win7-${ARCH}-Setup-${pkg.version}.exe`);
-fs.rmSync(out, { force: true });
 const r = spawnSync('makensis', [
   '-V2', '-WX',
   `-DVERSION=${pkg.version}`, `-DARCH=${ARCH}`, `-DSRC=${SRC}`, `-DOUTFILE=${out}`,
