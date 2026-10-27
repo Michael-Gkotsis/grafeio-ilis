@@ -157,6 +157,9 @@ Section "Uninstall"
   Call un.CheckClosed
   ; Μόνο ό,τι έβαλε η εγκατάσταση (λίστα από το σκριπτ του πακέτου). Ποτέ RMDir /r στον φάκελο: εκεί μένουν data\ και templates\.
   !include "${UNINST_INC}"
+  ; ο κώδικας της εφαρμογής ολόκληρος, και αρχεία παλιότερων εκδόσεων που δεν είναι στη λίστα
+  RMDir /r "$INSTDIR\resources\app"
+  RMDir "$INSTDIR\resources"
   Delete "$INSTDIR\Uninstall.exe"
   SetShellVarContext current
   Delete "$DESKTOP\Γραφείο Λοχία.lnk"
