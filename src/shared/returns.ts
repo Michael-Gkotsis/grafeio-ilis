@@ -43,8 +43,9 @@ export const onDay = (d: ISODate) => ACC[weekday(d)];
 export const theDay = (d: ISODate) => (weekday(d) === 6 ? 'το ' : 'η ') + DOW_FULL[weekday(d)];
 
 // day/time: πότε γυρνά· why: γιατί· pending: δεν ξέρουμε ακόμα (δεν έχει δηλωθεί η μέρα day)· leaveAt: γυρνά και φεύγει πάλι
-// για άδεια στην ώρα αυτή· duty/dutyTime: γυρνά για υπηρεσία· open: δεν γυρνά (χωρίς λήξη ή διόρθωση «συνεχίζει»)· fix: από διόρθωση
-export interface Ret { day: ISODate; time: string; why: string; pending?: true; leaveAt?: string; duty?: string; dutyTime?: string; open?: true; fix?: true }
+// για άδεια στην ώρα αυτή· duty/dutyTime: γυρνά για υπηρεσία· open: δεν γυρνά (χωρίς λήξη ή διόρθωση «συνεχίζει»)· fix: από διόρθωση·
+// base: άδεια που τελειώνει σήμερα με ΔΝ/έξοδο σήμερα («τέλος άδειας, ΔΝ»): το why μένει ο κανόνας της ΔΝ/εξόδου (leaveEnd)
+export interface Ret { day: ISODate; time: string; why: string; pending?: true; leaveAt?: string; duty?: string; dutyTime?: string; open?: true; fix?: true; base?: string }
 
 const MAX_DAYS = 120;
 const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
@@ -65,6 +66,15 @@ function withDuty(s: AppState, pid: number, r: Ret): Ret {
   return { ...r, why: 'υπηρεσία', duty: duty.label, dutyTime: duty.time, ...(r.time && duty.time && duty.time < r.time ? { time: duty.time } : {}) };
 }
 const hasOut = (x: Status) => TYPES[x.type].cat === 'out';
+// Άδεια που τελειώνει σήμερα (d) και σήμερα έχει ΔΝ/έξοδο (now = οι απουσίες της d): η ΔΝ/έξοδος κερδίζει και κρίνεται σαν να μην είχε
+// άδεια (ΔΝ → δεν γυρνά απόψε, γυρνά με τον κανόνα της ΔΝ· έξοδος → στην ώρα των εξοδούχων). Μία πηγή για την οθόνη «Ποιοι γυρίζουν και
+// πότε» (leaveBack) και για τους 4 πίνακες του Excel (outsTables). null: δεν ισχύει (καμία άδεια/ΔΝ/έξοδος, ή η άδεια συνεχίζει αύριο).
+export function leaveEnd(s: AppState, pid: number, d: ISODate, now: Status[]): { out: Status; r: Ret | null } | null {
+  const out = now.find(hasOut); if (!out || !now.some(x => !hasOut(x)) || awayOn(s, pid, addDays(d, 1)).some(x => !hasOut(x))) return null;
+  const free = { ...s, statuses: s.statuses.filter(x => x.pid !== pid || hasOut(x) || !TYPES[x.type].away) };
+  const r = returnOf(free, pid, d);
+  return { out, r: r && { ...r, base: out.type === 'DN' ? 'τέλος άδειας, ΔΝ' : 'τέλος άδειας, έξοδος' } };
+}
 
 // Πότε γυρνά όποιος είναι εξοδούχος ή ΔΝ τη μέρα d (ΔΝ της d = νύχτα d → πρωί d+1). null: δεν είναι εξοδούχος/ΔΝ (ή λείπει και αλλιώς).
 export function returnOf(s: AppState, pid: number, d: ISODate): Ret | null {
@@ -132,6 +142,7 @@ export const awayAt = (s: AppState, pid: number, d: ISODate, time: string): bool
 // Εξοδούχοι/ΔΝ: returnOf. Όποιος λείπει με άδεια ή νοσοκομείο: ως τη λήξη τους (όπως πριν), νωρίτερα αν έχει υπηρεσία.
 export interface Back { p: Person; st: Status; r: Ret }
 export function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
+  const le = leaveEnd(s, pid, d, awayOn(s, pid, d)); if (le?.r) return le.r;
   let last = d, lastSt: Status | undefined, back: Ret | null = null;
   for (let i = 0, x = d; i < MAX_DAYS; i++, x = addDays(x, 1)) {
     const a = awayOn(s, pid, x); if (!a.length) break;
@@ -160,7 +171,12 @@ export function returnsOn(s: AppState, d: ISODate): Back[] {
 // «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»
 export const retDay = (r: Ret) => (r.open ? 'Χωρίς λήξη' : DOW_FULL[weekday(r.day)] + ' ' + dm(r.day));
 // Γιατί γυρνά (why) και τι κάνει μετά (leave): οι ίδιες λέξεις στην οθόνη και στις Παρατηρήσεις του Excel
-const retWhy = (r: Ret) => ({ why: r.duty ? r.duty + (r.dutyTime && r.dutyTime !== r.time ? ' από ' + r.dutyTime : '') : r.why, leave: !r.duty && r.leaveAt ? 'φεύγει για άδεια ' + r.leaveAt : '' });
+const OBVIOUS = /^(πρωινή εκπαίδευση|μένει |μετά τη ΔΝ$|εξοδούχος |ΔΝ ως )/;
+function retWhy(r: Ret) {
+  const w = r.duty ? r.duty + (r.dutyTime && r.dutyTime !== r.time ? ' από ' + r.dutyTime : '') : r.why;
+  const why = r.base ? [r.base, r.duty ? 'υπηρεσία ' + w : OBVIOUS.test(w) ? '' : w].filter(Boolean).join(', ') : w;
+  return { why, leave: !r.duty && r.leaveAt ? 'φεύγει για άδεια ' + r.leaveAt : '' };
+}
 export const retWhen = (r: Ret) => {
   if (r.pending) return r.why;
   if (r.open) return 'δεν γυρνά, συνεχίζει' + (r.fix ? ' · ' + r.why : '');
@@ -207,9 +223,9 @@ export function whenTxt(s: AppState, d: ISODate, r: Ret): string {
 }
 // Γιατί γυρνά: η αιτία (ΔΝ, έξοδος, είδος άδειας) και, αν δεν είναι αυτονόητο, ό,τι άλλο λέει το «Ποιοι γυρίζουν» (ΔΝ ως την Κυριακή,
 // υπηρεσία Λ/Υ από 14:00, διόρθωση…, φεύγει για άδεια 14:00)
-const OBVIOUS = /^(πρωινή εκπαίδευση|μένει |μετά τη ΔΝ$|εξοδούχος |ΔΝ ως )/;
 function whyTxt(r: Ret, base: string, plain = false): string {
   const { why, leave } = retWhy(r);
+  if (r.base) return [why, leave].filter(Boolean).join(', ');
   const more = r.duty ? 'υπηρεσία ' + why : plain || OBVIOUS.test(why) ? '' : why;
   return [base, more, leave].filter(Boolean).join(', ');
 }
@@ -238,17 +254,16 @@ export function outsTables(s: AppState, d: ISODate): OutsTables {
       continue;
     }
     const lv = now.find(x => !hasOut(x)); if (!lv) continue;
-    const out = now.find(hasOut);
-    if (out && !awayOn(s, p.id, n).some(x => !hasOut(x))) {
-      // η άδεια τελειώνει σήμερα και έχει δηλωθεί ΔΝ/έξοδος: κερδίζει η ΔΝ/έξοδος (η ΔΝ κρίνεται σαν να μην είχε άδεια)
-      const free = { ...s, statuses: s.statuses.filter(x => x.pid !== p.id || hasOut(x) || !TYPES[x.type].away) };
-      const r2 = returnOf(free, p.id, d);
+    const le = leaveEnd(s, p.id, d, now);
+    if (le) {
+      const r2 = le.r;
       if (r2 && !r2.open) {
-        if (out.type === 'DN') { if (r2.day === n) t.tomorrow.push(row(p, out, r2, 'τέλος άδειας, ΔΝ')); }
-        else t.tonight.push(row(p, out, r2, 'τέλος άδειας, έξοδος'));
+        if (le.out.type === 'DN') { if (r2.day === n) t.tomorrow.push(row(p, le.out, r2, '')); }
+        else t.tonight.push(row(p, le.out, r2, ''));
       }
       continue;
     }
+    const out = now.find(hasOut);
     if (out) continue;
     const b = leaveBack(s, p.id, d);
     if (b.open || b.pending || (b.day !== d && b.day !== n)) continue;
