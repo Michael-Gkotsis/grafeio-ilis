@@ -95,12 +95,13 @@ export const isStatusField = (f: string) => f === 'stype' || Object.prototype.ha
 const CAT_WORD: Partial<Record<string, string>> = { med: 'ΙΑΤΡΙΚΟ', abs: 'ΑΔΕΙΑ', pun: 'ΠΟΙΝΗ', out: 'ΕΞΟΔΟΣ' };
 export const ST_TAGS: { tag: string; help: string }[] = [
   { tag: 'ΚΩΔ', help: 'ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ' }, { tag: 'ΣΥΝΤΟΜΑ', help: 'ΕΑ, ΕΥ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΟΝΟΜΑ', help: 'ΕΛΕΥΘΕΡΟΣ ΑΣΚΗΣΕΩΝ' },
-  { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΑΠΟ', help: '20/10' }, { tag: 'ΕΩΣ', help: '24/10' }, { tag: 'ΗΜΕΡΕΣ', help: '5' }
+  { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΑΠΟ', help: '20/10' }, { tag: 'ΕΩΣ', help: '24/10' }, { tag: 'ΗΜΕΡΕΣ', help: '5' },
+  { tag: 'ΜΕΝΟΥΝ', help: '2' }   // μέρες που μένουν από τη μέρα του εντύπου, με τη σημερινή
 ];
 // έτοιμες μορφές· ό,τι άλλο γράψεις είναι «δική σου»
-export const ST_FMTS = ['{ΚΩΔ}', '{ΣΥΝΤΟΜΑ}', '{ΟΝΟΜΑ}', '{ΚΑΤΗΓΟΡΙΑ}', '{ΚΩΔ} ΕΩΣ {ΕΩΣ}', '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}', '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)', 'ΝΑΙ'];
+export const ST_FMTS = ['{ΚΩΔ}', '{ΣΥΝΤΟΜΑ}', '{ΟΝΟΜΑ}', '{ΚΑΤΗΓΟΡΙΑ}', '{ΚΩΔ} ΕΩΣ {ΕΩΣ}', '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}', '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)', 'ΝΑΙ', '{ΚΩΔ} X{ΜΕΝΟΥΝ}'];   // στο τέλος: οι παλιές θέσεις μένουν ίδιες
 // Μία κατάσταση με τη μορφή fmt (χωρίς: ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ, όπως πριν)
-export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'>, fmt: string | undefined, lists?: AppState['settings']['lists']): string {
+export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'>, fmt: string | undefined, lists?: AppState['settings']['lists'], d?: ISODate): string {
   const lbl = statusLbl(st, lists); if (!fmt || fmt === '{ΚΩΔ}') return lbl;
   const t = TYPES[st.type]; const cat = t?.cat || '';
   const tag = (name: string): string | null => {
@@ -112,6 +113,7 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
       case 'ΑΠΟ': return dm(st.from);
       case 'ΕΩΣ': return st.open ? '…' : dm(st.to);
       case 'ΗΜΕΡΕΣ': return st.open ? '…' : String(daysBetween(st.from, st.to));
+      case 'ΜΕΝΟΥΝ': case 'ΜΕΝΟΥΝΗΜΕΡΕΣ': return st.open ? '…' : String(Math.max(0, daysBetween(d && d > st.from ? d : st.from, st.to)));   // από τη μέρα d, με αυτήν
     }
     return null;
   };
@@ -120,7 +122,7 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
 // Οι καταστάσεις ενός στρατιώτη τη μέρα d (κατηγορίες cats, null: όλες), μία φορά η καθεμία, με κόμμα
 function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string): string {
   const on = statusesOn(s.statuses, pid, d).filter(x => !cats || cats.includes(TYPES[x.type]?.cat as StCat));
-  return [...new Set(on.map(x => stText(x, fmt, s.settings.lists)).filter(Boolean))].join(', ');
+  return [...new Set(on.map(x => stText(x, fmt, s.settings.lists, d)).filter(Boolean))].join(', ');
 }
 // Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
 const COMBO_NO = new Set(['aa', 'blank', 'text', 'combo']);
@@ -349,7 +351,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
   if (kind === 'status') {
     const r = x as StatusRow; const st = r.st;
     switch (f) {
-      case 'stype': return stText(st, o?.sf, s.settings.lists); case 'from': return dmy(st.from); case 'to': return st.open ? '' : dmy(st.to);
+      case 'stype': return stText(st, o?.sf, s.settings.lists, d); case 'from': return dmy(st.from); case 'to': return st.open ? '' : dmy(st.to);
       case 'days': return st.open ? '' : daysBetween(st.from, st.to); case 'note': return st.note || ''; case 'by': return st.by || ''; case 'reason': return st.reason || '';
       case 'on': return st.type === 'PUN' ? dmy(st.on || st.from) : '';
     }

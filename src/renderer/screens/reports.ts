@@ -670,7 +670,7 @@ function RepSigs({ r, upd, none, setNone, upload, onLayout }: P) {
 const SAMPLE: Record<string, [Status['type'], string?][]> = { smed: [['EA'], ['EY']], sabs: [['LEAVE'], ['SICK']], spun: [['PUN', 'Περιορισμός']], sother: [['STEP'], ['NOS']], sout: [['OUT'], ['DN']] };
 function sampleText(f: string, fmt: string, today: string): string {
   const list = SAMPLE[f] || [['EA'], ['LEAVE'], ['PUN', 'Περιορισμός']];
-  return [...new Set(list.map(([type, kind]) => stText({ type, kind, from: addDays(today, -2), to: addDays(today, 3) }, fmt).toUpperCase()))].join(', ');
+  return [...new Set(list.map(([type, kind]) => stText({ type, kind, from: addDays(today, -2), to: addDays(today, 3) }, fmt, undefined, today).toUpperCase()))].join(', ');
 }
 const CUSTOM = '#own';   // «Δική σου μορφή…» στις λίστες
 function StatusFmt({ f, sf, onChange, id }: P) {
