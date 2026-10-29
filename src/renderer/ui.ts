@@ -2,6 +2,7 @@
 import React, { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import htm from 'htm';
+import { lockScroll } from './scrollLock';
 
 export const html = htm.bind(React.createElement) as (strings: TemplateStringsArray, ...values: any[]) => any;
 export const cx = (...a: unknown[]) => a.filter(Boolean).join(' ');
@@ -120,7 +121,7 @@ export function Dialog({ title, description, onClose, children, footer, size, cl
   useEscape(tryClose);
   useEffect(() => {
     const el = ref.current; const f = el && (el.querySelector('[data-autofocus]') || el.querySelector('.ui-dialog__foot .ui-btn--default,.ui-dialog__body input')) as HTMLElement | null;
-    f && f.focus(); const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; };
+    f && f.focus(); const unlock = lockScroll(); return () => { unlock(); };
   }, []);
   return createPortal(html`<div className="ui-overlay" onMouseDown=${(e: MouseEvent) => { if (e.target === e.currentTarget && closeOnOverlay) tryClose(); }}>
     <div ref=${ref} className=${cx('ui-dialog', size && 'ui-dialog--' + size)} role=${role} aria-modal="true" aria-labelledby="dlg-t">
