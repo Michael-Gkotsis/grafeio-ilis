@@ -418,7 +418,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const valEd = vsel >= 0 && vals[vsel] ? html`<${ValueTableEditor} key=${vals[vsel].id} t=${vals[vsel]} n=${vsel + 1} set=${(x: ValueTable) => setVals(vals.map((y, j) => (j === vsel ? x : y)))} del=${() => delVal(vsel)} at=${r.at} setAt=${(at?: string) => upd({ at })} all=${vals} upload=${mode === 'upload'}
     lay=${mode === 'build' ? html`<${LayEditor} n=${'v' + (vsel + 1)} noEven lay=${vals[vsel].lay} set=${(lay?: TabLay) => setVals(vals.map((y, j) => (j === vsel ? { ...y, lay } : y)))}/>` : null}/>` : null;
   // Διάταξη πινάκων (Φάση 3): ο 1ος, οι 2, 3… και οι πίνακες τιμών σε ζώνες· οι ανεβασμένοι δεν αλλάζουν (έχουν τις θέσεις του προτύπου τους)
-  const bandItems = useMemo(() => [{ id: MAIN, name: '1 · ' + (build?.title?.trim() ? build.title.trim().slice(0, 24) : kindLbl(r.kind)) }, ...(build?.more || []).map((t, i) => ({ id: t.id, name: i + 2 + ' · ' + (t.title?.trim().slice(0, 24) || kindLbl(t.kind)) })), ...valsUsed(r.vals).map(v => ({ id: v.id, name: 'Τιμές · ' + (v.title?.trim().slice(0, 24) || v.rows[0]?.label?.slice(0, 24) || 'πίνακας') }))], [build, r.kind, r.vals]);
+  const bandItems = useMemo(() => [{ id: MAIN, name: '1 · ' + (build?.t1?.trim() ? build.t1.trim().slice(0, 24) : kindLbl(r.kind)) }, ...(build?.more || []).map((t, i) => ({ id: t.id, name: i + 2 + ' · ' + (t.title?.trim().slice(0, 24) || kindLbl(t.kind)) })), ...valsUsed(r.vals).map(v => ({ id: v.id, name: 'Τιμές · ' + (v.title?.trim().slice(0, 24) || v.rows[0]?.label?.slice(0, 24) || 'πίνακας') }))], [build, r.kind, r.vals]);
   const bandIds = bandItems.map(x => x.id); const bands = bandsOf(bandIds, r.bands);
   const nop = hasVals(r) && (mode === 'build' ? !!build?.nopeople && !(build.more || []).length : false);   // έντυπο μόνο με πίνακες τιμών (φτιαγμένο εδώ)
   const [subInsp, setSubInsp] = useState<Record<string, TplInspect>>({});   // ανεβασμένο: οι επικεφαλίδες των πινάκων 2, 3…
@@ -552,7 +552,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const back = () => { if (dirty) setLeaving(true); else onClose(); };
   useEscape(() => { if (picking) setPicking(null); else back(); });
   const goStep = (i: number) => { setPicking(null); setStep(i); };
-  const tname = (i: number) => (i === 0 ? kindLbl(r.kind) : (r.more?.[i - 1]?.title || '').slice(0, 18) || kindLbl(r.more?.[i - 1]?.kind || r.kind));
+  const tname = (i: number) => (i === 0 ? (mode === 'build' && build?.t1?.trim() ? build.t1.trim().slice(0, 18) : kindLbl(r.kind)) : (r.more?.[i - 1]?.title || '').slice(0, 18) || kindLbl(r.more?.[i - 1]?.kind || r.kind));
   const lbls = (prev.pv?.counts || []).map((c, i) => ({ i, t: sampleLabel(c) })).filter(x => x.t);
   const why6 = missing(6);
   return html`<div className="rep-page" data-dirty=${dirty ? 'true' : undefined}>
@@ -733,13 +733,13 @@ function ColsEditor({ kind, cols, setCols }: P) {
 
 // Οι πίνακες του εντύπου (Michael, 22/10): «Πίνακας 1 · Στρατιώτες», «Πίνακας 2 · Καταστάσεις»…· onAdd: «+ Πίνακας» (βήμα 3)
 const kindLbl = (k: RepKind) => REP_KINDS.find(x => x.id === k)?.label || '';
-function TableTabs({ r, ti, setTi, onAdd, addTip, vals, vi = -1, setVi, onAddVal }: P) {
+function TableTabs({ r, t1, ti, setTi, onAdd, addTip, vals, vi = -1, setVi, onAddVal }: P) {
   const more: RepTable[] = r.more || []; const vs: ValueTable[] = onAddVal ? vals || [] : [];
   if (!more.length && !onAdd) return null;
   const pick = (i: number) => { setTi(i); setVi?.(-1); };
   return html`<div className="rep-tables" role="group" aria-label="Πίνακες του εντύπου">
     <span className="field__label">Πίνακες</span>
-    <button type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === 0 && vi < 0} onClick=${() => pick(0)}>1 · ${kindLbl(r.kind)}</button>
+    <button type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === 0 && vi < 0} onClick=${() => pick(0)}>1 · ${t1?.trim() ? t1.trim().slice(0, 18) : kindLbl(r.kind)}</button>
     ${more.map((t, i) => html`<button key=${t.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === i + 1 && vi < 0} onClick=${() => pick(i + 1)}>${i + 2} · ${t.title ? t.title.slice(0, 18) : kindLbl(t.kind)}</button>`)}
     ${onAdd && html`<${Button} size="sm" variant="outline" disabled=${more.length >= 5} why="Ως 6 πίνακες" data-tip=${addTip} onClick=${onAdd}>+ Πίνακας<//>`}
     ${vs.map((v, i) => html`<button key=${v.id} type="button" className="ui-chip ui-chip--sm ui-chip--gap" aria-pressed=${vi === i} data-tip="Πίνακας τιμών: κείμενο και αριθμός ανά γραμμή, στο τέλος του εντύπου" onClick=${() => setVi?.(i)}>Τιμές ${i + 1}${v.title ? ' · ' + v.title.slice(0, 14) : ''}</button>`)}
@@ -764,10 +764,10 @@ function NoHead({ on, set, n }: P) {
 // Πίνακας 2, 3… στο «Φτιάξ' το εδώ»: τι αφορά, τίτλος, στήλες
 function TableHead({ t, kind, title, setKind, setTitle, onDel, n }: P) {
   return html`<div className="field-row">
-    <div className="field"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>
+    ${setKind && html`<div className="field"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>`}
     ${setTitle && html`<div className="field"><label className="field__label" htmlFor=${'t-title' + n}>Τίτλος πάνω από τον πίνακα</label><input id=${'t-title' + n} className="ui-input" placeholder="π.χ. ΙΑΤΡΙΚΑ (κενό: χωρίς τίτλο)" value=${title} onChange=${(e: any) => setTitle(e.target.value)}/></div>`}
-    <div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label=${'Βγάλε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Βγάλε τον πίνακα<//></div>
-    <p className="field__help" style=${{ width: '100%', margin: 0 }}>${t ? 'Ποιοι μπαίνουν σε αυτόν τον πίνακα το διαλέγεις στο βήμα 4. ' : ''}Μπαίνει κάτω από τον προηγούμενο, με δικές του στήλες.</p>
+    ${onDel && html`<div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label=${'Βγάλε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Βγάλε τον πίνακα<//></div>
+    <p className="field__help" style=${{ width: '100%', margin: 0 }}>${t ? 'Ποιοι μπαίνουν σε αυτόν τον πίνακα το διαλέγεις στο βήμα 4. ' : ''}Μπαίνει κάτω από τον προηγούμενο, με δικές του στήλες.</p>`}
   </div>`;
 }
 
@@ -779,6 +779,7 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout
   const bt = ti > 0 ? more[ti - 1] : null;
   const setT = (id: string, x: Partial<BuildTable>) => set({ more: more.map(t => (t.id === id ? { ...t, ...x } : t)) });
   const noHeadT = (id: string, on: boolean) => set({ more: more.map(t => { if (t.id !== id) return t; const { nohead: _h, ...rest } = t; return on ? { ...rest, nohead: true } : rest; }) });
+  const setT1 = (t1: string) => { const { t1: _t, ...rest } = o; setO(t1 ? { ...rest, t1 } : rest); };
   const noHead1 = (on: boolean) => { const { nohead: _h, ...rest } = o; setO(on ? { ...rest, nohead: true } : rest); };
   const addTable = () => {
     const id = uid(); const k: RepKind = r.kind;
@@ -792,14 +793,15 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout
     upd({ more: (r.more || []).map((x: RepTable) => { if (x.id !== id) return x; const p = pickForKind(x.kind, x.pick, x.sort, k); return { ...x, kind: k, sort: p.sort, pick: subPick(p.pick) }; }) });
   };
   return html`<div className="stack rep-build">
-    <div className="field"><label className="field__label" htmlFor="b-title">Τίτλος</label><input id="b-title" className="ui-input" value=${o.title} onChange=${(e: any) => set({ title: e.target.value })}/></div>
-    <${TableTabs} r=${r} ti=${ti} setTi=${setTi} onAdd=${addTable} addTip="Κι άλλος πίνακας κάτω από τον πρώτο, με δικές του στήλες (π.χ. ένας για τους παρόντες και ένας για τα ιατρικά)" vals=${vals} vi=${vi} setVi=${setVi} onAddVal=${onAddVal}/>
+    <div className="field"><label className="field__label" htmlFor="b-title">Γενικός τίτλος σελίδας</label><input id="b-title" className="ui-input" placeholder="π.χ. ΚΑΤΑΣΤΑΣΗ ΔΥΝΑΜΗΣ" value=${o.title} onChange=${(e: any) => set({ title: e.target.value })}/><p className="field__help">Ένας για όλη τη σελίδα, στη μέση. Κάθε πίνακας έχει και δικό του τίτλο.</p></div>
+    <${TableTabs} r=${r} t1=${o.t1} ti=${ti} setTi=${setTi} onAdd=${addTable} addTip="Κι άλλος πίνακας κάτω από τον πρώτο, με δικές του στήλες (π.χ. ένας για τους παρόντες και ένας για τα ιατρικά)" vals=${vals} vi=${vi} setVi=${setVi} onAddVal=${onAddVal}/>
     ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
       <${ColsEditor} kind=${bt.kind} cols=${bt.cols} setCols=${(cols: BuildCol[]) => setT(bt.id, { cols })}/>
       <${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/>
       <${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`
       : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
-      : html`<${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[]) => set({ cols })}/>
+      : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} setTitle=${setT1}/>
+      <${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[]) => set({ cols })}/>
       <${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/>
       <${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`}
     ${hasVals(r) && !more.length && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!o.nopeople} onChange=${(e: any) => { const { nopeople: _n, ...rest } = o; setO(e.target.checked ? { ...rest, nopeople: true } : rest); if (e.target.checked) { setTi(0); upd({ split: 'none' }); } }}/>Χωρίς πίνακα ατόμων (μόνο πίνακες τιμών)</label>`}
