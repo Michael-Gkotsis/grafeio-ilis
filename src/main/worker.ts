@@ -9,7 +9,7 @@ import { zipHash } from './ziphash';
 import { buildTemplate, fillReport, placeSheets, previewReport, previewTemplate } from './reports';
 import type { AppState } from '../shared/domain';
 import { xlLook } from '../shared/xlLook';
-import { withBuilt } from '../shared/reports';
+import { forBuild, withBuilt } from '../shared/reports';
 
 const nodeRequire: NodeRequire = require;
 let state: AppState;
@@ -24,7 +24,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   placeSheets: (target, out, pairs, mine) => placeSheets(buf(target), buf(out), pairs, mine),
   previewReport: (tpl, r, ids, d, pages, sample) => previewReport(buf(tpl), state, r, ids, d, pages, sample),
   previewTemplate: (tpl, sheet) => previewTemplate(buf(tpl), sheet),
-  previewBuilt: async (o, r, ids, d, pages, sample) => { const b = await buildTemplate(o, r.kind, xlLook(state.settings)); return previewReport(b.data, state, withBuilt(r, b, o), ids, d, pages, sample); },
+  previewBuilt: async (o0, r, ids, d, pages, sample) => { const o = forBuild(o0, r); const b = await buildTemplate(o, r.kind, xlLook(state.settings)); return previewReport(b.data, state, withBuilt(r, b, o), ids, d, pages, sample); },
   zipHash: b => zipHash(buf(b)),
   valuesHash: b => valuesHash(buf(b)),
   readBook: (file, rows, cols) => readBook(file, rows, cols),
