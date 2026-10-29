@@ -503,7 +503,9 @@ export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLo
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
-  if (pid < 0 || isFixed(s, pid, k)) return null;   // στελέχη (pid < 0): μόνο η κατάστασή τους και το όριο, όχι ανάπαυση/ΣΚ/νούμερα
+  const c = pid < 0 ? cadreOf(s, pid) : undefined;
+  if (c && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση και το όριο· ΕΠΟΠ/ΟΒΑ κρατούν τους κανόνες τους
+  if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndexOf(s)).get(pid);
   if (!ds) return null;
   for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';

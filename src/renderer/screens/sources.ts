@@ -7,7 +7,7 @@ import { Select } from '../select';
 import { useStore } from '../store';
 import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
 import { TYPES, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type Settings, type TypeKey } from '../../shared/domain';
-import { personMap, postBy, postsOf } from '../../shared/rules';
+import { postBy, postsOf, seatMap } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { addDays, dm, dow } from '../../shared/dates';
 import {
@@ -354,7 +354,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     }
     const p = planDuties(sheet, b, state, month, today, choices, synced);
     const cmd: Command = { t: 'importDuties', ...dutiesCmd(p), source: book.name };
-    const pm = personMap(state.people);
+    const pm = seatMap(state);
     const notes = [
       p.noRow.length ? 'Δεν έχουν γραμμή σε αυτό το φύλλο, οπότε οι υπηρεσίες τους δεν γράφονται εκεί: ' + p.noRow.map(id => (pm.get(id) ? shortName(pm.get(id)!) : '?')).join(', ') + '.' : '',
       p.days.some(d => d.adds.some(a => !a.k)) ? 'Το σκέτο γράμμα (Θ, Μ, Σ…), ή θέση που έχει ήδη άλλος στην εφαρμογή, περνά ως υπηρεσία χωρίς θέση: μετρά στα σύνολα, στην ανάπαυση και στις αργίες, όχι στον κανόνα του ίδιου νούμερου.' : ''
@@ -386,7 +386,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
 // (γράφεται στο Excel) και τι έσβησες στην εφαρμογή (σβήνεται και από το Excel)· οι μέρες με λάθος στο Excel (δεν
 // περνούν), οι μελλοντικές (δεν περνούν ποτέ) και πόσες είναι ίδιες
 function DutyDays({ p }: { p: DutiesPlan }) {
-  const { state } = useStore(); const pm = personMap(state.people);
+  const { state } = useStore(); const pm = seatMap(state);
   const nm = (pid: number | null | undefined) => (pid == null ? '—' : pm.get(pid) ? shortName(pm.get(pid)!) : '?');
   return html`<div className="field">
     ${(p.warn || []).map(t => html`<${Alert} key=${t} tone="warn"><span>${t}</span><//>`)}

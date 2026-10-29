@@ -2,7 +2,7 @@
 // Η αυτόματη, ο «Επόμενος» και η ΠΣΚ δεν το βάζουν ποτέ· η σειρά δικαιοσύνης των στρατιωτών δεν αλλάζει. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { apply, type Command } from '../src/shared/commands';
-import { PROV, dutyPool, dutyStats, fairAvg, fairOf, fillDay, hkaiCounts, monthDuties, monthTxt, nextFor, pickPeople, seatMap, seatPeople, whyText } from '../src/shared/rules';
+import { PROV, dutyPool, dutyStats, fairAvg, fairOf, fillDay, hkaiCounts, monthDuties, monthTxt, nextFor, pickPeople, ruleBlock, seatMap, seatPeople, whyText } from '../src/shared/rules';
 import { armedRows, armWhen } from '../src/shared/armed';
 import { outCountOn, openMoveList } from '../src/shared/weaponView';
 import { weaponInfo, weaponSheets } from '../src/shared/weapons';
@@ -193,5 +193,23 @@ describe('Στελέχη: όπλο και ένοπλη υπηρεσία', () => 
     expect(info.out.size).toBe(0); expect(openMoveList(a, info)).toEqual([]);
     const s = put(a, 'ΛΟΧΙΑΔΗΣ', D, 'th1');
     expect(armedRows(s, D)).toEqual([]);
+  });
+  it('ανάπαυση: ο ΕΠΟΠ/ΟΒΑ κρατά τον κανόνα όπως πριν, το απλό στέλεχος δεν έχει ανάπαυση', () => {
+    let s = withCadres();
+    expect(s.rules.restDays).toBeGreaterThan(0);
+    // ΕΠΟΠ (όριο 2) με υπηρεσία χθες: ανάπαυση, ακριβώς όπως στον στρατιώτη
+    s = put(s, 'ΕΠΟΠΑΚΗΣ', '2026-10-14', 'th1');
+    expect(ruleBlock(s, '2026-10-15', -1)).toMatch(/ανάπαυση/);
+    expect(ruleBlock(s, '2026-10-13', -1)).toMatch(/ανάπαυση/);
+    expect(() => put(s, 'ΕΠΟΠΑΚΗΣ', '2026-10-15', 'th2')).toThrow(/ανάπαυση/);
+    expect(put(s, 'ΕΠΟΠΑΚΗΣ', '2026-10-15', 'th2', { force: 'εντολή' }).guards['2026-10-15'].th2).toBe(-1);
+    // απλό στέλεχος: ούτε ανάπαυση ούτε μπλοκ στη διπλανή μέρα
+    s = put(s, 'ΛΟΧΙΑΔΗΣ', '2026-10-14', 'th1');
+    const pid = s.cadreList.find(c => c.last === 'ΛΟΧΙΑΔΗΣ')!.pid!;
+    expect(ruleBlock(s, '2026-10-15', pid)).toBeNull();
+    expect(put(s, 'ΛΟΧΙΑΔΗΣ', '2026-10-15', 'th2').guards['2026-10-15'].th2).toBe(pid);
+    // στρατιώτης: όπως πάντα
+    const t = run(s, { t: 'assign', date: '2026-10-14', k: 'ly', pid: 1 });
+    expect(ruleBlock(t, '2026-10-15', 1)).toMatch(/ανάπαυση/);
   });
 });
