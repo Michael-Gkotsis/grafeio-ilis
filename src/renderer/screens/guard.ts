@@ -89,8 +89,8 @@ function DutyCheck({ onOpen, m }: P) {
   const H = (k: string, l: string, tip?: string) => html`<button type="button" className="chk__sort" data-tip=${tip} aria-sort=${sk?.k === k ? (sk.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => setSk(sk?.k === k ? { k, dir: -sk.dir } : { k, dir: k === 'name' ? 1 : -1 })}>${l}${sk?.k === k ? (sk.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   const mon = MONTHS[+ym.slice(5) - 1];
   // στήλες: όνομα (κολλά αριστερά), μία ανά υπηρεσία, Σύν., Αργ., Τελευταία, Μέρες· το πλάτος βγαίνει από το πλήθος τους: με πολλές υπηρεσίες κυλά μέσα στο πλαίσιο
-  const chkCols = 'minmax(140px,1fr) repeat(' + kinds.length + ',76px) 52px 52px 78px 62px';
-  const chkMin = 140 + kinds.length * 76 + 52 + 52 + 78 + 62;
+  const chkCols = 'minmax(140px,1fr) repeat(' + kinds.length + ',84px) 52px 52px 78px 62px';
+  const chkMin = 140 + kinds.length * 84 + 52 + 52 + 78 + 62;
   const chkHead = kinds.some(k => kindLbl(k).length > 9) ? 58 : 34;
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
