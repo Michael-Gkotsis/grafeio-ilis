@@ -694,7 +694,7 @@ export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
   });
   const { more: _, fixed: _f, nohead: _n, ...rest } = r;
   // πίνακες τιμών: η θέση που τους άφησε το πρότυπο (δεν υπάρχει όταν η διάταξη είναι η προεπιλεγμένη: γράφονται στο τέλος, όπως πριν)
-  const vals = r.vals?.map(v => { const { spot: _s, ...w } = v; const p = b.vals?.find(x => x.id === v.id); return p ? { ...w, spot: { c1: p.c1, c2: p.c2, ...(p.row != null ? { row: p.row } : {}) } } : w; });
+  const vals = r.vals?.map(v => { const { spot: _s, ...w } = v; const p = b.vals?.find(x => x.id === v.id); return p ? { ...w, spot: { c1: p.c1, c2: p.c2, ...(p.row != null ? { row: p.row } : {}), ...(p.tt ? { tt: true as const } : {}) } } : w; });
   return { ...rest, ...(vals ? { vals } : {}), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}), ...(o.nohead && !o.nopeople ? { nohead: true } : {}), ...(o.sig === 'none' && !r.sigs ? { sigs: [] } : {}) };
 }
 // «Υπογραφές: Καμία» στο «Φτιάξ' το εδώ» (Michael, 29/10: «οι υπογραφές δεν φεύγουν»): το πρότυπο δεν έχει γραμμή υπογραφών, και χωρίς

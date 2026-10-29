@@ -87,6 +87,23 @@ describe('Φάση 3: πίνακες δίπλα δίπλα στο Excel', () => 
     expect(r.vals![0].spot).toBeTruthy(); expect(r.vals![0].spot!.c1).toBeGreaterThan(nc.c);
   });
 
+  it('τίτλος πίνακα τιμών δίπλα σε πίνακα: στη γραμμή τίτλων της ζώνης, μία φορά, όχι στη γραμμή των επικεφαλίδων (Michael, 29/10)', async () => {
+    // δίπλα στον πίνακα 2 (με τίτλο) και δίπλα στον 1ο (χωρίς τίτλο): ίδια γραμμή με τον διπλανό τίτλο / δική του γραμμή τίτλων
+    for (const bands of [[[MAIN], ['t2', 'v1']], [[MAIN, 'v1'], ['t2']]]) {
+      const { g, r } = await make(two(), { vals: VALS, bands, pick: pickN(3) }, 3);
+      const t = at(g, 'ΣΥΝΟΛΑ'); expect(t).toHaveLength(1);
+      const host = bands[0].includes('v1') ? firstAt(g, 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ') : at(g, 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ')[1];
+      expect(t[0].r).toBe(host.r - 1);   // ο τίτλος μία γραμμή πάνω από τις επικεφαλίδες του διπλανού
+      if (!bands[0].includes('v1')) expect(firstAt(g, 'ΔΕΥΤΕΡΟΣ').r).toBe(t[0].r);
+      expect(firstAt(g, 'ΣΕ ΔΥΝΑΜΗ').r).toBe(host.r);   // οι γραμμές ξεκινούν στη γραμμή των επικεφαλίδων
+      expect(r.vals![0].spot!.tt).toBe(true);
+    }
+  });
+  it('πίνακας τιμών με τίτλο σε δική του ζώνη ή στο τέλος: όπως πριν (ο τίτλος γράφεται από το έντυπο)', async () => {
+    const { g, r } = await make(base(), { vals: VALS, bands: [['v1'], [MAIN]] });
+    expect(at(g, 'ΣΥΝΟΛΑ')).toHaveLength(1); expect(r.vals![0].spot!.tt).toBeUndefined();
+  });
+
   it('δύο πίνακες ατόμων δίπλα δίπλα: η ζώνη μεγαλώνει όσο ο ψηλότερος (αριστερός ψηλός, δεξιός κοντός)', async () => {
     const { g, out } = await makeTwo(30, 8);
     const hs = at(g, 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ'); expect(hs.length).toBe(2); const [lh, rh] = hs; expect(rh.c).toBeGreaterThan(lh.c); expect(rh.r).toBe(lh.r);

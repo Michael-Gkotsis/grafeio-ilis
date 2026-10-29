@@ -29,7 +29,8 @@ export interface VRow { label: string; expr: VExpr; percentOf?: VExpr; fmt?: VFm
 // Θέση στο φύλλο που άφησε το «Φτιάξ' το εδώ» (στήλες c1–c2, και row αν είναι μόνος του σε ζώνη): μπαίνει από το withBuilt, όχι από τον χρήστη.
 // Η θέση του πίνακα ως προς τους άλλους (κάτω από, δίπλα σε) είναι το Report.bands (shared/repBands.ts)· lay: πλάτος και στοίχιση (TabLay)
 // tagsOnly: δεν γράφεται πίνακας, μόνο στα κελιά του Excel με την ετικέτα της γραμμής
-export interface Spot { c1: number; c2: number; row?: number }
+// tt: ο τίτλος του πίνακα τιμών είναι ήδη γραμμένος στο πρότυπο, στη γραμμή τίτλων της ζώνης του (δίπλα σε πίνακα με τίτλο, Michael 29/10)
+export interface Spot { c1: number; c2: number; row?: number; tt?: true }
 export interface ValueTable { id: string; title?: string; rows: VRow[]; lay?: TabLay; spot?: Spot; tagsOnly?: boolean }
 export const FMTS: { id: VFmt; label: string }[] = [{ id: 'int', label: 'Αριθμός' }, { id: 'pct', label: 'Ποσοστό (96%)' }, { id: 'pct1', label: 'Ποσοστό με δεκαδικό (96,2%)' }];
 export const newValueTable = (id: string): ValueTable => ({ id, title: '', rows: [newRow()] });

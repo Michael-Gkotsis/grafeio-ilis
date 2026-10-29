@@ -195,7 +195,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   // θέσεις πινάκων (Φάση 3, Report.bands): ο καθένας με το id του (ο 1ος 'main') και οι πίνακες τιμών με το δικό τους. Χωρίς bands (ή με την
   // προεπιλεγμένη διάταξη) όλα γίνονται όπως πριν: οι πίνακες ατόμων ο ένας κάτω από τον άλλον, οι πίνακες τιμών στο τέλος
   const rmore = r.more || []; const tid = (i: number) => (i ? rmore[i - 1]?.id ?? 'm' + i : MAIN);
-  const vtab = vo.filter(v => !v.tagsOnly);   // πίνακες τιμών που γράφονται (οι tagsOnly μόνο στις ετικέτες του Excel)
+  const vtab = vo.filter(v => !v.tagsOnly).map(v => (v.spot?.tt ? { ...v, title: '' } : v));   // tt: ο τίτλος είναι ήδη στο πρότυπο   // πίνακες τιμών που γράφονται (οι tagsOnly μόνο στις ετικέτες του Excel)
   const bids = [...tabs.map((_, i) => i).filter(i => colsOf[i].length).map(tid), ...vtab.map(v => v.id)];
   const bands = bandsOf(bids, r.bands); const phys = bands.flat().map(id => tabs.findIndex((_, i) => tid(i) === id)).filter(i => i >= 0);
   const custom = !isDefault(bids, bands) && phys.length > 0;
@@ -566,14 +566,19 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
       for (const x of vs) { const [c1, c2] = boxes.get(x.id) || [1, n]; spots.push({ id: x.id, c1, c2, row: next }); }
       data = next; next = data + 1 + gapNext; return;
     }
-    // τίτλος του πίνακα (2, 3…) στη γραμμή πάνω από τις επικεφαλίδες του· ζώνη με πίνακες δίπλα-δίπλα: μία γραμμή τίτλων για όλους
-    if (tabs.some(t => t.id && t.title.trim())) {
+    // τίτλος του πίνακα (2, 3…) στη γραμμή πάνω από τις επικεφαλίδες του· ζώνη με πίνακες δίπλα-δίπλα: μία γραμμή τίτλων για όλους,
+    // και για τους πίνακες τιμών της ζώνης (Michael, 29/10: ο τίτλος τους έπεφτε στη γραμμή των επικεφαλίδων, κάτω από τον τίτλο του διπλανού)
+    const vt = vs.filter(v => v.title?.trim()); const titled = new Set<string>();
+    if (tabs.some(t => t.id && t.title.trim()) || vt.length) {
+      const title = (c1: number, c2: number, text: string) => {
+        ws.set(L(c1) + next, text).setStyle(L(c1) + next, st.sub);
+        if (c2 > c1) { for (let c = c1 + 1; c <= c2; c++) ws.setStyle(L(c) + next, st.sub); ws.addMerge(L(c1) + next + ':' + L(c2) + next); }
+      };
       for (const t of tabs) {
         if (!(t.id && t.title.trim())) continue;
-        const at = placeOf(t); const c1 = at[0][0], c2 = at[at.length - 1][1];
-        ws.set(L(c1) + next, t.title.trim()).setStyle(L(c1) + next, st.sub);
-        if (c2 > c1) { for (let c = c1 + 1; c <= c2; c++) ws.setStyle(L(c) + next, st.sub); ws.addMerge(L(c1) + next + ':' + L(c2) + next); }
+        const at = placeOf(t); title(at[0][0], at[at.length - 1][1], t.title.trim());
       }
+      for (const x of vt) { const [c1, c2] = boxes.get(x.id) || [1, n]; title(c1, c2, x.title!.trim()); titled.add(x.id); }
       next++;
     }
     const head = next; data = head + 1;
@@ -592,7 +597,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
       placed.push({ id: t.id, head, cols: out });
     }
     ws.setRowHeight(head, H.sz * 2.4); ws.setRowHeight(data, sz * 1.9);
-    for (const x of vs) { const [c1, c2] = boxes.get(x.id) || [1, n]; spots.push({ id: x.id, c1, c2 }); if (tabs.some(t => !t.id)) besideMain = true; }
+    for (const x of vs) { const [c1, c2] = boxes.get(x.id) || [1, n]; spots.push({ id: x.id, c1, c2, ...(titled.has(x.id) ? { tt: true as const } : {}) }); if (tabs.some(t => !t.id)) besideMain = true; }
     next = data + 1 + gapNext;
   });
   if (grid) for (let c = 1; c <= N; c++) widths[c] = Math.round((W / GRID) * 10) / 10;
