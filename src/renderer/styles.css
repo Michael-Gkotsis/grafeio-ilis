@@ -201,8 +201,10 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .page-head p{margin:4px 0 0;color:var(--muted-fg)}
 .page-head__sub{max-width:70ch}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width:1279px){.page-head > .weapons__acts{flex:1 1 100%;justify-content:space-between;margin-left:0}}   /* Οπλισμός: κείμενο σε όλο το πλάτος, ημερομηνίες και κουμπιά στην επόμενη γραμμή */
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
+.vlist__head{position:sticky;top:0;z-index:3}
 .datebar{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
 .datebar > *{flex:none}
 .daybtn{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-width:96px;padding:4px 12px 5px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm);cursor:pointer;text-align:left;line-height:1.25}
@@ -370,7 +372,7 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .toolbar__count{font-size:13px;color:var(--muted-fg);margin-left:auto;white-space:nowrap}
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;min-width:0;flex:1}
 .bulkbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border-radius:var(--radius);background:var(--secondary);color:var(--secondary-fg);font-weight:600}
-.bulkbar span{flex:1;min-width:120px}
+.bulkbar span{flex:1;min-width:120px}.bulkbar .ui-dd__v{min-width:0}   /* το κείμενο του αναδιπλούμενου μέσα στη μπάρα δεν παίρνει τα 120px, ώστε το βελάκι να χωράει */
 /* PeopleTable (στην εφαρμογή: PeopleTable.module.css) */
 .ptable{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);box-shadow:var(--shadow-sm);overflow:hidden}
 .ptable__head,.ptable__row{display:grid;grid-template-columns:40px minmax(170px,1.7fr) minmax(80px,.9fr) 100px 84px 72px 60px minmax(170px,1.5fr);align-items:center}
@@ -413,6 +415,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .post__who{display:flex;flex-direction:column;justify-content:center;min-width:0}
 .post__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:15px}
 .post__name .ui-badge{vertical-align:1px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .linkish{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}span.post__name > .ui-badge{flex:none}   /* μακρύ όνομα: «…» και όχι κόψιμο, το σήμα ⚠ μένει δίπλα */
 .post__acts{display:flex;align-items:center;gap:2px;justify-content:flex-start}
 .post__acts .ui-btn--sm{padding:0 9px;font-size:14px;font-weight:500}
 .post__pick{grid-column:3/-1;min-width:0}
@@ -535,7 +538,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .sigrid{border-collapse:collapse;width:100%;font-size:13px}
 .sigrid th,.sigrid td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}
 .sigrid th:first-child,.sigrid td:first-child{text-align:left}
-.sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px}
+.sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px;white-space:normal;line-height:1.2;vertical-align:bottom;overflow-wrap:anywhere}.sigrid thead th:not(:first-child){min-width:76px;max-width:100px}   /* οι υπηρεσίες σπάνε σε γραμμές (πλήρες όνομα στο data-tip) */
+.sigrid th:first-child,.sigrid td:first-child{position:sticky;left:0;z-index:1;background:var(--card);box-shadow:1px 0 0 var(--border)}.sigrid tr.sigrid__sec th:first-child{position:static;box-shadow:none}   /* η πρώτη στήλη μένει ορατή όταν ο πίνακας κυλά οριζόντια */
 .sigrid tr.is-sub td:first-child{padding-left:22px}
 .sigrid tr.is-cat td:first-child{padding-left:40px;font-size:12px}
 .sigrid td.is-set{background:var(--hover)}
@@ -551,20 +555,24 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .hk-req li:first-child{border-top:0}
 .hk-req__acts{display:flex;gap:4px}
 
-.chk{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:10px;background:var(--card)}
-.chk__in{min-width:540px}
-.chk__head,.chk__row{display:grid;grid-template-columns:minmax(130px,1fr) repeat(8,42px) 70px;align-items:center}
-.chk__head{background:var(--thead);font-size:12px;font-weight:600;border-bottom:1px solid var(--border)}
-.chk__head > *{padding:8px 6px;white-space:nowrap}
-.chk__head > span:not(:first-child),.chk__row .num{text-align:center}
-.chk__row{height:36px;border-bottom:1px solid var(--border);font-size:13px;width:100%}
+.chk{overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:10px;background:var(--card)}
+.chk__head,.chk__row{display:grid;align-items:center}
+.chk__head{background:var(--thead);font-size:12px;font-weight:600;border-bottom:1px solid var(--border);height:100%}
+.chk__head > *{padding:4px 6px;white-space:nowrap;min-width:0}
+.chk__head > :not(:first-child),.chk__row .num{text-align:center}
+.chk__head > span{padding:4px 2px}
+.chk__row{height:36px;border-bottom:1px solid var(--border);font-size:13px;width:100%;background:var(--card)}
 .chk__row > *{padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chk__row .num{font-family:var(--f-mono);color:var(--muted-fg)}
 .chk__row .tot{font-weight:700;color:var(--foreground)}
+/* όνομα κολλημένο αριστερά όταν το πλέγμα κυλά οριζόντια· οι υπηρεσίες σπάνε σε έως 3 γραμμές (πλήρες όνομα στο data-tip) */
+.chk__head > :first-child,.chk__row > :first-child{position:sticky;left:0;z-index:1;background:inherit;box-shadow:1px 0 0 var(--border);align-self:stretch}
+.chk__head > :first-child{display:flex;align-items:center}.chk__row > :first-child{line-height:35px}
+.chk__head > span .chk__sort{font-size:11px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:1.15;width:100%}
 .orow{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);width:100%}
 .orow > div:first-child{flex:1;min-width:0}
 .orow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
-.orow small{display:block;color:var(--muted-fg);font-size:12px;white-space:nowrap}
+.orow small{display:block;color:var(--muted-fg);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .orow.is-changed{background:var(--secondary)}
 .orow.is-blocked b{color:var(--muted-fg);font-weight:500}
 .orow .ui-badge{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -576,6 +584,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .outbar .outbar__xl{flex:none;max-width:100%;margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center}
 .outs__find .ui-input{flex:0 1 300px;min-width:200px}
 .outs__find .strip{flex:1 1 320px;display:flex;gap:6px;min-width:0}
+/* Εξοδούχοι: οι θάλαμοι και τα φίλτρα πάνε σε δεύτερη σειρά αντί να κρύβονται δεξιά (στα 1024 δεν φαίνονταν οι τελευταίοι) */
+.strip.chips--wrap{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .backs-box summary .cnt{font-family:var(--f-mono);color:var(--muted-fg);margin-left:4px}
 .rec{list-style:none;margin:0;padding:0}
 .rec li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)}
@@ -826,6 +836,7 @@ dl.kv.guide__kv{margin:0 0 16px;font-size:13px}
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}
 .sigrid .statsel.is-last{color:var(--warn);background:var(--warn-bg)}
 .ptable--roster .ptable__head > *,.ptable--roster .ptable__row > *{padding-left:7px;padding-right:7px}
+.ptable--roster .ptable__head > *{overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* Δήλωση κατάστασης: λίστα με όλες τις καταστάσεις και σύνοψη των προηγούμενων βημάτων */
 .stpick{display:flex;flex-direction:column;gap:14px}
 .stpick__cat{font-size:12px;font-weight:700;color:var(--muted-fg);margin-bottom:6px}
@@ -877,24 +888,41 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
 /* (review 29/10) οι επικεφαλίδες δεν πέφτουν πάνω στη διπλανή στήλη (έβγαινε «Θάλ. ▲.Ι.»): σπάνε σε δύο γραμμές· το επίθετο κόβεται με «…» (το κουμπί είναι μέσα στο span) */
 .ptable--weapons .ptable__head > *{white-space:normal;line-height:1.2;padding-left:4px;padding-right:4px;overflow-wrap:normal}.ptable--weapons .ptable__head > :nth-child(-n+3){white-space:nowrap}
+/* Οπλισμός: ο πίνακας κυλά οριζόντια μέσα στο πλαίσιό του· οι πρώτες στήλες (επιλογή, Α/Α, βαθμός, επίθετο) μένουν κολλημένες αριστερά */
+.ptable--weapons .ptable__head,.ptable--moves .ptable__head{height:100%}
+.ptable--weapons .ptable__row,.ptable--moves .ptable__row{background:var(--card)}
+.ptable--weapons .ptable__row.is-odd,.ptable--moves .ptable__row.is-odd{background:var(--muted)}
+.ptable--weapons .ptable__row:hover,.ptable--moves .ptable__row:hover{background:var(--hover)}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(-n+4),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(-n+2){position:sticky;z-index:2;background:inherit;align-self:stretch;min-width:0}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(-n+4),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(1){display:flex;align-items:center}
+.ptable--moves .ptable__row > .wmv__who{justify-content:center}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(1),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(1){left:0}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(2){left:26px}.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(3){left:56px}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(4){left:114px;box-shadow:1px 0 0 var(--border)}
+.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(2){left:36px;box-shadow:1px 0 0 var(--border)}
+.ptable--weapons .ptable__row.is-wout > :first-child{box-shadow:inset 3px 0 0 var(--bad-line)}.ptable--moves .ptable__row.is-auto > :first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.ptable--moves .ptable__head > *{overflow:hidden;text-overflow:ellipsis}
+.weapon-input,.weapon-type{scroll-margin:60px 0 0 240px}
 .ptable__row > span > .linkish{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 4px 0 6px;gap:2px;width:100%}.weapon-type > svg{width:14px;height:14px}
 .weapon-out{display:flex;align-items:center;gap:6px;min-width:0}.weapon-out small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.weapon-notes{display:flex;gap:6px;align-items:center;min-width:0}
+.weapon-notes{display:flex;gap:6px;align-items:center;min-width:0}   /* τα σήματα στενεύουν με «…» μέσα στο κελί (πλήρες κείμενο στο data-tip) */
 .weapon-notes .ui-badge{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
 /* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
+.whod__head > span:first-child,.whod__row > .whod__name{position:sticky;left:0;z-index:2;background:inherit;box-shadow:1px 0 0 var(--border);align-self:stretch}   /* ο στρατιώτης μένει ορατός όταν κυλά οριζόντια */
+.whod__row{background:var(--card)}.whod__row.is-odd{background:var(--muted)}.whod__row:hover{background:var(--hover)}
 .ptable--whod .ptable__head > *,.ptable--whod .ptable__row > *{padding-left:6px;padding-right:6px}
-.whod__head{align-items:stretch}
+.whod__head{align-items:stretch;height:100%}
 .whod__head > span:first-child{display:flex;align-items:flex-end}
 .ptable--whod .ptable__head > .whod__colhd{padding-left:2px;padding-right:2px}
 .whod__colhd{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;text-align:center !important;white-space:normal !important;line-height:1.15;border-radius:6px}
 .whod__colhd:hover{background:var(--muted)}
 .whod__colhd[aria-pressed="true"]{background:var(--primary);color:var(--primary-fg)}
-.whod__lbl{font-size:12px;word-break:keep-all;overflow-wrap:normal;max-width:100%}
+.whod__lbl{font-size:11px;overflow-wrap:anywhere;max-width:100%;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}   /* έως 3 γραμμές, σπάει και μακριά λέξη· πλήρες όνομα στο data-tip */
 .whod__colhd small{font-size:11px;font-weight:500;opacity:.85;font-family:var(--f-mono)}
 .whod__colhd small.has-n{color:var(--bad);opacity:1;font-weight:700}
 .whod__colhd[aria-pressed="true"] small{color:inherit}
@@ -938,7 +966,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wmv__search{flex:1 1 260px;max-width:420px;height:32px;font-size:13px}
 .wmv__w{display:flex;flex-direction:column;min-width:0;line-height:1.25}.wmv__w small{font-size:11px;color:var(--muted-fg);white-space:nowrap}
 .wmv__reason{min-width:0;display:flex}
-.wmv__reason .ui-badge{height:auto;min-height:22px;padding:2px 8px;white-space:normal;line-height:1.15;font-size:11px;text-align:left;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.wmv__reason .ui-badge{height:auto;min-height:22px;padding:2px 8px;white-space:normal;line-height:1.15;font-size:11px;text-align:left;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .wmv__post{white-space:normal;line-height:1.2;font-size:12px}
 .wmv__note{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wkey{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;margin-right:6px;padding:0 3px;border-radius:4px;border:1px solid currentColor;font:700 10px/1 var(--f-mono);opacity:.75;vertical-align:1px}
@@ -1408,7 +1436,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .wmv__who{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.25}.wmv__who .linkish{white-space:normal;text-align:left;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.wmv__who small{font-size:11px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wmv__auto{font-style:normal;font-size:11px;color:var(--warn);font-weight:600}
 .ptable--moves .ptable__row.is-auto{box-shadow:inset 3px 0 0 var(--warn)}
-.weapon-notes .ui-badge:first-child{flex:none}
+.weapon-notes .ui-badge:first-child{flex:0 1 auto}.weapon-notes .ui-btn{flex:none}
 /* μπάρα επιλογής: οι αριθμοί των λόγων (1-9) δεν σπάνε τη γραμμή στα 1366 */
 .bulkbar__reasons .wkey{margin-right:4px;min-width:14px;height:14px;font-size:9px}
 .bulkbar__reasons{gap:4px}.bulkbar__reasons .ui-btn--sm{padding-left:7px;padding-right:7px;flex:none}
