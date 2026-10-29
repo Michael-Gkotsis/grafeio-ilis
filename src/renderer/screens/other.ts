@@ -112,7 +112,7 @@ export function TodayScreen() {
     <${SourcesAlert}/>
     <div className="kpis">
       ${kpi('Στρατιώτες', c.total, () => nav.go('people', { filter: 'all' }), undefined, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη, με τις 08:00')}
-      ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
+      ${kpi('Παρόντες', c.present - kol.minus.length, () => nav.go('strength', { strengthDate: today, svCat: 'present' }), undefined, 'Χωρίς τους απόντες και τους κωλυόμενους που αφαιρούνται (' + kol.minus.length + '), όπως η Δύναμη')}
       ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today, svCat: 'away' }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
       ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
       ${wOut > 0 && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
@@ -129,7 +129,7 @@ export function TodayScreen() {
     </div>
     <div className="cols cols--b">
       ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
-        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.note || 'Κωλυόμενος'}${st.noOut ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· στην ' + HK() + ': ' + kolColName(col) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? kolColName(col) : 'παρών'}<//></li>`)}</ul>
+        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.type === 'STEP' ? [TYPES.STEP.long, st.note].filter(Boolean).join(' · ') : st.note || 'Κωλυόμενος'}${st.noOut ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· ' + (col ? 'στην ' + HK() + ': ' + kolColName(col) : 'δεν μετρά σε στήλη της ' + HK()) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? (col ? kolColName(col) : 'εκτός ' + HK()) : 'παρών'}<//></li>`)}</ul>
         <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
       <//>`}
       ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12}/><//>`}
@@ -275,11 +275,11 @@ export function StrengthScreen() {
       <${Button} size="sm" variant="outline" onClick=${() => nav.declare({ cat: 'kol', from: date, to: date })} data-tip="Υπηρεσία εκτός δικών μας, π.χ. ΣΤΕΠ">+ Κωλυόμενος<//><${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//></div><//>
     <div className="kpis kpis--sv">
       ${card('', 'Δύναμη', v.total, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη. Πάτα για να δεις όλους')}
-      ${card('present', 'Παρόντες', v.present, 'Παρόντες που δεν είναι δηλωμένοι κωλυόμενοι. Μέσα και όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή ή ιατρικό')}
-      ${card('kol', 'Κωλυόμενοι', v.kol, 'Δηλωμένοι κωλυόμενοι που αφαιρούνται από τους παρόντες (π.χ. υπηρεσία ΣΤΕΠ)')}
+      ${card('present', 'Παρόντες', v.present, 'Παρόντες που δεν είναι κωλυόμενοι. Μέσα και όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή ή ιατρικό')}
+      ${card('kol', 'Κωλυόμενοι', v.kol, 'Δηλωμένοι κωλυόμενοι (π.χ. υπηρεσία ΣΤΕΠ) και εισαγωγές ΣΤΕΠ, που αφαιρούνται από τους παρόντες')}
       ${card('away', 'Απόντες', v.absent, 'Άδειες, νοσοκομείο, έξοδος και ΔΝ· κάθε άτομο μία φορά')}</div>
     <p className="svline"><span className="num"><b>${v.present}</b> + <b>${v.kol}</b> + <b>${v.absent}</b> = <b>${v.total}</b></span> <span className="muted">· στις ${v.time}${date === today ? ' (όποιος γύρισε ως τώρα είναι παρών)' : ''}</span></p>
-    <p className="note svnote">Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, κάθε άτομο μία φορά. Κωλυόμενοι είναι μόνο όσοι δηλώθηκαν και αφαιρούνται από τους παρόντες· όσοι έχουν δική μας υπηρεσία, ΕΥ ή ποινή μένουν στους Παρόντες. Η ${HK()} μετρά τους κωλυόμενους με δικό της ορισμό.</p>
+    <p className="note svnote">Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, κάθε άτομο μία φορά. Κωλυόμενοι είναι όσοι δηλώθηκαν και αφαιρούνται από τους παρόντες, και όσοι έχουν εισαγωγή ΣΤΕΠ (Michael, 29/10: αυτόματα)· όσοι έχουν δική μας υπηρεσία, ΕΥ ή ποινή μένουν στους Παρόντες. Η ${HK()} μετρά τους κωλυόμενους με δικό της ορισμό.</p>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       ${units.length > 1 && html`<${Strip} className="chips" role="group" aria-label="Ουλαμός"><button type="button" className="ui-chip" aria-pressed=${!unit} onClick=${() => setUnit('')}>Όλοι</button>${units.map(u => html`<button key=${u} type="button" className="ui-chip" aria-pressed=${unit === u} onClick=${() => setUnit(unit === u ? '' : u)}>${u}</button>`)}<//>`}
       <${ActiveFilter} parts=${[cat && v.cats[cat].label, unit, dq.trim() && '«' + dq.trim() + '»']} onClear=${() => { setCat(''); setQ(''); setUnit(''); }}/></div>

@@ -102,6 +102,7 @@ export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
   away?: boolean; noDuty?: boolean; noArmed?: boolean; noOut?: boolean; light?: boolean;
   hkai?: string;   // στήλη της ΗΚΑΙ
+  kolAuto?: boolean;   // κωλυόμενος αυτόματα: αφαιρείται από τους παρόντες της Δύναμης· στην ΗΚΑΙ μόνο αν το STEP_COL έχει στήλη (rules.ts kolView)
   code?: string;   // κωδικός στο ημερολόγιο κωλυομένων-απόντων
 }
 export const TYPES: Record<TypeKey, TypeDef> = {
@@ -109,7 +110,7 @@ export const TYPES: Record<TypeKey, TypeDef> = {
   EA:    { label: 'ΕΑ', long: 'Ελεύθερος Ασκήσεων', tone: 'ey', cat: 'med', noArmed: true, light: true, code: 'Ε.Α' },
   EARV:  { label: 'ΕΑΡΒ', long: 'Ελεύθερος Αρβύλων', tone: 'ey', cat: 'med' },   // χωρίς περιορισμούς σε υπηρεσίες και έξοδο (λοχίας, 12/10)
   EO:    { label: 'ΕΟ', long: 'Ελεύθερος Ορθοστασίας', tone: 'ey', cat: 'med', noArmed: true, light: true },
-  STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noDuty: true, noArmed: true, noOut: true },   // εισαγωγή μέσα στο στρατόπεδο: παρών, σε καμία υπηρεσία, όχι έξοδο, όχι στην ΗΚΑΙ (Michael, 13-14/10)
+  STEP:  { label: 'ΣΤΕΠ', long: 'Εισαγωγή ΣΤΕΠ', tone: 'ey', cat: 'other', noDuty: true, noArmed: true, noOut: true, kolAuto: true },   // εισαγωγή μέσα στο στρατόπεδο: σε καμία υπηρεσία, όχι έξοδο (Michael, 13-14/10)· κωλυόμενος αυτόματα, αφαιρείται από τους παρόντες στη Δύναμη και στο Σήμερα, όχι σε στήλη της ΗΚΑΙ (Michael, 29/10)
   NOS:   { label: 'Νοσοκομείο', long: 'Εισαγωγή σε νοσοκομείο', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'nos' },
   PUN:   { label: 'Ποινή', long: 'Τιμωρημένος', tone: 'bad', cat: 'pun', noOut: true, hkai: 'tim' },
   LEAVE: { label: 'ΚΑ', long: 'Κανονική άδεια', tone: 'info', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'ka', code: 'Κ.Α' },
@@ -123,7 +124,7 @@ export const TYPES: Record<TypeKey, TypeDef> = {
 };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef) =>
-  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
+  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.kolAuto && 'Κωλυόμενος' + (STEP_COL ? ' (ΗΚΑΙ: ' + kolColName(STEP_COL) + ')' : ' (δεν μετρά σε στήλη της ΗΚΑΙ)'), t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
 export const typeTip = (t: TypeDef) => t.long + (effects(t) ? ': ' + effects(t) : '');
 export const RECORD_CATS: Cat[] = ['med', 'other', 'pun'];
 export const PUN_KINDS = ['Περιορισμός', 'Κράτηση', 'Φυλάκιση', 'Στέρηση εξόδου'];
@@ -560,6 +561,9 @@ export const KOL_DEFAULT_COL = 'yp';
 // Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία)
 export const kolColOf = (s: { hkCol?: string }): string => (KOL_COLS.some(x => x[0] === s.hkCol) ? s.hkCol! : KOL_DEFAULT_COL);
 export const kolColName = (k: string): string => KOL_COLS.find(x => x[0] === k)?.[1] || k;
+// Η στήλη της ΗΚΑΙ για όποιον έχει ΣΤΕΠ (Michael, 29/10: κωλυόμενος αυτόματα, «πουθενά» για τώρα). null = δεν μετρά σε καμία στήλη (μόνο στη Δύναμη
+// και στο Σήμερα)· κλειδί των KOL_COLS ('ey', 'yp'…) = μπαίνει σε εκείνη τη στήλη της ΗΚΑΙ ως κωλυόμενος. Μία γραμμή για να αλλάξει.
+export const STEP_COL = null as string | null;
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας

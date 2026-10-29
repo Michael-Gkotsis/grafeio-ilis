@@ -1,7 +1,8 @@
 // Σελίδα Δύναμη (Michael, 26/10): Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, με ομάδες και υποομάδες ανά άτομο.
 // Κωλυόμενοι εδώ = μόνο οι δηλωμένοι (Status KOL) που αφαιρούνται από τους παρόντες, σε υποομάδες ανά δηλωμένη υπηρεσία (το κείμενο της
 // δήλωσης: «Υπηρεσία ΣΤΕΠ», Συνοδεία…), με τη στήλη της ΗΚΑΙ σε κάθε γραμμή (tag). Όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή, ιατρικό ή δηλωμένο
-// κωλυόμενο χωρίς αφαίρεση μένουν Παρόντες, με δική τους υποομάδα. Η ΗΚΑΙ κρατά τον δικό της ορισμό κωλυομένων (hkaiCounts, kolView.cols).
+// κωλυόμενο χωρίς αφαίρεση μένουν Παρόντες, με δική τους υποομάδα. Η εισαγωγή ΣΤΕΠ είναι κωλυόμενος αυτόματα (Michael, 29/10): στους Κωλυόμενους,
+// στη δική της υποομάδα «Εισαγωγή ΣΤΕΠ» (όχι ανά σημείωση), με τη στήλη STEP_COL της ΗΚΑΙ μόνο αν έχει (τώρα πουθενά, χωρίς ετικέτα). Η ΗΚΑΙ κρατά τον δικό της ορισμό κωλυομένων (hkaiCounts, kolView.cols).
 // Ίδια στιγμή και ίδιοι κανόνες με το strengthOf (statusesAt), ώστε τα νούμερα να βγαίνουν ίδια με το «Σήμερα».
 import { TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
 import { dm, type ISODate } from './dates';
@@ -23,7 +24,7 @@ const AWAY_LBL: Record<string, string> = { NOS: 'Νοσοκομείο', LEAVE: '
 // υποομάδες των παρόντων, με τη σειρά που φαίνονται· ο καθένας μπαίνει στην πρώτη που ταιριάζει (σαν τη στήλη της ΗΚΑΙ)
 const PRESENT_SUBS: [string, string, string?][] = [
   ['keep', 'Κωλυόμενοι (παρόντες)', 'Δηλωμένοι κωλυόμενοι που δεν αφαιρούνται από τους παρόντες'],
-  ['duty', 'Σε υπηρεσία', 'Δική μας υπηρεσία της μέρας'], ['ey', 'ΕΥ'], ['pun', 'Τιμωρημένοι'], ['med', 'Άλλα ιατρικά (ΕΑ, ΕΟ, ΣΤΕΠ…)'], ['rest', 'Υπόλοιποι']
+  ['duty', 'Σε υπηρεσία', 'Δική μας υπηρεσία της μέρας'], ['ey', 'ΕΥ'], ['pun', 'Τιμωρημένοι'], ['med', 'Άλλα ιατρικά (ΕΑ, ΕΟ…)'], ['rest', 'Υπόλοιποι']
 ];
 // από–έως με τις ώρες όπου υπάρχουν: «24/10–26/10», «24/10 08:00–12:00», «από 24/10 (χωρίς λήξη)»
 export function spanTxt(x: Pick<Status, 'type' | 'from' | 'to' | 'fromTime' | 'toTime' | 'open'>): string {
@@ -39,6 +40,7 @@ const what = (s: AppState, x: Status) => {
 };
 const retKey = (r: Ret | null) => (!r ? '9' : r.open ? '9' : r.day + (r.duty ? '0' : r.pending ? '2' : '1') + (r.time || '23:59'));
 // Υποομάδες ανά δηλωμένη υπηρεσία: ίδιο κείμενο (χωρίς τόνους, πεζά/κεφαλαία, κενά) = μία ομάδα· πρώτες οι μεγαλύτερες, μετά κατά όνομα
+const STEP_LBL = TYPES.STEP.long;   // «Εισαγωγή ΣΤΕΠ»
 const NO_DESC = 'Χωρίς περιγραφή';
 const svcKey = (st: Status) => 'svc:' + norm(st.note).replace(/\s+/g, ' ');
 const svcLbl = (st: Status) => st.note?.trim().replace(/\s+/g, ' ') || NO_DESC;
@@ -67,14 +69,14 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
     const m = minus.get(p.id);
     if (m) {
       kol++;
-      const k = svcKey(m.st), g = kolG.get(k) || { label: svcLbl(m.st), rows: [] };
-      g.rows.push({ p, what: m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: kolColName(m.col) }); kolG.set(k, g);
+      const step = m.st.type === 'STEP', k = step ? 'step' : svcKey(m.st), g = kolG.get(k) || { label: step ? STEP_LBL : svcLbl(m.st), rows: [] };
+      g.rows.push({ p, what: step ? [STEP_LBL, m.st.note?.trim()].filter(Boolean).join(' · ') : m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: m.col ? kolColName(m.col) : undefined }); kolG.set(k, g);
       continue;
     }
     present++;
     const duty = dutyAt(s, date, p.id), c = col.get(p.id), kp = keep.get(p.id);
     const sub = kp ? 'keep' : c === 'yp' || c === 'mag' ? 'duty' : c === 'ey' ? 'ey' : c === 'tim' ? 'pun'
-      : ss.some(x => TYPES[x.type].cat === 'med' || x.type === 'STEP') ? 'med' : 'rest';
+      : ss.some(x => TYPES[x.type].cat === 'med') ? 'med' : 'rest';
     // τι έχει: όλες οι καταστάσεις του και η υπηρεσία του· το πρώτο δίνει το χρώμα
     const labels = [...ss.map(x => what(s, x)), ...(duty ? [duty.label + (duty.time ? ' ' + duty.time : '')] : [])];
     const main = kp?.st || ss[0];

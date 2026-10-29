@@ -86,8 +86,8 @@ describe('Καταστάσεις: αλλαγές από τις Ρυθμίσει�
   });
 });
 
-describe('ΣΤΕΠ: εισαγωγή μέσα στο στρατόπεδο (Michael, 14/10)', () => {
-  it('παρών, σε καμία υπηρεσία, δεν βγαίνει έξοδο, δεν μετρά στην ΗΚΑΙ', () => {
+describe('ΣΤΕΠ: εισαγωγή μέσα στο στρατόπεδο (Michael, 14/10 και 29/10)', () => {
+  it('όχι απών, σε καμία υπηρεσία, δεν βγαίνει έξοδο, δεν μετρά σε στήλη της ΗΚΑΙ (STEP_COL null· Michael, 29/10)', () => {
     const s = declare(fakeState(5), 'STEP', 2);
     expect(strengthOf(s, D).present).toBe(5);
     const h = hkaiCounts(s, D); expect(h.apo + h.kol).toBe(0);

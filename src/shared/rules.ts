@@ -7,7 +7,7 @@ import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell
 import { backBy, hasTimes, mins } from './hours';
 import { outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, kolColName, kolColOf, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -1177,12 +1177,12 @@ export function hkRankOf(rank: string, lists?: UserLists, origin?: string): stri
 // Η κατάσταση ενός στελέχους μια μέρα (η πρώτη, αν κατά λάθος επικαλύπτονται)
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
-// παρόντες (στη στήλη που διάλεξες), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
+// παρόντες (στη στήλη που διάλεξες), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
 function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
   const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
   if (abs) return abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!;
   const kol = kolMinus(ss, date, at);
-  return kol ? kolColOf(kol) : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+  return kol ? kolColOf(kol) : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
@@ -1240,9 +1240,12 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
 // στην ΗΚΑΙ στη στήλη hkCol· χωρίς minus μένει παρών και εκτός ΗΚΑΙ. noOut: κόβει την έξοδο (outBlock).
 const kolStarted = (x: Status, date: ISODate, at: number) => !(x.from === date && x.fromTime && mins(x.fromTime) > at);
 const kolMinus = (ss: Status[], date: ISODate, at: number) => ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at));
+// Εισαγωγή ΣΤΕΠ (Michael, 29/10): κωλυόμενος αυτόματα που αφαιρείται από τους παρόντες (col: STEP_COL, κενό αν δεν μετρά σε στήλη της ΗΚΑΙ)· με ώρα εισαγωγής μετρά από εκείνη την ώρα
+// (όπως ο κωλυόμενος). Δηλωμένος κωλυόμενος με αφαίρεση την ίδια στιγμή υπερισχύει: ένας άνθρωπος, μία φορά.
+const stepOn = (ss: Status[], date: ISODate, at: number) => ss.find(x => TYPES[x.type].kolAuto && kolStarted(x, date, at));
 export interface KolRow { p: Person; st: Status; col: string; minus: boolean }
-// cols: όλοι οι κωλυόμενοι παρόντες στρατιώτες ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένος κωλυόμενος…), ίδιο άθροισμα με την ΗΚΑΙ
-// στην ίδια στιγμή· n = πόσοι. man: οι δηλωμένοι κωλυόμενοι εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
+// cols: όλοι οι κωλυόμενοι παρόντες στρατιώτες ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένος κωλυόμενος, ΣΤΕΠ…), ίδιο άθροισμα με την ΗΚΑΙ
+// στην ίδια στιγμή· n = πόσοι. man: οι δηλωμένοι κωλυόμενοι και οι ΣΤΕΠ εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
 export interface KolView { cols: Record<string, Person[]>; n: number; man: KolRow[]; minus: KolRow[]; keep: KolRow[] }
 export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolView {
   const g = s.guards[date] || {}; const onDuty = new Map<number, DutyKind>();
@@ -1254,8 +1257,9 @@ export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolVie
     if (ss.some(x => TYPES[x.type].away)) continue;   // απών: μετρά στους απόντες
     const col = soldierCol(s, ss, onDuty.get(p.id), date, at);
     if (col && cols[col]) { cols[col].push(p); n++; }
-    const k = ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at)) || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
-    if (k) man.push({ p, st: k, col: kolColOf(k), minus: !!k.minus });
+    const km = kolMinus(ss, date, at), sp = km ? undefined : stepOn(ss, date, at);
+    const k = km || sp || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
+    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : kolColOf(k), minus: !!(k.minus || sp) });
   }
   return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };
 }
