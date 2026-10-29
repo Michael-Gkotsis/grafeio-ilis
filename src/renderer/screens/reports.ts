@@ -673,7 +673,7 @@ function sampleText(f: string, fmt: string, today: string): string {
   return [...new Set(list.map(([type, kind]) => stText({ type, kind, from: addDays(today, -2), to: addDays(today, 3) }, fmt, undefined, today).toUpperCase()))].join(', ');
 }
 const CUSTOM = '#own';   // «Δική σου μορφή…» στις λίστες
-function StatusFmt({ f, sf, onChange, id }: P) {
+function StatusFmt({ f, sf, onChange, id, st, onSt }: P) {
   const { today } = useStore();
   const preset = sf == null || ST_FMTS.includes(sf); const [own, setOwn] = useState(!preset);
   const v = own ? CUSTOM : sf ?? ST_FMTS[0];
@@ -681,6 +681,7 @@ function StatusFmt({ f, sf, onChange, id }: P) {
     <span className="rep-colopt__l">Πώς γράφεται</span>
     <${Select} className="ui-select" aria-label="Πώς γράφεται η κατάσταση" value=${v} onChange=${(e: any) => { const x = e.target.value; if (x === CUSTOM) { setOwn(true); onChange(sf || ST_FMTS[0]); } else { setOwn(false); onChange(x === ST_FMTS[0] ? undefined : x); } }}>
       ${ST_FMTS.map(x => html`<option key=${x} value=${x}>${sampleText(f, x, today)}</option>`)}<option value=${CUSTOM}>Δική σου μορφή…</option><//>
+    ${onSt && html`<span className="rep-colopt__l">Ποιες</span><${Select} className="ui-select" aria-label="Ποιες καταστάσεις" value=${st || 'on'} onChange=${(e: any) => onSt(e.target.value === 'new' ? 'new' : undefined)}><option value="on">Όσες ισχύουν τη μέρα</option><option value="new">Μόνο όσες ξεκινούν τη μέρα</option><//>`}
     ${own && html`<input id=${id} className="ui-input rep-colopt__fmt" aria-label="Δική σου μορφή κατάστασης" placeholder="π.χ. {ΚΩΔ} ΕΩΣ {ΕΩΣ}" value=${sf || ''} onChange=${(e: any) => onChange(e.target.value)}/>
       <small className="muted rep-colopt__help">${ST_TAGS.map(t => '{' + t.tag + '} ' + t.help).join(' · ')}. Τώρα: ${sampleText(f, sf || '', today) || '—'}</small>`}
   </span>`;
@@ -708,7 +709,10 @@ function ComboFmt({ kind, o, onChange }: P) {
 // Οι επιλογές κάτω από μια στήλη· set(o, h): νέες επιλογές και (στον συνδυασμό) η επικεφαλίδα, αν ήταν η αυτόματη
 function ColOptsEditor({ kind, c, set }: P) {
   if (c.f === 'combo') return html`<${ComboFmt} kind=${kind} o=${c.o} onChange=${(o: ColOpts) => set(o, !c.h || c.h === comboHead(kind, c.o) ? comboHead(kind, o) : c.h)}/>`;
-  if (isStatusField(c.f)) return html`<${StatusFmt} f=${c.f} sf=${c.o?.sf} onChange=${(sf?: string) => set(sf == null ? undefined : { sf }, c.h)}/>`;
+  if (isStatusField(c.f)) {
+    const put = (x: Partial<ColOpts>) => { const o: ColOpts = { ...(c.o || {}), ...x }; if (o.sf == null) delete o.sf; if (!o.st) delete o.st; set(o.sf == null && !o.st ? undefined : o, c.h); };
+    return html`<${StatusFmt} f=${c.f} sf=${c.o?.sf} st=${c.o?.st} onChange=${(sf?: string) => put({ sf })} onSt=${c.f === 'stype' ? undefined : (st?: 'new') => put({ st })}/>`;
+  }
   return null;
 }
 // Ένα στοιχείο σε στήλη: με το «Συνδυασμός» μπαίνει η προεπιλογή (βαθμός και Ο/Σ)
@@ -956,7 +960,7 @@ function StepPick({ r, upd, p, sub }: P) {
   return html`<div className="rep-pick">
     <div className="stack">
       ${status && html`<div><span className="field__label">Ποιες καταστάσεις</span><div className="rep-chips">${ST_CATS.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${(pk.cats || []).includes(c.id)} onClick=${() => { const cats = toggle<StCat>(pk.cats, c.id); if (cats.length) set({ cats }); }}>${c.label}</button>`)}</div></div>`}
-      ${status && html`<div className="rep-opts"><span className="field__label">Ποιες μπαίνουν</span><${Segmented} small=${true} value=${pk.when || 'on'} onChange=${(when: RepPick['when']) => set({ when })} items=${[{ value: 'on', label: 'Όσες ισχύουν τη μέρα' }, { value: 'from', label: 'Από τη μέρα και μετά' }]}/></div>`}
+      ${status && html`<div className="rep-opts"><span className="field__label">Ποιες μπαίνουν</span><${Segmented} small=${true} value=${pk.when || 'on'} onChange=${(when: RepPick['when']) => set({ when })} items=${[{ value: 'on', label: 'Όσες ισχύουν τη μέρα' }, { value: 'from', label: 'Από τη μέρα και μετά' }, { value: 'new', label: 'Μόνο όσες ξεκινούν τη μέρα' }]}/></div>`}
       ${duty && html`<div><span className="field__label">Ποιες υπηρεσίες <small className="muted">(καμία = όλες)</small></span><div className="rep-chips">${blockList.map(b => html`<button key=${b.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.blocks?.includes(b.id)} onClick=${() => set({ blocks: toggle(pk.blocks, b.id) })}>${b.name}</button>`)}</div></div>`}
       ${duty && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.empty} onChange=${(e: any) => set({ empty: e.target.checked })}/>Και οι θέσεις που δεν έχουν κανέναν (όχι με φίλτρο θαλάμου ή Σ.Ι.)</label>`}
       ${wmove && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.open} onChange=${(e: any) => set({ open: e.target.checked })}/>Μόνο όσα όπλα είναι ακόμα έξω</label>`}

@@ -88,7 +88,7 @@ export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find(x => x.k 
 
 // ------------------------------------------------------------------ μορφή στήλης (καταστάσεις, συνδυασμός)
 // sf: πώς γράφεται κάθε κατάσταση, με {ΕΤΙΚΕΤΕΣ} (ST_TAGS)· parts/fmt: τα στοιχεία του συνδυασμού και η μορφή του με {1}, {2}…
-export interface ColOpts { sf?: string; parts?: string[]; fmt?: string }
+export interface ColOpts { sf?: string; st?: 'new'; parts?: string[]; fmt?: string }   // st: 'new' = μόνο όσες ξεκινούν τη μέρα του εντύπου (κενό: όσες ισχύουν)
 // στήλες με καταστάσεις της μέρας: ποιες κατηγορίες παίρνει η καθεμία (null: όλες)
 const ST_FIELD: Record<string, StCat[] | null> = { status: null, smed: ['med'], sabs: ['abs'], spun: ['pun'], sother: ['other'], sout: ['out'] };
 export const isStatusField = (f: string) => f === 'stype' || Object.prototype.hasOwnProperty.call(ST_FIELD, f);
@@ -120,8 +120,8 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
   return fmt.replace(/\{([^{}]{1,20})\}/g, (m, n: string) => tag(n) ?? m).trim();
 }
 // Οι καταστάσεις ενός στρατιώτη τη μέρα d (κατηγορίες cats, null: όλες), μία φορά η καθεμία, με κόμμα
-function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string): string {
-  const on = statusesOn(s.statuses, pid, d).filter(x => !cats || cats.includes(TYPES[x.type]?.cat as StCat));
+function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string, only?: 'new'): string {
+  const on = statusesOn(s.statuses, pid, d).filter(x => (!cats || cats.includes(TYPES[x.type]?.cat as StCat)) && (only !== 'new' || x.from === d));
   return [...new Set(on.map(x => stText(x, fmt, s.settings.lists, d)).filter(Boolean))].join(', ');
 }
 // Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
@@ -183,7 +183,7 @@ export interface RepPick {
   even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
   fair?: boolean;                             // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
   cats?: StCat[];                             // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
-  when?: 'on' | 'from';                       // Καταστάσεις: όσες ισχύουν τη μέρα ή όσες ισχύουν από τη μέρα και μετά
+  when?: 'on' | 'from' | 'new';                // Καταστάσεις: όσες ισχύουν τη μέρα, όσες ισχύουν από τη μέρα και μετά, ή μόνο όσες ξεκινούν τη μέρα
   blocks?: string[];                          // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
   empty?: boolean;                            // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
   wf?: WeaponFilter;                          // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
@@ -384,7 +384,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     return null;
   }
   const p = x as Person;
-  if (f !== 'stype' && isStatusField(f)) return stCol(s, p.id, d, ST_FIELD[f], o?.sf);
+  if (f !== 'stype' && isStatusField(f)) return stCol(s, p.id, d, ST_FIELD[f], o?.sf, o?.st);
   switch (f) {
     case 'rank': return rankTxt(p); case 'rank1': return p.rank; case 'origin': return p.origin || ''; case 'spec': return p.spec; case 'name': return fullName(p);
     case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -426,7 +426,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
     const out: StatusRow[] = [];
     for (const st of s.statuses) {
       if (!cats.has(TYPES[st.type]?.cat as StCat) || !people.has(st.pid)) continue;
-      if (pk.when === 'from' ? st.to < d && !st.open : st.from > d || (st.to < d && !st.open)) continue;
+      if (pk.when === 'new' ? st.from !== d : pk.when === 'from' ? st.to < d && !st.open : st.from > d || (st.to < d && !st.open)) continue;
       const p = pm.get(st.pid); if (!p) continue;
       out.push({ ...p, id: st.id, pid: p.id, st, p });
     }
@@ -629,7 +629,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
   if (r.kind === 'status') {
     const cats = (pk.cats?.length ? pk.cats : DEF_CATS).map(c => ST_CATS.find(x => x.id === c)?.label.toLowerCase()).join(', ');
     const lead = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
-    return lead + ' (' + cats + ') ' + (pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
+    return lead + ' (' + cats + ') ' + (pk.when === 'new' ? 'που ξεκινούν τη μέρα' : pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
   }
   const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', ')].filter(Boolean).join(', ');
   const tail = rest ? ' (' + rest + ')' : '';
