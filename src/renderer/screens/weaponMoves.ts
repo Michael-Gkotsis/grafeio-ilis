@@ -9,7 +9,7 @@ import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Segmented, Virt
 import { Combo } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateField, GoLink, TimeField, useTimeOptions } from '../common';
-import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
+import { shortName, plainName, fullName, type Person, type WeaponMove } from '../../shared/domain';
 import { seatMap } from '../../shared/rules';
 import { listOf, rankTxt, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
@@ -182,8 +182,9 @@ function BulkFixDialog({ ids, onClose, onDone }: P) {
 }
 
 // Στήλες των Κινήσεων: χωράνε στα 1366 χωρίς κύλιση, και τα ονόματα, οι λόγοι και τα κουμπιά δεν κόβονται (Michael, 24/10)
-const MV_GRID = '36px minmax(180px,1.6fr) 100px minmax(170px,1.1fr) 128px minmax(130px,1fr) 128px minmax(76px,.6fr) 206px';
-const MV_MIN = 1160;
+const MV_GRID = '36px minmax(150px,1.4fr) 104px minmax(150px,1fr) 116px minmax(120px,1fr) 116px minmax(100px,.6fr) 212px';
+const MV_MIN = 1104;
+const MV_HEAD = 40;
 const MV_ROW = 50;
 // Μία γραμμή κίνησης. Ξαναζωγραφίζεται μόνο όταν αλλάξει κάτι δικό της.
 const MRow = memo(function MRow({ m, i, style, selected, pm, lists, today, onToggle, onIn, onEdit, onFix, onOpen }: P) {
@@ -193,7 +194,7 @@ const MRow = memo(function MRow({ m, i, style, selected, pm, lists, today, onTog
   const seat = own ? seatTxt(own.rack, own.wpos) : '';
   return html`<div className=${cx('ptable__row', i % 2 === 1 && 'is-odd', auto && 'is-auto')} style=${{ ...style, gridTemplateColumns: MV_GRID, cursor: 'default' }} role="row">
     <span>${!auto && html`<input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + (p ? shortName(p) : m.weapon)} checked=${selected} onChange=${(e: any) => onToggle(m.id, !!e.nativeEvent?.shiftKey)}/>`}</span>
-    <span className="wmv__who">${p ? html`<button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>${p.cid && html` <${Badge} tone="outline" data-tip="Στέλεχος σε ένοπλη υπηρεσία: το όπλο του είναι από την κάρτα στελέχους">στέλεχος<//>`}` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
+    <span className="wmv__who">${p ? html`<button type="button" className="linkish" data-tip=${rankTxt(p) + ' ' + fullName(p)} onClick=${() => onOpen(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>${p.cid && html` <${Badge} tone="outline" data-tip="Στέλεχος σε ένοπλη υπηρεσία: το όπλο του είναι από την κάρτα στελέχους">στέλεχος<//>`}` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
     <span className="wmv__w">${m.weapon ? html`<span className="num">${m.weapon}</span>` : auto ? html`<${Badge} tone="bad" data-tip=${'Ένοπλη υπηρεσία χωρίς αριθμό όπλου' + (own ? ': ο ' + shortName(own) + ' δεν έχει' : '')}>Χωρίς όπλο<//>` : '—'}${seat && html`<small>${seat}</small>`}</span>
     <span className="wmv__reason" data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
     <span className=${cx('num', post && 'wmv__post')}>${post ? moveOutCell(m) : dt(m.outDay, m.outTime)}</span>
@@ -255,10 +256,9 @@ export function MovesView({ date, info, pm, outN }: P) {
         <${Button} size="sm" variant="outline" onClick=${() => setBulkFix(selFix)} data-tip="Άλλαξε μαζί τον λόγο ή την ώρα εξόδου: μία εγγραφή στο Ιστορικό, μία αναίρεση">Διόρθωση λόγου/ώρας (${selFix.length})…<//></div>
       <${Button} size="sm" variant="ghost" onClick=${() => setSel(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || reasonF ? html`Καμία κίνηση δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρο<//>` : view === 'open' ? 'Όλα τα όπλα είναι μέσα στον οπλοβαστό. Για έξοδο: τσέκαρε άτομα στα «Όπλα» ή πάτα «Έξοδος» στη γραμμή του.' : 'Καμία κίνηση.'}</div>` :
-    html`<div className="ptable ptable--moves" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: MV_MIN + 'px' }}>
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: MV_GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλες οι κινήσεις που φαίνονται (όχι οι αυτόματες των ένοπλων υπηρεσιών). Shift-κλικ σε δύο γραμμές τσεκάρει ό,τι είναι ανάμεσα." disabled=${!ticks.length} checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(ticks))}/></span><span>Στρατιώτης</span><span>Όπλο</span><span>Λόγος εξόδου</span><span>Έξοδος</span><span>Λόγος εισόδου</span><span>Είσοδος</span><span>Παρατήρηση</span><span></span></div>
-      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${MV_ROW} height=${height} resetKey=${view + '|' + reasonF + '|' + dq} renderRow=${(m: WeaponMove, i: number, style: P) => html`<${MRow} key=${m.id} m=${m} i=${i} style=${style} selected=${sel.has(m.id)} pm=${pm} lists=${lists} today=${today} onToggle=${toggle} onIn=${setInFor} onEdit=${setEdit} onFix=${setFix} onOpen=${openP}/>`}/>
-    </div></div></div>`}
+    html`<div className="ptable ptable--moves" role="table" aria-rowcount=${rows.length}>
+      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${MV_ROW} height=${height + MV_HEAD} headHeight=${MV_HEAD} minWidth=${MV_MIN} head=${html`<div className="ptable__head" role="row" style=${{ gridTemplateColumns: MV_GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλες οι κινήσεις που φαίνονται (όχι οι αυτόματες των ένοπλων υπηρεσιών). Shift-κλικ σε δύο γραμμές τσεκάρει ό,τι είναι ανάμεσα." disabled=${!ticks.length} checked=${allSel} onChange=${() => setSel(allSel ? new Set() : new Set(ticks))}/></span><span>Στρατιώτης</span><span>Όπλο</span><span>Λόγος εξόδου</span><span>Έξοδος</span><span>Λόγος εισόδου</span><span>Είσοδος</span><span>Παρατήρηση</span><span></span></div>`} resetKey=${view + '|' + reasonF + '|' + dq} renderRow=${(m: WeaponMove, i: number, style: P) => html`<${MRow} key=${m.id} m=${m} i=${i} style=${style} selected=${sel.has(m.id)} pm=${pm} lists=${lists} today=${today} onToggle=${toggle} onIn=${setInFor} onEdit=${setEdit} onFix=${setFix} onOpen=${openP}/>`}/>
+    </div>`}
     ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}
     ${fix && html`<${DutyFixDialog} row=${fix} onClose=${() => setFix(null)}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}

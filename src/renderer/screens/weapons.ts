@@ -25,8 +25,9 @@ import { cadreSeats, seatMap } from '../../shared/rules';
 type P = any;
 
 // Χωρά σε 1366 χωρίς οριζόντια κύλιση (1140px): χωρίς πατρώνυμο (είναι στην καρτέλα και στο Excel). Η στήλη κατάστασης είναι η πιο φαρδιά: ο λόγος εξόδου διαβάζεται ολόκληρος
-const GRID = '26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(124px,.7fr)';
-const GRID_MIN = 1150;
+const GRID = '26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(200px,1fr)';
+const GRID_MIN = 1226;
+const WHEAD = 52;   // ύψος επικεφαλίδας (δύο γραμμές: «Αριθμός όπλου», «Κατάσταση όπλου»)
 const ROW_H = 46;   // κάτω από τον διακόπτη ΕΝΤΟΣ/ΕΚΤΟΣ γράφεται ο λόγος ολόκληρος (Michael, 24/10)
 // Πάει στο κουτί της γραμμής i. Ο πίνακας στήνει μόνο τις γραμμές που φαίνονται: αν δεν είναι στη σελίδα, κυλά ως εκεί πρώτα.
 const focusRow = (f: string, i: number) => {
@@ -35,7 +36,7 @@ const focusRow = (f: string, i: number) => {
   const el = find(); if (el) { go(el); return true; }
   const box = document.querySelector('.weapons__body') as HTMLElement | null;
   if (!box || i < 0 || i >= Number(box.dataset.rows || 0)) return false;
-  box.scrollTop = Math.max(0, i * ROW_H - box.clientHeight / 2);
+  box.scrollTop = Math.max(0, WHEAD + i * ROW_H - box.clientHeight / 2);
   requestAnimationFrame(() => requestAnimationFrame(() => { const x = find(); if (x) go(x); }));
   return true;
 };
@@ -294,10 +295,10 @@ export function WeaponsScreen() {
 
   return html`<div>
     <${PageHeader} title="Οπλισμός" quote="«Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ' ΕΣΣΟ 2026" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
-      <${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
+      <div className="page-head__acts weapons__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//>
-      <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} go=${exportXl}/><//>
+      <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} go=${exportXl}/></div><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }]}/></div>
     ${tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
@@ -325,10 +326,9 @@ export function WeaponsScreen() {
       ${selOut.length > 0 && html`<${Button} size="sm" variant="outline" onClick=${() => setInFor(selOut.map(m => m.id))}>ΕΝΤΟΣ ${selOut.length} ${selOut.length === 1 ? 'όπλο' : 'όπλα'}…<//>`}
       <${Button} size="sm" variant="ghost" onClick=${() => setSel(new Set())}>Καθάρισε<//></div>`}
     ${rows.length === 0 ? html`<div className="ui-card empty">${dq.trim() || unit !== 'all' || room != null ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : empty}</div>` :
-    html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: GRID_MIN + 'px' }}>
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται ΚΑΙ μπορούν να βγουν: έχουν αριθμό και δεν είναι ήδη εκτός (π.χ. ένας ουλαμός για ΕΚΠ). Αν δεν υπάρχει κανείς, όσοι είναι εκτός, για ΕΝΤΟΣ. Shift-κλικ σε δύο γραμμές τσεκάρει ό,τι είναι ανάμεσα." checked=${allSel} onChange=${() => setSel(s => { const n = new Set(s); tickable.forEach(p => (allSel ? n.delete(p.id) : n.add(p.id))); return n; })}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>ΑΣΜ</span>${H('room', 'Θάλ.')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβ.')}<span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">Θέση</span><span>Παρατήρηση</span></div>
-      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${ROW_H} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + JSON.stringify(sort)} renderRow=${(p: Person, i: number, style: P) => html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} pm=${pm} types=${types} lists=${lists} statuses=${state.statuses} date=${date} reset=${reset} onToggle=${toggle} onOpen=${openP} save=${save} commit=${commit} paste=${paste}/>`}/>
-    </div></div></div>`}<//>`}
+    html`<div className="ptable ptable--weapons" role="table" aria-rowcount=${rows.length}>
+      <${VirtualList} className="weapons__body" items=${rows} rowHeight=${ROW_H} height=${height + WHEAD} headHeight=${WHEAD} minWidth=${GRID_MIN} head=${html`<div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID }}><span><input type="checkbox" className="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται ΚΑΙ μπορούν να βγουν: έχουν αριθμό και δεν είναι ήδη εκτός (π.χ. ένας ουλαμός για ΕΚΠ). Αν δεν υπάρχει κανείς, όσοι είναι εκτός, για ΕΝΤΟΣ. Shift-κλικ σε δύο γραμμές τσεκάρει ό,τι είναι ανάμεσα." checked=${allSel} onChange=${() => setSel(s => { const n = new Set(s); tickable.forEach(p => (allSel ? n.delete(p.id) : n.add(p.id))); return n; })}/></span><span>Α/Α</span><span>Βαθμός</span>${H('last', 'Επίθετο')}<span>Όνομα</span><span>ΑΣΜ</span>${H('room', 'Θάλ.')}<span>Σ.Ι.</span><span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">Τύπος</span>${H('weapon', 'Αριθμός όπλου')}<span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">Κατάσταση όπλου${date !== today ? ' · υπηρεσίες ' + dm(date) : ''}</span>${H('rack', 'Οπλοβ.')}<span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">Θέση</span><span>Παρατήρηση</span></div>`} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + JSON.stringify(sort)} renderRow=${(p: Person, i: number, style: P) => html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} pm=${pm} types=${types} lists=${lists} statuses=${state.statuses} date=${date} reset=${reset} onToggle=${toggle} onOpen=${openP} save=${save} commit=${commit} paste=${paste}/>`}/>
+    </div>`}<//>`}
     ${outFor && html`<${WeaponOutDialog} pids=${outFor} reason=${outReason} onClose=${() => setOutFor(null)} onDone=${(r: string) => { if (r) setLastReason(r); setSel(new Set()); setOnlySel(false); }}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${ask && html`<${Dialog} title=${'Το όπλο ' + ask.w + ' είναι ήδη χρεωμένο'} onClose=${() => { setAsk(null); setReset(n => n + 1); }}

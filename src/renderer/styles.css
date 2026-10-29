@@ -201,6 +201,7 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .page-head p{margin:4px 0 0;color:var(--muted-fg)}
 .page-head__sub{max-width:70ch}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width:1279px){.page-head > .weapons__acts{flex:1 1 100%;justify-content:space-between;margin-left:0}}   /* Οπλισμός: κείμενο σε όλο το πλάτος, ημερομηνίες και κουμπιά στην επόμενη γραμμή */
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
 .vlist__head{position:sticky;top:0;z-index:3}
@@ -883,12 +884,27 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
 /* (review 29/10) οι επικεφαλίδες δεν πέφτουν πάνω στη διπλανή στήλη (έβγαινε «Θάλ. ▲.Ι.»): σπάνε σε δύο γραμμές· το επίθετο κόβεται με «…» (το κουμπί είναι μέσα στο span) */
 .ptable--weapons .ptable__head > *{white-space:normal;line-height:1.2;padding-left:4px;padding-right:4px;overflow-wrap:normal}.ptable--weapons .ptable__head > :nth-child(-n+3){white-space:nowrap}
+/* Οπλισμός: ο πίνακας κυλά οριζόντια μέσα στο πλαίσιό του· οι πρώτες στήλες (επιλογή, Α/Α, βαθμός, επίθετο) μένουν κολλημένες αριστερά */
+.ptable--weapons .ptable__head,.ptable--moves .ptable__head{height:100%}
+.ptable--weapons .ptable__row,.ptable--moves .ptable__row{background:var(--card)}
+.ptable--weapons .ptable__row.is-odd,.ptable--moves .ptable__row.is-odd{background:var(--muted)}
+.ptable--weapons .ptable__row:hover,.ptable--moves .ptable__row:hover{background:var(--hover)}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(-n+4),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(-n+2){position:sticky;z-index:2;background:inherit;align-self:stretch;min-width:0}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(-n+4),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(1){display:flex;align-items:center}
+.ptable--moves .ptable__row > .wmv__who{justify-content:center}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(1),.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(1){left:0}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(2){left:26px}.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(3){left:56px}
+.ptable--weapons :is(.ptable__head,.ptable__row) > :nth-child(4){left:114px;box-shadow:1px 0 0 var(--border)}
+.ptable--moves :is(.ptable__head,.ptable__row) > :nth-child(2){left:36px;box-shadow:1px 0 0 var(--border)}
+.ptable--weapons .ptable__row.is-wout > :first-child{box-shadow:inset 3px 0 0 var(--bad-line)}.ptable--moves .ptable__row.is-auto > :first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.ptable--moves .ptable__head > *{overflow:hidden;text-overflow:ellipsis}
+.weapon-input,.weapon-type{scroll-margin:60px 0 0 240px}
 .ptable__row > span > .linkish{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 4px 0 6px;gap:2px;width:100%}.weapon-type > svg{width:14px;height:14px}
 .weapon-out{display:flex;align-items:center;gap:6px;min-width:0}.weapon-out small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.weapon-notes{display:flex;gap:6px;align-items:center;min-width:0}
+.weapon-notes{display:flex;gap:6px;align-items:center;min-width:0}   /* τα σήματα στενεύουν με «…» μέσα στο κελί (πλήρες κείμενο στο data-tip) */
 .weapon-notes .ui-badge{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
@@ -946,7 +962,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wmv__search{flex:1 1 260px;max-width:420px;height:32px;font-size:13px}
 .wmv__w{display:flex;flex-direction:column;min-width:0;line-height:1.25}.wmv__w small{font-size:11px;color:var(--muted-fg);white-space:nowrap}
 .wmv__reason{min-width:0;display:flex}
-.wmv__reason .ui-badge{height:auto;min-height:22px;padding:2px 8px;white-space:normal;line-height:1.15;font-size:11px;text-align:left;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.wmv__reason .ui-badge{height:auto;min-height:22px;padding:2px 8px;white-space:normal;line-height:1.15;font-size:11px;text-align:left;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .wmv__post{white-space:normal;line-height:1.2;font-size:12px}
 .wmv__note{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wkey{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;margin-right:6px;padding:0 3px;border-radius:4px;border:1px solid currentColor;font:700 10px/1 var(--f-mono);opacity:.75;vertical-align:1px}
@@ -1416,7 +1432,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .wmv__who{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.25}.wmv__who .linkish{white-space:normal;text-align:left;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.wmv__who small{font-size:11px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wmv__auto{font-style:normal;font-size:11px;color:var(--warn);font-weight:600}
 .ptable--moves .ptable__row.is-auto{box-shadow:inset 3px 0 0 var(--warn)}
-.weapon-notes .ui-badge:first-child{flex:none}
+.weapon-notes .ui-badge:first-child{flex:0 1 auto}.weapon-notes .ui-btn{flex:none}
 /* μπάρα επιλογής: οι αριθμοί των λόγων (1-9) δεν σπάνε τη γραμμή στα 1366 */
 .bulkbar__reasons .wkey{margin-right:4px;min-width:14px;height:14px;font-size:9px}
 .bulkbar__reasons{gap:4px}.bulkbar__reasons .ui-btn--sm{padding-left:7px;padding-right:7px;flex:none}
