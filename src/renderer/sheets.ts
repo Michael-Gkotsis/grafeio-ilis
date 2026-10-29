@@ -2,7 +2,7 @@
 import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, activePeople, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { HK_K, HK_A, activePeople, cadreSeats, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { hkRowsOf, rankTxt } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
@@ -177,10 +177,12 @@ export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetMo
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
     [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map((d, j) => E(j + 1, 'b hdr sm' + (hol[j] ? ' we' : '')))]];
-  activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)).forEach((p, i) => {
+  // στελέχη που έκαναν υπηρεσία τον μήνα (Michael, 26/10): μετά τους στρατιώτες, με βαθμό
+  const cad = cadreSeats(s).filter(c => per.has(c.id) && (!only || only.has(c.id)));
+  [...activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)), ...cad].forEach((p, i) => {
     const x = per.get(p.id); let nh = 0; const c: Record<string, number> = {};
     const cells = days.map((d, j) => { const v = x && x.get(d); if (v) { if (hol[j]) nh++; c[v.kind] = (c[v.kind] || 0) + 1; } return E(v ? v.code : '', hol[j] ? 'b code we' : 'b code'); });
-    rows.push([E(i + 1, 'b c'), E(fullName(p), 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
+    rows.push([E(i + 1, 'b c'), E(p.cid ? rankTxt(p) + ' ' + fullName(p) : fullName(p), 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
   });
   return { cols: [30, 172, 34, 34, 34, 26, 26, 26, ...days.map(() => 24)], rows };
 }

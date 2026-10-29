@@ -21,6 +21,7 @@ import { listOf, rankTxt } from '../../shared/ranks';
 import { collator } from '../../shared/text';
 import { dm, dow, nowHM, today as todayFn } from '../../shared/dates';
 import { armWhen, hmOf } from '../../shared/armed';
+import { cadreSeats, seatMap } from '../../shared/rules';
 type P = any;
 
 // Χωρά σε 1366 χωρίς οριζόντια κύλιση (1140px): χωρίς πατρώνυμο (είναι στην καρτέλα και στο Excel). Η στήλη κατάστασης είναι η πιο φαρδιά: ο λόγος εξόδου διαβάζεται ολόκληρος
@@ -148,7 +149,7 @@ export function WeaponsScreen() {
   useEffect(() => { const t = setInterval(() => setHm(nowHM()), 15000); return () => clearInterval(t); }, []);
   const live = date === today ? hm : undefined;
   const info = useMemo(() => weaponInfo(state, date, live), [state.people, state.settings, state.rules, state.guards, state.dutyLog, state.weaponLog, state.dutyFix, date, live]);
-  const pm = useMemo(() => new Map(state.people.map(p => [p.id, p])), [state.people]);
+  const pm = useMemo(() => seatMap(state), [state.people, state.cadreList]);   // και στελέχη σε ένοπλη υπηρεσία
   // τσεκαρισμένοι για έξοδο/είσοδο μαζί· οι διάλογοι έξοδος (pids) και είσοδος (ids κινήσεων)
   const [sel, setSel] = useState(() => new Set<number>());
   const [outFor, setOutFor] = useState<number[] | null>(null); const [outReason, setOutReason] = useState('');
@@ -189,8 +190,9 @@ export function WeaponsScreen() {
   const openP = useOpenFrom(rows);
   const total = state.people.filter(p => p.active).length;
   // Κεφαλίδα, chip «Εκτός οπλοβαστού» και καρτέλα «Κινήσεις» μετράνε τους ίδιους: κινήσεις και ένοπλες υπηρεσίες, μία φορά ο καθένας
-  const outN = useMemo(() => outPeople(state.people, info).length, [state.people, info]);
-  const reasons = useMemo(() => byReason(state.people, info), [state.people, info]);
+  const armPpl = useMemo(() => [...state.people, ...cadreSeats(state)], [state.people, state.cadreList]);   // εκτός τώρα: και στελέχη σε ένοπλη υπηρεσία (Κινήσεις)
+  const outN = useMemo(() => outPeople(armPpl, info).length, [armPpl, info]);
+  const reasons = useMemo(() => byReason(armPpl, info), [armPpl, info]);
   const selP = state.people.filter(p => sel.has(p.id));
   const sp = outSplit(selP, info); const selIn = sp.go;   // όσοι από τους τσεκαρισμένους μπορούν να βγουν
   const shown = useMemo(() => new Set(rows.map(p => p.id)), [rows]); const hidN = selP.filter(p => !shown.has(p.id)).length;

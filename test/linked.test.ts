@@ -14,7 +14,7 @@ import {
 import { Workbook } from '../src/main/xlsx';
 import { readBook, tableState, writeSource, syncStampNow, type SourceMeta } from '../src/main/sources';
 import { fakeState } from './fixtures';
-import { dutyStats, guardUnavailable } from '../src/shared/rules';
+import { dutyStats, guardUnavailable, pickPeople } from '../src/shared/rules';
 
 const TODAY = '2026-10-12';
 let seq = 0;
@@ -228,6 +228,25 @@ function checkSheet(s: AppState, cells: Record<string, string>): RawSheet {
   ] };
 }
 describe('έλεγχος υπηρεσιών (μηνιαίο πλέγμα)', () => {
+  it('στέλεχος σε θέση (pid < 0): ούτε «δεν έχει γραμμή» με «?», ούτε γράφεται στο φύλλο των στρατιωτών· χωρίς στέλεχος όλα όπως πριν', () => {
+    const s0 = fakeState(12); const sh = checkSheet(s0, {}); const b = bind('duties', sh);
+    let s = run(s0, { t: 'saveCadre', cadre: { rank: 'ΛΧΙΑΣ', hk: 'Λοχίες', last: 'ΛΟΧΙΑΔΗΣ', first: 'ΒΗΤΑΣ' } });
+    s = run(s, { t: 'assign', date: '2026-09-03', k: 'th1', pid: 1 });
+    const base = planDuties(sh, b, s, '2026-09', TODAY); const baseW = planDutiesWrite(sh, b, s, TODAY);
+    expect(base.days.map(d => d.extra.map(x => x.pid))).toEqual([[1]]); expect(base.noRow).toEqual([]);
+    // το στέλεχος στη θέση th2 την ίδια μέρα και σε άλλη μέρα
+    const c = s.cadreList[0]; const prov = pickPeople(s).find(p => p.cid === c.id)!.id;
+    s = run(s, { t: 'assign', date: '2026-09-03', k: 'th2', pid: prov, cid: c.id });
+    s = run(s, { t: 'assign', date: '2026-09-08', k: 'ly', pid: s.cadreList[0].pid!, cid: c.id });
+    expect(Object.values(s.guards['2026-09-03'])).toContain(s.cadreList[0].pid);
+    const p = planDuties(sh, b, s, '2026-09', TODAY);
+    expect(p.noRow).toEqual([]);
+    expect(p.days.flatMap(d => d.extra.map(x => x.pid)).every(x => x > 0)).toBe(true);
+    expect(p.days.map(d => d.date)).toEqual(['2026-09-03']);   // η 8/9 έχει μόνο το στέλεχος: τίποτα για το φύλλο
+    expect(p.days[0].extra).toEqual(base.days[0].extra);
+    const w = planDutiesWrite(sh, b, s, TODAY);
+    expect(w.notFound).toEqual(baseW.notFound); expect(w.sets).toEqual(baseW.sets); expect(w.keys).toEqual(baseW.keys);
+  });
   it('μήνας από τον τίτλο και κωδικοί', () => {
     expect(monthOf('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΣΕΠΤΕΜΒΡΙΟΥ 2026', TODAY)).toBe('2026-09');
     expect(monthOf('Έλεγχος Μαΐου', TODAY)).toBe('2026-05');

@@ -10,7 +10,7 @@ import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { absCode, rankTxt } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
-import { activePeople, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
+import { activePeople, cadreSeats, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { colName, fitBook } from './xlsx';
 import type { MadeMark } from './exports';
 import { widthChars } from './textfit';
@@ -85,7 +85,8 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
     const c = head.getCell(i + 1); c.value = t; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
     if (i >= FIX.length && i < FIX.length + nd && isHol(s.settings, days[i - FIX.length])) c.fill = gray;
   });
-  const people = activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last));
+  // στελέχη που έκαναν υπηρεσία τον μήνα (Michael, 26/10): μετά τους στρατιώτες, με βαθμό
+  const people = [...activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last)), ...cadreSeats(s).filter(c => per.has(c.id))];
   people.forEach((p, i) => {
     const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, { code: string; kind: DutyKind; own?: string }>();
     let hol = 0; const c: Record<string, number> = {}; const o: Record<string, number> = {};

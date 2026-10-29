@@ -11,6 +11,7 @@ import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, effects, hoursTxt, phaseBase, plainName, shiftList, shiftReport, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type ShiftOwn, type Status } from '../shared/domain';
+import { cadreStatusOn } from '../shared/cadre';
 import { MED_LIKE, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
@@ -34,6 +35,8 @@ export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, list
   return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => (MED_LIKE.includes(x.type) && statusLbl(x, lists) !== TYPES[x.type].label ? statusLbl(x, lists) : TYPES[x.type].long) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
 });
 
+// κατάσταση στελέχους τη μέρα, στη λίστα επιλογής (η ίδια που φαίνεται στα Στελέχη)
+const cadreBadge = (s: P, cid: string, d: ISODate) => { const st = cadreStatusOn(s, cid, d); return st ? html`<${Badge} tone=${st.group === 'kol' ? 'info' : st.group === 'apo' ? 'warn' : 'outline'}>${st.label}<//>` : html`<${Badge} tone="ok">Παρών<//>`; };
 /* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
 // hint: μια μικρή σημείωση δίπλα στον βαθμό (π.χ. «2 από 4 τον μήνα» για ΕΠΟΠ/ΟΒΑ στις Υπηρεσίες)
 // people: άλλη λίστα από τους στρατιώτες (στις Υπηρεσίες και τα στελέχη ΕΠΟΠ/ΟΒΑ με υπηρεσίες)
@@ -45,7 +48,8 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
   const all: Person[] = people || state.people;
   const pm = useMemo(() => new Map(all.map(p => [p.id, p])), [all]);
   // όλοι όσοι ταιριάζουν, όχι μόνο οι πρώτοι 8 (Michael, 17/10: «να τους βγάζεις όλους στο search»)· η λίστα κυλά
-  const items = useMemo(() => searchPeople(all, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })), [dq, chosen.join(','), unavailable, all]);
+  // τα στελέχη (αν η λίστα έχει) στο τέλος, σε δική τους ομάδα
+  const items = useMemo(() => { const l = searchPeople(all, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })); return l.some(x => x.p.cid) ? [...l.filter(x => !x.p.cid), ...l.filter(x => x.p.cid)] : l; }, [dq, chosen.join(','), unavailable, all]);
   useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
   const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open, 420); const list = useRef<HTMLUListElement>(null);
   // με τα βελάκια η επιλογή μένει μέσα στη λίστα που κυλά
@@ -59,9 +63,9 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
       onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); pick(sel); } else if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } else if (e.key === 'Backspace' && !q && multiple && chosen.length) { onChange(chosen.slice(0, -1)); } }}/>
     ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
-      items.map((x, i) => html`<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
+      items.map((x, i) => html`${x.p.cid && !items[i - 1]?.p.cid && html`<li key=${'g' + x.p.id} className="picker__hd" role="presentation">Στελέχη</li>`}<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
         <div><b>${plainName(x.p)}</b><small>${x.p.cid ? 'Στέλεχος · ' + rankTxt(x.p) : 'του ' + (x.p.father || '—') + ' · ' + rankTxt(x.p) + ' · ' + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
-        ${x.na ? html`<${Badge}>${x.na}<//>` : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
+        ${x.na ? html`<${Badge}>${x.na}<//>` : x.p.cid ? cadreBadge(state, x.p.cid, date || today) : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`, document.body)}
   </div>`;
 }

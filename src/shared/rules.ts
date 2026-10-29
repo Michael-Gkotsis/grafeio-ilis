@@ -34,15 +34,23 @@ export function dutyPool(s: AppState): Person[] {
   const out = s.people.filter(p => p.active && !isEpop(p, s.settings.lists)); poolIdx.set(s.people, { lists: s.settings.lists, out });
   return out;
 }
-export const cadreSeat = (c: Cadre): Person => ({
-  id: c.pid!, cid: c.id, rank: c.rank, ...(c.origin ? { origin: c.origin } : {}), spec: c.spec || '', last: c.last, first: c.first, father: '', asm: c.am || '', phone: c.phone || '',
-  room: null, si: '', post: null, role: c.role || null, essos: '', attached: false, active: c.active, notes: '', ...(c.monthMax ? { monthMax: c.monthMax } : {})
+// Κάθε ενεργό στέλεχος μπαίνει σε οποιαδήποτε θέση, μόνο με το χέρι (Michael, 26/10)· αν δεν έχει ακόμα pid, παίρνει προσωρινό αριθμό
+// PROV - θέση στη λίστα στελεχών (μόνο για την επιλογή· το assign δίνει το πραγματικό pid, αρνητικό και μοναδικό, και μένει για πάντα)
+export const PROV = -1e6;
+export const cadreSeat = (c: Cadre, id: number = c.pid!): Person => ({
+  id, cid: c.id, rank: c.rank, ...(c.origin ? { origin: c.origin } : {}), spec: c.spec || '', last: c.last, first: c.first, father: '', asm: c.am || '', phone: c.phone || '',
+  room: null, si: '', post: null, role: c.role || null, essos: '', attached: false, active: c.active, notes: '', ...(c.monthMax ? { monthMax: c.monthMax } : {}),
+  ...(c.weapon ? { weapon: c.weapon } : {}), ...(c.wtype ? { wtype: c.wtype } : {}), ...(c.rack ? { rack: c.rack } : {}), ...(c.wpos ? { wpos: c.wpos } : {})
 });
+// το στέλεχος ενός αριθμού θέσης: πραγματικού (pid) ή προσωρινού (PROV)
+export const cadreOf = (s: Pick<AppState, 'cadreList'>, pid: number): Cadre | undefined => (pid <= PROV ? (s.cadreList || [])[PROV - pid] : pid < 0 ? (s.cadreList || []).find(c => c.pid === pid) : undefined);
+// ο επόμενος ελεύθερος αριθμός θέσης στελέχους (αρνητικός, δεν ξαναδίνεται ποτέ)
+export const nextCadrePid = (cl: Cadre[]): number => Math.min(0, ...cl.map(y => y.pid ?? 0)) - 1;
 const seatsIdx = new WeakMap<Cadre[], Person[]>();
 // τα στελέχη που έχουν (ή είχαν) θέσεις, σαν άτομα: και όσα είναι εκτός δύναμης, για το ιστορικό
 export function cadreSeats(s: Pick<AppState, 'cadreList'>): Person[] {
   const cl = s.cadreList || []; let v = seatsIdx.get(cl);
-  if (!v) { v = cl.filter(c => c.pid != null).map(cadreSeat); seatsIdx.set(cl, v); }
+  if (!v) { v = cl.filter(c => c.pid != null).map(c => cadreSeat(c)); seatsIdx.set(cl, v); }
   return v;
 }
 // όσοι διαλέγονται για θέση: οι στρατιώτες και τα στελέχη με υπηρεσίες (σε δύναμη, με όριο)· και στον Έλεγχο υπηρεσιών
@@ -51,6 +59,14 @@ export function seatPeople(s: Pick<AppState, 'people' | 'cadreList'>): Person[] 
   const cl = s.cadreList || []; const c = seatPplIdx.get(s.people); if (c && c.cl === cl) return c.v;
   const extra = cadreSeats(s).filter(p => p.active && p.monthMax); const v = extra.length ? [...s.people, ...extra] : s.people;
   seatPplIdx.set(s.people, { cl, v });
+  return v;
+}
+// όσοι διαλέγονται με το χέρι για θέση (Θέσεις, «Αλλαγή…», ΦΡΟΥΡΑ): οι στρατιώτες και ΟΛΑ τα ενεργά στελέχη, με προσωρινό αριθμό όσα δεν έχουν ακόμα
+const pickIdx = new WeakMap<Person[], { cl: Cadre[]; v: Person[] }>();
+export function pickPeople(s: Pick<AppState, 'people' | 'cadreList'>): Person[] {
+  const cl = s.cadreList || []; const c = pickIdx.get(s.people); if (c && c.cl === cl) return c.v;
+  const extra = cl.flatMap((x, i) => (x.active ? [cadreSeat(x, x.pid ?? PROV - i)] : [])); const v = extra.length ? [...s.people, ...extra] : s.people;
+  pickIdx.set(s.people, { cl, v });
   return v;
 }
 // ποιος είναι σε μια θέση: στρατιώτης ή στέλεχος (αρνητικός αριθμός)
@@ -73,13 +89,14 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
 }
 // Το όριο του μήνα: «έφτασε το όριο» αν με αυτή τη μέρα το ξεπερνά (ζητά επιβεβαίωση, όπως όλοι οι κανόνες)
 export function monthBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
-  const p = pid < 0 ? seatMap(s).get(pid) : personMap(s.people).get(pid);
-  if (p?.cid) {
-    if (!p.active) return 'Στέλεχος εκτός δύναμης';
+  const c = pid < 0 ? cadreOf(s, pid) : undefined;
+  if (c) {
+    if (!c.active) return 'Στέλεχος εκτός δύναμης';
     // στέλεχος με κατάσταση εκείνη τη μέρα (άδεια, απαλλαγή, ΕΥ…): μόνο η «Υπηρεσία εντός στρατοπέδου» τον αφήνει
-    const a = cadreAbsOn(s, p.cid, date); const k = a && cadreAbsOf(a.kind, s.settings.lists);
+    const a = cadreAbsOn(s, c.id, date); const k = a && cadreAbsOf(a.kind, s.settings.lists);
     if (k && k[2] && k[2] !== 'yp') return 'Στέλεχος: ' + k[1] + ' ' + dm(a!.from) + (a!.to !== a!.from ? '–' + dm(a!.to) : '');
   }
+  const p = pid < 0 ? seatMap(s).get(pid) : personMap(s.people).get(pid);
   const max = p?.monthMax;
   if (!p || !max || !limited(p, s.settings.lists)) return null;
   const n = monthDuties(s, date, pid, idx);
@@ -486,6 +503,8 @@ export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLo
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
+  const c = pid < 0 ? cadreOf(s, pid) : undefined;
+  if (c && !c.monthMax && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση· ΕΠΟΠ/ΟΒΑ (και όποιο έχει όριο, #125) κρατούν τους κανόνες τους
   if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndexOf(s)).get(pid);
   if (!ds) return null;
@@ -985,7 +1004,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
   const p = seatMap(s).get(pid);
-  if (p && limited(p, s.settings.lists)) return 'ΕΠΟΠ/ΟΒΑ, μόνο με το χέρι · ' + (monthDuties(s, date, pid) + 1) + 'η υπηρεσία του μήνα' + (p.monthMax ? ' (όριο ' + p.monthMax + ')' : '');
+  if (p && limited(p, s.settings.lists)) return (p.cid && !isEpop(p, s.settings.lists) ? 'Στέλεχος' : 'ΕΠΟΠ/ΟΒΑ') + ', μόνο με το χέρι · ' + (monthDuties(s, date, pid) + 1) + 'η υπηρεσία του μήνα' + (p.monthMax ? ' (όριο ' + p.monthMax + ')' : '');
   const f = fairOf(s, pid, date);
   const av = avgs || fairAvg(s, date); const avg = (fn: (x: { hol: number; total: number }) => number) => fn(av);
   const r1 = (x: number) => (Math.round(x * 10) / 10).toString().replace('.', ',');

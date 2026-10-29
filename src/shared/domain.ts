@@ -540,7 +540,9 @@ export interface PersonRequest { id: string; pid: number; date: ISODate; text: s
 // origin: προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ, ΣΣΕ…) · spec: Ο/Σ · am: αριθμός μητρώου · pos: η σειρά που όρισε ο χρήστης (ιεραρχία· χωρίς pos σε κανέναν, με τη σειρά της ΗΚΑΙ)
 // monthMax: ΕΠΟΠ/ΟΒΑ που κάνουν υπηρεσίες (Michael, 21/10): πόσες τον μήνα το πολύ· pid: ο αριθμός του στις θέσεις των
 // Υπηρεσιών (αρνητικός, για να μη συμπέσει με στρατιώτη), δίνεται μία φορά και μένει για το ιστορικό (rules.ts cadreSeat)
-export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number }
+// Κάθε ενεργό στέλεχος μπαίνει με το χέρι σε οποιαδήποτε θέση (Michael, 26/10): παίρνει το pid τη στιγμή που μπαίνει πρώτη φορά
+// στις θέσεις (commands.ts assign), όχι μόνο όσοι έχουν monthMax. weapon/wtype/rack/wpos: όπλο στελέχους, όπως του Person (ένοπλες θέσεις)
+export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.

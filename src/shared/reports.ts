@@ -4,7 +4,7 @@
 import { addDays, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
-import { activePeople, personMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
+import { activePeople, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
@@ -424,7 +424,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   // Υπηρεσίες: οι θέσεις της μέρας με τη σειρά της ΦΡΟΥΡΑΣ (και όσες έχουν κάποιον αλλά δεν είναι πια στο έντυπο)
   if (r.kind === 'duty') {
     const filtered = !!(pk.view || pk.si?.length || pk.rooms?.length);
-    const ok = filtered ? soldiersOf(s, pk, d) : null; const pm = personMap(s.people);
+    const ok = filtered ? soldiersOf(s, pk, d) : null; const pm = seatMap(s);   // και στελέχη σε θέση (Michael, 26/10)
     const blocks = pk.blocks?.length ? new Set(pk.blocks) : null;
     const g = s.guards[d] || {}; const posts = postsOf(s.settings); const have = new Set(posts.map(x => x.k));
     const out: DutyRow[] = [];
@@ -437,11 +437,11 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   }
   // Κινήσεις όπλων της μέρας (έξοδοι της μέρας, είσοδοι της μέρας, όσα είναι ακόμα έξω), με τη σειρά που βγήκαν
   if (r.kind === 'wmove') {
-    const ok = soldiersOf(s, pk, d); const pm = personMap(s.people);
+    const ok = soldiersOf(s, pk, d); const pm = seatMap(s); const all = !(pk.view || pk.si?.length || pk.rooms?.length);   // στελέχη (ένοπλη υπηρεσία) μόνο χωρίς φίλτρο στρατιωτών
     const out: MoveRow[] = [];
     for (const m of movesAll(s, d)) {
       if (pk.open && m.inDay && m.inDay <= d) continue;
-      const p = pm.get(m.pid); if (p && ok.has(p.id)) out.push({ ...p, id: m.id, pid: p.id, p, m });
+      const p = pm.get(m.pid); if (p && (ok.has(p.id) || (all && p.cid))) out.push({ ...p, id: m.id, pid: p.id, p, m });
     }
     return out;
   }
@@ -597,11 +597,11 @@ export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'>, d
 }
 export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: ISODate): Row[] => {
   if (kind === 'duty') {
-    const pm = personMap(s.people); const g = (d && s.guards[d]) || {};
+    const pm = seatMap(s); const g = (d && s.guards[d]) || {};
     return ids.map(k => { const po = postBy(s, String(k)); return po ? dutyRow(pm, po, g[po.k]) : null; }).filter((x): x is DutyRow => !!x);
   }
   if (kind === 'wmove') {
-    const pm = personMap(s.people);
+    const pm = seatMap(s);
     return ids.map(id => { const m = moveById(s, id as string); const p = m && pm.get(m.pid); return m && p ? { ...p, id: m.id, pid: p.id, p, m } as MoveRow : null; }).filter((x): x is MoveRow => !!x);
   }
   if (kind === 'status') {

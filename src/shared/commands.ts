@@ -6,7 +6,7 @@ import { norm, normGreek, upper } from './text';
 import { noPending, TYPES, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
-import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, itemName, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -48,7 +48,7 @@ export type Command =
   | { t: 'cancelLeave'; id: string }
   | { t: 'endLeave'; id: string; date: ISODate; time: string }
   | { t: 'approvePun'; id: string }
-  | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string }
+  | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string; cid?: string }   // cid: στέλεχος (παίρνει pid όταν μπει πρώτη φορά σε θέση)
   | { t: 'autofill'; date: ISODate }
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
@@ -431,7 +431,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (old?.pos != null) x.pos = old.pos;
       // ΕΠΟΠ/ΟΒΑ με υπηρεσίες τον μήνα: αριθμός θέσης μία φορά (αρνητικός), και μένει ακόμα κι αν σβήσεις το όριο
       const mx = Math.floor(Number(c0.monthMax)); if (mx > 0) x.monthMax = mx;
-      if (old?.pid != null) x.pid = old.pid; else if (mx > 0) x.pid = Math.min(0, ...s.cadreList.map(y => y.pid ?? 0)) - 1;
+      if (old?.pid != null) x.pid = old.pid; else if (mx > 0) x.pid = nextCadrePid(s.cadreList);
+      // όπλο στελέχους (ένοπλες θέσεις): ίδια κανονικοποίηση με τον Οπλισμό
+      const wv = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack, wpos: normPos } as const;
+      for (const f of ['weapon', 'wtype', 'rack', 'wpos'] as const) { const v = wv[f](c0[f]); if (v) x[f] = v; }
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (όπως ο στρατιώτης)
       let guards = s.guards;
       if (old?.active && !x.active && x.pid != null) for (const d of Object.keys(guards)) if (d >= ctx.today && Object.values(guards[d] || {}).includes(x.pid)) { const g = { ...guards[d] }; for (const k in g) if (g[k] === x.pid) delete g[k]; guards = { ...guards, [d]: g }; }
@@ -599,21 +602,29 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // Τίποτα δεν απαγορεύεται πλήρως (Michael, 17/10): κατάσταση (ΕΥ, άδεια…), ανάπαυση, ΣΚ, δυνατότητα και «ήδη σε άλλη
       // θέση» περνούν με αιτιολογία. move: η άλλη θέση του αδειάζει (μετακίνηση), αλλιώς μένει και στις δύο.
       let note = ''; let base = s;
-      if (c.pid) {
-        if (!pm.get(c.pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
-        const other = postOf(s, c.date, c.pid, c.k);
-        if (c.move && other && other.k === c.move) { base = setGuard(s, c.date, c.move, null); note = ' (από ' + postTxt(other) + ')'; }
-        const twice = !c.move && other ? 'ήδη ' + postTxt(other) : null;
-        const soft = dutyBlock(s.statuses, c.date, c.pid, post, s.settings.lists) || twice || capBlock(base, c.date, c.pid, post) || ruleBlock(base, c.date, c.pid, undefined, c.k);
-        if (soft && !c.force) throw new Error(shortName(pm.get(c.pid)!) + ' δεν μπαίνει: ' + soft);
-        if (soft) note += ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
-        const lr = lastResort(s.statuses, c.date, c.pid, post, s.settings.lists) || statusWarn(s, c.date, c.pid); if (lr) note += ' (' + lr + ')';
+      // στέλεχος που μπαίνει πρώτη φορά σε θέση: παίρνει εδώ τον μόνιμο αριθμό θέσης του (αρνητικός, δεν ξαναδίνεται)
+      let pid = c.pid;
+      if (pid && c.cid) {
+        const cd = s.cadreList.find(x => x.id === c.cid); if (!cd) throw new Error('Δεν βρέθηκε το στέλεχος');
+        if (cd.pid != null) pid = cd.pid;
+        else { const np = nextCadrePid(s.cadreList); pid = np; base = { ...s, cadreList: s.cadreList.map(x => (x === cd ? { ...cd, pid: np } : x)) }; }
       }
-      let next = setGuard(base, c.date, c.k, c.pid);
+      const pm = seatMap(base);
+      if (pid) {
+        if (!pm.get(pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
+        const other = postOf(s, c.date, pid, c.k);
+        if (c.move && other && other.k === c.move) { base = setGuard(base, c.date, c.move, null); note = ' (από ' + postTxt(other) + ')'; }
+        const twice = !c.move && other ? 'ήδη ' + postTxt(other) : null;
+        const soft = dutyBlock(s.statuses, c.date, pid, post, s.settings.lists) || twice || capBlock(base, c.date, pid, post) || ruleBlock(base, c.date, pid, undefined, c.k);
+        if (soft && !c.force) throw new Error(shortName(pm.get(pid)!) + ' δεν μπαίνει: ' + soft);
+        if (soft) note += ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
+        const lr = lastResort(s.statuses, c.date, pid, post, s.settings.lists) || statusWarn(s, c.date, pid); if (lr) note += ' (' + lr + ')';
+      }
+      let next = setGuard(base, c.date, c.k, pid || null);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση
-      const sl = c.pid ? (s.dutyLog[c.date] || []).filter(e => !(e.pid === c.pid && e.kind === post.kind)) : null;
+      const sl = pid ? (s.dutyLog[c.date] || []).filter(e => !(e.pid === pid && e.kind === post.kind)) : null;
       if (sl && sl.length !== (s.dutyLog[c.date] || []).length) { const dutyLog = { ...s.dutyLog, [c.date]: sl }; if (!sl.length) delete dutyLog[c.date]; next = { ...next, dutyLog }; }
-      return { state: next, text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (c.pid ? shortName(pm.get(c.pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      return { state: next, text: 'Υπηρεσίες ' + dm(c.date) + ': ' + (pid ? shortName(pm.get(pid)!) + ' σε ' : 'κενή η θέση ') + postTxt(post) + note, files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'swapPosts': {
       const A = postBy(s, c.a), B = postBy(s, c.b); const g = s.guards[c.date] || {};

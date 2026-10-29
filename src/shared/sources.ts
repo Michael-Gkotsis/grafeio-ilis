@@ -8,7 +8,7 @@ import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fa
 import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
-import { capCols, isHol, postBy } from './rules';
+import { capCols, isHol, postBy, seatMap } from './rules';
 import { listOf, medTypeOf, optionsOf, rankTxt, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
@@ -1465,7 +1465,7 @@ export const dutiesCmd = (p: DutiesPlan): { days: Record<ISODate, DutyCell[]> } 
   ({ days: Object.fromEntries(p.days.filter(x => x.adds.length).map(x => [x.date, x.cells.filter(c => !x.gone.some(g => g.pid === c.pid))])) });
 // synced: «μέρα|άτομο» που είχε δει η εφαρμογή στο Excel στην προηγούμενη ανάγνωση/εγγραφή
 export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}, synced: string[] = []): DutiesPlan {
-  const sp = sheetPeople(sheet, b, s.people, choices); const pm = new Map(s.people.map(p => [p.id, p]));
+  const sp = sheetPeople(sheet, b, s.people, choices); const pm = seatMap(s);
   const plan: DutiesPlan = { month, days: [], changes: 0, same: 0, errors: [], future: [], noRow: [], keys: [], unknown: [], sp };
   const cols = dutyDays(sheet, b);
   const [y, m] = month.split('-').map(Number); const inMonth = new Date(Date.UTC(y, m, 0)).getUTCDate(); const nDays = Math.min(cols.length, inMonth);
@@ -1496,7 +1496,7 @@ export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month
     cells.forEach(c => keys.add(dkey(d, c.pid)));
     const has = new Set(cells.map(c => c.pid)); const g = s.guards[d] || {};
     const extra = [...Object.keys(g).map(k => ({ pid: g[k], label: dutyLabel(s, k, postBy(s, k)?.kind || 'other') })), ...(s.dutyLog?.[d] || []).map(e => ({ pid: e.pid, label: dutyLabel(s, undefined, e.kind) }))]
-      .filter(x => !has.has(x.pid) && (inSheet.has(x.pid) || (noRow.add(x.pid), false)));
+      .filter(x => x.pid >= 0 && !has.has(x.pid) && (inSheet.has(x.pid) || (noRow.add(x.pid), false)));   // στέλεχος σε θέση (pid < 0): δεν ανήκει στο φύλλο των στρατιωτών
     if (!r.adds.length && !r.differ.length && !r.gone.length && !extra.length) { plan.same++; continue; }
     const pids = [...Object.values(r.day.seats), ...r.day.seatless.map(e => e.pid)];
     plan.days.push({ ...r, date: d, cells, extra, locked: d < today, twice: [...new Set(pids.filter((p, i) => pids.indexOf(p) !== i))] });
@@ -1611,7 +1611,7 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   const seenDays = new Set(synced.map(x => x.split('|')[0]));
   type Want = { k?: string; kind: DutyKind; code: string };
   const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, Want>>(); const days: number[] = [];
-  const put = (pid: number, i: number, w: Want) => { const x = want.get(pid) || new Map<number, Want>(); if (!x.get(i)?.k) x.set(i, w); want.set(pid, x); };
+  const put = (pid: number, i: number, w: Want) => { if (pid < 0) return; const x = want.get(pid) || new Map<number, Want>(); if (!x.get(i)?.k) x.set(i, w); want.set(pid, x); };
   for (let i = 0; i < nDays; i++) {
     const d = dateOf(i); const g = s.guards[d] || {}; const log = s.dutyLog?.[d] || [];
     if (!Object.keys(g).length && !log.length && !seenDays.has(d)) continue;
