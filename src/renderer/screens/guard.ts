@@ -484,11 +484,11 @@ const OutRow = memo(function OutRow({ p, unit, style, reason, value, changed, on
 // Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία.
 // fixable (οθόνη Εξοδούχοι): «Διόρθωση…» ανά εξοδούχο/ΔΝ. Όσοι δεν ξέρουμε πότε γυρίζουν (δεν έχει δηλωθεί η επόμενη μέρα) στο τέλος, με προειδοποίηση.
 const PENDING = 'Να δηλωθεί η επόμενη μέρα';
-export function ReturnsList({ date, limit, fixable }: { date: string; limit?: number; fixable?: boolean }) {
+export function ReturnsList({ date, limit, fixable, outsOnly }: { date: string; limit?: number; fixable?: boolean; outsOnly?: boolean }) {
   const { state } = useStore(); const nav = useNav();
-  const list = useMemo(() => returnsOn(state, date), [state, date]);
+  const list = useMemo(() => (outsOnly ? returnsOn(state, date).filter(b => TYPES[b.st.type].cat === 'out') : returnsOn(state, date)), [state, date, outsOnly]);
   const [fix, setFix] = useState<Back | null>(null);
-  if (!list.length) return html`<div className="empty">Κανείς δεν λείπει.</div>`;
+  if (!list.length) return html`<div className="empty">${outsOnly ? 'Κανένας εξοδούχος ή ΔΝ.' : 'Κανείς δεν λείπει.'}</div>`;
   const shown = limit ? list.slice(0, limit) : list;
   const grp = (b: Back) => (b.r.pending ? PENDING : retDay(b.r));
   const days = [...new Set(shown.map(grp))];
@@ -550,7 +550,9 @@ export function OutsScreen() {
     return why ? { why, leave: false } : null;
   }, [state, sat, sunday]);
   const backs = useMemo(() => returnsOn(state, date), [state, date]);
-  const backEarly = backs.some(b => b.r.duty), backN = backs.length;
+  // εδώ μόνο εξοδούχοι/ΔΝ (με «Διόρθωση…»)· άδειες και νοσοκομείο με το πότε γυρνούν είναι στη Δύναμη
+  const backsOut = useMemo(() => backs.filter(b => TYPES[b.st.type].cat === 'out'), [backs]);
+  const backEarly = backsOut.some(b => b.r.duty), backN = backsOut.length, backMore = backs.length - backN;
   // ΔΝ που δεν ξέρουμε πότε γυρνούν: η επόμενη μέρα δεν έχει δηλωθεί (και δεν έχει εκπαίδευση)
   const pendDays = useMemo(() => { const m = new Map<string, string[]>(); backs.forEach(b => { if (b.r.pending) m.set(b.r.day, [...(m.get(b.r.day) || []), shortName(b.p)]); }); return [...m]; }, [backs]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
@@ -592,7 +594,7 @@ export function OutsScreen() {
     <${OutsDayBar} date=${date}/>
     ${pendDays.map(([d, who]) => html`<${Alert} key=${d} tone="warn"><span><b>Δεν έχει δηλωθεί ${theDay(d)}</b> και δεν έχει εκπαίδευση το πρωί, οπότε δεν ξέρουμε πότε γυρνούν (${who.join(', ')}). Δήλωσε τους εξοδούχους εκείνης της μέρας ή άλλαξε το «Αύριο εκπαίδευση». <${Button} size="sm" variant="secondary" onClick=${() => nav.set({ outDate: d })}>Άνοιγμα ${dayName(d, today).toLowerCase()}<//></span><//>`)}
     ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
-    <details className="note backs-box"><summary>Ποιοι γυρίζουν και πότε <span className="cnt">${backN}</span>${backEarly ? html` <${Badge} tone="bad">κάποιοι για υπηρεσία<//>` : null}${pendDays.length ? html` <${Badge} tone="warn">να δηλωθεί η επόμενη μέρα<//>` : null}</summary><${ReturnsList} date=${date} fixable=${true}/></details>
+    <details className="note backs-box"><summary>Ποιοι γυρίζουν και πότε <span className="cnt">${backN}</span>${backEarly ? html` <${Badge} tone="bad">κάποιοι για υπηρεσία<//>` : null}${pendDays.length ? html` <${Badge} tone="warn">να δηλωθεί η επόμενη μέρα<//>` : null}<button type="button" className="linkish backs-box__all" onClick=${(e: any) => { e.preventDefault(); nav.go('strength', { strengthDate: date }); }} data-tip="Όλοι με το πότε γυρνούν: παρόντες, κωλυόμενοι, απόντες">Όλοι στη Δύναμη →</button></summary><${ReturnsList} date=${date} fixable=${true} outsOnly=${true}/>${backMore > 0 && html`<p className="note rows__more">Και ${backMore} με άδεια ή στο νοσοκομείο, στη Δύναμη.</p>`}</details>
     <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b>${sat ? html` · ΔΝ ΣΚ <b>${cnt('DNSK')}</b>` : null} · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span></span>
       ${nChanges ? html`<${Button} size="sm" variant="ghost" onClick=${() => { setDraft(saved); setNotes(savedNotes); }}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${nChanges})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}
       <span className="outbar__xl">${nChanges > 0 ? html`<span className="note">Αποθήκευσε πρώτα για Excel.</span>` : html`<${ExportButton} kind="outs" date=${date} label="οι εξοδούχοι και παραμένοντες" variant="outline" size="sm"/>`}</span></div>
