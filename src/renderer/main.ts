@@ -2,6 +2,7 @@ import './styles.css';
 import { createRoot } from 'react-dom/client';
 import { html } from './ui';
 import { App } from './app';
+import { ErrorBoundary } from './errorBoundary';
 import { applyPrefs, loadPrefs } from './prefs';
 import { installTips } from './tips';
 
@@ -12,6 +13,6 @@ installTips();   // θέμα και πυκνότητα πριν από την π
 const ready = window.api ? Promise.resolve() : import('./mockApi').then(m => { (window as any).api = m.mockApi(); });
 const root = createRoot(document.getElementById('root')!);
 ready.then(() => window.api.boot()).then(
-  boot => root.render(html`<${App} boot=${boot}/>`),
+  boot => root.render(html`<${ErrorBoundary} whole><${App} boot=${boot}/><//>`),
   err => root.render(html`<div className="boot err">Δεν ξεκίνησε η εφαρμογή: ${String(err)}</div>`)
 );
