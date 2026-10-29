@@ -96,8 +96,8 @@ export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 // away: απών · noDuty: καμία υπηρεσία · noArmed: όχι ένοπλη θέση · noOut: δεν βγαίνει έξοδο
 // light: ΕΟ/ΕΑ (λοχίας, 10/10): όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
 // ---------------------------------------------------------------------------
-export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN';
-export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun';
+export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN' | 'KOL';
+export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun' | 'kol';
 export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
   away?: boolean; noDuty?: boolean; noArmed?: boolean; noOut?: boolean; light?: boolean;
@@ -116,11 +116,14 @@ export const TYPES: Record<TypeKey, TypeDef> = {
   HON:   { label: 'Τιμητική', long: 'Τιμητική άδεια', tone: 'info', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'eid' },
   SICK:  { label: 'Αναρρωτική', long: 'Αναρρωτική άδεια', tone: 'bad', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'an', code: 'ΑΝ.ΑΔ' },
   OUT:   { label: 'Εξοδούχος', long: 'Εξοδούχος', tone: 'warn', cat: 'out', away: true, noDuty: true },
-  DN:    { label: 'ΔΝ', long: 'Εξοδούχος με ΔΝ', tone: 'dn', cat: 'out', away: true, noDuty: true }
+  DN:    { label: 'ΔΝ', long: 'Εξοδούχος με ΔΝ', tone: 'dn', cat: 'out', away: true, noDuty: true },
+  // Κωλυόμενος (Michael, 24/10): υπηρεσία που δεν είναι δική μας (π.χ. ΣΤΕΠ). Παρών, σε καμία δική μας υπηρεσία· η έξοδος, η αφαίρεση
+  // από τους παρόντες και η στήλη της ΗΚΑΙ ορίζονται ανά δήλωση (Status.noOut, minus, hkCol, rules.ts kolView)
+  KOL:   { label: 'Κωλυόμενος', long: 'Κωλυόμενος (υπηρεσία εκτός δικών μας)', tone: 'warn', cat: 'kol', noDuty: true }
 };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef) =>
-  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο'].filter(Boolean).join(' · ');
+  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
 export const typeTip = (t: TypeDef) => t.long + (effects(t) ? ': ' + effects(t) : '');
 export const RECORD_CATS: Cat[] = ['med', 'other', 'pun'];
 export const PUN_KINDS = ['Περιορισμός', 'Κράτηση', 'Φυλάκιση', 'Στέρηση εξόδου'];
@@ -142,6 +145,9 @@ export interface Status {
   fromTime?: string;  // άδεια: ώρα αναχώρησης την πρώτη μέρα (ΩΩ:ΛΛ), shared/hours.ts
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
   req?: string;       // άδεια που εγκρίθηκε από αίτηση της ΗΚΑΙ (PersonRequest.id)
+  minus?: boolean;    // κωλυόμενος: αφαιρείται από τους παρόντες και μπαίνει στην ΗΚΑΙ, στη στήλη hkCol
+  hkCol?: string;     // κωλυόμενος: στήλη κωλυομένων της ΗΚΑΙ (KOL_COLS), προεπιλογή yp «Υπηρεσία»
+  noOut?: boolean;    // κωλυόμενος: δεν βγαίνει έξοδο (αλλιώς βγαίνει κανονικά)
   days?: number;      // στέρηση εξόδου: ημέρες ποινής· το «to» μετακινείται για κάθε μέρα με υπηρεσία ή βραδινή εκπαίδευση (shared/punish.ts)
 }
 // Οι ποινές ισχύουν αμέσως, χωρίς έγκριση (Michael, 17/10): όσες είχαν μείνει «αιτείται» από παλιότερη έκδοση ισχύουν κι αυτές.
@@ -543,6 +549,12 @@ export const CADRE_ABS: [string, string, string][] = [
   ['adik', 'Αγνοούμενος / αδικαιολογήτως', 'adik'], ['fp', 'Φύλλο πορείας', 'fp'], ['fyl', 'Φυλάκιο', 'fyl'], ['apal', 'Απαλλαγή', 'apal'],
   ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']
 ];
+// Στήλες κωλυομένων της ΗΚΑΙ που διαλέγει η δήλωση του κωλυόμενου: οι πρώτες επτά του CADRE_ABS (Υπηρεσία, ΕΥ, Τιμ., Ο/Σ, Μαγειρεία…)
+export const KOL_COLS: [string, string][] = CADRE_ABS.slice(0, 7).map(([k, l]) => [k, k === 'yp' ? 'Υπηρεσία' : l]);
+export const KOL_DEFAULT_COL = 'yp';
+// Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία)
+export const kolColOf = (s: { hkCol?: string }): string => (KOL_COLS.some(x => x[0] === s.hkCol) ? s.hkCol! : KOL_DEFAULT_COL);
+export const kolColName = (k: string): string => KOL_COLS.find(x => x[0] === k)?.[1] || k;
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας

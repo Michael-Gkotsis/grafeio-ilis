@@ -3,15 +3,17 @@
 import type { CellValue } from './roster';
 import type { Status, TypeKey } from './domain';
 
-// Ποια είδη έχουν ώρες: οι άδειες (κανονική, τιμητική, αναρρωτική), το νοσοκομείο και ο ΣΤΕΠ (Michael, 18/10: «και για
-// τις υπόλοιπες καταστάσεις όπου έχει σημασία»). Τα ιατρικά (ΕΥ, ΕΑ…), οι ποινές και οι έξοδοι είναι ολόκληρες μέρες.
-export const TIMED: TypeKey[] = ['LEAVE', 'HON', 'SICK', 'NOS', 'STEP'];
+// Ποια είδη έχουν ώρες: οι άδειες (κανονική, τιμητική, αναρρωτική), το νοσοκομείο, ο ΣΤΕΠ (Michael, 18/10: «και για
+// τις υπόλοιπες καταστάσεις όπου έχει σημασία») και ο κωλυόμενος. Τα ιατρικά (ΕΥ, ΕΑ…), οι ποινές και οι έξοδοι είναι ολόκληρες μέρες.
+export const TIMED: TypeKey[] = ['LEAVE', 'HON', 'SICK', 'NOS', 'STEP', 'KOL'];
 export const hasTimes = (t: TypeKey) => TIMED.includes(t);
 // Πώς λέγονται οι δύο ώρες: στις άδειες αναχώρηση/επιστροφή, στο νοσοκομείο και στον ΣΤΕΠ εισαγωγή/έξοδος
 const IN_OUT: TypeKey[] = ['NOS', 'STEP'];
-export const timeNames = (t?: TypeKey) => (t && IN_OUT.includes(t)
-  ? { from: 'εισαγωγή', to: 'έξοδος', fromG: 'εισαγωγής', toG: 'εξόδου' }
-  : { from: 'αναχώρηση', to: 'επιστροφή', fromG: 'αναχώρησης', toG: 'επιστροφής' });
+export const timeNames = (t?: TypeKey) => (t === 'KOL'
+  ? { from: 'έναρξη', to: 'λήξη', fromG: 'έναρξης', toG: 'λήξης' }
+  : t && IN_OUT.includes(t)
+    ? { from: 'εισαγωγή', to: 'έξοδος', fromG: 'εισαγωγής', toG: 'εξόδου' }
+    : { from: 'αναχώρηση', to: 'επιστροφή', fromG: 'αναχώρησης', toG: 'επιστροφής' });
 
 // «14», «1400», «14.00», «14:00», «9:30» → «14:00», «09:30». Κενό → ''. Άκυρο → null.
 export function normTime(raw: unknown): string | null {

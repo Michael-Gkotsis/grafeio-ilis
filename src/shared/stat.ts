@@ -58,7 +58,8 @@ export function statOutOf(lists: UserLists | undefined, type: TypeKey, own?: str
   const vr = STAT_ROWS.includes(type) ? o?.[type] : undefined; if (vr != null) return { ok: vr, from: 'row' };
   return { ok: !TYPES[type].noOut, from: 'def' };
 }
-export const statNoOut = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => {
+export const statNoOut = (s: Pick<Status, 'type' | 'kind'> & { noOut?: boolean }, lists?: UserLists): boolean => {
+  if (s.type === 'KOL') return !!s.noOut;   // ο κωλυόμενος: ανά δήλωση
   const r = statRowOf(s, lists);
   return r ? !statOutOf(lists, r.type, r.own).ok : !!TYPES[s.type].noOut;
 };

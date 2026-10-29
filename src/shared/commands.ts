@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -254,7 +254,7 @@ function editedMove(s: AppState, m: WeaponMove, pt: Partial<Pick<WeaponMove, 're
   if (!x.inDay && (s.weaponLog || []).some(y => y.id !== x.id && y.pid === x.pid && !y.inDay)) throw new Error('Το όπλο του έχει ήδη άλλη έξοδο χωρίς είσοδο');
   return x;
 }
-const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά');
+const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : st.type === 'KOL' ? HK() : 'Ιατρικά');
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
 
 // Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
@@ -340,13 +340,15 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const { cmd } = c; const plan = planStatusChange(s, cmd, ctx.today);
       if (!cmd.pids.length) throw new Error('Δεν διάλεξες άτομο');
       if (cmd.open && !canOpen(cmd.type)) throw new Error('«Χωρίς λήξη» δηλώνονται μόνο ιατρικά, ΣΤΕΠ και νοσοκομείο');
+      const kol = cmd.type === 'KOL'; const kNote = kol ? (cmd.note || '').trim() : '';
+      if (kol && !kNote) throw new Error('Γράψε τι υπηρεσία είναι (π.χ. Υπηρεσία ΣΤΕΠ): φαίνεται στη Δύναμη και στο Σήμερα');
       // χωρίς λήξη: το «έως» είναι σήμερα (ή το «από») και προχωρά μόνο του κάθε μέρα (extendOpen)
       const open = !!cmd.open; const to = open ? (cmd.from > ctx.today ? cmd.from : ctx.today) : cmd.to;
       if (!open && cmd.to < cmd.from) throw new Error('Το «έως» είναι πριν από το «από»');
       const tm = checkTimes({ ...cmd, open });
       if (plan.blocked.length && !cmd.force) { const b = plan.blocked[0]; throw new Error(shortName(pm.get(b.pid)!) + ' δεν βγαίνει έξοδο ' + dm(b.date) + ': ' + b.reason); }
       // η ίδια δήλωση δεύτερη φορά (π.χ. διπλό κλικ): δεν γράφεται διπλή
-      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && (open ? !!x.open : !x.open && x.to === cmd.to) && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)));
+      const twin = s.statuses.find(x => cmd.pids.includes(x.pid) && x.type === cmd.type && x.from === cmd.from && (open ? !!x.open : !x.open && x.to === cmd.to) && (TYPES[x.type].cat !== 'med' || sameMed(x, cmd, s.settings.lists)) && (!kol || ((x.note || '') === kNote && (x.fromTime || '') === (tm.fromTime || '') && (x.toTime || '') === (tm.toTime || ''))));
       const when = open ? 'από ' + dm(cmd.from) + ' χωρίς λήξη' : range(cmd.from, cmd.to);
       if (twin) throw new Error(shortName(pm.get(twin.pid)!) + ' έχει ήδη ' + (cmd.type === 'PUN' ? 'την ίδια ποινή' : statusLbl(cmd, s.settings.lists)) + ' ' + when);
       const drop = new Set(plan.cancels.map(x => x.id));
@@ -355,8 +357,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         statuses: [...s.statuses.filter(x => !drop.has(x.id)), ...plan.cancels.flatMap(x => splitOut(x, cmd.from, outCutTo(s, planTo(cmd)), ctx.newId)), ...cmd.pids.map(pid => {
           const st: Status = { id: ctx.newId(), pid, type: cmd.type, from: cmd.from, to };
           if (open) st.open = true;
-          if (cmd.note) st.note = cmd.note;
+          if (cmd.note) st.note = kol ? kNote : cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
+          if (kol) { if (cmd.minus) { st.minus = true; st.hkCol = kolColOf(cmd); } if (cmd.noOut) st.noOut = true; }
           Object.assign(st, tm);
           if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; if (cmd.by?.trim()) st.by = cmd.by.trim(); if (cmd.reason?.trim()) st.reason = cmd.reason.trim(); if (cmd.on) st.on = cmd.on; }
           if (isDeprivation(st)) st.days = daysBetween(cmd.from, cmd.to);   // οι ημέρες της ποινής· το «έως» μετακινείται στο apply
@@ -547,26 +550,26 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       let out: AppState = { ...s, statuses: s.statuses.map(x => (x === st ? next : x)) };
       plan.conflicts.forEach(x => { out = setGuard(out, x.date, x.k, null); });
       const t = timesTxt(next), lv = TYPES[st.type].cat === 'abs';
-      return { state: out, text: 'Ώρες ' + (lv ? 'άδειας' : TYPES[st.type].label) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: [st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : 'Ιατρικά', ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
+      return { state: out, text: 'Ώρες ' + (lv ? 'άδειας' : TYPES[st.type].label) + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!) + ': ' + (t || 'χωρίς ώρες'), files: [leaveFile(st), ...plan.files.filter(f => f.fn.startsWith('Υπηρεσίες')).map(f => f.fn)] };
     }
     case 'endStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
       const y = addDays(ctx.today, -1);
       const statuses = st.from > y ? s.statuses.filter(x => x !== st) : s.statuses.map(x => { if (x !== st) return x; const n = { ...x, to: y }; delete n.open; delete n.days; return n; });
-      return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'] };
+      return { state: { ...s, statuses }, text: 'Τέλος από σήμερα: ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : st.type === 'KOL' ? HK() : 'Ιατρικά'] };
     }
     case 'deleteStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
-      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε (μπήκε λάθος): ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + (st.open ? 'από ' + dm(st.from) + ' χωρίς λήξη' : range(st.from, st.to)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά', HK()] };
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st) }, text: 'Διαγράφηκε (μπήκε λάθος): ' + (st.type === 'PUN' ? 'ποινή' : statusLbl(st, s.settings.lists)) + ' ' + (st.open ? 'από ' + dm(st.from) + ' χωρίς λήξη' : range(st.from, st.to)) + ' του ' + shortName(pm.get(st.pid)!), files: [st.type === 'PUN' ? 'Ποινές' : leaveFile(st), HK()] };
     }
     case 'replaceStatus': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η καταχώρηση');
-      if (!RECORD_CATS.includes(TYPES[st.type].cat)) throw new Error('Διορθώνονται εδώ μόνο ιατρικά και ποινές');
+      if (!RECORD_CATS.includes(TYPES[st.type].cat) && st.type !== 'KOL') throw new Error('Διορθώνονται εδώ μόνο ιατρικά και ποινές');
       if (!c.cmds.length) throw new Error('Δεν διάλεξες κατάσταση');
       const base: AppState = { ...s, statuses: s.statuses.filter(x => x !== st) };
       const r = run(base, c.cmds.length > 1 ? { t: 'declareMany', cmds: c.cmds } : { t: 'declare', cmd: c.cmds[0] }, ctx);
       const was = (st.type === 'PUN' ? 'ποινή (' + punLbl(st.kind || PUN_KINDS[0]) + ')' : statusLbl(st, s.settings.lists)) + ' ' + (st.open ? 'από ' + dm(st.from) + ' χωρίς λήξη' : range(st.from, st.to));
-      return { state: r.state, text: 'Διόρθωση: ' + r.text + ' (ήταν ' + was + ')', files: [...new Set([st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά', ...r.files])] };
+      return { state: r.state, text: 'Διόρθωση: ' + r.text + ' (ήταν ' + was + ')', files: [...new Set([st.type === 'PUN' ? 'Ποινές' : leaveFile(st), ...r.files])] };
     }
     case 'cancelLeave': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
