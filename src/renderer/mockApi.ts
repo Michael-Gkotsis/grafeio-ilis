@@ -7,7 +7,7 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
-import { byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
+import { blankN, byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
 import { atOf, evalTables, rowText } from '../shared/values';
 import { MAIN, bandsOf } from '../shared/repBands';
@@ -210,7 +210,8 @@ export function mockApi(): Api {
     repPreview: async (src, r: Report, ids, date, _raw, opts) => {
       type Col = { f: string; h?: string; text?: string; o?: ColOpts };
       const build = 'build' in src ? src.build : null;
-      const cols1: Col[] = build ? build.cols : r.cols;
+      let gj = 0;   // «Κενό»: τα κελιά του πλέγματος μπαίνουν στις στήλες (χωρίς το Α/Α), όπως τα βάζει ο main
+      const cols1: Col[] = build ? (r.kind === 'blank' ? build.cols.map(c => { if (c.f === 'aa') return c; const j = gj++; return { ...c, o: { ...c.o, vals: (build.grid || []).slice(0, blankN(build.nrows)).map(row => row?.[j] ?? '') } }; }) : build.cols) : r.cols;
       const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const extra = moreRows(state, r, date);

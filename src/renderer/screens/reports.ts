@@ -26,8 +26,8 @@ import { WEAPON_FILTERS } from '../../shared/weapons';
 import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
-  DEF_COMBO, TAB_WIDTHS, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, stText, subPick, tagKey, withBuilt,
+  BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  DEF_COMBO, TAB_WIDTHS, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid,
   type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -39,6 +39,7 @@ const fileName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
 // «Φτιάξ' το εδώ», άλλαξε το είδος: φεύγουν οι στήλες που δεν υπάρχουν σε αυτό (π.χ. ΑΣΜ στα στελέχη) και μπαίνουν οι βασικές του
 // (Καταστάσεις: είδος, από, έως· Υπηρεσίες: θέση πρώτη, μετά το Α/Α)· ο συνδυασμός κρατά όσα στοιχεία υπάρχουν
 function colsForKind(cs: BuildCol[], kind: RepKind): BuildCol[] {
+  if (kind === 'blank') { const aa = cs.find(c => c.f === 'aa'); const col = cs.filter(c => c.f === 'col'); return [...(aa ? [aa] : [{ f: 'aa', h: 'Α/Α', w: 'narrow' as const }]), ...(col.length ? col : [1, 2].map(n => ({ f: 'col', h: 'ΣΤΗΛΗ ' + n, w: 'auto' as const })))]; }
   const cols = cs.filter(c => fieldOf(kind, c.f) && !Object.values(KIND_COLS).some(l => l!.includes(c.f) && !fieldOf('people', c.f)))
     .map(c => (c.f === 'combo' && c.o?.parts ? { ...c, o: { ...c.o, parts: c.o.parts.filter(k => fieldOf(kind, k)) } } : c));
   for (const f of KIND_COLS[kind] || []) if (!cols.some(c => c.f === f)) cols.push({ f, h: fieldOf(kind, f)!.head, w: ['stype', 'seat', 'inout', 'mreason'].includes(f) ? 'auto' : 'narrow' });
@@ -46,7 +47,7 @@ function colsForKind(cs: BuildCol[], kind: RepKind): BuildCol[] {
   return cols;
 }
 // πού βγαίνει, για τη λίστα: «φύλλο ΑΓΓΑΡΕΙΑ στο Δυναμολόγιο»
-const splitText = (r: Report) => (r.kind !== 'cadre' && r.split && r.split !== 'none' ? ', ' + (SPLITS.find(x => x.value === r.split)?.label.toLowerCase() || '') : '');
+const splitText = (r: Report) => (splitOk(r.kind) && r.split && r.split !== 'none' ? ', ' + (SPLITS.find(x => x.value === r.split)?.label.toLowerCase() || '') : '');
 const outText = (r: Report) => r.out === 'print' ? 'εκτύπωση' + splitText(r) : r.out !== 'sheet' ? 'Excel' + splitText(r) :
   'φύλλο ' + (r.target?.sheet || r.name).toUpperCase() + splitText(r) + ' στο ' + (r.target?.to === 'file' ? fileName(r.target.file) : 'Δυναμολόγιο') + (r.target?.auto ? ', ενημερώνεται μόνο του' : '');
 const STEPS = ['Πρότυπο', 'Τι αφορά', 'Η σελίδα και οι πίνακες', 'Ποιοι μπαίνουν', 'Πού βγαίνει'];
@@ -456,22 +457,25 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     setTpl(t); setNote('');
     const f = (await window.api.repFiles([t.file]))[t.file];
     if (!f || !f.exists) { setNote('Το αρχείο του προτύπου λείπει από τον φάκελο «Πρότυπα εντύπων». Ανέβασέ το ξανά ή διάλεξε άλλο.'); setMode(null); return; }
-    if (t.built && !editedInExcel(t, f.mtime)) { const b: BuildOpts = JSON.parse(JSON.stringify(t.built)); setMode('build'); setBuild(b); setInsp(null); setR(o => ({ ...o, more: syncMore(o.more, b.more) })); return; }
+    if (t.built && !editedInExcel(t, f.mtime)) { const b: BuildOpts = JSON.parse(JSON.stringify(t.built)); setMode('build'); setBuild(b); setInsp(null); setR(o => ({ ...o, more: syncMore(o.more, b.more), ...(b.nrows != null && o.kind !== 'blank' ? { kind: 'blank' as const, pick: { from: 'all' as const, mode: 'all' as const, n: blankN(b.nrows) }, sort: 'pick' as const, split: 'none' as const } : {}) })); return; }   // πρότυπο «Κενό»: το είδος το ακολουθεί
     if (t.built) setNote('Το πρότυπο άλλαξε στο Excel, οπότε οι στήλες διαβάζονται από το αρχείο.');
-    setMode('upload'); setBuild(null); if (!keepCols) { upd({ more: undefined }); setSubInsp({}); }
-    await inspect(t, kind, keepCols ? r.sheet : undefined, keepCols ? r.head : undefined, keepCols);
+    const k0: RepKind = !keepCols && kind === 'blank' ? 'people' : kind;
+    setMode('upload'); setBuild(null); if (!keepCols) { upd({ more: undefined, ...(k0 !== kind ? { kind: k0, ...pickForKind(kind, r.pick, r.sort, k0) } : {}) }); setSubInsp({}); }
+    await inspect(t, k0, keepCols ? r.sheet : undefined, keepCols ? r.head : undefined, keepCols);
     if (keepCols) for (const m of r.more || []) await inspectSub(t, m.id, m.kind, m.head, true);
   };
+  // το «Κενό» είναι μόνο για «Φτιάξ' το εδώ»: με ανεβασμένο Excel το είδος γυρίζει στους στρατιώτες
+  const noBlank = () => (r.kind === 'blank' ? 'people' : r.kind);
   const upload = async () => {
-    const x = await window.api.repUpload(r.kind); if (!x) return;
+    const x = await window.api.repUpload(noBlank()); if (!x) return;
     if (!x.ok) { toast({ text: html`<span><b>Δεν ανέβηκε.</b> ${x.error}</span>` }); return; }
     setTpl(x.tpl); setMode('upload'); setBuild(null); setInsp(x.insp); setNote('');
-    upd({ sheet: x.insp.sheet, head: x.insp.head, cols: colsFrom(x.insp), cells: [], name: r.name || x.tpl.name, more: undefined }); setSubInsp({}); setTi(0);
+    upd({ sheet: x.insp.sheet, head: x.insp.head, cols: colsFrom(x.insp), cells: [], name: r.name || x.tpl.name, more: undefined, ...(r.kind === 'blank' ? { kind: 'people', ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) }); setSubInsp({}); setTi(0);
     setStep(2);
   };
   // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
   const [quick, setQuick] = useState(false);
-  const startBuild = (o: BuildOpts, name: string, jump = false) => { const b: BuildOpts = JSON.parse(JSON.stringify(o)); setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote(''); upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more) }); setTi(0); setQuick(jump); setStep(jump ? 4 : 2); };
+  const startBuild = (o: BuildOpts, name: string, jump = false) => { const b: BuildOpts = JSON.parse(JSON.stringify(o)); setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote(''); upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(r.kind === 'blank' ? { kind: 'people', ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) }); setTi(0); setQuick(jump); setStep(jump ? 4 : 2); };
   useEffect(() => {
     if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true).finally(() => setReady(true)); else { setStep(1); setReady(true); } }
     else if (start === 'upload') upload().finally(() => setReady(true));
@@ -481,16 +485,20 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
   const setKind = async (kind: RepKind) => {
     if (kind === r.kind) return;
-    upd({ kind, ...pickForKind(r.kind, r.pick, r.sort, kind), split: kind === 'cadre' ? 'none' : r.split });
+    upd({ kind, ...pickForKind(r.kind, r.pick, r.sort, kind), split: splitOk(kind) ? r.split : 'none' });
     if (mode === 'upload' && tpl) await inspect(tpl, kind, r.sheet, r.head);
-    if (mode === 'build' && build) setBuild({ ...build, cols: colsForKind(build.cols, kind) });
+    if (mode === 'build' && build) {
+      const { grid: _g, nrows: _n, ...o } = build; let cols = colsForKind(build.cols, kind);
+      if (r.kind === 'blank' && !cols.some(c => c.f !== 'aa')) cols = [...cols, ...['rank', 'name'].filter(f => fieldOf(kind, f)).map(f => ({ f, h: fieldOf(kind, f)!.head, w: 'auto' as const }))];   // από το «Κενό» πίσω: χωρίς στήλες δεν γίνεται πίνακας
+      setBuild({ ...o, cols, ...(kind === 'blank' ? { nrows: BLANK_ROWS } : {}) });
+    }
   };
   const p = usePick(r, d);
   const ids = useMemo(() => p.rows.map(x => x.id), [p.rows]);
   const raw = step === 3 && mode === 'upload' && (view === 'tpl' || !!picking);
   const src: RepSource | null = mode === 'build' && build ? { build } : mode === 'upload' && tpl ? { file: tpl.file } : null;
   // χωρισμένο ανά θάλαμο/ουλαμό/Σ.Ι.: η προεπισκόπηση δείχνει την ομάδα που διαλέγεις
-  const groups = useMemo(() => (r.kind !== 'cadre' && r.split && r.split !== 'none' ? groupsOf(state, r.kind, p.rows, r.split) : []), [state, r.kind, r.split, p.rows]);
+  const groups = useMemo(() => (splitOk(r.kind) && r.split && r.split !== 'none' ? groupsOf(state, r.kind, p.rows, r.split) : []), [state, r.kind, r.split, p.rows]);
   const [pvG, setPvG] = useState('');
   const g = groups.find(x => x.key === pvG) || groups[0];
   const pvIds = useMemo(() => (g ? g.rows.map(x => x.id) : ids), [g, ids]);
@@ -592,7 +600,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
         ${step === 4 && quick && html`<${Alert} tone="info">Ξεκίνησες από το έτοιμο «${r.name}»: οι στήλες είναι έτοιμες. Διάλεξε ποιοι μπαίνουν και πάτα «Αποθήκευση και Βγάλε», ή «Επόμενο» για το πού βγαίνει. Τις στήλες τις αλλάζεις από το βήμα 3.<//>`}
         ${step === 4 && !nop && html`<${TableTabs} r=${r} t1=${mode === 'build' ? build?.t1 : undefined} ti=${Math.min(ti, (r.more || []).length)} setTi=${setTi}/>`}
         ${step === 4 && nop && html`<${Alert} tone="info">Αυτό το έντυπο έχει μόνο πίνακες τιμών: δεν διαλέγεις άτομα. Τους πίνακες και τη στιγμή μέτρησης τα αλλάζεις από το βήμα 3.<//>`}
-        ${step === 4 && !nop && (ti > 0 && r.more?.[ti - 1] ? html`<${SubPick} key=${r.more[ti - 1].id} r=${r} t=${r.more[ti - 1]} n=${ti + 1} d=${d} set=${(t: RepTable) => upd({ more: (r.more || []).map(x => (x.id === t.id ? t : x)) })}/>` : html`<${StepPick} r=${r} upd=${upd} p=${p}/>`)}
+        ${step === 4 && !nop && (ti > 0 && r.more?.[ti - 1] ? html`<${SubPick} key=${r.more[ti - 1].id} r=${r} t=${r.more[ti - 1]} n=${ti + 1} d=${d} set=${(t: RepTable) => upd({ more: (r.more || []).map(x => (x.id === t.id ? t : x)) })}/>` : r.kind === 'blank' ? html`<${StepBlank} r=${r} upd=${upd}/>` : html`<${StepPick} r=${r} upd=${upd} p=${p}/>`)}
         ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
       </div>
       <div className="rep-page__nav"><${Button} variant="outline" disabled=${step < 2} why="Είσαι στο πρώτο βήμα" onClick=${() => goStep(step - 1)}>‹ Πίσω<//><${Button} variant="outline" disabled=${step > 4 || !canGo(step + 1)} why=${missing(step + 1)} onClick=${() => goStep(step + 1)}>Επόμενο ›<//></div>
@@ -632,7 +640,7 @@ function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
 
 function StepKind({ r, setKind, mode, tpl, build }: P) {
   return html`<div className="stack">
-    <div className="rep-kinds">${REP_KINDS.map(k => html`<button key=${k.id} type="button" className="rep-preset" aria-pressed=${r.kind === k.id} onClick=${() => setKind(k.id)}><b>${k.label}</b><small>${k.help}</small></button>`)}</div>
+    <div className="rep-kinds">${REP_KINDS.filter(k => k.id !== 'blank' || mode !== 'upload').map(k => html`<button key=${k.id} type="button" className="rep-preset" aria-pressed=${r.kind === k.id} onClick=${() => setKind(k.id)}><b>${k.label}</b><small>${k.help}</small></button>`)}</div>
     <p className="note">${mode === 'upload' ? 'Οι στήλες του «' + (tpl?.name || '') + '» ξαναδιαβάζονται για το είδος που διαλέγεις.' : build ? 'Οι στήλες που δεν υπάρχουν στο είδος φεύγουν (π.χ. ΑΣΜ στα στελέχη, εκεί είναι ΑΜ) και μπαίνουν οι βασικές του (π.χ. θέση και ώρες στις υπηρεσίες).' : ''}</p>
   </div>`;
 }
@@ -716,13 +724,18 @@ function ColOptsEditor({ kind, c, set }: P) {
   return null;
 }
 // Ένα στοιχείο σε στήλη: με το «Συνδυασμός» μπαίνει η προεπιλογή (βαθμός και Ο/Σ)
-const colWith = (kind: RepKind, f: string, h: string) => (f === 'combo' ? { f, h: comboHead(kind, DEF_COMBO), o: { ...DEF_COMBO } } : { f, h: fieldOf(kind, f)?.head || h, o: undefined });
+const colWith = (kind: RepKind, f: string, h: string) => (f === 'combo' ? { f, h: comboHead(kind, DEF_COMBO), o: { ...DEF_COMBO } } : { f, h: fieldOf(kind, f)?.head || (kind === 'blank' && h === 'Α/Α' ? '' : h), o: undefined });
 
 // Οι στήλες ενός πίνακα στο «Φτιάξ' το εδώ»
 function ColsEditor({ kind, cols, setCols }: P) {
   const setCol = (i: number, x: Partial<BuildCol>) => setCols(cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)));
-  const move = (i: number, by: number) => { const cs = [...cols]; const j = i + by; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; setCols(cs); };
-  const add = () => { const used = new Set(cols.map((c: BuildCol) => c.f)); const f = FIELDS[kind as RepKind].find(x => !used.has(x.k) && x.k !== 'text' && x.k !== 'combo') || FIELDS[kind as RepKind][0]; setCols([...cols, { f: f.k, h: f.head, w: 'auto' }]); };
+  // το 2ο όρισμα του setCols: από ποια παλιά στήλη προέρχεται κάθε νέα (για το πλέγμα του «Κενό»)
+  const ix = cols.map((_: BuildCol, i: number) => i);
+  const move = (i: number, by: number) => { const cs = [...cols]; const j = i + by; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; const from = [...ix]; [from[i], from[j]] = [from[j], from[i]]; setCols(cs, from); };
+  const add = () => {
+    if (kind === 'blank') { setCols([...cols, { f: 'col', h: 'ΣΤΗΛΗ ' + (cols.filter((c: BuildCol) => c.f === 'col').length + 1), w: 'auto' }], [...ix, -1]); return; }
+    const used = new Set(cols.map((c: BuildCol) => c.f)); const f = FIELDS[kind as RepKind].find(x => !used.has(x.k) && x.k !== 'text' && x.k !== 'combo') || FIELDS[kind as RepKind][0]; setCols([...cols, { f: f.k, h: f.head, w: 'auto' }]);
+  };
   return html`<div><span className="field__label">Στήλες</span>
     <ul className="rep-cols">${cols.map((c: BuildCol, i: number) => html`<li key=${i}>
       <span className="rep-cols__l">${String.fromCharCode(65 + i)}</span>
@@ -730,7 +743,7 @@ function ColsEditor({ kind, cols, setCols }: P) {
       <input className="ui-input" aria-label=${'Επικεφαλίδα στήλης ' + (i + 1)} placeholder="Επικεφαλίδα" value=${c.h} onChange=${(e: any) => setCol(i, { h: e.target.value })}/>
       <${Select} className="ui-select rep-cols__w" aria-label=${'Πλάτος στήλης ' + (i + 1)} value=${c.w} onChange=${(e: any) => setCol(i, { w: e.target.value })}><option value="narrow">Στενή</option><option value="auto">Κανονική</option><option value="wide">Φαρδιά</option><//>
       <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${i === 0} onClick=${() => move(i, -1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${i === cols.length - 1} onClick=${() => move(i, 1)}>${Icon.down}<//>
-        <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${cols.length < 2} why="Χρειάζεται τουλάχιστον μία στήλη" onClick=${() => setCols(cols.filter((_: BuildCol, j: number) => j !== i))}>${Icon.x}<//></span>
+        <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${cols.length < 2} why="Χρειάζεται τουλάχιστον μία στήλη" onClick=${() => setCols(cols.filter((_: BuildCol, j: number) => j !== i), ix.filter((j: number) => j !== i))}>${Icon.x}<//></span>
       ${c.f === 'text' && html`<input className="ui-input rep-cols__txt" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(i, { text: e.target.value })}/>`}
       <${ColOptsEditor} kind=${kind} c=${c} set=${(o: ColOpts | undefined, h: string) => setCol(i, { o, h })}/>
     </li>`)}</ul>
@@ -771,7 +784,7 @@ function NoHead({ on, set, n }: P) {
 function TableHead({ t, kind, title, ta, setTa, setKind, setTitle, onDel, n }: P) {
   return html`<div className="rep-th">
     ${setTitle && html`<div className="field rep-th__t"><label className="field__label" htmlFor=${'t-title' + n}>Τίτλος πάνω από τον πίνακα</label><input id=${'t-title' + n} className="ui-input" placeholder=${n > 1 ? 'π.χ. ΙΑΤΡΙΚΑ (κενό: χωρίς τίτλο)' : 'π.χ. ΠΑΡΟΝΤΕΣ (κενό: χωρίς τίτλο)'} value=${title} onChange=${(e: any) => setTitle(e.target.value)}/>${setTa && alignSeg(ta, 'left', setTa, 'Στοίχιση τίτλου πίνακα ' + n)}</div>`}
-    ${setKind && html`<div className="field rep-th__k"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>`}
+    ${setKind && html`<div className="field rep-th__k"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.filter(k => k.id !== 'blank').map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>`}
     ${onDel && html`<p className="field__help rep-th__h">${t ? 'Ποιοι μπαίνουν σε αυτόν τον πίνακα το διαλέγεις στο βήμα 4. ' : ''}Μπαίνει κάτω από τον προηγούμενο, με δικές του στήλες.</p>
     <${Button} size="sm" variant="ghost" aria-label=${'Βγάλε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Βγάλε τον πίνακα<//>`}
   </div>`;
@@ -804,7 +817,7 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
   const setT1 = (t1: string) => { const { t1: _t, ...rest } = o; setO(t1 ? { ...rest, t1 } : rest); };
   const noHead1 = (on: boolean) => { const { nohead: _h, ...rest } = o; setO(on ? { ...rest, nohead: true } : rest); };
   const addTable = () => {
-    const id = uid(); const k: RepKind = r.kind;
+    const id = uid(); const k: RepKind = r.kind === 'blank' ? 'people' : r.kind;   // το «Κενό» είναι μόνο ο 1ος πίνακας
     const { nopeople: _n, ...o0 } = o;
     setO({ ...o0, more: [...more, { id, title: '', kind: k, cols: colsForKind([{ f: 'aa', h: 'Α/Α', w: 'narrow' }, ...(fieldOf(k, 'rank') ? [{ f: 'rank', h: 'ΒΑΘΜΟΣ', w: 'auto' as const }] : []), { f: 'name', h: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', w: 'auto' }], k) }] });
     upd({ more: [...(r.more || []), newTable(k, id)] }); setTi(more.length + 1); setVi(-1);
@@ -844,7 +857,8 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
         ${layFold(bt.lay, bt.nohead, html`<${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/><${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`)}`
         : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
         : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} ta=${o.ta1} setTa=${setTa1} setTitle=${setT1}/>
-        <${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[]) => set({ cols })}/>
+        <${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[], from?: number[]) => set(kind === 'blank' ? { cols, grid: regrid(o.grid, o.cols, cols, from) } : { cols })}/>
+        ${kind === 'blank' && html`<${BlankGrid} o=${o} set=${set} r=${r} upd=${upd}/>`}
         ${layFold(o.lay, o.nohead, html`<${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/><${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`)}`}
       </div>
     </section>
@@ -862,6 +876,46 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
         <span className="field__label">Επικεφαλίδες</span><${Segmented} small=${true} value=${o.fill} onChange=${(fill: BuildOpts['fill']) => set({ fill })} items=${[{ value: 'none', label: 'Λευκές' }, { value: 'gray', label: 'Γκρι' }, { value: 'olive', label: 'Λαδί' }]}/></div>
       <p className="note">Θέλεις λογότυπο, άλλη γραμματοσειρά ή κάτι που δεν έχει εδώ; <${Button} variant="link" onClick=${onExcel}>Άνοιξέ το στο Excel<//> και άλλαξέ το εκεί. Ό,τι γράψεις σε {ΑΓΚΥΛΕΣ} (π.χ. {ΗΜΕΡΟΜΗΝΙΑ}, {ΣΥΝΟΛΟ}) γεμίζει μόνο του.</p>
     </section>`}
+  </div>`;
+}
+
+// «Κενό»: πόσες γραμμές και ένα μικρό πλέγμα για να γράψεις τα κελιά (BuildOpts.grid: γραμμή × στήλη, χωρίς το Α/Α). Κάθε κελί κρατά το κείμενο
+// μέσα του και ενημερώνει τη σελίδα όταν τελειώσεις (Enter, Tab, κλικ αλλού), όχι σε κάθε πλήκτρο· επικόλληση από το Excel γεμίζει πολλά κελιά μαζί
+const BlankCell = memo(function BlankCell({ i, j, v, label, put, paste }: P) {
+  const [t, setT] = useState<string>(v); useEffect(() => setT(v), [v]);
+  return html`<input className="ui-input" aria-label=${label} maxLength=${200} value=${t}
+    onChange=${(e: any) => setT(e.target.value)} onBlur=${() => { if (t !== v) put(i, j, t); }}
+    onKeyDown=${(e: any) => { if (e.key !== 'Enter') return; e.preventDefault(); const td = e.currentTarget.closest('td'); (td?.parentElement?.nextElementSibling?.children[td.cellIndex]?.querySelector('input') || e.currentTarget).focus(); }}
+    onPaste=${(e: any) => { const x: string = e.clipboardData?.getData('text') || ''; if (/[\t\n]/.test(x.replace(/\r?\n$/, ''))) { e.preventDefault(); paste(i, j, x); } }}/>`;
+});
+function BlankGrid({ o, set, r, upd }: P) {
+  const n = blankN(o.nrows); const heads: BuildCol[] = o.cols.filter((c: BuildCol) => c.f !== 'aa');
+  const [txt, setTxt] = useState(String(n)); useEffect(() => setTxt(String(n)), [n]);
+  const cb = useRef({ o, set, r, upd }); cb.current = { o, set, r, upd };
+  const put = useCallback((i: number, j: number, t: string) => {
+    const g: string[][] = (cb.current.o.grid || []).map((row: string[]) => [...row]);
+    while (g.length <= i) g.push([]);
+    while (g[i].length <= j) g[i].push('');
+    g[i][j] = t;
+    while (g.length && g[g.length - 1].every(x => !x)) g.pop();
+    cb.current.set({ grid: g });
+  }, []);
+  // επικόλληση: ό,τι χωράει από το κελί που επικολλήθηκε (γραμμές μέχρι τις nrows, στήλες μέχρι την τελευταία)
+  const paste = useCallback((i: number, j: number, text: string) => {
+    const { o: o2, set: set2 } = cb.current; const w = o2.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(o2.nrows);
+    const g: string[][] = (o2.grid || []).map((row: string[]) => [...row]);
+    text.replace(/\r?\n$/, '').split(/\r?\n/).forEach((line, di) => { if (i + di >= nr) return; while (g.length <= i + di) g.push([]); line.split('\t').forEach((v, dj) => { if (j + dj >= w) return; while (g[i + di].length <= j + dj) g[i + di].push(''); g[i + di][j + dj] = v; }); });
+    while (g.length && g[g.length - 1].every(x => !x)) g.pop();
+    set2({ grid: g });
+  }, []);
+  const rows = (x: number) => { cb.current.set({ nrows: x }); cb.current.upd({ pick: { ...cb.current.r.pick, mode: 'all', n: x } }); };
+  return html`<div className="rep-grid">
+    <div className="rep-grid__bar"><label className="field__label" htmlFor="b-nrows">Γραμμές</label>
+      <input id="b-nrows" type="number" min="1" max=${BLANK_MAX} className="ui-input rep-n" value=${txt} onChange=${(e: any) => { setTxt(e.target.value); const x = +e.target.value; if (Number.isInteger(x) && x >= 1 && x <= BLANK_MAX && x !== n) rows(x); }} onBlur=${() => setTxt(String(n))}/>
+      <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel.</small></div>
+    <div className="rep-grid__sc" tabIndex=${0} role="group" aria-label="Κελιά του πίνακα"><table className="rep-grid__t">
+      <thead><tr><th scope="col" aria-label="Γραμμή"></th>${heads.map((c, j) => html`<th key=${j} scope="col" title=${c.h}>${c.h || '\u00a0'}</th>`)}</tr></thead>
+      <tbody>${Array.from({ length: n }, (_, i) => html`<tr key=${i}><th scope="row">${i + 1}</th>${heads.map((c, j) => html`<td key=${j}><${BlankCell} i=${i} j=${j} v=${o.grid?.[i]?.[j] ?? ''} label=${'Γραμμή ' + (i + 1) + ', ' + (c.h || 'στήλη ' + (j + 1))} put=${put} paste=${paste}/></td>`)}</tr>`)}</tbody></table></div>
   </div>`;
 }
 
@@ -935,6 +989,14 @@ function SubPick({ r, t, n, d, set }: P) {
   return html`<div className="stack">
     <p className="note" style=${{ margin: 0 }}>Πίνακας ${n}${t.title ? ' «' + t.title + '»' : ''} (${kindLbl(t.kind).toLowerCase()}): για την ίδια μέρα με τον πρώτο. Μπαίνουν όλοι όσοι περνούν τα φίλτρα ή οι πρώτοι Ν· τυχαίοι μόνο στον πρώτο πίνακα.${r.split && r.split !== 'none' && t.kind !== 'cadre' ? ' Με χωριστά φύλλα ανά ομάδα, ο καθένας μπαίνει στο φύλλο της ομάδας του.' : ''}</p>
     <${StepPick} r=${tr} upd=${upd} p=${p} sub=${true}/></div>`;
+}
+
+// Ποιοι μπαίνουν στο «Κενό»: κανείς, οι γραμμές είναι αυτές που γράφεις στο βήμα 3· μένει μόνο η μέρα (ημερομηνία, πίνακες τιμών)
+function StepBlank({ r, upd }: P) {
+  return html`<div className="stack">
+    <${Alert} tone="info">Το «Κενό» δεν παίρνει άτομα: οι ${blankN(r.pick.n)} γραμμές του πίνακα είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//>
+    <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
+  </div>`;
 }
 
 // Ποιοι μπαίνουν: από πού, φίλτρα, πόσοι (όλοι, οι πρώτοι, τυχαίοι), σειρά, μέρα· sub: πίνακας 2, 3… (χωρίς μέρα και τυχαίους)
@@ -1014,7 +1076,7 @@ function StepOut({ r, upd, mode, insp, rows, d }: P) {
     if (v === 'people') { upd({ out: 'sheet', target: { ...t, to: 'people' } }); return; }
     upd({ out: v as Report['out'] });
   };
-  const canSplit = r.kind !== 'cadre';
+  const canSplit = splitOk(r.kind);
   const split = canSplit && !!r.split && r.split !== 'none';
   const plan = outPlan(state, r, rows, d);
   const extra = useMemo(() => moreRows(state, r, d), [state, r.more, d]);   // eslint-disable-line react-hooks/exhaustive-deps

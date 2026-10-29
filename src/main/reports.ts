@@ -10,7 +10,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankN, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -153,7 +153,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
   // οι πίνακες 2, 3…: όλοι όσοι περνούν τα φίλτρα τους (χωρίς τυχαίους), με τη σειρά τους
   const more = r.more || []; const extra = moreRows(s, r, d).map(x => x.slice(0, MAX_ROWS));
-  const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre' && !(vo.length && !r.cols.length);
+  const split = !!r.split && r.split !== 'none' && splitOk(r.kind) && !(vo.length && !r.cols.length);
   let groups = groupsOf(s, r.kind, rows, r.split);
   if (split) {
     // ένας θάλαμος που έχει μόνο π.χ. καταστάσεις στον 2ο πίνακα παίρνει κι αυτός φύλλο
@@ -485,8 +485,8 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   const cols = one(o.cols);
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
-  type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay; grid?: string[][]; nrows?: number };
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο
@@ -591,7 +591,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     const head = next; data = head + 1;
     for (const t of tabs) {
       const at = placeOf(t);
-      const out: RepCol[] = []; const nat = natural(t);
+      const out: RepCol[] = []; const nat = natural(t); let dj = 0;   // dj: ποια στήλη του πλέγματος (χωρίς το Α/Α) είναι η τωρινή, στο «Κενό»
       t.cols.forEach((c, i) => {
         const f = fieldOf(t.kind, c.f); const h = (c.h || f?.head || '').trim() || ' ';
         const [a, b] = at[i];
@@ -599,7 +599,10 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
         for (let x = a; x <= b; x++) { ws.setStyle(L(x) + head, st.head); ws.setStyle(L(x) + data, st.cell); }
         if (b > a) { ws.addMerge(L(a) + head + ':' + L(b) + head); ws.addMerge(L(a) + data + ':' + L(b) + data); }
         if (!grid) widths[a] = Math.max(widths[a] || 0, nat[i]);
-        out.push({ c: a, f: c.f, h: upper(h), ...(c.f === 'text' && c.text ? { text: c.text } : {}), ...(c.o ? { o: c.o } : {}) });
+        // «Κενό»: τα κελιά της στήλης (όσα έγραψες, μέχρι τις γραμμές του πίνακα) πάνε στην αναφορά της στήλης· τα κενά στο τέλος φεύγουν
+        let vals: string[] | undefined;
+        if (t.kind === 'blank' && c.f !== 'aa') { const j = dj++; vals = (t.grid || []).slice(0, t.nrows).map(row => String(row?.[j] ?? '')); while (vals.length && !vals[vals.length - 1].trim()) vals.pop(); if (!vals.length) vals = undefined; }
+        out.push({ c: a, f: c.f, h: upper(h), ...(c.f === 'text' && c.text ? { text: c.text } : {}), ...(c.o || vals ? { o: { ...c.o, ...(vals ? { vals } : {}) } } : {}) });
       });
       placed.push({ id: t.id, head, cols: out });
     }
