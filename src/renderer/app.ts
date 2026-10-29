@@ -279,8 +279,8 @@ function ExcelChip() {
   const [b, setB] = useState<ExcelBusy | null>(null);
   useEffect(() => window.api.onBusy?.(setB), []);
   if (!b) return null;
-  if (b.on) return html`<span className="xlchip is-on" role="status" data-tip="Η εφαρμογή γράφει τις αλλαγές στα αρχεία Excel. Μπορείς να συνεχίσεις κανονικά." data-tip-side="bottom"><span className="xlchip__dot"></span>Γράφεται στο Excel…</span>`;
-  return html`<span className=${cx('xlchip', b.error && 'is-bad')} role="status" data-tip=${b.error ? 'Η τελευταία εγγραφή στο Excel δεν έγινε: ' + b.error + ' (Ρυθμίσεις › Αρχεία Excel)' : 'Οι αλλαγές γράφτηκαν στα αρχεία Excel στις ' + b.at} data-tip-side="bottom">${b.error ? 'Δεν γράφτηκε στο Excel' : 'Γράφτηκε ' + b.at}</span>`;
+  if (b.on) return html`<span className="xlchip is-on" role="status" data-tip="Η εφαρμογή γράφει τις αλλαγές στα αρχεία Excel. Μπορείς να συνεχίσεις κανονικά." data-tip-side="bottom"><span className="xlchip__dot"></span><span className="xlchip__txt">Γράφεται στο Excel…</span><span className="xlchip__short">Excel…</span></span>`;
+  return html`<span className=${cx('xlchip', b.error && 'is-bad')} role="status" data-tip=${b.error ? 'Η τελευταία εγγραφή στο Excel δεν έγινε: ' + b.error + ' (Ρυθμίσεις › Αρχεία Excel)' : 'Οι αλλαγές γράφτηκαν στα αρχεία Excel στις ' + b.at} data-tip-side="bottom"><span className="xlchip__txt">${b.error ? 'Δεν γράφτηκε στο Excel' : 'Γράφτηκε ' + b.at}</span>${b.error && html`<span className="xlchip__short">Excel ✗</span>`}</span>`;
 }
 export function App({ boot }: { boot: Boot }) {
   return html`<${ToastProvider}><${Root} boot=${boot}/><//>`;

@@ -254,7 +254,8 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .searchbtn .ui-kbd{background:transparent;border-color:var(--bar-line);color:var(--bar-muted)}
 /* στενή οθόνη (1024): μόνο ο φακός, όχι ένα σπασμένο «Ctrl K» */
 @media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}.topbar{gap:10px}.topbar__right{gap:6px}}
-.topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px;min-width:0}
+.topbar__right > :not(.xlchip){flex-shrink:0} /* (review 29/10) στα 1024 το chip του Excel έσπρωχνε τη μπάρα στα 1050px και έκοβε την «Αναίρεση»: μικραίνει μόνο το chip, με «…» */
 .topbar .ui-btn--ghost{color:var(--bar-fg);border-color:var(--bar-line)}
 .topbar .ui-btn--ghost:hover{background:var(--bar-field);border-color:var(--bar-muted)}
 .topbar .ui-btn--outline{background:transparent;border-color:var(--bar-fg);color:var(--bar-fg)}
@@ -1006,12 +1007,15 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .qa__del:hover{color:var(--bad)}
 .qa__sum{margin-right:auto;font-size:13px;color:var(--muted-fg)}
 /* Πάνω μπάρα: εγγραφή στο Excel στο παρασκήνιο */
-.xlchip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;color:var(--bar-fg);opacity:.85}
+.xlchip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;color:var(--bar-fg);opacity:.85;min-width:0;flex-shrink:1}
 .xlchip.is-on{opacity:1;border:1px solid var(--bar-line)}
 .xlchip.is-bad{opacity:1;color:#1b1f16;background:var(--gold);font-weight:600}
-.xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate}
+.xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate;flex:none}
+.xlchip__txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xlchip__short{display:none}
 @keyframes xlpulse{from{opacity:.35}to{opacity:1}}
-@media (max-width:900px){.xlchip:not(.is-on):not(.is-bad){display:none}}
+/* ως 1240px: το «Γράφτηκε» κρύβεται, το «Γράφεται…» και το «Δεν γράφτηκε» δείχνουν σύντομο κείμενο (όλο στο tooltip) */
+@media (max-width:1240px){.xlchip:not(.is-on):not(.is-bad){display:none}.xlchip{padding:0 8px;overflow:hidden}.xlchip .xlchip__dot,.xlchip__txt{display:none}.xlchip__short{display:inline}}
 /* «Έντυπα ημέρας» (Σήμερα) */
 .dayforms{display:flex;flex-direction:column;gap:14px}
 .dayforms__head{display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;font-size:15px}
