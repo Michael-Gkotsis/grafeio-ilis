@@ -47,3 +47,22 @@ export function applyMoves(wb: Workbook, ws: Sheet, blocks: Block[], moves: Move
   }
   return out;
 }
+
+// Ημερομηνία πάνω αριστερά, κεφαλίδα πάνω δεξιά (Michael, 29/10): όταν το φύλλο έχει και τα δύο, αλλάζουν θέση με τον ίδιο μηχανισμό
+// (applyMoves). Κεφαλίδα αριστερά: η ημερομηνία πάει εκεί που άρχιζε η κεφαλίδα και η κεφαλίδα τελειώνει εκεί που τελείωνε η ημερομηνία,
+// στην πάνω γραμμή της κεφαλίδας. Κεφαλίδα ήδη δεξιά και ημερομηνία κάτω από αυτήν (Εξοδούχοι): μόνο η ημερομηνία πάει στο Α, πάνω.
+// Δεν γίνεται αν τα κομμάτια θα πατούσαν το ένα το άλλο ή κάτι άλλο, ή αν έχουν τύπους.
+export async function swapHeadDate(wb: Workbook, ws: Sheet, blocks: Block[]): Promise<Block[]> {
+  const h = blocks.find(b => b.id === 'head'), d = blocks.find(b => b.id === 'date');
+  if (!h || !d) return blocks;
+  const left = h.c1 < d.c1;
+  if (!left && d.r1 <= h.r2) return blocks;   // η ημερομηνία είναι ήδη αριστερά, δίπλα στην κεφαλίδα
+  const dh = left ? d.c2 - h.c2 : 0, dd = h.r1 - d.r1, dc = (left ? h.c1 : 1) - d.c1;
+  const nh: Rect = { r1: h.r1, c1: h.c1 + dh, r2: h.r2, c2: h.c2 + dh }, nd: Rect = { r1: d.r1 + dd, c1: d.c1 + dc, r2: d.r2 + dd, c2: d.c2 + dc };
+  const withFormula = (b: Block) => { for (let r = b.r1; r <= b.r2; r++) for (let c = b.c1; c <= b.c2; c++) if (ws.hasFormula(colName(c) + r)) return true; return false; };
+  if (nh.c1 < 1 || nd.r1 < 1 || touches(nh, nd) || withFormula(h) || withFormula(d) || blocks.some(b => b !== h && b !== d && (touches(nh, b) || touches(nd, b)))) return blocks;
+  const out = applyMoves(wb, ws, blocks, { head: [0, dh], date: [dd, dc] });
+  const nb = out.find(b => b.id === 'date')!;   // η ημερομηνία μένει αριστερά στη νέα θέση της
+  for (let r = nb.r1; r <= nb.r2; r++) for (let c = nb.c1; c <= nb.c2; c++) { const ref = colName(c) + r; const x = ws.raw(ref); if (x) ws.setStyle(ref, await wb.like(x.s, { h: 'left' })); }
+  return out;
+}

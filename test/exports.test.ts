@@ -5,7 +5,9 @@ import { apply, type Ctx } from '../src/shared/commands';
 import { fillFroura, fillHkai, fillOuts } from '../src/main/exports';
 import { Workbook, mergeFirstSheets } from '../src/main/xlsx';
 import { pskDays } from '../src/shared/dates';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 import { statOf } from '../src/shared/rules';
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));

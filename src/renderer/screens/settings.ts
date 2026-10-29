@@ -93,7 +93,7 @@ function SettingsCard() {
 // Κάθε κομμάτι με δικό του μέγεθος, έντονα, πλάγια, υπογράμμιση (Michael, 21/10): κεφαλίδα και υπογραφές και στα έντυπα.
 const lookText = (x: XlLook) => x.font + ' ' + x.sz + ', ' + XL_H.find(o => o.value === x.h)!.label.toLowerCase() + ' / ' + XL_V.find(o => o.value === x.v)!.label.toLowerCase() + (x.parts ? ', με δικά τους γράμματα σε κομμάτια' : '');
 const PART_LBL: Record<XlPartKey, [string, string]> = {
-  hdr: ['Κεφαλίδα', 'Οι γραμμές πάνω αριστερά (μονάδα, γραφείο). Σε όλα τα έντυπα.'],
+  hdr: ['Κεφαλίδα', 'Οι γραμμές της μονάδας (μονάδα, γραφείο). Σε όλα τα έντυπα.'],
   title: ['Τίτλος', 'Ο τίτλος του φύλλου ή του εντύπου.'],
   head: ['Επικεφαλίδες στηλών', 'Η γραμμή με τα ονόματα των στηλών.'],
   data: ['Γραμμές του πίνακα', 'Τα στοιχεία κάτω από τις επικεφαλίδες.'],
@@ -208,6 +208,8 @@ function SigsCard() {
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
       ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} ή υπογραφές του προτύπου (αλλιώς κάτω από τον πίνακα), εκτός αν το έντυπο έχει δικές του.' : made ? ' Αρχικά καμία. Μπαίνουν μία γραμμή κάτω από κάθε φύλλο, μοιρασμένες στο πλάτος του. Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
+    <label className="ui-checkrow" style=${{ marginTop: '10px' }} data-tip="Σε όλα τα έντυπα και τα Excel: ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα (μονάδα) πάνω δεξιά. Ξετσέκαρε για την παλιά διάταξη."><input type="checkbox" className="ui-check" aria-label="Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά" checked=${!state.settings.hdLeft}
+      onChange=${(e: any) => run({ t: 'setSettings', settings: { hdLeft: e.target.checked ? undefined : true }, text: 'κεφαλίδα και ημερομηνία: ' + (e.target.checked ? 'ημερομηνία αριστερά, κεφαλίδα δεξιά' : 'παλιά διάταξη') }, false)}/> Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά</label>
     <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>
       ${changed && html`<${Button} variant="ghost" onClick=${() => setEdit({ ...edit, [form]: undefined })}>Άκυρο<//>`}
       ${(sigsCustom(state.settings, form) || changed) && html`<${Button} variant="ghost" onClick=${reset} data-tip=${'Όπως το έντυπο: ' + sigsText(sigDefaults(state.settings, form))}>Όπως το έντυπο<//>`}

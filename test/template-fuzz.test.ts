@@ -15,7 +15,9 @@ import { HK_NCO, HK_OFFICERS, hkaiCounts, postBy, seatMap } from '../src/shared/
 import { HK_COLS } from '../src/shared/sources';
 import { hkRowName, unitSettingsFor } from '../src/shared/unit';
 import { normGreek, norm } from '../src/shared/text';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 import { genFroura, genHkai, genOuts, genReport, col, rng, chance, pick, int, shuffle } from './tplgen';
 import { fillReport, inspectTemplate } from '../src/main/reports';
 import { byIds, defaultPick, fieldValue, type Report } from '../src/shared/reports';

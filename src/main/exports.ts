@@ -19,7 +19,7 @@ import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum,
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
-import { applyMoves, blockOf } from './layout';
+import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 export { FROURA_FORMS };
 
@@ -55,7 +55,9 @@ export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState,
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
     for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
-    out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, blocks, mv(x.key)) });
+    // ημερομηνία αριστερά και κεφαλίδα δεξιά (εκτός αν hdLeft)· οι θέσεις που έσυρες μετρούν ΜΕΤΑ, από τη νέα θέση
+    const sw = s.settings.hdLeft ? blocks : await swapHeadDate(wb, x.ws, blocks);
+    out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, sw, mv(x.key)) });
   }
   return out;
 }
