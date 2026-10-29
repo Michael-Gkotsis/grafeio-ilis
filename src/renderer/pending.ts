@@ -3,7 +3,8 @@
 // χωρίς να το ξέρεις (Michael, 22/10: «να μην έχουμε regression»· πριν, η αλλαγή χανόταν σιωπηλά).
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
-export interface Pending { label: string; save: () => Promise<unknown> | unknown; discard: () => void }
+// bar: false: η σελίδα έχει δικά της «Αποθήκευση»/«Άκυρο» (Έντυπα › σελίδα δημιουργίας): χωρίς μπάρα κάτω, μόνο η ερώτηση όταν φεύγεις
+export interface Pending { label: string; save: () => Promise<unknown> | unknown; discard: () => void; bar?: false }
 const reg = new Map<number, { current: Pending }>();
 let seq = 0, snap: Pending[] = [], asking: (() => void) | null = null;
 const subs = new Set<() => void>();
