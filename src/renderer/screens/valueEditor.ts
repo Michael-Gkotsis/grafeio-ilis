@@ -124,7 +124,7 @@ export function ValueTableEditor({ t, n, set, del, at, setAt, all, lay, upload }
   return html`<div className="stack vt-ed">
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor=${'vt-title' + n}>Τίτλος πάνω από τον πίνακα τιμών</label><input id=${'vt-title' + n} className="ui-input" placeholder="π.χ. ΔΥΝΑΜΗ (κενό: χωρίς τίτλο)" value=${t.title || ''} onChange=${(e: P) => set({ ...t, title: e.target.value })}/>${alignSeg(t.ta, 'left', (ta?: TAlign) => { const { ta: _a, ...rest } = t; set(ta ? { ...rest, ta } : rest); }, 'Στοίχιση τίτλου πίνακα τιμών ' + n)}<span className="field__help">Κενός τίτλος = χωρίς κεφαλίδα: ο πίνακας ξεκινά κατευθείαν με τις γραμμές του.</span></div>
-      <div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label="Βγάλε τον πίνακα τιμών" onClick=${del}>${Icon.x}Βγάλε τον πίνακα<//></div>
+      <div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label="Σβήσε τον πίνακα τιμών" onClick=${del}>${Icon.x}Σβήσε τον πίνακα<//></div>
     </div>
     <p className="note" style=${{ margin: 0 }}>Κάθε γραμμή γράφει το κείμενό σου αριστερά και έναν αριθμό δεξιά (από υπολογισμό, ή «Δική μου τιμή»: αριθμός ή κείμενο που γράφεις εσύ). ${upload ? 'Μπαίνει στο τέλος του εντύπου, ή όπου γράψεις την ετικέτα της γραμμής (π.χ. {ΠΑΡΟΝΤΕΣ}) μέσα στο Excel σου.' : 'Μπαίνει κάτω από τους πίνακες ατόμων και πριν τις υπογραφές, ή δίπλα σε πίνακα (από τη «Διάταξη πινάκων» δεξιά).'} Οι αριθμοί βγαίνουν από τα ίδια στοιχεία με τις οθόνες (Δύναμη, ${HK()}, Οπλισμός…).</p>
     ${lay}

@@ -417,7 +417,11 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const vals: ValueTable[] = r.vals || []; const vsel = Math.min(vi, vals.length - 1);
   const setVals = (v: ValueTable[]) => upd({ vals: v.length ? v : undefined });
   const addVal = () => { setVals([...vals, newValueTable(uid())]); setVi(vals.length); };
-  const delVal = (i: number) => { setVals(vals.filter((_, j) => j !== i)); setVi(-1); };
+  // Σβήσε τον πίνακα τιμών: με «Αναίρεση» που τον βάζει πίσω στη θέση του (οι θέσεις του στη διάταξη δεν σβήνονται, μένουν όπως ήταν)
+  const delVal = (i: number) => {
+    const v = vals[i]; setVals(vals.filter((_, j) => j !== i)); setVi(-1);
+    if (v) toast({ text: 'Σβήστηκε ο πίνακας τιμών', actions: [{ label: 'Αναίρεση', fn: () => { setR(o => { const a = [...(o.vals || [])]; if (!a.some(y => y.id === v.id)) a.splice(Math.min(i, a.length), 0, v); return { ...o, vals: a }; }); setVi(i); } }] });
+  };
   const valEd = vsel >= 0 && vals[vsel] ? html`<${ValueTableEditor} key=${vals[vsel].id} t=${vals[vsel]} n=${vsel + 1} set=${(x: ValueTable) => setVals(vals.map((y, j) => (j === vsel ? x : y)))} del=${() => delVal(vsel)} at=${r.at} setAt=${(at?: string) => upd({ at })} all=${vals} upload=${mode === 'upload'}
     lay=${mode === 'build' ? html`<${Fold} id="lay" fold=${fold} title="Μέγεθος και θέση στο χαρτί" sum=${layText(vals[vsel].lay)}><${LayEditor} n=${'v' + (vsel + 1)} noEven lay=${vals[vsel].lay} set=${(lay?: TabLay) => setVals(vals.map((y, j) => (j === vsel ? { ...y, lay } : y)))}/><//>` : null}/>` : null;
   // Διάταξη πινάκων (Φάση 3): ο 1ος, οι 2, 3… και οι πίνακες τιμών σε ζώνες· οι ανεβασμένοι δεν αλλάζουν (έχουν τις θέσεις του προτύπου τους)
@@ -581,8 +585,8 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
       <div className="rep-wiz__main">
         ${step === 1 && html`<${StepTpl} mode=${mode} tpl=${tpl} build=${build} tpls=${tpls} upload=${upload} onBuild=${startBuild} onTpl=${(t: RepTpl) => { upd({ name: r.name || t.name }); useTpl(t, r.kind, false).then(() => setStep(2)); }}/>`}
         ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
-        ${step === 3 && mode === 'build' && build && html`<${Builder} fold=${fold} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd} onLayout=${() => setLay(true)} ti=${Math.min(ti, (build.more || []).length)} setTi=${setTi}
-          vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} valEd=${valEd}
+        ${step === 3 && mode === 'build' && build && html`<${Builder} fold=${fold} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd} setR=${setR} onLayout=${() => setLay(true)} ti=${Math.min(ti, (build.more || []).length)} setTi=${setTi}
+          vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} onDelVal=${delVal} valEd=${valEd}
           onExcel=${async () => {
             const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
             const bo = forBuild(build, r); const b = await window.api.repBuild(bo, r.kind, tpl && !shared ? tpl.file : undefined);
@@ -593,8 +597,8 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
             window.api.repOpenTpl(b.file);
             setNote('Άνοιξε στο Excel. Άλλαξε ό,τι θέλεις, αποθήκευσε, και πάτα «Ξαναδιάβασε το πρότυπο». Οι {ΕΤΙΚΕΤΕΣ} μέσα στο Excel γεμίζουν μόνες τους.');
           }}/>`}
-        ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
-          vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} valEd=${valEd}
+        ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} setR=${setR} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
+          vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} onDelVal=${delVal} valEd=${valEd}
           ti=${Math.min(ti, (r.more || []).length)} setTi=${setTi} subInsp=${subInsp} subKind=${(id: string, k: RepKind) => { const m = (r.more || []).find(x => x.id === id); if (!m || !tpl) return; const p = pickForKind(m.kind, m.pick, m.sort, k); upd({ more: (r.more || []).map(x => (x.id === id ? { ...x, sort: p.sort, pick: subPick(p.pick) } : x)) }); inspectSub(tpl, id, k, m.head, false); }}
           signers=${signers} setSigners=${setSigners} onLayout=${() => setLay(true)} reread=${() => tpl && inspect(tpl, r.kind, r.sheet, r.head, true)} sheetTo=${(sh: string) => tpl && inspect(tpl, r.kind, sh)}/>`}
         ${step === 4 && quick && html`<${Alert} tone="info">Ξεκίνησες από το έτοιμο «${r.name}»: οι στήλες είναι έτοιμες. Διάλεξε ποιοι μπαίνουν και πάτα «Αποθήκευση και Βγάλε», ή «Επόμενο» για το πού βγαίνει. Τις στήλες τις αλλάζεις από το βήμα 3.<//>`}
@@ -752,16 +756,16 @@ function ColsEditor({ kind, cols, setCols }: P) {
 
 // Οι πίνακες του εντύπου (Michael, 22/10): «Πίνακας 1 · Στρατιώτες», «Πίνακας 2 · Καταστάσεις»…· onAdd: «+ Πίνακας» (βήμα 3)
 const kindLbl = (k: RepKind) => REP_KINDS.find(x => x.id === k)?.label || '';
-function TableTabs({ r, t1, ti, setTi, onAdd, addTip, vals, vi = -1, setVi, onAddVal }: P) {
+function TableTabs({ r, t1, ti, setTi, onAdd, addTip, vals, vi = -1, setVi, onAddVal, onDel, onDelVal }: P) {
   const more: RepTable[] = r.more || []; const vs: ValueTable[] = onAddVal ? vals || [] : [];
   if (!more.length && !onAdd) return null;
   const pick = (i: number) => { setTi(i); setVi?.(-1); };
   return html`<div className="rep-tables" role="group" aria-label="Πίνακες του εντύπου">
     <span className="field__label">Πίνακες</span>
     <button type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === 0 && vi < 0} onClick=${() => pick(0)}>1 · ${t1?.trim() ? t1.trim().slice(0, 18) : kindLbl(r.kind)}</button>
-    ${more.map((t, i) => html`<button key=${t.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === i + 1 && vi < 0} onClick=${() => pick(i + 1)}>${i + 2} · ${t.title ? t.title.slice(0, 18) : kindLbl(t.kind)}</button>`)}
+    ${more.map((t, i) => html`<span key=${t.id} className="rep-chipx"><button type="button" className="ui-chip ui-chip--sm" aria-pressed=${ti === i + 1 && vi < 0} onClick=${() => pick(i + 1)}>${i + 2} · ${t.title ? t.title.slice(0, 18) : kindLbl(t.kind)}</button>${onAdd && onDel && html`<button type="button" className="rep-chipx__x" aria-label=${'Σβήσε τον πίνακα ' + (i + 2)} data-tip=${'Σβήσε τον πίνακα ' + (i + 2)} onClick=${() => onDel(t.id)}>${Icon.x}</button>`}</span>`)}
     ${onAdd && html`<${Button} size="sm" variant="outline" disabled=${more.length >= 5} why="Ως 6 πίνακες" data-tip=${addTip} onClick=${onAdd}>+ Πίνακας<//>`}
-    ${vs.map((v, i) => html`<button key=${v.id} type="button" className="ui-chip ui-chip--sm ui-chip--gap" aria-pressed=${vi === i} data-tip="Πίνακας τιμών: κείμενο και αριθμός ανά γραμμή, στο τέλος του εντύπου" onClick=${() => setVi?.(i)}>Τιμές ${i + 1}${v.title ? ' · ' + v.title.slice(0, 14) : ''}</button>`)}
+    ${vs.map((v, i) => html`<span key=${v.id} className="rep-chipx ui-chip--gap"><button type="button" className="ui-chip ui-chip--sm" aria-pressed=${vi === i} data-tip="Πίνακας τιμών: κείμενο και αριθμός ανά γραμμή, στο τέλος του εντύπου" onClick=${() => setVi?.(i)}>Τιμές ${i + 1}${v.title ? ' · ' + v.title.slice(0, 14) : ''}</button>${onDelVal && html`<button type="button" className="rep-chipx__x" aria-label="Σβήσε τον πίνακα τιμών" data-tip="Σβήσε τον πίνακα τιμών" onClick=${() => onDelVal(i)}>${Icon.x}</button>`}</span>`)}
     ${onAddVal && html`<${Button} size="sm" variant="outline" disabled=${vs.length >= 4} why="Ως 4 πίνακες τιμών" data-tip="Πίνακας με γραμμές όπως «Παρόντες» ή «Ενεργές άδειες = ΚΑ + Τιμητικές + ΔΝ», με αριθμούς από την εφαρμογή. Μπαίνει στο τέλος του εντύπου, πριν τις υπογραφές." onClick=${onAddVal}>+ Πίνακας τιμών<//>`}
   </div>`;
 }
@@ -786,7 +790,7 @@ function TableHead({ t, kind, title, ta, setTa, setKind, setTitle, onDel, n }: P
     ${setTitle && html`<div className="field rep-th__t"><label className="field__label" htmlFor=${'t-title' + n}>Τίτλος πάνω από τον πίνακα</label><input id=${'t-title' + n} className="ui-input" placeholder=${n > 1 ? 'π.χ. ΙΑΤΡΙΚΑ (κενό: χωρίς τίτλο)' : 'π.χ. ΠΑΡΟΝΤΕΣ (κενό: χωρίς τίτλο)'} value=${title} onChange=${(e: any) => setTitle(e.target.value)}/>${setTa && alignSeg(ta, 'left', setTa, 'Στοίχιση τίτλου πίνακα ' + n)}</div>`}
     ${setKind && html`<div className="field rep-th__k"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.filter(k => k.id !== 'blank').map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>`}
     ${onDel && html`<p className="field__help rep-th__h">${t ? 'Ποιοι μπαίνουν σε αυτόν τον πίνακα το διαλέγεις στο βήμα 4. ' : ''}Μπαίνει κάτω από τον προηγούμενο, με δικές του στήλες.</p>
-    <${Button} size="sm" variant="ghost" aria-label=${'Βγάλε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Βγάλε τον πίνακα<//>`}
+    <${Button} size="sm" variant="ghost" aria-label=${'Σβήσε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Σβήσε τον πίνακα<//>`}
   </div>`;
 }
 
@@ -804,8 +808,8 @@ const layText = (l?: TabLay, nohead?: boolean) => (!l?.w || l.w === 'auto' ? 'Ό
 const nStl = (n: number) => n + (n === 1 ? ' στήλη' : ' στήλες'), nGr = (n: number) => n + (n === 1 ? ' γραμμή' : ' γραμμές');
 
 // «Φτιάξ' το εδώ»: στήλες, τίτλος, κεφαλίδα, υπογραφές, σελίδα· και πίνακες 2, 3… (build.more, με τα «ποιοι» στο r.more)
-function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout, ti, setTi, vals, vi, setVi, onAddVal, valEd }: P) {
-  const { state } = useStore(); const custom = sigsCustom(state.settings, 'reports');
+function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, setR, onLayout, ti, setTi, vals, vi, setVi, onAddVal, onDelVal, valEd }: P) {
+  const { state } = useStore(); const custom = sigsCustom(state.settings, 'reports'); const toast = useToast();
   const set = (x: Partial<BuildOpts>) => setO({ ...o, ...x });
   const more: BuildTable[] = o.more || [];
   const bt = ti > 0 ? more[ti - 1] : null;
@@ -822,16 +826,22 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
     setO({ ...o0, more: [...more, { id, title: '', kind: k, cols: colsForKind([{ f: 'aa', h: 'Α/Α', w: 'narrow' }, ...(fieldOf(k, 'rank') ? [{ f: 'rank', h: 'ΒΑΘΜΟΣ', w: 'auto' as const }] : []), { f: 'name', h: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', w: 'auto' }], k) }] });
     upd({ more: [...(r.more || []), newTable(k, id)] }); setTi(more.length + 1); setVi(-1);
   };
-  const delTable = (id: string) => { setO({ ...o, more: more.filter(t => t.id !== id) }); const rest = (r.more || []).filter((t: RepTable) => t.id !== id); upd({ more: rest.length ? rest : undefined }); setTi(0); };
+  // Σβήσε τον πίνακα N (× στη λίστα ή κουμπί κάτω): με «Αναίρεση» που τον βάζει πίσω στη θέση του, με τα «ποιοι μπαίνουν» που είχε
+  const delTable = (id: string) => {
+    const i = more.findIndex(t => t.id === id); const bt0 = more[i]; const rt0: RepTable | undefined = (r.more || []).find((t: RepTable) => t.id === id);
+    setO({ ...o, more: more.filter(t => t.id !== id) }); const rest = (r.more || []).filter((t: RepTable) => t.id !== id); upd({ more: rest.length ? rest : undefined }); setTi(0);
+    const back = <T extends { id: string }>(l: T[] | undefined, x: T) => { const a = [...(l || [])]; if (!a.some(y => y.id === x.id)) a.splice(Math.min(i, a.length), 0, x); return a; };
+    if (bt0) toast({ text: 'Σβήστηκε ο πίνακας ' + (i + 2), actions: [{ label: 'Αναίρεση', fn: () => { setO((c: BuildOpts) => ({ ...c, more: back(c.more, bt0) })); if (rt0) setR((c: Report) => ({ ...c, more: back(c.more, rt0) })); setTi(i + 1); setVi(-1); } }] });
+  };
   const kindOf = (id: string, k: RepKind) => {
     const t = more.find(x => x.id === id)!; setT(id, { kind: k, cols: colsForKind(t.cols, k) });
     upd({ more: (r.more || []).map((x: RepTable) => { if (x.id !== id) return x; const p = pickForKind(x.kind, x.pick, x.sort, k); return { ...x, kind: k, sort: p.sort, pick: subPick(p.pick) }; }) });
   };
   // μία γραμμή ανά πίνακα (1, 2, 3… και Τ για τους πίνακες τιμών)· το κλικ διαλέγει ποιος ανοίγει από κάτω (ti / vi)
-  const tl = [
+  const tl: { key: string; on: boolean; pick: () => void; n: string; name: string; sub: string; dl?: string; del?: () => void }[] = [
     { key: 'm', on: vi < 0 && ti === 0, pick: () => { setTi(0); setVi(-1); }, n: '1', name: o.t1?.trim() || kindLbl(kind), sub: o.nopeople && !more.length && hasVals(r) ? 'Χωρίς πίνακα ατόμων' : kindLbl(kind) + ' · ' + nStl(o.cols.length) },
-    ...more.map((t, i) => ({ key: t.id, on: vi < 0 && ti === i + 1, pick: () => { setTi(i + 1); setVi(-1); }, n: String(i + 2), name: t.title?.trim() || kindLbl(t.kind), sub: kindLbl(t.kind) + ' · ' + nStl(t.cols.length) })),
-    ...(vals || []).map((v: ValueTable, i: number) => ({ key: v.id, on: vi === i, pick: () => setVi(i), n: 'Τ', name: v.title?.trim() || v.rows[0]?.label || 'Πίνακας τιμών', sub: 'Πίνακας τιμών · ' + nGr(v.rows.length) }))
+    ...more.map((t, i) => ({ key: t.id, on: vi < 0 && ti === i + 1, pick: () => { setTi(i + 1); setVi(-1); }, n: String(i + 2), name: t.title?.trim() || kindLbl(t.kind), sub: kindLbl(t.kind) + ' · ' + nStl(t.cols.length), dl: 'Σβήσε τον πίνακα ' + (i + 2), del: () => delTable(t.id) })),
+    ...(vals || []).map((v: ValueTable, i: number) => ({ key: v.id, on: vi === i, pick: () => setVi(i), n: 'Τ', name: v.title?.trim() || v.rows[0]?.label || 'Πίνακας τιμών', sub: 'Πίνακας τιμών · ' + nGr(v.rows.length), dl: 'Σβήσε τον πίνακα τιμών', del: () => onDelVal(i) }))
   ];
   const sigMode = r.sigs ? (r.sigs.length ? 'Δικές του' : 'Καμία') : o.sig === 'none' ? 'Καμία' : 'Από τις Ρυθμίσεις';
   const layFold = (l?: TabLay, nohead?: boolean, nh?: any) => html`<${Fold} id="lay" fold=${fold} title="Μέγεθος και θέση στο χαρτί, χωρίς επικεφαλίδες" sum=${layText(l, nohead)}>${nh}<//>`;
@@ -849,7 +859,7 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
       <div className="rep-card__head"><b>Πίνακες της σελίδας</b>
         <${Button} size="sm" variant="outline" disabled=${more.length >= 5} why="Ως 6 πίνακες" data-tip="Κι άλλος πίνακας κάτω από τον πρώτο, με δικές του στήλες (π.χ. ένας για τους παρόντες και ένας για τα ιατρικά)" onClick=${addTable}>+ Πίνακας<//>
         <${Button} size="sm" variant="outline" disabled=${(vals || []).length >= 4} why="Ως 4 πίνακες τιμών" data-tip="Πίνακας με γραμμές όπως «Παρόντες» ή «Ενεργές άδειες = ΚΑ + Τιμητικές + ΔΝ», με αριθμούς από την εφαρμογή. Μπαίνει στο τέλος του εντύπου, πριν τις υπογραφές." onClick=${onAddVal}>+ Πίνακας τιμών<//></div>
-      <div className="rep-tl" role="group" aria-label="Πίνακες του εντύπου">${tl.map(x => html`<button key=${x.key} type="button" className="rep-tl__r" aria-pressed=${x.on} onClick=${x.pick}><b>${x.n}</b><span className="rep-tl__n">${x.name}</span><span className="rep-tl__s">${x.sub}</span></button>`)}</div>
+      <div className="rep-tl" role="group" aria-label="Πίνακες του εντύπου">${tl.map(x => html`<div key=${x.key} className="rep-tl__row"><button type="button" className="rep-tl__r" aria-pressed=${x.on} onClick=${x.pick}><b>${x.n}</b><span className="rep-tl__n">${x.name}</span><span className="rep-tl__s">${x.sub}</span></button>${x.del ? html`<button type="button" className="rep-picks__x rep-tl__x" aria-label=${x.dl} data-tip=${x.dl} onClick=${x.del}>${Icon.x}</button>` : html`<span className="rep-tl__x" aria-hidden="true"></span>`}</div>`)}</div>
       ${hasVals(r) && !more.length && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!o.nopeople} onChange=${(e: any) => { const { nopeople: _n, ...rest } = o; setO(e.target.checked ? { ...rest, nopeople: true } : rest); if (e.target.checked) { setTi(0); upd({ split: 'none' }); } }}/>Χωρίς πίνακα ατόμων (μόνο πίνακες τιμών)</label>`}
       <div className="rep-card__ed">
       ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} ta=${bt.ta} setTa=${(ta?: TAlign) => set({ more: more.map(x => (x.id === bt.id ? noTa(x, ta) : x)) })} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
@@ -938,7 +948,8 @@ function ColMap({ kind, headers, cols, setCols }: P) {
 
 // Ανεβασμένο πρότυπο: φύλλο, γραμμή επικεφαλίδων, ποια στήλη παίρνει τι, στοιχεία σε κελιά· και πίνακες 2, 3… (κλικ στη
 // γραμμή με τις επικεφαλίδες τους, κάτω από τον πρώτο)
-function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signers, setSigners, reread, sheetTo, onLayout, ti, setTi, subInsp, subKind, vals, vi, setVi, onAddVal, valEd }: P) {
+function Mapping({ r, upd, setR, insp, tpl, picking, setPicking, view, setView, signers, setSigners, reread, sheetTo, onLayout, ti, setTi, subInsp, subKind, vals, vi, setVi, onAddVal, onDelVal, valEd }: P) {
+  const toast = useToast();
   if (!insp) return html`<div className="empty">Διαβάζεται το πρότυπο…</div>`;
   const keys = new Set([...r.cells.map((c: P) => c.k), ...insp.tags.map((t: P) => t.k)]);
   // ετικέτες γραμμών πινάκων τιμών που βρέθηκαν στο Excel: ταιριάζουν ή όχι (όσο υπάρχουν πίνακες τιμών)
@@ -947,11 +958,16 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
   const free = CELLS.filter(c => !r.cells.some((x: P) => x.k === c.k));
   const m: RepTable | null = ti > 0 ? r.more?.[ti - 1] || null : null;
   const setMore = (id: string, x: Partial<RepTable>) => upd({ more: (r.more || []).map((t: RepTable) => (t.id === id ? { ...t, ...x } : t)) });
-  const delMore = (id: string) => { const rest = (r.more || []).filter((t: RepTable) => t.id !== id); upd({ more: rest.length ? rest : undefined }); setTi(0); };
+  // Σβήσε τον πίνακα N: με «Αναίρεση» που τον βάζει πίσω (στη σειρά των γραμμών επικεφαλίδων)
+  const delMore = (id: string) => {
+    const i = (r.more || []).findIndex((t: RepTable) => t.id === id); const t0: RepTable | undefined = (r.more || [])[i];
+    const rest = (r.more || []).filter((t: RepTable) => t.id !== id); upd({ more: rest.length ? rest : undefined }); setTi(0);
+    if (t0) toast({ text: 'Σβήστηκε ο πίνακας ' + (i + 2), actions: [{ label: 'Αναίρεση', fn: () => { setR((c: Report) => ({ ...c, more: c.more?.some(y => y.id === t0.id) ? c.more : [...(c.more || []), t0].sort((a, b) => a.head - b.head) })); setTi(i + 1); } }] });
+  };
   const si = m ? subInsp[m.id] : null;
   return html`<div className="stack rep-map">
     ${insp.sheets.length > 1 && html`<div className="rep-opts"><label className="field__label" htmlFor="m-sheet">Φύλλο</label><${Select} id="m-sheet" className="ui-select" value=${insp.sheet} onChange=${(e: any) => sheetTo(e.target.value)}>${insp.sheets.map((s: string) => html`<option key=${s} value=${s}>${s}</option>`)}<//></div>`}
-    <${TableTabs} r=${r} ti=${ti} setTi=${setTi} onAdd=${() => setPicking('#head:+')} addTip="Κι άλλος πίνακας στο ίδιο φύλλο, κάτω από τον πρώτο: μετά κάνε κλικ στη γραμμή με τις επικεφαλίδες του" vals=${vals} vi=${vi} setVi=${setVi} onAddVal=${onAddVal}/>
+    <${TableTabs} r=${r} ti=${ti} setTi=${setTi} onAdd=${() => setPicking('#head:+')} addTip="Κι άλλος πίνακας στο ίδιο φύλλο, κάτω από τον πρώτο: μετά κάνε κλικ στη γραμμή με τις επικεφαλίδες του" vals=${vals} vi=${vi} setVi=${setVi} onAddVal=${onAddVal} onDel=${delMore} onDelVal=${onDelVal}/>
     ${valEd ? valEd : m ? html`<div className="rep-opts">
         <span>Επικεφαλίδες του πίνακα ${ti + 1} στη γραμμή <b>${m.head}</b>${si && si.prepared > 1 ? ' · ' + si.prepared + ' έτοιμες γραμμές' : ''}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head:' + m.id} onClick=${() => setPicking(picking === '#head:' + m.id ? null : '#head:' + m.id)}>Άλλη γραμμή…<//></div>
