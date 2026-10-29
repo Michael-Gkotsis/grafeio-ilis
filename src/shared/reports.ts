@@ -12,7 +12,7 @@ import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
-import { valsUsed, type Spot, type TAlign, type ValueTable, type VAt } from './values';
+import { metricByTag, rowValue, tagId, tagsOf as valTags, valsUsed, valueText, vctx, type Spot, type TAlign, type ValueOut, type ValueTable, type VAt, type VCtx, type VFmt } from './values';
 import { MAIN, bandsOf, hasBeside, isDefault, type Bands } from './repBands';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove' | 'blank';
@@ -339,6 +339,38 @@ export function guessField(kind: RepKind, head: unknown): string | null {
 }
 // {ΗΜΕΡΟΜΗΝΙΑ} → 'date'
 export const tagKey = (tag: string) => TAG_KEY.get(normGreek(tag).replace(/\s+/g, ' ').trim()) || null;
+
+// «Κενός πίνακας»: κελιά με {ΕΤΙΚΕΤΕΣ} (Michael, 29/10), όπως στα δικά σου Excel. Μια ετικέτα είναι (με σειρά προτεραιότητας) γραμμή πίνακα τιμών του
+// ίδιου εντύπου (όπως στα δικά σου Excel, μια ετικέτα που είναι ήδη στοιχείο εντύπου δεν μετρά ως γραμμή: προειδοποίηση), στοιχείο εντύπου ({ΗΜΕΡΟΜΗΝΙΑ},
+// {ΤΙΤΛΟΣ}…) ή μέτρηση του καταλόγου των πινάκων τιμών ({ΠΑΡΟΝΤΕΣ}, χωρίς να χρειάζεται πίνακας τιμών). Ολόκληρο το κελί ετικέτα = αριθμός (η γραμμή
+// πίνακα τιμών με τη μορφή της), μέσα σε κείμενο = κείμενο. Άγνωστη ετικέτα μένει όπως γράφτηκε. Όλα βγαίνουν με κεφαλαία εκτός από τους αριθμούς.
+export interface BlankTags { std: (k: string) => string | number | null; row: (tag: string) => ValueOut['rows'][number] | undefined; met: (tag: string) => number | undefined }
+export function blankTags(s: AppState, r: Pick<Report, 'vals'>, vo: ValueOut[], mv: (id: string) => number | null, std: (k: string) => string | number | null): BlankTags {
+  const vt = valTags(valsUsed(r.vals), id => !!tagKey(id));
+  return {
+    std,
+    row: tg => { const e = vt.map.get(tagId(tg)); return e ? vo.find(x => x.id === e.t.id)?.rows[e.i] : undefined; },
+    met: tg => { const m = metricByTag(s, tg); const v = m ? mv(m.id) : null; return v ?? undefined; }
+  };
+}
+// Η μέτρηση ενός μετρητή (id του καταλόγου) τη μέρα d και στιγμή at (λεπτά), με κοινά αποτελέσματα μεταξύ των κελιών
+export function metricFn(s: AppState, d: ISODate, at: () => number, today: ISODate = d): (id: string) => number | null {
+  let c: VCtx | undefined; const memo = new Map<string, number | null>();
+  return id => { if (!memo.has(id)) { const a = at(); c ||= vctx(s, d, a, today); memo.set(id, rowValue(s, d, a, { label: '', expr: [{ sign: '+', metric: id }] }, c)); } return memo.get(id)!; };
+}
+// bad: οι ετικέτες που δεν ταίριαξαν με τίποτα (για την προειδοποίηση)
+export function blankFill(raw: string, x: BlankTags, bad?: Set<string>): { v: string | number | null; fmt?: VFmt } {
+  const one = (tg: string): { s: string; n?: number; fmt?: VFmt } | null => {
+    const w = x.row(tg); if (w) return w.txt != null ? { s: w.txt } : w.v == null ? { s: '—' } : { s: valueText(w.v, w.fmt), n: w.v, fmt: w.fmt };
+    const k = tagKey(tg);
+    if (k) { const v = x.std(k); return typeof v === 'number' ? { s: String(v), n: v } : { s: String(v ?? '').replace(/\n/g, ' ') }; }
+    const m = x.met(tg); return m == null ? null : { s: valueText(m, 'int'), n: m };
+  };
+  const t = raw.trim(); const whole = /^\{([^{}]{1,40})\}$/.exec(t);
+  if (whole) { const o = one(whole[1]); if (!o) { bad?.add(whole[1].trim()); return { v: upper(t) || null }; } return o.n != null ? { v: o.n, ...(o.fmt && o.fmt !== 'int' ? { fmt: o.fmt } : {}) } : { v: upper(o.s.trim()) || null }; }
+  const out = t.replace(TAG_RE, (m, tg: string) => { const o = one(tg); if (!o) { bad?.add(tg.trim()); return m; } return o.s; });
+  return { v: upper(out.trim()) || null };
+}
 
 // ------------------------------------------------------------------ τιμές
 const shortDate = (d: ISODate) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + String(x.getFullYear()).slice(2); };

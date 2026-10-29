@@ -13,7 +13,7 @@ import { PAGE_CSS } from '../pageCss';
 import { SigEditor, SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { ValueTableEditor, alignSeg } from './valueEditor';
-import { hasVals, newValueTable, noPeople, tagId, tagsOf, valsUsed, type TAlign, type ValueTable } from '../../shared/values';
+import { hasVals, metricGroups, newValueTable, noPeople, rowTag, tagId, tagText, tagsOf, valsUsed, type TAlign, type ValueTable } from '../../shared/values';
 import { MAIN, bandsOf, keepBands } from '../../shared/repBands';
 import { BandsPanel } from './repBands';
 import { dropSigMoves, type Layout } from '../../shared/layout';
@@ -898,15 +898,33 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, se
 
 // «Κενό»: πόσες γραμμές και ένα μικρό πλέγμα για να γράψεις τα κελιά (BuildOpts.grid: γραμμή × στήλη, χωρίς το Α/Α). Κάθε κελί κρατά το κείμενο
 // μέσα του και ενημερώνει τη σελίδα όταν τελειώσεις (Enter, Tab, κλικ αλλού), όχι σε κάθε πλήκτρο· επικόλληση από το Excel γεμίζει πολλά κελιά μαζί
-const BlankCell = memo(function BlankCell({ i, j, v, label, put, paste }: P) {
+const TAG_IN = /\{[^{}]+\}/;   // κελί με {ΕΤΙΚΕΤΑ}: φαίνεται διαφορετικά στο πλέγμα
+const BlankCell = memo(function BlankCell({ i, j, v, label, put, paste, onFocus }: P) {
   const [t, setT] = useState<string>(v); useEffect(() => setT(v), [v]);
-  return html`<input className="ui-input" aria-label=${label} maxLength=${200} value=${t}
-    onChange=${(e: any) => setT(e.target.value)} onBlur=${() => { if (t !== v) put(i, j, t); }}
+  return html`<input className=${cx('ui-input', TAG_IN.test(t) && 'is-tag')} aria-label=${label} maxLength=${200} value=${t} data-i=${i} data-j=${j}
+    onChange=${(e: any) => setT(e.target.value)} onFocus=${() => onFocus(i, j)} onBlur=${() => { if (t !== v) put(i, j, t); }}
     onKeyDown=${(e: any) => { if (e.key !== 'Enter') return; e.preventDefault(); const td = e.currentTarget.closest('td'); (td?.parentElement?.nextElementSibling?.children[td.cellIndex]?.querySelector('input') || e.currentTarget).focus(); }}
     onPaste=${(e: any) => { const x: string = e.clipboardData?.getData('text') || ''; if (/[\t\n]/.test(x.replace(/\r?\n$/, ''))) { e.preventDefault(); paste(i, j, x); } }}/>`;
 });
+// «Βάλε τιμή…»: στοιχεία εντύπου, γραμμές των πινάκων τιμών του εντύπου και μετρήσεις (όπως στους πίνακες τιμών) που μπαίνουν ως {ΕΤΙΚΕΤΑ} στο κελί
+const VAL_CELLS = CELLS.filter(c => !['head', 'sigs', 'group', 'count'].includes(c.k));   // κεφαλίδα 3 γραμμών, υπογραφές, ομάδα φύλλου και σύνολο ατόμων δεν έχουν νόημα σε κελί
+function ValuePick({ r, put }: P) {
+  const { state } = useStore();
+  const groups = useMemo(() => metricGroups(state), [state.settings]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => [...tagsOf(valsUsed(r.vals), (id: string) => !!tagKey(id)).map.values()].map(e => ({ tag: rowTag(e.t.rows[e.i]), label: e.t.rows[e.i].label || rowTag(e.t.rows[e.i]) })), [r.vals]);
+  // μέτρηση με ίδια ετικέτα με στοιχείο εντύπου, γραμμή πίνακα τιμών ή προηγούμενη μέτρηση: δεν μπαίνει στη λίστα (θα έπαιρνε την τιμή του άλλου)
+  const ms = useMemo(() => { const seen = new Set([...VAL_CELLS.map(c => tagId(c.tag)), ...rows.map(x => tagId(x.tag))]); return groups.map(g => ({ group: g.group, items: g.items.filter(m => { const id = tagId(m.label); if (!id || seen.has(id)) return false; seen.add(id); return true; }) })).filter(g => g.items.length); }, [groups, rows]);
+  return html`<${Select} className="ui-select rep-grid__val" search=${true} aria-label="Βάλε τιμή από την εφαρμογή στο κελί" data-tip="Βάζει μια {ΕΤΙΚΕΤΑ} στο κελί που έγραφες (ή στο πρώτο κελί): όταν βγει το έντυπο γράφεται η τιμή. Η προεπισκόπηση τη δείχνει ήδη." value="" onChange=${(e: any) => e.target.value && put(e.target.value)}>
+    <option value="">Βάλε τιμή…</option>
+    <optgroup label="Στοιχεία εντύπου">${VAL_CELLS.map(c => html`<option key=${c.k} value=${c.tag}>${c.label}</option>`)}</optgroup>
+    ${rows.length > 0 && html`<optgroup label="Γραμμές των πινάκων τιμών">${rows.map(x => html`<option key=${x.tag} value=${x.tag}>${x.label}</option>`)}</optgroup>`}
+    ${ms.map(g => html`<optgroup key=${g.group} label=${'Μετρήσεις · ' + g.group}>${g.items.map(m => html`<option key=${m.id} value=${tagText(m.label)}>${m.label}</option>`)}</optgroup>`)}
+  <//>`;
+}
 function BlankGrid({ o, set, r, upd }: P) {
+  const toast = useToast();
   const n = blankN(o.nrows); const heads: BuildCol[] = o.cols.filter((c: BuildCol) => c.f !== 'aa');
+  const sc = useRef<HTMLDivElement>(null); const last = useRef<{ i: number; j: number } | null>(null);   // το τελευταίο κελί που είχε τον δρομέα
   const [txt, setTxt] = useState(String(n)); useEffect(() => setTxt(String(n)), [n]);
   const cb = useRef({ o, set, r, upd }); cb.current = { o, set, r, upd };
   const put = useCallback((i: number, j: number, t: string) => {
@@ -926,13 +944,27 @@ function BlankGrid({ o, set, r, upd }: P) {
     set2({ grid: g });
   }, []);
   const rows = (x: number) => { cb.current.set({ nrows: x }); cb.current.upd({ pick: { ...cb.current.r.pick, mode: 'all', n: x } }); };
+  const onFocus = useCallback((i: number, j: number) => { last.current = { i, j }; }, []);
+  // μπαίνει στη θέση του δρομέα του τελευταίου κελιού (ή στο τέλος του πρώτου κελιού, αν δεν πάτησες σε κανένα) και σώζεται αμέσως
+  const insert = (tag: string) => {
+    const w = cb.current.o.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(cb.current.o.nrows);
+    const at = last.current && last.current.i < nr && last.current.j < w ? last.current : null; const i = at?.i ?? 0, j = at?.j ?? 0;
+    const el = sc.current?.querySelector('input[data-i="' + i + '"][data-j="' + j + '"]') as HTMLInputElement | null;
+    const cur = el ? el.value : cb.current.o.grid?.[i]?.[j] ?? '';
+    const a = at && el && el.selectionStart != null ? el.selectionStart : cur.length; const b = at && el && el.selectionEnd != null ? el.selectionEnd : a;
+    const x = '{' + tag + '}'; const text = cur.slice(0, a) + x + cur.slice(b);
+    if (text.length > 200) { toast({ text: 'Το κελί χωράει ως 200 χαρακτήρες.' }); return; }
+    put(i, j, text);
+    setTimeout(() => { el?.focus(); el?.setSelectionRange(a + x.length, a + x.length); }, 30);
+  };
   return html`<div className="rep-grid">
     <div className="rep-grid__bar"><label className="field__label" htmlFor="b-nrows">Γραμμές</label>
       <input id="b-nrows" type="number" min="1" max=${BLANK_MAX} className="ui-input rep-n" value=${txt} onChange=${(e: any) => { setTxt(e.target.value); const x = +e.target.value; if (Number.isInteger(x) && x >= 1 && x <= BLANK_MAX && x !== n) rows(x); }} onBlur=${() => setTxt(String(n))}/>
-      <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel.</small></div>
-    <div className="rep-grid__sc" tabIndex=${0} role="group" aria-label="Κελιά του πίνακα"><table className="rep-grid__t">
+      <${ValuePick} r=${r} put=${insert}/>
+      <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel. Με «Βάλε τιμή…» ένα κελί παίρνει ημερομηνία, αριθμό κ.ά. από την εφαρμογή.</small></div>
+    <div ref=${sc} className="rep-grid__sc" tabIndex=${0} role="group" aria-label="Κελιά του πίνακα"><table className="rep-grid__t">
       <thead><tr><th scope="col" aria-label="Γραμμή"></th>${heads.map((c, j) => html`<th key=${j} scope="col" title=${c.h}>${c.h || '\u00a0'}</th>`)}</tr></thead>
-      <tbody>${Array.from({ length: n }, (_, i) => html`<tr key=${i}><th scope="row">${i + 1}</th>${heads.map((c, j) => html`<td key=${j}><${BlankCell} i=${i} j=${j} v=${o.grid?.[i]?.[j] ?? ''} label=${'Γραμμή ' + (i + 1) + ', ' + (c.h || 'στήλη ' + (j + 1))} put=${put} paste=${paste}/></td>`)}</tr>`)}</tbody></table></div>
+      <tbody>${Array.from({ length: n }, (_, i) => html`<tr key=${i}><th scope="row">${i + 1}</th>${heads.map((c, j) => html`<td key=${j}><${BlankCell} i=${i} j=${j} v=${o.grid?.[i]?.[j] ?? ''} label=${'Γραμμή ' + (i + 1) + ', ' + (c.h || 'στήλη ' + (j + 1))} put=${put} paste=${paste} onFocus=${onFocus}/></td>`)}</tr>`)}</tbody></table></div>
   </div>`;
 }
 

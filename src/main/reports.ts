@@ -10,7 +10,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, blankN, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankFill, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -147,6 +147,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   // πίνακες τιμών: υπολογίζονται μία φορά και γράφονται σε κάθε φύλλο, κάτω από τους πίνακες
   const clock = o.clock || { today: todayISO(), now: nowMin() };
   const vo = valsUsed(r.vals).length ? evalTables(s, d, atOf(s, r.at, d, clock.today, clock.now), r.vals, clock.today) : [];
+  const mv = metricFn(s, d, () => atOf(s, r.at, d, clock.today, clock.now), clock.today);   // μετρήσεις σε ετικέτες των κελιών του «Κενός πίνακας»
   for (const m of valsMissing(s, r.vals)) warnings.push('Στους πίνακες τιμών δεν υπάρχει πια η μέτρηση «' + m + '» (σβήστηκε υπηρεσία ή τύπος;). Δεν μετρά.');
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
   const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
@@ -172,7 +173,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
   const t0 = pv ? tabs(split ? groups[0] : null) : null;
   const counts = t0 ? t0.map(x => ({ shown: cutSample(x.rows, pv!.sample).length, total: x.rows.length })) : undefined;
-  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo)); names.push(sheet); }
+  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo, mv)); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -180,7 +181,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo); if (!i) layout.push(...l); }
+    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo, mv); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
   const name = repFileName(r, d);
@@ -189,7 +190,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 // nohead: χωρίς γραμμή επικεφαλίδων στο έντυπο (η γραμμή μένει στο πρότυπο μέχρι να γεμίσει και μετά κρύβεται ή αδειάζει, δες noHead)
 interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
-async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[]): Promise<LayoutSheet[]> {
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[], mv: (id: string) => number | null): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const colsOf = tabs.map(t => t.cols.filter(c => c.c >= 1 && fieldOf(t.kind, c.f)));
   // θέσεις πινάκων (Φάση 3, Report.bands): ο καθένας με το id του (ο 1ος 'main') και οι πίνακες τιμών με το δικό τους. Χωρίς bands (ή με την
@@ -265,6 +266,9 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     }));
     if (whole && !tagKey(whole[1]) && !wv && vt.map.size) unknown.add(whole[1].trim());
   }
+  // «Κενός πίνακας»: κελιά με {ΕΤΙΚΕΤΑ} γραμμής πίνακα τιμών (δεν είναι στο Excel, είναι στα κελιά που έγραψες) μετρούν ως χρήση της ετικέτας
+  const bx = blankTags(s, r, vo, mv, val); const badB = new Set<string>();
+  tabs.forEach(t => { if (t.kind === 'blank') for (const c of t.cols) if (c.f === 'col') (c.o?.vals || []).slice(0, t.rows.length).forEach(v => { for (const m of String(v).matchAll(TAG_RE)) if (!tagKey(m[1]) && bx.row(m[1])) seenTags.add(tagId(m[1])); }); });
   for (const u of unknown) warnings.push('Στο πρότυπο υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου ούτε γραμμή πίνακα τιμών. Μένει όπως είναι.');
   for (const t of vo) if (t.tagsOnly) for (const x of t.rows) if (x.tag && vt.map.has(tagId(x.tag)) && !seenTags.has(tagId(x.tag))) warnings.push('Ο πίνακας τιμών' + (t.title ? ' «' + t.title + '»' : '') + ' γράφεται μόνο στο Excel, αλλά το πρότυπο δεν έχει την ετικέτα {' + x.tag + '}.');
   if (vt.dup.length) warnings.push('Δύο γραμμές των πινάκων τιμών έχουν την ετικέτα ' + vt.dup.map(x => '{' + x + '}').join(', ') + ': μετρά η πρώτη.');
@@ -338,6 +342,13 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
         for (const c of cols) {
           const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
           if (j >= t.rows.length && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
+          // «Κενός πίνακας»: κελί με {ΕΤΙΚΕΤΑ}· όλα τα άλλα κελιά όπως πριν
+          const raw = j < t.rows.length && t.kind === 'blank' && c.f === 'col' ? c.o?.vals?.[j] : undefined;
+          if (raw && raw.includes('{')) {
+            const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
+            if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών
+            continue;
+          }
           ws.set(ref, j < t.rows.length ? fieldValue(s, t.kind, t.rows[j], c.f, j, d, c.text, c.o) : null);
         }
       }
@@ -350,6 +361,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     const added = await writeValues(wb, ws, tail, { end, c1: vc1, c2: vc2, gap: cs0.length > 0, h: vref.h, data: vref.data, head: vref.head, look });
     shiftBy(added, end); end += added;
   }
+  for (const u of badB) warnings.push('Στον κενό πίνακα υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου, γραμμή πίνακα τιμών ούτε μέτρηση. Μένει όπως είναι.');
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
   const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
   const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names }], s, 'reports', r.sigs, warnings, () => r.layout);
