@@ -504,7 +504,7 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
   const r = s.rules;
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
-  if (c && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση και το όριο· ΕΠΟΠ/ΟΒΑ κρατούν τους κανόνες τους
+  if (c && !c.monthMax && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση· ΕΠΟΠ/ΟΒΑ (και όποιο έχει όριο, #125) κρατούν τους κανόνες τους
   if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndexOf(s)).get(pid);
   if (!ds) return null;
