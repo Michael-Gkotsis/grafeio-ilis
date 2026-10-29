@@ -12,8 +12,9 @@ import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAB_WIDTHS, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, tagKey, type BuildOpts, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row } from '../shared/reports';
 import type { AppState } from '../shared/domain';
-import { XL_LOOK, formPart, tablePart, type XlLook } from '../shared/xlLook';
-import type { ISODate } from '../shared/dates';
+import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
+import { atOf, evalTables, valsMissing, valsUsed, type ValueOut } from '../shared/values';
+import { nowMin, today as todayISO, type ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
 
 export const MAX_ROWS = 2000;
@@ -128,19 +129,24 @@ function locateHead(ws: Sheet, rows: XlValue[][], cols: RepCol[], head: number, 
 // (φύλλα στο Δυναμολόγιο)· stale: ομάδες που είχαν βγει παλιότερα και τώρα δεν έχουν κανέναν (γράφονται άδειες, για να μη
 // μείνουν παλιά ονόματα)
 export type GroupKey = Omit<RepGroup, 'rows'>;
-export interface FillOpts { prefix?: string; stale?: GroupKey[] }
+// clock: σήμερα και ώρα (λεπτά) για τη στιγμή μέτρησης των πινάκων τιμών (τα tests τα δίνουν· αλλιώς το ρολόι)
+export interface FillOpts { prefix?: string; stale?: GroupKey[]; clock?: { today: ISODate; now: number } }
 // Δείγμα της προεπισκόπησης (Έντυπα › σελίδα δημιουργίας): κάθε πίνακας δείχνει ως sample γραμμές (0: ως PV_MAX). Το βγάλσιμο (rep:run, αυτόματη
 // ενημέρωση) δεν το περνά ποτέ: μπαίνει μόνο από το previewReport, και τότε το αποτέλεσμα έχει counts (πόσες από πόσες, ανά πίνακα του 1ου φύλλου)
 export interface PvOpts { sample: number }
 export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}, pv?: PvOpts): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[]; layout: LayoutSheet[]; counts?: PvCount[] }> {
   const wb = await Workbook.open(tpl); wb.widen = !r.fixed; const warnings: string[] = [];
   await unitWords(wb, s);
+  // πίνακες τιμών: υπολογίζονται μία φορά και γράφονται σε κάθε φύλλο, κάτω από τους πίνακες
+  const clock = o.clock || { today: todayISO(), now: nowMin() };
+  const vo = valsUsed(r.vals).length ? evalTables(s, d, atOf(s, r.at, d, clock.today, clock.now), r.vals, clock.today) : [];
+  for (const m of valsMissing(s, r.vals)) warnings.push('Στους πίνακες τιμών δεν υπάρχει πια η μέτρηση «' + m + '» (σβήστηκε υπηρεσία ή τύπος;). Δεν μετρά.');
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
   const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
   // οι πίνακες 2, 3…: όλοι όσοι περνούν τα φίλτρα τους (χωρίς τυχαίους), με τη σειρά τους
   const more = r.more || []; const extra = moreRows(s, r, d).map(x => x.slice(0, MAX_ROWS));
-  const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre';
+  const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre' && !(vo.length && !r.cols.length);
   let groups = groupsOf(s, r.kind, rows, r.split);
   if (split) {
     // ένας θάλαμος που έχει μόνο π.χ. καταστάσεις στον 2ο πίνακα παίρνει κι αυτός φύλλο
@@ -151,13 +157,15 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   }
   if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
+  // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
   const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))];
+    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+    .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
   const t0 = pv ? tabs(split ? groups[0] : null) : null;
   const counts = t0 ? t0.map(x => ({ shown: cutSample(x.rows, pv!.sample).length, total: x.rows.length })) : undefined;
-  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings)); names.push(sheet); }
+  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo)); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -165,7 +173,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings); if (!i) layout.push(...l); }
+    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
   const name = repFileName(r, d);
@@ -173,7 +181,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
 }
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[] }
-async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[]): Promise<LayoutSheet[]> {
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[]): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   // πού είναι οι πίνακες τώρα: ο πρώτος όπως πάντα, κάθε επόμενος κάτω από τον προηγούμενο
   const heads: number[] = [];
@@ -255,6 +263,13 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
       }
     }
   }
+  // πίνακες τιμών: αμέσως κάτω από τον τελευταίο πίνακα, πριν τις υπογραφές (ό,τι είναι από κάτω κατεβαίνει)
+  if (vo.length) {
+    const cs = colsOf[0].map(c => c.c); const c1 = cs.length ? Math.min(...cs) : 1, c2 = cs.length ? Math.max(...cs) : Math.max(2, ws.lastCol());
+    const added = await writeValues(wb, ws, vo, { end, c1, c2, gap: cs.length > 0, data: ws.style(colName(c1) + datas[0]), head: ws.style(colName(c1) + heads[0]), look: xlLook(s.settings) });
+    for (const key of ['head', 'date', 'title', 'names'] as const) parts[key] = parts[key].map(x => x.replace(/(\d+)$/, (_m, nn: string) => String(+nn > end ? +nn + added : +nn)));
+    end += added;
+  }
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
   const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
   const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names }], s, 'reports', r.sigs, warnings, () => r.layout);
@@ -262,9 +277,52 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   wb.markFixed(ws.name, layout[0]?.blocks || []);
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα (με έναν πίνακα: με πολλούς θα έβγαιναν του πρώτου πάνω από τους άλλους)
   // και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
-  if (tabs.length === 1) wb.setPrintTitles(sheet, head, data - 1);
+  if (tabs.length === 1 && colsOf[0].length) wb.setPrintTitles(sheet, head, data - 1);
   ws.setPrintFit(false);
   return layout;
+}
+
+// ------------------------------------------------------------------ πίνακες τιμών
+// Κείμενο αριστερά (ενωμένα κελιά ως ~40 χαρακτήρες από την πρώτη στήλη του πίνακα) και η τιμή δεξιά, με τη μορφή των κελιών του
+// πίνακα (πλαίσιο, γράμματα)· προαιρετικός τίτλος πάνω από κάθε πίνακα· μία κενή γραμμή πριν από τον καθένα (gap: και πριν τον πρώτο).
+// Μπαίνουν μετά τη γραμμή end (ό,τι είναι από κάτω κατεβαίνει). Γυρνά πόσες γραμμές μπήκαν. at: θέση της πρώτης γραμμής αν χρειαστεί
+// αργότερα (Φάση 3: δίπλα/κάτω από άλλον πίνακα) — όλα γράφονται από εδώ.
+export interface ValueAt { end: number; c1: number; c2: number; gap: boolean; data: number | null; head: number | null; look: XlLook }
+export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: ValueAt): Promise<number> {
+  const n = vo.reduce((x, t, i) => x + (i || a.gap ? 1 : 0) + (t.title ? 1 : 0) + t.rows.length, 0);
+  if (!n) return 0;
+  ws.insertRows(a.end, n, 0, wb);
+  // μέχρι ποια στήλη φτάνει το κείμενο: ~40 χαρακτήρες πλάτος, αφήνοντας μία στήλη του πίνακα για την τιμή
+  const cap = a.c2 > a.c1 ? a.c2 - 1 : a.c1; let e = a.c1, w = ws.colWidth(a.c1);
+  while (e < cap && w < 40) { e++; w += ws.colWidth(e); }
+  const vc = e + 1; const L = colName;
+  const { font, h, v } = a.look;
+  const base = a.data ?? await wb.style({ font, ...tablePart(a.look, 'data', 12), border: true, h, v });
+  const lab = await wb.like(base, { h: 'left', wrap: true });
+  const hd = await wb.like(a.head ?? await wb.style({ font, ...tablePart(a.look, 'head', 12), border: true, h, v, fill: FILLS.gray }), { h: 'left', b: true });
+  const sty: Record<string, number> = {};
+  const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : {}) }));
+  let row = a.end + 1;
+  for (let i = 0; i < vo.length; i++) {
+    const t = vo[i];
+    if (i || a.gap) row++;   // κενή γραμμή
+    if (t.title) {
+      ws.set(L(a.c1) + row, t.title);
+      for (let c = a.c1; c <= vc; c++) ws.setStyle(L(c) + row, hd);
+      if (vc > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(vc) + row);
+      row++;
+    }
+    for (const x of t.rows) {
+      ws.set(L(a.c1) + row, x.label || null);
+      for (let c = a.c1; c <= e; c++) ws.setStyle(L(c) + row, lab);
+      const lines = Math.ceil((x.label.length * 1.2) / Math.max(w - 1, 1));   // μεγάλο κείμενο: περισσότερες γραμμές στο ίδιο κελί (το Excel δεν μεγαλώνει μόνο του τα ενωμένα)
+      if (lines > 1) ws.setRowHeight(row, 16 * lines);
+      if (e > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(e) + row);
+      ws.set(L(vc) + row, x.v == null ? '—' : x.v); ws.setStyle(L(vc) + row, await valSt(x.v == null ? 'int' : x.fmt));
+      row++;
+    }
+  }
+  return n;
 }
 
 // ------------------------------------------------------------------ «Φτιάξ' το εδώ»
@@ -287,10 +345,12 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   const wb = await Workbook.blank(sheet); const ws = await wb.sheet(0);
   const one = (cs: BuildOpts['cols']) => (cs.length ? cs : [{ f: 'name', h: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', w: 'auto' as const }]);
   const cols = one(o.cols);
-  const tables = [{ id: '', title: '', kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
+  const nop = !!o.nopeople && !(o.more || []).length;
+  const tables = nop ? [] : [{ id: '', title: '', kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
-  const grid = gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
-  const n = grid ? GRID : Math.max(...tables.map(t => t.cols.length)); const L = (c: number) => colName(c);
+  const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
+  const n = nop ? 2 : grid ? GRID : Math.max(...tables.map(t => t.cols.length)); const L = (c: number) => colName(c);
   // πλάτος κάθε στήλης όπως θα ήταν μόνη της (σε χαρακτήρες)
   const natural = (t: (typeof tables)[number]) => t.cols.map(c => { const f = fieldOf(t.kind, c.f); const h = (c.h || f?.head || '').trim() || ' '; return Math.round(Math.max(4, Math.max(f?.w || 12, Math.min(40, h.length * 1.1 + 2)) * WMUL[c.w || 'auto'] * (sz / 11)) * 10) / 10; });
   // πού πέφτει κάθε στήλη: χωρίς πλέγμα η i-οστή στήλη του φύλλου· με πλέγμα ένα κομμάτι από τις GRID στήλες της σελίδας
@@ -332,7 +392,8 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   const placed: { id: string; head: number; cols: RepCol[] }[] = [];
   // κενές γραμμές πάνω από κάθε πίνακα (προεπιλογή μία: κάτω από τον τίτλο ή τον προηγούμενο πίνακα)
   const gapOf = (t: (typeof tables)[number]) => Math.max(0, Math.min(10, t.lay?.gap ?? 1));
-  let next = r + 1 + gapOf(tables[0]), data = next;
+  let next = nop ? r + 1 : r + 1 + gapOf(tables[0]), data = next;
+  if (nop) { placed.push({ id: '', head: r, cols: [] }); data = r + 1; widths[1] = 46; widths[2] = 14; }
   for (const t of tables) {
     const at = placeOf(t); const c1 = at[0][0], c2 = at[at.length - 1][1];
     // τίτλος του πίνακα (2, 3…) στη γραμμή πάνω από τις επικεφαλίδες του
@@ -376,7 +437,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   }
   ws.setPrintFit(!!o.land); ws.setFooter('ΣΕΛΙΔΑ &P ΑΠΟ &N');
   const [main, ...more] = placed;
-  if (!more.length) wb.setPrintTitles(sheet, main.head, main.head);
+  if (!more.length && !nop) wb.setPrintTitles(sheet, main.head, main.head);
   // οι ετικέτες μένουν μέσα στο αρχείο: αν το ανοίξεις στο Excel και το αλλάξεις, η εφαρμογή τις ξαναβρίσκει
   return { data: await wb.save(), sheet, head: main.head, cols: main.cols, cells: [{ ref: tref, k: GTITLE }], ...(more.length ? { more } : {}), ...(grid ? { fixed: true } : {}) };
 }

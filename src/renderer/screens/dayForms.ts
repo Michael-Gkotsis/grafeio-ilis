@@ -9,6 +9,7 @@ import { preflight, type Check } from '../../shared/preflight';
 import { HK } from '../../shared/unit';
 import { dayName, dmy, type ISODate } from '../../shared/dates';
 import { dailyOk, repDate, rowNoun, rowsOf, type Report } from '../../shared/reports';
+import { hasVals } from '../../shared/values';
 import type { ExportKind, ExportResult } from '../../shared/api';
 
 type Item = { kind: ExportKind | 'rep'; date: ISODate; name: string; label: string; rep?: Report };
@@ -21,10 +22,10 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
     { kind: 'outs', date: today, name: 'Εξοδούχοι και παραμένοντες', label: 'οι εξοδούχοι' },
     ...(state.settings.reports || []).filter(r => r.daily && dailyOk(r)).map(r => ({ kind: 'rep' as const, date: repDate(r, today), name: r.name, label: 'το έντυπο', rep: r }))
   ];
-  // δικά σου έντυπα: χωρίς πρότυπο δεν βγαίνει· χωρίς κανέναν βγαίνει άδειο, με προειδοποίηση
+  // δικά σου έντυπα: χωρίς πρότυπο δεν βγαίνει· χωρίς κανέναν βγαίνει άδειο, με προειδοποίηση (εκτός αν έχει πίνακες τιμών: βγαίνει πάντα)
   const repCheck = (r: Report, d: ISODate): Check[] => {
     if (!(state.settings.reportTpls || []).some(t => t.id === r.tpl)) return [{ level: 'err', text: 'Το πρότυπό του δεν υπάρχει πια. Άνοιξέ το στα Έντυπα με «Αλλαγή».' } as Check];
-    return rowsOf(state, r, d).length ? [] : [{ level: 'warn', text: 'Κανείς δεν περνά τα φίλτρα του (0 ' + rowNoun(r.kind) + ').' } as Check];
+    return rowsOf(state, r, d).length || hasVals(r) ? [] : [{ level: 'warn', text: 'Κανείς δεν περνά τα φίλτρα του (0 ' + rowNoun(r.kind) + ').' } as Check];
   };
   const checks = useMemo(() => items.map(it => (it.rep ? repCheck(it.rep, it.date) : preflight(it.kind as ExportKind, state, it.date))), [state, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const bad = checks.map(cs => cs.some(c => c.level === 'err'));
