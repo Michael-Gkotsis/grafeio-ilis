@@ -281,9 +281,11 @@ export function evalValue(s: AppState, d: ISODate, at: number, expr: VExpr, cx?:
 export const fmtOf = (r: Pick<VRow, 'fmt' | 'percentOf' | 'man'>): VFmt => (r.man != null ? 'int' : r.fmt ?? (r.percentOf?.length ? 'pct' : 'int'));
 // Δική σου τιμή: αριθμός αν είναι αριθμός (και με κόμμα: «3,5»· όχι «007» ή πάνω από 15 ψηφία, που χάνουν τα μηδενικά ή την ακρίβεια), αλλιώς κείμενο
 // σε κεφαλαία· κενή: κανένα από τα δύο (γράφεται «—» όπως τιμή που λείπει)
-const MAN_NUM = /^[-+]?(?:(?:0|[1-9]\d*)(?:[.,]\d+)?|[.,]\d+)$/;
+// «1.234» / «12.345,5»: τελείες χιλιάδων όπως γράφουμε στα ελληνικά (όχι 1,234)
+const MAN_NUM = /^[-+]?(?:(?:0|[1-9]\d*)(?:[.,]\d+)?|[.,]\d+)$/, MAN_K = /^[-+]?[1-9]\d{0,2}(?:\.\d{3})+(?:,\d+)?$/;
 export function manOf(man: string): { v: number | null; txt?: string } {
-  const t = man.trim(); if (!t) return { v: null };
+  let t = man.trim(); if (!t) return { v: null };
+  if (MAN_K.test(t)) t = t.replace(/\./g, '');
   if (MAN_NUM.test(t) && t.replace(/\D/g, '').length <= 15) return { v: +t.replace(',', '.') };
   return { v: null, txt: upper(t) };
 }

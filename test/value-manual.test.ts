@@ -21,6 +21,7 @@ const s = fakeState(40);
 describe('Δική μου τιμή: αριθμός ή κείμενο', () => {
   it('αριθμός, και με κόμμα ή τελεία δεκαδικού· το κείμενο σε κεφαλαία χωρίς τόνους· κενό = τίποτα', () => {
     expect(manOf('12')).toEqual({ v: 12 }); expect(manOf(' 3,5 ')).toEqual({ v: 3.5 }); expect(manOf('3.5')).toEqual({ v: 3.5 }); expect(manOf('-2')).toEqual({ v: -2 }); expect(manOf('0,25')).toEqual({ v: 0.25 }); expect(manOf('0')).toEqual({ v: 0 });
+    expect(manOf('1.234')).toEqual({ v: 1234 }); expect(manOf('12.345,5')).toEqual({ v: 12345.5 }); expect(manOf('1.5')).toEqual({ v: 1.5 });
     expect(manOf('Αναμονή')).toEqual({ v: null, txt: 'ΑΝΑΜΟΝΗ' }); expect(manOf('12 άτομα')).toEqual({ v: null, txt: '12 ΑΤΟΜΑ' }); expect(manOf('3,5,1')).toEqual({ v: null, txt: '3,5,1' });
     // δεν γίνονται αριθμοί: χάνουν μηδενικά ή ακρίβεια
     expect(manOf('007')).toEqual({ v: null, txt: '007' }); expect(manOf('1234567890123456')).toEqual({ v: null, txt: '1234567890123456' });
