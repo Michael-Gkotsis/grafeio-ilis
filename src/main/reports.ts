@@ -159,7 +159,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (split) {
     // ένας θάλαμος που έχει μόνο π.χ. καταστάσεις στον 2ο πίνακα παίρνει κι αυτός φύλλο
     const keys = new Set(groups.map(g => g.key)); let added = false;
-    more.forEach((t, i) => { if (t.kind !== 'cadre') for (const x of extra[i]) { const g = groupOf(s, x, r.split!); if (!keys.has(g.key)) { keys.add(g.key); groups.push({ ...g, rows: [] }); added = true; } } });
+    more.forEach((t, i) => { if (splitOk(t.kind)) for (const x of extra[i]) { const g = groupOf(s, x, r.split!); if (!keys.has(g.key)) { keys.add(g.key); groups.push({ ...g, rows: [] }); added = true; } } });
     if (added) groups.sort(byGroup);
     groups = [...groups, ...(o.stale || []).filter(x => !groups.some(g => g.key === x.key)).map(x => ({ ...x, rows: [] }))];
   }
@@ -167,7 +167,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
   // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
   const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
     .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
@@ -498,7 +498,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
   type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay; grid?: string[][]; nrows?: number };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay, ...(t.kind === 'blank' ? { grid: t.grid, nrows: blankN(t.nrows) } : {}) }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο

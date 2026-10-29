@@ -290,7 +290,7 @@ export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide';
 // «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
 // Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
 export interface BuildVal { id: string; title?: string; ta?: TAlign; lay?: TabLay }
-export interface BuildTable { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean }   // nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10)
+export interface BuildTable { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean; grid?: string[][]; nrows?: number }   // nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
 // Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
 // στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
 export interface TabLay { w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4'; at?: 'left' | 'center' | 'right'; even?: boolean; gap?: number }
@@ -311,6 +311,28 @@ export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts 
   { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
   { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 12, fill: 'gray' } }
 ];
+// στήλες που μπαίνουν μόνες τους όταν διαλέγεις είδος σε «Φτιάξ' το εδώ»
+const KIND_COLS: Partial<Record<RepKind, string[]>> = { status: ['stype', 'from', 'to'], duty: ['seat', 'hours'], weapon: ['weapon', 'wtype', 'rack', 'inout'], wmove: ['weapon', 'mreason', 'mout', 'min'] };
+// «Φτιάξ' το εδώ», άλλαξε το είδος: φεύγουν οι στήλες που δεν υπάρχουν σε αυτό (π.χ. ΑΣΜ στα στελέχη) και μπαίνουν οι βασικές του
+// (Καταστάσεις: είδος, από, έως· Υπηρεσίες: θέση πρώτη, μετά το Α/Α)· ο συνδυασμός κρατά όσα στοιχεία υπάρχουν
+export function colsForKind(cs: BuildCol[], kind: RepKind): BuildCol[] {
+  if (kind === 'blank') { const aa = cs.find(c => c.f === 'aa'); const col = cs.filter(c => c.f === 'col'); return [...(aa ? [aa] : [{ f: 'aa', h: 'Α/Α', w: 'narrow' as const }]), ...(col.length ? col : [1, 2].map(n => ({ f: 'col', h: 'ΣΤΗΛΗ ' + n, w: 'auto' as const })))]; }
+  const cols = cs.filter(c => fieldOf(kind, c.f) && !Object.values(KIND_COLS).some(l => l!.includes(c.f) && !fieldOf('people', c.f)))
+    .map(c => (c.f === 'combo' && c.o?.parts ? { ...c, o: { ...c.o, parts: c.o.parts.filter(k => fieldOf(kind, k)) } } : c));
+  for (const f of KIND_COLS[kind] || []) if (!cols.some(c => c.f === f)) cols.push({ f, h: fieldOf(kind, f)!.head, w: ['stype', 'seat', 'inout', 'mreason'].includes(f) ? 'auto' : 'narrow' });
+  if (kind === 'duty') { const i = cols.findIndex(c => c.f === 'seat'); const [x] = cols.splice(i, 1); cols.splice(cols[0]?.f === 'aa' ? 1 : 0, 0, x); }
+  return cols;
+}
+// Αλλαγή είδους από «from» σε «to» με τις στήλες της: από το «Κενός πίνακας» πίσω, χωρίς στήλες δεν γίνεται πίνακας, οπότε μπαίνουν βαθμός και ονοματεπώνυμο
+export function switchCols(cs: BuildCol[], from: RepKind, to: RepKind): BuildCol[] {
+  const cols = colsForKind(cs, to);
+  return from === 'blank' && !cols.some(c => c.f !== 'aa') ? [...cols, ...['rank', 'name'].filter(f => fieldOf(to, f)).map(f => ({ f, h: fieldOf(to, f)!.head, w: 'auto' as const }))] : cols;
+}
+// Πίνακας 2, 3… (Φτιάξ' το εδώ) αλλάζει είδος: στήλες όπως στον 1ο πίνακα (switchCols)· στο «Κενός πίνακας» 10 γραμμές και κενό πλέγμα, πίσω χωρίς πλέγμα
+export function retypeTable(t: BuildTable, kind: RepKind): BuildTable {
+  const { grid: _g, nrows: _n, ...rest } = t;
+  return { ...rest, kind, cols: switchCols(t.cols, t.kind, kind), ...(kind === 'blank' ? { nrows: BLANK_ROWS } : {}) };
+}
 export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' });
 
 // ------------------------------------------------------------------ μαντεψιά από τις επικεφαλίδες του Excel
@@ -748,7 +770,9 @@ export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
     const prev = r.more?.find(x => x.id === t.id); const got = b.more?.find(x => x.id === t.id);
     const base = !prev ? newTable(t.kind, t.id) : prev.kind === t.kind ? prev : { ...prev, ...pickForKind(prev.kind, prev.pick, prev.sort, t.kind) };
     const { nohead: _h, ...b0 } = base;
-    return { ...b0, title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [], ...(t.nohead ? { nohead: true } : {}) };
+    // «Κενός πίνακας»: οι γραμμές είναι οι nrows του πλέγματος του πίνακα (όπως στον 1ο)
+    const pick = t.kind === 'blank' && t.nrows != null ? { pick: { ...b0.pick, mode: 'all' as const, n: blankN(t.nrows) } } : {};
+    return { ...b0, ...pick, title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [], ...(t.nohead ? { nohead: true } : {}) };
   });
   const { more: _, fixed: _f, nohead: _n, ...rest } = r;
   // πίνακες τιμών: η θέση που τους άφησε το πρότυπο (δεν υπάρχει όταν η διάταξη είναι η προεπιλεγμένη: γράφονται στο τέλος, όπως πριν)
