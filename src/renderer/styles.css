@@ -1101,6 +1101,16 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-cols__mv{display:inline-flex;flex:none}
 .rep-cols__mv .ui-btn--icon{width:22px;height:28px;border-radius:6px;border-color:transparent}
 .rep-cols__mv .ui-btn--icon svg{width:14px;height:14px}
+/* «Κενό»: γραμμές και πλέγμα κελιών (γλιστρά οριζόντια και κάθετα μέσα στην κάρτα) */
+.rep-grid{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rep-grid__bar{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px}.rep-grid__bar .field__label{margin:0}.rep-grid__bar small{flex:1 1 180px;line-height:1.35}
+.rep-grid__sc{max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.rep-grid__t{border-collapse:separate;border-spacing:0;font-size:12px}
+.rep-grid__t th{position:sticky;top:0;z-index:1;padding:3px 6px;background:var(--thead);color:var(--muted-fg);font-weight:600;text-align:left;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid var(--border)}
+.rep-grid__t tbody th{position:static;top:auto;text-align:right;font:600 11px var(--f-mono);border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.rep-grid__t td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.rep-grid__t .ui-input{display:block;width:96px;height:26px;padding:0 6px;border:0;border-radius:0;font-size:12px;background:transparent}
+.rep-grid__t .ui-input:focus{background:var(--card);box-shadow:inset 0 0 0 2px var(--ring)}
 /* μορφή στήλης: καταστάσεις (ΕΑ, ΑΔΕΙΑ…) και συνδυασμός (ΣΤΡ (ΜΧ)), κάτω από τη στήλη */
 .rep-colopt{display:flex;align-items:center;flex-wrap:wrap;gap:5px 6px;flex-basis:100%;padding:4px 0 2px 27px;font-size:12px}
 .rep-table--map .rep-colopt{padding-left:0;margin-top:5px}

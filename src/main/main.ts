@@ -23,7 +23,7 @@ import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './expor
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
-import { forBuild, repDate, rowsOf, sigsNone, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
+import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
 import { frouraFile, hkLvOn, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
@@ -500,7 +500,7 @@ async function writeRepSheet(r: Report, tplFile: string, ids: (number | string)[
   const file = repFileOf(r); if (typeof file !== 'string') return { ok: false, error: file.error };
   const s = store.state; const all = readMeta().repSheets || {};
   const prev = all[r.id] && sameFile(all[r.id].file, file) ? all[r.id] : undefined;
-  const base = repSheetBase(r); const split = !!r.split && r.split !== 'none' && r.kind !== 'cadre';
+  const base = repSheetBase(r); const split = !!r.split && r.split !== 'none' && splitOk(r.kind);
   const tpl = await tplBuf(tplFile); const o = split ? { prefix: base, stale: prev?.groups || [] } : {};
   const out = await off('fillReport', [tpl, r, ids, d, o], () => fillReport(tpl, s, r, ids, d, o), s);
   const pairs: [string, string][] = split ? out.sheets.map(n => [n, n]) : [[out.sheets[0], base]];
