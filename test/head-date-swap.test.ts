@@ -1,10 +1,10 @@
-// Ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα πάνω δεξιά, σε όλα τα έντυπα (Michael, 29/10). Με hdLeft: true η παλιά διάταξη.
+// Ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα πάνω δεξιά, σε όλα τα έντυπα εκτός από την ΗΚΑΙ (Michael, 29/10). Με hdLeft: true η παλιά διάταξη.
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import fs from 'fs';
 import path from 'path';
 import { rosterPrint, weaponsBook } from '../src/main/excel';
-import { fillFroura, fillOuts, signMade } from '../src/main/exports';
+import { fillFroura, fillHkai, fillOuts, signMade } from '../src/main/exports';
 import { buildTemplate, fillReport } from '../src/main/reports';
 import { Workbook, colName } from '../src/main/xlsx';
 import { PRESETS, defaultPick, withBuilt, type Report } from '../src/shared/reports';
@@ -80,6 +80,22 @@ describe('Ημερομηνία αριστερά, κεφαλίδα δεξιά', (
       const w0 = await look(o.data, i), w1 = await look(n.data, i);
       expect(w1.get('A1')).toBe(w0.get(ref(d0))); expect(w1.get(ref(d0))).toBeNull(); expect(w1.h('A1')).toBe('left');
       expect(w1.get(ref(h1))).toBe(w0.get(ref(h0)));
+    }
+  });
+
+  it('ΗΚΑΙ: ποτέ δεν αλλάζει (Michael, 29/10 22:04) — κεφαλίδα αριστερά, ίδιο Excel με ή χωρίς hdLeft, και οι θέσεις που έσυρες μετρούν όπως πριν', async () => {
+    const o = await fillHkai(T('hkai.xlsx'), st(true), D), n = await fillHkai(T('hkai.xlsx'), st(false), D);
+    expect(n.layout).toEqual(o.layout);   // front και back
+    expect(n.layout!.some(l => l.blocks.some(b => b.id === 'head' || b.id === 'date'))).toBe(true);
+    const f = blk(n.layout![0], 'head'); expect([f.r1, f.c1]).toEqual([blk(o.layout![0], 'head').r1, 1]);   // κεφαλίδα εκεί που την έχει το template, αριστερά
+    const [a, b] = [await Workbook.open(o.data), await Workbook.open(n.data)];
+    for (let i = 0; i < n.layout!.length; i++) expect((await b.sheet(i)).dump()).toEqual((await a.sheet(i)).dump());
+    expect((await look(n.data)).merges).toEqual((await look(o.data)).merges);
+    // «Θέσεις στο χαρτί…» ισχύει κανονικά: η ημερομηνία του μπροστινού μετακινείται από τη θέση του template
+    for (const old of [true, false]) {
+      const s = st(old); s.settings.layout = { hkai: { front: { date: [1, 0] } } };
+      const mv = await fillHkai(T('hkai.xlsx'), s, D);
+      expect(blk(mv.layout![0], 'date').r1).toBe(blk(o.layout![0], 'date').r1 + 1);
     }
   });
 
