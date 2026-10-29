@@ -10,7 +10,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, blankN, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankFill, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -147,6 +147,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   // πίνακες τιμών: υπολογίζονται μία φορά και γράφονται σε κάθε φύλλο, κάτω από τους πίνακες
   const clock = o.clock || { today: todayISO(), now: nowMin() };
   const vo = valsUsed(r.vals).length ? evalTables(s, d, atOf(s, r.at, d, clock.today, clock.now), r.vals, clock.today) : [];
+  const mv = metricFn(s, d, () => atOf(s, r.at, d, clock.today, clock.now), clock.today);   // μετρήσεις σε ετικέτες των κελιών του «Κενός πίνακας»
   for (const m of valsMissing(s, r.vals)) warnings.push('Στους πίνακες τιμών δεν υπάρχει πια η μέτρηση «' + m + '» (σβήστηκε υπηρεσία ή τύπος;). Δεν μετρά.');
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
   const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
@@ -158,7 +159,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (split) {
     // ένας θάλαμος που έχει μόνο π.χ. καταστάσεις στον 2ο πίνακα παίρνει κι αυτός φύλλο
     const keys = new Set(groups.map(g => g.key)); let added = false;
-    more.forEach((t, i) => { if (t.kind !== 'cadre') for (const x of extra[i]) { const g = groupOf(s, x, r.split!); if (!keys.has(g.key)) { keys.add(g.key); groups.push({ ...g, rows: [] }); added = true; } } });
+    more.forEach((t, i) => { if (splitOk(t.kind)) for (const x of extra[i]) { const g = groupOf(s, x, r.split!); if (!keys.has(g.key)) { keys.add(g.key); groups.push({ ...g, rows: [] }); added = true; } } });
     if (added) groups.sort(byGroup);
     groups = [...groups, ...(o.stale || []).filter(x => !groups.some(g => g.key === x.key)).map(x => ({ ...x, rows: [] }))];
   }
@@ -166,13 +167,13 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
   // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
   const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
     .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
   const t0 = pv ? tabs(split ? groups[0] : null) : null;
   const counts = t0 ? t0.map(x => ({ shown: cutSample(x.rows, pv!.sample).length, total: x.rows.length })) : undefined;
-  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo)); names.push(sheet); }
+  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo, mv)); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -180,7 +181,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo); if (!i) layout.push(...l); }
+    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo, mv); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
   const name = repFileName(r, d);
@@ -189,7 +190,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 // nohead: χωρίς γραμμή επικεφαλίδων στο έντυπο (η γραμμή μένει στο πρότυπο μέχρι να γεμίσει και μετά κρύβεται ή αδειάζει, δες noHead)
 interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
-async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[]): Promise<LayoutSheet[]> {
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[], mv: (id: string) => number | null): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const colsOf = tabs.map(t => t.cols.filter(c => c.c >= 1 && fieldOf(t.kind, c.f)));
   // θέσεις πινάκων (Φάση 3, Report.bands): ο καθένας με το id του (ο 1ος 'main') και οι πίνακες τιμών με το δικό τους. Χωρίς bands (ή με την
@@ -265,6 +266,9 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     }));
     if (whole && !tagKey(whole[1]) && !wv && vt.map.size) unknown.add(whole[1].trim());
   }
+  // «Κενός πίνακας»: κελιά με {ΕΤΙΚΕΤΑ} γραμμής πίνακα τιμών (δεν είναι στο Excel, είναι στα κελιά που έγραψες) μετρούν ως χρήση της ετικέτας
+  const bx = blankTags(s, r, vo, mv, val); const badB = new Set<string>();
+  tabs.forEach(t => { if (t.kind === 'blank') for (const c of t.cols) if (c.f === 'col') (c.o?.vals || []).slice(0, t.rows.length).forEach(v => { for (const m of String(v).matchAll(TAG_RE)) if (!tagKey(m[1]) && bx.row(m[1])) seenTags.add(tagId(m[1])); }); });
   for (const u of unknown) warnings.push('Στο πρότυπο υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου ούτε γραμμή πίνακα τιμών. Μένει όπως είναι.');
   for (const t of vo) if (t.tagsOnly) for (const x of t.rows) if (x.tag && vt.map.has(tagId(x.tag)) && !seenTags.has(tagId(x.tag))) warnings.push('Ο πίνακας τιμών' + (t.title ? ' «' + t.title + '»' : '') + ' γράφεται μόνο στο Excel, αλλά το πρότυπο δεν έχει την ετικέτα {' + x.tag + '}.');
   if (vt.dup.length) warnings.push('Δύο γραμμές των πινάκων τιμών έχουν την ετικέτα ' + vt.dup.map(x => '{' + x + '}').join(', ') + ': μετρά η πρώτη.');
@@ -338,6 +342,13 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
         for (const c of cols) {
           const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
           if (j >= t.rows.length && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
+          // «Κενός πίνακας»: κελί με {ΕΤΙΚΕΤΑ}· όλα τα άλλα κελιά όπως πριν
+          const raw = j < t.rows.length && t.kind === 'blank' && c.f === 'col' ? c.o?.vals?.[j] : undefined;
+          if (raw && raw.includes('{')) {
+            const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
+            if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών
+            continue;
+          }
           ws.set(ref, j < t.rows.length ? fieldValue(s, t.kind, t.rows[j], c.f, j, d, c.text, c.o) : null);
         }
       }
@@ -350,6 +361,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     const added = await writeValues(wb, ws, tail, { end, c1: vc1, c2: vc2, gap: cs0.length > 0, h: vref.h, data: vref.data, head: vref.head, look });
     shiftBy(added, end); end += added;
   }
+  for (const u of badB) warnings.push('Στον κενό πίνακα υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου, γραμμή πίνακα τιμών ούτε μέτρηση. Μένει όπως είναι.');
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
   const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
   const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names }], s, 'reports', r.sigs, warnings, () => r.layout);
@@ -486,7 +498,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
   type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay; grid?: string[][]; nrows?: number };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay, ...(t.kind === 'blank' ? { grid: t.grid, nrows: blankN(t.nrows) } : {}) }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο
@@ -551,9 +563,16 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     if (o.head) ['ΚΕΦΑΛΙΔΑ 1', 'ΚΕΦΑΛΙΔΑ 2', 'ΚΕΦΑΛΙΔΑ 3'].forEach((t, i) => ws.set('A' + (i + 1), '{' + t + '}').setStyle('A' + (i + 1), st.hdr));
     if (o.date) {
       // πάνω δεξιά: στις δύο τελευταίες στήλες (συγχωνευμένες) αν χωράει δίπλα στην κεφαλίδα
-      const c1 = grid ? n - 7 : n >= 3 ? n - 1 : o.head ? Math.max(2, n) : 1;   // πλέγμα: στο τελευταίο 1/3 της σελίδας
-      ws.set(L(c1) + 1, '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle(L(c1) + 1, st.date);
-      if (n >= 3) { ws.setStyle(L(n) + 1, st.date); ws.addMerge(L(c1) + '1:' + L(n) + '1'); }
+      if (!grid && o.head && n <= 3) {
+        // στενός πίνακας (π.χ. Α/Α, βαθμός, ονοματεπώνυμο): δίπλα στην κεφαλίδα (στήλη Β) δεν χωρά ούτε η μία ούτε η άλλη (και η αλλαγή θέσης κεφαλίδας-ημερομηνίας
+        // την έσπρωχνε στη στενή στήλη), οπότε η ημερομηνία πάει στη γραμμή 4, ανάμεσα στην κεφαλίδα και τον τίτλο, δεξιά σε όλο το πλάτος
+        ws.set('A4', '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle('A4', st.date);
+        if (n >= 2) { for (let c = 2; c <= n; c++) ws.setStyle(L(c) + 4, st.date); ws.addMerge('A4:' + L(n) + '4'); }
+      } else {
+        const c1 = grid ? n - 7 : n >= 3 ? n - 1 : o.head ? Math.max(2, n) : 1;   // πλέγμα: στο τελευταίο 1/3 της σελίδας
+        ws.set(L(c1) + 1, '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle(L(c1) + 1, st.date);
+        if (n >= 3) { ws.setStyle(L(n) + 1, st.date); ws.addMerge(L(c1) + '1:' + L(n) + '1'); }
+      }
     }
     r = o.head ? 5 : 3;
   }

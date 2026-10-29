@@ -7,7 +7,7 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
-import { blankN, byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
+import { blankFill, blankN, blankTags, byIds, cellValue, fieldOf, fieldValue, metricFn, moreRows, type BuildCol, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
 import { atOf, evalTables, rowText } from '../shared/values';
 import { MAIN, bandsOf } from '../shared/repBands';
@@ -210,26 +210,28 @@ export function mockApi(): Api {
     repPreview: async (src, r: Report, ids, date, _raw, opts) => {
       type Col = { f: string; h?: string; text?: string; o?: ColOpts };
       const build = 'build' in src ? src.build : null;
-      let gj = 0;   // «Κενό»: τα κελιά του πλέγματος μπαίνουν στις στήλες (χωρίς το Α/Α), όπως τα βάζει ο main
-      const cols1: Col[] = build ? (r.kind === 'blank' ? build.cols.map(c => { if (c.f === 'aa') return c; const j = gj++; return { ...c, o: { ...c.o, vals: (build.grid || []).slice(0, blankN(build.nrows)).map(row => row?.[j] ?? '') } }; }) : build.cols) : r.cols;
+      // «Κενός πίνακας»: τα κελιά του πλέγματος μπαίνουν στις στήλες (χωρίς το Α/Α), όπως τα βάζει ο main
+      const gridCols = (cs: BuildCol[], t: { grid?: string[][]; nrows?: number }): Col[] => { let gj = 0; return cs.map(c => { if (c.f === 'aa') return c; const j = gj++; return { ...c, o: { ...c.o, vals: (t.grid || []).slice(0, blankN(t.nrows)).map(row => row?.[j] ?? '') } }; }); };
+      const cols1: Col[] = build ? (r.kind === 'blank' ? gridCols(build.cols, build) : build.cols) : r.cols;
       const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const extra = moreRows(state, r, date);
       const nop = !!build?.nopeople && !(build.more || []).length;   // μόνο πίνακες τιμών
       const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : cols1, rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
-        ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: t.cols as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
+        ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: (t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
+      const at = atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()); const vo = evalTables(state, date, at, r.vals);
+      const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''));   // «Κενός πίνακας»: ετικέτες στα κελιά
       // κάθε πίνακας (και κάθε πίνακας τιμών) είναι ένα κομμάτι· οι ζώνες (r.bands) τα βάζουν το ένα κάτω από το άλλο ή δίπλα δίπλα
       const th = 'border:1px solid #333;background:#d9d9d9';
       const parts = new Map<string, { h: string; n: number }>();
       tabs.forEach((t, k) => {
         const nohead = k ? (build ? build.more![k - 1].nohead : (r.more || [])[k - 1]?.nohead) : build ? build.nohead : r.nohead;
         const ls = ['<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>', ...(nohead ? [] : ['<tr>' + t.cols.map(c => '<th style="' + th + '">' + esc(c.h) + '</th>').join('') + '</tr>'])];
-        cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
+        cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(t.kind === 'blank' && c.f === 'col' && c.o?.vals?.[i]?.includes('{') ? blankFill(c.o.vals[i], bx).v : fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
         parts.set(k ? build ? build.more![k - 1].id : (r.more || [])[k - 1]?.id : MAIN, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       });
       // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά
-      const vo = evalTables(state, date, atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()), r.vals);
       for (const v of vo) {
         const ls = (v.title ? ['<tr><th colspan="2" style="' + th + ';text-align:left">' + esc(v.title) + '</th></tr>'] : []).concat(v.rows.map(x => '<tr><td style="border:1px solid #333;min-width:160px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(rowText(x)) + '</td></tr>'));
         parts.set(v.id, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });

@@ -221,6 +221,14 @@ export function metricOf(s: AppState, id: string): Metric | undefined {
   return m.get(id);
 }
 export const metricLabel = (s: AppState, id: string) => metricOf(s, id)?.label || '(δεν υπάρχει πια)';
+// Ετικέτα {ΟΝΟΜΑ} μέτρησης (Michael, 29/10: «κενός πίνακας» με αριθμούς από την εφαρμογή, χωρίς πίνακα τιμών): το tagText της ετικέτας της,
+// π.χ. «Παρόντες» → {ΠΑΡΟΝΤΕΣ}. Αν δύο μετρήσεις έχουν την ίδια ετικέτα (ή τα ίδια πρώτα 40 γράμματα), μετρά η πρώτη του καταλόγου
+const BY_TAG = new WeakMap<Metric[], Map<string, Metric>>();
+export function metricByTag(s: AppState, tag: unknown): Metric | undefined {
+  const l = metricsOf(s); let m = BY_TAG.get(l);
+  if (!m) { m = new Map(); for (const x of l) { const id = tagId(x.label); if (id && !m.has(id)) m.set(id, x); } BY_TAG.set(l, m); }
+  return m.get(tagId(tag));
+}
 // Οι ομάδες με τη σειρά που φαίνονται στον κατάλογο
 export function metricGroups(s: AppState): { group: string; items: Metric[] }[] {
   const out = new Map<string, Metric[]>();
