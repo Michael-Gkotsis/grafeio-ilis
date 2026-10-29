@@ -1235,7 +1235,7 @@ export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolVie
     if (ss.some(x => TYPES[x.type].away)) continue;   // απών: μετρά στους απόντες
     const col = soldierCol(s, ss, onDuty.get(p.id), date, at);
     if (col && cols[col]) { cols[col].push(p); n++; }
-    const k = ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
+    const k = ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at)) || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
     if (k) man.push({ p, st: k, col: kolColOf(k), minus: !!k.minus });
   }
   return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };

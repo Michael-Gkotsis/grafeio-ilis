@@ -107,17 +107,21 @@ const gone = (r: Ret | null, from: ISODate, m: number) => !!r && (!!r.pending ||
 // Η έξοδος/ΔΝ που κρατά το άτομο έξω τη μέρα d στις m (λεπτά): η δική της μέρας από την αρχή εξόδου ως την επιστροφή, ή της προηγούμενης
 // μέρας (ΔΝ που γυρνά το πρωί, διόρθωση που γυρνά αργότερα). null: δεν είναι έξω. undefined: δεν κρίνεται με ώρες (άδεια την ίδια μέρα
 // με την έξοδο: μετρά όπως πριν, ολόκληρη η μέρα). Ό,τι δεν είναι έξοδος/ΔΝ (άδειες, νοσοκομείο) μετρά αλλού.
-export function outHeld(s: AppState, pid: number, d: ISODate, m: number): Status | null | undefined {
+export function outHeldBy(s: AppState, pid: number, d: ISODate, m: number): { st: Status; r: Ret | null } | null | undefined {
   const own = awayOn(s, pid, d), outs = own.filter(hasOut);
   if (outs.length) {
     if (own.some(x => !hasOut(x))) return undefined;
-    if (m >= mins(dayTimes(s, d).out) && gone(returnOf(s, pid, d), d, m)) return outs.find(x => x.type === 'DN') || outs[0];
+    if (m >= mins(dayTimes(s, d).out)) { const r = returnOf(s, pid, d); if (gone(r, d, m)) return { st: outs.find(x => x.type === 'DN') || outs[0], r }; }
   }
   // η προηγούμενη μέρα και οι διορθώσεις παλαιότερων ημερών που γυρνούν αργότερα
   const prev = addDays(d, -1), days = [prev];
   for (const f of s.backFix || []) if (f.pid === pid && f.at && f.day < prev) days.push(f.day);
-  for (const x of days) { const o = awayOn(s, pid, x).find(hasOut); if (o && gone(returnOf(s, pid, x), d, m)) return o; }
+  for (const x of days) { const o = awayOn(s, pid, x).find(hasOut); if (o) { const r = returnOf(s, pid, x); if (gone(r, d, m)) return { st: o, r }; } }
   return null;
+}
+export function outHeld(s: AppState, pid: number, d: ISODate, m: number): Status | null | undefined {
+  const h = outHeldBy(s, pid, d, m);
+  return h ? h.st : h;
 }
 export const awayAt = (s: AppState, pid: number, d: ISODate, time: string): boolean => !!outHeld(s, pid, d, mins(time));
 
@@ -125,7 +129,7 @@ export const awayAt = (s: AppState, pid: number, d: ISODate, time: string): bool
 // «Ποιοι γυρίζουν και πότε»: όλοι όσοι λείπουν τη μέρα d, με πότε και γιατί γυρνά ο καθένας (Εξοδούχοι, Σήμερα)
 // Εξοδούχοι/ΔΝ: returnOf. Όποιος λείπει με άδεια ή νοσοκομείο: ως τη λήξη τους (όπως πριν), νωρίτερα αν έχει υπηρεσία.
 export interface Back { p: Person; st: Status; r: Ret }
-function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
+export function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
   let last = d, lastSt: Status | undefined, back: Ret | null = null;
   for (let i = 0, x = d; i < MAX_DAYS; i++, x = addDays(x, 1)) {
     const a = awayOn(s, pid, x); if (!a.length) break;
@@ -171,4 +175,12 @@ export function retNote(r: Ret): string {
   const { why, leave } = retWhy(r);
   const obvious = !r.duty && (/^εξοδούχος /.test(why) || (!!leave && why === 'μετά τη ΔΝ'));
   return 'γυρνά ' + retDay(r) + ' ' + (r.time || 'πρωί') + (obvious ? '' : ' (' + why + ')') + (leave ? ', ' + leave : '');
+}
+// Στη σελίδα Δύναμη (μία γραμμή ανά άτομο): «Γυρνά Δευτέρα 27/10 06:00 (ΔΝ ως την Κυριακή)», «Γυρνά Τρίτη 28/10 πρωί (τέλος ΚΑ)»,
+// «Γυρνά Τρίτη 28/10 06:00 (υπηρεσία Θ1 από 05:00), φεύγει για άδεια 14:00». Πάντα με τον λόγο.
+export function retLine(r: Ret): string {
+  if (r.pending) return 'Δεν ξέρουμε πότε γυρνά (' + r.why + ')';
+  if (r.open) return 'Δεν γυρνά, συνεχίζει (' + r.why + ')';
+  const { why, leave } = retWhy(r);
+  return 'Γυρνά ' + retDay(r) + ' ' + (r.time || 'πρωί') + (why ? ' (' + why + ')' : '') + (leave ? ', ' + leave : '');
 }

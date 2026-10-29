@@ -1,7 +1,7 @@
 // Σήμερα, ιατρικά/ποινές, δύναμη, ΗΚΑΙ, ιστορικό, templates/εισαγωγή/ρυθμίσεις, αναζήτηση (Ctrl+K)
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { html, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useEscape, useMedia, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
 import { requestLeave, usePending } from '../pending';
@@ -13,12 +13,13 @@ import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportBut
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, KOL_COLS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
+import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
+import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
@@ -112,7 +113,7 @@ export function TodayScreen() {
     <div className="kpis">
       ${kpi('Στρατιώτες', c.total, () => nav.go('people', { filter: 'all' }), undefined, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη, με τις 08:00')}
       ${kpi('Παρόντες', c.present, () => nav.go('people', { filter: 'present' }))}
-      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
+      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today, svCat: 'away' }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
       ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
       ${wOut > 0 && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
       ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
@@ -121,13 +122,13 @@ export function TodayScreen() {
       <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
         ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
       <//>
-      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today })}>Δύναμη<//>`}>
+      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
         ${away.length ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? outUntil(s) : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}</ul>
           ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
       <//>
     </div>
     <div className="cols cols--b">
-      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today })} data-tip="Δύναμη, με τους κωλυόμενους ανά στήλη της ${HK()}">Δύναμη<//>`}>
+      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
         <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.note || 'Κωλυόμενος'}${st.noOut ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· στην ' + HK() + ': ' + kolColName(col) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? kolColName(col) : 'παρών'}<//></li>`)}</ul>
         <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
       <//>`}
@@ -235,39 +236,57 @@ function PunTextDialog({ st, onClose }: P) {
   <//>`;
 }
 
+// Δύναμη (Michael, 26/10): 4 κάρτες που αθροίζουν (Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη) και από κάτω ομάδες που ανοιγοκλείνουν.
+// Οι Παρόντες (100+) είναι κλειστοί μέχρι να τους ανοίξεις: η κλειστή κάρτα δεν φτιάχνει τις γραμμές.
+const SV_OPEN: Record<SvCat, boolean> = { kol: true, away: true, present: false };
+const SV_ORDER: SvCat[] = ['kol', 'away', 'present'];
+function SvRows({ g, onOpen }: { g: SvGroup; onOpen: (id: number) => void }) {
+  return html`<div className="svsub"><div className="svsub__head" data-tip=${g.tip}><b>${g.label}</b><span className="num">${g.rows.length}</span></div>
+    <ul className="svl">${g.rows.map(r => html`<li key=${r.p.id} className="svl__row"><button type="button" className="linkish svl__name" onClick=${() => onOpen(r.p.id)}>${shortName(r.p)}</button><span className="svl__room muted">${roomTxt(r.p)}</span>
+      <span className="svl__what">${r.what && html`<${Badge} tone=${r.tone} data-tip=${r.what}>${r.what}<//>`}</span><span className="svl__range muted">${r.range}</span><span className=${cx('svl__ret', r.retBad ? 'txt-bad' : 'muted')}>${r.ret}</span></li>`)}</ul></div>`;
+}
 export function StrengthScreen() {
   const { state, today, tomorrow } = useStore(); const nav = useNav();
   const date = nav.params.strengthDate || today;
   const now = useNowMin();
   // σήμερα με την ίδια στιγμή που μετρά το «Σήμερα» (όποιος γύρισε ως τώρα είναι παρών), για να βγαίνουν ίδια νούμερα
-  const c = useMemo(() => strengthOf(state, date, strengthAt(state.rules, date, today, now)), [state, date, today, now]);
-  // οι απουσίες με κάθε άτομο μία φορά (στον πρώτο λόγο), ώστε να αθροίζουν στους Απόντες· τα υπόλοιπα όλα
-  const nOf = (k: TypeKey) => (TYPES[k].away ? c.away[k] : c.counts[k]);
-  const listOf = (k: TypeKey) => (TYPES[k].away ? c.awayLists[k] : c.lists[k]);
-  // οι κατηγορίες χωρίς κανέναν σε μία γραμμή στο τέλος, για να χωρά η Δύναμη σε μία οθόνη
-  const zeros = TYPE_KEYS.filter(k => k !== 'KOL' && !nOf(k));
-  // κωλυόμενοι ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένοι…) με την ίδια στιγμή· διαθέσιμοι = παρόντες − κωλυόμενοι
-  const kv = useMemo(() => kolView(state, date, strengthAt(state.rules, date, today, now)), [state, date, today, now]);
-  const manBy = useMemo(() => new Map(kv.man.map(x => [x.p.id, x])), [kv]);
-  const kname = (p: Person) => { const m = manBy.get(p.id); return shortName(p) + (m?.minus ? ' (' + (m.st.note || 'Κωλυόμενος') + ')' : ''); };
+  const at = strengthAt(state.rules, date, today, now);
+  const v = useMemo(() => strengthView(state, date, at), [state, date, at]);
+  const [cat, setCat] = useState<SvCat | ''>((nav.params.svCat || '') as SvCat | '');
+  useEffect(() => { if (nav.params.svCat) nav.set({ svCat: undefined }); }, []);
+  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [unit, setUnit] = useState('');
+  const [open, setOpen] = useState<Partial<Record<SvCat, boolean>>>({});
+  const units = useMemo(() => platoonsOf(state.settings).map(u => platoonShort(u.name)), [state.settings]);
+  const found = useMemo(() => (dq.trim() ? new Set(searchPeople(state.people, dq).map(p => p.id)) : null), [state.people, dq]);
+  const filtering = !!found || !!unit;
+  // οι γραμμές που περνούν από την αναζήτηση και τον ουλαμό· χωρίς φίλτρο τίποτα δεν ξαναχτίζεται
+  const shown = useMemo(() => SV_ORDER.map(c => {
+    const cv = v.cats[c];
+    const groups = filtering ? cv.groups.map(g => ({ ...g, rows: g.rows.filter(r => (!found || found.has(r.p.id)) && (!unit || unitOf(r.p, state.settings) === unit)) })).filter(g => g.rows.length) : cv.groups;
+    return { ...cv, groups, shown: filtering ? groups.reduce((n, g) => n + g.rows.length, 0) : cv.n };
+  }), [v, found, unit, filtering, state.settings]);
+  const pick = (c: SvCat | '') => { setCat(cat === c ? '' : c); if (c) setOpen(o => ({ ...o, [c]: undefined })); };
+  const isOpen = (c: SvCat) => open[c] ?? (cat === c || !!found || SV_OPEN[c]);
+  const ids = () => shown.filter(g => !cat || g.cat === cat).flatMap(g => g.groups.flatMap(x => x.rows.map(r => r.p.id)));
+  const card = (c: SvCat | '', l: string, n: number, tip: string) => html`<button type="button" className=${cx('kpi', 'kpi--sv')} aria-pressed=${cat === c} data-tip=${tip} onClick=${() => pick(c)}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
+  const vis = shown.filter(g => !cat || g.cat === cat);
   return html`<div>
-    <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
-    <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//>`}>
-      <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Στρατιώτες</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
-      ${c.absent > 0 && html`<p className="note" style=${{ margin: '0 0 10px' }}>Απόντες ${c.absent} = ${awayText(c)}. Κάθε άτομο μετριέται μία φορά: όποιος έχει και άδεια και έξοδο μετρά στην άδεια.${date === today ? ' Όποιος γύρισε σήμερα ως τώρα είναι παρών.' : ''}</p>`}
-      <p className="note" style=${{ margin: '0 0 10px' }}>Διαθέσιμοι <b>${c.present - kv.n}</b> = παρόντες ${c.present} − κωλυόμενοι ${kv.n}.</p>
-      ${TYPE_KEYS.filter(k => k !== 'KOL' && nOf(k) > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${nOf(k)}</span></div>
-        ${nOf(k) > 0 && html`<div className="cat__names">${listOf(k).map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
-      ${zeros.length > 0 && html`<p className="cat__zero"><b>Κανείς σε:</b> ${zeros.map(k => TYPES[k].label).join(', ')}</p>`}
-    <//>
-    <${Card} title=${'Κωλυόμενοι · ' + kv.n} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.declare({ cat: 'kol', from: date, to: date })} data-tip="Υπηρεσία εκτός δικών μας, π.χ. ΣΤΕΠ">+ Κωλυόμενος<//>`}>
-      <p className="note" style=${{ margin: '0 0 8px' }}>Με τις ίδιες στήλες και τους ίδιους αριθμούς με την ${HK()}. Είναι παρόντες που δεν είναι διαθέσιμοι για τις υπηρεσίες μας.</p>
-      ${KOL_COLS.filter(([k]) => kv.cols[k].length > 0).map(([k, l]) => html`<div key=${k} className="cat"><div className="cat__head"><b>${l}</b><span className="num">${kv.cols[k].length}</span></div>
-        <div className="cat__names">${kv.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${kname(p)}</button>`)}</div></div>`)}
-      ${kv.keep.length > 0 && html`<div className="cat"><div className="cat__head"><b>Κωλυόμενοι (παρόντες)</b><span className="num">${kv.keep.length}</span></div>
-        <div className="cat__names">${kv.keep.map(({ p, st }) => html`<button key=${st.id} type="button" onClick=${() => nav.openPerson(p.id)} data-tip="Δεν αφαιρείται από τους παρόντες, δεν μπαίνει στην ${HK()}">${shortName(p)} (${st.note || 'Κωλυόμενος'})</button>`)}</div></div>`}
-      ${kv.n === 0 && kv.keep.length === 0 && html`<div className="empty">Κανένας κωλυόμενος.</div>`}
-    <//>
+    <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.declare({ cat: 'kol', from: date, to: date })} data-tip="Υπηρεσία εκτός δικών μας, π.χ. ΣΤΕΠ">+ Κωλυόμενος<//><${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//></div><//>
+    <div className="kpis kpis--sv">
+      ${card('', 'Δύναμη', v.total, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη. Πάτα για να δεις όλους')}
+      ${card('present', 'Παρόντες', v.present, 'Παρόντες που δεν είναι δηλωμένοι κωλυόμενοι. Μέσα και όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή ή ιατρικό')}
+      ${card('kol', 'Κωλυόμενοι', v.kol, 'Δηλωμένοι κωλυόμενοι που αφαιρούνται από τους παρόντες (π.χ. υπηρεσία ΣΤΕΠ)')}
+      ${card('away', 'Απόντες', v.absent, 'Άδειες, νοσοκομείο, έξοδος και ΔΝ· κάθε άτομο μία φορά')}</div>
+    <p className="svline"><span className="num"><b>${v.present}</b> + <b>${v.kol}</b> + <b>${v.absent}</b> = <b>${v.total}</b></span> <span className="muted">· στις ${v.time}${date === today ? ' (όποιος γύρισε ως τώρα είναι παρών)' : ''}</span></p>
+    <p className="note svnote">Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, κάθε άτομο μία φορά. Κωλυόμενοι είναι μόνο όσοι δηλώθηκαν και αφαιρούνται από τους παρόντες· όσοι έχουν δική μας υπηρεσία, ΕΥ ή ποινή μένουν στους Παρόντες. Η ${HK()} μετρά τους κωλυόμενους με δικό της ορισμό.</p>
+    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
+      ${units.length > 1 && html`<${Strip} className="chips" role="group" aria-label="Ουλαμός"><button type="button" className="ui-chip" aria-pressed=${!unit} onClick=${() => setUnit('')}>Όλοι</button>${units.map(u => html`<button key=${u} type="button" className="ui-chip" aria-pressed=${unit === u} onClick=${() => setUnit(unit === u ? '' : u)}>${u}</button>`)}<//>`}
+      <${ActiveFilter} parts=${[cat && v.cats[cat].label, unit, dq.trim() && '«' + dq.trim() + '»']} onClear=${() => { setCat(''); setQ(''); setUnit(''); }}/></div>
+    <div className="stack">${vis.map(g => html`<${Card} key=${g.cat} title=${g.label + ' · ' + g.shown + (filtering ? ' από ' + g.n : '')} open=${isOpen(g.cat)} onToggle=${() => setOpen(o => ({ ...o, [g.cat]: !isOpen(g.cat) }))}
+        summary=${g.groups.length ? g.groups.map(x => x.label + ' ' + x.rows.length).join(' · ') : 'Κανείς'}>
+        ${g.groups.length ? g.groups.map(x => html`<${SvRows} key=${x.key} g=${x} onOpen=${(id: number) => nav.openPerson(id, ids())}/>`) : html`<div className="empty">${filtering ? 'Κανείς με αυτά τα φίλτρα.' : 'Κανείς.'}</div>`}
+      <//>`)}</div>
   </div>`;
 }
 
