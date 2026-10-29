@@ -1096,6 +1096,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-page__pv .rep-pv{flex:1;min-height:0;max-height:none}
 .rep-pvbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:34px}
 .rep-pvbar__lbl{font-size:13px;font-weight:600}
+.rep-pvbar__acts{margin-left:auto;display:inline-flex;gap:6px;flex-wrap:wrap}.rep-pvbar__acts ~ .rep-pvbar__pg{margin-left:0}
 .rep-pvbar__pg{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;white-space:nowrap}
 .rep-pvbar__pg .ui-btn--icon{width:30px;height:30px;font-size:18px}
 .rep-pvbar__cnt{display:flex;gap:2px 14px;flex-wrap:wrap;font-size:12px;font-weight:600;color:var(--muted-fg)}

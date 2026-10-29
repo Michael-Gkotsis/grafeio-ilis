@@ -559,6 +559,18 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     } finally { setBusy(false); }
   };
   const canGo = (i: number) => !missing(i);
+  // «Άνοιξέ το στο Excel» (βήμα 3, φτιαγμένο εδώ): γίνεται δικό σου πρότυπο Excel και ανοίγει· από εδώ και πέρα αλλάζεις το αρχείο
+  const openExcel = async () => {
+    if (!build) return;
+    const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
+    const bo = forBuild(build, r); const b = await window.api.repBuild(bo, r.kind, tpl && !shared ? tpl.file : undefined);
+    if (!b.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${b.error}</span>` }); return; }
+    const t: RepTpl = { id: tpl && !shared ? tpl.id : uid(), name: r.name || build.title, file: b.file };   // χωρίς built: από εδώ και πέρα το αρχείο είναι το πρότυπο
+    setTpl(t); setMode('upload'); setBuild(null); const nr = withBuilt(r, b, bo); setR(nr);
+    await inspect(t, r.kind, b.sheet, b.head, true); for (const m of nr.more || []) await inspectSub(t, m.id, m.kind, m.head, true);
+    window.api.repOpenTpl(b.file);
+    setNote('Άνοιξε στο Excel. Άλλαξε ό,τι θέλεις, αποθήκευσε, και πάτα «Ξαναδιάβασε το πρότυπο». Οι {ΕΤΙΚΕΤΕΣ} μέσα στο Excel γεμίζουν μόνες τους.');
+  };
   // μη αποθηκευμένες αλλαγές: η μπάρα κάτω και η ερώτηση σε αλλαγή οθόνης (pending.ts)· «Πέτα» κλείνει τη σελίδα
   const [leaving, setLeaving] = useState(false);
   usePending(dirty, { label: 'Έντυπο «' + nameOf() + '»', save: () => save(false), discard: onClose, bar: false });
@@ -586,16 +598,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
         ${step === 2 && html`<${StepKind} r=${r} setKind=${setKind} mode=${mode} tpl=${tpl} build=${build}/>`}
         ${step === 3 && mode === 'build' && build && html`<${Builder} fold=${fold} o=${build} setO=${setBuild} kind=${r.kind} signers=${signers} setSigners=${setSigners} r=${r} upd=${upd} setR=${setR} onLayout=${() => setLay(true)} ti=${Math.min(ti, (build.more || []).length)} setTi=${setTi}
           vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} onDelVal=${delVal} valEd=${valEd}
-          onExcel=${async () => {
-            const shared = tpl && repsOf(state).some(x => x.id !== r.id && x.tpl === tpl.id);
-            const bo = forBuild(build, r); const b = await window.api.repBuild(bo, r.kind, tpl && !shared ? tpl.file : undefined);
-            if (!b.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${b.error}</span>` }); return; }
-            const t: RepTpl = { id: tpl && !shared ? tpl.id : uid(), name: r.name || build.title, file: b.file };   // χωρίς built: από εδώ και πέρα το αρχείο είναι το πρότυπο
-            setTpl(t); setMode('upload'); setBuild(null); const nr = withBuilt(r, b, bo); setR(nr);
-            await inspect(t, r.kind, b.sheet, b.head, true); for (const m of nr.more || []) await inspectSub(t, m.id, m.kind, m.head, true);
-            window.api.repOpenTpl(b.file);
-            setNote('Άνοιξε στο Excel. Άλλαξε ό,τι θέλεις, αποθήκευσε, και πάτα «Ξαναδιάβασε το πρότυπο». Οι {ΕΤΙΚΕΤΕΣ} μέσα στο Excel γεμίζουν μόνες τους.');
-          }}/>`}
+          onExcel=${openExcel}/>`}
         ${step === 3 && mode === 'upload' && html`<${Mapping} r=${r} upd=${upd} setR=${setR} insp=${insp} tpl=${tpl} picking=${picking} setPicking=${(k: string | null) => { setPicking(k); if (k) setView('tpl'); }} view=${view} setView=${setView}
           vals=${vals} vi=${vsel} setVi=${setVi} onAddVal=${addVal} onDelVal=${delVal} valEd=${valEd}
           ti=${Math.min(ti, (r.more || []).length)} setTi=${setTi} subInsp=${subInsp} subKind=${(id: string, k: RepKind) => { const m = (r.more || []).find(x => x.id === id); if (!m || !tpl) return; const p = pickForKind(m.kind, m.pick, m.sort, k); upd({ more: (r.more || []).map(x => (x.id === id ? { ...x, sort: p.sort, pick: subPick(p.pick) } : x)) }); inspectSub(tpl, id, k, m.head, false); }}
@@ -611,6 +614,9 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
       <div className="rep-page__pv">
         <div className="rep-pvbar">
           ${!raw && html`<span className="rep-pvbar__lbl">Δείγμα:</span><${Segmented} small=${true} value=${String(sample)} onChange=${(v: string) => pickSample(+v)} items=${PV_SAMPLES.map(n => ({ value: String(n), label: sampleName(n), tip: n ? 'Κάθε πίνακας δείχνει ως ' + n + ' γραμμές στην προεπισκόπηση. Το έντυπο βγαίνει πάντα με όλους.' : 'Κάθε πίνακας δείχνει όλες τις γραμμές του (ως ' + PV_MAX + ')' }))}/>`}
+          ${mode === 'build' && build && step === 3 && html`<span className="rep-pvbar__acts">
+            <${Button} size="sm" variant="outline" onClick=${openExcel} data-tip="Φτιάχνει το Excel και το ανοίγει, για λογότυπο, άλλη γραμματοσειρά ή ό,τι δεν έχει εδώ. Από εκεί και πέρα το αρχείο είναι το πρότυπο.">Άνοιξέ το στο Excel<//>
+            <${Button} size="sm" variant="outline" onClick=${() => setLay(true)} data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί. Ισχύει και στο Excel και στην εκτύπωση.">Θέσεις στο χαρτί…${r.layout && Object.keys(r.layout).length ? ' •' : ''}<//></span>`}
           ${pages > 1 && html`<span className="rep-pvbar__pg"><${Button} size="icon" variant="ghost" aria-label="Προηγούμενη σελίδα" data-tip="Προηγούμενη σελίδα" disabled=${pg <= 1} onClick=${() => setPage(pg - 1)}>‹<//><span role="status">${pageText(pg, prev.pv!.pages)}</span><${Button} size="icon" variant="ghost" aria-label="Επόμενη σελίδα" data-tip="Επόμενη σελίδα" disabled=${pg >= pages} onClick=${() => setPage(pg + 1)}>›<//></span>`}
         </div>
         ${!raw && lbls.length > 0 && html`<div className="rep-pvbar__cnt" role="status">${lbls.map(x => html`<span key=${x.i}>${(r.more?.length ? x.i + 1 + ' · ' + tname(x.i) + ': ' : '') + x.t}</span>`)}</div>`}
