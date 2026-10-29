@@ -221,6 +221,13 @@ export class Sheet {
     this.tail = n ? this.tail.replace(/<mergeCells\b([^>]*)>/, (_m, x: string) => `<mergeCells${setAttr(x, 'count', String(n))}>`) : this.tail.replace(/<mergeCells\b[^>]*>\s*<\/mergeCells>/, '');
     return this;
   }
+  // Αδειάζει ένα ορθογώνιο (στήλες c1–c2, γραμμές r1–r2): τιμές, μορφή και όσες συγχωνεύσεις είναι ολόκληρες μέσα του. Για τις γραμμές που
+  // πρόσθεσε ο ψηλότερος από δύο πίνακες δίπλα-δίπλα: ο κοντύτερος δεν συνεχίζει με άδεια κελιά με πλαίσιο.
+  clearBox(c1: number, c2: number, r1: number, r2: number): this {
+    for (const row of this.rows) if (row.r >= r1 && row.r <= r2) row.cells = row.cells.filter(c => c.col < c1 || c.col > c2);
+    for (const m of this.merges()) if (m.c1 >= c1 && m.c2 <= c2 && m.r1 >= r1 && m.r2 <= r2) this.removeMerge(m);
+    return this;
+  }
   // Υπάρχει ήδη έλεγχος δεδομένων (λίστα κ.λπ.) σε κάποιο κελί της στήλης c μεταξύ των γραμμών r1–r2;
   hasValidation(c: number, r1: number, r2: number): boolean {
     const refs = [...this.tail.matchAll(/<(?:x14:)?dataValidation\b[^>]*?\ssqref="([^"]+)"/g), ...this.tail.matchAll(/<xm:sqref>([^<]+)<\/xm:sqref>/g)].flatMap(m => m[1].split(/\s+/));

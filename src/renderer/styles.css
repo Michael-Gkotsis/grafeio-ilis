@@ -1106,6 +1106,20 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-tables{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--muted)}
 .rep-tables .field__label{margin:0 4px 0 0}
 .rep-wiz__main > .rep-tables{margin-bottom:10px}
+/* διάταξη πινάκων (Έντυπα › κουτιά που σέρνονται, ζώνες πάνω-κάτω) */
+.rep-bands{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--muted)}
+.rep-bands__head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}.rep-bands__head small{font-size:12px}
+.rep-bands__rows{display:flex;flex-direction:column;gap:5px}
+.rep-bands__row{display:flex;gap:5px}
+.rep-box{flex:1 1 0;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:grab;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none}
+.rep-box.is-sel{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.rep-box.is-drag{opacity:.45}
+.rep-box.is-drop-left{box-shadow:inset 5px 0 0 var(--primary)}.rep-box.is-drop-right{box-shadow:inset -5px 0 0 var(--primary)}
+.rep-box.is-drop-above{box-shadow:inset 0 4px 0 var(--primary)}.rep-box.is-drop-below{box-shadow:inset 0 -4px 0 var(--primary)}
+.rep-bands__ctl{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.rep-bands__ctl .field__label{margin:0 6px 0 0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-bands__ctl .ui-btn--icon{width:28px;height:28px;font-size:15px}
+.rep-bands__where.ui-select{width:auto;min-width:230px;margin-left:6px}
 /* πίνακες τιμών (Έντυπα › + Πίνακας τιμών) */
 .vt-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
 .vt-row{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
@@ -1122,6 +1136,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .vt-pct{font-size:13px}
 .vt-den{display:flex;flex-direction:column;gap:4px;padding-left:18px}
 .vt-sum{font-size:12px}
+.vt-tag{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px}.vt-tag .field__label{margin:0}.vt-tag__in.ui-input{width:190px;height:28px}.vt-tag__in.is-bad{border-color:var(--bad-line)}.vt-tag__bad{color:var(--bad)}
 .vt-at{padding:2px 0 8px;border-bottom:1px dashed var(--border);align-items:flex-start}
 .vt-at .field{flex:none}
 .vt-at .field__help{flex-basis:100%}

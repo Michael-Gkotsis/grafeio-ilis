@@ -59,7 +59,7 @@ export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; r
 export type EssoResult = { ok: true; archive: string; dir: string; files: string[]; warnings: string[] } | Fail;
 
 // Έντυπα: πρότυπο όπως το βρήκε η εφαρμογή (φύλλα, γραμμή επικεφαλίδων, στήλες, {ΕΤΙΚΕΤΕΣ})
-export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; prepared: number; guessed: boolean }
+export interface TplInspect { sheets: string[]; sheet: string; head: number; data: number; headers: { c: number; text: string; f: string | null }[]; tags: RepCell[]; unknown?: { ref: string; tag: string }[]; prepared: number; guessed: boolean }
 // counts: ανά πίνακα, πόσες γραμμές φαίνονται από πόσες (μόνο όταν ζητήθηκε δείγμα)
 export interface RepPreview { html: string; css: string; pages: number; counts?: { shown: number; total: number }[] }
 // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα

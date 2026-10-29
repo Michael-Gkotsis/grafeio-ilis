@@ -603,7 +603,8 @@ function sumsOf(g: Geo, rows: number[]): [number, number] {
 // οι στήλες που ταξινομούνται (με το κλειδί της επικεφαλίδας: «Ο/Σ» → «ΟΣ») και οι στήλες Α/Α που μένουν στη θέση τους
 export type SortKind = 'text' | 'num' | 'date' | 'rank';
 export interface SortCol { k: string; label: string; kind: SortKind }
-interface Table { head: number; rows: number[]; cols: (SortCol & { c: number })[]; fixed: number[] }
+// span: οι στήλες του πίνακα όταν είναι δίπλα σε άλλον (Φάση 3 των Εντύπων): ταξινομείται μόνος του, κελί προς κελί, όχι ολόκληρες οι γραμμές
+interface Table { head: number; rows: number[]; cols: (SortCol & { c: number })[]; fixed: number[]; span?: number[] }
 const geoCache = new WeakMap<Book, Map<string, Geo>>();
 const normHead = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω]/g, '');
 async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
@@ -718,26 +719,31 @@ function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[]
   const raw = (r: number, c: number): Val => { const k = sh.cells.get(key(r, c)); if (!k) return null; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? null : v; };
   const text = (r: number, c: number) => { const v = raw(r, c); return v == null ? '' : String(v).trim(); };
   const dateFmt = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; if (!xf || !xf.fmt) return false; const code = book.styles.codes.get(xf.fmt) ?? BUILTIN[xf.fmt] ?? ''; return isDateFmt(code); };
+  const bord = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; return !!xf && !!(xf.border.l || xf.border.r || xf.border.t || xf.border.b); };
   const out: Table[] = [];
-  for (let i = 0; i < units.length; i++) {
-    const u = units[i]; if (u.length !== 1 || !framed.has(u[0])) continue;
-    const h = u[0];
-    const heads = cols.map(c => ({ c, t: text(h, c) })).filter(x => /\p{L}/u.test(x.t));
-    if (heads.length < 2) continue;
+  // ένας πίνακας με επικεφαλίδες στη μονάδα i και στήλες cs· split: είναι δίπλα σε άλλον, οπότε οι γραμμές του είναι όσες έχουν πλαίσιο στις στήλες του (όχι σε όλη τη γραμμή).
+  // j: από ποια μονάδα συνεχίζει η αναζήτηση (η i + 1 όταν δεν είναι πίνακας ή δεν ταξινομείται)
+  const one = (i: number, cs: number[], split: boolean): { t?: Table; j: number } => {
+    const h = units[i][0]; const none = { j: i + 1 };
+    const heads = cs.map(c => ({ c, t: text(h, c) })).filter(x => /\p{L}/u.test(x.t));
+    if (heads.length < 2) return none;
     const keys = heads.map(x => sortKey(x.t));
     // κάθε επικεφαλίδα μία φορά (όχι πίνακες δίπλα-δίπλα, όχι γραμμή με 0 | 0 | 0 όπως οι βαθμοί της ΗΚΑΙ)
-    const all = cols.map(c => text(h, c)).filter(Boolean);
-    if (new Set(keys).size !== keys.length || new Set(all).size !== all.length || keys.some(k => !k || /^ΣΥΝΟΛ/.test(k))) continue;
-    // τίτλοι πινάκων πάνω από τις επικεφαλίδες («ΤΙΜΩΡΗΜΕΝΟΙ», «ΑΠΟΝΤΕΣ» σε συγχωνευμένα κελιά): όχι επικεφαλίδα
-    if (heads.filter(x => sh.merges.some(m => m.r1 === h && m.c1 === x.c && m.c2 > m.c1)).length * 2 >= heads.length) continue;
+    const all = cs.map(c => text(h, c)).filter(Boolean);
+    if (new Set(keys).size !== keys.length || new Set(all).size !== all.length || keys.some(k => !k || /^ΣΥΝΟΛ/.test(k))) return none;
+    // τίτλοι πινάκων πάνω από τις επικεφαλίδες («ΤΙΜΩΡΗΜΕΝΟΙ», «ΑΠΟΝΤΕΣ» σε συγχωνευμένα κελιά): όχι επικεφαλίδα. Επικεφαλίδες που είναι συγχωνευμένες
+    // και στη γραμμή από κάτω με τον ίδιο τρόπο (πίνακας σε πλέγμα στηλών, «Φτιάξ' το εδώ») είναι επικεφαλίδες στηλών
+    const nr = units[i + 1]?.[0];
+    const title = (x: { c: number }) => { const m = sh.merges.find(y => y.r1 === h && y.c1 === x.c && y.c2 > y.c1); return !!m && !(nr != null && sh.merges.some(y => y.r1 === nr && y.c1 === m.c1 && y.c2 === m.c2)); };
+    if (heads.filter(title).length * 2 >= heads.length) return none;
     const rows: number[] = []; let multi = false; let j = i + 1;
     for (; j < units.length; j++) {
-      const v = units[j]; if (!v.every(r => framed.has(r))) break;
-      if (cols.some(c => /^ΣΥΝΟΛ/.test(sortKey(text(v[0], c))))) break;
+      const v = units[j]; if (!(split ? v.every(r => cs.some(c => bord(r, c))) : v.every(r => framed.has(r)))) break;
+      if (cs.some(c => /^ΣΥΝΟΛ/.test(sortKey(text(v[0], c))))) break;
       if (v.length > 1) multi = true;
       rows.push(...v);
     }
-    if (multi || rows.length < 2) { i = j - 1; continue; }
+    if (multi || rows.length < 2) return { j };
     const list: (SortCol & { c: number })[] = []; const fixed: number[] = [];
     heads.forEach((x, n) => {
       const k = keys[n]; const full = rows.filter(r => raw(r, x.c) != null && raw(r, x.c) !== ''); const vals = full.map(r => raw(r, x.c));
@@ -750,8 +756,20 @@ function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[]
         : vals.length && vals.every(v => typeof v === 'number' || NUMERIC.test(String(v).trim())) ? 'num' : 'text';
       list.push({ c: x.c, k, label: x.t.replace(/\s+/g, ' '), kind });
     });
-    if (list.length) out.push({ head: h, rows, cols: list, fixed });
-    i = j - 1;
+    return { j, ...(list.length ? { t: { head: h, rows, cols: list, fixed, ...(split ? { span: cs } : {}) } } : {}) };
+  };
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i]; if (u.length !== 1 || !framed.has(u[0])) continue;
+    const h = u[0];
+    // πίνακες δίπλα-δίπλα: ομάδες στηλών με πλαίσιο στη γραμμή των επικεφαλίδων, χωρισμένες από στήλες χωρίς (το κενό που αφήνει το «Φτιάξ' το εδώ»)
+    // (ο καθένας με δύο τουλάχιστον επικεφαλίδες): ταξινομούνται ξεχωριστά
+    const segs: number[][] = []; let cur: number[] = [];
+    for (const c of cols) { if (bord(h, c)) cur.push(c); else if (cur.length) { segs.push(cur); cur = []; } }
+    if (cur.length) segs.push(cur);
+    const parts = segs.length > 1 ? segs.filter(g => g.filter(c => /\p{L}/u.test(text(h, c))).length >= 2) : [];
+    const split = parts.length > 1; let end = i + 1;
+    for (const g of split ? parts : [cols]) { const x = one(i, g, split); if (x.t) out.push(x.t); end = Math.max(end, x.j); }
+    i = end - 1;
   }
   return out;
 }
@@ -791,10 +809,12 @@ function sortRows(book: Book, g: Geo, sort: PrintSort[]): Geo {
     });
     if (sorted.every((r, i) => r === t.rows[i])) continue;
     moved = true;
+    // πίνακας δίπλα σε άλλον: οι γραμμές δεν μετακινούνται (θα έσερναν και τον διπλανό)· κάθε κελί του δείχνει το κελί της γραμμής που ήταν εκεί πριν, εκτός από το Α/Α
+    if (t.span) { sorted.forEach((r, i) => { if (r !== t.rows[i]) for (const c of t.span!) if (!t.fixed.includes(c)) fix.set(key(t.rows[i], c), r); }); continue; }
     const at = rowsAll.indexOf(t.rows[0]); rowsAll.splice(at, sorted.length, ...sorted);
     sorted.forEach((r, i) => { for (const c of t.fixed) if (r !== t.rows[i]) fix.set(key(r, c), t.rows[i]); });
   }
-  return moved ? { ...g, rowsAll, units: g.regroup(rowsAll), fix } : g;
+  return moved ? { ...g, rowsAll, units: rowsAll.every((r, i) => r === g.rowsAll[i]) ? g.units : g.regroup(rowsAll), fix } : g;
 }
 
 // ------------------------------------------------------------------ το σχέδιο: χαρτί, κλίμακα, ποιες γραμμές σε κάθε σελίδα

@@ -10,6 +10,7 @@ import { preflight, hasErrors } from '../shared/preflight';
 import { byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
 import { atOf, evalTables, valueText } from '../shared/values';
+import { MAIN, bandsOf } from '../shared/repBands';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
 import { rankTxt } from '../shared/ranks';
@@ -203,6 +204,7 @@ export function mockApi(): Api {
     repUpload: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
     repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: (o.nopeople && !(o.more || []).length ? [] : o.cols).map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
+      ...(o.vals ? { vals: o.vals.map((v, i) => ({ id: v.id, c1: 1 + 6 * (i % 2), c2: 6 + 6 * (i % 2) })) } : {}),
       more: (o.more || []).map((t, j) => ({ id: t.id, head: 11 + j * 4, cols: t.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(t.kind, c.f)?.head || '', o: c.o })) })) }),
     // προεπισκόπηση: απλοί πίνακες (ένας ανά πίνακα του εντύπου) σε σελίδες των 30 γραμμών, με το ίδιο δείγμα και counts όπως ο main
     repPreview: async (src, r: Report, ids, date, _raw, opts) => {
@@ -216,24 +218,31 @@ export function mockApi(): Api {
       const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : cols1, rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: t.cols as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
-      // γραμμές της σελίδας: τίτλος, επικεφαλίδες, δεδομένα
-      const lines: string[] = [];
-      for (const t of tabs) {
-        lines.push('<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>');
-        lines.push('<tr>' + t.cols.map(c => '<th style="border:1px solid #333;background:#d9d9d9">' + esc(c.h) + '</th>').join('') + '</tr>');
-        cut(t.rows).forEach((x, i) => lines.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
-        lines.push('<tr><td style="border:0">&nbsp;</td></tr>');
-      }
-      // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά, στο τέλος (όπως στο Excel)
+      // κάθε πίνακας (και κάθε πίνακας τιμών) είναι ένα κομμάτι· οι ζώνες (r.bands) τα βάζουν το ένα κάτω από το άλλο ή δίπλα δίπλα
+      const th = 'border:1px solid #333;background:#d9d9d9';
+      const parts = new Map<string, { h: string; n: number }>();
+      tabs.forEach((t, k) => {
+        const ls = ['<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>', '<tr>' + t.cols.map(c => '<th style="' + th + '">' + esc(c.h) + '</th>').join('') + '</tr>'];
+        cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
+        parts.set(k ? build ? build.more![k - 1].id : (r.more || [])[k - 1]?.id : MAIN, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
+      });
+      // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά
       const vo = evalTables(state, date, atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()), r.vals);
-      const vl: string[] = [];
       for (const v of vo) {
-        if (v.title) vl.push('<tr><th colspan="2" style="border:1px solid #333;background:#d9d9d9;text-align:left">' + esc(v.title) + '</th></tr>');
-        for (const x of v.rows) vl.push('<tr><td style="border:1px solid #333;width:420px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(valueText(x.v, x.fmt)) + '</td></tr>');
-        vl.push('<tr><td style="border:0">&nbsp;</td></tr>');
+        const ls = (v.title ? ['<tr><th colspan="2" style="' + th + ';text-align:left">' + esc(v.title) + '</th></tr>'] : []).concat(v.rows.map(x => '<tr><td style="border:1px solid #333;min-width:160px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(valueText(x.v, x.fmt)) + '</td></tr>'));
+        parts.set(v.id, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       }
-      const pages: string[] = []; for (let i = 0; i < lines.length; i += 30) pages.push('<div class="pg" style="width:794px;height:760px;padding:24px"><table class="mock" style="font:12px Calibri,Arial">' + lines.slice(i, i + 30).join('') + '</table>' + (i + 30 >= lines.length && vl.length ? '<table class="mock" style="font:12px Calibri,Arial;margin-top:12px">' + vl.join('') + '</table>' : '') + '</div>');
-      return { html: pages.slice(0, PV_PAGES).join(''), css: '', pages: pages.length || 1, ...(sample == null ? {} : { counts }) };
+      const bands = bandsOf([...parts.keys()], nop ? undefined : r.bands);
+      const pages: string[] = []; let cur = '', used = 0;
+      for (const b of bands) {
+        const ps = b.map(id => parts.get(id)).filter(Boolean) as { h: string; n: number }[]; if (!ps.length) continue;
+        const n = Math.max(...ps.map(x => x.n)) + 1;
+        if (cur && used + n > 30) { pages.push(cur); cur = ''; used = 0; }
+        cur += '<div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:12px">' + ps.map(x => x.h).join('') + '</div>'; used += n;
+      }
+      if (cur || !pages.length) pages.push(cur);
+      const wrap = (h: string) => '<div class="pg" style="width:794px;height:760px;padding:24px">' + h + '</div>';
+      return { html: pages.slice(0, PV_PAGES).map(wrap).join(''), css: '', pages: pages.length || 1, ...(sample == null ? {} : { counts }) };
     },
     // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές
     layoutPreview: async q => {

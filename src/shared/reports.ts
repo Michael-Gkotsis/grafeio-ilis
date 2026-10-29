@@ -12,7 +12,8 @@ import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
-import type { ValueTable, VAt } from './values';
+import { valsUsed, type Spot, type ValueTable, type VAt } from './values';
+import { MAIN, bandsOf, hasBeside, isDefault, type Bands } from './repBands';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
@@ -257,6 +258,7 @@ export interface Report {
   fixed?: boolean;                            // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
   vals?: ValueTable[];                        // πίνακες τιμών (shared/values.ts): κείμενο και τιμή, κάτω από τους πίνακες, πριν τις υπογραφές· χωρίς πίνακα ατόμων επιτρέπεται το έντυπο να έχει μόνο αυτούς
   at?: VAt;                                   // στιγμή μέτρησης των πινάκων τιμών (κενό: όπως η Δύναμη της μέρας)
+  bands?: Bands;                              // θέσεις πινάκων (Φάση 3, shared/repBands.ts): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη οι πίνακες δίπλα-δίπλα· κενό: ο ένας κάτω από τον άλλον όπως πριν
 }
 // Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
 // επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
@@ -265,6 +267,8 @@ export interface RepTable { id: string; title?: string; kind: RepKind; head: num
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
 export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string; o?: ColOpts }
 // «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
+// Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
+export interface BuildVal { id: string; title?: string; lay?: TabLay }
 export interface BuildTable { id: string; title: string; kind: RepKind; cols: BuildCol[]; lay?: TabLay }
 // Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
 // στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
@@ -273,9 +277,10 @@ export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: nu
   { value: 'auto', label: 'Όσο χρειάζονται οι στήλες', f: 0 }, { value: 'full', label: 'Όλο το πλάτος', f: 1 }, { value: '3/4', label: 'Τα 3/4', f: 3 / 4 },
   { value: '2/3', label: 'Τα 2/3', f: 2 / 3 }, { value: '1/2', label: 'Το μισό', f: 1 / 2 }, { value: '1/3', label: 'Το 1/3', f: 1 / 3 }, { value: '1/4', label: 'Το 1/4', f: 1 / 4 }];
 // Με κάποιον πίνακα σε δικό του πλάτος ή θέση, το φύλλο στήνεται σε πλέγμα στηλών (κάθε στήλη πίνακα = συγχωνευμένα κελιά)
-export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'>) => [o.lay, ...(o.more || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even));
+// Και όταν κάποιοι πίνακες είναι δίπλα-δίπλα (bands): μοιράζονται τις 24 στήλες
+export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOpts, 'bands' | 'vals'>>) => [o.lay, ...(o.more || []).map(t => t.lay), ...(o.vals || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even)) || hasBeside(o.bands || []);
 // sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean }   // nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…)
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[] }   // nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
@@ -670,7 +675,15 @@ export function newTable(kind: RepKind, id: string): RepTable {
 // Οι πίνακες 2, 3… χωρίς τυχαίους: η κλήρωση είναι μόνο του πρώτου
 export const subPick = (pk: RepPick): RepPick => (pk.mode === 'random' ? { ...pk, mode: 'all', even: undefined, fair: undefined, gap: undefined } : pk);
 // Μετά το «Φτιάξ' το εδώ»: πού κατέληξαν οι πίνακες στο πρότυπο, μαζί με ό,τι διάλεξες για τον καθένα (ποιοι, σειρά)
-export interface BuiltOut { sheet: string; head: number; cols: RepCol[]; cells: RepCell[]; more?: { id: string; head: number; cols: RepCol[] }[]; fixed?: boolean }
+export interface BuiltOut { sheet: string; head: number; cols: RepCol[]; cells: RepCell[]; more?: { id: string; head: number; cols: RepCol[] }[]; fixed?: boolean; vals?: ({ id: string } & Spot)[] }
+// Το BuildOpts όπως το χρειάζεται το buildTemplate: με τις θέσεις των πινάκων και τους πίνακες τιμών του εντύπου, αλλά μόνο όταν η διάταξη δεν είναι
+// η προεπιλεγμένη (ο ένας κάτω από τον άλλον)· αλλιώς το ίδιο αντικείμενο, άρα το ίδιο πρότυπο όπως πριν τη Φάση 3
+export function forBuild(o: BuildOpts, r: Pick<Report, 'bands' | 'vals'>): BuildOpts {
+  if (o.nopeople && !(o.more || []).length) return o;
+  const vs = valsUsed(r.vals); const ids = [MAIN, ...(o.more || []).map(t => t.id), ...vs.map(v => v.id)];
+  const bands = bandsOf(ids, r.bands); if (isDefault(ids, bands)) return o;
+  return { ...o, bands, vals: vs.map(v => ({ id: v.id, title: (v.title || '').trim(), ...(v.lay ? { lay: v.lay } : {}) })) };
+}
 export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
   const more = (o.more || []).map(t => {
     const prev = r.more?.find(x => x.id === t.id); const got = b.more?.find(x => x.id === t.id);
@@ -678,7 +691,9 @@ export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
     return { ...base, title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [] };
   });
   const { more: _, fixed: _f, ...rest } = r;
-  return { ...rest, sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}) };
+  // πίνακες τιμών: η θέση που τους άφησε το πρότυπο (δεν υπάρχει όταν η διάταξη είναι η προεπιλεγμένη: γράφονται στο τέλος, όπως πριν)
+  const vals = r.vals?.map(v => { const { spot: _s, ...w } = v; const p = b.vals?.find(x => x.id === v.id); return p ? { ...w, spot: { c1: p.c1, c2: p.c2, ...(p.row != null ? { row: p.row } : {}) } } : w; });
+  return { ...rest, ...(vals ? { vals } : {}), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}) };
 }
 // Οι γραμμές των πινάκων 2, 3… (όλες ή οι πρώτες Ν, με τη σειρά τους)
 export const moreRows = (s: AppState, r: Pick<Report, 'more'>, d: ISODate): Row[][] => (r.more || []).map(t => rowsOf(s, { ...t, pick: subPick(t.pick) }, d));
