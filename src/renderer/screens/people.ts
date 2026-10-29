@@ -54,23 +54,24 @@ function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: str
 // φαίνονται μόνο στα αντίστοιχα φίλτρα, με μία στήλη ακόμα (τι και από πότε έως πότε)· τα ιατρικά στα «Ιατρικά και ποινές».
 const COLS: [string, string][] = [['rank', 'Βαθμός'], ['spec', 'Ο/Σ'], ['last', 'Επίθετο'], ['first', 'Όνομα'], ['father', 'Πατρώνυμο'], ['asm', 'ΑΣΜ'], ['phone', 'Τηλέφωνο'], ['room', 'Θάλαμος'], ['post', 'Πόστο'], ['role', 'Ρόλος'], ['si', 'Σ.Ι.'], ['dn', 'ΔΝ']];
 // στις άδειες/ποινές η στήλη της κατάστασης μπαίνει μετά το πατρώνυμο, για να φαίνεται χωρίς κύλιση
-const COL_W: Record<string, [string, number]> = { rank: ['112px', 112], spec: ['60px', 60], last: ['minmax(160px,1.6fr)', 160], first: ['minmax(100px,1fr)', 100], father: ['minmax(100px,1fr)', 100], asm: ['96px', 96], phone: ['106px', 106], room: ['70px', 70], post: ['minmax(76px,.7fr)', 76], role: ['minmax(120px,.8fr)', 120], si: ['104px', 104], dn: ['40px', 40] };
+const COL_W: Record<string, [string, number]> = { rank: ['100px', 100], spec: ['52px', 52], last: ['minmax(150px,1.6fr)', 150], first: ['minmax(100px,1fr)', 100], father: ['minmax(100px,1fr)', 100], asm: ['84px', 84], phone: ['102px', 102], room: ['76px', 76], post: ['minmax(76px,.7fr)', 76], role: ['minmax(120px,.8fr)', 120], si: ['96px', 96], dn: ['40px', 40] };
 // σε στενή οθόνη (π.χ. 1024) φεύγουν Πατρώνυμο και Τηλέφωνο, που φαίνονται στην καρτέλα, για να χωρά ο πίνακας χωρίς κύλιση
 const NARROW_HIDE = ['father', 'phone'];
-const COL_WN: Record<string, [string, number]> = { rank: ['64px', 64], last: ['minmax(140px,1.6fr)', 140], asm: ['84px', 84], room: ['50px', 50], post: ['minmax(64px,.7fr)', 64], role: ['minmax(90px,.8fr)', 90], si: ['84px', 84] };
+const COL_WN: Record<string, [string, number]> = { rank: ['70px', 70], spec: ['46px', 46], last: ['minmax(110px,1.6fr)', 110], first: ['minmax(76px,1fr)', 76], asm: ['70px', 70], room: ['48px', 48], post: ['minmax(52px,.7fr)', 52], role: ['minmax(64px,.8fr)', 64], si: ['64px', 64], dn: ['38px', 38] };   // χωράει και με ανοιχτό μενού στο 1024 (710px)
 const colsOf = (narrow: boolean): [string, string][] => (narrow ? COLS.filter(([k]) => !NARROW_HIDE.includes(k)).map(([k, l]) => [k, k === 'room' ? 'Θάλ.' : l]) : COLS);
 const HEAD_KEYS = ['rank', 'spec', 'last', 'first', 'father'];
 function gridOf(narrow: boolean, withSt: boolean): [string, number] {
   const ks = colsOf(narrow).map(([k]) => k), head = ks.filter(k => HEAD_KEYS.includes(k)), tail = ks.filter(k => !HEAD_KEYS.includes(k));
   const w = (k: string) => (narrow && COL_WN[k]) || COL_W[k];
-  const cols = ['44px', ...head.map(k => w(k)[0]), ...(withSt ? ['minmax(220px,1.6fr)'] : []), ...tail.map(k => w(k)[0])];
-  return [cols.join(' '), 44 + ks.reduce((a, k) => a + w(k)[1], 0) + (withSt ? 220 : 0) + 18];
+  const aa = narrow ? 38 : 44;
+  const cols = [aa + 'px', ...head.map(k => w(k)[0]), ...(withSt ? ['minmax(220px,1.6fr)'] : []), ...tail.map(k => w(k)[0])];
+  return [cols.join(' '), aa + ks.reduce((a, k) => a + w(k)[1], 0) + (withSt ? 220 : 0) + 18];
 }
 const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
 const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm }: P) {
   const si = p.si ? siOf(p, lists).text : '';
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
-    <span className="num muted">${n}</span><span data-tip=${p.origin ? rankTxt(p) : undefined}>${rankTxt(p)}</span><span>${p.spec}</span><span><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}</span><span>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
+    <span className="num muted">${n}</span><span data-tip=${rankTxt(p)}>${rankTxt(p)}</span><span>${p.spec}</span><span data-tip=${p.last}><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}</span><span data-tip=${p.first}>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
     ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
     <span className="num">${p.asm}</span>${!narrow && html`<span className="num">${p.phone}</span>`}<span>${p.room ?? ''}</span><span data-tip=${p.post && p.post.length > 9 ? p.post : undefined}>${p.post || ''}</span><span data-tip=${p.role && p.role.length > 9 ? p.role : undefined}>${p.role || ''}</span>
     <span data-tip=${si !== siShort(si) ? si : undefined}>${siShort(si)}</span><span>${p.dn ? '✓' : ''}</span></div>`;

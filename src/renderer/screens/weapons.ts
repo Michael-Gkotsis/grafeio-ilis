@@ -25,8 +25,8 @@ import { cadreSeats, seatMap } from '../../shared/rules';
 type P = any;
 
 // Χωρά σε 1366 χωρίς οριζόντια κύλιση (1140px): χωρίς πατρώνυμο (είναι στην καρτέλα και στο Excel). Η στήλη κατάστασης είναι η πιο φαρδιά: ο λόγος εξόδου διαβάζεται ολόκληρος
-const GRID = '26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(200px,1fr)';
-const GRID_MIN = 1226;
+const GRID = '26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr)';
+const GRID_MIN = 1186;
 const WHEAD = 52;   // ύψος επικεφαλίδας (δύο γραμμές: «Αριθμός όπλου», «Κατάσταση όπλου»)
 const ROW_H = 46;   // κάτω από τον διακόπτη ΕΝΤΟΣ/ΕΚΤΟΣ γράφεται ο λόγος ολόκληρος (Michael, 24/10)
 // Πάει στο κουτί της γραμμής i. Ο πίνακας στήνει μόνο τις γραμμές που φαίνονται: αν δεν είναι στη σελίδα, κυλά ως εκεί πρώτα.

@@ -572,7 +572,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .orow{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);width:100%}
 .orow > div:first-child{flex:1;min-width:0}
 .orow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
-.orow small{display:block;color:var(--muted-fg);font-size:12px;white-space:nowrap}
+.orow small{display:block;color:var(--muted-fg);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .orow.is-changed{background:var(--secondary)}
 .orow.is-blocked b{color:var(--muted-fg);font-weight:500}
 .orow .ui-badge{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
