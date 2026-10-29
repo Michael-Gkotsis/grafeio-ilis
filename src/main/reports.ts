@@ -13,7 +13,7 @@ import { normGreek, upper } from '../shared/text';
 import { FILLS, TAB_WIDTHS, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
-import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type ValueOut } from '../shared/values';
+import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
 import { MAIN, bandIndex, bandsOf, isDefault } from '../shared/repBands';
 import { nowMin, today as todayISO, type ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
@@ -397,6 +397,7 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
   const base = a.data ?? await wb.style({ font, ...tablePart(a.look, 'data', 12), border: true, h, v });
   const lab = await wb.like(base, { h: 'left', wrap: true });
   const hd = await wb.like(a.head ?? await wb.style({ font, ...tablePart(a.look, 'head', 12), border: true, h, v, fill: FILLS.gray }), { h: 'left', b: true });
+  const hdAt: Record<string, number> = {}; const hdOf = async (ta?: string) => (ta && ta !== 'left' ? (hdAt[ta] ??= await wb.like(hd, { h: ta as 'center' | 'right' })) : hd);   // στοίχιση τίτλου που γράφεται τώρα (μόνο όταν ζητήθηκε)
   const sty: Record<string, number> = {};
   const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : f === 'txt' ? { wrap: true } : {}) }));
   let row = a.end + 1;
@@ -406,7 +407,7 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
     if (t.title) {
       if (a.h) ws.setRowHeight(row, a.h);
       ws.set(L(a.c1) + row, t.title);
-      for (let c = a.c1; c <= vc; c++) ws.setStyle(L(c) + row, hd);
+      const ht = await hdOf(t.ta); for (let c = a.c1; c <= vc; c++) ws.setStyle(L(c) + row, ht);
       if (vc > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(vc) + row);
       row++;
     }
@@ -432,6 +433,7 @@ export async function writeBoxes(wb: Workbook, ws: Sheet, vts: ValueOut[], a: Bo
   const base = a.data ?? await wb.style({ font, ...tablePart(a.look, 'data', 12), border: true, h, v });
   const lab = await wb.like(base, { h: 'left', wrap: true });
   const hd = await wb.like(a.head ?? await wb.style({ font, ...tablePart(a.look, 'head', 12), border: true, h, v, fill: FILLS.gray }), { h: 'left', b: true });
+  const hdAt: Record<string, number> = {}; const hdOf = async (ta?: string) => (ta && ta !== 'left' ? (hdAt[ta] ??= await wb.like(hd, { h: ta as 'center' | 'right' })) : hd);   // στοίχιση τίτλου που γράφεται τώρα (μόνο όταν ζητήθηκε)
   const sty: Record<string, number> = {};
   const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : f === 'txt' ? { wrap: true } : {}) }));
   for (const t of vts) {
@@ -444,7 +446,7 @@ export async function writeBoxes(wb: Workbook, ws: Sheet, vts: ValueOut[], a: Bo
     if (t.title) {
       if (a.setH && a.h) ws.setRowHeight(row, a.h);
       ws.set(L(c1) + row, t.title);
-      const last = a.exact ? c2 : vc; for (let c = c1; c <= last; c++) ws.setStyle(L(c) + row, hd);
+      const ht = await hdOf(t.ta); const last = a.exact ? c2 : vc; for (let c = c1; c <= last; c++) ws.setStyle(L(c) + row, ht);
       if (last > c1) ws.addMerge(L(c1) + row + ':' + L(last) + row);
       row++;
     }
@@ -483,8 +485,8 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   const cols = one(o.cols);
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
-  type Tab = { id: string; title: string; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay };
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο
@@ -540,6 +542,10 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     sig: await wb.style({ font, sz, b: true, ...sg, h: 'center' }), sigName: await wb.style({ font, sz, ...sg, h: 'center' }),
     sub: await wb.style({ font, ...H, h: 'left' })
   };
+  // στοίχιση τίτλων (ta1, ta, tta): ένα στυλ ανά στοίχιση, μόνο όταν χρησιμοποιείται· χωρίς αυτές τα στυλ μένουν όπως πριν
+  const subAt: Record<string, number> = {};
+  for (const ta of new Set([...tables.map(t => t.ta), ...(nop ? [] : o.vals || []).map(x => x.ta)])) if (ta && ta !== 'left') subAt[ta] = await wb.like(st.sub, { h: ta });
+  const pageTitle = o.tta && o.tta !== 'center' ? await wb.like(st.title, { h: o.tta }) : st.title;
   let r = 1;
   if (o.head || o.date) {
     if (o.head) ['ΚΕΦΑΛΙΔΑ 1', 'ΚΕΦΑΛΙΔΑ 2', 'ΚΕΦΑΛΙΔΑ 3'].forEach((t, i) => ws.set('A' + (i + 1), '{' + t + '}').setStyle('A' + (i + 1), st.hdr));
@@ -551,7 +557,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     }
     r = o.head ? 5 : 3;
   }
-  const tref = 'A' + r; ws.set(tref, o.title || ' ').setStyle(tref, st.title); if (n > 1) { ws.addMerge('A' + r + ':' + L(n) + r); for (let c = 2; c <= n; c++) ws.setStyle(L(c) + r, st.title); }
+  const tref = 'A' + r; ws.set(tref, o.title || ' ').setStyle(tref, pageTitle); if (n > 1) { ws.addMerge('A' + r + ':' + L(n) + r); for (let c = 2; c <= n; c++) ws.setStyle(L(c) + r, pageTitle); }
   ws.setRowHeight(r, T.sz * 1.6);
   const widths: Record<number, number> = {};
   const placed: { id: string; head: number; cols: RepCol[] }[] = [];
@@ -570,15 +576,16 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     // και για τους πίνακες τιμών της ζώνης (Michael, 29/10: ο τίτλος τους έπεφτε στη γραμμή των επικεφαλίδων, κάτω από τον τίτλο του διπλανού)
     const vt = vs.filter(v => v.title?.trim()); const titled = new Set<string>();
     if (tabs.some(t => t.title.trim()) || vt.length) {
-      const title = (c1: number, c2: number, text: string) => {
-        ws.set(L(c1) + next, text).setStyle(L(c1) + next, st.sub);
-        if (c2 > c1) { for (let c = c1 + 1; c <= c2; c++) ws.setStyle(L(c) + next, st.sub); ws.addMerge(L(c1) + next + ':' + L(c2) + next); }
+      const title = (c1: number, c2: number, text: string, ta?: TAlign) => {
+        const sx = (ta && subAt[ta]) || st.sub;
+        ws.set(L(c1) + next, text).setStyle(L(c1) + next, sx);
+        if (c2 > c1) { for (let c = c1 + 1; c <= c2; c++) ws.setStyle(L(c) + next, sx); ws.addMerge(L(c1) + next + ':' + L(c2) + next); }
       };
       for (const t of tabs) {
         if (!t.title.trim()) continue;
-        const at = placeOf(t); title(at[0][0], at[at.length - 1][1], t.title.trim());
+        const at = placeOf(t); title(at[0][0], at[at.length - 1][1], t.title.trim(), t.ta);
       }
-      for (const x of vt) { const [c1, c2] = boxes.get(x.id) || [1, n]; title(c1, c2, x.title!.trim()); titled.add(x.id); }
+      for (const x of vt) { const [c1, c2] = boxes.get(x.id) || [1, n]; title(c1, c2, x.title!.trim(), x.ta); titled.add(x.id); }
       next++;
     }
     const head = next; data = head + 1;

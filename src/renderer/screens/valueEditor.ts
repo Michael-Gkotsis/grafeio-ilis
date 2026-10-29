@@ -9,7 +9,7 @@ import { TimeField } from '../common';
 import { normTime } from '../../shared/hours';
 import { HK } from '../../shared/unit';
 import { hkMin, outMin } from '../../shared/rules';
-import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, manOf, metricGroups, metricOf, newRow, rowOn, rowTag, tagId, tagText, tagsOf, type VFilter, type VRow, type VTerm } from '../../shared/values';
+import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, manOf, metricGroups, metricOf, newRow, rowOn, rowTag, tagId, tagText, tagsOf, type TAlign, type VFilter, type VRow, type VTerm } from '../../shared/values';
 import { tagKey } from '../../shared/reports';
 import { upper } from '../../shared/text';
 import type { AppState } from '../../shared/domain';
@@ -107,6 +107,9 @@ export function AtPick({ at, set }: P) {
 }
 
 // Ο πίνακας τιμών n: τίτλος (προαιρετικός), γραμμές, και η στιγμή μέτρησης
+// Στοίχιση τίτλου (Αριστερά/Κέντρο/Δεξιά): δεν αποθηκεύεται η προεπιλογή (def), μόνο ό,τι αλλάζει
+const TA_ITEMS = [{ value: 'left', label: 'Αριστερά' }, { value: 'center', label: 'Κέντρο' }, { value: 'right', label: 'Δεξιά' }];
+export const alignSeg = (value: TAlign | undefined, def: TAlign, onChange: (v?: TAlign) => void, label: string) => html`<div className="rep-ta"><${Segmented} small=${true} label=${label} value=${value || def} onChange=${(v: TAlign) => onChange(v === def ? undefined : v)} items=${TA_ITEMS}/></div>`;
 export function ValueTableEditor({ t, n, set, del, at, setAt, all, lay, upload }: P) {
   const { state } = useStore(); const s: AppState = state;
   // ετικέτες που δεν κάνουν: διπλές στο έντυπο ή ίδιες με στοιχείο εντύπου ({ΣΥΝΟΛΟ}…)
@@ -120,7 +123,7 @@ export function ValueTableEditor({ t, n, set, del, at, setAt, all, lay, upload }
   const move = (i: number, by: number) => { const rs = [...t.rows]; const j = i + by; if (j < 0 || j >= rs.length) return; [rs[i], rs[j]] = [rs[j], rs[i]]; set({ ...t, rows: rs }); };
   return html`<div className="stack vt-ed">
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor=${'vt-title' + n}>Τίτλος πάνω από τον πίνακα τιμών</label><input id=${'vt-title' + n} className="ui-input" placeholder="π.χ. ΔΥΝΑΜΗ (κενό: χωρίς τίτλο)" value=${t.title || ''} onChange=${(e: P) => set({ ...t, title: e.target.value })}/><span className="field__help">Κενός τίτλος = χωρίς κεφαλίδα: ο πίνακας ξεκινά κατευθείαν με τις γραμμές του.</span></div>
+      <div className="field"><label className="field__label" htmlFor=${'vt-title' + n}>Τίτλος πάνω από τον πίνακα τιμών</label><input id=${'vt-title' + n} className="ui-input" placeholder="π.χ. ΔΥΝΑΜΗ (κενό: χωρίς τίτλο)" value=${t.title || ''} onChange=${(e: P) => set({ ...t, title: e.target.value })}/>${alignSeg(t.ta, 'left', (ta?: TAlign) => { const { ta: _a, ...rest } = t; set(ta ? { ...rest, ta } : rest); }, 'Στοίχιση τίτλου πίνακα τιμών ' + n)}<span className="field__help">Κενός τίτλος = χωρίς κεφαλίδα: ο πίνακας ξεκινά κατευθείαν με τις γραμμές του.</span></div>
       <div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label="Βγάλε τον πίνακα τιμών" onClick=${del}>${Icon.x}Βγάλε τον πίνακα<//></div>
     </div>
     <p className="note" style=${{ margin: 0 }}>Κάθε γραμμή γράφει το κείμενό σου αριστερά και έναν αριθμό δεξιά (από υπολογισμό, ή «Δική μου τιμή»: αριθμός ή κείμενο που γράφεις εσύ). ${upload ? 'Μπαίνει στο τέλος του εντύπου, ή όπου γράψεις την ετικέτα της γραμμής (π.χ. {ΠΑΡΟΝΤΕΣ}) μέσα στο Excel σου.' : 'Μπαίνει κάτω από τους πίνακες ατόμων και πριν τις υπογραφές, ή δίπλα σε πίνακα (από τη «Διάταξη πινάκων» δεξιά).'} Οι αριθμοί βγαίνουν από τα ίδια στοιχεία με τις οθόνες (Δύναμη, ${HK()}, Οπλισμός…).</p>

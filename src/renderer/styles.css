@@ -1380,3 +1380,4 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .bulkbar__reasons .wkey{margin-right:4px;min-width:14px;height:14px;font-size:9px}
 .bulkbar__reasons{gap:4px}.bulkbar__reasons .ui-btn--sm{padding-left:7px;padding-right:7px;flex:none}
 .bulkbar .bulkbar__sel{min-width:100px}
+.rep-ta .ui-seg--sm button{height:26px;padding:0 9px;font-size:12px}   /* στοίχιση τίτλου: μικρή, κάτω από το πεδίο */

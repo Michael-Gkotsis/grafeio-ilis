@@ -12,7 +12,7 @@ import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
-import { valsUsed, type Spot, type ValueTable, type VAt } from './values';
+import { valsUsed, type Spot, type TAlign, type ValueTable, type VAt } from './values';
 import { MAIN, bandsOf, hasBeside, isDefault, type Bands } from './repBands';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove';
@@ -269,8 +269,8 @@ export interface RepTpl { id: string; name: string; file: string; built?: BuildO
 export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string; o?: ColOpts }
 // «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
 // Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
-export interface BuildVal { id: string; title?: string; lay?: TabLay }
-export interface BuildTable { id: string; title: string; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean }   // nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10)
+export interface BuildVal { id: string; title?: string; ta?: TAlign; lay?: TabLay }
+export interface BuildTable { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean }   // nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10)
 // Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
 // στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
 export interface TabLay { w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4'; at?: 'left' | 'center' | 'right'; even?: boolean; gap?: number }
@@ -281,7 +281,7 @@ export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: nu
 // Και όταν κάποιοι πίνακες είναι δίπλα-δίπλα (bands): μοιράζονται τις 24 στήλες
 export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOpts, 'bands' | 'vals'>>) => [o.lay, ...(o.more || []).map(t => t.lay), ...(o.vals || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even)) || hasBeside(o.bands || []);
 // sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[]; nohead?: boolean; t1?: string }   // t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[]; nohead?: boolean; t1?: string; ta1?: TAlign; tta?: TAlign }   // ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
@@ -683,7 +683,7 @@ export function forBuild(o: BuildOpts, r: Pick<Report, 'bands' | 'vals'>): Build
   if (o.nopeople && !(o.more || []).length) return o;
   const vs = valsUsed(r.vals); const ids = [MAIN, ...(o.more || []).map(t => t.id), ...vs.map(v => v.id)];
   const bands = bandsOf(ids, r.bands); if (isDefault(ids, bands)) return o;
-  return { ...o, bands, vals: vs.map(v => ({ id: v.id, title: (v.title || '').trim(), ...(v.lay ? { lay: v.lay } : {}) })) };
+  return { ...o, bands, vals: vs.map(v => ({ id: v.id, title: (v.title || '').trim(), ...(v.ta ? { ta: v.ta } : {}), ...(v.lay ? { lay: v.lay } : {}) })) };
 }
 export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
   const more = (o.more || []).map(t => {
