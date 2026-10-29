@@ -23,7 +23,7 @@ import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
 import { blocksOf, type AppState, type Person, type Status } from '../../shared/domain';
 import { WEAPON_FILTERS } from '../../shared/weapons';
-import { PV_MAX, PV_SAMPLES, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
+import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
@@ -515,14 +515,15 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     if (i >= 3 && mode === 'build' && !build?.cols.length && !nop) return 'Βάλε τουλάχιστον μία στήλη.';
     if (i >= 3 && mode === 'upload' && !r.cols.length && !hasVals(r)) return 'Δείξε ποια στήλη παίρνει τι (τουλάχιστον μία).';
     if (i >= 3) { const n = (mode === 'build' ? (build?.more || []).map(t => t.cols.length) : (r.more || []).map(t => t.cols.length)).findIndex(x => !x); if (n >= 0) return 'Ο πίνακας ' + (n + 2) + ' δεν έχει στήλες.'; }
-    if (i >= 6 && !r.name.trim()) return 'Δώσε όνομα στο έντυπο (στο βήμα «Πού βγαίνει»).';   // 6 = αποθήκευση (το όνομα γράφεται στο βήμα 5)
     return '';
   };
+  // χωρίς όνομα (π.χ. από το «Κενό»): παίρνει τον τίτλο ή το όνομα του προτύπου, ώστε η αποθήκευση να μη μένει κλειστή ως το βήμα 5 (Michael, 29/10: «δεν μου αποθήκευσε»)
+  const nameOf = () => r.name.trim() || autoName(mode === 'build' ? build?.title : tpl?.name);
   const save = async (andRun: boolean) => {
     const why = missing(6); if (why) { toast({ text: why }); return false; }
     setBusy(true);
     try {
-      let rr: Report = { ...r, name: r.name.trim() }; let list = [...tpls];
+      let rr: Report = { ...r, name: nameOf() }; let list = [...tpls];
       // δικές του υπογραφές (καθαρές)· άλλο πλήθος από πριν: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
       if (rr.sigs) rr.sigs = sigsClean(rr.sigs); else delete rr.sigs;
       if (rr.layout && sigN(rr) !== layN.current) { const l = dropSigMoves({ main: rr.layout })?.main; if (l) rr.layout = l; else delete rr.layout; }
@@ -547,7 +548,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const canGo = (i: number) => !missing(i);
   // μη αποθηκευμένες αλλαγές: η μπάρα κάτω και η ερώτηση σε αλλαγή οθόνης (pending.ts)· «Πέτα» κλείνει τη σελίδα
   const [leaving, setLeaving] = useState(false);
-  usePending(dirty, { label: 'Έντυπο «' + (r.name.trim() || 'χωρίς όνομα') + '»', save: () => save(false), discard: onClose });
+  usePending(dirty, { label: 'Έντυπο «' + nameOf() + '»', save: () => save(false), discard: onClose, bar: false });
   const back = () => { if (dirty) setLeaving(true); else onClose(); };
   useEscape(() => { if (picking) setPicking(null); else back(); });
   const goStep = (i: number) => { setPicking(null); setStep(i); };
@@ -559,7 +560,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
       <${Button} variant="ghost" onClick=${back} data-tip="Πίσω στη λίστα των εντύπων (Esc)">← Έντυπα<//>
       <h2 className="rep-page__title">${editing ? 'Αλλαγή εντύπου «' + (initial.name || '') + '»' : 'Νέο έντυπο'}</h2>
       <span className="rep-wiz__why">${why6}</span>
-      <${Button} variant="outline" onClick=${onClose} data-tip="Κλείνει χωρίς αποθήκευση">Άκυρο<//>
+      <${Button} variant="outline" onClick=${back} data-tip="Κλείνει χωρίς αποθήκευση (ρωτά αν άλλαξες κάτι)">Άκυρο<//>
       <${Button} variant="outline" disabled=${busy || !!why6} why=${why6} data-tip=${'Αποθήκευση χωρίς να βγει. Πού βγαίνει: ' + outText(r)} onClick=${() => save(false)}>Αποθήκευση<//>
       <${Button} disabled=${busy || !!why6} why=${why6} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>
     </div>
@@ -783,7 +784,7 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout
     const id = uid(); const k: RepKind = r.kind;
     const { nopeople: _n, ...o0 } = o;
     setO({ ...o0, more: [...more, { id, title: '', kind: k, cols: colsForKind([{ f: 'aa', h: 'Α/Α', w: 'narrow' }, ...(fieldOf(k, 'rank') ? [{ f: 'rank', h: 'ΒΑΘΜΟΣ', w: 'auto' as const }] : []), { f: 'name', h: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', w: 'auto' }], k) }] });
-    upd({ more: [...(r.more || []), newTable(k, id)] }); setTi(more.length + 1);
+    upd({ more: [...(r.more || []), newTable(k, id)] }); setTi(more.length + 1); setVi(-1);
   };
   const delTable = (id: string) => { setO({ ...o, more: more.filter(t => t.id !== id) }); const rest = (r.more || []).filter((t: RepTable) => t.id !== id); upd({ more: rest.length ? rest : undefined }); setTi(0); };
   const kindOf = (id: string, k: RepKind) => {

@@ -46,3 +46,5 @@ export const noForm = (): Record<string, any> => ({ [FORM_PARAM]: undefined });
 // Βήμα, δείγμα, σελίδα προεπισκόπησης και ό,τι άλλο είναι οθόνη ΔΕΝ μπαίνουν. Η αφετηρία (base) παίρνεται μετά την αρχικοποίηση από τη διαδρομή.
 export const formSnap = (r: unknown, build: unknown, mode: unknown, signers: unknown): string => JSON.stringify([r, build, mode, signers]);
 export const isFormDirty = (base: string | null, cur: string, busy = false): boolean => !busy && base != null && base !== cur;
+// Όνομα εντύπου όταν δεν έγραψες (Michael, 29/10: «δεν μου αποθήκευσε»): ο τίτλος του (ή το όνομα του προτύπου), αλλιώς «Έντυπο»
+export const autoName = (title?: string): string => (title || '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Έντυπο';

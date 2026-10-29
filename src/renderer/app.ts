@@ -265,8 +265,9 @@ function Shell() {
 function PendingBar() {
   const list = usePendingList(); const asking = useLeaveAsk(); const [busy, setBusy] = useState(false);
   const names = [...new Set(list.map(p => p.label))].join(', ');
+  const shown = list.some(p => p.bar !== false);
   const saveThen = async (go?: () => void) => { setBusy(true); const ok = await saveAll(); setBusy(false); if (ok && go) { closeLeaveAsk(); go(); } else if (!ok) closeLeaveAsk(); };
-  return html`${list.length > 0 && html`<div className="pendbar" role="status"><span>Δεν αποθηκεύτηκαν οι αλλαγές: <b>${names}</b></span>
+  return html`${shown && html`<div className="pendbar" role="status"><span>Δεν αποθηκεύτηκαν οι αλλαγές: <b>${names}</b></span>
       <${Button} variant="ghost" size="sm" disabled=${busy} data-tip="Γυρίζουν όπως ήταν πριν τις αλλάξεις" onClick=${discardAll}>Άκυρο<//><${Button} size="sm" disabled=${busy} onClick=${() => saveThen()}>Αποθήκευση<//></div>`}
     ${asking && list.length > 0 && html`<${Dialog} role="alertdialog" title="Δεν αποθηκεύτηκαν οι αλλαγές" onClose=${closeLeaveAsk}
       footer=${html`<${Button} variant="ghost" onClick=${closeLeaveAsk}>Μείνε εδώ<//><${Button} variant="outline" disabled=${busy} onClick=${() => { discardAll(); closeLeaveAsk(); asking(); }}>Πέτα τις αλλαγές<//><${Button} data-autofocus="" disabled=${busy} onClick=${() => saveThen(asking)}>Αποθήκευση και συνέχεια<//>`}>

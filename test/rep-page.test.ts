@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport, previewReport } from '../src/main/reports';
 import { defaultPick, withBuilt, type BuildOpts, type Report } from '../src/shared/reports';
-import { FORM_PARAM, PV_MAX, PV_PAGES, PV_SAMPLES, PV_SAMPLE_DEF, clampPage, cutSample, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../src/shared/repPage';
+import { FORM_PARAM, autoName, PV_MAX, PV_PAGES, PV_SAMPLES, PV_SAMPLE_DEF, clampPage, cutSample, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../src/shared/repPage';
 import { fakeState } from './fixtures';
 
 const D = '2026-10-19';
@@ -144,5 +144,12 @@ describe('σελίδα δημιουργίας: μη αποθηκευμένες �
     const r = rep({ id: 'e1' }); const base = snap(r, null, 'upload');
     expect(isFormDirty(base, snap({ ...r }, null, 'upload'))).toBe(false);
     expect(isFormDirty(base, snap({ ...r, name: 'Αλλαγμένο' }, null, 'upload'))).toBe(true);
+  });
+});
+
+describe('Όνομα εντύπου όταν δεν γράφτηκε (Michael, 29/10: «δεν μου αποθήκευσε»)', () => {
+  it('παίρνει τον τίτλο, αλλιώς «Έντυπο»', () => {
+    expect(autoName('  ΚΑΤΑΣΤΑΣΗ   ΘΑΛΑΜΟΥ ')).toBe('ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ');
+    expect(autoName('')).toBe('Έντυπο'); expect(autoName(undefined)).toBe('Έντυπο'); expect(autoName('   ')).toBe('Έντυπο');
   });
 });
