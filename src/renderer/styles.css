@@ -203,6 +203,7 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
+.vlist__head{position:sticky;top:0;z-index:3}
 .datebar{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
 .datebar > *{flex:none}
 .daybtn{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-width:96px;padding:4px 12px 5px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm);cursor:pointer;text-align:left;line-height:1.25}
@@ -551,16 +552,20 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .hk-req li:first-child{border-top:0}
 .hk-req__acts{display:flex;gap:4px}
 
-.chk{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:10px;background:var(--card)}
-.chk__in{min-width:540px}
-.chk__head,.chk__row{display:grid;grid-template-columns:minmax(130px,1fr) repeat(8,42px) 70px;align-items:center}
-.chk__head{background:var(--thead);font-size:12px;font-weight:600;border-bottom:1px solid var(--border)}
-.chk__head > *{padding:8px 6px;white-space:nowrap}
-.chk__head > span:not(:first-child),.chk__row .num{text-align:center}
-.chk__row{height:36px;border-bottom:1px solid var(--border);font-size:13px;width:100%}
+.chk{overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:10px;background:var(--card)}
+.chk__head,.chk__row{display:grid;align-items:center}
+.chk__head{background:var(--thead);font-size:12px;font-weight:600;border-bottom:1px solid var(--border);height:100%}
+.chk__head > *{padding:4px 6px;white-space:nowrap;min-width:0}
+.chk__head > :not(:first-child),.chk__row .num{text-align:center}
+.chk__head > span{padding:4px 2px}
+.chk__row{height:36px;border-bottom:1px solid var(--border);font-size:13px;width:100%;background:var(--card)}
 .chk__row > *{padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chk__row .num{font-family:var(--f-mono);color:var(--muted-fg)}
 .chk__row .tot{font-weight:700;color:var(--foreground)}
+/* όνομα κολλημένο αριστερά όταν το πλέγμα κυλά οριζόντια· οι υπηρεσίες σπάνε σε έως 3 γραμμές (πλήρες όνομα στο data-tip) */
+.chk__head > :first-child,.chk__row > :first-child{position:sticky;left:0;z-index:1;background:inherit;box-shadow:1px 0 0 var(--border);align-self:stretch}
+.chk__head > :first-child{display:flex;align-items:center}.chk__row > :first-child{line-height:35px}
+.chk__head > span .chk__sort{font-size:11px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:1.15;width:100%}
 .orow{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);width:100%}
 .orow > div:first-child{flex:1;min-width:0}
 .orow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}

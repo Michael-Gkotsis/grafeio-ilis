@@ -198,15 +198,18 @@ export function ToastProvider({ children }: P) {
 // resetKey: πότε γυρνά στην αρχή (αλλαγή φίλτρου/αναζήτησης), όχι σε κάθε αλλαγή δεδομένων
 // Στην κατάσταση μόνο η πρώτη ορατή γραμμή: το κύλισμα μέσα στην ίδια γραμμή δεν ξαναζωγραφίζει τίποτα. Το στυλ κάθε
 // γραμμής μένει το ίδιο αντικείμενο, ώστε οι γραμμές με memo να μην ξαναζωγραφίζονται χωρίς λόγο.
-export function VirtualList({ items, rowHeight, height, renderRow, resetKey, className, scrollRef }: P) {
+// head: επικεφαλίδα που μένει πάνω (sticky) μέσα στο ίδιο κουτί με τις γραμμές, ώστε να κυλά οριζόντια μαζί τους· headHeight: το ύψος της.
+// minWidth: ελάχιστο πλάτος περιεχομένου (οι γραμμές είναι absolute): όταν το κουτί είναι στενότερο, κυλά οριζόντια ΜΕΣΑ στο κουτί.
+export function VirtualList({ items, rowHeight, height, renderRow, resetKey, className, scrollRef, head, headHeight = 0, minWidth }: P) {
   const own = useRef<HTMLDivElement>(null); const ref = scrollRef || own; const [first, setFirst] = useState(0);
   const styles = useRef<{ h: number; m: Map<number, object> }>({ h: rowHeight, m: new Map() });
   if (styles.current.h !== rowHeight) styles.current = { h: rowHeight, m: new Map() };
   const styleOf = (i: number) => { let st = styles.current.m.get(i); if (!st) { st = { position: 'absolute', top: i * rowHeight, left: 0, right: 0, height: rowHeight }; styles.current.m.set(i, st); } return st; };
   const start = Math.max(0, first - 6); const end = Math.min(items.length, first + Math.ceil(height / rowHeight) + 7);
   useEffect(() => { if (ref.current) { ref.current.scrollTop = 0; setFirst(0); } }, [resetKey === undefined ? items.length : resetKey]);
-  return html`<div ref=${ref} className=${cx('vlist', className)} data-rows=${items.length} style=${{ height: Math.min(height, items.length * rowHeight + 2) }} onScroll=${(e: any) => setFirst(Math.floor(e.currentTarget.scrollTop / rowHeight))}>
-    <div className="vlist__inner" style=${{ height: items.length * rowHeight }}>
+  return html`<div ref=${ref} className=${cx('vlist', className)} data-rows=${items.length} style=${{ height: Math.min(height, items.length * rowHeight + headHeight + 2) }} onScroll=${(e: any) => setFirst(Math.floor(e.currentTarget.scrollTop / rowHeight))}>
+    ${head && html`<div className="vlist__head" style=${{ minWidth, height: headHeight }}>${head}</div>`}
+    <div className="vlist__inner" style=${{ height: items.length * rowHeight, minWidth }}>
       ${items.slice(start, end).map((it: P, i: number) => renderRow(it, start + i, styleOf(start + i)))}
     </div></div>`;
 }
