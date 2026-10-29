@@ -37,7 +37,7 @@ export const frouraForm = (s: AppState, phase: Phase = phaseOf(s)): FrouraForm =
 
 export const rankName = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 // Στο έντυπο υπηρεσιών: μόνο επώνυμο και όνομα. Λ/Υ και Δ/Υ: βαθμός, όνομα, κινητό και όπλο (γραφέας, 10/10).
-export const dutyName = (p: Person) => fullName(p);
+export const dutyName = (p: Person) => (p.cid ? rankTxt(p) + ' ' : '') + fullName(p);   // στέλεχος σε θέση (Michael, 26/10): με βαθμό
 export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '') + (p.weapon ? ', ΟΠΛΟ: ' + p.weapon : '');
 
 export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }

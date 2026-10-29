@@ -12,6 +12,7 @@ import type { Cadre, CadreAbs } from '../../shared/domain';
 import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStatusOf, cadreStatusOn, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
 import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
+import { seatTxt } from '../../shared/weapons';
 import type { AppState } from '../../shared/domain';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
@@ -110,7 +111,9 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       <small>${st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ', στήλη «' + colShort(st.col) + '»'}${a.note ? ' · ' + a.note : ''}</small></div>
     ${edit && html`<${Button} size="sm" variant="ghost" onClick=${() => setStFor({ abs: a })}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => delAbs(a)}>Διαγραφή<//></li>`; };
   const doDelete = async () => { setDel(false); onClose(); if (await run({ t: 'deleteCadre', id: c.id }, false)) toast({ text: 'Διαγράφηκε: ' + rankTxt(c) + ' ' + c.last, actions: [undoMark()] }); };
-  const month = c.pid != null && c.monthMax ? monthTxt(state, today, cadreSeat(c)) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '';
+  // μετρητής υπηρεσιών του μήνα: κάθε ενεργό στέλεχος (και το «0» όσο δεν έχει μπει ποτέ σε θέση)· ΕΠΟΠ/ΟΒΑ «2 από 4 τον μήνα»
+  const month = c.active ? (c.pid != null ? monthTxt(state, today, cadreSeat(c)) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '0 τον μήνα') : '';
+  const wtxt = [c.wtype, c.weapon && 'αριθμός ' + c.weapon, (c.rack || c.wpos) && 'θέση ' + seatTxt(c.rack, c.wpos)].filter(Boolean).join(' · ');
   return html`<${Sheet} onClose=${onClose} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
     subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.role, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ'].filter(Boolean).join(' · ')}</div>`}>
     <${TodayAlert} rules=${[]} rem=${rem} onRem=${() => setTab('notes')}/>
@@ -121,10 +124,10 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
         ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
       ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
-      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες</span><div>${month} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}</div>`}
+      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}</div>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
       <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>
-      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd></dl>
+      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd></dl>
       <div><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
     ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}
     ${edit && html`<${CadreDialog} c=${c} onClose=${() => setEdit(false)}/>`}
@@ -139,8 +142,9 @@ function CadreDialog({ c, onClose }: P) {
   const lists = state.settings.lists;
   const ranks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(x => x.rank)), [state.cadreList, lists]);
   const specs = useMemo(() => optionsOf(listOf(lists, 'specs'), state.cadreList.map(x => x.spec || '')), [state.cadreList, lists]);
+  const wtypes = useMemo(() => optionsOf(listOf(lists, 'weaponTypes'), [c.wtype || '']), [lists, c.wtype]);
   const origins = useMemo(() => optionsOf(listOf(lists, 'origins'), [...state.cadreList.map(x => x.origin), ...state.people.map(p => p.origin)]), [state.cadreList, state.people, lists]);
-  const [f, setF] = useState({ rank: c.rank || '', origin: c.origin || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined });
+  const [f, setF] = useState({ rank: c.rank || '', origin: c.origin || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined, wtype: c.wtype || '', weapon: c.weapon || '', rack: c.rack || '', wpos: c.wpos || '' });
   // ΕΠΟΠ/ΟΒΑ (Michael, 21/10): πόσες υπηρεσίες τον μήνα· με όριο μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι
   const duty = isEpop({ rank: f.rank, origin: f.origin }, lists) || EPOP_ROWS.includes(f.hk) || !!c.monthMax;
   const [hkTouched, setHkTouched] = useState(!!c.id); const dirty = useDirty(f);
@@ -156,6 +160,10 @@ function CadreDialog({ c, onClose }: P) {
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής ' + UNIT().gen)}
       <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><${Select} id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div></div>
     ${duty && html`<div className="field"><label className="field__label" htmlFor="cd-mm">Υπηρεσίες τον μήνα (το πολύ)</label><input id="cd-mm" className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${f.monthMax ?? ''} onChange=${(e: any) => setF({ ...f, monthMax: Math.max(0, Math.floor(+e.target.value)) || undefined })}/><span className="field__help">Με αριθμό μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι (ποτέ η αυτόματη συμπλήρωση). Πάνω από το όριο ζητά αιτία. Κενό = δεν κάνει υπηρεσίες.</span></div>`}
+    <div className="field"><span className="field__label">Όπλο (προαιρετικό)</span><div className="field-row">
+      <div className="field"><label className="field__label" htmlFor="cd-wtype">Τύπος</label><${Select} id="cd-wtype" className="ui-input" value=${f.wtype} onChange=${(e: any) => setF({ ...f, wtype: e.target.value })}><option value="">—</option>${wtypes.map((w: string) => html`<option key=${w} value=${w}>${w}</option>`)}<//></div>
+      ${fld('weapon', 'Αριθμός όπλου')}${fld('rack', 'Οπλοβ.', 'π.χ. Ε')}${fld('wpos', 'Θέση', 'π.χ. 23')}</div>
+      <span className="field__help">Αν μπει σε ένοπλη υπηρεσία, το όπλο του βγαίνει ΕΚΤΟΣ στις ώρες του νούμερου (Οπλισμός › Κινήσεις). Χωρίς αριθμό φαίνεται «Ένοπλη χωρίς όπλο».</span></div>
     ${c.id && html`<label className="field" style=${{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}><input type="checkbox" className="ui-check" checked=${f.active} onChange=${() => setF({ ...f, active: !f.active })}/>
       <span>Σε δύναμη <span className="field__help">(αν φύγει από τη μονάδα, βγάλ' το: μένει στη λίστα «Εκτός δύναμης» και δεν μετρά στην ${HK()})</span></span></label>`}
   <//>`;

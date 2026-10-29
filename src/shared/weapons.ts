@@ -4,10 +4,10 @@
 // έχει ένοπλη υπηρεσία (σκοπός, οπλοφύλακας, ΤΑΕ, δική σου ένοπλη), με τη θέση ως λόγο.
 // Τίποτα δεν μπλοκάρεται: ίδιος αριθμός σε δύο, όπλο σε άοπλο ή σε εκτός δύναμης φαίνονται ως φίλτρα και προειδοποιήσεις.
 import { dm, dmy, type ISODate } from './dates';
-import { blocksOf, type AppState, type Person, type WeaponMove } from './domain';
+import { blocksOf, type AppState, type Cadre, type Person, type WeaponMove } from './domain';
 import { ARM_BACK, armedLive, armedRows, armWhen, calDay, hmOf, rowById, type ArmRow, type ArmState } from './armed';
 import { weaponBack } from './ranks';
-import { postBy, postsOf } from './rules';
+import { postBy, postsOf, seatMap } from './rules';
 import { siIsUnarmed, siOf } from './si';
 import { byRoomName } from './rosterLists';
 import { normGreek, upper } from './text';
@@ -152,13 +152,15 @@ export const byOut = (a: WeaponMove, b: WeaponMove) => (a.outDay + a.outTime).lo
 // βγαίνουν από τις υπηρεσίες. id «auto:ΜΕΡΑ|θέση|n»· στο «της θέσης» pid = όποιος κρατά το όπλο, weapon = του ιδιοκτήτη.
 export interface DutyMove extends WeaponMove { auto: true; row: ArmRow }
 export const isAuto = (m: WeaponMove): m is DutyMove => (m as DutyMove).auto === true;
-export function dutyMove(s: Pick<AppState, 'people' | 'settings'>, r: ArmRow): DutyMove {
-  const pm = new Map(s.people.map(p => [p.id, p])); const o = r.out, i = r.in;
+// τα άτομα που μπορεί να έχουν όπλο σε ένοπλη υπηρεσία: στρατιώτες και στελέχη σε θέση (Michael, 26/10)
+export const armMap = (s: { people: Person[]; cadreList?: Cadre[] }) => seatMap({ people: s.people, cadreList: s.cadreList || [] });
+export function dutyMove(s: Pick<AppState, 'people' | 'settings'> & { cadreList?: Cadre[] }, r: ArmRow): DutyMove {
+  const pm = armMap(s); const o = r.out, i = r.in;
   const back = r.mode === 'post' && r.give ? 'ΠΑΡΑΔΟΣΗ' + (r.next != null ? ' ΣΕ ' + upper(pm.get(r.next)?.last || '') : '') : weaponBack('ΥΠΗΡΕΣΙΑ', s.settings.lists) || ARM_BACK;
   return { id: 'auto:' + r.id, pid: r.who, weapon: normWeapon(pm.get(r.owner)?.weapon), reason: r.reason, outDay: calDay(r.day, o), outTime: hmOf(o), inDay: calDay(r.day, i), inTime: hmOf(i), inReason: back.trim(),
     note: r.fix ? 'ΔΙΟΡΘΩΣΗ: ' + r.fix.why : '', auto: true, row: r };
 }
-export const dutyMoves = (s: Pick<AppState, 'people' | 'settings' | 'guards' | 'dutyLog' | 'rules' | 'dutyFix'>, d: ISODate): DutyMove[] => armedRows(s, d).map(r => dutyMove(s, r));
+export const dutyMoves = (s: Pick<AppState, 'people' | 'settings' | 'guards' | 'dutyLog' | 'rules' | 'dutyFix'> & { cadreList?: Cadre[] }, d: ISODate): DutyMove[] => armedRows(s, d).map(r => dutyMove(s, r));
 // Κίνηση από το id της: από το weaponLog ή αυτόματη (έντυπο «Κινήσεις όπλων»)
 export function moveById(s: AppState, id: string): WeaponMove | undefined {
   if (id.startsWith('auto:')) { const r = rowById(s, id.slice(5)); return r ? dutyMove(s, r) : undefined; }
@@ -170,10 +172,10 @@ const dayTxt = (day: ISODate | undefined, t: string | undefined, d: ISODate) => 
 export const moveOutCell = (m: WeaponMove) => (isAuto(m) && m.row.mode === 'post' ? 'ΠΑΡΑΛΑΒΗ ' + dayTxt(m.outDay, m.outTime, m.row.day) : dmy(m.outDay) + ' ' + m.outTime);
 export const moveInCell = (m: WeaponMove) => (isAuto(m) && m.row.mode === 'post' ? 'ΠΑΡΑΔΟΣΗ ' + dayTxt(m.inDay, m.inTime, m.row.day) : m.inDay ? dmy(m.inDay) + ' ' + (m.inTime || '') : 'ΕΚΤΟΣ');
 function moveSheet(s: AppState, d: ISODate): WeaponSheet {
-  const pm = new Map(s.people.map(p => [p.id, p]));
+  const pm = armMap(s);
   const rows = movesAll(s, d).map((m, j) => {
     const p = pm.get(m.pid);
-    return [j + 1, rankTxt(p), p?.last || '', p?.first || '', normWeapon(m.weapon), m.reason, moveOutCell(m), m.inReason || '', moveInCell(m), isAuto(m) ? 'ΑΥΤΟΜΑΤΑ' + (m.note ? ' · ' + m.note : '') : m.note || ''];
+    return [j + 1, rankTxt(p), p?.last || '', p?.first || '', normWeapon(m.weapon), m.reason, moveOutCell(m), m.inReason || '', moveInCell(m), (p?.cid ? 'ΣΤΕΛΕΧΟΣ' + (isAuto(m) || m.note ? ' · ' : '') : '') + (isAuto(m) ? 'ΑΥΤΟΜΑΤΑ' + (m.note ? ' · ' + m.note : '') : m.note || '')];
   });
   return { name: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ', title: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ' + dmy(d), head: MOVE_COLS, rows, note: 'Έξοδοι και είσοδοι όπλων από τον οπλοβαστό τη μέρα, και όσα είναι ακόμα εκτός· οι ένοπλες υπηρεσίες ανά νούμερο, με τις ώρες' };
 }

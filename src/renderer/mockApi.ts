@@ -48,6 +48,9 @@ function seed(): AppState {
   // ΦΡΟΥΡΑ ΣΠΕΝ: σκοποί (α/β παράλληλες γραμμές) και οπλοφύλακες «όπλο της θέσης», ΤΑΕ όλη μέρα (ένοπλες υπηρεσίες ανά νούμερο)
   s.settings = { ...s.settings, phase: 'spen', blocksSpen: s.settings.blocksSpen.map(b => (b.id === 'op' || b.id === 'sk' ? { ...b, armWeapon: 'post' as const } : b)) };
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
+  // στελέχη σε υπηρεσία με το χέρι (Michael, 26/10): ο αρχιλοχίας Λ/Υ σήμερα, ο επιλοχίας σκοπός με το όπλο του (ΕΚΤΟΣ στις ώρες του νούμερου)
+  s.cadreList = s.cadreList.map(c => (c.id === 's2' ? { ...c, pid: -2 } : c.id === 's3' ? { ...c, pid: -3, wtype: 'G3A3', weapon: '4817777', rack: 'Ε', wpos: '30' } : c));
+  s.guards = { ...s.guards, [t]: { ...(s.guards[t] || {}), ly: -2, sk4b: -3 } };
   // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
   s.baseline = { 7: { th: 3, mg: 1, hol: 1 }, 19: { th: 2 } };

@@ -1,11 +1,11 @@
 // Οπλισμός: Κινήσεις ανά λόγο, αναζήτηση, ενδείξεις καταστάσεων και «μένει ΕΚΤΟΣ λόγω υπηρεσίας» (Michael, 24/10). Καθαρή λογική, χωρίς οθόνη.
 import { dm, type ISODate } from './dates';
-import { TYPES, type AppState, type Person, type Status, type WeaponMove } from './domain';
+import { TYPES, type AppState, type Cadre, type Person, type Status, type WeaponMove } from './domain';
 import { armedLive, calDay, hmOf, type ArmRow, type ArmState } from './armed';
 import { statusLbl, type UserLists } from './ranks';
 import { statusesOn } from './rules';
 import { normGreek, norm, translit } from './text';
-import { AUTO_KEY, dutyMove, isAuto, outPeople, posKey, rackKey, weaponInfo, weaponKey, type WeaponInfo } from './weapons';
+import { AUTO_KEY, armMap, dutyMove, isAuto, outPeople, posKey, rackKey, weaponInfo, weaponKey, type WeaponInfo } from './weapons';
 
 // ---------- Κινήσεις: «Εκτός τώρα» ----------
 // Ο λόγος κάθε γραμμής για τα chips: ο χειροκίνητος όπως γράφτηκε, ή AUTO_KEY για ένοπλη υπηρεσία
@@ -13,8 +13,8 @@ export const moveKey = (m: WeaponMove) => (isAuto(m) ? AUTO_KEY : m.reason);
 // Οι γραμμές του «Εκτός τώρα»: όλες οι ανοιχτές κινήσεις (και όσων βγήκαν από τη δύναμη, για να μπει το όπλο) και οι ένοπλες υπηρεσίες
 // (σήμερα όσες τρέχουν τώρα, αλλιώς όλα τα νούμερα της μέρας). Ένοπλη υπηρεσία δεν μπαίνει όταν το όπλο του ιδιοκτήτη είναι ήδη εκτός
 // με κίνηση ή ο ιδιοκτήτης είναι εκτός δύναμης: έτσι κάθε όπλο μετράει μία φορά, όπως στην κεφαλίδα.
-export function openMoveList(s: Pick<AppState, 'people' | 'settings' | 'weaponLog'>, info: WeaponInfo): WeaponMove[] {
-  const act = new Set(s.people.filter(p => p.active).map(p => p.id));
+export function openMoveList(s: Pick<AppState, 'people' | 'settings' | 'weaponLog'> & { cadreList?: Cadre[] }, info: WeaponInfo): WeaponMove[] {
+  const act = new Set([...armMap(s).values()].filter(p => p.active).map(p => p.id));   // και στελέχη σε ένοπλη υπηρεσία
   const open = (s.weaponLog || []).filter(m => !m.inDay);
   const by = new Set(open.map(m => m.pid));
   const rows: ArmRow[] = info.arm.live ? [...info.arm.cur.values()] : info.arm.rows;
@@ -80,5 +80,5 @@ export function stayOutByDuty(s: ArmState, pid: number, day: ISODate, hm: string
 
 // ---------- Μετρητής για τη Σήμερα ----------
 // Όσοι έχουν το όπλο εκτός (κινήσεις και ένοπλες υπηρεσίες, μία φορά ο καθένας): όσοι μετράει η κεφαλίδα του Οπλισμού
-export const outCountOn = (s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix'>>, d: ISODate, hm?: string) => outPeople(s.people, weaponInfo(s, d, hm)).length;
+export const outCountOn = (s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix' | 'cadreList'>>, d: ISODate, hm?: string) => outPeople([...s.people, ...(s.cadreList ? [...armMap(s).values()].filter(p => p.cid) : [])], weaponInfo(s, d, hm)).length;
 

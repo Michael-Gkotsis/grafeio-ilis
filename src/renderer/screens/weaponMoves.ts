@@ -10,7 +10,7 @@ import { Combo } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateField, GoLink, TimeField, useTimeOptions } from '../common';
 import { shortName, plainName, type Person, type WeaponMove } from '../../shared/domain';
-import { personMap } from '../../shared/rules';
+import { seatMap } from '../../shared/rules';
 import { listOf, rankTxt, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
 import { dm, dmy, nowHM, today as todayFn } from '../../shared/dates';
@@ -33,7 +33,7 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
   const [reason, setReason] = useState(r0); const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [note, setNote] = useState('');
-  const pm = personMap(state.people); const open = openMoves(state.weaponLog);
+  const pm = seatMap(state); const open = openMoves(state.weaponLog);
   const ps: Person[] = pids.map((id: number) => pm.get(id)).filter(Boolean);
   const go = ps.filter(p => p.weapon && !open.has(p.id)); const noW = ps.filter(p => !p.weapon); const already = ps.filter(p => p.weapon && open.has(p.id));
   const ok = !!reason.trim() && !!normTime(time) && go.length > 0;
@@ -60,7 +60,7 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
 export function WeaponInDialog({ ids, onClose, onDone }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const [day, setDay] = useState(todayFn()); const [time, setTime] = useState(nowHM()); const [reason, setReason] = useState('');
-  const pm = personMap(state.people); const lists = state.settings.lists;
+  const pm = seatMap(state); const lists = state.settings.lists;
   const moves: WeaponMove[] = (state.weaponLog || []).filter(m => ids.includes(m.id) && !m.inDay);
   const backs = [...new Set(moves.map(m => weaponBack(m.reason, lists)))];
   const early = moves.filter(m => day + ' ' + (normTime(time) || '') < m.outDay + ' ' + m.outTime);
@@ -92,7 +92,7 @@ function EditMoveDialog({ m, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
   const [x, setX] = useState({ reason: m.reason, outDay: m.outDay, outTime: m.outTime, inDay: m.inDay || '', inTime: m.inTime || '', inReason: m.inReason || '', note: m.note || '' });
-  const p = personMap(state.people).get(m.pid);
+  const p = seatMap(state).get(m.pid);
   const ok = !!x.reason.trim() && !!normTime(x.outTime) && (!x.inDay || !!normTime(x.inTime));
   const miss = missingOf([['Λόγος', x.reason.trim()], ['Ώρα εξόδου', normTime(x.outTime)], ['Ώρα εισόδου', !x.inDay || normTime(x.inTime)]]);
   const save = async () => {
@@ -120,7 +120,7 @@ function EditMoveDialog({ m, onClose }: P) {
 // Διόρθωση ώρας ενός ένοπλου νούμερου (Michael, 24/10): οι ώρες βγαίνουν από τις υπηρεσίες· εδώ αλλάζουν για αυτό το νούμερο, με λόγο
 function DutyFixDialog({ row, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
-  const pm = personMap(state.people); const p = pm.get(row.who); const owner = pm.get(row.owner);
+  const pm = seatMap(state); const p = pm.get(row.who); const owner = pm.get(row.owner);
   const [x, setX] = useState(() => ({ od: calDay(row.day, row.out), ot: hmOf(row.out), id: calDay(row.day, row.in), it: hmOf(row.in), why: row.fix?.why || '' }));
   const ot = normTime(x.ot), it = normTime(x.it); const out = ot ? x.od + ' ' + ot : '', inn = it ? x.id + ' ' + it : '';
   const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
@@ -146,7 +146,7 @@ function DutyFixDialog({ row, onClose }: P) {
 function BulkFixDialog({ ids, onClose, onDone }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons: string[] = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
-  const pm = personMap(state.people);
+  const pm = seatMap(state);
   const ms: WeaponMove[] = (state.weaponLog || []).filter(m => ids.includes(m.id));
   const [reason, setReason] = useState(''); const [timeOn, setTimeOn] = useState(false);
   const [day, setDay] = useState(ms[0]?.outDay || todayFn()); const [time, setTime] = useState(ms[0]?.outTime || nowHM());
@@ -193,7 +193,7 @@ const MRow = memo(function MRow({ m, i, style, selected, pm, lists, today, onTog
   const seat = own ? seatTxt(own.rack, own.wpos) : '';
   return html`<div className=${cx('ptable__row', i % 2 === 1 && 'is-odd', auto && 'is-auto')} style=${{ ...style, gridTemplateColumns: MV_GRID, cursor: 'default' }} role="row">
     <span>${!auto && html`<input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + (p ? shortName(p) : m.weapon)} checked=${selected} onChange=${(e: any) => onToggle(m.id, !!e.nativeEvent?.shiftKey)}/>`}</span>
-    <span className="wmv__who">${p ? html`<button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
+    <span className="wmv__who">${p ? html`<button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>${p.cid && html` <${Badge} tone="outline" data-tip="Στέλεχος σε ένοπλη υπηρεσία: το όπλο του είναι από την κάρτα στελέχους">στέλεχος<//>`}` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
     <span className="wmv__w">${m.weapon ? html`<span className="num">${m.weapon}</span>` : auto ? html`<${Badge} tone="bad" data-tip=${'Ένοπλη υπηρεσία χωρίς αριθμό όπλου' + (own ? ': ο ' + shortName(own) + ' δεν έχει' : '')}>Χωρίς όπλο<//>` : '—'}${seat && html`<small>${seat}</small>`}</span>
     <span className="wmv__reason" data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
     <span className=${cx('num', post && 'wmv__post')}>${post ? moveOutCell(m) : dt(m.outDay, m.outTime)}</span>

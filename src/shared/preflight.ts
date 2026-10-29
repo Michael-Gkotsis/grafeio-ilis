@@ -48,6 +48,7 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     if (sl) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): την ίδια μέρα και ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel), δύο υπηρεσίες', go: 'guard' });
     const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x, s.settings.lists) || statusWarn(s, date, pid);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
+    if (p.cid && x.armed && !p.weapon) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): Ένοπλη χωρίς όπλο (γράψε τον αριθμό όπλου στην κάρτα του στελέχους)', go: 'cadre' });
   }
   return out;
 }
