@@ -892,14 +892,16 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .weapon-notes .ui-btn{margin-left:auto}
 .ui-chip--warn:not([aria-pressed="true"]) .cnt{color:var(--warn);opacity:1;font-weight:700}
 /* Υπηρεσίες › Ποιος κάνει τι: στρατιώτες × υπηρεσίες και μέρες */
+.whod__head > span:first-child,.whod__row > .whod__name{position:sticky;left:0;z-index:2;background:inherit;box-shadow:1px 0 0 var(--border);align-self:stretch}   /* ο στρατιώτης μένει ορατός όταν κυλά οριζόντια */
+.whod__row{background:var(--card)}.whod__row.is-odd{background:var(--muted)}.whod__row:hover{background:var(--hover)}
 .ptable--whod .ptable__head > *,.ptable--whod .ptable__row > *{padding-left:6px;padding-right:6px}
-.whod__head{align-items:stretch}
+.whod__head{align-items:stretch;height:100%}
 .whod__head > span:first-child{display:flex;align-items:flex-end}
 .ptable--whod .ptable__head > .whod__colhd{padding-left:2px;padding-right:2px}
 .whod__colhd{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;text-align:center !important;white-space:normal !important;line-height:1.15;border-radius:6px}
 .whod__colhd:hover{background:var(--muted)}
 .whod__colhd[aria-pressed="true"]{background:var(--primary);color:var(--primary-fg)}
-.whod__lbl{font-size:12px;word-break:keep-all;overflow-wrap:normal;max-width:100%}
+.whod__lbl{font-size:11px;overflow-wrap:anywhere;max-width:100%;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}   /* έως 3 γραμμές, σπάει και μακριά λέξη· πλήρες όνομα στο data-tip */
 .whod__colhd small{font-size:11px;font-weight:500;opacity:.85;font-family:var(--f-mono)}
 .whod__colhd small.has-n{color:var(--bad);opacity:1;font-weight:700}
 .whod__colhd[aria-pressed="true"] small{color:inherit}

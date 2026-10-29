@@ -64,7 +64,8 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const [ask, setAsk] = useState<{ p: Person; col: CapCol; why: string } | null>(null);
   const lists = state.settings.lists;
   const cols = capCols(state.settings);
-  const grid = 'minmax(190px,1.6fr) repeat(' + cols.length + ',minmax(72px,84px)) 212px 34px';
+  const whodHead = cols.some(c => c.short.length > 10) ? 86 : 60;   // ύψος επικεφαλίδας: έως 3 γραμμές όνομα + «όχι Ν»
+  const grid = 'minmax(190px,1.6fr) repeat(' + cols.length + ',minmax(80px,88px)) 212px 34px';
   const people = useMemo(() => state.people.filter(p => p.active).sort(byRoomName), [state.people]);
   // όλα τα κελιά μία φορά ανά αλλαγή (όχι σε κάθε πλήκτρο της αναζήτησης)
   const cells = useMemo(() => new Map(people.map(p => [p.id, cols.map(c => capCell(state, p, c))])), [people, cols, state.caps, state.settings]);
@@ -124,12 +125,11 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
       <${ActiveFilter} parts=${[onlyP && shortName(onlyP), unit !== 'all' && unit, room != null && 'Θάλαμος ' + room, filter !== 'all' && FILTERS.find(f => f[0] === filter)![1], colLbl, dq.trim() && '«' + dq.trim() + '»']} onClear=${clear}/>
       <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'άτομο' : 'άτομα'}</span></div>
     ${!cols.length ? html`<div className="ui-card empty">Δεν υπάρχουν υπηρεσίες στα έντυπα (εκτός από Λ/Υ και Δ/Υ).</div>` : rows.length === 0 ? html`<div className="ui-card empty">${people.length ? html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>` : 'Δεν υπάρχει κανείς σε δύναμη.'}</div>` :
-    html`<div className="ptable ptable--whod" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: (190 + cols.length * 72 + 246) + 'px' }}>
-      <div className="ptable__head whod__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Στρατιώτης</span>
+    html`<div className="ptable ptable--whod" role="table" aria-rowcount=${rows.length}>
+      <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height + whodHead} headHeight=${whodHead} minWidth=${190 + cols.length * 80 + 246} head=${html`<div className="ptable__head whod__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Στρατιώτης</span>
         ${cols.map((c, i) => html`<button key=${c.key} type="button" className="whod__colhd" aria-pressed=${colF === c.key} data-tip=${colTip(c, state.settings) + '. Πάτα: μόνο όσοι δεν κάνουν ' + c.label.toLowerCase()} onClick=${() => setColF(colF === c.key ? null : c.key)}><span className="whod__lbl">${c.short}</span><small className=${cx(colN[i] > 0 && 'has-n')}>${colN[i] ? 'όχι ' + colN[i] : 'όλοι'}</small></button>`)}
-        <span className="whod__dayhd" data-tip=${'Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, ' + dutyStartOf(state.settings) + '.'}><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>
-      <${VirtualList} className="whod__body" items=${rows} rowHeight=${46} height=${height} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${openP}/>`; }}/>
-    </div></div></div>`}
+        <span className="whod__dayhd" data-tip=${'Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, ' + dutyStartOf(state.settings) + '.'}><span>Μέρες υπηρεσίας</span><small>${WEEK.map(d => html`<i key=${d}>${DAY2(d)}</i>`)}</small></span><span></span></div>`} resetKey=${filter + '|' + dq + '|' + unit + '|' + room + '|' + colF + '|' + only} renderRow=${(p: Person, i: number, style: P) => { const h = hintOf(p); return html`<${Row} key=${p.id} p=${p} style=${style} own=${ownOf(p)} cols=${cols} cells=${cells.get(p.id)} odd=${i % 2 === 1} grid=${grid} hintTxt=${h?.txt} hintTip=${h?.tip} hintBad=${h?.bad} lists=${lists} onCell=${act.cell} onDay=${act.day} onReset=${act.reset} onOpen=${openP}/>`; }}/>
+    </div>`}
     <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (<${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//>) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
       Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.</p>
     ${ask && html`<${Dialog} title=${'Να κάνει ' + ask.col.label.toLowerCase() + ' ο ' + shortName(ask.p) + ';'} description=${'Κανονικά δεν μπαίνει: ' + ask.why + '.'} onClose=${() => setAsk(null)}
