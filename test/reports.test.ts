@@ -4,7 +4,9 @@ import { apply, type Ctx } from '../src/shared/commands';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport, inspectTemplate, previewReport } from '../src/main/reports';
 import { PRESETS, candidates, defaultPick, guessField, pickRandom, replaceOne, rowsOf, sortRows, type Report } from '../src/shared/reports';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
 const D = '2026-10-19';
 let seq = 0;

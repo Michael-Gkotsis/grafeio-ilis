@@ -7,7 +7,9 @@ import { buildTemplate, fillReport } from '../src/main/reports';
 import { Workbook } from '../src/main/xlsx';
 import { PRESETS, defaultPick, type Report } from '../src/shared/reports';
 import { cleanLayout, dropSigMoves } from '../src/shared/layout';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
 const D = '2026-10-12';

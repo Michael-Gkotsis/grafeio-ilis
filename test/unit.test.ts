@@ -11,7 +11,9 @@ import { hkRowLabel, unitSettingsFor, unitText } from '../src/shared/unit';
 import { hkaiFront } from '../src/renderer/sheets';
 import { detectHkai } from '../src/shared/sources';
 import { preflight } from '../src/shared/preflight';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
 let seq = 0;

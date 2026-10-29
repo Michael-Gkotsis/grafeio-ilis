@@ -5,7 +5,9 @@ import path from 'path';
 import { fillOuts } from '../src/main/exports';
 import { Workbook, mergeFirstSheets } from '../src/main/xlsx';
 import { pskDays } from '../src/shared/dates';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 import { genOuts } from './tplgen';
 import { outsTables } from '../src/shared/returns';
 import { upper } from '../src/shared/text';

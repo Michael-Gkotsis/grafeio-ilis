@@ -8,7 +8,9 @@ import { Workbook, colName } from '../src/main/xlsx';
 import { defaultPick, type Report } from '../src/shared/reports';
 import { MADE_FORMS, SIG_FORMS, sigFormOf, sigsSaved, type Sig } from '../src/shared/sigs';
 import { LAYOUT_SHEETS, blockLabel } from '../src/shared/layout';
-import { fakeState } from './fixtures';
+import { fakeState as fakeNew } from './fixtures';
+// η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
+const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
 const D = '2026-10-17';
 const two: Sig[] = [{ art: 'Ο', title: 'ΑΛΧΙΑΣ ΙΛΗΣ', name: 'Λοχιας Δοκιμης' }, { art: 'Ο', title: 'ΔΚΤΗΣ ΙΛΗΣ' }];
