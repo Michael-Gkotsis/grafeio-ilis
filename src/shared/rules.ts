@@ -7,7 +7,7 @@ import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell
 import { backBy, hasTimes, mins } from './hours';
 import { outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -1114,7 +1114,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
-  else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
+  else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
@@ -1177,12 +1177,12 @@ export function hkRankOf(rank: string, lists?: UserLists, origin?: string): stri
 // Η κατάσταση ενός στελέχους μια μέρα (η πρώτη, αν κατά λάθος επικαλύπτονται)
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
-// παρόντες (στη στήλη που διάλεξες), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
+// παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
 function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
   const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
   if (abs) return abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!;
-  const kol = kolMinus(ss, date, at);
-  return kol ? kolColOf(kol) : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+  const kol = kolMinus(ss, date, at), kc = kol && kolHk(kol);   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
+  return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
@@ -1237,7 +1237,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
 // Δήλωση στρατιώτη με υπηρεσία που δεν είναι δική μας (π.χ. «Υπηρεσία ΣΤΕΠ»): από–έως μέρες, προαιρετικά με ώρες (hours.ts: το τέλος
 // το κόβει το statusesFrom, η ώρα έναρξης την πρώτη μέρα εδώ). Δεν μπαίνει στις δικές μας υπηρεσίες (dutyBlock: αυτόματη, «Επόμενος»,
 // εναλλαγή τον προσπερνούν, με το χέρι μπαίνει με αιτία)· η σειρά δικαιοσύνης δεν αλλάζει. minus: αφαιρείται από τους παρόντες και μπαίνει
-// στην ΗΚΑΙ στη στήλη hkCol· χωρίς minus μένει παρών και εκτός ΗΚΑΙ. noOut: κόβει την έξοδο (outBlock).
+// στην ΗΚΑΙ στη στήλη hkCol (ή σε καμία, '-')· χωρίς minus μένει παρών και εκτός ΗΚΑΙ. noOut: κόβει την έξοδο (outBlock).
 const kolStarted = (x: Status, date: ISODate, at: number) => !(x.from === date && x.fromTime && mins(x.fromTime) > at);
 const kolMinus = (ss: Status[], date: ISODate, at: number) => ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at));
 // Εισαγωγή ΣΤΕΠ (Michael, 29/10): κωλυόμενος αυτόματα που αφαιρείται από τους παρόντες (col: STEP_COL, κενό αν δεν μετρά σε στήλη της ΗΚΑΙ)· με ώρα εισαγωγής μετρά από εκείνη την ώρα
@@ -1245,7 +1245,7 @@ const kolMinus = (ss: Status[], date: ISODate, at: number) => ss.find(x => x.typ
 const stepOn = (ss: Status[], date: ISODate, at: number) => ss.find(x => TYPES[x.type].kolAuto && kolStarted(x, date, at));
 export interface KolRow { p: Person; st: Status; col: string; minus: boolean }
 // cols: όλοι οι κωλυόμενοι παρόντες στρατιώτες ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένος κωλυόμενος, ΣΤΕΠ…), ίδιο άθροισμα με την ΗΚΑΙ
-// στην ίδια στιγμή· n = πόσοι. man: οι δηλωμένοι κωλυόμενοι και οι ΣΤΕΠ εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
+// στην ίδια στιγμή· n = πόσοι (όποιος έχει hkCol '-' δεν μπαίνει σε στήλη εδώ ούτε στην ΗΚΑΙ, αλλά μένει στο man/minus). man: οι δηλωμένοι κωλυόμενοι και οι ΣΤΕΠ εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
 export interface KolView { cols: Record<string, Person[]>; n: number; man: KolRow[]; minus: KolRow[]; keep: KolRow[] }
 export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolView {
   const g = s.guards[date] || {}; const onDuty = new Map<number, DutyKind>();
