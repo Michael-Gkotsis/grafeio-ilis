@@ -23,7 +23,7 @@ import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './expor
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
-import { forBuild, repDate, rowsOf, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
+import { forBuild, repDate, rowsOf, sigsNone, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
 import { frouraFile, hkLvOn, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
@@ -77,6 +77,12 @@ const TPL_DIR = path.join(DATA, 'Πρότυπα εντύπων');
 const TPL_NAME = /^[0-9a-f-]{36}\.xls[xm]$/i;
 const TPL_MAX = 5 * 1024 * 1024;
 const tplBuf = (file: string) => { if (!TPL_NAME.test(file)) throw new Error('Άγνωστο πρότυπο'); const f = path.join(TPL_DIR, file); if (!fs.existsSync(f)) throw new Error('Λείπει το αρχείο του προτύπου. Ανέβασέ το ξανά στα Έντυπα › Πρότυπα.'); return fs.promises.readFile(f); };   // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
+// αποθηκευμένο έντυπο που βγαίνει: «Υπογραφές: Καμία» του «Φτιάξ' το εδώ» ισχύει και για όσα αποθηκεύτηκαν πριν τη διόρθωση (shared/reports sigsNone)
+const savedSigs = (r: Report, file: string): Report => {
+  const t = (store.state.settings.reportTpls || []).find(x => x.id === r.tpl); if (r.sigs || !t?.built) return r;
+  let edited = false; try { edited = !!t.mtime && Math.abs(fs.statSync(path.join(TPL_DIR, file)).mtimeMs - t.mtime) > 2000; } catch { /* λείπει: το λέει το tplBuf */ }
+  return sigsNone(r, store.state.settings.reportTpls, edited);
+};
 const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },
   { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΠΕΝ)', file: 'froura-spen.xlsx' },
@@ -490,6 +496,7 @@ const repOwned = (file: string): Set<string> => new Set(Object.values(readMeta()
 const notReports = <T extends { name: string }>(file: string, sheets: T[]): T[] => { const own = repOwned(file); return own.size ? sheets.filter(x => !own.has(x.name)) : sheets; };
 // Χωρίς serial μέσα: ο καλών (rep:run, αυτόματη ενημέρωση) το βάζει σε serial με όλη την ανάγνωση-εγγραφή
 async function writeRepSheet(r: Report, tplFile: string, ids: (number | string)[], d: ISODate, force: boolean): Promise<RepOut> {
+  r = savedSigs(r, tplFile);
   const file = repFileOf(r); if (typeof file !== 'string') return { ok: false, error: file.error };
   const s = store.state; const all = readMeta().repSheets || {};
   const prev = all[r.id] && sameFile(all[r.id].file, file) ? all[r.id] : undefined;
@@ -1121,7 +1128,7 @@ else {
           // «Φτιάξ' το εδώ» μέσα στον οδηγό: το πρότυπο από τις επιλογές, χωρίς αρχείο ακόμα (όπως η προεπισκόπηση)
           const bo = q.build ? forBuild(q.build, q.report) : null;
           const b = bo ? await buildTemplate(bo, q.report.kind, xlLook(s.settings)) : null;
-          const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? withBuilt(q.report, b, bo!) : q.report;
+          const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? withBuilt(q.report, b, bo!) : savedSigs(q.report, q.file || '');
           out = await off('fillReport', [buf, rep, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date), s);
         }
         else {
@@ -1144,8 +1151,8 @@ else {
           res = await serial(() => writeRepSheet(r, file, ids, date, !!force));
           if (res.ok) { logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0); notify(); }
         } else {
-          const buf = await tplBuf(file);
-          const out = await off('fillReport', [buf, r, ids, date], () => fillReport(buf, s, r, ids, date), s);
+          const buf = await tplBuf(file); const rs = savedSigs(r, file);
+          const out = await off('fillReport', [buf, rs, ids, date], () => fillReport(buf, s, rs, ids, date), s);
           const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
           const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
           logWrite('Έντυπο ' + r.name, t0);
