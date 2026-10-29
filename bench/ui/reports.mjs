@@ -46,7 +46,7 @@ await page.waitForTimeout(500);
 await time('βήμα 3', () => page.locator('.rep-steps button').nth(2).click());
 for (let i = 0; i < 3; i++) await time('(κλικ χωρίς αλλαγή: χρόνος του Playwright)', () => page.locator('.rep-steps').click({ position: { x: 2, y: 2 } }));
 await page.waitForTimeout(800);
-const title = page.getByLabel('Τίτλος', { exact: true });
+const title = page.getByLabel('Γενικός τίτλος σελίδας', { exact: true });
 await title.click();
 for (let i = 0; i < 6; i++) await time('πλήκτρο στον τίτλο', () => page.keyboard.type('Α'));
 const sel = async (label, text) => { await page.getByLabel(label, { exact: true }).click(); await page.locator('.ui-dd__pop').getByText(text, { exact: false }).first().click(); };

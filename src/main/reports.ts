@@ -484,7 +484,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
   type Tab = { id: string; title: string; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: '', kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', kind, cols, lay: o.lay }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, kind: t.kind, cols: one(t.cols), lay: t.lay }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο
@@ -569,13 +569,13 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     // τίτλος του πίνακα (2, 3…) στη γραμμή πάνω από τις επικεφαλίδες του· ζώνη με πίνακες δίπλα-δίπλα: μία γραμμή τίτλων για όλους,
     // και για τους πίνακες τιμών της ζώνης (Michael, 29/10: ο τίτλος τους έπεφτε στη γραμμή των επικεφαλίδων, κάτω από τον τίτλο του διπλανού)
     const vt = vs.filter(v => v.title?.trim()); const titled = new Set<string>();
-    if (tabs.some(t => t.id && t.title.trim()) || vt.length) {
+    if (tabs.some(t => t.title.trim()) || vt.length) {
       const title = (c1: number, c2: number, text: string) => {
         ws.set(L(c1) + next, text).setStyle(L(c1) + next, st.sub);
         if (c2 > c1) { for (let c = c1 + 1; c <= c2; c++) ws.setStyle(L(c) + next, st.sub); ws.addMerge(L(c1) + next + ':' + L(c2) + next); }
       };
       for (const t of tabs) {
-        if (!(t.id && t.title.trim())) continue;
+        if (!t.title.trim()) continue;
         const at = placeOf(t); title(at[0][0], at[at.length - 1][1], t.title.trim());
       }
       for (const x of vt) { const [c1, c2] = boxes.get(x.id) || [1, n]; title(c1, c2, x.title!.trim()); titled.add(x.id); }
