@@ -31,7 +31,8 @@ export interface VRow { label: string; expr: VExpr; percentOf?: VExpr; fmt?: VFm
 // tagsOnly: δεν γράφεται πίνακας, μόνο στα κελιά του Excel με την ετικέτα της γραμμής
 // tt: ο τίτλος του πίνακα τιμών είναι ήδη γραμμένος στο πρότυπο, στη γραμμή τίτλων της ζώνης του (δίπλα σε πίνακα με τίτλο, Michael 29/10)
 export interface Spot { c1: number; c2: number; row?: number; tt?: true }
-export interface ValueTable { id: string; title?: string; rows: VRow[]; lay?: TabLay; spot?: Spot; tagsOnly?: boolean }
+export type TAlign = 'left' | 'center' | 'right';   // στοίχιση τίτλου (Michael, 29/10): κενό = όπως πριν (πίνακες αριστερά, γενικός τίτλος κέντρο)
+export interface ValueTable { id: string; title?: string; ta?: TAlign; rows: VRow[]; lay?: TabLay; spot?: Spot; tagsOnly?: boolean }
 export const FMTS: { id: VFmt; label: string }[] = [{ id: 'int', label: 'Αριθμός' }, { id: 'pct', label: 'Ποσοστό (96%)' }, { id: 'pct1', label: 'Ποσοστό με δεκαδικό (96,2%)' }];
 export const newValueTable = (id: string): ValueTable => ({ id, title: '', rows: [newRow()] });
 export const newRow = (): VRow => ({ label: '', expr: [{ sign: '+', metric: 'str.total' }] });
@@ -308,11 +309,11 @@ export function valueText(v: number | null, fmt: VFmt): string {
 // txt: δική σου τιμή που είναι κείμενο (τότε v = null)
 export const rowText = (x: { v: number | null; fmt: VFmt; txt?: string }): string => x.txt ?? valueText(x.v, x.fmt);
 // id, tag και θέση: για να μπει στη θέση του (Φάση 3) και στα κελιά {ΟΝΟΜΑ} του Excel
-export interface ValueOut { id: string; title: string; rows: { label: string; v: number | null; fmt: VFmt; tag?: string; txt?: string }[]; lay?: TabLay; spot?: Spot; tagsOnly?: boolean }
+export interface ValueOut { id: string; title: string; ta?: TAlign; rows: { label: string; v: number | null; fmt: VFmt; tag?: string; txt?: string }[]; lay?: TabLay; spot?: Spot; tagsOnly?: boolean }
 // Όλοι οι πίνακες τιμών ενός εντύπου για τη μέρα d και στιγμή at (λεπτά), με κοινά αποτελέσματα μετρήσεων
 export function evalTables(s: AppState, d: ISODate, at: number, vals: ValueTable[] | undefined, today: ISODate = d): ValueOut[] {
   const c = vctx(s, d, at, today);
-  return valsUsed(vals).map(t => ({ id: t.id, title: (t.title || '').trim(), rows: t.rows.map(r => ({ label: r.label.trim(), v: rowValue(s, d, at, r, c), fmt: fmtOf(r), ...(rowTag(r) ? { tag: rowTag(r) } : {}), ...(r.man != null && manOf(r.man).txt ? { txt: manOf(r.man).txt } : {}) })),
+  return valsUsed(vals).map(t => ({ id: t.id, title: (t.title || '').trim(), ...(t.ta ? { ta: t.ta } : {}), rows: t.rows.map(r => ({ label: r.label.trim(), v: rowValue(s, d, at, r, c), fmt: fmtOf(r), ...(rowTag(r) ? { tag: rowTag(r) } : {}), ...(r.man != null && manOf(r.man).txt ? { txt: manOf(r.man).txt } : {}) })),
     ...(t.lay ? { lay: t.lay } : {}), ...(t.spot ? { spot: t.spot } : {}), ...(t.tagsOnly ? { tagsOnly: true } : {}) }));
 }
 // «ΚΑ + Τιμητική + ΔΝ» για τη λίστα και τη συμβουλή

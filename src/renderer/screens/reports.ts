@@ -12,8 +12,8 @@ import { DateField, GoLink, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigEditor, SigsDialog } from '../sigs';
 import { LayoutDialog } from '../layout';
-import { ValueTableEditor } from './valueEditor';
-import { hasVals, newValueTable, noPeople, tagId, tagsOf, valsUsed, type ValueTable } from '../../shared/values';
+import { ValueTableEditor, alignSeg } from './valueEditor';
+import { hasVals, newValueTable, noPeople, tagId, tagsOf, valsUsed, type TAlign, type ValueTable } from '../../shared/values';
 import { MAIN, bandsOf, keepBands } from '../../shared/repBands';
 import { BandsPanel } from './repBands';
 import { dropSigMoves, type Layout } from '../../shared/layout';
@@ -764,9 +764,9 @@ function NoHead({ on, set, n }: P) {
   return html`<label className="ui-checkrow" data-tip="Ο πίνακας βγαίνει χωρίς τη γραμμή με τις επικεφαλίδες (Α/Α, ΒΑΘΜΟΣ…), μόνο με τις γραμμές των ατόμων. Οι στήλες μένουν όπως τις έφτιαξες."><input type="checkbox" className="ui-check" aria-label=${'Χωρίς γραμμή επικεφαλίδων στον πίνακα ' + n} checked=${!!on} onChange=${(e: any) => set(e.target.checked)}/>Χωρίς γραμμή επικεφαλίδων</label>`;
 }
 // Πίνακας στο «Φτιάξ' το εδώ» και στο δικό σου Excel: τίτλος και τι αφορά (δίπλα-δίπλα), από κάτω η βοήθεια και «Βγάλε τον πίνακα»· ο 1ος πίνακας: μόνο τίτλος
-function TableHead({ t, kind, title, setKind, setTitle, onDel, n }: P) {
+function TableHead({ t, kind, title, ta, setTa, setKind, setTitle, onDel, n }: P) {
   return html`<div className="rep-th">
-    ${setTitle && html`<div className="field rep-th__t"><label className="field__label" htmlFor=${'t-title' + n}>Τίτλος πάνω από τον πίνακα</label><input id=${'t-title' + n} className="ui-input" placeholder=${n > 1 ? 'π.χ. ΙΑΤΡΙΚΑ (κενό: χωρίς τίτλο)' : 'π.χ. ΠΑΡΟΝΤΕΣ (κενό: χωρίς τίτλο)'} value=${title} onChange=${(e: any) => setTitle(e.target.value)}/></div>`}
+    ${setTitle && html`<div className="field rep-th__t"><label className="field__label" htmlFor=${'t-title' + n}>Τίτλος πάνω από τον πίνακα</label><input id=${'t-title' + n} className="ui-input" placeholder=${n > 1 ? 'π.χ. ΙΑΤΡΙΚΑ (κενό: χωρίς τίτλο)' : 'π.χ. ΠΑΡΟΝΤΕΣ (κενό: χωρίς τίτλο)'} value=${title} onChange=${(e: any) => setTitle(e.target.value)}/>${setTa && alignSeg(ta, 'left', setTa, 'Στοίχιση τίτλου πίνακα ' + n)}</div>`}
     ${setKind && html`<div className="field rep-th__k"><label className="field__label" htmlFor=${'t-kind' + n}>Ο πίνακας ${n} αφορά</label><${Select} id=${'t-kind' + n} className="ui-select" value=${kind} onChange=${(e: any) => setKind(e.target.value)}>${REP_KINDS.map(k => html`<option key=${k.id} value=${k.id}>${k.label}</option>`)}<//></div>`}
     ${onDel && html`<p className="field__help rep-th__h">${t ? 'Ποιοι μπαίνουν σε αυτόν τον πίνακα το διαλέγεις στο βήμα 4. ' : ''}Μπαίνει κάτω από τον προηγούμενο, με δικές του στήλες.</p>
     <${Button} size="sm" variant="ghost" aria-label=${'Βγάλε τον πίνακα ' + n} onClick=${onDel}>${Icon.x}Βγάλε τον πίνακα<//>`}
@@ -794,6 +794,9 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
   const bt = ti > 0 ? more[ti - 1] : null;
   const setT = (id: string, x: Partial<BuildTable>) => set({ more: more.map(t => (t.id === id ? { ...t, ...x } : t)) });
   const noHeadT = (id: string, on: boolean) => set({ more: more.map(t => { if (t.id !== id) return t; const { nohead: _h, ...rest } = t; return on ? { ...rest, nohead: true } : rest; }) });
+  const noTa = <T extends object>(x: T & { ta?: TAlign }, ta?: TAlign): T => { const { ta: _a, ...rest } = x; return (ta ? { ...rest, ta } : rest) as T; };   // στοίχιση τίτλου: μόνο η μη προεπιλεγμένη μένει στο αρχείο
+  const setTa1 = (ta?: TAlign) => { const { ta1: _a, ...rest } = o; setO(ta ? { ...rest, ta1: ta } : rest); };
+  const setTta = (ta?: TAlign) => { const { tta: _a, ...rest } = o; setO(ta ? { ...rest, tta: ta } : rest); };
   const setT1 = (t1: string) => { const { t1: _t, ...rest } = o; setO(t1 ? { ...rest, t1 } : rest); };
   const noHead1 = (on: boolean) => { const { nohead: _h, ...rest } = o; setO(on ? { ...rest, nohead: true } : rest); };
   const addTable = () => {
@@ -818,6 +821,7 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
   return html`<div className="rep-build">
     <section className="rep-card">
       <div className="rep-card__row"><label className="field__label" htmlFor="b-title" data-tip="Ένας για όλη τη σελίδα, στη μέση. Κάθε πίνακας έχει και δικό του τίτλο.">Γενικός τίτλος σελίδας</label><input id="b-title" className="ui-input" placeholder="π.χ. ΚΑΤΑΣΤΑΣΗ ΔΥΝΑΜΗΣ" value=${o.title} onChange=${(e: any) => set({ title: e.target.value })}/></div>
+      <div className="rep-card__row"><span className="field__label">Στοίχιση</span>${alignSeg(o.tta, 'center', setTta, 'Στοίχιση γενικού τίτλου')}</div>
       <div className="rep-card__row rep-card__checks">
         <label className="ui-checkrow" data-tip="Κεφαλίδα πάνω αριστερά (από τις Ρυθμίσεις)"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα</label>
         <label className="ui-checkrow" data-tip="Τόπος και ημερομηνία πάνω δεξιά"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος, ημερομηνία</label>
@@ -831,11 +835,11 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
       <div className="rep-tl" role="group" aria-label="Πίνακες του εντύπου">${tl.map(x => html`<button key=${x.key} type="button" className="rep-tl__r" aria-pressed=${x.on} onClick=${x.pick}><b>${x.n}</b><span className="rep-tl__n">${x.name}</span><span className="rep-tl__s">${x.sub}</span></button>`)}</div>
       ${hasVals(r) && !more.length && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!o.nopeople} onChange=${(e: any) => { const { nopeople: _n, ...rest } = o; setO(e.target.checked ? { ...rest, nopeople: true } : rest); if (e.target.checked) { setTi(0); upd({ split: 'none' }); } }}/>Χωρίς πίνακα ατόμων (μόνο πίνακες τιμών)</label>`}
       <div className="rep-card__ed">
-      ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
+      ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} ta=${bt.ta} setTa=${(ta?: TAlign) => set({ more: more.map(x => (x.id === bt.id ? noTa(x, ta) : x)) })} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
         <${ColsEditor} kind=${bt.kind} cols=${bt.cols} setCols=${(cols: BuildCol[]) => setT(bt.id, { cols })}/>
         ${layFold(bt.lay, bt.nohead, html`<${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/><${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`)}`
         : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
-        : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} setTitle=${setT1}/>
+        : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} ta=${o.ta1} setTa=${setTa1} setTitle=${setT1}/>
         <${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[]) => set({ cols })}/>
         ${layFold(o.lay, o.nohead, html`<${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/><${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`)}`}
       </div>

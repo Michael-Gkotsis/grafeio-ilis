@@ -92,8 +92,8 @@ export const Alert = ({ tone, children }: P) => html`<div className=${cx('ui-ale
 export function Tabs({ value, onChange, items }: P) {
   return html`<div className="ui-tabs" role="tablist">${items.map((it: P) => html`<button key=${it.value} type="button" role="tab" aria-selected=${value === it.value} onClick=${() => onChange(it.value)}>${it.label}</button>`)}</div>`;
 }
-export function Segmented({ value, onChange, items, small }: P) {
-  return html`<div className=${cx('ui-seg', small && 'ui-seg--sm')} role="group">${items.map((it: P) => html`<button key=${it.value} type="button" aria-pressed=${value === it.value} data-tip=${it.tip} onClick=${() => onChange(it.value)}>${it.label}</button>`)}</div>`;
+export function Segmented({ value, onChange, items, small, label }: P) {
+  return html`<div className=${cx('ui-seg', small && 'ui-seg--sm')} role="group" aria-label=${label}>${items.map((it: P) => html`<button key=${it.value} type="button" aria-pressed=${value === it.value} data-tip=${it.tip} onClick=${() => onChange(it.value)}>${it.label}</button>`)}</div>`;
 }
 // Esc κλείνει μόνο το πάνω πάνω παράθυρο (π.χ. το Υπόμνημα πάνω από μια δήλωση), όχι όλα μαζί
 const escStack: { current: () => void }[] = [];
