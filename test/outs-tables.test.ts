@@ -115,10 +115,10 @@ describe('outsTables: οι τέσσερις πίνακες', () => {
   });
 });
 
-describe('outsTables: το «Ποιοι γυρίζουν και πότε» δεν αλλάζει', () => {
-  it('returnsOn δίνει τα ίδια με πριν για ΔΝ με άδεια την ίδια μέρα (η άδεια μετρά ως τη λήξη της)', () => {
+describe('outsTables και «Ποιοι γυρίζουν και πότε»: μία πηγή', () => {
+  it('άδεια που λήγει σήμερα με ΔΝ σήμερα: και το returnsOn γυρνά με τον κανόνα του ΔΝ, όπως το Excel (σχέδιο 26/10)', () => {
     const s = with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '06:00' }), st(5, 'DN', MON));
-    expect(returnsOn(s, MON).map(b => [b.p.id, b.r.day, b.r.time])).toEqual([[5, MON, '06:00']]);
+    expect(returnsOn(s, MON).map(b => [b.p.id, b.r.day, b.r.time])).toEqual([[5, TUE, '06:00']]);
     expect(returnOf(s, 5, MON)).toBeNull();
   });
 });

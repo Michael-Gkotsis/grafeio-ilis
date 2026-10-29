@@ -243,7 +243,7 @@ const SV_ORDER: SvCat[] = ['kol', 'away', 'present'];
 function SvRows({ g, onOpen }: { g: SvGroup; onOpen: (id: number) => void }) {
   return html`<div className="svsub"><div className="svsub__head" data-tip=${g.tip}><b>${g.label}</b><span className="num">${g.rows.length}</span></div>
     <ul className="svl">${g.rows.map(r => html`<li key=${r.p.id} className="svl__row"><button type="button" className="linkish svl__name" onClick=${() => onOpen(r.p.id)}>${shortName(r.p)}</button><span className="svl__room muted">${roomTxt(r.p)}</span>
-      <span className="svl__what">${r.what && html`<${Badge} tone=${r.tone} data-tip=${r.what}>${r.what}<//>`}</span><span className="svl__range muted">${r.range}</span><span className=${cx('svl__ret', r.retBad ? 'txt-bad' : 'muted')}>${r.ret}</span></li>`)}</ul></div>`;
+      <span className="svl__what">${r.what && html`<${Badge} tone=${r.tone} data-tip=${r.what}>${r.what}<//>`}</span><span className="svl__range muted">${r.range}</span><span className=${cx('svl__ret', r.retBad ? 'txt-bad' : 'muted')}>${r.tag ? html`<${Badge} tone="outline" data-tip="Στήλη της ΗΚΑΙ όπου μετρά">ΗΚΑΙ: ${r.tag}<//>` : r.ret}</span></li>`)}</ul></div>`;
 }
 export function StrengthScreen() {
   const { state, today, tomorrow } = useStore(); const nav = useNav();

@@ -1,5 +1,6 @@
 // Σελίδα Δύναμη (Michael, 26/10): Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, με ομάδες και υποομάδες ανά άτομο.
-// Κωλυόμενοι εδώ = μόνο οι δηλωμένοι (Status KOL) που αφαιρούνται από τους παρόντες. Όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή, ιατρικό ή δηλωμένο
+// Κωλυόμενοι εδώ = μόνο οι δηλωμένοι (Status KOL) που αφαιρούνται από τους παρόντες, σε υποομάδες ανά δηλωμένη υπηρεσία (το κείμενο της
+// δήλωσης: «Υπηρεσία ΣΤΕΠ», Συνοδεία…), με τη στήλη της ΗΚΑΙ σε κάθε γραμμή (tag). Όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή, ιατρικό ή δηλωμένο
 // κωλυόμενο χωρίς αφαίρεση μένουν Παρόντες, με δική τους υποομάδα. Η ΗΚΑΙ κρατά τον δικό της ορισμό κωλυομένων (hkaiCounts, kolView.cols).
 // Ίδια στιγμή και ίδιοι κανόνες με το strengthOf (statusesAt), ώστε τα νούμερα να βγαίνουν ίδια με το «Σήμερα».
 import { TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
@@ -8,10 +9,11 @@ import { hasTimes } from './hours';
 import { activePeople, kolView, statusesAt, type KolRow } from './rules';
 import { leaveBack, outHeldBy, retLine, returnOf, type Ret } from './returns';
 import { statusLbl } from './ranks';
+import { collator, norm } from './text';
 import { dutyAt, outLbl } from './weekend';
 
 export type SvCat = 'present' | 'kol' | 'away';
-export interface SvRow { p: Person; what: string; tone: string; range: string; ret: string; retBad: boolean }
+export interface SvRow { p: Person; what: string; tone: string; range: string; ret: string; retBad: boolean; tag?: string }
 export interface SvGroup { key: string; label: string; tip?: string; rows: SvRow[] }
 export interface SvCatView { cat: SvCat; label: string; n: number; groups: SvGroup[] }
 export interface StrengthView { date: ISODate; at: number; time: string; total: number; present: number; kol: number; absent: number; cats: Record<SvCat, SvCatView>; line: string }
@@ -36,13 +38,19 @@ const what = (s: AppState, x: Status) => {
   return [base, kind, x.type !== 'KOL' && x.note?.trim()].filter(Boolean).join(' · ');
 };
 const retKey = (r: Ret | null) => (!r ? '9' : r.open ? '9' : r.day + (r.duty ? '0' : r.pending ? '2' : '1') + (r.time || '23:59'));
+// Υποομάδες ανά δηλωμένη υπηρεσία: ίδιο κείμενο (χωρίς τόνους, πεζά/κεφαλαία, κενά) = μία ομάδα· πρώτες οι μεγαλύτερες, μετά κατά όνομα
+const NO_DESC = 'Χωρίς περιγραφή';
+const svcKey = (st: Status) => 'svc:' + norm(st.note).replace(/\s+/g, ' ');
+const svcLbl = (st: Status) => st.note?.trim().replace(/\s+/g, ' ') || NO_DESC;
+const bySvc = (m: Map<string, { label: string; rows: SvRow[] }>, pre = ''): SvGroup[] =>
+  [...m].map(([key, g]) => ({ key, label: pre + g.label, rows: g.rows })).sort((a, b) => b.rows.length - a.rows.length || collator.compare(a.label, b.label));
 const cmp = (a: Person, b: Person) => a.last.localeCompare(b.last, 'el') || a.first.localeCompare(b.first, 'el');
 
 export function strengthView(s: AppState, date: ISODate, at: number): StrengthView {
   const kv = kolView(s, date, at);
   const minus = new Map<number, KolRow>(kv.minus.map(x => [x.p.id, x])), keep = new Map<number, KolRow>(kv.keep.map(x => [x.p.id, x]));
   const col = new Map<number, string>(); for (const k in kv.cols) kv.cols[k].forEach(p => col.set(p.id, k));
-  const away = new Map<string, { row: SvRow; key: string }[]>(), kolG = new Map<string, SvRow[]>(), pres = new Map<string, SvRow[]>();
+  const away = new Map<string, { row: SvRow; key: string }[]>(), kolG = new Map<string, { label: string; rows: SvRow[] }>(), keepG = new Map<string, { label: string; rows: SvRow[] }>(), pres = new Map<string, SvRow[]>();
   const push = <T>(m: Map<string, T[]>, k: string, v: T) => { const l = m.get(k); if (l) l.push(v); else m.set(k, [v]); };
   let total = 0, present = 0, kol = 0, absent = 0;
   for (const p of activePeople(s)) {
@@ -59,7 +67,8 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
     const m = minus.get(p.id);
     if (m) {
       kol++;
-      push(kolG, m.col, { p, what: m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false });
+      const k = svcKey(m.st), g = kolG.get(k) || { label: svcLbl(m.st), rows: [] };
+      g.rows.push({ p, what: m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: kolColName(m.col) }); kolG.set(k, g);
       continue;
     }
     present++;
@@ -69,13 +78,16 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
     // τι έχει: όλες οι καταστάσεις του και η υπηρεσία του· το πρώτο δίνει το χρώμα
     const labels = [...ss.map(x => what(s, x)), ...(duty ? [duty.label + (duty.time ? ' ' + duty.time : '')] : [])];
     const main = kp?.st || ss[0];
-    push(pres, sub, { p, what: labels.join(' · '), tone: main ? TYPES[main.type].tone : 'ok', range: main ? spanTxt(main) : '', ret: '', retBad: false });
+    const row: SvRow = { p, what: labels.join(' · '), tone: main ? TYPES[main.type].tone : 'ok', range: main ? spanTxt(main) : '', ret: '', retBad: false };
+    if (kp) { const k = svcKey(kp.st), g = keepG.get(k) || { label: svcLbl(kp.st), rows: [] }; g.rows.push(row); keepG.set(k, g); } else push(pres, sub, row);
   }
   const sorted = (rows: SvRow[]) => rows.sort((x, y) => cmp(x.p, y.p));
   const grp = (cat: SvCat, label: string, groups: SvGroup[]): SvCatView => ({ cat, label, n: groups.reduce((n, g) => n + g.rows.length, 0), groups });
   const awayG: SvGroup[] = TYPE_KEYS.filter(k => away.has(k)).map(k => ({ key: k, label: AWAY_LBL[k] || TYPES[k].label, rows: away.get(k)!.sort((x, y) => x.key.localeCompare(y.key) || cmp(x.row.p, y.row.p)).map(x => x.row) }));
-  const kolGroups: SvGroup[] = [...kolG].map(([k, rows]) => ({ key: k, label: kolColName(k), rows: sorted(rows) }));
-  const presG: SvGroup[] = PRESENT_SUBS.filter(([k]) => pres.has(k)).map(([key, label, tip]) => ({ key, label, tip, rows: sorted(pres.get(key)!) }));
+  const kolGroups = bySvc(kolG).map(g => ({ ...g, rows: sorted(g.rows) }));
+  const presG: SvGroup[] = PRESENT_SUBS.flatMap(([key, label, tip]): SvGroup[] => key === 'keep'
+    ? bySvc(keepG, label + ': ').map(g => ({ ...g, key: 'keep:' + g.key, tip, rows: sorted(g.rows) }))
+    : pres.has(key) ? [{ key, label, tip, rows: sorted(pres.get(key)!) }] : []);
   const cats = { present: grp('present', 'Παρόντες', presG), kol: grp('kol', 'Κωλυόμενοι', kolGroups), away: grp('away', 'Απόντες', awayG) };
   return { date, at, time: hhmm(at), total, present, kol, absent, cats, line: present + ' + ' + kol + ' + ' + absent + ' = ' + total + ' · στις ' + hhmm(at) };
 }

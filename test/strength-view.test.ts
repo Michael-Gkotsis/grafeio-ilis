@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { hhmm, strengthView, type StrengthView } from '../src/shared/strengthView';
 import { fillDay, kolView, strengthOf } from '../src/shared/rules';
-import type { AppState, Status } from '../src/shared/domain';
+import { kolColName, type AppState, type Status } from '../src/shared/domain';
 import { mockApi } from '../src/renderer/mockApi';
 import { addDays, today } from '../src/shared/dates';
 import { fakeState } from './fixtures';
@@ -41,8 +41,8 @@ describe('Δύναμη: οι τέσσερις αριθμοί', () => {
     const s = seed();
     expect(grp(strengthView(s, D, 300), 'away', 'DN')).toContain(9);
     expect(grp(strengthView(s, D, 600), 'away', 'DN')).not.toContain(9);
-    expect(grp(strengthView(s, D, 600), 'kol', 'yp')).toEqual([10]);
-    expect(grp(strengthView(s, D, 780), 'kol', 'yp').sort()).toEqual([10, 12]);
+    expect(grp(strengthView(s, D, 600), 'kol', 'svc:ΥΠΗΡΕΣΙΑ ΣΤΕΠ')).toEqual([10]);
+    expect(grp(strengthView(s, D, 780), 'kol', 'svc:ΥΠΗΡΕΣΙΑ ΣΤΕΠ').sort()).toEqual([10, 12]);
     expect(grp(strengthView(s, D, 1080), 'away', 'OUT')).toEqual([7]);
     expect(grp(strengthView(s, D, 600), 'away', 'OUT')).toEqual([]);
   });
@@ -51,19 +51,44 @@ describe('Δύναμη: οι τέσσερις αριθμοί', () => {
 describe('Δύναμη: κατηγορίες', () => {
   it('ο κωλυόμενος που αφαιρείται μετρά μόνο στους Κωλυόμενους, όχι στους Παρόντες', () => {
     const v = strengthView(seed(), D, 600);
-    expect(grp(v, 'kol', 'yp')).toEqual([10]);
+    expect(grp(v, 'kol', 'svc:ΥΠΗΡΕΣΙΑ ΣΤΕΠ')).toEqual([10]);
     expect(v.cats.present.groups.flatMap(g => g.rows.map(r => r.p.id))).not.toContain(10);
     expect(v.cats.kol.groups[0].rows[0].what).toBe('Υπηρεσία ΣΤΕΠ');
   });
   it('χωρίς αφαίρεση, δική μας υπηρεσία, ΕΥ, ποινή και ιατρικά μένουν Παρόντες με δική τους υποομάδα', () => {
     const s = seed(), v = strengthView(s, D, 600);
-    expect(grp(v, 'present', 'keep')).toEqual([11]);
+    expect(grp(v, 'present', 'keep:svc:ΣΥΝΟΔΕΙΑ')).toEqual([11]);
     expect(grp(v, 'present', 'ey')).toEqual([13]); expect(grp(v, 'present', 'pun')).toEqual([14]);
     expect(grp(v, 'present', 'med').sort()).toEqual([15, 16]);
     const duty = grp(v, 'present', 'duty'); expect(duty.length).toBeGreaterThan(0);
     const onDuty = new Set(Object.values(s.guards[D])); duty.forEach(id => expect(onDuty.has(id)).toBe(true));
     expect(v.cats.present.groups.find(g => g.key === 'duty')!.rows[0].what).not.toBe('');
     expect(v.cats.kol.n).toBe(1);
+  });
+});
+
+describe('Δύναμη: Κωλυόμενοι ανά δηλωμένη υπηρεσία', () => {
+  const kolS = (specs: [number, string, Partial<Status>?][]) => {
+    const s = fakeState(30); s.statuses = specs.map(([pid, note, x]) => st(pid, 'KOL', D, D, { note, minus: true, ...x })); return s;
+  };
+  it('ίδιο κείμενο (πεζά/κεφαλαία, τόνοι, κενά) = μία ομάδα· οι ΗΚΑΙ στήλες δεν χωρίζουν ομάδες· πρώτες οι μεγαλύτερες', () => {
+    const v = strengthView(kolS([[1, 'Υπηρεσία ΣΤΕΠ'], [2, 'υπηρεσια  στεπ ', { hkCol: 'ey' }], [3, ' ΥΠΗΡΕΣΙΑ ΣΤΕΠ'], [4, 'Συνοδεία'], [5, 'Βαρδιά', { hkCol: 'tim' }], [6, 'Βαρδιά']]), D, 600);
+    expect(v.cats.kol.groups.map(g => [g.label, g.rows.map(r => r.p.id).sort((a, b) => a - b)])).toEqual([['Υπηρεσία ΣΤΕΠ', [1, 2, 3]], ['Βαρδιά', [5, 6]], ['Συνοδεία', [4]]]);
+    expect(v.cats.kol.n).toBe(6);
+  });
+  it('η στήλη της ΗΚΑΙ φαίνεται σε κάθε γραμμή (tag)· κενή περιγραφή → «Χωρίς περιγραφή»', () => {
+    const v = strengthView(kolS([[1, 'Υπηρεσία ΣΤΕΠ'], [2, 'Υπηρεσία ΣΤΕΠ', { hkCol: 'ey' }], [3, '  ']]), D, 600);
+    const g = v.cats.kol.groups;
+    expect(g.map(x => x.label)).toEqual(['Υπηρεσία ΣΤΕΠ', 'Χωρίς περιγραφή']);
+    const tags = Object.fromEntries(g.flatMap(x => x.rows).map(r => [r.p.id, r.tag]));
+    expect(tags[1]).toBe('Υπηρεσία'); expect(tags[2]).toBe(kolColName('ey')); expect(tags[3]).toBe('Υπηρεσία');
+  });
+  it('ίδιο μέγεθος: κατά όνομα· και οι «Κωλυόμενοι (παρόντες)» χωρίζονται με τον ίδιο τρόπο', () => {
+    const v = strengthView(kolS([[1, 'Ζ υπηρεσία'], [2, 'Α υπηρεσία'], [3, 'Συνοδεία', { minus: false }], [4, 'συνοδεια', { minus: false }], [5, 'Άλλο', { minus: false }]]), D, 600);
+    expect(v.cats.kol.groups.map(g => g.label)).toEqual(['Α υπηρεσία', 'Ζ υπηρεσία']);
+    const keep = v.cats.present.groups.filter(g => g.key.startsWith('keep:'));
+    expect(keep.map(g => [g.label, g.rows.map(r => r.p.id)])).toEqual([['Κωλυόμενοι (παρόντες): Συνοδεία', [3, 4]], ['Κωλυόμενοι (παρόντες): Άλλο', [5]]]);
+    expect(keep.every(g => g.rows.every(r => !r.tag))).toBe(true);
   });
 });
 
