@@ -286,7 +286,7 @@ export function WeaponsScreen() {
   const duties = useMemo(() => dutyPicks(state, date), [state.guards, state.dutyLog, state.settings, date]);
   const clear = () => { setQ(''); setOnlySel(false); nav.set({ wfilter: 'all', unit: 'all', room: null, wreason: null }); };
   const fLabel = (WEAPON_FILTERS.find(([k]) => k === filter) || [, filter])[1];
-  const H = (k: string, l: string) => html`<button key=${k} type="button" aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ wsort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
+  const H = (k: string, l: string) => html`<button key=${k} type="button" data-tip=${l} aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ wsort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   // Τύπος σε όλους όσους φαίνονται και έχουν αριθμό όπλου αλλά όχι τύπο
   const noType = rows.filter(p => p.active && weaponKey(p.weapon) && !p.wtype);
   const typeAll = (t: string) => { if (t && noType.length) save(noType.map(p => ({ pid: p.id, wtype: t })), { what: 'τύπος ' + t, msg: 'Τύπος ' + t + ' σε ' + noType.length + (noType.length === 1 ? ' άτομο' : ' άτομα') + ' χωρίς τύπο' }); };

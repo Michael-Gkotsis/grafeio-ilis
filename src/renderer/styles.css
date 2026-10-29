@@ -864,6 +864,9 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 
 /* Οπλισμός: αριθμός όπλου μέσα στη γραμμή */
 .ptable--weapons .ptable__head > *,.ptable--weapons .ptable__row > *{padding-left:7px;padding-right:7px}
+/* (review 29/10) οι επικεφαλίδες δεν πέφτουν πάνω στη διπλανή στήλη (έβγαινε «Θάλ. ▲.Ι.»): σπάνε σε δύο γραμμές· το επίθετο κόβεται με «…» (το κουμπί είναι μέσα στο span) */
+.ptable--weapons .ptable__head > *{white-space:normal;line-height:1.2;padding-left:4px;padding-right:4px;overflow-wrap:normal}.ptable--weapons .ptable__head > :nth-child(-n+3){white-space:nowrap}
+.ptable__row > span > .linkish{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .ptable__row .weapon-cell{overflow:visible}
 .weapon-input{height:30px;font-family:var(--f-mono);font-size:13px;padding:0 8px;width:100%}
 .weapon-type{height:30px;font-size:13px;padding:0 4px 0 6px;gap:2px;width:100%}.weapon-type > svg{width:14px;height:14px}
