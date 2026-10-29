@@ -41,7 +41,7 @@ if (PROF) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSampl
 await time('Έντυπα (Ctrl+E)', () => page.keyboard.press('Control+e'));
 await page.waitForTimeout(300);
 await time('+ Νέο έντυπο', () => page.getByRole('button', { name: '+ Νέο έντυπο' }).first().click());
-await time('έτοιμο: Ονομαστική κατάσταση (βήμα 4)', () => page.getByRole('dialog').getByRole('button', { name: /Ονομαστική κατάσταση/ }).first().click());
+await time('έτοιμο: Ονομαστική κατάσταση (βήμα 4)', () => page.getByRole('button', { name: /Ονομαστική κατάσταση/ }).first().click());
 await page.waitForTimeout(500);
 await time('βήμα 3', () => page.locator('.rep-steps button').nth(2).click());
 for (let i = 0; i < 3; i++) await time('(κλικ χωρίς αλλαγή: χρόνος του Playwright)', () => page.locator('.rep-steps').click({ position: { x: 2, y: 2 } }));
@@ -56,7 +56,7 @@ await time('στήλη: Ιατρικό τη μέρα', () => sel('Στοιχεί
 const head = page.getByLabel('Επικεφαλίδα στήλης 1', { exact: true });
 await head.click();
 for (let i = 0; i < 4; i++) await time('πλήκτρο σε επικεφαλίδα', () => page.keyboard.type('Β'));
-await time('+ Πίνακας', () => page.getByRole('button', { name: '+ Πίνακας' }).click());
+await time('+ Πίνακας', () => page.getByRole('button', { name: '+ Πίνακας', exact: true }).click());
 await time('πίνακας 2: Καταστάσεις', () => sel('Ο πίνακας 2 αφορά', 'Καταστάσεις'));
 await page.waitForTimeout(1500);
 await time('βήμα 4', () => page.getByRole('button', { name: 'Επόμενο' }).click());
@@ -66,7 +66,7 @@ const chips = page.locator('.rep-wiz__main [aria-pressed]');
 for (let i = 0; i < 3; i++) await time('φίλτρο στο βήμα 4', () => page.locator('.rep-conds .ui-seg button, .rep-conds button').nth(1 + i * 3).click());
 await page.waitForTimeout(600);
 await time('βήμα 5', () => page.getByRole('button', { name: 'Επόμενο' }).click());
-const name = page.getByLabel('Όνομα εντύπου');
+const name = page.locator('#o-name');   // και στη μπάρα πάνω υπάρχει «Όνομα εντύπου» (ίδιο r.name)
 await name.click();
 for (let i = 0; i < 4; i++) await time('πλήκτρο στο όνομα', () => page.keyboard.type('Γ'));
 const med = xs => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
