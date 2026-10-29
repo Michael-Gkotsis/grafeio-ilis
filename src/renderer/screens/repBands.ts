@@ -25,7 +25,7 @@ export function BandsPanel({ items, bands, set }: P) {
   const go = (id: string, d: Step) => { set(step(bands, id, d)); setSel(id); };
   const where = whereVal(bands, cur);
   return html`<section className="rep-bands" aria-label="Διάταξη πινάκων">
-    <div className="rep-bands__head"><b>Διάταξη πινάκων</b><small className="muted">Σύρε ένα κουτί πάνω σε άλλο: στην αριστερή ή δεξιά άκρη μπαίνει δίπλα του, στο πάνω ή κάτω μισό πάνω ή κάτω από αυτό.</small></div>
+    <b className="rep-bands__lbl" data-tip="Σύρε ένα κουτί πάνω σε άλλο: στην αριστερή ή δεξιά άκρη μπαίνει δίπλα του, στο πάνω ή κάτω μισό πάνω ή κάτω από αυτό. Ή διάλεξε ένα κουτί και χρησιμοποίησε τα βελάκια ή τη «Θέση».">Διάταξη</b>
     <div className="rep-bands__rows">${bands.map((b: string[], bi: number) => html`<div key=${bi} className="rep-bands__row" role="group" aria-label=${'Ζώνη ' + (bi + 1)}>
       ${b.map((id: string) => html`<div key=${id} role="button" tabIndex="0" draggable="true" data-id=${id} aria-pressed=${id === cur} aria-label=${'Πίνακας ' + name(id)}
         className=${cx('rep-box', id === cur && 'is-sel', drag === id && 'is-drag', over?.id === id && drag !== id && DROP[over.how])}
@@ -35,8 +35,8 @@ export function BandsPanel({ items, bands, set }: P) {
         onDragLeave=${(e: any) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(o => (o?.id === id ? null : o)); }}
         onDrop=${(e: any) => { e.preventDefault(); if (drag && over && drag !== over.id) set(put(bands, drag, { id: over.id, how: over.how === 'beside' ? 'beside' : over.how as 'left' | 'above' | 'below' })); end(); }}>${name(id)}</div>`)}
     </div>`)}</div>
-    <div className="rep-bands__ctl"><span className="field__label">${name(cur)}</span>
-      ${ARROWS.map(([d, ch, lbl]) => html`<${Button} key=${d} size="icon" variant="ghost" aria-label=${lbl} data-tip=${lbl + ' (Alt+' + ch + ' στο κουτί)'} disabled=${!canStep(bands, cur, d)} onClick=${() => go(cur, d)}>${ch}<//>`)}
+    <div className="rep-bands__ctl">
+      <span className="rep-bands__arr">${ARROWS.map(([d, ch, lbl]) => html`<${Button} key=${d} size="icon" variant="ghost" aria-label=${lbl} data-tip=${lbl + ' (Alt+' + ch + ' στο κουτί)'} disabled=${!canStep(bands, cur, d)} onClick=${() => go(cur, d)}>${ch}<//>`)}</span>
       <${Select} className="ui-select rep-bands__where" aria-label=${'Θέση του πίνακα ' + name(cur)} value=${where} onChange=${(e: any) => set(applyWhere(bands, cur, e.target.value))}>
         <option value="first">Πρώτος (στην κορυφή)</option>
         ${items.filter((x: BoxItem) => x.id !== cur).map((x: BoxItem) => html`<${'optgroup'} key=${x.id} label=${x.name}><option value=${'below:' + x.id}>Κάτω από ${x.name}</option><option value=${'beside:' + x.id}>Δίπλα σε ${x.name}</option><//>`)}<//>
