@@ -184,6 +184,10 @@ export class Sheet {
     if (c.inner) this.wrote.add(ref); else this.wrote.delete(ref);
     return this;
   }
+  // Σβήνει όλα τα κελιά μιας γραμμής (και τα στυλ τους): κενή γραμμή χωρίς πλαίσια
+  dropCells(r: number): this { const x = this.row(r, false); if (x) x.cells = []; return this; }
+  // Η τελευταία γραμμή με κελί
+  lastRow(): number { return this.rows.reduce((a, r) => (r.cells.length && r.r > a ? r.r : a), 0); }
   // Τελευταία στήλη με κελί σε κάποια γραμμή (ή συγχώνευση)
   lastCol(): number { let n = 0; for (const row of this.rows) for (const c of row.cells) if (c.col > n) n = c.col; for (const m of this.merges()) if (m.c2 > n) n = m.c2; return n; }
   rowHidden(r: number): boolean { return /^(1|true)$/.test(attr(this.row(r, false)?.attrs || '', 'hidden') || ''); }
@@ -1124,6 +1128,46 @@ export class Workbook {
     const m = [...this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)].find(x => attr(x[1], 'name') === '_xlnm.Print_Area' && attr(x[1], 'localSheetId') === String(i));
     const r = m && /:\$?[A-Z]+\$?(\d+)(?:$|,)/.exec(unesc(m[2])); return r ? Number(r[1]) : null;
   }
+  // Η περιοχή εκτύπωσης του φύλλου φτάνει τουλάχιστον ως τη στήλη col (από 1)
+  printWidenTo(sheet: string, col: number) {
+    const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {
+      if (attr(at, 'name') !== '_xlnm.Print_Area' || attr(at, 'localSheetId') !== String(i)) return m;
+      return a + body.replace(/(:\$?)([A-Z]+)(?=\$?\d+(?:$|,))/, (x, p: string, cl: string) => (colNum(cl) < col ? p + colName(col) : x)) + c;
+    });
+  }
+  // Βγάζει ένα φύλλο από το βιβλίο (και τα ονόματα εκτύπωσης που είχε)· false αν είναι το μοναδικό ή δεν υπάρχει
+  async dropSheet(name: string): Promise<boolean> {
+    const i = this.names.findIndex(x => x.name === name); if (i < 0 || this.names.length < 2) return false;
+    const e = this.names[i];
+    const tag = [...this.workbookXml.matchAll(/<sheet\b[^>]*>/g)].find(m => attr(m[0], 'name')?.replace(/&amp;/g, '&') === name)?.[0]; if (!tag) return false;
+    const rid = attr(tag, 'r:id');
+    this.workbookXml = this.workbookXml.replace(tag, '');
+    // τα τοπικά ονόματα των φύλλων μετά από αυτό ανεβαίνουν μία θέση· του φύλλου που φεύγει σβήνονται
+    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>[^<]*<\/definedName>/g, (m, a: string) => {
+      const l = attr(a, 'localSheetId'); if (l == null) return m;
+      if (Number(l) === i) return '';
+      return Number(l) > i ? m.replace(`localSheetId="${l}"`, `localSheetId="${Number(l) - 1}"`) : m;
+    });
+    this.workbookXml = this.workbookXml.replace(/<workbookView\b[^>]*>/, v => setAttr(setAttr(v, 'activeTab', '0'), 'firstSheet', '0'));
+    const rp = 'xl/_rels/workbook.xml.rels'; const rels = await this.zip.file(rp)!.async('string');
+    this.zip.file(rp, rid ? rels.replace(new RegExp('<Relationship\\b[^>]*\\bId="' + rid + '"[^>]*/>'), '') : rels);
+    const ct = await this.zip.file('[Content_Types].xml')!.async('string');
+    this.zip.file('[Content_Types].xml', ct.replace(new RegExp('<Override\\b[^>]*PartName="/' + e.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[^>]*/>'), ''));
+    // ό,τι δείχνει το φύλλο (πίνακες, σχόλια, σχέδια) φεύγει μαζί του
+    const sr = this.zip.file(e.path.replace(/([^/]+)$/, '_rels/$1.rels'));
+    let ct2 = (await this.zip.file('[Content_Types].xml')!.async('string'));
+    if (sr) for (const m of (await sr.async('string')).matchAll(/<Relationship\b[^>]*>/g)) {
+      const target = attr(m[0], 'Target') || ''; if (!/\/(table|comments|vmlDrawing|drawing)$/.test(attr(m[0], 'Type') || '')) continue;
+      const part = (target.startsWith('/') ? target.slice(1) : e.path.replace(/[^/]+$/, '') + target).split('/').reduce((a: string[], x) => (x === '..' ? a.slice(0, -1) : x === '.' ? a : [...a, x]), []).join('/');
+      this.zip.remove(part); this.zip.remove(part.replace(/([^/]+)$/, '_rels/$1.rels'));
+      ct2 = ct2.replace(new RegExp('<Override\\b[^>]*PartName="/' + part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[^>]*/>'), '');
+    }
+    this.zip.file('[Content_Types].xml', ct2);
+    this.zip.remove(e.path); this.zip.remove(e.path.replace(/([^/]+)$/, '_rels/$1.rels'));
+    this.sheets.delete(e.path); this.names.splice(i, 1);
+    return true;
+  }
   printDownTo(sheet: string, row: number) {
     const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
     this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {
@@ -1133,6 +1177,10 @@ export class Workbook {
   }
   // Πίνακες του Excel (ListObject) στο φύλλο
   private tableEdits: { path: string; after: number; n: number }[] = [];
+  // Οι πίνακες του Excel του φύλλου δεν φτάνουν πιο κάτω από τη γραμμή last (π.χ. «Σε 4 πίνακες»: ο πίνακας του template είναι
+  // μόνο ο πρώτος, οι άλλοι έχουν συγχωνευμένους τίτλους που ο Excel δεν δέχεται μέσα σε πίνακα)
+  private tableLimits: { path: string; last: number }[] = [];
+  limitTables(sheet: Sheet, last: number) { this.tableLimits.push({ path: sheet.path, last }); }
   shiftTables(sheet: Sheet, after: number, n: number) { this.tableEdits.push({ path: sheet.path, after, n }); }
 
   async save(): Promise<Buffer> {
@@ -1173,6 +1221,13 @@ export class Workbook {
           return ` ref="${a.replace(/\d+$/, String(ra > ed.after ? ra + ed.n : ra))}:${b.replace(/\d+$/, String(rb >= ed.after ? rb + ed.n : rb))}"`;
         }).replace(/<sortState[\s\S]*?<\/sortState>/, '');
         this.zip.file(tp, x);
+      }
+    }
+    for (const lim of this.tableLimits) {
+      const rel = this.zip.file(lim.path.replace(/([^/]+)$/, '_rels/$1.rels')); if (!rel) continue;
+      for (const m of (await rel.async('string')).matchAll(/Target="(?:\.\.\/|\/xl\/)tables\/([^"]+)"/g)) {
+        const tp = 'xl/tables/' + m[1]; const f = this.zip.file(tp); if (!f) continue;
+        this.zip.file(tp, (await f.async('string')).replace(/\sref="([^"]+)"/g, (x, r: string) => { const [a, b] = r.split(':'); return b ? ` ref="${a}:${b.replace(/\d+$/, v => String(Math.max(splitRef(a).r, Math.min(+v, lim.last))))}"` : x; }));
       }
     }
     // Ο Excel ξαναϋπολογίζει όλους τους τύπους στο άνοιγμα· το calcChain θα ήταν πλέον λάθος

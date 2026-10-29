@@ -350,6 +350,8 @@ export interface DayPlan { out?: string; backOut?: string; backDn?: string; trai
 export interface BackFix { id: string; pid: number; day: ISODate; stay?: true; at?: { day: ISODate; time: string }; why: string }
 export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
+export type OutsFmt = 'cur' | 'tab4';
+export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['tab4', 'Σε 4 πίνακες']];
 export interface Settings {
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
@@ -382,6 +384,7 @@ export interface Settings {
   reports?: Report[];                    // Έντυπα: τα έτοιμα έντυπα (πρότυπο, στήλες, ποιοι μπαίνουν, πού βγαίνει)
   essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
   dutyStart?: string;                    // πότε ξεκινά ο κύκλος των υπηρεσιών (ΩΩ:ΛΛ, κενό = 14:00): η μέρα της υπηρεσίας είναι από τότε ως την ίδια ώρα την επόμενη
+  outsFmt?: OutsFmt;                     // Excel Εξοδούχων: 'cur' = Τωρινή (προεπιλογή), 'tab4' = Σε 4 πίνακες· η τελευταία επιλογή μένει, και το αυτόματο ξαναγράψιμο την ακολουθεί
   xl?: Partial<XlLook>;                  // γράμματα και στοίχιση σε ό,τι φτιάχνει η εφαρμογή στο Excel (κενό = Arial 12, κέντρο), xlLook.ts
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.

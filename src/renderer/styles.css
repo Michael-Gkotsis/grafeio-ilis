@@ -569,7 +569,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .outbar b{font-family:var(--f-mono)}
 /* Εξοδούχοι: η μπάρα με τα σύνολα, την αποθήκευση και το Excel μένει πάνω όταν κυλάς */
 .outbar{position:sticky;top:var(--top-h);z-index:20;box-shadow:0 0 0 6px var(--background)}
-.outbar .outbar__xl{flex:none;margin-left:auto;display:flex;gap:6px;align-items:center}
+.outbar .outbar__xl{flex:none;max-width:100%;margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center}
 .outs__find .ui-input{flex:0 1 300px;min-width:200px}
 .outs__find .strip{flex:1 1 320px;display:flex;gap:6px;min-width:0}
 .backs-box summary .cnt{font-family:var(--f-mono);color:var(--muted-fg);margin-left:4px}
