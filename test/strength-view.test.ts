@@ -53,17 +53,47 @@ describe('Δύναμη: κατηγορίες', () => {
     const v = strengthView(seed(), D, 600);
     expect(grp(v, 'kol', 'svc:ΥΠΗΡΕΣΙΑ ΣΤΕΠ')).toEqual([10]);
     expect(v.cats.present.groups.flatMap(g => g.rows.map(r => r.p.id))).not.toContain(10);
-    expect(v.cats.kol.groups[0].rows[0].what).toBe('Υπηρεσία ΣΤΕΠ');
+    expect(v.cats.kol.groups.find(g => g.key === 'svc:ΥΠΗΡΕΣΙΑ ΣΤΕΠ')!.rows[0].what).toBe('Υπηρεσία ΣΤΕΠ');
   });
   it('χωρίς αφαίρεση, δική μας υπηρεσία, ΕΥ, ποινή και ιατρικά μένουν Παρόντες με δική τους υποομάδα', () => {
     const s = seed(), v = strengthView(s, D, 600);
     expect(grp(v, 'present', 'keep:svc:ΣΥΝΟΔΕΙΑ')).toEqual([11]);
     expect(grp(v, 'present', 'ey')).toEqual([13]); expect(grp(v, 'present', 'pun')).toEqual([14]);
-    expect(grp(v, 'present', 'med').sort()).toEqual([15, 16]);
+    expect(grp(v, 'present', 'med')).toEqual([15]);   // το ΣΤΕΠ (16) είναι κωλυόμενος αυτόματα, όχι εδώ (Michael, 29/10)
     const duty = grp(v, 'present', 'duty'); expect(duty.length).toBeGreaterThan(0);
     const onDuty = new Set(Object.values(s.guards[D])); duty.forEach(id => expect(onDuty.has(id)).toBe(true));
     expect(v.cats.present.groups.find(g => g.key === 'duty')!.rows[0].what).not.toBe('');
-    expect(v.cats.kol.n).toBe(1);
+    expect(v.cats.kol.n).toBe(2);
+  });
+});
+
+describe('Δύναμη: Εισαγωγή ΣΤΕΠ (Michael, 29/10: κωλυόμενος αυτόματα)', () => {
+  it('στους Κωλυόμενους, στη δική της υποομάδα, με τη στήλη της ΗΚΑΙ· όχι στους Παρόντες', () => {
+    const v = strengthView(seed(), D, 600);
+    expect(grp(v, 'kol', 'step')).toEqual([16]);
+    const g = v.cats.kol.groups.find(x => x.key === 'step')!, r = g.rows[0];
+    expect(g.label).toBe('Εισαγωγή ΣΤΕΠ'); expect(r.what).toBe('Εισαγωγή ΣΤΕΠ'); expect(r.tag).toBeUndefined();   // STEP_COL null: δεν μετρά σε στήλη της ΗΚΑΙ
+    expect(v.cats.present.groups.flatMap(x => x.rows.map(y => y.p.id))).not.toContain(16);
+    expect(v.cats.present.groups.find(x => x.key === 'med')!.label).toBe('Άλλα ιατρικά (ΕΑ, ΕΟ…)');
+    expect(v.present + v.kol + v.absent).toBe(v.total);
+  });
+  it('ίδια ομάδα για όλες τις σημειώσεις· η σημείωση μπαίνει στο κείμενο της γραμμής', () => {
+    const s = fakeState(30); s.statuses = [st(1, 'STEP', D, D, { note: 'ΙΑΤΡΟΣ' }), st(2, 'STEP', D, D), st(3, 'KOL', D, D, { note: 'Εισαγωγή ΣΤΕΠ', minus: true })];
+    const v = strengthView(s, D, 600), g = v.cats.kol.groups;
+    expect(g.map(x => [x.key, x.rows.length])).toEqual([['step', 2], ['svc:ΕΙΣΑΓΩΓΗ ΣΤΕΠ', 1]]);
+    expect(g[0].rows.map(r => r.what).sort()).toEqual(['Εισαγωγή ΣΤΕΠ', 'Εισαγωγή ΣΤΕΠ · ΙΑΤΡΟΣ']);
+    expect(v.kol).toBe(3); expect(v.present + v.kol + v.absent).toBe(v.total);
+  });
+  it('δηλωμένος κωλυόμενος με αφαίρεση + ΣΤΕΠ την ίδια μέρα: μία φορά, νικά ο κωλυόμενος', () => {
+    const s = fakeState(30); s.statuses = [st(1, 'KOL', D, D, { note: 'Συνοδεία', minus: true, hkCol: 'tim' }), st(1, 'STEP', D, D)];
+    const v = strengthView(s, D, 600);
+    expect(v.kol).toBe(1); expect(grp(v, 'kol', 'svc:ΣΥΝΟΔΕΙΑ')).toEqual([1]); expect(grp(v, 'kol', 'step')).toEqual([]);
+    expect(v.cats.kol.groups[0].rows[0].tag).toBe(kolColName('tim')); expect(v.present + v.kol + v.absent).toBe(v.total);
+  });
+  it('το νοσοκομείο μένει απών', () => {
+    const s = fakeState(30); s.statuses = [st(1, 'NOS', D, D)];
+    const v = strengthView(s, D, 600);
+    expect(grp(v, 'away', 'NOS')).toEqual([1]); expect(v.kol).toBe(0);
   });
 });
 

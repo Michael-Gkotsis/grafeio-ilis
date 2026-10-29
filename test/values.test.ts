@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport } from '../src/main/reports';
 import { defaultPick, withBuilt, type BuildOpts, type Report } from '../src/shared/reports';
-import { TYPE_KEYS, type AppState, type Status } from '../src/shared/domain';
+import { KOL_COLS, TYPE_KEYS, type AppState, type Status } from '../src/shared/domain';
 import { hkMin, hkaiCounts, kolView, outMin, postsOf, strengthAt, strengthOf } from '../src/shared/rules';
 import { dutyPicks, weaponInfo, outPeople, noSeat } from '../src/shared/weapons';
 import { outsTables } from '../src/shared/returns';
@@ -45,6 +45,13 @@ describe('Κατάλογος μετρήσεων: ίδιοι αριθμοί με 
     expect(ev(s, [T('str.present')])).toBe(g.present - kv.minus.length);
     expect(ev(s, [T('str.kol')])).toBe(kv.minus.length);
     expect(kv.minus.length).toBe(1);
+  });
+  it('ΣΤΕΠ (Michael, 29/10): κωλυόμενος της Δύναμης, δεν μετρά σε στήλη της ΗΚΑΙ', () => {
+    const s = fakeState(40); s.statuses = [st('z', 8, 'STEP', D, D)];
+    const g = strengthOf(s, D, HK), h = hkaiCounts(s, D);
+    expect(ev(s, [T('str.kol')])).toBe(1); expect(ev(s, [T('str.present')])).toBe(g.present - 1); expect(ev(s, [T('kol.minus')])).toBe(1);
+    for (const [k] of KOL_COLS) expect(ev(s, [T('kol.col:' + k)]), k).toBe(0);
+    expect(ev(s, [T('hk.kol')])).toBe(h.kol); expect(h.kol).toBe(hkaiCounts(fakeState(40), D).kol);
   });
   it('Καταστάσεις και ιατρικά: κατηγορίες (ένωση)', () => {
     const s = seed(); const g = strengthOf(s, D, HK);
