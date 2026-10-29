@@ -479,7 +479,13 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   };
   // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
   const [quick, setQuick] = useState(false);
-  const startBuild = (o: BuildOpts, name: string, jump = false) => { const b: BuildOpts = JSON.parse(JSON.stringify(o)); setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote(''); upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(r.kind === 'blank' ? { kind: 'people', ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) }); setTi(0); setQuick(jump); setStep(jump ? 4 : 2); };
+  // blank: το «Κενός πίνακας» του βήματος 1, ίδιο αποτέλεσμα με το «Κενός πίνακας» του βήματος 2 (setKind), και πάει κατευθείαν στο βήμα 3
+  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false) => {
+    const b: BuildOpts = JSON.parse(JSON.stringify(o)); if (blank) { b.cols = colsForKind(b.cols, 'blank'); b.nrows = BLANK_ROWS; }
+    setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote('');
+    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
+    setTi(0); setQuick(jump); setStep(blank ? 3 : jump ? 4 : 2);
+  };
   useEffect(() => {
     if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true).finally(() => setReady(true)); else { setStep(1); setReady(true); } }
     else if (start === 'upload') upload().finally(() => setReady(true));
@@ -637,7 +643,8 @@ function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
       <${Button} variant="outline" onClick=${upload}>Ανέβασε Excel…<//></div>
     <div><h3 className="rep-h">Φτιάξ' το εδώ</h3><p className="note">Η εφαρμογή φτιάχνει το Excel: κεφαλίδα και υπογραφές από τις Ρυθμίσεις, πλαίσια, Α/Α, επικεφαλίδες σε κάθε σελίδα.</p>
       <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => onBuild(p.opts, p.name)}><b>${p.name}</b><small>${p.help}</small></button>`)}
-        <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '')}><b>Κενό</b><small>Α/Α, βαθμός, ονοματεπώνυμο. Προσθέτεις στήλες στο βήμα 3.</small></button></div></div>
+        <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '')}><b>Απλή λίστα</b><small>Α/Α, βαθμός, ονοματεπώνυμο. Προσθέτεις στήλες στο βήμα 3.</small></button>
+        <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '', false, true)}><b>Κενός πίνακας</b><small>Δικές σου στήλες και γραμμές, χωρίς άτομα· γράφεις ό,τι θες στα κελιά ή βάζεις τιμές από την εφαρμογή</small></button></div></div>
     ${tpls.length > 0 && html`<div><h3 className="rep-h">Πρότυπο που ήδη υπάρχει</h3><div className="rep-presets">${tpls.map((t: RepTpl) => html`<button key=${t.id} type="button" className="rep-preset" aria-pressed=${tpl?.id === t.id} onClick=${() => onTpl(t)}><b>${t.name}</b><small>${t.built ? 'Φτιαγμένο εδώ' : 'Ανεβασμένο Excel'}</small></button>`)}</div></div>`}
   </div>`;
 }
@@ -1010,7 +1017,7 @@ function SubPick({ r, t, n, d, set }: P) {
 // Ποιοι μπαίνουν στο «Κενό»: κανείς, οι γραμμές είναι αυτές που γράφεις στο βήμα 3· μένει μόνο η μέρα (ημερομηνία, πίνακες τιμών)
 function StepBlank({ r, upd }: P) {
   return html`<div className="stack">
-    <${Alert} tone="info">Το «Κενό» δεν παίρνει άτομα: οι ${blankN(r.pick.n)} γραμμές του πίνακα είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//>
+    <${Alert} tone="info">Ο κενός πίνακας δεν παίρνει άτομα: οι ${blankN(r.pick.n)} γραμμές του πίνακα είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//>
     <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
   </div>`;
 }

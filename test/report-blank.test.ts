@@ -93,8 +93,14 @@ describe('Έντυπα: «Κενό», ο πίνακας από το μηδέν',
 
 describe('Έντυπα: «Κενό», καθαρή λογική', () => {
   it('είδος στη λίστα του «Τι αφορά» με τη βοήθεια που ζήτησε ο Michael· τα άτομα δεν μετράνε', () => {
-    const k = REP_KINDS.find(x => x.id === 'blank')!; expect(k.label).toBe('Κενό'); expect(k.help).toMatch(/χωρίς άτομα/);
+    const k = REP_KINDS.find(x => x.id === 'blank')!; expect(k.label).toBe('Κενός πίνακας'); expect(k.help).toMatch(/χωρίς άτομα/);
     expect(rowNoun('blank')).toBe('γραμμές'); expect(sortsOf('blank').map(x => x.value)).toEqual(['pick']);
+  });
+  it('ετικέτα «Κενός πίνακας» (Michael, 29/10): τα id των ειδών μένουν, η ετικέτα δεν γράφεται ούτε στο Excel ούτε στο έντυπο', async () => {
+    expect(REP_KINDS.map(k => k.id)).toEqual(['people', 'cadre', 'status', 'duty', 'weapon', 'wmove', 'blank']);
+    expect(new Set(REP_KINDS.map(k => k.label)).size).toBe(REP_KINDS.length);
+    const { out, b } = await make(base());
+    for (const d of [b.data, out.data]) { const z = await parts(d); const all = Object.values(z).map(v => Buffer.from(v, 'base64').toString('utf8')).join('\n'); expect(all).not.toMatch(/Κενός|ΚΕΝΟΣ ΠΙΝΑΚΑΣ|Κενό\b/); }
   });
   it('blankN: προεπιλογή 10, ως 200, τουλάχιστον 1· οι γραμμές είναι όσες το pick.n και δεν εξαρτώνται από τους ανθρώπους', () => {
     expect(BLANK_ROWS).toBe(10); expect(BLANK_MAX).toBe(200);
