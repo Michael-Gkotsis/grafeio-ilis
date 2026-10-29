@@ -831,6 +831,7 @@ dl.kv.guide__kv{margin:0 0 16px;font-size:13px}
 .sigrid .statsel.is-no{color:var(--bad);background:var(--bad-bg)}
 .sigrid .statsel.is-last{color:var(--warn);background:var(--warn-bg)}
 .ptable--roster .ptable__head > *,.ptable--roster .ptable__row > *{padding-left:7px;padding-right:7px}
+.ptable--roster .ptable__head > *{overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* Δήλωση κατάστασης: λίστα με όλες τις καταστάσεις και σύνοψη των προηγούμενων βημάτων */
 .stpick{display:flex;flex-direction:column;gap:14px}
 .stpick__cat{font-size:12px;font-weight:700;color:var(--muted-fg);margin-bottom:6px}
