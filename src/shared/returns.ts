@@ -4,13 +4,15 @@
 //  - returnOf: πότε και γιατί γυρνά όποιος είναι εξοδούχος ή ΔΝ τη μέρα d
 //  - outHeld/awayAt: λείπει εκείνη την ώρα; (η Δύναμη και το «Σήμερα» με την ώρα)
 //  - returnsOn, retDay/retWhen/retTxt: «Ποιοι γυρίζουν και πότε» (Εξοδούχοι, Σήμερα)
+//  - outsTables: οι 4 πίνακες του Excel «Σε 4 πίνακες» (Βγαίνουν ΔΝ, Βγαίνουν εξοδούχοι, Γυρίζουν απόψε, Γυρίζουν αύριο) με Πότε/Γιατί
 // Η «Ώρα εξόδου» 16:00 των Κανόνων (rules.outTime) είναι άλλο πράγμα: ισχύει μόνο για όσους γυρίζουν από άδεια.
 // Κυκλική εξάρτηση με το rules.ts (η Δύναμη με την ώρα καλεί το outHeld): όλα χρησιμοποιούνται μέσα σε συναρτήσεις, όχι στην αρχή του αρχείου.
 import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
 import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { hasTimes, mins } from './hours';
 import { activePeople, holOf, statusesOn } from './rules';
-import { dutyAt, isSat, isWk } from './weekend';
+import { collator } from './text';
+import { dutyAt, isSat, isWk, outLbl } from './weekend';
 
 export interface WeekRow { out: string; backOut: string; backDn: string; train: boolean }
 // Προεπιλογές: έξοδος 17:00, εξοδούχοι πίσω 22:00, ΔΝ πίσω 06:00, εκπαίδευση Δευτέρα ως Σάββατο (η Κυριακή όχι)
@@ -183,4 +185,77 @@ export function retLine(r: Ret): string {
   if (r.open) return 'Δεν γυρνά, συνεχίζει (' + r.why + ')';
   const { why, leave } = retWhy(r);
   return 'Γυρνά ' + retDay(r) + ' ' + (r.time || 'πρωί') + (why ? ' (' + why + ')' : '') + (leave ? ', ' + leave : '');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Excel «Σε 4 πίνακες» (Michael, 26/10): ποιος μπαίνει πού κρίνεται από ό,τι δηλώθηκε χθες/σήμερα και από το αν σήμερα έχει εκπαίδευση.
+//  dn: μέσα και φεύγουν σήμερα με ΔΝ (και ο χθεσινός ΔΝ που γύρισε το πρωί γιατί έχει εκπαίδευση και ξαναφεύγει)
+//  out: μέσα και φεύγουν σήμερα ως εξοδούχοι
+//  tonight: χθεσινοί ΔΝ που σήμερα είναι εξοδούχοι (δεν γύρισαν το πρωί) και όσοι τελειώνουν άδεια σήμερα
+//  tomorrow: οι σημερινοί ΔΝ, όσοι συνεχίζουν ΔΝ από χθες (σήμερα χωρίς εκπαίδευση: μόνο εδώ, όχι στους dn) και άδειες που τελειώνουν αύριο
+// Άδεια που τελειώνει σήμερα: ΔΝ σήμερα → δεν γυρνά απόψε, γυρνά με τον κανόνα της ΔΝ (returnOf)· έξοδος σήμερα → γυρνά στην ώρα των
+// εξοδούχων· αλλιώς στην ώρα της άδειας (leaveBack). Τα returnOf/leaveBack δεν αλλάζουν.
+export interface OutRow { p: Person; st?: Status; r: Ret; when: string; why: string; key: string }
+export interface OutsTables { dn: OutRow[]; out: OutRow[]; tonight: OutRow[]; tomorrow: OutRow[] }
+// «απόψε 22:00» · «σήμερα 14:00» · «αύριο 06:00» · «αύριο πρωί» · «Δευτέρα 26/10 06:00» · «δεν γυρνά» · «άγνωστο»
+export function whenTxt(s: AppState, d: ISODate, r: Ret): string {
+  if (r.pending) return 'άγνωστο';
+  if (r.open) return 'δεν γυρνά';
+  if (r.day === d) return r.time && mins(r.time) < mins(dayTimes(s, d).out) ? 'σήμερα ' + r.time : 'απόψε' + (r.time ? ' ' + r.time : '');
+  if (r.day === addDays(d, 1)) return 'αύριο ' + (r.time || 'πρωί');
+  return DOW_FULL[weekday(r.day)] + ' ' + dm(r.day) + ' ' + (r.time || 'πρωί');
+}
+// Γιατί γυρνά: η αιτία (ΔΝ, έξοδος, είδος άδειας) και, αν δεν είναι αυτονόητο, ό,τι άλλο λέει το «Ποιοι γυρίζουν» (ΔΝ ως την Κυριακή,
+// υπηρεσία Λ/Υ από 14:00, διόρθωση…, φεύγει για άδεια 14:00)
+const OBVIOUS = /^(πρωινή εκπαίδευση|μένει |μετά τη ΔΝ$|εξοδούχος |ΔΝ ως )/;
+function whyTxt(r: Ret, base: string, plain = false): string {
+  const { why, leave } = retWhy(r);
+  const more = r.duty ? 'υπηρεσία ' + why : plain || OBVIOUS.test(why) ? '' : why;
+  return [base, more, leave].filter(Boolean).join(', ');
+}
+const leaveName = (x: Status) => (x.type === 'LEAVE' ? (!x.kind || x.kind === 'Κανονική' ? 'Κανονική άδεια' : 'άδεια ' + x.kind) : x.type === 'NOS' ? 'νοσοκομείο' : TYPES[x.type].long);
+const byRoomName = (a: OutRow, b: OutRow) => (a.p.room ?? 99) - (b.p.room ?? 99) || collator.compare(a.p.last, b.p.last) || collator.compare(a.p.first, b.p.first);
+export function outsTables(s: AppState, d: ISODate): OutsTables {
+  const y = addDays(d, -1), n = addDays(d, 1);
+  const t: OutsTables = { dn: [], out: [], tonight: [], tomorrow: [] };
+  const row = (p: Person, st: Status | undefined, r: Ret, base: string, plain = false): OutRow =>
+    ({ p, st, r, when: whenTxt(s, d, r), why: whyTxt(r, base, plain), key: r.pending || r.open ? r.day + ' 99:99' : r.day + ' ' + (r.time || dayTimes(s, r.day).backDn) });
+  for (const p of activePeople(s)) {
+    const now = awayOn(s, p.id, d); if (!now.length) continue;
+    const rd = returnOf(s, p.id, d);
+    if (rd) {
+      const dn = now.find(x => x.type === 'DN'), st = dn || now.find(hasOut)!;
+      if (dn) {
+        // χθες ΔΝ και δεν γύρισε το πρωί (σήμερα χωρίς εκπαίδευση, ΔΝ ΣΚ): συνεχίζει, δεν «βγαίνει» σήμερα
+        const prev = returnOf(s, p.id, y);
+        if (!(prev && !prev.open && prev.day > d)) t.dn.push(row(p, dn, rd, outLbl(dn)));
+        if (rd.day === n && !rd.open) t.tomorrow.push(row(p, dn, rd, outLbl(dn)));
+      } else {
+        const prevDn = awayOn(s, p.id, y).some(x => x.type === 'DN') && !!returnOf(s, p.id, y);
+        (prevDn ? t.tonight : t.out).push(row(p, st, rd, prevDn ? 'ΔΝ χθες, έξοδος' : 'έξοδος'));
+        if (rd.day === n && !rd.open) t.tomorrow.push(row(p, st, rd, 'έξοδος'));
+      }
+      continue;
+    }
+    const lv = now.find(x => !hasOut(x)); if (!lv) continue;
+    const out = now.find(hasOut);
+    if (out && !awayOn(s, p.id, n).some(x => !hasOut(x))) {
+      // η άδεια τελειώνει σήμερα και έχει δηλωθεί ΔΝ/έξοδος: κερδίζει η ΔΝ/έξοδος (η ΔΝ κρίνεται σαν να μην είχε άδεια)
+      const free = { ...s, statuses: s.statuses.filter(x => x.pid !== p.id || hasOut(x) || !TYPES[x.type].away) };
+      const r2 = returnOf(free, p.id, d);
+      if (r2 && !r2.open) {
+        if (out.type === 'DN') { if (r2.day === n) t.tomorrow.push(row(p, out, r2, 'τέλος άδειας, ΔΝ')); }
+        else t.tonight.push(row(p, out, r2, 'τέλος άδειας, έξοδος'));
+      }
+      continue;
+    }
+    if (out) continue;
+    const b = leaveBack(s, p.id, d);
+    if (b.open || b.pending || (b.day !== d && b.day !== n)) continue;
+    (b.day === d ? t.tonight : t.tomorrow).push(row(p, undefined, b, leaveName(lv), true));
+  }
+  t.dn.sort(byRoomName); t.out.sort(byRoomName);
+  const byTime = (a: OutRow, b: OutRow) => a.key.localeCompare(b.key) || byRoomName(a, b);
+  t.tonight.sort(byTime); t.tomorrow.sort(byTime);
+  return t;
 }

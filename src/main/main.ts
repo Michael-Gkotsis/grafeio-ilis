@@ -209,7 +209,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
     const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
     const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), parts[0].sheet || (fr ? b.sheet : undefined));
-    return { name: (fr ? frouraFile(s.settings) : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
+    return { name: (fr ? frouraFile(s.settings) : s.settings.outsFmt === 'tab4' ? 'ΕΞΟΔΟΥΧΟΙ ' : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
   if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
   // ΗΚΑΙ: οι θέσεις βρίσκονται από τα κείμενα του εντύπου (και του δικού σου στον φάκελο templates), και από πάνω ό,τι διόρθωσες

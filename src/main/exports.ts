@@ -1,7 +1,7 @@
 // Συμπλήρωση των εντύπων της Ίλης από την κατάσταση της εφαρμογής (06, 11).
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
 import { addDays, dm, dmy, dmyy, hkDate, parseD, DOW_FULL, MON_SHORT, type ISODate } from '../shared/dates';
-import { retNote, returnOf } from '../shared/returns';
+import { outsTables, retNote, returnOf, type OutsTables } from '../shared/returns';
 import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
@@ -462,18 +462,19 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
 // Παρατηρήσεις εξοδούχου: ΔΝ / ΔΝ ΣΚ, η υπηρεσία της επόμενης μέρας (γυρίζει το πρωί γι' αυτήν), η άδεια που ξεκινά
 // τη μέρα της ΔΝ ή την επόμενη, και η παρατήρηση της μέρας σε παρένθεση, και στο τέλος πότε γυρνά (και η διόρθωση του γραφείου):
 // «ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00, ΑΔΕΙΑ ΑΠΟ ΔΕΥΤΕΡΑ 19/10 (ΙΑΤΡΟΣ ΣΤΕΠ), ΓΥΡΝΑ ΚΥΡΙΑΚΗ 18/10 06:00 (Λ/Υ ΑΠΟ 14:00)»
-export function outsNote(s: AppState, d: ISODate, pid: number, st: Status): string {
+export function outsNote(s: AppState, d: ISODate, pid: number, st: Status, ret = true): string {
   const duty = st.type === 'DN' ? dutyAt(s, addDays(d, 1), pid) : null;
   const lv = st.type === 'DN' ? leaveStart(s, d, pid) : undefined;
   const auto = [st.type === 'DN' ? outLbl(st) : isWk(st) ? 'ΔΝ ΣΚ' : '', duty && 'ΥΠΗΡΕΣΙΑ ' + DOW_FULL[parseD(addDays(d, 1)).getDay()] + ' ' + duty.label + (duty.time ? ' ' + duty.time : ''), lv && leaveText(lv)].filter(Boolean).join(', ');
   // στο τέλος πότε γυρνά (returnOf, με τις ίδιες λέξεις της οθόνης «Ποιοι γυρίζουν και πότε»)
-  const r = returnOf(s, pid, d);
+  // (ret = false: στη μορφή «Σε 4 πίνακες» η επιστροφή είναι στις στήλες Πότε/Γιατί)
+  const r = ret ? returnOf(s, pid, d) : null;
   return [norm(withNote(auto, outNoteOf(s, d, pid))), r && norm(retNote(r))].filter(Boolean).join(', ');
 }
 // Πού είναι κάθε λίστα: φύλλο (αυτό που διάλεξες, αλλιώς με το όνομα ή τον τίτλο της), και το κομμάτι του αν το φύλλο
 // έχει και τις δύο. Χωρίς φύλλο παραμενόντων: αντίγραφο του φύλλου των εξοδούχων.
 interface OutsLoc { sheet: string; from: number; to: number; rename?: boolean }
-async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, place: string): Promise<[OutsLoc, OutsLoc]> {
+async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, place: string, one = false): Promise<[OutsLoc, OutsLoc]> {
   const names = wb.sheetNames(); const info = new Map<string, { vals: XlValue[][]; cs: ReturnType<typeof textCells>; list: boolean }>();
   for (const n of names) { const vals = await wb.values(n, 200, 40); const ws = await wb.sheet(n); info.set(n, { vals, cs: textCells(vals), list: !!mapOuts(vals, ws.merges(), place) }); }
   const titled = (re: RegExp) => names.find(n => re.test(tnorm(n))) || names.find(n => info.get(n)!.cs.some(x => re.test(x.t) && x.r < 40));
@@ -482,6 +483,7 @@ async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, 
   const end = 2000;
   if (!stay && info.get(outs)!.cs.some(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t))) stay = outs;
   if (!stay) stay = names.find(n => n !== outs && info.get(n)!.list && !/^ΕΞΟΔΟΥΧ/.test(tnorm(n)));
+  if (!stay && one) return [{ sheet: outs, from: 1, to: end }, { sheet: outs, from: 1, to: 0 }];   // «Σε 4 πίνακες»: χωρίς Παραμένοντες (to < from: δεν υπάρχουν)
   if (!stay) { stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ'); let i = 2; while (wb.hasSheet(stay)) stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ ' + i++); await wb.cloneSheet(outs, stay); return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end, rename: true }]; }
   if (stay !== outs) return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end }];
   // και οι δύο λίστες στο ίδιο φύλλο: χωρίζονται στον τίτλο της δεύτερης
@@ -491,6 +493,7 @@ async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, 
 // sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)· κάθε στήλη από την επικεφαλίδα της (tplmap.ts)
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = [];
+  if (s.settings.outsFmt === 'tab4') return fillOuts4(wb, s, d, sheets, sigs, warnings);
   const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] } }[] = [];
   const { outs, stay } = outsAndStay(s, d);
   const locs = await outsPlaces(wb, sheets, s.settings.place);
@@ -542,4 +545,112 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
   const done: SheetPart[] = marks.map(x => ({ ws: x.ws, key: x.key, more: [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] }));
   const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
   return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
+}
+
+// ------------------------------------------------------------------ Εξοδούχοι «Σε 4 πίνακες» (Michael, 26/10)
+// Τέσσερις πίνακες στο ίδιο φύλλο, ο ένας κάτω από τον άλλο, με την ίδια επικεφαλίδα και μορφή γραμμής του template (η
+// πρώτη λίστα του, ΕΞΟΔΟΥΧΟΙ) και δύο στήλες δεξιά από τις δικές του: ΠΟΤΕ και ΓΙΑΤΙ. Χωρίς Παραμένοντες. Ποιος μπαίνει πού:
+// outsTables (shared/returns.ts). Πίνακας χωρίς κανέναν: ο τίτλος, η επικεφαλίδα και μία γραμμή με «—».
+const OUTS4: [keyof OutsTables, string][] = [['dn', 'ΒΓΑΙΝΟΥΝ ΣΗΜΕΡΑ ΔΝ'], ['out', 'ΒΓΑΙΝΟΥΝ ΣΗΜΕΡΑ ΕΞΟΔΟΥΧΟΙ'], ['tonight', 'ΓΥΡΙΖΟΥΝ ΣΗΜΕΡΑ (ΑΠΟΨΕ)'], ['tomorrow', 'ΓΥΡΙΖΟΥΝ ΑΥΡΙΟ']];
+export const OUTS4_HEAD = ['ΠΟΤΕ', 'ΓΙΑΤΙ'];
+async function fillOuts4(wb: Workbook, s: AppState, d: ISODate, want: { outs?: string; stay?: string }, sigs: Sig[] | null | undefined, warnings: string[]): Promise<ExportResult> {
+  const [loc, stay] = await outsPlaces(wb, want, s.settings.place, true);
+  const ws = await wb.sheet(loc.sheet);
+  // δεν υπάρχουν Παραμένοντες: το φύλλο τους φεύγει (ή οι γραμμές τους, αν είναι στο ίδιο φύλλο)
+  if (stay.to >= stay.from) {
+    if (stay.sheet !== loc.sheet) await wb.dropSheet(stay.sheet);
+    else {
+      // και οι δύο λίστες στο ίδιο φύλλο: φεύγει η λίστα των Παραμενόντων, από τον τίτλο της ως τον τόπο (ο τόπος και οι υπογραφές μένουν)
+      const v0 = await wb.values(loc.sheet, 2000, 40); const ms = mapOuts(v0, ws.merges(), s.settings.place, stay.from, stay.to);
+      const a = ms ? ms.title?.r ?? ms.hr : stay.from, b = ms?.place ? ms.place.r - 1 : stay.from === 1 ? stay.to : ws.lastRow();
+      for (let r = b; r >= a; r--) if (!ws.deleteRow(r, wb)) ws.dropCells(r);
+      loc.from = 1; loc.to = 2000;
+    }
+  }
+  const vals = await wb.values(loc.sheet, 2000, 40);
+  const m = mapOuts(vals, ws.merges(), s.settings.place, loc.from, loc.to);
+  const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] } }[] = [];
+  const name = 'ΕΞΟΔΟΥΧΟΙ ' + dmy(d).replace(/\//g, '-') + '.xlsx';
+  if (!m) { warnings.push('Στο φύλλο «' + loc.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας (ΒΑΘΜΟΣ, ΕΠΩΝΥΜΟ, ΟΝΟΜΑ…): οι ΕΞΟΔΟΥΧΟΙ δεν γράφτηκαν'); return { name, data: await wb.save(), warnings, sheet: loc.sheet }; }
+  const tabs = outsTables(s, d);
+  const raw = (c: { r: number; c: number }) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
+  const head = headCells(m.head, m.title?.r ?? m.hr, (r, c) => vals[r - 1]?.[c - 1] != null);
+  // στήλες: οι δικές του και δεξιά ΠΟΤΕ, ΓΙΑΤΙ
+  const C = m.cols; const cols = Object.values(C); const c0 = Math.min(...cols);
+  const tm = m.title ? ws.mergeAt(refOf(m.title.c, m.title.r)) : null;
+  const cLast = Math.max(...cols, tm?.c2 ?? 0), cWhen = cLast + 1, cWhy = cLast + 2;
+  // η κεφαλίδα της Ίλης πάνω από την τελευταία στήλη πάει πάνω από τη νέα τελευταία (δεξιά άκρη του πίνακα)
+  head.forEach(h => { if (h.c === cLast) { const st = ws.style(refOf(h.c, h.r)); ws.set(refOf(h.c, h.r), null); h.c = cWhy; if (st != null) ws.setStyle(refOf(h.c, h.r), st); } });
+  s.settings.unit.forEach((u, i) => { const h = head[i]; if (h && (i < m.head.length || u)) ws.set(refOf(h.c, h.r), u); });
+  const nums = C.aa != null && ws.hasFormula(refOf(C.aa, m.first));   // η αρίθμηση του template είναι τύπος (=ROW()-6)
+  // μορφή γραμμής από το template, πριν αλλάξει οτιδήποτε: τίτλος, επικεφαλίδα και γραμμή λίστας ανά στήλη, και τα κείμενα της επικεφαλίδας
+  const look = (r: number) => { const o: Record<number, number | null> = {}; for (let c = c0; c <= cLast; c++) o[c] = ws.style(refOf(c, r)); return o; };
+  const hts = { head: ws.rowHeight(m.hr), data: ws.rowHeight(m.first), title: m.title ? ws.rowHeight(m.title.r) : ws.rowHeight(m.hr) };
+  const sTitle = look(m.title ? m.title.r : m.hr), sHead = look(m.hr), sData = look(m.first);
+  const heads: Record<number, string> = {}; for (let c = c0; c <= cLast; c++) if (vals[m.hr - 1]?.[c - 1] != null) heads[c] = raw({ r: m.hr, c });
+  // οι δύο νέες στήλες: μορφή της διπλανής μέσης στήλης (η τελευταία του template μπορεί να έχει πλαίσιο μόνο από τη μία μεριά)
+  const mid = (st: Record<number, number | null>) => (cLast > c0 ? st[cLast - 1] : st[cLast]) ?? st[cLast];
+  // ετοιμες γραμμές του πρώτου πίνακα, όπως στην τωρινή μορφή
+  const stop = m.place ? m.place.r - 1 : loc.to;
+  const cl = Object.values(C); const s0 = ws.style(refOf(c0, m.first));
+  let ready = 1;
+  while (m.first + ready < stop && ws.style(refOf(c0, m.first + ready)) === s0 && s0 != null && !cl.some(c => { const x = ws.raw(refOf(c, m.first + ready)); return x && x.inner && !x.inner.includes('<f'); })) ready++;
+  const R = OUTS4.map(([k]) => Math.max(1, tabs[k].length));
+  // γραμμές: τίτλος (αν το template δεν έχει, μπαίνει μία πάνω από την επικεφαλίδα)
+  const up = m.title ? 0 : 1;
+  if (up) ws.insertRows(m.hr - 1, 1, m.hr, wb);
+  const titleRow = m.title ? m.title.r : m.hr, H = m.hr + up, F = m.first + up;
+  let gone = 0;
+  for (let r = F + ready - 1; r >= F + R[0]; r--) { if (!ws.deleteRow(r, wb)) break; gone++; }
+  const eff = Math.max(R[0], ready - gone), n0 = eff - (ready - gone);
+  if (n0 > 0) ws.insertRows(F + ready - gone - 1, n0, F + ready - gone - 1, wb);
+  const e0 = F + eff - 1, E = R.slice(1).reduce((a, n) => a + 3 + n, 0);
+  ws.insertRows(e0, E, e0, wb);
+  const placeRow = m.place ? m.place.r + up - gone + n0 + E : 0;
+  // πίνακες: [τίτλος, επικεφαλίδα, πρώτη γραμμή δεδομένων, γραμμές]
+  const blocks: { title: number; head: number; first: number; n: number }[] = [{ title: titleRow, head: H, first: F, n: eff }];
+  for (let k = 1, pos = e0 + 1; k < 4; pos += 3 + R[k], k++) { ws.dropCells(pos).setRowHeight(pos, 12); blocks.push({ title: pos + 1, head: pos + 2, first: pos + 3, n: R[k] }); }
+  const styled = (r: number, st: Record<number, number | null>, extra: number | null | undefined) => { for (let c = c0; c <= cLast; c++) if (st[c] != null) ws.setStyle(refOf(c, r), st[c]!); for (const c of [cWhen, cWhy]) if (extra != null) ws.setStyle(refOf(c, r), extra); };
+  const titleC = m.title ? m.title.c : c0;
+  // το τελευταίο κελί του τίτλου (συγχωνευμένο) κρατά το δεξί πλαίσιο: πάει στη νέα τελευταία στήλη
+  const tEnd = sTitle[cLast], tMid = mid(sTitle);
+  if (tm) ws.removeMerge(tm);
+  blocks.forEach((b, k) => {
+    ws.dropCells(b.title); ws.setRowHeight(b.title, hts.title);
+    styled(b.title, { ...sTitle, [cLast]: tMid ?? tEnd }, tMid); if (tEnd != null) ws.setStyle(refOf(cWhy, b.title), tEnd);
+    ws.set(refOf(titleC, b.title), OUTS4[k][1]);
+    if (tm || titleC === c0) ws.addMerge(refOf(Math.min(tm?.c1 ?? c0, titleC), b.title) + ':' + refOf(cWhy, b.title));
+    ws.dropCells(b.head); ws.setRowHeight(b.head, hts.head);
+    styled(b.head, sHead, mid(sHead));
+    for (const c of Object.keys(heads).map(Number)) ws.set(refOf(c, b.head), heads[c]);
+    ws.set(refOf(cWhen, b.head), OUTS4_HEAD[0]); ws.set(refOf(cWhy, b.head), OUTS4_HEAD[1]);
+    // γραμμές: σβήνονται και ξαναγράφονται με τη μορφή της πρώτης γραμμής του template
+    const list = tabs[OUTS4[k][0]];
+    for (let i = 0; i < b.n; i++) {
+      const r = b.first + i; ws.dropCells(r); ws.setRowHeight(r, hts.data); styled(r, sData, mid(sData));
+      const row = list[i];
+      if (!row) {
+        // άδειος πίνακας: μία γραμμή με «—» στο όνομα
+        const c = C.name ?? C.who ?? C.last; if (i === 0 && !list.length && c != null) ws.set(refOf(c, r), '—');
+        continue;
+      }
+      const p = row.p; const set = (key: string, v: string | number | null | undefined) => { const c = C[key]; if (c != null) ws.set(refOf(c, r), v ?? ''); };
+      if (C.aa != null) { if (nums) ws.setFormula(refOf(C.aa, r), 'ROW()-' + (b.first - 1)); else set('aa', i + 1); }
+      set('rank', rankTxt(p)); set('spec', p.spec); set('last', p.last); set('first', p.first + (C.father != null ? '' : fatherTxt(p)));
+      set('father', p.father); set('name', fullName(p)); set('who', who(p)); set('room', p.room ?? ''); set('phone', p.phone); set('asm', p.asm); set('si', p.si);
+      set('note', row.st ? outsNote(s, d, p.id, row.st, false) : '');
+      ws.set(refOf(cWhen, r), row.when); ws.set(refOf(cWhy, r), row.why);
+    }
+  });
+  // πλάτη των δύο στηλών (φαρδαίνουν κι άλλο όσο χρειάζεται στην αποθήκευση) και περιοχή εκτύπωσης
+  if (ws.colWidth(cWhen) < 16) ws.setColWidth(cWhen, 16);
+  if (ws.colWidth(cWhy) < 32) ws.setColWidth(cWhy, 32);
+  wb.printWidenTo(loc.sheet, cWhy); wb.limitTables(ws, e0);   // ο πίνακας του Excel στο template μένει ο πρώτος
+  const dateRef = m.place ? refOf(m.place.c, placeRow) : null;
+  if (dateRef) ws.set(dateRef, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
+  const headRefs = head.slice(0, Math.max(m.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
+  marks.push({ ws, key: 'outs', refs: { head: headRefs, date: dateRef ? [dateRef] : [] } });
+  const done: SheetPart[] = marks.map(x => ({ ws: x.ws, key: x.key, more: [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] }));
+  const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
+  return { name, data: await wb.save(), warnings, layout, sheet: loc.sheet };
 }
