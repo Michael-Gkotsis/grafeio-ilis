@@ -9,7 +9,7 @@ import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMap
 import { preflight, hasErrors } from '../shared/preflight';
 import { byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
-import { atOf, evalTables, valueText } from '../shared/values';
+import { atOf, evalTables, rowText } from '../shared/values';
 import { MAIN, bandsOf } from '../shared/repBands';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
@@ -222,14 +222,15 @@ export function mockApi(): Api {
       const th = 'border:1px solid #333;background:#d9d9d9';
       const parts = new Map<string, { h: string; n: number }>();
       tabs.forEach((t, k) => {
-        const ls = ['<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>', '<tr>' + t.cols.map(c => '<th style="' + th + '">' + esc(c.h) + '</th>').join('') + '</tr>'];
+        const nohead = k ? (build ? build.more![k - 1].nohead : (r.more || [])[k - 1]?.nohead) : build ? build.nohead : r.nohead;
+        const ls = ['<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>', ...(nohead ? [] : ['<tr>' + t.cols.map(c => '<th style="' + th + '">' + esc(c.h) + '</th>').join('') + '</tr>'])];
         cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
         parts.set(k ? build ? build.more![k - 1].id : (r.more || [])[k - 1]?.id : MAIN, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       });
       // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά
       const vo = evalTables(state, date, atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()), r.vals);
       for (const v of vo) {
-        const ls = (v.title ? ['<tr><th colspan="2" style="' + th + ';text-align:left">' + esc(v.title) + '</th></tr>'] : []).concat(v.rows.map(x => '<tr><td style="border:1px solid #333;min-width:160px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(valueText(x.v, x.fmt)) + '</td></tr>'));
+        const ls = (v.title ? ['<tr><th colspan="2" style="' + th + ';text-align:left">' + esc(v.title) + '</th></tr>'] : []).concat(v.rows.map(x => '<tr><td style="border:1px solid #333;min-width:160px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(rowText(x)) + '</td></tr>'));
         parts.set(v.id, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       }
       const bands = bandsOf([...parts.keys()], nop ? undefined : r.bands);

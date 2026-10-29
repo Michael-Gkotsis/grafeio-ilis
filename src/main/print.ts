@@ -5,7 +5,7 @@
 // (SUM, ROW()-6, E17-Z17…), γιατί τα αρχεία που γράφει η εφαρμογή έχουν τις παλιές τιμές μέχρι να τα ανοίξει ο Excel.
 import crypto from 'crypto';
 import JSZip from 'jszip';
-import { FIXED_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
+import { FIXED_MARK, NOHEAD_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
 
 const attr = (s: string, n: string) => { const m = attrRe(n).exec(s); return m ? unesc(m[1]) : null; };
 const num = (s: string, n: string, d: number) => { const v = attr(s, n); return v == null || v === '' || isNaN(+v) ? d : +v; };
@@ -689,10 +689,19 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
     }
     return units;
   };
+  // Έντυπα, πίνακες χωρίς γραμμή επικεφαλίδων (NOHEAD_MARK): η κρυφή γραμμή μένει στην αναζήτηση πινάκων (έχει ακόμα τις επικεφαλίδες, άρα ταξινομείται κανονικά),
+  // και οι περιοχές της που αδειάστηκαν (διπλανός πίνακας με επικεφαλίδες) λένε στο tablesOf ότι εκεί δεν υπάρχει επικεφαλίδα
+  const noHead = new Set<number>(); const hid: number[] = [];
+  for (const a of areasOf(definedName(book.wbXml, NOHEAD_MARK, idx))) {
+    if (rowH(a.r1) === 0) { if (!hid.includes(a.r1)) hid.push(a.r1); continue; }
+    if (Array.from({ length: a.c2 - a.c1 + 1 }, (_, i) => a.c1 + i).every(c => shown(a.r1, c) === '')) for (let c = a.c1; c <= a.c2; c++) noHead.add(key(a.r1, c));
+  }
+  const withHidden = hid.length ? [...rowsAll, ...hid].sort((a, b) => a - b) : rowsAll;
+  const framedT = hid.length ? new Set([...framed, ...hid.filter(r => colsAll.some(c => { const xf = st.xfs[styleOf(r, c)] || st.xfs[0]; return xf.border.l || xf.border.r || xf.border.t || xf.border.b; }))]) : framed;
   const g: Geo = { sh, idx, ps, pm, po, rowsAll, colsAll, rowH, colW, W, titles, titleList, titleH: titleList.reduce((a, r) => a + rowH(r), 0),
     oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
     grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units: regroup(rowsAll), framed,
-    tables: tablesOf(book, sh, unitsOf(rowsAll), colsAll, framed), regroup };
+    tables: tablesOf(book, sh, unitsOf(withHidden), colsAll, framedT, noHead), regroup };
   const fixed = areasOf(definedName(book.wbXml, FIXED_MARK, idx));
   if (fixed.length) {
     const fixC = new Set<number>(), near = new Set<number>();
@@ -715,17 +724,24 @@ const RANKS = ['ΤΧΗΣ', 'ΕΠΛΧΟΣ', 'ΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΑΝΘΛ
 const NUMERIC = /^[-+]?\d+(?:[.,]\d+)?$/, DATE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?!\d)/;
 const SEQ = /^(\d+)\s*(?:ο|η|\.|\))?$/i;
 const greekOrder = new Intl.Collator('el', { numeric: true, sensitivity: 'base' });
-function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[], framed: Set<number>): Table[] {
+function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[], framed: Set<number>, noHead: Set<number> = new Set()): Table[] {
   const raw = (r: number, c: number): Val => { const k = sh.cells.get(key(r, c)); if (!k) return null; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? null : v; };
   const text = (r: number, c: number) => { const v = raw(r, c); return v == null ? '' : String(v).trim(); };
   const dateFmt = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; if (!xf || !xf.fmt) return false; const code = book.styles.codes.get(xf.fmt) ?? BUILTIN[xf.fmt] ?? ''; return isDateFmt(code); };
   const bord = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; return !!xf && !!(xf.border.l || xf.border.r || xf.border.t || xf.border.b); };
+  // κελί της γραμμής h χωρίς επικεφαλίδα επειδή ο πίνακας βγήκε χωρίς (NOHEAD_MARK): ο πίνακας υπάρχει, δεν ταξινομείται, και δεν παίρνεται για επικεφαλίδα η πρώτη γραμμή του
+  const blind = (h: number, c: number) => noHead.has(key(h, c));
   const out: Table[] = [];
   // ένας πίνακας με επικεφαλίδες στη μονάδα i και στήλες cs· split: είναι δίπλα σε άλλον, οπότε οι γραμμές του είναι όσες έχουν πλαίσιο στις στήλες του (όχι σε όλη τη γραμμή).
   // j: από ποια μονάδα συνεχίζει η αναζήτηση (η i + 1 όταν δεν είναι πίνακας ή δεν ταξινομείται)
   const one = (i: number, cs: number[], split: boolean): { t?: Table; j: number } => {
     const h = units[i][0]; const none = { j: i + 1 };
     const heads = cs.map(c => ({ c, t: text(h, c) })).filter(x => /\p{L}/u.test(x.t));
+    if (cs.some(c => blind(h, c))) {
+      // πίνακας χωρίς επικεφαλίδες: μόνο να φανεί πού τελειώνουν οι γραμμές του, για να μη θεωρηθούν επικεφαλίδα του επόμενου
+      let j = i + 1; while (j < units.length && units[j].every(r => cs.some(c => bord(r, c)))) j++;
+      return { j };
+    }
     if (heads.length < 2) return none;
     const keys = heads.map(x => sortKey(x.t));
     // κάθε επικεφαλίδα μία φορά (όχι πίνακες δίπλα-δίπλα, όχι γραμμή με 0 | 0 | 0 όπως οι βαθμοί της ΗΚΑΙ)
@@ -764,9 +780,9 @@ function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[]
     // πίνακες δίπλα-δίπλα: ομάδες στηλών με πλαίσιο στη γραμμή των επικεφαλίδων, χωρισμένες από στήλες χωρίς (το κενό που αφήνει το «Φτιάξ' το εδώ»)
     // (ο καθένας με δύο τουλάχιστον επικεφαλίδες): ταξινομούνται ξεχωριστά
     const segs: number[][] = []; let cur: number[] = [];
-    for (const c of cols) { if (bord(h, c)) cur.push(c); else if (cur.length) { segs.push(cur); cur = []; } }
+    for (const c of cols) { if (bord(h, c) || blind(h, c)) cur.push(c); else if (cur.length) { segs.push(cur); cur = []; } }
     if (cur.length) segs.push(cur);
-    const parts = segs.length > 1 ? segs.filter(g => g.filter(c => /\p{L}/u.test(text(h, c))).length >= 2) : [];
+    const parts = segs.length > 1 ? segs.filter(g => g.some(c => blind(h, c)) || g.filter(c => /\p{L}/u.test(text(h, c))).length >= 2) : [];
     const split = parts.length > 1; let end = i + 1;
     for (const g of split ? parts : [cols]) { const x = one(i, g, split); if (x.t) out.push(x.t); end = Math.max(end, x.j); }
     i = end - 1;

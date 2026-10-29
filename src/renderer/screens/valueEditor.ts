@@ -1,14 +1,15 @@
 // Έντυπα › πίνακες τιμών (Michael, 24/10): ο επεξεργαστής στο βήμα 3. Κάθε γραμμή έχει δικό σου κείμενο και έναν υπολογισμό από τον κατάλογο
 // μετρήσεων (shared/values.ts): όροι με + ή −, φίλτρο ανά όρο, προαιρετικά «ως ποσοστό του…». Η στιγμή μέτρησης είναι κοινή για όλους τους πίνακες.
+// Ή «Δική μου τιμή»: αριθμός ή κείμενο που γράφεις εσύ (VRow.man) αντί για υπολογισμό.
 import { useMemo, useState } from 'react';
-import { html, cx, Button, Icon } from '../ui';
+import { html, cx, Button, Icon, Segmented } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
 import { TimeField } from '../common';
 import { normTime } from '../../shared/hours';
 import { HK } from '../../shared/unit';
 import { hkMin, outMin } from '../../shared/rules';
-import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, metricGroups, metricOf, newRow, rowTag, tagId, tagText, tagsOf, type VFilter, type VRow, type VTerm } from '../../shared/values';
+import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, manOf, metricGroups, metricOf, newRow, rowOn, rowTag, tagId, tagText, tagsOf, type VFilter, type VRow, type VTerm } from '../../shared/values';
 import { tagKey } from '../../shared/reports';
 import { upper } from '../../shared/text';
 import type { AppState } from '../../shared/domain';
@@ -62,21 +63,26 @@ function Terms({ s, terms, set, id, min }: P) {
 }
 
 function RowEditor({ s, row, n, set, del, move, last, tid, bad }: P) {
-  const pct = !!row.percentOf?.length; const tg = rowTag(row);
+  const pct = !!row.percentOf?.length; const tg = rowTag(row); const man = row.man != null;
+  const mv = man ? manOf(row.man!) : null;
   return html`<li className="vt-row">
     <div className="vt-row__top">
       <input className="ui-input vt-label" aria-label=${'Κείμενο της γραμμής ' + n} placeholder="Κείμενο της γραμμής (π.χ. Παρόντες)" value=${row.label} onChange=${(e: P) => set({ ...row, label: e.target.value })}/>
-      <${Select} className="ui-select vt-fmt" aria-label=${'Μορφή τιμής της γραμμής ' + n} value=${fmtOf(row)} onChange=${(e: P) => set({ ...row, fmt: e.target.value })}>${FMTS.map(f => html`<option key=${f.id} value=${f.id}>${f.label}</option>`)}<//>
+      <${Segmented} small=${true} value=${man ? 'm' : 'c'} onChange=${(v: string) => { const { man: _m, ...rest } = row; set(v === 'm' ? { ...row, man: row.man ?? '' } : rest); }} items=${[{ value: 'c', label: 'Υπολογισμός', tip: 'Ο αριθμός βγαίνει από τις μετρήσεις της εφαρμογής' }, { value: 'm', label: 'Δική μου τιμή', tip: 'Γράφεις εσύ τον αριθμό ή το κείμενο, και μένει όπως είναι σε κάθε έντυπο' }]}/>
+      ${!man && html`<${Select} className="ui-select vt-fmt" aria-label=${'Μορφή τιμής της γραμμής ' + n} value=${fmtOf(row)} onChange=${(e: P) => set({ ...row, fmt: e.target.value })}>${FMTS.map(f => html`<option key=${f.id} value=${f.id}>${f.label}</option>`)}<//>`}
       <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${n === 1} onClick=${() => move(-1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${last} onClick=${() => move(1)}>${Icon.down}<//>
         <${Button} size="icon" variant="ghost" aria-label=${'Βγάλε τη γραμμή ' + n} onClick=${del}>${Icon.x}<//></span>
     </div>
-    <${Terms} s=${s} terms=${row.expr} min=${1} set=${(expr: VTerm[]) => set({ ...row, expr })}/>
+    ${man ? html`<div className="vt-man">
+      <input className="ui-input vt-man__in" aria-label=${'Δική σου τιμή της γραμμής ' + n} placeholder="Αριθμός ή κείμενο (π.χ. 12, 3,5 ή ΕΚΤΟΣ)" value=${row.man} onChange=${(e: P) => set({ ...row, man: e.target.value })}/>
+      <small className="vt-sum muted">${mv!.txt != null ? 'Γράφεται ως κείμενο: ' + mv!.txt : mv!.v != null ? 'Γράφεται ως αριθμός: ' + String(mv!.v).replace('.', ',') : 'Κενό: γράφεται «—»'}</small>
+    </div>` : html`<${Terms} s=${s} terms=${row.expr} min=${1} set=${(expr: VTerm[]) => set({ ...row, expr })}/>
     <label className="ui-checkrow vt-pct"><input type="checkbox" className="ui-check" checked=${pct} onChange=${(e: P) => {
       const { percentOf: _p, fmt: _f, ...rest } = row;
       set(e.target.checked ? { ...rest, percentOf: [{ sign: '+', metric: 'str.total' }] } : rest);
     }}/>ως ποσοστό του…</label>
     ${pct && html`<div className="vt-den"><${Terms} s=${s} terms=${row.percentOf} min=${1} set=${(percentOf: VTerm[]) => set({ ...row, percentOf })}/></div>`}
-    <small className="vt-sum muted">${row.expr.length ? exprText(s, row.expr) + (pct ? '  ÷  ' + exprText(s, row.percentOf) : '') : ''}</small>
+    <small className="vt-sum muted">${row.expr.length ? exprText(s, row.expr) + (pct ? '  ÷  ' + exprText(s, row.percentOf) : '') : ''}</small>`}
     <div className="vt-tag">
       <label className="field__label" htmlFor=${tid}>Ετικέτα στο Excel</label>
       <input id=${tid} className=${cx('ui-input vt-tag__in', bad && 'is-bad')} aria-invalid=${bad ? 'true' : undefined} placeholder=${tagText(row.label) || 'ΟΝΟΜΑ'} value=${row.tag ?? ''}
@@ -106,7 +112,7 @@ export function ValueTableEditor({ t, n, set, del, at, setAt, all, lay, upload }
   // ετικέτες που δεν κάνουν: διπλές στο έντυπο ή ίδιες με στοιχείο εντύπου ({ΣΥΝΟΛΟ}…)
   const tg = useMemo(() => tagsOf(all || [t], id => !!tagKey(id)), [all, t]);   // eslint-disable-line react-hooks/exhaustive-deps
   const badOf = (r: VRow, i: number): string => {
-    const x = rowTag(r); if (!x || !r.expr.length) return '';
+    const x = rowTag(r); if (!x || !rowOn(r)) return '';
     if (tg.taken.includes(x)) return 'Η {' + x + '} είναι ήδη στοιχείο εντύπου: γράψε άλλη ετικέτα.';
     const e = tg.map.get(tagId(x)); return e && (e.t.id !== t.id || e.i !== i) ? 'Η {' + x + '} υπάρχει ήδη σε άλλη γραμμή: γράψε άλλη ετικέτα.' : '';
   };
@@ -114,10 +120,10 @@ export function ValueTableEditor({ t, n, set, del, at, setAt, all, lay, upload }
   const move = (i: number, by: number) => { const rs = [...t.rows]; const j = i + by; if (j < 0 || j >= rs.length) return; [rs[i], rs[j]] = [rs[j], rs[i]]; set({ ...t, rows: rs }); };
   return html`<div className="stack vt-ed">
     <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor=${'vt-title' + n}>Τίτλος πάνω από τον πίνακα τιμών</label><input id=${'vt-title' + n} className="ui-input" placeholder="π.χ. ΔΥΝΑΜΗ (κενό: χωρίς τίτλο)" value=${t.title || ''} onChange=${(e: P) => set({ ...t, title: e.target.value })}/></div>
+      <div className="field"><label className="field__label" htmlFor=${'vt-title' + n}>Τίτλος πάνω από τον πίνακα τιμών</label><input id=${'vt-title' + n} className="ui-input" placeholder="π.χ. ΔΥΝΑΜΗ (κενό: χωρίς τίτλο)" value=${t.title || ''} onChange=${(e: P) => set({ ...t, title: e.target.value })}/><span className="field__help">Κενός τίτλος = χωρίς κεφαλίδα: ο πίνακας ξεκινά κατευθείαν με τις γραμμές του.</span></div>
       <div className="field" style=${{ flex: 'none' }}><span className="field__label"> </span><${Button} variant="ghost" aria-label="Βγάλε τον πίνακα τιμών" onClick=${del}>${Icon.x}Βγάλε τον πίνακα<//></div>
     </div>
-    <p className="note" style=${{ margin: 0 }}>Κάθε γραμμή γράφει το κείμενό σου αριστερά και έναν αριθμό δεξιά. ${upload ? 'Μπαίνει στο τέλος του εντύπου, ή όπου γράψεις την ετικέτα της γραμμής (π.χ. {ΠΑΡΟΝΤΕΣ}) μέσα στο Excel σου.' : 'Μπαίνει κάτω από τους πίνακες ατόμων και πριν τις υπογραφές, ή δίπλα σε πίνακα (από τη «Διάταξη πινάκων» δεξιά).'} Οι αριθμοί βγαίνουν από τα ίδια στοιχεία με τις οθόνες (Δύναμη, ${HK()}, Οπλισμός…).</p>
+    <p className="note" style=${{ margin: 0 }}>Κάθε γραμμή γράφει το κείμενό σου αριστερά και έναν αριθμό δεξιά (από υπολογισμό, ή «Δική μου τιμή»: αριθμός ή κείμενο που γράφεις εσύ). ${upload ? 'Μπαίνει στο τέλος του εντύπου, ή όπου γράψεις την ετικέτα της γραμμής (π.χ. {ΠΑΡΟΝΤΕΣ}) μέσα στο Excel σου.' : 'Μπαίνει κάτω από τους πίνακες ατόμων και πριν τις υπογραφές, ή δίπλα σε πίνακα (από τη «Διάταξη πινάκων» δεξιά).'} Οι αριθμοί βγαίνουν από τα ίδια στοιχεία με τις οθόνες (Δύναμη, ${HK()}, Οπλισμός…).</p>
     ${lay}
     ${upload && html`<label className="ui-checkrow" data-tip="Για δικό σου πρότυπο Excel: οι αριθμοί μπαίνουν μόνο στα κελιά με ετικέτα (π.χ. {ΠΑΡΟΝΤΕΣ}), χωρίς να γραφτεί πίνακας"><input type="checkbox" className="ui-check" checked=${!!t.tagsOnly} onChange=${(e: P) => { const { tagsOnly: _o, ...rest } = t; set(e.target.checked ? { ...rest, tagsOnly: true } : rest); }}/>Μόνο στα κελιά του Excel με ετικέτα (χωρίς να γραφτεί πίνακας)</label>`}
     <${AtPick} at=${at} set=${setAt}/>

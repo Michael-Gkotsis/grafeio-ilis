@@ -756,6 +756,10 @@ function LayEditor({ lay, set, n, noEven }: P) {
     <label className="field__label" htmlFor=${'lay-gap' + n}>Κενές γραμμές από πάνω</label><input id=${'lay-gap' + n} type="number" min="0" max="10" className="ui-input rep-n" value=${l.gap ?? 1} onChange=${(e: any) => put({ gap: Math.max(0, Math.min(10, Math.round(+e.target.value || 0))) })}/>
   </div>`;
 }
+// «Χωρίς γραμμή επικεφαλίδων» (Michael, 29/10): ο πίνακας βγαίνει μόνο με τις γραμμές των ατόμων, χωρίς τη γραμμή Α/Α, ΒΑΘΜΟΣ…
+function NoHead({ on, set, n }: P) {
+  return html`<label className="ui-checkrow" data-tip="Ο πίνακας βγαίνει χωρίς τη γραμμή με τις επικεφαλίδες (Α/Α, ΒΑΘΜΟΣ…), μόνο με τις γραμμές των ατόμων. Οι στήλες μένουν όπως τις έφτιαξες."><input type="checkbox" className="ui-check" aria-label=${'Χωρίς γραμμή επικεφαλίδων στον πίνακα ' + n} checked=${!!on} onChange=${(e: any) => set(e.target.checked)}/>Χωρίς γραμμή επικεφαλίδων</label>`;
+}
 // Πίνακας 2, 3… στο «Φτιάξ' το εδώ»: τι αφορά, τίτλος, στήλες
 function TableHead({ t, kind, title, setKind, setTitle, onDel, n }: P) {
   return html`<div className="field-row">
@@ -773,6 +777,8 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout
   const more: BuildTable[] = o.more || [];
   const bt = ti > 0 ? more[ti - 1] : null;
   const setT = (id: string, x: Partial<BuildTable>) => set({ more: more.map(t => (t.id === id ? { ...t, ...x } : t)) });
+  const noHeadT = (id: string, on: boolean) => set({ more: more.map(t => { if (t.id !== id) return t; const { nohead: _h, ...rest } = t; return on ? { ...rest, nohead: true } : rest; }) });
+  const noHead1 = (on: boolean) => { const { nohead: _h, ...rest } = o; setO(on ? { ...rest, nohead: true } : rest); };
   const addTable = () => {
     const id = uid(); const k: RepKind = r.kind;
     const { nopeople: _n, ...o0 } = o;
@@ -789,10 +795,12 @@ function Builder({ o, setO, kind, signers, setSigners, onExcel, r, upd, onLayout
     <${TableTabs} r=${r} ti=${ti} setTi=${setTi} onAdd=${addTable} addTip="Κι άλλος πίνακας κάτω από τον πρώτο, με δικές του στήλες (π.χ. ένας για τους παρόντες και ένας για τα ιατρικά)" vals=${vals} vi=${vi} setVi=${setVi} onAddVal=${onAddVal}/>
     ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
       <${ColsEditor} kind=${bt.kind} cols=${bt.cols} setCols=${(cols: BuildCol[]) => setT(bt.id, { cols })}/>
-      <${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/>`
+      <${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/>
+      <${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`
       : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
       : html`<${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[]) => set({ cols })}/>
-      <${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/>`}
+      <${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/>
+      <${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`}
     ${hasVals(r) && !more.length && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!o.nopeople} onChange=${(e: any) => { const { nopeople: _n, ...rest } = o; setO(e.target.checked ? { ...rest, nopeople: true } : rest); if (e.target.checked) { setTi(0); upd({ split: 'none' }); } }}/>Χωρίς πίνακα ατόμων (μόνο πίνακες τιμών)</label>`}
     <div className="rep-opts">
       <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα πάνω αριστερά (Ρυθμίσεις)</label>
@@ -844,11 +852,13 @@ function Mapping({ r, upd, insp, tpl, picking, setPicking, view, setView, signer
         <span>Επικεφαλίδες του πίνακα ${ti + 1} στη γραμμή <b>${m.head}</b>${si && si.prepared > 1 ? ' · ' + si.prepared + ' έτοιμες γραμμές' : ''}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head:' + m.id} onClick=${() => setPicking(picking === '#head:' + m.id ? null : '#head:' + m.id)}>Άλλη γραμμή…<//></div>
       <${TableHead} t=${m} n=${ti + 1} kind=${m.kind} setKind=${(k: RepKind) => subKind(m.id, k)} onDel=${() => delMore(m.id)}/>
-      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${m.kind} headers=${si?.headers} cols=${m.cols} setCols=${(cols: RepCol[]) => setMore(m.id, { cols })}/></div>`
+      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${m.kind} headers=${si?.headers} cols=${m.cols} setCols=${(cols: RepCol[]) => setMore(m.id, { cols })}/></div>
+      ${m.nohead && html`<${NoHead} n=${ti + 1} on=${true} set=${(on: boolean) => setMore(m.id, { nohead: on ? true : undefined })}/>`}`
     : html`<div className="rep-opts">
         <span>Επικεφαλίδες στη γραμμή <b>${insp.head}</b>${insp.guessed ? ' (βρέθηκε μόνη της)' : ''} · ${insp.prepared > 1 ? insp.prepared + ' έτοιμες γραμμές' : 'οι γραμμές μπαίνουν όσες χρειάζονται'}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head'} onClick=${() => setPicking(picking === '#head' ? null : '#head')}>Άλλη γραμμή…<//></div>
-      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${r.kind} headers=${insp.headers} cols=${r.cols} setCols=${(cols: RepCol[]) => upd({ cols })}/></div>`}
+      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${r.kind} headers=${insp.headers} cols=${r.cols} setCols=${(cols: RepCol[]) => upd({ cols })}/></div>
+      ${r.nohead && html`<${NoHead} n=${1} on=${true} set=${(on: boolean) => upd({ nohead: on ? true : undefined })}/>`}`}
     <div><span className="field__label">Στοιχεία σε κελιά (κεφαλίδα, ημερομηνία, υπογραφές…)</span>
       <ul className="rep-cells">
         ${insp.tags.map((t: P) => html`<li key=${'t' + t.ref}><b>${t.ref}</b> ${cellOf(t.k)?.label}<small className="muted"> · από {${cellOf(t.k)?.tag}} στο Excel</small></li>`)}

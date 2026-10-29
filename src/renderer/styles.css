@@ -1133,6 +1133,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .vt-sign.is-minus{color:var(--bad);border-color:var(--bad-line)}
 .vt-filter{display:flex;gap:5px;flex-wrap:wrap;flex-basis:100%;padding:2px 0 2px 33px}
 .vt-filter .ui-select{width:auto;min-width:130px}
+.vt-man{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.vt-man__in.ui-input{flex:1 1 220px;max-width:340px;height:32px}
 .vt-pct{font-size:13px}
 .vt-den{display:flex;flex-direction:column;gap:4px;padding-left:18px}
 .vt-sum{font-size:12px}

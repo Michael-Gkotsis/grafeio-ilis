@@ -11,6 +11,8 @@ import { tablePart, type XlLook, type XlPart } from '../shared/xlLook';
 export const REPORT_MARK = 'GL_ENTYPO';
 // Κομμάτια του φύλλου με σταθερό μέγεθος στην εκτύπωση (κεφαλίδα, ημερομηνία, τίτλος, υπογραφές: print.ts)
 export const FIXED_MARK = 'GL_STATHERA';
+// Πίνακες των Εντύπων χωρίς γραμμή επικεφαλίδων (Michael, 29/10): οι περιοχές όπου ήταν η γραμμή (κρυφή τώρα, ή άδεια), για την ταξινόμηση της εκτύπωσης
+export const NOHEAD_MARK = 'GL_XORIS_EPIKEFALIDA';
 export const sheetSafe = (name: string) => name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
@@ -746,6 +748,16 @@ export class Workbook {
     else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
     return true;
   }
+  // Σβήνει τις γραμμές τίτλων (Print_Titles) του φύλλου όταν είναι μόνο η γραμμή r (π.χ. επικεφαλίδα που κρύφτηκε)
+  dropPrintTitles(sheet: string, r: number): boolean {
+    const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return false;
+    let gone = false;
+    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g, (m, a: string, b: string) => {
+      if (attr(a, 'name') !== '_xlnm.Print_Titles' || attr(a, 'localSheetId') !== String(i) || !new RegExp('!\\$' + r + ':\\$' + r + '$').test(unesc(b))) return m;
+      gone = true; return '';
+    });
+    return gone;
+  }
   // Στυλ όπως το base με άλλο μέγεθος γραμμάτων ή/και αναδίπλωση (κρατά πλαίσια, στοίχιση, γέμισμα, μορφή αριθμού)
   private fitStyle(base: number, fontId: number, sz: number | null, wrap: boolean): number {
     const st = this.styles!; st.fitted = st.fitted || new Map();
@@ -1066,13 +1078,16 @@ export class Workbook {
   }
   // Κεφαλίδα, ημερομηνία, τίτλος και υπογραφές μένουν στο μέγεθός τους όταν η εκτύπωση μικραίνει ή μεγαλώνει τον πίνακα
   // (Michael, 22/10): κρυφό όνομα του φύλλου με τις περιοχές τους, που το διαβάζει η εκτύπωση της εφαρμογής (print.ts)
-  markFixed(name: string, areas: { r1: number; c1: number; r2: number; c2: number }[]) {
+  markFixed(name: string, areas: { r1: number; c1: number; r2: number; c2: number }[]) { this.markAreas(name, FIXED_MARK, areas, false); }
+  // add: οι περιοχές προστίθενται σε όσες έχει ήδη το όνομα (αλλιώς το αντικαθιστούν)
+  markAreas(name: string, mark: string, areas: { r1: number; c1: number; r2: number; c2: number }[], add: boolean) {
     const i = this.sheetIndex(name); if (i < 0) return;
-    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>[^<]*<\/definedName>/g, (m, a: string) => (attr(a, 'name') === FIXED_MARK && attr(a, 'localSheetId') === String(i) ? '' : m));
-    if (!areas.length) return;
+    let old = '';
+    this.workbookXml = this.workbookXml.replace(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g, (m, a: string, b: string) => { if (attr(a, 'name') === mark && attr(a, 'localSheetId') === String(i)) { old = b; return ''; } return m; });
+    if (!areas.length && !(add && old)) return;
     const q = "'" + name.replace(/'/g, "''") + "'!";
-    const body = areas.map(b => q + '$' + colName(b.c1) + '$' + b.r1 + ':$' + colName(b.c2) + '$' + b.r2).join(',');
-    const dn = `<definedName name="${FIXED_MARK}" localSheetId="${i}" hidden="1">${esc(body).replace(/'/g, '&apos;')}</definedName>`;
+    const body = [...(add && old ? [unesc(old)] : []), ...areas.map(b => q + '$' + colName(b.c1) + '$' + b.r1 + ':$' + colName(b.c2) + '$' + b.r2)].join(',');
+    const dn = `<definedName name="${mark}" localSheetId="${i}" hidden="1">${esc(body).replace(/'/g, '&apos;')}</definedName>`;
     if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('</definedNames>', dn + '</definedNames>');
     else this.workbookXml = this.workbookXml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
   }

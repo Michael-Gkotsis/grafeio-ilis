@@ -2,7 +2,7 @@
 // Με το ελαφρύ xlsx.ts, όπως η ΦΡΟΥΡΑ και η ΗΚΑΙ: αλλάζουν μόνο οι τιμές, η μορφοποίηση του προτύπου μένει όπως είναι.
 // Η πρώτη γραμμή κάτω από τις επικεφαλίδες είναι η «γραμμή-πρότυπο»: κάθε άτομο παίρνει τη μορφή της και ό,τι είναι
 // από κάτω (υπογραφές, σύνολα) κατεβαίνει όσο μεγαλώνει η λίστα.
-import { Workbook, colName, colNum, sheetSafe, type Sheet, type XlValue } from './xlsx';
+import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, type Sheet, type XlValue } from './xlsx';
 import { TemplateError, signSheets, unitWords } from './exports';
 import { blockOf } from './layout';
 import type { LayoutSheet } from '../shared/layout';
@@ -13,7 +13,7 @@ import { normGreek, upper } from '../shared/text';
 import { FILLS, TAB_WIDTHS, gridOn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
-import { atOf, evalTables, tagId, tagText, tagsOf as valTags, valueText, valsMissing, valsUsed, type Spot, type ValueOut } from '../shared/values';
+import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type ValueOut } from '../shared/values';
 import { MAIN, bandIndex, bandsOf, isDefault } from '../shared/repBands';
 import { nowMin, today as todayISO, type ISODate } from '../shared/dates';
 import type { TplInspect } from '../shared/api';
@@ -165,8 +165,8 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
   // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
-  const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+  const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
+    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || t.kind === 'cadre' ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
     .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
@@ -187,7 +187,8 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [], layout, ...(counts ? { counts } : {}) };
 }
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
-interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[] }
+// nohead: χωρίς γραμμή επικεφαλίδων στο έντυπο (η γραμμή μένει στο πρότυπο μέχρι να γεμίσει και μετά κρύβεται ή αδειάζει, δες noHead)
+interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
 async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[]): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const colsOf = tabs.map(t => t.cols.filter(c => c.c >= 1 && fieldOf(t.kind, c.f)));
@@ -252,13 +253,14 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     const wv = whole && !tagKey(whole[1]) ? vrow(whole[1]) : undefined;
     if (wv) {
       seenTags.add(tagId(whole![1])); if (ws.hasFormula(t.ref)) continue;
-      if (wv.v == null) ws.set(t.ref, '—');
+      if (wv.txt != null) ws.set(t.ref, wv.txt);   // δική σου τιμή, κείμενο
+      else if (wv.v == null) ws.set(t.ref, '—');
       else { ws.set(t.ref, wv.v); if (wv.fmt !== 'int') ws.setStyle(t.ref, await wb.like(ws.style(t.ref), { fmt: wv.fmt === 'pct' ? '0%' : '0.0%' })); }
     }
     else if (whole && tagKey(whole[1])) await put(t.ref, val(tagKey(whole[1])!));
     else ws.set(t.ref, t.text.replace(TAG_RE, (m, tg: string) => {
       const kk = tagKey(tg);
-      if (!kk) { const x = vrow(tg); if (!x) { if (vt.map.size) unknown.add(tg.trim()); return m; } seenTags.add(tagId(tg)); return valueText(x.v, x.fmt); }
+      if (!kk) { const x = vrow(tg); if (!x) { if (vt.map.size) unknown.add(tg.trim()); return m; } seenTags.add(tagId(tg)); return rowText(x); }
       const v = val(kk); return v == null ? '' : String(v).replace(/\n/g, ' ');
     }));
     if (whole && !tagKey(whole[1]) && !wv && vt.map.size) unknown.add(whole[1].trim());
@@ -340,6 +342,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
         }
       }
     }
+    if (G.some(i => tabs[i].nohead)) noHead(wb, ws, G.filter(i => tabs[i].nohead).map(i => colsOf[i].map(c => c.c)), HR, G.every(i => tabs[i].nohead) && !it.vts.length);
     if (it.vts.length) await writeBoxes(wb, ws, it.vts, { row: HR, setH: false, exact: !!r.fixed, ...vref, look });
   }
   // πίνακες τιμών χωρίς θέση: αμέσως κάτω από τον τελευταίο πίνακα, πριν τις υπογραφές (ό,τι είναι από κάτω κατεβαίνει)
@@ -354,9 +357,22 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   wb.markFixed(ws.name, layout[0]?.blocks || []);
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα (με έναν πίνακα: με πολλούς θα έβγαιναν του πρώτου πάνω από τους άλλους)
   // και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
-  if (tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length)) wb.setPrintTitles(sheet, head, data - 1);
+  if (tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length) && !tabs[0].nohead) wb.setPrintTitles(sheet, head, data - 1);
   ws.setPrintFit(false);
   return layout;
+}
+
+// Χωρίς γραμμή επικεφαλίδων (Michael, 29/10): η γραμμή hr μένει στο φύλλο ως τώρα, γιατί από τα κείμενά της βρίσκονται οι στήλες. Εδώ φεύγει από το
+// έντυπο, χωρίς να μετακινηθεί καμία άλλη γραμμή (υπογραφές, θέσεις, πίνακες από κάτω μένουν όπου ήταν):
+// - όλοι οι πίνακες της γραμμής χωρίς επικεφαλίδες (και τίποτα άλλο δεν γράφεται πάνω της): η γραμμή κρύβεται (Excel και εκτύπωση)
+// - αλλιώς (διπλανός πίνακας με επικεφαλίδες, ή πίνακας τιμών που ξεκινά από αυτή τη γραμμή): αδειάζουν μόνο τα κελιά του πίνακα, όχι ολόκληρη η γραμμή
+// Η εκτύπωση (print.ts) ξέρει από το κρυφό όνομα NOHEAD_MARK πού ήταν, ώστε να ταξινομεί ακόμα τον πίνακα (κρυφή γραμμή) και να μη μπερδεύει την
+// πρώτη γραμμή δεδομένων με επικεφαλίδα (άδεια κελιά)
+function noHead(wb: Workbook, ws: Sheet, cols: number[][], hr: number, whole: boolean) {
+  const mg = ws.merges();
+  const areas = cols.filter(cs => cs.length).map(cs => ({ r1: hr, r2: hr, c1: Math.min(...cs), c2: Math.max(...cs.map(c => mg.find(m => m.r1 === hr && m.c1 === c)?.c2 ?? c)) }));
+  if (whole) { ws.setRowHidden(hr); wb.dropPrintTitles(ws.name, hr); } else for (const a of areas) ws.clearBox(a.c1, a.c2, hr, hr);
+  wb.markAreas(ws.name, NOHEAD_MARK, areas, true);
 }
 
 // ------------------------------------------------------------------ πίνακες τιμών
@@ -364,6 +380,9 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
 // πίνακα (πλαίσιο, γράμματα)· προαιρετικός τίτλος πάνω από κάθε πίνακα· μία κενή γραμμή πριν από τον καθένα (gap: και πριν τον πρώτο).
 // Μπαίνουν μετά τη γραμμή end (ό,τι είναι από κάτω κατεβαίνει). Γυρνά πόσες γραμμές μπήκαν. at: θέση της πρώτης γραμμής αν χρειαστεί
 // αργότερα (Φάση 3: δίπλα/κάτω από άλλον πίνακα) — όλα γράφονται από εδώ.
+// η τιμή που γράφεται (δική σου τιμή κείμενο, «—» όταν λείπει, αλλιώς αριθμός) και η μορφή του κελιού της
+const vcell = (x: ValueOut['rows'][number]): string | number => (x.txt != null ? x.txt : x.v == null ? '—' : x.v);
+const vsty = (x: ValueOut['rows'][number]): string => (x.txt != null ? 'txt' : x.v == null ? 'int' : x.fmt);
 export interface ValueAt { end: number; c1: number; c2: number; gap: boolean; h: number; data: number | null; head: number | null; look: XlLook }
 export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: ValueAt): Promise<number> {
   const n = vo.reduce((x, t, i) => x + (i || a.gap ? 1 : 0) + (t.title ? 1 : 0) + t.rows.length, 0);
@@ -379,7 +398,7 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
   const lab = await wb.like(base, { h: 'left', wrap: true });
   const hd = await wb.like(a.head ?? await wb.style({ font, ...tablePart(a.look, 'head', 12), border: true, h, v, fill: FILLS.gray }), { h: 'left', b: true });
   const sty: Record<string, number> = {};
-  const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : {}) }));
+  const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : f === 'txt' ? { wrap: true } : {}) }));
   let row = a.end + 1;
   for (let i = 0; i < vo.length; i++) {
     const t = vo[i];
@@ -397,7 +416,7 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
       const lines = Math.ceil((x.label.length * 1.2) / Math.max(w - 1, 1));   // μεγάλο κείμενο: περισσότερες γραμμές στο ίδιο κελί (το Excel δεν μεγαλώνει μόνο του τα ενωμένα)
       if (lines > 1) ws.setRowHeight(row, Math.max(a.h, 16 * lines)); else if (a.h) ws.setRowHeight(row, a.h);
       if (e > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(e) + row);
-      ws.set(L(vc) + row, x.v == null ? '—' : x.v); ws.setStyle(L(vc) + row, await valSt(x.v == null ? 'int' : x.fmt));
+      ws.set(L(vc) + row, vcell(x)); ws.setStyle(L(vc) + row, await valSt(vsty(x)));
       row++;
     }
   }
@@ -414,7 +433,7 @@ export async function writeBoxes(wb: Workbook, ws: Sheet, vts: ValueOut[], a: Bo
   const lab = await wb.like(base, { h: 'left', wrap: true });
   const hd = await wb.like(a.head ?? await wb.style({ font, ...tablePart(a.look, 'head', 12), border: true, h, v, fill: FILLS.gray }), { h: 'left', b: true });
   const sty: Record<string, number> = {};
-  const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : {}) }));
+  const valSt = async (f: string) => (sty[f] ??= await wb.like(base, { h: 'right', ...(f === 'pct' ? { fmt: '0%' } : f === 'pct1' ? { fmt: '0.0%' } : f === 'txt' ? { wrap: true } : {}) }));
   for (const t of vts) {
     const c1 = t.spot?.c1 ?? 1, c2 = Math.max(c1 + 1, t.spot?.c2 ?? c1 + 1);
     // μέχρι ποια στήλη φτάνει το κείμενο και από ποια ξεκινά η τιμή
@@ -435,8 +454,8 @@ export async function writeBoxes(wb: Workbook, ws: Sheet, vts: ValueOut[], a: Bo
       const lines = Math.ceil((x.label.length * 1.2) / Math.max(w - 1, 1));
       if (lines > 1) ws.setRowHeight(row, Math.max(a.setH ? a.h : ws.rowHeight(row), 16 * lines)); else if (a.setH && a.h) ws.setRowHeight(row, a.h);
       if (e > c1) ws.addMerge(L(c1) + row + ':' + L(e) + row);
-      ws.set(L(vc) + row, x.v == null ? '—' : x.v); ws.setStyle(L(vc) + row, await valSt(x.v == null ? 'int' : x.fmt));
-      if (a.exact) { for (let c = vc + 1; c <= c2; c++) ws.setStyle(L(c) + row, await valSt(x.v == null ? 'int' : x.fmt)); if (c2 > vc) ws.addMerge(L(vc) + row + ':' + L(c2) + row); }
+      ws.set(L(vc) + row, vcell(x)); ws.setStyle(L(vc) + row, await valSt(vsty(x)));
+      if (a.exact) { for (let c = vc + 1; c <= c2; c++) ws.setStyle(L(c) + row, await valSt(vsty(x))); if (c2 > vc) ws.addMerge(L(vc) + row + ':' + L(c2) + row); }
       row++;
     }
   }
