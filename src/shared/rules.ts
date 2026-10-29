@@ -7,7 +7,7 @@ import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell
 import { backBy, hasTimes, mins } from './hours';
 import { outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, kolColName, kolColOf, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -374,7 +374,7 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
     const c = statOn(s, post, lists); if (c.v !== 'no') continue;
     const t = TYPES[s.type];
     if (c.from !== 'def') return statusLbl(s, lists) + ': όχι ' + ((post?.kind && CAP_ACC[post.kind]) || 'σε αυτή την υπηρεσία') + untilTxt(s, date);
-    if (t.noDuty) return t.label + untilTxt(s, date);
+    if (t.noDuty) return (s.type === 'KOL' ? statusLbl(s, lists) : t.label) + untilTxt(s, date);
     if (t.noArmed && (!post || post.armed)) return 'Άοπλος: ' + t.label + untilTxt(s, date);
     return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
   }
@@ -1008,7 +1008,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
 // unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
 // force: ο χρήστης είδε ότι κάποιος δεν βγαίνει έξοδο (ποινή, υπηρεσία…) και το δήλωσε παρ' όλα αυτά (Michael, 17/10)
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean; minus?: boolean; hkCol?: string; noOut?: boolean }
 // «Χωρίς λήξη» στη δήλωση (Michael, 19/10: «στα ΣΤΕΠ και καταστάσεις»): ιατρικά, ΣΤΕΠ και νοσοκομείο, όχι άδειες, ποινές,
 // εξοδούχοι. Ισχύει μέχρι «Σταμάτησε» (endStatus)· στο Excel το «έως» μένει κενό, όπως στις εγγραφές X4 από το Excel.
 export const canOpen = (type: TypeKey) => TYPES[type].cat === 'med' || TYPES[type].cat === 'other';
@@ -1056,7 +1056,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   const files: PlanFile[] = [];
   const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [], warned: StatusPlan['conflicts'] = [];
   const lists = s.settings.lists;
-  const clash = (x: Status) => (t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away);
+  const clash = (x: Status) => t.cat !== 'kol' && ((t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away));   // κωλυόμενοι: μπορεί περισσότεροι μαζί (άλλη υπηρεσία, άλλες ώρες)
   // με ώρα αναχώρησης μετρά και η υπηρεσία της προηγούμενης μέρας (τελειώνει το μεσημέρι της πρώτης μέρας της άδειας)
   const first = cmd.fromTime && hasTimes(cmd.type) ? addDays(cmd.from, -1) : cmd.from;
   const dates = Object.keys(s.guards).filter(d => d >= first && d <= cmd.to).sort();
@@ -1095,6 +1095,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
+  else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
@@ -1156,6 +1157,14 @@ export function hkRankOf(rank: string, lists?: UserLists, origin?: string): stri
 }
 // Η κατάσταση ενός στελέχους μια μέρα (η πρώτη, αν κατά λάθος επικαλύπτονται)
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
+// Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
+// παρόντες (στη στήλη που διάλεξες), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
+function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
+  const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
+  if (abs) return abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!;
+  const kol = kolMinus(ss, date, at);
+  return kol ? kolColOf(kol) : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+}
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
@@ -1187,10 +1196,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     soldiers++;
     const r = hkRankOf(p.rank, s.settings.lists, p.origin); rank[r].n++; if (p.attached) rank[r].attached++;
     // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)
-    const ss = statusesFrom(s.statuses, p.id, date, at);
-    const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
-    const duty = onDuty.get(p.id);
-    const col = abs ? (abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!) : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+    const col = soldierCol(s, statusesFrom(s.statuses, p.id, date, at), onDuty.get(p.id), date, at);
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
   let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0) + cadreKol, apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
@@ -1206,4 +1212,31 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   }
   const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
   return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length, soldiers, cadreN: cadre };
+}
+
+// --------------------------- Κωλυόμενοι (Michael, 24/10) ---------------------------
+// Δήλωση στρατιώτη με υπηρεσία που δεν είναι δική μας (π.χ. «Υπηρεσία ΣΤΕΠ»): από–έως μέρες, προαιρετικά με ώρες (hours.ts: το τέλος
+// το κόβει το statusesFrom, η ώρα έναρξης την πρώτη μέρα εδώ). Δεν μπαίνει στις δικές μας υπηρεσίες (dutyBlock: αυτόματη, «Επόμενος»,
+// εναλλαγή τον προσπερνούν, με το χέρι μπαίνει με αιτία)· η σειρά δικαιοσύνης δεν αλλάζει. minus: αφαιρείται από τους παρόντες και μπαίνει
+// στην ΗΚΑΙ στη στήλη hkCol· χωρίς minus μένει παρών και εκτός ΗΚΑΙ. noOut: κόβει την έξοδο (outBlock).
+const kolStarted = (x: Status, date: ISODate, at: number) => !(x.from === date && x.fromTime && mins(x.fromTime) > at);
+const kolMinus = (ss: Status[], date: ISODate, at: number) => ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at));
+export interface KolRow { p: Person; st: Status; col: string; minus: boolean }
+// cols: όλοι οι κωλυόμενοι παρόντες στρατιώτες ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένος κωλυόμενος…), ίδιο άθροισμα με την ΗΚΑΙ
+// στην ίδια στιγμή· n = πόσοι. man: οι δηλωμένοι κωλυόμενοι εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
+export interface KolView { cols: Record<string, Person[]>; n: number; man: KolRow[]; minus: KolRow[]; keep: KolRow[] }
+export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolView {
+  const g = s.guards[date] || {}; const onDuty = new Map<number, DutyKind>();
+  for (const k in g) { const p = postBy(s, k); if (p) onDuty.set(g[k], p.kind); }
+  const cols: Record<string, Person[]> = {}; KOL_COLS.forEach(([k]) => (cols[k] = []));
+  const man: KolRow[] = []; let n = 0;
+  for (const p of activePeople(s)) {
+    const ss = statusesAt(s, p.id, date, at);
+    if (ss.some(x => TYPES[x.type].away)) continue;   // απών: μετρά στους απόντες
+    const col = soldierCol(s, ss, onDuty.get(p.id), date, at);
+    if (col && cols[col]) { cols[col].push(p); n++; }
+    const k = ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
+    if (k) man.push({ p, st: k, col: kolColOf(k), minus: !!k.minus });
+  }
+  return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };
 }

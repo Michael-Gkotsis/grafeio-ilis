@@ -33,7 +33,9 @@ function seed(): AppState {
   const t = today(); let n = 0; const id = () => 'm' + ++n;
   const st = (pid: number, type: any, a: number, b: number, extra: any = {}) => ({ id: id(), pid, type, from: addDays(t, a), to: addDays(t, b), ...extra });
   s.statuses = [st(5, 'LEAVE', -3, 0), st(10, 'LEAVE', -4, 2), st(12, 'SICK', -1, 2), st(47, 'NOS', -2, 3), st(18, 'EY', 0, 0), st(21, 'EA', -5, 4), st(44, 'EO', -10, 20), st(52, 'EA', -3, 0, { open: true }),
-    st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true, on: t, by: 'ΛΧΙΑ ΔΟΚΙΜΙΟ', reason: 'απουσίασε από το προσκλητήριο' }), st(23, 'OUT', 0, 0), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1)];
+    st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true, on: t, by: 'ΛΧΙΑ ΔΟΚΙΜΙΟ', reason: 'απουσίασε από το προσκλητήριο' }), st(23, 'OUT', 0, 0), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1),
+    // κωλυόμενοι: ο ένας αφαιρείται από τους παρόντες (ΗΚΑΙ «Υπηρεσία»), ο άλλος μένει παρών και βγαίνει έξοδο
+    st(60, 'KOL', -1, 2, { note: 'Υπηρεσία ΣΤΕΠ', minus: true, hkCol: 'yp', noOut: true }), st(62, 'KOL', -1, 1, { note: 'Συνοδεία σε νοσοκομείο' })];
   s.requests = [{ id: id(), pid: 33, date: t, text: 'μετάθεση στην 2η ΕΠΧΙΑ' }, { id: id(), pid: 61, date: t, text: 'για οικογενειακούς λόγους', leave: { type: 'LEAVE', kind: 'Κανονική', from: addDays(t, 1), to: addDays(t, 3) } }];
   s.people[99] = { ...s.people[99], active: false, outOn: t, notes: 'μετάθεση στο 2ο ΣΠ' };
   // στελέχη με φανταστικά ονόματα και καταστάσεις της ΗΚΑΙ (καρτέλα «Στελέχη»)

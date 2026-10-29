@@ -13,9 +13,9 @@ import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportBut
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
+import { HK_SECTIONS, KOL_COLS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, type TypeKey } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
@@ -53,6 +53,8 @@ export function TodayScreen() {
   // έξοδος/ΔΝ: ως πότε λείπει («ως 22:00», «ως Δευ 06:00»), αλλιώς «σήμερα» όταν δεν ξέρουμε πότε γυρνά
   const outUntil = (s: Status) => { const r = returnOf(state, s.pid, s.from); return !r || r.pending || r.open ? 'σήμερα' : 'ως ' + (r.day === today ? '' : dow(r.day) + ' ') + r.time; };
   const empty = frouraEmpty(state, tomorrow);
+  // κωλυόμενοι που δήλωσες σήμερα (υπηρεσία εκτός δικών μας), στην ίδια στιγμή με τους παρόντες
+  const kol = useMemo(() => kolView(state, today, strengthAt(state.rules, today, today, now)), [state, today, now]);
   // Όπλα εκτός τώρα: όσους μετράει και η κεφαλίδα του Οπλισμού (κινήσεις και ένοπλες υπηρεσίες)
   const wOut = useMemo(() => outCountOn(state, today, nowHM()), [state.people, state.settings, state.rules, state.guards, state.dutyLog, state.weaponLog, state.dutyFix, today, now]);   // eslint-disable-line react-hooks/exhaustive-deps
   // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
@@ -125,6 +127,10 @@ export function TodayScreen() {
       <//>
     </div>
     <div className="cols cols--b">
+      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today })} data-tip="Δύναμη, με τους κωλυόμενους ανά στήλη της ${HK()}">Δύναμη<//>`}>
+        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.note || 'Κωλυόμενος'}${st.noOut ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· στην ' + HK() + ': ' + kolColName(col) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? kolColName(col) : 'παρών'}<//></li>`)}</ul>
+        <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
+      <//>`}
       ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12}/><//>`}
       ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
         <ul className="rows">${ends.map(({ s, when, tip }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(s.pid)}>${shortName(pm.get(s.pid)!)}</button><span className="muted" data-tip=${tip || undefined} data-tip-side="left">${what(s)} · ${when}</span></li>`)}</ul>
@@ -239,15 +245,28 @@ export function StrengthScreen() {
   const nOf = (k: TypeKey) => (TYPES[k].away ? c.away[k] : c.counts[k]);
   const listOf = (k: TypeKey) => (TYPES[k].away ? c.awayLists[k] : c.lists[k]);
   // οι κατηγορίες χωρίς κανέναν σε μία γραμμή στο τέλος, για να χωρά η Δύναμη σε μία οθόνη
-  const zeros = TYPE_KEYS.filter(k => !nOf(k));
+  const zeros = TYPE_KEYS.filter(k => k !== 'KOL' && !nOf(k));
+  // κωλυόμενοι ανά στήλη της ΗΚΑΙ (υπηρεσία, ΕΥ, ποινή, δηλωμένοι…) με την ίδια στιγμή· διαθέσιμοι = παρόντες − κωλυόμενοι
+  const kv = useMemo(() => kolView(state, date, strengthAt(state.rules, date, today, now)), [state, date, today, now]);
+  const manBy = useMemo(() => new Map(kv.man.map(x => [x.p.id, x])), [kv]);
+  const kname = (p: Person) => { const m = manBy.get(p.id); return shortName(p) + (m?.minus ? ' (' + (m.st.note || 'Κωλυόμενος') + ')' : ''); };
   return html`<div>
     <${PageHeader} title=${'Δύναμη ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές."><${DateBar} value=${date} onChange=${(d: string) => nav.set({ strengthDate: d })} days=${[today, tomorrow]}/><//>
     <${Card} title="Σύνοψη" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: date })}>${HK()}<//>`}>
       <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main"><span className="tile__n">${c.total}</span><span className="tile__l">Στρατιώτες</span></div><div className="tile"><span className="tile__n">${c.present}</span><span className="tile__l">Παρόντες</span></div><div className="tile"><span className="tile__n">${c.absent}</span><span className="tile__l">Απόντες</span></div></div>
       ${c.absent > 0 && html`<p className="note" style=${{ margin: '0 0 10px' }}>Απόντες ${c.absent} = ${awayText(c)}. Κάθε άτομο μετριέται μία φορά: όποιος έχει και άδεια και έξοδο μετρά στην άδεια.${date === today ? ' Όποιος γύρισε σήμερα ως τώρα είναι παρών.' : ''}</p>`}
-      ${TYPE_KEYS.filter(k => nOf(k) > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${nOf(k)}</span></div>
+      <p className="note" style=${{ margin: '0 0 10px' }}>Διαθέσιμοι <b>${c.present - kv.n}</b> = παρόντες ${c.present} − κωλυόμενοι ${kv.n}.</p>
+      ${TYPE_KEYS.filter(k => k !== 'KOL' && nOf(k) > 0).map(k => html`<div key=${k} className="cat"><div className="cat__head"><${Badge} tone=${TYPES[k].tone}>${TYPES[k].label}<//><b>${TYPES[k].long}</b><span className="num">${nOf(k)}</span></div>
         ${nOf(k) > 0 && html`<div className="cat__names">${listOf(k).map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div>`}</div>`)}
       ${zeros.length > 0 && html`<p className="cat__zero"><b>Κανείς σε:</b> ${zeros.map(k => TYPES[k].label).join(', ')}</p>`}
+    <//>
+    <${Card} title=${'Κωλυόμενοι · ' + kv.n} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.declare({ cat: 'kol', from: date, to: date })} data-tip="Υπηρεσία εκτός δικών μας, π.χ. ΣΤΕΠ">+ Κωλυόμενος<//>`}>
+      <p className="note" style=${{ margin: '0 0 8px' }}>Με τις ίδιες στήλες και τους ίδιους αριθμούς με την ${HK()}. Είναι παρόντες που δεν είναι διαθέσιμοι για τις υπηρεσίες μας.</p>
+      ${KOL_COLS.filter(([k]) => kv.cols[k].length > 0).map(([k, l]) => html`<div key=${k} className="cat"><div className="cat__head"><b>${l}</b><span className="num">${kv.cols[k].length}</span></div>
+        <div className="cat__names">${kv.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${kname(p)}</button>`)}</div></div>`)}
+      ${kv.keep.length > 0 && html`<div className="cat"><div className="cat__head"><b>Κωλυόμενοι (παρόντες)</b><span className="num">${kv.keep.length}</span></div>
+        <div className="cat__names">${kv.keep.map(({ p, st }) => html`<button key=${st.id} type="button" onClick=${() => nav.openPerson(p.id)} data-tip="Δεν αφαιρείται από τους παρόντες, δεν μπαίνει στην ${HK()}">${shortName(p)} (${st.note || 'Κωλυόμενος'})</button>`)}</div></div>`}
+      ${kv.n === 0 && kv.keep.length === 0 && html`<div className="empty">Κανένας κωλυόμενος.</div>`}
     <//>
   </div>`;
 }

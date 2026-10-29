@@ -227,8 +227,9 @@ export const medKinds = (lists?: UserLists): ListItem[] => listRows(lists, 'medK
 // Δικό σου ιατρικό «μόνο προειδοποίηση» (Michael, 13/10): μπαίνει σε υπηρεσία, αλλά με προειδοποίηση
 export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.warn;
 // Όνομα κατάστασης σε σήματα και λίστες: η ποινή με το είδος της, το δικό σου ιατρικό με το όνομά του
-export function statusLbl(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string {
+export function statusLbl(s: Pick<Status, 'type' | 'kind'> & { note?: string }, lists?: UserLists): string {
   if (s.type === 'PUN') return upper(s.kind || TYPES.PUN.label);   // οι ποινές με κεφαλαία παντού (Michael, 13/10)
+  if (s.type === 'KOL') return TYPES.KOL.label + (s.note?.trim() ? ': ' + s.note.trim() : '');   // ο κωλυόμενος με το «τι υπηρεσία» που έγραψες
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m ? m.name : TYPES[s.type].label;
 }
