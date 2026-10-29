@@ -563,9 +563,16 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     if (o.head) ['ΚΕΦΑΛΙΔΑ 1', 'ΚΕΦΑΛΙΔΑ 2', 'ΚΕΦΑΛΙΔΑ 3'].forEach((t, i) => ws.set('A' + (i + 1), '{' + t + '}').setStyle('A' + (i + 1), st.hdr));
     if (o.date) {
       // πάνω δεξιά: στις δύο τελευταίες στήλες (συγχωνευμένες) αν χωράει δίπλα στην κεφαλίδα
-      const c1 = grid ? n - 7 : n >= 3 ? n - 1 : o.head ? Math.max(2, n) : 1;   // πλέγμα: στο τελευταίο 1/3 της σελίδας
-      ws.set(L(c1) + 1, '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle(L(c1) + 1, st.date);
-      if (n >= 3) { ws.setStyle(L(n) + 1, st.date); ws.addMerge(L(c1) + '1:' + L(n) + '1'); }
+      if (!grid && o.head && n <= 3) {
+        // στενός πίνακας (π.χ. Α/Α, βαθμός, ονοματεπώνυμο): δίπλα στην κεφαλίδα (στήλη Β) δεν χωρά ούτε η μία ούτε η άλλη (και η αλλαγή θέσης κεφαλίδας-ημερομηνίας
+        // την έσπρωχνε στη στενή στήλη), οπότε η ημερομηνία πάει στη γραμμή 4, ανάμεσα στην κεφαλίδα και τον τίτλο, δεξιά σε όλο το πλάτος
+        ws.set('A4', '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle('A4', st.date);
+        if (n >= 2) { for (let c = 2; c <= n; c++) ws.setStyle(L(c) + 4, st.date); ws.addMerge('A4:' + L(n) + '4'); }
+      } else {
+        const c1 = grid ? n - 7 : n >= 3 ? n - 1 : o.head ? Math.max(2, n) : 1;   // πλέγμα: στο τελευταίο 1/3 της σελίδας
+        ws.set(L(c1) + 1, '{ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ}').setStyle(L(c1) + 1, st.date);
+        if (n >= 3) { ws.setStyle(L(n) + 1, st.date); ws.addMerge(L(c1) + '1:' + L(n) + '1'); }
+      }
     }
     r = o.head ? 5 : 3;
   }
