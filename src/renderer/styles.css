@@ -611,6 +611,14 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* εφαρμογή */
 .boot{display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted-fg);font-size:15px}
+.crash{display:flex;justify-content:center;padding:32px 0}
+.crash--whole{align-items:center;min-height:100vh;padding:24px}
+.crash__card{max-width:640px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 28px;box-shadow:var(--shadow-sm)}
+.crash__card h2{margin:0 0 10px;font-size:19px}
+.crash__card p{margin:0 0 18px;line-height:1.6}
+.crash__btns{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+.crash__card summary{cursor:pointer;color:var(--muted-fg)}
+.crash__card pre{margin:10px 0 0;padding:10px 12px;max-height:240px;overflow:auto;background:var(--muted);border-radius:var(--radius);font:12px/1.5 var(--f-mono);white-space:pre-wrap;word-break:break-word;user-select:text}
 .onboard{max-width:640px;margin:24px auto;text-align:left}
 .onboard ol{padding-left:20px;line-height:1.7}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 12px}
