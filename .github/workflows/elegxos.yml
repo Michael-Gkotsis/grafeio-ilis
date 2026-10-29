@@ -1,0 +1,28 @@
+# Τρέχει σε κάθε pull request: τύποι, δοκιμές και build, πριν γίνει συγχώνευση στο main (χωρίς πακετάρισμα, αυτό το κάνει το paketo.yml)
+name: Έλεγχος
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Νέο push στο ίδιο PR ακυρώνει τον προηγούμενο έλεγχο
+concurrency:
+  group: elegxos-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  elegxos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
