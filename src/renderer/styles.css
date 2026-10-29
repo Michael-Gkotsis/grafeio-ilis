@@ -565,8 +565,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .orow.is-changed{background:var(--secondary)}
 .orow.is-blocked b{color:var(--muted-fg);font-weight:500}
 .orow .ui-badge{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ui-seg--sm{flex-wrap:nowrap;gap:4px}
-.ui-seg--sm button{height:32px;padding:0 10px;font-size:13px}
+.ui-seg--sm{flex-wrap:wrap;gap:4px}   /* (review 29/10) όταν δεν χωράνε (π.χ. «Ανά Σ.Ι.» στα 1024) πάνε σε δεύτερη σειρά αντί να κόβεται το κείμενο */
+.ui-seg--sm button{height:32px;padding:0 10px;font-size:13px;white-space:nowrap}
 .outbar b{font-family:var(--f-mono)}
 /* Εξοδούχοι: η μπάρα με τα σύνολα, την αποθήκευση και το Excel μένει πάνω όταν κυλάς */
 .outbar{position:sticky;top:var(--top-h);z-index:20;box-shadow:0 0 0 6px var(--background)}
