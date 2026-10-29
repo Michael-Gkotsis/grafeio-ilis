@@ -266,7 +266,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   // πίνακες τιμών: αμέσως κάτω από τον τελευταίο πίνακα, πριν τις υπογραφές (ό,τι είναι από κάτω κατεβαίνει)
   if (vo.length) {
     const cs = colsOf[0].map(c => c.c); const c1 = cs.length ? Math.min(...cs) : 1, c2 = cs.length ? Math.max(...cs) : Math.max(2, ws.lastCol());
-    const added = await writeValues(wb, ws, vo, { end, c1, c2, gap: cs.length > 0, data: ws.style(colName(c1) + datas[0]), head: ws.style(colName(c1) + heads[0]), look: xlLook(s.settings) });
+    const added = await writeValues(wb, ws, vo, { end, c1, c2, gap: cs.length > 0, h: cs.length ? ws.rowHeight(datas[0]) : 0, data: ws.style(colName(c1) + datas[0]), head: ws.style(colName(c1) + heads[0]), look: xlLook(s.settings) });
     for (const key of ['head', 'date', 'title', 'names'] as const) parts[key] = parts[key].map(x => x.replace(/(\d+)$/, (_m, nn: string) => String(+nn > end ? +nn + added : +nn)));
     end += added;
   }
@@ -287,14 +287,15 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
 // πίνακα (πλαίσιο, γράμματα)· προαιρετικός τίτλος πάνω από κάθε πίνακα· μία κενή γραμμή πριν από τον καθένα (gap: και πριν τον πρώτο).
 // Μπαίνουν μετά τη γραμμή end (ό,τι είναι από κάτω κατεβαίνει). Γυρνά πόσες γραμμές μπήκαν. at: θέση της πρώτης γραμμής αν χρειαστεί
 // αργότερα (Φάση 3: δίπλα/κάτω από άλλον πίνακα) — όλα γράφονται από εδώ.
-export interface ValueAt { end: number; c1: number; c2: number; gap: boolean; data: number | null; head: number | null; look: XlLook }
+export interface ValueAt { end: number; c1: number; c2: number; gap: boolean; h: number; data: number | null; head: number | null; look: XlLook }
 export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: ValueAt): Promise<number> {
   const n = vo.reduce((x, t, i) => x + (i || a.gap ? 1 : 0) + (t.title ? 1 : 0) + t.rows.length, 0);
   if (!n) return 0;
   ws.insertRows(a.end, n, 0, wb);
-  // μέχρι ποια στήλη φτάνει το κείμενο: ~40 χαρακτήρες πλάτος, αφήνοντας μία στήλη του πίνακα για την τιμή
+  // μέχρι ποια στήλη φτάνει το κείμενο: ~40 χαρακτήρες πλάτος, αφήνοντας μία στήλη του πίνακα για την τιμή (σε στενό πίνακα συνεχίζει δεξιά του)
   const cap = a.c2 > a.c1 ? a.c2 - 1 : a.c1; let e = a.c1, w = ws.colWidth(a.c1);
   while (e < cap && w < 40) { e++; w += ws.colWidth(e); }
+  while (w < 40 && e < a.c2 + 3) { e++; w += ws.colWidth(e); }   // πίνακας στενός (π.χ. 2 στήλες): το κείμενο συνεχίζει δεξιά του, για να μένουν οι γραμμές σε κανονικό ύψος
   const vc = e + 1; const L = colName;
   const { font, h, v } = a.look;
   const base = a.data ?? await wb.style({ font, ...tablePart(a.look, 'data', 12), border: true, h, v });
@@ -305,8 +306,9 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
   let row = a.end + 1;
   for (let i = 0; i < vo.length; i++) {
     const t = vo[i];
-    if (i || a.gap) row++;   // κενή γραμμή
+    if (i || a.gap) { if (a.h) ws.setRowHeight(row, a.h); row++; }   // κενή γραμμή
     if (t.title) {
+      if (a.h) ws.setRowHeight(row, a.h);
       ws.set(L(a.c1) + row, t.title);
       for (let c = a.c1; c <= vc; c++) ws.setStyle(L(c) + row, hd);
       if (vc > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(vc) + row);
@@ -316,7 +318,7 @@ export async function writeValues(wb: Workbook, ws: Sheet, vo: ValueOut[], a: Va
       ws.set(L(a.c1) + row, x.label || null);
       for (let c = a.c1; c <= e; c++) ws.setStyle(L(c) + row, lab);
       const lines = Math.ceil((x.label.length * 1.2) / Math.max(w - 1, 1));   // μεγάλο κείμενο: περισσότερες γραμμές στο ίδιο κελί (το Excel δεν μεγαλώνει μόνο του τα ενωμένα)
-      if (lines > 1) ws.setRowHeight(row, 16 * lines);
+      if (lines > 1) ws.setRowHeight(row, Math.max(a.h, 16 * lines)); else if (a.h) ws.setRowHeight(row, a.h);
       if (e > a.c1) ws.addMerge(L(a.c1) + row + ':' + L(e) + row);
       ws.set(L(vc) + row, x.v == null ? '—' : x.v); ws.setStyle(L(vc) + row, await valSt(x.v == null ? 'int' : x.fmt));
       row++;

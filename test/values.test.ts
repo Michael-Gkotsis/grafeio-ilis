@@ -243,6 +243,19 @@ describe('Πίνακες τιμών στο έντυπο', () => {
     const tot = g[find(g, 'ΣΕ ΔΥΝΑΜΗ')].filter(x => x != null); expect(tot[tot.length - 1]).toBe(40);
     const pr = g[find(g, '% ΠΑΡΟΝΤΩΝ')].filter(x => x != null); expect(pr[pr.length - 1]).toBeCloseTo(evalValue(s, D, HK, [T('str.present')]) / 40, 10);
   });
+  it('ύψος γραμμών: οι γραμμές τιμών έχουν κανονικό ύψος (όπως του πίνακα ατόμων), οι υπογραφές κρατούν το δικό τους', async () => {
+    const s = seed(); const o = baseOpts({ sig: 'both' }); const b = await buildTemplate(o, 'people');
+    const ids = s.people.slice(0, 6).map(p => p.id); const sigs = [{ art: 'Ο', title: 'ΕΠΟΠΤΗΣ' }];
+    const plain = await fillReport(b.data, s, { ...withBuilt(rep({}), b, o), sigs }, ids, D, { clock });
+    const out = await fillReport(b.data, s, { ...withBuilt(rep({ vals: VALS, at: 'hkai' }), b, o), sigs }, ids, D, { clock });
+    const g = await grid(out.data); const ws = await (await Workbook.open(out.data)).sheet(0); const w0 = await (await Workbook.open(plain.data)).sheet(0);
+    const body = ws.rowHeight(find(g, s.people[0].last + ' ' + s.people[0].first) + 1);
+    const lab = find(g, 'ΕΝΕΡΓΕΣ ΑΔΕΙΕΣ = ΚΑ + ΤΙΜΗΤΙΚΕΣ + ΔΝ') + 1;
+    for (let r = lab - 2; r <= lab + 2; r++) expect(ws.rowHeight(r), 'γραμμή ' + r).toBe(body);   // τίτλος, τρεις γραμμές, και η κενή πριν
+    // οι υπογραφές: ίδια ύψη με πριν, μετατοπισμένα όσες γραμμές μπήκαν
+    const sig = find(g, 'ΕΠΟΠΤΗΣ') + 1, sig0 = find(await grid(plain.data), 'ΕΠΟΠΤΗΣ') + 1;
+    for (let k = -2; k <= 1; k++) expect(ws.rowHeight(sig + k)).toBe(w0.rowHeight(sig0 + k));
+  });
   it('ποσοστό: μορφή κελιού στο xlsx (0%) και αριθμός στο κελί', async () => {
     const s = seed(); const o = baseOpts(); const b = await buildTemplate(o, 'people');
     const r = withBuilt(rep({ vals: VALS }), b, o);
