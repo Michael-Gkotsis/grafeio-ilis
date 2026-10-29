@@ -1,7 +1,7 @@
 // Κωλυόμενος (Michael, 24/10): υπηρεσία εκτός δικών μας, δήλωση από–έως με ώρες. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { apply, type Command, type Ctx } from '../src/shared/commands';
-import { KOL_COLS, STEP_COL, kolColOf, type AppState, type Status } from '../src/shared/domain';
+import { KOL_COLS, KOL_NO_COL, STEP_COL, kolColName, kolColOf, kolHk, type AppState, type Status } from '../src/shared/domain';
 import { dutyBlock, fairOf, fillDay, guardUnavailable, hkMin, hkaiCounts, kolView, nextFor, outBlock, planStatusChange, postBy, postsOf, strengthOf } from '../src/shared/rules';
 import { frouraChecks } from '../src/shared/preflight';
 import { outsAndStay } from '../src/main/exports';
@@ -241,5 +241,45 @@ describe('κωλυόμενος: χωρίς κωλυόμενους όλα όπω�
     const v = kolView(s, D1);
     expect(v.man).toEqual([]); expect(v.n).toBe(hkaiCounts(s, D1).kol);   // 2 υπηρεσίες, ΕΥ, ποινή = 4
     expect(v.n).toBe(4);
+  });
+});
+
+// Η στήλη της ΗΚΑΙ προαιρετική (Michael, 29/10): hkCol '-' = κωλυόμενος στη Δύναμη/Σήμερα, όχι σε στήλη κωλυομένων της ΗΚΑΙ
+describe('κωλυόμενος: χωρίς στήλη ΗΚΑΙ («Καμία»)', () => {
+  it('η δήλωση κρατά «-»· παλιά δεδομένα χωρίς στήλη μένουν Υπηρεσία', () => {
+    expect(KOL_NO_COL).toBe('-');
+    const s = kol(fakeState(10), 3, D1, D2, { hkCol: '-' });
+    expect(s.statuses[0]).toMatchObject({ type: 'KOL', minus: true, hkCol: '-', noOut: true });
+    expect(kolColOf({ hkCol: '-' })).toBe('-'); expect(kolHk({ hkCol: '-' })).toBeNull();
+    expect(kolColOf({})).toBe('yp'); expect(kolHk({})).toBe('yp'); expect(kolHk({ hkCol: 'ey' })).toBe('ey'); expect(kolHk({ hkCol: 'xx' })).toBe('yp');
+    expect(kolColName('-')).toBe('χωρίς στήλη ΗΚΑΙ');
+    expect(planStatusChange(fakeState(10), { type: 'KOL', pids: [3], from: D1, to: D2, note: 'ΣΤΕΠ', minus: true, hkCol: '-' }).files.some(f => f.desc === 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ')).toBe(true);
+    // παλιά δήλωση: minus χωρίς hkCol → στήλη Υπηρεσία όπως πριν
+    const old: AppState = { ...fakeState(30), statuses: [{ id: 'old', pid: 3, type: 'KOL', from: D1, to: D2, note: 'Υπηρεσία ΣΤΕΠ', minus: true }] };
+    expect(hkaiCounts(old, D1).cols.yp.map(p => p.id)).toEqual([3]); expect(kolView(old, D1).cols.yp.map(p => p.id)).toEqual([3]);
+  });
+  it('στη Δύναμη κωλυόμενος, σε καμία στήλη κωλυομένων της ΗΚΑΙ· ΗΚΑΙ και Δύναμη συμφωνούν', () => {
+    const base = fakeState(30); const h0 = hkaiCounts(base, D1), n0 = strengthOf(base, D1, hkMin(base.rules));
+    const s = kol(base, 3, D1, D2, { hkCol: '-' });
+    const h = hkaiCounts(s, D1), v = kolView(s, D1, hkMin(s.rules)), c = strengthOf(s, D1, hkMin(s.rules));
+    expect(v.minus.map(x => x.p.id)).toEqual([3]); expect(v.minus[0].col).toBe('-'); expect(v.man).toHaveLength(1);
+    for (const [k] of KOL_COLS) { expect(h.cols[k].map(p => p.id), k).not.toContain(3); expect(v.cols[k].map(p => p.id).sort(), k).toEqual(h.cols[k].map(p => p.id).sort()); }
+    expect(h.kol).toBe(h0.kol); expect(h.cols).toEqual(h0.cols); expect(h.avail).toBe(h0.avail); expect(h.rank).toEqual(h0.rank);
+    expect(v.n).toBe(KOL_COLS.reduce((a, [k]) => a + h.cols[k].length, 0)); expect(v.n).toBe(h0.kol);
+    expect(c.present).toBe(n0.present); expect(c.present - v.minus.length).toBe(n0.present - 1);   // η Δύναμη/Σήμερα τον αφαιρούν από τους παρόντες (present − kol.minus)
+  });
+  it('η δική του υπηρεσία, ΕΥ ή ποινή μετρά στη στήλη της όπως αν δεν υπήρχε η δήλωση', () => {
+    const base: AppState = { ...fakeState(30), guards: { [D1]: { th1: 3, mg1: 4 } }, statuses: [st(5, 'EY', D1, D1), st(6, 'PUN', D1, D1, { kind: 'Κράτηση' })] };
+    const ref = hkaiCounts(base, D1);
+    const s: AppState = { ...base, statuses: [...base.statuses, ...[3, 4, 5, 6].map(pid => st(pid, 'KOL', D1, D1, { note: 'Υπηρεσία ΣΤΕΠ', minus: true, hkCol: '-' }))] };   // απευθείας: η δήλωση θα έβγαζε από την υπηρεσία
+    const h = hkaiCounts(s, D1), v = kolView(s, D1, hkMin(s.rules));
+    expect(h.cols).toEqual(ref.cols); expect(h.kol).toBe(ref.kol);
+    expect(h.cols.yp.map(p => p.id)).toContain(3); expect(h.cols.mag.map(p => p.id)).toContain(4); expect(h.cols.ey.map(p => p.id)).toEqual([5]); expect(h.cols.tim.map(p => p.id)).toEqual([6]);
+    for (const [k] of KOL_COLS) expect(v.cols[k].map(p => p.id).sort(), k).toEqual(h.cols[k].map(p => p.id).sort());
+    expect(v.n).toBe(ref.kol); expect(v.minus.map(x => x.p.id).sort((a, b) => a - b)).toEqual([3, 4, 5, 6]);
+    // απουσία νικά πάντα· με επιλεγμένη στήλη ο κωλυόμενος εξακολουθεί να παίρνει τη στήλη του
+    const l = kol({ ...base, statuses: [st(7, 'LEAVE', D1, D1, { kind: 'Κανονική' })] }, 7, D1, D1, { hkCol: '-' });
+    expect(hkaiCounts(l, D1).cols.ka.map(p => p.id)).toEqual([7]);
+    expect(hkaiCounts(kol(base, 3, D1, D1, { hkCol: 'ey' }), D1).cols.ey.map(p => p.id)).toContain(3);
   });
 });

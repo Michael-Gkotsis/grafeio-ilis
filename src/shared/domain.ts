@@ -147,7 +147,7 @@ export interface Status {
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
   req?: string;       // άδεια που εγκρίθηκε από αίτηση της ΗΚΑΙ (PersonRequest.id)
   minus?: boolean;    // κωλυόμενος: αφαιρείται από τους παρόντες και μπαίνει στην ΗΚΑΙ, στη στήλη hkCol
-  hkCol?: string;     // κωλυόμενος: στήλη κωλυομένων της ΗΚΑΙ (KOL_COLS), προεπιλογή yp «Υπηρεσία»
+  hkCol?: string;     // κωλυόμενος: στήλη κωλυομένων της ΗΚΑΙ (KOL_COLS), προεπιλογή yp «Υπηρεσία» για παλιές δηλώσεις· '-' (KOL_NO_COL) = καμία (Michael, 29/10)
   noOut?: boolean;    // κωλυόμενος: δεν βγαίνει έξοδο (αλλιώς βγαίνει κανονικά)
   days?: number;      // στέρηση εξόδου: ημέρες ποινής· το «to» μετακινείται για κάθε μέρα με υπηρεσία ή βραδινή εκπαίδευση (shared/punish.ts)
 }
@@ -559,9 +559,14 @@ export const CADRE_ABS: [string, string, string][] = [
 // Στήλες κωλυομένων της ΗΚΑΙ που διαλέγει η δήλωση του κωλυόμενου: οι πρώτες επτά του CADRE_ABS (Υπηρεσία, ΕΥ, Τιμ., Ο/Σ, Μαγειρεία…)
 export const KOL_COLS: [string, string][] = CADRE_ABS.slice(0, 7).map(([k, l]) => [k, k === 'yp' ? 'Υπηρεσία' : l]);
 export const KOL_DEFAULT_COL = 'yp';
-// Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία)
-export const kolColOf = (s: { hkCol?: string }): string => (KOL_COLS.some(x => x[0] === s.hkCol) ? s.hkCol! : KOL_DEFAULT_COL);
-export const kolColName = (k: string): string => KOL_COLS.find(x => x[0] === k)?.[1] || k;
+// «Καμία στήλη» (Michael, 29/10: η στήλη της ΗΚΑΙ είναι προαιρετική): hkCol '-' = κωλυόμενος στη Δύναμη και στο Σήμερα, όχι σε στήλη κωλυομένων της ΗΚΑΙ.
+// Παλιές δηλώσεις (hkCol λείπει) μένουν στην Υπηρεσία όπως πάντα.
+export const KOL_NO_COL = '-';
+// Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία· '-' = καμία)
+export const kolColOf = (s: { hkCol?: string }): string => (s.hkCol === KOL_NO_COL ? KOL_NO_COL : KOL_COLS.some(x => x[0] === s.hkCol) ? s.hkCol! : KOL_DEFAULT_COL);
+// Η στήλη της ΗΚΑΙ που μετρά πραγματικά, null όταν δεν μπαίνει σε καμία
+export const kolHk = (s: { hkCol?: string }): string | null => { const c = kolColOf(s); return c === KOL_NO_COL ? null : c; };
+export const kolColName = (k: string): string => (k === KOL_NO_COL ? 'χωρίς στήλη ΗΚΑΙ' : KOL_COLS.find(x => x[0] === k)?.[1] || k);
 // Η στήλη της ΗΚΑΙ για όποιον έχει ΣΤΕΠ (Michael, 29/10: κωλυόμενος αυτόματα, «πουθενά» για τώρα). null = δεν μετρά σε καμία στήλη (μόνο στη Δύναμη
 // και στο Σήμερα)· κλειδί των KOL_COLS ('ey', 'yp'…) = μπαίνει σε εκείνη τη στήλη της ΗΚΑΙ ως κωλυόμενος. Μία γραμμή για να αλλάξει.
 export const STEP_COL = null as string | null;
