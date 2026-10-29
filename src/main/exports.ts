@@ -7,12 +7,13 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
-import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
+import { hkRowsOf, itemKey, rankTxt, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
-import { activePeople, seatMap, statusesFrom, outMin, dutyMin, hkaiCounts, postBy, postOf, postsOf } from '../shared/rules';
+import { seatMap, dutyMin, hkaiCounts, postBy, postsOf } from '../shared/rules';
 import { Workbook, colName, colNum, sheetSafe, unesc, type Sheet, type XlValue } from './xlsx';
 import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
+import { byRoom, outsAndStay } from '../shared/outsStay';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
 import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
 import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
@@ -24,7 +25,7 @@ export { FROURA_FORMS };
 
 export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
-export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
+export { byRoom };
 
 export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string }   // sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)
 
@@ -441,24 +442,7 @@ function hkHead(fr: Sheet, m: HkaiMap, s: AppState) {
 }
 
 // ------------------------------------------------------------------ Εξοδούχοι / Παραμένοντες (δείγμα 10)
-export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: Status }[]; stay: { p: Person; note: string }[] } {
-  const outs: { p: Person; st: Status }[] = []; const stay: { p: Person; note: string }[] = [];
-  for (const p of activePeople(s)) {
-    // γύρισε ως την ώρα εξόδου: μετρά σαν να ήταν μέσα (εξοδούχος ή παραμένων)
-    const ss = statusesFrom(s.statuses, p.id, d, outMin(s.rules));
-    const o = ss.find(x => TYPES[x.type].cat === 'out');
-    if (o) { outs.push({ p, st: o }); continue; }
-    if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
-    const post = postOf(s, d, p.id);
-    // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
-    const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
-    const note = [...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
-    stay.push({ p, note: norm(withNote(note, outNoteOf(s, d, p.id))) });
-  }
-  // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)
-  outs.sort((a, b) => byRoom(a.p, b.p)); stay.sort((a, b) => byRoom(a.p, b.p));
-  return { outs, stay };
-}
+export { outsAndStay };
 // Παρατηρήσεις εξοδούχου: ΔΝ / ΔΝ ΣΚ, η υπηρεσία της επόμενης μέρας (γυρίζει το πρωί γι' αυτήν), η άδεια που ξεκινά
 // τη μέρα της ΔΝ ή την επόμενη, και η παρατήρηση της μέρας σε παρένθεση, και στο τέλος πότε γυρνά (και η διόρθωση του γραφείου):
 // «ΔΝ ΣΚ, ΥΠΗΡΕΣΙΑ ΚΥΡΙΑΚΗ Λ/Υ 14:00, ΑΔΕΙΑ ΑΠΟ ΔΕΥΤΕΡΑ 19/10 (ΙΑΤΡΟΣ ΣΤΕΠ), ΓΥΡΝΑ ΚΥΡΙΑΚΗ 18/10 06:00 (Λ/Υ ΑΠΟ 14:00)»

@@ -9,6 +9,7 @@ import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMap
 import { preflight, hasErrors } from '../shared/preflight';
 import { byIds, fieldOf, fieldValue, moreRows, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
+import { atOf, evalTables, valueText } from '../shared/values';
 import { LAYOUT_SHEETS, type Block } from '../shared/layout';
 import { sigsSaved } from '../shared/sigs';
 import { rankTxt } from '../shared/ranks';
@@ -201,7 +202,7 @@ export function mockApi(): Api {
     // Έντυπα: στον browser δεν υπάρχει Excel· η προεπισκόπηση είναι ένας απλός πίνακας με τα στοιχεία
     repUpload: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
-    repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: o.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
+    repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: (o.nopeople && !(o.more || []).length ? [] : o.cols).map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
       more: (o.more || []).map((t, j) => ({ id: t.id, head: 11 + j * 4, cols: t.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(t.kind, c.f)?.head || '', o: c.o })) })) }),
     // προεπισκόπηση: απλοί πίνακες (ένας ανά πίνακα του εντύπου) σε σελίδες των 30 γραμμών, με το ίδιο δείγμα και counts όπως ο main
     repPreview: async (src, r: Report, ids, date, _raw, opts) => {
@@ -211,7 +212,8 @@ export function mockApi(): Api {
       const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const extra = moreRows(state, r, date);
-      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: cols1, rows: byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
+      const nop = !!build?.nopeople && !(build.more || []).length;   // μόνο πίνακες τιμών
+      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : cols1, rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: t.cols as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
       // γραμμές της σελίδας: τίτλος, επικεφαλίδες, δεδομένα
@@ -222,7 +224,15 @@ export function mockApi(): Api {
         cut(t.rows).forEach((x, i) => lines.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
         lines.push('<tr><td style="border:0">&nbsp;</td></tr>');
       }
-      const pages: string[] = []; for (let i = 0; i < lines.length; i += 30) pages.push('<div class="pg" style="width:794px;height:760px;padding:24px"><table class="mock" style="font:12px Calibri,Arial">' + lines.slice(i, i + 30).join('') + '</table></div>');
+      // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά, στο τέλος (όπως στο Excel)
+      const vo = evalTables(state, date, atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()), r.vals);
+      const vl: string[] = [];
+      for (const v of vo) {
+        if (v.title) vl.push('<tr><th colspan="2" style="border:1px solid #333;background:#d9d9d9;text-align:left">' + esc(v.title) + '</th></tr>');
+        for (const x of v.rows) vl.push('<tr><td style="border:1px solid #333;width:420px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(valueText(x.v, x.fmt)) + '</td></tr>');
+        vl.push('<tr><td style="border:0">&nbsp;</td></tr>');
+      }
+      const pages: string[] = []; for (let i = 0; i < lines.length; i += 30) pages.push('<div class="pg" style="width:794px;height:760px;padding:24px"><table class="mock" style="font:12px Calibri,Arial">' + lines.slice(i, i + 30).join('') + '</table>' + (i + 30 >= lines.length && vl.length ? '<table class="mock" style="font:12px Calibri,Arial;margin-top:12px">' + vl.join('') + '</table>' : '') + '</div>');
       return { html: pages.slice(0, PV_PAGES).join(''), css: '', pages: pages.length || 1, ...(sample == null ? {} : { counts }) };
     },
     // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές

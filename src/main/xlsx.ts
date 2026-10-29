@@ -710,6 +710,16 @@ export class Workbook {
     return this.xfLike(base ?? 0, st.centered, x => withAlign(x, { horizontal: 'center', vertical: 'center' }));
   }
 
+  // Στυλ όπως το base με άλλη στοίχιση, έντονα ή μορφή αριθμού («0%», «0.0%»): οι πίνακες τιμών των Έντυπα παίρνουν τη μορφή των κελιών του πίνακα
+  async like(base: number | null, o: { h?: 'left' | 'center' | 'right'; b?: boolean; fmt?: string; wrap?: boolean }): Promise<number> {
+    const st = await this.loadStyles();
+    let x = this.xfList(st.xml)[base ?? 0] || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
+    const open = (a: (head: string) => string) => { x = x.replace(/^<xf\b[^>]*?(?=\/?>)/, a); };
+    if (o.b != null) { const fid = this.fontLike(Number(attr(x.slice(0, x.indexOf('>') + 1), 'fontId') || 0), { b: o.b }); open(a => setAttr(setAttr(a, 'fontId', String(fid)), 'applyFont', '1')); }
+    if (o.fmt) { const id = o.fmt === '0%' ? 9 : this.fmtFor(o.fmt); open(a => setAttr(setAttr(a, 'numFmtId', String(id)), 'applyNumberFormat', '1')); }
+    if (o.h || o.wrap) x = withAlign(x, { ...(o.h ? { horizontal: o.h } : {}), ...(o.wrap ? { wrapText: '1' } : {}) }, { vertical: 'center' });
+    return this.addXf(x);
+  }
   // Στυλ από απλές επιλογές, για πρότυπα που φτιάχνει η εφαρμογή (Έντυπα › «Φτιάξ' το εδώ»): γραμματοσειρά της βάσης του
   // βιβλίου σε μέγεθος sz (έντονη, πλάγια, υπογραμμισμένη), γέμισμα (rgb χωρίς #), λεπτό πλαίσιο και στοίχιση. Ίδιες επιλογές → ίδιο στυλ.
   async style(o: { font?: string; sz?: number; b?: boolean; i?: boolean; u?: boolean; fill?: string; border?: boolean; h?: 'left' | 'center' | 'right'; v?: 'top' | 'center' | 'bottom'; wrap?: boolean }): Promise<number> {
