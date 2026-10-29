@@ -840,8 +840,8 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, on
       <div className="rep-card__row"><label className="field__label" htmlFor="b-title" data-tip="Ένας για όλη τη σελίδα, στη μέση. Κάθε πίνακας έχει και δικό του τίτλο.">Γενικός τίτλος σελίδας</label><input id="b-title" className="ui-input" placeholder="π.χ. ΚΑΤΑΣΤΑΣΗ ΔΥΝΑΜΗΣ" value=${o.title} onChange=${(e: any) => set({ title: e.target.value })}/></div>
       <div className="rep-card__row"><span className="field__label">Στοίχιση</span>${alignSeg(o.tta, 'center', setTta, 'Στοίχιση γενικού τίτλου')}</div>
       <div className="rep-card__row rep-card__checks">
-        <label className="ui-checkrow" data-tip="Κεφαλίδα πάνω αριστερά (από τις Ρυθμίσεις)"><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα</label>
-        <label className="ui-checkrow" data-tip="Τόπος και ημερομηνία πάνω δεξιά"><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος, ημερομηνία</label>
+        <label className="ui-checkrow" data-tip=${(state.settings.hdLeft ? 'Κεφαλίδα πάνω αριστερά' : 'Κεφαλίδα πάνω δεξιά') + ' (από τις Ρυθμίσεις)'}><input type="checkbox" className="ui-check" checked=${o.head} onChange=${(e: any) => set({ head: e.target.checked })}/>Κεφαλίδα</label>
+        <label className="ui-checkrow" data-tip=${'Τόπος και ημερομηνία πάνω ' + (state.settings.hdLeft ? 'δεξιά' : 'αριστερά')}><input type="checkbox" className="ui-check" checked=${o.date} onChange=${(e: any) => set({ date: e.target.checked })}/>Τόπος, ημερομηνία</label>
         <span className="note rep-card__hint">Κενός τίτλος: χωρίς</span>
       </div>
     </section>

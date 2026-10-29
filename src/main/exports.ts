@@ -56,7 +56,8 @@ export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState,
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
     for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
     // ημερομηνία αριστερά και κεφαλίδα δεξιά (εκτός αν hdLeft)· οι θέσεις που έσυρες μετρούν ΜΕΤΑ, από τη νέα θέση
-    const sw = s.settings.hdLeft ? blocks : await swapHeadDate(wb, x.ws, blocks);
+    // (Michael, 29/10 22:04: η ΗΚΑΙ μένει με την κεφαλίδα αριστερά)
+    const sw = s.settings.hdLeft || form === 'hkai' ? blocks : await swapHeadDate(wb, x.ws, blocks);
     out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, sw, mv(x.key)) });
   }
   return out;
