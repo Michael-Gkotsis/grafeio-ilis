@@ -57,7 +57,7 @@ export function useDutyCols(): (BlockDef & { only?: string })[] {
     return out;
   }, [state.settings]);
 }
-export const colHead = (b: BlockDef & { only?: string }) => html`<th key=${b.id}>${b.name}${b.armed && html`<span className="sigrid__tag">ένοπλη</span>`}${b.only && html`<span className="sigrid__tag">μόνο ${b.only}</span>`}</th>`;
+export const colHead = (b: BlockDef & { only?: string }) => html`<th key=${b.id} data-tip=${b.name}>${b.name}${b.armed && html`<span className="sigrid__tag">ένοπλη</span>`}${b.only && html`<span className="sigrid__tag">μόνο ${b.only}</span>`}</th>`;
 
 export function SiCard() {
   const { state, run } = useStore(); const toast = useToast();
@@ -147,13 +147,13 @@ export function SiCard() {
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '12px' }}>
       <div className="field" style=${{ maxWidth: '150px' }}><label className="field__label" htmlFor="si-cr">Δικοί κανόνες για</label><${Select} id="si-cr" className="ui-input" value=${catRow} onChange=${(e: any) => setCatRow(e.target.value)}>${catRows.map(l => html`<option key=${l} value=${l}>${l}</option>`)}<//></div>
       <div className="field"><label className="field__label" htmlFor="si-cp">με πάθηση</label><${Select} id="si-cp" className="ui-input" value=${catPick} onChange=${(e: any) => { setCatPick(e.target.value); setErr(null); }}><option value="">—</option>${siCats(cfg).map(c => html`<option key=${c} value=${c}>${c}</option>`)}<//></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!catPick} why="Διάλεξε πρώτα πάθηση" onClick=${addCatRow}>Πρόσθεσε γραμμή<//></div>
+      <div className="field" style=${{ flex: '0 0 auto', minWidth: 0 }}><${Button} variant="outline" disabled=${!catPick} why="Διάλεξε πρώτα πάθηση" onClick=${addCatRow}>Πρόσθεσε γραμμή<//></div>
     </div>
     <div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '8px' }}>
       <div className="field"><label className="field__label" htmlFor="si-b">Νέα Σ.Ι.</label><input id="si-b" className="ui-input" placeholder="π.χ. Ι5" value=${nb} onChange=${(e: any) => { setNb(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') addBase(); }}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nb.trim()} why="Γράψε πρώτα το όνομα" onClick=${addBase}>Πρόσθεσε<//></div>
+      <div className="field" style=${{ flex: '0 0 auto', minWidth: 0 }}><${Button} variant="outline" disabled=${!nb.trim()} why="Γράψε πρώτα το όνομα" onClick=${addBase}>Πρόσθεσε<//></div>
       <div className="field"><label className="field__label" htmlFor="si-c">Νέα κατηγορία πάθησης</label><input id="si-c" className="ui-input" placeholder="π.χ. ΓΑΣΤΡΕΝΤΕΡΟΛΟΓΙΚΟ" value=${nc} onChange=${(e: any) => { setNc(e.target.value); setErr(null); }} onKeyDown=${(e: any) => { if (e.key === 'Enter') addCat(); }}/></div>
-      <div className="field" style=${{ flex: 0 }}><${Button} variant="outline" disabled=${!nc.trim()} why="Γράψε πρώτα το όνομα" onClick=${addCat}>Πρόσθεσε<//></div>
+      <div className="field" style=${{ flex: '0 0 auto', minWidth: 0 }}><${Button} variant="outline" disabled=${!nc.trim()} why="Γράψε πρώτα το όνομα" onClick=${addCat}>Πρόσθεσε<//></div>
     </div>
     ${ownCats.length > 0 && html`<p className="note">Δικές σου κατηγορίες: ${ownCats.map((c, i) => html`<span key=${c}>${i ? ', ' : ''}${c}${!usedCat(c) && html` <${Button} variant="link" aria-label=${'Σβήσε ' + c} onClick=${() => removeCat(c)}>✕<//>`}</span>`)}</p>`}
     <p className="note">Οι κατηγορίες πάθησης ακολουθούν τις ενότητες του Γενικού Πίνακα Νοσημάτων (π.δ. 11/2014). Μένουν μόνο στην εφαρμογή: στο Excel η Σ.Ι. γράφεται χωρίς αυτήν (π.χ. «Ι3 ΧΩΡΙΣ ΟΠΛΟ»), για να μη χαλάσει κάποιος τύπος που τη μετράει.</p>

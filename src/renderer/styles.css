@@ -372,7 +372,7 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .toolbar__count{font-size:13px;color:var(--muted-fg);margin-left:auto;white-space:nowrap}
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;min-width:0;flex:1}
 .bulkbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border-radius:var(--radius);background:var(--secondary);color:var(--secondary-fg);font-weight:600}
-.bulkbar span{flex:1;min-width:120px}
+.bulkbar span{flex:1;min-width:120px}.bulkbar .ui-dd__v{min-width:0}   /* το κείμενο του αναδιπλούμενου μέσα στη μπάρα δεν παίρνει τα 120px, ώστε το βελάκι να χωράει */
 /* PeopleTable (στην εφαρμογή: PeopleTable.module.css) */
 .ptable{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);box-shadow:var(--shadow-sm);overflow:hidden}
 .ptable__head,.ptable__row{display:grid;grid-template-columns:40px minmax(170px,1.7fr) minmax(80px,.9fr) 100px 84px 72px 60px minmax(170px,1.5fr);align-items:center}
@@ -415,6 +415,7 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .post__who{display:flex;flex-direction:column;justify-content:center;min-width:0}
 .post__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:15px}
 .post__name .ui-badge{vertical-align:1px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .linkish{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}span.post__name > .ui-badge{flex:none}   /* μακρύ όνομα: «…» και όχι κόψιμο, το σήμα ⚠ μένει δίπλα */
 .post__acts{display:flex;align-items:center;gap:2px;justify-content:flex-start}
 .post__acts .ui-btn--sm{padding:0 9px;font-size:14px;font-weight:500}
 .post__pick{grid-column:3/-1;min-width:0}
@@ -537,7 +538,8 @@ dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .sigrid{border-collapse:collapse;width:100%;font-size:13px}
 .sigrid th,.sigrid td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}
 .sigrid th:first-child,.sigrid td:first-child{text-align:left}
-.sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px}
+.sigrid thead th{font-weight:600;color:var(--muted-fg);font-size:12px;white-space:normal;line-height:1.2;vertical-align:bottom;overflow-wrap:anywhere}.sigrid thead th:not(:first-child){min-width:76px;max-width:100px}   /* οι υπηρεσίες σπάνε σε γραμμές (πλήρες όνομα στο data-tip) */
+.sigrid th:first-child,.sigrid td:first-child{position:sticky;left:0;z-index:1;background:var(--card);box-shadow:1px 0 0 var(--border)}.sigrid tr.sigrid__sec th:first-child{position:static;box-shadow:none}   /* η πρώτη στήλη μένει ορατή όταν ο πίνακας κυλά οριζόντια */
 .sigrid tr.is-sub td:first-child{padding-left:22px}
 .sigrid tr.is-cat td:first-child{padding-left:40px;font-size:12px}
 .sigrid td.is-set{background:var(--hover)}
