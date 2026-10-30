@@ -7,6 +7,7 @@ import { byName } from './hkaiText';
 import { statusLbl } from './ranks';
 import { norm } from './text';
 import { outNoteOf, withNote } from './weekend';
+import { stillOut } from './returns';
 
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
 export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: Status }[]; stay: { p: Person; note: string }[] } {
@@ -16,11 +17,15 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     const ss = statusesFrom(s.statuses, p.id, d, outMin(s.rules));
     const o = ss.find(x => TYPES[x.type].cat === 'out');
     if (o) { outs.push({ p, st: o }); continue; }
+    // έξω ακόμα από έξοδο/ΔΝ παλαιότερης μέρας (διόρθωση «γυρνά αργότερα», «δεν γυρνά»): δεν είναι παραμένων
+    const held = stillOut(s, p.id, d);
+    if (held) { outs.push({ p, st: held.st }); continue; }
     if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
     const post = postOf(s, d, p.id);
     // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
     const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
-    const note = [...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label : '', p.post || ''].filter(Boolean).join(', ');
+    // δύο καταστάσεις του ίδιου είδους που πέφτουν την ίδια μέρα: μία φορά («ΣΤΕΠ», όχι «ΣΤΕΠ, ΣΤΕΠ»)
+    const note = [...new Set([...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label : '', p.post || ''].filter(Boolean))].join(', ');
     stay.push({ p, note: norm(withNote(note, outNoteOf(s, d, p.id))) });
   }
   // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)

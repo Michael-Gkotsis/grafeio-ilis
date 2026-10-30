@@ -10,7 +10,7 @@
 import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
 import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { hasTimes, mins } from './hours';
-import { activePeople, holOf, statusesOn } from './rules';
+import { activePeople, holOf, postOf, statusesOn } from './rules';
 import { collator } from './text';
 import { dutyAt, isSat, isWk, outLbl } from './weekend';
 
@@ -136,6 +136,22 @@ export function outHeld(s: AppState, pid: number, d: ISODate, m: number): Status
   return h ? h.st : h;
 }
 export const awayAt = (s: AppState, pid: number, d: ISODate, time: string): boolean => !!outHeld(s, pid, d, mins(time));
+// Λείπει ακόμα από έξοδο/ΔΝ παλαιότερης μέρας χωρίς δική του κατάσταση τη μέρα d, επειδή η διόρθωση του γραφείου λέει «γυρνά αργότερα»
+// ή «δεν γυρνά»: στην αρχή εξόδου της d είναι έξω. Δεν είναι παραμένων· στους Εξοδούχους με την έξοδο/ΔΝ της μέρας του.
+// Με υπηρεσία τη μέρα d είναι μέσα (η υπηρεσία μετρά πάνω από τη διόρθωση).
+export function stillOut(s: AppState, pid: number, d: ISODate): { st: Status; r: Ret } | null {
+  if (!s.backFix?.length || awayOn(s, pid, d).length || postOf(s, d, pid)) return null;
+  const h = outHeldBy(s, pid, d, mins(dayTimes(s, d).out));
+  return h && h.r?.fix ? { st: h.st, r: h.r } : null;
+}
+// Πότε γυρνά όποιος είναι στους Εξοδούχους της d, όπως το λέει το «Ποιοι γυρίζουν και πότε» (returnsOn): εξοδούχος/ΔΝ (returnOf),
+// με άδεια την ίδια μέρα (leaveBack: π.χ. η άδεια τελειώνει σήμερα και απόψε έχει ΔΝ), ή έξω ακόμα από παλαιότερη μέρα με διόρθωση
+// (stillOut). Οι Παρατηρήσεις του Excel λένε έτσι πάντα το «ΓΥΡΝΑ …».
+export function retFor(s: AppState, pid: number, d: ISODate): Ret | null {
+  const r = returnOf(s, pid, d); if (r) return r;
+  if (awayOn(s, pid, d).some(x => !hasOut(x))) return leaveBack(s, pid, d);
+  return stillOut(s, pid, d)?.r ?? null;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // «Ποιοι γυρίζουν και πότε»: όλοι όσοι λείπουν τη μέρα d, με πότε και γιατί γυρνά ο καθένας (Εξοδούχοι, Σήμερα)
@@ -236,20 +252,30 @@ export function outsTables(s: AppState, d: ISODate): OutsTables {
   const t: OutsTables = { dn: [], out: [], tonight: [], tomorrow: [] };
   const row = (p: Person, st: Status | undefined, r: Ret, base: string, plain = false): OutRow =>
     ({ p, st, r, when: whenTxt(s, d, r), why: whyTxt(r, base, plain), key: r.pending || r.open ? r.day + ' 99:99' : r.day + ' ' + (r.time || dayTimes(s, r.day).backDn) });
+  // πότε γυρνά ο ΔΝ/εξοδούχος της μέρας x, και όταν εκείνη τη μέρα τελείωνε και άδεια (leaveEnd)
+  const back = (pid: number, x: ISODate) => returnOf(s, pid, x) ?? leaveEnd(s, pid, x, awayOn(s, pid, x))?.r ?? null;
   for (const p of activePeople(s)) {
-    const now = awayOn(s, p.id, d); if (!now.length) continue;
+    const now = awayOn(s, p.id, d);
+    if (!now.length) {
+      // έξω ακόμα από παλαιότερη μέρα με διόρθωση «γυρνά …» (χωρίς δική του κατάσταση σήμερα): γυρνά σήμερα ή αύριο
+      const h = stillOut(s, p.id, d);
+      if (h && !h.r.open && (h.r.day === d || h.r.day === n)) (h.r.day === d ? t.tonight : t.tomorrow).push(row(p, h.st, h.r, outLbl(h.st)));
+      continue;
+    }
     const rd = returnOf(s, p.id, d);
     if (rd) {
       const dn = now.find(x => x.type === 'DN'), st = dn || now.find(hasOut)!;
       if (dn) {
-        // χθες ΔΝ και δεν γύρισε το πρωί (σήμερα χωρίς εκπαίδευση, ΔΝ ΣΚ): συνεχίζει, δεν «βγαίνει» σήμερα
-        const prev = returnOf(s, p.id, y);
-        if (!(prev && !prev.open && prev.day > d)) t.dn.push(row(p, dn, rd, outLbl(dn)));
+        // χθες ΔΝ και δεν γύρισε το πρωί (σήμερα χωρίς εκπαίδευση, ΔΝ ΣΚ, διόρθωση): συνεχίζει, δεν «βγαίνει» σήμερα
+        const prev = back(p.id, y);
+        if (!(prev && !prev.pending && (prev.open || prev.day > d))) t.dn.push(row(p, dn, rd, outLbl(dn)));
         if (rd.day === n && !rd.open) t.tomorrow.push(row(p, dn, rd, outLbl(dn)));
       } else {
-        const prevDn = awayOn(s, p.id, y).some(x => x.type === 'DN') && !!returnOf(s, p.id, y);
-        (prevDn ? t.tonight : t.out).push(row(p, st, rd, prevDn ? 'ΔΝ χθες, έξοδος' : 'έξοδος'));
-        if (rd.day === n && !rd.open) t.tomorrow.push(row(p, st, rd, 'έξοδος'));
+        // χθες ΔΝ (και με άδεια που τελείωνε χθες) και σήμερα έξοδος: δεν γύρισε, γυρνά απόψε· με διόρθωση για αύριο μόνο στον 4
+        const prevDn = awayOn(s, p.id, y).some(x => x.type === 'DN') && !!back(p.id, y);
+        if (!prevDn) t.out.push(row(p, st, rd, 'έξοδος'));
+        else if (rd.day !== n || rd.open) t.tonight.push(row(p, st, rd, 'ΔΝ χθες, έξοδος'));
+        if (rd.day === n && !rd.open) t.tomorrow.push(row(p, st, rd, prevDn ? 'ΔΝ χθες, έξοδος' : 'έξοδος'));
       }
       continue;
     }
