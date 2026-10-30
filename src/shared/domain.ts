@@ -430,7 +430,7 @@ export const DEFAULT_SETTINGS: Settings = {
   signers: { sergeant: '', commander: '' },
   outputDir: '',
   fixed: {},
-  rev: 7
+  rev: 8
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {

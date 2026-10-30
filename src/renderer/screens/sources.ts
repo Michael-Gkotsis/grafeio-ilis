@@ -39,7 +39,7 @@ export function SourcesView() {
       if (!r.ok) { toast({ text: r.error }); return; }
       if (kind) {
         const best = bestFor(kind, r.sheets);
-        setLayer({ kind: 'map', list: kind, book: r, b: best ? { file: r.file, sheet: best.sheet, header: best.header, cols: best.cols, write: true, scope: 'all' } : defaultBinding(kind, r.file, r.sheets[0]?.name) });
+        setLayer({ kind: 'map', list: kind, book: r, b: best ? { file: r.file, sheet: best.sheet, header: best.header, cols: best.cols, write: true, scope: 'active' } : defaultBinding(kind, r.file, r.sheets[0]?.name) });
       } else setLayer({ kind: 'match', book: r });
     } finally { setBusy(''); }
   };
@@ -131,7 +131,7 @@ function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () =
   const dupe = chosen.map(([, k]) => k).find((k, i, a) => a.indexOf(k) !== i);
   const bindingFor = (i: number, k: ListKind): SourceBinding => {
     const h = book.hits[i]; const sh = book.sheets.find(s => s.name === h.sheet);
-    return { file: book.file, sheet: h.sheet, header: h.header, cols: suggestCols(k, sh, h.header), write: true, scope: 'all' };
+    return { file: book.file, sheet: h.sheet, header: h.header, cols: suggestCols(k, sh, h.header), write: true, scope: 'active' };
   };
   const save = async () => {
     for (const [i, k] of chosen) await window.api.srcSave(k, bindingFor(+i, k));
@@ -214,7 +214,7 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
         <input id="mp-hd" type="number" min="1" className="ui-input" value=${b.header + 1} onChange=${(e: any) => setHeader(Math.max(0, (+e.target.value || 1) - 1))}/></div>`}
       ${isStatusKind(list) && html`<div className="field"><span className="field__label">Τι γράφει η εφαρμογή</span>
         <${Select} className="ui-input" aria-label="Ποιες εγγραφές γράφονται" value=${b.scope || 'all'} onChange=${(e: any) => setB({ ...b, scope: e.target.value })}>
-          <option value="all">Όλες τις εγγραφές</option><option value="active">Μόνο όσες ισχύουν από σήμερα και μετά</option><//></div>`}
+          <option value="active">Μόνο όσες ισχύουν από σήμερα και μετά (τα ληγμένα σβήνονται)</option><option value="all">Όλες τις εγγραφές (και τα ληγμένα)</option><//></div>`}
     </div>
     ${miss.length > 0 && html`<${Alert} tone="bad"><span>Λείπει: <b>${miss.join(', ')}</b>. Πάτα το πεδίο αριστερά και μετά ένα κελί της στήλης του στον πίνακα.</span><//>`}
     <div className="mapper">
@@ -259,7 +259,7 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
   useEffect(() => { if (same) window.api.srcKeys(list).then(setPrev); else setPrev({ keys: [], base: {} }); }, [list, same]);
   const sheet = book.sheets.find(s => s.name === b.sheet);
   const parsed = useMemo(() => (sheet ? parseStatuses(list, sheet, b, state.people, today, state.settings.lists) : null), [sheet, b, state.people, today, list, state.settings.lists]);
-  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, prev.keys, prev.base) : null), [parsed, state, b, choices, list, prev]);
+  const d = useMemo(() => (parsed ? diffStatuses(list, state, parsed, b, choices, prev.keys, prev.base, today) : null), [parsed, state, b, choices, list, prev, today]);
   const all = useMemo(() => (parsed ? parsed.cands.filter(c => c.pid == null) : []), [parsed]);
   if (!sheet || !parsed || !d) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const types = KIND[list].types!;

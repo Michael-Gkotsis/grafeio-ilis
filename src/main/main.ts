@@ -156,10 +156,18 @@ function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: 
 }
 
 // Κάθε μέρα: όσα ιατρικά/ποινές έληξαν χθες γράφονται στο ιστορικό (Κ-04, Κ-10), και ένα αντίγραφο της βάσης
+// Με την εφαρμογή ανοιχτή από μέρα σε μέρα: τα φύλλα με «Μόνο όσες ισχύουν» ξαναγράφονται, ώστε να σβηστούν όσα έληξαν χθες
+// (χωρίς αλλαγή στα δεδομένα δεν θα γράφονταν ως την επόμενη εκκίνηση)
+let dayOf = '';
 function daily() {
   const d = today();
   if (store.state.statuses.some(x => x.open && x.to < d)) runCmd({ t: 'extendOpen' });
   if (!store.hasAuditToday(d, 'auto')) runCmd({ t: 'expire' });
+  if (dayOf && dayOf !== d) {
+    const ks = STATUS_KINDS.filter(k => bindingOf(k)?.scope === 'active' && bindingOf(k)?.write !== false);
+    if (ks.length) { ks.forEach(k => dirty.add(k)); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
+  }
+  dayOf = d;
   const dir = path.join(DATA, 'backups');
   const has = fs.existsSync(dir) && fs.readdirSync(dir).some(f => f.startsWith('ilh_' + d));
   if (!has) { try { store.backup('ημερήσιο'); store.pruneBackups(); } catch (e) { console.error('backup', e); } }
@@ -591,7 +599,7 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
     const book = await readBook(b.file); const sheet = sheetOf(book.sheets, b.sheet);
     if (!sheet) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const parsed = parseStatuses(kind, sheet, b, store.state.people, today(), store.state.settings.lists);
-    const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b));
+    const d = diffStatuses(kind, store.state, parsed, b, choices, keysOf(kind, b), baseFor(kind, b), today());
     if (auto && (parsed.unknown.length || parsed.skipped.length || d.unmatched.length || d.dup.length || d.removed.length || d.update.some(u => u.conflict) || d.add.some(a => a.open) || d.update.some(u => u.patch.open) || !(d.add.length + d.update.length))) return fail('όχι απλό');
     saveBinding(kind, b);
     // άλλαξαν και στις δύο πλευρές και ο χρήστης κράτησε της εφαρμογής: δεν περνούν, και γράφονται μετά στο Excel
@@ -650,7 +658,7 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
     try {
       const book = await readBook(ros.file);
       const hit = detectTables(notReports(ros.file, book.sheets)).find(h => h.best === kind);
-      if (hit) return { b: { file: ros.file, sheet: hit.sheet, header: hit.header, cols: hit.cols, write: true, scope: 'all' }, found: true };
+      if (hit) return { b: { file: ros.file, sheet: hit.sheet, header: hit.header, cols: hit.cols, write: true, scope: 'active' }, found: true };
       const names = new Set(book.sheets.map(x => normGreek(x.name)));
       const title = KIND[kind].title.slice(0, 28); let name = title;
       for (let i = 2; names.has(normGreek(name)); i++) name = title + ' ' + i;

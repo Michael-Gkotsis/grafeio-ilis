@@ -10,6 +10,7 @@ import { daysBetween, today } from '../shared/dates';
 import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
 import { splitOrigins } from '../shared/ranks';
+import { isStatusKind, type ListKind } from '../shared/sources';
 
 // empty: το αρχείο είναι άδειο (0 bytes) ή δεν έχει τους πίνακές μας (κόψιμο ρεύματος, μισή αντιγραφή φακέλου)
 export class CorruptDbError extends Error { constructor(msg: string, public empty = false) { super(msg); } }
@@ -107,6 +108,13 @@ export class Store {
       const s0 = this.state; const caps = rev < 6 ? capsPerService(s0.settings, s0.caps) : null;
       const settings = { ...(ownKinds(s0.settings) || s0.settings), rev: 7 };
       this.commit({ ...s0, ...(caps ? { caps } : {}), settings }); this.flush();
+    }
+    // rev 8 (Michael, 30/10: «γιατί δεν σβήνονται από το excel τα ιατρικά, άδειες, ποινές»): τα φύλλα καταστάσεων
+    // γράφουν μόνο όσα ισχύουν από σήμερα και μετά, οπότε τα ληγμένα σβήνονται από το Excel (στην εφαρμογή μένουν)
+    if ((this.state.settings.rev || 0) < 8) {
+      const s0 = this.state; const src = s0.settings.sources || {};
+      const sources = Object.fromEntries(Object.entries(src).map(([k, b]) => [k, b && isStatusKind(k as ListKind) ? { ...b, scope: 'active' as const } : b]));
+      this.commit({ ...s0, settings: { ...s0.settings, sources, rev: 8 } }); this.flush();
     }
     // προέλευση (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» στον βαθμό γίνεται βαθμός ΛΧΙΑΣ με προέλευση ΕΠΟΠ (μόνο όσοι το έχουν)
     const so = splitOrigins(this.state); if (so) { this.commit(so); this.flush(); }
