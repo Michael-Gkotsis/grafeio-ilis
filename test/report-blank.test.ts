@@ -146,3 +146,53 @@ describe('Έντυπα: «Κενό», καθαρή λογική', () => {
     expect(regrid(undefined, was, [A, C, C])).toEqual([]);
   });
 });
+
+// Michael, 30/10: «το κενό έντυπο δεν πιάνει το πλάτος του εντύπου, είναι πάντα αριστερά»
+describe('Έντυπα: «Κενός πίνακας», πλάτος και θέση στο χαρτί', () => {
+  const C = (f: string, h: string, w: 'auto' | 'narrow' | 'wide' = 'auto') => ({ f, h, w });
+  const bcols = [C('aa', 'Α/Α', 'narrow'), C('col', 'Α'), C('col', 'Β', 'wide'), C('col', 'Γ')];
+  const pcols = [C('aa', 'Α/Α', 'narrow'), C('rank', 'ΒΑΘΜΟΣ'), C('name', 'ΟΝΟΜΑ')];
+  const opts = (kind: 'blank' | 'people', x: Partial<BuildOpts> = {}): BuildOpts => ({ title: 'Τ', head: true, date: true, sig: 'none', land: false, sz: 12, fill: 'gray', cols: kind === 'blank' ? bcols : pcols, ...x });
+  async function sheet(o: BuildOpts, kind: 'blank' | 'people') {
+    const b = await buildTemplate(o, kind); const wb = await Workbook.open(b.data); const ws = await wb.sheet(0);
+    const cs = b.cols.map(c => c.c); const mg = ws.merges().filter(m => m.r1 === b.head);
+    const end = Math.max(...cs, ...mg.map(m => m.c2));
+    return { b, w: (c: number) => ws.colWidth(c), cs, start: cs[0], end, last: ws.lastCol() };
+  }
+  const total = (x: Awaited<ReturnType<typeof sheet>>) => Array.from({ length: x.end }, (_, i) => x.w(i + 1)).reduce((a, b) => a + b, 0);
+  it('χωρίς πλάτος: ο κενός πίνακας πιάνει όλο το πλάτος της σελίδας (όρθια 96, οριζόντια 140), το Α/Α μένει όσο ήταν, οι στήλες αναλογικά (η φαρδιά μεγαλύτερη)', async () => {
+    const p = await sheet(opts('blank'), 'blank');
+    expect(total(p)).toBeGreaterThan(94); expect(total(p)).toBeLessThan(98); expect(p.b.fixed).toBeUndefined();
+    expect(p.w(1)).toBe(5.5); expect(p.w(3)).toBeGreaterThan(p.w(2) * 1.4); expect(p.w(2)).toBeCloseTo(p.w(4), 0);
+    const l = await sheet(opts('blank', { land: true }), 'blank'); expect(total(l)).toBeGreaterThan(138); expect(total(l)).toBeLessThan(142);
+    // πολλές φαρδιές στήλες που ήδη ξεπερνούν τη σελίδα δεν στενεύουν
+    const many = await sheet(opts('blank', { cols: [C('aa', 'Α/Α', 'narrow'), ...Array.from({ length: 8 }, (_, i) => C('name', 'ΟΝΟΜΑ' + i))] }), 'blank');
+    expect(many.w(2)).toBeCloseTo(30.5, 0);
+  });
+  it('με πλάτος ή θέση που διάλεξες: όπως οι πίνακες ατόμων (μισό στο κέντρο, 2/3 δεξιά, όλο το πλάτος)· αριστερά = από την 1η στήλη', async () => {
+    for (const lay of [{ w: '1/2', at: 'center' }, { w: '2/3', at: 'right' }, { w: 'full' }, { w: '1/2' }, { at: 'center' }] as BuildOpts['lay'][]) {
+      const b = await sheet(opts('blank', { lay }), 'blank'), p = await sheet(opts('people', { lay }), 'people');
+      expect(b.b.fixed, JSON.stringify(lay)).toBe(true); expect(b.last).toBe(p.last);
+      const GRID = 24; const left = b.start - 1, right = GRID - b.end;
+      if (lay!.at === 'center') expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+      if (lay!.at === 'right') { expect(b.end).toBe(GRID); expect(p.end).toBe(GRID); }
+      if (!lay!.at) expect(b.start).toBe(1);
+      if (lay!.w === 'full') { expect([b.start, b.end]).toEqual([1, GRID]); expect([p.start, p.end]).toEqual([1, GRID]); }
+      if (lay!.w === '1/2') expect(b.end - b.start + 1).toBe(p.end - p.start + 1);   // το ίδιο πλάτος με τον πίνακα ατόμων
+    }
+  });
+  it('δίπλα σε άλλον πίνακα (ζώνη) και ο κενός πίνακας 2 κάτω από τον πρώτο: χωρίς επικάλυψη, ο κενός χωρίς πλάτος πιάνει όλη τη σελίδα όταν είναι μόνος του', async () => {
+    const t2 = { id: 't2', title: 'Β', kind: 'blank' as const, cols: bcols, nrows: 2 };
+    const beside = await buildTemplate(opts('people', { more: [t2], bands: [['main', 't2']] }), 'people');
+    const a = beside.cols.map(c => c.c), bb = beside.more![0].cols.map(c => c.c);
+    expect(beside.fixed).toBe(true); expect(Math.max(...a)).toBeLessThan(Math.min(...bb)); expect(Math.min(...a)).toBe(1);
+    const below = await buildTemplate(opts('people', { more: [t2], lay: { w: '1/2' } }), 'people');   // ο 1ος μισός (πλέγμα), ο κενός από κάτω μόνος του: όλο το πλάτος
+    expect(below.more![0].cols.map(c => c.c)[0]).toBe(1); expect(Math.max(...below.more![0].cols.map(c => c.c))).toBeGreaterThan(12);
+  });
+  it('οι πίνακες ατόμων δεν αλλάζουν: ίδια πλάτη στηλών όπως πριν (Α/Α 5,5, βαθμός 12, ονοματεπώνυμο 30,5)', async () => {
+    const p = await sheet(opts('people'), 'people');
+    expect([p.w(1), p.w(2), p.w(3)]).toEqual([5.5, 12, 30.5]); expect(p.last).toBe(3);
+    const withBlank = await sheet(opts('people', { more: [{ id: 't2', title: '', kind: 'blank', cols: bcols, nrows: 2 }] }), 'people');
+    expect(withBlank.w(2)).toBeGreaterThanOrEqual(12);   // κοινή στήλη του φύλλου: δεν στενεύει ο πίνακας ατόμων
+  });
+});
