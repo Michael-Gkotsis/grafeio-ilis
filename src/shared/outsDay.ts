@@ -5,11 +5,11 @@
 // Οι κανόνες ταξινόμησης έχουν σειρά προτεραιότητας και βγαίνουν μόνο από τις συναρτήσεις που ήδη χρησιμοποιούν η οθόνη και τα άλλα Excel
 // (returnOf, leaveEnd, retFor, stillOut, outHeldBy, postOf, statusesFrom, dayTimes): μία πηγή. Ελέγχονται στα test/outs-day.test.ts και outs-combos.test.ts.
 import type { ISODate } from './dates';
-import { addDays } from './dates';
+import { addDays, dm } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
 import { activePeople, outMin, postOf, statusesFrom, statusesOn } from './rules';
-import { dayTimes, leaveEnd, outHeldBy, retFor, retOrd, retTxt, returnOf, stillOut, type Ret } from './returns';
+import { dayTimes, leaveEnd, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
 import { dutyAt } from './weekend';
@@ -76,11 +76,13 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
   return rows.sort((a, b) => byRoom(a.p, b.p));
 }
 
-// Δ. ΠΟΤΕ ΓΥΡΙΖΟΥΝ: όσοι του Α, του Β και του Γ4, ομαδοποιημένοι ανά το κείμενο της επιστροφής (retTxt, όπως στην οθόνη «Ποιοι γυρίζουν»),
+// Δ. ΠΟΤΕ ΓΥΡΙΖΟΥΝ: όσοι του Α, του Β και του Γ4, ομαδοποιημένοι ανά μέρα και ώρα επιστροφής,
 // με τη σειρά του returnsOn (όσοι δεν έχουν λήξη στο τέλος)
 export interface DayWhen { when: string; r: Ret; rows: DayRow[] }
 export function whenList(rows: DayRow[]): DayWhen[] {
   const m = new Map<string, DayWhen>();
-  for (const x of rows) if (x.r && /^[AB]|^G4/.test(x.g)) { const k = retTxt(x.r); const l = m.get(k); if (l) l.rows.push(x); else m.set(k, { when: k, r: x.r, rows: [x] }); }
+  // ανά ώρα επιστροφής (μέρα και ώρα), όχι ανά λόγο: «Σάββατο 31/10 06:00» μία γραμμή για όλους τους ΔΝ
+  const at = (r: Ret) => (r.pending ? r.why + ' ' + dm(r.day) : r.open ? 'χωρίς λήξη' : retDay(r) + ' ' + (r.time || 'πρωί'));
+  for (const x of rows) if (x.r && /^[AB]|^G4/.test(x.g)) { const k = at(x.r); const l = m.get(k); if (l) l.rows.push(x); else m.set(k, { when: k, r: x.r, rows: [x] }); }
   return [...m.values()].sort((a, b) => retOrd(a.r).localeCompare(retOrd(b.r)) || a.when.localeCompare(b.when, 'el'));
 }

@@ -67,6 +67,12 @@ describe('Όλη η δύναμη: οι 35 περιπτώσεις', () => {
     if (x && !when && want !== 'G5') expect(x.r).toBeNull();
     expect(x?.warn?.startsWith(warn ?? '\0') ?? warn === undefined).toBe(true);
   });
+  it('η Δ ομαδοποιεί ανά μέρα και ώρα, όχι ανά λόγο: όλοι όσοι γυρίζουν αύριο 06:00 σε μία γραμμή', () => {
+    let s = base(); s = { ...s, statuses: [...s.statuses, st(1, 'DN', FRI), st(2, 'DN', THU), st(2, 'DN', FRI), st(3, 'NOS', '2026-10-28', { to: FRI, open: true }), st(4, 'OUT', THU)] };
+    s = run(s, { t: 'setBackFix', pid: 4, day: THU, stay: true, why: 'Χ' });
+    const w = whenList(dayBook(s, FRI)).filter(x => x.rows.some(r => r.p.id < 10));
+    expect(w.map(x => [x.when, x.rows.map(r => r.p.id).sort()])).toEqual([['Σάββατο 31/10 06:00', [1, 2]], ['χωρίς λήξη', [3, 4]]]);
+  });
   it('μία φορά ο καθένας, και η Δ ομαδοποιεί όσους γυρίζουν με τη σειρά των ωρών (όσοι δεν έχουν λήξη στο τέλος)', () => {
     let s = base(); s = { ...s, statuses: [...s.statuses, st(1, 'DN', FRI), st(2, 'OUT', FRI), st(3, 'OUT', FRI), st(4, 'NOS', '2026-10-28', { to: FRI, open: true }), st(5, 'LEAVE', '2026-10-26', { to: FRI, toTime: '14:00' })] };
     const book = dayBook(s, FRI); expect(new Set(book.map(r => r.p.id)).size).toBe(book.length); expect(book.length).toBe(40);
