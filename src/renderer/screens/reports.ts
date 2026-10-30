@@ -691,7 +691,7 @@ function sampleText(f: string, fmt: string, today: string): string {
   return [...new Set(list.map(([type, kind]) => stText({ type, kind, from: addDays(today, -2), to: addDays(today, 3) }, fmt, undefined, today).toUpperCase()))].join(', ');
 }
 const CUSTOM = '#own';   // «Δική σου μορφή…» στις λίστες
-function StatusFmt({ f, sf, onChange, id, st, onSt }: P) {
+function StatusFmt({ f, sf, onChange, id, st, onSt, stNew }: P) {   // stNew: το φίλτρο του βήματος 4 «μόνο όσα δηλώθηκαν τη μέρα» ισχύει για όλες τις στήλες
   const { today } = useStore();
   const preset = sf == null || ST_FMTS.includes(sf); const [own, setOwn] = useState(!preset);
   const v = own ? CUSTOM : sf ?? ST_FMTS[0];
@@ -699,7 +699,7 @@ function StatusFmt({ f, sf, onChange, id, st, onSt }: P) {
     <span className="rep-colopt__l">Πώς γράφεται</span>
     <${Select} className="ui-select" aria-label="Πώς γράφεται η κατάσταση" value=${v} onChange=${(e: any) => { const x = e.target.value; if (x === CUSTOM) { setOwn(true); onChange(sf || ST_FMTS[0]); } else { setOwn(false); onChange(x === ST_FMTS[0] ? undefined : x); } }}>
       ${ST_FMTS.map(x => html`<option key=${x} value=${x}>${sampleText(f, x, today)}</option>`)}<option value=${CUSTOM}>Δική σου μορφή…</option><//>
-    ${onSt && html`<span className="rep-colopt__l">Ποιες</span><${Select} className="ui-select" aria-label="Ποιες καταστάσεις" value=${st || 'on'} onChange=${(e: any) => onSt(e.target.value === 'new' ? 'new' : undefined)}><option value="on">Όσες ισχύουν τη μέρα</option><option value="new">Μόνο όσες ξεκινούν τη μέρα</option><//>`}
+    ${onSt && html`<span className="rep-colopt__l">Ποιες</span><${Select} className="ui-select" aria-label="Ποιες καταστάσεις" disabled=${!!stNew} value=${stNew ? 'new' : st || 'on'} onChange=${(e: any) => onSt(e.target.value === 'new' ? 'new' : undefined)}><option value="on">Όσες ισχύουν τη μέρα</option><option value="new">Μόνο όσες ξεκινούν τη μέρα</option><//>${stNew && html`<small className="muted">από το βήμα 4</small>`}`}
     ${own && html`<input id=${id} className="ui-input rep-colopt__fmt" aria-label="Δική σου μορφή κατάστασης" placeholder="π.χ. {ΚΩΔ} ΕΩΣ {ΕΩΣ}" value=${sf || ''} onChange=${(e: any) => onChange(e.target.value)}/>
       <small className="muted rep-colopt__help">${ST_TAGS.map(t => '{' + t.tag + '} ' + t.help).join(' · ')}. Τώρα: ${sampleText(f, sf || '', today) || '—'}</small>`}
   </span>`;
@@ -725,11 +725,11 @@ function ComboFmt({ kind, o, onChange }: P) {
   </span>`;
 }
 // Οι επιλογές κάτω από μια στήλη· set(o, h): νέες επιλογές και (στον συνδυασμό) η επικεφαλίδα, αν ήταν η αυτόματη
-function ColOptsEditor({ kind, c, set }: P) {
+function ColOptsEditor({ kind, c, set, stNew }: P) {
   if (c.f === 'combo') return html`<${ComboFmt} kind=${kind} o=${c.o} onChange=${(o: ColOpts) => set(o, !c.h || c.h === comboHead(kind, c.o) ? comboHead(kind, o) : c.h)}/>`;
   if (isStatusField(c.f)) {
     const put = (x: Partial<ColOpts>) => { const o: ColOpts = { ...(c.o || {}), ...x }; if (o.sf == null) delete o.sf; if (!o.st) delete o.st; set(o.sf == null && !o.st ? undefined : o, c.h); };
-    return html`<${StatusFmt} f=${c.f} sf=${c.o?.sf} st=${c.o?.st} onChange=${(sf?: string) => put({ sf })} onSt=${c.f === 'stype' ? undefined : (st?: 'new') => put({ st })}/>`;
+    return html`<${StatusFmt} f=${c.f} sf=${c.o?.sf} st=${c.o?.st} stNew=${stNew} onChange=${(sf?: string) => put({ sf })} onSt=${c.f === 'stype' ? undefined : (st?: 'new') => put({ st })}/>`;
   }
   return null;
 }
@@ -737,7 +737,7 @@ function ColOptsEditor({ kind, c, set }: P) {
 const colWith = (kind: RepKind, f: string, h: string) => (f === 'combo' ? { f, h: comboHead(kind, DEF_COMBO), o: { ...DEF_COMBO } } : { f, h: fieldOf(kind, f)?.head || (kind === 'blank' && h === 'Α/Α' ? '' : h), o: undefined });
 
 // Οι στήλες ενός πίνακα στο «Φτιάξ' το εδώ»
-function ColsEditor({ kind, cols, setCols }: P) {
+function ColsEditor({ kind, cols, setCols, stNew }: P) {
   const setCol = (i: number, x: Partial<BuildCol>) => setCols(cols.map((c: BuildCol, j: number) => (j === i ? { ...c, ...x } : c)));
   // το 2ο όρισμα του setCols: από ποια παλιά στήλη προέρχεται κάθε νέα (για το πλέγμα του «Κενό»)
   const ix = cols.map((_: BuildCol, i: number) => i);
@@ -755,7 +755,7 @@ function ColsEditor({ kind, cols, setCols }: P) {
       <span className="rep-cols__mv"><${Button} size="icon" variant="ghost" aria-label="Πάνω" disabled=${i === 0} onClick=${() => move(i, -1)}>${Icon.up}<//><${Button} size="icon" variant="ghost" aria-label="Κάτω" disabled=${i === cols.length - 1} onClick=${() => move(i, 1)}>${Icon.down}<//>
         <${Button} size="icon" variant="ghost" aria-label="Βγάλε τη στήλη" disabled=${cols.length < 2} why="Χρειάζεται τουλάχιστον μία στήλη" onClick=${() => setCols(cols.filter((_: BuildCol, j: number) => j !== i), ix.filter((j: number) => j !== i))}>${Icon.x}<//></span>
       ${c.f === 'text' && html`<input className="ui-input rep-cols__txt" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(i, { text: e.target.value })}/>`}
-      <${ColOptsEditor} kind=${kind} c=${c} set=${(o: ColOpts | undefined, h: string) => setCol(i, { o, h })}/>
+      <${ColOptsEditor} kind=${kind} c=${c} stNew=${stNew} set=${(o: ColOpts | undefined, h: string) => setCol(i, { o, h })}/>
     </li>`)}</ul>
     <${Button} size="sm" variant="outline" disabled=${cols.length >= 16} why="Ως 16 στήλες" onClick=${add}>+ Στήλη<//></div>`;
 }
@@ -869,12 +869,12 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, se
       ${hasVals(r) && !more.length && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!o.nopeople} onChange=${(e: any) => { const { nopeople: _n, ...rest } = o; setO(e.target.checked ? { ...rest, nopeople: true } : rest); if (e.target.checked) { setTi(0); upd({ split: 'none' }); } }}/>Χωρίς πίνακα ατόμων (μόνο πίνακες τιμών)</label>`}
       <div className="rep-card__ed">
       ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} ta=${bt.ta} setTa=${(ta?: TAlign) => set({ more: more.map(x => (x.id === bt.id ? noTa(x, ta) : x)) })} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
-        <${ColsEditor} kind=${bt.kind} cols=${bt.cols} setCols=${(cols: BuildCol[], from?: number[]) => setT(bt.id, bt.kind === 'blank' ? { cols, grid: regrid(bt.grid, bt.cols, cols, from) } : { cols })}/>
+        <${ColsEditor} kind=${bt.kind} cols=${bt.cols} stNew=${(r.more || []).find((t: RepTable) => t.id === bt.id)?.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => setT(bt.id, bt.kind === 'blank' ? { cols, grid: regrid(bt.grid, bt.cols, cols, from) } : { cols })}/>
         ${bt.kind === 'blank' && html`<${BlankGrid} key=${bt.id} o=${bt} set=${(x: Partial<BuildTable>) => setT(bt.id, x)} r=${r} onRows=${(x: number) => upd({ more: (r.more || []).map((t: RepTable) => (t.id === bt.id ? { ...t, pick: { ...t.pick, mode: 'all', n: x } } : t)) })}/>`}
         ${layFold(bt.lay, bt.nohead, html`<${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/><${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`)}`
         : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
         : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} ta=${o.ta1} setTa=${setTa1} setTitle=${setT1}/>
-        <${ColsEditor} kind=${kind} cols=${o.cols} setCols=${(cols: BuildCol[], from?: number[]) => set(kind === 'blank' ? { cols, grid: regrid(o.grid, o.cols, cols, from) } : { cols })}/>
+        <${ColsEditor} kind=${kind} cols=${o.cols} stNew=${r.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => set(kind === 'blank' ? { cols, grid: regrid(o.grid, o.cols, cols, from) } : { cols })}/>
         ${kind === 'blank' && html`<${BlankGrid} o=${o} set=${set} r=${r} onRows=${(x: number) => upd({ pick: { ...r.pick, mode: 'all', n: x } })}/>`}
         ${layFold(o.lay, o.nohead, html`<${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/><${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`)}`}
       </div>
@@ -969,7 +969,7 @@ function BlankGrid({ o, set, r, onRows }: P) {
 }
 
 // Ανεβασμένο πρότυπο: ποια στήλη (επικεφαλίδα) παίρνει τι, για έναν πίνακα
-function ColMap({ kind, headers, cols, setCols }: P) {
+function ColMap({ kind, headers, cols, setCols, stNew }: P) {
   const colOf = (c: number) => cols.find((x: RepCol) => x.c === c);
   const setCol = (h: TplInspect['headers'][number], f: string, x: Partial<RepCol> = {}) => {
     const rest = cols.filter((y: RepCol) => y.c !== h.c); const cur = colOf(h.c);
@@ -981,7 +981,7 @@ function ColMap({ kind, headers, cols, setCols }: P) {
     <td className="nw"><span className="rep-cols__l">${String.fromCharCode(64 + Math.min(h.c, 26))}${h.c > 26 ? '…' : ''}</span> ${h.text}</td>
     <td><${Select} className=${cx('ui-select', !c && 'is-off')} aria-label=${'Στοιχείο για «' + h.text + '»'} value=${c?.f || ''} onChange=${(e: any) => setCol(h, e.target.value)}><option value="">— δεν γεμίζει —</option>${fieldOpts(kind)}<//>
       ${c?.f === 'text' && html`<input className="ui-input rep-map__txt" aria-label="Κείμενο σε κάθε γραμμή" placeholder="Κείμενο σε κάθε γραμμή" value=${c.text || ''} onChange=${(e: any) => setCol(h, 'text', { text: e.target.value })}/>`}
-      ${c && html`<${ColOptsEditor} kind=${kind} c=${{ ...c, h: '' }} set=${(o: ColOpts | undefined) => setCol(h, c.f, { o })}/>`}</td></tr>`; })}</tbody></table>`
+      ${c && html`<${ColOptsEditor} kind=${kind} c=${{ ...c, h: '' }} stNew=${stNew} set=${(o: ColOpts | undefined) => setCol(h, c.f, { o })}/>`}</td></tr>`; })}</tbody></table>`
     : html`<${Alert} tone="warn">Δεν βρέθηκαν επικεφαλίδες. Πάτα «Άλλη γραμμή…» και κάνε κλικ στη γραμμή με τις επικεφαλίδες του πίνακα.<//>`;
 }
 
@@ -1011,12 +1011,12 @@ function Mapping({ r, upd, setR, insp, tpl, picking, setPicking, view, setView, 
         <span>Επικεφαλίδες του πίνακα ${ti + 1} στη γραμμή <b>${m.head}</b>${si && si.prepared > 1 ? ' · ' + si.prepared + ' έτοιμες γραμμές' : ''}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head:' + m.id} onClick=${() => setPicking(picking === '#head:' + m.id ? null : '#head:' + m.id)}>Άλλη γραμμή…<//></div>
       <${TableHead} t=${m} n=${ti + 1} kind=${m.kind} noBlank=${true} setKind=${(k: RepKind) => subKind(m.id, k)} onDel=${() => delMore(m.id)}/>
-      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${m.kind} headers=${si?.headers} cols=${m.cols} setCols=${(cols: RepCol[]) => setMore(m.id, { cols })}/></div>
+      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${m.kind} headers=${si?.headers} cols=${m.cols} stNew=${m.pick?.stNew} setCols=${(cols: RepCol[]) => setMore(m.id, { cols })}/></div>
       ${m.nohead && html`<${NoHead} n=${ti + 1} on=${true} set=${(on: boolean) => setMore(m.id, { nohead: on ? true : undefined })}/>`}`
     : html`<div className="rep-opts">
         <span>Επικεφαλίδες στη γραμμή <b>${insp.head}</b>${insp.guessed ? ' (βρέθηκε μόνη της)' : ''} · ${insp.prepared > 1 ? insp.prepared + ' έτοιμες γραμμές' : 'οι γραμμές μπαίνουν όσες χρειάζονται'}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head'} onClick=${() => setPicking(picking === '#head' ? null : '#head')}>Άλλη γραμμή…<//></div>
-      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${r.kind} headers=${insp.headers} cols=${r.cols} setCols=${(cols: RepCol[]) => upd({ cols })}/></div>
+      <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${r.kind} headers=${insp.headers} cols=${r.cols} stNew=${r.pick.stNew} setCols=${(cols: RepCol[]) => upd({ cols })}/></div>
       ${r.nohead && html`<${NoHead} n=${1} on=${true} set=${(on: boolean) => upd({ nohead: on ? true : undefined })}/>`}`}
     <div><span className="field__label">Στοιχεία σε κελιά (κεφαλίδα, ημερομηνία, υπογραφές…)</span>
       <ul className="rep-cells">
@@ -1094,7 +1094,8 @@ function StepPick({ r, upd, p, sub }: P) {
         ${!sub && html`<div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>`}
       </div>
       ${people && html`<div><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
-        <div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${condVal(pk, c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setCond(pk, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div></div>`}
+        <div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${condVal(pk, c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setCond(pk, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div>
+        <label className="ui-checkrow" data-tip="Τα φίλτρα ιατρικό, ποινή, άδεια, εισαγωγή και οι στήλες καταστάσεων κοιτάνε μόνο όσα ξεκινούν τη μέρα του εντύπου, όχι ό,τι ισχύει γενικά."><input type="checkbox" className="ui-check" checked=${!!pk.stNew} onChange=${(e: any) => upd({ pick: { ...pk, stNew: e.target.checked ? true : undefined } })}/>Μόνο όσα δηλώθηκαν τη μέρα του εντύπου (ιατρικά, ποινές, άδειες, εισαγωγές)</label></div>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
       ${people && html`<div className="field-row">

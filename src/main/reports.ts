@@ -10,7 +10,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, blankFill, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankFill, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -166,8 +166,8 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
   // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
-  const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: r.cols, rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: t.cols, ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+  const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: stNewCols(r.cols, r.pick), rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
+    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: stNewCols(t.cols, t.pick), ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
     .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
