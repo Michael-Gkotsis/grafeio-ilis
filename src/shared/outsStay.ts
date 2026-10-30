@@ -10,6 +10,16 @@ import { outNoteOf, withNote } from './weekend';
 import { stillOut } from './returns';
 
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);
+// Τι κρατά μέσα έναν παραμένοντα (υπηρεσία, ΣΤΕΠ, ποινή, ιατρικά, πόστο) και η παρατήρηση της μέρας: οι Παραμένοντες και το Γ της «Όλη η δύναμη»
+// ss: οι καταστάσεις του από την ώρα εξόδου· hours: η υπηρεσία με τις ώρες της («Λ/Υ 14:00 → 14:00»)
+export function stayNote(s: AppState, d: ISODate, p: Person, ss: Status[], hours = false): string {
+  const post = postOf(s, d, p.id);
+  // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
+  const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
+  // δύο καταστάσεις του ίδιου είδους που πέφτουν την ίδια μέρα: μία φορά («ΣΤΕΠ», όχι «ΣΤΕΠ, ΣΤΕΠ»)
+  const note = [...new Set([...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label + (hours && post.hrs ? ' ' + post.hrs : '') : '', p.post || ''].filter(Boolean))].join(', ');
+  return norm(withNote(note, outNoteOf(s, d, p.id)));
+}
 export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: Status }[]; stay: { p: Person; note: string }[] } {
   const outs: { p: Person; st: Status }[] = []; const stay: { p: Person; note: string }[] = [];
   for (const p of activePeople(s)) {
@@ -21,12 +31,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     const held = stillOut(s, p.id, d);
     if (held) { outs.push({ p, st: held.st }); continue; }
     if (ss.some(x => TYPES[x.type].away)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
-    const post = postOf(s, d, p.id);
-    // και η ποινή που ακόμα αιτείται κρατά μέσα (γραφέας, 10/10)
-    const pend = s.statuses.filter(x => x.pid === p.id && x.type === 'PUN' && x.pending && coversDay(x, d));
-    // δύο καταστάσεις του ίδιου είδους που πέφτουν την ίδια μέρα: μία φορά («ΣΤΕΠ», όχι «ΣΤΕΠ, ΣΤΕΠ»)
-    const note = [...new Set([...ss.map(x => statusLbl(x, s.settings.lists)), ...pend.map(x => statusLbl(x, s.settings.lists)), post ? post.label : '', p.post || ''].filter(Boolean))].join(', ');
-    stay.push({ p, note: norm(withNote(note, outNoteOf(s, d, p.id))) });
+    stay.push({ p, note: stayNote(s, d, p, ss) });
   }
   // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)
   outs.sort((a, b) => byRoom(a.p, b.p)); stay.sort((a, b) => byRoom(a.p, b.p));

@@ -146,7 +146,7 @@ export function metricsOf(s: AppState): Metric[] {
   m.push(S('req.pending', G.req, 'Αιτήσεις που εκκρεμούν', c => reqs(c, x => !x.decision)));
   m.push(S('req.ok', G.req, 'Αιτήσεις που εγκρίθηκαν', c => reqs(c, x => x.decision === 'ok')));
   m.push(S('req.no', G.req, 'Αιτήσεις που απορρίφθηκαν', c => reqs(c, x => x.decision === 'no')));
-  // ---- Έξοδοι: όπως τα Excel «Εξοδούχοι / Παραμένοντες» (ώρα εξόδου) και «Σε 4 πίνακες»
+  // ---- Έξοδοι: όπως τα Excel «Εξοδούχοι / Παραμένοντες» (ώρα εξόδου) και οι 4 πίνακες (outsTables)
   const oas = (c: VCtx) => memo(c, 'oas', () => outsAndStay(c.s, c.d));
   m.push(S('out.outs', G.out, 'Εξοδούχοι και ΔΝ (κατάσταση εξόδου)', c => keys(oas(c).outs.map(x => x.p)), 'Όπως το Excel «Εξοδούχοι»: τη μέρα, με την ώρα εξόδου των Κανόνων (όχι τη στιγμή μέτρησης)'));
   m.push(S('out.out', G.out, 'Εξοδούχοι (έξοδος)', c => keys(oas(c).outs.filter(x => x.st.type === 'OUT').map(x => x.p))));
