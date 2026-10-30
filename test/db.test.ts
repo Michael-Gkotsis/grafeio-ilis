@@ -28,7 +28,7 @@ describe('βάση δεδομένων', () => {
   it('αναβάθμιση (rev 6 και 7): η δική σου υπηρεσία παίρνει δική της δυνατότητα με ό,τι ίσχυε μέσω του είδους της', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
     let st = new Store(dir, WASM); await st.open();
-    expect(st.state.settings.rev).toBe(7);
+    expect(st.state.settings.rev).toBe(8);
     const rows = fakePeople(5).map(({ id, active, ...p }) => p);
     let s = apply(st.state, { t: 'importPeople', rows, source: 't', deactivateMissing: false }, ctx).state;
     s = apply(s, { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'mg', armed: false, n: 1, hrs: '' }, ctx).state;
@@ -36,12 +36,24 @@ describe('βάση δεδομένων', () => {
     // όπως πριν την αναβάθμιση: «δεν κάνει μαγειρεία» ίσχυε και για την Πύλη
     st.commit({ ...s, caps: { 2: { mg: 'ΠΟΝΟΣ' } }, settings: { ...s.settings, rev: 5 } }); st.close();
     st = new Store(dir, WASM); await st.open();
-    expect(st.state.settings.rev).toBe(7);
+    expect(st.state.settings.rev).toBe(8);
     expect(st.state.caps[2]).toEqual({ mg: 'ΠΟΝΟΣ', [gate]: 'ΠΟΝΟΣ' });
     expect(st.state.settings.blocks.find(b => b.custom)!.kind).toBe('other');   // rev 7: μετρά ως δική της, μετά το rev 6
     st.close();
     st = new Store(dir, WASM); await st.open();   // γράφτηκε στη βάση, μία φορά
     expect(st.state.caps[2]).toEqual({ mg: 'ΠΟΝΟΣ', [gate]: 'ΠΟΝΟΣ' });
+    st.close();
+  });
+  it('αναβάθμιση (rev 8): τα φύλλα καταστάσεων γράφουν μόνο όσα ισχύουν (τα ληγμένα σβήνονται από το Excel)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gidb-'));
+    let st = new Store(dir, WASM); await st.open();
+    const med = { file: 'x.xlsx', sheet: 'Μ', header: 0, cols: { last: 0, from: 1 }, write: true, scope: 'all' as const };
+    const ppl = { file: 'x.xlsx', sheet: 'Δ', header: 0, cols: { last: 0 }, scope: 'all' as const };
+    st.commit({ ...st.state, settings: { ...st.state.settings, rev: 7, sources: { medical: med, leave: { ...med, scope: undefined }, people: ppl } } }); st.close();
+    st = new Store(dir, WASM); await st.open();
+    expect(st.state.settings.rev).toBe(8);
+    expect(st.state.settings.sources!.medical!.scope).toBe('active'); expect(st.state.settings.sources!.leave!.scope).toBe('active');
+    expect(st.state.settings.sources!.people).toEqual(ppl);
     st.close();
   });
   it('χαλασμένο αρχείο: δεν ανοίγει σιωπηλά, και το αντίγραφο περνά τον έλεγχο', async () => {

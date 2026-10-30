@@ -28,7 +28,7 @@ export interface SourceBinding {
   header: number;
   cols: Record<string, number>;
   write?: boolean;                   // η εφαρμογή γράφει εδώ τις αλλαγές της (μόνο για καταστάσεις)
-  scope?: 'all' | 'active';          // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά
+  scope?: 'all' | 'active';          // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά (προεπιλογή από 30/10: active, τα ληγμένα σβήνονται)
   values?: Record<string, TypeKey>;  // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
   month?: string;                    // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
   autoRead?: boolean;                // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
@@ -528,7 +528,9 @@ export interface Diff {
 // synced: ποιες εγγραφές είχε το Excel στην προηγούμενη ανάγνωση/εγγραφή. Όσες λείπουν τώρα σβήστηκαν εκεί· αν στη θέση
 // τους υπάρχει νέα γραμμή του ίδιου ατόμου, είναι η ίδια εγγραφή με άλλη ημερομηνία έναρξης.
 // base: οι εγγραφές όπως ήταν στην τελευταία ανάγνωση/εγγραφή (recVal ανά ταυτότητα)
-export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}, synced: string[] = [], base: Record<string, string> = {}): Diff {
+// today: με «Μόνο όσες ισχύουν» όσα έληξαν δεν είναι «της εφαρμογής, λείπουν από το Excel» (δεν γράφονται εκεί) ούτε
+// «σβήστηκαν από το Excel» (τα σβήνει η ίδια η εφαρμογή· μένουν στην εφαρμογή ως ιστορικό)
+export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b: SourceBinding, choices: Record<number, number | null> = {}, synced: string[] = [], base: Record<string, string> = {}, today?: ISODate): Diff {
   const changedInApp = (x: Status) => { const v = base[statusId(kind, x)]; return v != null && v !== recVal(x); };
   const types = KIND[kind].types!;
   const mine = s.statuses.filter(x => types.includes(x.type));
@@ -585,7 +587,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     } else if (what.length) d.update.push({ id: cur.id, patch, who, what: what.join(', '), ...(changedInApp(cur) ? { conflict: appText(cur) } : {}) });
     else d.same++;
   }
-  d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)));
+  d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)) && !(today && b.scope === 'active' && x.to < today));
   const was = new Set(synced);
   const gone = d.appOnly.filter(x => was.has(statusId(kind, x)));
   if (gone.length) {
@@ -834,7 +836,7 @@ export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, l
 // Προεπιλεγμένη διάταξη για καινούργιο πίνακα (όπως τα φύλλα του Δυναμολογίου)
 export function defaultBinding(kind: ListKind, file: string, sheet = KIND[kind].title.slice(0, 31)): SourceBinding {
   const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days').map(f => f.k)];
-  return { file, sheet, header: 1, cols: Object.fromEntries(keys.map((k, i) => [k, i])), write: isStatusKind(kind), scope: 'all' };
+  return { file, sheet, header: 1, cols: Object.fromEntries(keys.map((k, i) => [k, i])), write: isStatusKind(kind), scope: 'active' };
 }
 // Τι λείπει από μια αντιστοίχιση για να δουλέψει
 export function missingFields(kind: ListKind, cols: Record<string, number>): string[] {
