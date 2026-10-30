@@ -144,6 +144,10 @@ function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?:
 }
 // Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
 const COMBO_NO = new Set(['aa', 'blank', 'text', 'combo', 'col']);
+// «Κενός πίνακας», άτομο ανά γραμμή (Michael, 30/10): το FIELDS.blank έχει και τα στοιχεία των ατόμων. Κλειδιά: του στρατιώτη όπως είναι (rank, name, asm…),
+// του στελέχους ίδια όταν υπάρχουν και στους δύο (rank, name, who, phone, role, status) και μόνο ό,τι έχει το στέλεχος με δικό του κλειδί ('am'), άρα δεν συγκρούονται.
+// Στέλεχος σε στοιχείο που δεν έχει (ΑΣΜ, θάλαμος…) δίνει κενό κελί, στρατιώτης σε 'am' επίσης
+FIELDS.blank.push(...FIELDS.people.filter(f => !COMBO_NO.has(f.k)), ...FIELDS.cadre.filter(f => !COMBO_NO.has(f.k) && !FIELDS.people.some(x => x.k === f.k)));
 export const comboFields = (kind: RepKind) => FIELDS[kind].filter(f => !COMBO_NO.has(f.k));
 export const DEF_COMBO: Required<Pick<ColOpts, 'parts' | 'fmt'>> = { parts: ['rank1', 'spec'], fmt: '{1} ({2})' };
 export function comboFmts(n: number): string[] {
@@ -277,6 +281,7 @@ export interface Report {
   daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
   sigs?: Sig[];                               // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
   layout?: Moves;                             // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
+  who?: (string | null)[];                    // «Κενός πίνακας» (kind blank): το άτομο κάθε γραμμής, 'p:12' (στρατιώτης) ή 'c:3' (στέλεχος)· κενό/σβησμένο = κενή γραμμή
   more?: RepTable[];                          // κι άλλοι πίνακες κάτω από τον πρώτο, με δικές τους στήλες και δικούς τους ποιοι μπαίνουν
   fixed?: boolean;                            // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
   vals?: ValueTable[];                        // πίνακες τιμών (shared/values.ts): κείμενο και τιμή, κάτω από τους πίνακες, πριν τις υπογραφές· χωρίς πίνακα ατόμων επιτρέπεται το έντυπο να έχει μόνο αυτούς
@@ -286,14 +291,14 @@ export interface Report {
 }
 // Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
 // επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
-export interface RepTable { id: string; title?: string; kind: RepKind; head: number; cols: RepCol[]; pick: RepPick; sort: RepSort; nohead?: boolean }
+export interface RepTable { id: string; title?: string; kind: RepKind; head: number; cols: RepCol[]; pick: RepPick; sort: RepSort; nohead?: boolean; who?: (string | null)[] }   // who: όπως στο Report (μόνο στο kind blank)
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
 export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
 export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string; o?: ColOpts }
 // «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
 // Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
 export interface BuildVal { id: string; title?: string; ta?: TAlign; lay?: TabLay }
-export interface BuildTable { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean; grid?: string[][]; nrows?: number }   // nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
+export interface BuildTable { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean; grid?: string[][]; nrows?: number; who?: (string | null)[] }   // who: άτομο ανά γραμμή (Report.who) · nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
 // Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
 // στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
 export interface TabLay { w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4'; at?: 'left' | 'center' | 'right'; even?: boolean; gap?: number }
@@ -304,7 +309,7 @@ export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: nu
 // Και όταν κάποιοι πίνακες είναι δίπλα-δίπλα (bands): μοιράζονται τις 24 στήλες
 export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOpts, 'bands' | 'vals'>>) => [o.lay, ...(o.more || []).map(t => t.lay), ...(o.vals || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even)) || hasBeside(o.bands || []);
 // sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[]; nohead?: boolean; t1?: string; ta1?: TAlign; tta?: TAlign; grid?: string[][]; nrows?: number }   // grid, nrows: «Κενό» (1ος πίνακας), τα κελιά που έγραψες (γραμμή × στήλη, χωρίς το Α/Α· κρατιούνται και πέρα από τις nrows) και πόσες γραμμές βγαίνουν (προεπιλογή 10) · ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
+export interface BuildOpts { title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[]; nohead?: boolean; t1?: string; ta1?: TAlign; tta?: TAlign; grid?: string[][]; nrows?: number; who?: (string | null)[] }   // who: το άτομο κάθε γραμμής ('p:12', 'c:3', null), όπως στο Report.who · grid, nrows: «Κενό» (1ος πίνακας), τα κελιά που έγραψες (γραμμή × στήλη, χωρίς το Α/Α· κρατιούνται και πέρα από τις nrows) και πόσες γραμμές βγαίνουν (προεπιλογή 10) · ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
@@ -333,7 +338,7 @@ export function switchCols(cs: BuildCol[], from: RepKind, to: RepKind): BuildCol
 }
 // Πίνακας 2, 3… (Φτιάξ' το εδώ) αλλάζει είδος: στήλες όπως στον 1ο πίνακα (switchCols)· στο «Κενός πίνακας» 10 γραμμές και κενό πλέγμα, πίσω χωρίς πλέγμα
 export function retypeTable(t: BuildTable, kind: RepKind): BuildTable {
-  const { grid: _g, nrows: _n, ...rest } = t;
+  const { grid: _g, nrows: _n, who: _w, ...rest } = t;
   return { ...rest, kind, cols: switchCols(t.cols, t.kind, kind), ...(kind === 'blank' ? { nrows: BLANK_ROWS } : {}) };
 }
 export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' });
@@ -416,12 +421,27 @@ const when = (day?: ISODate, t?: string) => (day ? dmy(day) + (t ? ' ' + t : '')
 // Οι στήλες ενός πίνακα όταν το φίλτρο λέει «μόνο όσα δηλώθηκαν τη μέρα» (pick.stNew): οι στήλες καταστάσεων και οι συνδυασμοί παίρνουν st: 'new'
 export const stNewCols = <T extends { f: string; o?: ColOpts }>(cols: T[], pk?: Pick<RepPick, 'stNew'>): T[] =>
   (pk?.stNew ? cols.map(c => (c.f === 'combo' || (c.f !== 'stype' && isStatusField(c.f)) ? { ...c, o: { ...c.o, st: 'new' as const } } : c)) : cols);
+// Άτομο γραμμής του «Κενός πίνακας»: 'p:12' στρατιώτης (id), 'c:3' στέλεχος (id του Cadre, κείμενο)· σβησμένο ή άγνωστο = null (κενή γραμμή)
+export type WhoAt = { kind: 'people'; x: Person } | { kind: 'cadre'; x: Cadre };
+export const whoP = (id: number) => 'p:' + id, whoC = (id: string) => 'c:' + id;
+export function whoOf(s: Pick<AppState, 'people' | 'cadreList'>, ref: string | null | undefined, pm?: Map<number, Person>): WhoAt | null {
+  if (!ref) return null; const id = ref.slice(2);
+  if (ref.startsWith('c:')) { const c = (s.cadreList || []).find(x => x.id === id); return c ? { kind: 'cadre', x: c } : null; }
+  if (ref.startsWith('p:')) { const p = (pm || personMap(s.people)).get(+id); return p ? { kind: 'people', x: p } : null; }
+  return null;
+}
 // o: μορφή της στήλης (καταστάσεις, συνδυασμός)
 export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string, o?: ColOpts): string | number | null {
   if (f === 'aa') return i + 1;
   if (f === 'blank') return null;
   if (f === 'text') return text || null;
-  if (kind === 'blank') return f === 'col' ? upper(String(o?.vals?.[i] ?? '').trim()) || null : null;   // τα κελιά που έγραψες (ColOpts.vals), με κεφαλαία
+  if (kind === 'blank') {
+    const typed = upper(String(o?.vals?.[i] ?? '').trim()) || null;   // τα κελιά που έγραψες (ColOpts.vals), με κεφαλαία· νικούν πάντα
+    const w = (x as unknown as { bw?: WhoAt }).bw;
+    if (typed || f === 'col' || !w) return typed;
+    const v = fieldValue(s, w.kind, w.x as Row, f, i, d, undefined, o);   // άτομο γραμμής: το στοιχείο του (στρατιώτη ή στελέχους) τη μέρα d
+    return v == null || v === '' ? null : typeof v === 'string' ? upper(v) : v;
+  }
   if (f === 'combo') {
     const c = comboOf(o);
     const vals = c.parts.map(k => { const v = COMBO_NO.has(k) ? null : fieldValue(s, kind, x, k, i, d, undefined, o); return v == null ? '' : String(v); });
@@ -497,9 +517,9 @@ export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode ===
 // τα φίλτρα στρατιωτών χωρίς «ποιοι» φίλτρα (για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση)
 const soldiersPick = (pk: RepPick): RepPick => ({ ...pk, from: 'all', noDuty: false, need: undefined, not: undefined, mode: 'all' });
 // Όσοι περνούν τα φίλτρα (πριν από «πόσοι»), με τη σειρά του Δυναμολογίου (αλφαβητικά)
-export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISODate): Row[] {
+export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'who'>, d: ISODate): Row[] {
   const pk = r.pick;
-  if (r.kind === 'blank') return Array.from({ length: blankN(pk.n) }, (_, i) => blankRow(i));
+  if (r.kind === 'blank') { const pm = r.who?.some(Boolean) ? personMap(s.people) : undefined; return Array.from({ length: blankN(pk.n) }, (_, i) => blankRow(i, whoOf(s, r.who?.[i], pm))); }
   if (r.kind === 'status') {
     const cats = new Set(pk.cats?.length ? pk.cats : DEF_CATS); const pm = personMap(s.people);
     const people = new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id));
@@ -562,7 +582,7 @@ function soldiersOf(s: AppState, pk: RepPick, d: ISODate): Set<number> {
   return new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id as number));
 }
 // Κενό: μία γραμμή = ο αριθμός της (0, 1, 2…), χωρίς στοιχεία ατόμου
-const blankRow = (i: number) => ({ ...NOBODY, id: i }) as unknown as Person;
+const blankRow = (i: number, w?: WhoAt | null) => ({ ...NOBODY, id: i, ...(w ? { bw: w } : {}) }) as unknown as Person;   // bw: το άτομο της γραμμής (Report.who)
 const NOBODY = { rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', si: '', room: null } as unknown as Omit<Person, 'id'>;
 function dutyRow(pm: Map<number, Person>, po: Post, pid: number | undefined): DutyRow {
   const p = pid != null ? pm.get(pid) : undefined;
@@ -682,14 +702,14 @@ export function recentIds(hist: { date: ISODate; ids: (number | string)[] }[], d
   for (const h of hist) if (h.date < d && h.date >= from) h.ids.forEach(i => out.add(i));
   return out;
 }
-export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'>, d: ISODate): Row[] {
+export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'> & Pick<Partial<Report>, 'who'>, d: ISODate): Row[] {
   const a = alwaysOf(s, r); const aIds = new Set(a.map(p => p.id));
   const c = [...a, ...candidates(s, r, d).filter(x => !aIds.has(x.id as number))];
   const n = r.pick.mode === 'all' ? c.length : Math.max(0, r.pick.n || 0);
   return sortRows(r.pick.mode === 'first' ? c.slice(0, n) : c, r.sort, s, r.kind);
 }
-export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: ISODate): Row[] => {
-  if (kind === 'blank') return ids.map(i => blankRow(+i));
+export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: ISODate, who?: (string | null)[]): Row[] => {
+  if (kind === 'blank') { const pm = who?.some(Boolean) ? personMap(s.people) : undefined; return ids.map(i => blankRow(+i, whoOf(s, who?.[+i], pm))); }
   if (kind === 'duty') {
     const pm = seatMap(s); const g = (d && s.guards[d]) || {};
     return ids.map(k => { const po = postBy(s, String(k)); return po ? dutyRow(pm, po, g[po.k]) : null; }).filter((x): x is DutyRow => !!x);
@@ -772,21 +792,28 @@ export function forBuild(o: BuildOpts, r: Pick<Report, 'bands' | 'vals'>): Build
   const bands = bandsOf(ids, r.bands); if (isDefault(ids, bands)) return o;
   return { ...o, bands, vals: vs.map(v => ({ id: v.id, title: (v.title || '').trim(), ...(v.ta ? { ta: v.ta } : {}), ...(v.lay ? { lay: v.lay } : {}) })) };
 }
+// Τα άτομα των γραμμών όπως σώζονται: μόνο μέσα στις nrows γραμμές, χωρίς κενά στο τέλος· τίποτα = undefined
+export function whoCut(who: (string | null)[] | undefined, nrows?: number): (string | null)[] | undefined {
+  const w = (who || []).slice(0, blankN(nrows)).map(x => x || null); while (w.length && !w[w.length - 1]) w.pop();
+  return w.length ? w : undefined;
+}
 export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
   const more = (o.more || []).map(t => {
     const prev = r.more?.find(x => x.id === t.id); const got = b.more?.find(x => x.id === t.id);
     const base = !prev ? newTable(t.kind, t.id) : prev.kind === t.kind ? prev : { ...prev, ...pickForKind(prev.kind, prev.pick, prev.sort, t.kind) };
-    const { nohead: _h, ...b0 } = base;
+    const { nohead: _h, who: _w, ...b0 } = base;
     // «Κενός πίνακας»: οι γραμμές είναι οι nrows του πλέγματος του πίνακα (όπως στον 1ο)
     const pick = t.kind === 'blank' && t.nrows != null ? { pick: { ...b0.pick, mode: 'all' as const, n: blankN(t.nrows) } } : {};
-    return { ...b0, ...pick, title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [], ...(t.nohead ? { nohead: true } : {}) };
+    const who = t.kind === 'blank' ? whoCut(t.who, t.nrows) : undefined;
+    return { ...b0, ...pick, ...(who ? { who } : {}), title: t.title, kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [], ...(t.nohead ? { nohead: true } : {}) };
   });
-  const { more: _, fixed: _f, nohead: _n, ...rest } = r;
+  const { more: _, fixed: _f, nohead: _n, who: _w, ...rest } = r;
   // πίνακες τιμών: η θέση που τους άφησε το πρότυπο (δεν υπάρχει όταν η διάταξη είναι η προεπιλεγμένη: γράφονται στο τέλος, όπως πριν)
   const vals = r.vals?.map(v => { const { spot: _s, ...w } = v; const p = b.vals?.find(x => x.id === v.id); return p ? { ...w, spot: { c1: p.c1, c2: p.c2, ...(p.row != null ? { row: p.row } : {}), ...(p.tt ? { tt: true as const } : {}) } } : w; });
   // «Κενό»: οι γραμμές είναι οι nrows του πλέγματος (το pick.n το κρατά η οθόνη για να ξέρει πόσες γραμμές έχει)
   const pick: Partial<Report> = r.kind === 'blank' && o.nrows != null ? { pick: { ...r.pick, mode: 'all', n: blankN(o.nrows) } } : {};
-  return { ...rest, ...pick, ...(vals ? { vals } : {}), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}), ...(o.nohead && !o.nopeople ? { nohead: true } : {}), ...(o.sig === 'none' && !r.sigs ? { sigs: [] } : {}) };
+  const who = r.kind === 'blank' ? whoCut(o.who, o.nrows) : undefined;
+  return { ...rest, ...pick, ...(who ? { who } : {}), ...(vals ? { vals } : {}), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}), ...(o.nohead && !o.nopeople ? { nohead: true } : {}), ...(o.sig === 'none' && !r.sigs ? { sigs: [] } : {}) };
 }
 // «Υπογραφές: Καμία» στο «Φτιάξ' το εδώ» (Michael, 29/10: «οι υπογραφές δεν φεύγουν»): το πρότυπο δεν έχει γραμμή υπογραφών, και χωρίς
 // sigs το έντυπο έπαιρνε κάτω από τον πίνακα τις υπογραφές των Ρυθμίσεων (όταν τις έχεις αλλάξει εκεί). Τώρα «Καμία» = καμία (withBuilt

@@ -215,9 +215,9 @@ export function mockApi(): Api {
       const cols1: Col[] = build ? (r.kind === 'blank' ? gridCols(build.cols, build) : build.cols) : r.cols;
       const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
-      const extra = moreRows(state, r, date);
+      const extra = moreRows(state, { more: (r.more || []).map(m => ({ ...m, who: build?.more?.find(b => b.id === m.id)?.who ?? m.who })) }, date);
       const nop = !!build?.nopeople && !(build.more || []).length;   // μόνο πίνακες τιμών
-      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : stNewCols(cols1, r.pick), rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
+      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : stNewCols(cols1, r.pick), rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date, build?.who ?? r.who) },
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: stNewCols((t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], (r.more || []).find(m => m.id === t.id)?.pick), rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
       const at = atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()); const vo = evalTables(state, date, at, r.vals);
@@ -228,7 +228,7 @@ export function mockApi(): Api {
       tabs.forEach((t, k) => {
         const nohead = k ? (build ? build.more![k - 1].nohead : (r.more || [])[k - 1]?.nohead) : build ? build.nohead : r.nohead;
         const ls = ['<tr><th colspan="' + Math.max(1, t.cols.length) + '" style="border:0;background:#fff;text-align:left">' + esc(t.title) + '</th></tr>', ...(nohead ? [] : ['<tr>' + t.cols.map(c => '<th style="' + th + '">' + esc(c.h) + '</th>').join('') + '</tr>'])];
-        cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(t.kind === 'blank' && c.f === 'col' && c.o?.vals?.[i]?.includes('{') ? blankFill(c.o.vals[i], bx).v : fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
+        cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(t.kind === 'blank' && c.f !== 'aa' && c.o?.vals?.[i]?.includes('{') ? blankFill(c.o.vals[i], bx).v : fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
         parts.set(k ? build ? build.more![k - 1].id : (r.more || [])[k - 1]?.id : MAIN, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       });
       // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά
