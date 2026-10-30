@@ -3,7 +3,7 @@
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
 import { addDays, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
-import { TYPES, blocksOf, everyBlock, fullName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type WeaponMove } from './domain';
+import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
 import { activePeople, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { listOf, rankTxt, statusLbl } from './ranks';
@@ -380,13 +380,44 @@ export const tagKey = (tag: string) => TAG_KEY.get(normGreek(tag).replace(/\s+/g
 // ίδιου εντύπου (όπως στα δικά σου Excel, μια ετικέτα που είναι ήδη στοιχείο εντύπου δεν μετρά ως γραμμή: προειδοποίηση), στοιχείο εντύπου ({ΗΜΕΡΟΜΗΝΙΑ},
 // {ΤΙΤΛΟΣ}…) ή μέτρηση του καταλόγου των πινάκων τιμών ({ΠΑΡΟΝΤΕΣ}, χωρίς να χρειάζεται πίνακας τιμών). Ολόκληρο το κελί ετικέτα = αριθμός (η γραμμή
 // πίνακα τιμών με τη μορφή της), μέσα σε κείμενο = κείμενο. Άγνωστη ετικέτα μένει όπως γράφτηκε. Όλα βγαίνουν με κεφαλαία εκτός από τους αριθμούς.
-export interface BlankTags { std: (k: string) => string | number | null; row: (tag: string) => ValueOut['rows'][number] | undefined; met: (tag: string) => number | undefined }
-export function blankTags(s: AppState, r: Pick<Report, 'vals'>, vo: ValueOut[], mv: (id: string) => number | null, std: (k: string) => string | number | null): BlankTags {
+export interface BlankTags { std: (k: string) => string | number | null; row: (tag: string) => ValueOut['rows'][number] | undefined; met: (tag: string) => number | undefined; list?: (tag: string) => { s: string; n: number; cnt: boolean } | undefined }   // list: κείμενο, πλήθος, και αν ζητήθηκε το πλήθος
+// d: η μέρα του εντύπου, για τις λίστες ονομάτων ({ΛΙΣΤΑ ΕΥ}…)· χωρίς αυτήν δεν υπάρχουν λίστες
+export function blankTags(s: AppState, r: Pick<Report, 'vals'>, vo: ValueOut[], mv: (id: string) => number | null, std: (k: string) => string | number | null, d?: ISODate): BlankTags {
   const vt = valTags(valsUsed(r.vals), id => !!tagKey(id));
   return {
     std,
     row: tg => { const e = vt.map.get(tagId(tg)); return e ? vo.find(x => x.id === e.t.id)?.rows[e.i] : undefined; },
-    met: tg => { const m = metricByTag(s, tg); const v = m ? mv(m.id) : null; return v ?? undefined; }
+    met: tg => { const m = metricByTag(s, tg); const v = m ? mv(m.id) : null; return v ?? undefined; },
+    ...(d ? { list: blankLists(s, d) } : {})
+  };
+}
+// «Λίστες ονομάτων» (Michael, 30/10): {ΛΙΣΤΑ ΕΥ} γράφει σε ένα κελί τα ονόματα, χωρισμένα με κόμμα, π.χ. «ΣΤΡ ΑΛΦΑΣ Α., ΣΤΡ ΒΗΤΑΣ Β.». Λίστες: ανά φίλτρο του εντύπου
+// (REP_CONDS, η πλευρά «ναι») και ανά είδος κατάστασης (ΕΑ, ΕΥ, ΚΑ…)· με το «ΣΗΜΕΡΑ» μόνο όσες καταστάσεις ξεκινούν τη μέρα του εντύπου (όπως το pick.stNew).
+// {ΠΛΗΘΟΣ ΕΥ}: το πλήθος της ίδιας λίστας (αριθμός). Άδεια λίστα: «—», όπως η γραμμή πίνακα τιμών χωρίς τιμή
+interface ListDef { name: string; cond?: RepCond; neg?: true; type?: TypeKey; st: boolean }   // st: έχει και παραλλαγή «ΣΗΜΕΡΑ» (βασίζεται σε καταστάσεις)
+const LIST_CONDS: RepCond[] = ['present', 'duty', 'med', 'pun', 'leave', 'other'];
+const LIST_DEFS = (): ListDef[] => {
+  const cs = LIST_CONDS.map(id => REP_CONDS.find(c => c.id === id)!);
+  return [...cs.map((c): ListDef => ({ name: upper(c.yes), cond: c.id, st: c.id !== 'present' && c.id !== 'duty' })), { name: upper(cs[0].no), cond: 'present', neg: true, st: false },
+    ...(Object.keys(TYPES) as TypeKey[]).filter(k => ['med', 'abs', 'pun', 'other'].includes(TYPES[k].cat)).map((k): ListDef => ({ name: upper(TYPES[k].label), type: k, st: true }))];
+};
+// Όλες οι ετικέτες των λιστών, όπως μπαίνουν από το «Βάλε τιμή…» (χωρίς τα {ΠΛΗΘΟΣ …}, που γράφονται με το χέρι)
+export const listTags = (): string[] => LIST_DEFS().flatMap(f => ['ΛΙΣΤΑ ' + f.name, ...(f.st ? ['ΛΙΣΤΑ ' + f.name + ' ΣΗΜΕΡΑ'] : [])]);
+let LIST_IDX: Map<string, { f: ListDef; today: boolean; cnt: boolean }> | undefined;
+const listIdx = () => LIST_IDX ||= new Map(LIST_DEFS().flatMap(f => (['ΛΙΣΤΑ', 'ΠΛΗΘΟΣ'] as const).flatMap(w => [false, true].filter(t => !t || f.st).map(t => [tagId(w + ' ' + f.name + (t ? ' ΣΗΜΕΡΑ' : '')), { f, today: t, cnt: w === 'ΠΛΗΘΟΣ' }] as const))));
+// Όνομα στη λίστα: βαθμός (χωρίς προέλευση) και συντομογραφία (επώνυμο, αρχικό ονόματος, «του πατρός» στους ομώνυμους), όπως στις υπόλοιπες οθόνες (shortName)
+const listName = (p: Person) => [p.rank, shortName(p)].filter(Boolean).join(' ');
+function blankLists(s: AppState, d: ISODate): NonNullable<BlankTags['list']> {
+  const tst = [condTest(s, d), condTest(s, d, true)]; const memo = new Map<string, { s: string; n: number }>();
+  return tg => {
+    const id = tagId(tg); const e = listIdx().get(id); if (!e) return undefined;
+    const key = id.replace(/^\S+/, ''); let o = memo.get(key);   // ΛΙΣΤΑ και ΠΛΗΘΟΣ της ίδιας λίστας μετρούν μία φορά
+    if (!o) {
+      const t = tst[+e.today]; const f = e.f;
+      const ps = activePeople(s).filter(p => f.type ? statusesOn(s.statuses, p.id, d).some(x => x.type === f.type && (!e.today || x.from === d)) : t(f.cond!, p) !== !!f.neg);
+      o = { s: sortRows(ps, 'rank', s, 'people').map(listName).join(', ') || '—', n: ps.length }; memo.set(key, o);
+    }
+    return { ...o, cnt: e.cnt };
   };
 }
 // Η μέτρηση ενός μετρητή (id του καταλόγου) τη μέρα d και στιγμή at (λεπτά), με κοινά αποτελέσματα μεταξύ των κελιών
@@ -395,17 +426,21 @@ export function metricFn(s: AppState, d: ISODate, at: () => number, today: ISODa
   return id => { if (!memo.has(id)) { const a = at(); c ||= vctx(s, d, a, today); memo.set(id, rowValue(s, d, a, { label: '', expr: [{ sign: '+', metric: id }] }, c)); } return memo.get(id)!; };
 }
 // bad: οι ετικέτες που δεν ταίριαξαν με τίποτα (για την προειδοποίηση)
-export function blankFill(raw: string, x: BlankTags, bad?: Set<string>): { v: string | number | null; fmt?: VFmt } {
+// wrap: έχει λίστα ονομάτων (μεγάλο κείμενο: αναδίπλωση στο κελί)
+export function blankFill(raw: string, x: BlankTags, bad?: Set<string>): { v: string | number | null; fmt?: VFmt; wrap?: true } {
+  let wrap = false;
   const one = (tg: string): { s: string; n?: number; fmt?: VFmt } | null => {
     const w = x.row(tg); if (w) return w.txt != null ? { s: w.txt } : w.v == null ? { s: '—' } : { s: valueText(w.v, w.fmt), n: w.v, fmt: w.fmt };
     const k = tagKey(tg);
     if (k) { const v = x.std(k); return typeof v === 'number' ? { s: String(v), n: v } : { s: String(v ?? '').replace(/\n/g, ' ') }; }
-    const m = x.met(tg); return m == null ? null : { s: valueText(m, 'int'), n: m };
+    const m = x.met(tg); if (m != null) return { s: valueText(m, 'int'), n: m };
+    const l = x.list?.(tg); if (!l) return null;
+    return l.cnt ? { s: String(l.n), n: l.n } : (wrap = true, { s: l.s });
   };
   const t = raw.trim(); const whole = /^\{([^{}]{1,40})\}$/.exec(t);
-  if (whole) { const o = one(whole[1]); if (!o) { bad?.add(whole[1].trim()); return { v: upper(t) || null }; } return o.n != null ? { v: o.n, ...(o.fmt && o.fmt !== 'int' ? { fmt: o.fmt } : {}) } : { v: upper(o.s.trim()) || null }; }
+  if (whole) { const o = one(whole[1]); if (!o) { bad?.add(whole[1].trim()); return { v: upper(t) || null }; } return o.n != null ? { v: o.n, ...(o.fmt && o.fmt !== 'int' ? { fmt: o.fmt } : {}) } : { v: upper(o.s.trim()) || null, ...(wrap ? { wrap: true as const } : {}) }; }
   const out = t.replace(TAG_RE, (m, tg: string) => { const o = one(tg); if (!o) { bad?.add(tg.trim()); return m; } return o.s; });
-  return { v: upper(out.trim()) || null };
+  return { v: upper(out.trim()) || null, ...(wrap ? { wrap: true as const } : {}) };
 }
 
 // ------------------------------------------------------------------ τιμές

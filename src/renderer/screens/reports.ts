@@ -28,7 +28,7 @@ import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, 
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
-  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, srcSort, whoOf, whoP, whoC, fieldValue,
+  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, listTags, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, srcSort, whoOf, whoP, whoC, fieldValue,
   type BlankSrc, type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -915,6 +915,7 @@ const BlankCell = memo(function BlankCell({ i, j, v, label, ph, put, paste, onFo
     onPaste=${(e: any) => { const x: string = e.clipboardData?.getData('text') || ''; if (/[\t\n]/.test(x.replace(/\r?\n$/, ''))) { e.preventDefault(); paste(i, j, x); } }}/>`;
 });
 // «Βάλε τιμή…»: στοιχεία εντύπου, γραμμές των πινάκων τιμών του εντύπου και μετρήσεις (όπως στους πίνακες τιμών) που μπαίνουν ως {ΕΤΙΚΕΤΑ} στο κελί
+const LIST_TAGS = listTags();   // «Λίστες ονομάτων»: {ΛΙΣΤΑ ΕΥ}, {ΛΙΣΤΑ ΕΥ ΣΗΜΕΡΑ}… (ονόματα σε ένα κελί, χωρισμένα με κόμμα)
 const VAL_CELLS = CELLS.filter(c => !['head', 'sigs', 'group', 'count'].includes(c.k));   // κεφαλίδα 3 γραμμών, υπογραφές, ομάδα φύλλου και σύνολο ατόμων δεν έχουν νόημα σε κελί
 function ValuePick({ r, put }: P) {
   const { state } = useStore();
@@ -926,6 +927,7 @@ function ValuePick({ r, put }: P) {
     <option value="">Βάλε τιμή…</option>
     <optgroup label="Στοιχεία εντύπου">${VAL_CELLS.map(c => html`<option key=${c.k} value=${c.tag}>${c.label}</option>`)}</optgroup>
     ${rows.length > 0 && html`<optgroup label="Γραμμές των πινάκων τιμών">${rows.map(x => html`<option key=${x.tag} value=${x.tag}>${x.label}</option>`)}</optgroup>`}
+    <optgroup label="Λίστες ονομάτων">${LIST_TAGS.map(t => html`<option key=${t} value=${t}>${t}</option>`)}</optgroup>
     ${ms.map(g => html`<optgroup key=${g.group} label=${'Μετρήσεις · ' + g.group}>${g.items.map(m => html`<option key=${m.id} value=${tagText(m.label)}>${m.label}</option>`)}</optgroup>`)}
   <//>`;
 }

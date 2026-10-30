@@ -267,7 +267,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     if (whole && !tagKey(whole[1]) && !wv && vt.map.size) unknown.add(whole[1].trim());
   }
   // «Κενός πίνακας»: κελιά με {ΕΤΙΚΕΤΑ} γραμμής πίνακα τιμών (δεν είναι στο Excel, είναι στα κελιά που έγραψες) μετρούν ως χρήση της ετικέτας
-  const bx = blankTags(s, r, vo, mv, val); const badB = new Set<string>();
+  const bx = blankTags(s, r, vo, mv, val, d); const badB = new Set<string>();
   tabs.forEach(t => { if (t.kind === 'blank') for (const c of t.cols) if (c.f !== 'aa') (c.o?.vals || []).slice(0, t.rows.length).forEach(v => { for (const m of String(v).matchAll(TAG_RE)) if (!tagKey(m[1]) && bx.row(m[1])) seenTags.add(tagId(m[1])); }); });
   for (const u of unknown) warnings.push('Στο πρότυπο υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου ούτε γραμμή πίνακα τιμών. Μένει όπως είναι.');
   for (const t of vo) if (t.tagsOnly) for (const x of t.rows) if (x.tag && vt.map.has(tagId(x.tag)) && !seenTags.has(tagId(x.tag))) warnings.push('Ο πίνακας τιμών' + (t.title ? ' «' + t.title + '»' : '') + ' γράφεται μόνο στο Excel, αλλά το πρότυπο δεν έχει την ετικέτα {' + x.tag + '}.');
@@ -347,6 +347,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
           if (raw && raw.includes('{')) {
             const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
             if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών
+            if (b.wrap) { ws.setStyle(ref, await wb.like(ws.style(ref), { wrap: true })); wb.widen = false; }   // λίστα ονομάτων: αναδιπλώνεται στο κελί (ψηλώνει η γραμμή), η στήλη δεν φαρδαίνει πέρα από το πλάτος της σελίδας
             continue;
           }
           ws.set(ref, j < t.rows.length ? fieldValue(s, t.kind, t.rows[j], c.f, j, d, c.text, c.o) : null);

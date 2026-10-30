@@ -221,7 +221,7 @@ export function mockApi(): Api {
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: stNewCols((t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], (r.more || []).find(m => m.id === t.id)?.pick), rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
       const at = atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()); const vo = evalTables(state, date, at, r.vals);
-      const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''));   // «Κενός πίνακας»: ετικέτες στα κελιά
+      const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''), date);   // «Κενός πίνακας»: ετικέτες στα κελιά
       // κάθε πίνακας (και κάθε πίνακας τιμών) είναι ένα κομμάτι· οι ζώνες (r.bands) τα βάζουν το ένα κάτω από το άλλο ή δίπλα δίπλα
       const th = 'border:1px solid #333;background:#d9d9d9';
       const parts = new Map<string, { h: string; n: number }>();
