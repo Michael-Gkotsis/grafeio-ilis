@@ -155,6 +155,13 @@ describe('Εξοδούχοι: οι διορθώσεις της 30/10', () => {
     s = run(s, { t: 'setBackFix', pid: 4, day: TUE, at: { day: '2026-10-28', time: '09:00' }, why: 'ΕΞΕΤΑΣΕΙΣ' });
     expect(ids(outsTables(s, TUE))).toEqual({ dn: [], out: [], tonight: [], tomorrow: [4] });
   });
+  it('άδεια ως σήμερα 22:00 και εξοδούχος/ΔΝ (Michael, 30/10): από την ώρα εξόδου η Δύναμη τον μετρά στην έξοδο/ΔΝ, όχι στην άδεια', () => {
+    const s = with_(st(2, 'LEAVE', FRI, { to: MON, toTime: '22:00', kind: 'Κανονική' }), st(2, 'OUT', MON), st(3, 'HON', FRI, { to: MON }), st(3, 'DN', MON),
+      st(4, 'LEAVE', FRI, { to: MON, toTime: '22:00', kind: 'Κανονική' }), st(4, 'OUT', MON), st(4, 'LEAVE', TUE, { to: '2026-10-29', kind: 'Κανονική' }));
+    const why = (pid: number, m: number) => Object.entries(strengthOf(s, MON, m).awayLists).filter(([, v]) => v.some(p => p.id === pid)).map(([k]) => k).join() || 'παρών';
+    expect([2, 3, 4].map(pid => [why(pid, mins('08:00')), why(pid, mins('18:00')), why(pid, mins('22:30'))])).toEqual([['LEAVE', 'OUT', 'παρών'], ['HON', 'DN', 'DN'], ['LEAVE', 'OUT', 'παρών']]);
+    expect(dayBook(s, MON).filter(r => r.p.id > 1 && r.p.id < 5).map(r => [r.p.id, r.g])).toEqual([[2, 'A2'], [3, 'A1'], [4, 'A2']]);
+  });
   it('άδεια ως σήμερα 14:00 και ΔΝ αύριο: «Ποιοι γυρίζουν» λέει σήμερα 14:00 (πριν: μεθαύριο 06:00, μετά τη ΔΝ)', () => {
     const s = with_(st(2, 'LEAVE', FRI, { to: MON, toTime: '14:00', kind: 'Κανονική' }), st(2, 'DN', TUE), st(9, 'OUT', MON));
     expect(returnsOn(s, MON).find(b => b.p.id === 2)!.r).toMatchObject({ day: MON, time: '14:00' });

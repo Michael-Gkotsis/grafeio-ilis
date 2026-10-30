@@ -9,7 +9,7 @@ import { addDays, dm } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
 import { activePeople, outMin, postOf, statusesFrom, statusesOn } from './rules';
-import { dayTimes, leaveEnd, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
+import { dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
 import { dutyAt } from './weekend';
@@ -39,7 +39,13 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
     if (lv.length) {
       const r = retFor(s, p.id, d);
       const atT = statusesFrom(s.statuses, p.id, d, T).filter(x => TYPES[x.type].away && !isOut(x) && !x.pending);
-      if (outs.length) { R(lv.some(x => x.type === 'NOS') ? 'B2' : 'B1', r, 'άδεια + έξοδος', { st: outs.find(x => x.type === 'DN') || outs[0], lv: lv[0] }); continue; }
+      if (outs.length) {
+        const o = outs.find(x => x.type === 'DN') || outs[0];
+        // η άδεια τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (leaveOut, κανόνας 26/10), ή έχει τελειώσει πριν την έξοδο: εξοδούχος/ΔΝ της μέρας,
+        // όπως στη Δύναμη (Michael, 30/10: άδεια ως 22:00 και εξοδούχος ήταν «σε άδεια»)
+        if (leaveOut(s, p.id, d, T) || !atT.length) { R(o.type === 'DN' ? 'A1' : 'A2', r, 'τέλος άδειας + έξοδος', { st: o, lv: lv[0], ...duty() }); continue; }
+        R(lv.some(x => x.type === 'NOS') ? 'B2' : 'B1', r, 'άδεια + έξοδος', { st: o, lv: lv[0] }); continue;
+      }
       if (!atT.length) { R('G4', r, 'γύρισε πριν την έξοδο', { lv: lv[0] }); continue; }
       const l = atT.find(x => x.type === 'NOS') || atT[0];
       const yAway = awayOn(s, p.id, y);
