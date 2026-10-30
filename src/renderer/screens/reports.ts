@@ -28,8 +28,8 @@ import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, 
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
-  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, whoOf, whoP, whoC, fieldValue,
-  type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
+  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, srcSort, whoOf, whoP, whoC, fieldValue,
+  type BlankSrc, type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
 
@@ -379,8 +379,9 @@ const syncMore = (more: RepTable[] | undefined, bm: BuildTable[] | undefined): R
     const x = more?.find(m => m.id === t.id);
     // «Κενός πίνακας» (είδος ή πίσω): τα «ποιοι» ακολουθούν το είδος, οι γραμμές είναι οι nrows του προτύπου
     const base = x && x.kind !== t.kind && (x.kind === 'blank' || t.kind === 'blank') ? { ...x, ...pickForKind(x.kind, x.pick, x.sort, t.kind) } : x || newTable(t.kind, t.id);
-    const nr = t.kind === 'blank' && t.nrows != null ? { pick: { ...base.pick, mode: 'all' as const, n: blankN(t.nrows) } } : {};
-    return x ? { ...base, ...nr, title: t.title, kind: t.kind } : { ...base, ...nr, title: t.title };
+    const nr = t.kind === 'blank' && t.nrows != null ? { pick: { ...base.pick, mode: 'all' as const, n: blankN(t.nrows, t.src) } } : {};
+    const { src: _s, ...b2 } = base; const sr = t.kind === 'blank' && t.src ? { src: t.src } : {};   // γραμμές από φίλτρο του κενού πίνακα
+    return x ? { ...b2, ...nr, ...sr, title: t.title, kind: t.kind } : { ...b2, ...nr, ...sr, title: t.title };
   });
   return out.length ? out : undefined;
 };
@@ -456,7 +457,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     setTpl(t); setNote('');
     const f = (await window.api.repFiles([t.file]))[t.file];
     if (!f || !f.exists) { setNote('Το αρχείο του προτύπου λείπει από τον φάκελο «Πρότυπα εντύπων». Ανέβασέ το ξανά ή διάλεξε άλλο.'); setMode(null); return; }
-    if (t.built && !editedInExcel(t, f.mtime)) { const b: BuildOpts = JSON.parse(JSON.stringify(t.built)); setMode('build'); setBuild(b); setInsp(null); setR(o => ({ ...o, more: syncMore(o.more, b.more), ...(b.nrows != null && o.kind !== 'blank' ? { kind: 'blank' as const, pick: { from: 'all' as const, mode: 'all' as const, n: blankN(b.nrows) }, sort: 'pick' as const, split: 'none' as const } : {}) })); return; }   // πρότυπο «Κενό»: το είδος το ακολουθεί
+    if (t.built && !editedInExcel(t, f.mtime)) { const b: BuildOpts = JSON.parse(JSON.stringify(t.built)); setMode('build'); setBuild(b); setInsp(null); setR(o => ({ ...o, more: syncMore(o.more, b.more), ...(b.nrows != null && o.kind !== 'blank' ? { kind: 'blank' as const, pick: { from: 'all' as const, mode: 'all' as const, n: blankN(b.nrows, b.src) }, sort: 'pick' as const, split: 'none' as const, ...(b.src ? { src: b.src } : {}) } : {}) })); return; }   // πρότυπο «Κενό»: το είδος το ακολουθεί
     if (t.built) setNote('Το πρότυπο άλλαξε στο Excel, οπότε οι στήλες διαβάζονται από το αρχείο.');
     const k0: RepKind = !keepCols && kind === 'blank' ? 'people' : kind;
     setMode('upload'); setBuild(null); if (!keepCols) { upd({ more: undefined, ...(k0 !== kind ? { kind: k0, ...pickForKind(kind, r.pick, r.sort, k0) } : {}) }); setSubInsp({}); }
@@ -607,7 +608,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
         ${step === 4 && quick && html`<${Alert} tone="info">Ξεκίνησες από το έτοιμο «${r.name}»: οι στήλες είναι έτοιμες. Διάλεξε ποιοι μπαίνουν και πάτα «Αποθήκευση και Βγάλε», ή «Επόμενο» για το πού βγαίνει. Τις στήλες τις αλλάζεις από το βήμα 3.<//>`}
         ${step === 4 && !nop && html`<${TableTabs} r=${r} t1=${mode === 'build' ? build?.t1 : undefined} ti=${Math.min(ti, (r.more || []).length)} setTi=${setTi}/>`}
         ${step === 4 && nop && html`<${Alert} tone="info">Αυτό το έντυπο έχει μόνο πίνακες τιμών: δεν διαλέγεις άτομα. Τους πίνακες και τη στιγμή μέτρησης τα αλλάζεις από το βήμα 3.<//>`}
-        ${step === 4 && !nop && (ti > 0 && r.more?.[ti - 1] ? html`<${SubPick} key=${r.more[ti - 1].id} r=${r} t=${r.more[ti - 1]} n=${ti + 1} d=${d} set=${(t: RepTable) => upd({ more: (r.more || []).map(x => (x.id === t.id ? t : x)) })}/>` : r.kind === 'blank' ? html`<${StepBlank} r=${r} upd=${upd}/>` : html`<${StepPick} r=${r} upd=${upd} p=${p}/>`)}
+        ${step === 4 && !nop && (ti > 0 && r.more?.[ti - 1] ? html`<${SubPick} key=${r.more[ti - 1].id} r=${r} t=${r.more[ti - 1]} n=${ti + 1} d=${d} set=${(t: RepTable) => upd({ more: (r.more || []).map(x => (x.id === t.id ? t : x)) })}/>` : r.kind === 'blank' ? html`<${StepBlank} r=${r} upd=${upd} d=${d}/>` : html`<${StepPick} r=${r} upd=${upd} p=${p}/>`)}
         ${step === 5 && html`<${StepOut} r=${r} upd=${upd} mode=${mode} insp=${insp} build=${build} rows=${p.rows} d=${d}/>`}
       </div>
       <div className="rep-page__nav"><${Button} variant="outline" disabled=${step < 2} why="Είσαι στο πρώτο βήμα" onClick=${() => goStep(step - 1)}>‹ Πίσω<//><${Button} variant="outline" disabled=${step > 4 || !canGo(step + 1)} why=${missing(step + 1)} onClick=${() => goStep(step + 1)}>Επόμενο ›<//></div>
@@ -877,12 +878,12 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, se
       <div className="rep-card__ed">
       ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} ta=${bt.ta} setTa=${(ta?: TAlign) => set({ more: more.map(x => (x.id === bt.id ? noTa(x, ta) : x)) })} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
         <${ColsEditor} kind=${bt.kind} cols=${bt.cols} stNew=${(r.more || []).find((t: RepTable) => t.id === bt.id)?.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => setT(bt.id, bt.kind === 'blank' ? { cols, grid: regrid(bt.grid, bt.cols, cols, from) } : { cols })}/>
-        ${bt.kind === 'blank' && html`<${BlankGrid} key=${bt.id} o=${bt} set=${(x: Partial<BuildTable>) => setT(bt.id, x)} r=${r} onRows=${(x: number) => upd({ more: (r.more || []).map((t: RepTable) => (t.id === bt.id ? { ...t, pick: { ...t.pick, mode: 'all', n: x } } : t)) })}/>`}
+        ${bt.kind === 'blank' && html`<${BlankGrid} key=${bt.id} o=${bt} set=${(x: Partial<BuildTable>) => setT(bt.id, x)} r=${r} pk=${(r.more || []).find((t: RepTable) => t.id === bt.id)?.pick} onRows=${(x: number) => upd({ more: (r.more || []).map((t: RepTable) => (t.id === bt.id ? { ...t, pick: { ...t.pick, mode: 'all', n: x } } : t)) })} onSrc=${(src: BlankSrc | undefined, n: number) => upd({ more: (r.more || []).map((t: RepTable) => { if (t.id !== bt.id) return t; const { src: _s, ...rest } = t; return { ...rest, ...(src ? { src } : {}), pick: { from: 'all', mode: 'all', n }, sort: 'pick' }; }) })}/>`}
         ${layFold(bt.lay, bt.nohead, html`<${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/><${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`)}`
         : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
         : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} ta=${o.ta1} setTa=${setTa1} setTitle=${setT1}/>
         <${ColsEditor} kind=${kind} cols=${o.cols} stNew=${r.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => set(kind === 'blank' ? { cols, grid: regrid(o.grid, o.cols, cols, from) } : { cols })}/>
-        ${kind === 'blank' && html`<${BlankGrid} o=${o} set=${set} r=${r} onRows=${(x: number) => upd({ pick: { ...r.pick, mode: 'all', n: x } })}/>`}
+        ${kind === 'blank' && html`<${BlankGrid} o=${o} set=${set} r=${r} pk=${r.pick} onRows=${(x: number) => upd({ pick: { ...r.pick, mode: 'all', n: x } })} onSrc=${(src: BlankSrc | undefined, n: number) => upd({ src, pick: { from: 'all', mode: 'all', n }, sort: 'pick' })}/>`}
         ${layFold(o.lay, o.nohead, html`<${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/><${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`)}`}
       </div>
     </section>
@@ -930,13 +931,19 @@ function ValuePick({ r, put }: P) {
 }
 // Η γραμμή του πλέγματος με άτομο (BuildOpts.who): το όνομα στην επικεφαλίδα της γραμμής, με ✕ για να φύγει
 const whoName = (s: AppState, ref: string | null) => { const w = whoOf(s, ref); return !w ? 'Σβησμένο άτομο' : w.kind === 'people' ? shortName(w.x) : shortName(cadreSeat(w.x, 0)); };
-function BlankGrid({ o, set, r, onRows }: P) {
+function BlankGrid({ o, set, r, pk: tpk, onRows, onSrc }: P) {
   const toast = useToast(); const { state, today } = useStore();
   const [pk, setPk] = useState<number | null>(null);   // γραμμή που διαλέγει άτομο
-  const n = blankN(o.nrows); const heads: BuildCol[] = o.cols.filter((c: BuildCol) => c.f !== 'aa');
+  const n = blankN(o.nrows, o.src); const min = o.src ? 0 : 1; const heads: BuildCol[] = o.cols.filter((c: BuildCol) => c.f !== 'aa');
   const sc = useRef<HTMLDivElement>(null); const last = useRef<{ i: number; j: number } | null>(null);   // το τελευταίο κελί που είχε τον δρομέα
   const [txt, setTxt] = useState(String(n)); useEffect(() => setTxt(String(n)), [n]);
   const cb = useRef({ o, set, r, onRows }); cb.current = { o, set, r, onRows };
+  // γραμμές από λίστα (στρατιώτες ή στελέχη που περνούν τα φίλτρα του βήματος 4): οι δικές σου γραμμές μπαίνουν από κάτω, ως 0
+  const setSrc = (v: string) => {
+    const src = (v || undefined) as BlankSrc | undefined; const used = (o.grid || []).some((row: string[]) => row.some(x => x)) || (o.who || []).some(Boolean);
+    const nr = src && !used ? 0 : blankN(o.nrows, src); cb.current.set({ src, nrows: nr }); onSrc(src, nr);
+  };
+  const srcN = useMemo(() => (o.src ? rowsOf(state, { kind: o.src, pick: { ...(tpk || r.pick), mode: 'all' }, sort: srcSort(o.src, r.sort) }, repDate(r, today)).length : 0), [state, o.src, tpk, r.day]);   // eslint-disable-line react-hooks/exhaustive-deps
   const who: (string | null)[] = o.who || [];
   const setWho = (i: number, ref: string | null) => { const w = [...(cb.current.o.who || [])]; while (w.length <= i) w.push(null); w[i] = ref; while (w.length && !w[w.length - 1]) w.pop(); cb.current.set({ who: w.length ? w : undefined }); };
   const people = useMemo(() => pickPeople(state), [state.people, state.cadreList]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -958,7 +965,7 @@ function BlankGrid({ o, set, r, onRows }: P) {
   }, []);
   // επικόλληση: ό,τι χωράει από το κελί που επικολλήθηκε (γραμμές μέχρι τις nrows, στήλες μέχρι την τελευταία)
   const paste = useCallback((i: number, j: number, text: string) => {
-    const { o: o2, set: set2 } = cb.current; const w = o2.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(o2.nrows);
+    const { o: o2, set: set2 } = cb.current; const w = o2.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(o2.nrows, o2.src);
     const g: string[][] = (o2.grid || []).map((row: string[]) => [...row]);
     text.replace(/\r?\n$/, '').split(/\r?\n/).forEach((line, di) => { if (i + di >= nr) return; while (g.length <= i + di) g.push([]); line.split('\t').forEach((v, dj) => { if (j + dj >= w) return; while (g[i + di].length <= j + dj) g[i + di].push(''); g[i + di][j + dj] = v; }); });
     while (g.length && g[g.length - 1].every(x => !x)) g.pop();
@@ -968,7 +975,7 @@ function BlankGrid({ o, set, r, onRows }: P) {
   const onFocus = useCallback((i: number, j: number) => { last.current = { i, j }; }, []);
   // μπαίνει στη θέση του δρομέα του τελευταίου κελιού (ή στο τέλος του πρώτου κελιού, αν δεν πάτησες σε κανένα) και σώζεται αμέσως
   const insert = (tag: string) => {
-    const w = cb.current.o.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(cb.current.o.nrows);
+    const w = cb.current.o.cols.filter((c: BuildCol) => c.f !== 'aa').length; const nr = blankN(cb.current.o.nrows, cb.current.o.src);
     const at = last.current && last.current.i < nr && last.current.j < w ? last.current : null; const i = at?.i ?? 0, j = at?.j ?? 0;
     const el = sc.current?.querySelector('input[data-i="' + i + '"][data-j="' + j + '"]') as HTMLInputElement | null;
     const cur = el ? el.value : cb.current.o.grid?.[i]?.[j] ?? '';
@@ -979,8 +986,10 @@ function BlankGrid({ o, set, r, onRows }: P) {
     setTimeout(() => { el?.focus(); el?.setSelectionRange(a + x.length, a + x.length); }, 30);
   };
   return html`<div className="rep-grid">
-    <div className="rep-grid__bar"><label className="field__label" htmlFor="b-nrows">Γραμμές</label>
-      <input id="b-nrows" type="number" min="1" max=${BLANK_MAX} className="ui-input rep-n" value=${txt} onChange=${(e: any) => { setTxt(e.target.value); const x = +e.target.value; if (Number.isInteger(x) && x >= 1 && x <= BLANK_MAX && x !== n) rows(x); }} onBlur=${() => setTxt(String(n))}/>
+    <div className="rep-grid__bar"><span className="field__label">Γραμμές από λίστα</span><${Segmented} small=${true} value=${o.src || ''} onChange=${setSrc} items=${[{ value: '', label: 'Καμία' }, { value: 'people', label: 'Στρατιώτες' }, { value: 'cadre', label: 'Στελέχη' }]}/>
+      ${o.src && html`<small className="muted">Τα φίλτρα στο βήμα 4 (τώρα ${srcN}).</small>`}</div>
+    <div className="rep-grid__bar"><label className="field__label" htmlFor="b-nrows">${o.src ? 'Δικές σου γραμμές από κάτω' : 'Γραμμές'}</label>
+      <input id="b-nrows" type="number" min=${min} max=${BLANK_MAX} className="ui-input rep-n" value=${txt} onChange=${(e: any) => { setTxt(e.target.value); const x = +e.target.value; if (e.target.value !== '' && Number.isInteger(x) && x >= min && x <= BLANK_MAX && x !== n) rows(x); }} onBlur=${() => setTxt(String(n))}/>
       <${ValuePick} r=${r} put=${insert}/>
       <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel. Με «Βάλε τιμή…» ένα κελί παίρνει ημερομηνία, αριθμό κ.ά. από την εφαρμογή. Το κουμπί του ατόμου στη γραμμή δένει στρατιώτη ή στέλεχος: οι στήλες Βαθμός, Όνομα, ΑΣΜ… γεμίζουν μόνες τους, ό,τι γράψεις νικά.</small></div>
     ${pk != null && html`<div className="rep-grid__pick"><b>Γραμμή ${pk + 1}</b><${PersonPicker} id="b-who" value=${null} people=${people} date=${day} placeholder="Επώνυμο, όνομα ή ΑΣΜ…" autoFocus=${true} onChange=${pick}/><${Button} size="sm" variant="ghost" onClick=${() => setPk(null)}>Άκυρο<//></div>`}
@@ -1063,14 +1072,32 @@ function SubPick({ r, t, n, d, set }: P) {
   const tr = useMemo(() => ({ ...r, id: t.id, kind: t.kind, pick: subPick(t.pick), sort: t.sort, more: undefined }), [r, t]);
   const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0 }), [state, tr, d]);
   const upd = (x: Partial<Report>) => set({ ...t, ...(x.pick ? { pick: x.pick } : {}), ...(x.sort ? { sort: x.sort } : {}) });
+  if (t.kind === 'blank' && t.src) return html`<div className="stack"><${BlankSrc} r=${r} t=${t} n=${n} d=${d} set=${set}/></div>`;
   if (t.kind === 'blank') return html`<div className="stack"><${Alert} tone="info">Ο πίνακας ${n}${t.title ? ' «' + t.title + '»' : ''} (κενός πίνακας) δεν παίρνει άτομα: οι ${blankN(t.pick.n)} γραμμές του είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//></div>`;
   return html`<div className="stack">
     <p className="note" style=${{ margin: 0 }}>Πίνακας ${n}${t.title ? ' «' + t.title + '»' : ''} (${kindLbl(t.kind).toLowerCase()}): για την ίδια μέρα με τον πρώτο. Μπαίνουν όλοι όσοι περνούν τα φίλτρα ή οι πρώτοι Ν· τυχαίοι μόνο στον πρώτο πίνακα.${r.split && r.split !== 'none' && splitOk(t.kind) ? ' Με χωριστά φύλλα ανά ομάδα, ο καθένας μπαίνει στο φύλλο της ομάδας του.' : ''}</p>
     <${StepPick} r=${tr} upd=${upd} p=${p} sub=${true}/></div>`;
 }
 
-// Ποιοι μπαίνουν στο «Κενό»: κανείς, οι γραμμές είναι αυτές που γράφεις στο βήμα 3· μένει μόνο η μέρα (ημερομηνία, πίνακες τιμών)
-function StepBlank({ r, upd }: P) {
+// Κενός πίνακας με γραμμές από λίστα (src): τα ίδια φίλτρα με τον πίνακα ατόμων ή στελεχών, για όσους μπαίνουν πρώτοι· από κάτω οι δικές σου γραμμές (βήμα 3).
+// Χωρίς τυχαίους και «πρώτους Ν» (μπαίνουν όλοι όσοι περνούν) και χωρίς χωρισμό σε φύλλα. t: ο πίνακας (1ος ή 2…6) με src, pick, sort· set(t): αλλάζει
+function BlankSrc({ r, t, n, d, set }: P) {
+  const { state } = useStore();
+  const sort = srcSort(t.src, t.sort);
+  const tr = useMemo(() => ({ ...r, id: t.id, kind: t.src, pick: { ...t.pick, mode: 'all' }, sort, more: undefined, who: undefined, src: undefined }), [r, t, sort]);
+  const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0 }), [state, tr, d]);
+  const upd = (x: Partial<Report>) => set({ ...t, ...(x.pick ? { pick: { ...x.pick, mode: 'all', n: t.pick.n } } : {}), ...(x.sort ? { sort: x.sort } : {}) });
+  const m = blankN(t.pick.n, t.src);
+  return html`<div className="stack">
+    <p className="note" style=${{ margin: 0 }}>Πίνακας ${n}${t.title ? ' «' + t.title + '»' : ''} (κενός πίνακας): πρώτα μπαίνουν όσοι ${t.src === 'cadre' ? 'από τα στελέχη' : 'στρατιώτες'} περνούν τα φίλτρα, για τη μέρα του εντύπου, και από κάτω ${m ? 'οι ' + m + ' δικές σου γραμμές' : 'όσες δικές σου γραμμές βάλεις στο βήμα 3'}. Μπαίνουν όλοι όσοι περνούν τα φίλτρα (όχι τυχαίοι).</p>
+    <${StepPick} r=${tr} upd=${upd} p=${p} sub=${true} bsrc=${true}/></div>`;
+}
+
+// Ποιοι μπαίνουν στο «Κενό»: χωρίς λίστα κανείς, οι γραμμές είναι αυτές που γράφεις στο βήμα 3· μένει μόνο η μέρα (ημερομηνία, πίνακες τιμών)· με λίστα (src) τα φίλτρα της
+function StepBlank({ r, upd, d }: P) {
+  if (r.src) return html`<div className="stack">
+    <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
+    <${BlankSrc} r=${r} t=${{ id: 'main', title: '', src: r.src, pick: r.pick, sort: r.sort }} n=${1} d=${d} set=${(t: P) => upd({ pick: t.pick, sort: t.sort })}/></div>`;
   return html`<div className="stack">
     <${Alert} tone="info">Ο κενός πίνακας δεν παίρνει άτομα: οι ${blankN(r.pick.n)} γραμμές του πίνακα είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//>
     <div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>
@@ -1078,11 +1105,11 @@ function StepBlank({ r, upd }: P) {
 }
 
 // Ποιοι μπαίνουν: από πού, φίλτρα, πόσοι (όλοι, οι πρώτοι, τυχαίοι), σειρά, μέρα· sub: πίνακας 2, 3… (χωρίς μέρα και τυχαίους)
-function StepPick({ r, upd, p, sub }: P) {
+function StepPick({ r, upd, p, sub, bsrc }: P) {
   const { state } = useStore();
   const pk: RepPick = r.pick; const set = (x: Partial<RepPick>) => upd({ pick: { ...pk, ...x } });
   const people = r.kind === 'people' || r.kind === 'weapon'; const status = r.kind === 'status'; const linked = isLinked(r.kind); const soldiers = r.kind !== 'cadre';
-  const duty = r.kind === 'duty'; const wmove = r.kind === 'wmove'; const counted = !duty && !wmove;
+  const duty = r.kind === 'duty'; const wmove = r.kind === 'wmove'; const counted = !duty && !wmove && !bsrc;
   const blockList = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
   const views = state.settings.views || [];
   // στρατιώτες: βάση (σε δύναμη / εκτός δύναμης / λίστα) και φίλτρα που συνδυάζονται· στελέχη: όλα ή παρόντα
@@ -1131,7 +1158,7 @@ function StepPick({ r, upd, p, sub }: P) {
       ${pk.mode === 'random' && html`<div className="rep-inline"><label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.gap} onChange=${(e: any) => set({ gap: e.target.checked ? 1 : undefined })}/>Όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες</label>
         <input type="number" min="1" max="30" className="ui-input rep-n" aria-label="Μέρες" disabled=${!pk.gap} value=${pk.gap || 1} onChange=${(e: any) => set({ gap: Math.min(30, Math.max(1, +e.target.value || 1)) })}/><span>${(pk.gap || 1) === 1 ? 'μέρα' : 'μέρες'}</span></div>`}
       ${pk.mode === 'random' && html`<${Alert} tone="info"><b>Πώς δουλεύει η κλήρωση.</b> Δεξιά είναι μια κλήρωση: με ⟳ δίπλα σε κάποιον μπαίνει άλλος τυχαίος, με ✕ τον βγάζεις, με «Βάλε συγκεκριμένο» βάζεις όποιον θέλεις, με «⟳ Ξανά τυχαία» αλλάζουν όλοι. Αν αλλάξεις φίλτρα ή πόσοι, μένουν όσοι περνούν ακόμα. <b>Αυτοί ακριβώς</b> βγαίνουν αν πατήσεις «Αποθήκευση και Βγάλε». Τις επόμενες φορές, από το «Βγάλε…» στη λίστα, γίνεται νέα κλήρωση και τη βλέπεις (και την αλλάζεις) πριν βγει.<//>`}
-      <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${sortsOf(r.kind)}/></div>
+      <div className="rep-opts"><span className="field__label">Σειρά στο έντυπο</span><${Segmented} small=${true} value=${r.sort} onChange=${(sort: RepSort) => upd({ sort })} items=${bsrc ? sortsOf(r.kind).filter(x => x.value !== 'pick') : sortsOf(r.kind)}/></div>
     </div>
     <${PickList} p=${p} kind=${r.kind} onNever=${(id: number) => set({ never: [...(pk.never || []), id], always: (pk.always || []).filter(x => x !== id) })}/>
   </div>`;
