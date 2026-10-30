@@ -511,10 +511,20 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   // πλάτος κάθε στήλης όπως θα ήταν μόνη της (σε χαρακτήρες)
   const natural = (t: Tab) => t.cols.map(c => { const f = fieldOf(t.kind, c.f); const h = (c.h || f?.head || '').trim() || ' '; return Math.round(Math.max(4, Math.max(f?.w || 12, Math.min(40, h.length * 1.1 + 2)) * WMUL[c.w || 'auto'] * (sz / 11)) * 10) / 10; });
   const W = o.land ? 140 : 96;
+  // «Κενός πίνακας» χωρίς δικό του πλάτος (Michael, 30/10: «δεν πιάνει το πλάτος του εντύπου»): πιάνει όλο το πλάτος της σελίδας όπως οι άλλοι πίνακες, οι στήλες
+  // του αναλογικά με το φυσικό τους πλάτος (στενή/φαρδιά μετρούν) και το Α/Α όσο χρειάζεται· δεν στενεύει ποτέ κάτω από το φυσικό. Τα άλλα είδη όπως πριν
+  const autoW = (t: Tab) => t.kind === 'blank' && (!t.lay?.w || t.lay.w === 'auto') && (!t.lay?.at || t.lay.at === 'left');
+  const spread = (t: Tab): number[] => {
+    const nat = natural(t); if (!autoW(t)) return nat;
+    const sum = (free: boolean) => nat.reduce((a, x, i) => a + ((t.cols[i].f !== 'aa') === free ? x : 0), 0);
+    const room = W - sum(false), free = sum(true);
+    return free > 0 && room > free ? nat.map((x, i) => (t.cols[i].f === 'aa' ? x : Math.round(x * room / free * 10) / 10)) : nat;
+  };
+  const alone = (x: Item) => rows.some(b => b.length === 1 && b[0] === x);   // μόνος στη ζώνη του (όχι δίπλα σε άλλον πίνακα)
   // πόσες στήλες του πλέγματος θέλει ένας πίνακας (min: όσες χρειάζεται για να χωρέσει) · πίνακας τιμών: το μισό της σελίδας αν δεν πεις αλλιώς
   const wantOf = (x: Item): { min: number; want: number } => {
     if (x.v) return { min: 4, want: Math.max(4, Math.round(GRID * (TAB_WIDTHS.find(w => w.value === (x.v!.lay?.w || 'auto'))?.f || 0.5))) };
-    const t = x.t!; const fr = TAB_WIDTHS.find(w => w.value === (t.lay?.w || 'auto'))?.f || Math.min(1, natural(t).reduce((a, b) => a + b, 0) / W);
+    const t = x.t!; const fr = TAB_WIDTHS.find(w => w.value === (t.lay?.w || 'auto'))?.f || (autoW(t) && alone(x) ? 1 : Math.min(1, natural(t).reduce((a, b) => a + b, 0) / W));
     return { min: t.cols.length, want: Math.max(t.cols.length, Math.round(GRID * fr)) };
   };
   // ζώνη με έναν: όπως πάντα· με πολλούς: μοιράζονται τις στήλες (ένα κενό ανάμεσα), αν δεν χωράνε μικραίνουν αναλογικά, ως το ελάχιστο του καθενός
@@ -610,7 +620,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
     const head = next; data = head + 1;
     for (const t of tabs) {
       const at = placeOf(t);
-      const out: RepCol[] = []; const nat = natural(t); let dj = 0;   // dj: ποια στήλη του πλέγματος (χωρίς το Α/Α) είναι η τωρινή, στο «Κενό»
+      const out: RepCol[] = []; const nat = grid ? natural(t) : spread(t); let dj = 0;   // dj: ποια στήλη του πλέγματος (χωρίς το Α/Α) είναι η τωρινή, στο «Κενό»
       t.cols.forEach((c, i) => {
         const f = fieldOf(t.kind, c.f); const h = (c.h || f?.head || '').trim() || ' ';
         const [a, b] = at[i];
