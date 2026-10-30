@@ -172,6 +172,14 @@ describe('Εξοδούχοι: οι διορθώσεις της 30/10', () => {
     s = run(s, { t: 'setBackFix', pid: 4, day: TUE, at: { day: '2026-10-28', time: '09:00' }, why: 'ΕΞΕΤΑΣΕΙΣ' });
     expect(ids(outsTables(s, TUE))).toEqual({ dn: [], out: [], tonight: [], tomorrow: [4] });
   });
+  it('άδεια ως σήμερα 14:00 και ΔΝ αύριο: «Ποιοι γυρίζουν» λέει σήμερα 14:00 (πριν: μεθαύριο 06:00, μετά τη ΔΝ)', () => {
+    const s = with_(st(2, 'LEAVE', FRI, { to: MON, toTime: '14:00', kind: 'Κανονική' }), st(2, 'DN', TUE), st(9, 'OUT', MON));
+    expect(returnsOn(s, MON).find(b => b.p.id === 2)!.r).toMatchObject({ day: MON, time: '14:00' });
+  });
+  it('άδεια ως σήμερα 12:00, ΔΝ σήμερα, νέα άδεια από αύριο: γυρνά με τον κανόνα της ΔΝ μετά τη νέα άδεια', () => {
+    const s = with_(st(3, 'LEAVE', FRI, { to: MON, toTime: '12:00', kind: 'Κανονική' }), st(3, 'DN', MON), st(3, 'LEAVE', TUE, { to: '2026-10-28', kind: 'Ειδική' }), st(9, 'OUT', MON));
+    expect(returnsOn(s, MON).find(b => b.p.id === 3)!.r).toMatchObject({ day: '2026-10-29', time: '06:00', base: 'τέλος άδειας, ΔΝ' });
+  });
   it('δύο καταστάσεις του ίδιου είδους την ίδια μέρα: μία φορά στους Παραμένοντες', () => {
     const s = with_(st(2, 'STEP', FRI, { to: MON }), st(2, 'STEP', SUN, { to: TUE }), st(9, 'OUT', MON));
     expect(outsAndStay(s, MON).stay.find(x => x.p.id === 2)!.note).toBe('ΣΤΕΠ');
