@@ -150,7 +150,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   const mv = metricFn(s, d, () => atOf(s, r.at, d, clock.today, clock.now), clock.today);   // μετρήσεις σε ετικέτες των κελιών του «Κενός πίνακας»
   for (const m of valsMissing(s, r.vals)) warnings.push('Στους πίνακες τιμών δεν υπάρχει πια η μέτρηση «' + m + '» (σβήστηκε υπηρεσία ή τύπος;). Δεν μετρά.');
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
-  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d);
+  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d, r.who);
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
   // οι πίνακες 2, 3…: όλοι όσοι περνούν τα φίλτρα τους (χωρίς τυχαίους), με τη σειρά τους
   const more = r.more || []; const extra = moreRows(s, r, d).map(x => x.slice(0, MAX_ROWS));
@@ -268,7 +268,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   }
   // «Κενός πίνακας»: κελιά με {ΕΤΙΚΕΤΑ} γραμμής πίνακα τιμών (δεν είναι στο Excel, είναι στα κελιά που έγραψες) μετρούν ως χρήση της ετικέτας
   const bx = blankTags(s, r, vo, mv, val); const badB = new Set<string>();
-  tabs.forEach(t => { if (t.kind === 'blank') for (const c of t.cols) if (c.f === 'col') (c.o?.vals || []).slice(0, t.rows.length).forEach(v => { for (const m of String(v).matchAll(TAG_RE)) if (!tagKey(m[1]) && bx.row(m[1])) seenTags.add(tagId(m[1])); }); });
+  tabs.forEach(t => { if (t.kind === 'blank') for (const c of t.cols) if (c.f !== 'aa') (c.o?.vals || []).slice(0, t.rows.length).forEach(v => { for (const m of String(v).matchAll(TAG_RE)) if (!tagKey(m[1]) && bx.row(m[1])) seenTags.add(tagId(m[1])); }); });
   for (const u of unknown) warnings.push('Στο πρότυπο υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου ούτε γραμμή πίνακα τιμών. Μένει όπως είναι.');
   for (const t of vo) if (t.tagsOnly) for (const x of t.rows) if (x.tag && vt.map.has(tagId(x.tag)) && !seenTags.has(tagId(x.tag))) warnings.push('Ο πίνακας τιμών' + (t.title ? ' «' + t.title + '»' : '') + ' γράφεται μόνο στο Excel, αλλά το πρότυπο δεν έχει την ετικέτα {' + x.tag + '}.');
   if (vt.dup.length) warnings.push('Δύο γραμμές των πινάκων τιμών έχουν την ετικέτα ' + vt.dup.map(x => '{' + x + '}').join(', ') + ': μετρά η πρώτη.');
@@ -343,7 +343,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
           const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
           if (j >= t.rows.length && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
           // «Κενός πίνακας»: κελί με {ΕΤΙΚΕΤΑ}· όλα τα άλλα κελιά όπως πριν
-          const raw = j < t.rows.length && t.kind === 'blank' && c.f === 'col' ? c.o?.vals?.[j] : undefined;
+          const raw = j < t.rows.length && t.kind === 'blank' && c.f !== 'aa' ? c.o?.vals?.[j] : undefined;
           if (raw && raw.includes('{')) {
             const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
             if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών

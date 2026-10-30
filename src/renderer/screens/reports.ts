@@ -21,13 +21,14 @@ import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shar
 import { addDays, dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
-import { blocksOf, type AppState, type Person, type Status } from '../../shared/domain';
+import { blocksOf, shortName, type AppState, type Person, type Status } from '../../shared/domain';
+import { cadreSeat, pickPeople } from '../../shared/rules';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
   BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
-  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid,
+  DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, whoOf, whoP, whoC, fieldValue,
   type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
 type P = any;
@@ -492,7 +493,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     upd({ kind, ...pickForKind(r.kind, r.pick, r.sort, kind), split: splitOk(kind) ? r.split : 'none' });
     if (mode === 'upload' && tpl) await inspect(tpl, kind, r.sheet, r.head);
     if (mode === 'build' && build) {
-      const { grid: _g, nrows: _n, ...o } = build;
+      const { grid: _g, nrows: _n, who: _w, ...o } = build;
       setBuild({ ...o, cols: switchCols(build.cols, r.kind, kind), ...(kind === 'blank' ? { nrows: BLANK_ROWS } : {}) });   // από το «Κενός πίνακας» πίσω: χωρίς στήλες δεν γίνεται πίνακας
     }
   };
@@ -655,7 +656,13 @@ function StepKind({ r, setKind, mode, tpl, build }: P) {
   </div>`;
 }
 
-const fieldOpts = (kind: RepKind) => FIELDS[kind].map(f => html`<option key=${f.k} value=${f.k}>${f.label}</option>`);
+const fieldOpts = (kind: RepKind) => {
+  const opt = (f: { k: string; label: string }) => html`<option key=${f.k} value=${f.k}>${f.label}</option>`;
+  if (kind !== 'blank') return FIELDS[kind].map(opt);
+  // Κενός πίνακας: Α/Α, «Στήλη» και τα στοιχεία του ατόμου της γραμμής· του στελέχους μόνο όσα δεν έχει ο στρατιώτης (τα κοινά, π.χ. βαθμός, δουλεύουν και για τα δύο)
+  const cad = FIELDS.blank.filter(f => FIELDS.cadre.some(x => x.k === f.k) && !FIELDS.people.some(x => x.k === f.k));
+  return [...FIELDS.blank.filter(f => f.k === 'aa' || f.k === 'col').map(opt), html`<optgroup key="gs" label="Στρατιώτη">${FIELDS.blank.filter(f => f.k !== 'aa' && f.k !== 'col' && !cad.includes(f)).map(opt)}</optgroup>`, html`<optgroup key="gc" label="Στελέχους">${cad.map(opt)}</optgroup>`];
+};
 function SignerFields({ signers, setSigners, both }: P) {
   return html`<div className="field-row">
     <div className="field"><label className="field__label" htmlFor="sg-s">Όνομα λοχία κάτω από την υπογραφή</label><input id="sg-s" className="ui-input" placeholder="π.χ. ΕΠΟΠ ΛΧΙΑΣ ΠΑΠΑΔΟΠΟΥΛΟΣ" value=${signers.sergeant} onChange=${(e: any) => setSigners({ ...signers, sergeant: e.target.value })}/></div>
@@ -899,9 +906,9 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, se
 // «Κενό»: πόσες γραμμές και ένα μικρό πλέγμα για να γράψεις τα κελιά (BuildOpts.grid: γραμμή × στήλη, χωρίς το Α/Α). Κάθε κελί κρατά το κείμενο
 // μέσα του και ενημερώνει τη σελίδα όταν τελειώσεις (Enter, Tab, κλικ αλλού), όχι σε κάθε πλήκτρο· επικόλληση από το Excel γεμίζει πολλά κελιά μαζί
 const TAG_IN = /\{[^{}]+\}/;   // κελί με {ΕΤΙΚΕΤΑ}: φαίνεται διαφορετικά στο πλέγμα
-const BlankCell = memo(function BlankCell({ i, j, v, label, put, paste, onFocus }: P) {
+const BlankCell = memo(function BlankCell({ i, j, v, label, ph, put, paste, onFocus }: P) {
   const [t, setT] = useState<string>(v); useEffect(() => setT(v), [v]);
-  return html`<input className=${cx('ui-input', TAG_IN.test(t) && 'is-tag')} aria-label=${label} maxLength=${200} value=${t} data-i=${i} data-j=${j}
+  return html`<input className=${cx('ui-input', TAG_IN.test(t) && 'is-tag')} aria-label=${label} placeholder=${ph || undefined} maxLength=${200} value=${t} data-i=${i} data-j=${j}
     onChange=${(e: any) => setT(e.target.value)} onFocus=${() => onFocus(i, j)} onBlur=${() => { if (t !== v) put(i, j, t); }}
     onKeyDown=${(e: any) => { if (e.key !== 'Enter') return; e.preventDefault(); const td = e.currentTarget.closest('td'); (td?.parentElement?.nextElementSibling?.children[td.cellIndex]?.querySelector('input') || e.currentTarget).focus(); }}
     onPaste=${(e: any) => { const x: string = e.clipboardData?.getData('text') || ''; if (/[\t\n]/.test(x.replace(/\r?\n$/, ''))) { e.preventDefault(); paste(i, j, x); } }}/>`;
@@ -921,12 +928,26 @@ function ValuePick({ r, put }: P) {
     ${ms.map(g => html`<optgroup key=${g.group} label=${'Μετρήσεις · ' + g.group}>${g.items.map(m => html`<option key=${m.id} value=${tagText(m.label)}>${m.label}</option>`)}</optgroup>`)}
   <//>`;
 }
+// Η γραμμή του πλέγματος με άτομο (BuildOpts.who): το όνομα στην επικεφαλίδα της γραμμής, με ✕ για να φύγει
+const whoName = (s: AppState, ref: string | null) => { const w = whoOf(s, ref); return !w ? 'Σβησμένο άτομο' : w.kind === 'people' ? shortName(w.x) : shortName(cadreSeat(w.x, 0)); };
 function BlankGrid({ o, set, r, onRows }: P) {
-  const toast = useToast();
+  const toast = useToast(); const { state, today } = useStore();
+  const [pk, setPk] = useState<number | null>(null);   // γραμμή που διαλέγει άτομο
   const n = blankN(o.nrows); const heads: BuildCol[] = o.cols.filter((c: BuildCol) => c.f !== 'aa');
   const sc = useRef<HTMLDivElement>(null); const last = useRef<{ i: number; j: number } | null>(null);   // το τελευταίο κελί που είχε τον δρομέα
   const [txt, setTxt] = useState(String(n)); useEffect(() => setTxt(String(n)), [n]);
   const cb = useRef({ o, set, r, onRows }); cb.current = { o, set, r, onRows };
+  const who: (string | null)[] = o.who || [];
+  const setWho = (i: number, ref: string | null) => { const w = [...(cb.current.o.who || [])]; while (w.length <= i) w.push(null); w[i] = ref; while (w.length && !w[w.length - 1]) w.pop(); cb.current.set({ who: w.length ? w : undefined }); };
+  const people = useMemo(() => pickPeople(state), [state.people, state.cadreList]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (id: number) => { const p = people.find((x: Person) => x.id === id); if (p && pk != null) setWho(pk, p.cid ? whoC(p.cid) : whoP(p.id)); setPk(null); };
+  // οι τιμές των στηλών με στοιχεία για τις γραμμές με άτομο: φαίνονται γκρι μέσα στο κελί (ό,τι γράψεις νικά)
+  const day = repDate(r, today);
+  const ph = useMemo(() => {
+    const pm = new Map(state.people.map(p => [p.id, p])); const out: string[][] = [];
+    who.slice(0, n).forEach((ref, i) => { const w = whoOf(state, ref, pm); if (!w) return; const row = { id: i, bw: w } as unknown as Row; out[i] = heads.map((c: BuildCol) => (c.f === 'col' ? '' : String(fieldValue(state, 'blank', row, c.f, i, day, c.text, { ...c.o, vals: undefined }) ?? ''))); });
+    return out;
+  }, [state, o.who, o.cols, n, day]);   // eslint-disable-line react-hooks/exhaustive-deps
   const put = useCallback((i: number, j: number, t: string) => {
     const g: string[][] = (cb.current.o.grid || []).map((row: string[]) => [...row]);
     while (g.length <= i) g.push([]);
@@ -961,10 +982,11 @@ function BlankGrid({ o, set, r, onRows }: P) {
     <div className="rep-grid__bar"><label className="field__label" htmlFor="b-nrows">Γραμμές</label>
       <input id="b-nrows" type="number" min="1" max=${BLANK_MAX} className="ui-input rep-n" value=${txt} onChange=${(e: any) => { setTxt(e.target.value); const x = +e.target.value; if (Number.isInteger(x) && x >= 1 && x <= BLANK_MAX && x !== n) rows(x); }} onBlur=${() => setTxt(String(n))}/>
       <${ValuePick} r=${r} put=${insert}/>
-      <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel. Με «Βάλε τιμή…» ένα κελί παίρνει ημερομηνία, αριθμό κ.ά. από την εφαρμογή.</small></div>
+      <small className="muted">Ως ${BLANK_MAX}. Γράψε στα κελιά ή άφησέ τα κενά για το χέρι· μπορείς να επικολλήσεις από το Excel. Με «Βάλε τιμή…» ένα κελί παίρνει ημερομηνία, αριθμό κ.ά. από την εφαρμογή. Το κουμπί του ατόμου στη γραμμή δένει στρατιώτη ή στέλεχος: οι στήλες Βαθμός, Όνομα, ΑΣΜ… γεμίζουν μόνες τους, ό,τι γράψεις νικά.</small></div>
+    ${pk != null && html`<div className="rep-grid__pick"><b>Γραμμή ${pk + 1}</b><${PersonPicker} id="b-who" value=${null} people=${people} date=${day} placeholder="Επώνυμο, όνομα ή ΑΣΜ…" autoFocus=${true} onChange=${pick}/><${Button} size="sm" variant="ghost" onClick=${() => setPk(null)}>Άκυρο<//></div>`}
     <div ref=${sc} className="rep-grid__sc" tabIndex=${0} role="group" aria-label="Κελιά του πίνακα"><table className="rep-grid__t">
       <thead><tr><th scope="col" aria-label="Γραμμή"></th>${heads.map((c, j) => html`<th key=${j} scope="col" title=${c.h}>${c.h || '\u00a0'}</th>`)}</tr></thead>
-      <tbody>${Array.from({ length: n }, (_, i) => html`<tr key=${i}><th scope="row">${i + 1}</th>${heads.map((c, j) => html`<td key=${j}><${BlankCell} i=${i} j=${j} v=${o.grid?.[i]?.[j] ?? ''} label=${'Γραμμή ' + (i + 1) + ', ' + (c.h || 'στήλη ' + (j + 1))} put=${put} paste=${paste} onFocus=${onFocus}/></td>`)}</tr>`)}</tbody></table></div>
+      <tbody>${Array.from({ length: n }, (_, i) => html`<tr key=${i}><th scope="row"><span className="rep-grid__r"><button type="button" className="rep-grid__who" aria-label=${'Άτομο για τη γραμμή ' + (i + 1)} data-tip="Στρατιώτης ή στέλεχος σε αυτή τη γραμμή" onClick=${() => setPk(i)}>${Icon.people}</button>${who[i] && html`<span className="rep-grid__nm" title=${whoName(state, who[i])}><span>${whoName(state, who[i])}</span><button type="button" aria-label=${'Βγάλε το άτομο από τη γραμμή ' + (i + 1)} onClick=${() => setWho(i, null)}>✕</button></span>`}<span>${i + 1}</span></span></th>${heads.map((c, j) => html`<td key=${j}><${BlankCell} i=${i} j=${j} ph=${ph[i]?.[j]} v=${o.grid?.[i]?.[j] ?? ''} label=${'Γραμμή ' + (i + 1) + ', ' + (c.h || 'στήλη ' + (j + 1))} put=${put} paste=${paste} onFocus=${onFocus}/></td>`)}</tr>`)}</tbody></table></div>
   </div>`;
 }
 
