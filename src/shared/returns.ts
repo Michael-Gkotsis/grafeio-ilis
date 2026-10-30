@@ -159,10 +159,26 @@ export function retFor(s: AppState, pid: number, d: ISODate): Ret | null {
 export interface Back { p: Person; st: Status; r: Ret }
 export function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
   const le = leaveEnd(s, pid, d, awayOn(s, pid, d)); if (le?.r) return le.r;
-  let last = d, lastSt: Status | undefined, back: Ret | null = null;
+  let last = d, lastSt: Status | undefined, back: Ret | null = null, prev: Status[] = [];
   for (let i = 0, x = d; i < MAX_DAYS; i++, x = addDays(x, 1)) {
     const a = awayOn(s, pid, x); if (!a.length) break;
-    last = x; lastSt = a.find(y => !hasOut(y)) || a[0];
+    if (i > 0) {
+      // η άδεια τελείωσε την προηγούμενη μέρα με ώρα επιστροφής (γύρισε), ή σήμερα έχει μόνο έξοδο/ΔΝ: δεν συνεχίζει, γύρισε στη λήξη της
+      // (30/10: άδεια ως 14:00 και ΔΝ αύριο έλεγε «γυρνά αύριο 06:00 μετά τη ΔΝ»). Άδεια και ΔΝ/έξοδος την τελευταία μέρα: ο κανόνας της ΔΝ (leaveEnd).
+      const lv = prev.filter(y => !hasOut(y));
+      if (a.every(hasOut) || lv.every(y => !y.open && y.to === last && !!y.toTime && hasTimes(y.type))) {
+        const o = prev.find(hasOut);
+        if (o) {
+          const le2 = leaveEnd(s, pid, last, prev); if (le2?.r) return le2.r;
+          // άδεια που τελείωσε με ώρα τη μέρα της εξόδου/ΔΝ και άλλη άδεια μετά: η έξοδος/ΔΝ της μέρας κρίνεται χωρίς την άδεια που τελείωσε
+          const ended = new Set(lv.map(y => y.id));
+          const r = returnOf({ ...s, statuses: s.statuses.filter(y => !ended.has(y.id)) }, pid, last);
+          if (r) return { ...r, base: o.type === 'DN' ? 'τέλος άδειας, ΔΝ' : 'τέλος άδειας, έξοδος' };
+        }
+        break;
+      }
+    }
+    prev = a; last = x; lastSt = a.find(y => !hasOut(y)) || a[0];
     if (lastSt.open) { back = { day: x, time: '', why: 'χωρίς λήξη', open: true }; break; }
     // υπηρεσία μέσα στις μέρες που λείπει: γυρίζει γι' αυτήν
     const duty = i > 0 && dutyAt(s, x, pid);
@@ -280,7 +296,9 @@ export function outsTables(s: AppState, d: ISODate): OutsTables {
       continue;
     }
     const lv = now.find(x => !hasOut(x)); if (!lv) continue;
-    const le = leaveEnd(s, p.id, d, now);
+    const out = now.find(hasOut);
+    // άδεια που τελειώνει σήμερα και σήμερα έξοδος/ΔΝ: ο κανόνας της ΔΝ/εξόδου (leaveEnd, ή leaveBack όταν ακολουθεί άλλη άδεια)
+    const le = leaveEnd(s, p.id, d, now) ?? (out ? ((b: Ret) => (b.base ? { out, r: b } : null))(leaveBack(s, p.id, d)) : null);
     if (le) {
       const r2 = le.r;
       if (r2 && !r2.open) {
@@ -289,7 +307,6 @@ export function outsTables(s: AppState, d: ISODate): OutsTables {
       }
       continue;
     }
-    const out = now.find(hasOut);
     if (out) continue;
     const b = leaveBack(s, p.id, d);
     if (b.open || b.pending || (b.day !== d && b.day !== n)) continue;
