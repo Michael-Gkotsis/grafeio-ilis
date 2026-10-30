@@ -5,7 +5,7 @@ import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOr
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
-import { outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
+import { leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
@@ -208,7 +208,8 @@ export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: 
 export function statusesAt(s: AppState, pid: number, date: ISODate, at: number): Status[] {
   const ss = statusesFrom(s.statuses, pid, date, at), held = outHeld(s, pid, date, at);
   if (held === undefined) return ss;
-  const rest = ss.filter(x => TYPES[x.type].cat !== 'out');
+  // άδεια που τελειώνει σήμερα με έξοδο/ΔΝ σήμερα: από την αρχή εξόδου μετρά μόνο η έξοδος/ΔΝ (leaveOut)
+  const lo = !!leaveOut(s, pid, date, at), rest = ss.filter(x => TYPES[x.type].cat !== 'out' && !(lo && TYPES[x.type].away));
   return held ? [...rest, held].sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type)) : rest;
 }
 // Τώρα (Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό»): όποιος γύρισε σήμερα ως την ώρα

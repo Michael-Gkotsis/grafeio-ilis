@@ -45,7 +45,7 @@ describe('Εξοδούχοι «Όλη η δύναμη»: πραγματικό te
     const { rows } = await grid((await fillOuts(T('exodouxoi.xlsx'), s, D)).data);
     const nm = (id: number) => s.people.find(p => p.id === id)!.last;
     const where = (id: number) => { let sub = ''; for (let r = 1; r <= rows.length; r++) { const a = at(rows, r, 1); if (/^[ΑΒΓ]\d\. /.test(a)) sub = a.slice(0, 2); if (at(rows, r, 4) === nm(id) && /^\d+$/.test(a)) return sub; } return '-'; };
-    for (const [id, g] of [[1, 'Α1'], [3, 'Α2'], [4, 'Α2'], [5, 'Β3'], [6, 'Β1'], [7, 'Γ4'], [9, 'Β1']]) expect(where(id as number), 'p' + id).toBe(g);
+    for (const [id, g] of [[1, 'Α1'], [3, 'Α2'], [4, 'Α2'], [5, 'Β3'], [6, 'Β1'], [7, 'Γ4'], [9, 'Α1']]) expect(where(id as number), 'p' + id).toBe(g);
     expect(book.find(x => x.p.id === 1)!.g).toBe('A1');
     expect(inCell(rows, t => /^ΤΡΙΤΗ 27\/10 06:00/.test(t)).length).toBeGreaterThan(0);
   });

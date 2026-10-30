@@ -122,7 +122,12 @@ const gone = (r: Ret | null, from: ISODate, m: number) => !!r && (!!r.pending ||
 export function outHeldBy(s: AppState, pid: number, d: ISODate, m: number): { st: Status; r: Ret | null } | null | undefined {
   const own = awayOn(s, pid, d), outs = own.filter(hasOut);
   if (outs.length) {
-    if (own.some(x => !hasOut(x))) return undefined;
+    if (own.some(x => !hasOut(x))) {
+      // άδεια που τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (κανόνας 26/10): από την αρχή εξόδου μετρά ως εξοδούχος/ΔΝ, όχι ως άδεια
+      // (Michael, 30/10: άδεια ως 22:00 και εξοδούχος, η Δύναμη τον είχε στους απόντες της άδειας)
+      const le = leaveOut(s, pid, d, m); if (!le) return undefined;
+      return gone(le.r, d, m) ? { st: le.out, r: le.r } : null;
+    }
     if (m >= mins(dayTimes(s, d).out)) { const r = returnOf(s, pid, d); if (gone(r, d, m)) return { st: outs.find(x => x.type === 'DN') || outs[0], r }; }
   }
   // η προηγούμενη μέρα και οι διορθώσεις παλαιότερων ημερών που γυρνούν αργότερα
@@ -130,6 +135,15 @@ export function outHeldBy(s: AppState, pid: number, d: ISODate, m: number): { st
   for (const f of s.backFix || []) if (f.pid === pid && f.at && f.day < prev) days.push(f.day);
   for (const x of days) { const o = awayOn(s, pid, x).find(hasOut); if (o) { const r = returnOf(s, pid, x); if (gone(r, d, m)) return { st: o, r }; } }
   return null;
+}
+// Άδεια που τελειώνει τη μέρα d και την ίδια μέρα έξοδος/ΔΝ, από την αρχή εξόδου (m λεπτά) και μετά: ο εξοδούχος/ΔΝ και πότε γυρνά
+// (leaveEnd· ή leaveBack όταν αύριο αρχίζει νέα άδεια: η έξοδος/ΔΝ της μέρας κρίνεται χωρίς την άδεια που τελείωσε)
+export function leaveOut(s: AppState, pid: number, d: ISODate, m: number): { out: Status; r: Ret | null } | null {
+  if (m < mins(dayTimes(s, d).out)) return null;
+  const now = awayOn(s, pid, d), out = now.find(hasOut);
+  if (!out || now.some(x => !hasOut(x) && (x.open || x.to !== d))) return null;
+  const le = leaveEnd(s, pid, d, now); if (le) return le;
+  const b = leaveBack(s, pid, d); return b.base ? { out, r: b } : null;
 }
 export function outHeld(s: AppState, pid: number, d: ISODate, m: number): Status | null | undefined {
   const h = outHeldBy(s, pid, d, m);
