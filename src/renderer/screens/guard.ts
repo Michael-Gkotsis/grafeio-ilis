@@ -16,7 +16,7 @@ import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
 import { dutyAt, isSat, isWk, outLbl } from '../../shared/weekend';
-import { dayTimes, theDay, retDay, retWhen, returnsOn, type Back } from '../../shared/returns';
+import { dayTimes, theDay, retDay, retWhen, returnsOn, stillOut, type Back } from '../../shared/returns';
 import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
@@ -567,7 +567,7 @@ export function OutsScreen() {
   const pendDays = useMemo(() => { const m = new Map<string, string[]>(); backs.forEach(b => { if (b.r.pending) m.set(b.r.day, [...(m.get(b.r.day) || []), shortName(b.p)]); }); return [...m]; }, [backs]);
   const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
   const blockedN = people.filter(p => reasons[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out')).length;
+  const stayN = people.filter(p => !draft[p.id] && !statusesFrom(state.statuses, p.id, date, outMin(state.rules)).some(s => TYPES[s.type].away && TYPES[s.type].cat !== 'out') && !stillOut(state, p.id, date)).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useOpenFrom(rows);

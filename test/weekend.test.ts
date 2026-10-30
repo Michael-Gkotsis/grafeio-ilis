@@ -44,7 +44,8 @@ describe('ΔΝ ΣΚ', () => {
     s = { ...base, statuses: [dn, lv(SUN)] };
     expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΚΥΡΙΑΚΗ 18/10, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 06:00 (ΤΕΛΟΣ ΚΑ)');
     s = { ...base, statuses: [dn, lv(SAT)] };
-    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΣΑΒΒΑΤΟ 17/10');
+    // και πότε γυρνά, όπως το «Ποιοι γυρίζουν και πότε» (30/10: πριν έλειπε)
+    expect(outsNote(s, SAT, 2, dn)).toBe('ΔΝ, ΑΔΕΙΑ ΑΠΟ ΣΑΒΒΑΤΟ 17/10, ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 ΠΡΩΙ (ΤΕΛΟΣ ΚΑ)');
     const out = { ...dn, type: 'OUT' as const };
     expect(outsNote({ ...base, statuses: [out, lv(SUN)] }, SAT, 2, out)).toBe('ΓΥΡΝΑ ΣΑΒΒΑΤΟ 17/10 22:00');
   });
