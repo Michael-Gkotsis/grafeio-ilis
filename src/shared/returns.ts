@@ -4,7 +4,7 @@
 //  - returnOf: πότε και γιατί γυρνά όποιος είναι εξοδούχος ή ΔΝ τη μέρα d
 //  - outHeld/awayAt: λείπει εκείνη την ώρα; (η Δύναμη και το «Σήμερα» με την ώρα)
 //  - returnsOn, retDay/retWhen/retTxt: «Ποιοι γυρίζουν και πότε» (Εξοδούχοι, Σήμερα)
-//  - outsTables: οι 4 πίνακες του Excel «Σε 4 πίνακες» (Βγαίνουν ΔΝ, Βγαίνουν εξοδούχοι, Γυρίζουν απόψε, Γυρίζουν αύριο) με Πότε/Γιατί
+//  - outsTables: οι 4 πίνακες των τιμών Έντυπα (Βγαίνουν ΔΝ, Βγαίνουν εξοδούχοι, Γυρίζουν απόψε, Γυρίζουν αύριο) με Πότε/Γιατί· το Excel «Σε 4 πίνακες» αντικαταστάθηκε από την «Όλη η δύναμη» (outsDay.ts)
 // Η «Ώρα εξόδου» 16:00 των Κανόνων (rules.outTime) είναι άλλο πράγμα: ισχύει μόνο για όσους γυρίζουν από άδεια.
 // Κυκλική εξάρτηση με το rules.ts (η Δύναμη με την ώρα καλεί το outHeld): όλα χρησιμοποιούνται μέσα σε συναρτήσεις, όχι στην αρχή του αρχείου.
 import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
@@ -68,7 +68,7 @@ function withDuty(s: AppState, pid: number, r: Ret): Ret {
 const hasOut = (x: Status) => TYPES[x.type].cat === 'out';
 // Άδεια που τελειώνει σήμερα (d) και σήμερα έχει ΔΝ/έξοδο (now = οι απουσίες της d): η ΔΝ/έξοδος κερδίζει και κρίνεται σαν να μην είχε
 // άδεια (ΔΝ → δεν γυρνά απόψε, γυρνά με τον κανόνα της ΔΝ· έξοδος → στην ώρα των εξοδούχων). Μία πηγή για την οθόνη «Ποιοι γυρίζουν και
-// πότε» (leaveBack) και για τους 4 πίνακες του Excel (outsTables). null: δεν ισχύει (καμία άδεια/ΔΝ/έξοδος, ή η άδεια συνεχίζει αύριο).
+// πότε» (leaveBack) και για τους 4 πίνακες (outsTables). null: δεν ισχύει (καμία άδεια/ΔΝ/έξοδος, ή η άδεια συνεχίζει αύριο).
 export function leaveEnd(s: AppState, pid: number, d: ISODate, now: Status[]): { out: Status; r: Ret | null } | null {
   const out = now.find(hasOut); if (!out || !now.some(x => !hasOut(x)) || awayOn(s, pid, addDays(d, 1)).some(x => !hasOut(x))) return null;
   const free = { ...s, statuses: s.statuses.filter(x => x.pid !== pid || hasOut(x) || !TYPES[x.type].away) };
@@ -197,9 +197,10 @@ export function returnsOn(s: AppState, d: ISODate): Back[] {
     const now = awayOn(s, p.id, d); if (!now.length) continue;
     out.push({ p, st: now.find(y => !hasOut(y)) || now[0], r: returnOf(s, p.id, d) || leaveBack(s, p.id, d) });
   }
-  const ord = (b: Back) => (b.r.open ? '9' : b.r.day + (b.r.duty ? '0' : b.r.pending ? '2' : '1') + (b.r.time || '23:59'));
-  return out.sort((a, b) => ord(a).localeCompare(ord(b)) || a.p.last.localeCompare(b.p.last, 'el'));
+  return out.sort((a, b) => retOrd(a.r).localeCompare(retOrd(b.r)) || a.p.last.localeCompare(b.p.last, 'el'));
 }
+// Η σειρά των επιστροφών: ανά μέρα και ώρα, όσοι δεν έχουν λήξη στο τέλος (και στην «Όλη η δύναμη», Δ. Πότε γυρίζουν)
+export const retOrd = (r: Ret) => (r.open ? '9' : r.day + (r.duty ? '0' : r.pending ? '2' : '1') + (r.time || '23:59'));
 // «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»
 export const retDay = (r: Ret) => (r.open ? 'Χωρίς λήξη' : DOW_FULL[weekday(r.day)] + ' ' + dm(r.day));
 // Γιατί γυρνά (why) και τι κάνει μετά (leave): οι ίδιες λέξεις στην οθόνη και στις Παρατηρήσεις του Excel
@@ -236,7 +237,7 @@ export function retLine(r: Ret): string {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-// Excel «Σε 4 πίνακες» (Michael, 26/10): ποιος μπαίνει πού κρίνεται από ό,τι δηλώθηκε χθες/σήμερα και από το αν σήμερα έχει εκπαίδευση.
+// Οι 4 πίνακες (Michael, 26/10· ήταν το Excel «Σε 4 πίνακες», τώρα τιμές των Έντυπα): ποιος μπαίνει πού κρίνεται από ό,τι δηλώθηκε χθες/σήμερα και από το αν σήμερα έχει εκπαίδευση.
 //  dn: μέσα και φεύγουν σήμερα με ΔΝ (και ο χθεσινός ΔΝ που γύρισε το πρωί γιατί έχει εκπαίδευση και ξαναφεύγει)
 //  out: μέσα και φεύγουν σήμερα ως εξοδούχοι
 //  tonight: χθεσινοί ΔΝ που σήμερα είναι εξοδούχοι (δεν γύρισαν το πρωί) και όσοι τελειώνουν άδεια σήμερα

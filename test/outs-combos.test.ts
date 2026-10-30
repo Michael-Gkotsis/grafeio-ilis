@@ -6,59 +6,21 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { apply, type Command, type Ctx } from '../src/shared/commands';
 import { fakeState } from './fixtures';
 import { outsTables, outHeld, dayTimes, returnsOn, type OutsTables } from '../src/shared/returns';
 import { outsAndStay } from '../src/shared/outsStay';
 import { fillOuts, outsNote } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
-import { activePeople, outBlock, postOf, statusesOn } from '../src/shared/rules';
+import { activePeople, postOf, statusesOn, strengthOf } from '../src/shared/rules';
+import { dayBook, whenList } from '../src/shared/outsDay';
 import { addDays, type ISODate } from '../src/shared/dates';
 import { mins } from '../src/shared/hours';
 import { upper } from '../src/shared/text';
 import { TYPES, type AppState, type Status, type TypeKey } from '../src/shared/domain';
+import { genState, run, DAYS } from './outs-gen';
+export { genState };
 
 let seq = 0;
-const ctx: Ctx = { today: '2026-10-20', newId: () => 'k' + ++seq };
-const run = (s: AppState, c: Command) => { try { return apply(s, c, ctx).state; } catch { return s; } };
-const rng = (seed: number) => () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-const DAYS: ISODate[] = []; for (let d = '2026-10-21'; d <= '2026-11-04'; d = addDays(d, 1)) DAYS.push(d);
-const POSTS = ['ly', 'dy', 'th1', 'th3', 'th8', 'mg1', 'op2', 'sk3a', 'tae'];
-const TIMES = ['06:00', '10:00', '14:00', '16:00', '18:00', '22:00'];
-
-// realistic: όπως στην οθόνη χωρίς επιβεβαίωση (όποιος έχει υπηρεσία, ποινή, άδεια… δεν παίρνει έξοδο)
-export function genState(seed: number, realistic: boolean, n = 14): AppState {
-  const r = rng(seed); const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-  let s = fakeState(n); const ss: Status[] = [];
-  for (const p of s.people) for (let i = Math.floor(r() * 3); i > 0; i--) {
-    const type = pick<TypeKey>(['LEAVE', 'LEAVE', 'HON', 'SICK', 'NOS', 'STEP', 'PUN', 'PUN', 'EY', 'EA', 'KOL', 'KOL']);
-    const from = pick(DAYS.slice(0, 12)), len = Math.floor(r() * 4);
-    const x: Status = { id: 'g' + ++seq, pid: p.id, type, from, to: addDays(from, len) };
-    if (type === 'LEAVE') x.kind = pick(['Κανονική', 'Ειδική', 'ΑΜΔ']);
-    if (type === 'PUN') { x.kind = pick(['Περιορισμός', 'Κράτηση', 'Στέρηση εξόδου']); if (r() < 0.15) x.pending = true; if (x.kind === 'Στέρηση εξόδου') x.days = len + 1; }
-    if (type === 'KOL') { x.kind = 'ΣΤΕΠ'; x.noOut = r() < 0.5; x.minus = r() < 0.5; }
-    if (TYPES[type].cat === 'abs' || type === 'NOS' || type === 'STEP') { if (r() < 0.4) x.fromTime = pick(TIMES); if (r() < 0.5) x.toTime = pick(TIMES); if (r() < 0.07) x.open = true; }
-    ss.push(x);
-  }
-  s = { ...s, statuses: ss };
-  for (const d of DAYS) for (const k of POSTS) if (r() < 0.45) s = run(s, { t: 'assign', date: d, k, pid: 1 + Math.floor(r() * n), force: 'x' });
-  for (const d of DAYS) if (r() < 0.12) s = run(s, { t: 'setDayPlan', date: d, plan: pick([{ train: false }, { train: true }, { backOut: '23:30' }, { out: '14:00' }, { backDn: '07:00' }]) });
-  for (const d of DAYS) {
-    const changes: { pid: number; from: null; to: TypeKey; wk?: boolean }[] = [], notes: { pid: number; note: string }[] = [];
-    for (const p of s.people) {
-      if (statusesOn(s.statuses, p.id, d).some(x => TYPES[x.type].cat === 'out')) continue;   // π.χ. η Κυριακή της ΔΝ ΣΚ
-      if (realistic && outBlock(s, d, p.id)) continue;
-      const v = r(); if (v >= 0.55) continue;
-      const to: TypeKey = v < 0.3 ? 'OUT' : 'DN';
-      changes.push({ pid: p.id, from: null, to, ...(to === 'DN' && new Date(d).getDay() === 6 && r() < 0.6 ? { wk: true } : {}) });
-      if (r() < 0.1) notes.push({ pid: p.id, note: 'ΙΑΤΡΟΣ ΣΤΕΠ' });
-    }
-    if (changes.length) s = run(s, { t: 'outs', date: d, changes, notes, force: true });
-  }
-  for (const x of s.statuses.filter(y => TYPES[y.type].cat === 'out')) if (r() < 0.05)
-    s = run(s, r() < 0.5 ? { t: 'setBackFix', pid: x.pid, day: x.from, stay: true, why: 'ΕΙΠΕ Ο ΛΟΧΑΓΟΣ' } : { t: 'setBackFix', pid: x.pid, day: x.from, at: { day: addDays(x.from, 2), time: '12:00' }, why: 'ΕΞΕΤΑΣΕΙΣ' });
-  return s;
-}
 
 const TABS = ['dn', 'out', 'tonight', 'tomorrow'] as const;
 const bad = (t: string) => /undefined|null|NaN|\(\)|,\s*,|,\s*$|^\s*,|\s\s/.test(t);
@@ -90,6 +52,27 @@ function check(s: AppState, d: ISODate, realistic: boolean): string[] {
     const ids = t[k].map(y => y.p.id); if (new Set(ids).size !== ids.length) E('δύο φορές στον πίνακα ' + k);
     for (const row of t[k]) if (!row.why || bad(row.why) || bad(row.when)) E('Πότε/Γιατί: «' + row.when + '» «' + row.why + '»');
   }
+  // «Όλη η δύναμη» (outsDay.ts), όπως στο σχέδιο 30/10. P1: κάθε ενεργό άτομο μία φορά· P2: οι εξοδούχοι της Τωρινής μορφής στο Α ∪ Β και οι
+  // παραμένοντες στο Γ· P3: Α και Β απόντες στη Δύναμη στην ώρα εξόδου, Γ1, Γ2, Γ3, Γ5 παρόντες· P4: Α, Β, Γ4 έχουν επιστροφή, ίδια με την οθόνη· Δ = Α + Β + Γ4.
+  // Η μόνη επιτρεπτή διαφορά: υπηρεσία ενώ η διόρθωση λέει έξω (Γ1 με ΠΡΟΣΟΧΗ), και υπηρεσία μαζί με έξοδο/ΔΝ (Α1/Α2 με ΠΡΟΣΟΧΗ).
+  const book = dayBook(s, d), grp = new Map(book.map(r => [r.p.id, r.g])), pres = new Set(strengthOf(s, d, outM).lists.present.map(p => p.id));
+  const people = activePeople(s);
+  if (book.length !== people.length || new Set(book.map(r => r.p.id)).size !== people.length) E('P1 δεν είναι ο καθένας μία φορά');
+  for (const x of outs) if (!/^[AB]/.test(grp.get(x.p.id)!)) E('P2 p' + x.p.id + ' εξοδούχος στο ' + grp.get(x.p.id));
+  for (const x of stay) if (!/^G/.test(grp.get(x.p.id)!)) E('P2 p' + x.p.id + ' παραμένων στο ' + grp.get(x.p.id));
+  for (const r of book) {
+    if (/^[AB]/.test(r.g) && pres.has(r.p.id)) E('P3 p' + r.p.id + ' ' + r.g + ' παρών στην ώρα εξόδου');
+    if (/^G[1235]/.test(r.g) && !pres.has(r.p.id) && !(r.g === 'G1' && r.warn?.includes('ΔΙΟΡΘΩΣΗ'))) E('P3 p' + r.p.id + ' ' + r.g + ' απών στην ώρα εξόδου');
+    if (r.warn && !(r.g === 'G1' ? r.warn.includes('ΔΙΟΡΘΩΣΗ') : /^A[12]$/.test(r.g) && r.warn.includes('ΥΠΗΡΕΣΙΑ'))) E('P1 p' + r.p.id + ' ΠΡΟΣΟΧΗ εκτός των δύο γνωστών: ' + r.warn);
+    if (/^[AB]|^G4/.test(r.g)) {
+      const o = backs.find(b => b.p.id === r.p.id);
+      if (!r.r) { E('P4 p' + r.p.id + ' ' + r.g + ' χωρίς επιστροφή'); continue; }
+      if (o && (o.r.day !== r.r.day || (o.r.time || '') !== (r.r.time || '') || !!o.r.open !== !!r.r.open)) E('P4 p' + r.p.id + ' ' + r.g + ' άλλη επιστροφή από την οθόνη');
+      if (/^[AB]/.test(r.g) && !r.r.open && !r.r.pending && r.r.day < d) E('P4 p' + r.p.id + ' ' + r.g + ' γύρισε ήδη');
+    }
+  }
+  const dl = whenList(book).flatMap(w => w.rows.map(r => r.p.id)).sort((a, b) => a - b), want = book.filter(r => /^[AB]|^G4/.test(r.g) && r.r).map(r => r.p.id).sort((a, b) => a - b);
+  if (dl.join() !== want.join()) E('Δ δεν είναι Α + Β + Γ4');
   if (realistic) {
     // όσοι έχουν έξοδο/ΔΝ σήμερα: όχι και υπηρεσία (η οθόνη δεν το αφήνει χωρίς επιβεβαίωση)
     for (const x of outs) if (statusesOn(s.statuses, x.p.id, d).some(y => TYPES[y.type].cat === 'out') && postOf(s, d, x.p.id)) E('p' + x.p.id + ' εξοδούχος με υπηρεσία');
@@ -116,7 +99,7 @@ describe('Εξοδούχοι σε όλους τους συνδυασμούς', (
     }
     expect(errs.slice(0, 20)).toEqual([]);
   });
-  it('το Excel και στις δύο μορφές: γράφεται, και έχει όλους όσους λένε οι λίστες', async () => {
+  it('το Excel («Τωρινή» και «Όλη η δύναμη»): γράφεται, και έχει όλους όσους λένε οι λίστες', async () => {
     const T = fs.readFileSync(path.join(__dirname, '..', 'templates', 'exodouxoi.xlsx'));
     const text = async (data: Buffer) => { const wb = await Workbook.open(data); const all: string[] = []; for (const n of wb.sheetNames()) for (const r of await wb.values(n, 400, 30)) all.push(r.map(v => String(v ?? '')).join('|')); return all.join('\n'); };
     for (let seed = 1; seed <= 24; seed++) {
@@ -125,9 +108,9 @@ describe('Εξοδούχοι σε όλους τους συνδυασμούς', (
         const cur = await text((await fillOuts(T, s0, d)).data);
         const { outs, stay } = outsAndStay(s0, d);
         for (const x of [...outs, ...stay]) expect(cur, 'seed ' + seed + ' ' + d + ' ' + x.p.last).toContain(upper(x.p.last));
-        const s4 = { ...s0, settings: { ...s0.settings, outsFmt: 'tab4' as const } };
-        const t4 = await text((await fillOuts(T, s4, d)).data); const t = outsTables(s4, d);
-        for (const k of TABS) for (const row of t[k]) expect(t4, 'seed ' + seed + ' ' + d + ' ' + k).toContain(upper(row.p.last));
+        const sa = { ...s0, settings: { ...s0.settings, outsFmt: 'all' as const } };
+        const ta = await text((await fillOuts(T, sa, d)).data);
+        for (const p of activePeople(s0)) expect(ta, 'seed ' + seed + ' ' + d + ' ' + p.last + ' (όλη η δύναμη)').toContain(upper(p.last));
       }
     }
   }, 120000);
@@ -153,7 +136,7 @@ describe('Εξοδούχοι: οι διορθώσεις της 30/10', () => {
     expect(stay.map(x => x.p.id)).not.toContain(2); expect(stay.map(x => x.p.id)).not.toContain(3);
     const o2 = outs.find(x => x.p.id === 2)!; expect(outsNote(s, SUN, 2, o2.st)).toBe('ΓΥΡΝΑ ΔΕΥΤΕΡΑ 26/10 12:00 (ΔΙΟΡΘΩΣΗ: ΕΞΕΤΑΣΕΙΣ)');
     const o3 = outs.find(x => x.p.id === 3)!; expect(outsNote(s, SUN, 3, o3.st)).toBe('ΔΝ, ΔΕΝ ΓΥΡΝΑ (ΔΙΟΡΘΩΣΗ: ΕΙΠΕ Ο ΛΟΧΑΓΟΣ)');
-    // στους 4 πίνακες: γυρνά αύριο
+    // στους 4 πίνακες των τιμών: γυρνά αύριο
     expect(outsTables(s, SUN).tomorrow.map(x => [x.p.id, x.when, x.why])).toEqual([[2, 'αύριο 12:00', 'Εξοδούχος, διόρθωση: ΕΞΕΤΑΣΕΙΣ']]);
     // με υπηρεσία εκείνη τη μέρα είναι μέσα: παραμένων με την υπηρεσία του
     const s2 = run(s, { t: 'assign', date: SUN, k: 'ly', pid: 3, force: 'x' });

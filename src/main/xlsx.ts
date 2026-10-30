@@ -272,6 +272,11 @@ export class Sheet {
     this.tail = tailInsert(this.tail, 'pageSetup', `<pageSetup paperSize="9" orientation="${landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0"/>`);
     return this;
   }
+  // Το φύλλο που έχει ήδη δικές του ρυθμίσεις εκτύπωσης (template με «Προσαρμογή σε μία σελίδα»): σε πλάτος μιας σελίδας και όσες σελίδες χρειαστεί σε ύψος
+  fitTall(): this {
+    this.tail = this.tail.replace(/<pageSetup\b[^>]*?(?=\/?>)/, a => setAttr(setAttr(a, 'fitToHeight', '0'), 'scale', null));
+    return this;
+  }
   // Υποσέλιδο σε κάθε σελίδα (π.χ. «Σελίδα &P από &N» στο κέντρο), μόνο αν το φύλλο δεν έχει ήδη δικό του
   setFooter(center: string): this {
     if (/<headerFooter\b/.test(this.tail)) return this;
@@ -1209,7 +1214,7 @@ export class Workbook {
   }
   // Πίνακες του Excel (ListObject) στο φύλλο
   private tableEdits: { path: string; after: number; n: number }[] = [];
-  // Οι πίνακες του Excel του φύλλου δεν φτάνουν πιο κάτω από τη γραμμή last (π.χ. «Σε 4 πίνακες»: ο πίνακας του template είναι
+  // Οι πίνακες του Excel του φύλλου δεν φτάνουν πιο κάτω από τη γραμμή last (π.χ. «Όλη η δύναμη»: ο πίνακας του template είναι
   // μόνο ο πρώτος, οι άλλοι έχουν συγχωνευμένους τίτλους που ο Excel δεν δέχεται μέσα σε πίνακα)
   private tableLimits: { path: string; last: number }[] = [];
   limitTables(sheet: Sheet, last: number) { this.tableLimits.push({ path: sheet.path, last }); }
