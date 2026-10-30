@@ -10,7 +10,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, blankFill, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankFill, blankIdx, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, rowsOf, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -150,7 +150,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   const mv = metricFn(s, d, () => atOf(s, r.at, d, clock.today, clock.now), clock.today);   // μετρήσεις σε ετικέτες των κελιών του «Κενός πίνακας»
   for (const m of valsMissing(s, r.vals)) warnings.push('Στους πίνακες τιμών δεν υπάρχει πια η μέτρηση «' + m + '» (σβήστηκε υπηρεσία ή τύπος;). Δεν μετρά.');
   const sheet = r.sheet && wb.hasSheet(r.sheet) ? r.sheet : wb.sheetNames()[0];
-  const rows = byIds(s, r.kind, ids.slice(0, MAX_ROWS), d, r.who);
+  const rows = r.kind === 'blank' && r.src ? rowsOf(s, r, d).slice(0, Math.min(ids.length, MAX_ROWS)) : byIds(s, r.kind, ids.slice(0, MAX_ROWS), d, r.who);   // γραμμές από φίλτρο: τα άτομα βγαίνουν από το pick, όσες γραμμές ζητήθηκαν
   if (ids.length > MAX_ROWS) warnings.push('Μπήκαν οι πρώτοι ' + MAX_ROWS + '.');
   // οι πίνακες 2, 3…: όλοι όσοι περνούν τα φίλτρα τους (χωρίς τυχαίους), με τη σειρά τους
   const more = r.more || []; const extra = moreRows(s, r, d).map(x => x.slice(0, MAX_ROWS));
@@ -343,7 +343,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
           const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
           if (j >= t.rows.length && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
           // «Κενός πίνακας»: κελί με {ΕΤΙΚΕΤΑ}· όλα τα άλλα κελιά όπως πριν
-          const raw = j < t.rows.length && t.kind === 'blank' && c.f !== 'aa' ? c.o?.vals?.[j] : undefined;
+          const raw = j < t.rows.length && t.kind === 'blank' && c.f !== 'aa' ? c.o?.vals?.[blankIdx(t.rows[j], j)] : undefined;
           if (raw && raw.includes('{')) {
             const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
             if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών
@@ -498,7 +498,7 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
   // nop: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών): τίτλος, δύο στήλες (κείμενο, τιμή) και οι υπογραφές
   const nop = !!o.nopeople && !(o.more || []).length;
   type Tab = { id: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildOpts['cols']; lay?: TabLay; grid?: string[][]; nrows?: number };
-  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay, ...(t.kind === 'blank' ? { grid: t.grid, nrows: blankN(t.nrows) } : {}) }))];
+  const tables: Tab[] = nop ? [] : [{ id: '', title: o.t1 || '', ta: o.ta1, kind, cols, lay: o.lay, ...(kind === 'blank' ? { grid: o.grid, nrows: blankN(o.nrows, o.src) } : {}) }, ...(o.more || []).map(t => ({ id: t.id, title: t.title, ta: t.ta, kind: t.kind, cols: one(t.cols), lay: t.lay, ...(t.kind === 'blank' ? { grid: t.grid, nrows: blankN(t.nrows, t.src) } : {}) }))];
   const sz = o.sz || 11; const fill = FILLS[o.fill] || '';
   const grid = !nop && gridOn(o); if (grid) wb.widen = false;   // πλέγμα: οι στήλες μένουν όσο τις έστησες
   // θέσεις πινάκων (Φάση 3): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη πίνακες ατόμων και χώρος για πίνακες τιμών που γεμίζουν όταν βγαίνει το έντυπο
