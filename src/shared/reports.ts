@@ -206,9 +206,10 @@ export interface RepPick {
   empty?: boolean;                            // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
   wf?: WeaponFilter;                          // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
   open?: boolean;                             // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
+  stNew?: true;                               // μόνο όσες δηλώθηκαν (ξεκινούν) τη μέρα του εντύπου: στα φίλτρα ιατρικό/ποινή/άδεια/εισαγωγή και σε όλες τις στήλες καταστάσεων
 }
 // Φίλτρα στρατιωτών που συνδυάζονται (Michael 20/10: «π.χ. όχι πόστα και με ιατρικά»), όλα για τη μέρα του εντύπου
-export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'dnright' | 'weapon';
+export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'other' | 'dnright' | 'weapon';
 export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[] = [
   { id: 'present', label: 'Παρών τη μέρα', yes: 'Παρόντες', no: 'Απόντες' },
   { id: 'duty', label: 'Υπηρεσία τη μέρα ή την επόμενη', yes: 'Με υπηρεσία', no: 'Χωρίς υπηρεσία' },
@@ -216,6 +217,7 @@ export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[
   { id: 'med', label: 'Ιατρικό τη μέρα', yes: 'Με ιατρικό', no: 'Χωρίς ιατρικό' },
   { id: 'pun', label: 'Ποινή τη μέρα', yes: 'Τιμωρημένοι', no: 'Χωρίς ποινή' },
   { id: 'leave', label: 'Άδεια τη μέρα', yes: 'Σε άδεια', no: 'Όχι σε άδεια' },
+  { id: 'other', label: 'Εισαγωγή τη μέρα (ΣΤΕΠ, νοσοκομείο)', yes: 'Με εισαγωγή', no: 'Χωρίς εισαγωγή' },
   { id: 'dnright', label: 'Δικαίωμα ΔΝ', yes: 'Με δικαίωμα ΔΝ', no: 'Χωρίς δικαίωμα ΔΝ' },
   { id: 'weapon', label: 'Όπλο', yes: 'Με όπλο', no: 'Χωρίς όπλο' }
 ];
@@ -238,7 +240,8 @@ export function setCond(pk: RepPick, c: RepCond, v: 'any' | 'yes' | 'no'): RepPi
 }
 export const condVal = (pk: RepPick, c: RepCond): 'any' | 'yes' | 'no' => { const { need, not } = condsOf(pk); return need.includes(c) ? 'yes' : not.includes(c) ? 'no' : 'any'; };
 // Ελέγχει ένα φίλτρο για έναν στρατιώτη τη μέρα d (τα σύνολα φτιάχνονται μία φορά, μόνο όσα χρειάζονται)
-function condTest(s: AppState, d: ISODate) {
+// stNew: μόνο οι καταστάσεις που ξεκινούν τη μέρα d
+function condTest(s: AppState, d: ISODate, stNew?: boolean) {
   let present: Set<number> | null = null; let busy: Set<number> | null = null;
   return (c: RepCond, p: Person): boolean => {
     if (c === 'present') { present = present || new Set(strengthOf(s, d).lists.present.map(x => x.id)); return present.has(p.id); }
@@ -246,8 +249,8 @@ function condTest(s: AppState, d: ISODate) {
     if (c === 'post') return !!p.post;
     if (c === 'dnright') return !!p.dn;
     if (c === 'weapon') return !!(p.weapon || '').trim();
-    const on = statusesOn(s.statuses, p.id, d);
-    if (c === 'med') return on.some(x => TYPES[x.type].cat === 'med');
+    const all = statusesOn(s.statuses, p.id, d); const on = stNew ? all.filter(x => x.from === d) : all;
+    if (c === 'med' || c === 'other') return on.some(x => TYPES[x.type]?.cat === c);
     return !!filterStatus(c, on);
   };
 }
@@ -410,6 +413,9 @@ const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.setti
 let wiMemo: { s: AppState; d: ISODate; info: WeaponInfo } | null = null;
 const wInfo = (s: AppState, d: ISODate) => { if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) }; return wiMemo.info; };
 const when = (day?: ISODate, t?: string) => (day ? dmy(day) + (t ? ' ' + t : '') : '');
+// Οι στήλες ενός πίνακα όταν το φίλτρο λέει «μόνο όσα δηλώθηκαν τη μέρα» (pick.stNew): οι στήλες καταστάσεων και οι συνδυασμοί παίρνουν st: 'new'
+export const stNewCols = <T extends { f: string; o?: ColOpts }>(cols: T[], pk?: Pick<RepPick, 'stNew'>): T[] =>
+  (pk?.stNew ? cols.map(c => (c.f === 'combo' || (c.f !== 'stype' && isStatusField(c.f)) ? { ...c, o: { ...c.o, st: 'new' as const } } : c)) : cols);
 // o: μορφή της στήλης (καταστάσεις, συνδυασμός)
 export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string, o?: ColOpts): string | number | null {
   if (f === 'aa') return i + 1;
@@ -543,7 +549,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'>, d: ISO
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
   let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
   const { need, not } = condsOf(pk);
-  if (need.length || not.length) { const t = condTest(s, d); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
+  if (need.length || not.length) { const t = condTest(s, d, pk.stNew); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
   if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.origin, p.post, p.role].join(' ')).includes(normGreek(view.q))));
   if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
@@ -727,7 +733,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'>, s: Pick<AppState, 'se
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
   const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
   const man = manualKind(r.kind);
-  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)),
+  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
     pk.mode === 'random' && pk.gap ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες') : '',
     man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '', man && pk.never?.length ? pk.never.length + ' ποτέ' : ''].filter(Boolean).join(', ');
   const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
@@ -739,12 +745,13 @@ export const sortsOf = (kind: RepKind) => SORTS.filter(s => kind === 'blank' ? s
   && !((kind === 'duty' || kind === 'wmove') && s.value === 'pick')).map(s => (kind === 'wmove' && s.value === 'from' ? { ...s, label: 'Ώρα εξόδου' } : s));
 // Άλλαξε «Τι αφορά»: κάθε είδος κρατά μόνο τα δικά του φίλτρα· θάλαμοι, Σ.Ι. και λίστα μένουν σε όσα έχουν στρατιώτες
 export function pickForKind(from: RepKind, pk: RepPick, sort: RepSort, kind: RepKind): { pick: RepPick; sort: RepSort } {
-  const { cats, when, blocks, empty, wf, open, ...rest } = pk;
+  const { cats, when, blocks, empty, wf, open, stNew, ...rest } = pk;
+  const sn = stNew && (kind === 'people' || kind === 'weapon') ? { stNew } : {};   // μόνο στα είδη με φίλτρα στρατιωτών
   const base = { ...rest, from: 'all' as const, noDuty: false };
   const pick: RepPick = kind === 'blank' ? { from: 'all', mode: 'all', n: from === 'blank' ? blankN(pk.n) : BLANK_ROWS } : kind === 'cadre' ? { from: pk.from === 'present' ? 'present' : 'all', mode: pk.mode, n: pk.n }
     : kind === 'status' ? { ...base, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' }
     : kind === 'duty' ? { ...base, mode: 'all', blocks, empty } : kind === 'wmove' ? { ...base, mode: 'all', open }
-    : kind === 'weapon' ? { ...rest, from: isLinked(from) ? 'all' : rest.from, wf: wf || 'with' } : { ...rest, from: isLinked(from) ? 'all' : rest.from };
+    : kind === 'weapon' ? { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from, wf: wf || 'with' } : { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from };
   const so: RepSort = kind === 'blank' ? 'pick' : kind === 'duty' ? 'seat' : kind === 'wmove' ? 'from' : sortsOf(kind).some(x => x.value === sort) && from !== 'blank' ? sort : kind === 'cadre' ? 'rank' : 'name';
   return { pick, sort: so };
 }

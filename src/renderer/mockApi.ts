@@ -7,7 +7,7 @@ import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
-import { blankFill, blankN, blankTags, byIds, cellValue, fieldOf, fieldValue, metricFn, moreRows, type BuildCol, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
+import { blankFill, blankN, blankTags, byIds, cellValue, fieldOf, fieldValue, metricFn, moreRows, stNewCols, type BuildCol, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
 import { PV_PAGES, cutSample } from '../shared/repPage';
 import { atOf, evalTables, rowText } from '../shared/values';
 import { MAIN, bandsOf } from '../shared/repBands';
@@ -217,8 +217,8 @@ export function mockApi(): Api {
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const extra = moreRows(state, r, date);
       const nop = !!build?.nopeople && !(build.more || []).length;   // μόνο πίνακες τιμών
-      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : cols1, rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
-        ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: (t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
+      const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : stNewCols(cols1, r.pick), rows: nop ? [] : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date) },
+        ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: stNewCols((t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], (r.more || []).find(m => m.id === t.id)?.pick), rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
       const at = atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()); const vo = evalTables(state, date, at, r.vals);
       const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''));   // «Κενός πίνακας»: ετικέτες στα κελιά
