@@ -14,6 +14,7 @@ import { fakeState } from './fixtures';
 import { genState } from './outs-gen';
 import { genOuts } from './tplgen';
 import type { AppState } from '../src/shared/domain';
+import { renderBook } from '../src/main/print';
 
 const T = fs.readFileSync(path.join(__dirname, '..', 'templates', 'exodouxoi.xlsx'));
 const all = (s: AppState): AppState => ({ ...s, settings: { ...s.settings, outsFmt: 'all' } });
@@ -201,5 +202,25 @@ describe('Εξοδούχοι ΠΣΚ «Όλη η δύναμη»', () => {
     const tabs = ['ΠΑΡ', 'ΣΑΒ', 'ΚΥΡ'];
     const wb = await Workbook.open(await mergeSheets(parts.map(x => x.data), parts.map(x => x.sheets!), tabs.map(n => [n, n + ' ΔΥΝ'])));
     for (const n of tabs) { expect((await readPage(wb, n)).texts).toContain('ΑΛΧΙΑΣ ΙΛΗΣ'); expect((await readPage(wb, n + ' ΔΥΝ')).texts).not.toContain('ΑΛΧΙΑΣ ΙΛΗΣ'); }
+  });
+});
+
+// Michael 31/10: η ΔΥΝΑΜΗ στην προεπισκόπηση/εκτύπωση έδειχνε μόνο τις πρώτες 11 γραμμές (κεφαλίδα, τίτλος) χωρίς πίνακες:
+// η περιοχή εκτύπωσης του template γράφεται 'ΠΑΡΑΜΕΝΟΝΤΕΣ'!… (με ' και όχι &apos;) και η μετονομασία δεν την άλλαζε
+describe('Excel «Όλη η δύναμη»: περιοχή εκτύπωσης και προεπισκόπηση', () => {
+  it('η περιοχή εκτύπωσης κάθε φύλλου έχει το νέο όνομα και φτάνει ως τις υπογραφές· η προεπισκόπηση δείχνει τους πίνακες της ΔΥΝΑΜΗΣ', async () => {
+    const s = all(genState(1007, false, 10)); const r = await fillOuts(T, s, '2026-10-30');
+    const wb = await Workbook.open(r.data); const names = wb.sheetNames(); expect(names).toEqual(['ΕΞΟΔΟΥΧΟΙ', 'ΔΥΝΑΜΗ']);
+    for (const n of names) {
+      const ws = await wb.sheet(n); const last = wb.printLastRow(n)!;
+      expect(last).toBeGreaterThanOrEqual(ws.lastRow());
+    }
+    const zip = (await import('jszip')).default; const wx = await (await zip.loadAsync(r.data)).file('xl/workbook.xml')!.async('string');
+    expect(wx).not.toMatch(/ΠΑΡΑΜΕΝΟΝΤΕΣ/);
+    const doc = await renderBook(r.data, { file: 'x.xlsx', sheets: names });
+    const dyn = doc.sheets.find(x => x.name === 'ΔΥΝΑΜΗ')!.html;
+    for (const t of ['ΔΥΝΑΜΗ ΤΗΣ', 'Γ. ΜΕΝΟΥΝ ΜΕΣΑ', 'ΓΙΑΤΙ ΜΕΝΕΙ', 'Δ. ΠΟΤΕ ΓΥΡΙΖΟΥΝ', 'ΑΛΧΙΑΣ ΙΛΗΣ']) expect(dyn).toContain(t);
+    const ex = doc.sheets.find(x => x.name === 'ΕΞΟΔΟΥΧΟΙ')!.html;
+    for (const t of ['ΕΞΟΔΟΥΧΟΙ ΤΗΣ', 'Α1. ΜΕ ΔΝ', 'ΓΥΡΝΑ', 'ΑΛΧΙΑΣ ΙΛΗΣ']) expect(ex).toContain(t);
   });
 });

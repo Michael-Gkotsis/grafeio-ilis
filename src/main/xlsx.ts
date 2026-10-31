@@ -1033,8 +1033,12 @@ export class Workbook {
   renameSheet(from: string, to: string): string {
     const safe = sheetSafe(to); const e = this.names.find(x => x.name === from); if (!e || from === safe) return from;
     this.workbookXml = this.workbookXml.replace(/<sheet\b[^>]*>/g, t => (attr(t, 'name')?.replace(/&amp;/g, '&') === from ? setAttr(t, 'name', esc(safe)) : t));
-    const a = esc(from).replace(/'/g, '&apos;&apos;'), b = esc(safe).replace(/'/g, '&apos;&apos;');
-    this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, x, body: string, y) => x + body.split('&apos;' + a + '&apos;!').join('&apos;' + b + '&apos;!').split(a + '!').join('&apos;' + b + '&apos;!') + y);
+    // το όνομα μέσα στο definedName γράφεται 'ΟΝΟΜΑ'! ή &apos;ΟΝΟΜΑ&apos;! (το template μας έχει το πρώτο) ή χωρίς εισαγωγικά
+    const a = esc(from), b = "'" + esc(safe).replace(/'/g, "''") + "'!";
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (m, x, body: string, y) => {
+      const plain = body.replace(/&apos;/g, "'"), out = plain.split("'" + a.replace(/'/g, "''") + "'!").join(b).split(a + '!').join(b);
+      return out === plain ? m : x + out.replace(/'/g, '&apos;') + y;
+    });
     e.name = safe; const ws = this.sheets.get(e.path); if (ws) ws.name = safe;
     return safe;
   }
