@@ -17,7 +17,7 @@ import { hkOffText } from '../shared/cadre';
 import { byRoom, outsAndStay, stayNote } from '../shared/outsStay';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
 import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
-import { sigsCustom, sigsFor, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
+import { outsSig2Of, sigsCustom, sigsFor, sigsPage2, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
 import { applyMoves, blockOf, swapHeadDate } from './layout';
@@ -28,7 +28,7 @@ export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '',
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export { byRoom };
 
-export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string }   // sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)
+export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string; sheets?: string[] }   // sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)· sheets: τα δύο φύλλα της «Όλης της δύναμης» (εξοδούχοι, δύναμη)
 
 // Λόχος/Τάγμα (Michael, 18/10): οι λέξεις της ίλης στα κείμενα του template («ΔΚΤΗΣ ΙΛΗΣ», «2Η ΕΠΧΙΑ») γίνονται του λόχου,
 // πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Και ανάποδα (20/10): δικό σου
@@ -46,13 +46,15 @@ export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs:
 // Υπογραφές σε κάθε φύλλο, και μετά ό,τι μετακίνησες πάνω στο χαρτί (κεφαλίδα, ημερομηνία, υπογραφές: layout.ts).
 // more: τα άλλα κομμάτια του φύλλου (κεφαλίδα, τόπος και ημερομηνία)· key: ποιο φύλλο του εντύπου (LAYOUT_SHEETS)
 // tagOnly: οι υπογραφές μόνο στο {ΥΠΟΓΡΑΦΕΣ} (Excel της εφαρμογής, χωρίς υπογραφές δικές τους)· after, names: Έντυπα (placeSigs)
-export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean; after?: number; names?: string[] }
+// sigs: δικές του υπογραφές αυτού του φύλλου (σελίδα 2 των Εξοδούχων «Όλη η δύναμη»), αλλιώς οι υπογραφές του εντύπου
+export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean; after?: number; names?: string[]; sigs?: { sigs: Sig[] | null; def: Sig[] } }
 export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
   const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
   const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
   const L = xlLook(s.settings); const hdr = formPart(L, 'hdr'), sig = formPart(L, 'sig');
   for (const x of sheets) {
-    const sg = await placeSigs(wb, x.ws, g.sigs, g.def, warnings, { tagOnly: x.tagOnly, after: x.after, names: x.names });
+    const mine = x.sigs ?? g;
+    const sg = await placeSigs(wb, x.ws, mine.sigs, mine.def, warnings, { tagOnly: x.tagOnly, after: x.after, names: x.names });
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
     for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
@@ -462,7 +464,7 @@ export function outsNote(s: AppState, d: ISODate, pid: number, st: Status, ret =
 // Πού είναι κάθε λίστα: φύλλο (αυτό που διάλεξες, αλλιώς με το όνομα ή τον τίτλο της), και το κομμάτι του αν το φύλλο
 // έχει και τις δύο. Χωρίς φύλλο παραμενόντων: αντίγραφο του φύλλου των εξοδούχων.
 interface OutsLoc { sheet: string; from: number; to: number; rename?: boolean }
-async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, place: string, one = false): Promise<[OutsLoc, OutsLoc]> {
+async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, place: string, stayName = 'ΠΑΡΑΜΕΝΟΝΤΕΣ'): Promise<[OutsLoc, OutsLoc]> {
   const names = wb.sheetNames(); const info = new Map<string, { vals: XlValue[][]; cs: ReturnType<typeof textCells>; list: boolean }>();
   for (const n of names) { const vals = await wb.values(n, 200, 40); const ws = await wb.sheet(n); info.set(n, { vals, cs: textCells(vals), list: !!mapOuts(vals, ws.merges(), place) }); }
   const titled = (re: RegExp) => names.find(n => re.test(tnorm(n))) || names.find(n => info.get(n)!.cs.some(x => re.test(x.t) && x.r < 40));
@@ -471,8 +473,7 @@ async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, 
   const end = 2000;
   if (!stay && info.get(outs)!.cs.some(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t))) stay = outs;
   if (!stay) stay = names.find(n => n !== outs && info.get(n)!.list && !/^ΕΞΟΔΟΥΧ/.test(tnorm(n)));
-  if (!stay && one) return [{ sheet: outs, from: 1, to: end }, { sheet: outs, from: 1, to: 0 }];   // «Όλη η δύναμη»: χωρίς Παραμένοντες (to < from: δεν υπάρχουν)
-  if (!stay) { stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ'); let i = 2; while (wb.hasSheet(stay)) stay = sheetSafe('ΠΑΡΑΜΕΝΟΝΤΕΣ ' + i++); await wb.cloneSheet(outs, stay); return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end, rename: true }]; }
+  if (!stay) { stay = sheetSafe(stayName); let i = 2; while (wb.hasSheet(stay)) stay = sheetSafe(stayName + ' ' + i++); await wb.cloneSheet(outs, stay); return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end, rename: true }]; }
   if (stay !== outs) return [{ sheet: outs, from: 1, to: end }, { sheet: stay, from: 1, to: end }];
   // και οι δύο λίστες στο ίδιο φύλλο: χωρίζονται στον τίτλο της δεύτερης
   const cs = info.get(outs)!.cs; const t1 = cs.find(x => /^ΕΞΟΔΟΥΧ/.test(x.t))?.r ?? 1, t2 = cs.find(x => /^ΠΑΡΑΜΕΝΟΝΤΕΣ/.test(x.t))!.r;
@@ -535,63 +536,108 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
   return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
 }
 
-// δεν υπάρχουν Παραμένοντες (Όλη η δύναμη): το φύλλο τους φεύγει (ή οι γραμμές τους, αν είναι στο ίδιο φύλλο)
-async function dropStay(wb: Workbook, ws: Sheet, loc: OutsLoc, stay: OutsLoc, place: string) {
-  if (stay.to >= stay.from) {
-    if (stay.sheet !== loc.sheet) await wb.dropSheet(stay.sheet);
-    else {
-      // και οι δύο λίστες στο ίδιο φύλλο: φεύγει η λίστα των Παραμενόντων, από τον τίτλο της ως τον τόπο (ο τόπος και οι υπογραφές μένουν)
-      const v0 = await wb.values(loc.sheet, 2000, 40); const ms = mapOuts(v0, ws.merges(), place, stay.from, stay.to);
-      const a = ms ? ms.title?.r ?? ms.hr : stay.from, b = ms?.place ? ms.place.r - 1 : stay.from === 1 ? stay.to : ws.lastRow();
-      for (let r = b; r >= a; r--) if (!ws.deleteRow(r, wb)) ws.dropCells(r);
-      loc.from = 1; loc.to = 2000;
-    }
-  }
-}
 
-// ------------------------------------------------------------------ Εξοδούχοι «Όλη η δύναμη» (Michael, 30/10)
-// Ένα φύλλο (A4 όρθιο) με κάθε άτομο της δύναμης μία φορά: τίτλος με τη μέρα, ώρες, σύνοψη (ΔΥΝΑΜΗ = Α + Β + Γ), οι ομάδες Α (βγαίνουν σήμερα), Β (είναι
-// ήδη έξω), Γ (μένουν μέσα) ως πίνακες με την επικεφαλίδα και τη μορφή γραμμής του template και μία στήλη δεξιά (ΓΥΡΝΑ· στο Γ: ΓΙΑΤΙ ΜΕΝΕΙ), και
-// στο τέλος η Δ (πότε γυρίζουν). Ποιος μπαίνει πού: dayBook (shared/outsDay.ts). Μόνο οι οπλίτες (όπως οι άλλες μορφές), χωρίς Παραμένοντες.
-// Ομάδα χωρίς κανέναν δεν γράφεται. Η αρίθμηση Α/Α είναι συνεχής σε όλο το φύλλο και η Δ λέει ποιοι είναι με τον Α/Α τους.
+// ------------------------------------------------------------------ Εξοδούχοι «Όλη η δύναμη» (Michael, 30/10, 31/10)
+// Δύο φύλλα (A4 όρθιο), κάθε άτομο της δύναμης μία φορά. Φύλλο 1 «ΕΞΟΔΟΥΧΟΙ» (Πίνακας Α, με δικές του υπογραφές): όσοι βγαίνουν σήμερα,
+// σε υποομάδες Α1–Α3. Φύλλο 2 «ΔΥΝΑΜΗ»: η υπόλοιπη δύναμη, Β (είναι ήδη έξω) και Γ (μένουν μέσα), και η Δ (πότε γυρίζουν όλοι, με τη
+// σελίδα και τον Α/Α τους). Οι πίνακες έχουν την επικεφαλίδα και τη μορφή γραμμής του template και μία στήλη δεξιά (ΓΥΡΝΑ· στο Γ: ΓΙΑΤΙ
+// ΜΕΝΕΙ). Ποιος μπαίνει πού: dayBook (shared/outsDay.ts). Μόνο οι οπλίτες (όπως οι άλλες μορφές). Ομάδα χωρίς κανέναν δεν γράφεται.
+// Η αρίθμηση Α/Α ξεκινά από 1 σε κάθε φύλλο.
 const ALL_SEC = { A: 'Α. ΒΓΑΙΝΟΥΝ ΣΗΜΕΡΑ', B: 'Β. ΕΙΝΑΙ ΗΔΗ ΕΞΩ', G: 'Γ. ΜΕΝΟΥΝ ΜΕΣΑ ΑΠΟΨΕ' } as const;
+const DYN = 'ΔΥΝΑΜΗ';
 const gName = (g: DayGroup) => ({ A: 'Α', B: 'Β', G: 'Γ' })[g[0] as 'A' | 'B' | 'G'] + g[1];
 interface AllLine { k: 'title' | 'info' | 'gap' | 'banner' | 'sub' | 'head' | 'row' | 'dhead' | 'drow'; text?: string; x?: DayRow; no?: number; why?: boolean; cols?: string[] }
-async function fillOutsAll(wb: Workbook, s: AppState, d: ISODate, want: { outs?: string; stay?: string }, sigs: Sig[] | null | undefined, warnings: string[]): Promise<ExportResult> {
-  const [loc, stay] = await outsPlaces(wb, want, s.settings.place, true);
-  const ws = await wb.sheet(loc.sheet);
-  await dropStay(wb, ws, loc, stay, s.settings.place);
-  const vals = await wb.values(loc.sheet, 2000, 40);
-  const m = mapOuts(vals, ws.merges(), s.settings.place, loc.from, loc.to);
-  const name = 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' + dmy(d).replace(/\//g, '-') + '.xlsx';
-  if (!m) { warnings.push('Στο φύλλο «' + loc.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας (ΒΑΘΜΟΣ, ΕΠΩΝΥΜΟ, ΟΝΟΜΑ…): η ΔΥΝΑΜΗ δεν γράφτηκε'); return { name, data: await wb.save(), warnings, sheet: loc.sheet }; }
-  // οι γραμμές του φύλλου με τη σειρά, πριν μπουν στο φύλλο
-  const book = dayBook(s, d), tm = dayTimes(s, d), tn = dayTimes(s, addDays(d, 1)), L: AllLine[] = [];
-  const secOf = (k: 'A' | 'B' | 'G') => book.filter(x => x.g[0] === k), nums = new Map<number, number>();
-  L.push({ k: 'title', text: 'ΕΞΟΔΟΥΧΟΙ ΚΑΙ ΔΥΝΑΜΗ ΤΗΣ ' + DOW_GEN[weekday(d)] + ' ' + dmy(d).replace(/\//g, '-') });
-  L.push({ k: 'info', text: 'ΕΞΟΔΟΣ ' + tm.out + ' · ΕΠΙΣΤΡΟΦΗ ΕΞΟΔΟΥΧΩΝ ' + tm.backOut + ' · ΕΠΙΣΤΡΟΦΗ ΔΝ ' + tn.backDn + ' · ΑΥΡΙΟ ΕΚΠΑΙΔΕΥΣΗ ' + (tn.train ? 'ΝΑΙ' : 'ΟΧΙ') });
-  L.push({ k: 'info', text: 'ΔΥΝΑΜΗ ' + book.length + ' = Α ' + secOf('A').length + ' + Β ' + secOf('B').length + ' + Γ ' + secOf('G').length });
-  for (const k of ['A', 'B', 'G'] as const) {
-    const rs = secOf(k); if (!rs.length) continue;
+// Οι γραμμές των δύο φύλλων με τη σειρά, πριν μπουν στα φύλλα. nums: σελίδα και Α/Α κάθε ατόμου
+export function allLines(s: AppState, d: ISODate, book: DayRow[]): [AllLine[], AllLine[]] {
+  const tm = dayTimes(s, d), tn = dayTimes(s, addDays(d, 1));
+  const secOf = (k: 'A' | 'B' | 'G') => book.filter(x => x.g[0] === k);
+  const nums = new Map<number, { pg: number; no: number }>();
+  for (const pg of [1, 2]) { let n = 0; for (const [g, k] of DAY_GROUPS) if ((k === 'A') === (pg === 1)) for (const x of book.filter(b => b.g === g)) nums.set(x.p.id, { pg, no: ++n }); }
+  const day = ' ΤΗΣ ' + DOW_GEN[weekday(d)] + ' ' + dmy(d).replace(/\//g, '-');
+  const summary = (L: AllLine[], k: 'A' | 'B' | 'G') => {
+    const rs = secOf(k); if (!rs.length) return;
     L.push({ k: 'info', text: ALL_SEC[k] + ' ' + rs.length + ': ' + DAY_GROUPS.filter(g => g[1] === k && rs.some(x => x.g === g[0])).map(g => g[2] + ' ' + rs.filter(x => x.g === g[0]).length).join(', ') });
-  }
-  // μία κενή γραμμή πριν από κάθε ενότητα και ομάδα (όχι πριν την πρώτη επικεφαλίδα του template, που είναι δεμένη με τον πίνακα του Excel)
-  const gap = () => { const z = L[L.length - 1].k; if (z === 'row' || z === 'info') L.push({ k: 'gap' }); };
-  for (const k of ['A', 'B', 'G'] as const) {
-    const rs = secOf(k); if (!rs.length) continue;
-    gap(); L.push({ k: 'banner', text: ALL_SEC[k] + ' (' + rs.length + ')' });
-    for (const [g, , title] of DAY_GROUPS.filter(x => x[1] === k)) {
-      const gs = rs.filter(x => x.g === g); if (!gs.length) continue;
-      gap(); L.push({ k: 'sub', text: gName(g) + '. ' + title + ' (' + gs.length + ')' }, { k: 'head', why: k === 'G' });
-      for (const x of gs) { nums.set(x.p.id, nums.size + 1); L.push({ k: 'row', x, no: nums.size, why: k === 'G' }); }
+  };
+  // ενότητες: μία κενή γραμμή πριν από κάθε ενότητα και ομάδα (όχι πριν την πρώτη επικεφαλίδα του template, που είναι δεμένη με τον πίνακα του Excel)
+  const sections = (L: AllLine[], keys: ('A' | 'B' | 'G')[], banner: boolean, none: string) => {
+    const gap = () => { const z = L[L.length - 1].k; if (z === 'row' || z === 'info') L.push({ k: 'gap' }); };
+    for (const k of keys) {
+      const rs = secOf(k); if (!rs.length) continue;
+      if (banner) { gap(); L.push({ k: 'banner', text: ALL_SEC[k] + ' (' + rs.length + ')' }); }
+      for (const [g, , title] of DAY_GROUPS.filter(x => x[1] === k)) {
+        const gs = rs.filter(x => x.g === g); if (!gs.length) continue;
+        gap(); L.push({ k: 'sub', text: gName(g) + '. ' + title + ' (' + gs.length + ')' }, { k: 'head', why: k === 'G' });
+        for (const x of gs) L.push({ k: 'row', x, no: nums.get(x.p.id)!.no, why: k === 'G' });
+      }
     }
-  }
-  if (!L.some(x => x.k === 'head')) { gap(); L.push({ k: 'sub', text: 'ΔΥΝΑΜΗ (0)' }, { k: 'head' }, { k: 'row' }); }
+    if (!L.some(x => x.k === 'head')) { gap(); L.push({ k: 'sub', text: none + ' (0)' }, { k: 'head' }, { k: 'row' }); }
+  };
+  // φύλλο 1: οι εξοδούχοι (Πίνακας Α)
+  const p1: AllLine[] = [{ k: 'title', text: 'ΕΞΟΔΟΥΧΟΙ' + day }];
+  p1.push({ k: 'info', text: 'ΕΞΟΔΟΣ ' + tm.out + ' · ΕΠΙΣΤΡΟΦΗ ΕΞΟΔΟΥΧΩΝ ' + tm.backOut + ' · ΕΠΙΣΤΡΟΦΗ ΔΝ ' + tn.backDn + ' · ΑΥΡΙΟ ΕΚΠΑΙΔΕΥΣΗ ' + (tn.train ? 'ΝΑΙ' : 'ΟΧΙ') });
+  summary(p1, 'A'); sections(p1, ['A'], false, 'Α. ΒΓΑΙΝΟΥΝ ΣΗΜΕΡΑ');
+  // φύλλο 2: η υπόλοιπη δύναμη και η Δ
+  const p2: AllLine[] = [{ k: 'title', text: DYN + day }];
+  p2.push({ k: 'info', text: 'ΔΥΝΑΜΗ ' + book.length + ' = Α ' + secOf('A').length + ' (ΕΞΟΔΟΥΧΟΙ, ΣΕΛ. 1) + Β ' + secOf('B').length + ' + Γ ' + secOf('G').length });
+  summary(p2, 'B'); summary(p2, 'G'); sections(p2, ['B', 'G'], true, 'Β, Γ');
   const when = whenList(book);
   if (when.length) {
-    gap(); L.push({ k: 'banner', text: 'Δ. ΠΟΤΕ ΓΥΡΙΖΟΥΝ (' + when.reduce((a, w) => a + w.rows.length, 0) + ')' }, { k: 'dhead' });
-    for (const w of when) L.push({ k: 'drow', cols: [w.when, String(w.rows.length), w.rows.map(x => nums.get(x.p.id)!).sort((a, b) => a - b).join(', ')] });
+    p2.push({ k: 'gap' }, { k: 'banner', text: 'Δ. ΠΟΤΕ ΓΥΡΙΖΟΥΝ (' + when.reduce((a, w) => a + w.rows.length, 0) + ')' }, { k: 'dhead' });
+    // Α/Α: ανά σελίδα, μόνο οι σελίδες που έχουν άτομα («ΣΕΛ. 1: 1, 2 · ΣΕΛ. 2: 1»)
+    const refs = (rows: DayRow[]) => [1, 2].map(pg => { const ns = rows.map(x => nums.get(x.p.id)!).filter(n => n.pg === pg).map(n => n.no).sort((a, b) => a - b); return ns.length ? 'ΣΕΛ. ' + pg + ': ' + ns.join(', ') : ''; }).filter(Boolean).join(' · ');
+    for (const w of when) p2.push({ k: 'drow', cols: [w.when, String(w.rows.length), refs(w.rows)] });
   }
+  return [p1, p2];
+}
+
+// Το φύλλο κρατά μόνο την πρώτη λίστα του (ΕΞΟΔΟΥΧΟΙ): η δεύτερη (Παραμένοντες), όταν είναι στο ίδιο φύλλο, φεύγει από τον τίτλο της ως τον τόπο (ο τόπος και οι υπογραφές μένουν)
+async function dropStay(wb: Workbook, ws: Sheet, loc: OutsLoc, stay: OutsLoc, place: string) {
+  const v0 = await wb.values(loc.sheet, 2000, 40); const ms = mapOuts(v0, ws.merges(), place, stay.from, stay.to);
+  const a = ms ? ms.title?.r ?? ms.hr : stay.from, b = ms?.place ? ms.place.r - 1 : stay.from === 1 ? stay.to : ws.lastRow();
+  for (let r = b; r >= a; r--) if (!ws.deleteRow(r, wb)) ws.dropCells(r);
+  loc.from = 1; loc.to = 2000;
+}
+
+async function fillOutsAll(wb: Workbook, s: AppState, d: ISODate, want: { outs?: string; stay?: string }, sigs: Sig[] | null | undefined, warnings: string[]): Promise<ExportResult> {
+  const place = s.settings.place;
+  const [loc, stay0] = await outsPlaces(wb, want, place, DYN);
+  const name = 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' + dmy(d).replace(/\//g, '-') + '.xlsx';
+  const freeName = () => { let n = sheetSafe(DYN), i = 2; while (wb.hasSheet(n)) n = sheetSafe(DYN + ' ' + i++); return n; };
+  const mapOf = async (l: OutsLoc) => { const ws = await wb.sheet(l.sheet); return mapOuts(await wb.values(l.sheet, 2000, 40), ws.merges(), place, l.from, l.to); };
+  if (!(await mapOf(loc))) { warnings.push('Στο φύλλο «' + loc.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας (ΒΑΘΜΟΣ, ΕΠΩΝΥΜΟ, ΟΝΟΜΑ…): η ΔΥΝΑΜΗ δεν γράφτηκε'); return { name, data: await wb.save(), warnings, sheet: loc.sheet }; }
+  // το φύλλο 2: το φύλλο των Παραμενόντων του template (μετονομάζεται ΔΥΝΑΜΗ)· αν δεν διαβάζεται, ή αν οι δύο λίστες είναι στο ίδιο φύλλο,
+  // αντίγραφο του φύλλου των εξοδούχων (πριν αλλάξει οτιδήποτε)
+  let loc2: OutsLoc; const same = stay0.sheet === loc.sheet;
+  const stayLoc = { ...stay0 };
+  if (same) {
+    const nm = freeName(); await wb.cloneSheet(loc.sheet, nm); loc2 = { ...loc, sheet: nm };
+  } else if (!(await mapOf(stay0))) {
+    await wb.dropSheet(stay0.sheet); const nm = freeName(); await wb.cloneSheet(loc.sheet, nm); loc2 = { sheet: nm, from: 1, to: 2000 };
+    warnings.push('Στο φύλλο «' + stay0.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας: η ΔΥΝΑΜΗ γράφεται σε αντίγραφο του φύλλου «' + loc.sheet + '»');
+  } else {
+    loc2 = { ...stay0 };
+    if (loc2.sheet !== DYN && !wb.hasSheet(DYN)) loc2.sheet = wb.renameSheet(loc2.sheet, DYN);
+  }
+  if (same) { await dropStay(wb, await wb.sheet(loc.sheet), loc, stayLoc, place); await dropStay(wb, await wb.sheet(loc2.sheet), loc2, { ...stayLoc, sheet: loc2.sheet }, place); }
+  const book = dayBook(s, d); const [L1, L2] = allLines(s, d, book);
+  const p1 = await allSheet(wb, s, d, loc, L1), p2 = await allSheet(wb, s, d, loc2, L2);
+  if (!p1) return { name, data: await wb.save(), warnings, sheet: loc.sheet };
+  if (!p2) warnings.push('Στο φύλλο «' + loc2.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας: η ΔΥΝΑΜΗ δεν γράφτηκε');
+  const part = (p: NonNullable<typeof p1>, key: string, sg?: SheetPart['sigs']): SheetPart => ({ ws: p.ws, key, sigs: sg, more: [blockOf(p.ws, 'head', p.headRefs), blockOf(p.ws, 'date', p.dateRef ? [p.dateRef] : [])] });
+  // υπογραφές: το φύλλο 1 με του εντύπου· το φύλλο 2 με τις ίδιες, καμία ή δικές του (Ρυθμίσεις › Υπογραφές › Εξοδούχοι)
+  const mode = outsSig2Of(s.settings);
+  const g2 = mode === 'none' ? { sigs: [] as Sig[], def: [] as Sig[] } : mode === 'own' ? (() => { const l = sigsFor(s.settings, sigsPage2(s.settings)); return { sigs: l, def: l }; })() : undefined;
+  const parts: SheetPart[] = [part(p1, 'outs')]; if (p2) parts.push(part(p2, 'stay', g2));
+  const layout = await signSheets(wb, parts, s, 'outs', sigs, warnings);
+  return { name, data: await wb.save(), warnings, layout, sheet: loc.sheet, ...(p2 ? { sheets: [loc.sheet, loc2.sheet] } : {}) };
+}
+
+// Ένα φύλλο της «Όλης της δύναμης»: οι γραμμές L στον πίνακα του template (loc), με την κεφαλίδα της μονάδας και τον τόπο/ημερομηνία
+async function allSheet(wb: Workbook, s: AppState, d: ISODate, loc: OutsLoc, L: AllLine[]): Promise<{ ws: Sheet; headRefs: string[]; dateRef: string | null } | null> {
+  const ws = await wb.sheet(loc.sheet);
+  const vals = await wb.values(loc.sheet, 2000, 40);
+  const m = mapOuts(vals, ws.merges(), s.settings.place, loc.from, loc.to);
+  if (!m) return null;
   // ο τίτλος, οι πίνακες και η επικεφαλίδα του template. Στήλες: οι δικές του και δεξιά ΓΥΡΝΑ (στο Γ: ΓΙΑΤΙ ΜΕΝΕΙ)
   const raw = (c: { r: number; c: number }) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
   const head = headCells(m.head, m.title?.r ?? m.hr, (r, c) => vals[r - 1]?.[c - 1] != null);
@@ -685,7 +731,5 @@ async function fillOutsAll(wb: Workbook, s: AppState, d: ISODate, want: { outs?:
   const dateRef = m.place ? refOf(m.place.c, placeRow) : null;
   if (dateRef) ws.set(dateRef, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
   const headRefs = head.slice(0, Math.max(m.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
-  const done: SheetPart[] = [{ ws, key: 'outs', more: [blockOf(ws, 'head', headRefs), blockOf(ws, 'date', dateRef ? [dateRef] : [])] }];
-  const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
-  return { name, data: await wb.save(), warnings, layout, sheet: loc.sheet };
+  return { ws, headRefs, dateRef };
 }

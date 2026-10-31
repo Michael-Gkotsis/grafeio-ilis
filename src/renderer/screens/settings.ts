@@ -7,7 +7,7 @@ import { requestLeave, usePending } from '../pending';
 import { DateField, HoursField, RangeField, shiftForm, shiftOf, shiftWhy, useUsbCopy, type HoursMode } from '../common';
 import { normTime } from '../../shared/hours';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
-import { PHASE_NAME, blocksOf, dutyStartOf, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
+import { PHASE_NAME, blocksOf, dutyStartOf, isOutsAll, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
 import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
 import { phaseDelWhy } from '../../shared/commands';
 import { dmy, dow, greekHolidays } from '../../shared/dates';
@@ -27,7 +27,7 @@ import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
 import { XL_FONTS, XL_H, XL_LOOK, XL_PARTS, XL_SIZES, XL_STYLES, XL_V, sameLook, tablePart, xlLook, type XlLook, type XlPart, type XlPartKey } from '../../shared/xlLook';
-import { MADE_FORMS, SIG_FORMS, sameSigs, sigDefaults, sigLabel, sigsClean, sigsCustom, sigsSaved, sigsText, type Sig, type SigForm } from '../../shared/sigs';
+import { MADE_FORMS, OUTS_SIG2, SIG_FORMS, outsSig2Of, sameSigs, sigDefaults, sigLabel, sigsClean, sigsCustom, sigsPage2, sigsSaved, sigsText, type OutsSig2, type Sig, type SigForm } from '../../shared/sigs';
 type P = any;
 
 function ImportCard() {
@@ -167,6 +167,27 @@ function XlLookCard() {
 // Υπογραφές ανά έντυπο (Michael, 20/10): όσες θέλεις, από αριστερά προς τα δεξιά. Αλλάζουν και τη στιγμή που βγαίνει
 // το έντυπο («Υπογραφές…» δίπλα στο «Βγάλε το Excel»). Σε όλα τα έντυπα, και στα Excel της εφαρμογής (Michael, 22/10).
 const SIG_LABEL = (f: SigForm) => sigLabel(f, HK());
+// Εξοδούχοι «Όλη η δύναμη» (Michael, 31/10): η σελίδα 2 (ΔΥΝΑΜΗ) έχει τις ίδιες υπογραφές με τη σελίδα 1, καμία, ή δική της λίστα
+function OutsSig2() {
+  const { state, run } = useStore(); const toast = useToast();
+  const mode = outsSig2Of(state.settings); const saved = sigsPage2(state.settings);
+  const [edit, setEdit] = useState<Sig[] | undefined>(undefined);
+  const list = edit ?? saved; const changed = !!edit && !sameSigs(edit, saved);
+  const pick = (v: OutsSig2) => run({ t: 'setSettings', settings: { outsSig2: v === 'same' ? undefined : v }, text: 'υπογραφές εξοδούχων, σελίδα 2: ' + OUTS_SIG2.find(x => x[0] === v)![1] }, false);
+  const save = async () => {
+    const v = sigsClean(list);
+    if (await run({ t: 'setSettings', settings: { outsSigs2: v }, text: 'υπογραφές εξοδούχων, σελίδα 2: ' + sigsText(v) }, false)) { setEdit(undefined); toast({ text: 'Αποθηκεύτηκαν οι υπογραφές της σελίδας 2' }); return true; }
+    return false;
+  };
+  usePending(changed, { label: 'Υπογραφές σελίδας 2', save, discard: () => setEdit(undefined) });
+  return html`<div className="sigs2" style=${{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--line, #d0d4c4)' }}>
+    <div className="toolbar" style=${{ alignItems: 'center', marginBottom: '6px' }}><b>Σελίδα 2 (ΔΥΝΑΜΗ)</b>
+      <${Select} className="ui-select" aria-label="Υπογραφές στη σελίδα 2 των Εξοδούχων" value=${mode} onChange=${(e: any) => pick(e.target.value as OutsSig2)}>${OUTS_SIG2.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}<//></div>
+    <p className="note" style=${{ marginTop: 0 }}>Στη μορφή «Όλη η δύναμη» το Excel έχει δύο σελίδες: η 1 οι εξοδούχοι (Πίνακας Α), η 2 η υπόλοιπη δύναμη. Η σελίδα 1 έχει τις υπογραφές της λίστας πάνω. ${mode === 'same' ? 'Η σελίδα 2 έχει τις ίδιες.' : mode === 'none' ? 'Η σελίδα 2 βγαίνει χωρίς υπογραφές.' : 'Η σελίδα 2 έχει τη δική της λίστα, εδώ κάτω.'}</p>
+    ${mode === 'own' && html`<${SigEditor} value=${list} onChange=${setEdit} id="sg-outs2"/>
+      <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>${changed && html`<${Button} variant="ghost" onClick=${() => setEdit(undefined)}>Άκυρο<//>`}</div>`}
+  </div>`;
+}
 function SigsCard() {
   const { state, run, today } = useStore(); const toast = useToast();
   const [form, setForm] = useState<SigForm>('hkai'); const [lay, setLay] = useState(false);
@@ -208,6 +229,7 @@ function SigsCard() {
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
       ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} ή υπογραφές του προτύπου (αλλιώς κάτω από τον πίνακα), εκτός αν το έντυπο έχει δικές του.' : made ? ' Αρχικά καμία. Μπαίνουν μία γραμμή κάτω από κάθε φύλλο, μοιρασμένες στο πλάτος του. Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
+    ${form === 'outs' && isOutsAll(state.settings) && html`<${OutsSig2}/>`}
     <label className="ui-checkrow" style=${{ marginTop: '10px' }} data-tip="Σε όλα τα έντυπα και τα Excel, εκτός από την ΗΚΑΙ που έχει πάντα την κεφαλίδα αριστερά: ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα (μονάδα) πάνω δεξιά. Ξετσέκαρε για την παλιά διάταξη."><input type="checkbox" className="ui-check" aria-label="Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά" checked=${!state.settings.hdLeft}
       onChange=${(e: any) => run({ t: 'setSettings', settings: { hdLeft: e.target.checked ? undefined : true }, text: 'κεφαλίδα και ημερομηνία: ' + (e.target.checked ? 'ημερομηνία αριστερά, κεφαλίδα δεξιά' : 'παλιά διάταξη') }, false)}/> Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά</label>
     <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>

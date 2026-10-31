@@ -1341,3 +1341,68 @@ export async function mergeFirstSheets(bufs: Buffer[], names: string[], pick?: s
   base.file('xl/workbook.xml', wbx); base.file('xl/_rels/workbook.xml.rels', rels); base.file('[Content_Types].xml', ct);
   return base.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
+
+// Το ίδιο με το mergeFirstSheets, αλλά με πολλά φύλλα από κάθε αρχείο (Εξοδούχοι «Όλη η δύναμη» στο ΠΣΚ: δύο φύλλα ανά μέρα).
+// picks[i]: τα φύλλα του αρχείου i που κρατιούνται, names[i]: τα νέα ονόματά τους (με την ίδια σειρά). Από το πρώτο αρχείο
+// φεύγουν τα φύλλα που δεν κρατιούνται· τα φύλλα μπαίνουν με τη σειρά των αρχείων και μετά των picks.
+export async function mergeSheets(bufs: Buffer[], picks: string[][], names: string[][]): Promise<Buffer> {
+  const xmlName = (n: string) => esc(n.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
+  const plain = (t: string) => attr(t, 'name')!.replace(/&amp;/g, '&');
+  // πρώτο αρχείο: μόνο τα φύλλα που κρατιούνται
+  const first = await Workbook.open(bufs[0]);
+  let dropped = false;
+  for (const n of first.sheetNames()) if (!picks[0].includes(n)) { await first.dropSheet(n); dropped = true; }
+  const base = await JSZip.loadAsync(dropped ? await first.save() : bufs[0]);
+  let wbx = await base.file('xl/workbook.xml')!.async('string');
+  let rels = await base.file('xl/_rels/workbook.xml.rels')!.async('string');
+  let ct = await base.file('[Content_Types].xml')!.async('string');
+  const tagsOf = (x: string) => [...x.matchAll(/<sheet\b[^>]*>/g)].map(m => m[0]);
+  const printArea = (x: string, idx: number) => [...x.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)].find(m => attr(m[1], 'name') === '_xlnm.Print_Area' && attr(m[1], 'localSheetId') === String(idx))?.[2] || null;
+  const areaFor = (body: string | null, name: string) => (body ? body.replace(/^.*!/, "'" + xmlName(name).replace(/'/g, "''") + "'!") : null);
+  // πρώτο αρχείο: νέα ονόματα και περιοχές εκτύπωσης
+  const areas: (string | null)[] = []; const oldNames: [string, string][] = [];
+  const baseTags = tagsOf(wbx);
+  baseTags.forEach((t, idx) => {
+    const j = picks[0].indexOf(plain(t)); const nn = j >= 0 ? names[0][j] : plain(t);
+    areas.push(areaFor(printArea(wbx, idx), nn)); oldNames.push([plain(t), nn]);
+  });
+  for (const t of baseTags) { const j = picks[0].indexOf(plain(t)); if (j >= 0) wbx = wbx.replace(t, setAttr(t, 'name', xmlName(names[0][j]))); }
+  let maxId = Math.max(...[...wbx.matchAll(/sheetId="(\d+)"/g)].map(m => +m[1]));
+  let maxRid = Math.max(...[...rels.matchAll(/Id="rId(\d+)"/g)].map(m => +m[1]));
+  const newSheets: string[] = [];
+  for (let i = 1; i < bufs.length; i++) {
+    const z = await JSZip.loadAsync(bufs[i]);
+    const zw = await z.file('xl/workbook.xml')!.async('string');
+    const zr = await z.file('xl/_rels/workbook.xml.rels')!.async('string');
+    const tags = tagsOf(zw);
+    for (let j = 0; j < picks[i].length; j++) {
+      const idx = tags.findIndex(t => plain(t) === picks[i][j]); if (idx < 0) throw new Error('Λείπει το φύλλο ' + picks[i][j]);
+      const rid = attr(tags[idx], 'r:id')!;
+      const target = attr([...zr.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid)!, 'Target')!;
+      const src = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+      const x = (await z.file(src)!.async('string'))
+        .replace(/<drawing\b[^>]*\/>|<legacyDrawing\b[^>]*\/>/g, '').replace(/\sr:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
+      const path = `xl/worksheets/sheet_m${i + 1}_${j + 1}.xml`;
+      base.file(path, x);
+      maxId++; maxRid++;
+      newSheets.push(`<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="${xmlName(names[i][j])}" sheetId="${maxId}" state="visible" r:id="rId${maxRid}"/>`);
+      rels = rels.replace('</Relationships>', `<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}" Id="rId${maxRid}"/></Relationships>`);
+      ct = ct.replace('</Types>', `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+      areas.push(areaFor(printArea(zw, idx), names[i][j]));
+    }
+  }
+  wbx = wbx.replace('</sheets>', newSheets.join('') + '</sheets>');
+  // περιοχές εκτύπωσης όλων των φύλλων
+  const dn = areas.map((a, i) => (a ? `<definedName name="_xlnm.Print_Area" localSheetId="${i}">${a}</definedName>` : '')).join('');
+  wbx = wbx.replace(/<definedName\b[^>]*name="_xlnm\.Print_Area"[^>]*>[^<]*<\/definedName>/g, '');
+  if (/<definedNames>/.test(wbx)) wbx = wbx.replace('<definedNames>', '<definedNames>' + dn);
+  else if (dn) wbx = wbx.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+  wbx = wbx.replace(/<definedNames><\/definedNames>/, '');
+  // άλλα ονόματα που έδειχναν στα παλιά ονόματα των φύλλων του πρώτου αρχείου
+  for (const [o, n] of oldNames) {
+    if (o === n) continue; const nn = "'" + xmlName(n).replace(/'/g, "''") + "'!";
+    wbx = wbx.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, a, b: string, c) => a + b.split("'" + o + "'!").join(nn).split(o + '!').join(nn) + c);
+  }
+  base.file('xl/workbook.xml', wbx); base.file('xl/_rels/workbook.xml.rels', rels); base.file('[Content_Types].xml', ct);
+  return base.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}

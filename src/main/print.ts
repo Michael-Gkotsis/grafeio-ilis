@@ -900,6 +900,7 @@ export interface PrintOpts {
   same: boolean;                          // ίδια γράμματα σε όλα τα φύλλα του Excel
   breaks?: Record<string, number[]>;      // ανά φύλλο: γραμμές του Excel από όπου ξεκινά νέα σελίδα (κλικ στην προεπισκόπηση)
   sort?: PrintSort[];                     // ταξινόμηση των γραμμών κάθε πίνακα: 1η, 2η, 3η στήλη
+  sheets?: string[];                      // τα φύλλα που διάλεξε ο χρήστης (κουτάκια πάνω στην προεπισκόπηση)· θυμούνται ανά έντυπο, rememberedSheets
 }
 // c: η επικεφαλίδα της στήλης ως κλειδί (sortKey), l: όπως γράφεται, d: φθίνουσα (Ω→Α, 9→1, κατώτεροι πρώτα)
 export interface PrintSort { c: string; l?: string; d?: boolean }
@@ -925,11 +926,17 @@ export function cleanOpts(x: unknown, base: PrintOpts = PRINT_DEFAULT): PrintOpt
     const l = typeof (x as PrintSort).l === 'string' ? (x as PrintSort).l!.slice(0, 60) : '';
     sorts.push({ c, ...(l ? { l } : {}), ...((x as PrintSort).d === true ? { d: true } : {}) });
   }
+  const sheets = Array.isArray(o.sheets) ? o.sheets.filter((n): n is string => typeof n === 'string' && !!n).map(n => n.slice(0, 40)).slice(0, 50) : undefined;
   return {
     pages, size, or: pick(o.or, ['auto', 'p', 'l'] as const, base.or), paper: pick(o.paper, ['A4', 'A3'] as const, base.paper), m: pick(o.m, ['narrow', 'normal', 'wide'] as const, base.m),
     sp: pick(o.sp, ['top', 'center', 'fill'] as const, base.sp), stretch: bool('stretch'), repeat: bool('repeat'), keep: bool('keep'), pno: bool('pno'),
-    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {}), ...(sorts.length ? { sort: sorts } : {})
+    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {}), ...(sorts.length ? { sort: sorts } : {}), ...(sheets?.length ? { sheets } : {})
   };
+}
+// Τα φύλλα που διάλεξε την προηγούμενη φορά (π.χ. «μόνο ΕΞΟΔΟΥΧΟΙ»)· αν λείπει έστω ένα από το αρχείο, ισχύει η αρχική επιλογή (undefined)
+export function rememberedSheets(saved: string[] | undefined, visible: string[]): string[] | undefined {
+  if (!saved?.length || !saved.every(n => visible.includes(n))) return undefined;
+  return visible.filter(n => saved.includes(n));
 }
 const hasBreaks = (o: PrintOpts) => !!o.breaks && Object.values(o.breaks).some(b => b.length);
 const PAPERS = { A4: PAPER[9], A3: PAPER[8] };
@@ -1362,7 +1369,7 @@ const PREVIEW_SCRIPT = `
   $('size').addEventListener('input', function(){ $('sizeOut').textContent = fmt(+$('size').value) + ' pt'; set('size', +$('size').value); });
   $('mreset').addEventListener('click', function(){ delete o.breaks; request(false); });
   $('legible').addEventListener('click', function(e){ var b = e.target.closest('[data-sug]'); if (b) set('pages', +b.getAttribute('data-sug')); });
-  $('sheets').addEventListener('change', function(){ sel = [].slice.call(document.querySelectorAll('#sheets input:checked')).map(function(x){ return x.value; }); delete o.breaks; request(false); });
+  $('sheets').addEventListener('change', function(){ sel = [].slice.call(document.querySelectorAll('#sheets input:checked')).map(function(x){ return x.value; }); o.sheets = sel; delete o.breaks; request(true); });
   $('duplex').addEventListener('change', function(){ duplex = $('duplex').checked; api.duplex(duplex); panel(); });
   $('remember').addEventListener('change', function(){ remember = $('remember').checked; if (remember) request(true); else api.forget(); });
   $('reset').addEventListener('click', function(){ api.forget().then(function(d){ o = d; request(remember); say('Επανήλθαν οι αρχικές ρυθμίσεις.', true); }); });
