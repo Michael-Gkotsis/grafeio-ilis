@@ -8,7 +8,7 @@ import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, free
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
 import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
-import { Workbook, mergeFirstSheets, sheetSafe } from './xlsx';
+import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
 import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
@@ -20,7 +20,7 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, 
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
-import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
+import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
@@ -197,6 +197,7 @@ const X = {
   hkai: (buf: Buffer, s: AppState, d: ISODate, opts: Parameters<typeof fillHkai>[3]) => off('fillHkai', [buf, d, opts], () => fillHkai(buf, s, d, opts), s),
   outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3], sigs?: Sig[] | null) => off('fillOuts', [buf, d, sheets, sigs], () => fillOuts(buf, s, d, sheets, sigs), s),
   merge: (bufs: Buffer[], names: string[], pick?: string) => off('mergeFirstSheets', [bufs, names, pick], () => mergeFirstSheets(bufs, names, pick)),
+  mergeSheets: (bufs: Buffer[], picks: string[][], names: string[][]) => off('mergeSheets', [bufs, picks, names], () => mergeSheets(bufs, picks, names)),
   zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
 };
@@ -222,7 +223,11 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
     const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
-    const data = await X.merge(parts.map(x => x.data), days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-')), parts[0].sheet || (fr ? b.sheet : undefined));
+    const tabs = days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-'));
+    // «Όλη η δύναμη»: δύο φύλλα ανά μέρα, «ΠΑΡ 30-10» (εξοδούχοι) και «ΠΑΡ 30-10 ΔΥΝ» (η υπόλοιπη δύναμη)· αλλιώς το πρώτο φύλλο κάθε μέρας
+    const two = !fr && isOutsAll(s.settings) && parts.every(x => x.sheets && x.sheets.length === 2);
+    const data = two ? await X.mergeSheets(parts.map(x => x.data), parts.map(x => x.sheets!), tabs.map(n => [n, n + ' ΔΥΝ']))
+      : await X.merge(parts.map(x => x.data), tabs, parts[0].sheet || (fr ? b.sheet : undefined));
     return { name: (fr ? frouraFile(s.settings) : isOutsAll(s.settings) ? 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
   if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
@@ -777,7 +782,10 @@ async function printPage(file: string, sheets?: string[]): Promise<Omit<PrintJob
   const book = await openBook(await fs.promises.readFile(file));
   const key = printKey(file); const visible = book.sheets.filter(x => !x.hidden).map(x => x.name);
   const base = printDefaults(key, sheets && sheets.length ? sheets : visible); const { opts, remember } = printPrefs(key, base);
-  const doc = await renderOpen(book, { file: path.basename(file), sheets, layout: opts });
+  // τα φύλλα που είχες διαλέξει την προηγούμενη φορά (αν δεν ζητήθηκαν συγκεκριμένα)· αν λείπει κάποιο, η αρχική επιλογή
+  const rem = rememberedSheets(opts.sheets, visible); if (rem) opts.sheets = rem; else delete opts.sheets;
+  const want = sheets && sheets.length ? sheets : rem;
+  const doc = await renderOpen(book, { file: path.basename(file), sheets: want, layout: opts });
   const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
   await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file), { opts, remember, duplex: !!readMeta().printDuplex }));
   return { tmp, sheets: doc.sheets.map(x => x.name), book, key, base, opts };

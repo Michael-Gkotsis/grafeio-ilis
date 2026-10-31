@@ -3,7 +3,7 @@ import { parentPort } from 'worker_threads';
 import path from 'path';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
 import { LockedError, ChangedError } from './files';
-import { mergeFirstSheets } from './xlsx';
+import { mergeFirstSheets, mergeSheets } from './xlsx';
 import { OldFormatError, readBook, valuesHash, writeGroup } from './sources';
 import { zipHash } from './ziphash';
 import { buildTemplate, fillReport, placeSheets, previewReport, previewTemplate } from './reports';
@@ -20,6 +20,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   fillOuts: (tpl, d, sheets, sigs) => fillOuts(buf(tpl), state, d, sheets, sigs),
   signMade: (data, form, marks, sigs) => signMade(buf(data), state, form, marks, sigs),
   mergeFirstSheets: (bufs: Uint8Array[], names, pick) => mergeFirstSheets(bufs.map(buf), names, pick),
+  mergeSheets: (bufs: Uint8Array[], picks, names) => mergeSheets(bufs.map(buf), picks, names),
   fillReport: (tpl, r, ids, d, o) => fillReport(buf(tpl), state, r, ids, d, o),
   placeSheets: (target, out, pairs, mine) => placeSheets(buf(target), buf(out), pairs, mine),
   previewReport: (tpl, r, ids, d, pages, sample) => previewReport(buf(tpl), state, r, ids, d, pages, sample),

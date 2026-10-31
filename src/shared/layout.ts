@@ -12,7 +12,7 @@ export type LayoutForm = Exclude<SigForm, 'reports'>;
 export const LAYOUT_SHEETS: Record<LayoutForm, { key: string; label: string }[]> = {
   hkai: [{ key: 'front', label: 'Μπροστινό' }, { key: 'back', label: 'Πίσω' }],
   froura: [{ key: 'main', label: 'ΦΡΟΥΡΑ' }],
-  outs: [{ key: 'outs', label: 'Εξοδούχοι' }, { key: 'stay', label: 'Παραμένοντες' }],
+  outs: [{ key: 'outs', label: 'Εξοδούχοι' }, { key: 'stay', label: 'Παραμένοντες / Δύναμη' }],
   check: [{ key: 'main', label: 'Έλεγχος υπηρεσιών' }],
   roster: [{ key: 'print', label: 'Συνολικό (εκτύπωση)' }, { key: 'lists', label: 'Φύλλα του Excel' }],
   cadre: [{ key: 'main', label: 'Στελέχη' }],

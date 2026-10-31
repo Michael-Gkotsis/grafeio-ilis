@@ -40,6 +40,13 @@ export function sigDefaults(st: Pick<Settings, 'signers'>, form: SigForm): Sig[]
 export const sigsSaved = (st: Pick<Settings, 'signers' | 'sigs'>, form: SigForm): Sig[] => st.sigs?.[form]?.map(x => ({ ...x })) ?? sigDefaults(st, form);
 export const sigsCustom = (st: Pick<Settings, 'sigs'>, form: SigForm) => !!st.sigs?.[form];
 
+// Εξοδούχοι «Όλη η δύναμη» (Michael, 31/10): η σελίδα 2 (ΔΥΝΑΜΗ) έχει τις ίδιες υπογραφές με τη σελίδα 1 (προεπιλογή), καμία, ή δική της λίστα
+export type OutsSig2 = 'same' | 'none' | 'own';
+export const OUTS_SIG2: [OutsSig2, string][] = [['same', 'Οι ίδιες με τη σελίδα 1'], ['none', 'Καμία'], ['own', 'Δικές της']];
+export const outsSig2Of = (st: Pick<Settings, 'outsSig2'>): OutsSig2 => (st.outsSig2 === 'none' || st.outsSig2 === 'own' ? st.outsSig2 : 'same');
+// Η δική της λίστα (outsSigs2), αλλιώς ξεκινά από τις υπογραφές των Εξοδούχων
+export const sigsPage2 = (st: Pick<Settings, 'signers' | 'sigs' | 'outsSigs2'>): Sig[] => st.outsSigs2?.map(x => ({ ...x })) ?? sigsSaved(st, 'outs');
+
 // Για το Excel: κεφαλαία, χωρίς κενές, με τις λέξεις του τύπου της μονάδας
 export function sigsFor(st: Pick<Settings, 'unitKind'>, list: Sig[]): Sig[] {
   const kind = unitKindOf(st); const t = (v?: string) => unitText(upper((v || '').replace(/\s+/g, ' ').trim()), kind);
