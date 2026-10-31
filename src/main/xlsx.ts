@@ -15,6 +15,7 @@ export const FIXED_MARK = 'GL_STATHERA';
 export const NOHEAD_MARK = 'GL_XORIS_EPIKEFALIDA';
 export const sheetSafe = (name: string) => name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const ZIP_DATE = new Date(2020, 0, 1);   // βλ. save()
 // Χαρακτήρες που δεν επιτρέπει το XML (π.χ. από επικόλληση)
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 // Ό,τι γράφει η εφαρμογή στο Excel μπαίνει με κεφαλαία χωρίς τόνους (Michael, 13/10): κείμενα κελιών, κείμενο με μορφή και λίστες επιλογής.
@@ -1283,6 +1284,9 @@ export class Workbook {
     if (/<calcPr\b/.test(wbx)) wbx = wbx.replace(/<calcPr\b([^>]*?)\/?>/, (_m, a: string) => `<calcPr${setAttr(a, 'fullCalcOnLoad', '1')}/>`);
     else wbx = wbx.replace('</workbook>', '<calcPr fullCalcOnLoad="1"/></workbook>');
     this.zip.file('xl/workbook.xml', wbx);
+    // σταθερή ώρα στα μέρη του zip: το ίδιο βιβλίο βγαίνει ίδιο byte προς byte όποτε κι αν αποθηκευτεί
+    // (αλλιώς η ώρα της αποθήκευσης μπαίνει στο αρχείο και δύο ίδια έντυπα διαφέρουν)
+    this.zip.forEach((_p, f) => { f.date = ZIP_DATE; });
     return this.zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   }
 }
