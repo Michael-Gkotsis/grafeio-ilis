@@ -9,7 +9,7 @@ import { useNav, useStore } from '../store';
 import { requestLeave } from '../pending';
 import { collator, normGreek, upper } from '../../shared/text';
 import { CADRE_ABS, TYPES, shortName, type Person, type TypeKey } from '../../shared/domain';
-import { LEAVE_COLS, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { LEAVE_COLS, LEAVE_NO_COL, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { cadreLeaveHk, hkRange, leaveDest, leaveHk } from '../../shared/hkaiText';
 import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
@@ -24,7 +24,7 @@ const HELP = (): Record<ListId, string> => ({
   weaponTypes: 'Στη στήλη «Τύπος» της καρτέλας Οπλισμός και στο Excel «Οπλισμός».',
   weaponOut: 'Στην «Έξοδο όπλων» της καρτέλας Οπλισμός. Κάθε λόγος εξόδου έχει τον λόγο εισαγωγής του (π.χ. ΕΚΠ → ΛΗΞ ΕΚΠ), που μπαίνει μόνος του όταν επιστρέφει το όπλο.',
   punKinds: 'Στη δήλωση ποινής. Κάθε ποινή κόβει την έξοδο, μετρά στη στήλη «Τιμ.» και γράφεται στην ' + HK() + ' (4. Ποινές). Το «κείμενο» μπαίνει στην πρόταση «με δύο (02) ημέρες …». Σε ποιες υπηρεσίες μπαίνει κάθε είδος ορίζεις στις Υπηρεσίες και αργίες.',
-  leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ' + HK() + '. Το «Κείμενο στην ' + HK() + '» (κενό = αυτόματο) είναι πώς γράφεται το είδος στο 3. Άδειες και στο 5. Αιτήσεις (π.χ. Τιμητική → ΑΔΕΙΑ)· το Excel «Άδειες», οι Εξοδούχοι και τα Έντυπα λένε πάντα το είδος. Με «Κατεύθυνση στο κείμενο», η κατεύθυνση της άδειας γράφεται κι αυτή (… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ).',
+  leaveKinds: 'Στη δήλωση άδειας. Κάθε άδεια: απών, χωρίς υπηρεσίες. Η στήλη λέει πού μετρά στην ' + HK() + ' (ή «Πουθενά»: απών παντού αλλού, αλλά δεν μετρά στους απόντες της ' + HK() + '). Το «Κείμενο στην ' + HK() + '» (κενό = αυτόματο) είναι πώς γράφεται το είδος στο 3. Άδειες και στο 5. Αιτήσεις (π.χ. Τιμητική → ΑΔΕΙΑ)· το Excel «Άδειες», οι Εξοδούχοι και τα Έντυπα λένε πάντα το είδος. Με «Κατεύθυνση στο κείμενο», η κατεύθυνση της άδειας γράφεται κι αυτή (… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ).',
   cadreAbs: 'Στην «Κατάσταση» στελέχους (καρτέλα Στελέχη). Η στήλη λέει πού μετρά στην ' + HK() + ', στους κωλυόμενους ή στους απόντες· «μόνο στη λίστα» δεν μετρά. Οι άδειες (Κ.Άδ., Ειδ., Αναρρ.) έχουν και «Κείμενο στην ' + HK() + '» για το 3. Άδειες.',
   siUnarmed: 'Όποιος έχει τέτοιο Σ.Ι. είναι άοπλος: δεν μπαίνει οπλοφύλακας ούτε σκοπός, και μετρά ως άοπλος στα «Αυστηρά Άοπλοι». Ένα δικό σου ισχύει για κάθε Σ.Ι. που αρχίζει από αυτό (χωρίς κενά και τελείες). Η «Δυνατότητα υπηρεσιών» κάθε ατόμου ισχύει όπως πριν.',
   medKinds: 'Στη δήλωση ιατρικού και στη στήλη «είδος» του Excel ΕΑ-ΕΥ. Τι κάνει κάθε ιατρικό (σε ποιες υπηρεσίες μπαίνει, αν βγαίνει έξοδο, πού μετρά στην ' + HK() + ') το ορίζεις στις Υπηρεσίες και αργίες, όπου εμφανίζεται μόλις το προσθέσεις, αρχικά χωρίς περιορισμούς. «Μόνο προειδοποίηση» (π.χ. ΠΑΡΑΠΕΜΠΤΙΚΟ 401): όταν μπαίνει σε υπηρεσία βγαίνει προειδοποίηση και η αυτόματη συμπλήρωση τον βάζει μόνο αν δεν υπάρχει άλλος. Ο κωδικός μπαίνει στις μέρες απουσίας του Excel «Έλεγχος υπηρεσιών» (κενό = του βασικού). Αν κάποιο φύλλο του Excel σου μετράει με τύπο, π.χ. COUNTIF(…;"ΕΑ"), το νέο όνομα δεν μετριέται εκεί.'
@@ -151,6 +151,7 @@ export function ListsCard() {
       return (r.name === 'ΑΟΠΛ' && r.builtin ? 'περιέχει «ΑΟΠΛ» ή «ΧΩΡΙΣ ΟΠΛΟ»' : 'αρχίζει από «' + r.name + '»') + ' · ' + (n === 1 ? '1 άτομο' : n + ' άτομα') + (r.hidden ? ' (δεν ισχύει)' : '');
     }
     if (id === 'medKinds') { const t = TYPES[MED_LIKE.find(k => TYPES[k].label === r.name) || 'EA']; return t.long + (t.code ? ' · κωδικός ' + t.code : ''); }
+    if (id === 'leaveKinds' && current(id, r, lists) === LEAVE_NO_COL) return HK() + ': Πουθενά (δεν μετρά)';
     return pick ? HK() + ': ' + optLbl(pick, current(id, r, lists)) : '';
   };
 
