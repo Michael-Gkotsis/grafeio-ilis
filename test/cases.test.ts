@@ -494,8 +494,11 @@ describe('Επεξεργασία υπηρεσίας', () => {
   it('αλλάζει πλήθος και ώρες στις δικές σου, κρατά το ιστορικό, αλλάζει σειρά', () => {
     let s = run(fakeState(30), { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'other', armed: false, n: 3, hrs: '' });
     const b = s.settings.blocks.find(x => x.custom)!;
-    s = run(s, { t: 'assign', date: D, k: b.id + '_3', pid: 9 });
-    s = run(s, { t: 'editBlock', phase: 'sven', id: b.id, name: 'Πύλη Α', n: 2, hrs: { [b.id + '_1']: '07:30-08:00' } });
+    s = run(s, { t: 'assign', date: ctx.today, k: b.id + '_3', pid: 9 });
+    s = run(s, { t: 'assign', date: D, k: b.id + '_3', pid: 10 });
+    const r = apply(s, { t: 'editBlock', phase: 'sven', id: b.id, name: 'Πύλη Α', n: 2, hrs: { [b.id + '_1']: '07:30-08:00' } }, ctx); s = r.state;
+    expect(s.guards[D]?.[b.id + '_3']).toBeUndefined();   // η θέση που κρύφτηκε βγαίνει από αύριο και μετά (η σημερινή μένει)
+    expect(r.text).toContain('βγήκαν 1 υπηρεσία');
     const b2 = s.settings.blocks.find(x => x.id === b.id)!;
     expect(b2.name).toBe('Πύλη Α');
     expect(postsOf(s.settings).filter(x => x.block === b.id).map(x => x.k)).toEqual([b.id + '_1', b.id + '_2']);

@@ -1041,7 +1041,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       list[i] = nb;
       const settings = fillCodes(withBlocks(s.settings, c.phase, list), c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
-      return { state: { ...s, settings }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + name + ': άλλαξαν τα στοιχεία', files: [] };
+      // λιγότερα άτομα (Michael): οι θέσεις που κρύφτηκαν δεν μπορούν να μείνουν γεμάτες για αύριο και μετά (αόρατες υπηρεσίες που
+      // θα μετρούσαν στη δικαιοσύνη και θα έκαναν το άτομο «Ήδη» απασχολημένο)· όπως στο setBlock, η σημερινή μένει και μόνο στο έντυπο που ισχύει
+      let guards = s.guards, gone = 0;
+      const nowHidden = new Set(posts.filter(p => p.hidden && !b.posts.find(o => o.k === p.k)?.hidden).map(p => p.k));
+      if (nowHidden.size && c.phase === (s.settings.phase || 'sven')) {
+        guards = { ...s.guards };
+        for (const d in guards) if (d > ctx.today) {
+          const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !nowHidden.has(k)));
+          const n = Object.keys(g).length - Object.keys(left).length;
+          if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
+        }
+        if (!gone) guards = s.guards;
+      }
+      return { state: { ...s, guards, settings }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + name + ': άλλαξαν τα στοιχεία' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : ''), files: [] };
     }
     case 'setBlock': {
       const list = blocksOf(s.settings, c.phase); const b = list.find(x => x.id === c.id); if (!b) throw new Error('Δεν βρέθηκε η υπηρεσία');
