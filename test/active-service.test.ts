@@ -70,6 +70,29 @@ describe('ενεργή / ανενεργή υπηρεσία', () => {
     expect((await fillFroura(T('froura.xlsx'), r.state, D)).warnings.join(' ')).toMatch(/Πύλη είναι ανενεργή/);
   });
 
+  it('λιγότερα άτομα σε δική σου υπηρεσία: οι θέσεις που κρύφτηκαν βγαίνουν από αύριο και μετά', () => {
+    const s0 = run(fakeState(30), { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'other', armed: false, n: 3, hrs: '24ωρη' });
+    const b = s0.settings.blocks.find(x => x.name === 'Πύλη')!; const [k1, k2, k3] = b.posts.map(p => p.k);
+    s0.guards = { '2026-10-11': { [k1]: 1, [k2]: 2, [k3]: 3 }, '2026-10-15': { [k1]: 11, [k2]: 12, [k3]: 13 }, [D]: { [k1]: 4, [k2]: 5, th1: 6 }, '2026-10-13': { [k2]: 7, [k3]: 8 }, '2026-10-14': { [k1]: 9, th1: 10 } };
+    const edit = (st: AppState, n: number, phase: 'sven' | 'spen' = 'sven') => apply(st, { t: 'editBlock', phase, id: b.id, name: b.name, n, hrs: {} }, ctx);
+    const r = edit(s0, 1);
+    expect(r.state.guards).toEqual({ '2026-10-11': { [k1]: 1, [k2]: 2, [k3]: 3 }, [D]: { [k1]: 4, [k2]: 5, th1: 6 }, '2026-10-14': { [k1]: 9, th1: 10 }, '2026-10-15': { [k1]: 11 } });   // οι περασμένες και μένουν οι περασμένες, η σημερινή· οι άδειες μέρες φεύγουν
+    expect(r.text).toContain('βγήκαν 4 υπηρεσίες από αύριο και μετά');
+    expect(postsOf(r.state.settings).some(x => x.k === k2)).toBe(false);
+    // μία μόνο: «υπηρεσία»
+    expect(edit({ ...s0, guards: { '2026-10-14': { [k1]: 1, [k2]: 2 } } }, 1).text).toContain('βγήκαν 1 υπηρεσία');
+    // περισσότερα άτομα ή ίδιος αριθμός: τίποτα δεν βγαίνει
+    expect(edit(s0, 3).state.guards).toBe(s0.guards);
+    expect(edit(s0, 4).state.guards).toBe(s0.guards);
+    // ξανά 3: οι θέσεις που ήδη ήταν κρυφές δεν μετρούν ξανά (δεν έχουν γεμάτα)
+    const down = r.state; expect(edit(down, 1).state.guards).toBe(down.guards);
+    // στο έντυπο που δεν ισχύει τώρα: τίποτα δεν βγαίνει
+    const sp = run(fakeState(30), { t: 'addBlock', phase: 'spen', name: 'Πύλη', kind: 'other', armed: false, n: 3, hrs: '24ωρη' });
+    const bp = sp.settings.blocksSpen.find(x => x.name === 'Πύλη')!;
+    sp.guards = { '2026-10-15': Object.fromEntries(bp.posts.map((p, j) => [p.k, j + 1])) };
+    expect(apply(sp, { t: 'editBlock', phase: 'spen', id: bp.id, name: bp.name, n: 1, hrs: {} }, ctx).state.guards).toBe(sp.guards);
+  });
+
   it('Λ/Υ και Δ/Υ μένουν πάντα ενεργοί· νέα υπηρεσία μπορεί να ξεκινά ανενεργή', () => {
     expect(() => run(fakeState(5), { t: 'setBlock', phase: 'sven', id: 'ly', patch: { hidden: true } })).toThrow(/ενεργοί/);
     const s = run(fakeState(5), { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'other', armed: false, n: 1, hrs: '', off: true });

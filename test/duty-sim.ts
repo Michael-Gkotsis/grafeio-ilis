@@ -3,8 +3,8 @@
 // μέρες χωρίς υπηρεσία, εξαιρέσεις, μόνιμοι Λ/Υ-Δ/Υ, θέσεις με το χέρι. Επαναλήψιμο από τον σπόρο. Μόνο φανταστικά ονόματα.
 import { emptyState, TYPES, type AppState, type Person, type Status, type TypeKey, type Rules } from '../src/shared/domain';
 import { addDays, dm, isWeekend, type ISODate } from '../src/shared/dates';
-import { apply } from '../src/shared/commands';
-import { everyBlock } from '../src/shared/domain';
+import { apply, type Command } from '../src/shared/commands';
+import { everyBlock, blocksOf, type Phase } from '../src/shared/domain';
 const CTX = { today: '2026-10-01', newId: (() => { let i = 0; return () => 'c' + ++i; })() };
 const allBlocksOf = (s: AppState) => everyBlock(s.settings);
 import { fillDay, postsOf, isHol, dutyBlock, capBlock, guardUnavailable, isUnarmed, dutyPool, dutyIndexOf, statusesOn, postBy, fixedIds } from '../src/shared/rules';
@@ -18,9 +18,15 @@ export interface SimOpts {
   custom?: boolean;        // και δικές σου υπηρεσίες (Πύλη ένοπλη, Περίπολος άοπλη), με δικές τους στήλες «Ποιος κάνει τι»
   switchAt?: number;       // αλλαγή εντύπου (ΣΒΕΝ ↔ ΣΠΕΝ) αυτή τη μέρα
   hols?: ISODate[];        // και άλλες αργίες (π.χ. Παρασκευή)
+  // αλλαγές στη μέση της περιόδου, όπως τις κάνει ο λοχίας από τις Ρυθμίσεις: νέα υπηρεσία, ανενεργή/ξανά ενεργή, άλλος αριθμός
+  // ατόμων, άλλες βάρδιες, δικές μου βάρδιες, νέο έντυπο. at: η μέρα (από 0), πριν την αυτόματη συμπλήρωση εκείνης της μέρας
+  events?: SimEvent[];
   // τι «θόρυβο» βάζει (0 = τίποτα): πιθανότητες ανά άτομο ή ανά μέρα
   noise?: Partial<Noise>;
 }
+export interface SimEvent { at: number; cmd: Command | ((s: AppState) => Command | null) }
+// το id μιας δικής σου υπηρεσίας από το όνομά της (στο έντυπο ph)
+export const blockOf = (s: AppState, ph: Phase, name: string) => blocksOf(s.settings, ph).find(b => b.name === name || b.id === name);
 export interface Noise {
   leave: number;     // ανά άτομο ανά μέρα: ξεκινά άδεια 3–10 μέρες
   med: number;       // ανά άτομο ανά μέρα: ΕΥ/ΕΑ/ΕΟ/ΕΑΡΒ 1–5 μέρες
@@ -48,6 +54,7 @@ export interface Sim {
   soft: Set<string>;     // «μέρα|θέση» που γέμισαν παρά την αργία μετά από αργία (το μόνο που χαλαρώνει, με ειδοποίηση)
   avail: Map<number, number>;   // πόσες «θέσεις αναλογούν» σε κάθε άτομο (μέρες που μπορούσε, × θέσεις / όσοι μπορούσαν)
   availHol: Map<number, number>;
+  events: string[];      // όσες αλλαγές έγιναν στη μέση (μέρα + εντολή)
 }
 
 export function simulate(o: SimOpts): Sim {
@@ -90,9 +97,13 @@ export function simulate(o: SimOpts): Sim {
     else if (x < nz.leave + nz.med + nz.nos + nz.kol) add('KOL', 1 + Math.floor(r() * 3), { kind: 'ΣΤΕΠ', minus: true });
   }
   s.statuses = ss;
-  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], soft: new Set(), avail: new Map(), availHol: new Map() };
+  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], soft: new Set(), avail: new Map(), availHol: new Map(), events: [] };
   for (const d of days) {
     if (o.switchAt != null && d === days[o.switchAt]) s = { ...s, settings: { ...s.settings, phase: s.settings.phase === 'spen' ? 'sven' : 'spen' } };
+    for (const e of o.events || []) if (days[e.at] === d) {
+      const c = typeof e.cmd === 'function' ? e.cmd(s) : e.cmd;
+      if (c) { s = apply(s, c, { today: d, newId: CTX.newId }).state; sim.events.push(d + ' ' + c.t); }
+    }
     // νέοι και όσοι φεύγουν
     for (const [pid, jd] of joined) if (jd === d) s = { ...s, people: [...s.people, { ...all[pid - 1], inOn: d }] };
     for (const [pid, ld] of left) if (ld === d) s = { ...s, people: s.people.map(p => (p.id === pid ? { ...p, active: false, outOn: d } : p)) };
@@ -124,8 +135,11 @@ function check(sim: Sim, before: AppState, after: AppState, d: ISODate, empty: s
   const g0 = before.guards[d] || {}, g = after.guards[d] || {};
   const seen = new Map<number, string>(); const fixed = fixedIds(after);
   for (const k in g) { const pid = g[k]; if (seen.has(pid)) sim.viol.push(d + ' διπλή θέση ' + pid + ' ' + seen.get(pid) + '/' + k); seen.set(pid, k); }
+  const valid = new Set(postsOf(after.settings).map(x => x.k));
   for (const k in g) {
     if (g0[k]) continue; const pid = g[k]; const x = postBy(after, k)!;
+    // η αυτόματη συμπλήρωση μπαίνει μόνο σε θέσεις που υπάρχουν σήμερα στο έντυπο (όχι ανενεργή υπηρεσία ή θέση που κρύφτηκε με λιγότερα άτομα)
+    if (!valid.has(k)) sim.viol.push(d + ' ' + k + ' ' + pid + ': θέση που δεν υπάρχει σήμερα');
     if (fixed.has(pid) && (k === 'ly' || k === 'dy')) continue;
     // ο κανόνας με τις υπόλοιπες θέσεις της μέρας (χωρίς την ίδια)
     const gg = { ...g }; delete gg[k]; const w: AppState = { ...after, guards: { ...after.guards, [d]: gg } };
