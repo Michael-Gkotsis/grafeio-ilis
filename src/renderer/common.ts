@@ -8,7 +8,8 @@ import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
-import { statusesNow, isHol, holName, DEFAULT_OUT_TIME, DEFAULT_HK_TIME } from '../shared/rules';
+import { statusesNow, isHol, holName, DEFAULT_HK_TIME } from '../shared/rules';
+import { outTimesTxt, weekRow } from '../shared/returns';
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, effects, hoursTxt, phaseBase, plainName, shiftList, shiftReport, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type ShiftOwn, type Status } from '../shared/domain';
 import { cadreStatusOn } from '../shared/cadre';
@@ -104,7 +105,7 @@ const HALF_HOURS = Array.from({ length: 48 }, (_, i) => String(i >> 1).padStart(
 export type TimeQuick = [string, string][];   // [ώρα, τι είναι]
 export function useTimeOptions(quick?: TimeQuick, now?: boolean): ComboOpt[] {
   const { state } = useStore(); const r = state.rules;
-  const base: TimeQuick = [[dutyStartOf(state.settings), 'αλλαγή υπηρεσίας'], [r.outTime || DEFAULT_OUT_TIME, 'ώρα εξόδου'], [r.hkTime || DEFAULT_HK_TIME, 'ώρα ' + HK()]];
+  const base: TimeQuick = [[dutyStartOf(state.settings), 'αλλαγή υπηρεσίας'], ...[1, 2, 3, 4, 5, 6, 0].map(w => [weekRow(r, w).out, 'ώρα εξόδου'] as [string, string]), [r.hkTime || DEFAULT_HK_TIME, 'ώρα ' + HK()]];
   const top = [...(now ? [[nowHM(), 'τώρα'] as [string, string]] : []), ...(quick || []), ...base].filter(([t], i, a) => a.findIndex(x => x[0] === t) === i);
   return [...top.map(([t, l]) => ({ value: t, label: t + ' · ' + l, group: 'Συνηθισμένες' })), ...HALF_HOURS.map(t => ({ value: t, group: 'Όλες οι ώρες' }))];
 }
@@ -238,7 +239,7 @@ export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, f
       <span className="field__help">Γράφονται στις Θέσεις και στη ΦΡΟΥΡΑ, μία γραμμή για κάθε βάρδια. Η αρχή της υπηρεσίας (${start}) αλλάζει στους Κανόνες.</span><//>`}
   </div>`;
 }
-export const timesHelp = (r?: Rules | null, st?: Pick<Settings, 'dutyStart'> | null) => 'Η μέρα της υπηρεσίας είναι ' + dutyStartOf(st) + ' → ' + dutyStartOf(st) + '. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως τις ' + (r?.outTime || DEFAULT_OUT_TIME) + ', βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
+export const timesHelp = (r?: Rules | null, st?: Pick<Settings, 'dutyStart'> | null) => 'Η μέρα της υπηρεσίας είναι ' + dutyStartOf(st) + ' → ' + dutyStartOf(st) + '. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως την ώρα εξόδου της μέρας (' + outTimesTxt(r) + '), βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
 export function ChangePlanList({ plan }: P) {
   return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
 }

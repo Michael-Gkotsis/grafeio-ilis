@@ -5,9 +5,9 @@ import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOr
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
-import { leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
+import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -189,14 +189,16 @@ export function statusesOn(statuses: Status[], pid: number, date: ISODate): Stat
   return r;
 }
 // Ώρες επιστροφής (Michael, 18/10): η τελευταία μέρα μιας άδειας (ή νοσοκομείου, ΣΤΕΠ) με ώρα επιστροφής μετρά μόνο ως
-// εκείνη την ώρα. Κάθε έλεγχος έχει τη δική του στιγμή: η έξοδος ξεκινά στις rules.outTime, η ΗΚΑΙ μετρά στις
+// εκείνη την ώρα. Κάθε έλεγχος έχει τη δική του στιγμή: η έξοδος ξεκινά στην «Αρχή εξόδου» της μέρας (outMinOn), η ΗΚΑΙ μετρά στις
 // rules.hkTime, οι υπηρεσίες στην αρχή του κύκλου, settings.dutyStart (ανά θέση το backBefore πιο κάτω). Η πρώτη μέρα μετρά πάντα ολόκληρη, όπως
 // και κάθε μέρα χωρίς ώρα.
-export const DEFAULT_OUT_TIME = '16:00', DEFAULT_HK_TIME = '08:00';
+export const DEFAULT_HK_TIME = '08:00';
 // Αρχή του κύκλου των υπηρεσιών σε λεπτά (Ρυθμίσεις › Υπηρεσίες, προεπιλογή 14:00)
 export const dutyMin = (st?: Pick<Settings, 'dutyStart'> | null) => mins(dutyStartOf(st));
 const timeOr = (t: string | undefined, def: string) => (t && /^\d\d:\d\d$/.test(t) ? t : def);
-export const outMin = (r?: Pick<Rules, 'outTime'> | null) => mins(timeOr(r?.outTime, DEFAULT_OUT_TIME));
+// Μία ώρα εξόδου (Michael, 1/11): η «Αρχή εξόδου» της μέρας d, από τον πίνακα εβδομάδας και την αλλαγή της μιας μέρας (returns.ts dayTimes).
+// Το παλιό rules.outTime (16:00) δεν διαβάζεται πια: ήταν δεύτερη ώρα εξόδου, μόνο για όσους γυρίζουν από άδεια.
+export const outMinOn = (s: Pick<AppState, 'rules' | 'settings'> & Partial<Pick<AppState, 'dayPlan'>>, d: ISODate) => mins(dayTimes(s, d).out);
 export const hkMin = (r?: Pick<Rules, 'hkTime'> | null) => mins(timeOr(r?.hkTime, DEFAULT_HK_TIME));
 // Οι καταστάσεις που ισχύουν τη μέρα date από τις m και μετά (λεπτά από τα μεσάνυχτα): χωρίς όσες τελείωσαν ως τότε
 export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: number): Status[] {
@@ -515,10 +517,11 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
     for (let i = 2; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
   return k ? numBlock(s, date, pid, k, ds) : null;
 }
-// 3ο και 4ο νούμερο (οι βάρδιες 18:00/20:00): ξανά στο ίδιο νούμερο μόνο μετά από rules.numRest μέρες (λοχίας, 10/10)
+// Ξανά στο ίδιο νούμερο μόνο μετά από rules.numRest μέρες (λοχίας, 10/10): για τα νούμερα rules.numRots (Michael, 1/11), από προεπιλογή
+// το 3ο και 4ο (οι βάρδιες 18:00/20:00)
 function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<ISODate>): string | null {
   const n = s.rules.numRest || 0; const post = postBy(s, k);
-  if (n < 2 || !post || post.rot == null || post.rot < 2) return null;
+  if (n < 2 || !post || post.rot == null || !(s.rules.numRots ?? DEFAULT_NUM_ROTS).includes(post.rot)) return null;
   for (let i = 1; i < n; i++) for (const d of [addDays(date, -i), addDays(date, i)]) {
     if (!ds.has(d)) continue;
     const g = s.guards[d] || {};
@@ -541,7 +544,7 @@ export function outBlock(s: AppState, date: ISODate, pid: number): string | null
   const o = postOf(s, date, pid);
   if (o) return 'Έχει υπηρεσία: ' + o.label;
   // γύρισε από άδεια (νοσοκομείο, ΣΤΕΠ) πριν από την ώρα εξόδου: βγαίνει κανονικά (Michael, 18/10)
-  const st = statusesFrom(s.statuses, pid, date, outMin(s.rules)).find(x => statNoOut(x, s.settings.lists));
+  const st = statusesFrom(s.statuses, pid, date, outMinOn(s, date)).find(x => statNoOut(x, s.settings.lists));
   if (st) return statusLbl(st, s.settings.lists) + untilTxt(st, date) + (st.toTime && !st.open && st.to === date && hasTimes(st.type) ? ' (γυρίζει ' + st.toTime + ')' : '');
   // ποινή που ακόμα αιτείται: δεν μετρά στην ΗΚΑΙ (Κ-19), αλλά ο τιμωρημένος μένει μέσα
   const pend = statusesOf(s.statuses, pid).find(x => x.type === 'PUN' && x.pending && coversDay(x, date));
@@ -626,7 +629,7 @@ export function seedRank(date: ISODate, pid: number): number {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-export interface Fair { total: number; hol: number; byKind: Record<string, number>; byType: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate }
+export interface Fair { total: number; hol: number; byKind: Record<string, number>; byType: Record<string, number>; lastBefore: ISODate; lastHolBefore: ISODate; avg?: true }
 // Τύπος υπηρεσίας για την εναλλαγή: το είδος (θαλαμοφύλακας α΄ και β΄ πίνακα μαζί, σκοπιά, μαγειρεία…), κάθε δική σου
 // υπηρεσία χωριστά («b:» + id, όπως στο «Ποιος κάνει τι»). Υπηρεσία χωρίς θέση (από Excel): το είδος της.
 const typeIdx = new WeakMap<Settings, Map<string, string>>();
@@ -634,6 +637,27 @@ export function dutyType(s: AppState, k: string, kind: DutyKind): string {
   let m = typeIdx.get(s.settings);
   if (!m) { const own = new Set(allBlocks(s.settings).filter(b => b.custom).map(b => b.id)); m = new Map(allPosts(s.settings).map(p => [p.k, own.has(p.block) ? 'b:' + p.block : p.kind])); typeIdx.set(s.settings, m); }
   return (k && m.get(k)) || kind;
+}
+// Οι νέοι ξεκινούν από τον μέσο όρο (rules.newAvg, Michael 1/11): όποιος μπήκε στη δύναμη τη μέρα inOn (νέα ΕΣΣΟ, μετάθεση) μετρά σαν να είχε
+// κάνει όσες αργίες και υπηρεσίες ο μέσος όρος εκείνη τη μέρα, από τους άλλους της σειράς που ήταν ήδη εκεί (χωρίς inOn, ή με πιο παλιό inOn):
+// μόνο οι υπηρεσίες τους πριν από την inOn και η βάση τους. Μία φορά ανά μέρα inOn, για όλους τους νέους (κρατιέται με τα σύνολα και τη σειρά).
+const newAvgIdx = new WeakMap<Map<number, DutyStat>, WeakMap<Person[], Map<ISODate, { hol: number; total: number }>>>();
+function newcomerAvg(s: AppState, inOn: ISODate): { hol: number; total: number } {
+  const stats = dutyStats(s), pool = dutyPool(s);
+  let byPool = newAvgIdx.get(stats); if (!byPool) { byPool = new WeakMap(); newAvgIdx.set(stats, byPool); }
+  let byDay = byPool.get(pool); if (!byDay) { byDay = new Map(); byPool.set(pool, byDay); }
+  let r = byDay.get(inOn);
+  if (!r) {
+    let n = 0, hol = 0, total = 0;
+    for (const q of pool) {
+      if (q.inOn && q.inOn >= inOn) continue;
+      n++;
+      const b = s.baseline?.[q.id]; if (b) { total += baseTotal(b); hol += b.hol || 0; }
+      for (const e of stats.get(q.id)?.log || []) { if (e.d >= inOn) break; total++; if (e.h) hol++; }
+    }
+    r = { hol: n ? hol / n : 0, total: n ? total / n : 0 }; byDay.set(inOn, r);
+  }
+  return r;
 }
 // Στοιχεία δικαιοσύνης ενός ατόμου για μια ημέρα: μετρά όλες τις υπηρεσίες εκτός από την ίδια την ημέρα
 export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
@@ -648,6 +672,10 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   }
   const b = s.baseline?.[pid];
   if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) { f.byKind[k] = (f.byKind[k] || 0) + n; f.byType[k] = (f.byType[k] || 0) + n; } f.total += baseTotal(b); f.hol += b.hol || 0; }
+  if (s.rules.newAvg && pid > 0) {
+    const inOn = personMap(s.people).get(pid)?.inOn;
+    if (inOn && inOn <= date) { const a = newcomerAvg(s, inOn); f.total += a.total; f.hol += a.hol; f.avg = true; }
+  }
   return f;
 }
 // Με ποιο σύνολο συγκρίνονται στη σειρά: το είδος της θέσης, ή η ίδια η δική σου υπηρεσία («b:» + id)
@@ -689,8 +717,8 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
   const mine = new Set<string>();   // οι θέσεις που γέμισε αυτή η συμπλήρωση (μόνο αυτές μετακινούνται στην επιδιόρθωση)
   // «Αυστηρά Άοπλοι»: πρώτα οι θέσεις όπου μπαίνουν οι άοπλοι (μαγειρεία, 2ο-3ο, 1ο-4ο νούμερο), μετά όλες οι άλλες
-  const strict = !!s.rules.strictUnarmed;
-  const order = strict ? [...posts].sort((a, b) => strictTier(a) - strictTier(b)) : posts;
+  const strict = !!s.rules.strictUnarmed; const tiers = strictKeys(s.rules);
+  const order = strict ? [...posts].sort((a, b) => strictTier(a, tiers) - strictTier(b, tiers)) : posts;
   for (const x of order) {
     if (g[x.k]) continue;
     const list = candidates(work, date, x, people, fair, idx, fixed, memo);
@@ -771,20 +799,32 @@ export function isUnarmed(s: AppState, date: ISODate, pid: number): boolean {
   const own = new Set(allBlocks(s.settings).filter(b => b.custom).map(b => b.id));
   return armed.length > 0 && armed.every(x => !!manOf(c, x.block, x.kind, !!x.block && own.has(x.block)));
 }
-// 1 μαγειρεία · 2 θαλαμοφύλακας (και άοπλος οπλοφύλακας) 2ο-3ο νούμερο · 3 το ίδιο 1ο-4ο · 4 όλες οι άλλες
-export function strictTier(x: Post): number {
-  if (x.kind === 'mg') return 1;
-  if ((x.kind === 'th' || (x.kind === 'op' && !x.armed)) && x.rot != null) return x.rot === 1 || x.rot === 2 ? 2 : 3;
-  return 4;
+// Η σειρά των «Αυστηρά Άοπλοι» (Michael, 1/11: rules.strictOrder, προεπιλογή μαγειρεία → 2ο-3ο → 1ο-4ο νούμερο): κλειδιά
+// 'mg' μαγειρεία · 'mid' θαλαμοφύλακας (και άοπλος οπλοφύλακας) 2ο-3ο νούμερο · 'edge' το ίδιο 1ο-4ο · 'b:' + id δική σου άοπλη υπηρεσία
+export const strictKeys = (r: Pick<Rules, 'strictOrder'>): readonly string[] => (r.strictOrder && r.strictOrder.length ? r.strictOrder : DEFAULT_STRICT_ORDER);
+const tierOf = (x: Post, key: string): boolean => {
+  if (key === 'mg') return x.kind === 'mg';
+  if (key === 'mid' || key === 'edge') return (x.kind === 'th' || (x.kind === 'op' && !x.armed)) && x.rot != null && (key === 'mid') === (x.rot === 1 || x.rot === 2);
+  return key.startsWith('b:') && !x.armed && x.block === key.slice(2);
+};
+// Η βαθμίδα μιας θέσης: η θέση της στη σειρά (1, 2, 3…), ή μία πάνω από το τέλος για όλες τις άλλες (προεπιλογή: 1 μαγειρεία · 2 · 3 · 4 οι άλλες)
+export function strictTier(x: Post, order: readonly string[] = DEFAULT_STRICT_ORDER): number {
+  const i = order.findIndex(k => tierOf(x, k));
+  return i < 0 ? order.length + 1 : i + 1;
 }
 export const STRICT_SK = 'Αυστηρά Άοπλοι: σκοπιά μόνο ένοπλοι';
-const TIER_TXT: Record<number, string> = { 1: 'μαγειρεία', 2: '2ο-3ο νούμερο', 3: '1ο-4ο νούμερο' };
+// Πώς λέγεται ένα κλειδί της σειράς («Μαγειρεία», «2ο-3ο νούμερο», το όνομα της δικής σου υπηρεσίας)· κενό αν η υπηρεσία δεν υπάρχει πια
+export function strictKeyTxt(st: Settings, key: string): string {
+  if (key === 'mg') return 'μαγειρεία'; if (key === 'mid') return '2ο-3ο νούμερο'; if (key === 'edge') return '1ο-4ο νούμερο';
+  return key.startsWith('b:') ? allBlocks(st).find(b => b.custom && b.id === key.slice(2))?.name || '' : '';
+}
 // Η σειρά με «Αυστηρά Άοπλοι»: σε θέση 1-3 πρώτα οι άοπλοι (με τη σειρά δικαιοσύνης μεταξύ τους), αλλιώς η κανονική σειρά.
 // Άοπλος που χρειάζεται για να γεμίσει ένοπλη θέση της μέρας (π.χ. ΤΑΕ) δεν παίρνει προτεραιότητα, ώστε να μη μείνει κενή.
 // Σε σκοπιά κανένας άοπλος, ούτε ως τελευταία λύση.
 function strictOrder(s: AppState, date: ISODate, x: Post, list: Person[], people: Person[], idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person[] {
   if (x.kind === 'sk') return list.filter(p => !isUnarmed(s, date, p.id));
-  if (strictTier(x) > 3) return list;
+  const tiers = strictKeys(s.rules);
+  if (strictTier(x, tiers) > tiers.length) return list;
   const need = armedLeft(s, date, x.k);
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
   const first = list.filter(p => isUnarmed(s, date, p.id) && !keep?.has(p.id));
@@ -1010,18 +1050,20 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
   const av = avgs || fairAvg(s, date); const avg = (fn: (x: { hol: number; total: number }) => number) => fn(av);
   const r1 = (x: number) => (Math.round(x * 10) / 10).toString().replace('.', ',');
   const parts: string[] = [];
+  const nn = (x: number) => (f.avg ? r1(x) : String(x));   // νέος από τον μέσο όρο (newAvg): δεκαδικός
   if (isHol(s.settings, date)) {
-    parts.push(f.hol + (f.hol === 1 ? ' αργία' : ' αργίες') + ' (μ.ό. ' + r1(avg(x => x.hol)) + ')');
+    parts.push(nn(f.hol) + (f.hol === 1 ? ' αργία' : ' αργίες') + ' (μ.ό. ' + r1(avg(x => x.hol)) + ')');
     parts.push(f.lastHolBefore ? 'τελευταία αργία ' + dm(f.lastHolBefore) : 'καμία αργία ως τώρα');
   } else {
     parts.push(f.lastBefore ?  (daysBetween(f.lastBefore, date) - 2) + ' μέρες χωρίς υπηρεσία' : 'καμία υπηρεσία ως τώρα');
-    parts.push(f.total + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
+    parts.push(nn(f.total) + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' (μ.ό. ' + r1(avg(x => x.total)) + ')');
   }
+  if (f.avg) parts.push('νέος: από μ.ό.');
   const ah = isFixed(s, pid, k) ? null : dutyAhead(s, date, pid); if (ah) parts.push('έχει ήδη υπηρεσία ' + dm(ah));
   if (s.rules.rotate !== false && post.kind !== 'ly') { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }
   if (post.armed) parts.push('ένοπλος');
   else if (!s.rules.strictUnarmed && reservedFor(s, date, post, pid)) parts.push('προτιμήθηκε γιατί δεν κάνει ένοπλη και οι ένοπλες θέσεις δεν έφταναν');
-  if (s.rules.strictUnarmed && strictTier(post) <= 3 && isUnarmed(s, date, pid)) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + TIER_TXT[strictTier(post)]);
+  if (s.rules.strictUnarmed && isUnarmed(s, date, pid)) { const ks = strictKeys(s.rules), t = strictTier(post, ks); if (t <= ks.length) parts.push('Αυστηρά Άοπλοι: άοπλος, προτεραιότητα σε ' + (strictKeyTxt(s.settings, ks[t - 1]) || post.label)); }
   return parts.join(' · ');
 }
 
@@ -1058,7 +1100,7 @@ export function splitOut(st: Status, from: ISODate, to: ISODate, newId: () => st
   return out;
 }
 // Ως πότε ακυρώνει τις εξόδους μια δήλωση: χωρίς την τελευταία μέρα, αν τελειώνει με ώρα πριν από την ώρα εξόδου
-export const outCutTo = (s: AppState, cmd: Pick<StatusCmd, 'type' | 'to' | 'toTime'>) => (backBy(cmd, cmd.to, outMin(s.rules)) ? addDays(cmd.to, -1) : cmd.to);
+export const outCutTo = (s: AppState, cmd: Pick<StatusCmd, 'type' | 'to' | 'toTime'>) => (backBy(cmd, cmd.to, outMinOn(s, cmd.to)) ? addDays(cmd.to, -1) : cmd.to);
 // μία γραμμή ανά μέρα: ποιοι βγαίνουν από ποιες θέσεις
 function conflictFiles(s: AppState, conflicts: StatusPlan['conflicts']): PlanFile[] {
   const pm = personMap(s.people), posts = allPosts(s.settings);
@@ -1082,12 +1124,11 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   const dates = Object.keys(s.guards).filter(d => d >= first && d <= cmd.to).sort();
   const posts = allPosts(s.settings);
   // έξοδος/ΔΝ και άδεια που τελειώνει με ώρα επιστροφής πριν από την έξοδο: δεν πέφτουν μαζί (Michael, 18/10)
-  const om = outMin(s.rules);
   const meets = (x: Status) => {
     if (!overlapsRange(x, cmd.from, cmd.to)) return false;
     const xo = TYPES[x.type].cat === 'out';
-    if (t.cat === 'out' && !xo && backBy(x, x.to, om)) return overlapsRange({ ...x, to: addDays(x.to, -1) }, cmd.from, cmd.to) && x.from < x.to;
-    if (xo && t.cat !== 'out' && backBy({ ...cmd, open: false }, cmd.to, om)) return overlapsRange(x, cmd.from, addDays(cmd.to, -1)) && cmd.from < cmd.to;
+    if (t.cat === 'out' && !xo && backBy(x, x.to, outMinOn(s, x.to))) return overlapsRange({ ...x, to: addDays(x.to, -1) }, cmd.from, cmd.to) && x.from < x.to;
+    if (xo && t.cat !== 'out' && backBy({ ...cmd, open: false }, cmd.to, outMinOn(s, cmd.to))) return overlapsRange(x, cmd.from, addDays(cmd.to, -1)) && cmd.from < cmd.to;
     return true;
   };
   for (const pid of cmd.pids) {

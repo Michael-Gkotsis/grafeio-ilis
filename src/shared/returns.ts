@@ -5,7 +5,7 @@
 //  - outHeld/awayAt: λείπει εκείνη την ώρα; (η Δύναμη και το «Σήμερα» με την ώρα)
 //  - returnsOn, retDay/retWhen/retTxt: «Ποιοι γυρίζουν και πότε» (Εξοδούχοι, Σήμερα)
 //  - outsTables: οι 4 πίνακες των τιμών Έντυπα (Βγαίνουν ΔΝ, Βγαίνουν εξοδούχοι, Γυρίζουν απόψε, Γυρίζουν αύριο) με Πότε/Γιατί· το Excel «Σε 4 πίνακες» αντικαταστάθηκε από την «Όλη η δύναμη» (outsDay.ts)
-// Η «Ώρα εξόδου» 16:00 των Κανόνων (rules.outTime) είναι άλλο πράγμα: ισχύει μόνο για όσους γυρίζουν από άδεια.
+// Μία ώρα εξόδου (Michael, 1/11): η «Αρχή εξόδου» της μέρας ισχύει και για όσους γυρίζουν από άδεια (rules.outMinOn). Το παλιό rules.outTime δεν διαβάζεται πια.
 // Κυκλική εξάρτηση με το rules.ts (η Δύναμη με την ώρα καλεί το outHeld): όλα χρησιμοποιούνται μέσα σε συναρτήσεις, όχι στην αρχή του αρχείου.
 import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
 import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
@@ -24,6 +24,8 @@ export function weekRow(r: Pick<Rules, 'week'> | undefined | null, w: number): W
   const d = defaultRow(w), x = r?.week?.[w];
   return { out: okT(x?.out, d.out), backOut: okT(x?.backOut, d.backOut), backDn: okT(x?.backDn, d.backDn), train: typeof x?.train === 'boolean' ? x.train : d.train };
 }
+// Οι ώρες «Αρχή εξόδου» της εβδομάδας με τη σειρά, μία φορά η καθεμία (για κείμενα βοήθειας: «17:00»)
+export const outTimesTxt = (r: Pick<Rules, 'week'> | undefined | null) => [...new Set([1, 2, 3, 4, 5, 6, 0].map(w => weekRow(r, w).out))].join(' / ');
 // Η γραμμή της μέρας d χωρίς αλλαγή μιας μέρας: οι αργίες (όχι το ΣΚ) δεν έχουν εκπαίδευση
 export function baseOf(s: Pick<AppState, 'rules' | 'settings'>, d: ISODate): WeekRow {
   const r = weekRow(s.rules, weekday(d));

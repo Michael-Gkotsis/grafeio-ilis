@@ -3,7 +3,7 @@
 import { HK } from './unit';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -673,6 +673,19 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // περιθώριο ένοπλης υπηρεσίας (Michael, 24/10): λεπτά, από 0 ως 240 (ARM_MAX)
       const rules = { ...c.rules };
       for (const k of ['armBefore', 'armAfter'] as const) if (rules[k] != null) { const n = Math.round(Number(rules[k])); if (!(n >= 0 && n <= ARM_MAX)) throw new Error('Το περιθώριο του όπλου είναι από 0 έως ' + ARM_MAX + ' λεπτά'); rules[k] = n; }
+      // ποια νούμερα έχουν «ξανά στο ίδιο νούμερο» (Michael, 1/11): ακέραιοι 0..3, μοναδικοί, σε σειρά· [2, 3] (όπως πάντα) δεν αποθηκεύεται
+      if (rules.numRots != null) {
+        const v = [...new Set(rules.numRots)].sort((a, b) => a - b);
+        if (!v.length || !v.every(n => Number.isInteger(n) && n >= 0 && n <= 3)) throw new Error('Τα νούμερα είναι από 1ο έως 4ο');
+        if (v.join() === DEFAULT_NUM_ROTS.join()) delete rules.numRots; else rules.numRots = v;
+      }
+      // η σειρά των «Αυστηρά Άοπλοι»: τουλάχιστον ένα κλειδί, χωρίς διπλά· η προεπιλογή δεν αποθηκεύεται (κλειδιά υπηρεσιών που διαγράφηκαν αγνοούνται στη λογική)
+      if (rules.strictOrder != null) {
+        const v = [...new Set(rules.strictOrder)];
+        if (!v.length || !v.every(k => typeof k === 'string' && k)) throw new Error('Η σειρά των Αυστηρά Άοπλοι θέλει τουλάχιστον μία υπηρεσία');
+        if (v.join() === DEFAULT_STRICT_ORDER.join()) delete rules.strictOrder; else rules.strictOrder = v;
+      }
+      if (rules.newAvg != null) { if (rules.newAvg) rules.newAvg = true; else delete rules.newAvg; }
       return { state: { ...s, rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
     }
     case 'setCap': {

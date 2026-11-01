@@ -8,7 +8,7 @@ import { useStore } from '../store';
 import { TimeField } from '../common';
 import { normTime } from '../../shared/hours';
 import { HK } from '../../shared/unit';
-import { hkMin, outMin } from '../../shared/rules';
+import { hkMin, outMinOn } from '../../shared/rules';
 import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, manOf, metricGroups, metricOf, newRow, rowOn, rowTag, tagId, tagText, tagsOf, type TAlign, type VFilter, type VRow, type VTerm } from '../../shared/values';
 import { tagKey } from '../../shared/reports';
 import { upper } from '../../shared/text';
@@ -95,12 +95,12 @@ function RowEditor({ s, row, n, set, del, move, last, tid, bad }: P) {
 
 // Στιγμή μέτρησης (κοινή για όλους τους πίνακες τιμών του εντύπου): χωρίς επιλογή, όπως η Δύναμη της μέρας
 export function AtPick({ at, set }: P) {
-  const { state } = useStore();
+  const { state, today } = useStore();
   const v = at == null ? '' : AT_CUSTOM.test(at) ? '#c' : at;
   const [txt, setTxt] = useState(at && AT_CUSTOM.test(at) ? at : '');   // η ώρα όπως γράφεται (έγκυρη μόνο όταν είναι ΩΩ:ΛΛ)
   return html`<div className="rep-opts vt-at"><label className="field__label" htmlFor="vt-at">Στιγμή μέτρησης</label>
     <${Select} id="vt-at" className="ui-select" value=${v} onChange=${(e: P) => { const x = e.target.value; set(x === '' ? undefined : x === '#c' ? (setTxt(hhmm(hkMin(state.rules))), hhmm(hkMin(state.rules))) : x); }}>
-      <option value="">Όπως η Δύναμη της μέρας</option><option value="hkai">Ώρα ${HK()} (${hhmm(hkMin(state.rules))})</option><option value="out">Ώρα εξόδου (${hhmm(outMin(state.rules))})</option><option value="now">Τώρα (την ώρα που βγαίνει)</option><option value="#c">Συγκεκριμένη ώρα…</option><//>
+      <option value="">Όπως η Δύναμη της μέρας</option><option value="hkai">Ώρα ${HK()} (${hhmm(hkMin(state.rules))})</option><option value="out">Ώρα εξόδου της μέρας (σήμερα ${hhmm(outMinOn(state, today))})</option><option value="now">Τώρα (την ώρα που βγαίνει)</option><option value="#c">Συγκεκριμένη ώρα…</option><//>
     ${v === '#c' && html`<${TimeField} id="vt-time" label="Ώρα" value=${txt} onChange=${(x: string) => { setTxt(x); const n = normTime(x); if (n && AT_CUSTOM.test(n)) set(n); }}/>`}
     <span className="field__help">Ισχύει για όλους τους πίνακες τιμών του εντύπου· καθορίζει ποιος είναι εξοδούχος, ΔΝ ή παρών εκείνη την ώρα.</span>
   </div>`;

@@ -6,7 +6,7 @@
 import type { ISODate } from './dates';
 import type { TabLay } from './reports';
 import { KOL_COLS, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
-import { HK_A, HK_K, activePeople, cadreSeats, hkMin, hkaiCounts, kolView, outMin, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
+import { HK_A, HK_K, activePeople, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
 import { listOf, MED_LIKE, ownMed, hkRowList } from './ranks';
 import { siCombos, siOf } from './si';
 import { outsTables } from './returns';
@@ -63,20 +63,20 @@ export const noPeople = (r: { vals?: ValueTable[]; cols: unknown[] }) => hasVals
 
 // ------------------------------------------------------------------ στιγμή μέτρησης
 // undefined: όπως η Δύναμη της μέρας (σήμερα η ώρα της ΗΚΑΙ ή η τωρινή αν είναι μετά, αλλιώς η ώρα της ΗΚΑΙ)· 'hkai': ώρα ΗΚΑΙ· 'out': ώρα εξόδου
-// των Κανόνων· 'now': η ώρα που βγαίνει το έντυπο· 'ΩΩ:ΛΛ': δική σου
+// της μέρας (Αρχή εξόδου)· 'now': η ώρα που βγαίνει το έντυπο· 'ΩΩ:ΛΛ': δική σου
 export type VAt = string | undefined;
 export const AT_CUSTOM = /^([01]\d|2[0-3]):[0-5]\d$/;
-export function atOf(s: Pick<AppState, 'rules'>, at: VAt, d: ISODate, today: ISODate, now: number): number {
+export function atOf(s: Pick<AppState, 'rules' | 'settings'> & Partial<Pick<AppState, 'dayPlan'>>, at: VAt, d: ISODate, today: ISODate, now: number): number {
   if (at === 'hkai') return hkMin(s.rules);
-  if (at === 'out') return outMin(s.rules);
+  if (at === 'out') return outMinOn(s, d);
   if (at === 'now') return now;
   if (at && AT_CUSTOM.test(at)) return mins(at);
   return strengthAt(s.rules, d, today, now);
 }
 export const hhmm = (m: number) => hmOf(m);
-export function atText(s: Pick<AppState, 'rules'>, at: VAt, hk = 'ΗΚΑΙ'): string {
+export function atText(s: Pick<AppState, 'rules' | 'settings'> & Partial<Pick<AppState, 'dayPlan'>>, at: VAt, hk = 'ΗΚΑΙ', d?: ISODate): string {
   if (at === 'hkai') return 'ώρα ' + hk + ' (' + hhmm(hkMin(s.rules)) + ')';
-  if (at === 'out') return 'ώρα εξόδου (' + hhmm(outMin(s.rules)) + ')';
+  if (at === 'out') return 'ώρα εξόδου της μέρας' + (d ? ' (' + hhmm(outMinOn(s, d)) + ')' : '');
   if (at === 'now') return 'τώρα';
   if (at && AT_CUSTOM.test(at)) return at;
   return 'όπως η Δύναμη';

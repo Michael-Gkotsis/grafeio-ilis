@@ -9,7 +9,7 @@ import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, 
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
-import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMin, dutyMin, DEFAULT_OUT_TIME, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -24,7 +24,7 @@ import { WhoDoes } from './whodoes';
 import { SkipsView } from './skips';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.outTime && r.outTime !== DEFAULT_OUT_TIME ? 'ώρα εξόδου ' + r.outTime : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : '', (r.armBefore ?? ARM_BEFORE) !== ARM_BEFORE || (r.armAfter ?? ARM_AFTER) !== ARM_AFTER ? 'το όπλο ένοπλης υπηρεσίας βγαίνει ' + (r.armBefore ?? ARM_BEFORE) + '′ πριν και μπαίνει ' + (r.armAfter ?? ARM_AFTER) + '′ μετά' : ''].filter(Boolean).join(', ');
+const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : '', (r.armBefore ?? ARM_BEFORE) !== ARM_BEFORE || (r.armAfter ?? ARM_AFTER) !== ARM_AFTER ? 'το όπλο ένοπλης υπηρεσίας βγαίνει ' + (r.armBefore ?? ARM_BEFORE) + '′ πριν και μπαίνει ' + (r.armAfter ?? ARM_AFTER) + '′ μετά' : ''].filter(Boolean).join(', ');
 const ROTATE_TXT = 'Κανείς δεν ξανακάνει την ίδια υπηρεσία (σκοπιά, μαγειρεία, θαλαμοφύλακα…) όσο κάποιος άλλος, που είναι η σειρά του σήμερα, δεν την έχει κάνει. Έτσι περνούν όλοι από όλες τις υπηρεσίες που μπορούν να κάνουν και μετά ξαναρχίζουν. Ποιοι μπαίνουν σήμερα το κρίνει η σειρά δικαιοσύνης, όπως πριν· όποιος δεν κάνει μια υπηρεσία (Ποιος κάνει τι, Σ.Ι., ιατρικά) δεν τη χρωστά.';
 const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
@@ -120,14 +120,14 @@ function DaysSelect({ id, value, onChange, opts, txt }: P) {
 }
 function RulesDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
-  const [r, setR] = useState({ ...state.rules, outTime: state.rules.outTime || DEFAULT_OUT_TIME, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) });
+  const [r, setR] = useState({ ...state.rules, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) });
   const [ds, setDs] = useState(dutyStartOf(state.settings));
   // ώρες εξόδου/επιστροφής και εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10), γράφονται με το setWeekRules
   const [wk, setWk] = useState<WeekDraft>(() => weekDraft(state.rules)); const wkBad = weekIssue(wk);
-  const badT = !normTime(r.outTime) || !normTime(r.hkTime) || !normTime(ds) || !!wkBad;
+  const badT = !normTime(r.hkTime) || !normTime(ds) || !!wkBad;
   const [r0] = useState(() => JSON.stringify([r, ds, wk])); const dirty = JSON.stringify([r, ds, wk]) !== r0;
   const save = async () => {
-    const { before, after, ...rest } = r as any; const nr = { ...rest, outTime: normTime(r.outTime)!, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after }; const nds = normTime(ds)!;
+    const { before, after, ...rest } = r as any; const { outTime: _old, ...rest2 } = rest; const nr = { ...rest2, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after }; const nds = normTime(ds)!;
     if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
     if (!(await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false))) return;
     const week = Object.fromEntries(WEEK_ORDER.map(w => [w, { out: normTime(wk[w].out)!, backOut: normTime(wk[w].backOut)!, backDn: normTime(wk[w].backDn)!, train: wk[w].train }]));
@@ -144,7 +144,6 @@ function RulesDialog({ onClose }: P) {
       <div className="field"><span className="field__label">Βάρδιες</span><span className="note">Κάθε πόσες ώρες αλλάζει το νούμερο το ορίζεις σε κάθε υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες και αργίες › Υπηρεσίες<//> › Επεξεργασία.</span></div>
     </div></div>
     <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
-      <${TimeField} id="rout" label="Ώρα εξόδου" value=${r.outTime} onChange=${(v: string) => setR({ ...r, outTime: v })} help="Όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο την ίδια μέρα"/>
       <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
     </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
     <div className="field"><span className="field__label">Εξοδούχοι: ώρες ανά ημέρα</span>
@@ -575,7 +574,7 @@ export function OutsScreen() {
   const blockedN = people.filter(p => reasons[p.id] && !aways.has(p.id)).length;
   const cantN = people.filter(p => reasons[p.id] || aways.has(p.id)).length;
   const awayN = people.filter(p => aways.has(p.id) && !draft[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(state.statuses, p.id, date, outMin(state.rules))) && !stillOut(state, p.id, date)).length;
+  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(state.statuses, p.id, date, outMinOn(state, date))) && !stillOut(state, p.id, date)).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useOpenFrom(rows);

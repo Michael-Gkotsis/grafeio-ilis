@@ -3,7 +3,7 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMin, HK_A, HK_K
+  activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { hkRowList, rankTxt } from './ranks';
@@ -23,7 +23,7 @@ export function preflight(kind: ExportKind, s: AppState, date: ISODate): Check[]
 }
 
 const outOn = (s: AppState, pid: number, date: ISODate) => statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].cat === 'out');
-const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(s.statuses, pid, date, outMin(s.rules));
+const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(s.statuses, pid, date, outMinOn(s, date));
 
 export function frouraChecks(s: AppState, date: ISODate): Check[] {
   const out: Check[] = []; const pm = seatMap(s);

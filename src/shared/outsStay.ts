@@ -2,7 +2,7 @@
 // Ώρα εξόδου: όποιος γύρισε ως τότε μετρά σαν να ήταν μέσα.
 import type { ISODate } from './dates';
 import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
-import { activePeople, outMin, postOf, statusesFrom } from './rules';
+import { activePeople, outMinOn, postOf, statusesFrom } from './rules';
 import { byName } from './hkaiText';
 import { statusLbl } from './ranks';
 import { norm } from './text';
@@ -27,7 +27,7 @@ export const awayIn = (ss: Status[]): Status | null => {
   const a = ss.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && !x.pending);
   return a.find(x => x.type === 'NOS') || a[0] || null;
 };
-export const awayAtOut = (s: AppState, d: ISODate, pid: number): Status | null => awayIn(statusesFrom(s.statuses, pid, d, outMin(s.rules)));
+export const awayAtOut = (s: AppState, d: ISODate, pid: number): Status | null => awayIn(statusesFrom(s.statuses, pid, d, outMinOn(s, d)));
 // Το πρώτο κουμπί των Εξοδούχων για όποιον είναι σε άδεια: στη θέση του «Μένει»
 export const awayName = (st: Pick<Status, 'type'>) => (st.type === 'NOS' ? 'Νοσοκομείο' : 'Σε άδεια');
 // «Κανονική άδεια ως 05/11 · γυρνά Πέμ 06/11 πρωί»: ουδέτερη σημείωση στη γραμμή του (όχι προειδοποίηση)
@@ -42,7 +42,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
   const outs: { p: Person; st: Status }[] = []; const stay: { p: Person; note: string }[] = [];
   for (const p of activePeople(s)) {
     // γύρισε ως την ώρα εξόδου: μετρά σαν να ήταν μέσα (εξοδούχος ή παραμένων)
-    const ss = statusesFrom(s.statuses, p.id, d, outMin(s.rules));
+    const ss = statusesFrom(s.statuses, p.id, d, outMinOn(s, d));
     const o = ss.find(x => TYPES[x.type].cat === 'out');
     if (o) { outs.push({ p, st: o }); continue; }
     // έξω ακόμα από έξοδο/ΔΝ παλαιότερης μέρας (διόρθωση «γυρνά αργότερα», «δεν γυρνά»): δεν είναι παραμένων
