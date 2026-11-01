@@ -195,7 +195,9 @@ export const userItem = (lists: UserLists | undefined, id: ListId, name: string 
   const k = itemKey(name || ''); return k ? (lists?.[id]?.add || []).find(x => itemKey(x.name) === k) : undefined;
 };
 // Άδεια → στήλη της ΗΚΑΙ: η «Ειδική» στις Ειδικές (Michael, 13/10), οι άλλες βασικές στις Κανονικές· οι δικές σου όπου όρισες
-export const LEAVE_COLS: [string, string][] = [['ka', 'Κ.Άδ. (κανονικές)'], ['eid', 'Ειδ. (ειδικές)']];
+// '-' (LEAVE_NO_COL): δικό σου είδος που δεν μετρά σε καμία στήλη της ΗΚΑΙ (ο άνθρωπος μένει απών παντού αλλού, όπως ο κωλυόμενος χωρίς στήλη)
+export const LEAVE_NO_COL = '-';
+export const LEAVE_COLS: [string, string][] = [['ka', 'Κ.Άδ. (κανονικές)'], ['eid', 'Ειδ. (ειδικές)'], [LEAVE_NO_COL, 'Πουθενά στην ΗΚΑΙ (δεν μετρά)']];
 export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const k = itemKey(kind || '');
   if (k === itemKey('Ειδική') || k === itemKey('Ειδική άδεια')) return 'eid';

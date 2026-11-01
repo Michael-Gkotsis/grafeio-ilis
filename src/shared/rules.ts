@@ -1,7 +1,7 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, leaveCol, leaveNameKey, medWarns, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, LEAVE_NO_COL, leaveCol, leaveNameKey, medWarns, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -1196,7 +1196,7 @@ export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISO
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
 function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
   const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
-  if (abs) return abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!;
+  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!; return lc === LEAVE_NO_COL ? null : lc; }   // άδεια με '-': κερδίζει των άλλων, αλλά χωρίς στήλη
   const kol = kolMinus(ss, date, at), kc = kol && kolHk(kol);   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
