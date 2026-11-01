@@ -582,7 +582,7 @@ export function OutsScreen() {
   const byRooms = () => {
     if (!rooms) return;
     const n: Record<number, OutVal> = {}; people.forEach(p => { if (p.room != null && rooms.includes(p.room) && !reasons[p.id] && !aways.has(p.id)) n[p.id] = draft[p.id] === 'DN' || draft[p.id] === 'DNSK' ? draft[p.id] : 'OUT'; }); setDraft(n);
-    const kept = people.filter(p => p.room != null && rooms.includes(p.room) && (reasons[p.id] || aways.has(p.id))).length;
+    const kept = people.filter(p => p.room != null && rooms.includes(p.room) && reasons[p.id] && !aways.has(p.id)).length;
     toast({ text: 'Πρόταση: θάλαμοι ' + roomsTxt(rooms) + ' έξω (' + Object.keys(n).length + '). ' + kept + ' από αυτούς μένουν λόγω κανόνων και μπαίνουν στους Παραμένοντες.' });
   };
   const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !aways.has(p.id) && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
