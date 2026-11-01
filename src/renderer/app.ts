@@ -22,7 +22,7 @@ import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
 import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
-import { noteNamesakes } from '../shared/domain';
+import { isWaiting, noteNamesakes } from '../shared/domain';
 import { dueCount } from '../shared/notes';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
@@ -213,12 +213,12 @@ function Shell() {
   const title = appTitle(state.settings);
   useEffect(() => { document.title = title; }, [title]);
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
-  const waiting = useMemo(() => state.requests.filter(r => r.leave && !r.decision && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
+  const waiting = useMemo(() => state.requests.filter(r => isWaiting(r) && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
   const notesDue = useMemo(() => dueCount(state.notes, today), [state.notes, today]);
   const navItem = (v: string, inRail = false) => {
     const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : v === 'notes' ? notesDue : 0;
-    const what = v === 'guard' ? 'κενές θέσεις αύριο' : v === 'notes' ? 'υπενθυμίσεις σημειώσεων' : 'αιτήσεις άδειας περιμένουν';
-    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : v === 'notes' ? 'Υπενθυμίσεις σημειώσεων που έφτασαν' : 'Αιτήσεις άδειας που περιμένουν απάντηση';
+    const what = v === 'guard' ? 'κενές θέσεις αύριο' : v === 'notes' ? 'υπενθυμίσεις σημειώσεων' : 'αιτήσεις περιμένουν';
+    const tip = v === 'guard' ? 'Κενές θέσεις στις υπηρεσίες αύριο' : v === 'notes' ? 'Υπενθυμίσεις σημειώσεων που έφτασαν' : 'Αιτήσεις που περιμένουν απάντηση';
     const ix = NAV_ALL.indexOf(v); const key = ix < 0 || ix > 9 ? '' : String((ix + 1) % 10); const kb = key ? ' (Alt+' + key + ')' : v === 'reports' ? ' (Ctrl+E)' : v === 'guide' ? ' (F1)' : '';
     return html`<button key=${v} type="button" className="navbtn" aria-current=${route.view === v ? 'page' : undefined} aria-label=${inRail ? label + (n > 0 ? ' (' + n + ')' : '') : undefined} aria-keyshortcuts=${key ? 'Alt+' + key : undefined}
       data-tip=${inRail ? label + (n > 0 ? ': ' + n + ' ' + what : '') + kb : undefined} data-tip-side=${inRail ? 'right' : undefined} title=${inRail ? undefined : label + kb} onClick=${() => go(v)}>

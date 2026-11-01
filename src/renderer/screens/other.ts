@@ -9,20 +9,20 @@ import { useNowMin } from '../clock';
 import { LeaveEndDialog, StatusFixDialog } from './people';
 import { hasTimes, normTime, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
-import { ActiveFilter, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
+import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
+import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText } from '../../shared/rules';
+import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
 import { norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
-import { byName, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
+import { byName, destNote, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
 import { recentPeople } from '../prefs';
 import { GUIDE_TITLES } from '../guideTopic';
@@ -92,7 +92,7 @@ export function TodayScreen() {
   const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
   if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις ' + dutyStartOf(state.settings), urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
   const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
-  if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση άδειας περιμένει απάντηση' : waiting.length + ' αιτήσεις άδειας περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
+  if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση περιμένει απάντηση' : waiting.length + ' αιτήσεις περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
   // σημειώσεις με υπενθύμιση που έφτασε (Michael, 24/10): πρώτες οι πιο παλιές
   const remNotes = noteGroups((state.notes || []).filter(n => noteDue(n, today)), today).due;
   if (remNotes.length) tasks.push({ key: 'notes', title: remNotes.length === 1 ? 'Σημείωση με υπενθύμιση' : remNotes.length + ' σημειώσεις με υπενθύμιση',
@@ -324,7 +324,7 @@ function RequestsLink({ date }: { date: string }) {
   const nDay = state.requests.filter(r => r.date === date && pm.has(r.pid)).length;
   const nWait = reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length;
   return html`<${Card} title="5. Αιτήσεις" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.set({ hkTab: 'req' })}>Αιτήσεις<//>`}>
-    <p className="note" style=${{ margin: 0 }}>${nDay ? nDay + (nDay === 1 ? ' αίτηση' : ' αιτήσεις') : 'Καμία αίτηση'} για ${date === today ? 'σήμερα' : dm(date)}${nWait ? ' · ' + nWait + (nWait === 1 ? ' αίτηση άδειας περιμένει' : ' αιτήσεις άδειας περιμένουν') + ' απάντηση' : ''}.</p>
+    <p className="note" style=${{ margin: 0 }}>${nDay ? nDay + (nDay === 1 ? ' αίτηση' : ' αιτήσεις') : 'Καμία αίτηση'} για ${date === today ? 'σήμερα' : dm(date)}${nWait ? ' · ' + nWait + (nWait === 1 ? ' αίτηση περιμένει' : ' αιτήσεις περιμένουν') + ' απάντηση' : ''}.</p>
   <//>`;
 }
 
@@ -467,33 +467,52 @@ function HkaiSectionsCard() {
       ${provDirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${async () => { if (await save({ ...cur, prov }, 'προβλέπονται')) toast({ text: 'Αποθηκεύτηκαν τα «Προβλέπονται»' }); }}>Αποθήκευση<//></div>`}</div>`}
   <//>`;
 }
-// 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ. Οι αιτήσεις άδειας περιμένουν
-// «Εγκρίθηκε» ή «Απορρίφθηκε»· με την έγκριση γίνονται άδεια (στην ΗΚΑΙ μένει μόνο η αίτηση).
-export const reqWaiting = (rs: PersonRequest[]) => rs.filter(r => r.leave && !r.decision);
+// 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ. Όλες οι αιτήσεις περιμένουν «Εγκρίθηκε» ή
+// «Απορρίφθηκε» (1/11)· η αίτηση άδειας με την έγκριση γίνεται άδεια (στην ΗΚΑΙ μένει μόνο η αίτηση). Οι παλιές χωρίς απάντηση (old) δεν μετρούν.
+export const reqWaiting = (rs: PersonRequest[]) => rs.filter(isWaiting);
 function RequestsCard({ date }: { date: string }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const [edit, setEdit] = useState<Partial<PersonRequest> | null>(null);
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const sorted = (rs: PersonRequest[]) => rs.filter(r => pm.has(r.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!) || a.id.localeCompare(b.id));
   const list = useMemo(() => sorted(state.requests.filter(r => r.date === date)), [state.requests, pm, date]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // αιτήσεις άδειας άλλων ημερών που ακόμα δεν απαντήθηκαν
-  const other = useMemo(() => sorted(reqWaiting(state.requests).filter(r => r.date !== date)), [state.requests, pm, date]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // αιτήσεις άλλων ημερών που ακόμα δεν απαντήθηκαν, και οι παλιές χωρίς απάντηση (old) από κάτω
+  const other = useMemo(() => sorted(state.requests.filter(r => r.date !== date && !r.decision)), [state.requests, pm, date]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const waitN = other.filter(isWaiting).length;
+  const [ask, setAsk] = useState<{ r: PersonRequest; plan: StatusPlan } | null>(null);
   const del = async (r: PersonRequest) => { if (await run({ t: 'deleteRequest', id: r.id }, false)) toast({ text: 'Διαγράφηκε η αίτηση του ' + shortName(pm.get(r.pid)!), actions: [undoMark()] }); };
   const decide = async (r: PersonRequest, ok: boolean | null) => {
     if (!(await run({ t: 'decideRequest', id: r.id, ok }, false))) return;
-    const who = shortName(pm.get(r.pid)!);
-    toast({ text: ok === null ? 'Αναιρέθηκε η απόφαση για την άδεια του ' + who : ok ? 'Εγκρίθηκε η άδεια του ' + who + ' και μπήκε στις Άδειες.' : 'Απορρίφθηκε η αίτηση άδειας του ' + who, actions: [undoMark()] });
+    const who = shortName(pm.get(r.pid)!); const what = r.leave ? 'άδεια' : 'αίτηση';
+    toast({ text: ok === null ? 'Αναιρέθηκε η απόφαση για την ' + what + ' του ' + who : ok ? (r.leave ? 'Εγκρίθηκε η άδεια του ' + who + ' και μπήκε στις Άδειες.' : 'Εγκρίθηκε η αίτηση του ' + who + '.') : 'Απορρίφθηκε η αίτηση ' + (r.leave ? 'άδειας ' : '') + 'του ' + who, actions: [undoMark()] });
   };
-  const item = (r: PersonRequest, showDate: boolean) => { const p = pm.get(r.pid)!; return html`<li key=${r.id}><div className="hk-req__row">
-    <span>${showDate && html`<span className="num">${dm(r.date)} </span>`}<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${upper(reqWhat(r))}.
-      ${r.decision === 'ok' && html` <${Badge} tone="ok" data-tip=${"Έγινε άδεια· στην " + HK() + " μένει μόνο η αίτηση"}>Εγκρίθηκε ${dm(r.decided!)}<//>`}${r.decision === 'no' && html` <${Badge} tone="bad">Απορρίφθηκε ${dm(r.decided!)}<//>`}${r.leave && !r.decision && html` <${Badge} tone="warn">Περιμένει απάντηση<//>`}</span>
-    <span className="hk-req__acts">${r.leave && !r.decision && html`<${Button} size="sm" onClick=${() => decide(r, true)} data-tip=${"Γίνεται άδεια· στην " + HK() + " μένει μόνο η αίτηση, δεν ξαναγράφεται"}>Εγκρίθηκε<//><${Button} size="sm" variant="outline" onClick=${() => decide(r, false)}>Απορρίφθηκε<//>`}
-      ${r.decision ? html`<${Button} size="sm" variant="ghost" onClick=${() => decide(r, null)} data-tip=${r.decision === 'ok' ? 'Η αίτηση ξαναπεριμένει απάντηση και η άδεια βγαίνει' : 'Η αίτηση ξαναπεριμένει απάντηση'}>Αναίρεση απόφασης<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; };
+  // «Εγκρίθηκε» σε αίτηση άδειας (Λ1, Λ2): ίδιος έλεγχος με τη Δήλωση· επικάλυψη με άλλη άδεια, υπηρεσίες που αδειάζουν ή μέρες στο παρελθόν ρωτούν πρώτα
+  const approve = (r: PersonRequest) => {
+    const plan = approvalPlan(state, r, today);
+    if (plan && planNeedsOk(plan)) setAsk({ r, plan }); else decide(r, true);
+  };
+  const item = (r: PersonRequest, showDate: boolean) => { const p = pm.get(r.pid)!; const gone = r.leave && r.decision === 'ok' && !(r.sid && state.statuses.some(x => x.id === r.sid)); return html`<li key=${r.id}><div className="hk-req__row">
+    <span>${showDate && html`<span className="num">${dm(r.date)} </span>`}<button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button> αιτείται ${upper(reqWhat(r, state.settings.lists))}.
+      ${r.decision === 'ok' && html` <${Badge} tone="ok" data-tip=${r.leave ? "Έγινε άδεια· στην " + HK() + " μένει μόνο η αίτηση" : 'Εγκρίθηκε από τον Διοικητή'}>Εγκρίθηκε ${dm(r.decided!)}<//>`}${gone && html` <${Badge} tone="bad" data-tip="Η άδεια ακυρώθηκε ή διαγράφηκε μετά την έγκριση· η αίτηση έμεινε εγκεκριμένη">η άδεια ακυρώθηκε<//>`}${r.decision === 'no' && html` <${Badge} tone="bad">Απορρίφθηκε ${dm(r.decided!)}<//>`}${!r.decision && (r.old ? html` <${Badge} tone="outline" data-tip="Από πριν την έγκριση σε όλες τις αιτήσεις· δεν μετρά στις αιτήσεις που περιμένουν">χωρίς απάντηση (παλιά)<//>` : html` <${Badge} tone="warn">Περιμένει απάντηση<//>`)}</span>
+    <span className="hk-req__acts">${!r.decision && html`<${Button} size="sm" onClick=${() => (r.leave ? approve(r) : decide(r, true))} data-tip=${r.leave ? "Γίνεται άδεια· στην " + HK() + " μένει μόνο η αίτηση, δεν ξαναγράφεται" : 'Ο Διοικητής ενέκρινε την αίτηση'}>Εγκρίθηκε<//><${Button} size="sm" variant="outline" onClick=${() => decide(r, false)}>Απορρίφθηκε<//>`}
+      ${r.decision ? html`<${Button} size="sm" variant="ghost" onClick=${() => decide(r, null)} data-tip=${r.decision === 'ok' && r.leave ? 'Η αίτηση ξαναπεριμένει απάντηση και η άδεια βγαίνει' : 'Η αίτηση ξαναπεριμένει απάντηση'}>Αναίρεση απόφασης<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setEdit(r)}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => del(r)}>Διαγραφή<//></span></div></li>`; };
   return html`<${Card} title=${'5. Αιτήσεις (' + (date === today ? 'σήμερα' : dm(date)) + ')'} actions=${html`<${Button} size="sm" variant="outline" onClick=${() => setEdit({ date, leave: { type: 'LEAVE', from: addDays(date, 1), to: addDays(date, 1) } })}>+ Αίτηση άδειας<//><${Button} size="sm" variant="ghost" onClick=${() => setEdit({ date })}>+ Άλλη αίτηση<//>`}>
     ${list.length ? html`<ol className="hk-req">${list.map(r => item(r, false))}</ol>`
       : html`<p className="note" style=${{ margin: 0 }}>Καμία αίτηση για ${dm(date)}. Γράφονται στην ${HK()} ως «1. ΣΤΡ (ΠΖ) … : ΑΙΤΕΙΤΑΙ …». Γράφονται μία φορά· με το «Εγκρίθηκε» η άδεια μπαίνει στις Άδειες χωρίς να ξαναγραφτεί.</p>`}
-    ${other.length > 0 && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Αιτήσεις άδειας άλλων ημερών που περιμένουν απάντηση</span><ul className="hk-req" style=${{ listStyle: 'none', paddingLeft: 0 }}>${other.map(r => item(r, true))}</ul></div>`}
+    ${other.length > 0 && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Αιτήσεις άλλων ημερών που περιμένουν απάντηση${waitN < other.length ? (waitN ? ' και παλιές χωρίς απάντηση' : ': μόνο παλιές χωρίς απάντηση') : ''}</span><ul className="hk-req" style=${{ listStyle: 'none', paddingLeft: 0 }}>${other.map(r => item(r, true))}</ul></div>`}
     ${edit && html`<${RequestDialog} req=${edit} onClose=${() => setEdit(null)}/>`}
+    ${ask && html`<${ApproveDialog} r=${ask.r} plan=${ask.plan} onClose=${() => setAsk(null)} onGo=${() => { const r = ask.r; setAsk(null); decide(r, true); }}/>`}
+  <//>`;
+}
+// Έγκριση αίτησης άδειας που θέλει προσοχή (Λ1, Λ2): τα ίδια μηνύματα με τη Δήλωση, και «Έγκριση παρ' όλα αυτά» / «Άκυρο»
+function ApproveDialog({ r, plan, onClose, onGo }: { r: PersonRequest; plan: StatusPlan; onClose: () => void; onGo: () => void }) {
+  const { state } = useStore(); const pm = personMap(state.people); const lv = r.leave!;
+  const files = plan.files.filter(f => f.fn.startsWith('Υπηρεσίες'));
+  return html`<${Dialog} role="alertdialog" title=${'Έγκριση: ' + shortName(pm.get(r.pid)!) + ', άδεια ' + (lv.from === lv.to ? dm(lv.from) : dm(lv.from) + '–' + dm(lv.to))} onClose=${onClose}
+    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${onClose}>Άκυρο<//><${Button} onClick=${onGo}>Έγκριση παρ' όλα αυτά<//>`}>
+    ${plan.overlaps.length > 0 && html`<${Alert} tone="warn"><span>${plan.overlaps.map((o, i) => html`<span key=${i}>${i > 0 && html`<br/>`}<b>${shortName(pm.get(o.pid)!)}</b> έχει ήδη ${statusLbl(o.status, state.settings.lists)} ${dm(o.status.from)}–${dm(o.status.to)}. Αν εγκριθεί, θα έχει δύο άδειες μαζί· στην ${HK()} θα μετρά μόνο η μία.</span>`)}</span><//>`}
+    ${files.length > 0 && html`<${ChangePlanList} plan=${{ files }}/>`}
+    <span className="note">Με την έγκριση γίνεται άδεια· στην ${HK()} μένει μόνο η αίτηση.</span>
   <//>`;
 }
 // Νέα αίτηση ή αλλαγή: από την ΗΚΑΙ ή από την καρτέλα του ατόμου (req.pid). Άδεια: είδος και από πότε έως πότε, με αιτιολόγηση.
@@ -502,14 +521,14 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
   const { state, run, today, undoMark } = useStore(); const toast = useToast();
   const kinds = [...listOf(state.settings.lists, 'leaveKinds'), HON];
   const lv0 = req.leave; const next = addDays(req.date || today, 1);
-  const [f, setF] = useState({ pid: req.pid ?? null as number | null, date: req.date || today, text: req.text || '', isLeave: !!lv0, kind: lv0?.type === 'HON' ? HON : lv0?.kind || kinds[0], from: lv0?.from || next, to: lv0?.to || next, fromTime: lv0?.fromTime || '', toTime: lv0?.toTime || '' });
+  const [f, setF] = useState({ pid: req.pid ?? null as number | null, date: req.date || today, text: req.text || '', isLeave: !!lv0, kind: lv0?.type === 'HON' ? HON : lv0?.kind || kinds[0], from: lv0?.from || next, to: lv0?.to || next, fromTime: lv0?.fromTime || '', toTime: lv0?.toTime || '', dest: lv0?.dest || '' });
   const [f0] = useState(() => JSON.stringify(f)); const dirty = JSON.stringify(f) !== f0;
   const p = f.pid != null ? personMap(state.people).get(f.pid) : undefined;
   const text = reqText(f.text);
   // ώρες προαιρετικές: γράφονται στην αίτηση μόνο αν μπήκαν (και διαβάζονται)
   const ft = normTime(f.fromTime), tt = normTime(f.toTime);
   const tms = { ...(ft ? { fromTime: ft } : {}), ...(tt ? { toTime: tt } : {}) };
-  const leave: LeaveAsk | undefined = f.isLeave ? { type: f.kind === HON ? 'HON' : 'LEAVE', ...(f.kind === HON ? {} : { kind: f.kind }), from: f.from, to: f.to, ...tms } : undefined;
+  const leave: LeaveAsk | undefined = f.isLeave ? { type: f.kind === HON ? 'HON' : 'LEAVE', ...(f.kind === HON ? {} : { kind: f.kind }), from: f.from, to: f.to, ...tms, ...(f.dest.trim() ? { dest: f.dest.trim() } : {}) } : undefined;
   const ok = !!p && (f.isLeave || !!text) && (!f.isLeave || (ft != null && tt != null));
   const miss = ok ? '' : !p ? 'Λείπει: Στρατιώτης' : !f.isLeave ? 'Λείπει: Τι αιτείται' : 'Μια ώρα δεν είναι σωστή (π.χ. 14:00)';
   const save = async () => {
@@ -518,7 +537,7 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
     const cmd = req.id ? { t: 'updateRequest' as const, req: { id: req.id, ...body } } : { t: 'addRequest' as const, req: body };
     if (await run(cmd, false)) { onClose(); toast({ text: (req.id ? 'Άλλαξε η αίτηση: ' : 'Αίτηση για την ' + HK() + ' ' + dm(f.date) + ': ') + shortName(p!), actions: [undoMark()] }); }
   };
-  const line = p && ok ? 'Στην ' + HK() + ': «' + upper(hkWho(p) + ': αιτείται ' + reqWhat({ id: '', pid: p.id, date: f.date, text, leave })) + '.»' : '';
+  const line = p && ok ? 'Στην ' + HK() + ': «' + upper(hkWho(p) + ': αιτείται ' + reqWhat({ id: '', pid: p.id, date: f.date, text, leave }, state.settings.lists)) + '.»' : '';
   return html`<${Dialog} title=${req.id ? 'Αλλαγή αίτησης' : f.isLeave ? 'Αίτηση άδειας' : 'Νέα αίτηση'} description="Γράφεται στην ${HK()} της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ»." onClose=${onClose} dirty=${dirty && 'Η αίτηση δεν αποθηκεύτηκε. Αν κλείσεις, χάνεται.'}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field"><span className="field__label">Τι αιτείται</span><${Segmented} value=${f.isLeave ? 'leave' : 'other'} onChange=${(v: string) => setF({ ...f, isLeave: v === 'leave' })} items=${[{ value: 'leave', label: 'Άδεια' }, { value: 'other', label: 'Κάτι άλλο' }]}/></div>
@@ -531,7 +550,8 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
       <div className="field"><div className="field-row">
         <${TimeField} id="rq-out" label="Ώρα αναχώρησης" value=${f.fromTime} onChange=${(v: string) => setF({ ...f, fromTime: v })} help=${'Προαιρετικό · ' + dow(f.from) + ' ' + dm(f.from)}/>
         <${TimeField} id="rq-in" label="Ώρα επιστροφής" value=${f.toTime} onChange=${(v: string) => setF({ ...f, toTime: v })} help=${'Προαιρετικό · ' + dow(f.to) + ' ' + dm(f.to)}/>
-      </div><span className="field__help">Αν μπουν, γράφονται στην αίτηση της ${HK()} και περνούν στην άδεια με το «Εγκρίθηκε». Κενές = ολόκληρες μέρες.</span></div>`}
+      </div><span className="field__help">Αν μπουν, γράφονται στην αίτηση της ${HK()} και περνούν στην άδεια με το «Εγκρίθηκε». Κενές = ολόκληρες μέρες.</span></div>
+      <div className="field"><label className="field__label" htmlFor="rq-dest">Κατεύθυνση (προαιρετικό)</label><input id="rq-dest" className="ui-input" placeholder="π.χ. Κόρινθος" value=${f.dest} onChange=${(e: any) => setF({ ...f, dest: e.target.value })}/><span className="field__help">${destNote({ type: f.kind === HON ? 'HON' : 'LEAVE', kind: f.kind === HON ? undefined : f.kind }, f.dest, state.settings.lists)}</span></div>`}
     <div className="field"><label className="field__label" htmlFor="rq-t">${f.isLeave ? 'Αιτιολόγηση (προαιρετικό)' : 'Αιτείται'}</label><input id="rq-t" className="ui-input" placeholder=${f.isLeave ? 'π.χ. για οικογενειακούς λόγους' : 'π.χ. μετάθεση στην 2η ΕΠΧΙΑ'} value=${f.text} data-autofocus=${p ? '' : undefined} onChange=${(e: any) => setF({ ...f, text: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }}/>
       <span className="field__help">${line || (f.isLeave ? 'Γράφεται μία φορά, στις αιτήσεις. Όταν εγκριθεί, γίνεται άδεια χωρίς να ξαναγραφτεί στην ' + HK() + '.' : 'Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.')}</span></div>
   <//>`;
