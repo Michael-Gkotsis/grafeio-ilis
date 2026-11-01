@@ -46,7 +46,8 @@ describe('προεπιλογές: τίποτα δεν αλλάζει', () => {
   });
   it('οι νέοι (inOn) δεν αλλάζουν τίποτα όσο το newAvg είναι κλειστό', () => {
     const s = spen(fakeState(30));
-    const withIn = { ...s, people: s.people.map(p => (p.id > 24 ? { ...p, inOn: '2026-10-05' } : p)) };
+    // inOn την πρώτη μέρα του ημερολογίου: ήταν εκεί από την αρχή. (Αργότερα το inOn μετρά στο «πόσες αναλογούν» της καθημερινής σειράς: οι μέρες πριν δεν τους αναλογούν υπηρεσίες)
+    const withIn = { ...s, people: s.people.map(p => (p.id > 24 ? { ...p, inOn: '2026-10-01' } : p)) };
     expect(month(withIn)).toEqual(month(s));
     expect(month(withRules(withIn, { newAvg: false }))).toEqual(month(s));
   });
