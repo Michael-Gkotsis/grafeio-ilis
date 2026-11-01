@@ -61,7 +61,7 @@ await time('πίνακας 2: Καταστάσεις', () => sel('Ο πίνακ�
 await page.waitForTimeout(1500);
 await time('βήμα 4', () => page.getByRole('button', { name: 'Επόμενο' }).click());
 await page.waitForTimeout(600);
-await time('βήμα 4: πίνακας 1', () => page.locator('.rep-tables').getByRole('button', { name: /^1 ·/ }).click());
+await time('βήμα 4: πίνακας 1', () => page.getByRole('tab', { name: /^1 ·/ }).click());
 const chips = page.locator('.rep-wiz__main [aria-pressed]');
 for (let i = 0; i < 3; i++) await time('φίλτρο στο βήμα 4', () => page.locator('.rep-conds .ui-seg button, .rep-conds button').nth(1 + i * 3).click());
 await page.waitForTimeout(600);
