@@ -1,15 +1,16 @@
 // features/guard (Κατάσταση υπηρεσιών, έλεγχος) και features/outs (εξοδούχοι, ΔΝ)
 import { HK } from '../../shared/unit';
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
+import { memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, DialogLeave, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
-import { ARM_AFTER, ARM_BEFORE, ARM_MAX, armMargin } from '../../shared/armed';
+import { ARM_MAX, armMargin } from '../../shared/armed';
+import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftForm, shiftOf, shiftWhy, type HoursMode, useExport, useExportBusy } from '../common';
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
-import { TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
-import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople } from '../../shared/rules';
+import { TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
+import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -24,9 +25,6 @@ import { WhoDoes } from './whodoes';
 import { SkipsView } from './skips';
 type P = any;
 
-const RULE_TXT = (r: P) => [r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση', r.numRest ? '3ο/4ο νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '', r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό', r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών', r.strictUnarmed ? 'Αυστηρά Άοπλοι' : '', r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : '', (r.armBefore ?? ARM_BEFORE) !== ARM_BEFORE || (r.armAfter ?? ARM_AFTER) !== ARM_AFTER ? 'το όπλο ένοπλης υπηρεσίας βγαίνει ' + (r.armBefore ?? ARM_BEFORE) + '′ πριν και μπαίνει ' + (r.armAfter ?? ARM_AFTER) + '′ μετά' : ''].filter(Boolean).join(', ');
-const ROTATE_TXT = 'Κανείς δεν ξανακάνει την ίδια υπηρεσία (σκοπιά, μαγειρεία, θαλαμοφύλακα…) όσο κάποιος άλλος, που είναι η σειρά του σήμερα, δεν την έχει κάνει. Έτσι περνούν όλοι από όλες τις υπηρεσίες που μπορούν να κάνουν και μετά ξαναρχίζουν. Ποιοι μπαίνουν σήμερα το κρίνει η σειρά δικαιοσύνης, όπως πριν· όποιος δεν κάνει μια υπηρεσία (Ποιος κάνει τι, Σ.Ι., ιατρικά) δεν τη χρωστά.';
-const STRICT_TXT = 'Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι.';
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
 const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.kind === 'op' && !x.hidden); return b.length ? 'οπλοφύλακας: ' + (b.every((x: P) => x.armed) ? 'ένοπλος' : 'άοπλος') + ' (Ρυθμίσεις)' : ''; };
 
@@ -118,56 +116,140 @@ function DaysSelect({ id, value, onChange, opts, txt }: P) {
     ${own && html`<input type="number" min="1" max=${MAX_DAYS} className="ui-input" style=${{ maxWidth: '90px' }} aria-label="Ημέρες" value=${value} onChange=${(e: any) => onChange(Math.max(1, Math.min(MAX_DAYS, Math.floor(+e.target.value) || 1)))}/><span className="note">ημέρες</span>`}
   </div>`;
 }
-function RulesDialog({ onClose }: P) {
-  const { state, run } = useStore(); const toast = useToast();
-  const [r, setR] = useState({ ...state.rules, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) });
-  const [ds, setDs] = useState(dutyStartOf(state.settings));
+// Κανόνες υπηρεσιών (Michael, 1/11): τρεις καρτέλες σε ένα παράθυρο (Κανόνες · Σειρά δικαιοσύνης · Ώρες), ένα πρόχειρο, μία «Αποθήκευση»
+const KEY_NAME: Record<string, [string, string]> = { mg: ['Μαγειρεία', ''], mid: ['2ο-3ο νούμερο', 'θαλαμοφύλακας, άοπλος οπλοφύλακας'], edge: ['1ο-4ο νούμερο', 'θαλαμοφύλακας, άοπλος οπλοφύλακας'] };
+const ONOFF = (on: boolean) => html`<${Badge} tone=${on ? 'ok' : undefined}>${on ? 'ανοιχτό' : 'κλειστό'}<//>`;
+// Σύνδεσμος που κλείνει το παράθυρο (με την ίδια ερώτηση αν έχει αλλαγές, όπως το GoLink) και κάνει κάτι στην οθόνη Υπηρεσίες
+function TabLink({ onGo, children }: P) {
+  const leave = useContext(DialogLeave);
+  return html`<${Button} variant="link" className="golink" onClick=${() => (leave ? leave(onGo) : onGo())}>${children}<//>`;
+}
+function RulesDialog({ onClose, onTab, onFixed }: P) {
+  const { state, run, today } = useStore(); const toast = useToast(); const st = state.settings;
+  const [tab, setTab] = useState('rules');
+  const [r, setR] = useState<P>(() => ({ ...state.rules, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) }));
+  const [ds, setDs] = useState(dutyStartOf(st));
   // ώρες εξόδου/επιστροφής και εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10), γράφονται με το setWeekRules
   const [wk, setWk] = useState<WeekDraft>(() => weekDraft(state.rules)); const wkBad = weekIssue(wk);
-  const badT = !normTime(r.hkTime) || !normTime(ds) || !!wkBad;
+  const badT = !normTime(r.hkTime) || !normTime(ds) || !!wkBad; const badTxt = wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00): δες την καρτέλα Ώρες';
   const [r0] = useState(() => JSON.stringify([r, ds, wk])); const dirty = JSON.stringify([r, ds, wk]) !== r0;
+  const set = (k: string, v: unknown) => setR((x: P) => { const n = { ...x }; if (v === undefined) delete n[k]; else n[k] = v; return n; });   // undefined = η προεπιλογή, δεν αποθηκεύεται
+  const txt = (x: P) => RULE_TXT({ ...x, armBefore: x.before, armAfter: x.after }, st);
   const save = async () => {
-    const { before, after, ...rest } = r as any; const { outTime: _old, ...rest2 } = rest; const nr = { ...rest2, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after }; const nds = normTime(ds)!;
-    if (nds !== dutyStartOf(state.settings) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
-    if (!(await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false))) return;
+    const { before, after, outTime: _old, ...rest } = r;   // το παλιό «Ώρα εξόδου» (outTime) δεν υπάρχει πια: μία ώρα εξόδου, ο πίνακας εβδομάδας
+    const nr = { ...rest, hkTime: normTime(r.hkTime)!, armBefore: before, armAfter: after } as Rules; const nds = normTime(ds)!;
+    if (nds !== dutyStartOf(st) && !(await run({ t: 'setSettings', settings: { dutyStart: nds }, text: 'ο κύκλος των υπηρεσιών ξεκινά στις ' + nds }, false))) return;
+    if (!(await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr, st) }, false))) return;
     const week = Object.fromEntries(WEEK_ORDER.map(w => [w, { out: normTime(wk[w].out)!, backOut: normTime(wk[w].backOut)!, backDn: normTime(wk[w].backDn)!, train: wk[w].train }]));
     if (!(await run({ t: 'setWeekRules', week }, false))) return;
-    onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr) });
+    onClose(); toast({ text: 'Οι κανόνες άλλαξαν: ' + RULE_TXT(nr, st) });
   };
-  return html`<${Dialog} title="Κανόνες υπηρεσιών" description="Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose} dirty=${dirty && 'Οι αλλαγές στους κανόνες δεν αποθηκεύτηκαν. Αν κλείσεις, μένουν οι παλιοί.'}
-    footer=${html`<${Why} text=${badT && (wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00)')}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} why=${wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00)'} onClick=${save}>Αποθήκευση<//>`}>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => setR({ ...r, noConsecHol: e.target.checked })}/><span><b>Όχι αργία ή ΣΚ δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε υπηρεσία σε ΣΚ ή αργία δεν μπαίνει στο επόμενο ΣΚ/αργία (Κ-13), ούτε σε αργία δύο μέρες μετά (π.χ. Παρασκευή αργία και Κυριακή).</small></span></label>
-    <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία (Κ-14)</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => setR({ ...r, restDays: v })} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
-    <div className="field"><label className="field__label" htmlFor="rnum">3ο και 4ο νούμερο</label><${DaysSelect} id="rnum" value=${r.numRest || 0} onChange=${(v: number) => setR({ ...r, numRest: v })} opts=${[[0, 'Χωρίς περιορισμό'], [3, 'Ξανά στο ίδιο νούμερο μετά από 3 ημέρες'], [4, 'Μετά από 4 ημέρες']]} txt=${(n: number) => 'Μετά από ' + n + ' ημέρες'}/><span className="note">Ισχύει μαζί με την ανάπαυση: όποιος ήταν 3ος ή 4ος (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει στο ίδιο νούμερο νωρίτερα.</span></div>
-    <div className="field"><span className="field__label">Αρχή υπηρεσίας</span><div className="field-row">
-      <${TimeField} id="rds" label="Ο κύκλος ξεκινά στις" value=${ds} onChange=${setDs} help=${'Η μέρα της υπηρεσίας είναι ' + (normTime(ds) || '14:00') + ' → ' + (normTime(ds) || '14:00') + ' της επόμενης. Από εδώ ξεκινούν και οι βάρδιες.'}/>
-      <div className="field"><span className="field__label">Βάρδιες</span><span className="note">Κάθε πόσες ώρες αλλάζει το νούμερο το ορίζεις σε κάθε υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες και αργίες › Υπηρεσίες<//> › Επεξεργασία.</span></div>
-    </div></div>
-    <div className="field"><span className="field__label">Επιστροφή με ώρα (άδεια, νοσοκομείο, ΣΤΕΠ)</span><div className="field-row">
-      <${TimeField} id="rhk" label="Ώρα ${HK()}" value=${r.hkTime} onChange=${(v: string) => setR({ ...r, hkTime: v })} help="Όποιος γυρίσει ως τότε μετρά παρών στην ${HK()} της μέρας"/>
-    </div><span className="note">Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span></div>
-    <div className="field"><span className="field__label">Εξοδούχοι: ώρες ανά ημέρα</span>
+  // Α. ποια νούμερα έχουν «ξανά στο ίδιο νούμερο» (τουλάχιστον ένα)
+  const rots: number[] = r.numRots ?? DEFAULT_NUM_ROTS;
+  const togRot = (n: number) => { const v = rots.includes(n) ? rots.filter(x => x !== n) : [...rots, n].sort((a, b) => a - b); if (v.length) set('numRots', v.join() === DEFAULT_NUM_ROTS.join() ? undefined : v); };
+  // Β. η σειρά των Αυστηρά Άοπλοι: οι δικές σου άοπλες υπηρεσίες (όχι κρυφές, όχι Λ/Υ-Δ/Υ) μπαίνουν προαιρετικά
+  const [editOrd, setEditOrd] = useState(false);
+  const own = useMemo(() => capCols(st).filter(c => c.block && !c.armed).map(c => ({ key: c.key as string, name: c.label })), [st]);
+  const nameOf = (k: string) => KEY_NAME[k]?.[0] || own.find(o => o.key === k)?.name || '';
+  const order = [...strictKeys(r)].filter(nameOf);   // κλειδιά υπηρεσιών που διαγράφηκαν αγνοούνται σιωπηλά
+  const setOrder = (v: string[]) => set('strictOrder', v.join() === DEFAULT_STRICT_ORDER.join() ? undefined : v);
+  const move = (i: number, d: number) => { const v = [...order]; [v[i], v[i + d]] = [v[i + d], v[i]]; setOrder(v); };
+  const spare = [...Object.keys(KEY_NAME), ...own.map(o => o.key)].filter(k => !order.includes(k));
+  // «Τι άλλο κρίνει ποιος μπαίνει»: φθηνά νούμερα, μία φορά όταν ανοίγει το παράθυρο
+  const info = useMemo(() => {
+    const cnt = (c?: Record<string, Record<string, unknown>>) => Object.values(c || {}).reduce((n, row) => n + Object.keys(row).length, 0);
+    const act = activePeople(state); const end = addDays(today, 6); const pm = personMap(state.people); const fx = state.settings.fixed || {};
+    return {
+      stat: cnt(st.lists?.stat?.cells), si: cnt(st.lists?.si?.cells),
+      caps: act.filter(p => Object.values(state.caps[p.id] || {}).some(v => typeof v === 'string')).length,
+      skips: act.reduce((n, p) => n + (p.skips?.filter(k => k.from <= end && k.to >= today).length || 0), 0),
+      off: act.filter(p => p.offDays?.length).length, post: act.filter(p => p.post).length,
+      fixed: (['ly', 'dy'] as const).filter(k => fx[k] && pm.get(fx[k]!)).map(k => (k === 'ly' ? 'Λ/Υ ' : 'Δ/Υ ') + shortName(pm.get(fx[k]!)!)),
+      cadre: (state.cadreList || []).filter(c => c.active && c.monthMax).length
+    };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const chg = (n: number) => (n ? n + (n === 1 ? ' αλλαγή' : ' αλλαγές') : 'όπως η προεπιλογή');
+  const ppl = (n: number) => n + (n === 1 ? ' άτομο' : ' άτομα');
+  const item = (k: string, body: any, more?: any) => html`<div className="rl-i"><b>${k}</b> · ${body}${more && html`<small className="muted">${more}</small>`}</div>`;
+  const rulesTab = html`<div className="rl-tab">
+    <p className="note rl-now">Ισχύουν τώρα: ${txt(r)}</p>
+    <section className="rl-grp"><h3>Ανάπαυση</h3>
+      <div className="rl-two">
+        <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => set('restDays', v)} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
+        <div className="field"><label className="field__label" htmlFor="rnum">Ξανά στο ίδιο νούμερο</label><${DaysSelect} id="rnum" value=${r.numRest || 0} onChange=${(v: number) => set('numRest', v)} opts=${[[0, 'Χωρίς περιορισμό'], [3, 'Μετά από 3 ημέρες'], [4, 'Μετά από 4 ημέρες']]} txt=${(n: number) => 'Μετά από ' + n + ' ημέρες'}/>
+          <div className=${cx('rl-chips', !r.numRest && 'is-off')} role="group" aria-label="Ποια νούμερα"><span className="note">Ποια νούμερα:</span>${[0, 1, 2, 3].map(n => html`<button key=${n} type="button" className="rl-chip" aria-pressed=${rots.includes(n)} disabled=${!r.numRest} data-tip=${rots.length === 1 && rots.includes(n) ? 'Τουλάχιστον ένα νούμερο' : undefined} onClick=${() => togRot(n)}>${n + 1}ο</button>`)}</div></div>
+      </div>
+      <span className="note">Ισχύουν μαζί: όποιος ήταν σε ένα από τα νούμερα (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει σε αυτό νωρίτερα.</span>
+    </section>
+    <section className="rl-grp"><h3>ΣΚ και αργίες</h3>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => set('noConsecHol', e.target.checked)}/><span><b>Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε ΣΚ ή αργία δεν μπαίνει στο επόμενο, ούτε σε αργία δύο μέρες μετά.</small></span></label>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.newAvg} onChange=${(e: any) => set('newAvg', e.target.checked ? true : undefined)}/><span><b>Οι νέοι στη δύναμη ξεκινούν από τον μέσο όρο</b><small>Όποιος μπαίνει στη δύναμη (νέα ΕΣΣΟ, μετάθεση) μετρά σαν να έχει κάνει όσες αργίες και υπηρεσίες ο μέσος όρος τη μέρα που ήρθε. Κλειστό: ξεκινά από το 0 και παίρνει σχεδόν κάθε δεύτερο ΣΚ ώσπου να φτάσει τους άλλους.</small></span></label>
+    </section>
+    <section className="rl-grp"><h3>Μοίρασμα</h3>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${r.rotate !== false} onChange=${(e: any) => set('rotate', e.target.checked)}/><span><b>Εναλλαγή υπηρεσιών</b><small>Από όσους είναι η σειρά τους σήμερα, η θέση πάει σε όποιον έχει κάνει λιγότερο αυτή την υπηρεσία.</small></span></label>
+      <div className="rule rl-strict"><input id="rstrict" type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => set('strictUnarmed', e.target.checked)}/><span><label htmlFor="rstrict"><b>Αυστηρά Άοπλοι</b></label>
+        <small>Οι άοπλοι μπαίνουν πρώτα με αυτή τη σειρά: <b>${strictOrderTxt(r, st)}</b> <button type="button" className="linkish rl-lnk" aria-expanded=${editOrd} onClick=${() => setEditOrd(!editOrd)}>${editOrd ? 'Κλείσιμο' : 'Αλλαγή σειράς'}</button>. Σκοποί μόνο ένοπλοι.${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''}</small>
+        ${editOrd && html`<ol className="rl-ord" aria-label="Σειρά των Αυστηρά Άοπλοι">
+          ${order.map((k, i) => html`<li key=${k}><span className="rl-ord__mv"><button type="button" aria-label=${'Πάνω: ' + nameOf(k)} disabled=${i === 0} onClick=${() => move(i, -1)}>↑</button><button type="button" aria-label=${'Κάτω: ' + nameOf(k)} disabled=${i === order.length - 1} onClick=${() => move(i, 1)}>↓</button></span>
+            <label><input type="checkbox" className="ui-check" checked=${true} disabled=${order.length < 2} data-tip=${order.length < 2 ? 'Τουλάχιστον μία υπηρεσία' : undefined} onChange=${() => setOrder(order.filter(x => x !== k))}/> <b>${nameOf(k)}</b>${KEY_NAME[k]?.[1] ? html`<small className="muted">${KEY_NAME[k][1]}</small>` : null}</label></li>`)}
+          ${spare.map(k => html`<li key=${k} className="is-spare"><span className="rl-ord__mv"></span><label><input type="checkbox" className="ui-check" checked=${false} onChange=${() => setOrder([...order, k])}/> <span>${nameOf(k)}</span> <small className="muted">${KEY_NAME[k] ? KEY_NAME[k][1] : 'δική σου άοπλη υπηρεσία'}</small></label></li>`)}
+        </ol>`}</span></div>
+    </section>
+    <section className="rl-grp"><h3>Τι άλλο κρίνει ποιος μπαίνει <small className="muted">(αλλάζουν εκεί, εδώ βλέπεις τι ισχύει)</small></h3>
+      <div className="rl-box">
+        ${item('Καταστάσεις', html`<span>${chg(info.stat)} <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'stat' }}>Ρυθμίσεις › Καταστάσεις<//></span>`, 'Προεπιλογή: ΕΥ, ΣΤΕΠ, κωλυόμενος: καμία υπηρεσία · ΕΑ/ΕΟ: όχι ένοπλη, όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος')}
+        ${item('Σ.Ι.', html`<span>${chg(info.si)} <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//></span>`)}
+        ${item('Ποιος κάνει τι', html`<span>${ppl(info.caps)} με «δεν κάνει» <${TabLink} onGo=${() => onTab('who')}>Άνοιγμα<//></span>`)}
+        ${item('Εξαιρέσεις', html`<span>${info.skips} τις επόμενες 7 μέρες <${TabLink} onGo=${() => onTab('skips')}>Άνοιγμα<//></span>`)}
+        ${item('Μέρες χωρίς υπηρεσία', html`<span>${ppl(info.off)} <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
+        ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο Λ/Υ-Δ/Υ <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
+        ${item('Μόνιμοι Λ/Υ-Δ/Υ', html`<span>${info.fixed.length ? info.fixed.join(', ') + ' · μπαίνουν μόνοι τους' : 'κανένας'} <${TabLink} onGo=${onFixed}>Όρισε<//></span>`)}
+        ${item('ΕΠΟΠ/ΟΒΑ', html`<span>μόνο με το χέρι, ${info.cadre} με όριο τον μήνα <${GoLink} view="cadre">Στελέχη<//></span>`)}
+      </div>
+      <span className="note">Πάντα: ένας άνθρωπος σε μία θέση τη μέρα · όχι όποιος έχει άδεια ή λείπει. Οι αναθέσεις που υπάρχουν δεν αλλάζουν· όσες παραβαίνουν τους νέους κανόνες φαίνονται με ⚠.</span>
+    </section>
+  </div>`;
+  // Σειρά δικαιοσύνης: μόνο ανάγνωση. Κάθε βήμα είναι αυτό που κάνει ο κώδικας (rules.ts: candidates, fairCompare, rotate, strictOrder, repair)
+  const n = aheadDays(r), strictOn = !!r.strictUnarmed, rotOn = r.rotate !== false;
+  const avgTxt = r.newAvg ? ' Οι νέοι στη δύναμη ξεκινούν από τον μέσο όρο.' : '';
+  const steps: [string, any, string][] = [
+    ['Κρατά όσους επιτρέπουν οι κανόνες', '', 'Καταστάσεις, Σ.Ι., Ποιος κάνει τι, Εξαιρέσεις, μέρες χωρίς υπηρεσία, ανάπαυση, ΣΚ μετά από ΣΚ. Κανείς δεν μπαίνει σιωπηλά παρά τον κανόνα: αν δεν βρεθεί κανείς, η θέση μένει κενή και το λέει.'],
+    ['Τελευταίοι: «μόνο αν δεν υπάρχει άλλος»', '', 'π.χ. ΕΑ/ΕΟ σε σκοπιά, ιατρικό «μόνο προειδοποίηση».'],
+    ['Κρατά τους ένοπλους για τις ένοπλες θέσεις', '', 'Σε άοπλη θέση μπαίνουν τελευταίοι όσοι χρειάζονται για να μη μείνει κενή ένοπλη θέση της μέρας.'],
+    ['Τελευταίοι όσοι χρωστάνε ΣΚ ή έχουν ήδη υπηρεσία μπροστά', '', n ? 'Τις ' + n + ' μέρες πριν από ΣΚ ή αργία κρατά στην άκρη όσους θα πάρουν το ΣΚ (οι λιγότερες αργίες)· και όποιον έβαλες ήδη με το χέρι τις επόμενες ' + n + ' μέρες. Μπαίνουν μόνο αν δεν φτάνουν οι άλλοι.' : 'Ισχύει μόνο με ανάπαυση: τώρα η ανάπαυση είναι «Χωρίς».'],
+    ['ΣΚ ή αργία: λιγότερες αργίες', '', 'Μετά όποιος έκανε αργία πιο παλιά. ΔΝ, έξοδος και θάλαμος δεν μετράνε.' + avgTxt],
+    ['Καθημερινή: περισσότερες μέρες χωρίς υπηρεσία', '', 'Μετά λιγότερες υπηρεσίες συνολικά, μετά λιγότερες αργίες.' + avgTxt],
+    ['Εναλλαγή υπηρεσιών', ONOFF(rotOn), rotOn ? 'Από όσους είναι η σειρά τους σήμερα, η θέση πάει σε όποιον χρωστά αυτή την υπηρεσία: την έχει κάνει λιγότερο από τις άλλες που μπορεί να κάνει. Όποιος χωρά μόνο σε αυτή τη θέση μπαίνει πρώτος. Δεν αλλάζει τα βήματα 2-4.' : 'Κλειστό: μένει η σειρά των βημάτων 5-6.'],
+    ['Αυστηρά Άοπλοι', ONOFF(strictOn), strictOn ? 'Οι θέσεις της σειράς (' + strictOrderTxt(r, st) + ') γεμίζουν πρώτες και εκεί οι άοπλοι προηγούνται. Σκοπιά μόνο ένοπλοι. Άοπλος που χρειάζεται για ένοπλη θέση δεν παίρνει προτεραιότητα.' : 'Κλειστό: οι άοπλοι δεν προηγούνται, ισχύει η κανονική σειρά.'],
+    ['Διόρθωση στο τέλος', '', 'Αν έμεινε κενή θέση ενώ γινόταν να γεμίσει, μετακινεί ως 3 από όσους έβαλε η ίδια συμπλήρωση. Όσους έβαλες με το χέρι και τους μόνιμους Λ/Υ-Δ/Υ δεν τους αγγίζει· κανόνας δεν παραβαίνεται.'],
+    ['Ισοπαλία: κλήρωση', '', 'Πρώτα λιγότερες φορές στο ίδιο είδος θέσης, μετά κλήρωση με σπόρο την ημερομηνία: την ίδια μέρα βγαίνει πάντα το ίδιο αποτέλεσμα.']
+  ];
+  const orderTab = html`<div className="rl-tab">
+    <p className="note">Έτσι διαλέγει η αυτόματη συμπλήρωση και το «Επόμενος». Δίπλα σε κάθε όνομα το «Γιατί:» λέει ποιο βήμα τον έφερε.</p>
+    <ol className="rl-steps">${steps.map(([t, badge, d], i) => html`<li key=${i}><b>${t}</b> ${badge}<small>${d}</small></li>`)}</ol>
+    <span className="note">Πριν από όλα μπαίνουν οι μόνιμοι Λ/Υ και Δ/Υ. ΕΠΟΠ, ΟΒΑ και στελέχη δεν μπαίνουν ποτέ από την αυτόματη συμπλήρωση, μόνο με το χέρι.</span>
+    <span className="note">Τι έχει κάνει ο καθένας: <${TabLink} onGo=${() => onTab('check')}>Υπηρεσίες › Έλεγχος<//></span>
+  </div>`;
+  const hoursTab = html`<div className="rl-tab">
+    <section className="rl-grp"><h3>Μέρα υπηρεσίας και ${HK()}</h3>
+      <div className="rl-two">
+        <${TimeField} id="rds" label="Ο κύκλος ξεκινά στις" value=${ds} onChange=${setDs} help=${'Η μέρα της υπηρεσίας είναι ' + (normTime(ds) || '14:00') + ' → ' + (normTime(ds) || '14:00') + ' της επόμενης. Από εδώ ξεκινούν και οι βάρδιες.'}/>
+        <${TimeField} id="rhk" label=${'Ώρα ' + HK()} value=${r.hkTime} onChange=${(v: string) => set('hkTime', v)} help=${'Όποιος γυρίσει ως τότε μετρά παρών στην ' + HK() + ' της μέρας'}/>
+      </div>
+      <span className="note">Βάρδιες: κάθε πόσες ώρες αλλάζει το νούμερο («Κάθε τόσες ώρες») ή τις βάρδιες που γράφεις εσύ («Δικές μου βάρδιες») το ορίζεις σε κάθε υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες και αργίες › Υπηρεσίες<//> › Επεξεργασία. Στις υπηρεσίες μετρά η ώρα που ξεκινά κάθε θέση (π.χ. επιστροφή 12:00 → μπαίνει στις 14:00). Η μέρα της αναχώρησης μετρά πάντα ολόκληρη.</span>
+    </section>
+    <section className="rl-grp"><h3>Εξοδούχοι: ώρες ανά ημέρα</h3>
       <${WeekTable} draft=${wk} onChange=${(w: number, k: string, v: string | boolean) => setWk(d => ({ ...d, [w]: { ...d[w], [k]: v } }))}/>
-      <span className="note">Ισχύουν στους <${GoLink} view="outs">Εξοδούχους<//>: «Επιστροφή ΔΝ» της Δευτέρας = πότε γυρνά το πρωί της Δευτέρας όποιος είχε ΔΝ την Κυριακή. Αν η Δευτέρα δεν έχει εκπαίδευση και δεν έχει δηλωθεί, δεν ξέρουμε πότε γυρνά και η οθόνη Εξοδούχοι ζητά να δηλωθεί. Οι αργίες της εβδομάδας δεν έχουν εκπαίδευση. Για μία μέρα αλλάζουν από την ίδια την οθόνη Εξοδούχοι. Η «Ώρα εξόδου» πιο πάνω είναι άλλο πράγμα: μόνο για όσους γυρίζουν από άδεια.</span></div>
-    <div className="field"><span className="field__label">Ένοπλη υπηρεσία: πότε βγαίνει το όπλο</span><div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="rab">Βγαίνει πριν (λεπτά)</label><input id="rab" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.before} onChange=${(e: any) => setR({ ...r, before: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
-      <div className="field"><label className="field__label" htmlFor="raa">Μπαίνει μετά (λεπτά)</label><input id="raa" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.after} onChange=${(e: any) => setR({ ...r, after: Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)) })}/></div>
-    </div><span className="note">Το όπλο βγαίνει ${r.before}′ πριν ξεκινήσει το νούμερο και μπαίνει ${r.after}′ μετά το τέλος του (προεπιλογή 15′ και 15′). Ποιο όπλο βγαίνει, δικό του ή της θέσης, το ορίζεις σε κάθε ένοπλη υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</span></div>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${r.rotate !== false} onChange=${(e: any) => setR({ ...r, rotate: e.target.checked })}/><span><b>Εναλλαγή υπηρεσιών</b><small>${ROTATE_TXT} Όταν είναι κλειστό, μετρούν μόνο τα νούμερα.</small></span></label>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.strictUnarmed} onChange=${(e: any) => setR({ ...r, strictUnarmed: e.target.checked })}/><span><b>Αυστηρά Άοπλοι</b><small>${STRICT_TXT}${opState(state) ? ' Τώρα: ' + opState(state) + '.' : ''} Όταν είναι κλειστό, ισχύει η κανονική σειρά.</small></span></label>
-    <div className="field"><span className="field__label">Πάντα ισχύουν</span><span className="note" style=${{ fontSize: '13px' }}>Ένοπλες θέσεις χωρίς ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01) · ΕΥ και ΣΤΕΠ σε καμία υπηρεσία · όχι όποιος έχει άδεια ή απουσιάζει (Κ-02) · ΕΟ και ΕΑ όχι σε μαγειρεία, και σε σκοπιά μόνο αν δεν υπάρχει άλλος · η «Δυνατότητα υπηρεσιών» κάθε ατόμου (Κ-15) · ένα άτομο σε μία θέση τη μέρα · οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν μόνοι τους, εκτός σειράς.</span></div>
-    <div className="field"><span className="field__label">Πώς διαλέγει η αυτόματη συμπλήρωση</span><ol className="note fairlist">
-      <li>Πρώτα κρατά μόνο όσους επιτρέπουν <b>όλοι</b> οι παραπάνω κανόνες. Κανόνας δεν παραβαίνεται ποτέ σιωπηλά: αν δεν βρεθεί κανείς, η θέση μένει κενή και το λέει.</li>
-      <li>Σε άοπλη θέση αφήνει τελευταίους όσους χρειάζονται για να γεμίσουν οι ένοπλες θέσεις της μέρας. Όταν οι ένοπλοι φτάνουν, όλοι (και οι ΕΑ/ΕΟ) μπαίνουν με τη σειρά δικαιοσύνης.</li>
-      <li>Σε ΣΚ ή αργία: όποιος έχει κάνει τις <b>λιγότερες αργίες</b>, και μετά όποιος έκανε αργία πιο παλιά. ΔΝ, έξοδος και θάλαμος δεν μετράνε. Όποιος έκανε το προηγούμενο ΣΚ δεν μπαίνει στο αμέσως επόμενο (κανόνας πιο πάνω).</li>
-      <li>Τις 2 μέρες πριν από ΣΚ ή αργία (Πέμπτη, Παρασκευή): όσοι <b>χρωστάνε ΣΚ</b> (οι λιγότερες αργίες, όσοι χρειάζονται για τις θέσεις του) μπαίνουν τελευταίοι, για να μην τους κόψει η ανάπαυση από το ΣΚ.</li>
-      <li>Όποιος έχει <b>ήδη υπηρεσία τις επόμενες μέρες</b> (π.χ. τον έβαλες με το χέρι Παρασκευή ή ΣΚ): μέσα στις μέρες της ανάπαυσης δεν μπαίνει καθόλου, και ως 2 μέρες πριν μπαίνει τελευταίος, μόνο αν δεν φτάνουν οι άλλοι.</li>
-      <li>Σε καθημερινή: όποιος έχει τις <b>περισσότερες μέρες χωρίς υπηρεσία</b>, μετά τις λιγότερες υπηρεσίες συνολικά και μετά τις λιγότερες αργίες.</li>
-      <li><b>Εναλλαγή υπηρεσιών</b> (αν είναι ανοιχτή): από όσους είναι η σειρά τους σήμερα (οι πρώτοι στη σειρά, όσες οι κενές θέσεις της μέρας), στη θέση μπαίνει όποιος <b>χρωστά αυτή την υπηρεσία</b>: την έχει κάνει λιγότερο από τις άλλες που μπορεί να κάνει, και λιγότερες φορές από τους άλλους. Όποιος χωρά μόνο σε αυτή τη θέση μπαίνει πρώτος, για να μη μείνει χωρίς υπηρεσία.</li>
-      <li>Μετά: τις λιγότερες υπηρεσίες <b>στο ίδιο είδος</b> θέσης.</li>
-      <li>Αν ισοβαθμούν σε όλα: κλήρωση με σπόρο την ημερομηνία, ώστε την ίδια μέρα να βγαίνει πάντα το ίδιο αποτέλεσμα.</li>
-    </ol><span className="note">Δίπλα σε κάθε όνομα το «Γιατί:» γράφει ποιο κριτήριο τον έφερε.</span></div>
-    <span className="note">Οι αναθέσεις που ήδη υπάρχουν δεν αλλάζουν· όσες παραβαίνουν τους νέους κανόνες φαίνονται με ⚠.</span>
+      <span className="note">Ισχύουν στους <${GoLink} view="outs">Εξοδούχους<//>: «Επιστροφή ΔΝ» της Δευτέρας = πότε γυρνά το πρωί της Δευτέρας όποιος είχε ΔΝ την Κυριακή. Αν η Δευτέρα δεν έχει εκπαίδευση και δεν έχει δηλωθεί, δεν ξέρουμε πότε γυρνά και η οθόνη Εξοδούχοι ζητά να δηλωθεί. Οι αργίες της εβδομάδας δεν έχουν εκπαίδευση. Για μία μέρα αλλάζουν από την ίδια την οθόνη Εξοδούχοι. <b>Μία ώρα εξόδου:</b> η «Αρχή εξόδου» της μέρας ισχύει και για όποιον γυρίζει από άδεια, νοσοκομείο ή ΣΤΕΠ· όποιος γυρίσει ως τότε βγαίνει κανονικά έξοδο εκείνη τη μέρα.</span></section>
+    <section className="rl-grp"><h3>Ένοπλη υπηρεσία: πότε βγαίνει το όπλο</h3><div className="rl-two">
+      <div className="field"><label className="field__label" htmlFor="rab">Βγαίνει πριν (λεπτά)</label><input id="rab" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.before} onChange=${(e: any) => set('before', Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)))}/></div>
+      <div className="field"><label className="field__label" htmlFor="raa">Μπαίνει μετά (λεπτά)</label><input id="raa" type="number" min="0" max=${ARM_MAX} className="ui-input" style=${{ maxWidth: '110px' }} value=${r.after} onChange=${(e: any) => set('after', Math.max(0, Math.min(ARM_MAX, Math.floor(+e.target.value) || 0)))}/></div>
+    </div><span className="note">Το όπλο βγαίνει ${r.before}′ πριν ξεκινήσει το νούμερο και μπαίνει ${r.after}′ μετά το τέλος του (προεπιλογή 15′ και 15′). Ποιο όπλο βγαίνει, δικό του ή της θέσης, το ορίζεις σε κάθε ένοπλη υπηρεσία: <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</span></section>
+  </div>`;
+  return html`<${Dialog} size="lg" title="Κανόνες υπηρεσιών" description="Ποιος μπαίνει σε υπηρεσία και με ποια σειρά. Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση." onClose=${onClose} dirty=${dirty && 'Οι αλλαγές στους κανόνες δεν αποθηκεύτηκαν. Αν κλείσεις, μένουν οι παλιοί.'}
+    footer=${html`<${Why} text=${badT && badTxt}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badT} why=${badTxt} onClick=${save}>Αποθήκευση<//>`}>
+    <${Segmented} value=${tab} onChange=${setTab} label="Καρτέλες των κανόνων" items=${[{ value: 'rules', label: 'Κανόνες' }, { value: 'order', label: 'Σειρά δικαιοσύνης' }, { value: 'hours', label: 'Ώρες' + (badT ? ' ⚠' : '') }]}/>
+    ${tab === 'rules' ? rulesTab : tab === 'order' ? orderTab : hoursTab}
   <//>`;
 }
 
@@ -369,13 +451,13 @@ export function GuardScreen() {
   const emptyOn = (d: string) => { const gd = state.guards[d] || {}; let n = 0; for (const x of posts) if (!gd[x.k]) n++; return n; };
   return html`<div>
     <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dm(date)} sub=${html`Κύκλος <b className="mono-lg">${dow(date)} ${dm(date)} ${dutyStartOf(state.settings)} → ${dow(addDays(date, 1))} ${dm(addDays(date, 1))} ${dutyStartOf(state.settings)}</b>`}>
-      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules)}>Κανόνες<//><label className="strict-sw" data-tip=${STRICT_TXT + (opState(state) ? ' Τώρα: ' + opState(state) + '.' : '')} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${!!state.rules.strictUnarmed} onChange=${async (e: any) => { const on = e.target.checked; const nr = { ...state.rules, strictUnarmed: on }; if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr) }, false)) toast({ text: 'Αυστηρά Άοπλοι: ' + (on ? 'ανοιχτό. Ισχύει στην αυτόματη συμπλήρωση και στο «Επόμενος».' : 'κλειστό, κανονική σειρά.') }); }}/>Αυστηρά Άοπλοι</label><${Button} disabled=${!!afWhy} why=${afWhy} onClick=${autofill} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες· από όσους είναι η σειρά τους, η υπηρεσία πάει σε όποιον δεν την έχει κάνει (εναλλαγή υπηρεσιών), μετά κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//>${!mobile && html`<${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}</div><//>
+      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules, state.settings)}>Κανόνες<//><label className="strict-sw" data-tip=${strictTxt(state.rules, state.settings) + (opState(state) ? ' Τώρα: ' + opState(state) + '.' : '')} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${!!state.rules.strictUnarmed} onChange=${async (e: any) => { const on = e.target.checked; const nr = { ...state.rules, strictUnarmed: on }; if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr, state.settings) }, false)) toast({ text: 'Αυστηρά Άοπλοι: ' + (on ? 'ανοιχτό. Ισχύει στην αυτόματη συμπλήρωση και στο «Επόμενος».' : 'κλειστό, κανονική σειρά.') }); }}/>Αυστηρά Άοπλοι</label><${Button} disabled=${!!afWhy} why=${afWhy} onClick=${autofill} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες· από όσους είναι η σειρά τους, η υπηρεσία πάει σε όποιον δεν την έχει κάνει (εναλλαγή υπηρεσιών), μετά κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση<//>${!mobile && html`<${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}</div><//>
     <div className="guard__days"><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))} count=${emptyOn}/></div>
     <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${cur === 'skips' ? html`<${SkipsView} onPerson=${setProf}/>` : cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Ό,τι βλέπεις εδώ βγαίνει ίδιο στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
-    ${rules && html`<${RulesDialog} onClose=${() => setRules(false)}/>`}
+    ${rules && html`<${RulesDialog} onClose=${() => setRules(false)} onTab=${setTab} onFixed=${() => { setTab('posts'); setFixedOpen(true); }}/>`}
     ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
     ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : force.move ? shortName(force.p) + ' είναι ήδη σε άλλη θέση' : 'Βάλε τον ' + shortName(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//>${force.move
