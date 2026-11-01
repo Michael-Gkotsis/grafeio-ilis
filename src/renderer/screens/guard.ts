@@ -182,7 +182,7 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
       <span className="note">Ισχύουν μαζί: όποιος ήταν σε ένα από τα νούμερα (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει σε αυτό νωρίτερα.</span>
     </section>
     <section className="rl-grp"><h3>ΣΚ και αργίες</h3>
-      <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => set('noConsecHol', e.target.checked)}/><span><b>Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε ΣΚ ή αργία δεν μπαίνει στο επόμενο, ούτε σε αργία δύο μέρες μετά.</small></span></label>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => set('noConsecHol', e.target.checked)}/><span><b>Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε ΣΚ ή αργία δεν μπαίνει στο επόμενο, ούτε σε αργία δύο μέρες μετά. Αν σε αργία δεν φτάνουν οι υπόλοιποι, μπαίνουν και όσοι έκαναν πρόσφατα αργία (πρώτα όποιος την έκανε πιο παλιά), με ειδοποίηση.</small></span></label>
       <label className="rule"><input type="checkbox" className="ui-check" checked=${!!r.newAvg} onChange=${(e: any) => set('newAvg', e.target.checked ? true : undefined)}/><span><b>Οι νέοι στη δύναμη ξεκινούν από τον μέσο όρο</b><small>Όποιος μπαίνει στη δύναμη (νέα ΕΣΣΟ, μετάθεση) μετρά σαν να έχει κάνει όσες αργίες και υπηρεσίες ο μέσος όρος τη μέρα που ήρθε. Κλειστό: ξεκινά από το 0 και παίρνει σχεδόν κάθε δεύτερο ΣΚ ώσπου να φτάσει τους άλλους.</small></span></label>
     </section>
     <section className="rl-grp"><h3>Μοίρασμα</h3>
@@ -202,7 +202,7 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
         ${item('Ποιος κάνει τι', html`<span>${ppl(info.caps)} με «δεν κάνει» <${TabLink} onGo=${() => onTab('who')}>Άνοιγμα<//></span>`)}
         ${item('Εξαιρέσεις', html`<span>${info.skips} τις επόμενες 7 μέρες <${TabLink} onGo=${() => onTab('skips')}>Άνοιγμα<//></span>`)}
         ${item('Μέρες χωρίς υπηρεσία', html`<span>${ppl(info.off)} <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
-        ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο Λ/Υ-Δ/Υ <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
+        ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο με το χέρι (ούτε Λ/Υ-Δ/Υ) <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
         ${item('Μόνιμοι Λ/Υ-Δ/Υ', html`<span>${info.fixed.length ? info.fixed.join(', ') + ' · μπαίνουν μόνοι τους' : 'κανένας'} <${TabLink} onGo=${onFixed}>Όρισε<//></span>`)}
         ${item('ΕΠΟΠ/ΟΒΑ', html`<span>μόνο με το χέρι, ${info.cadre} με όριο τον μήνα <${GoLink} view="cadre">Στελέχη<//></span>`)}
       </div>
@@ -218,16 +218,18 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
     ['Κρατά τους ένοπλους για τις ένοπλες θέσεις', '', 'Σε άοπλη θέση μπαίνουν τελευταίοι όσοι χρειάζονται για να μη μείνει κενή ένοπλη θέση της μέρας.'],
     ['Τελευταίοι όσοι χρωστάνε ΣΚ ή έχουν ήδη υπηρεσία μπροστά', '', n ? 'Τις ' + n + ' μέρες πριν από ΣΚ ή αργία κρατά στην άκρη όσους θα πάρουν το ΣΚ (οι λιγότερες αργίες)· και όποιον έβαλες ήδη με το χέρι τις επόμενες ' + n + ' μέρες. Μπαίνουν μόνο αν δεν φτάνουν οι άλλοι.' : 'Ισχύει μόνο με ανάπαυση: τώρα η ανάπαυση είναι «Χωρίς».'],
     ['ΣΚ ή αργία: λιγότερες αργίες', '', 'Μετά όποιος έκανε αργία πιο παλιά. ΔΝ, έξοδος και θάλαμος δεν μετράνε.' + avgTxt],
-    ['Καθημερινή: περισσότερες μέρες χωρίς υπηρεσία', '', 'Μετά λιγότερες υπηρεσίες συνολικά, μετά λιγότερες αργίες.' + avgTxt],
-    ['Εναλλαγή υπηρεσιών', ONOFF(rotOn), rotOn ? 'Από όσους είναι η σειρά τους σήμερα, η θέση πάει σε όποιον χρωστά αυτή την υπηρεσία: την έχει κάνει λιγότερο από τις άλλες που μπορεί να κάνει. Όποιος χωρά μόνο σε αυτή τη θέση μπαίνει πρώτος. Δεν αλλάζει τα βήματα 2-4.' : 'Κλειστό: μένει η σειρά των βημάτων 5-6.'],
-    ['Αυστηρά Άοπλοι', ONOFF(strictOn), strictOn ? 'Οι θέσεις της σειράς (' + strictOrderTxt(r, st) + ') γεμίζουν πρώτες και εκεί οι άοπλοι προηγούνται. Σκοπιά μόνο ένοπλοι. Άοπλος που χρειάζεται για ένοπλη θέση δεν παίρνει προτεραιότητα.' : 'Κλειστό: οι άοπλοι δεν προηγούνται, ισχύει η κανονική σειρά.'],
+    ['Καθημερινή: περισσότερες μέρες χωρίς υπηρεσία', '', 'Οι μέρες διορθώνονται με το «πόσες αναλογούν»: όποιος έλειπε (άδεια, νοσοκομείο, ΕΥ) δεν μένει πίσω, και όποιος έκανε λιγότερες από όσες του αναλογούν προηγείται (ως 2 υπηρεσίες). Μετά λιγότερες υπηρεσίες συνολικά, μετά λιγότερες αργίες.' + avgTxt],
+    ['Εναλλαγή υπηρεσιών', ONOFF(rotOn), rotOn ? 'Από όσους είναι η σειρά τους σήμερα, η θέση πάει σε όποιον χρωστά αυτή την υπηρεσία: την έχει κάνει λιγότερο από τις άλλες που μπορεί να κάνει. Όποιος χωρά μόνο σε αυτή τη θέση μπαίνει πρώτος. Μετράει και το Λ/Υ-Δ/Υ (όταν δεν έχει μόνιμο). Δεν αλλάζει τα βήματα 2-4.' : 'Κλειστό: μένει η σειρά των βημάτων 5-6.'],
+    ['Αυστηρά Άοπλοι', ONOFF(strictOn), strictOn ? 'Οι θέσεις της σειράς (' + strictOrderTxt(r, st) + ') γεμίζουν πρώτες και εκεί οι άοπλοι προηγούνται. Σκοπιά μόνο ένοπλοι. Η προτεραιότητα ισχύει μόνο για τους πρώτους της σειράς δικαιοσύνης, όσες οι κενές θέσεις της μέρας: δεν προσπερνά κάθε μέρα όλους τους άλλους. Άοπλος που χρειάζεται για ένοπλη θέση δεν παίρνει προτεραιότητα.' : 'Κλειστό: οι άοπλοι δεν προηγούνται, ισχύει η κανονική σειρά.'],
     ['Διόρθωση στο τέλος', '', 'Αν έμεινε κενή θέση ενώ γινόταν να γεμίσει, μετακινεί ως 3 από όσους έβαλε η ίδια συμπλήρωση. Όσους έβαλες με το χέρι και τους μόνιμους Λ/Υ-Δ/Υ δεν τους αγγίζει· κανόνας δεν παραβαίνεται.'],
+    ['Ίσα νούμερα', ONOFF(rotOn), rotOn ? 'Όσους έβαλε η ίδια συμπλήρωση στα νούμερα του ίδιου εντύπου (2 ως 6 θέσεις) τους ανταλλάσσει ώστε να μην κάνει ο ίδιος τις ίδιες ώρες ξανά και ξανά (π.χ. πάντα τη νύχτα). Δεν αλλάζει ποιος έχει υπηρεσία σήμερα, ούτε τους κανόνες της θέσης.' : 'Κλειστό μαζί με την εναλλαγή.'],
+    ['Αργία χωρίς αρκετούς', ONOFF(!!r.noConsecHol), r.noConsecHol ? 'Αν σε αργία μείνει θέση κενή επειδή όλοι έκαναν πρόσφατα αργία, μπαίνουν όσοι την έκαναν πιο παλιά (μόνο αυτός ο κανόνας χαλαρώνει) και βγαίνει ειδοποίηση.' : 'Κλειστό: ισχύει μόνο όταν είναι ανοιχτό το «Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες».'],
     ['Ισοπαλία: κλήρωση', '', 'Πρώτα λιγότερες φορές στο ίδιο είδος θέσης, μετά κλήρωση με σπόρο την ημερομηνία: την ίδια μέρα βγαίνει πάντα το ίδιο αποτέλεσμα.']
   ];
   const orderTab = html`<div className="rl-tab">
     <p className="note">Έτσι διαλέγει η αυτόματη συμπλήρωση και το «Επόμενος». Δίπλα σε κάθε όνομα το «Γιατί:» λέει ποιο βήμα τον έφερε.</p>
     <ol className="rl-steps">${steps.map(([t, badge, d], i) => html`<li key=${i}><b>${t}</b> ${badge}<small>${d}</small></li>`)}</ol>
-    <span className="note">Πριν από όλα μπαίνουν οι μόνιμοι Λ/Υ και Δ/Υ. ΕΠΟΠ, ΟΒΑ και στελέχη δεν μπαίνουν ποτέ από την αυτόματη συμπλήρωση, μόνο με το χέρι.</span>
+    <span className="note">Πριν από όλα μπαίνουν οι μόνιμοι Λ/Υ και Δ/Υ. ΕΠΟΠ, ΟΒΑ και στελέχη δεν μπαίνουν ποτέ από την αυτόματη συμπλήρωση, μόνο με το χέρι. Το ίδιο όσοι έχουν πόστο (και στο Λ/Υ-Δ/Υ).</span>
     <span className="note">Τι έχει κάνει ο καθένας: <${TabLink} onGo=${() => onTab('check')}>Υπηρεσίες › Έλεγχος<//></span>
   </div>`;
   const hoursTab = html`<div className="rl-tab">
@@ -276,7 +278,7 @@ export function GuardScreen() {
     // όπως ορίζει ο πίνακας καταστάσεων (Ρυθμίσεις › Υπηρεσίες): καμία υπηρεσία του εντύπου, ή καμία ένοπλη
     const lists = state.settings.lists; const blocks = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
     people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, dutyMin(state.settings)); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
-    // με πόστο: χωριστά, με το πόστο τους (μόνο Λ/Υ και Δ/Υ)
+    // με πόστο: χωριστά, με το πόστο τους (μόνο με το χέρι, σε οποιαδήποτε θέση)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
     const cols = capCols(state.settings);
     const capped = people.filter(p => !p.post).map(p => ({ p, c: cols.map(col => ({ col, x: capCell(state, p, col) })).filter(o => !o.x.on) })).filter(o => o.c.length);
@@ -425,7 +427,7 @@ export function GuardScreen() {
       ${fold.ex ? html`<div className="side__more">
         <h3 className="minihd">Σε καμία υπηρεσία (${excluded.noDuty.length})</h3>${pill(excluded.noDuty)}
         <h3 className="minihd">Μόνο σε άοπλες θέσεις (${excluded.unarmed.length})</h3>${pill(excluded.unarmed)}
-        ${excluded.posted.length > 0 && html`<h3 className="minihd">Με πόστο, μόνο Λ/Υ και Δ/Υ (${excluded.posted.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει. Με το χέρι μπαίνουν σε οποιαδήποτε θέση: διάλεξέ τον στη θέση και γράψε την αιτία.</p><div className="avail">${excluded.posted.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από το φύλλο ΠΟΣΤΑ (Αρχεία Excel)">${shortName(p)} <${Badge} tone="outline">${p.post}<//></button>`)}</div>`}
+        ${excluded.posted.length > 0 && html`<h3 className="minihd">Με πόστο, μόνο με το χέρι (${excluded.posted.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει πουθενά, ούτε στο Λ/Υ και Δ/Υ. Με το χέρι μπαίνουν σε οποιαδήποτε θέση: διάλεξέ τον στη θέση και γράψε την αιτία.</p><div className="avail">${excluded.posted.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip="Από το φύλλο ΠΟΣΤΑ (Αρχεία Excel)">${shortName(p)} <${Badge} tone="outline">${p.post}<//></button>`)}</div>`}
         ${excluded.epop.length > 0 && html`<h3 className="minihd">ΕΠΟΠ/ΟΒΑ, μόνο με το χέρι (${excluded.epop.length})</h3><p className="note" style=${{ margin: '0 0 6px' }}>Η αυτόματη συμπλήρωση δεν τους βάζει. Διάλεξέ τον στη θέση· πάνω από το όριο του μήνα ζητά αιτία. Την απαλλαγή του στελέχους τη γράφεις με το χέρι στα Στελέχη.</p><div className="avail">${excluded.epop.map((p: Person) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)} data-tip=${p.cid ? 'Το όριο αλλάζει στα «Στοιχεία» του στελέχους' : 'Το όριο αλλάζει στη «Διόρθωση στοιχείων» της καρτέλας'}>${shortName(p)} <${Badge} tone="outline">${epopHint(p)}<//></button>`)}</div>`}
         <h3 className="minihd">Μόνιμα όχι σε κάποιες θέσεις (${excluded.capped.length})</h3><div className="avail">${excluded.capped.map(({ p, c }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip=${c.map((o: P) => o.col.label + ': ' + o.x.why).join(' · ') + ' · Πάτα: «Ποιος κάνει τι»'}>${shortName(p)} <${Badge} tone="outline">όχι ${c.map((o: P) => o.col.block ? o.col.label : (KIND_LBL as P)[o.col.kind]).join(', ')}<//></button>`)}</div>
         ${excluded.offDay.length > 0 && html`<h3 className="minihd">Όχι υπηρεσία ${DOW_FULL[weekday(date)]} (${excluded.offDay.length})</h3><div className="avail">${excluded.offDay.map(({ p }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => setProf(p.id)} data-tip="Πάτα: «Ποιος κάνει τι»">${shortName(p)}</button>`)}</div>`}
