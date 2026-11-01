@@ -6,7 +6,7 @@ import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
 import { activePeople, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
-import { listOf, rankTxt, statusLbl } from './ranks';
+import { leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
@@ -119,20 +119,22 @@ const CAT_WORD: Partial<Record<string, string>> = { med: 'ΙΑΤΡΙΚΟ', abs: 
 export const ST_TAGS: { tag: string; help: string }[] = [
   { tag: 'ΚΩΔ', help: 'ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ' }, { tag: 'ΣΥΝΤΟΜΑ', help: 'ΕΑ, ΕΥ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΟΝΟΜΑ', help: 'ΕΛΕΥΘΕΡΟΣ ΑΣΚΗΣΕΩΝ' },
   { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΑΠΟ', help: '20/10' }, { tag: 'ΕΩΣ', help: '24/10' }, { tag: 'ΗΜΕΡΕΣ', help: '5' },
-  { tag: 'ΜΕΝΟΥΝ', help: '2' }   // μέρες που μένουν από τη μέρα του εντύπου, με τη σημερινή
+  { tag: 'ΜΕΝΟΥΝ', help: '2' },   // μέρες που μένουν από τη μέρα του εντύπου, με τη σημερινή
+  { tag: 'ΚΑΤΕΥΘΥΝΣΗ', help: 'ΚΟΡΙΝΘΟΣ (άδειες)' }   // κατεύθυνση της άδειας (1/11), κενό αν δεν έχει
 ];
 // έτοιμες μορφές· ό,τι άλλο γράψεις είναι «δική σου»
 export const ST_FMTS = ['{ΚΩΔ}', '{ΣΥΝΤΟΜΑ}', '{ΟΝΟΜΑ}', '{ΚΑΤΗΓΟΡΙΑ}', '{ΚΩΔ} ΕΩΣ {ΕΩΣ}', '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}', '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)', 'ΝΑΙ', '{ΚΩΔ} X{ΜΕΝΟΥΝ}'];   // στο τέλος: οι παλιές θέσεις μένουν ίδιες
 // Μία κατάσταση με τη μορφή fmt (χωρίς: ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ, όπως πριν)
-export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'>, fmt: string | undefined, lists?: AppState['settings']['lists'], d?: ISODate): string {
+export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open' | 'dest'>, fmt: string | undefined, lists?: AppState['settings']['lists'], d?: ISODate): string {
   const lbl = statusLbl(st, lists); if (!fmt || fmt === '{ΚΩΔ}') return lbl;
   const t = TYPES[st.type]; const cat = t?.cat || '';
   const tag = (name: string): string | null => {
     switch (normGreek(name).replace(/\s+/g, '')) {
       case 'ΚΩΔ': case 'ΚΩΔΙΚΟΣ': return lbl;
       case 'ΣΥΝΤΟΜΑ': return cat === 'abs' || cat === 'pun' ? CAT_WORD[cat]! : st.type === 'OUT' ? 'ΕΞΟΔΟΣ' : lbl;
-      case 'ΟΝΟΜΑ': return st.type === 'PUN' || lbl !== t?.label ? lbl : st.type === 'LEAVE' && st.kind ? st.kind + ' άδεια' : t?.long || lbl;
+      case 'ΟΝΟΜΑ': return st.type === 'PUN' || lbl !== t?.label ? lbl : st.type === 'LEAVE' && st.kind ? leavePhrase(st) : t?.long || lbl;
       case 'ΚΑΤΗΓΟΡΙΑ': return CAT_WORD[cat] || lbl;
+      case 'ΚΑΤΕΥΘΥΝΣΗ': return st.dest?.trim() || '';   // της άδειας (κενό αν δεν έχει)
       case 'ΑΠΟ': return dm(st.from);
       case 'ΕΩΣ': return st.open ? '…' : dm(st.to);
       case 'ΗΜΕΡΕΣ': return st.open ? '…' : String(daysBetween(st.from, st.to));

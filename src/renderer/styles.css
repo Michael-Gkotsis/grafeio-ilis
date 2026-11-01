@@ -1448,3 +1448,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .bulkbar__reasons{gap:4px}.bulkbar__reasons .ui-btn--sm{padding-left:7px;padding-right:7px;flex:none}
 .bulkbar .bulkbar__sel{min-width:100px}
 .rep-ta .ui-seg--sm button{height:26px;padding:0 9px;font-size:12px}   /* στοίχιση τίτλου: μικρή, κάτω από το πεδίο */
+/* Ρυθμίσεις › Λίστες › Είδη άδειας: «Κείμενο στην ΗΚΑΙ», κατεύθυνση και δείγμα γραμμής (1/11) */
+.lists__lt{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.lists__prev{flex:1 1 320px;min-width:0;font-size:12px;color:var(--muted-fg);overflow-wrap:anywhere}
+.lists__prev b{color:var(--foreground);font-weight:600}

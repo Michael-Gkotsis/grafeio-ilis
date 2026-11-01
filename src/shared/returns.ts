@@ -12,6 +12,7 @@ import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { hasTimes, mins } from './hours';
 import { activePeople, holOf, postOf, statusesOn } from './rules';
 import { collator } from './text';
+import { leavePhrase } from './ranks';
 import { dutyAt, isSat, isWk, outLbl } from './weekend';
 
 export interface WeekRow { out: string; backOut: string; backDn: string; train: boolean }
@@ -276,7 +277,7 @@ function whyTxt(r: Ret, base: string, plain = false): string {
   const more = r.duty ? 'υπηρεσία ' + why : plain || OBVIOUS.test(why) ? '' : why;
   return [base, more, leave].filter(Boolean).join(', ');
 }
-const leaveName = (x: Status) => (x.type === 'LEAVE' ? (!x.kind || x.kind === 'Κανονική' ? 'Κανονική άδεια' : 'άδεια ' + x.kind) : x.type === 'NOS' ? 'νοσοκομείο' : TYPES[x.type].long);
+const leaveName = (x: Status) => (x.type === 'LEAVE' ? leavePhrase(x) : x.type === 'NOS' ? 'νοσοκομείο' : TYPES[x.type].long);
 const byRoomName = (a: OutRow, b: OutRow) => (a.p.room ?? 99) - (b.p.room ?? 99) || collator.compare(a.p.last, b.p.last) || collator.compare(a.p.first, b.p.first);
 export function outsTables(s: AppState, d: ISODate): OutsTables {
   const y = addDays(d, -1), n = addDays(d, 1);

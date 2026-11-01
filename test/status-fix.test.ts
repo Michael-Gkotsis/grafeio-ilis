@@ -42,9 +42,12 @@ describe('διόρθωση (replaceStatus)', () => {
     expect(() => run(s, { t: 'replaceStatus', id: 's1', cmds: [{ type: 'EY', pids: [1], from: '2026-10-15', to: '2026-10-13' }] })).toThrow('πριν από');
     expect(s.statuses).toEqual([ey]);
   });
-  it('μόνο ιατρικά και ποινές (οι άδειες έχουν Ακύρωση/Διακοπή)', () => {
+  it('μόνο ιατρικά, ποινές και άδειες (Λ9: οι άδειες διορθώνονται, η έξοδος όχι)', () => {
+    const out: Status = { id: 'o1', pid: 1, type: 'OUT', from: TODAY, to: '2026-10-18' };
+    expect(() => run(with1(out), { t: 'replaceStatus', id: 'o1', cmds: [{ type: 'OUT', pids: [1], from: TODAY, to: '2026-10-16' }] })).toThrow('μόνο ιατρικά, ποινές και άδειες');
     const lv: Status = { id: 'l1', pid: 1, type: 'LEAVE', from: TODAY, to: '2026-10-18', kind: 'Κανονική' };
-    expect(() => run(with1(lv), { t: 'replaceStatus', id: 'l1', cmds: [{ type: 'LEAVE', pids: [1], from: TODAY, to: '2026-10-16', kind: 'Κανονική' }] })).toThrow('μόνο ιατρικά και ποινές');
+    const r = run(with1(lv), { t: 'replaceStatus', id: 'l1', cmds: [{ type: 'LEAVE', pids: [1], from: TODAY, to: '2026-10-16', kind: 'Ειδική' }] }).state;
+    expect(r.statuses).toHaveLength(1); expect(r.statuses[0]).toMatchObject({ type: 'LEAVE', to: '2026-10-16', kind: 'Ειδική' });
   });
 });
 

@@ -5,7 +5,7 @@
 // κάθε άτομο μετρά μία φορά (ένωση συνόλων, όπως η Δύναμη)· οι αριθμοί προστίθενται. Καθαρή λογική, χωρίς οθόνη.
 import type { ISODate } from './dates';
 import type { TabLay } from './reports';
-import { KOL_COLS, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
+import { KOL_COLS, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
 import { HK_A, HK_K, activePeople, cadreSeats, hkMin, hkaiCounts, kolView, outMin, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
 import { listOf, MED_LIKE, ownMed, hkRowList } from './ranks';
 import { siCombos, siOf } from './si';
@@ -144,6 +144,7 @@ export function metricsOf(s: AppState): Metric[] {
   const reqs = (c: VCtx, f: (x: AppState['requests'][number]) => boolean) => { const pm = new Set(activePeople(c.s).map(p => p.id)); return new Set(c.s.requests.filter(x => x.date === c.d && pm.has(x.pid) && f(x)).map(x => 'p' + x.pid)); };
   m.push(S('req.all', G.req, 'Αιτούντες της μέρας', c => reqs(c, () => true), 'Στρατιώτες με αίτηση που έγινε τη μέρα του εντύπου (5. ΑΙΤΗΣΕΙΣ της ' + HKN + ')'));
   m.push(S('req.pending', G.req, 'Αιτήσεις που εκκρεμούν', c => reqs(c, x => !x.decision)));
+  m.push(S('req.waiting', G.req, 'Αιτήσεις που περιμένουν (όλες οι μέρες)', c => { const pm = new Set(activePeople(c.s).map(p => p.id)); return new Set(c.s.requests.filter(x => pm.has(x.pid) && isWaiting(x)).map(x => 'p' + x.pid)); }, 'Στρατιώτες με αίτηση, οποιασδήποτε μέρας, που περιμένει ακόμα απάντηση (όχι οι παλιές χωρίς απάντηση)'));
   m.push(S('req.ok', G.req, 'Αιτήσεις που εγκρίθηκαν', c => reqs(c, x => x.decision === 'ok')));
   m.push(S('req.no', G.req, 'Αιτήσεις που απορρίφθηκαν', c => reqs(c, x => x.decision === 'no')));
   // ---- Έξοδοι: όπως τα Excel «Εξοδούχοι / Παραμένοντες» (ώρα εξόδου) και οι 4 πίνακες (outsTables)

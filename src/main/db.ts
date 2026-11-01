@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
-import { emptyState, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
+import { emptyState, markOldRequests, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { normNote } from '../shared/notes';
 import { daysBetween, today } from '../shared/dates';
 import { capsPerService, ownKinds } from '../shared/rules';
@@ -118,6 +118,8 @@ export class Store {
     }
     // προέλευση (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» στον βαθμό γίνεται βαθμός ΛΧΙΑΣ με προέλευση ΕΠΟΠ (μόνο όσοι το έχουν)
     const so = splitOrigins(this.state); if (so) { this.commit(so); this.flush(); }
+    // έγκριση σε όλες τις αιτήσεις (1/11): οι παλιές αιτήσεις (όχι άδειας) χωρίς απάντηση δεν μετρούν ως «περιμένουν»
+    const mo = markOldRequests(this.state, today()); if (mo) { this.commit(mo); this.flush(); }
     // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου
     // υπηρεσιών, οπότε ο έλεγχος μετά την αναβάθμιση δεν χρειάζεται ποτέ
     const st = this.state;
