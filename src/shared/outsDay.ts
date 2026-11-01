@@ -8,7 +8,7 @@ import type { ISODate } from './dates';
 import { addDays, dm } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
-import { activePeople, outMin, postOf, statusesFrom, statusesOn } from './rules';
+import { activePeople, postOf, statusesFrom, statusesOn } from './rules';
 import { dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
@@ -73,7 +73,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
       // η υπηρεσία μετρά πάνω από τη διόρθωση, αλλά το γραφείο πρέπει να το ξέρει
       R('G1', null, '', stillOut({ ...s, guards: {} }, p.id, d) ? { warn: 'ΠΡΟΣΟΧΗ: Η ΔΙΟΡΘΩΣΗ ΛΕΕΙ ΕΞΩ' } : {}); continue;
     }
-    const ss = statusesFrom(s.statuses, p.id, d, outMin(s.rules));
+    const ss = statusesFrom(s.statuses, p.id, d, T);
     if (ss.some(x => x.type === 'PUN') || s.statuses.some(x => x.pid === p.id && x.type === 'PUN' && x.pending && x.from <= d && d <= x.to)) { R('G2', null); continue; }
     if (ss.some(x => x.type === 'STEP' || x.type === 'KOL' || statNoOut(x, s.settings.lists))) { R('G3', null); continue; }
     R('G5', null);

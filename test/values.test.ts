@@ -5,7 +5,7 @@ import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport } from '../src/main/reports';
 import { defaultPick, withBuilt, type BuildOpts, type Report } from '../src/shared/reports';
 import { KOL_COLS, TYPE_KEYS, type AppState, type Status } from '../src/shared/domain';
-import { hkMin, hkaiCounts, kolView, outMin, postsOf, strengthAt, strengthOf } from '../src/shared/rules';
+import { hkMin, hkaiCounts, kolView, outMinOn, postsOf, strengthAt, strengthOf } from '../src/shared/rules';
 import { dutyPicks, weaponInfo, outPeople, noSeat } from '../src/shared/weapons';
 import { outsTables } from '../src/shared/returns';
 import { outsAndStay } from '../src/shared/outsStay';
@@ -14,7 +14,7 @@ import { fakeState } from './fixtures';
 
 const D = '2026-10-19';
 const st = (id: string, pid: number, type: Status['type'], from: string, to: string, x: Partial<Status> = {}): Status => ({ id, pid, type, from, to, ...x });
-const HK = hkMin(fakeState(1).rules), OUT = outMin(fakeState(1).rules);
+const HK = hkMin(fakeState(1).rules), OUT = outMinOn(fakeState(1), D);
 // Μια μονάδα με όλα: άδειες, τιμητική, ΔΝ, εξοδούχοι, ιατρικά, ποινή, κωλυόμενος, υπηρεσίες και ένοπλες
 function seed(): AppState {
   const s = fakeState(40);

@@ -9,7 +9,7 @@ import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLi
 import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
-import { seatMap, dutyMin, hkaiCounts, outMin, postBy, postsOf, statusesFrom } from '../shared/rules';
+import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
 import { Workbook, colName, colNum, sheetSafe, unesc, type Sheet, type XlValue } from './xlsx';
 import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
@@ -689,7 +689,7 @@ async function allSheet(wb: Workbook, s: AppState, d: ISODate, loc: OutsLoc, L: 
     x.lv ? (x.st ? statusLbl(x.lv, s.settings.lists) : norm(withNote(statusLbl(x.lv, s.settings.lists), outNoteOf(s, d, x.p.id)))) : '',
     x.st ? outsNote(s, d, x.p.id, x.st, false) : '', x.warn || ''].filter(Boolean).join(', ');
   // ΓΥΡΝΑ (Α, Β): όπως το «Ποιοι γυρίζουν και πότε»· ΓΙΑΤΙ ΜΕΝΕΙ (Γ): υπηρεσία με ώρες, ποινή, ΣΤΕΠ…, ή πότε γυρνά (Γ4)
-  const whyOf = (x: DayRow) => (x.g[0] !== 'G' ? (x.r ? retTxt(x.r) : '') : x.g === 'G4' ? (x.r ? retNote(x.r) : '') : stayNote(s, d, x.p, statusesFrom(s.statuses, x.p.id, d, outMin(s.rules)), true));
+  const whyOf = (x: DayRow) => (x.g[0] !== 'G' ? (x.r ? retTxt(x.r) : '') : x.g === 'G4' ? (x.r ? retNote(x.r) : '') : stayNote(s, d, x.p, statusesFrom(s.statuses, x.p.id, d, outMinOn(s, d)), true));
   // Δ: ΠΟΤΕ στις πρώτες στήλες, ΠΛΗΘΟΣ στη στήλη του θαλάμου, Α/Α στις υπόλοιπες
   const cPl = C.room != null && C.room > c0 + 1 && C.room < cLast ? C.room : Math.max(c0 + 1, cLast - 1);
   const span = (r: number, a: number, b: number) => { if (b > a) ws.addMerge(refOf(a, r) + ':' + refOf(b, r)); };

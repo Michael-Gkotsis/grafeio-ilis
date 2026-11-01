@@ -10,7 +10,8 @@ import type { Sig } from '../../shared/sigs';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { badgeLbl, leavePhrase, listOf, medKinds, optionsOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, KOL_NO_COL, kolColOf, kolColName, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { DEFAULT_HK_TIME, DEFAULT_OUT_TIME, isEpop, monthTxt, awayNow, statusesAt, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
+import { DEFAULT_HK_TIME, isEpop, monthTxt, awayNow, statusesAt, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
+import { dayTimes } from '../../shared/returns';
 import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
 import { addDays, daysBetween, dayName, dm, dow, nowHM } from '../../shared/dates';
 import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
@@ -342,7 +343,7 @@ export function LeaveEndDialog({ st, onClose }: P) {
   const desc = fullName(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + ' – ' + (st.open ? 'χωρίς λήξη' : dm(st.to) + (st.toTime ? ' ' + st.toTime : ''));
   const t = normTime(time);
   // τι σημαίνει η ώρα τη μέρα που γυρνά (ίδιοι κανόνες με τις ώρες της άδειας· ο ΣΤΕΠ είναι κωλυόμενος στην ΗΚΑΙ ως την έξοδο, Michael 29/10)
-  const hk = state.rules?.hkTime || DEFAULT_HK_TIME, out = state.rules?.outTime || DEFAULT_OUT_TIME;
+  const hk = state.rules?.hkTime || DEFAULT_HK_TIME, out = dayTimes(state, day).out;
   const effect = !t ? 'Χωρίς ώρα η μέρα αυτή μετρά ολόκληρη· παρών από την επόμενη μέρα.'
     : (t <= hk ? 'Εκείνη τη μέρα μετρά παρών και στην ' + HK() + ', βγαίνει έξοδο και μπαίνει σε υπηρεσίες.'
       : t <= out ? 'Εκείνη τη μέρα βγαίνει κανονικά έξοδο και μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· στην ' + HK() + ' μετρά παρών από την επόμενη μέρα.'

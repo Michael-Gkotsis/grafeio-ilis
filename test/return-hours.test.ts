@@ -5,7 +5,7 @@ import { apply, type Command, type Ctx } from '../src/shared/commands';
 import type { AppState, Status } from '../src/shared/domain';
 import type { RawSheet } from '../src/shared/roster';
 import { timesTxt } from '../src/shared/hours';
-import { dutyBlock, hkaiCounts, outBlock, planStatusChange, postBy, statusesFrom, strengthOf, outMin, hkMin } from '../src/shared/rules';
+import { dutyBlock, hkaiCounts, outBlock, planStatusChange, postBy, statusesFrom, strengthOf, outMinOn, hkMin } from '../src/shared/rules';
 import { diffStatuses, parseStatuses, timeCols, type SourceBinding } from '../src/shared/sources';
 import { outsAndStay, absentOn } from '../src/main/exports';
 import { preflight } from '../src/shared/preflight';
@@ -36,8 +36,8 @@ describe('έξοδος την ημέρα της επιστροφής', () => {
     const late = with1(st(pid, 'LEAVE', '2026-10-10', WED, { toTime: '22:00' }));
     expect(outBlock(late, WED, pid)).toBe('ΚΑ (γυρίζει 22:00)');
     expect(planStatusChange(late, { type: 'OUT', pids: [pid], from: WED, to: WED }, TODAY).blocked).toHaveLength(1);
-    // και η ώρα εξόδου αλλάζει στους Κανόνες
-    const s = { ...late, rules: { ...late.rules, outTime: '22:30' } };
+    // και η ώρα εξόδου αλλάζει στον πίνακα «Εξοδούχοι: ώρες ανά ημέρα» των Κανόνων (μία ώρα εξόδου, 1/11: η Τετάρτη βγαίνει 22:30)
+    const s = { ...late, rules: { ...late.rules, week: { 3: { out: '22:30' } } } };
     expect(outBlock(s, WED, pid)).toBeNull();
   });
   it('η μέρα της αναχώρησης μετρά ολόκληρη, ακόμα κι αν φεύγει το βράδυ', () => {
@@ -82,8 +82,8 @@ describe('ΗΚΑΙ και Δύναμη', () => {
     expect(hkaiCounts(s, WED).cols.ka.map(p => p.id)).toEqual([pid]);
     expect(statusesFrom(s.statuses, pid, WED, 23 * 60)).toHaveLength(1);
   });
-  it('προεπιλογές: έξοδος 16:00, ΗΚΑΙ 08:00', () => {
-    expect(outMin(undefined)).toBe(16 * 60); expect(hkMin(null)).toBe(8 * 60);
+  it('προεπιλογές: έξοδος 17:00 (η «Αρχή εξόδου» της μέρας), ΗΚΑΙ 08:00', () => {
+    expect(outMinOn(fakeState(10), WED)).toBe(17 * 60); expect(hkMin(null)).toBe(8 * 60);
   });
 });
 

@@ -334,11 +334,14 @@ export type Caps = Record<number, Partial<Record<CapKey, string | null>>>;
 export interface Rules {
   noConsecHol: boolean;                  // Κ-13
   restDays: number;                      // Κ-14
-  numRest: number;                       // 3ο/4ο νούμερο: ξανά στο ίδιο νούμερο μετά από τόσες μέρες (0 = όχι)
+  numRest: number;                       // ξανά στο ίδιο νούμερο μετά από τόσες μέρες (0 = όχι)· για ποια νούμερα: numRots
+  numRots?: number[];                    // ποια νούμερα (0..3 = 1ο..4ο) έχουν το numRest (Michael, 1/11)· λείπει = [2, 3] (3ο και 4ο, όπως πάντα)
   outRooms: Record<number, number[]>;    // Κ-16: ημέρα εβδομάδας → θάλαμοι που βγαίνουν
   strictUnarmed?: boolean;               // «Αυστηρά Άοπλοι»: οι άοπλοι πρώτα σε μαγειρεία, μετά 2ο-3ο, μετά 1ο-4ο νούμερο· σκοποί μόνο ένοπλοι
+  strictOrder?: string[];                // η σειρά των «Αυστηρά Άοπλοι» (Michael, 1/11): 'mg' μαγειρεία, 'mid' 2ο-3ο νούμερο, 'edge' 1ο-4ο νούμερο, 'b:' + id δική σου άοπλη υπηρεσία· λείπει = ['mg', 'mid', 'edge']
+  newAvg?: boolean;                      // οι νέοι στη δύναμη (Person.inOn) ξεκινούν από τον μέσο όρο αργιών και υπηρεσιών της μέρας που ήρθαν (Michael, 1/11)· λείπει/false = από το 0
   rotate?: boolean;                      // εναλλαγή υπηρεσιών (Michael, 18/10): όλοι περνούν από όλες τις υπηρεσίες πριν ξανακάνουν την ίδια· false = κλειστό
-  outTime?: string;                      // ώρα που ξεκινά η έξοδος (ΩΩ:ΛΛ, προεπιλογή 16:00): όποιος γυρίσει ως τότε βγαίνει κανονικά
+  outTime?: string;                      // ΠΑΛΙΟ, δεν διαβάζεται πια (Michael, 1/11: μία ώρα εξόδου, η «Αρχή εξόδου» της μέρας στο week)· μένει για να φορτώνονται τα παλιά δεδομένα
   hkTime?: string;                       // ώρα της ΗΚΑΙ (ΩΩ:ΛΛ, προεπιλογή 08:00): όποιος γυρίσει ως τότε μετρά παρών εκείνη τη μέρα
   armBefore?: number;                    // ένοπλη υπηρεσία (Michael, 24/10): το όπλο βγαίνει τόσα λεπτά πριν από το νούμερο (προεπιλογή 15, armed.ts)
   armAfter?: number;                     // ... και μπαίνει τόσα λεπτά μετά (προεπιλογή 15)
@@ -350,6 +353,8 @@ export interface DayPlan { out?: string; backOut?: string; backDn?: string; trai
 // Διόρθωση επιστροφής ενός ατόμου (Michael, 24/10), όταν άλλαξε κάτι προφορικά: day = η μέρα της ΔΝ/εξόδου του· stay = δεν γυρνά,
 // συνεχίζει· at = γυρνά τη μέρα και την ώρα που λέει. id: «pid:day» (μία διόρθωση ανά άτομο και μέρα). why υποχρεωτικό.
 export interface BackFix { id: string; pid: number; day: ISODate; stay?: true; at?: { day: ISODate; time: string }; why: string }
+export const DEFAULT_NUM_ROTS = [2, 3];
+export const DEFAULT_STRICT_ORDER = ['mg', 'mid', 'edge'];
 export const DEFAULT_RULES: Rules = { noConsecHol: true, restDays: 1, numRest: 3, outRooms: { 6: [1, 2, 3, 4], 0: [5, 6, 7, 8] } };
 
 export type OutsFmt = 'cur' | 'all';
