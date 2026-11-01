@@ -2,7 +2,7 @@
 // με τη μέρα, όπως ο λοχίας: άδειες, ιατρικά, νοσοκομείο, ΣΤΕΠ, κωλυόμενοι, νέοι στρατιώτες, όσοι φεύγουν, Σ.Ι., πόστα,
 // μέρες χωρίς υπηρεσία, εξαιρέσεις, μόνιμοι Λ/Υ-Δ/Υ, θέσεις με το χέρι. Επαναλήψιμο από τον σπόρο. Μόνο φανταστικά ονόματα.
 import { emptyState, TYPES, type AppState, type Person, type Status, type TypeKey, type Rules } from '../src/shared/domain';
-import { addDays, isWeekend, type ISODate } from '../src/shared/dates';
+import { addDays, dm, isWeekend, type ISODate } from '../src/shared/dates';
 import { apply } from '../src/shared/commands';
 import { everyBlock } from '../src/shared/domain';
 const CTX = { today: '2026-10-01', newId: (() => { let i = 0; return () => 'c' + ++i; })() };
@@ -45,6 +45,7 @@ export interface Sim {
   manual: Set<string>;   // «μέρα|θέση» που έβαλε ο λοχίας με το χέρι
   log: { d: ISODate; empty: string[]; warn: string[] }[];
   viol: string[];        // παραβάσεις κανόνων της αυτόματης συμπλήρωσης (πρέπει να είναι 0)
+  soft: Set<string>;     // «μέρα|θέση» που γέμισαν παρά την αργία μετά από αργία (το μόνο που χαλαρώνει, με ειδοποίηση)
   avail: Map<number, number>;   // πόσες «θέσεις αναλογούν» σε κάθε άτομο (μέρες που μπορούσε, × θέσεις / όσοι μπορούσαν)
   availHol: Map<number, number>;
 }
@@ -89,7 +90,7 @@ export function simulate(o: SimOpts): Sim {
     else if (x < nz.leave + nz.med + nz.nos + nz.kol) add('KOL', 1 + Math.floor(r() * 3), { kind: 'ΣΤΕΠ', minus: true });
   }
   s.statuses = ss;
-  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], avail: new Map(), availHol: new Map() };
+  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], soft: new Set(), avail: new Map(), availHol: new Map() };
   for (const d of days) {
     if (o.switchAt != null && d === days[o.switchAt]) s = { ...s, settings: { ...s.settings, phase: s.settings.phase === 'spen' ? 'sven' : 'spen' } };
     // νέοι και όσοι φεύγουν
@@ -111,7 +112,7 @@ export function simulate(o: SimOpts): Sim {
     const res = fillDay(s, d);
     s = { ...s, guards: res.guards };
     sim.log.push({ d, empty: res.empty, warn: res.warn });
-    check(sim, before, s, d, res.empty);
+    check(sim, before, s, d, res.empty, res.warn);
     share(sim, before, s, d);
   }
   sim.s = s;
@@ -119,7 +120,7 @@ export function simulate(o: SimOpts): Sim {
 }
 
 // Κανόνες που η αυτόματη συμπλήρωση δεν παραβαίνει ποτέ, για τις θέσεις που γέμισε η ίδια
-function check(sim: Sim, before: AppState, after: AppState, d: ISODate, empty: string[]) {
+function check(sim: Sim, before: AppState, after: AppState, d: ISODate, empty: string[], warn: string[]) {
   const g0 = before.guards[d] || {}, g = after.guards[d] || {};
   const seen = new Map<number, string>(); const fixed = fixedIds(after);
   for (const k in g) { const pid = g[k]; if (seen.has(pid)) sim.viol.push(d + ' διπλή θέση ' + pid + ' ' + seen.get(pid) + '/' + k); seen.set(pid, k); }
@@ -129,14 +130,19 @@ function check(sim: Sim, before: AppState, after: AppState, d: ISODate, empty: s
     // ο κανόνας με τις υπόλοιπες θέσεις της μέρας (χωρίς την ίδια)
     const gg = { ...g }; delete gg[k]; const w: AppState = { ...after, guards: { ...after.guards, [d]: gg } };
     const why = guardUnavailable(w, d, pid, k);
-    if (why) sim.viol.push(d + ' ' + k + ' ' + pid + ': ' + why);
+    if (why) {
+      // η μόνη επιτρεπτή εξαίρεση: αργία μετά από αργία όταν δεν έφταναν οι υπόλοιποι, και μόνο με ειδοποίηση (όλοι οι άλλοι κανόνες ισχύουν)
+      const onlyHol = why.startsWith('Έκανε αργία') && !guardUnavailable({ ...w, rules: { ...w.rules, noConsecHol: false } }, d, pid, k) && warn.some(t => t.startsWith(dm(d) + ': ') && t.includes('κάνει αργία πρόσφατα'));
+      if (onlyHol) sim.soft.add(d + '|' + k); else sim.viol.push(d + ' ' + k + ' ' + pid + ': ' + why);
+    }
+    if (post_ly(x) && personOf(after, pid)?.post) sim.viol.push(d + ' ' + k + ' πόστο σε Λ/Υ-Δ/Υ ' + pid);
     if (after.rules.strictUnarmed && x.kind === 'sk' && isUnarmed(after, d, pid)) sim.viol.push(d + ' ' + k + ' άοπλος σε σκοπιά ' + pid);
   }
   // κενή θέση ενώ κάποιος χωρίς θέση σήμερα μπορούσε (μία απλή ματιά, χωρίς αλυσίδες)
   const busy = new Set(Object.values(g)); const fixedIds0 = fixed;
   for (const k of empty) {
     const x = postBy(after, k)!;
-    const can = dutyPool(after).filter(p => !busy.has(p.id) && !fixedIds0.has(p.id) && !guardUnavailable(after, d, p.id, k) && !(after.rules.strictUnarmed && x.kind === 'sk' && isUnarmed(after, d, p.id)));
+    const can = dutyPool(after).filter(p => !busy.has(p.id) && !fixedIds0.has(p.id) && !(x.kind === 'ly' && p.post) && !guardUnavailable(after, d, p.id, k) && !(after.rules.strictUnarmed && x.kind === 'sk' && isUnarmed(after, d, p.id)));
     if (can.length) sim.viol.push(d + ' κενή ' + k + ' ενώ μπορούσαν ' + can.map(p => p.id).join(','));
   }
 }
@@ -175,7 +181,20 @@ export function cleanIds(sim: Sim): number[] {
   return s.people.filter(p => p.active && !sim.joined.has(p.id) && !sim.left.has(p.id) && !fixed.has(p.id) && !p.post && p.si === 'Ι1' && !p.offDays && !p.skips && !s.caps[p.id]
     && !s.statuses.some(x => x.pid === p.id)).map(p => p.id);
 }
+const post_ly = (x: { kind: string }) => x.kind === 'ly';
+const personOf = (s: AppState, pid: number) => s.people.find(p => p.id === pid);
+// Λόγος υπηρεσιών προς όσες αναλογούσαν, για μια ομάδα ατόμων (όχι μόνιμοι Λ/Υ-Δ/Υ, μόνο όσοι είχαν αρκετές θέσεις να τους αναλογούν)
+export function shareRatio(sim: Sim, pick: (p: Person) => boolean): { ratio: number; n: number } {
+  const fixed = fixedIds(sim.s); let T = 0, E = 0, n = 0;
+  for (const x of stats(sim).values()) {
+    const p = sim.s.people.find(q => q.id === x.pid);
+    if (!p || fixed.has(p.id) || x.exp < 2 || !pick(p)) continue;
+    T += x.total; E += x.exp; n++;
+  }
+  return { ratio: E ? T / E : NaN, n };
+}
 export const range = (xs: number[]) => (xs.length ? Math.max(...xs) - Math.min(...xs) : 0);
+const softOn = (sim: Sim, d: ISODate, pid: number) => [...sim.soft].some(m => m.startsWith(d + '|') && (sim.s.guards[d] || {})[m.slice(11)] === pid);
 // συνεχόμενα ΣΚ/αργίες (ανάμεσα 2 ως 9 μέρες, όπως ο κανόνας) και ανάπαυση
 export function restViol(sim: Sim): string[] {
   const s = sim.s; const out: string[] = []; const idx = dutyIndexOf(s); const fixed = fixedIds(s);
@@ -186,8 +205,9 @@ export function restViol(sim: Sim): string[] {
       const a = l[i - 1], b = l[i]; const man = (d: ISODate) => [...sim.manual].some(m => m.startsWith(d + '|') && (s.guards[d] || {})[m.slice(11)] === pid);
       if (man(a) || man(b)) continue;
       const gap = (Date.parse(b) - Date.parse(a)) / 864e5;
+      // όπως το ruleBlock: η ανάπαυση ως restDays μέρες, η αργία μετά από αργία από 2 ως 9 μέρες (1 μέρα είναι ήδη ανάπαυση ή, με restDays 0, επιτρέπεται)
       if (gap <= s.rules.restDays) out.push(pid + ' ανάπαυση ' + a + '→' + b);
-      else if (s.rules.noConsecHol && isHol(s.settings, a) && isHol(s.settings, b) && gap <= 9) out.push(pid + ' αργία μετά από αργία ' + a + '→' + b);
+      else if (s.rules.noConsecHol && gap >= 2 && gap <= 9 && isHol(s.settings, a) && isHol(s.settings, b) && !softOn(sim, a, pid) && !softOn(sim, b, pid)) out.push(pid + ' αργία μετά από αργία ' + a + '→' + b);
     }
   }
   return out;
