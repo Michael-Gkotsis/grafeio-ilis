@@ -146,6 +146,7 @@ export interface Status {
   fromTime?: string;  // άδεια: ώρα αναχώρησης την πρώτη μέρα (ΩΩ:ΛΛ), shared/hours.ts
   toTime?: string;    // άδεια: ώρα επιστροφής την τελευταία μέρα (ΩΩ:ΛΛ)
   req?: string;       // άδεια που εγκρίθηκε από αίτηση της ΗΚΑΙ (PersonRequest.id)
+  dest?: string;      // άδεια: κατεύθυνση (Κόρινθος, Αθήνα…), προαιρετική· γράφεται στην ΗΚΑΙ μόνο αν το είδος έχει τη ρύθμιση (ranks.ts leaveText)
   minus?: boolean;    // κωλυόμενος: αφαιρείται από τους παρόντες και μπαίνει στην ΗΚΑΙ, στη στήλη hkCol
   hkCol?: string;     // κωλυόμενος: στήλη κωλυομένων της ΗΚΑΙ (KOL_COLS), προεπιλογή yp «Υπηρεσία» για παλιές δηλώσεις· '-' (KOL_NO_COL) = καμία (Michael, 29/10)
   noOut?: boolean;    // κωλυόμενος: δεν βγαίνει έξοδο (αλλιώς βγαίνει κανονικά)
@@ -378,6 +379,7 @@ export interface Settings {
   forms?: Partial<Record<FormKind, FormBinding>>;        // ποιο template και ποιος φάκελος για κάθε έντυπο
   newDirs?: Partial<Record<ListKind, string>>;         // πού φτιάχνονται τα νέα Excel κάθε είδους (κενό = ο γενικός φάκελος)
   dutyCodeAliases?: Record<string, string>;   // έλεγχος υπηρεσιών: άγνωστος κωδικός (codeKey) → θέση, «kind:<είδος>» χωρίς θέση, ή «ignore»
+  reqFrom?: ISODate;                     // η πρώτη μέρα που άνοιξε η έκδοση με έγκριση σε όλες τις αιτήσεις: οι παλιότερες αιτήσεις χωρίς απάντηση πήραν old (markOldRequests)
   baselineReviewed?: boolean;            // ο έλεγχος των «προηγούμενων υπηρεσιών» μετά την αναβάθμιση (κωδικοί θέσεων) έγινε
   lists?: UserLists;                     // ό,τι πρόσθεσες ή έκρυψες στις λίστες (βαθμοί, Ο/Σ)· οι βασικές είναι στο ranks.ts
   hkai?: HkaiSettings;                   // ΗΚΑΙ: ενότητες που δεν χρησιμοποιεί η Ίλη, οχήματα, «Προβλέπονται»
@@ -540,8 +542,20 @@ export type DutyLog = Record<ISODate, SeatlessDuty[]>;
 // (Status με req = το id της αίτησης). Στην ΗΚΑΙ γράφεται μόνο η αίτηση, μία φορά, όχι και στο 3. ΑΔΕΙΕΣ (Michael, 18/10).
 // text: ό,τι αιτείται· στην άδεια η αιτιολόγηση (μπορεί να είναι κενή)
 // Ώρες αναχώρησης/επιστροφής προαιρετικές (Michael, 21/10): γράφονται στην αίτηση και περνούν στην άδεια με το «Εγκρίθηκε»
-export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate; fromTime?: string; toTime?: string }
-export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string }
+// dest: κατεύθυνση (προαιρετική), περνά στην άδεια με το «Εγκρίθηκε»
+export interface LeaveAsk { type: 'LEAVE' | 'HON'; kind?: string; from: ISODate; to: ISODate; fromTime?: string; toTime?: string; dest?: string }
+// Έγκριση σε όλες τις αιτήσεις (1/11): η άλλη αίτηση κρατά μόνο decision και decided. old: παλιά αίτηση χωρίς απάντηση (πριν την έκδοση που έφερε
+// την έγκριση σε όλες): φαίνεται «χωρίς απάντηση (παλιά)» και δεν μετρά στα «περιμένουν» (db.ts oldRequests)
+export interface PersonRequest { id: string; pid: number; date: ISODate; text: string; leave?: LeaveAsk; decision?: 'ok' | 'no'; decided?: ISODate; sid?: string; old?: boolean }
+// Περιμένει απάντηση: χωρίς απόφαση και όχι παλιά (old)
+export const isWaiting = (r: Pick<PersonRequest, 'decision' | 'old'>) => !r.decision && !r.old;
+// Μία φορά, την πρώτη μέρα που ανοίγει η έκδοση με έγκριση σε όλες τις αιτήσεις (db.ts): οι αιτήσεις που δεν είναι άδεια, χωρίς απόφαση και με
+// ημερομηνία πριν από σήμερα παίρνουν old, ώστε να μην ξυπνήσει μια λίστα από παλιές. Οι αιτήσεις άδειας περίμεναν πάντα απάντηση: δεν αλλάζουν.
+export function markOldRequests(s: AppState, today: ISODate): AppState | null {
+  if (s.settings.reqFrom) return null;
+  const requests = s.requests.map(r => (!r.leave && !r.decision && !r.old && r.date < today ? { ...r, old: true } : r));
+  return { ...s, requests, settings: { ...s.settings, reqFrom: today } };
+}
 // Στελέχη (καρτέλα «Στελέχη»): ονόματα, θέση, καταστάσεις της ΗΚΑΙ, που ταΐζουν και την ΗΚΑΙ
 // origin: προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ, ΣΣΕ…) · spec: Ο/Σ · am: αριθμός μητρώου · pos: η σειρά που όρισε ο χρήστης (ιεραρχία· χωρίς pos σε κανέναν, με τη σειρά της ΗΚΑΙ)
 // monthMax: ΕΠΟΠ/ΟΒΑ που κάνουν υπηρεσίες (Michael, 21/10): πόσες τον μήνα το πολύ· pid: ο αριθμός του στις θέσεις των

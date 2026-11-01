@@ -1,6 +1,6 @@
 // Λίστες επιλογής για βαθμό, προέλευση και Ο/Σ (όπλο/σώμα): στις φόρμες της εφαρμογής και ως dropdown στα Excel.
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
-import { collator, normGreek, upper } from './text';
+import { collator, norm, normGreek, upper } from './text';
 import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type AppState, type Status, type TypeKey } from './domain';
 import type { SiConfig } from './si';
 import type { StatConfig } from './stat';
@@ -49,7 +49,10 @@ export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
 // hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
 // hkNames: άλλο όνομα για μια γραμμή (κλειδί → όνομα), π.χ. «Ίλαρχοι» → «Ίλαρχοι-Λοχαγοί»· το κλειδί δεν αλλάζει
-export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkNames?: Record<string, string> };
+// leaveText: «Κείμενο στην ΗΚΑΙ» ανά είδος άδειας (1/11), κλειδί leaveKey: t = πώς γράφεται το είδος στο 3. ΑΔΕΙΕΣ και στο 5. ΑΙΤΗΣΕΙΣ
+// (κενό = αυτόματο), dest = γράφεται και η κατεύθυνση της άδειας («… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»)
+export interface LeaveText { t?: string; dest?: boolean }
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkNames?: Record<string, string>; leaveText?: Record<string, LeaveText> };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, origins: ORIGINS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
@@ -199,6 +202,22 @@ export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const own = userItem(lists, 'leaveKinds', kind)?.col;
   return own && LEAVE_COLS.some(c => c[0] === own) ? own : 'ka';
 }
+// Το είδος της άδειας σε φράση: «Κανονική άδεια», «Άδεια ΑΜΔ», «Τιμητική άδεια», και τα δικά σου είδη όπως τα έγραψες
+// («Αιμοδοσίας» → «Άδεια Αιμοδοσίας», «ΑΔΕΙΑ ΓΑΜΟΥ» μένει ως έχει)
+export function leavePhrase(st: Pick<Status, 'type' | 'kind'>): string {
+  const k = ((st.type === 'LEAVE' ? st.kind : '') || TYPES[st.type].long).trim(); const n = norm(k);
+  return /ΑΔΕΙΑ/.test(n) ? k : /Η$/.test(n) ? k + ' άδεια' : 'Άδεια ' + k;
+}
+export const leaveName = (st: Pick<Status, 'type' | 'kind'>): string => upper(leavePhrase(st));
+// Κλειδί του «Κειμένου στην ΗΚΑΙ» ενός είδους άδειας: το όνομα χωρίς το «άδεια» στο τέλος («Ειδική άδεια» = «Ειδική»)· η τιμητική και η
+// αναρρωτική έχουν σταθερό κλειδί, τα στελέχη 'Σ:' + κωδικός κατάστασης (cadreAbsOf)
+const noLeaveWord = (v: string) => itemKey(v).replace(/ ΑΔΕΙΑ$/, '');
+export const leaveNameKey = (name: string | undefined) => noLeaveWord(name || LEAVE_KINDS[0]);
+export const leaveKey = (st: Pick<Status, 'type' | 'kind'>): string => (st.type === 'HON' ? noLeaveWord('Τιμητική') : st.type === 'SICK' ? noLeaveWord('Αναρρωτική') : leaveNameKey(st.kind));
+export const cadreLeaveKey = (code: string) => 'Σ:' + code;
+export function leaveTextOf(st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): LeaveText | undefined {
+  const m = lists?.leaveText; return m ? m[leaveKey(st)] : undefined;
+}
 // Καταστάσεις στελεχών (οι στήλες της ΗΚΑΙ): [κωδικός, όνομα, στήλη ΗΚΑΙ]. Οι βασικές με τον κωδικό τους, οι δικές σου με το όνομα ως κωδικό.
 // all: και όσες έκρυψες (για εγγραφές που υπάρχουν ήδη)
 export function cadreAbsKinds(lists?: UserLists, all = false): [string, string, string][] {
@@ -233,6 +252,9 @@ export function statusLbl(s: Pick<Status, 'type' | 'kind'> & { note?: string }, 
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m ? m.name : TYPES[s.type].label;
 }
+// Σήμα στις οθόνες (Λ5, 1/11): η άδεια με το είδος της, «ΚΑ» μόνο η Κανονική. Τα έντυπα, το Excel και οι κωδικοί κρατούν το statusLbl.
+export const badgeLbl = (s: Pick<Status, 'type' | 'kind'> & { note?: string }, lists?: UserLists): string =>
+  (s.type === 'LEAVE' && s.kind?.trim() && leaveNameKey(s.kind) !== leaveNameKey(LEAVE_KINDS[0]) ? s.kind.trim() : statusLbl(s, lists));
 // Κωδικός στο ημερολόγιο (Κ.Α, Ε.Υ…): ό,τι όρισες για το δικό σου ιατρικό, αλλιώς του βασικού τύπου
 export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string | undefined {
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;

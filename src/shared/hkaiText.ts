@@ -1,12 +1,13 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { hkDay, type ISODate } from './dates';
-import { OUT_NOTE, TYPES, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { OUT_NOTE, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
-import { collator, norm, upper } from './text';
+import { collator, upper } from './text';
 import { genitive } from './greek';
-import { rankTxt } from './ranks';
+import { HK } from './unit';
+import { cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
 import { cadreStatusOf, orderedCadre } from './cadre';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
@@ -30,26 +31,39 @@ export function hkaiPunLines(s: AppState, d: ISODate): Line[] {
   return numbered(list.map(({ st, ps }) => { const t = punText(ps, st, s.settings.lists); return [{ t: t.before }, { t: t.dur, u: true }, { t: t.after }]; }));
 }
 
-// Τι αιτείται: «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 <αιτιολόγηση>» ή το κείμενο της αίτησης
-export const reqWhat = (x: PersonRequest) => (x.leave ? leaveName(x.leave) + ' ' + hkRange(x.leave) + (x.text ? ' ' + x.text : '') : x.text);
+// Τι αιτείται: «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 <αιτιολόγηση>» ή το κείμενο της αίτησης. Με lists: το «Κείμενο στην ΗΚΑΙ» του είδους
+// και η κατεύθυνση (leaveHk, leaveDest)
+export const reqWhat = (x: PersonRequest, lists?: UserLists) => (x.leave ? leaveHk(x.leave, lists) + ' ' + hkRange(x.leave) + leaveDest(x.leave, lists) + (x.text ? ' ' + x.text : '') : x.text);
 // 5. ΑΙΤΗΣΕΙΣ: «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΑΙΤΕΙΤΑΙ …», και στο τέλος ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ
 export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
   const out: Line[] = numbered(s.requests.filter(x => x.date === d && pm.has(x.pid))
     .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': αιτείται ' + reqWhat(x) + '.') }]));
+    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': αιτείται ' + reqWhat(x, s.settings.lists) + '.') }]));
   const free = s.hkaiManual?.[d]?.text?.ait?.trim();
   if (free) out.push([{ t: free }]);
   return out;
 }
 
-// Το είδος της άδειας σε φράση: «Κανονική άδεια», «Άδεια ΑΜΔ», «Τιμητική άδεια», και τα δικά σου είδη όπως τα έγραψες
-// («Αιμοδοσίας» → «Άδεια Αιμοδοσίας», «ΑΔΕΙΑ ΓΑΜΟΥ» μένει ως έχει)
-export function leavePhrase(st: Pick<Status, 'type' | 'kind'>): string {
-  const k = ((st.type === 'LEAVE' ? st.kind : '') || TYPES[st.type].long).trim(); const n = norm(k);
-  return /ΑΔΕΙΑ/.test(n) ? k : /Η$/.test(n) ? k + ' άδεια' : 'Άδεια ' + k;
+export { leavePhrase, leaveName };
+// Πώς γράφεται το είδος στην ΗΚΑΙ (3. ΑΔΕΙΕΣ, 5. ΑΙΤΗΣΕΙΣ): το «Κείμενο στην ΗΚΑΙ» που όρισες στις Λίστες, αλλιώς το όνομα του είδους.
+// Οι Εξοδούχοι, τα Έντυπα και η Φρουρά λένε πάντα το είδος (leavePhrase).
+export const leaveHk = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string => upper(leaveTextOf(st, lists)?.t?.trim() || leavePhrase(st));
+// « ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»: μόνο όταν το είδος έχει τη ρύθμιση και η άδεια έχει κατεύθυνση (αλλιώς κενό)
+export const leaveDest = (st: Pick<Status, 'type' | 'kind' | 'dest'>, lists?: UserLists): string => {
+  const d = st.dest?.trim(); return d && leaveTextOf(st, lists)?.dest ? upper(' ΜΕ ΚΑΤΕΥΘΥΝΣΗ ' + d) : '';
+};
+// Βοήθεια κάτω από το πεδίο «Κατεύθυνση» (Δήλωση, Αίτηση, Ώρες και κατεύθυνση): γράφεται ή όχι στην ΗΚΑΙ, ανάλογα με το είδος
+export function destNote(st: Pick<Status, 'type' | 'kind'>, dest: string, lists?: UserLists): string {
+  if (!dest.trim()) return 'Προαιρετικό · κενό = δεν γράφεται πουθενά.';
+  if (leaveTextOf(st, lists)?.dest) return 'Γράφεται στην ' + HK() + '.';
+  return 'Φαίνεται στις Άδειες και στο Excel. Δεν γράφεται στην ' + HK() + ' για «' + (st.type === 'HON' ? 'Τιμητική' : st.type === 'SICK' ? 'Αναρρωτική' : st.kind?.trim() || 'Κανονική') + '»: άνοιξέ το στις Λίστες › Είδη άδειας.';
 }
-export const leaveName = (st: Pick<Status, 'type' | 'kind'>): string => upper(leavePhrase(st));
+// Στέλεχος: το «Κείμενο στην ΗΚΑΙ» της κατάστασής του (Σ:κωδικός), αλλιώς «Κανονική άδεια»…
+export const cadreLeaveHk = (kind: string, label: string, lists?: UserLists): string => {
+  const code = cadreAbsOf(kind, lists)?.[0]; const t = code ? lists?.leaveText?.[cadreLeaveKey(code)]?.t?.trim() : '';
+  return t ? upper(t) : leaveName({ type: 'LEAVE', kind: label });
+};
 // «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26» ή «ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26», με τις ώρες αν γράφτηκαν
 export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 'open'>): string {
   const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''), back = x.toTime && !x.open ? ' ' + x.toTime : '';
@@ -73,10 +87,10 @@ export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
     .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => CADRE_LEAVE_COLS.includes(x.st.col))
     .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)));
   const out = numbered([
-    ...cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + leaveName({ type: 'LEAVE', kind: st.label }) + ' ' + hkRange(st.abs) + '.') }]),
+    ...cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) + ' ' + hkRange(st.abs) + '.') }]),
     ...s.statuses.filter(x => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
       .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-      .map(({ x, p }): Line => [{ t: upper(hkWho(p) + ': ' + leaveName(x) + ' ' + hkRange(x) + '.') }])
+      .map(({ x, p }): Line => [{ t: upper(hkWho(p) + ': ' + leaveHk(x, s.settings.lists) + ' ' + hkRange(x) + leaveDest(x, s.settings.lists) + '.') }])
   ]);
   const free = s.hkaiManual?.[d]?.text?.lv?.trim();
   if (free) out.push([{ t: free }]);

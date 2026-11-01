@@ -1,14 +1,14 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, leaveCol, medWarns, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, leaveCol, leaveNameKey, medWarns, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import { leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -1028,7 +1028,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
 // --------------------------- «Τι θα αλλάξει» για μια δήλωση (dry-run) ---------------------------
 // unlockPast: ο χρήστης ξεκλείδωσε τις περασμένες μέρες· υπηρεσίες που έγιναν και δεν επιτρέπονται πια φεύγουν κι αυτές
 // force: ο χρήστης είδε ότι κάποιος δεν βγαίνει έξοδο (ποινή, υπηρεσία…) και το δήλωσε παρ' όλα αυτά (Michael, 17/10)
-export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean; minus?: boolean; hkCol?: string; noOut?: boolean }
+export interface StatusCmd { type: TypeKey; pids: number[]; from: ISODate; to: ISODate; kind?: string; note?: string; by?: string; reason?: string; on?: ISODate; fromTime?: string; toTime?: string; unlockPast?: boolean; force?: boolean; open?: boolean; minus?: boolean; hkCol?: string; noOut?: boolean; dest?: string }
 // «Χωρίς λήξη» στη δήλωση (Michael, 19/10: «στα ΣΤΕΠ και καταστάσεις»): ιατρικά, ΣΤΕΠ και νοσοκομείο, όχι άδειες, ποινές,
 // εξοδούχοι. Ισχύει μέχρι «Σταμάτησε» (endStatus)· στο Excel το «έως» μένει κενό, όπως στις εγγραφές X4 από το Excel.
 export const canOpen = (type: TypeKey) => TYPES[type].cat === 'med' || TYPES[type].cat === 'other';
@@ -1155,6 +1155,21 @@ export function planStatusChanges(s: AppState, cmds: StatusCmd[], today?: ISODat
   };
 }
 
+// Αίτηση άδειας → η δήλωση που γίνεται με το «Εγκρίθηκε»
+export const leaveCmdOf = (r: PersonRequest): StatusCmd | null => (r.leave ? { type: r.leave.type, pids: [r.pid], from: r.leave.from, to: r.leave.to, ...(r.leave.kind ? { kind: r.leave.kind } : {}), ...(r.leave.fromTime ? { fromTime: r.leave.fromTime } : {}), ...(r.leave.toTime ? { toTime: r.leave.toTime } : {}), ...(r.leave.dest ? { dest: r.leave.dest } : {}) } : null);
+// Η ίδια άδεια υπάρχει ήδη, δηλωμένη απευθείας (Λ3: ίδιο άτομο, τύπος, είδος, από, έως): το «Εγκρίθηκε» τη δένει με την αίτηση αντί να δηλώσει δεύτερη
+export function sameLeave(s: Pick<AppState, 'statuses'>, r: PersonRequest): Status | undefined {
+  const lv = r.leave; if (!lv) return undefined;
+  return s.statuses.find(x => !x.req && x.pid === r.pid && x.type === lv.type && x.from === lv.from && x.to === lv.to && !x.open && (lv.type !== 'LEAVE' || leaveNameKey(x.kind) === leaveNameKey(lv.kind)));
+}
+// Έλεγχος πριν το «Εγκρίθηκε» (Λ1, Λ2): τα ίδια μηνύματα με τη Δήλωση (επικαλύψεις με άλλη άδεια, υπηρεσίες που αδειάζουν, μέρες στο παρελθόν).
+// null = αίτηση χωρίς άδεια ή η άδεια υπάρχει ήδη (δεν αλλάζει τίποτα)
+export function approvalPlan(s: AppState, r: PersonRequest, today?: ISODate): StatusPlan | null {
+  const cmd = leaveCmdOf(r); if (!cmd || sameLeave(s, r)) return null;
+  return planStatusChange(s, cmd, today);
+}
+export const planNeedsOk = (p: StatusPlan) => p.overlaps.length > 0 || p.conflicts.length > 0 || p.past.length > 0;
+
 // --------------------------- ΗΚΑΙ (Κ-17) ---------------------------
 // Κάθε άτομο μετριέται σε ΜΙΑ στήλη: πρώτα απουσία, μετά υπηρεσία, ΕΥ, ποινή. Τα πόστα δεν μετρούν στην ΗΚΑΙ
 // (Michael, 13/10)· η στήλη Ο/Σ γράφεται με το χέρι.
@@ -1185,6 +1200,10 @@ function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date:
   const kol = kolMinus(ss, date, at), kc = kol && kolHk(kol);   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
+// Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
+// Μόνο στη μέτρηση της ΗΚΑΙ: οι υπηρεσίες, η έξοδος, η Δύναμη και το 3. ΑΔΕΙΕΣ μένουν όπως ήταν. Χωρίς ώρα αναχώρησης: απών όλη τη μέρα.
+const leftAfter = (x: Status, date: ISODate, m: number) => TYPES[x.type].cat === 'abs' && x.from === date && !!x.fromTime && mins(x.fromTime) > m;
+const notLeftYet = (ss: Status[], date: ISODate, m: number): Status[] => (ss.some(x => leftAfter(x, date, m)) ? ss.filter(x => !leftAfter(x, date, m)) : ss);
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
@@ -1215,8 +1234,8 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   for (const p of activePeople(s)) {
     soldiers++;
     const r = hkRankOf(p.rank, s.settings.lists, p.origin); rank[r].n++; if (p.attached) rank[r].attached++;
-    // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)
-    const col = soldierCol(s, statusesFrom(s.statuses, p.id, date, at), onDuty.get(p.id), date, at);
+    // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)· φεύγει για άδεια μετά την ώρα της: παρών ως να φύγει (Michael, 1/11)
+    const col = soldierCol(s, notLeftYet(statusesFrom(s.statuses, p.id, date, at), date, at), onDuty.get(p.id), date, at);
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
   let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0) + cadreKol, apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
