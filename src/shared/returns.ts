@@ -105,7 +105,9 @@ export function returnOf(s: AppState, pid: number, d: ISODate): Ret | null {
       const end: Ret = lv.toTime && hasTimes(lv.type) ? { day: lv.to, time: lv.toTime, why: 'τέλος ' + TYPES[lv.type].label } : { day: addDays(lv.to, 1), time: dayTimes(s, addDays(lv.to, 1)).backDn, why: 'τέλος ' + TYPES[lv.type].label };
       return withDuty(s, pid, end);
     }
-    if (on.some(x => x.type === 'OUT')) return { day: n, time: t.backOut, why: 'εξοδούχος ' + onDay(n) };
+    // εξοδούχος την επόμενη μέρα: με πρωινή εκπαίδευση γυρνά το πρωί και φεύγει πάλι στην ώρα εξόδου, όπως με ΔΝ (Michael, 2/11:
+    // ΔΝ ΣΚ και εξοδούχος τη Δευτέρα έβγαινε «ΔΝ από χθες» στο Β3)· χωρίς εκπαίδευση (ΣΚ, αργία) μένει έξω ως την επιστροφή των εξοδούχων
+    if (on.some(x => x.type === 'OUT')) return t.train ? { day: n, time: t.backDn, why: why('πρωινή εκπαίδευση') } : { day: n, time: t.backOut, why: 'εξοδούχος ' + onDay(n) };
     if (on.some(x => x.type === 'DN')) {
       if (t.train) return { day: n, time: t.backDn, why: why('πρωινή εκπαίδευση') };
       cur = n; continue;

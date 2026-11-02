@@ -30,8 +30,11 @@ describe('returnOf: εξοδούχος', () => {
 });
 
 describe('returnOf: ΔΝ κατά ό,τι δηλώθηκε την επόμενη μέρα', () => {
-  it('Παρ ΔΝ, Σαβ εξοδούχος: Σάββατο 22:00', () => {
-    const s = with_(st(2, 'DN', FRI), st(2, 'OUT', SAT));
+  // Michael, 2/11: ΔΝ ΣΚ και εξοδούχος τη Δευτέρα έβγαινε «ΔΝ από χθες» (Β3): με εκπαίδευση γυρνά το πρωί, όπως με ΔΝ την επόμενη
+  it('Παρ ΔΝ, Σαβ εξοδούχος: με εκπαίδευση Σάββατο 06:00 (και φεύγει πάλι), χωρίς εκπαίδευση Σάββατο 22:00', () => {
+    let s = with_(st(2, 'DN', FRI), st(2, 'OUT', SAT));
+    expect(returnOf(s, 2, FRI)).toEqual({ day: SAT, time: '06:00', why: 'πρωινή εκπαίδευση' });
+    s = run(s, { t: 'setDayPlan', date: SAT, plan: { train: false } });
     expect(returnOf(s, 2, FRI)).toEqual({ day: SAT, time: '22:00', why: 'εξοδούχος το Σάββατο' });
   });
   it('Παρ ΔΝ, Σαβ μένει (η μέρα είναι δηλωμένη): Σάββατο 06:00', () => {
@@ -130,7 +133,7 @@ describe('returnOf: υπηρεσία και διόρθωση ανά άτομο',
     expect(returnOf(s, 2, FRI)).toEqual({ day: MON, time: '10:00', why: 'διόρθωση: ΕΞΕΤΑΣΕΙΣ', fix: true });
     expect(returnOf(s, 2, SAT)).toMatchObject({ day: SAT, time: '22:00' });   // άλλη μέρα: όχι
     s = run(s, { t: 'delBackFix', id: '2:' + FRI });
-    expect(returnOf(s, 2, FRI)).toMatchObject({ day: SAT, time: '22:00' });
+    expect(returnOf(s, 2, FRI)).toMatchObject({ day: SAT, time: '06:00' });
   });
 });
 
@@ -148,8 +151,13 @@ describe('awayAt: παρουσία με την ώρα', () => {
     expect(awayAt(s, 2, SAT, '06:00')).toBe(false);
     expect(awayAt(s, 2, SAT, '10:00')).toBe(false);
   });
-  it('ΔΝ που την επόμενη μέρα είναι εξοδούχος: απών όλη την επόμενη μέρα ως τις 22:00', () => {
-    const s = with_(st(2, 'DN', FRI), st(2, 'OUT', SAT));
+  it('ΔΝ που την επόμενη μέρα είναι εξοδούχος: με εκπαίδευση παρών από 06:00 ως την έξοδο· χωρίς εκπαίδευση απών ως τις 22:00', () => {
+    let s = with_(st(2, 'DN', FRI), st(2, 'OUT', SAT));
+    expect(awayAt(s, 2, SAT, '05:00')).toBe(true);
+    expect(awayAt(s, 2, SAT, '10:00')).toBe(false);
+    expect(awayAt(s, 2, SAT, '18:00')).toBe(true);
+    expect(awayAt(s, 2, SAT, '22:00')).toBe(false);
+    s = run(s, { t: 'setDayPlan', date: SAT, plan: { train: false } });
     expect(awayAt(s, 2, SAT, '10:00')).toBe(true);
     expect(awayAt(s, 2, SAT, '18:00')).toBe(true);
     expect(awayAt(s, 2, SAT, '22:00')).toBe(false);
