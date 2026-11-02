@@ -9,8 +9,8 @@
 // Κυκλική εξάρτηση με το rules.ts (η Δύναμη με την ώρα καλεί το outHeld): όλα χρησιμοποιούνται μέσα σε συναρτήσεις, όχι στην αρχή του αρχείου.
 import { TYPES, type AppState, type DayPlan, type Person, type Rules, type Status } from './domain';
 import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
-import { hasTimes, mins } from './hours';
-import { activePeople, holOf, postOf, statusesOn } from './rules';
+import { backBy, hasTimes, mins } from './hours';
+import { activePeople, hkMin, holOf, postOf, statusesAt, statusesOn } from './rules';
 import { collator } from './text';
 import { leavePhrase } from './ranks';
 import { dutyAt, isSat, isWk, outLbl } from './weekend';
@@ -51,7 +51,12 @@ export const theDay = (d: ISODate) => (weekday(d) === 6 ? 'το ' : 'η ') + DOW
 export interface Ret { day: ISODate; time: string; why: string; pending?: true; leaveAt?: string; duty?: string; dutyTime?: string; open?: true; fix?: true; base?: string }
 
 const MAX_DAYS = 120;
-const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
+// Άδεια/νοσοκομείο που τελειώνει τη μέρα d με ώρα ως την ώρα της ΗΚΑΙ (π.χ. ΚΑ ως 06:00): γύρισε το πρωί, η μέρα του είναι κανονική
+// (Michael, 2/11: δεν «γυρίζει σήμερα», ούτε στο «Ποιοι γυρίζουν» ούτε στο Γ4· με ΔΝ/έξοδο σήμερα κρίνεται σαν να μην είχε άδεια)
+export const backAm = (s: Pick<AppState, 'rules'>, x: Status, d: ISODate) => TYPES[x.type].cat !== 'out' && backBy(x, d, hkMin(s.rules));
+// (awayAll: και αυτές, για τη συνέχεια μιας άδειας στις επόμενες μέρες: ΚΑ ως αύριο 06:00 γυρνά αύριο 06:00)
+const awayAll = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
+export const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => awayAll(s, pid, d).filter(y => !backAm(s, y, d));
 // Μέρα «δηλωμένη» = κάποιος έχει έξοδο ή ΔΝ εκείνη τη μέρα (ή παρατήρηση εξοδούχου): οι Εξοδούχοι της μέρας έχουν συμπληρωθεί και όποιος
 // δεν έχει έξοδο/ΔΝ μένει. Αλλιώς δεν ξέρουμε αν ο ΔΝ μένει (η αλλαγή ωρών της μέρας δεν μετρά: μπορεί να μπει από πριν). Η «ΔΝ ΣΚ» του
 // Σαββάτου δηλώνει και την Κυριακή, ακόμα κι αν εκείνος δεν μπήκε στη ΔΝ της (υπηρεσία, ποινή…).
@@ -73,7 +78,7 @@ const hasOut = (x: Status) => TYPES[x.type].cat === 'out';
 // άδεια (ΔΝ → δεν γυρνά απόψε, γυρνά με τον κανόνα της ΔΝ· έξοδος → στην ώρα των εξοδούχων). Μία πηγή για την οθόνη «Ποιοι γυρίζουν και
 // πότε» (leaveBack) και για τους 4 πίνακες (outsTables). null: δεν ισχύει (καμία άδεια/ΔΝ/έξοδος, ή η άδεια συνεχίζει αύριο).
 export function leaveEnd(s: AppState, pid: number, d: ISODate, now: Status[]): { out: Status; r: Ret | null } | null {
-  const out = now.find(hasOut); if (!out || !now.some(x => !hasOut(x)) || awayOn(s, pid, addDays(d, 1)).some(x => !hasOut(x))) return null;
+  const out = now.find(hasOut); if (!out || !now.some(x => !hasOut(x)) || awayAll(s, pid, addDays(d, 1)).some(x => !hasOut(x))) return null;
   const free = { ...s, statuses: s.statuses.filter(x => x.pid !== pid || hasOut(x) || !TYPES[x.type].away) };
   const r = returnOf(free, pid, d);
   return { out, r: r && { ...r, base: out.type === 'DN' ? 'τέλος άδειας, ΔΝ' : 'τέλος άδειας, έξοδος' } };
@@ -95,7 +100,7 @@ export function returnOf(s: AppState, pid: number, d: ISODate): Ret | null {
     const why = (plain: string) => (cur === d ? plain : 'ΔΝ ως ' + onDay(cur));
     const duty = dutyAt(s, n, pid);
     if (duty) return withDuty(s, pid, { day: n, time: t.backDn, why: '' });
-    const on = awayOn(s, pid, n);
+    const on = awayAll(s, pid, n);
     const lv = on.find(x => !hasOut(x));
     if (lv) {
       // άδεια που ξεκινά μετά την ώρα επιστροφής ΔΝ: γυρνά και φεύγει στην ώρα της· ως την ώρα αυτή: συνεχίζει σε άδεια
@@ -130,10 +135,12 @@ export function outHeldBy(s: AppState, pid: number, d: ISODate, m: number): { st
     if (own.some(x => !hasOut(x))) {
       // άδεια που τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (κανόνας 26/10): από την αρχή εξόδου μετρά ως εξοδούχος/ΔΝ, όχι ως άδεια
       // (Michael, 30/10: άδεια ως 22:00 και εξοδούχος, η Δύναμη τον είχε στους απόντες της άδειας)
-      const le = leaveOut(s, pid, d, m); if (!le) return undefined;
-      return gone(le.r, d, m) ? { st: le.out, r: le.r } : null;
-    }
-    if (m >= mins(dayTimes(s, d).out)) { const r = returnOf(s, pid, d); if (gone(r, d, m)) return { st: outs.find(x => x.type === 'DN') || outs[0], r }; }
+      const le = leaveOut(s, pid, d, m);
+      if (le) return gone(le.r, d, m) ? { st: le.out, r: le.r } : null;
+      // πριν την αρχή εξόδου και η άδεια έχει ήδη τελειώσει (Michael, 2/11: ΚΑ ως 06:00 και ΔΝ σήμερα έβγαινε «ΔΝ» στους Απόντες
+      // από το πρωί): είναι μέσα ως την έξοδο, όπως όποιος δεν είχε άδεια (μένει μόνο η χθεσινή ΔΝ/έξοδος πιο κάτω)
+      if (!(m < mins(dayTimes(s, d).out) && own.every(x => hasOut(x) || backBy(x, d, m)))) return undefined;
+    } else if (m >= mins(dayTimes(s, d).out)) { const r = returnOf(s, pid, d); if (gone(r, d, m)) return { st: outs.find(x => x.type === 'DN') || outs[0], r }; }
   }
   // η προηγούμενη μέρα και οι διορθώσεις παλαιότερων ημερών που γυρνούν αργότερα
   const prev = addDays(d, -1), days = [prev];
@@ -180,7 +187,7 @@ export function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
   const le = leaveEnd(s, pid, d, awayOn(s, pid, d)); if (le?.r) return le.r;
   let last = d, lastSt: Status | undefined, back: Ret | null = null, prev: Status[] = [];
   for (let i = 0, x = d; i < MAX_DAYS; i++, x = addDays(x, 1)) {
-    const a = awayOn(s, pid, x); if (!a.length) break;
+    const a = i ? awayAll(s, pid, x) : awayOn(s, pid, x); if (!a.length) break;
     if (i > 0) {
       // η άδεια τελείωσε την προηγούμενη μέρα με ώρα επιστροφής (γύρισε), ή σήμερα έχει μόνο έξοδο/ΔΝ: δεν συνεχίζει, γύρισε στη λήξη της
       // (30/10: άδεια ως 14:00 και ΔΝ αύριο έλεγε «γυρνά αύριο 06:00 μετά τη ΔΝ»). Άδεια και ΔΝ/έξοδος την τελευταία μέρα: ο κανόνας της ΔΝ (leaveEnd).
@@ -218,6 +225,9 @@ export function returnsOn(s: AppState, d: ISODate): Back[] {
   }
   return out.sort((a, b) => retOrd(a.r).localeCompare(retOrd(b.r)) || a.p.last.localeCompare(b.p.last, 'el'));
 }
+// Όσοι δεν έχουν γυρίσει ακόμα στη στιγμή at (λεπτά) της μέρας d: χωρίς όποιον γυρνά σήμερα ως τότε (το «Σήμερα» με την ώρα)
+// (και ο ίδιος κανόνας με τη Δύναμη: όποιος μετρά ακόμα απών μένει, π.χ. έπρεπε να γυρίσει 16:00 για υπηρεσία αλλά η άδεια λέει 22:00)
+export const backsAt = (s: AppState, bs: Back[], d: ISODate, at?: number) => (at == null ? bs : bs.filter(b => b.r.open || b.r.pending || b.r.day !== d || !b.r.time || mins(b.r.time) > at || statusesAt(s, b.p.id, d, at).some(x => TYPES[x.type].away)));
 // Η σειρά των επιστροφών: ανά μέρα και ώρα, όσοι δεν έχουν λήξη στο τέλος (και στην «Όλη η δύναμη», Δ. Πότε γυρίζουν)
 export const retOrd = (r: Ret) => (r.open ? '9' : r.day + (r.duty ? '0' : r.pending ? '2' : '1') + (r.time || '23:59'));
 // «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»

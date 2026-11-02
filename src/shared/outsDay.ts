@@ -8,8 +8,8 @@ import type { ISODate } from './dates';
 import { addDays, dm } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
-import { activePeople, postOf, statusesFrom, statusesOn } from './rules';
-import { dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
+import { activePeople, postOf, statusesFrom } from './rules';
+import { awayOn, dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
 import { dutyAt } from './weekend';
@@ -24,7 +24,6 @@ export const DAY_GROUPS: [DayGroup, 'A' | 'B' | 'G', string][] = [
   ['B1', 'B', 'ΣΕ ΑΔΕΙΑ'], ['B2', 'B', 'ΝΟΣΟΚΟΜΕΙΟ'], ['B3', 'B', 'ΔΝ ΑΠΟ ΧΘΕΣ / ΔΕΝ ΓΥΡΙΣΑΝ'],
   ['G1', 'G', 'ΥΠΗΡΕΣΙΑ'], ['G2', 'G', 'ΠΟΙΝΗ'], ['G3', 'G', 'ΣΤΕΠ / ΚΩΛΥΟΜΕΝΟΙ / ΙΑΤΡΙΚΑ'], ['G4', 'G', 'ΓΥΡΙΖΟΥΝ ΣΗΜΕΡΑ ΚΑΙ ΜΕΝΟΥΝ'], ['G5', 'G', 'ΔΕΝ ΒΓΗΚΑΝ']
 ];
-const awayOn = (s: AppState, pid: number, d: ISODate) => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
 const isOut = (x: Status) => TYPES[x.type].cat === 'out';
 // πότε γύρισε ο ΔΝ/εξοδούχος της μέρας x (και όταν εκείνη τη μέρα τελείωνε και άδεια: leaveEnd)
 const back = (s: AppState, pid: number, x: ISODate) => returnOf(s, pid, x) ?? leaveEnd(s, pid, x, awayOn(s, pid, x))?.r ?? null;
@@ -46,7 +45,12 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
         if (leaveOut(s, p.id, d, T) || !atT.length) { R(o.type === 'DN' ? 'A1' : 'A2', r, 'τέλος άδειας + έξοδος', { st: o, lv: lv[0], ...duty() }); continue; }
         R(lv.some(x => x.type === 'NOS') ? 'B2' : 'B1', r, 'άδεια + έξοδος', { st: o, lv: lv[0] }); continue;
       }
-      if (!atT.length) { R('G4', r, 'γύρισε πριν την έξοδο', { lv: lv[0] }); continue; }
+      if (!atT.length) {
+        // γύρισε από την άδεια πριν την έξοδο, αλλά τον κρατά ακόμα έξω η χθεσινή ΔΝ/έξοδος (διόρθωση «γυρνά αργότερα»): είναι ήδη έξω, όπως στη Δύναμη
+        const h = postOf(s, d, p.id) ? null : outHeldBy(s, p.id, d, T);
+        if (h) { R('B3', h.r, 'held', { st: h.st, lv: lv[0] }); continue; }
+        R('G4', r, 'γύρισε πριν την έξοδο', { lv: lv[0] }); continue;
+      }
       const l = atT.find(x => x.type === 'NOS') || atT[0];
       const yAway = awayOn(s, p.id, y);
       const yb = yAway.some(isOut) ? back(s, p.id, y) : null;

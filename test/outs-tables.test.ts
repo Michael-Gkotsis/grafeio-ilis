@@ -48,16 +48,21 @@ describe('outsTables: οι τέσσερις πίνακες', () => {
     expect(line(t, 'tomorrow', 5)).toEqual(['αύριο πρωί', 'Τιμητική άδεια']);
   });
   it('άδεια που λήγει σήμερα και σήμερα έχει ΔΝ: δεν γυρνά απόψε, γυρνά με τον κανόνα της ΔΝ (στον 4, όχι στον 1)', () => {
-    const t = outsTables(with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '06:00' }), st(5, 'DN', MON)), MON);
+    const t = outsTables(with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '18:00' }), st(5, 'DN', MON)), MON);
     expect(ids(t)).toEqual({ dn: [], out: [], tonight: [], tomorrow: [5] });
     expect(line(t, 'tomorrow', 5)).toEqual(['αύριο 06:00', 'τέλος άδειας, ΔΝ']);
+    // γύρισε ως την ώρα της ΗΚΑΙ (06:00): μέσα το πρωί, βγαίνει απόψε με ΔΝ όπως όλοι (Michael, 2/11)
+    const am = outsTables(with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '06:00' }), st(5, 'DN', MON)), MON);
+    expect(ids(am)).toEqual({ dn: [5], out: [], tonight: [], tomorrow: [5] });
     // η ώρα της ΔΝ ακολουθεί τα ίδια με το returnOf (εδώ η Τρίτη έχει άλλη ώρα επιστροφής ΔΝ)
     const s = run(with_(st(5, 'LEAVE', FRI, { to: MON }), st(5, 'DN', MON)), { t: 'setDayPlan', date: TUE, plan: { backDn: '07:15' } });
     expect(line(outsTables(s, MON), 'tomorrow', 5)[0]).toBe('αύριο 07:15');
   });
   it('άδεια που λήγει σήμερα και απόψε έχει έξοδο: γυρνά στην ώρα των εξοδούχων (στον 3)', () => {
-    const t = outsTables(with_(st(5, 'SICK', FRI, { to: MON, toTime: '06:00' }), st(5, 'OUT', MON)), MON);
+    const t = outsTables(with_(st(5, 'SICK', FRI, { to: MON, toTime: '14:00' }), st(5, 'OUT', MON)), MON);
     expect(ids(t)).toEqual({ dn: [], out: [], tonight: [5], tomorrow: [] });
+    // γύρισε ως την ώρα της ΗΚΑΙ: εξοδούχος όπως όλοι
+    expect(ids(outsTables(with_(st(5, 'SICK', FRI, { to: MON, toTime: '06:00' }), st(5, 'OUT', MON)), MON))).toEqual({ dn: [], out: [5], tonight: [], tomorrow: [] });
     expect(line(t, 'tonight', 5)).toEqual(['απόψε 22:00', 'τέλος άδειας, έξοδος']);
   });
   it('άδεια που λήγει αύριο: στον 4 με την ώρα της· ταξινόμηση κατά ώρα (06:00 πρώτα, μετά 14:00, 22:00)', () => {
@@ -117,8 +122,11 @@ describe('outsTables: οι τέσσερις πίνακες', () => {
 
 describe('outsTables και «Ποιοι γυρίζουν και πότε»: μία πηγή', () => {
   it('άδεια που λήγει σήμερα με ΔΝ σήμερα: και το returnsOn γυρνά με τον κανόνα του ΔΝ, όπως το Excel (σχέδιο 26/10)', () => {
-    const s = with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '06:00' }), st(5, 'DN', MON));
+    const s = with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '10:00' }), st(5, 'DN', MON));
     expect(returnsOn(s, MON).map(b => [b.p.id, b.r.day, b.r.time])).toEqual([[5, TUE, '06:00']]);
     expect(returnOf(s, 5, MON)).toBeNull();
+    // ως 06:00 (πριν την ΗΚΑΙ): σκέτη ΔΝ
+    const am = with_(st(5, 'LEAVE', FRI, { to: MON, toTime: '06:00' }), st(5, 'DN', MON));
+    expect(returnsOn(am, MON).map(b => [b.p.id, b.st.type, b.r.day, b.r.time])).toEqual([[5, 'DN', TUE, '06:00']]);
   });
 });

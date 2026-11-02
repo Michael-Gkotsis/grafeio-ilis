@@ -61,7 +61,8 @@ function check(s: AppState, d: ISODate, realistic: boolean): string[] {
   for (const x of outs) if (!/^[AB]/.test(grp.get(x.p.id)!)) E('P2 p' + x.p.id + ' εξοδούχος στο ' + grp.get(x.p.id));
   for (const x of stay) if (!/^G/.test(grp.get(x.p.id)!)) E('P2 p' + x.p.id + ' παραμένων στο ' + grp.get(x.p.id));
   for (const r of book) {
-    if (/^[AB]/.test(r.g) && pres.has(r.p.id)) E('P3 p' + r.p.id + ' ' + r.g + ' παρών στην ώρα εξόδου');
+    // ο Α3/Β1 που φεύγει για (νέα) άδεια μετά την ώρα εξόδου είναι παρών ως να φύγει (όπως στην ΗΚΑΙ, Michael 1/11 και 2/11)
+    if (/^[AB]/.test(r.g) && pres.has(r.p.id) && !(/^A3|^B1/.test(r.g) && r.lv?.from === d && !!r.lv.fromTime && mins(r.lv.fromTime) > outM)) E('P3 p' + r.p.id + ' ' + r.g + ' παρών στην ώρα εξόδου');
     if (/^G[1235]/.test(r.g) && !pres.has(r.p.id) && !(r.g === 'G1' && r.warn?.includes('ΔΙΟΡΘΩΣΗ'))) E('P3 p' + r.p.id + ' ' + r.g + ' απών στην ώρα εξόδου');
     if (r.warn && !(r.g === 'G1' ? r.warn.includes('ΔΙΟΡΘΩΣΗ') : /^A[12]$/.test(r.g) && r.warn.includes('ΥΠΗΡΕΣΙΑ'))) E('P1 p' + r.p.id + ' ΠΡΟΣΟΧΗ εκτός των δύο γνωστών: ' + r.warn);
     if (/^[AB]|^G4/.test(r.g)) {

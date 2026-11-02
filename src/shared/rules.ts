@@ -207,8 +207,10 @@ export function statusesFrom(statuses: Status[], pid: number, date: ISODate, m: 
 }
 // Οι καταστάσεις της μέρας date στη στιγμή at (λεπτά) όπως τις μετρά η Δύναμη: οι άδειες όπως στο statusesFrom, η έξοδος και η ΔΝ με την
 // ώρα (Michael, 24/10): ο εξοδούχος παρών ως την αρχή εξόδου, ο ΔΝ απών ως την επιστροφή του, ακόμα και την επόμενη μέρα.
+// Άδεια που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή at: παρών ως να φύγει, όπως στην ΗΚΑΙ (Michael, 1/11 και 2/11: «να είναι
+// consistent μεταξύ τους» το Σήμερα, η Δύναμη και η ΗΚΑΙ). Οι υπηρεσίες και η έξοδος κρίνονται αλλού και δεν αλλάζουν.
 export function statusesAt(s: AppState, pid: number, date: ISODate, at: number): Status[] {
-  const ss = statusesFrom(s.statuses, pid, date, at), held = outHeld(s, pid, date, at);
+  const ss = notLeftYet(statusesFrom(s.statuses, pid, date, at), date, at), held = outHeld(s, pid, date, at);
   if (held === undefined) return ss;
   // άδεια που τελειώνει σήμερα με έξοδο/ΔΝ σήμερα: από την αρχή εξόδου μετρά μόνο η έξοδος/ΔΝ (leaveOut)
   const lo = !!leaveOut(s, pid, date, at), rest = ss.filter(x => TYPES[x.type].cat !== 'out' && !(lo && TYPES[x.type].away));
@@ -1342,7 +1344,7 @@ function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date:
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 // Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
-// Μόνο στη μέτρηση της ΗΚΑΙ: οι υπηρεσίες, η έξοδος, η Δύναμη και το 3. ΑΔΕΙΕΣ μένουν όπως ήταν. Χωρίς ώρα αναχώρησης: απών όλη τη μέρα.
+// Στη μέτρηση της ΗΚΑΙ και στη Δύναμη/Σήμερα με την ώρα (statusesAt): οι υπηρεσίες, η έξοδος και το 3. ΑΔΕΙΕΣ μένουν όπως ήταν. Χωρίς ώρα αναχώρησης: απών όλη τη μέρα.
 const leftAfter = (x: Status, date: ISODate, m: number) => TYPES[x.type].cat === 'abs' && x.from === date && !!x.fromTime && mins(x.fromTime) > m;
 const notLeftYet = (ss: Status[], date: ISODate, m: number): Status[] => (ss.some(x => leftAfter(x, date, m)) ? ss.filter(x => !leftAfter(x, date, m)) : ss);
 export interface HkaiRow { n: number; attached: number; c: Record<string, number> }   // c.ab = μισθοτροφοδοτηθέντες (μόνο με το χέρι)

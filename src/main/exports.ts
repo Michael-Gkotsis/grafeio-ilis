@@ -22,6 +22,7 @@ import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
 import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
+import { statNoOut } from '../shared/stat';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -685,11 +686,15 @@ async function allSheet(wb: Workbook, s: AppState, d: ISODate, loc: OutsLoc, L: 
   const titleC = m.title ? m.title.c : c0;
   if (tmg) ws.removeMerge(tmg);
   // Παρατηρήσεις: η κατάσταση (άδεια, ΔΝ, έξοδος) με τις λέξεις των άλλων μορφών, η παρατήρηση της μέρας και η ΠΡΟΣΟΧΗ του γραφείου
+  // Στο Γ (εκτός Γ4) οι καταστάσεις που δεν κόβουν την έξοδο (ΕΑ, ΕΟ, κωλυόμενος που βγαίνει…) δεν είναι «γιατί μένει» (Michael, 2/11):
+  // γράφονται στις Παρατηρήσεις
+  const stayOf = (x: DayRow) => statusesFrom(s.statuses, x.p.id, d, outMinOn(s, d));
+  const notWhy = (x: DayRow) => (x.g[0] === 'G' && x.g !== 'G4' ? stayOf(x).filter(y => !statNoOut(y, s.settings.lists)).map(y => statusLbl(y, s.settings.lists)) : []);
   const noteOf = (x: DayRow) => [
     x.lv ? (x.st ? statusLbl(x.lv, s.settings.lists) : norm(withNote(statusLbl(x.lv, s.settings.lists), outNoteOf(s, d, x.p.id)))) : '',
-    x.st ? outsNote(s, d, x.p.id, x.st, false) : '', x.warn || ''].filter(Boolean).join(', ');
+    x.st ? outsNote(s, d, x.p.id, x.st, false) : '', ...new Set(notWhy(x)), x.warn || ''].filter(Boolean).join(', ');
   // ΓΥΡΝΑ (Α, Β): όπως το «Ποιοι γυρίζουν και πότε»· ΓΙΑΤΙ ΜΕΝΕΙ (Γ): υπηρεσία με ώρες, ποινή, ΣΤΕΠ…, ή πότε γυρνά (Γ4)
-  const whyOf = (x: DayRow) => (x.g[0] !== 'G' ? (x.r ? retTxt(x.r) : '') : x.g === 'G4' ? (x.r ? retNote(x.r) : '') : stayNote(s, d, x.p, statusesFrom(s.statuses, x.p.id, d, outMinOn(s, d)), true));
+  const whyOf = (x: DayRow) => (x.g[0] !== 'G' ? (x.r ? retTxt(x.r) : '') : x.g === 'G4' ? (x.r ? retNote(x.r) : '') : stayNote(s, d, x.p, stayOf(x).filter(y => statNoOut(y, s.settings.lists)), true));
   // Δ: ΠΟΤΕ στις πρώτες στήλες, ΠΛΗΘΟΣ στη στήλη του θαλάμου, Α/Α στις υπόλοιπες
   const cPl = C.room != null && C.room > c0 + 1 && C.room < cLast ? C.room : Math.max(c0 + 1, cLast - 1);
   const span = (r: number, a: number, b: number) => { if (b > a) ws.addMerge(refOf(a, r) + ':' + refOf(b, r)); };

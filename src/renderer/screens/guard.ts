@@ -17,7 +17,7 @@ import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
 import { dutyAt, isSat, isWk, outLbl } from '../../shared/weekend';
-import { dayTimes, theDay, retDay, retWhen, returnsOn, stillOut, type Back } from '../../shared/returns';
+import { backsAt, dayTimes, theDay, retDay, retWhen, returnsOn, stillOut, type Back } from '../../shared/returns';
 import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
 import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { statusLbl } from '../../shared/ranks';
@@ -574,9 +574,10 @@ const OutRow = memo(function OutRow({ p, unit, style, reason, away, awayTxt, val
 // Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία.
 // fixable (οθόνη Εξοδούχοι): «Διόρθωση…» ανά εξοδούχο/ΔΝ. Όσοι δεν ξέρουμε πότε γυρίζουν (δεν έχει δηλωθεί η επόμενη μέρα) στο τέλος, με προειδοποίηση.
 const PENDING = 'Να δηλωθεί η επόμενη μέρα';
-export function ReturnsList({ date, limit, fixable }: { date: string; limit?: number; fixable?: boolean }) {
+// at (Σήμερα, λεπτά): χωρίς όσους γύρισαν ήδη ως τώρα (Michael, 2/11: έδειχνε ΚΑ που είχαν λήξει)
+export function ReturnsList({ date, limit, fixable, at }: { date: string; limit?: number; fixable?: boolean; at?: number }) {
   const { state } = useStore(); const nav = useNav();
-  const list = useMemo(() => returnsOn(state, date), [state, date]);
+  const list = useMemo(() => backsAt(state, returnsOn(state, date), date, at), [state, date, at]);
   const [fix, setFix] = useState<Back | null>(null);
   if (!list.length) return html`<div className="empty">Κανείς δεν λείπει.</div>`;
   const shown = limit ? list.slice(0, limit) : list;
