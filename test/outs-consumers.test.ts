@@ -21,7 +21,8 @@ const decl = (d: string) => st(9, 'OUT', d);
 
 describe('«Ποιοι γυρίζουν και πότε»: μέρα, ώρα και γιατί', () => {
   it('Παρ ΔΝ: Σάββατο εξοδούχος / μένει / τίποτα δηλωμένο (με και χωρίς εκπαίδευση)', () => {
-    expect(txt(with_(st(2, 'DN', FRI), st(2, 'OUT', SAT)), FRI, 2)).toBe('Σάββατο 24/10 22:00 · εξοδούχος το Σάββατο');
+    expect(txt(with_(st(2, 'DN', FRI), st(2, 'OUT', SAT)), FRI, 2)).toBe('Σάββατο 24/10 06:00 · πρωινή εκπαίδευση');
+    expect(txt(run(with_(st(2, 'DN', FRI), st(2, 'OUT', SAT)), { t: 'setDayPlan', date: SAT, plan: { train: false } }), FRI, 2)).toBe('Σάββατο 24/10 22:00 · εξοδούχος το Σάββατο');
     expect(txt(with_(st(2, 'DN', FRI), decl(SAT)), FRI, 2)).toBe('Σάββατο 24/10 06:00 · μένει το Σάββατο');
     expect(txt(with_(st(2, 'DN', FRI)), FRI, 2)).toBe('Σάββατο 24/10 06:00 · πρωινή εκπαίδευση');
     const s = run(with_(st(2, 'DN', FRI)), { t: 'setDayPlan', date: SAT, plan: { train: false } });

@@ -23,7 +23,7 @@ const D = '2026-10-26';   // Δευτέρα
 function state(fmt: OutsFmt | 'tab4' | undefined, ss: Status[], n = 40): AppState {
   const s = fakeState(n); s.statuses = ss; s.settings = { ...s.settings, ...(fmt ? { outsFmt: fmt } : {}) }; return s;
 }
-// ό,τι μπήκε: 1 ΔΝ σήμερα, 2 εξοδούχοι, ΔΝ χθες + έξοδος σήμερα, ΚΑ που λήγει σήμερα 15:00, ΚΑ που λήγει αύριο, ΚΑ που λήγει σήμερα με ΔΝ
+// ό,τι μπήκε: 1 ΔΝ σήμερα, 2 εξοδούχοι, ΔΝ χθες + έξοδος σήμερα (Δευτέρα με εκπαίδευση: γυρνά το πρωί, Α2), ΚΑ που λήγει σήμερα 15:00, ΚΑ που λήγει αύριο, ΚΑ που λήγει σήμερα με ΔΝ
 const scenario = () => [st(1, 'DN', D), st(3, 'OUT', D), st(4, 'OUT', D), st(5, 'DN', '2026-10-25'), st(5, 'OUT', D),
   st(7, 'LEAVE', '2026-10-23', { to: D, toTime: '15:00', kind: 'Κανονική' }), st(6, 'LEAVE', '2026-10-23', { to: '2026-10-27', toTime: '14:00', kind: 'Κανονική' }), st(9, 'LEAVE', '2026-10-23', { to: D }), st(9, 'DN', D)];
 // όλα τα κελιά ως κείμενο ανά γραμμή
@@ -48,7 +48,7 @@ describe('Εξοδούχοι «Όλη η δύναμη»: πραγματικό te
     const rows = [...(await grid(out)).rows, ...(await grid(out, 'ΔΥΝΑΜΗ')).rows];   // οι δύο σελίδες η μία μετά την άλλη
     const nm = (id: number) => s.people.find(p => p.id === id)!.last;
     const where = (id: number) => { let sub = ''; for (let r = 1; r <= rows.length; r++) { const a = at(rows, r, 1); if (/^[ΑΒΓ]\d\. /.test(a)) sub = a.slice(0, 2); if (at(rows, r, 4) === nm(id) && /^\d+$/.test(a)) return sub; } return '-'; };
-    for (const [id, g] of [[1, 'Α1'], [3, 'Α2'], [4, 'Α2'], [5, 'Β3'], [6, 'Β1'], [7, 'Γ4'], [9, 'Α1']]) expect(where(id as number), 'p' + id).toBe(g);
+    for (const [id, g] of [[1, 'Α1'], [3, 'Α2'], [4, 'Α2'], [5, 'Α2'], [6, 'Β1'], [7, 'Γ4'], [9, 'Α1']]) expect(where(id as number), 'p' + id).toBe(g);
     expect(book.find(x => x.p.id === 1)!.g).toBe('A1');
     expect(inCell(rows, t => /^ΤΡΙΤΗ 27\/10 06:00/.test(t)).length).toBeGreaterThan(0);
   });
