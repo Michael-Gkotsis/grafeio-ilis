@@ -9,7 +9,7 @@ import { dayBook } from '../src/shared/outsDay';
 import { backsAt, dayTimes, returnsOn } from '../src/shared/returns';
 import { mins } from '../src/shared/hours';
 import { TYPES, type AppState } from '../src/shared/domain';
-import { isAway as isAwaySt, type UserLists } from '../src/shared/ranks';
+import { isAway as isAwaySt, LEAVE_AWAY_NO_COL, leaveCol, type UserLists } from '../src/shared/ranks';
 import type { ISODate } from '../src/shared/dates';
 
 const TIMES = ['08:00', '09:30', '12:00', '13:30', '16:59', '17:00', '18:30', '21:59', '22:00', '23:30'];
@@ -54,7 +54,13 @@ function check(s: AppState, d: ISODate): string[] {
   const h = hkaiCounts(s, d), c8 = strengthOf(s, d, hkMin(s.rules));
   if (h.soldiers !== total) E('ΗΚΑΙ στρατιώτες ' + h.soldiers + ' ≠ ' + total);
   const hkAway = HK_A.flatMap(([k]) => h.cols[k] || []);
-  const lvAway = people.filter(p => statusesAt(s, p.id, d, hkMin(s.rules)).some(x => isAwaySt(x, lists) && TYPES[x.type].cat !== 'out'));
+  // «Πουθενά στην ΗΚΑΙ, απών στην εφαρμογή» ('-a', Michael, 3/11): απών στη Δύναμη, σε καμία στήλη της ΗΚΑΙ, άρα εκεί μετρά παρών
+  const noCol = (x: { type: string; kind?: string }) => x.type === 'LEAVE' && leaveCol(x.kind, lists) === LEAVE_AWAY_NO_COL;
+  const awayAt = people.filter(p => statusesAt(s, p.id, d, hkMin(s.rules)).some(x => isAwaySt(x, lists) && TYPES[x.type].cat !== 'out'));
+  const lvNo = awayAt.filter(p => statusesAt(s, p.id, d, hkMin(s.rules)).some(x => isAwaySt(x, lists) && TYPES[x.type].cat !== 'out' && noCol(x)));
+  const lvAway = awayAt.filter(p => !lvNo.includes(p));
+  if (ids(h.noCol.map(x => x.p)) !== ids(lvNo)) E('ΗΚΑΙ noCol ' + ids(h.noCol.map(x => x.p)) + ' ≠ ' + ids(lvNo));
+  if (h.avail !== h.total - h.apo) E('ΗΚΑΙ διαθέσιμοι ≠ σύνολο − απόντες');
   if (ids(hkAway) !== ids(lvAway)) E('ΗΚΑΙ απόντες ' + ids(hkAway) + ' ≠ Δύναμη 08:00 (άδειες/νοσοκομείο) ' + ids(lvAway) + ' · ' + c8.absent);
   return errs;
 }
@@ -69,8 +75,8 @@ describe('Σήμερα, Δύναμη, ΗΚΑΙ και ΔΥΝΑΜΗ συμφων�
 
 // Δικά σου είδη άδειας (Michael, 3/11): απών με στήλη (Φ.Πορ.), κωλυόμενος με στήλη (Κίν.), παρών «Πουθενά» χωρίς και με υπηρεσίες/έξοδο.
 // Οι Κανονικές και οι ΑΜΔ των τυχαίων δεδομένων γίνονται, με τη σειρά, τα δικά σου είδη· οι αριθμοί των οθονών συμφωνούν και με αυτά.
-const OWN: UserLists = { leaveKinds: { add: [{ name: 'Φύλλο πορείας', col: 'fp' }, { name: 'Υπηρεσιακό', col: 'kin' }, { name: 'Εκτός', col: '-' }, { name: 'Εκτός2', col: '-', duty: true, out: true }] } };
-const KINDS = ['Φύλλο πορείας', 'Υπηρεσιακό', 'Εκτός', 'Εκτός2'];
+const OWN: UserLists = { leaveKinds: { add: [{ name: 'Φύλλο πορείας', col: 'fp' }, { name: 'Υπηρεσιακό', col: 'kin' }, { name: 'Εκτός', col: '-' }, { name: 'Εκτός2', col: '-', duty: true, out: true }, { name: 'Απών-εφαρμογή', col: '-a' }] } };
+const KINDS = ['Φύλλο πορείας', 'Υπηρεσιακό', 'Εκτός', 'Εκτός2', 'Απών-εφαρμογή'];
 const withOwn = (s: AppState): AppState => {
   let i = 0;
   return { ...s, settings: { ...s.settings, lists: OWN }, statuses: s.statuses.map(x => (x.type === 'LEAVE' && x.kind !== 'Ειδική' ? { ...x, kind: KINDS[i++ % KINDS.length] } : x)) };

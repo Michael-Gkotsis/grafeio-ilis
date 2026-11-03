@@ -202,10 +202,14 @@ export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανον�
 // στήλη απόντων (απών παντού), στήλη κωλυομένων (κωλυόμενος: αφαιρείται από τους παρόντες, χωρίς υπηρεσία και έξοδο) ή '-' (LEAVE_NO_COL, «Πουθενά»:
 // παρών παντού, δεν μετρά σε στήλη· υπηρεσίες και έξοδος μόνο αν το ζητήσεις: ListItem.duty / out)
 export const LEAVE_NO_COL = '-';
+// '-a': «Πουθενά στην ΗΚΑΙ, απών στην εφαρμογή»: απών σαν τις στήλες απόντων, αλλά σε καμία στήλη της ΗΚΑΙ (εκεί μετρά παρών, Michael, 3/11)
+export const LEAVE_AWAY_NO_COL = '-a';
+export const noHkCol = (c: string | undefined): boolean => c === LEAVE_NO_COL || c === LEAVE_AWAY_NO_COL;
 export const LEAVE_COLS: [string, string][] = [
   ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string]),
   ...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]),
-  [LEAVE_NO_COL, 'Πουθενά (μετρά παρών)']
+  [LEAVE_NO_COL, 'Πουθενά στην ΗΚΑΙ (παρών παντού)'],
+  [LEAVE_AWAY_NO_COL, 'Πουθενά στην ΗΚΑΙ (απών στην εφαρμογή)']
 ];
 export type LeaveMode = 'away' | 'kol' | 'present';
 // το δικό σου είδος άδειας (όχι τα βασικά: Κανονική, Ειδική, ΑΜΔ, ΥΕΘΑ)
@@ -247,6 +251,7 @@ export const noOutOf = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): b
 export function leaveEffect(kind: string | undefined, lists?: UserLists, hk = 'ΗΚΑΙ'): string {
   const m = leaveMode({ type: 'LEAVE', kind }, lists), col = leaveCol(kind, lists), short = [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || col;
   if (m === 'kol') return 'Κωλυόμενος: αφαιρείται από τους παρόντες, στην ' + hk + ' στη στήλη ' + short + ', χωρίς υπηρεσία και έξοδο';
+  if (m === 'away' && col === LEAVE_AWAY_NO_COL) return 'Απών στην εφαρμογή, δεν μετρά σε στήλη της ' + hk + ' (εκεί μετρά στους παρόντες)';
   if (m === 'present') {
     const o = ownLeave(kind, lists);
     return 'Παρών παντού, δεν μετρά σε στήλη της ' + hk + (o?.duty ? ' · μπαίνει σε υπηρεσίες' : ' · όχι υπηρεσίες') + (o?.out ? ' · βγαίνει έξοδο' : ' · όχι έξοδο');

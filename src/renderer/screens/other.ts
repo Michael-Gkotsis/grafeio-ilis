@@ -347,6 +347,7 @@ function HkaiMain() {
     <p className="note" style=${{ margin: '-4px 0 12px' }}>Δύναμη = <b>${h.soldiers}</b> στρατιώτες + <b>${h.cadreN}</b> στελέχη · μετρά με τις ${state.rules?.hkTime || '08:00'} (όποιος γυρίσει ως τότε είναι παρών).</p>
     <ul className="hk-src">${src.map(([k, , full]) => html`<li key=${k}><b>${full}</b>: <span className="num">${h.cols[k].length + (h.cadre[k]?.length || 0)}</span><div className="cat__names">${cadreOf(k).map(c => html`<button key=${c.id} type="button" data-tip="Στέλεχος· ανοίγει η κάρτα του, όπου αλλάζει η κατάσταση" onClick=${() => nav.openCadre(c.id, cadreSeen)}>${rankTxt(c)} ${c.last}</button>`)}${h.cols[k].map(p => html`<button key=${p.id} type="button" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button>`)}</div></li>`)}</ul>
     <p className="note" style=${{ margin: '8px 0 0' }}>Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο· τα στελέχη από τις καταστάσεις τους στην καρτέλα Στελέχη. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.</p>
+    ${h.noCol.length > 0 && html`<p className="note" style=${{ margin: '6px 0 0', opacity: 0.75 }}>${h.noCol.length} ${h.noCol.length === 1 ? 'απών της εφαρμογής δεν μετρά' : 'απόντες της εφαρμογής δεν μετρούν'} στην ${HK()} (${[...new Set(h.noCol.map(x => x.kind))].join(', ')}).</p>`}
   <//>
   <${CadreCard} warn=${!cadre}/>
   <${HkHeadCard}/>
