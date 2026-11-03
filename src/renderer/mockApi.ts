@@ -1,7 +1,7 @@
 // Μόνο για ανάπτυξη στον browser (χωρίς Electron): ίδιοι κανόνες, δεδομένα στη μνήμη, φανταστικά ονόματα.
 import { apply, type Command } from '../shared/commands';
 import { emptyState, type AppState, type AuditEntry, type Person } from '../shared/domain';
-import { addDays, nowHM, today } from '../shared/dates';
+import { addDays, nowHM, nowMin, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
 import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
@@ -220,7 +220,7 @@ export function mockApi(): Api {
       const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : stNewCols(cols1, r.pick), rows: nop ? [] : r.kind === 'blank' && (build?.src ?? r.src) ? rowsOf(state, { ...r, src: build?.src ?? r.src, who: build?.who ?? r.who }, date).slice(0, ids.length) : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date, build?.who ?? r.who) },
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: stNewCols((t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], (r.more || []).find(m => m.id === t.id)?.pick), rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
-      const at = atOf(state, r.at, date, today(), new Date().getHours() * 60 + new Date().getMinutes()); const vo = evalTables(state, date, at, r.vals);
+      const at = atOf(state, r.at, date, today(), nowMin()); const vo = evalTables(state, date, at, r.vals);
       const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''), date);   // «Κενός πίνακας»: ετικέτες στα κελιά
       // κάθε πίνακας (και κάθε πίνακας τιμών) είναι ένα κομμάτι· οι ζώνες (r.bands) τα βάζουν το ένα κάτω από το άλλο ή δίπλα δίπλα
       const th = 'border:1px solid #333;background:#d9d9d9';

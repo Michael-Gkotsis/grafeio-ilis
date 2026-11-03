@@ -7,7 +7,7 @@ import { Store, CorruptDbError, listBackups } from './db';
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
-import { dm, dow, nowHM, pskDays, today, type ISODate } from '../shared/dates';
+import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
@@ -1369,7 +1369,7 @@ else {
       const src = r.filePaths[0];
       const bad = store.validate(src);
       if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
-      const d = new Date(); const name = 'ilh_' + today() + '_' + [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
+      const d = nowParts(); const name = 'ilh_' + today() + '_' + [d.h, d.mi, d.s].map(n => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
       fs.mkdirSync(BACKUPS, { recursive: true }); copyDurable(src, path.join(BACKUPS, name));
       return { ok: true, name };
     });

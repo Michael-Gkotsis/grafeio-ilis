@@ -1,4 +1,5 @@
 // Το νήμα των Excel (offload.ts): ό,τι βαρύ γίνεται με τα αρχεία, με τα ίδια δεδομένα που έχει το παράθυρο.
+import { clockOf } from '../shared/dates';
 import { parentPort } from 'worker_threads';
 import path from 'path';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
@@ -34,7 +35,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   dutyCheck: ym => (nodeRequire(path.join(__dirname, 'excel.js')) as typeof import('./excel')).dutyCheck(state, ym)
 };
 parentPort!.on('message', async (m: { id: number; fn: string; args: unknown[]; state?: AppState }) => {
-  if (m.state) state = m.state;
+  if (m.state) { state = m.state; clockOf(state.settings); }
   try { parentPort!.postMessage({ id: m.id, ok: true, r: await FNS[m.fn](...m.args) }); }
   catch (e: any) {
     // τα ονόματα των κλάσεων χάνονται στο minify: το είδος του λάθους με instanceof

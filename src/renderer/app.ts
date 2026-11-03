@@ -20,7 +20,8 @@ import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
-import { addDays, dm, dmy, dow, today as todayFn } from '../shared/dates';
+import { clockChanged, onClockChange, useNowMin } from './clock';
+import { DEFAULT_TZ, addDays, appVsOs, clockOf, clockShift, dm, dmy, dow, durLabel, osParts, today as todayFn, zoneLabel } from '../shared/dates';
 import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
 import { isWaiting, noteNamesakes } from '../shared/domain';
 import { dueCount } from '../shared/notes';
@@ -46,7 +47,7 @@ const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre',
 
 function useToday() {
   const [d, setD] = useState(todayFn());
-  useEffect(() => { const t = setInterval(() => setD(todayFn()), 30000); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => setD(todayFn()), 30000); const off = onClockChange(() => setD(todayFn())); return () => { clearInterval(t); off(); }; }, []);
   return d;
 }
 
@@ -77,9 +78,11 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
   noteNamesakes(state.people);   // πατρώνυμο στους συνονόματους, πριν αποδοθούν οι οθόνες
+  clockOf(state.settings);       // ζώνη ώρας και διόρθωση, πριν χρησιμοποιηθεί το today()
   setUnitKind(state.settings);   // ΗΚΑΙ ή ΗΚΑΛ, Ίλη ή Λόχος στα κείμενα των οθονών
   const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
+  useEffect(() => { clockChanged(); }, [state.settings.tz, state.settings.clockFix]);   // ισχύει αμέσως, χωρίς να περιμένει το ρολόι
   const refresh = useCallback(async () => { const b = await window.api.boot(); cur.current = { state: b.state, audit: b.audit }; setBoot(b); setState(b.state); setAudit(b.audit); }, []);
   // Ο main στέλνει μόνο ό,τι άλλαξε: τα υπόλοιπα κρατούν την ίδια αναφορά, άρα και τα ευρετήρια (rules.ts) και τα useMemo τους
   const merge = useCallback((r: Extract<CmdResult, { ok: true }>) => {
@@ -120,6 +123,13 @@ function Root({ boot: initial }: { boot: Boot }) {
 
 function Shell() {
   const { state, audit, today, tomorrow, undo, boot } = useStore();
+  const nm = useNowMin(); const hm = String(Math.floor(nm / 60)).padStart(2, '0') + ':' + String(nm % 60).padStart(2, '0');
+  // επεξήγηση της ώρας: ζώνη, διόρθωση και, αν διαφέρει, η ώρα των Windows
+  const clockTip = useMemo(() => {
+    const st = state.settings, fx = clockShift(), vs = appVsOs(), os = osParts();
+    return 'Η ώρα της εφαρμογής (' + zoneLabel(st.tz || DEFAULT_TZ) + (fx ? ' · διόρθωση ' + (fx > 0 ? '+' : '−') + Math.abs(fx) + '′' : '') + '). Με αυτήν μετρούν η ΗΚΑΙ των 08:00, οι έξοδοι και οι επιστροφές. Κλικ: Ρυθμίσεις › Ώρα και ζώνη ώρας'
+      + (Math.abs(vs) >= 1 ? ' Τα Windows δείχνουν ' + String(os.h).padStart(2, '0') + ':' + String(os.mi).padStart(2, '0') + ' (διαφέρουν ' + durLabel(vs) + ').' : '');
+  }, [state.settings.tz, state.settings.clockFix, nm]);   // eslint-disable-line react-hooks/exhaustive-deps
   // «Αναίρεση» σε παλιό μήνυμα: μόνο όσο η ενέργειά του είναι ακόμα η τελευταία
   const prune = useToastPrune();
   useEffect(() => { prune(audit.find(a => a.undoable && !a.undone)?.id ?? -1); }, [audit, prune]);
@@ -237,7 +247,7 @@ function Shell() {
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
           <${Button} variant="ghost" size="icon" aria-label="Ιστορικό ενεργειών" data-tip="Ιστορικό ενεργειών και αναίρεση" data-tip-side="bottom" className=${route.view === 'history' ? 'is-on' : undefined} onClick=${() => go('history')}>${Icon.history}<//>
           <${Button} variant="ghost" size="icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (F1)" data-tip-side="left" onClick=${help}>${Icon.help}<//>
-          <span className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today)}>${dow(today)}<b>${dmy(today)}</b></span>
+          <button type="button" className="today-lbl" aria-label=${'Σήμερα ' + dow(today) + ' ' + dmy(today) + ' ώρα ' + hm} data-tip=${clockTip} data-tip-side="bottom" onClick=${() => go('templates', { tab: 'clock' })}>${dow(today)}<b>${dm(today)}<span className="today-yr">${dmy(today).slice(5)}</span></b><b className="today-time">${hm}</b></button>
           <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
       </header>

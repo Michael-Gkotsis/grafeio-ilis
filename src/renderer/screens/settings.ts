@@ -10,7 +10,8 @@ import { USB_DAYS, usbDue } from '../../shared/reminders';
 import { PHASE_NAME, blocksOf, dutyStartOf, isOutsAll, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
 import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
 import { phaseDelWhy } from '../../shared/commands';
-import { dmy, dow, greekHolidays } from '../../shared/dates';
+import { DEFAULT_TZ, DOW_FULL, FIX_MAX, appVsOs, dmy, dow, durLabel, greekHolidays, nowParts, osParts, utcLabel, weekday, zoneLabel, zoneOffset, type Parts } from '../../shared/dates';
+import { useNowMin } from '../clock';
 import { codeErrors } from '../../shared/codes';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { usePrefs, type Prefs } from '../prefs';
@@ -357,7 +358,7 @@ function DutySection() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας']];
 export function TemplatesScreen() {
   const { boot } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -370,7 +371,7 @@ export function TemplatesScreen() {
     </div>`;
   const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : templates;
+    : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
@@ -378,4 +379,45 @@ export function TemplatesScreen() {
       <div className="setbody">${body}</div>
     </div>
   </div>`;
+}
+
+// Ώρα και ζώνη ώρας: ισχύει αμέσως (σαν την Εμφάνιση), αποθηκεύεται στις ρυθμίσεις (settings.tz, settings.clockFix)
+const ZONES_FALLBACK = ['Europe/Athens', 'Europe/Nicosia', 'Europe/Berlin', 'Europe/London', 'Europe/Istanbul', 'Europe/Sofia', 'Europe/Rome', 'Europe/Paris', 'Africa/Cairo', 'Asia/Dubai', 'America/New_York', 'UTC'];
+const zoneList = (): string[] => { try { const f = (Intl as any).supportedValuesOf?.('timeZone') as string[] | undefined; if (f && f.length) return f.includes('UTC') ? f : [...f, 'UTC']; } catch { /* παλιό Chromium */ } return ZONES_FALLBACK; };
+const fixTxt = (n: number) => (n === 0 ? '0′' : (n > 0 ? '+' : '−') + Math.abs(n) + '′');
+function ClockCard() {
+  const { state, run } = useStore(); useNowMin(); const [pickOther, setPickOther] = useState(false);
+  const tz = state.settings.tz || '', fix = state.settings.clockFix || 0;
+  const mode = tz === 'system' ? 'win' : pickOther || (tz && tz !== DEFAULT_TZ) ? 'other' : 'athens';
+  const zones = useMemo(zoneList, []);
+  const save = (patch: { tz?: string; clockFix?: number }, text: string) => run({ t: 'setSettings', settings: patch, text }, text);
+  const now = nowParts(), os = osParts(), vs = appVsOs();
+  const hm = (p: Parts) => String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0');
+  const iso = now.y + '-' + String(now.mo).padStart(2, '0') + '-' + String(now.d).padStart(2, '0');
+  const zname = zoneLabel(tz || DEFAULT_TZ);
+  const ms = Date.now() + fix * 6e4; const winOff = -new Date().getTimezoneOffset() * 6e4;
+  const off = tz === 'system' ? winOff : zoneOffset(tz || DEFAULT_TZ, ms);
+  const dst = !tz || tz === DEFAULT_TZ ? (off > zoneOffset(DEFAULT_TZ, Date.UTC(now.y, 0, 1)) ? ' θερινή' : ' χειμερινή') : '';
+  const row = (label: string, help: string, ctl: unknown) => html`<div className="pref"><div><b>${label}</b><small>${help}</small></div>${ctl}</div>`;
+  const pickMode = (v: string) => {
+    if (v === 'athens') { setPickOther(false); if (tz) save({ tz: '' }, 'Ώρα: Ελλάδα (Αθήνα)'); }
+    else if (v === 'win') { setPickOther(false); save({ tz: 'system' }, 'Ώρα: όπως τα Windows'); }
+    else setPickOther(true);
+  };
+  return html`<div className="stack"><${Card} title="Η ώρα της εφαρμογής">
+    <div className="clockbig">${DOW_FULL[weekday(iso)]} ${dmy(iso)} · ${hm(now)}<small>Με αυτήν μετρούν όλα: ΗΚΑΙ 08:00, έξοδοι, επιστροφές, ΚΑ ως 06:00, ποιος είναι παρών τώρα, αλλαγή μέρας στα μεσάνυχτα.</small></div>
+    <dl className="clockcmp"><dt>Ώρα Windows</dt><dd>${hm(os)} (ζώνη Windows: ${utcLabel(winOff)})</dd><dt>Ζώνη εφαρμογής</dt><dd>${zname}, ${utcLabel(off)}${dst}${fix ? ' · διόρθωση ' + fixTxt(fix) : ''}</dd></dl>
+    ${Math.abs(vs) >= 1 && html`<${Alert} tone="warn"><span>Η ώρα των Windows διαφέρει ${durLabel(vs)} από την ώρα της εφαρμογής. Η εφαρμογή μετρά με ${zname}${fix ? ' και διόρθωση ' + fixTxt(fix) : ''}. Αν η ώρα πάνω είναι λάθος, διάλεξε «Όπως τα Windows» ή βάλε διόρθωση.</span><//>`}
+  <//>
+  <${Card} title="Ρύθμιση">
+    ${row('Ζώνη ώρας', 'Προεπιλογή: Ελλάδα. Μετρά σωστά τη θερινή ώρα ακόμα κι αν τα Windows 7 έχουν λάθος ζώνη.', html`<${Segmented} small=${true} value=${mode} onChange=${pickMode} items=${[{ value: 'athens', label: 'Ελλάδα (Αθήνα)' }, { value: 'win', label: 'Όπως τα Windows' }, { value: 'other', label: 'Άλλη…' }]}/>`)}
+    ${mode === 'other' && row('Άλλη ζώνη', 'Όλες οι ζώνες του κόσμου· γράψε για να ψάξεις.', html`<${Select} search=${true} value=${tz && tz !== 'system' ? tz : ''} onChange=${(v: string) => { if (v) save({ tz: v === DEFAULT_TZ ? '' : v }, 'Ώρα: ' + v); }}><option value="">Διάλεξε ζώνη…</option>${zones.map(v => html`<option key=${v} value=${v}>${v}</option>`)}<//>`)}
+    ${row('Διόρθωση ώρας', 'Αν το ρολόι του PC πάει μπροστά ή πίσω και δεν μπορείς να το αλλάξεις (χωρίς δικαιώματα διαχειριστή). 0 = χωρίς διόρθωση.', html`<div style=${{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <${Button} size="sm" variant="outline" disabled=${fix <= -FIX_MAX} why="Όριο ±12 ώρες" onClick=${() => save({ clockFix: Math.max(-FIX_MAX, fix - 60) }, 'Διόρθωση ώρας ' + fixTxt(Math.max(-FIX_MAX, fix - 60)))}>−60′<//>
+      <${Button} size="sm" variant="outline" disabled=${fix <= -FIX_MAX} why="Όριο ±12 ώρες" onClick=${() => save({ clockFix: fix - 1 }, 'Διόρθωση ώρας ' + fixTxt(fix - 1))}>−1′<//>
+      <b className="mono-lg" style=${{ minWidth: '70px', textAlign: 'center' }}>${fixTxt(fix)}</b>
+      <${Button} size="sm" variant="outline" disabled=${fix >= FIX_MAX} why="Όριο ±12 ώρες" onClick=${() => save({ clockFix: fix + 1 }, 'Διόρθωση ώρας ' + fixTxt(fix + 1))}>+1′<//>
+      <${Button} size="sm" variant="outline" disabled=${fix >= FIX_MAX} why="Όριο ±12 ώρες" onClick=${() => save({ clockFix: Math.min(FIX_MAX, fix + 60) }, 'Διόρθωση ώρας ' + fixTxt(Math.min(FIX_MAX, fix + 60)))}>+60′<//>
+      ${fix !== 0 && html`<${Button} size="sm" variant="ghost" onClick=${() => save({ clockFix: 0 }, 'Διόρθωση ώρας: καμία')}>Μηδένισε<//>`}</div>`)}
+  <//></div>`;
 }
