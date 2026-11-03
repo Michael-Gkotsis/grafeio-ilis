@@ -7,7 +7,7 @@ import { apply, type Command } from '../src/shared/commands';
 import { everyBlock, blocksOf, type Phase } from '../src/shared/domain';
 const CTX = { today: '2026-10-01', newId: (() => { let i = 0; return () => 'c' + ++i; })() };
 const allBlocksOf = (s: AppState) => everyBlock(s.settings);
-import { fillDay, postsOf, isHol, dutyBlock, capBlock, guardUnavailable, isUnarmed, dutyPool, dutyIndexOf, statusesOn, postBy, fixedIds } from '../src/shared/rules';
+import { fillDay, postsOf, isHol, dutyBlock, capBlock, guardUnavailable, isUnarmed, dutyPool, dutyIndexOf, statusesOn, postBy, fixedIds, lastResort, statusWarn, strictKeys, strictTier } from '../src/shared/rules';
 
 export const rng = (seed: number) => () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
@@ -51,6 +51,9 @@ export interface Sim {
   manual: Set<string>;   // «μέρα|θέση» που έβαλε ο λοχίας με το χέρι
   log: { d: ISODate; empty: string[]; warn: string[] }[];
   viol: string[];        // παραβάσεις κανόνων της αυτόματης συμπλήρωσης (πρέπει να είναι 0)
+  // θέσεις της σειράς των «Αυστηρά Άοπλοι» (μαγειρεία, 2ο-3ο, 1ο-4ο) που η αυτόματη συμπλήρωση έδωσε σε ένοπλο, ενώ ένας άοπλος
+  // έμεινε χωρίς θέση τη μέρα και έμπαινε σε αυτή κανονικά (όχι «μόνο αν δεν υπάρχει άλλος»). Με ανοιχτά τα Αυστηρά Άοπλοι: 0
+  strictMiss: string[];
   soft: Set<string>;     // «μέρα|θέση» που γέμισαν παρά την αργία μετά από αργία (το μόνο που χαλαρώνει, με ειδοποίηση)
   avail: Map<number, number>;   // πόσες «θέσεις αναλογούν» σε κάθε άτομο (μέρες που μπορούσε, × θέσεις / όσοι μπορούσαν)
   availHol: Map<number, number>;
@@ -97,7 +100,7 @@ export function simulate(o: SimOpts): Sim {
     else if (x < nz.leave + nz.med + nz.nos + nz.kol) add('KOL', 1 + Math.floor(r() * 3), { kind: 'ΣΤΕΠ', minus: true });
   }
   s.statuses = ss;
-  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], soft: new Set(), avail: new Map(), availHol: new Map(), events: [] };
+  const sim: Sim = { s, days, joined, left, manual: new Set(), log: [], viol: [], strictMiss: [], soft: new Set(), avail: new Map(), availHol: new Map(), events: [] };
   for (const d of days) {
     if (o.switchAt != null && d === days[o.switchAt]) s = { ...s, settings: { ...s.settings, phase: s.settings.phase === 'spen' ? 'sven' : 'spen' } };
     for (const e of o.events || []) if (days[e.at] === d) {
@@ -154,6 +157,15 @@ function check(sim: Sim, before: AppState, after: AppState, d: ISODate, empty: s
   }
   // κενή θέση ενώ κάποιος χωρίς θέση σήμερα μπορούσε (μία απλή ματιά, χωρίς αλυσίδες)
   const busy = new Set(Object.values(g)); const fixedIds0 = fixed;
+  // «Αυστηρά Άοπλοι» (Michael, 3/11): ένοπλος σε θέση της σειράς ενώ ελεύθερος άοπλος έμπαινε (μετρά πάντα, για σύγκριση ανοιχτό/κλειστό)
+  const ks = strictKeys(after.rules);
+  const freeUn = dutyPool(after).filter(p => !busy.has(p.id) && !fixed.has(p.id) && !p.post && isUnarmed(after, d, p.id));
+  if (freeUn.length) for (const x of postsOf(after.settings)) {
+    const pid = g[x.k]; if (!pid || g0[x.k] || x.kind === 'sk' || x.kind === 'ly' || strictTier(x, ks) > ks.length || isUnarmed(after, d, pid)) continue;
+    const gg = { ...g }; delete gg[x.k]; const w: AppState = { ...after, guards: { ...after.guards, [d]: gg } };
+    const u = freeUn.find(p => !guardUnavailable(w, d, p.id, x.k) && !lastResort(after.statuses, d, p.id, x, after.settings.lists) && !statusWarn(after, d, p.id));
+    if (u) sim.strictMiss.push(d + ' ' + x.k + ': ένοπλος ' + pid + ', ελεύθερος άοπλος ' + u.id);
+  }
   for (const k of empty) {
     const x = postBy(after, k)!;
     const can = dutyPool(after).filter(p => !busy.has(p.id) && !fixedIds0.has(p.id) && !(x.kind === 'ly' && p.post) && !guardUnavailable(after, d, p.id, k) && !(after.rules.strictUnarmed && x.kind === 'sk' && isUnarmed(after, d, p.id)));

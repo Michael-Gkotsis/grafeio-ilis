@@ -67,21 +67,41 @@ describe('ήσυχη προσομοίωση: ίδιοι στρατιώτες, χ
 describe('φορτωμένη προσομοίωση: άδειες, ιατρικά, Σ.Ι., πόστα, νέοι, όσοι φεύγουν, χειροκίνητες θέσεις, μόνιμοι Λ/Υ-Δ/Υ', () => {
   const unarmed = (p: Person) => (p.si === 'Ι3 ΧΩΡΙΣ ΟΠΛΟ' || p.si === 'Ι4');
   const plain = (m: Sim) => (p: Person) => !unarmed(p) && !m.joined.has(p.id) && !m.left.has(p.id) && !p.offDays && !p.skips && !m.s.caps[p.id] && !p.post;
-  // Ι3 χωρίς όπλο και Ι4 με τα Αυστηρά Άοπλοι: έπαιρναν 2,9 ως 4,2 φορές όσα τους αναλογούσαν· τώρα περίπου όσα (όπως οι άλλοι)
+  // Με τα Αυστηρά Άοπλοι (Michael, 3/11): κάθε ελεύθερος άοπλος μπαίνει πρώτος στις θέσεις της σειράς, οπότε οι Ι3 χωρίς όπλο και Ι4
+  // κάνουν περισσότερες υπηρεσίες (πάντα με ανάπαυση). Οι υπόλοιποι παίρνουν περίπου όσα τους αναλογούν, και κανένας ένοπλος δεν
+  // παίρνει μαγειρεία ή 2ο-3ο/1ο-4ο νούμερο ενώ ένας άοπλος μένει ελεύθερος. Κλειστό: και οι άοπλοι παίρνουν περίπου όσα αναλογούν.
   for (const [name, o] of [
     ['160 άτομα ΣΒΕΝ, Αυστηρά Άοπλοι, σπόρος 1', { seed: 1, n: 160, days: 91, phase: 'sven', rules: { strictUnarmed: true } }],
     ['160 άτομα ΣΒΕΝ, Αυστηρά Άοπλοι, σπόρος 2', { seed: 2, n: 160, days: 91, phase: 'sven', rules: { strictUnarmed: true } }],
     ['160 άτομα ΣΠΕΝ, Αυστηρά Άοπλοι', { seed: 1, n: 160, days: 91, phase: 'spen', rules: { strictUnarmed: true } }],
     ['100 άτομα ΣΒΕΝ με δικές σου υπηρεσίες, Αυστηρά Άοπλοι', { seed: 1, n: 100, days: 91, phase: 'sven', custom: true, rules: { strictUnarmed: true } }],
-    ['60 άτομα ΣΒΕΝ, Αυστηρά Άοπλοι (λίγοι για τις θέσεις)', { seed: 1, n: 60, days: 91, phase: 'sven', rules: { strictUnarmed: true } }]
+    ['60 άτομα ΣΒΕΝ, Αυστηρά Άοπλοι (λίγοι για τις θέσεις)', { seed: 1, n: 60, days: 91, phase: 'sven', rules: { strictUnarmed: true } }],
+    ['80 άτομα ΣΠΕΝ, Αυστηρά Άοπλοι, 30 μέρες', { seed: 1, n: 80, days: 30, phase: 'spen', rules: { strictUnarmed: true } }],
+    ['160 άτομα ΣΒΕΝ, χωρίς Αυστηρά Άοπλοι', { seed: 1, n: 160, days: 91, phase: 'sven' }],
+    ['160 άτομα ΣΠΕΝ, χωρίς Αυστηρά Άοπλοι', { seed: 1, n: 160, days: 91, phase: 'spen' }]
   ] as [string, Opts][]) it(name, () => {
     const m = sim({ noise: BUSY, ...o }); invariants(m);
+    const strict = !!o.rules?.strictUnarmed;
     const u = shareRatio(m, p => unarmed(p) && !p.offDays && !p.skips && !m.s.caps[p.id] && !p.post), a = shareRatio(m, plain(m)), nw = shareRatio(m, p => m.joined.has(p.id));
     expect(u.n).toBeGreaterThanOrEqual(3);
-    expect(u.ratio).toBeGreaterThanOrEqual(0.8); expect(u.ratio).toBeLessThanOrEqual(1.25);
-    expect(a.ratio).toBeGreaterThanOrEqual(0.8); expect(a.ratio).toBeLessThanOrEqual(1.25);
-    // οι νέοι ξεκινούν από τη μέρα που ήρθαν και παίρνουν περίπου όσα τους αναλογούν
-    expect(nw.ratio).toBeGreaterThanOrEqual(0.85); expect(nw.ratio).toBeLessThanOrEqual(1.15);
+    if (strict) {
+      // οι άοπλοι 1,6 ως 4,2 φορές όσα αναλογούν (όσο λιγότεροι τόσο περισσότερες)· οι ένοπλοι γι' αυτό λιγότερες (0,64 ως 0,95)
+      expect(m.strictMiss).toEqual([]);
+      expect(u.ratio).toBeGreaterThan(1.5);
+      expect(a.ratio).toBeGreaterThanOrEqual(0.6); expect(a.ratio).toBeLessThanOrEqual(1.05);
+      expect(nw.ratio).toBeGreaterThanOrEqual(0.85); expect(nw.ratio).toBeLessThanOrEqual(1.25);
+    } else {
+      for (const r of [u, a]) { expect(r.ratio).toBeGreaterThanOrEqual(0.8); expect(r.ratio).toBeLessThanOrEqual(1.25); }
+      // οι νέοι ξεκινούν από τη μέρα που ήρθαν και παίρνουν περίπου όσα τους αναλογούν
+      expect(nw.ratio).toBeGreaterThanOrEqual(0.85); expect(nw.ratio).toBeLessThanOrEqual(1.15);
+    }
+  });
+
+  it('ήσυχη, 80 άτομα, 5 άοπλοι: ανοιχτό = κανένας ένοπλος στα μαγειρεία με ελεύθερο άοπλο· κλειστό = συμβαίνει (ο διακόπτης κάνει διαφορά)', () => {
+    const on = sim({ seed: 1, n: 80, days: 30, phase: 'sven', noise: { ...QUIET, si: 0.12 }, rules: { strictUnarmed: true } }); invariants(on);
+    const off = sim({ seed: 1, n: 80, days: 30, phase: 'sven', noise: { ...QUIET, si: 0.12 } }); invariants(off);
+    expect(on.strictMiss).toEqual([]);
+    expect(off.strictMiss.length).toBeGreaterThan(30);
   });
 
   it('οι νέοι από τον μέσο όρο (newAvg) παίρνουν επίσης περίπου όσα τους αναλογούν', () => {
@@ -169,9 +189,10 @@ describe('αλλαγές στη μέση της περιόδου: νέα υπη�
     }
   });
 
-  // φορτωμένη (άδειες, ιατρικά, Σ.Ι., νέοι, θέσεις με το χέρι): όλα μαζί, και όλοι παίρνουν περίπου όσα τους αναλογούν
-  for (const [ph, n] of [['sven', 100], ['spen', 100]] as ['sven' | 'spen', number][]) it(`όλα μαζί, ${ph === 'sven' ? 'ΣΒΕΝ' : 'ΣΠΕΝ'}, ${n} άτομα, φορτωμένη με Αυστηρά Άοπλοι`, () => {
-    const m = sim({ seed: 2, n, days: 91, phase: ph, noise: BUSY, rules: { strictUnarmed: true }, events: COMBINED(ph) });
+  // φορτωμένη (άδειες, ιατρικά, Σ.Ι., νέοι, θέσεις με το χέρι): όλα μαζί. Χωρίς Αυστηρά Άοπλοι όλοι παίρνουν περίπου όσα τους
+  // αναλογούν· με αυτά οι άοπλοι παίρνουν περισσότερες και κανένας ένοπλος δεν παίρνει τη θέση τους όσο υπάρχει ελεύθερος άοπλος
+  for (const [ph, n, strict] of [['sven', 100, true], ['spen', 100, true], ['sven', 100, false], ['spen', 100, false]] as ['sven' | 'spen', number, boolean][]) it(`όλα μαζί, ${ph === 'sven' ? 'ΣΒΕΝ' : 'ΣΠΕΝ'}, ${n} άτομα, φορτωμένη ${strict ? 'με' : 'χωρίς'} Αυστηρά Άοπλοι`, () => {
+    const m = sim({ seed: 2, n, days: 91, phase: ph, noise: BUSY, rules: { strictUnarmed: strict }, events: COMBINED(ph) });
     expect(m.events.length).toBe(10);
     invariants(m);
     const clean = (p: Person) => !m.left.has(p.id) && !p.offDays && !p.skips && !m.s.caps[p.id] && !p.post;
@@ -179,6 +200,10 @@ describe('αλλαγές στη μέση της περιόδου: νέα υπη�
     const unarmed = shareRatio(m, p => (p.si === 'Ι3 ΧΩΡΙΣ ΟΠΛΟ' || p.si === 'Ι4') && clean(p));
     const fresh = shareRatio(m, p => m.joined.has(p.id));
     expect(unarmed.n).toBeGreaterThanOrEqual(3);
-    for (const r of [plain, unarmed, fresh]) { expect(r.ratio).toBeGreaterThanOrEqual(0.85); expect(r.ratio).toBeLessThanOrEqual(1.15); }
+    if (strict) {
+      expect(m.strictMiss).toEqual([]); expect(unarmed.ratio).toBeGreaterThan(1.3);
+      const freshArmed = shareRatio(m, p => m.joined.has(p.id) && p.si === 'Ι1');   // οι νέοι άοπλοι κάνουν κι αυτοί περισσότερες
+      for (const r of [plain, freshArmed]) { expect(r.ratio).toBeGreaterThanOrEqual(0.6); expect(r.ratio).toBeLessThanOrEqual(1.25); }
+    } else for (const r of [plain, unarmed, fresh]) { expect(r.ratio).toBeGreaterThanOrEqual(0.85); expect(r.ratio).toBeLessThanOrEqual(1.15); }
   });
 });

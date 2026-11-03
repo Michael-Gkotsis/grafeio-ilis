@@ -750,6 +750,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   // το ευρετήριο της βάσης κοινό (όχι αντίγραφο κάθε συνόλου)· αντίγραφο μόνο για όσους μπαίνουν σήμερα
   const idx = new Map(dutyIndexOf(s)); const own = new Set<number>();
   const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };
+  const unmark = (id: number) => { if (own.has(id)) idx.get(id)!.delete(date); };
   let n = 0; const skNone = new Set<string>();
   const posts = postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση (Michael, 18/10), και παρά τους κανόνες (ανάπαυση, ΣΚ, μέρες
@@ -781,6 +782,7 @@ export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number
   }
   n += repair(s, date, g, mine, order, people, fair, idx, fixed);
   if (s.rules.rotate !== false) balanceNums(s, date, g, mine, posts, idx);
+  if (strict) strictTopUp(s, date, g, mine, order, people, fair, idx, fixed, mark, unmark);
   // αργία: θέσεις που κανείς δεν μπορούσε να πάρει επειδή όλοι είχαν κάνει αργία πρόσφατα (Michael, 1/11: «γεμίζει με ειδοποίηση»)
   const holWarn: string[] = []; const nHol = s.rules.noConsecHol && isHol(s.settings, date) ? fillAfterHoliday(s, date, g, mine, order, people, fair, idx, fixed, strict, mark) : 0;
   n += nHol;
@@ -864,6 +866,26 @@ function fillAfterHoliday(s: AppState, date: ISODate, g: Record<string, number>,
   }
   return added;
 }
+// «Αυστηρά Άοπλοι» στο τέλος (Michael, 3/11): άοπλος που έμεινε χωρίς θέση ενώ μια θέση της σειράς του (μαγειρεία, 2ο-3ο, 1ο-4ο)
+// την πήρε ένοπλος από αυτή τη συμπλήρωση (π.χ. δεν χωρούσε στο 4ο νούμερο που έμενε, και τα «Ίσα νούμερα» έβαλαν τον ένοπλο στο 2ο):
+// μπαίνει αυτός και ο ένοπλος μένει για αύριο. Μόνο αν περνά όλους τους κανόνες της θέσης, όχι «μόνο αν δεν υπάρχει άλλος».
+function strictTopUp(s: AppState, date: ISODate, g: Record<string, number>, mine: Set<string>, posts: Post[], people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, mark: (id: number) => void, unmark: (id: number) => void) {
+  const ks = strictKeys(s.rules); const lists = s.settings.lists;
+  const busy = new Set(Object.values(g));
+  let free = people.filter(p => !busy.has(p.id) && !fixed.has(p.id) && !p.post && isUnarmed(s, date, p.id));
+  if (!free.length) return;
+  const cmp = fairCompare(isHol(s.settings, date), '', date);
+  free = free.sort((a, b) => cmp(fair.get(a.id)!, fair.get(b.id)!));
+  for (const x of posts) {
+    if (!free.length) return;
+    const pid = g[x.k];
+    if (!pid || !mine.has(x.k) || x.kind === 'sk' || x.kind === 'ly' || strictTier(x, ks) > ks.length || isUnarmed(s, date, pid)) continue;
+    const gg = { ...g }; delete gg[x.k]; const w: AppState = { ...s, guards: { ...s.guards, [date]: gg } };
+    const u = free.find(p => !guardUnavailable(w, date, p.id, x.k, idx) && !lastResort(s.statuses, date, p.id, x, lists) && !statusWarn(s, date, p.id));
+    if (!u) continue;
+    unmark(pid); g[x.k] = u.id; mark(u.id); free = free.filter(p => p !== u);
+  }
+}
 // Νούμερα (Michael, 1/11): οι θέσεις με νούμερο (rot) κάθε εντύπου που γέμισε αυτή η συμπλήρωση (2 ως 6, μόνο όσους έβαλε η ίδια)
 // ανταλλάσσουν ανθρώπους ώστε να μειώνεται το άθροισμα των τετραγώνων των φορών που έκανε ο καθένας ήδη το ίδιο νούμερο (ίδιες ώρες).
 // Δεν αλλάζει ποιοι έχουν υπηρεσία σήμερα· όποιος αλλάζει θέση περνά όλους τους κανόνες της νέας (ώρες επιστροφής, 3ο/4ο, «μόνο αν
@@ -933,10 +955,11 @@ function strictOrder(s: AppState, date: ISODate, x: Post, list: Person[], people
   if (strictTier(x, tiers) > tiers.length) return list;
   const need = armedLeft(s, date, x.k);
   const keep = need.length ? armedNeeded(s, date, need, people.filter(p => !fixed.has(p.id)), idx, memo) : null;
-  // Προτεραιότητα μόνο μέσα στους πρώτους της σειράς δικαιοσύνης, όσες οι κενές θέσεις της μέρας (Michael, 1/11): αλλιώς οι
-  // άοπλοι έπαιρναν κάθε μέρα τις θέσεις των αρχών της σειράς, ό,τι κι αν είχαν κάνει, και οι ένοπλοι έμεναν πίσω
-  const seats = postsOf(s.settings).filter(y => !(s.guards[date] || {})[y.k]).length;
-  const first = list.slice(0, seats).filter(p => isUnarmed(s, date, p.id) && !keep?.has(p.id));
+  // Κάθε ελεύθερος άοπλος προηγείται, όχι μόνο όταν είναι η σειρά του (Michael, 3/11: «δεν μου δούλεψε πλέον»). Από 1/11 ως
+  // 3/11 η προτεραιότητα ίσχυε μόνο μέσα στους πρώτους της σειράς, όσες οι κενές θέσεις: τότε οι ένοπλοι έπαιρναν τα μαγειρεία
+  // ενώ υπήρχαν ελεύθεροι άοπλοι και ο διακόπτης σχεδόν δεν άλλαζε τίποτα. Οι άοπλοι κάνουν έτσι περισσότερες υπηρεσίες (με
+  // ανάπαυση)· όποιος θέλει ίσες υπηρεσίες για όλους τον κλείνει.
+  const first = list.filter(p => isUnarmed(s, date, p.id) && !keep?.has(p.id));
   return [...first, ...list.filter(p => !first.includes(p))];
 }
 const strictPick = (s: AppState, date: ISODate, x: Post, list: Person[], people: Person[], idx: Map<number, Set<ISODate>>, fixed: Set<number>, memo?: Map<string, number[]>): Person | undefined =>

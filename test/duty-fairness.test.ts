@@ -79,7 +79,8 @@ describe('4. Λ/Υ-Δ/Υ στην εναλλαγή (χωρίς μόνιμο)', (
   });
 });
 
-describe('1. Αυστηρά Άοπλοι: προτεραιότητα μόνο στους πρώτους της σειράς', () => {
+// Michael, 3/11 («δεν μου δούλεψε πλέον»): ξανά όπως πριν την 1/11, κάθε ελεύθερος άοπλος προηγείται, όχι μόνο όταν είναι η σειρά του
+describe('1. Αυστηρά Άοπλοι: οι ελεύθεροι άοπλοι προηγούνται πάντα', () => {
   const D = '2026-11-04';
   // ΣΠΕΝ, 120 άτομα, οι 6 άοπλοι έκαναν υπηρεσία πριν 3 μέρες (στο τέλος της σειράς), όλοι οι άλλοι ποτέ
   function state(strict: boolean): AppState {
@@ -88,11 +89,15 @@ describe('1. Αυστηρά Άοπλοι: προτεραιότητα μόνο σ
     s = { ...s, people: s.people.map(p => ({ ...p, si: AOPLO.includes(p.id) ? 'Ι3 ΑΟΠΛΟ' : 'Ι1' })), rules: { ...s.rules, strictUnarmed: strict }, settings: { ...s.settings, phase: 'spen' } };
     return { ...s, guards: { [addDays(D, -3)]: Object.fromEntries(AOPLO.map((pid, i) => ['mg' + (i + 1), pid]).slice(0, 5)) }, baseline: { 33: { th: 1 } } };
   }
-  it('οι άοπλοι που είναι πίσω στη σειρά δεν παίρνουν τις πρώτες θέσεις', () => {
+  it('οι άοπλοι που είναι πίσω στη σειρά παίρνουν κι αυτοί τα μαγειρεία (όχι οι ένοπλοι που είναι η σειρά τους)', () => {
     const s = state(true); const g = fillDay(s, D).guards[D];
     const AOPLO = [3, 9, 15, 21, 27, 33];
-    expect(AOPLO.filter(pid => idsIn(g).has(pid))).toEqual([]);
+    expect(AOPLO.filter(pid => idsIn(g).has(pid))).toHaveLength(6);
+    for (const k of ['mg1', 'mg2', 'mg3', 'mg4', 'mg5']) expect(AOPLO).toContain(g[k]);
     expect(postsOf(s.settings).every(x => g[x.k])).toBe(true);
+    // κλειστό: οι ένοπλοι που είναι η σειρά τους, κανένας από τους άοπλους
+    const off = fillDay(state(false), D).guards[D];
+    expect(AOPLO.filter(pid => idsIn(off).has(pid))).toEqual([]);
   });
   it('όταν είναι στους πρώτους (λίγοι άνθρωποι για τις θέσεις), οι άοπλοι προηγούνται στα μαγειρεία όπως πριν', () => {
     const s0 = noPost(fakeState(30));
