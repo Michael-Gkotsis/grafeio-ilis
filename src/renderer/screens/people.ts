@@ -25,6 +25,7 @@ import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
+import { PersonalTab } from './personal';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
 type P = any;
 
@@ -214,7 +215,7 @@ function SaveViewDialog({ onClose, onSave }: P) {
   <//>`;
 }
 
-const SHEET_TABS = [{ value: 'info', label: 'Στοιχεία' }, { value: 'duty', label: 'Υπηρεσίες' }, { value: 'hist', label: 'Ιστορικό' }, { value: 'notes', label: 'Σημειώσεις' }];
+const SHEET_TABS = [{ value: 'info', label: 'Στοιχεία' }, { value: 'duty', label: 'Υπηρεσίες' }, { value: 'hist', label: 'Ιστορικό' }, { value: 'notes', label: 'Σημειώσεις' }, { value: 'pers', label: 'Προσωπικά' }];
 // list: η λίστα από την οποία άνοιξε η καρτέλα (Δυναμολόγιο με τα φίλτρα του, Οπλισμός, Εξοδούχοι…)· αλλιώς όλοι σε δύναμη αλφαβητικά
 export function PersonSheet({ pid, list, onMove, onClose }: P) {
   const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
@@ -268,6 +269,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r, state.settings.lists))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && r.decision === 'ok' && !(r.sid && state.statuses.some(x => x.id === r.sid)) && html` <${Badge} tone="bad">η άδεια ακυρώθηκε<//>`}${!r.decision && html` <${Badge} tone=${r.old ? 'outline' : 'warn'}>${r.old ? 'χωρίς απάντηση (παλιά)' : 'περιμένει'}<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>${HK()}<//></li>`)}</ul></section>`}
     `}
     ${tab === 'notes' && html`<${NotesTab} key=${pid} who=${{ pid }}/>`}
+    ${tab === 'pers' && html`<${PersonalTab} key=${pid} who=${{ pid }} rec=${p}/>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
     ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}

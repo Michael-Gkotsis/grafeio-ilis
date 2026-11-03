@@ -262,7 +262,7 @@ describe('σύνδεση στην εφαρμογή', () => {
   it('κάρτες ατόμου: 4η καρτέλα Σημειώσεις στον στρατιώτη, 3 καρτέλες στο στέλεχος, πλαϊνό φύλλο πάνω από κάθε οθόνη, χωρίς αυτόματο focus', () => {
     const pe = src('renderer/screens/people.ts'), ca = src('renderer/screens/cadre.ts'), no = src('renderer/screens/notes.ts'), ap = src('renderer/app.ts');
     expect(pe).toContain("{ value: 'notes', label: 'Σημειώσεις' }"); expect(pe).not.toContain('PersonNotes');
-    expect(ca).toMatch(/CADRE_TABS = \[\{ value: 'abs', label: 'Καταστάσεις' \}, \{ value: 'info', label: 'Στοιχεία' \}, \{ value: 'notes', label: 'Σημειώσεις' \}\]/);
+    expect(ca).toMatch(/CADRE_TABS = \[\{ value: 'abs', label: 'Καταστάσεις' \}, \{ value: 'info', label: 'Στοιχεία' \}, \{ value: 'notes', label: 'Σημειώσεις' \}, \{ value: 'pers', label: 'Προσωπικά' \}\]/);
     expect(ca).toContain('<${Sheet} onClose'); expect(ca).not.toContain('size="lg"'); expect(ca).toContain('Διαγραφή στελέχους…');
     expect(ap).toContain('<${CadreSheet} cid=${cadreId}'); expect(ap).toMatch(/if \(id < 0\) \{[^\n]*openCadre/);
     expect(no).toContain('<${NoteComposer} draft=${draft} ns="np" compact=${true}/>');
