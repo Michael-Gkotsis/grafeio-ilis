@@ -12,6 +12,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
+import { normPersonal } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
 import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
@@ -104,6 +105,7 @@ export type Command =
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
   | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
+  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string }   // IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)
   // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
   // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
@@ -432,6 +434,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
       if (old?.pos != null) x.pos = old.pos;
+      for (const k of ['iban', 'amka', 'afm'] as const) if (old?.[k]) x[k] = old[k];   // έξτρα στοιχεία: αλλάζουν μόνο από το tab τους (setPersonal)
       // ΕΠΟΠ/ΟΒΑ με υπηρεσίες τον μήνα: αριθμός θέσης μία φορά (αρνητικός), και μένει ακόμα κι αν σβήσεις το όριο
       const mx = Math.floor(Number(c0.monthMax)); if (mx > 0) x.monthMax = mx;
       if (old?.pid != null) x.pid = old.pid; else if (mx > 0) x.pid = nextCadrePid(s.cadreList);
@@ -846,6 +849,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
       const text = old.active && !person.active ? shortName(person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && person.active ? shortName(person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'setPersonal': {
+      // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ): μόνο στο άτομο, δεν ακουμπούν Excel· ούτε τα νούμερα στο ιστορικό ενεργειών
+      const keys = ['iban', 'amka', 'afm'] as const;
+      const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } return q; };
+      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]);
+      if (c.cid) {
+        const o = s.cadreList.find(x => x.id === c.cid); if (!o) throw new Error('Δεν βρέθηκε το στέλεχος');
+        const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };
+        return { state: { ...s, cadreList: s.cadreList.map(x => (x === o ? q : x)) }, text: 'Έξτρα στοιχεία: ' + rankTxt(o) + ' ' + o.last, files: [] };
+      }
+      const o = c.pid != null ? s.people.find(x => x.id === c.pid) : undefined; if (!o) throw new Error('Δεν βρέθηκε το άτομο');
+      const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };
+      return { state: { ...s, people: s.people.map(x => (x === o ? q : x)) }, text: 'Έξτρα στοιχεία: ' + shortName(o), files: [] };
     }
     case 'setWeapons': {
       const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack, wpos: normPos } as const;

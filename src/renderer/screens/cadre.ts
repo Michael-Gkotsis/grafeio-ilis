@@ -14,6 +14,7 @@ import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import { seatTxt } from '../../shared/weapons';
 import type { AppState } from '../../shared/domain';
+import { PersonalTab } from './personal';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
 const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
@@ -91,8 +92,8 @@ export function CadreScreen() {
 }
 
 // Καρτέλα στελέχους, πλαϊνή όπως του στρατιώτη (Michael, 24/10): ανοίγει πάνω από κάθε οθόνη (Shell), ▲▼/↑↓ στη λίστα από όπου άνοιξε.
-// Καρτέλες: Καταστάσεις (σήμερα, όσες έρχονται, προηγούμενες), Στοιχεία (+ Διαγραφή), Σημειώσεις. list: τα id της λίστας που βλέπεις
-const CADRE_TABS = [{ value: 'abs', label: 'Καταστάσεις' }, { value: 'info', label: 'Στοιχεία' }, { value: 'notes', label: 'Σημειώσεις' }];
+// Καρτέλες: Καταστάσεις (σήμερα, όσες έρχονται, προηγούμενες), Στοιχεία (+ Διαγραφή), Σημειώσεις, Προσωπικά (IBAN/ΑΜΚΑ/ΑΦΜ). list: τα id της λίστας που βλέπεις
+const CADRE_TABS = [{ value: 'abs', label: 'Καταστάσεις' }, { value: 'info', label: 'Στοιχεία' }, { value: 'notes', label: 'Σημειώσεις' }, { value: 'pers', label: 'Προσωπικά' }];
 export function CadreSheet({ cid, list, onMove, onClose }: P) {
   const { state, today, run, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const c: Cadre | undefined = state.cadreList.find(x => x.id === cid);
@@ -130,6 +131,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd></dl>
       <div><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
     ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}
+    ${tab === 'pers' && html`<${PersonalTab} key=${cid} who=${{ cid }} rec=${c}/>`}
     ${edit && html`<${CadreDialog} c=${c} onClose=${() => setEdit(false)}/>`}
     ${stFor && html`<${StatusDialog} c=${c} abs=${stFor.abs} onClose=${() => setStFor(null)}/>`}
     ${del && html`<${Dialog} role="alertdialog" title=${'Διαγραφή: ' + rankTxt(c) + ' ' + c.last + ';'} description="Φεύγει από τη λίστα και από την ${HK()}, μαζί με τις καταστάσεις του. Αν απλώς έφυγε από τη μονάδα, βάλ' τον «εκτός δύναμης» από τα «Στοιχεία»." onClose=${() => setDel(false)}
