@@ -6,6 +6,7 @@ import { norm, normGreek, upper } from './text';
 import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
+import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
@@ -30,6 +31,9 @@ export type Command =
   | { t: 'orderCadre'; ids: string[] }   // η σειρά των στελεχών, όλα τα id με τη νέα σειρά
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> & { id?: string }; replace?: boolean }   // id: αλλαγή · replace: κόβει όσες πέφτουν στις ίδιες μέρες
   | { t: 'deleteCadreAbs'; id: string }
+  // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
+  | { t: 'importCadres'; adds: CadreNew[]; updates: { id: string; patch: Partial<Cadre> }[]; source: string }
+  | { t: 'importCadreAbs'; adds: AbsNew[]; updates: { id: string; note: string }[]; deletes: string[]; source: string }
   | { t: 'setPunInfo'; id: string; by: string; reason: string; on: ISODate }
   | { t: 'setTimes'; id: string; fromTime: string; toTime: string; dest?: string }   // dest: άδειες μόνο· λείπει = δεν αλλάζει, κενό = σβήνεται
   | { t: 'addRequest'; req: Omit<PersonRequest, 'id'> }
@@ -450,6 +454,40 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const o = x.origin; const lists0 = s.settings.lists;
       const settings = o && !/[,"]/.test(o) && itemKey(o) !== itemKey(old?.origin || '') && !listRows(lists0, 'origins').some(r => itemKey(r.name) === itemKey(o)) ? { ...s.settings, lists: { ...lists0, origins: { ...(lists0?.origins || {}), add: [...(lists0?.origins?.add || []), { name: o }] } } } : s.settings;
       return { state: { ...s, cadreList, guards, settings }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + rankTxt(x) + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
+    }
+    case 'importCadres': {
+      // κάθε στέλεχος περνά από το saveCadre (κανονικοποίηση, προέλευση, ΗΚΑΙ, σειρά)· IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν μετά, όπως στο setPersonal
+      let st = s; let nAdd = 0, nUpd = 0;
+      const personal = (id: string, src: Partial<Cadre>) => {
+        const o = st.cadreList.find(x => x.id === id); if (!o) return;
+        const q: Cadre = { ...o }; for (const k of PKEYS) { if (!(k in src)) continue; const v = normPersonal(k, src[k]); if (v) q[k] = v; else delete q[k]; }
+        if (PKEYS.some(k => q[k] !== o[k])) st = { ...st, cadreList: st.cadreList.map(x => (x === o ? q : x)) };
+      };
+      for (const a of c.adds || []) {
+        if (!String(a?.last || '').trim()) continue;
+        const known = new Set(st.cadreList.map(x => x.id));
+        const r = run(st, { t: 'saveCadre', cadre: { ...a, hk: a.hk || guessHk(a.rank || '', st.settings.lists, a.origin) } }, ctx);
+        st = r.state; nAdd++;
+        const nu = st.cadreList.find(x => !known.has(x.id)); if (nu) personal(nu.id, a);
+      }
+      for (const u of c.updates || []) {
+        const old = st.cadreList.find(x => x.id === u.id); if (!old) continue;
+        const r = run(st, { t: 'saveCadre', cadre: { ...old, ...u.patch } as Cadre }, ctx);
+        st = r.state; personal(u.id, u.patch); nUpd++;
+      }
+      if (!nAdd && !nUpd) return { state: s, text: '', files: [] };
+      return { state: st, text: 'Από Excel (' + c.source + '), στελέχη: ' + [nAdd && nAdd + (nAdd === 1 ? ' νέο' : ' νέα'), nUpd && nUpd + (nUpd === 1 ? ' αλλαγή' : ' αλλαγές')].filter(Boolean).join(', '), files: [HK()], source: 'excel' };
+    }
+    case 'importCadreAbs': {
+      let st = s; let nAdd = 0, nUpd = 0, nDel = 0;
+      for (const id of c.deletes || []) { if (!st.cadreAbs.some(a => a.id === id)) continue; st = { ...st, cadreAbs: st.cadreAbs.filter(a => a.id !== id) }; nDel++; }
+      for (const u of c.updates || []) { const a = st.cadreAbs.find(x => x.id === u.id); if (!a) continue; const note = String(u.note || '').trim(); st = { ...st, cadreAbs: st.cadreAbs.map(x => { if (x !== a) return x; const { note: _o, ...rest } = x; return note ? { ...rest, note } : rest; }) }; nUpd++; }
+      for (const a of c.adds || []) {
+        if (!st.cadreList.some(x => x.id === a.cid) || !/^\d{4}-\d{2}-\d{2}$/.test(a.from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(a.to || '') || a.to < a.from) continue;
+        st = run(st, { t: 'addCadreAbs', abs: { cid: a.cid, kind: a.kind, from: a.from, to: a.to, ...(a.note ? { note: a.note } : {}) }, replace: true }, ctx).state; nAdd++;
+      }
+      if (!nAdd && !nUpd && !nDel) return { state: s, text: '', files: [] };
+      return { state: st, text: 'Από Excel (' + c.source + '), καταστάσεις στελεχών: ' + [nAdd && nAdd + (nAdd === 1 ? ' νέα' : ' νέες'), nUpd && nUpd + (nUpd === 1 ? ' αλλαγή' : ' αλλαγές'), nDel && nDel + ' σβήστηκαν'].filter(Boolean).join(', '), files: [HK()], source: 'excel' };
     }
     case 'orderCadre': {
       const ids = new Set(c.ids); const by = new Map(s.cadreList.map(x => [x.id, x]));

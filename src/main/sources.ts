@@ -338,7 +338,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     const tidy = tidyOf(kind, b, ws, sheet, s.settings.lists); if (fresh) tidy.titles = [];
     const tidied = tidyText(tidy);
     const res = { added: plan.added, changed: plan.changed, cleared: plan.cleared, foreign: plan.foreign, notFound: plan.notFound, warn: plan.warn };
-    const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}) };
+    const keep = { keys: plan.keys, psnap: plan.psnap, ...(plan.snap ? { snap: plan.snap } : {}), ...(plan.base ? { base: plan.base } : {}) };
     const steps = plan.inserts || [];
     if (!plan.sets.length && !plan.insert && !steps.length && !plan.deletes?.length && !fresh && !tc.head.length && !(opts.tidy && tidied.length)) return { unchanged: true, res, keep, b };
     await applyTidy(wb, ws, tidy);
