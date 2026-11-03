@@ -438,6 +438,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c0.spec?.trim()) x.spec = itemName(c0.spec, 'specs'); if (c0.am?.trim()) x.am = c0.am.trim().toUpperCase();
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
       if (old?.pos != null) x.pos = old.pos;
+      if (c0.eid?.trim()) x.eid = upper(c0.eid.trim().replace(/\s+/g, ' '));   // ειδικότητα (Δυναμολόγιο-Παρουσιολόγιο στελεχών)
       for (const k of ['iban', 'amka', 'afm'] as const) if (old?.[k]) x[k] = old[k];   // έξτρα στοιχεία: αλλάζουν μόνο από το tab τους (setPersonal)
       // ΕΠΟΠ/ΟΒΑ με υπηρεσίες τον μήνα: αριθμός θέσης μία φορά (αρνητικός), και μένει ακόμα κι αν σβήσεις το όριο
       const mx = Math.floor(Number(c0.monthMax)); if (mx > 0) x.monthMax = mx;

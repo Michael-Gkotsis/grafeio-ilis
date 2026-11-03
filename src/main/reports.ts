@@ -2,7 +2,8 @@
 // Με το ελαφρύ xlsx.ts, όπως η ΦΡΟΥΡΑ και η ΗΚΑΙ: αλλάζουν μόνο οι τιμές, η μορφοποίηση του προτύπου μένει όπως είναι.
 // Η πρώτη γραμμή κάτω από τις επικεφαλίδες είναι η «γραμμή-πρότυπο»: κάθε άτομο παίρνει τη μορφή της και ό,τι είναι
 // από κάτω (υπογραφές, σύνολα) κατεβαίνει όσο μεγαλώνει η λίστα.
-import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, type Sheet, type XlValue } from './xlsx';
+import { hkDate } from '../shared/dates';
+import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, toSerial, type Sheet, type XlValue } from './xlsx';
 import { TemplateError, signSheets, unitWords } from './exports';
 import { blockOf } from './layout';
 import type { LayoutSheet } from '../shared/layout';
@@ -10,7 +11,7 @@ import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
-import { FILLS, TAB_WIDTHS, blankFill, blankIdx, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, rowsOf, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
+import { FILLS, TAB_WIDTHS, blankFill, blankIdx, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, DATE_FIELDS, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, rowsOf, tableDay, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
 import type { AppState } from '../shared/domain';
 import { XL_LOOK, formPart, tablePart, xlLook, type XlLook } from '../shared/xlLook';
 import { atOf, evalTables, rowText, tagId, tagText, tagsOf as valTags, valsMissing, valsUsed, type Spot, type TAlign, type ValueOut } from '../shared/values';
@@ -26,10 +27,15 @@ const str = (v: XlValue | undefined) => (v == null ? '' : v instanceof Date ? ''
 
 
 // Η γραμμή των δεδομένων κάτω από τις επικεφαλίδες: αν μια επικεφαλίδα είναι συγχωνευμένη σε δύο γραμμές, μετά από αυτές
-function dataRowOf(ws: Sheet, head: number): number {
+function dataRowOf(ws: Sheet, head: number, cols: number[] = []): number {
   let last = head;
-  for (const m of ws.merges()) if (m.r1 === head && m.r2 > last && m.r2 - head < 4) last = m.r2;
-  return last + 1;
+  const mg = ws.merges();
+  for (const m of mg) if (m.r1 === head && m.r2 > last && m.r2 - head < 4) last = m.r2;
+  // γραμμές-διαχωριστικά κάτω από τις επικεφαλίδες δεν είναι γραμμές δεδομένων: πολύ χαμηλές (< 5 pt, π.χ. 0,75) ή συγχωνευμένες σε όλο το πλάτος
+  // του πίνακα (μία γραμμή-γραμμή)· αλλιώς οι νέες γραμμές κληρονομούσαν ύψος 0,75 και δεν φαίνονταν
+  let d = last + 1;
+  while (d < last + 4 && (ws.rowHeight(d) < 5 || (cols.length > 1 && mg.some(m => m.r1 === d && m.r2 === d && m.c1 <= Math.min(...cols) && m.c2 >= Math.max(...cols))))) d++;
+  return d;
 }
 // Επικεφαλίδες σε δύο γραμμές με τη γραμμή των υπότιτλων ως «γραμμή επικεφαλίδων»: οι στήλες που είναι συγχωνευμένες
 // κάθετα ξεκινούν πιο πάνω, οπότε ο πίνακας ξεκινά από εκεί (αλλιώς χάνονται οι τίτλοι τους)
@@ -76,8 +82,10 @@ function preparedRows(ws: Sheet, data: number, cols: number[], aa?: number): num
   for (let r = data + 1; r < data + 500; r++) {
     const ref0 = colName(cols[0]) + r;
     if (!ws.raw(ref0) && ws.style(ref0) == null) break;   // η γραμμή δεν υπάρχει
-    if (ws.style(ref0) !== s0) break;
-    if (cols.some(c => { const x = ws.raw(colName(c) + r); if (!x || x.inner.includes('<f') || !/<v>|<is>/.test(x.inner)) return false; return !(c === aa && Number((ws.get(colName(c) + r) || '').trim()) === k + 1); })) break;
+    // γραμμή-δείγμα του προτύπου (με αριθμό Α/Α στη σειρά και ό,τι άλλο): μετρά ως έτοιμη γραμμή, και αδειάζει αν δεν χρειαστεί (fillSheet)
+    const seq = aa != null && Number(String(ws.get(colName(aa) + r) ?? '').trim()) === k + 1;
+    if (!seq && ws.style(ref0) !== s0) break;
+    if (!seq && cols.some(c => { const x = ws.raw(colName(c) + r); if (!x || x.inner.includes('<f') || !/<v>|<is>/.test(x.inner)) return false; return !(c === aa && Number((ws.get(colName(c) + r) || '').trim()) === k + 1); })) break;
     k++;
   }
   return k;
@@ -113,8 +121,9 @@ export async function inspectTemplate(buf: Buffer | Uint8Array, kind: RepKind, s
   const ws = await wb.sheet(name); const rows = await wb.values(name, SCAN_ROWS, SCAN_COLS);
   const found = head ? { head, guessed: false } : findHead(rows, kind);
   found.head = headTop(ws, found.head);
-  const data = dataRowOf(ws, found.head);
-  const headers = headersOf(ws, rows, found.head, data, kind);
+  const data0 = dataRowOf(ws, found.head);
+  const headers = headersOf(ws, rows, found.head, data0, kind);
+  const data = dataRowOf(ws, found.head, headers.map(h => h.c));
   return { sheets, sheet: name, head: found.head, data, headers, tags: tagsOf(rows, data), unknown: unknownTags(rows, data), prepared: preparedRows(ws, data, headers.map(h => h.c), headers.find(h => h.f === 'aa')?.c), guessed: found.guessed };
 }
 
@@ -166,8 +175,8 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   if (!groups.length) groups = [{ key: '', label: '', short: '', rows: [] }];
   // οι πίνακες ενός φύλλου: ο πρώτος με τα άτομα της ομάδας, οι άλλοι με όσους από αυτούς είναι στην ομάδα (τα στελέχη όλα)
   // (πίνακας χωρίς στήλες σε έντυπο με πίνακες τιμών = έντυπο χωρίς άτομα: καμία γραμμή)
-  const tabs = (g: RepGroup | null): Tab[] => [{ kind: r.kind, head: r.head, cols: stNewCols(r.cols, r.pick), rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
-    ...more.map((t, i) => ({ kind: t.kind, head: t.head, cols: stNewCols(t.cols, t.pick), ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
+  const tabs = (g: RepGroup | null): Tab[] => [{ day: tableDay(s, r.tday, d), kind: r.kind, head: r.head, cols: stNewCols(r.cols, r.pick), rows: g ? g.rows : rows, ...(r.nohead ? { nohead: true } : {}) },
+    ...more.map((t, i) => ({ day: tableDay(s, t.tday, d), kind: t.kind, head: t.head, cols: stNewCols(t.cols, t.pick), ...(t.nohead ? { nohead: true } : {}), rows: !g || !splitOk(t.kind) ? extra[i] : extra[i].filter(x => groupOf(s, x, r.split!).key === g.key) }))]
     .map(t => (vo.length && !t.cols.length ? { ...t, rows: [] } : t));
   const names: string[] = []; const layout: LayoutSheet[] = [];
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
@@ -189,7 +198,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
 }
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 // nohead: χωρίς γραμμή επικεφαλίδων στο έντυπο (η γραμμή μένει στο πρότυπο μέχρι να γεμίσει και μετά κρύβεται ή αδειάζει, δες noHead)
-interface Tab { kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
+interface Tab { day?: ISODate; kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
 async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[], mv: (id: string) => number | null): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const colsOf = tabs.map(t => t.cols.filter(c => c.c >= 1 && fieldOf(t.kind, c.f)));
@@ -207,7 +216,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     const t = tabs[i], p = order[k - 1];
     heads[i] = !k ? locateHead(ws, scan, t.cols, t.head) : locateHead(ws, tagScan, t.cols, t.head, custom && bandIndex(bands, tid(i)) === bandIndex(bands, tid(p)) ? heads[p] : heads[p] + 1, k + 1);
   });
-  const datas = heads.map(h => dataRowOf(ws, h));
+  const datas = heads.map((h, i) => dataRowOf(ws, h, tabs[i].cols.map(c => c.c)));
   const head = heads[0], data = datas[0];
   const n = tabs[0].rows.length;
   // στοιχεία εντύπου πρώτα (στις θέσεις του προτύπου, πριν μπουν γραμμές): όσα όρισες με κλικ και κάθε {ΕΤΙΚΕΤΑ} του φύλλου
@@ -246,7 +255,10 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   // ετικέτες των γραμμών των πινάκων τιμών (Φάση 3): {ΠΑΡΟΝΤΕΣ} σε κελί του Excel παίρνει την τιμή της γραμμής, ως αριθμό (το ποσοστό με μορφή %)
   const vt = valTags(valsUsed(r.vals), id => !!tagKey(id)); const vrow = (tg: string) => { const e = vt.map.get(tagId(tg)); return e ? vo.find(x => x.id === e.t.id)?.rows[e.i] : undefined; };
   const seenTags = new Set<string>(), unknown = new Set<string>();
-  for (const t of tags) {
+  // {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ} (του 1ου πίνακα) ή {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ 2}: η μέρα του πίνακα, όπως 26 ΟΚΤ 26
+  const tday = (x: string) => x.replace(/\{\s*ΗΜΕΡΟΜΗΝΙΑ\s+ΠΙΝΑΚΑ(?:\s+(\d+))?\s*\}/gi, (_m, n?: string) => hkDate(tabs[Math.max(0, Math.min(tabs.length, Number(n || 1)) - 1)]?.day || d));
+  for (const t0 of tags) {
+    const t = { ...t0, text: tday(t0.text) }; if (t.text !== t0.text) { ws.set(t.ref, t.text); if (!/\{[^{}]+\}/.test(t.text)) continue; }
     if (inTable.has(t.ref)) continue;
     const whole = /^\{([^{}]+)\}$/.exec(t.text.trim());
     if (whole) mark(tagKey(whole[1]), t.ref);
@@ -317,6 +329,8 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     const nT = G.map(i => Math.max(tabs[i].rows.length, 1)); const vh = it.vts.length ? Math.max(...it.vts.map(vrows)) : 0;
     const N = Math.max(...nT, vh ? HR + vh - D : 0);
     const delta = N > K ? N - K : N < K && r.trim ? -(K - N) : 0;
+    // γραμμές-δείγμα του προτύπου που περισσεύουν (όταν δεν σβήνονται): αδειάζουν, εκτός από τον Α/Α και τους τύπους
+    if (N < K && !r.trim) G.forEach(i => { for (const c of colsOf[i]) if (c.f !== 'aa') for (let rr = D + nT[G.indexOf(i)]; rr <= D + K - 1; rr++) { const ref = colName(c.c) + rr; if (!ws.hasFormula(ref) && ws.get(ref) != null) ws.set(ref, null); } });
     end = last ? D + K - 1 + delta : end + delta; shiftBy(delta, D + K - 1);
     if (N > K) {
       ws.insertRows(D + K - 1, N - K, D, wb);
@@ -343,14 +357,18 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
           const ref = colName(c.c) + row; if (ws.hasFormula(ref)) continue;
           if (j >= t.rows.length && c.f === 'aa') continue;   // κενός πίνακας: ο αριθμός της έτοιμης γραμμής μένει όπως στο πρότυπο
           // «Κενός πίνακας»: κελί με {ΕΤΙΚΕΤΑ}· όλα τα άλλα κελιά όπως πριν
-          const raw = j < t.rows.length && t.kind === 'blank' && c.f !== 'aa' ? c.o?.vals?.[blankIdx(t.rows[j], j)] : undefined;
+          const raw0 = j < t.rows.length && t.kind === 'blank' && c.f !== 'aa' ? c.o?.vals?.[blankIdx(t.rows[j], j)] : undefined; const raw = raw0 && tday(raw0);
           if (raw && raw.includes('{')) {
             const b = blankFill(raw, bx, badB); ws.set(ref, b.v);
             if (b.fmt) ws.setStyle(ref, await wb.like(ws.style(ref), { fmt: b.fmt === 'pct' ? '0%' : '0.0%' }));   // ποσοστό γραμμής πίνακα τιμών
             if (b.wrap) { ws.setStyle(ref, await wb.like(ws.style(ref), { wrap: true })); wb.widen = false; }   // λίστα ονομάτων: αναδιπλώνεται στο κελί (ψηλώνει η γραμμή), η στήλη δεν φαρδαίνει πέρα από το πλάτος της σελίδας
             continue;
           }
-          ws.set(ref, j < t.rows.length ? fieldValue(s, t.kind, t.rows[j], c.f, j, d, c.text, c.o) : null);
+          const v = j < t.rows.length ? fieldValue(s, t.kind, t.rows[j], c.f, j, t.day || d, c.text, c.o) : null;
+          // ημερομηνία επιστροφής: πραγματική ημερομηνία του Excel (dd/mm/yyyy), όχι κείμενο
+          const dm = typeof v === 'string' && DATE_FIELDS.has(c.f) ? /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(v) : null;
+          if (dm) ws.setNumber(ref, toSerial(dm[3] + '-' + dm[2] + '-' + dm[1], wb.date1904), await wb.dateStyle(ws.style(ref)));
+          else ws.set(ref, v);
         }
       }
     }

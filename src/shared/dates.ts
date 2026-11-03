@@ -154,3 +154,22 @@ export function weekendFrom(today: ISODate, next: boolean): [ISODate, ISODate] {
   return next ? [addDays(sat, 7), addDays(sat, 8)] : [from, to];
 }
 
+
+export const DAY_CHOICES: { value: string; label: string }[] = [{ value: '', label: 'Όπως το έντυπο' }, { value: 'next', label: 'Επόμενη εργάσιμη' }, { value: '+1', label: 'Αύριο' }, { value: '+2', label: 'Σε 2 μέρες' }, { value: '+3', label: 'Σε 3 μέρες' },
+  { value: 'wd5', label: 'Η Παρασκευή' }, { value: 'wd6', label: 'Το Σάββατο' }, { value: 'wd0', label: 'Η Κυριακή' }];
+// Επόμενη εργάσιμη μέρα μετά τη d (Παρασκευή → Δευτέρα): isOff = Σαββατοκύριακο ή αργία της εφαρμογής (rules.ts isHol)
+export function nextWorkday(d: ISODate, isOff: (d: ISODate) => boolean = isWeekend): ISODate {
+  let x = addDays(d, 1);
+  for (let i = 0; i < 40 && isOff(x); i++) x = addDays(x, 1);
+  return x;
+}
+// «Για ποια μέρα» (Έντυπα): '' = όπως το έντυπο, 'next' = επόμενη εργάσιμη, '+N'/'-N' = N μέρες μετά/πριν, 'wd0'…'wd6' = η πρώτη
+// Κυριακή…Σάββατο από τη μέρα του εντύπου και μετά (αυτή η μέρα αν είναι ήδη)
+export function dayFor(spec: string | undefined, d: ISODate, isOff: (d: ISODate) => boolean = isWeekend): ISODate {
+  if (!spec) return d;
+  if (spec === 'next') return nextWorkday(d, isOff);
+  if (/^[+-]\d{1,3}$/.test(spec)) return addDays(d, Number(spec));
+  const m = /^wd([0-6])$/.exec(spec);
+  if (m) { let x = d; for (let i = 0; i < 7 && weekday(x) !== +m[1]; i++) x = addDays(x, 1); return x; }
+  return d;
+}

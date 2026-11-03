@@ -13,12 +13,12 @@ import { cellText, num, noRoomTxt, parseDate, sideBy, tableRows, type SourceBind
 import type { CellValue, RawSheet } from './roster';
 
 // Στήλες που μπαίνουν στο τέλος του πίνακα μόνο όταν κάποιο στέλεχος έχει τιμή (όπως οι ώρες στις άδειες)
-export const CADRE_OPT = ['monthMax', 'weapon', 'wtype', 'rack', 'wpos', 'iban', 'amka', 'afm'] as const;
+export const CADRE_OPT = ['eid', 'monthMax', 'weapon', 'wtype', 'rack', 'wpos', 'iban', 'amka', 'afm'] as const;
 export const CADRE_KEYS = ['rank', 'origin', 'spec', 'last', 'first', 'am', 'phone', 'role', 'hk', 'active', ...CADRE_OPT] as const;
 type Meta = { keys?: string[]; base?: Record<string, string> };
 export type CadrePlan = SourcePlan & { base: Record<string, string> };
 type Cfg = Pick<AppState, 'settings'>;
-const LABEL: Record<string, string> = { rank: 'βαθμός', origin: 'προέλευση', spec: 'Ο/Σ', last: 'επώνυμο', first: 'όνομα', am: 'ΑΜ', phone: 'τηλέφωνο', role: 'θέση', hk: 'γραμμή ΗΚΑΙ', active: 'σε δύναμη', monthMax: 'όριο υπηρεσιών', weapon: 'όπλο', wtype: 'τύπος όπλου', rack: 'οπλοβάστης', wpos: 'θέση όπλου', iban: 'IBAN', amka: 'ΑΜΚΑ', afm: 'ΑΦΜ' };
+const LABEL: Record<string, string> = { rank: 'βαθμός', origin: 'προέλευση', spec: 'Ο/Σ', eid: 'ειδικότητα', last: 'επώνυμο', first: 'όνομα', am: 'ΑΜ', phone: 'τηλέφωνο', role: 'θέση', hk: 'γραμμή ΗΚΑΙ', active: 'σε δύναμη', monthMax: 'όριο υπηρεσιών', weapon: 'όπλο', wtype: 'τύπος όπλου', rack: 'οπλοβάστης', wpos: 'θέση όπλου', iban: 'IBAN', amka: 'ΑΜΚΑ', afm: 'ΑΦΜ' };
 
 // ------------------------------------------------------------------ τιμές
 const sq = (t: string) => normGreek(t).replace(/\s+/g, '');

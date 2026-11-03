@@ -3,10 +3,10 @@
 // τον ίδιο μετρητή με την οθόνη της (strengthOf, kolView, hkaiCounts, outsTables, weaponInfo…), άρα οι αριθμοί βγαίνουν ίδιοι.
 // Μέτρηση = σύνολο ατόμων (κλειδί 'p12' στρατιώτης, 'cΧΧΧ' στέλεχος) ή απλός αριθμός (θέσεις, ΗΚΑΙ). Σε ένα άθροισμα
 // κάθε άτομο μετρά μία φορά (ένωση συνόλων, όπως η Δύναμη)· οι αριθμοί προστίθενται. Καθαρή λογική, χωρίς οθόνη.
-import type { ISODate } from './dates';
+import { dayFor, type ISODate } from './dates';
 import type { TabLay } from './reports';
 import { KOL_COLS, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
-import { HK_A, HK_K, activePeople, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
+import { HK_A, HK_K, activePeople, isHol, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
 import { listOf, MED_LIKE, ownMed, hkRowList } from './ranks';
 import { siCombos, siOf } from './si';
 import { outsTables } from './returns';
@@ -25,7 +25,7 @@ export type VFmt = 'int' | 'pct' | 'pct1';
 // tag: η ετικέτα {ΟΝΟΜΑ} της γραμμής σε δικό σου πρότυπο Excel (κενό: από το κείμενο της γραμμής)
 // man: «Δική σου τιμή» (Michael, 29/10): αριθμός ή κείμενο που γράφεις εσύ και μένει σταθερό στο έντυπο. Όταν υπάρχει (ακόμα και κενό) η γραμμή
 // είναι χειροκίνητη: το expr (και το percentOf, fmt) δεν μετρά, αλλά μένει στη γραμμή για να γυρίσεις στον «Υπολογισμό» χωρίς να χαθεί
-export interface VRow { label: string; expr: VExpr; percentOf?: VExpr; fmt?: VFmt; tag?: string; man?: string }
+export interface VRow { day?: string; time?: string; label: string; expr: VExpr; percentOf?: VExpr; fmt?: VFmt; tag?: string; man?: string }
 // Θέση στο φύλλο που άφησε το «Φτιάξ' το εδώ» (στήλες c1–c2, και row αν είναι μόνος του σε ζώνη): μπαίνει από το withBuilt, όχι από τον χρήστη.
 // Η θέση του πίνακα ως προς τους άλλους (κάτω από, δίπλα σε) είναι το Report.bands (shared/repBands.ts)· lay: πλάτος και στοίχιση (TabLay)
 // tagsOnly: δεν γράφεται πίνακας, μόνο στα κελιά του Excel με την ετικέτα της γραμμής
@@ -322,7 +322,13 @@ export interface ValueOut { id: string; title: string; ta?: TAlign; rows: { labe
 // Όλοι οι πίνακες τιμών ενός εντύπου για τη μέρα d και στιγμή at (λεπτά), με κοινά αποτελέσματα μετρήσεων
 export function evalTables(s: AppState, d: ISODate, at: number, vals: ValueTable[] | undefined, today: ISODate = d): ValueOut[] {
   const c = vctx(s, d, at, today);
-  return valsUsed(vals).map(t => ({ id: t.id, title: (t.title || '').trim(), ...(t.ta ? { ta: t.ta } : {}), rows: t.rows.map(r => ({ label: r.label.trim(), v: rowValue(s, d, at, r, c), fmt: fmtOf(r), ...(rowTag(r) ? { tag: rowTag(r) } : {}), ...(r.man != null && manOf(r.man).txt ? { txt: manOf(r.man).txt } : {}) })),
+  // γραμμή με δική της μέρα και ώρα (π.χ. δείπνο Παρασκευής 19:00): μετράει εκείνη τη στιγμή, με τους ίδιους κανόνες
+  const own = (r: VRow): { d: ISODate; at: number; c: VCtx } => {
+    if (!r.day && !r.time) return { d, at, c };
+    const d2 = dayFor(r.day, d, x => isHol(s.settings, x)); const m = r.time && AT_CUSTOM.test(r.time) ? Number(r.time.slice(0, 2)) * 60 + Number(r.time.slice(3)) : at;
+    return { d: d2, at: m, c: vctx(s, d2, m, today) };
+  };
+  return valsUsed(vals).map(t => ({ id: t.id, title: (t.title || '').trim(), ...(t.ta ? { ta: t.ta } : {}), rows: t.rows.map(r => { const o = own(r); return ({ label: r.label.trim(), v: rowValue(s, o.d, o.at, r, o.c), fmt: fmtOf(r), ...(rowTag(r) ? { tag: rowTag(r) } : {}), ...(r.man != null && manOf(r.man).txt ? { txt: manOf(r.man).txt } : {}) }); }),
     ...(t.lay ? { lay: t.lay } : {}), ...(t.spot ? { spot: t.spot } : {}), ...(t.tagsOnly ? { tagsOnly: true } : {}) }));
 }
 // «ΚΑ + Τιμητική + ΔΝ» για τη λίστα και τη συμβουλή

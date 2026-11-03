@@ -144,9 +144,10 @@ function CadreDialog({ c, onClose }: P) {
   const lists = state.settings.lists;
   const ranks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(x => x.rank)), [state.cadreList, lists]);
   const specs = useMemo(() => optionsOf(listOf(lists, 'specs'), state.cadreList.map(x => x.spec || '')), [state.cadreList, lists]);
+  const eids = useMemo(() => optionsOf([], state.cadreList.map(x => x.eid || '')), [state.cadreList]);
   const wtypes = useMemo(() => optionsOf(listOf(lists, 'weaponTypes'), [c.wtype || '']), [lists, c.wtype]);
   const origins = useMemo(() => optionsOf(listOf(lists, 'origins'), [...state.cadreList.map(x => x.origin), ...state.people.map(p => p.origin)]), [state.cadreList, state.people, lists]);
-  const [f, setF] = useState({ rank: c.rank || '', origin: c.origin || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined, wtype: c.wtype || '', weapon: c.weapon || '', rack: c.rack || '', wpos: c.wpos || '' });
+  const [f, setF] = useState({ rank: c.rank || '', origin: c.origin || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', eid: c.eid || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined, wtype: c.wtype || '', weapon: c.weapon || '', rack: c.rack || '', wpos: c.wpos || '' });
   // ΕΠΟΠ/ΟΒΑ (Michael, 21/10): πόσες υπηρεσίες τον μήνα· με όριο μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι
   const duty = isEpop({ rank: f.rank, origin: f.origin }, lists) || EPOP_ROWS.includes(f.hk) || !!c.monthMax;
   const [hkTouched, setHkTouched] = useState(!!c.id); const dirty = useDirty(f);
@@ -159,6 +160,7 @@ function CadreDialog({ c, onClose }: P) {
       <${ChoiceField} id="cd-spec" label="Ο/Σ" value=${f.spec} options=${specs} placeholder="π.χ. ΤΘ" onChange=${(v: string) => setF({ ...f, spec: v })}/></div>
     <div className="field-row">${fld('last', 'Επώνυμο *')}${fld('first', 'Όνομα')}</div>
     <div className="field-row">${fld('am', 'ΑΜ', 'αριθμός μητρώου')}${fld('phone', 'Τηλέφωνο')}</div>
+    <div className="field-row"><${ChoiceField} id="cd-eid" label="Ειδικότητα" value=${f.eid} options=${eids} placeholder="π.χ. ΔΙΟΙΚΗΤΙΚΟΣ" otherLabel="+ Νέα ειδικότητα…" otherHelp="Γράφεται με κεφαλαία και μένει στη λίστα για την επόμενη φορά." onChange=${(v: string) => setF({ ...f, eid: v })}/></div>
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής ' + UNIT().gen)}
       <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><${Select} id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div></div>
     ${duty && html`<div className="field"><label className="field__label" htmlFor="cd-mm">Υπηρεσίες τον μήνα (το πολύ)</label><input id="cd-mm" className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${f.monthMax ?? ''} onChange=${(e: any) => setF({ ...f, monthMax: Math.max(0, Math.floor(+e.target.value)) || undefined })}/><span className="field__help">Με αριθμό μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι (ποτέ η αυτόματη συμπλήρωση). Πάνω από το όριο ζητά αιτία. Κενό = δεν κάνει υπηρεσίες.</span></div>`}
