@@ -482,16 +482,16 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
   const [quick, setQuick] = useState(false);
   // blank: το «Κενός πίνακας» του βήματος 1, ίδιο αποτέλεσμα με το «Κενός πίνακας» του βήματος 2 (setKind), και πάει κατευθείαν στο βήμα 3
-  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false) => {
+  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false, pre?: { vals?: ValueTable[]; sort?: Report['sort'] }) => {
     const b: BuildOpts = JSON.parse(JSON.stringify(o)); if (blank) { b.cols = colsForKind(b.cols, 'blank'); b.nrows = BLANK_ROWS; }
     setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote('');
-    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
+    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(pre?.vals ? { vals: JSON.parse(JSON.stringify(pre.vals)) } : {}), ...(pre?.sort ? { sort: pre.sort } : {}), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
     setTi(0); setQuick(jump); setStep(blank ? 3 : jump ? 4 : 2);
   };
   useEffect(() => {
     if (initial) { const t = tpls.find(x => x.id === initial.tpl); if (t) useTpl(t, initial.kind, true).finally(() => setReady(true)); else { setStep(1); setReady(true); } }
     else if (start === 'upload') upload().finally(() => setReady(true));
-    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p); setReady(true); }
+    else if (start === 'build') { const p = PRESETS.find(x => x.id === preset); startBuild(p ? p.opts : blankBuild(), p ? p.name : '', !!p, false, p); setReady(true); }
     else if (start === 'tpl') { const t = tpls.find(x => x.id === tplId); if (t) { upd({ name: t.name }); useTpl(t, 'people', false).then(() => setStep(2)).finally(() => setReady(true)); } else setReady(true); }
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   // άλλαξε «Τι αφορά»: οι στήλες ξαναμαντεύονται (ανεβασμένο) ή φεύγουν όσες δεν υπάρχουν στο νέο είδος (φτιαγμένο)
@@ -663,7 +663,7 @@ function StepTpl({ mode, tpl, build, tpls, upload, onBuild, onTpl }: P) {
     <div><h3 className="rep-h">Δικό σου Excel</h3><p className="note">Ένα έντυπο που ήδη έχεις (.xlsx). Κρατά τη μορφή του (γραμματοσειρές, πλαίσια, λογότυπο, υπογραφές) και η εφαρμογή συμπληρώνει μόνο τα στοιχεία.</p>
       <${Button} variant="outline" onClick=${upload}>Ανέβασε Excel…<//></div>
     <div><h3 className="rep-h">Φτιάξ' το εδώ</h3><p className="note">Η εφαρμογή φτιάχνει το Excel: κεφαλίδα και υπογραφές από τις Ρυθμίσεις, πλαίσια, Α/Α, επικεφαλίδες σε κάθε σελίδα.</p>
-      <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => onBuild(p.opts, p.name)}><b>${p.name}</b><small>${p.help}</small></button>`)}
+      <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => onBuild(p.opts, p.name, false, false, p)}><b>${p.name}</b><small>${p.help}</small></button>`)}
         <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '')}><b>Απλή λίστα</b><small>Α/Α, βαθμός, ονοματεπώνυμο. Προσθέτεις στήλες στο βήμα 3.</small></button>
         <button type="button" className="rep-preset" onClick=${() => onBuild(blankBuild(), '', false, true)}><b>Κενός πίνακας</b><small>Δικές σου στήλες και γραμμές, χωρίς άτομα· γράφεις ό,τι θες στα κελιά ή βάζεις τιμές από την εφαρμογή</small></button></div></div>
     ${tpls.length > 0 && html`<div><h3 className="rep-h">Πρότυπο που ήδη υπάρχει</h3><div className="rep-presets">${tpls.map((t: RepTpl) => html`<button key=${t.id} type="button" className="rep-preset" aria-pressed=${tpl?.id === t.id} onClick=${() => onTpl(t)}><b>${t.name}</b><small>${t.built ? 'Φτιαγμένο εδώ' : 'Ανεβασμένο Excel'}</small></button>`)}</div></div>`}
