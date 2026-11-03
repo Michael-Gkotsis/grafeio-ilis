@@ -46,6 +46,9 @@ export interface Person {
   inOn?: ISODate;        // μπήκε στη δύναμη αυτή τη μέρα («Νέος στρατιώτης» ή νέα γραμμή του Δυναμολογίου): 1. ΕΓΓΡΑΦΕΣ της ΗΚΑΙ
   outOn?: ISODate;       // βγήκε εκτός δύναμης αυτή τη μέρα: 2. ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ (φεύγει αν ξαναμπεί σε δύναμη)
   added?: boolean;       // φτιάχτηκε στην εφαρμογή («Νέος στρατιώτης»): μπαίνει σε νέα γραμμή στο Δυναμολόγιο ως την επόμενη εισαγωγή του
+  iban?: string;         // έξτρα στοιχεία (shared/personal.ts): μόνο στην καρτέλα, ποτέ σε Excel/έντυπα· συμπαγή, χωρίς κενά
+  amka?: string;
+  afm?: string;
 }
 
 // Αρχή των σημειώσεων όσων βγήκαν εκτός δύναμης από φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» (όχι με το χέρι)
@@ -567,7 +570,7 @@ export function markOldRequests(s: AppState, today: ISODate): AppState | null {
 // Υπηρεσιών (αρνητικός, για να μη συμπέσει με στρατιώτη), δίνεται μία φορά και μένει για το ιστορικό (rules.ts cadreSeat)
 // Κάθε ενεργό στέλεχος μπαίνει με το χέρι σε οποιαδήποτε θέση (Michael, 26/10): παίρνει το pid τη στιγμή που μπαίνει πρώτη φορά
 // στις θέσεις (commands.ts assign), όχι μόνο όσοι έχουν monthMax. weapon/wtype/rack/wpos: όπλο στελέχους, όπως του Person (ένοπλες θέσεις)
-export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string }
+export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string; iban?: string; amka?: string; afm?: string }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
