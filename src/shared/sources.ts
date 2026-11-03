@@ -998,7 +998,8 @@ const remarksOf = (role: string, dn: boolean, inRemarks: boolean) => [stripDn(ro
 export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   rank: rankTxt(p), origin: p.origin || '', spec: p.spec || '', last: p.last || '', first: p.first || '', father: p.father || '', asm: p.asm || '',
   phone: p.phone || '', room: p.room == null ? '' : String(p.room), si: p.si || '', remarks: remarksOf(p.role || '', !!p.dn, !!b && b.cols.dn == null),
-  dn: p.dn ? 'ΝΑΙ' : '', iban: p.iban || '', amka: p.amka || '', afm: p.afm || ''
+  dn: p.dn ? 'ΝΑΙ' : '', iban: p.iban || '', amka: p.amka || '', afm: p.afm || '',
+  email: p.email || '', relEmail: p.relEmail || '', blood: p.blood || ''   // βάση για το φύλλο ΘΑΛΑΜΟΙ (roomExtra.ts)
 });
 export const snapPeople = (people: Person[]): Record<number, PersonSnap> => Object.fromEntries(people.map(p => [p.id, personVals(p)]));
 // Γραμμές που μπαίνουν σε ένα φύλλο: after/tpl είναι γραμμές του φύλλου όπως ήταν (από 0), με αύξουσα σειρά. steps: πώς

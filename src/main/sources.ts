@@ -346,7 +346,7 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
     const steps = plan.inserts || [];
     // e-mail, e-mail συγγενή, ομάδα αίματος στο φύλλο ΘΑΛΑΜΟΙ (αν έχει τέτοιες στήλες): γράφονται μόνο όσα διαφέρουν
     const roomName = (): string | undefined => { const rp = wb.reportSheets(); return wb.sheetNames().find(x => x !== b.sheet && !rp.has(x) && /ΘΑΛΑΜ/i.test(x)); };
-    const roomExtras = async (name: string) => { const fx = new Set<string>(); return planRoomExtras({ name, rows: await wb.values(name, 2000, MAX_COLS, fx), fx }, s.people); };
+    const roomExtras = async (name: string) => { const fx = new Set<string>(); return planRoomExtras({ name, rows: await wb.values(name, 2000, MAX_COLS, fx), fx }, s.people, meta?.psnap); };
     const rxName = kind === 'people' && had ? roomName() : undefined;
     const rx0 = rxName ? await roomExtras(rxName) : [];
     // σύνολα κάτω από τον πίνακα του ΣΥΝΟΛΙΚΟ (ΣΤΕΠ, αναρρωτικές, άδειες, νοσοκομείο): τα ίδια νούμερα με τη σελίδα Δύναμη

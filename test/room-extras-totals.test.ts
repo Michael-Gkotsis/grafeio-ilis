@@ -71,7 +71,7 @@ describe('ΘΑΛΑΜΟΙ: ανάγνωση και σχέδιο εγγραφής'
   it('γράφει μόνο ό,τι διαφέρει· κενό στην εφαρμογή σβήνει το κελί', () => {
     const s = run(s0, { t: 'setPersonal', pid: 2, email: 'A@b.gr', blood: 'Α+' });
     const rs = roomSheet({ 2: ['', '', 'A +'], 3: ['old@x.gr', '', ''] });
-    const sets = planRoomExtras(rs, s.people);
+    const sets = planRoomExtras(rs, s.people, { 3: { email: 'old@x.gr', relEmail: '', blood: '' } });
     expect(sets).toContainEqual({ r: 3, c: 8, v: 'A@b.gr' });
     expect(sets).toContainEqual({ r: 4, c: 8, v: null });
     expect(sets.length).toBe(2);   // το «A +» είναι ήδη Α+, το νούμερο παραλλαγής (στήλη 10) δεν ακουμπιέται
@@ -119,6 +119,39 @@ describe('αληθινό αρχείο: ΘΑΛΑΜΟΙ και σύνολα', () =
     // δεύτερη εγγραφή: τίποτα να αλλάξει
     const w3 = await writeSource('people', b, s, undefined, D, { at: 600 });
     expect(w3.ok && w3.unchanged).toBe(true);
+  });
+});
+
+describe('ΘΑΛΑΜΟΙ: προστασία με βάση τον τελευταίο συγχρονισμό', () => {
+  const snap = (email: string) => ({ 2: { email, relEmail: '', blood: '' } });
+  it('πρώτη εγγραφή: μη κενό κελί με κενή τιμή στην εφαρμογή μένει όπως είναι (και χωρίς βάση)', () => {
+    const rs = roomSheet({ 2: ['mine@x.gr', '', ''] });
+    expect(planRoomExtras(rs, s0.people)).toEqual([]);
+    expect(planRoomExtras(rs, s0.people, {})).toEqual([]);
+    // με άλλη τιμή στην εφαρμογή και χωρίς βάση: πάλι δεν γράφεται πάνω
+    expect(planRoomExtras(rs, run(s0, { t: 'setPersonal', pid: 2, email: 'app@x.gr' }).people)).toEqual([]);
+  });
+  it('κενό κελί + τιμή στην εφαρμογή: γράφεται', () => {
+    const s = run(s0, { t: 'setPersonal', pid: 2, email: 'app@x.gr' });
+    expect(planRoomExtras(roomSheet({}), s.people)).toEqual([{ r: 3, c: 8, v: 'app@x.gr' }]);
+  });
+  it('σβήσιμο στην εφαρμογή μετά από συγχρονισμό σβήνει το κελί', () => {
+    const rs = roomSheet({ 2: ['old@x.gr', '', ''] });
+    expect(planRoomExtras(rs, s0.people, snap('old@x.gr'))).toEqual([{ r: 3, c: 8, v: null }]);
+  });
+  it('αλλαγή στο Excel μετά από συγχρονισμό: δεν γράφεται πάνω και περνά με την εισαγωγή', () => {
+    const rs = roomSheet({ 2: ['new@x.gr', '', ''] });
+    const s = run(s0, { t: 'setPersonal', pid: 2, email: 'old@x.gr' });
+    expect(planRoomExtras(rs, s.people, snap('old@x.gr'))).toEqual([]);
+    const main: RawSheet = { name: 'ΣΥΝΟΛΙΚΟ', rows: [['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΚΙΝΗΤΟ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι'], ...s0.people.map((p, i) => [i + 1, p.rank, p.spec, p.last, p.first, p.father, p.asm, p.phone, p.room, p.si])] as RawSheet['rows'] };
+    const rows = (psnap: Record<number, Record<string, string>>, app = s.people) => withRoomExtras(parseRoster([main]).rows, [main, rs], 'ΣΥΝΟΛΙΚΟ', app, psnap);
+    expect(rows(snap('old@x.gr'))[1].email).toBe('new@x.gr');
+    // και οι δύο άλλαξαν: μένει της εφαρμογής
+    const s2 = run(s0, { t: 'setPersonal', pid: 2, email: 'app@x.gr' });
+    expect('email' in rows(snap('old@x.gr'), s2.people)[1]).toBe(false);
+    // χωρίς βάση: περνά η μη κενή τιμή του Excel· κενό κελί δεν σβήνει
+    expect(rows({})[1].email).toBe('new@x.gr');
+    expect('email' in withRoomExtras(parseRoster([main]).rows, [main, roomSheet({})], 'ΣΥΝΟΛΙΚΟ', s.people, {})[1]).toBe(false);
   });
 });
 
