@@ -31,6 +31,7 @@ import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
 import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
+import type { ImerReq } from '../shared/imer';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
@@ -205,12 +206,12 @@ const X = {
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
 };
 // Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
-type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons';
-const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons' };
-async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons' | 'imer';
+const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons', imer: 'imer' };
+async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null, imer?: ImerReq): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
   const m = what === 'check' ? await off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s)
     : what === 'lists' ? await excel().rosterLists(s, date) : what === 'rosterPrint' ? await excel().rosterPrint(s, date) : what === 'rosterPreview' ? await excel().rosterPreview(s, date)
-    : what === 'cadre' ? await excel().cadreLists(s, date) : await excel().weaponsBook(s, date);
+    : what === 'cadre' ? await excel().cadreLists(s, date) : what === 'imer' ? await excel().imerBook(s, imer!) : await excel().weaponsBook(s, date);
   const form = MADE_FORM[what];
   const r = await off('signMade', [m.data, form, m.marks, sigs], () => signMade(m.data, s, form, m.marks, sigs), s);
   return { name: m.name, ...r };
@@ -456,7 +457,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   if (prev === next) return;
   if (toExcel) kindsOf(prev, next).forEach(k => dirty.add(k));
   // τα έντυπα δεν χρησιμοποιούν δυνατότητες ούτε το «βγήκε στις…»: χωρίς αυτά δεν ξαναπαράγονται
-  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
+  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && k !== 'imer' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
   if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
@@ -1103,6 +1104,16 @@ else {
     ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
       try {
         const r = await made('weapons', date, store.state, sigs);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings = r.warnings;
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
+    // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
+    ipcMain.handle('export:imer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
+      try {
+        const r = await made('imer', req.to, store.state, sigs, req);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);

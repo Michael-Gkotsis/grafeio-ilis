@@ -23,8 +23,12 @@ const unarmedOf = (s: AppState, d: ISODate): Set<number> => {
   return u;
 };
 const RANK = (st: Status): number => (TYPES[st.type].cat === 'abs' || st.type === 'NOS' ? 0 : st.type === 'STEP' ? 1 : TYPES[st.type].cat === 'med' ? 2 : 9);
+// η κατάσταση που κερδίζει τη μέρα d (άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό) ή undefined· το Ημερολόγιο κωλυομένων (imer.ts) τη χρησιμοποιεί χωρίς τον ΑΟΠΛΟΣ
+export function dayStatus(s: AppState, p: Person, d: ISODate): Status | undefined {
+  return statusesOn(s.statuses, p.id, d).filter(x => RANK(x) < 9).sort((a, b) => RANK(a) - RANK(b))[0];
+}
 export function dayCode(s: AppState, p: Person, d: ISODate): string {
-  const ss = statusesOn(s.statuses, p.id, d).filter(x => RANK(x) < 9).sort((a, b) => RANK(a) - RANK(b));
-  if (ss.length) return codeOfStatus(ss[0], s.settings.lists);
+  const st = dayStatus(s, p, d);
+  if (st) return codeOfStatus(st, s.settings.lists);
   return unarmedOf(s, d).has(p.id) ? 'ΑΟΠΛΟΣ' : '';
 }

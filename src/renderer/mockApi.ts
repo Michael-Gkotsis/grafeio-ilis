@@ -144,6 +144,7 @@ export function mockApi(): Api {
     exportWeapons: async date => ({ ok: true, file: '(δοκιμή) ΟΠΛΙΣΜΟΣ ' + date + '.xlsx', warnings: [] }),
     exportLists: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + date + '.xlsx', warnings: [] }),
     exportCadre: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + date + '.xlsx', warnings: [] }),
+    exportImer: async req => ({ ok: true, file: '(δοκιμή) ΗΜΕΡΟΛΟΓΙΟ ΚΩΛΥΟΜΕΝΩΝ ' + req.from + '.xlsx', warnings: [] }),
     exportRoster: async date => ({ ok: true, file: '(δοκιμή) ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + date + '.xlsx', warnings: [] }),
     pickRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     applyRoster: async () => ({ ok: false, error: 'δοκιμή' }),

@@ -10,6 +10,7 @@ const api: Api = {
   dayCheck: () => ipcRenderer.invoke('day:check'),
   exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
   exportLists: (date, sigs) => ipcRenderer.invoke('export:lists', date, sigs),
+  exportImer: (req, print, sigs) => ipcRenderer.invoke('export:imer', req, print, sigs),
   exportRoster: (date, print, sigs) => ipcRenderer.invoke('export:roster', date, print, sigs),
   exportWeapons: (date, print, sigs) => ipcRenderer.invoke('export:weapons', date, print, sigs),
   exportCadre: (date, sigs) => ipcRenderer.invoke('export:cadre', date, sigs),

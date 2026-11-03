@@ -26,6 +26,7 @@ import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { PersonalTab } from './personal';
+import { ImerTab } from './imerologio';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
 type P = any;
 
@@ -88,7 +89,13 @@ type Filt = { unit: string; room: number | null; filter: string };
 const DEF_SORT = { k: 'last', dir: 1 };
 // φίλτρα αποθηκευμένων λιστών από πριν (Παρόντες, ΕΥ…): ισχύουν ακόμα, απλώς δεν είναι πια κουμπιά
 const legacyMatch = (f: string, ss: Status[], lists?: UserLists) => { const away = ss.some(s => isAway(s, lists)); return f === 'present' ? !away : f === 'absent' ? away : (TYPES as any)[f] ? ss.some(s => s.type === f) : true; };
+// Δυναμολόγιο: δύο καρτέλες, η Λίστα και το Ημερολόγιο κωλυομένων (imerologio.ts)
 export function PeopleScreen() {
+  const { state } = useStore(); const nav = useNav(); const tab = nav.params.ptab === 'imer' ? 'imer' : 'list';
+  return html`<div><div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ ptab: v === 'imer' ? 'imer' : undefined })} items=${[{ value: 'list', label: 'Λίστα (' + state.people.filter(p => p.active).length + ')' }, { value: 'imer', label: 'Ημερολόγιο κωλυομένων' }]}/></div>
+    ${tab === 'imer' ? html`<${ImerTab}/>` : html`<${PeopleList}/>`}</div>`;
+}
+function PeopleList() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
   const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);   // ένδειξη «έχει σημειώσεις» δίπλα στο όνομα
@@ -144,7 +151,7 @@ export function PeopleScreen() {
   }, [dq, filter, unit, room, sort, listFor, lists]);
   const stOf = (p: Person) => (withSt ? filterStatus(filter as RosterFilter, ssOf.get(p.id) || []) : undefined);
   const open = useOpenFrom(rows);
-  const height = useViewportHeight(mobile ? 330 : 300);
+  const height = useViewportHeight(mobile ? 380 : 350);
   const rowH = useRowH(40, 32);
   const H = (k: string, l: string) => html`<button key=${k} type="button" aria-sort=${sort.k === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => nav.set({ sort: sort.k === k ? { k, dir: -sort.dir } : { k, dir: 1 } })}>${l}${sort.k === k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   const clear = () => { setQ(''); nav.set({ filter: 'all', unit: 'all', room: null, pdate: undefined }); };
