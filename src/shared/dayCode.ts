@@ -15,11 +15,11 @@ export function codeOfStatus(st: Pick<Status, 'type' | 'kind' | 'note'>, lists?:
   if (lbl !== t.label) return upper(lbl);
   return upper(NAMES[st.type] || t.code || lbl);
 }
-const UNARMED = new WeakMap<object, Map<string, Set<number>>>();
+// οι άοπλοι εξαρτώνται μόνο από τα άτομα και τις Ρυθμίσεις (Σ.Ι. × υπηρεσίες): μία φορά ανά κατάσταση, όχι ανά γραμμή
+const UNARMED = new WeakMap<object, WeakMap<object, Set<number>>>();
 const unarmedOf = (s: AppState, d: ISODate): Set<number> => {
-  let m = UNARMED.get(s.people); if (!m) { m = new Map(); UNARMED.set(s.people, m); }
-  const k = d + '|' + (s.settings as unknown as { id?: string }).id; let u = m.get(k);
-  if (!u) { u = weaponInfo(s, d).unarmed; m.set(k, u); }
+  let m = UNARMED.get(s.people); if (!m) { m = new WeakMap(); UNARMED.set(s.people, m); }
+  let u = m.get(s.settings); if (!u) { u = weaponInfo(s, d).unarmed; m.set(s.settings, u); }
   return u;
 };
 const RANK = (st: Status): number => (TYPES[st.type].cat === 'abs' || st.type === 'NOS' ? 0 : st.type === 'STEP' ? 1 : TYPES[st.type].cat === 'med' ? 2 : 9);

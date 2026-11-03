@@ -482,10 +482,10 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
   const [quick, setQuick] = useState(false);
   // blank: το «Κενός πίνακας» του βήματος 1, ίδιο αποτέλεσμα με το «Κενός πίνακας» του βήματος 2 (setKind), και πάει κατευθείαν στο βήμα 3
-  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false, pre?: { vals?: ValueTable[]; sort?: Report['sort'] }) => {
+  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false, pre?: { vals?: ValueTable[]; sort?: Report['sort']; bands?: Report['bands'] }) => {
     const b: BuildOpts = JSON.parse(JSON.stringify(o)); if (blank) { b.cols = colsForKind(b.cols, 'blank'); b.nrows = BLANK_ROWS; }
     setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote('');
-    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(pre?.vals ? { vals: JSON.parse(JSON.stringify(pre.vals)) } : {}), ...(pre?.sort ? { sort: pre.sort } : {}), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
+    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(pre?.vals ? { vals: JSON.parse(JSON.stringify(pre.vals)) } : {}), ...(pre?.sort ? { sort: pre.sort } : {}), ...(pre?.bands ? { bands: JSON.parse(JSON.stringify(pre.bands)) } : {}), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
     setTi(0); setQuick(jump); setStep(blank ? 3 : jump ? 4 : 2);
   };
   useEffect(() => {

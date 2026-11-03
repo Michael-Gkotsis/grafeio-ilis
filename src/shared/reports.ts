@@ -355,12 +355,12 @@ export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
 const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
-export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts; vals?: ValueTable[]; sort?: RepSort }[] = [
+export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts; vals?: ValueTable[]; sort?: RepSort; bands?: Bands }[] = [
   { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
   { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
   { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 12, fill: 'gray' } },
   // Δυναμολόγιο αξιολόγησης (Michael, 3/11): πίνακας νούμερων (οι ΤΟΠΟΘΕΤΗΜΕΝΟΙ… από τη Δύναμη, ΕΚΠΑΙΔΕΥΟΜΕΝΟΙ δική σου τιμή) και κάτω οι οπλίτες με κωδικό μέρας στις ΠΑΡΑΤΗΡΗΣΕΙΣ
-  { id: 'axiologisi', name: 'Δυναμολόγιο αξιολόγησης', help: 'Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις', sort: 'room',
+  { id: 'axiologisi', name: 'Δυναμολόγιο αξιολόγησης', help: 'Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις', sort: 'room', bands: [['v1'], ['main']],   // τα νούμερα πάνω, όπως στο δικό του αρχείο
     vals: [{ id: 'v1', title: '', rows: [
       { label: 'ΤΟΠΟΘΕΤΗΜΕΝΟΙ', expr: [{ sign: '+', metric: 'str.total' }] }, { label: 'ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }, { label: 'ΠΑΡΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.inside' }] },
       { label: 'ΕΚΠΑΙΔΕΥΟΜΕΝΟΙ ΣμηΕΑ', expr: [], man: '' }, { label: 'ΕΛΕΥΘΕΡΟΙ ΥΠΗΡΕΣΙΑΣ/ΑΣΚΗΣΕΩΝ', expr: [{ sign: '+', metric: 'st.EY' }, { sign: '+', metric: 'st.EA' }] },
