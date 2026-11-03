@@ -1,8 +1,8 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
-import { collator } from './text';
+import { collator, upper } from './text';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, isEpopOrigin, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, medWarns, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, medWarns, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -1288,6 +1288,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (cmd.type === 'LEAVE' && leaveMode(cmd, lists) !== 'away') { if (leaveMode(cmd, lists) === 'kol') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + kolColName(leaveCol(cmd.kind, lists)) + ' +' + n }); }   // «Πουθενά»: δεν μπαίνει στην ΗΚΑΙ
+  else if (cmd.type === 'LEAVE' && leaveCol(cmd.kind, lists) === LEAVE_AWAY_NO_COL) files.push({ fn: HK(), desc: 'Απών στην εφαρμογή, σε καμία στήλη της ' + HK() + ' (εκεί μετρά στους παρόντες)' });   // (Michael, 3/11)
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
@@ -1366,10 +1367,11 @@ export function hkRankOf(rank: string, lists?: UserLists, origin?: string): stri
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
-function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
+function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number, noCol?: Status[]): string | null {
   const lists = s.settings.lists;
   const abs = ss.find(x => isAway(x, lists) && TYPES[x.type].hkai);
-  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; return lc === LEAVE_NO_COL ? null : lc; }
+  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; if (lc === LEAVE_AWAY_NO_COL) noCol?.push(abs);   // απών στην εφαρμογή, σε καμία στήλη (Michael, 3/11)
+    return lc === LEAVE_NO_COL || lc === LEAVE_AWAY_NO_COL ? null : lc; }
   const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
@@ -1381,7 +1383,7 @@ export interface HkaiRow { n: number; attached: number; c: Record<string, number
 // Στήλες της ΗΚΑΙ που δεν βγαίνουν από την εφαρμογή και γράφονται με το χέρι
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
 // cadre: τα στελέχη ανά στήλη (καρτέλα Στελέχη), για να φαίνονται με ονόματα όπως οι στρατιώτες
-export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; kol: number; apo: number; total: number; avail: number; guardsN: number; soldiers: number; cadreN: number }
+export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; noCol: { p: Person; kind: string }[]; kol: number; apo: number; total: number; avail: number; guardsN: number; soldiers: number; cadreN: number }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
   const onDuty = new Map<number, DutyKind>();
@@ -1403,12 +1405,14 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || (dk ? (dk === 'mg' ? 'mag' : 'yp') : undefined);
     if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
   }
-  let soldiers = 0; const at = hkMin(s.rules);
+  let soldiers = 0; const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];
   for (const p of activePeople(s)) {
     soldiers++;
     const r = hkRankOf(p.rank, s.settings.lists, p.origin); rank[r].n++; if (p.attached) rank[r].attached++;
     // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)· φεύγει για άδεια μετά την ώρα της: παρών ως να φύγει (Michael, 1/11)
-    const col = soldierCol(s, notLeftYet(statusesFrom(s.statuses, p.id, date, at), date, at), onDuty.get(p.id), date, at);
+    nc.length = 0;
+    const col = soldierCol(s, notLeftYet(statusesFrom(s.statuses, p.id, date, at), date, at), onDuty.get(p.id), date, at, nc);
+    if (nc.length) noCol.push({ p, kind: upper(nc[0].kind || '') });
     if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
   }
   let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0) + cadreKol, apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
@@ -1423,7 +1427,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     }
   }
   const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
-  return { cols, cadre: cadreCols, rank, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length, soldiers, cadreN: cadre };
+  return { cols, cadre: cadreCols, rank, noCol, kol, apo, total: soldiers + cadre, avail: soldiers + cadre - apo, guardsN: Object.keys(g).length, soldiers, cadreN: cadre };
 }
 
 // --------------------------- Κωλυόμενοι (Michael, 24/10) ---------------------------

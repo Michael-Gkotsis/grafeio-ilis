@@ -27,6 +27,7 @@ type Mode = 'away' | 'kol' | 'present';
 const ITEMS: Record<string, { mode: Mode; item: Partial<ListItem>; col: string | null }> = {
   away: { mode: 'away', item: { col: 'fp' }, col: 'fp' },
   kol: { mode: 'kol', item: { col: 'kin' }, col: 'kin' },
+  'away-no-col': { mode: 'away', item: { col: '-a' }, col: null },
   present: { mode: 'present', item: { col: '-' }, col: null },
   'present+duty': { mode: 'present', item: { col: '-', duty: true }, col: null },
   'present+out': { mode: 'present', item: { col: '-', out: true }, col: null },
@@ -78,8 +79,10 @@ describe('δικό σου είδος άδειας: πώς μετρά ανά στ
     const h = hkaiCounts(s, D), h0 = hkaiCounts(none, D);
     const inCol = Object.entries(h.cols).filter(([, l]) => l.some(p => p.id === PID)).map(([k]) => k);
     expect(inCol).toEqual(x.col ? [x.col] : []);
-    expect(h.apo).toBe(h0.apo + (x.mode === 'away' ? 1 : 0)); expect(h.kol).toBe(h0.kol + (x.mode === 'kol' ? 1 : 0));
-    expect(h.avail).toBe(h.total - h.apo); expect(h.avail).toBe(h0.avail - (x.mode === 'away' ? 1 : 0));
+    const noc = x.item.col === '-a';   // απών στην εφαρμογή, σε καμία στήλη της ΗΚΑΙ: δεν μετρά ούτε στους απόντες της
+    expect(h.noCol.map(y => y.p.id)).toEqual(noc ? [PID] : []); if (noc) expect(h.noCol[0].kind).toBe('ΥΠΗΡΕΣΙΑΚΟ');
+    expect(h.apo).toBe(h0.apo + (x.mode === 'away' && !noc ? 1 : 0)); expect(h.kol).toBe(h0.kol + (x.mode === 'kol' ? 1 : 0));
+    expect(h.avail).toBe(h.total - h.apo); expect(h.avail).toBe(h0.avail - (x.mode === 'away' && !noc ? 1 : 0));
     expect(h.soldiers).toBe(N);
     // η γραμμή «Στρατιώτες» έχει το άτομο στη στήλη του
     const r = h.rank['Στρατιώτες']; if (x.col) expect(r.c[x.col]).toBe((h0.rank['Στρατιώτες'].c[x.col] || 0) + 1);
@@ -180,6 +183,8 @@ describe('όνομα αντί «ΚΑ»', () => {
   it('leaveEffect και η σύνοψη της δήλωσης λένε τι κάνει πραγματικά', () => {
     expect(leaveEffect(KIND, lists({ col: 'fp' }))).toBe('Απών παντού, στην ΗΚΑΙ στη στήλη Φ.Πορ.');
     expect(leaveEffect(KIND, lists({ col: 'kin' }))).toBe('Κωλυόμενος: αφαιρείται από τους παρόντες, στην ΗΚΑΙ στη στήλη Κίν., χωρίς υπηρεσία και έξοδο');
+    expect(leaveEffect(KIND, lists({ col: '-a' }))).toBe('Απών στην εφαρμογή, δεν μετρά σε στήλη της ΗΚΑΙ (εκεί μετρά στους παρόντες)');
+    expect(statSummary({ type: 'LEAVE' as const, kind: KIND }, [], lists({ col: '-a' }))).toBe('Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο');
     expect(leaveEffect(KIND, lists({ col: '-' }))).toMatch(/^Παρών παντού, δεν μετρά σε στήλη της ΗΚΑΙ/);
     const st = { type: 'LEAVE' as const, kind: KIND };
     expect(statSummary(st, [], lists({ col: 'fp' }))).toBe('Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο');

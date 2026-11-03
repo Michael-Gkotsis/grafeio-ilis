@@ -24,7 +24,7 @@ const inAny = (s: AppState, pid: number) => Object.values(hkaiCounts(s, D).cols)
 describe('άδεια με «Πουθενά στην ΗΚΑΙ»', () => {
   it('η επιλογή υπάρχει στη λίστα στηλών και το leaveCol τη δέχεται', () => {
     const keys = LEAVE_COLS.map(c => c[0]);
-    expect(keys.slice(0, 2)).toEqual(['ka', 'an']); expect(keys[keys.length - 1]).toBe(LEAVE_NO_COL);
+    expect(keys.slice(0, 2)).toEqual(['ka', 'an']); expect(keys.slice(-2)).toEqual([LEAVE_NO_COL, '-a']);
     for (const k of ['eid', 'fp', 'allh', 'yp', 'ey', 'kin']) expect(keys).toContain(k);
     expect(keys).not.toContain('bl');
     expect(LEAVE_NO_COL).toBe('-');
