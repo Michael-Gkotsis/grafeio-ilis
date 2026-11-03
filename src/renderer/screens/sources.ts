@@ -1,6 +1,6 @@
 // Αρχεία Excel: για κάθε είδος από ποιο αρχείο, φύλλο και στήλες διαβάζει η εφαρμογή και πού γράφει τις αλλαγές της.
 // Αναγνώριση μόνη της· ό,τι δεν βρεθεί ο χρήστης το δείχνει με κλικ στο κελί, με την πρόταση σημειωμένη.
-import { HK } from '../../shared/unit';
+import { HK, hkRowLabel } from '../../shared/unit';
 import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { Select } from '../select';
@@ -11,10 +11,11 @@ import { postBy, postsOf, seatMap } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { addDays, dm, dow } from '../../shared/dates';
 import {
-  KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, inRoster, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
+  KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, sheetHost, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capExtraCols, capExtras, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
   type DutiesPlan, type SheetPerson, type FormBinding, type FormKind, type HkaiMap, type ListKind, type SourceBinding, type StatusKind
 } from '../../shared/sources';
+import { planCadres, planCadreAbs } from '../../shared/cadreSource';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
 import { base, useSourceStatus } from './srcStatus';
@@ -23,7 +24,7 @@ type P = any;
 
 // Διαβάζονται και μαζί με το προσωπικό (από το ίδιο Δυναμολόγιο), αλλά και μόνα τους με δική τους προεπισκόπηση
 const WITH_PEOPLE: ListKind[] = ['posts', 'outside'];
-const SHEET_KINDS: ListKind[] = ['posts', 'outside', 'caps', 'duties'];
+const SHEET_KINDS: ListKind[] = ['posts', 'outside', 'caps', 'duties', 'cadres', 'cadreAbs'];
 
 export function SourcesView() {
   const { state, refresh } = useStore(); const toast = useToast();
@@ -78,7 +79,7 @@ export function SourcesView() {
     <${Card} title="Αρχεία Excel ανά είδος" actions=${html`<${Button} disabled=${!!busy} onClick=${() => pick(null)}>${busy === 'new' ? 'Ανάγνωση…' : 'Εισαγωγή νέου Excel…'}<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Για κάθε είδος: από ποιο Excel, φύλλο και πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές σου. Αλλάζεις κάτι εδώ (π.χ. το Σ.Ι. κάποιου, μια ποινή) και γράφεται στο κελί του στο Excel. Η προηγούμενη έκδοση του αρχείου μένει στο <b>_προηγούμενα</b> δίπλα του.</p>
       <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id} saving=${!!saving}
-        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id)} roster=${!!sources.people}
+        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id)} host=${!!(sheetHost(k.id) && sources[sheetHost(k.id)!])}
         onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggle(k.id, { write: on })} onAuto=${(on: boolean) => toggle(k.id, { autoRead: on })}/>`)}</ul>
     <//>
     <${FormsCard} outs=${st.forms}/>
@@ -92,7 +93,7 @@ export function SourcesView() {
   </div>`;
 }
 
-function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
+function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const { today } = useStore();
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
@@ -109,7 +110,7 @@ function SourceRow({ kind, b, st, busy, saving, roster, onPick, onEdit, onRead, 
       <small>${b ? html`<span className="plan__fn" title=${b.file}>${bindingText(b)}</span>${b.write === false ? ' · δεν γράφει μόνη της' : ''}` : k.help + ' · δεν έχει οριστεί αρχείο'}</small>
       ${s?.error && !s.locked && html`<small className="txt-bad">${s.error}</small>`}</div>
     <div className="srcrow__act">
-      ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${canCreate(kind) && html`<${Button} size="sm" variant="ghost" data-tip=${roster && inRoster(kind) ? 'Η εφαρμογή προσθέτει φύλλο «' + k.title + '» στο Δυναμολόγιο με ό,τι έχει και το κρατά ενημερωμένο' : 'Η εφαρμογή φτιάχνει καινούργιο Excel με ό,τι έχει και το κρατά ενημερωμένο'} onClick=${onNew}>${roster && inRoster(kind) ? 'Νέο φύλλο…' : 'Νέο αρχείο…'}<//>`}`
+      ${!b ? html`<${Button} size="sm" variant="outline" disabled=${busy} onClick=${onPick}>${busy ? 'Ανάγνωση…' : 'Διάλεξε Excel…'}<//>${canCreate(kind) && html`<${Button} size="sm" variant="ghost" data-tip=${host ? 'Η εφαρμογή προσθέτει φύλλο «' + k.title + '» στο ' + (kind === 'cadreAbs' ? 'αρχείο των στελεχών' : 'Δυναμολόγιο') + ' με ό,τι έχει και το κρατά ενημερωμένο' : 'Η εφαρμογή φτιάχνει καινούργιο Excel με ό,τι έχει και το κρατά ενημερωμένο'} onClick=${onNew}>${host ? 'Νέο φύλλο…' : 'Νέο αρχείο…'}<//>`}`
       : html`<${Button} size="sm" variant=${s?.changed ? 'default' : 'outline'} onClick=${onRead} data-tip=${'Διάβασε το Excel και δες τι αλλάζει πριν περάσει στην εφαρμογή' + (withPeople ? ' (διαβάζεται και μαζί με το προσωπικό)' : '')}>Ανανέωση από Excel<//>
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
         ${kind === 'duties' && s?.month && s.month < today.slice(0, 7) && html`<${Button} size="sm" data-tip="Νέο φύλλο για τον τρέχοντα μήνα στο ίδιο αρχείο, με όλους τους ενεργούς, τους μετρητές και τις ΣΚ/αργίες· οι προηγούμενοι μήνες μένουν όπως είναι" onClick=${onNew}>Νέος μήνας<//>`}
@@ -335,8 +336,9 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
   // έλεγχος υπηρεσιών: ποια κελιά είχε ήδη δει η εφαρμογή (ό,τι έσβησες μετά στην εφαρμογή δεν ξαναμπαίνει)
   const cur = state.settings.sources?.[list];
   const sameTable = !!cur && cur.file === b.file && cur.sheet === b.sheet && cur.header === b.header;
-  const [synced, setSynced] = useState<string[]>([]);
-  useEffect(() => { if (list === 'duties' && sameTable) window.api.srcKeys(list).then(x => setSynced(x.keys)); }, [list, sameTable]);
+  const [synced, setSynced] = useState<string[]>([]); const [meta, setMeta] = useState<{ keys: string[]; base: Record<string, string> }>({ keys: [], base: {} });
+  const [del, setDel] = useState(true);   // στελέχη: καταστάσεις που σβήστηκαν από το Excel σβήνονται και από την εφαρμογή
+  useEffect(() => { if ((list === 'duties' || list === 'cadres' || list === 'cadreAbs') && sameTable) window.api.srcKeys(list).then(x => { setSynced(x.keys); setMeta(x); }); }, [list, sameTable]);
   const res = useMemo(() => {
     if (!sheet) return null;
     if (list === 'posts' || list === 'outside') {
@@ -352,6 +354,26 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
       return { sp: p.sp, n: p.changes.length, cmd, tiles: [[p.changes.length, 'Αλλαγές'], [p.listed, 'Στο φύλλο'], [p.same, 'Ίδιοι'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][],
         lists: [{ title: 'Τι αλλάζει', items: [...by].map(([w, l]) => w + ': ' + l.join(', ')) }], notes: ['Όσοι δεν είναι στο φύλλο δεν αλλάζουν. Τα αυτόματα (πόστο, Σ.Ι. Ι4 ή άοπλος) ισχύουν πάντα.'] };
     }
+    if (list === 'cadres') {
+      const p = planCadres(sheet, b, state, meta);
+      const cmd: Command = { t: 'importCadres', adds: p.adds.map(a => a.cadre), updates: p.updates.map(u => ({ id: u.id, patch: u.patch })), source: book.name };
+      const n = p.adds.length + p.updates.length;
+      return { sp: { rows: [], unmatched: [], dup: 0 }, n, cmd, tiles: [[n, 'Αλλαγές'], [p.adds.length, 'Νέα στελέχη'], [p.same, 'Ίδια'], [p.listed, 'Στο φύλλο']] as [number, string][],
+        lists: [{ title: 'Νέα στελέχη', items: p.adds.map(a => a.who + ' · γραμμή ΗΚΑΙ: ' + hkRowLabel(a.cadre.hk, state.settings)) }, { title: 'Αλλάζουν', items: p.updates.map(u => u.who + ': ' + u.what.join(', ') + (u.conflict ? ' (άλλαξε και στην εφαρμογή· περνά του Excel)' : '')) },
+          { title: 'Παραλείπονται', items: [...p.skipped.map(x => 'Γραμμή ' + (x.r + 1) + ' ' + x.who + ': ' + x.why), ...p.amb.map(x => 'Γραμμή ' + (x.r + 1) + ' ' + x.who + ': ίδιο ονοματεπώνυμο με άλλο στέλεχος, βάλε ΑΜ')] }],
+        notes: [...p.warn, p.appOnly.length ? p.appOnly.length + (p.appOnly.length === 1 ? ' στέλεχος της εφαρμογής δεν είναι' : ' στελέχη της εφαρμογής δεν είναι') + ' στο Excel (' + p.appOnly.slice(0, 4).join(', ') + (p.appOnly.length > 4 ? '…' : '') + '). Δεν σβήνονται· γράφονται στο Excel. Για να φύγει κάποιος από τη δύναμη βάλε ΟΧΙ στη στήλη «Σε δύναμη».' : ''].filter(Boolean) };
+    }
+    if (list === 'cadreAbs') {
+      const p = planCadreAbs(sheet, b, state, meta);
+      const rm = del ? p.removed : [];
+      const cmd: Command = { t: 'importCadreAbs', adds: p.adds.map(a => a.abs), updates: p.updates.map(u => ({ id: u.id, note: u.note })), deletes: rm.map(x => x.id), source: book.name };
+      const n = p.adds.length + p.updates.length + rm.length;
+      return { sp: { rows: [], unmatched: [], dup: 0 }, n, cmd, tiles: [[n, 'Αλλαγές'], [p.adds.length, 'Νέες καταστάσεις'], [p.same, 'Ίδιες'], [p.listed, 'Στο φύλλο']] as [number, string][],
+        lists: [{ title: 'Νέες καταστάσεις', items: p.adds.map(a => a.who + ': ' + a.text + (a.abs.note ? ' · ' + a.abs.note : '')) }, { title: 'Αλλάζουν', items: p.updates.map(u => u.who + ': ' + u.text) },
+          { title: 'Παραλείπονται', items: p.skipped.map(x => 'Γραμμή ' + (x.r + 1) + ' ' + x.who + ': ' + x.why) }],
+        removed: p.removed.map(x => x.who + ': ' + x.text),
+        notes: [p.appOnly ? p.appOnly + (p.appOnly === 1 ? ' κατάσταση της εφαρμογής δεν είναι' : ' καταστάσεις της εφαρμογής δεν είναι') + ' στο Excel· δεν σβήνονται, γράφονται στο Excel.' : '', 'Κατάσταση που πέφτει πάνω σε άλλη του ίδιου στελέχους παίρνει τη θέση της (μία κατάσταση τη μέρα).'].filter(Boolean) };
+    }
     const p = planDuties(sheet, b, state, month, today, choices, synced);
     const cmd: Command = { t: 'importDuties', ...dutiesCmd(p), source: book.name };
     const pm = seatMap(state);
@@ -361,7 +383,7 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     ].filter(Boolean);
     const write = p.days.filter(d => d.extra.length || d.differ.length || d.gone.length).length;
     return { sp: p.sp, n: p.changes, cmd, duties: p, keys: p.keys, tiles: [[p.changes, 'Υπηρεσίες που περνούν'], [write, 'Μέρες που γράφονται στο Excel'], [p.same, 'Ίδιες μέρες'], [p.sp.rows.length, 'Άτομα'], [p.sp.unmatched.length, 'Χωρίς άτομο']] as [number, string][], lists: [] as { title: string; items: string[] }[], notes };
-  }, [sheet, list, b, state, choices, month, today, book.name, synced]);
+  }, [sheet, list, b, state, choices, month, today, book.name, synced, meta, del]);
   if (!sheet || !res) return html`<${Dialog} title="Ανανέωση από Excel" onClose=${onClose}><${Alert} tone="bad"><span>Δεν υπάρχει φύλλο «${b.sheet}» στο ${book.name}. Πάτα «Στήλες…» και διάλεξε άλλο.</span><//><//>`;
   const go = async () => {
     setBusy(true);
@@ -376,6 +398,8 @@ function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: S
     <${Unmatched} rows=${res.sp.unmatched} choices=${choices} setChoices=${setChoices}/>
     ${res.duties && html`<${DutyAliases} codes=${res.duties.unknown}/><${DutyDays} p=${res.duties}/>`}
     ${res.lists.map(l => html`<${List} key=${l.title} title=${l.title} items=${l.items}/>`)}
+    ${(res as any).removed?.length > 0 && html`<div className="field"><span className="field__label">Σβήστηκαν από το Excel (${(res as any).removed.length})</span><ul className="note" style=${{ margin: 0 }}>${(res as any).removed.slice(0, 40).map((t: string) => html`<li key=${t}>${t}</li>`)}</ul>
+      <label className="rule"><input type="checkbox" className="ui-check" checked=${del} onChange=${(e: any) => setDel(e.target.checked)}/><span><b>Σβήσε τες και από την εφαρμογή</b><small>Αλλιώς μένουν στην εφαρμογή και ξαναγράφονται στο Excel.</small></span></label></div>`}
     ${res.notes.map(t => html`<p key=${t} className="note">${t}</p>`)}
     ${res.sp.dup > 0 && html`<p className="note">${res.sp.dup === 1 ? '1 άτομο είναι' : res.sp.dup + ' άτομα είναι'} δύο φορές στο φύλλο· κρατήθηκε η πρώτη γραμμή.</p>`}
     <p className="note">Από εκεί και πέρα ό,τι αλλάζεις στην εφαρμογή γράφεται και σε αυτό το φύλλο${b.write === false ? ' με την «Ενημέρωση Excel»' : ''}.</p>

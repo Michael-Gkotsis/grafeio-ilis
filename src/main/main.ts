@@ -16,10 +16,11 @@ import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isCadreKind, sheetHost, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
+import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
@@ -380,7 +381,7 @@ const sheetOf = (sheets: RawSheet[], name: string) => sheets.find(x => x.name ==
 // Η μορφή που μπήκε, σύντομα (για το Ιστορικό)
 const tidyWhat = (t: string[]) => [t.some(x => x.startsWith('Ο τίτλος')) && 'τίτλος στο κέντρο', t.some(x => x.startsWith('Λίστα')) && 'λίστες επιλογής'].filter(Boolean).join(' και ');
 function writeText(kind: ListKind, file: string, r: { added: number; changed: number; cleared: number; notFound: string[]; warn?: string[]; created: boolean; rooms?: { n: number; added: number; placed?: number; sheet: string }; tidy?: string[] }, b: SourceBinding) {
-  const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (kind === 'people' ? (r.added === 1 ? ' νέος στρατιώτης' : ' νέοι στρατιώτες') : r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν', r.tidy?.length && 'μορφή: ' + tidyWhat(r.tidy)].filter(Boolean).join(', ');
+  const parts = [r.created && 'φτιάχτηκε', r.added && r.added + (kind === 'people' ? (r.added === 1 ? ' νέος στρατιώτης' : ' νέοι στρατιώτες') : kind === 'cadres' ? (r.added === 1 ? ' νέο στέλεχος' : ' νέα στελέχη') : r.added === 1 ? ' νέα' : ' νέες'), r.changed && r.changed + (r.changed === 1 ? ' αλλαγή' : ' αλλαγές'), r.cleared && r.cleared + ' σβήστηκαν', r.tidy?.length && 'μορφή: ' + tidyWhat(r.tidy)].filter(Boolean).join(', ');
   return 'Excel ' + KIND[kind].label.toLowerCase() + ': ' + path.basename(file) + ' › ' + b.sheet + (parts ? ' (' + parts + ')' : '') + (r.notFound.length ? '. Δεν βρέθηκαν στο φύλλο: ' + r.notFound.slice(0, 5).join(', ') : '')
     + (r.warn?.length ? '. ' + r.warn.join(' ') : '')
     + (r.rooms?.n ? '. Άλλαξε θάλαμος σε ' + (r.rooms.n === 1 ? '1 άτομο' : r.rooms.n + ' άτομα') + ': μετακίνησέ ' + (r.rooms.n === 1 ? 'τον' : 'τους') + ' και στο φύλλο ' + r.rooms.sheet + ' (δεν ενημερώνεται μόνο του)' : '')
@@ -409,7 +410,7 @@ async function autoCheck(kind: ListKind): Promise<{ b: SourceBinding; m?: Source
 // Μετά την εγγραφή ενός είδους: νέα αντιστοίχιση (στήλες ωρών, πίνακας που κατέβηκε), τι ξέρουμε για το αρχείο, Ιστορικό
 function afterWrite(kind: ListKind, b: SourceBinding, r: WriteOutcome): SyncOut {
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
-  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? (kind === 'caps' ? 'στήλες για τις δικές σου υπηρεσίες στο φύλλο «' + b.sheet + '»' : 'μπήκαν στήλες ' + KIND[kind].fields.filter(f => (f.k === 'tout' || f.k === 'tin' || f.k === 'dest' || PKEYS.includes(f.k as PKey)) && b.cols[f.k] == null && r.binding!.cols[f.k] != null).map(f => '«' + f.head + '»').join(' και ') + ' στο φύλλο «' + b.sheet + '» (' + (kind === 'people' ? 'στοιχεία που έχεις στις καρτέλες' : kind === 'leave' ? 'άδειες με ώρα ή κατεύθυνση' : 'εγγραφές με ώρα') + ')') : undefined); b = bindingOf(kind) || r.binding; }
+  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? (kind === 'caps' ? 'στήλες για τις δικές σου υπηρεσίες στο φύλλο «' + b.sheet + '»' : 'μπήκαν στήλες ' + KIND[kind].fields.filter(f => (f.k === 'tout' || f.k === 'tin' || f.k === 'dest' || PKEYS.includes(f.k as PKey) || (CADRE_OPT as readonly string[]).includes(f.k)) && b.cols[f.k] == null && r.binding!.cols[f.k] != null).map(f => '«' + f.head + '»').join(' και ') + ' στο φύλλο «' + b.sheet + '» (' + (kind === 'people' ? 'στοιχεία που έχεις στις καρτέλες' : kind === 'cadres' ? 'στοιχεία που έχεις στις καρτέλες των στελεχών' : kind === 'leave' ? 'άδειες με ώρα ή κατεύθυνση' : 'εγγραφές με ώρα') + ')') : undefined); b = bindingOf(kind) || r.binding; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);
@@ -444,6 +445,9 @@ function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
   // και νέα (ή ξανά ενεργή) δική σου υπηρεσία: παίρνει μόνη της στήλη στο φύλλο δυνατοτήτων (capExtraCols)
   if (prev.caps !== next.caps || (prev.settings !== next.settings && capSig(prev.settings) !== capSig(next.settings))) out.add('caps');
   if (prev.guards !== next.guards || prev.dutyLog !== next.dutyLog) out.add('duties');
+  // στελέχη: τα στοιχεία τους και οι καταστάσεις τους (που έχουν και τα ονόματά τους) γράφονται στο δικό τους Excel
+  if (prev.cadreList !== next.cadreList) { out.add('cadres'); out.add('cadreAbs'); }
+  if (prev.cadreAbs !== next.cadreAbs) out.add('cadreAbs');
   return out;
 }
 // toExcel=false: μόνο τα έντυπα (π.χ. μετά από αναίρεση ανάγνωσης από Excel, που δεν πρέπει να γράψει πίσω στο Excel)
@@ -626,18 +630,23 @@ async function importStatuses(kind: StatusKind, b: SourceBinding, choices: Recor
 async function markSynced(kind: ListKind, b: SourceBinding, extra: Partial<SourceMeta> = {}) {
   srcMeta.set(kind, { ...(await syncStampNow(b)), psnap: snapPeople(store.state.people), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined, ...extra });
 }
-const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = { posts: 'setPeopleFields', outside: 'setPeopleFields', caps: 'importCaps', duties: 'importDuties' };
+const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = { posts: 'setPeopleFields', outside: 'setPeopleFields', caps: 'importCaps', duties: 'importDuties', cadres: 'importCadres', cadreAbs: 'importCadreAbs' };
 // keys (έλεγχος υπηρεσιών): «μέρα|άτομο» του Excel που είδε πια η εφαρμογή· μόνο αυτά σβήνει μετά η εγγραφή
 async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keys: string[] = []): Promise<CmdResult> {
   if (SHEET_CMDS[kind] !== cmd.t) return fail('Λάθος είδος εισαγωγής');
   try {
     saveBinding(kind, b);
     const r = runCmd(cmd); if (!r.ok) return r;
-    await markSynced(kind, b, kind === 'duties' ? { keys: [...new Set(keys.map(String))] } : {});
+    await markSynced(kind, b, kind === 'duties' ? { keys: [...new Set(keys.map(String))] } : isCadreKind(kind) ? await cadreExtra(kind, b) : {});
     dirty.add(kind); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
     notify();
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
   } catch (e) { return fail(e); }
+}
+// Στελέχη: μετά την ανάγνωση, ποια είναι στο φύλλο και οι τιμές της εφαρμογής εκείνη τη στιγμή (η επόμενη εγγραφή γράφει μόνο ό,τι άλλαξε μετά)
+async function cadreExtra(kind: 'cadres' | 'cadreAbs', b: SourceBinding): Promise<Partial<SourceMeta>> {
+  const sh = sheetOf((await readBook(b.file)).sheets, b.sheet);
+  return sh ? cadreMeta(kind, sh, b, store.state, today()) : {};
 }
 // οι εγγραφές που είχε το Excel στην προηγούμενη ανάγνωση/εγγραφή (μόνο αν είναι ο ίδιος πίνακας)
 function keysOf(kind: ListKind, b: SourceBinding): string[] {
@@ -659,8 +668,8 @@ function saveBinding(kind: ListKind, b0: SourceBinding | null) {
 // εφαρμογή γράφει εκεί· αλλιώς χωριστό αρχείο στον φάκελο του είδους. Αν το Δυναμολόγιο έχει ήδη πίνακα αυτού του
 // είδους, ορίζεται αυτός (found) αντί να φτιαχτεί δεύτερος. Υπάρχον φύλλο ή αρχείο δεν γράφεται ποτέ από πάνω.
 async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boolean; inRoster?: boolean } | { error: string }> {
-  const ros = bindingOf('people');
-  if (inRoster(kind) && ros && ros.write !== false && /\.xls[xm]$/i.test(ros.file) && fs.existsSync(ros.file)) {
+  const host = sheetHost(kind); const ros = host ? bindingOf(host) : undefined;   // φύλλο μέσα στο αρχείο του «οικοδεσπότη»: Δυναμολόγιο ή στελέχη
+  if (host && ros && ros.write !== false && /\.xls[xm]$/i.test(ros.file) && fs.existsSync(ros.file)) {
     try {
       const book = await readBook(ros.file);
       const hit = detectTables(notReports(ros.file, book.sheets)).find(h => h.best === kind);
@@ -707,7 +716,7 @@ async function createNew(kind: ListKind): Promise<NewOut> {
   if (!r.ok) { saveBinding(kind, prev || null); prevMeta(); notify(); return r; }
   // νέο Δυναμολόγιο: και τα φύλλα του (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) για όσα είδη δεν έχουν ακόμα αρχείο
   const sheets: string[] = [];
-  if (kind === 'people') for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) {
+  if (kind === 'people' || kind === 'cadres') for (const k of NEW_KINDS.filter(x => sheetHost(x) === kind && !bindingOf(x))) {
     const at2 = await newPlace(k); if ('error' in at2 || !at2.inRoster) continue;
     saveBinding(k, at2.b);
     if ((await syncOut(k, false, true)).ok) sheets.push(at2.b.sheet); else saveBinding(k, null);
@@ -1232,7 +1241,7 @@ else {
     const known = (b: SourceBinding | null | undefined) => !!b && typeof b.file === 'string' && srcMeta.allowed(b.file);
     ipcMain.handle('src:import', (_e, kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved: boolean, keepApp: string[]) => !known(b) ? fail('Άγνωστο αρχείο') : importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []));
     ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) => !known(b) ? fail('Άγνωστο αρχείο') : applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []));
-    ipcMain.handle('src:keys', (_e, kind: StatusKind | 'duties') => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
+    ipcMain.handle('src:keys', (_e, kind: ListKind) => ({ keys: srcMeta.get(kind)?.keys || [], base: srcMeta.get(kind)?.base || {} }));
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο'); const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });

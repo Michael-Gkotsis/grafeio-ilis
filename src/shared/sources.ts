@@ -15,9 +15,10 @@ import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
 import { hkRowNames } from './unit';
 import { PKEYS, personalFromCell, type PKey } from './personal';
+import { planCadresWrite, planCadreAbsWrite, CADRE_OPT } from './cadreSource';
 export { OUT_NOTE };
 
-export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
+export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties' | 'cadres' | 'cadreAbs';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
 export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
 export const FORM_KINDS: FormKind[] = ['froura', 'frouraSpen', 'hkai', 'outs', 'check'];
@@ -113,7 +114,20 @@ export const KINDS: KindDef[] = [
       F('sk', 'Σκοπιά', 'ΣΚΟΠΙΑ', /^ΣΚΟΠ/), F('tae', 'ΤΑΕ', 'ΤΑΕ', /^ΤΑΕ$/), F('capnote', 'Παρατηρήσεις (λόγος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$|^ΛΟΓΟΣ$/)] },
   { id: 'duties', label: 'Έλεγχος υπηρεσιών (μηνιαίο)', help: 'Μηνιαίο πλέγμα με Θ/Μ/Σ ανά μέρα: περνούν οι υπηρεσίες που έκανε ο καθένας', title: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', write: false,
     sheetRe: /ΕΛΕΓΧΟΣ ΥΠΗΡ/, titleRe: /ΕΛΕΓΧΟΣ ΥΠΗΡ/,
-    fields: [F('d1', 'Στήλη της 1ης του μήνα', '1', /^1$/, { req: true })] }
+    fields: [F('d1', 'Στήλη της 1ης του μήνα', '1', /^1$/, { req: true })] },
+  // Στελέχη (3/11, Michael): δικό τους Excel (ΣΤΕΛΕΧΗ.xlsx) με τα στοιχεία και τις καταστάσεις τους, χωριστά από το Δυναμολόγιο
+  { id: 'cadres', label: 'Στελέχη', help: 'Δικό τους Excel: βαθμός, όνομα, ΑΜ, τηλέφωνο, θέση, γραμμή ΗΚΑΙ, σε δύναμη, όπλο, IBAN, ΑΜΚΑ, ΑΦΜ', title: 'ΣΤΕΛΕΧΗ', write: true,
+    sheetRe: /ΣΤΕΛΕΧ/, titleRe: /ΣΤΕΛΕΧ/,
+    fields: [F('am', 'ΑΜ', 'ΑΜ', /^ΑΜ$|^Α\s*\.\s*Μ$/), F('role', 'Θέση', 'ΘΕΣΗ', /^ΘΕΣΗ$/), F('hk', 'Γραμμή ΗΚΑΙ', 'ΓΡΑΜΜΗ ΗΚΑΙ', /^ΓΡΑΜΜΗ(\s+ΗΚΑ[ΙΛ])?$|^ΗΚΑ[ΙΛ]$/),
+      F('active', 'Σε δύναμη', 'ΣΕ ΔΥΝΑΜΗ', /^ΣΕ ΔΥΝΑΜΗ$|^ΕΝΕΡΓΟΣ$/),
+      // προαιρετικές: μπαίνουν στο τέλος του πίνακα μόνο όταν κάποιο στέλεχος έχει τιμή (timeCols)
+      F('monthMax', 'Όριο υπηρεσιών το μήνα', 'ΟΡΙΟ ΥΠΗΡΕΣΙΩΝ ΤΟ ΜΗΝΑ', /^ΟΡΙΟ ΥΠΗΡ/), F('weapon', 'Όπλο', 'ΟΠΛΟ', /^ΟΠΛΟ$/), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', /^ΤΥΠΟΣ ΟΠΛ/),
+      F('rack', 'Οπλοβάστης', 'ΟΠΛΟΒΑΣΤΗΣ', /^ΟΠΛΟΒΑΣΤ/), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', /^ΘΕΣΗ ΟΠΛΟΥ$/),
+      F('iban', 'IBAN', 'IBAN', /^[ΙI][ΒB][ΑA][ΝN]$/), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', /^ΑΜΚΑ$/), F('afm', 'ΑΦΜ', 'ΑΦΜ', /^Α[ΦF]Μ$/)] },
+  { id: 'cadreAbs', label: 'Καταστάσεις στελεχών', help: 'Στο ίδιο Excel με τα στελέχη: κατάσταση (άδεια, νοσοκομείο, υπηρεσία…), από, έως', title: 'ΚΑΤΑΣΤΑΣΕΙΣ', write: true,
+    sheetRe: /ΚΑΤΑΣΤΑΣ/, titleRe: /ΚΑΤΑΣΤΑΣ.*ΣΤΕΛΕΧ|ΣΤΕΛΕΧ.*ΚΑΤΑΣΤΑΣ/,
+    fields: [F('kind', 'Κατάσταση', 'ΚΑΤΑΣΤΑΣΗ', /^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣ$/, { req: true }), F('hkcol', 'Στήλη ΗΚΑΙ', 'ΣΤΗΛΗ ΗΚΑΙ', /^ΣΤΗΛΗ(\s+ΗΚΑ[ΙΛ])?$/), FROM(), TO(),
+      F('note', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', /^ΠΑΡΑΤΗΡΗΣΕΙ?Σ?$|^ΣΗΜΕΙΩΣΕΙΣ$/)] }
 ];
 export const KIND: Record<ListKind, KindDef> = Object.fromEntries(KINDS.map(k => [k.id, k])) as Record<ListKind, KindDef>;
 export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'step', 'leave', 'dn'];
@@ -121,12 +135,17 @@ export const STATUS_KINDS: StatusKind[] = ['punish', 'medical', 'hospital', 'ste
 export const TIME_KINDS: StatusKind[] = ['leave', 'hospital', 'step'];
 export const isStatusKind = (k: ListKind): k is StatusKind => (STATUS_KINDS as string[]).includes(k);
 // Είδη που η εφαρμογή φτιάχνει από την αρχή («Νέο αρχείο…»): τίτλος, επικεφαλίδες και ό,τι έχει η ίδια
-export const NEW_KINDS: ListKind[] = ['people', ...STATUS_KINDS, 'posts', 'outside', 'caps', 'duties'];
+export const NEW_KINDS: ListKind[] = ['people', ...STATUS_KINDS, 'posts', 'outside', 'caps', 'duties', 'cadres', 'cadreAbs'];
+export const isCadreKind = (k: ListKind): k is 'cadres' | 'cadreAbs' => k === 'cadres' || k === 'cadreAbs';
 export const canCreate = (k: ListKind) => NEW_KINDS.includes(k);
 // Μπαίνουν ως φύλλα στο Δυναμολόγιο, όπως στο αρχείο της Ίλης (ΑΔΕΙΕΣ, ΤΙΜΩΡΗΜΕΝΟΙ, ΠΟΣΤΑ…)
-export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !== 'duties';
+export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !== 'duties' && !isCadreKind(k);
+// Σε ποιο είδος «φιλοξενείται» ως φύλλο: τα φύλλα του Δυναμολογίου στο προσωπικό, οι καταστάσεις των στελεχών στο αρχείο των στελεχών
+export const sheetHost = (k: ListKind): ListKind | null => (inRoster(k) ? 'people' : k === 'cadreAbs' ? 'cadres' : null);
 // Το προσωπικό δεν έχει «ονοματεπώνυμο σε ένα κελί» (το Δυναμολόγιο τα έχει χωριστά) ούτε Α/Α που να μετράει
-export const fieldsOf = (k: ListKind): FieldDef[] => [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields];
+const CADRE_PERSON = ['aa', 'rank', 'origin', 'spec', 'last', 'first', 'phone'];
+export const fieldsOf = (k: ListKind): FieldDef[] => (isCadreKind(k) ? [...PERSON_FIELDS.filter(f => CADRE_PERSON.includes(f.k) && (k === 'cadres' || f.k !== 'phone' && f.k !== 'origin')), ...KIND[k].fields]
+  : [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields]);
 export const kindOfType = (t: TypeKey): StatusKind | null => (STATUS_KINDS.find(k => KIND[k].types!.includes(t)) || null);
 
 // ------------------------------------------------------------------ κείμενα κελιών
@@ -274,6 +293,11 @@ export function scoreKind(kind: ListKind, sheetName: string, title: string, head
   const days = dayColumns(header).length;
   if (kind === 'duties') s += days >= 10 ? 10 : -10;
   else if (days >= 10) s -= 20;
+  // το δικό τους αρχείο: χωρίς στήλες που μόνο τα στελέχη έχουν (ΑΜ, γραμμή ΗΚΑΙ, σε δύναμη) και χωρίς «ΣΤΕΛΕΧΗ» στο όνομα δεν είναι τέτοιος πίνακας
+  const cadreSheet = /ΣΤΕΛΕΧ/.test(normGreek(sheetName + ' ' + title));
+  if (kind === 'cadres' && cols.hk == null && cols.active == null && !cadreSheet) s -= 12;
+  if (kind === 'cadreAbs' && !cadreSheet && cols.hkcol == null) s -= 12;
+  if (kind === 'people') { const cc = mapColumns(header, KIND.cadres.fields); if (cc.hk != null || cc.active != null) s -= 12; }
   if (kind === 'people') {
     const person = PERSON_FIELDS.filter(f => cols[f.k] != null).length;
     if (cols.from == null && cols.to == null) s += 2;
@@ -661,7 +685,7 @@ export function sideBy(sheet: RawSheet | null | undefined, b: { header: number; 
   return false;
 }
 export const noRoomTxt = (sheet: string, who: string[]) => 'Δεν χωράει στο φύλλο «' + sheet + '» χωρίς να κοπεί στα δύο ό,τι είναι δίπλα στον πίνακα (πιο κάτω, σε άλλες στήλες): ' + who.slice(0, 5).join(', ') + (who.length > 5 ? ' κ.ά.' : '') + '. Πρόσθεσε κενές γραμμές στο τέλος του πίνακα ή μετακίνησε τον διπλανό πίνακα· γράφεται μόνο του μόλις χωρέσει.';
-const num = (s: string): string | number => (/^[1-9]\d{0,14}$/.test(s) ? Number(s) : s);
+export const num = (s: string): string | number => (/^[1-9]\d{0,14}$/.test(s) ? Number(s) : s);
 // Βαθμός στο Excel: με την προέλευση μπροστά («ΕΠΟΠ ΛΧΙΑΣ»), εκτός αν ο πίνακας έχει δική του στήλη «Προέλευση»
 const rankCell = (p: Person, b?: { cols: Record<string, number> }) => (b && b.cols.origin != null ? p.rank : rankTxt(p)) || null;
 // Στήλη «Ονοματεπώνυμο» (ή «Όνομα» χωρίς αυτήν): στους συνονόματους και «του <πατρώνυμο>», αν ο πίνακας δεν έχει δική
@@ -694,7 +718,7 @@ export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | 
     default: return null;
   }
 }
-const same = (a: CellValue, b: WVal) => {
+export const same = (a: CellValue, b: WVal) => {
   if (b == null) return cellText(a) === '';
   if (typeof b === 'object') return parseDate(a) === b.date;
   return normGreek(cellText(a)) === normGreek(String(b));
@@ -789,8 +813,10 @@ export function timeCols(kind: ListKind, sheet: RawSheet | null, b: SourceBindin
   // ώρες: όταν κάποια εγγραφή έχει ώρα· κατεύθυνση (μόνο στις άδειες): όταν κάποια άδεια έχει κατεύθυνση
   // Δυναμολόγιο: IBAN, ΑΜΚΑ, ΑΦΜ όταν κάποιος σε δύναμη έχει τιμή και ο πίνακας δεν έχει τη στήλη
   const need = [...(want.some(x => x.fromTime || (x.toTime && !x.open)) ? TIME_FIELDS.filter(k => b.cols[k] == null) : []), ...(kind === 'leave' && b.cols.dest == null && want.some(x => x.dest) ? ['dest'] : []),
-    ...(kind === 'people' ? PKEYS.filter(k => b.cols[k] == null && s.people.some(p => p.active && p[k])) : [])];
-  if (!(timed || kind === 'people') || !need.length) return { b, head: [] };
+    ...(kind === 'people' ? PKEYS.filter(k => b.cols[k] == null && s.people.some(p => p.active && p[k])) : []),
+    // στελέχη: όπλο, όριο υπηρεσιών, IBAN… μόνο όταν κάποιο στέλεχος έχει τιμή
+    ...(kind === 'cadres' ? CADRE_OPT.filter(k => b.cols[k] == null && (s.cadreList || []).some(c => c[k])) : [])];
+  if (!(timed || kind === 'people' || kind === 'cadres') || !need.length) return { b, head: [] };
   const rows = sheet?.rows || [];
   const fresh = !(rows[b.header] || []).some(v => cellText(v));
   const scan = sheet && !fresh ? tableRows(sheet, b.header, b.cols) : null;
@@ -828,7 +854,12 @@ export function titleSpans(kind: ListKind, sheet: RawSheet, b: SourceBinding): {
 // Με τις Λίστες των Ρυθμίσεων (lists): ό,τι πρόσθεσες μπαίνει και στο dropdown, ό,τι έκρυψες όχι
 // και για τη Σ.Ι.: οι συνδυασμοί του πίνακα Σ.Ι. (Ι1 … Ι3 ΜΕ ΟΠΛΟ, Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4 …)
 export const LIST_FIELDS: [string, ListId | 'si', string][] = [['rank', 'soldierRanks', 'Βαθμός'], ['origin', 'origins', 'Προέλευση'], ['spec', 'specs', 'Ο/Σ'], ['si', 'si', 'Σ.Ι.']];
-const fieldList = (lists: UserLists | undefined, id: ListId | 'si') => (id === 'si' ? siCombos(lists?.si) : listOf(lists, id));
+const fieldList = (lists: UserLists | undefined, id: ListId | 'si' | 'yn') => (id === 'si' ? siCombos(lists?.si) : id === 'yn' ? ['ΝΑΙ', 'ΟΧΙ'] : id === 'cadreAbs' ? listOf(lists, id).map(upper) : listOf(lists, id));
+// τα στελέχη έχουν δικούς τους βαθμούς και καταστάσεις
+const CADRE_LISTS: Partial<Record<ListKind, [string, ListId | 'si' | 'yn', string][]>> = {
+  cadres: [['rank', 'cadreRanks', 'Βαθμός'], ['origin', 'origins', 'Προέλευση'], ['spec', 'specs', 'Ο/Σ'], ['active', 'yn', 'Σε δύναμη']],
+  cadreAbs: [['rank', 'cadreRanks', 'Βαθμός'], ['spec', 'specs', 'Ο/Σ'], ['kind', 'cadreAbs', 'Κατάσταση']]
+};
 export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, lists?: UserLists): { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] {
   if (kind === 'duties') return [];
   const scan = tableRows(sheet, b.header, b.cols);
@@ -836,7 +867,7 @@ export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, l
   const r1 = b.header + 1, r2 = r < sheet.rows.length ? r - 1 : Math.max(scan.end, b.header) + 200;
   if (r2 < r1) return [];
   const out: { c: number; r1: number; r2: number; items: string[]; what: string; base: string[] }[] = [];
-  for (const [k, id, what] of LIST_FIELDS) {
+  for (const [k, id, what] of CADRE_LISTS[kind] || LIST_FIELDS) {
     const c = b.cols[k]; if (c == null) continue;
     // Σ.Ι.: ό,τι είναι ήδη στη λίστα με άλλο όνομα (π.χ. το παλιό «Ι3 ΑΟΠΛΟ» = «Ι3 ΧΩΡΙΣ ΟΠΛΟ») δεν μπαίνει δεύτερη φορά
     const known = (v: string) => { if (id !== 'si') return false; const x = parseSi(v, lists?.si); return !!x?.ok && fieldList(lists, id).includes(siLabel(x.base, x.sub)); };
@@ -849,15 +880,22 @@ export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, l
 }
 
 // Προεπιλεγμένη διάταξη για καινούργιο πίνακα (όπως τα φύλλα του Δυναμολογίου)
+const CADRE_DEFAULT: Partial<Record<ListKind, string[]>> = {
+  cadres: ['aa', 'rank', 'origin', 'spec', 'last', 'first', 'am', 'phone', 'role', 'hk', 'active'],
+  cadreAbs: ['aa', 'rank', 'spec', 'last', 'first', 'kind', 'hkcol', 'from', 'to', 'note']
+};
 export function defaultBinding(kind: ListKind, file: string, sheet = KIND[kind].title.slice(0, 31)): SourceBinding {
+  const own = CADRE_DEFAULT[kind];
+  if (own) return { file, sheet, header: 1, cols: Object.fromEntries(own.map((k, i) => [k, i])), write: true, scope: 'active' };
   const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days' && f.k !== 'dest' && !PKEYS.includes(f.k as PKey)).map(f => f.k)];   // η κατεύθυνση και τα IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν αργότερα, μόνο όταν υπάρχουν τιμές (timeCols)
   return { file, sheet, header: 1, cols: Object.fromEntries(keys.map((k, i) => [k, i])), write: isStatusKind(kind), scope: 'active' };
 }
 // Τι λείπει από μια αντιστοίχιση για να δουλέψει
 export function missingFields(kind: ListKind, cols: Record<string, number>): string[] {
   const out: string[] = [];
-  const hasPerson = cols.asm != null || cols.name != null || (cols.last != null && cols.first != null);
-  if (!hasPerson) out.push('Επώνυμο και Όνομα (ή ΑΣΜ)');
+  const hasPerson = isCadreKind(kind) ? cols.last != null && (kind === 'cadreAbs' || cols.first != null) : cols.asm != null || cols.name != null || (cols.last != null && cols.first != null);
+  if (!hasPerson) out.push(isCadreKind(kind) ? 'Επώνυμο και Όνομα' : 'Επώνυμο και Όνομα (ή ΑΣΜ)');
+  if (kind === 'cadreAbs' && cols.from == null) out.push('Από (ημερομηνία)');
   for (const f of KIND[kind].fields) if (f.req && cols[f.k] == null) out.push(f.label);
   if (kind === 'caps' && !CAP_COLS.some(k => cols[k] != null)) out.push('μία τουλάχιστον στήλη υπηρεσίας (Θαλαμοφύλακας, Μαγειρεία…)');
   return out;
@@ -1789,13 +1827,19 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
 }
 
 // Ένα σχέδιο εγγραφής για κάθε είδος (το χρησιμοποιούν η προεπισκόπηση, η εγγραφή και η δοκιμή στον browser)
-export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap> }
+export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; base?: Record<string, string> }
 export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap>; grow?: PeoplePlan['grow'];
   inserts?: RowInsert[]; deletes?: number[]; fresh?: number[]; gone?: PersonSnap[];   // μόνο το προσωπικό (planPeopleWrite)
-  extra?: Extra[]; merges?: Span[] }   // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα
+  extra?: Extra[]; merges?: Span[];   // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα
+  base?: Record<string, string> }   // στελέχη: οι τιμές της εφαρμογής όπως θα είναι μετά την εγγραφή (για το ποιος άλλαξε τι)
 export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, meta: SyncMeta | undefined, today: ISODate): FullPlan {
   const psnap = snapPeople(s.people); const sh = sheet || { name: b.sheet, rows: [] };
   if (kind === 'people' && !(sh.rows[b.header] || []).some(v => cellText(v))) return { ...planPeopleNew(b, s), psnap };
+  if (isCadreKind(kind)) {
+    const plan = kind === 'cadres' ? planCadresWrite(sh, b, s, meta) : planCadreAbsWrite(sh, b, s, meta, today);
+    plan.header = newHeader(kind, sh.rows, b);
+    return { ...plan, psnap: {} };
+  }
   if (kind === 'people') {
     const p = planPeopleWrite(sh, b, s, meta?.snap || snapFromSheet(sh, b, s.people), meta?.keys);
     return { sets: p.sets, insert: null, inserts: p.inserts, deletes: p.deletes, fresh: p.fresh, gone: p.gone, header: [], keys: p.keys, added: p.added, changed: p.changed, cleared: p.cleared, foreign: 0, notFound: p.notFound, snap: p.snap, psnap, grow: p.grow, ...(p.warn ? { warn: p.warn } : {}) };
@@ -1821,7 +1865,7 @@ const KIND_PERSON: Partial<Record<ListKind, string[]>> = {
   posts: ['post', 'active'], outside: ['active', 'notes'], caps: ['active']
 };
 export function kindsForPeople(prev: Person[], next: Person[], sources: Partial<Record<ListKind, SourceBinding>>): Set<ListKind> {
-  const all = new Set((Object.keys(sources) as ListKind[]).filter(k => sources[k]));
+  const all = new Set((Object.keys(sources) as ListKind[]).filter(k => sources[k] && !isCadreKind(k)));
   const was = new Map(prev.map(p => [p.id, p]));
   if (prev.length !== next.length || next.some(p => !was.has(p.id))) return all;
   const changed = new Set<string>();

@@ -100,7 +100,7 @@ export interface Api {
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
   // keepApp: εγγραφές που άλλαξαν και στις δύο πλευρές και κρατιέται η τιμή της εφαρμογής (γράφεται μετά στο Excel)
   srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean, keepApp?: string[]): Promise<CmdResult>;
-  srcKeys(kind: StatusKind | 'duties'): Promise<{ keys: string[]; base: Record<string, string> }>;
+  srcKeys(kind: ListKind): Promise<{ keys: string[]; base: Record<string, string> }>;
   srcApply(kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]): Promise<CmdResult>;   // πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών (keys: κελιά που είδε η εφαρμογή)
   srcPeople(b: SourceBinding): Promise<ImportPreview | Fail>;
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;

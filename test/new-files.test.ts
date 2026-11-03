@@ -40,7 +40,7 @@ async function roundTrip(kind: ListKind, s: AppState) {
 describe('νέα αρχεία για πόστα, εκτός δύναμης και δυνατότητες', () => {
   it('τα είδη που φτιάχνει η εφαρμογή· τα πόστα κ.λπ. πάνε στο Δυναμολόγιο', () => {
     for (const k of ['people', 'punish', 'medical', 'hospital', 'step', 'leave', 'dn', 'posts', 'outside', 'caps', 'duties'] as ListKind[]) expect(canCreate(k), k).toBe(true);
-    expect(NEW_KINDS.filter(k => !inRoster(k))).toEqual(['people', 'duties']);   // ο έλεγχος υπηρεσιών: δικό του αρχείο
+    expect(NEW_KINDS.filter(k => !inRoster(k))).toEqual(['people', 'duties', 'cadres', 'cadreAbs']);   // ο έλεγχος υπηρεσιών και τα στελέχη: δικό τους αρχείο
   });
 
   it('πόστα: τίτλος ΠΟΣΤΑ, επικεφαλίδες του Δυναμολογίου και στήλη «Πόστο»· ξαναδιαβάζεται χωρίς αλλαγές', async () => {
