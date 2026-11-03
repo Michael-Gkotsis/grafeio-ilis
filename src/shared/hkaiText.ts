@@ -79,20 +79,34 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
 // Πρώτα τα στελέχη σε δύναμη (σειρά ιεραρχίας) με άδεια στις στήλες Κ.Άδ., Ειδ. ή Αναρρωτική της ΗΚΑΙ, μετά οι στρατιώτες σε δύναμη,
 // με μία αρίθμηση· στο τέλος το ελεύθερο κείμενο της οθόνης, χωρίς αριθμό.
 const CADRE_LEAVE_COLS = ['ka', 'eid', 'an'];
-export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
-  if (!hkLvOn(s, d)) return [];
+// οι γραμμές χωρίς αρίθμηση, χωριστά για στελέχη και στρατιώτες (η Ημερήσια Διαταγή τις θέλει σε δύο πίνακες)
+function leaveParts(s: AppState, d: ISODate, force = false): { cadre: Line[]; soldiers: Line[] } {
+  if (!force && !hkLvOn(s, d)) return { cadre: [], soldiers: [] };
   const pm = personMap(s.people);
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
   const cadre = orderedCadre(s.cadreList || []).filter(c => c.active).flatMap(c => (s.cadreAbs || []).filter(a => a.cid === c.id && a.from === d)
     .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => CADRE_LEAVE_COLS.includes(x.st.col))
     .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)));
-  const out = numbered([
-    ...cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) + ' ' + hkRange(st.abs) + '.') }]),
-    ...s.statuses.filter(x => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
+  return {
+    cadre: cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) + ' ' + hkRange(st.abs) + '.') }]),
+    soldiers: s.statuses.filter(x => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
       .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
       .map(({ x, p }): Line => [{ t: upper(hkWho(p) + ': ' + leaveHk(x, s.settings.lists) + ' ' + hkRange(x) + leaveDest(x, s.settings.lists) + '.') }])
-  ]);
+  };
+}
+export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
+  if (!hkLvOn(s, d)) return [];
+  const { cadre, soldiers } = leaveParts(s, d);
+  const out = numbered([...cadre, ...soldiers]);
   const free = s.hkaiManual?.[d]?.text?.lv?.trim();
+  if (free) out.push([{ t: free }]);
+  return out;
+}
+// Ημερήσια Διαταγή: οι άδειες των στελεχών, και των στρατιωτών (με το ελεύθερο κείμενο της ΗΚΑΙ), καθεμία με δική της αρίθμηση.
+// Γράφονται πάντα, όποια κι αν είναι η επιλογή «Άδειες στο 3. Άδειες» της ΗΚΑΙ: η ΗΔ ανακοινώνει τις άδειες της μέρας
+export const hkaiCadreLeaveLines = (s: AppState, d: ISODate): Line[] => numbered(leaveParts(s, d, true).cadre);
+export function hkaiSoldierLeaveLines(s: AppState, d: ISODate): Line[] {
+  const out = numbered(leaveParts(s, d, true).soldiers); const free = s.hkaiManual?.[d]?.text?.lv?.trim();
   if (free) out.push([{ t: free }]);
   return out;
 }

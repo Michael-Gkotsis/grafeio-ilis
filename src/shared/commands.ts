@@ -1,6 +1,7 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { HK } from './unit';
+import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
 import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
@@ -101,6 +102,8 @@ export type Command =
   // Αλλαγή ωρών/εκπαίδευσης για μία μέρα· plan κενό = πίσω στην ημέρα εβδομάδας
   | { t: 'setDayPlan'; date: ISODate; plan: DayPlan }
   // Ημερολόγιο κωλυομένων: κελί με το χέρι (ελεύθερο κείμενο, κεφαλαία)· text κενό = πίσω στο αυτόματο. Αλλάζει μόνο το ημερολόγιο
+  // Ημερήσια Διαταγή: η ΗΔ της μέρας όπως βγήκε (γραμμές και πεδία)· doc null = ξανά από τα δεδομένα. Δεν αγγίζει την ΗΚΑΙ
+  | { t: 'setHd'; date: ISODate; doc: HdDoc | null }
   | { t: 'setImer'; date: ISODate; cells: { pid: number; text: string }[] }
   // ... δύο μέρες μαζί (οθόνη Εξοδούχοι: η έξοδος της μέρας και η επιστροφή ΔΝ της επόμενης), μία αναίρεση
   | { t: 'setDayPlans'; plans: { date: ISODate; plan: DayPlan }[] }
@@ -1164,6 +1167,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const dayPlan = { ...(s.dayPlan || {}) }; if (Object.keys(row).length) dayPlan[c.date] = row; else delete dayPlan[c.date];
       const what = Object.keys(row).length ? planDiff(base, nx).map(x => x.replace(/^(.*) (\S+) → (\S+)$/, '$1 $3 (αντί $2)')).join(', ') : 'πίσω στην προεπιλογή';
       return { state: { ...s, dayPlan }, text: 'Ώρες εξόδου ' + day + ': ' + what, files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'setHd': {
+      const hd = { ...(s.hd || {}) }; const had = !!hd[c.date];
+      if (c.doc) hd[c.date] = cleanHd(c.doc); else delete hd[c.date];
+      if (!c.doc && !had) return { state: s, text: '', files: [] };
+      return { state: { ...s, hd }, text: 'Ημερήσια Διαταγή ' + dm(c.date) + (c.doc ? ': βγήκε' : ': ξανά από τα δεδομένα'), files: [] };
     }
     case 'setImer': {
       const pm = personMap(s.people); const day = { ...(s.imer?.[c.date] || {}) }; const parts: string[] = [];
