@@ -112,7 +112,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
     ${edit && html`<${Button} size="sm" variant="ghost" onClick=${() => setStFor({ abs: a })}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => delAbs(a)}>Διαγραφή<//></li>`; };
   const doDelete = async () => { setDel(false); onClose(); if (await run({ t: 'deleteCadre', id: c.id }, false)) toast({ text: 'Διαγράφηκε: ' + rankTxt(c) + ' ' + c.last, actions: [undoMark()] }); };
   // μετρητής υπηρεσιών του μήνα: κάθε ενεργό στέλεχος (και το «0» όσο δεν έχει μπει ποτέ σε θέση)· ΕΠΟΠ/ΟΒΑ «2 από 4 τον μήνα»
-  const month = c.active ? (c.pid != null ? monthTxt(state, today, cadreSeat(c)) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '0 τον μήνα') : '';
+  const month = c.active ? (c.pid != null ? monthTxt(state, today, cadreSeat(c), true) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '0 τον μήνα') : '';
   const wtxt = [c.wtype, c.weapon && 'αριθμός ' + c.weapon, (c.rack || c.wpos) && 'θέση ' + seatTxt(c.rack, c.wpos)].filter(Boolean).join(' · ');
   return html`<${Sheet} onClose=${onClose} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
     subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.role, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ'].filter(Boolean).join(' · ')}</div>`}>

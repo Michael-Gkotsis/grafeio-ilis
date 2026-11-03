@@ -80,11 +80,12 @@ export function seatMap(s: Pick<AppState, 'people' | 'cadreList'>): Map<number, 
   return m;
 }
 const limited = (p: Person, lists?: UserLists) => !!p.cid || isEpop(p, lists);
-// Υπηρεσίες του μήνα της μέρας (χωρίς την ίδια τη μέρα): όσες μέρες έχει υπηρεσία, από το ημερολόγιο και από το Excel
-export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): number {
+// Υπηρεσίες του μήνα της μέρας (χωρίς την ίδια τη μέρα): όσες μέρες έχει υπηρεσία, από το ημερολόγιο και από το Excel.
+// withDay: και η ίδια η μέρα (καρτέλα: «σήμερα» μετρά κι αυτή· στην επιλογή και στο όριο η μέρα που διαλέγεις δεν μετρά)
+export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, withDay = false): number {
   const ds = (idx || dutyIndexOf(s)).get(pid); if (!ds) return 0;
   const ym = date.slice(0, 7); let n = 0;
-  for (const d of ds) if (d !== date && d.slice(0, 7) === ym) n++;
+  for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
   return n;
 }
 // Το όριο του μήνα: «έφτασε το όριο» αν με αυτή τη μέρα το ξεπερνά (ζητά επιβεβαίωση, όπως όλοι οι κανόνες)
@@ -102,10 +103,10 @@ export function monthBlock(s: AppState, date: ISODate, pid: number, idx?: Map<nu
   const n = monthDuties(s, date, pid, idx);
   return n >= max ? 'Έφτασε το όριο του μήνα: ' + n + ' από ' + max + ' υπηρεσίες' : null;
 }
-// «2 από 4 τον μήνα» για την επιλογή ατόμου και την καρτέλα
-export function monthTxt(s: AppState, date: ISODate, p: Person): string {
+// «2 από 4 τον μήνα» για την επιλογή ατόμου και την καρτέλα (withDay: η καρτέλα μετρά και τη σημερινή υπηρεσία, Michael 3/11)
+export function monthTxt(s: AppState, date: ISODate, p: Person, withDay = false): string {
   if (!limited(p, s.settings.lists)) return '';
-  const n = monthDuties(s, date, p.id);
+  const n = monthDuties(s, date, p.id, undefined, withDay);
   return p.monthMax ? n + ' από ' + p.monthMax + ' τον μήνα' : n + ' τον μήνα';
 }
 
