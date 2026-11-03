@@ -44,7 +44,8 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punK
 // Τα καινούργια μπαίνουν σαν ΕΑΡΒ (χωρίς περιορισμούς ώσπου να τα ρυθμίσεις, Michael 18/10) · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
 // back: λόγος εισαγωγής όπλου για έναν δικό σου λόγο εξόδου (κενό = «ΛΗΞ <λόγος>»)
 // warn: «μόνο προειδοποίηση» (checkbox): βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
-export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; back?: string }
+// duty/out: μόνο για δικό σου είδος άδειας με col '-' («Πουθενά», παρών): μπαίνει σε υπηρεσίες / βγαίνει έξοδο (αλλιώς όχι) (Michael, 3/11)
+export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; back?: string; duty?: boolean; out?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
 // hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
@@ -194,15 +195,63 @@ export function hkOfRank(lists: UserLists | undefined, id: 'soldierRanks' | 'cad
 export const userItem = (lists: UserLists | undefined, id: ListId, name: string | undefined): ListItem | undefined => {
   const k = itemKey(name || ''); return k ? (lists?.[id]?.add || []).find(x => itemKey(x.name) === k) : undefined;
 };
-// Άδεια → στήλη της ΗΚΑΙ: η «Ειδική» στις Ειδικές (Michael, 13/10), οι άλλες βασικές στις Κανονικές· οι δικές σου όπου όρισες
-// '-' (LEAVE_NO_COL): δικό σου είδος που δεν μετρά σε καμία στήλη της ΗΚΑΙ (ο άνθρωπος μένει απών παντού αλλού, όπως ο κωλυόμενος χωρίς στήλη)
+// Στήλες της ΗΚΑΙ: κωλυόμενοι (HK_K) και απόντες (HK_A). Εδώ και όχι στο rules.ts για να τις βλέπουν και οι άδειες (κυκλική εξάρτηση)
+export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
+export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
+// Άδεια → στήλη της ΗΚΑΙ: η «Ειδική» στις Ειδικές (Michael, 13/10), οι άλλες βασικές στις Κανονικές. Τα δικά σου είδη διαλέγουν μόνα τους (Michael, 3/11):
+// στήλη απόντων (απών παντού), στήλη κωλυομένων (κωλυόμενος: αφαιρείται από τους παρόντες, χωρίς υπηρεσία και έξοδο) ή '-' (LEAVE_NO_COL, «Πουθενά»:
+// παρών παντού, δεν μετρά σε στήλη· υπηρεσίες και έξοδος μόνο αν το ζητήσεις: ListItem.duty / out)
 export const LEAVE_NO_COL = '-';
-export const LEAVE_COLS: [string, string][] = [['ka', 'Κ.Άδ. (κανονικές)'], ['eid', 'Ειδ. (ειδικές)'], [LEAVE_NO_COL, 'Πουθενά στην ΗΚΑΙ (δεν μετρά)']];
+export const LEAVE_COLS: [string, string][] = [
+  ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string]),
+  ...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]),
+  [LEAVE_NO_COL, 'Πουθενά (μετρά παρών)']
+];
+export type LeaveMode = 'away' | 'kol' | 'present';
+// το δικό σου είδος άδειας (όχι τα βασικά: Κανονική, Ειδική, ΑΜΔ, ΥΕΘΑ)
+function ownLeave(kind: string | undefined, lists?: UserLists): ListItem | undefined {
+  const add = lists?.leaveKinds?.add; if (!add?.length || !kind) return undefined;
+  const n = leaveNameKey(kind); if (LEAVE_KINDS.some(b => leaveNameKey(b) === n)) return undefined;
+  return userItem(lists, 'leaveKinds', kind);
+}
 export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const k = itemKey(kind || '');
   if (k === itemKey('Ειδική') || k === itemKey('Ειδική άδεια')) return 'eid';
-  const own = userItem(lists, 'leaveKinds', kind)?.col;
+  const own = ownLeave(kind, lists)?.col;
   return own && LEAVE_COLS.some(c => c[0] === own) ? own : 'ka';
+}
+// Πώς μετρά μια άδεια (Michael, 3/11): 'away' απών (τα βασικά και όσα έχουν στήλη απόντων), 'kol' κωλυόμενος, 'present' παρών. undefined: δεν είναι άδεια.
+// Ρωτιέται για κάθε άτομο σε κάθε μέτρηση: κρατιέται ανά είδος και ανά τις δικές σου Λίστες
+const modeIdx = new WeakMap<object, Map<string, LeaveMode>>();
+export function leaveMode(st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): LeaveMode | undefined {
+  if (st.type !== 'LEAVE') return undefined;
+  const add = lists?.leaveKinds?.add; if (!add?.length) return 'away';
+  let m = modeIdx.get(add); if (!m) { m = new Map(); modeIdx.set(add, m); }
+  const key = st.kind || ''; let r = m.get(key);
+  if (r === undefined) {
+    const c = ownLeave(key, lists)?.col;
+    r = !c ? 'away' : c === LEAVE_NO_COL ? 'present' : HK_K.some(x => x[0] === c && c !== 'bl') ? 'kol' : 'away';
+    m.set(key, r);
+  }
+  return r;
+}
+// Απών; Όπως το TYPES[...].away, εκτός από την άδεια δικού σου είδους που μετρά κωλυόμενη ή παρούσα
+export const isAway = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean =>
+  !!TYPES[st.type].away && (st.type !== 'LEAVE' || leaveMode(st, lists) === 'away');
+// Άδεια «Πουθενά» (παρούσα): μπαίνει σε υπηρεσίες / βγαίνει έξοδο μόνο αν το όρισες· οι άλλες καταστάσεις όπως τα TYPES
+export const noDutyOf = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean =>
+  !!TYPES[st.type].noDuty && !(st.type === 'LEAVE' && leaveMode(st, lists) === 'present' && ownLeave(st.kind, lists)?.duty);
+export const noOutOf = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean =>
+  !!TYPES[st.type].noOut && !(st.type === 'LEAVE' && leaveMode(st, lists) === 'present' && ownLeave(st.kind, lists)?.out);
+// Τι κάνει ένα είδος άδειας, σε μία γραμμή (Λίστες › Είδη άδειας): hk = το όνομα της ΗΚΑΙ στη μονάδα
+export function leaveEffect(kind: string | undefined, lists?: UserLists, hk = 'ΗΚΑΙ'): string {
+  const m = leaveMode({ type: 'LEAVE', kind }, lists), col = leaveCol(kind, lists), short = [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || col;
+  if (m === 'kol') return 'Κωλυόμενος: αφαιρείται από τους παρόντες, στην ' + hk + ' στη στήλη ' + short + ', χωρίς υπηρεσία και έξοδο';
+  if (m === 'present') {
+    const o = ownLeave(kind, lists);
+    return 'Παρών παντού, δεν μετρά σε στήλη της ' + hk + (o?.duty ? ' · μπαίνει σε υπηρεσίες' : ' · όχι υπηρεσίες') + (o?.out ? ' · βγαίνει έξοδο' : ' · όχι έξοδο');
+  }
+  return 'Απών παντού, στην ' + hk + ' στη στήλη ' + short;
 }
 // Το είδος της άδειας σε φράση: «Κανονική άδεια», «Άδεια ΑΜΔ», «Τιμητική άδεια», και τα δικά σου είδη όπως τα έγραψες
 // («Αιμοδοσίας» → «Άδεια Αιμοδοσίας», «ΑΔΕΙΑ ΓΑΜΟΥ» μένει ως έχει)
@@ -251,14 +300,22 @@ export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): b
 export function statusLbl(s: Pick<Status, 'type' | 'kind'> & { note?: string }, lists?: UserLists): string {
   if (s.type === 'PUN') return upper(s.kind || TYPES.PUN.label);   // οι ποινές με κεφαλαία παντού (Michael, 13/10)
   if (s.type === 'KOL') return TYPES.KOL.label + (s.note?.trim() ? ': ' + s.note.trim() : '');   // ο κωλυόμενος με το «τι υπηρεσία» που έγραψες
+  // η άδεια με το είδος της όπως το έγραψες, «ΚΑ» μόνο η Κανονική (Michael, 3/11: τα δικά μου είδη δεν γράφονται «ΚΑ»)
+  if (s.type === 'LEAVE') { const k = s.kind?.trim(); if (k && leaveNameKey(k) !== leaveNameKey(LEAVE_KINDS[0])) return k; }
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m ? m.name : TYPES[s.type].label;
 }
-// Σήμα στις οθόνες (Λ5, 1/11): η άδεια με το είδος της, «ΚΑ» μόνο η Κανονική. Τα έντυπα, το Excel και οι κωδικοί κρατούν το statusLbl.
-export const badgeLbl = (s: Pick<Status, 'type' | 'kind'> & { note?: string }, lists?: UserLists): string =>
-  (s.type === 'LEAVE' && s.kind?.trim() && leaveNameKey(s.kind) !== leaveNameKey(LEAVE_KINDS[0]) ? s.kind.trim() : statusLbl(s, lists));
-// Κωδικός στο ημερολόγιο (Κ.Α, Ε.Υ…): ό,τι όρισες για το δικό σου ιατρικό, αλλιώς του βασικού τύπου
+// Σήμα στις οθόνες (Λ5, 1/11): το ίδιο με το statusLbl
+export const badgeLbl = statusLbl;
+// Κωδικός στο ημερολόγιο (Κ.Α, Ε.Υ…): ό,τι όρισες για το δικό σου ιατρικό ή είδος άδειας, αλλιώς του βασικού τύπου. Άδεια: Κανονική «Κ.Α»,
+// Ειδική «ΕΙΔ», ΑΜΔ, ΥΕΘΑ, και το δικό σου είδος με κωδικό ή με το όνομά του (Michael, 3/11)
+const LEAVE_CODES: Record<string, string> = { 'ΕΙΔΙΚΗ': 'ΕΙΔ', 'ΑΜΔ': 'ΑΜΔ', 'ΥΕΘΑ': 'ΥΕΘΑ' };
 export function absCode(s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string | undefined {
+  if (s.type === 'LEAVE') {
+    const k = s.kind?.trim(), n = leaveNameKey(k);
+    if (!k || n === leaveNameKey(LEAVE_KINDS[0])) return TYPES.LEAVE.code;
+    return LEAVE_CODES[n] || ownLeave(k, lists)?.code || upper(k);
+  }
   const m = MED_LIKE.includes(s.type) ? ownMed(lists, s.kind) : undefined;
   return m?.code || TYPES[s.type].code;
 }

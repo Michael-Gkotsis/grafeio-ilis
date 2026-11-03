@@ -8,8 +8,8 @@ import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, SigsMenu, UnsavedDialog, DateField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
 import type { Sig } from '../../shared/sigs';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
-import { badgeLbl, leavePhrase, listOf, medKinds, optionsOf, rankTxt, statusLbl } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, KOL_NO_COL, kolColOf, kolColName, KIND_LBL, KIND_NAME, blocksOf, effects, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { badgeLbl, isAway, leavePhrase, listOf, medKinds, optionsOf, rankTxt, statusLbl, type UserLists } from '../../shared/ranks';
+import { TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, KOL_NO_COL, kolColOf, kolColName, KIND_LBL, KIND_NAME, blocksOf, fullName, plainName, shortName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { DEFAULT_HK_TIME, isEpop, monthTxt, awayNow, statusesAt, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
 import { dayTimes } from '../../shared/returns';
 import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
@@ -42,7 +42,7 @@ function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: str
   const out: StatusPick[] = [];
   for (const [c] of CATS) for (const k of TYPE_KEYS.filter(x => TYPES[x].cat === c)) {
     const t = TYPES[k];
-    if (k === 'LEAVE') leaveKinds.forEach(n => out.push({ key: 'LEAVE:' + n, cat: c, type: k, kind: n, short: n === 'Κανονική' ? t.label : n, long: leavePhrase({ type: k, kind: n }), help: effects(t) }));
+    if (k === 'LEAVE') leaveKinds.forEach(n => out.push({ key: 'LEAVE:' + n, cat: c, type: k, kind: n, short: n === 'Κανονική' ? t.label : n, long: leavePhrase({ type: k, kind: n }), help: sum({ type: k, kind: n }) }));
     else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: sum({ type: k, kind: n }) + ' · ισχύει αμέσως και γράφεται στην ' + HK() + ' (4. Ποινές)' }));
     else out.push({ key: k, cat: c, type: k, short: t.label, long: t.long, help: k === 'KOL' ? 'Υπηρεσία εκτός δικών μας (π.χ. ΣΤΕΠ): δεν μπαίνει στις υπηρεσίες μας· φαίνεται στη Δύναμη και στο Σήμερα, και προαιρετικά στην ' + HK() : sum({ type: k }) });
     // τα δικά σου ιατρικά: ό,τι όρισες στις Υπηρεσίες και αργίες (Michael, 18/10)
@@ -87,7 +87,7 @@ const PersonCard = memo(function PersonCard({ p, style, st, lists, onOpen }: P) 
 type Filt = { unit: string; room: number | null; filter: string };
 const DEF_SORT = { k: 'last', dir: 1 };
 // φίλτρα αποθηκευμένων λιστών από πριν (Παρόντες, ΕΥ…): ισχύουν ακόμα, απλώς δεν είναι πια κουμπιά
-const legacyMatch = (f: string, ss: Status[]) => { const away = ss.some(s => TYPES[s.type].away); return f === 'present' ? !away : f === 'absent' ? away : (TYPES as any)[f] ? ss.some(s => s.type === f) : true; };
+const legacyMatch = (f: string, ss: Status[], lists?: UserLists) => { const away = ss.some(s => isAway(s, lists)); return f === 'present' ? !away : f === 'absent' ? away : (TYPES as any)[f] ? ss.some(s => s.type === f) : true; };
 export function PeopleScreen() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const mobile = useMedia('(max-width: 767px)');
   const [q, setQ] = useState(''); const dq = useDeferredValue(q);
@@ -120,7 +120,7 @@ export function PeopleScreen() {
   const matches = useCallback((p: Person, f: Filt) => {
     if (!place(p, f)) return false;
     const ss = ssOf.get(p.id) || [];
-    return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss);
+    return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss, state.settings.lists);
   }, [ssOf, state.settings.rooms]);
   const listFor = useCallback((f: Filt, text: string) => (f.filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, text)).filter(p => matches(p, f)), [state.people, matches]);
   // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό/θάλαμο), για να φαίνεται πριν πατήσεις
@@ -241,8 +241,8 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
   const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
   const ssT = statusesOn(state.statuses, pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = statusesOf(state.statuses, pid).filter(x => !STAT_ROWS.includes(x.type) && !backBy(x, today, nowM));   // γύρισε σήμερα ως τώρα: όχι πια «καμία υπηρεσία»
-  const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false });
-  const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true });
+  const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false }, lists);
+  const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true }, lists);
   const rules = [noDutyT ? 'Καμία υπηρεσία' : unarmedT ? 'Μόνο άοπλες θέσεις' : null, ob ? 'Δεν βγαίνει έξοδο (' + ob + ')' : null].filter(Boolean);
   const si = p.si ? siOf(p, lists) : null;
   // Η καρτέλα (Michael, 17/10): ό,τι έχει το Δυναμολόγιο για τον στρατιώτη, οι υπηρεσίες του (σύνολο, με τις αργίες/ΣΚ από κάτω),

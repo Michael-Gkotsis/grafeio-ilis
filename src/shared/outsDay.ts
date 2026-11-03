@@ -12,6 +12,7 @@ import { activePeople, postOf, statusesFrom } from './rules';
 import { awayOn, dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
+import { isAway } from './ranks';
 import { dutyAt } from './weekend';
 import { upper } from './text';
 
@@ -37,7 +38,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
     const duty = () => { const u = dutyAt(s, d, p.id); return u ? { warn: 'ΠΡΟΣΟΧΗ: ΚΑΙ ΥΠΗΡΕΣΙΑ ' + upper(u.label) + (u.time ? ' ' + u.time : '') } : {}; };
     if (lv.length) {
       const r = retFor(s, p.id, d);
-      const atT = statusesFrom(s.statuses, p.id, d, T).filter(x => TYPES[x.type].away && !isOut(x) && !x.pending);
+      const atT = statusesFrom(s.statuses, p.id, d, T).filter(x => isAway(x, s.settings.lists) && !isOut(x) && !x.pending);
       if (outs.length) {
         const o = outs.find(x => x.type === 'DN') || outs[0];
         // η άδεια τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (leaveOut, κανόνας 26/10), ή έχει τελειώσει πριν την έξοδο: εξοδούχος/ΔΝ της μέρας,

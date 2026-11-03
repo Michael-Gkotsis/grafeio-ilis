@@ -74,7 +74,7 @@ describe('λίστες', () => {
   });
   it('άδειες: η «Ειδική» μετρά στις Ειδικές της ΗΚΑΙ, οι άλλες βασικές στις Κανονικές, οι δικές σου όπου όρισες', () => {
     expect(listOf(undefined, 'leaveKinds')).toEqual(LEAVE_KINDS);
-    const l: UserLists = { leaveKinds: { add: [{ name: 'Γονική', col: 'eid' }, { name: 'Φοιτητική' }, { name: 'Λάθος', col: 'nos' }] } };
+    const l: UserLists = { leaveKinds: { add: [{ name: 'Γονική', col: 'eid' }, { name: 'Φοιτητική' }, { name: 'Λάθος', col: 'xx' }] } };
     expect(['Κανονική', 'ΑΜΔ', 'ΥΕΘΑ', undefined].map(k => leaveCol(k))).toEqual(['ka', 'ka', 'ka', 'ka']);
     expect(leaveCol('ΕΙΔΙΚΗ')).toBe('eid'); expect(leaveCol('Ειδική', l)).toBe('eid');
     expect([leaveCol('γονική', l), leaveCol('Φοιτητική', l), leaveCol('Λάθος', l)]).toEqual(['eid', 'ka', 'ka']);

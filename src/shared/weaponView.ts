@@ -2,7 +2,7 @@
 import { dm, type ISODate } from './dates';
 import { TYPES, type AppState, type Cadre, type Person, type Status, type WeaponMove } from './domain';
 import { armedLive, calDay, hmOf, type ArmRow, type ArmState } from './armed';
-import { statusLbl, type UserLists } from './ranks';
+import { isAway, noDutyOf, statusLbl, type UserLists } from './ranks';
 import { statusesOn } from './rules';
 import { normGreek, norm, translit } from './text';
 import { AUTO_KEY, armMap, dutyMove, isAuto, outPeople, posKey, rackKey, weaponInfo, weaponKey, type WeaponInfo } from './weapons';
@@ -58,7 +58,7 @@ export const fixIds = (list: WeaponMove[]) => list.filter(m => !isAuto(m)).map(m
 export interface StatusHint { text: string; tip: string }
 // «Άδεια», «ΔΝ», «Νοσοκομείο»… από τις καταστάσεις της μέρας που έχουν σχέση με το όπλο: απών, χωρίς υπηρεσίες ή χωρίς ένοπλες θέσεις
 export function statusHint(statuses: Status[], pid: number, date: ISODate, lists?: UserLists): StatusHint | null {
-  const l = statusesOn(statuses, pid, date).filter(x => { const t = TYPES[x.type]; return t.away || t.noDuty || t.noArmed; });
+  const l = statusesOn(statuses, pid, date).filter(x => isAway(x, lists) || noDutyOf(x, lists) || TYPES[x.type].noArmed);
   if (!l.length) return null;
   const lbl = (x: Status) => (x.type === 'LEAVE' ? 'Άδεια' : statusLbl(x, lists));
   return { text: lbl(l[0]) + (l.length > 1 ? ' +' + (l.length - 1) : ''), tip: l.map(x => TYPES[x.type].long + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ') };

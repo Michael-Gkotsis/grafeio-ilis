@@ -1,7 +1,8 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
+import { collator } from './text';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, isEpopOrigin, LEAVE_NO_COL, leaveCol, leaveNameKey, medWarns, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, isEpopOrigin, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, medWarns, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -214,8 +215,8 @@ export function statusesAt(s: AppState, pid: number, date: ISODate, at: number):
   const ss = notLeftYet(statusesFrom(s.statuses, pid, date, at), date, at), held = outHeld(s, pid, date, at);
   if (held === undefined) return ss;
   // άδεια που τελειώνει σήμερα με έξοδο/ΔΝ σήμερα: από την αρχή εξόδου μετρά μόνο η έξοδος/ΔΝ (leaveOut)
-  const lo = !!leaveOut(s, pid, date, at), rest = ss.filter(x => TYPES[x.type].cat !== 'out' && !(lo && TYPES[x.type].away));
-  return held ? [...rest, held].sort((a, b) => (Number(!!TYPES[b.type].away) - Number(!!TYPES[a.type].away)) || ORDER(a.type) - ORDER(b.type)) : rest;
+  const lists = s.settings.lists, lo = !!leaveOut(s, pid, date, at), rest = ss.filter(x => TYPES[x.type].cat !== 'out' && !(lo && isAway(x, lists)));
+  return held ? [...rest, held].sort((a, b) => (Number(isAway(b, lists)) - Number(isAway(a, lists))) || ORDER(a.type) - ORDER(b.type)) : rest;
 }
 // Τώρα (Michael, 20/10: «όταν κάποιος γυρνά, να γυρνά το state του στο κανονικό»): όποιος γύρισε σήμερα ως την ώρα
 // που είναι τώρα (now, λεπτά) δεν λείπει πια στο Δυναμολόγιο, στις Άδειες και στο «Σήμερα». Άλλες μέρες: ολόκληρη η μέρα.
@@ -229,29 +230,33 @@ export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD
 // Κάθε άτομο μετριέται μία φορά (Michael, 22/10: «δεν βγαίνουν τα μαθηματικά»): counts/lists ανά είδος, ένας άνθρωπος
 // μία φορά ανά είδος· away/awayLists μόνο οι απόντες, ο καθένας στον πρώτο λόγο που λείπει (νοσοκομείο, άδεια, μετά
 // έξοδος/ΔΝ), ώστε τα νούμερά τους να κάνουν ακριβώς absent = total − present.
-export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]>; away: Record<TypeKey, number>; awayLists: Record<TypeKey, Person[]> }
+// awayLeave: οι απόντες με άδεια ανά όνομα (ΚΑ, ΥΠΗΡΕΣΙΑΚΟ…), για το awayText (Michael, 3/11)
+export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]>; away: Record<TypeKey, number>; awayLists: Record<TypeKey, Person[]>; awayLeave: Record<string, number> }
 // at: η στιγμή της μέρας που μετρά (λεπτά)· προεπιλογή η ώρα της ΗΚΑΙ (οι Εξοδούχοι μετρούν από την ώρα εξόδου)
 export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Strength {
   const people = activePeople(s);
   const counts = {} as Record<TypeKey, number>, away = {} as Record<TypeKey, number>;
   const lists = { present: [] } as unknown as Strength['lists'], awayLists = {} as Strength['awayLists'];
   TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; away[k] = 0; awayLists[k] = []; });
-  let present = 0;
+  let present = 0; const awayLeave: Record<string, number> = {}, lv = s.settings.lists;
   for (const p of people) {
     const ss = statusesAt(s, p.id, date, at);
     // διπλή εγγραφή του ίδιου είδους (π.χ. δύο έξοδοι την ίδια μέρα): μία φορά
     new Set(ss.map(x => x.type)).forEach(k => { counts[k]++; lists[k].push(p); });
     // οι καταστάσεις είναι ταξινομημένες: πρώτα οι απουσίες, με τη σειρά των ειδών
-    const a = ss.find(x => TYPES[x.type].away);
-    if (a) { away[a.type]++; awayLists[a.type].push(p); } else { present++; lists.present.push(p); }
+    const a = ss.find(x => isAway(x, lv));
+    if (a) { away[a.type]++; awayLists[a.type].push(p); if (a.type === 'LEAVE') { const l = statusLbl(a, lv); awayLeave[l] = (awayLeave[l] || 0) + 1; } } else { present++; lists.present.push(p); }
   }
-  return { total: people.length, present, absent: people.length - present, counts, lists, away, awayLists };
+  return { total: people.length, present, absent: people.length - present, counts, lists, away, awayLists, awayLeave };
 }
 // Η στιγμή που μετρά η Δύναμη μιας μέρας: σήμερα όπως η ΗΚΑΙ ως τις 08:00 και μετά όποιος γύρισε ως τώρα (το «Σήμερα»,
 // η Δύναμη και το Δυναμολόγιο το ίδιο)· άλλες μέρες η ώρα της ΗΚΑΙ.
 export const strengthAt = (r: Rules | null | undefined, date: ISODate, today: ISODate, now: number) => (date === today ? Math.max(hkMin(r), now) : hkMin(r));
 // Σύνοψη των απόντων: «24 έξοδος · 29 ΔΝ · 4 ΚΑ», με τη σειρά των ειδών· αθροίζει στους Απόντες
-export const awayText = (c: Strength) => TYPE_KEYS.filter(k => c.away[k] > 0).map(k => c.away[k] + ' ' + (k === 'OUT' ? 'έξοδος' : TYPES[k].label)).join(' · ');
+// Οι άδειες ανά είδος, όπως γράφονται: «1 ΚΑ · 2 ΥΠΗΡΕΣΙΑΚΟ» (η Κανονική πρώτη, μετά κατά όνομα)
+export const awayText = (c: Strength) => TYPE_KEYS.filter(k => c.away[k] > 0).flatMap(k => k === 'LEAVE' && c.awayLeave
+  ? Object.keys(c.awayLeave).sort((a, b) => Number(b === TYPES.LEAVE.label) - Number(a === TYPES.LEAVE.label) || collator.compare(a, b)).map(l => c.awayLeave[l] + ' ' + l)
+  : [c.away[k] + ' ' + (k === 'OUT' ? 'έξοδος' : TYPES[k].label)]).join(' · ');
 
 // --------------------------- Δυνατότητα υπηρεσιών (Κ-15) ---------------------------
 // Για την κάρτα του ατόμου (ανά είδος): πόστο, ή Σ.Ι. που δεν μπαίνει σε καμία υπηρεσία αυτού του είδους (blocks: και των
@@ -397,11 +402,11 @@ export function dutyBlock(statuses: Status[], date: ISODate, pid: number, post?:
     const c = statOn(s, post, lists); if (c.v !== 'no') continue;
     const t = TYPES[s.type];
     if (c.from !== 'def') return statusLbl(s, lists) + ': όχι ' + ((post?.kind && CAP_ACC[post.kind]) || 'σε αυτή την υπηρεσία') + untilTxt(s, date);
-    if (t.noDuty) return (s.type === 'KOL' ? statusLbl(s, lists) : t.label) + untilTxt(s, date);
+    if (t.noDuty) return (s.type === 'KOL' || s.type === 'LEAVE' ? statusLbl(s, lists) : t.label) + untilTxt(s, date);
     if (t.noArmed && (!post || post.armed)) return 'Άοπλος: ' + t.label + untilTxt(s, date);
     return 'Όχι μαγειρεία: ' + t.label + untilTxt(s, date);
   }
-  return leavesBefore(statuses, date, pid, post);
+  return leavesBefore(statuses, date, pid, post, lists);
 }
 // --------------------------- ώρες στις άδειες (Michael, 13/10) ---------------------------
 // Η μέρα της υπηρεσίας είναι από την αρχή του κύκλου (settings.dutyStart, π.χ. 14:00) ως την ίδια ώρα την επόμενη. Πότε ξεκινά και πότε τελειώνει μια θέση, σε λεπτά από τα μεσάνυχτα της μέρας
@@ -451,14 +456,15 @@ function backBefore(s: Status, date: ISODate, post?: DutyPost | null): boolean {
 }
 // Φεύγει για άδεια την επόμενη μέρα πριν τελειώσει η υπηρεσία που ξεκινά σήμερα (π.χ. αναχώρηση 10:00, η υπηρεσία
 // τελειώνει 14:00): δεν μπαίνει. Θέση χωρίς γνωστό τέλος τελειώνει στην αρχή του κύκλου της επόμενης· η μαγειρεία είναι της ημέρας.
-function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null): string | null {
+function leavesBefore(statuses: Status[], date: ISODate, pid: number, post?: DutyPost | null, lists?: UserLists): string | null {
   if (!post) return null;
   const next = addDays(date, 1);
-  const s = statusesOf(statuses, pid).find(x => x.from === next && x.fromTime && !x.pending && hasTimes(x.type));
+  // άδεια δικού σου είδους που μετρά παρούσα δεν φεύγει πουθενά (Michael, 3/11)
+  const s = statusesOf(statuses, pid).find(x => x.from === next && x.fromTime && !x.pending && hasTimes(x.type) && leaveMode(x, lists) !== 'present');
   if (!s) return null;
   const end = postSpan(post).end ?? (post.kind === 'mg' ? null : 1440 + (post.cyc ?? 14 * 60));
   if (end == null || 1440 + mins(s.fromTime!) >= end) return null;
-  return 'Φεύγει ' + TYPES[s.type].label + ' ' + dm(next) + ' στις ' + s.fromTime;
+  return 'Φεύγει ' + statusLbl(s, lists) + ' ' + dm(next) + ' στις ' + s.fromTime;
 }
 // ΕΟ/ΕΑ σε (άοπλη) σκοπιά: επιτρέπεται, αλλά μόνο αν δεν υπάρχει άλλος (λοχίας, 10/10)· και ό,τι άλλο όρισες έτσι
 // στον πίνακα καταστάσεων
@@ -466,7 +472,7 @@ export function lastResort(statuses: Status[], date: ISODate, pid: number, post?
   if (!post?.kind) return null;
   for (const st of statusesOn(statuses, pid, date)) {
     const c = statOn(st, { ...post, armed: !!post.armed }, lists); if (c.v !== 'last') continue;
-    return (c.from === 'def' ? TYPES[st.type].label : statusLbl(st, lists)) + ': ' + (CAP_ACC[post.kind] || 'υπηρεσία') + ' μόνο αν δεν υπάρχει άλλος';
+    return (c.from === 'def' && st.type !== 'LEAVE' ? TYPES[st.type].label : statusLbl(st, lists)) + ': ' + (CAP_ACC[post.kind] || 'υπηρεσία') + ' μόνο αν δεν υπάρχει άλλος';
   }
   return null;
 }
@@ -696,7 +702,7 @@ function availDays(s: AppState, pid: number, from: ISODate, date: ISODate): numb
   const n = daysBetween(from, date) - 1; if (n <= 0) return 0;
   const last = addDays(date, -1); const iv: [number, number][] = [];
   for (const x of statusesOf(s.statuses, pid)) {
-    const t = TYPES[x.type]; if (!t.noDuty || t.cat === 'out' || x.pending) continue;
+    if (!noDutyOf(x, s.settings.lists) || TYPES[x.type].cat === 'out' || x.pending) continue;
     const a = x.from > from ? x.from : from, b = x.open || x.to >= date ? last : x.to;
     if (a <= b) iv.push([dayNum(a), dayNum(b)]);
   }
@@ -1221,7 +1227,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   const files: PlanFile[] = [];
   const overlaps: StatusPlan['overlaps'] = [], conflicts: StatusPlan['conflicts'] = [], past: StatusPlan['past'] = [], blocked: StatusPlan['blocked'] = [], cancels: Status[] = [], alongside: StatusPlan['alongside'] = [], warned: StatusPlan['conflicts'] = [];
   const lists = s.settings.lists;
-  const clash = (x: Status) => t.cat !== 'kol' && ((t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (!!TYPES[x.type].away && !!t.away));   // κωλυόμενοι: μπορεί περισσότεροι μαζί (άλλη υπηρεσία, άλλες ώρες)
+  const clash = (x: Status) => t.cat !== 'kol' && ((t.cat === 'med' && TYPES[x.type].cat === 'med' ? sameMed(x, cmd, lists) : TYPES[x.type].cat === t.cat) || (isAway(x, lists) && isAway(cmd, lists)));   // κωλυόμενοι: μπορεί περισσότεροι μαζί (άλλη υπηρεσία, άλλες ώρες)
   // με ώρα αναχώρησης μετρά και η υπηρεσία της προηγούμενης μέρας (τελειώνει το μεσημέρι της πρώτης μέρας της άδειας)
   const first = cmd.fromTime && hasTimes(cmd.type) ? addDays(cmd.from, -1) : cmd.from;
   const dates = Object.keys(s.guards).filter(d => d >= first && d <= cmd.to).sort();
@@ -1252,12 +1258,13 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
     // ιατρικό «μόνο προειδοποίηση»: οι υπηρεσίες μένουν, με προειδοποίηση
     if (medWarns(cmd, lists) && !(today && cmd.to < today)) dates.forEach(date => posts.forEach(x => { if ((!today || date >= today) && s.guards[date][x.k] === pid) warned.push({ pid, date, k: x.k }); }));
     // και η ποινή που ακόμα αιτείται κρατά τον στρατιώτη μέσα (outBlock)
-    if (statNoOut(cmd, lists) && !t.away)
+    if (statNoOut(cmd, lists) && !isAway(cmd, lists))
       s.statuses.forEach(x => { if (x.pid === pid && TYPES[x.type].cat === 'out' && meets(x)) cancels.push(x); });
   }
   const rows = (k: number) => '+' + k + (k > 1 ? ' γραμμές' : ' γραμμή');
   if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
+  else if (cmd.type === 'LEAVE' && leaveMode(cmd, lists) !== 'away') { if (leaveMode(cmd, lists) === 'kol') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + kolColName(leaveCol(cmd.kind, lists)) + ' +' + n }); }   // «Πουθενά»: δεν μπαίνει στην ΗΚΑΙ
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });
@@ -1317,9 +1324,7 @@ export const planNeedsOk = (p: StatusPlan) => p.overlaps.length > 0 || p.conflic
 // --------------------------- ΗΚΑΙ (Κ-17) ---------------------------
 // Κάθε άτομο μετριέται σε ΜΙΑ στήλη: πρώτα απουσία, μετά υπηρεσία, ΕΥ, ποινή. Τα πόστα δεν μετρούν στην ΗΚΑΙ
 // (Michael, 13/10)· η στήλη Ο/Σ γράφεται με το χέρι.
-export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
-export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
-export { HK_OFFICERS, HK_NCO } from './ranks';
+export { HK_K, HK_A, HK_OFFICERS, HK_NCO } from './ranks';
 // Βαθμός (και προέλευση) προσώπου → γραμμή της ΗΚΑΙ: πρώτα ό,τι όρισες στις Λίστες για δικό σου βαθμό, αλλιώς από το
 // όνομα· ΕΠΟΠ/ΟΒΑ στρατιώτης στη δική του γραμμή, ο ΕΠΟΠ ΛΧΙΑΣ στους Λοχίες
 export function hkRankOf(rank: string, lists?: UserLists, origin?: string): string {
@@ -1339,9 +1344,10 @@ export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISO
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
 function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number): string | null {
-  const abs = ss.find(x => TYPES[x.type].away && TYPES[x.type].hkai);
-  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, s.settings.lists) : TYPES[abs.type].hkai!; return lc === LEAVE_NO_COL ? null : lc; }   // άδεια με '-': κερδίζει των άλλων, αλλά χωρίς στήλη
-  const kol = kolMinus(ss, date, at), kc = kol && kolHk(kol);   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
+  const lists = s.settings.lists;
+  const abs = ss.find(x => isAway(x, lists) && TYPES[x.type].hkai);
+  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; return lc === LEAVE_NO_COL ? null : lc; }
+  const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 // Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
@@ -1403,7 +1409,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
 // εναλλαγή τον προσπερνούν, με το χέρι μπαίνει με αιτία)· η σειρά δικαιοσύνης δεν αλλάζει. minus: αφαιρείται από τους παρόντες και μπαίνει
 // στην ΗΚΑΙ στη στήλη hkCol (ή σε καμία, '-')· χωρίς minus μένει παρών και εκτός ΗΚΑΙ. noOut: κόβει την έξοδο (outBlock).
 const kolStarted = (x: Status, date: ISODate, at: number) => !(x.from === date && x.fromTime && mins(x.fromTime) > at);
-const kolMinus = (ss: Status[], date: ISODate, at: number) => ss.find(x => x.type === 'KOL' && x.minus && kolStarted(x, date, at));
+const kolMinus = (ss: Status[], date: ISODate, at: number, lists?: UserLists) => ss.find(x => ((x.type === 'KOL' && x.minus) || (x.type === 'LEAVE' && leaveMode(x, lists) === 'kol')) && kolStarted(x, date, at));
 // Εισαγωγή ΣΤΕΠ (Michael, 29/10): κωλυόμενος αυτόματα που αφαιρείται από τους παρόντες (col: STEP_COL, κενό αν δεν μετρά σε στήλη της ΗΚΑΙ)· με ώρα εισαγωγής μετρά από εκείνη την ώρα
 // (όπως ο κωλυόμενος). Δηλωμένος κωλυόμενος με αφαίρεση την ίδια στιγμή υπερισχύει: ένας άνθρωπος, μία φορά.
 const stepOn = (ss: Status[], date: ISODate, at: number) => ss.find(x => TYPES[x.type].kolAuto && kolStarted(x, date, at));
@@ -1418,12 +1424,12 @@ export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolVie
   const man: KolRow[] = []; let n = 0;
   for (const p of activePeople(s)) {
     const ss = statusesAt(s, p.id, date, at);
-    if (ss.some(x => TYPES[x.type].away)) continue;   // απών: μετρά στους απόντες
+    if (ss.some(x => isAway(x, s.settings.lists))) continue;   // απών: μετρά στους απόντες
     const col = soldierCol(s, ss, onDuty.get(p.id), date, at);
     if (col && cols[col]) { cols[col].push(p); n++; }
-    const km = kolMinus(ss, date, at), sp = km ? undefined : stepOn(ss, date, at);
+    const km = kolMinus(ss, date, at, s.settings.lists), sp = km ? undefined : stepOn(ss, date, at);
     const k = km || sp || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
-    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : kolColOf(k), minus: !!(k.minus || sp) });
+    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : k.type === 'LEAVE' ? leaveCol(k.kind, s.settings.lists) : kolColOf(k), minus: !!(k.minus || sp || k.type === 'LEAVE') });
   }
   return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };
 }

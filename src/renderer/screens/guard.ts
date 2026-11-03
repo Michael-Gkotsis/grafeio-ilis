@@ -337,7 +337,7 @@ export function GuardScreen() {
   // ΠΣΚ: όταν η μέρα είναι Παρασκευή, Σάββατο ή Κυριακή
   const psk = [5, 6, 0].includes(parseD(date).getDay()) ? pskDays(date) : null;
   const pskEmpty = (d: string) => posts.filter(x => !(state.guards[d] || {})[x.k]).length;
-  const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${s.type === 'KOL' && s.note ? 'Κωλυόμενος: ' + s.note : TYPES[s.type as TypeKey].long}>${TYPES[s.type as TypeKey].label}<//></button>`)}</div>`;
+  const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${s.type === 'KOL' && s.note ? 'Κωλυόμενος: ' + s.note : TYPES[s.type as TypeKey].long}>${s.type === 'LEAVE' ? statusLbl(s, state.settings.lists) : TYPES[s.type as TypeKey].label}<//></button>`)}</div>`;
   const autofill = async () => { const ns = await run({ t: 'autofill', date }, false); const left = ns ? postsOf(ns.settings).filter(x => !(ns.guards[date] || {})[x.k]).length : 0; if (ns) toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoMark()] }); };
   const [preview, setPreview] = useState(false);
   // «Επόμενη κενή» (κουμπί ή πλήκτρο Ν): πάει στην επόμενη κενή θέση, ανοίγει την ομάδα της και την επιλογή ατόμου
@@ -659,7 +659,7 @@ export function OutsScreen() {
   const blockedN = people.filter(p => reasons[p.id] && !aways.has(p.id)).length;
   const cantN = people.filter(p => reasons[p.id] || aways.has(p.id)).length;
   const awayN = people.filter(p => aways.has(p.id) && !draft[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(state.statuses, p.id, date, outMinOn(state, date))) && !stillOut(state, p.id, date)).length;
+  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(state.statuses, p.id, date, outMinOn(state, date)), state.settings.lists) && !stillOut(state, p.id, date)).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useOpenFrom(rows);

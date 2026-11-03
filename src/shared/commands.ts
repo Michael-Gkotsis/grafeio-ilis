@@ -7,7 +7,7 @@ import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, 
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, itemName, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
@@ -408,7 +408,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
           const onSun = statusesOn(statuses, x.pid, sun);
           if (onSun.some(y => TYPES[y.type].cat === 'out')) continue;
           if (onSun.some(y => TYPES[y.type].cat === 'abs' && y.from >= c.date)) { leaving.push(shortName(pm.get(x.pid)!)); continue; }
-          if (onSun.some(y => TYPES[y.type].away) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }
+          if (onSun.some(y => isAway(y, s.settings.lists)) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }
           added.push({ id: ctx.newId(), pid: x.pid, type: 'DN', from: sun, to: sun, kind: WK });
         }
       }
@@ -601,7 +601,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
       // από εγκεκριμένη αίτηση: η αίτηση μένει εγκεκριμένη, χωρίς άδεια (δεν γράφεται πια στην ΗΚΑΙ ως άδεια)
       const requests = s.requests.map(r => { if (r.sid !== st.id) return r; const n = { ...r }; delete n.sid; return n; });
-      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: (TYPES[st.type].cat === 'abs' ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + TYPES[st.type].long.toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
+      return { state: { ...s, statuses: s.statuses.filter(x => x !== st), requests }, text: (TYPES[st.type].cat === 'abs' ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + (st.type === 'LEAVE' ? leavePhrase(st) : TYPES[st.type].long).toLowerCase() + ' ' + range(st.from, st.to) + ' του ' + shortName(pm.get(st.pid)!), files: [leaveFile(st), HK()] };
     }
     case 'endLeave': {
       const st = s.statuses.find(x => x.id === c.id); if (!st || !hasTimes(st.type)) throw new Error('Δεν βρέθηκε η άδεια');
@@ -614,7 +614,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (!st.open && (c.date > st.to || (c.date === st.to && (!t || (!!st.toTime && mins(t) >= mins(st.toTime)))))) throw new Error((abs ? 'Η άδεια' : 'Η ' + TYPES[st.type].long.toLowerCase()) + ' είναι ήδη ' + was + '. Διάλεξε νωρίτερη ' + tn.to + '.');
       const n: Status = { ...st, to: c.date }; delete n.open; delete n.days;
       if (t) n.toTime = t; else delete n.toTime;
-      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + TYPES[st.type].long.toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', ' + tn.to + ' ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
+      return { state: { ...s, statuses: s.statuses.map(x => (x === st ? n : x)) }, text: 'Διακοπή: ' + (st.type === 'LEAVE' ? leavePhrase(st) : TYPES[st.type].long).toLowerCase() + ' του ' + shortName(pm.get(st.pid)!) + ', ' + tn.to + ' ' + dm(c.date) + (t ? ' ' + t : '') + ' (ήταν ' + was + ')', files: [leaveFile(st), HK()] };
     }
     case 'approvePun': {
       const st = s.statuses.find(x => x.id === c.id); if (!st) throw new Error('Δεν βρέθηκε η ποινή');

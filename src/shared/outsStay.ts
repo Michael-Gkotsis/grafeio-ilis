@@ -4,7 +4,7 @@ import type { ISODate } from './dates';
 import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
 import { activePeople, outMinOn, postOf, statusesFrom } from './rules';
 import { byName } from './hkaiText';
-import { statusLbl } from './ranks';
+import { isAway, leavePhrase, statusLbl, type UserLists } from './ranks';
 import { norm } from './text';
 import { outNoteOf, withNote } from './weekend';
 import { stillOut, retFor } from './returns';
@@ -23,16 +23,16 @@ export function stayNote(s: AppState, d: ISODate, p: Person, ss: Status[], hours
   return norm(withNote(note, outNoteOf(s, d, p.id)));
 }
 // Σε άδεια/νοσοκομείο στην ώρα εξόδου: ούτε εξοδούχος ούτε παραμένων. ss: οι καταστάσεις του από την ώρα εξόδου (statusesFrom)· προτιμάται το νοσοκομείο
-export const awayIn = (ss: Status[]): Status | null => {
-  const a = ss.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && !x.pending);
+export const awayIn = (ss: Status[], lists?: UserLists): Status | null => {
+  const a = ss.filter(x => isAway(x, lists) && TYPES[x.type].cat !== 'out' && !x.pending);
   return a.find(x => x.type === 'NOS') || a[0] || null;
 };
-export const awayAtOut = (s: AppState, d: ISODate, pid: number): Status | null => awayIn(statusesFrom(s.statuses, pid, d, outMinOn(s, d)));
+export const awayAtOut = (s: AppState, d: ISODate, pid: number): Status | null => awayIn(statusesFrom(s.statuses, pid, d, outMinOn(s, d)), s.settings.lists);
 // Το πρώτο κουμπί των Εξοδούχων για όποιον είναι σε άδεια: στη θέση του «Μένει»
 export const awayName = (st: Pick<Status, 'type'>) => (st.type === 'NOS' ? 'Νοσοκομείο' : 'Σε άδεια');
 // «Κανονική άδεια ως 05/11 · γυρνά Πέμ 06/11 πρωί»: ουδέτερη σημείωση στη γραμμή του (όχι προειδοποίηση)
 export function awayNote(s: AppState, d: ISODate, pid: number, st: Status): string {
-  const lbl = statusLbl(st, s.settings.lists), long = lbl === TYPES[st.type].label ? TYPES[st.type].long : lbl;
+  const lbl = statusLbl(st, s.settings.lists), long = st.type === 'LEAVE' ? leavePhrase(st) : lbl === TYPES[st.type].label ? TYPES[st.type].long : lbl;   // άδεια: με το είδος της, όχι «ΚΑ»
   const r = retFor(s, pid, d);
   const until = st.open ? 'χωρίς λήξη' : st.to !== d && !(st.toTime && hasTimes(st.type)) ? 'ως ' + dm(st.to) : '';
   const back = !r || r.open || r.pending ? '' : 'γυρνά ' + dow(r.day) + ' ' + dm(r.day) + ' ' + (r.time || 'πρωί') + (r.duty ? ' για υπηρεσία' : '');
@@ -48,7 +48,7 @@ export function outsAndStay(s: AppState, d: ISODate): { outs: { p: Person; st: S
     // έξω ακόμα από έξοδο/ΔΝ παλαιότερης μέρας (διόρθωση «γυρνά αργότερα», «δεν γυρνά»): δεν είναι παραμένων
     const held = stillOut(s, p.id, d);
     if (held) { outs.push({ p, st: held.st }); continue; }
-    if (awayIn(ss)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
+    if (awayIn(ss, s.settings.lists)) continue; // σε άδεια/νοσοκομείο: ούτε εξοδούχος ούτε παραμένων
     stay.push({ p, note: stayNote(s, d, p, ss) });
   }
   // ανά θάλαμο, όπως έρχονται τα χαρτιά (γραφέας, 10/10)
