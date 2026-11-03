@@ -29,5 +29,7 @@ export function absenceOfPerson(s: AppState, p: Person, d: ISODate): Absence {
 }
 export function absenceOfCadre(s: AppState, c: Cadre, d: ISODate): Absence {
   const a = cadreAbsOn(s, c.id, d); if (!a) return NONE;
-  return { absent: true, reason: upper(cadreStatusOf(a, s.settings.lists).label), ret: addDays(a.to, 1) };
+  // μόνο ό,τι τον βγάζει απόντα ή κωλυόμενο στην ΗΚΑΙ· είδος χωρίς στήλη ΗΚΑΙ («Πουθενά») = παρών
+  const st = cadreStatusOf(a, s.settings.lists); if (st.group === 'list') return NONE;
+  return { absent: true, reason: upper(st.label), ret: addDays(a.to, 1) };
 }

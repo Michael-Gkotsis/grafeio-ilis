@@ -362,6 +362,9 @@ export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
 const bk = (kind: RepKind, f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf(kind, f)!.head, w });
 const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
+// στελέχη ανά κατηγορία από τις γραμμές της ΗΚΑΙ (ΔΕΑ = αξιωματικοί)· κάθε γραμμή είναι ένα «+» στον πίνακα τιμών, άρα αλλάζει από τον χρήστη
+const HK_AXK = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΕΑ'], HK_ANTH = ['Ανθυπασπιστές'], HK_YPX = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες'];
+const hkx = (w: 'row' | 'rowa', rows: string[]) => rows.map(r => ({ sign: '+' as const, metric: 'hk.' + w + ':' + r }));
 export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts; vals?: ValueTable[]; sort?: RepSort; bands?: Bands; kind?: RepKind; more?: Partial<RepTable>[] }[] = [
   { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
   { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
@@ -377,8 +380,8 @@ export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts;
   { id: 'stelexi', name: 'Δυναμολόγιο-Παρουσιολόγιο στελεχών', help: 'Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου', kind: 'cadre', sort: 'pick',
     more: [{ pick: { from: 'all', mode: 'all', not: ['present'] }, sort: 'room' }, { pick: { from: 'all', mode: 'all', need: ['med'], cats: ['med'] }, sort: 'room' }],
     vals: [
-      { id: 'v1', title: 'ΤΟΠΟΘΕΤΗΜΕΝΗ ΔΥΝΑΜΗ', rows: [{ label: 'ΑΞΚΟΙ', expr: [], man: '' }, { label: 'ΑΝΘΣΤΕΣ', expr: [], man: '' }, { label: 'ΥΠΞΚΟΙ', expr: [], man: '' }, { label: 'ΦΑΜΥΕΣ', expr: [{ sign: '+', metric: 'str.total' }] }] },
-      { id: 'v2', title: 'ΑΠΟΝΤΕΣ', rows: [{ label: 'ΑΞΚΟΙ ΑΠΟΝΤΕΣ', expr: [], man: '' }, { label: 'ΑΝΘΣΤΕΣ ΑΠΟΝΤΕΣ', expr: [], man: '' }, { label: 'ΥΠΞΚΟΙ ΑΠΟΝΤΕΣ', expr: [], man: '' }, { label: 'ΦΑΜΥΕΣ ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }] },
+      { id: 'v1', title: 'ΤΟΠΟΘΕΤΗΜΕΝΗ ΔΥΝΑΜΗ', rows: [{ label: 'ΑΞΚΟΙ', expr: hkx('row', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ', expr: hkx('row', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ', expr: hkx('row', HK_YPX) }, { label: 'ΦΑΜΥΕΣ', expr: [{ sign: '+', metric: 'str.total' }] }] },
+      { id: 'v2', title: 'ΑΠΟΝΤΕΣ', rows: [{ label: 'ΑΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_YPX) }, { label: 'ΦΑΜΥΕΣ ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }] },
       { id: 'v3', title: 'ΔΥΝΑΜΗ ΣΥΣΣΙΤΙΟΥΝΤΩΝ ΓΙΑ ΔΕΙΠΝΟ (19:00)', rows: [{ label: 'ΠΑΡΑΣΚΕΥΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd5', time: '19:00' }, { label: 'ΣΑΒΒΑΤΟ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd6', time: '19:00' }, { label: 'ΚΥΡΙΑΚΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd0', time: '19:00' }] }],
     opts: { title: 'ΔΥΝΑΜΟΛΟΓΙΟ - ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΣΤΕΛΕΧΩΝ ΤΗΣ {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ}', tday: 'next', head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray',
       cols: [bk('cadre', 'aa', 'narrow'), bk('cadre', 'rank'), bk('cadre', 'last'), bk('cadre', 'first'), bk('cadre', 'cspec'), bk('cadre', 'role'), bk('cadre', 'absent', 'narrow'), bk('cadre', 'areason'), bk('cadre', 'aret')],

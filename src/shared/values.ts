@@ -213,6 +213,8 @@ export function metricsOf(s: AppState): Metric[] {
   for (const [k, , long] of HK_A) m.push(N('hk.a:' + k, G.hk, HKN + ' απόντες: ' + long, c => col(c, k)));
   m.push(N('hk.a:ab', G.hk, HKN + ': Μισθοτροφοδοτηθέντες (με το χέρι)', c => col(c, 'ab')));
   for (const r of hkRowList(lists)) m.push(N('hk.row:' + r, G.hk, HKN + ' γραμμή: ' + r + ' (δύναμη)', c => hk(c).rank[r]?.n || 0));
+  // απόντες μιας γραμμής (άθροισμα των στηλών απόντων της), για τα «Απόντες ΑΞΚΟΙ/ΑΝΘΣΤΕΣ/ΥΠΞΚΟΙ» του Δυναμολογίου στελεχών
+  for (const r of hkRowList(lists)) m.push(N('hk.rowa:' + r, G.hk, HKN + ' γραμμή: ' + r + ' (απόντες)', c => { const row = hk(c).rank[r]; return row ? HK_A.reduce((a, [k]) => a + (row.c[k] || 0), 0) : 0; }));
   MET_CACHE.set(s.settings, m);
   return m;
 }
