@@ -27,7 +27,7 @@ import { WEAPON_FILTERS } from '../../shared/weapons';
 import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condsOf, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condGroups, setGroupCond, addGroup, removeGroup, matchGroup, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, listTags, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, srcSort, whoOf, whoP, whoC, fieldValue,
   type BlankSrc, type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
@@ -81,6 +81,11 @@ function useRunReport() {
 // Ποιοι μπαίνουν: όσοι περνούν τα φίλτρα, και αν είναι τυχαίοι, η τωρινή κλήρωση (⟳ ξανά όλοι ή ένας, ✕ βγάλ' τον,
 // και όποιον θέλεις με το όνομα). init: η κλήρωση που ήδη είδε (από τον οδηγό), αντί για νέα. Αν αλλάξουν τα φίλτρα ή
 // το πόσοι, η κλήρωση κρατά όσους περνούν ακόμα· από την αρχή γίνεται μόνο με «⟳ Ξανά τυχαία».
+// Ομάδες φίλτρων (Ή): σε ποια ομάδα μπαίνει ο καθένας (id → 0, 1…), για το σήμα «Ομ. K» στη λίστα
+const gmapOf = (state: AppState, r: Pick<Report, 'kind' | 'pick'>, pool: Row[], d: string): Map<number | string, number> | null => {
+  if (!r.pick.or?.length || (r.kind !== 'people' && r.kind !== 'weapon')) return null;
+  const f = matchGroup(state, r.pick, d); return new Map(pool.map(x => [x.id, f(x as Person)]));
+};
 function usePick(r: Report, d: string, init?: (number | string)[] | null) {
   const { state } = useStore(); const toast = useToast();
   const pk = JSON.stringify(r.pick);
@@ -92,6 +97,7 @@ function usePick(r: Report, d: string, init?: (number | string)[] | null) {
   const recent = useMemo(() => (gap && hist ? recentIds(hist, d, gap) : null), [gap, hist, d]);
   const always = useMemo(() => alwaysOf(state, r), [state, r.kind, pk]);   // eslint-disable-line react-hooks/exhaustive-deps
   const pool = useMemo(() => { const c = candidates(state, r, d); return recent ? c.filter(x => !recent.has(x.id)) : c; }, [state, r.kind, pk, d, recent]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const gm = useMemo(() => gmapOf(state, r, pool, d), [state, r.kind, pk, pool, d]);   // eslint-disable-line react-hooks/exhaustive-deps
   const poolKey = useMemo(() => pool.map(x => x.id).join() + '|' + always.map(x => x.id).join(), [pool, always]);
   const [seed, setSeed] = useState(0); const [rand, setRand] = useState<Row[]>([]);
   const initRef = useRef(init && init.length ? init : null); const seedRef = useRef(-1);
@@ -132,14 +138,14 @@ function usePick(r: Report, d: string, init?: (number | string)[] | null) {
     const p = state.people.find(x => x.id === id); if (!p) return;
     if (random) { added.current.add(id); setRand(x => (x.some(y => y.id === id) ? x : [...x, p])); } else { setExtra(x => [...x, id]); setDrop(x => x.filter(y => y !== id)); }
   };
-  return { pool, rows, random, manual, times: fair ? times : null, recent: recent ? recent.size : 0, reroll: () => setSeed(x => x + 1), replace, remove, add };
+  return { pool, gm, d, rows, random, manual, times: fair ? times : null, recent: recent ? recent.size : 0, reroll: () => setSeed(x => x + 1), replace, remove, add };
 }
 
-const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times, style }: P) {
+const PickRow = memo(function PickRow({ x, i, kind, onSwap, onX, onNever, times, style, grp }: P) {
   const t = times ? times[x.id] || 0 : -1; const nm = nameOf(x);
   const info = [rankTxt(x), kind !== 'cadre' && x.room != null ? 'Θ' + x.room : '', kind === 'status' && x.st ? statusLbl(x.st) + ' ' + dm(x.st.from) + '–' + (x.st.open ? '…' : dm(x.st.to)) : '',
     kind === 'duty' && x.seat ? x.seat.label : '', kind === 'weapon' ? x.weapon || '' : '', kind === 'wmove' && x.m ? x.m.weapon + ' · ' + x.m.reason + ' ' + x.m.outTime : '', t >= 0 ? (t ? 'βγήκε ' + t + (t === 1 ? ' φορά' : ' φορές') : 'πρώτη φορά') : ''].filter(Boolean).join(' · ');
-  return html`<div role="listitem" className="rep-picks__row" style=${style}><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b><small data-tip=${info.length > 40 ? info : undefined}>${info}</small>
+  return html`<div role="listitem" className="rep-picks__row" style=${style}><span className="rep-picks__n">${i + 1}</span><b>${nm || '(κενή θέση)'}</b>${grp != null && grp >= 0 && html`<span className=${'rep-gb rep-gb--' + Math.min(grp + 1, 4)} data-tip=${'Περνά την ομάδα ' + (grp + 1)}>Ομ. ${grp + 1}</span>`}<small data-tip=${info.length > 40 ? info : undefined}>${info}</small>
     <span className="rep-picks__acts">
       ${onNever && html`<button type="button" className="rep-picks__never" aria-label=${'Ποτέ ο ' + nm} data-tip="Να μη μπαίνει ποτέ σε αυτό το έντυπο" onClick=${() => onNever(x.id)}>Ποτέ</button>`}
       ${onSwap && html`<button type="button" className="rep-picks__x" aria-label=${'Άλλος τυχαίος αντί για ' + nm} data-tip="Άλλος τυχαίος στη θέση του" onClick=${() => onSwap(x.id)}>⟳</button>`}
@@ -162,7 +168,7 @@ function PickList({ p, kind, onNever }: P) {
       ${p.random && html`<${Button} size="sm" variant="outline" disabled=${!p.pool.length} onClick=${p.reroll} data-tip="Νέα κλήρωση για όλους">⟳ Ξανά τυχαία<//>`}</div>
     ${p.rows.length ? html`<div role="list" aria-label=${'Μπαίνουν: ' + p.rows.length}><${VirtualList} className="rep-picks__list" items=${p.rows} rowHeight=${PICK_H} height=${height}
       renderRow=${(x: Row, i: number, style: P) => html`<${PickRow} key=${x.id} x=${x} i=${i} kind=${kind} times=${p.times} style=${style}
-        onSwap=${p.random ? swap : null} onX=${p.random || p.manual ? out : null} onNever=${p.manual && onNever ? never : null}/>`}/></div>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
+        grp=${p.gm ? p.gm.get(x.id) : null} onSwap=${p.random ? swap : null} onX=${p.random || p.manual ? out : null} onNever=${p.manual && onNever ? never : null}/>`}/></div>` : html`<div className="empty">Κανείς δεν περνά τα φίλτρα.</div>`}
     ${p.manual && html`<div className="rep-picks__add"><${PersonPicker} placeholder="Βάλε συγκεκριμένο: επώνυμο, όνομα ή ΑΣΜ…" unavailable=${na} onChange=${(id: number) => p.add(id)}/></div>`}
   </div>`;
 }
@@ -1094,7 +1100,7 @@ function Mapping({ r, upd, setR, insp, tpl, picking, setPicking, view, setView, 
 function SubPick({ r, t, n, d, set }: P) {
   const { state } = useStore();
   const tr = useMemo(() => ({ ...r, id: t.id, kind: t.kind, pick: subPick(t.pick), sort: t.sort, more: undefined }), [r, t]);
-  const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0 }), [state, tr, d]);
+  const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0, d }), [state, tr, d]);
   const upd = (x: Partial<Report>) => set({ ...t, ...(x.pick ? { pick: x.pick } : {}), ...(x.sort ? { sort: x.sort } : {}) });
   if (t.kind === 'blank' && t.src) return html`<div className="stack"><${BlankSrc} r=${r} t=${t} n=${n} d=${d} set=${set}/></div>`;
   if (t.kind === 'blank') return html`<div className="stack"><${Alert} tone="info">Ο πίνακας ${n}${t.title ? ' «' + t.title + '»' : ''} (κενός πίνακας) δεν παίρνει άτομα: οι ${blankN(t.pick.n)} γραμμές του είναι αυτές που ορίζεις και γράφεις στο βήμα 3.<//></div>`;
@@ -1109,7 +1115,7 @@ function BlankSrc({ r, t, n, d, set }: P) {
   const { state } = useStore();
   const sort = srcSort(t.src, t.sort);
   const tr = useMemo(() => ({ ...r, id: t.id, kind: t.src, pick: { ...t.pick, mode: 'all' }, sort, more: undefined, who: undefined, src: undefined }), [r, t, sort]);
-  const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0 }), [state, tr, d]);
+  const p = useMemo(() => ({ pool: candidates(state, tr, d), rows: rowsOf(state, tr, d), random: false, manual: false, recent: 0, d }), [state, tr, d]);
   const upd = (x: Partial<Report>) => set({ ...t, ...(x.pick ? { pick: { ...x.pick, mode: 'all', n: t.pick.n } } : {}), ...(x.sort ? { sort: x.sort } : {}) });
   const m = blankN(t.pick.n, t.src);
   return html`<div className="stack">
@@ -1144,8 +1150,18 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
     upd({ pick: v.startsWith('v:') ? { ...kept, from: 'all', view: v.slice(2) } : { ...kept, from: v === 'inactive' ? 'inactive' : 'all', view: undefined } });
   };
   const nPass = p.pool.length;
+  // ομάδες φίλτρων (Ή): ανοιχτή είναι μία κάθε φορά· M = πόσοι της βάσης περνούν την ομάδα
+  const gs = people ? condGroups(pk) : []; const multi = gs.length > 1;
+  const [openG, setOpenG] = useState(0); const og = Math.min(openG, gs.length - 1);
+  const gCount = useMemo(() => (multi ? gs.map(g => candidates(state, { kind: 'people', pick: { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: g.need, not: g.not, or: undefined, mode: 'all' } }, p.d).length) : []), [state, pk, p.d]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const gval = (g: { need: string[]; not: string[] }, c: string) => (g.need.includes(c) ? 'yes' : g.not.includes(c) ? 'no' : 'any');
+  const gWords = (g: { need: string[]; not: string[] }) => REP_CONDS.filter(c => g.need.includes(c.id) || g.not.includes(c.id)).map(c => (g.need.includes(c.id) ? c.yes : c.no).toLowerCase()).join(' · ');
+  const copyG = (gi: number) => { upd({ pick: addGroup(pk, gi) }); setOpenG(gs.length); };
+  const delG = (gi: number) => { upd({ pick: removeGroup(pk, gi) }); setOpenG(gi < og ? og - 1 : gi === og ? Math.max(0, gi - 1) : og); };
+  const condGrid = (gi: number) => html`<div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${gval(gs[gi], c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setGroupCond(pk, gi, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div>`;
+  const stNewBox = html`<label className="ui-checkrow" data-tip="Τα φίλτρα ιατρικό, ποινή, άδεια, εισαγωγή και οι στήλες καταστάσεων κοιτάνε μόνο όσα ξεκινούν τη μέρα του εντύπου, όχι ό,τι ισχύει γενικά."><input type="checkbox" className="ui-check" checked=${!!pk.stNew} onChange=${(e: any) => upd({ pick: { ...pk, stNew: e.target.checked ? true : undefined } })}/>Μόνο όσα δηλώθηκαν τη μέρα του εντύπου (ιατρικά, ποινές, άδειες, εισαγωγές)</label>`;
   // τυχαίοι: από προεπιλογή μόνο όσοι είναι παρόντες χωρίς υπηρεσία σήμερα και αύριο (μπορείς να το αλλάξεις)
-  const noConds = () => { const c = condsOf(pk); return !c.need.length && !c.not.length; };
+  const noConds = () => condGroups(pk).every(c => !c.need.length && !c.not.length);
   const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && people && pk.from === 'all' && !pk.view && noConds() ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
   const toggle = <T,>(list: T[] | undefined, x: T) => { const s = new Set(list || []); if (s.has(x)) s.delete(x); else s.add(x); return [...s]; };
   return html`<div className="rep-pick">
@@ -1166,9 +1182,25 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
           <option value="all">Όλα τα στελέχη</option><option value="present">Παρόντα τη μέρα (χωρίς κατάσταση)</option><//></div>`}
         ${!sub && html`<div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>`}
       </div>
-      ${people && html`<div><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
-        <div className="rep-conds">${REP_CONDS.map(c => html`<${Fragment} key=${c.id}><span>${c.label}</span><${Segmented} small=${true} value=${condVal(pk, c.id)} onChange=${(v: 'any' | 'yes' | 'no') => upd({ pick: setCond(pk, c.id, v) })} items=${[{ value: 'any', label: 'Όλοι' }, { value: 'yes', label: c.yes }, { value: 'no', label: c.no }]}/><//>`)}</div>
-        <label className="ui-checkrow" data-tip="Τα φίλτρα ιατρικό, ποινή, άδεια, εισαγωγή και οι στήλες καταστάσεων κοιτάνε μόνο όσα ξεκινούν τη μέρα του εντύπου, όχι ό,τι ισχύει γενικά."><input type="checkbox" className="ui-check" checked=${!!pk.stNew} onChange=${(e: any) => upd({ pick: { ...pk, stNew: e.target.checked ? true : undefined } })}/>Μόνο όσα δηλώθηκαν τη μέρα του εντύπου (ιατρικά, ποινές, άδειες, εισαγωγές)</label></div>`}
+      ${people && !multi && html`<div className="rep-filt"><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
+        ${condGrid(0)}
+        <button type="button" className="rep-addg" onClick=${() => copyG(0)}>+ Ή άλλη ομάδα</button>
+        ${stNewBox}</div>`}
+      ${people && multi && html`<div className="rep-filt"><span className="field__label">Φίλτρα <small className="muted">(μπαίνει όποιος περνά μία από τις ομάδες · τώρα ${nPass})</small></span>
+        <div className="rep-groups">${gs.map((g, gi) => html`<${Fragment} key=${gi}>
+          ${gi > 0 && html`<div className="rep-or" aria-hidden="true"><span>Ή</span></div>`}
+          <div className=${'rep-g' + (gi === og ? ' rep-g--open' : '')}>
+            <div className="rep-g__head"><b>Ομάδα ${gi + 1}</b>
+              ${gi === og ? html`<small className="muted">όλα μαζί (ΚΑΙ) · ${gCount[gi]} άτομα</small>` : html`<span className="rep-g__sum">${gWords(g) || html`<i className="muted">Κενή ομάδα: μπαίνουν όλοι</i>`}</span><small className="muted">· ${gCount[gi]} άτομα</small>`}
+              <span className="rep-g__acts">
+                ${gi !== og && html`<button type="button" className="rep-g__b" onClick=${() => setOpenG(gi)}>Αλλαγή</button>`}
+                <button type="button" className="rep-g__b" onClick=${() => copyG(gi)}>Αντιγραφή</button>
+                <button type="button" className="rep-g__b" aria-label=${'Διαγραφή ομάδας ' + (gi + 1)} data-tip="Διαγραφή ομάδας" onClick=${() => delG(gi)}>${Icon.x}</button></span></div>
+            ${gi === og && condGrid(gi)}
+            ${gi === og && !gWords(g) && html`<small className="muted">Κενή ομάδα: μπαίνουν όλοι</small>`}
+          </div><//>`)}</div>
+        <button type="button" className="rep-addg" onClick=${() => copyG(og)}>+ Ή άλλη ομάδα</button>
+        <span className="field__label rep-gall">Για όλες τις ομάδες</span>${stNewBox}</div>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
       ${people && html`<div className="field-row">

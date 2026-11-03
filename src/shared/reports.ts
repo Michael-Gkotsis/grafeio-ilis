@@ -205,6 +205,7 @@ export interface RepPick {
   view?: string;                              // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
   noDuty?: boolean;                           // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
   need?: RepCond[]; not?: RepCond[];          // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
+  or?: { need?: RepCond[]; not?: RepCond[] }[];  // (Michael 03/11) άλλες ομάδες φίλτρων: μπαίνει όποιος περνά την ομάδα 1 (need/not) Ή μία από αυτές
   always?: number[]; never?: number[];        // στρατιώτες: πάντα μέσα (ό,τι κι αν λένε τα φίλτρα) / ποτέ σε αυτό το έντυπο
   gap?: number;                               // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
   si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
@@ -249,8 +250,38 @@ export function setCond(pk: RepPick, c: RepCond, v: 'any' | 'yes' | 'no'): RepPi
   const order = (l: RepCond[]) => REP_CONDS.map(x => x.id).filter(x => l.includes(x));
   return { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: order(n), not: order(o) };
 }
+// Οι ομάδες φίλτρων: η 1η από τα need/not (και τα παλιά πεδία), οι άλλες από το or· κάθε ομάδα με σειρά REP_CONDS, χωρίς διπλά
+type CondGroup = { need: RepCond[]; not: RepCond[] };
+const condOrder = (l: Iterable<RepCond>) => { const s = new Set(l); return REP_CONDS.map(x => x.id).filter(x => s.has(x)); };
+const normGroup = (g: { need?: RepCond[]; not?: RepCond[] }): CondGroup => { const need = condOrder(g.need || []); return { need, not: condOrder((g.not || []).filter(c => !need.includes(c))) }; };
+export function condGroups(pk: RepPick): CondGroup[] { return [condsOf(pk), ...(pk.or || []).map(normGroup)]; }
+// Αλλάζει ένα φίλτρο της ομάδας gi (0: η 1η, όπως το setCond)
+export function setGroupCond(pk: RepPick, gi: number, c: RepCond, v: 'any' | 'yes' | 'no'): RepPick {
+  if (gi <= 0 || !pk.or?.[gi - 1]) return setCond(pk, c, v);
+  const g = normGroup(pk.or[gi - 1]); const need = g.need.filter(x => x !== c); const not = g.not.filter(x => x !== c);
+  if (v === 'yes') need.push(c); if (v === 'no') not.push(c);
+  return { ...pk, or: pk.or.map((x, i) => (i === gi - 1 ? normGroup({ need, not }) : x)) };
+}
+// Νέα ομάδα: αντίγραφο της ομάδας copyFrom
+export function addGroup(pk: RepPick, copyFrom: number): RepPick {
+  const g = condGroups(pk)[copyFrom] || { need: [], not: [] };
+  return { ...pk, or: [...(pk.or || []), { need: [...g.need], not: [...g.not] }] };
+}
+// Σβήνει την ομάδα gi· αν σβηστεί η 1η, η 2η παίρνει τη θέση της
+export function removeGroup(pk: RepPick, gi: number): RepPick {
+  const or = pk.or || []; if (!or.length) return pk;
+  if (gi > 0) { const left = or.filter((_, i) => i !== gi - 1); return { ...pk, or: left.length ? left : undefined }; }
+  const g = normGroup(or[0]); const rest = or.slice(1);
+  return { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: g.need, not: g.not, or: rest.length ? rest : undefined };
+}
 export const condVal = (pk: RepPick, c: RepCond): 'any' | 'yes' | 'no' => { const { need, not } = condsOf(pk); return need.includes(c) ? 'yes' : not.includes(c) ? 'no' : 'any'; };
 // Ελέγχει ένα φίλτρο για έναν στρατιώτη τη μέρα d (τα σύνολα φτιάχνονται μία φορά, μόνο όσα χρειάζονται)
+const passGroup = (t: (c: RepCond, p: Person) => boolean, g: CondGroup, p: Person) => g.need.every(c => t(c, p)) && !g.not.some(c => t(c, p));
+// Ποια ομάδα φίλτρων (0, 1…) περνά πρώτη ο στρατιώτης, ή -1 (για το σήμα «Ομ. K» στη λίστα)
+export function matchGroup(s: AppState, pk: RepPick, d: ISODate): (p: Person) => number {
+  const gs = condGroups(pk); const t = condTest(s, d, pk.stNew);
+  return p => gs.findIndex(g => passGroup(t, g, p));
+}
 // stNew: μόνο οι καταστάσεις που ξεκινούν τη μέρα d
 function condTest(s: AppState, d: ISODate, stNew?: boolean) {
   let present: Set<number> | null = null; let busy: Set<number> | null = null;
@@ -560,7 +591,7 @@ export function cellValue(s: AppState, key: string, d: ISODate, r: Pick<Report, 
 // ------------------------------------------------------------------ ποιοι μπαίνουν
 export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode === 'random' ? { from: 'all', need: ['present'], not: ['duty'], mode, n: 10, even: false } : { from: 'all', mode });
 // τα φίλτρα στρατιωτών χωρίς «ποιοι» φίλτρα (για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση)
-const soldiersPick = (pk: RepPick): RepPick => ({ ...pk, from: 'all', noDuty: false, need: undefined, not: undefined, mode: 'all' });
+const soldiersPick = (pk: RepPick): RepPick => ({ ...pk, from: 'all', noDuty: false, need: undefined, not: undefined, or: undefined, mode: 'all' });
 // Όσοι περνούν τα φίλτρα (πριν από «πόσοι»), με τη σειρά του Δυναμολογίου (αλφαβητικά)
 export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'who' | 'src' | 'sort'>, d: ISODate): Row[] {
   const pk = r.pick;
@@ -618,8 +649,9 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   }
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
   let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
-  const { need, not } = condsOf(pk);
-  if (need.length || not.length) { const t = condTest(s, d, pk.stNew); list = list.filter(p => need.every(c => t(c, p)) && !not.some(c => t(c, p))); }
+  const gs = condGroups(pk);
+  if (gs.length > 1) { const t = condTest(s, d, pk.stNew); list = list.filter(p => gs.some(g => passGroup(t, g, p))); }   // Ή ανάμεσα στις ομάδες· κενή ομάδα = περνούν όλοι
+  else if (gs[0].need.length || gs[0].not.length) { const t = condTest(s, d, pk.stNew); list = list.filter(p => passGroup(t, gs[0], p)); }
   if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.origin, p.post, p.role].join(' ')).includes(normGreek(view.q))));
   if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
@@ -800,13 +832,15 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>
     return (pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι: ' : '') + 'Οπλισμός, ' + (wf ? wf[1].toLowerCase() : '') + tail;
   }
   const cadre = r.kind === 'cadre';
-  const { need, not } = cadre ? { need: [] as RepCond[], not: [] as RepCond[] } : condsOf(pk);
-  const pres = cadre ? pk.from === 'present' : need.includes('present');
+  const gs = cadre || !pk.or?.length ? null : condGroups(pk);   // ομάδες φίλτρων (Ή)
+  const { need, not } = cadre || gs ? { need: [] as RepCond[], not: [] as RepCond[] } : condsOf(pk);
+  const pres = cadre ? pk.from === 'present' : gs ? gs.every(g => g.need.includes('present')) : need.includes('present');
   const from = pk.from === 'inactive' ? 'τους εκτός δύναμης' : pres ? (cadre ? 'τα παρόντα στελέχη' : 'τους παρόντες') : cadre ? 'όλα τα στελέχη' : 'όλους';
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
   const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
   const man = manualKind(r.kind);
-  const extra = [view && 'λίστα «' + view + '»', ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
+  const gtxt = gs ? gs.map(g => [...g.need.filter(c => !pres || c !== 'present').map(c => word(c, true)), ...g.not.map(c => word(c, false))]).map(w => (w.length === 1 ? w[0] : w.length ? '(' + w.join(' και ') + ')' : 'όλοι')).join(' ή ') : '';
+  const extra = [view && 'λίστα «' + view + '»', gtxt, ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
     pk.mode === 'random' && pk.gap ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες') : '',
     man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '', man && pk.never?.length ? pk.never.length + ' ποτέ' : ''].filter(Boolean).join(', ');
   const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
