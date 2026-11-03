@@ -1528,3 +1528,31 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .lists__lt{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
 .lists__prev{flex:1 1 320px;min-width:0;font-size:12px;color:var(--muted-fg);overflow-wrap:anywhere}
 .lists__prev b{color:var(--foreground);font-weight:600}
+
+/* Ημερολόγιο κωλυομένων (Δυναμολόγιο › Ημερολόγιο, imerologio.ts) */
+.imer{overflow:auto;max-height:calc(100vh - 330px);min-height:200px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.imer__t{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+.imer__t th,.imer__t td{padding:4px 4px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-weight:400}
+.imer__t thead th{position:sticky;top:0;z-index:2;background:var(--muted);font-weight:700}
+.imer__t .imer__l{text-align:left}
+.imer__t tbody th[scope=row].imer__l{font-weight:700}
+.imer__n{color:var(--muted-fg);width:34px}
+.imer__t td.imer__l{max-width:76px;overflow:hidden;text-overflow:ellipsis}.imer__t th.imer__l{max-width:132px;overflow:hidden;text-overflow:ellipsis}
+.imer__d{min-width:34px;line-height:1.2}.imer__d span{display:block;font-weight:600;color:var(--muted-fg);font-size:12px}
+.imer__c{cursor:pointer;font-weight:700;position:relative;min-width:34px;overflow:hidden;text-overflow:ellipsis;max-width:64px}
+.imer__c:hover{outline:2px solid var(--ring);outline-offset:-2px}.imer__c:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+.imer__c.is-abs,.imer__key i.is-abs{background:var(--bad-bg);color:var(--bad)}
+.imer__c.is-duty,.imer__key i.is-duty{background:var(--ok-bg);color:var(--ok)}
+.imer__c.is-free,.imer__key i.is-free{background:var(--warn-bg);color:var(--warn)}
+.imer__c.is-future,.imer__key i.is-future{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--border) 4px 5px)}
+.imer__c.is-today{box-shadow:inset 2px 0 0 var(--primary),inset -2px 0 0 var(--primary)}
+.imer__c.is-hand::after,.imer__key i.is-hand::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#e07b00}
+.imer__grp th{background:var(--secondary);text-align:left!important;font-weight:700!important}
+.imer__tot th,.imer__tot td{background:var(--muted);font-weight:700!important}.imer__tot th{text-align:left}
+.imer__key{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13px;color:var(--muted-fg);align-items:center}
+.imer__key span{display:inline-flex;gap:6px;align-items:center}.imer__key i{display:inline-block;width:16px;height:14px;border:1px solid var(--border);border-radius:3px;position:relative}
+.imer__range{font-size:15px;white-space:nowrap}
+.imer__ch{display:flex;flex-wrap:wrap;gap:8px}
+.imer__opt{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.imer__opt>span{font-weight:600;min-width:52px}
+.imer__codes{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}.imer__codes th,.imer__codes td{padding:5px 8px;border:1px solid var(--border);text-align:left}.imer__codes th{background:var(--muted)}
+.imer__codes .ui-input{width:96px;height:34px}

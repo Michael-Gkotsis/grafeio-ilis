@@ -16,7 +16,8 @@ export const LAYOUT_SHEETS: Record<LayoutForm, { key: string; label: string }[]>
   check: [{ key: 'main', label: 'Έλεγχος υπηρεσιών' }],
   roster: [{ key: 'print', label: 'Συνολικό (εκτύπωση)' }, { key: 'lists', label: 'Φύλλα του Excel' }],
   cadre: [{ key: 'main', label: 'Στελέχη' }],
-  weapons: [{ key: 'main', label: 'Κατάσταση οπλισμού' }, { key: 'rest', label: 'Τα άλλα φύλλα' }]
+  weapons: [{ key: 'main', label: 'Κατάσταση οπλισμού' }, { key: 'rest', label: 'Τα άλλα φύλλα' }],
+  imer: [{ key: 'main', label: 'Ημερολόγιο κωλυομένων' }]
 };
 export type Layout = Record<string, Moves>;          // ανά φύλλο (key)
 

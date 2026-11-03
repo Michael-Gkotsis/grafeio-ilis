@@ -100,6 +100,8 @@ export type Command =
   | { t: 'setWeekRules'; week: Partial<Record<number, DayPlan>> }
   // Αλλαγή ωρών/εκπαίδευσης για μία μέρα· plan κενό = πίσω στην ημέρα εβδομάδας
   | { t: 'setDayPlan'; date: ISODate; plan: DayPlan }
+  // Ημερολόγιο κωλυομένων: κελί με το χέρι (ελεύθερο κείμενο, κεφαλαία)· text κενό = πίσω στο αυτόματο. Αλλάζει μόνο το ημερολόγιο
+  | { t: 'setImer'; date: ISODate; cells: { pid: number; text: string }[] }
   // ... δύο μέρες μαζί (οθόνη Εξοδούχοι: η έξοδος της μέρας και η επιστροφή ΔΝ της επόμενης), μία αναίρεση
   | { t: 'setDayPlans'; plans: { date: ISODate; plan: DayPlan }[] }
   // Διόρθωση επιστροφής ενός ατόμου (ΔΝ/εξοδούχος της μέρας day): stay = δεν γυρνά, συνεχίζει· at = γυρνά τότε· why υποχρεωτικό
@@ -1162,6 +1164,19 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const dayPlan = { ...(s.dayPlan || {}) }; if (Object.keys(row).length) dayPlan[c.date] = row; else delete dayPlan[c.date];
       const what = Object.keys(row).length ? planDiff(base, nx).map(x => x.replace(/^(.*) (\S+) → (\S+)$/, '$1 $3 (αντί $2)')).join(', ') : 'πίσω στην προεπιλογή';
       return { state: { ...s, dayPlan }, text: 'Ώρες εξόδου ' + day + ': ' + what, files: ['Εξοδούχοι-Παραμένοντες'] };
+    }
+    case 'setImer': {
+      const pm = personMap(s.people); const day = { ...(s.imer?.[c.date] || {}) }; const parts: string[] = [];
+      for (const x of c.cells) {
+        const p = pm.get(x.pid); if (!p) continue;
+        const v = upper(x.text).replace(/\s+/g, ' ').trim().slice(0, 24);
+        if ((day[x.pid] || '') === v) continue;
+        if (v) day[x.pid] = v; else delete day[x.pid];
+        parts.push(shortName(p) + (v ? ' → ' + v : ': πίσω στο αυτόματο'));
+      }
+      if (!parts.length) return { state: s, text: '', files: [] };
+      const imer = { ...(s.imer || {}) }; if (Object.keys(day).length) imer[c.date] = day; else delete imer[c.date];
+      return { state: { ...s, imer }, text: 'Ημερολόγιο κωλυομένων ' + dm(c.date) + ': ' + (parts.length > 3 ? parts.length + ' κελιά' : parts.join(', ')), files: [] };
     }
     case 'setDayPlans': {
       let next = s; const files: string[] = [], texts: string[] = [];

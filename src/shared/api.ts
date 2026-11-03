@@ -6,6 +6,7 @@ import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';
 import type { Sig } from './sigs';
+import type { ImerReq } from './imer';
 import type { Block, Layout, LayoutForm, LayoutSheet } from './layout';
 import type { BuildOpts, BuiltOut, RepCell, RepKind, Report, RepTpl } from './reports';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
@@ -78,6 +79,7 @@ export interface Api {
   exportFile(kind: ExportKind, date: ISODate, opts?: ExportOpts): Promise<ExportResult>;
   // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς Ρυθμίσεις › Υπογραφές)
   exportLists(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
+  exportImer(req: ImerReq, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό· print: προεπισκόπηση εκτύπωσης
   exportRoster(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
   exportWeapons(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
   exportCadre(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί

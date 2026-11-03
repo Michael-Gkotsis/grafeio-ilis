@@ -26,7 +26,8 @@ const where = (cells: Record<string, string>, v: string) => Object.keys(cells).f
 describe('υπογραφές σε όλα τα έντυπα', () => {
   it('κάθε έντυπο έχει λίστα υπογραφών και θέσεις στο χαρτί· τα Excel της εφαρμογής αρχικά χωρίς υπογραφές', () => {
     for (const f of SIG_FORMS) if (f !== 'reports') expect(LAYOUT_SHEETS[f].length).toBeGreaterThan(0);
-    for (const f of MADE_FORMS) expect(sigsSaved(fakeState(3).settings, f)).toEqual([]);
+    for (const f of MADE_FORMS.filter(x => x !== 'imer')) expect(sigsSaved(fakeState(3).settings, f)).toEqual([]);
+    expect(sigsSaved(fakeState(3).settings, 'imer').map(x => x.title)).toEqual(['ΟΥΛΑΜΑΓΟΣ', 'ΔΚΤΗΣ ΙΛΗΣ']);   // το Ημερολόγιο κωλυομένων: όπως το Excel του
     expect(sigFormOf('check')).toBe('check'); expect(sigFormOf('outsPsk')).toBe('outs');
     expect(blockLabel('title')).toBe('Τίτλος');
   });
