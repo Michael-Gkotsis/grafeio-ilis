@@ -1,5 +1,6 @@
-// Έξτρα στοιχεία ατόμου (Michael, 3/11): IBAN, ΑΜΚΑ, ΑΦΜ. Μόνο στην καρτέλα (οπλίτη και στελέχους): δεν γράφονται σε Excel,
-// έντυπα, εκτυπώσεις ή άλλες οθόνες. Ελαφρύς έλεγχος που δεν εμποδίζει ποτέ την αποθήκευση.
+// Έξτρα στοιχεία ατόμου (Michael, 3/11): IBAN, ΑΜΚΑ, ΑΦΜ. Στην καρτέλα (οπλίτη και στελέχους)· από 3/11 (Michael: «θέλω να γράφονται
+// στο Excel») γράφονται και διαβάζονται και στο Δυναμολόγιο των οπλιτών (στήλες IBAN, ΑΜΚΑ, ΑΦΜ), όχι σε έντυπα/εκτυπώσεις.
+// Ελαφρύς έλεγχος που δεν εμποδίζει ποτέ την αποθήκευση.
 
 export type PKey = 'iban' | 'amka' | 'afm';
 export interface PField { k: PKey; label: string; ph: string; len: number | null }
@@ -33,3 +34,9 @@ export function warnPersonal(k: PKey, v: unknown): string {
 }
 // IBAN ανά 4 για ανάγνωση (GR16 0110 …)· τα άλλα όπως είναι
 export const showPersonal = (k: PKey, v: unknown): string => { const t = normPersonal(k, v); return k === 'iban' ? t.replace(/(.{4})(?=.)/g, '$1 ') : t; };
+export const PKEYS: PKey[] = PFIELDS.map(f => f.k);
+// Από κελί του Excel: όπως στην καρτέλα· ΑΜΚΑ/ΑΦΜ που ήρθαν ως αριθμός έχασαν το αρχικό μηδέν (01019012345 → 1019012345): το ξαναβάζουμε
+export function personalFromCell(k: PKey, v: unknown): string {
+  const t = normPersonal(k, v); const n = PFIELDS.find(f => f.k === k)!.len;
+  return k !== 'iban' && n && /^\d+$/.test(t) && t.length === n - 1 ? '0' + t : t;
+}

@@ -12,7 +12,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
-import { normPersonal } from './personal';
+import { normPersonal, PKEYS, type PKey } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
 import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
@@ -1179,10 +1179,11 @@ function mergeRow(ex: Person, r: ImportRow): Person {
   const active = r.active ?? (ex.active || !auto);
   const next: Person = { ...ex, ...r, id: ex.id, active };
   delete next.added; if (!next.origin) delete next.origin;
+  for (const k of PKEYS) if (!next[k]) delete next[k];   // κενό κελί IBAN/ΑΜΚΑ/ΑΦΜ στο αρχείο = χωρίς
   if (active && r.notes === undefined && auto) next.notes = '';
   return next;
 }
-const newPerson = (r: ImportRow, id: number): Person => { const p: Person = { post: null, attached: false, notes: '', ...r, id, active: r.active ?? true }; if (!p.origin) delete p.origin; return p; };
+const newPerson = (r: ImportRow, id: number): Person => { const p: Person = { post: null, attached: false, notes: '', ...r, id, active: r.active ?? true }; if (!p.origin) delete p.origin; for (const k of PKEYS) if (!p[k]) delete p[k]; return p; };
 function importPeople(s: AppState, rows: ImportRow[], source: string, deactivateMissing: boolean): Result {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
   const byName = new Map(s.people.map(p => [personKey(p), p]));
@@ -1214,7 +1215,7 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
 
 // Τι αλλάζει στον καθένα με μια εισαγωγή προσωπικού (για την προεπισκόπηση: «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»)
 const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['origin', 'προέλευση'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
-  ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη']];
+  ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη'], ['iban', 'IBAN'], ['amka', 'ΑΜΚΑ'], ['afm', 'ΑΦΜ']];
 const rv = (v: unknown) => (v == null || v === '' ? '—' : v === true ? 'ναι' : v === false ? 'όχι' : String(v));
 export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who: string; what: string }[]; same: number } {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
@@ -1224,7 +1225,7 @@ export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who:
     const ex = (r.asm && byAsm.get(r.asm)) || byName.get(personKey(r)); if (!ex) continue;
     const next = mergeRow(ex, r) as unknown as Record<string, unknown>; const cur = ex as unknown as Record<string, unknown>;
     const what = ROSTER_FIELDS.filter(([k]) => (r[k] !== undefined || k === 'active') && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
-      .map(([k, label]) => label + ' ' + rv(cur[k] ?? (k === 'dn' ? false : null)) + ' → ' + rv(next[k]));
+      .map(([k, label]) => (PKEYS.includes(k as PKey) ? label + ' άλλαξε' : label + ' ' + rv(cur[k] ?? (k === 'dn' ? false : null)) + ' → ' + rv(next[k])));   // IBAN/ΑΜΚΑ/ΑΦΜ: χωρίς τα νούμερα στην προεπισκόπηση
     if (what.length) changes.push({ who: fullName(ex), what: what.join(', ') }); else same++;
   }
   return { changes, same };

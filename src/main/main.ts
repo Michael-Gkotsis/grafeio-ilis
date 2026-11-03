@@ -19,6 +19,7 @@ import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from 
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
+import { PKEYS, type PKey } from '../shared/personal';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
@@ -408,7 +409,7 @@ async function autoCheck(kind: ListKind): Promise<{ b: SourceBinding; m?: Source
 // Μετά την εγγραφή ενός είδους: νέα αντιστοίχιση (στήλες ωρών, πίνακας που κατέβηκε), τι ξέρουμε για το αρχείο, Ιστορικό
 function afterWrite(kind: ListKind, b: SourceBinding, r: WriteOutcome): SyncOut {
   if (!r.ok) { srcMeta.set(kind, { pending: true, error: r.error, locked: !!r.locked }); return r; }
-  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? (kind === 'caps' ? 'στήλες για τις δικές σου υπηρεσίες στο φύλλο «' + b.sheet + '»' : 'μπήκαν στήλες ' + KIND[kind].fields.filter(f => (f.k === 'tout' || f.k === 'tin' || f.k === 'dest') && b.cols[f.k] == null && r.binding!.cols[f.k] != null).map(f => '«' + f.head + '»').join(' και ') + ' στο φύλλο «' + b.sheet + '» (' + (kind === 'leave' ? 'άδειες με ώρα ή κατεύθυνση' : 'εγγραφές με ώρα') + ')') : undefined); b = bindingOf(kind) || r.binding; }
+  if (r.binding) { moveBinding(kind, r.binding, r.timeCols ? (kind === 'caps' ? 'στήλες για τις δικές σου υπηρεσίες στο φύλλο «' + b.sheet + '»' : 'μπήκαν στήλες ' + KIND[kind].fields.filter(f => (f.k === 'tout' || f.k === 'tin' || f.k === 'dest' || PKEYS.includes(f.k as PKey)) && b.cols[f.k] == null && r.binding!.cols[f.k] != null).map(f => '«' + f.head + '»').join(' και ') + ' στο φύλλο «' + b.sheet + '» (' + (kind === 'people' ? 'στοιχεία που έχεις στις καρτέλες' : kind === 'leave' ? 'άδειες με ώρα ή κατεύθυνση' : 'εγγραφές με ώρα') + ')') : undefined); b = bindingOf(kind) || r.binding; }
   srcMeta.set(kind, { ...r.meta, ...(isStatusKind(kind) ? { base: baseOf(kind, store.state, r.meta.keys || []) } : {}), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   if (r.unchanged) return { ok: true, text: 'Το ' + path.basename(r.file) + ' είχε ήδη τα ίδια', file: r.file, unchanged: true };
   const text = writeText(kind, r.file, r, b);
@@ -725,7 +726,7 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     const had = !!book?.sheets.some(x => x.name === b.sheet);
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
     const tc0 = timeCols(kind, had ? sheet : null, b, store.state, today()); const tc1 = capExtraCols(kind, had ? sheet : null, tc0.b, store.state); b = tc1.b;
-    const tc = { head: [...tc0.head.map(h => ({ ...h, why: 'για τις ώρες των αδειών' })), ...tc1.head.map(h => ({ ...h, why: 'για όσους δεν κάνουν αυτή την υπηρεσία' }))] };
+    const tc = { head: [...tc0.head.map(h => ({ ...h, why: kind === 'people' ? 'για τα στοιχεία των καρτελών (IBAN, ΑΜΚΑ, ΑΦΜ)' : 'για τις ώρες των αδειών' })), ...tc1.head.map(h => ({ ...h, why: 'για όσους δεν κάνουν αυτή την υπηρεσία' }))] };
     const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
     const steps = plan.inserts || [], sheet2 = steps.length ? withRows(sheet, steps) : sheet;
     const lines = describeSets(kind, sheet2, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : stepRows(steps));
