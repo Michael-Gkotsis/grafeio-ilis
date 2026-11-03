@@ -1310,6 +1310,9 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .rep-conds{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin-top:4px;font-size:13px}
 .rep-conds .ui-seg{justify-self:start}
+/* στενή στήλη (π.χ. 1024): το όνομα του φίλτρου πάνω από τα κουμπιά του, για να μη σπάνε τα κουμπιά σε τρεις γραμμές */
+.rep-filt{container-type:inline-size}
+@container (max-width:560px){.rep-conds{grid-template-columns:minmax(0,1fr);gap:2px}.rep-conds>span{margin-top:6px;font-weight:600}}
 .rep-addg{display:block;width:100%;margin-top:8px;padding:6px 10px;border:1px dashed var(--border);border-radius:var(--radius);background:transparent;color:var(--primary);font:inherit;font-size:13px;cursor:pointer}
 .rep-addg:hover{background:var(--hover)}
 .rep-groups{display:flex;flex-direction:column;margin-top:4px}

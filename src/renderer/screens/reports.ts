@@ -1182,11 +1182,11 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
           <option value="all">Όλα τα στελέχη</option><option value="present">Παρόντα τη μέρα (χωρίς κατάσταση)</option><//></div>`}
         ${!sub && html`<div className="field"><span className="field__label">Για ποια μέρα</span><${Segmented} small=${true} value=${r.day} onChange=${(day: Report['day']) => upd({ day })} items=${[{ value: 'today', label: 'Σήμερα' }, { value: 'tomorrow', label: 'Αύριο' }, { value: 'ask', label: 'Ρώτα κάθε φορά' }]}/></div>`}
       </div>
-      ${people && !multi && html`<div><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
+      ${people && !multi && html`<div className="rep-filt"><span className="field__label">Φίλτρα <small className="muted">(συνδυάζονται: μπαίνουν όσοι περνούν όλα · τώρα ${nPass})</small></span>
         ${condGrid(0)}
         <button type="button" className="rep-addg" onClick=${() => copyG(0)}>+ Ή άλλη ομάδα</button>
         ${stNewBox}</div>`}
-      ${people && multi && html`<div><span className="field__label">Φίλτρα <small className="muted">(μπαίνει όποιος περνά μία από τις ομάδες · τώρα ${nPass})</small></span>
+      ${people && multi && html`<div className="rep-filt"><span className="field__label">Φίλτρα <small className="muted">(μπαίνει όποιος περνά μία από τις ομάδες · τώρα ${nPass})</small></span>
         <div className="rep-groups">${gs.map((g, gi) => html`<${Fragment} key=${gi}>
           ${gi > 0 && html`<div className="rep-or" aria-hidden="true"><span>Ή</span></div>`}
           <div className=${'rep-g' + (gi === og ? ' rep-g--open' : '')}>
