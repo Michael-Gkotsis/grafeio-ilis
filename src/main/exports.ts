@@ -7,7 +7,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
-import { hkRowsOf, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
+import { hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
@@ -105,7 +105,7 @@ export function punishedOn(s: AppState, d: ISODate): Status[] {
 }
 export function absentOn(s: AppState, d: ISODate): Status[] {
   // απόντες του εντύπου υπηρεσιών: άδειες, αναρρωτικές, νοσοκομείο (όχι οι εξοδούχοι)· όχι όποιος γυρίζει ως τις 14:00
-  return s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, dutyMin(s.settings)));
+  return s.statuses.filter(x => isAway(x, s.settings.lists) && TYPES[x.type].cat !== 'out' && coversDay(x, d) && !backBy(x, d, dutyMin(s.settings)));
 }
 
 // Πίνακες των δικών σου υπηρεσιών κάτω από τους πίνακες του εντύπου, ανά δύο δίπλα δίπλα (στις στήλες των δύο πρώτων

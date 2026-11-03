@@ -132,7 +132,7 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
     switch (normGreek(name).replace(/\s+/g, '')) {
       case 'ΚΩΔ': case 'ΚΩΔΙΚΟΣ': return lbl;
       case 'ΣΥΝΤΟΜΑ': return cat === 'abs' || cat === 'pun' ? CAT_WORD[cat]! : st.type === 'OUT' ? 'ΕΞΟΔΟΣ' : lbl;
-      case 'ΟΝΟΜΑ': return st.type === 'PUN' || lbl !== t?.label ? lbl : st.type === 'LEAVE' && st.kind ? leavePhrase(st) : t?.long || lbl;
+      case 'ΟΝΟΜΑ': return st.type === 'PUN' ? lbl : st.type === 'LEAVE' && st.kind ? leavePhrase(st) : lbl !== t?.label ? lbl : t?.long || lbl;
       case 'ΚΑΤΗΓΟΡΙΑ': return CAT_WORD[cat] || lbl;
       case 'ΚΑΤΕΥΘΥΝΣΗ': return st.dest?.trim() || '';   // της άδειας (κενό αν δεν έχει)
       case 'ΑΠΟ': return dm(st.from);

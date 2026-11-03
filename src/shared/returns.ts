@@ -12,7 +12,7 @@ import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { backBy, hasTimes, mins } from './hours';
 import { activePeople, hkMin, holOf, postOf, statusesAt, statusesOn } from './rules';
 import { collator } from './text';
-import { leavePhrase } from './ranks';
+import { isAway, leavePhrase, statusLbl } from './ranks';
 import { dutyAt, isSat, isWk, outLbl } from './weekend';
 
 export interface WeekRow { out: string; backOut: string; backDn: string; train: boolean }
@@ -55,7 +55,7 @@ const MAX_DAYS = 120;
 // (Michael, 2/11: δεν «γυρίζει σήμερα», ούτε στο «Ποιοι γυρίζουν» ούτε στο Γ4· με ΔΝ/έξοδο σήμερα κρίνεται σαν να μην είχε άδεια)
 export const backAm = (s: Pick<AppState, 'rules'>, x: Status, d: ISODate) => TYPES[x.type].cat !== 'out' && backBy(x, d, hkMin(s.rules));
 // (awayAll: και αυτές, για τη συνέχεια μιας άδειας στις επόμενες μέρες: ΚΑ ως αύριο 06:00 γυρνά αύριο 06:00)
-const awayAll = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => TYPES[y.type].away && !y.pending);
+const awayAll = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => isAway(y, s.settings.lists) && !y.pending);
 export const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => awayAll(s, pid, d).filter(y => !backAm(s, y, d));
 // Μέρα «δηλωμένη» = κάποιος έχει έξοδο ή ΔΝ εκείνη τη μέρα (ή παρατήρηση εξοδούχου): οι Εξοδούχοι της μέρας έχουν συμπληρωθεί και όποιος
 // δεν έχει έξοδο/ΔΝ μένει. Αλλιώς δεν ξέρουμε αν ο ΔΝ μένει (η αλλαγή ωρών της μέρας δεν μετρά: μπορεί να μπει από πριν). Η «ΔΝ ΣΚ» του
@@ -79,7 +79,7 @@ const hasOut = (x: Status) => TYPES[x.type].cat === 'out';
 // πότε» (leaveBack) και για τους 4 πίνακες (outsTables). null: δεν ισχύει (καμία άδεια/ΔΝ/έξοδος, ή η άδεια συνεχίζει αύριο).
 export function leaveEnd(s: AppState, pid: number, d: ISODate, now: Status[]): { out: Status; r: Ret | null } | null {
   const out = now.find(hasOut); if (!out || !now.some(x => !hasOut(x)) || awayAll(s, pid, addDays(d, 1)).some(x => !hasOut(x))) return null;
-  const free = { ...s, statuses: s.statuses.filter(x => x.pid !== pid || hasOut(x) || !TYPES[x.type].away) };
+  const free = { ...s, statuses: s.statuses.filter(x => x.pid !== pid || hasOut(x) || !isAway(x, s.settings.lists)) };
   const r = returnOf(free, pid, d);
   return { out, r: r && { ...r, base: out.type === 'DN' ? 'τέλος άδειας, ΔΝ' : 'τέλος άδειας, έξοδος' } };
 }
@@ -107,7 +107,7 @@ export function returnOf(s: AppState, pid: number, d: ISODate): Ret | null {
       const at = lv.from === n && hasTimes(lv.type) && lv.fromTime ? lv.fromTime : '';
       if (at && mins(at) > mins(t.backDn)) return { day: n, time: t.backDn, why: why('μετά τη ΔΝ'), leaveAt: at };
       if (lv.open) return { day: n, time: '', why: 'χωρίς λήξη', open: true };
-      const end: Ret = lv.toTime && hasTimes(lv.type) ? { day: lv.to, time: lv.toTime, why: 'τέλος ' + TYPES[lv.type].label } : { day: addDays(lv.to, 1), time: dayTimes(s, addDays(lv.to, 1)).backDn, why: 'τέλος ' + TYPES[lv.type].label };
+      const end: Ret = lv.toTime && hasTimes(lv.type) ? { day: lv.to, time: lv.toTime, why: 'τέλος ' + statusLbl(lv, s.settings.lists) } : { day: addDays(lv.to, 1), time: dayTimes(s, addDays(lv.to, 1)).backDn, why: 'τέλος ' + statusLbl(lv, s.settings.lists) };
       return withDuty(s, pid, end);
     }
     // εξοδούχος την επόμενη μέρα: με πρωινή εκπαίδευση γυρνά το πρωί και φεύγει πάλι στην ώρα εξόδου, όπως με ΔΝ (Michael, 2/11:
@@ -211,10 +211,10 @@ export function leaveBack(s: AppState, pid: number, d: ISODate): Ret {
     if (duty) { back = { day: x, time: duty.time, why: 'υπηρεσία', duty: duty.label }; break; }
   }
   if (back) return back;
-  const t = TYPES[lastSt!.type];
+  const tl = statusLbl(lastSt!, s.settings.lists);   // «τέλος ΚΑ», «τέλος ΥΠΗΡΕΣΙΑΚΟ»
   if (hasOut(lastSt!)) back = lastSt!.type === 'OUT' ? { day: last, time: dayTimes(s, last).backOut, why: 'τέλος εξόδου' } : { day: addDays(last, 1), time: dayTimes(s, addDays(last, 1)).backDn, why: 'μετά τη ΔΝ' };
-  else if (lastSt!.toTime && hasTimes(lastSt!.type)) back = { day: last, time: lastSt!.toTime, why: 'τέλος ' + t.label };
-  else back = { day: addDays(last, 1), time: '', why: 'τέλος ' + t.label };
+  else if (lastSt!.toTime && hasTimes(lastSt!.type)) back = { day: last, time: lastSt!.toTime, why: 'τέλος ' + tl };
+  else back = { day: addDays(last, 1), time: '', why: 'τέλος ' + tl };
   return withDuty(s, pid, back);
 }
 export function returnsOn(s: AppState, d: ISODate): Back[] {
@@ -227,7 +227,7 @@ export function returnsOn(s: AppState, d: ISODate): Back[] {
 }
 // Όσοι δεν έχουν γυρίσει ακόμα στη στιγμή at (λεπτά) της μέρας d: χωρίς όποιον γυρνά σήμερα ως τότε (το «Σήμερα» με την ώρα)
 // (και ο ίδιος κανόνας με τη Δύναμη: όποιος μετρά ακόμα απών μένει, π.χ. έπρεπε να γυρίσει 16:00 για υπηρεσία αλλά η άδεια λέει 22:00)
-export const backsAt = (s: AppState, bs: Back[], d: ISODate, at?: number) => (at == null ? bs : bs.filter(b => b.r.open || b.r.pending || b.r.day !== d || !b.r.time || mins(b.r.time) > at || statusesAt(s, b.p.id, d, at).some(x => TYPES[x.type].away)));
+export const backsAt = (s: AppState, bs: Back[], d: ISODate, at?: number) => (at == null ? bs : bs.filter(b => b.r.open || b.r.pending || b.r.day !== d || !b.r.time || mins(b.r.time) > at || statusesAt(s, b.p.id, d, at).some(x => isAway(x, s.settings.lists))));
 // Η σειρά των επιστροφών: ανά μέρα και ώρα, όσοι δεν έχουν λήξη στο τέλος (και στην «Όλη η δύναμη», Δ. Πότε γυρίζουν)
 export const retOrd = (r: Ret) => (r.open ? '9' : r.day + (r.duty ? '0' : r.pending ? '2' : '1') + (r.time || '23:59'));
 // «Δευτέρα 26/10» · «06:00 · ΔΝ ως την Κυριακή» · «06:00 · μετά τη ΔΝ, φεύγει για άδεια 14:00» · «δεν έχει δηλωθεί η Κυριακή»

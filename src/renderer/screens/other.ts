@@ -29,7 +29,7 @@ import { GUIDE_TITLES } from '../guideTopic';
 import { SourcesAlert } from './srcStatus';
 import { appTitle } from '../../shared/brand';
 import { LeavesTab } from './leaves';
-import { cadreCountRows, hkRowList, listOf, rankTxt, statusLbl } from '../../shared/ranks';
+import { cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
@@ -48,7 +48,7 @@ export function TodayScreen() {
     const out: { p: Person; s: Status }[] = [];
     // όπως η ΗΚΑΙ (ως τις 08:00 παρών), και μετά όποιος γύρισε ως τώρα (Michael, 20/10)
     // και ο εξοδούχος/ΔΝ με την ώρα (παρών ως την αρχή εξόδου, απών ως την επιστροφή του), όπως η Δύναμη
-    const at = strengthAt(state.rules, today, today, now); activePeople(state).forEach(p => { const x = statusesAt(state, p.id, today, at).find(q => TYPES[q.type].away); if (x) out.push({ p, s: x }); });
+    const at = strengthAt(state.rules, today, today, now); activePeople(state).forEach(p => { const x = statusesAt(state, p.id, today, at).find(q => isAway(q, state.settings.lists)); if (x) out.push({ p, s: x }); });
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
   }, [state, today, now]);
   // έξοδος/ΔΝ: ως πότε λείπει («ως 22:00», «ως Δευ 06:00»), αλλιώς «σήμερα» όταν δεν ξέρουμε πότε γυρνά
@@ -77,8 +77,8 @@ export function TodayScreen() {
     // άλλο ιατρικό που συνεχίζει αύριο: λέει τι μένει, όχι ότι ξαναμπαίνει
     const rest = statusesOn(state.statuses, s.pid, tomorrow).filter(x => x.id !== s.id && TYPES[x.type].cat !== 'out');
     const lbl = (x: Status) => statusLbl(x, state.settings.lists) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to));
-    const nd = rest.find(x => TYPES[x.type].noDuty), na = rest.find(x => TYPES[x.type].noArmed);
-    if (t.noDuty) return nd ? 'Μένει ' + lbl(nd) : na ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες, όχι σε ένοπλες (' + lbl(na) + ')' : 'Από αύριο ξαναμπαίνει σε υπηρεσίες';
+    const nd = rest.find(x => noDutyOf(x, state.settings.lists)), na = rest.find(x => TYPES[x.type].noArmed);
+    if (noDutyOf(s, state.settings.lists)) return nd ? 'Μένει ' + lbl(nd) : na ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες, όχι σε ένοπλες (' + lbl(na) + ')' : 'Από αύριο ξαναμπαίνει σε υπηρεσίες';
     if (t.noArmed) return nd || na ? 'Μένει ' + lbl((nd || na)!) : 'Από αύριο ξαναμπαίνει και σε ένοπλες θέσεις';
     return 'Από αύριο μπορεί να βγει έξοδο';
   };
@@ -129,7 +129,7 @@ export function TodayScreen() {
     </div>
     <div className="cols cols--b">
       ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
-        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.type === 'STEP' ? [TYPES.STEP.long, st.note].filter(Boolean).join(' · ') : st.note || 'Κωλυόμενος'}${st.noOut ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· ' + (col && col !== '-' ? 'στην ' + HK() + ': ' + kolColName(col) : 'δεν μετρά σε στήλη της ' + HK()) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? (col && col !== '-' ? kolColName(col) : 'εκτός ' + HK()) : 'παρών'}<//></li>`)}</ul>
+        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}>${shortName(p)}</button><small className="muted" style=${{ display: 'block' }}>${st.type === 'STEP' ? [TYPES.STEP.long, st.note].filter(Boolean).join(' · ') : st.type === 'LEAVE' ? [statusLbl(st, state.settings.lists), st.note].filter(Boolean).join(' · ') : st.note || 'Κωλυόμενος'}${st.noOut || st.type === 'LEAVE' ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· ' + (col && col !== '-' ? 'στην ' + HK() + ': ' + kolColName(col) : 'δεν μετρά σε στήλη της ' + HK()) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? (col && col !== '-' ? kolColName(col) : 'εκτός ' + HK()) : 'παρών'}<//></li>`)}</ul>
         <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
       <//>`}
       ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12} at=${strengthAt(state.rules, today, today, now)}/><//>`}

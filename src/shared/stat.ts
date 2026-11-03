@@ -6,7 +6,7 @@
 // μένει όπως ο βασικός του τύπος (τα παλιά όπως ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ, τα καινούργια χωρίς περιορισμούς).
 // Ποινές (Michael, 18/10): μία γραμμή για όλες και μία για κάθε είδος· αρχικά μπαίνουν παντού, όπως πριν. Έξοδο ποτέ.
 import { TYPES, effects, type DutyKind, type Status, type TypeDef, type TypeKey } from './domain';
-import { itemKey, listRows, ownMed, type UserLists } from './ranks';
+import { itemKey, leaveMode, listRows, noDutyOf, noOutOf, ownMed, type UserLists } from './ranks';
 
 export type StatCell = 'yes' | 'last' | 'no';
 // cells: γραμμή («EA» ή «EA:ΕΛ ΓΥΜΝ») → υπηρεσία (id μπλοκ) → τιμή · out: γραμμή → βγαίνει έξοδο
@@ -47,6 +47,8 @@ export function statCellOf(lists: UserLists | undefined, type: TypeKey, own: str
 export function statOn(s: Pick<Status, 'type' | 'kind'>, post: (Blk & { block?: string }) | null | undefined, lists?: UserLists): { v: StatCell; from: 'own' | 'row' | 'def' } {
   const t = TYPES[s.type];
   const r = post?.block && post.kind !== 'ly' ? statRowOf(s, lists) : null;
+  // άδεια δικού σου είδους «Πουθενά» που μπαίνει σε υπηρεσίες (Michael, 3/11)
+  if (!r && s.type === 'LEAVE' && !noDutyOf(s, lists)) return { v: 'yes', from: 'def' };
   if (!r) return { v: statDefault(t, post || { armed: true }), from: 'def' };
   return statCellOf(lists, r.type, r.own, { id: post!.block!, kind: post!.kind, armed: post!.armed });
 }
@@ -61,7 +63,7 @@ export function statOutOf(lists: UserLists | undefined, type: TypeKey, own?: str
 export const statNoOut = (s: Pick<Status, 'type' | 'kind'> & { noOut?: boolean }, lists?: UserLists): boolean => {
   if (s.type === 'KOL') return !!s.noOut;   // ο κωλυόμενος: ανά δήλωση
   const r = statRowOf(s, lists);
-  return r ? !statOutOf(lists, r.type, r.own).ok : !!TYPES[s.type].noOut;
+  return r ? !statOutOf(lists, r.type, r.own).ok : noOutOf(s, lists);   // η άδεια «Πουθενά»: βγαίνει έξοδο μόνο αν το όρισες
 };
 // Άοπλος λόγω κατάστασης (για τα «Αυστηρά Άοπλοι»): δεν μπαίνει σε καμία ένοπλη υπηρεσία του εντύπου.
 // Έντυπο χωρίς ένοπλες υπηρεσίες: όπως πριν, από τον τύπο (ΕΑ/ΕΟ).
@@ -74,11 +76,14 @@ export function statIsUnarmed(s: Pick<Status, 'type' | 'kind'>, blocks: (Blk & {
 // Σε καμία υπηρεσία του εντύπου λόγω κατάστασης (για τις λίστες της Φρουράς)
 export function statNoDuty(s: Pick<Status, 'type' | 'kind'>, blocks: (Blk & { id: string })[], lists?: UserLists): boolean {
   const r = statRowOf(s, lists); const bs = blocks.filter(b => b.kind !== 'ly');
-  if (!bs.length || !r) return !!TYPES[s.type].noDuty;
+  if (!bs.length || !r) return noDutyOf(s, lists);
   return bs.every(b => statCellOf(lists, r.type, r.own, b).v === 'no');
 }
 // Τι κάνει μια κατάσταση με αυτές τις υπηρεσίες, σε μία γραμμή (για τη δήλωση): «Όχι: Μαγειρεία · Δεν βγαίνει έξοδο»
 export function statSummary(s: Pick<Status, 'type' | 'kind'>, blocks: (Blk & { id: string; name: string; hidden?: boolean })[], lists?: UserLists): string {
+  const lm = leaveMode(s, lists);   // άδεια δικού σου είδους που δεν μετρά απούσα (Michael, 3/11): τι κάνει στην πράξη
+  if (lm === 'kol') return 'Κωλυόμενος (αφαιρείται από τους παρόντες) · Καμία υπηρεσία · Δεν βγαίνει έξοδο';
+  if (lm === 'present') return 'Παρών · ' + (noDutyOf(s, lists) ? 'Καμία υπηρεσία' : 'Μπαίνει σε υπηρεσίες') + ' · ' + (noOutOf(s, lists) ? 'Δεν βγαίνει έξοδο' : 'Βγαίνει έξοδο');
   const r = statRowOf(s, lists); const bs = blocks.filter(b => b.kind !== 'ly' && !b.hidden);
   if (!r || !bs.length) return effects(TYPES[s.type]);
   const of = (v: StatCell) => bs.filter(b => statCellOf(lists, r.type, r.own, b).v === v).map(b => b.name);

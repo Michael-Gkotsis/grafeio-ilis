@@ -3,7 +3,7 @@ import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
 import { HK_K, HK_A, activePeople, cadreSeats, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
-import { hkRowsOf, rankTxt } from '../shared/ranks';
+import { hkRowsOf, isAway, rankTxt } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
@@ -84,7 +84,7 @@ export function frouraSheet(s: AppState, date: ISODate): SheetModel {
   const on = (x: Status) => coversDay(x, date);
   const away = (x: Status) => on(x) && !backBy(x, date, dutyMin(s.settings));   // όποιος γυρίζει ως την αρχή της υπηρεσίας (π.χ. 14:00) δεν είναι απών της υπηρεσίας
   const pun = s.statuses.filter(x => x.type === 'PUN' && !x.pending && on(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
-  const abs = s.statuses.filter(x => TYPES[x.type].away && TYPES[x.type].cat !== 'out' && away(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
+  const abs = s.statuses.filter(x => isAway(x, s.settings.lists) && TYPES[x.type].cat !== 'out' && away(x) && pm.has(x.pid)).sort((a, b) => byName(pm.get(a.pid)!, pm.get(b.pid)!));
   rows.push([E('ΤΙΜΩΡΗΜΕΝΟΙ', 'b hdr', 6), E(''), E('ΑΠΟΝΤΕΣ', 'b hdr', 6)]);
   rows.push([...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ'), E(''), ...hdr('Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΕΙΔΟΣ ΑΠΟΥΣΙΑΣ', 'ΑΠΟ', 'ΕΩΣ', 'ΠΑΡ/ΣΕΙΣ')]);
   for (let i = 0; i < Math.max(6, pun.length, abs.length); i++) {

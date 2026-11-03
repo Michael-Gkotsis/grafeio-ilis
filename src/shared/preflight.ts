@@ -6,7 +6,7 @@ import {
   activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
-import { hkRowList, rankTxt } from './ranks';
+import { hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
 import { HK, hkRowLabel } from './unit';
 import { normGreek } from './text';
 import type { ExportKind } from './api';
@@ -93,8 +93,8 @@ export function outsChecks(s: AppState, date: ISODate): Check[] {
   for (const { p, st } of outs) {
     const r = outBlock(s, date, p.id);
     if (r) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος αλλά δεν βγαίνει: ' + r, go: 'outs' });
-    const away = fromOut(s, p.id, date).find(x => x !== st && TYPES[x.type].away && TYPES[x.type].cat !== 'out');
-    if (away) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος και ' + TYPES[away.type].long.toLowerCase(), go: 'outs' });
+    const away = fromOut(s, p.id, date).find(x => x !== st && isAway(x, s.settings.lists) && TYPES[x.type].cat !== 'out');
+    if (away) out.push({ level: 'warn', text: shortName(p) + ' είναι εξοδούχος και ' + (away.type === 'LEAVE' ? leavePhrase(away) : TYPES[away.type].long).toLowerCase(), go: 'outs' });
   }
   // ΔΝ χωρίς δικαίωμα: μόνο αφού έχει σημειωθεί δικαίωμα ΔΝ σε έστω έναν (όπως στους Εξοδούχους)
   if (s.people.some(p => p.dn)) for (const { p, st } of outs) if (st!.type === 'DN' && !p.dn) out.push({ level: 'warn', text: shortName(p) + ': ΔΝ χωρίς δικαίωμα ΔΝ (βάλ\' το στην καρτέλα του ή άλλαξέ το σε έξοδο)', go: 'outs' });
