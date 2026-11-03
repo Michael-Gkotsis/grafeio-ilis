@@ -149,13 +149,13 @@ export class Sheet {
   }
 
   // Γράφει τιμή κρατώντας το στυλ (s="…"). null = άδειασμα.
-  set(ref: string, v: string | number | null | undefined): this {
+  set(ref: string, v: string | number | null | undefined, keepCase = false): this {
     const x = this.cell(ref)!;
     if (x.inner.includes('<f')) throw new Error(`Το κελί ${this.name}!${ref} έχει τύπο και δεν αλλάζει`);
     let a = setAttr(x.attrs, 't', null);
     if (v == null || v === '') { x.attrs = a; x.inner = ''; x.selfClose = true; return this; }
     if (typeof v === 'number') { x.attrs = a; x.inner = `<v>${v}</v>`; }
-    else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(text(v))}</t></is>`; }
+    else { x.attrs = setAttr(a, 't', 'inlineStr'); x.inner = `<is><t xml:space="preserve">${esc(keepCase ? clean(String(v)) : text(v))}</t></is>`; }
     x.selfClose = false; this.wrote.add(ref); return this;
   }
   // Τύπος σε καινούργιο κελί (χωρίς «=»): ο Excel τον υπολογίζει στο άνοιγμα (fullCalcOnLoad στο save)

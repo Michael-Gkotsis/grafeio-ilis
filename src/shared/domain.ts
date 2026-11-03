@@ -49,6 +49,9 @@ export interface Person {
   iban?: string;         // έξτρα στοιχεία (shared/personal.ts): μόνο στην καρτέλα, ποτέ σε Excel/έντυπα· συμπαγή, χωρίς κενά
   amka?: string;
   afm?: string;
+  email?: string;        // E-mail, e-mail συγγενή, ομάδα αίματος (shared/personal.ts): φύλλο ΘΑΛΑΜΟΙ του Δυναμολογίου και στήλες στα Έντυπα
+  relEmail?: string;
+  blood?: string;        // Α+, Α-, Β+, Β-, ΑΒ+, ΑΒ-, 0+, 0- (ή κείμενο όπως ήρθε από το Excel)
 }
 
 // Αρχή των σημειώσεων όσων βγήκαν εκτός δύναμης από φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» (όχι με το χέρι)

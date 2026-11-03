@@ -1,5 +1,6 @@
 // Έξτρα στοιχεία ατόμου (Michael, 3/11): IBAN, ΑΜΚΑ, ΑΦΜ. Στην καρτέλα (οπλίτη και στελέχους)· από 3/11 (Michael: «θέλω να γράφονται
 // στο Excel») γράφονται και διαβάζονται και στο Δυναμολόγιο των οπλιτών (στήλες IBAN, ΑΜΚΑ, ΑΦΜ), όχι σε έντυπα/εκτυπώσεις.
+import { upper } from './text';
 // Ελαφρύς έλεγχος που δεν εμποδίζει ποτέ την αποθήκευση.
 
 export type PKey = 'iban' | 'amka' | 'afm';
@@ -40,3 +41,28 @@ export function personalFromCell(k: PKey, v: unknown): string {
   const t = normPersonal(k, v); const n = PFIELDS.find(f => f.k === k)!.len;
   return k !== 'iban' && n && /^\d+$/.test(t) && t.length === n - 1 ? '0' + t : t;
 }
+
+// E-mail, e-mail συγγενή, ομάδα αίματος (Michael, 3/11): μόνο οπλίτες. Γράφονται στο φύλλο ΘΑΛΑΜΟΙ του Δυναμολογίου (όχι στο ΣΥΝΟΛΙΚΟ)
+// και υπάρχουν ως στήλες στα Έντυπα. Τα e-mail μένουν όπως γράφτηκαν (είναι διευθύνσεις, όχι κεφαλαία).
+export type XKey = 'email' | 'relEmail' | 'blood';
+export interface XField { k: XKey; label: string; ph: string }
+export const XFIELDS: XField[] = [
+  { k: 'email', label: 'E-mail', ph: 'π.χ. onoma@example.gr' },
+  { k: 'relEmail', label: 'E-mail συγγενή', ph: 'π.χ. του πατέρα' },
+  { k: 'blood', label: 'Ομάδα αίματος', ph: '' }
+];
+export const XKEYS: XKey[] = XFIELDS.map(f => f.k);
+export type Extras = { [K in XKey]?: string };
+export const BLOOD_GROUPS = ['Α+', 'Α-', 'Β+', 'Β-', 'ΑΒ+', 'ΑΒ-', '0+', '0-'];
+// Ομάδα αίματος σε μία μορφή (ελληνικά γράμματα, «0» αριθμός): A+, a +, ΑΒ θετικό, o neg → Α+, Α+, ΑΒ+, 0-.
+// Ό,τι δεν αναγνωρίζεται μένει με κεφαλαία (δεν χάνεται).
+export function normBlood(v: unknown): string {
+  const raw = String(v ?? '').replace(/\s+/g, ' ').trim(); if (!raw) return '';
+  let t = raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[＋]/g, '+').replace(/[−–—‐]/g, '-');
+  let sign = t.includes('+') ? '+' : t.includes('-') ? '-' : '';
+  if (/ΘΕΤΙΚ|POS/.test(t)) sign = '+'; else if (/ΑΡΝΗΤΙΚ|NEG/.test(t)) sign = '-';
+  const g = t.replace(/ΘΕΤΙΚ\S*|ΑΡΝΗΤΙΚ\S*|POSITIVE|NEGATIVE|POS|NEG|RH/g, '').replace(/[^A-ZΑ-Ω0]/g, '')
+    .split('').map(c => ({ A: 'Α', Α: 'Α', B: 'Β', Β: 'Β', O: '0', Ο: '0', 0: '0' } as Record<string, string>)[c] || c).join('');
+  return sign && ['Α', 'Β', 'ΑΒ', '0'].includes(g) ? g + sign : upper(raw);
+}
+export const normExtra = (k: XKey, v: unknown): string => (k === 'blood' ? normBlood(v) : String(v ?? '').trim());

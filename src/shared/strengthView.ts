@@ -99,3 +99,11 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
   const cats = { present: grp('present', 'Παρόντες', presG), kol: grp('kol', 'Κωλυόμενοι', kolGroups), away: grp('away', 'Απόντες', awayG) };
   return { date, at, time: hhmm(at), total, present, kol, absent, cats, line: present + ' + ' + kol + ' + ' + absent + ' = ' + total + ' · στις ' + hhmm(at) };
 }
+
+// Νούμερα κάτω από τον πίνακα του ΣΥΝΟΛΙΚΟ (ΣΤΕΠ, αναρρωτικές, άδειες, νοσοκομείο): τα ίδια ακριβώς με τις ομάδες της σελίδας Δύναμη
+export interface SheetTotals { step: number; sick: number; leave: number; hosp: number }
+export function sheetTotals(s: AppState, date: ISODate, at: number): SheetTotals {
+  const v = strengthView(s, date, at);
+  const n = (cat: SvCat, ...keys: string[]) => v.cats[cat].groups.filter(g => keys.includes(g.key)).reduce((t, g) => t + g.rows.length, 0);
+  return { step: n('kol', 'step'), sick: n('away', 'SICK'), leave: n('away', 'LEAVE', 'HON'), hosp: n('away', 'NOS') };
+}

@@ -75,7 +75,8 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
     F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
     F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
-    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
+    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'), F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10),
+    F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
     F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
     ...TAIL],
@@ -389,7 +390,7 @@ const GUESS: [string, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
   ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
-  ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
+  ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['email', /^ΕΜΑΙ[LΛ]$|^ΗΛΕΚΤΡΟΝΙΚΟΤΑΧΥΔΡΟΜΕΙΟ$/], ['relEmail', /^ΕΜΑΙ[LΛ].*(ΣΥΓΓ|ΠΡΟΣΩΠ)/], ['blood', /ΟΜΑΔΑΑΙΜΑΤΟΣ$|^ΑΙΜΑΤΟΣ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
   ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/], ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/], ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/], ['rack', /ΟΠΛΟΒΑΣΤΟΣ/], ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
   ['status', /^ΚΑΤΑΣΤΑΣΗ$/], ['duty', /^ΥΠΗΡΕΣΙΑ$/], ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/],
   ['stype', /^ΕΙΔΟΣ$|^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣΑΔΕΙΑΣ$|^ΠΟΙΝΗ$/], ['from', /^ΑΠΟ$|^ΕΝΑΡΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΑΠΟ$/], ['to', /^ΕΩΣ$|^ΜΕΧΡΙ$|^ΛΗΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΕΩΣ$/],
@@ -516,7 +517,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     const w = (x as unknown as { bw?: WhoAt }).bw;
     if (typed || f === 'col' || !w) return typed;
     const v = fieldValue(s, w.kind, w.x as Row, f, i, d, undefined, o);   // άτομο γραμμής: το στοιχείο του (στρατιώτη ή στελέχους) τη μέρα d
-    return v == null || v === '' ? null : typeof v === 'string' ? upper(v) : v;
+    return v == null || v === '' ? null : typeof v === 'string' ? (f === 'email' || f === 'relEmail' ? v : upper(v)) : v;   // τα e-mail μένουν όπως γράφτηκαν
   }
   if (f === 'combo') {
     const c = comboOf(o);
@@ -565,6 +566,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
     case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
+    case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || '';
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
     case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
     case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
