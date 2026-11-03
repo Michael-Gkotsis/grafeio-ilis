@@ -2,7 +2,66 @@
 export type ISODate = string;
 
 export const iso = (dt: Date): ISODate => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
-export const today = (): ISODate => iso(new Date());
+
+// Ρολόι της εφαρμογής: ζώνη ώρας + διόρθωση λεπτών (Ρυθμίσεις › Ώρα και ζώνη ώρας). Μία φορά ανά νήμα (main, worker, UI).
+// Το «τώρα» διαβάζεται μόνο από εδώ: today(), nowMin(), nowHM(), nowParts().
+export const DEFAULT_TZ = 'Europe/Athens';
+export const FIX_MAX = 720;
+let clockTz = DEFAULT_TZ, clockFix = 0;
+const p2 = (n: number) => String(n).padStart(2, '0');
+// αλλαγή ρολογιού: ζώνη '' = Αθήνα, 'system' = Windows, αλλιώς όνομα ζώνης (IANA)
+export function setClock(o: { tz?: string; fix?: number }): void {
+  const tz = (o.tz || '').trim() || DEFAULT_TZ; const fix = Math.max(-FIX_MAX, Math.min(FIX_MAX, Math.round(+(o.fix || 0)) || 0));
+  if (tz !== clockTz || fix !== clockFix) { clockTz = tz; clockFix = fix; offMemo.clear(); }
+}
+export const clockOf = (st?: { tz?: string; clockFix?: number } | null) => setClock({ tz: st?.tz, fix: st?.clockFix });
+export const clockZone = (): string => clockTz;
+export const clockShift = (): number => clockFix;
+// μετατόπιση ζώνης (ms από UTC) ανά τέταρτο ώρας· άκυρη ζώνη → Αθήνα, χωρίς θόρυβο
+const fmts = new Map<string, Intl.DateTimeFormat | null>(); const offMemo = new Map<string, [number, number]>();
+const fmtOf = (tz: string): Intl.DateTimeFormat | null => {
+  let f = fmts.get(tz);
+  if (f === undefined) {
+    try { f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }); } catch { f = null; }
+    fmts.set(tz, f);
+  }
+  return f;
+};
+export function zoneOffset(tz: string, at: number): number {
+  const b = Math.floor(at / 9e5), m = offMemo.get(tz);
+  if (m && m[0] === b) return m[1];
+  const f = fmtOf(tz) || fmtOf(DEFAULT_TZ); let off = 0;
+  if (f) {
+    const o: Record<string, number> = {};
+    for (const x of f.formatToParts(new Date(b * 9e5))) if (x.type !== 'literal') o[x.type] = +x.value;
+    off = Date.UTC(o.year, o.month - 1, o.day, o.hour % 24, o.minute, o.second) - b * 9e5;
+  }
+  if (offMemo.size > 8) offMemo.clear();
+  offMemo.set(tz, [b, off]);
+  return off;
+}
+export type Parts = { y: number; mo: number; d: number; h: number; mi: number; s: number };
+// η ώρα του τοίχου της εφαρμογής (ζώνη + διόρθωση) από στιγμή ms· για 'system' η τοπική ώρα του PC
+export function partsAt(ms: number): Parts {
+  const t = ms + clockFix * 6e4;
+  if (clockTz === 'system') { const d = new Date(t); return { y: d.getFullYear(), mo: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds() }; }
+  const d = new Date(t + zoneOffset(clockTz, t));
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds() };
+}
+// κείμενα για την οθόνη: όνομα ζώνης, «UTC+02:00», «1 ώρα και 5 λεπτά»
+export const zoneLabel = (tz: string = clockTz): string => (tz === DEFAULT_TZ ? 'Ελλάδα, Αθήνα' : tz === 'system' ? 'όπως τα Windows' : tz);
+export const utcLabel = (offMs: number): string => { const m = Math.round(offMs / 6e4), a = Math.abs(m); return 'UTC' + (m < 0 ? '−' : '+') + p2(Math.floor(a / 60)) + ':' + p2(a % 60); };
+export const durLabel = (min: number): string => {
+  const a = Math.abs(Math.round(min)), h = Math.floor(a / 60), m = a % 60;
+  const hh = h === 1 ? '1 ώρα' : h + ' ώρες', mm = m === 1 ? '1 λεπτό' : m + ' λεπτά';
+  return h && m ? hh + ' και ' + mm : h ? hh : mm;
+};
+// η ώρα των Windows (τοπική του PC) και πόσα λεπτά πάει μπροστά η εφαρμογή από αυτήν (αρνητικό: πίσω)
+export const osParts = (): Parts => { const d = new Date(); return { y: d.getFullYear(), mo: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds() }; };
+const wallMin = (p: Parts) => Math.floor(Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) / 6e4);
+export const appVsOs = (): number => wallMin(nowParts()) - wallMin(osParts());
+export const nowParts = (): Parts => partsAt(Date.now());
+export const today = (): ISODate => { const p = nowParts(); return p.y + '-' + p2(p.mo) + '-' + p2(p.d); };
 export const parseD = (s: ISODate): Date => new Date(s + 'T12:00:00');
 // Οι κανόνες ρωτούν τις ίδιες γειτονικές μέρες χιλιάδες φορές σε κάθε αυτόματη συμπλήρωση: αριθμός ημέρας (από
 // 1/1/1970, με αριθμητική, χωρίς Date) ανά ημερομηνία και ημερομηνία ανά αριθμό, κρατημένα
@@ -62,8 +121,8 @@ export const dow = (s: ISODate): string => DOW[parseD(s).getDay()];
 export const fileDate = (s: ISODate): string => dm(s).replace('/', '-');
 export const dayName = (s: ISODate, ref: ISODate = today()): string =>
   s === ref ? 'Σήμερα' : s === addDays(ref, 1) ? 'Αύριο' : s === addDays(ref, -1) ? 'Χθες' : dow(s) + ' ' + dm(s);
-export const nowMin = (): number => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
-export const nowHM = (): string => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+export const nowMin = (): number => { const p = nowParts(); return p.h * 60 + p.mi; };
+export const nowHM = (): string => { const p = nowParts(); return p2(p.h) + ':' + p2(p.mi); };
 // Ημέρα της εβδομάδας με αριθμητική (Sakamoto), χωρίς Date: 0 = Κυριακή
 const SAK = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
 export const weekday = (d: ISODate): number => { let y = +d.slice(0, 4); const m = +d.slice(5, 7), dd = +d.slice(8, 10); if (m < 3) y--; return (y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) + SAK[m - 1] + dd) % 7; };

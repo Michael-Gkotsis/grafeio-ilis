@@ -6,6 +6,10 @@ import { nowMin } from '../shared/dates';
 let cur = nowMin(); let timer: ReturnType<typeof setInterval> | null = null;
 const subs = new Set<() => void>();
 const tick = () => { const n = nowMin(); if (n !== cur) { cur = n; subs.forEach(f => f()); } };
+// άλλαξε η ζώνη ή η διόρθωση: ξαναϋπολογίζεται αμέσως (και η μέρα, για το useToday)
+const daySubs = new Set<() => void>();
+export function clockChanged() { cur = nowMin(); subs.forEach(f => f()); daySubs.forEach(f => f()); }
+export const onClockChange = (f: () => void) => { daySubs.add(f); return () => { daySubs.delete(f); }; };
 function subscribe(f: () => void) {
   subs.add(f); if (!timer) { cur = nowMin(); timer = setInterval(tick, 15000); }
   return () => { subs.delete(f); if (!subs.size && timer) { clearInterval(timer); timer = null; } };

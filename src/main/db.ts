@@ -6,7 +6,7 @@ import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
 import { emptyState, markOldRequests, migrateSettings, noPending, noteNamesakes, DEFAULT_RULES, DEFAULT_SETTINGS, type AppState, type AuditEntry } from '../shared/domain';
 import { normNote } from '../shared/notes';
-import { daysBetween, today } from '../shared/dates';
+import { clockOf, daysBetween, nowParts, today } from '../shared/dates';
 import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
 import { splitOrigins } from '../shared/ranks';
@@ -188,7 +188,7 @@ export class Store {
     s.backFix = kv.get('backFix') || [];
     s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map(r => JSON.parse(r.data));
-    this.state = s; noteNamesakes(s.people);
+    this.state = s; clockOf(s.settings); noteNamesakes(s.people);
   }
 
   // Γράφει τη νέα κατάσταση: μόνο ό,τι άλλαξε, και επιστρέφει το patch για αναίρεση
@@ -219,7 +219,7 @@ export class Store {
       }
       this.db.run('COMMIT');
     } catch (e) { this.db.run('ROLLBACK'); throw e; }
-    this.state = next; noteNamesakes(next.people);
+    this.state = next; clockOf(next.settings); noteNamesakes(next.people);
     return patch;
   }
 
@@ -292,8 +292,8 @@ export class Store {
 
   backup(label: string, dir = path.join(this.dataDir, 'backups')): string {
     fs.mkdirSync(dir, { recursive: true });
-    const d = new Date();
-    const stamp = today() + '_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
+    const d = nowParts();
+    const stamp = today() + '_' + String(d.h).padStart(2, '0') + String(d.mi).padStart(2, '0') + String(d.s).padStart(2, '0');
     const out = path.join(dir, `ilh_${stamp}_${label}.db`);
     writeDurable(out, this.db.export());
     return out;

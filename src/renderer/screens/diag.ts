@@ -1,4 +1,5 @@
 // Κρυφή οθόνη «Διάγνωση» (Ctrl+Shift+D): μνήμη ανά διεργασία, χρόνος εκκίνησης, διακόπτης GPU (έρευνα §5)
+import { nowHM } from '../../shared/dates';
 import { useEffect, useState } from 'react';
 import { html, Alert, Badge, Button, Card, PageHeader } from '../ui';
 import { useNav, useStore } from '../store';
@@ -36,8 +37,7 @@ async function runSpeed(back: () => void, onStep: (s: string) => void) {
     }
     if (was >= 0) await clickMs(tabsOf()[was]);
   }
-  const d = new Date();
-  lastRun = { at: String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), rows };
+  lastRun = { at: nowHM(), rows };
   back();
 }
 const tone = (ms: number) => (ms > 1000 ? 'bad' : ms > 400 ? 'warn' : 'ok');

@@ -269,6 +269,12 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .mockchip{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1b1f16;background:var(--gold);padding:3px 9px;border-radius:999px;white-space:nowrap}
 .today-lbl{display:flex;align-items:baseline;gap:8px;white-space:nowrap;font-family:var(--f-mono);color:var(--bar-muted);font-size:13px;text-transform:uppercase}
 .today-lbl b{color:var(--bar-fg);font-size:22px;font-weight:700;letter-spacing:.02em}
+button.today-lbl{background:none;border:0;padding:4px 6px;border-radius:8px;cursor:pointer}
+button.today-lbl:hover{background:rgba(255,255,255,.08)}
+.today-lbl .today-time{color:var(--gold);padding-left:8px;border-left:1px solid var(--bar-muted)}
+@media (max-width:1180px){.today-yr{display:none}}
+.clockbig{font-family:var(--f-mono);font-size:30px;font-weight:700}.clockbig small{display:block;margin-top:4px;font-size:13px;font-weight:400;color:var(--muted-fg);font-family:var(--f-body)}
+.clockcmp{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:10px 0 4px;font-size:14px}.clockcmp dt{color:var(--muted-fg)}.clockcmp dd{margin:0;font-family:var(--f-mono)}
 .syncbar{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 16px;background:var(--info-bg);border-bottom:1px solid var(--border);font-size:14px}
 .syncbar > div{flex:1;min-width:200px}
 /* το μενού μένει ορατό όσο κυλά η σελίδα (π.χ. στις Υπηρεσίες) */

@@ -3,6 +3,7 @@
 // γραμμές τίτλων, κεφαλίδα/υποσέλιδο) και τυπώνεται από το Chromium του Electron με τον διάλογο εκτυπωτή των Windows.
 // Κρατά γραμματοσειρές, πλαίσια, χρώματα, στοίχιση, συγχωνεύσεις και υπολογίζει ξανά τους απλούς τύπους
 // (SUM, ROW()-6, E17-Z17…), γιατί τα αρχεία που γράφει η εφαρμογή έχουν τις παλιές τιμές μέχρι να τα ανοίξει ο Excel.
+import { nowParts } from '../shared/dates';
 import crypto from 'crypto';
 import JSZip from 'jszip';
 import { FIXED_MARK, NOHEAD_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
@@ -407,7 +408,7 @@ export class Book {
         case 'TRIM': return toStr(ev(args[0])).trim().replace(/\s+/g, ' ');
         case 'LEFT': case 'RIGHT': { const s = toStr(ev(args[0])); const n = args[1] ? toNum(ev(args[1])) : 1; if (n instanceof XErr) return n; return name === 'LEFT' ? s.slice(0, n) : n ? s.slice(-n) : ''; }
         case 'MID': { const s = toStr(ev(args[0])); const a = toNum(ev(args[1])), b = toNum(ev(args[2])); if (a instanceof XErr) return a; if (b instanceof XErr) return b; return s.substr(a - 1, b); }
-        case 'TODAY': { const d = new Date(); return Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 86400000); }
+        case 'TODAY': { const d = nowParts(); return Math.floor((Date.UTC(d.y, d.mo - 1, d.d) - Date.UTC(1899, 11, 30)) / 86400000); }
       }
     } catch (e) { if (e instanceof XErr) return e; throw e; }
     throw new Unsupported(name);
@@ -500,15 +501,15 @@ function titleRows(body: string | null): [number, number] | null {
 // &L &C &R κεφαλίδας/υποσέλιδου, με σελίδα, σύνολο σελίδων, ημερομηνία, όνομα φύλλου και αρχείου
 function headerFooter(src: string | null, ctx: { page: number; pages: number; sheet: string; file: string }): [string, string, string] | null {
   if (!src) return null;
-  const out: [string, string, string] = ['', '', '']; let sec = 1; const d = new Date(); const p2 = (n: number) => String(n).padStart(2, '0');
+  const out: [string, string, string] = ['', '', '']; let sec = 1; const d = nowParts(); const p2 = (n: number) => String(n).padStart(2, '0');
   const s = src.replace(/&"[^"]*"/g, '').replace(/&K[0-9A-F]{6}/gi, '').replace(/&\d+/g, '');
   for (let i = 0; i < s.length; i++) {
     if (s[i] !== '&') { out[sec] += s[i]; continue; }
     const k = s[++i]?.toUpperCase();
     if (k === 'L') sec = 0; else if (k === 'C') sec = 1; else if (k === 'R') sec = 2;
     else if (k === 'P') out[sec] += String(ctx.page); else if (k === 'N') out[sec] += String(ctx.pages);
-    else if (k === 'D') out[sec] += p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear();
-    else if (k === 'T') out[sec] += p2(d.getHours()) + ':' + p2(d.getMinutes());
+    else if (k === 'D') out[sec] += p2(d.d) + '/' + p2(d.mo) + '/' + d.y;
+    else if (k === 'T') out[sec] += p2(d.h) + ':' + p2(d.mi);
     else if (k === 'A') out[sec] += ctx.sheet; else if (k === 'F') out[sec] += ctx.file; else if (k === 'Z') out[sec] += '';
     else if (k === '&') out[sec] += '&';
   }

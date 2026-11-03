@@ -1,6 +1,7 @@
 // Ασφαλής εγγραφή Excel (έρευνα §4.1):
 // 1. το template δεν γράφεται ποτέ (διαβάζεται μόνο), 2. πρώτα έλεγχος αν το αρχείο είναι ανοιχτό στο Excel,
 // 3. γράφεται σε .tmp, ξαναδιαβάζεται, και μόνο τότε μετονομάζεται, 4. η προηγούμενη έκδοση κρατιέται στα «_προηγούμενα».
+import { nowParts } from '../shared/dates';
 import fs from 'fs';
 import { threadId } from 'worker_threads';
 const fsp = fs.promises;
@@ -66,7 +67,7 @@ async function verifyXlsx(file: string) {
   const zip = await JSZip.loadAsync(await fsp.readFile(file));
   if (!zip.file('xl/workbook.xml') || !zip.file('[Content_Types].xml')) throw new Error('Το αρχείο που γράφτηκε δεν διαβάζεται σωστά');
 }
-const stamp = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); };
+const stamp = () => { const d = nowParts(); const p = (n: number) => String(n).padStart(2, '0'); return d.y + '-' + p(d.mo) + '-' + p(d.d) + ' ' + p(d.h) + p(d.mi) + p(d.s); };
 
 export function prunePrev(dir: string, base: string, keep = KEEP_PREV) {
   const pdir = path.join(dir, PREV_DIR); if (!fs.existsSync(pdir)) return;

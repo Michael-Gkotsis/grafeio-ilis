@@ -369,6 +369,8 @@ export interface Settings {
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
   unitKind?: UnitKind;                   // Ίλη/Επιλαρχία (ΗΚΑΙ, προεπιλογή) ή Λόχος/Τάγμα (ΗΚΑΛ), unit.ts
   place: string;                         // Αυλώνας
+  tz?: string;                           // ζώνη ώρας εφαρμογής: κενό = Europe/Athens, 'system' = Windows, αλλιώς όνομα IANA (dates.ts)
+  clockFix?: number;                     // διόρθωση ρολογιού σε λεπτά (−720..720), 0 = καμία
   blocks: BlockDef[];                    // ΣΒΕΝ
   blocksSpen: BlockDef[];                // ΣΠΕΝ
   phases?: PhaseDef[];                   // δικά σου έντυπα υπηρεσιών (αντίγραφο της ΣΒΕΝ ή της ΣΠΕΝ στην αρχή)
