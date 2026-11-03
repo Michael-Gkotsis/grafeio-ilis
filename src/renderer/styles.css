@@ -1310,6 +1310,26 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .rep-conds{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin-top:4px;font-size:13px}
 .rep-conds .ui-seg{justify-self:start}
+.rep-addg{display:block;width:100%;margin-top:8px;padding:6px 10px;border:1px dashed var(--border);border-radius:var(--radius);background:transparent;color:var(--primary);font:inherit;font-size:13px;cursor:pointer}
+.rep-addg:hover{background:var(--hover)}
+.rep-groups{display:flex;flex-direction:column;margin-top:4px}
+.rep-g{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:8px 10px}
+.rep-g--open{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.rep-g__head{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
+.rep-g__head b{flex:none}
+.rep-g__sum{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-g__head small{flex:none;white-space:nowrap}
+.rep-g__acts{margin-left:auto;display:inline-flex;gap:2px;flex:none}
+.rep-g__b{border:0;background:transparent;color:var(--primary);font:inherit;font-size:12px;padding:2px 6px;border-radius:var(--radius);cursor:pointer;display:inline-flex;align-items:center}
+.rep-g__b:hover{background:var(--hover)}
+.rep-g__b svg{width:14px;height:14px}
+.rep-g .rep-conds{margin-top:8px}
+.rep-or{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted-fg);font-size:12px}
+.rep-or::before,.rep-or::after{content:"";flex:1;height:1px;background:var(--border)}
+.rep-or span{padding:1px 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);font-weight:600}
+.rep-gall{margin-top:10px}
+.rep-gb{flex:none;font-size:11px;font-weight:600;padding:0 6px;border-radius:999px;line-height:18px}
+.rep-gb--1{color:var(--info);background:var(--info-bg)}.rep-gb--2{color:var(--warn);background:var(--warn-bg)}.rep-gb--3{color:var(--ey);background:var(--ey-bg)}.rep-gb--4{color:var(--dn);background:var(--dn-bg)}
 .rep-outs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
 .rep-out{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);cursor:pointer}
 .rep-out:has(input:checked){border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
