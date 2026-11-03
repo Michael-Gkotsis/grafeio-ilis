@@ -1288,6 +1288,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   if (cmd.type === 'PUN') files.push({ fn: HK(), desc: 'Αιτείται στις Αποφάσεις Διοικητή (4. Ποινές)· ισχύει όταν εγκριθεί' });
   else if (t.cat === 'med' || t.cat === 'other') files.push({ fn: 'Ιατρικά', desc: rows(n) + ' · αφαιρείται μόνο του όταν λήξει' });
   else if (cmd.type === 'LEAVE' && leaveMode(cmd, lists) !== 'away') { if (leaveMode(cmd, lists) === 'kol') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + kolColName(leaveCol(cmd.kind, lists)) + ' +' + n }); }   // «Πουθενά»: δεν μπαίνει στην ΗΚΑΙ
+  else if (cmd.type === 'LEAVE' && leaveCol(cmd.kind, lists) === LEAVE_AWAY_NO_COL) files.push({ fn: HK(), desc: 'Απών στην εφαρμογή, σε καμία στήλη της ' + HK() + ' (εκεί μετρά στους παρόντες)' });   // (Michael, 3/11)
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs') files.push({ fn: HK(), desc: 'Κωλυόμενοι: ' + t.long + ' ' + rows(n) });

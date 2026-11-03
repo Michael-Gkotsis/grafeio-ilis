@@ -204,7 +204,6 @@ export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανον�
 export const LEAVE_NO_COL = '-';
 // '-a': «Πουθενά στην ΗΚΑΙ, απών στην εφαρμογή»: απών σαν τις στήλες απόντων, αλλά σε καμία στήλη της ΗΚΑΙ (εκεί μετρά παρών, Michael, 3/11)
 export const LEAVE_AWAY_NO_COL = '-a';
-export const noHkCol = (c: string | undefined): boolean => c === LEAVE_NO_COL || c === LEAVE_AWAY_NO_COL;
 export const LEAVE_COLS: [string, string][] = [
   ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string]),
   ...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]),
