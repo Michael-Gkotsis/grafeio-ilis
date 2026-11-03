@@ -9,6 +9,7 @@ import type { Report, RepTpl } from './reports';
 import type { Sig, SigForm } from './sigs';
 import type { Layout, LayoutForm } from './layout';
 import type { ImerSettings } from './imer';
+import type { HdDoc } from './hd';
 import type { XlLook } from './xlLook';
 
 // ---------------------------------------------------------------------------
@@ -383,6 +384,7 @@ export interface Settings {
   holidaysOff?: ISODate[];               // επίσημες αργίες που αφαίρεσες
   cadre: Record<string, number>;         // στελέχη ανά βαθμό για την ΗΚΑΙ
   signers: { sergeant: string; commander: string };
+  hdTpl?: { file: string; name: string };  // δικό σου πρότυπο Word για την Ημερήσια Διαταγή (αρχείο στον φάκελο προτύπων)
   imer?: ImerSettings;                     // Ημερολόγιο κωλυομένων: τίτλος, φύλλα, κωδικοί και «Μετρά ως» (shared/imer.ts)
   sigs?: Partial<Record<SigForm, Sig[]>>;  // υπογραφές ανά έντυπο, από αριστερά προς τα δεξιά (κενό = όπως το έντυπο), sigs.ts
   layout?: Partial<Record<LayoutForm, Layout>>;  // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία πάνω στο χαρτί, layout.ts
@@ -537,6 +539,7 @@ export interface AppState {
   backFix?: BackFix[];                   // διορθώσεις επιστροφής ανά άτομο, με λόγο (kv «backFix», shared/returns.ts)
   outNotes?: Record<ISODate, Record<number, string>>;   // παρατήρηση εξοδούχου/παραμένοντα τη μέρα: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)» (shared/weekend.ts)
   imer?: Record<ISODate, Record<number, string>>;   // κελιά του Ημερολογίου κωλυομένων που γράφτηκαν με το χέρι (shared/imer.ts): μόνο στο ημερολόγιο
+  hd?: Record<ISODate, HdDoc>;           // Ημερήσιες Διαταγές που βγήκαν, όπως βγήκαν (shared/hd.ts)
   lastExpire: ISODate | '';               // πότε γράφτηκαν τελευταία στο Ιστορικό όσα έληξαν (για τις μέρες που η εφαρμογή ήταν κλειστή)
 }
 // Σημείωση (Michael, 24/10: «γράφουμε χαρτάκια και τα ξεχνάμε»). Χωρίς pid και cid είναι γενική. rem: μέρα υπενθύμισης·
@@ -611,5 +614,5 @@ export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string>; lv?: boolean }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], dayPlan: {}, backFix: [], outNotes: {}, imer: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], dayPlan: {}, backFix: [], outNotes: {}, imer: {}, hd: {}, lastExpire: ''
 });

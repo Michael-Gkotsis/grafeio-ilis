@@ -9,6 +9,7 @@ import { useNowMin } from '../clock';
 import { LeaveEndDialog, StatusFixDialog } from './people';
 import { hasTimes, normTime, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
+import { HdTab } from './hd';
 import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
@@ -305,8 +306,8 @@ export function HkaiScreen() {
   const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
   const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
   return html`<div>
-    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }]}/></div>
-    ${tab === 'pun' ? html`<${RecordList} mode="pun"/>` : tab === 'leave' ? html`<${LeavesTab}/>` : tab === 'req' ? html`<${RequestsTab}/>` : html`<${HkaiMain}/>`}
+    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }, { value: 'hd', label: 'Ημερήσια Διαταγή' }]}/></div>
+    ${tab === 'pun' ? html`<${RecordList} mode="pun"/>` : tab === 'leave' ? html`<${LeavesTab}/>` : tab === 'req' ? html`<${RequestsTab}/>` : tab === 'hd' ? html`<${HdTab}/>` : html`<${HkaiMain}/>`}
   </div>`;
 }
 function RequestsTab() {

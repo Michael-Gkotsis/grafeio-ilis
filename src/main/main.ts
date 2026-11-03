@@ -22,7 +22,9 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, 
 import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
-import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
+import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
+import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
+import { cleanHd, hdPageHtml, hdTags, type HdDoc } from '../shared/hd';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
@@ -457,7 +459,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   if (prev === next) return;
   if (toExcel) kindsOf(prev, next).forEach(k => dirty.add(k));
   // τα έντυπα δεν χρησιμοποιούν δυνατότητες ούτε το «βγήκε στις…»: χωρίς αυτά δεν ξαναπαράγονται
-  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && k !== 'imer' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
+  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && k !== 'imer' && k !== 'hd' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
   if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
@@ -1110,6 +1112,35 @@ else {
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση της σελίδας χωρίς Word (παράθυρο εκτύπωσης των Windows)
+    ipcMain.handle('export:hd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
+      try {
+        const s = store.state; const g = sigsOf(s, 'hd', req.sigs); const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
+        if (req.print) {
+          const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+          const page = '<!doctype html><meta charset="utf-8"><title>Ημερήσια Διαταγή</title><style>@page{size:A4;margin:10mm}body{margin:0}</style>' + hdPageHtml(tags, 11);
+          await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page));
+          w.webContents.print({ silent: false, printBackground: false }, () => w.destroy());
+          return { ok: true, file: '', warnings: [] };
+        }
+        const own = s.settings.hdTpl?.file; let buf: Buffer | null = null; const warnings: string[] = [];
+        if (own) { try { buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own))); } catch { warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.'); } }
+        const data = await fillDocx(buf || await builtinTemplate(), tags);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' + req.date.slice(8, 10) + '-' + req.date.slice(5, 7) + '-' + req.date.slice(0, 4) + '.docx', data }]));
+        shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
+    ipcMain.handle('hd:tpl', async () => {
+      const res = await dialog.showOpenDialog(win!, { title: 'Διάλεξε το Word που θα γίνει πρότυπο της Ημερήσιας Διαταγής', filters: [{ name: 'Word', extensions: ['docx'] }], properties: ['openFile'] });
+      const src = res.canceled ? null : res.filePaths[0]; if (!src) return null;
+      try {
+        if (fs.statSync(src).size > TPL_MAX) return fail('Το αρχείο είναι πάνω από 5 MB.');
+        const buf = await fs.promises.readFile(src); const bad = await checkTemplate(buf); if (bad) return fail(bad);
+        const file = crypto.randomUUID() + '.docx'; await fs.promises.mkdir(TPL_DIR, { recursive: true }); await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
+        return { ok: true, file, name: path.basename(src) };
+      } catch (e) { return fail(e); }
+    });
     // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
     ipcMain.handle('export:imer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
       try {
@@ -1174,7 +1205,7 @@ else {
           const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
           const f = q.form;
           out = f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check' ? await produce(f, q.date, s2, q.sigs)
-            : await made(f === 'roster' ? 'rosterPreview' : f, q.date, s2, q.sigs);
+            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs);
         }
         // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
         const ls = (out.layout || []).filter((l, i, a) => a.findIndex(x => x.key === l.key) === i); const wb = await Workbook.open(out.data);
