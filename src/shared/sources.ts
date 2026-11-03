@@ -1192,7 +1192,7 @@ export function planPeopleNew(b: SourceBinding, s: AppState): Omit<FullPlan, 'ps
   return plan;
 }
 // ΘΑΛΑΜΟΙ: ένας πίνακας ανά θάλαμο («ΔΥΝΑΜΟΛΟΓΙΟ 1ου ΘΑΛΑΜΟΥ», επικεφαλίδες, άτομα), με κενή γραμμή ανάμεσα, όπως
-// το διαβάζει το roomBlocks. Οι στήλες που δεν κρατά η εφαρμογή (e-mail, νούμερο, ομάδα αίματος) μένουν κενές για τον λοχία.
+// το διαβάζει το roomBlocks. Το e-mail, το e-mail συγγενή και η ομάδα αίματος γράφονται από την καρτέλα· το νούμερο παραλλαγής μένει κενό για τον λοχία.
 // Οι θάλαμοι του νέου Δυναμολογίου: όσοι ορίστηκαν στις Ρυθμίσεις › Θάλαμοι και ουλαμοί (και οι άδειοι, για όποιον
 // μπει αργότερα) και όποιος άλλος έχει κάποιον
 export const roomList = (s: Pick<AppState, 'settings'>, people: Person[]) => [...new Set([...Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1),
@@ -1207,7 +1207,7 @@ export function roomSheetNew(people: Person[], rooms0?: number[]): { cells: { r:
     out.cells.push({ r, c: 0, v: 'ΔΥΝΑΜΟΛΟΓΙΟ ' + n + 'ου ΘΑΛΑΜΟΥ', st: 'title' }); out.merges.push({ r, c1: 0, c2: ROOM_HEAD.length - 1 }); r++;
     ROOM_HEAD.forEach((h, c) => out.cells.push({ r, c, v: h, st: 'head' })); r++;
     act.filter(p => p.room === n).forEach((p, i) => {
-      const v: WVal[] = [i + 1, rankTxt(p) || null, p.spec || null, p.last, p.first, p.father || null, p.asm ? num(p.asm) : null, p.phone ? num(p.phone) : null];
+      const v: WVal[] = [i + 1, rankTxt(p) || null, p.spec || null, p.last, p.first, p.father || null, p.asm ? num(p.asm) : null, p.phone ? num(p.phone) : null, p.email || null, p.relEmail || null, null, p.blood || null];
       for (let c = 0; c < ROOM_HEAD.length; c++) out.cells.push({ r, c, v: v[c] ?? null, st: 'data' });
       r++;
     });

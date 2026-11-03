@@ -13,7 +13,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
-import { normPersonal, PKEYS, type PKey } from './personal';
+import { normExtra, normPersonal, PKEYS, XKEYS, type PKey } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
 import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
@@ -109,7 +109,7 @@ export type Command =
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
   | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
-  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string }   // IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)
+  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string }   // IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
   // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
   // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
@@ -892,14 +892,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ): μόνο στο άτομο, δεν ακουμπούν Excel· ούτε τα νούμερα στο ιστορικό ενεργειών
       const keys = ['iban', 'amka', 'afm'] as const;
       const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } return q; };
-      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]);
+      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);
       if (c.cid) {
         const o = s.cadreList.find(x => x.id === c.cid); if (!o) throw new Error('Δεν βρέθηκε το στέλεχος');
         const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };
         return { state: { ...s, cadreList: s.cadreList.map(x => (x === o ? q : x)) }, text: 'Έξτρα στοιχεία: ' + rankTxt(o) + ' ' + o.last, files: [] };
       }
       const o = c.pid != null ? s.people.find(x => x.id === c.pid) : undefined; if (!o) throw new Error('Δεν βρέθηκε το άτομο');
-      const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };
+      const q = patch(o); for (const k of XKEYS) { if (c[k] === undefined) continue; const v = normExtra(k, c[k]); if (v) q[k] = v; else delete q[k]; } if (same(o, q)) return { state: s, text: '', files: [] };
       return { state: { ...s, people: s.people.map(x => (x === o ? q : x)) }, text: 'Έξτρα στοιχεία: ' + shortName(o), files: [] };
     }
     case 'setWeapons': {
@@ -1217,11 +1217,11 @@ function mergeRow(ex: Person, r: ImportRow): Person {
   const active = r.active ?? (ex.active || !auto);
   const next: Person = { ...ex, ...r, id: ex.id, active };
   delete next.added; if (!next.origin) delete next.origin;
-  for (const k of PKEYS) if (!next[k]) delete next[k];   // κενό κελί IBAN/ΑΜΚΑ/ΑΦΜ στο αρχείο = χωρίς
+  for (const k of [...PKEYS, ...XKEYS]) if (!next[k]) delete next[k];   // κενό κελί IBAN/ΑΜΚΑ/ΑΦΜ (ή e-mail, ομάδας αίματος) στο αρχείο = χωρίς
   if (active && r.notes === undefined && auto) next.notes = '';
   return next;
 }
-const newPerson = (r: ImportRow, id: number): Person => { const p: Person = { post: null, attached: false, notes: '', ...r, id, active: r.active ?? true }; if (!p.origin) delete p.origin; for (const k of PKEYS) if (!p[k]) delete p[k]; return p; };
+const newPerson = (r: ImportRow, id: number): Person => { const p: Person = { post: null, attached: false, notes: '', ...r, id, active: r.active ?? true }; if (!p.origin) delete p.origin; for (const k of [...PKEYS, ...XKEYS]) if (!p[k]) delete p[k]; return p; };
 function importPeople(s: AppState, rows: ImportRow[], source: string, deactivateMissing: boolean): Result {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
   const byName = new Map(s.people.map(p => [personKey(p), p]));
@@ -1253,7 +1253,7 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
 
 // Τι αλλάζει στον καθένα με μια εισαγωγή προσωπικού (για την προεπισκόπηση: «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»)
 const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['origin', 'προέλευση'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
-  ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη'], ['iban', 'IBAN'], ['amka', 'ΑΜΚΑ'], ['afm', 'ΑΦΜ']];
+  ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη'], ['iban', 'IBAN'], ['amka', 'ΑΜΚΑ'], ['afm', 'ΑΦΜ'], ['email', 'e-mail'], ['relEmail', 'e-mail συγγενή'], ['blood', 'ομάδα αίματος']];
 const rv = (v: unknown) => (v == null || v === '' ? '—' : v === true ? 'ναι' : v === false ? 'όχι' : String(v));
 export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who: string; what: string }[]; same: number } {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));

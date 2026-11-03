@@ -15,6 +15,7 @@ import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
 import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { withRoomExtras } from '../shared/roomExtra';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isCadreKind, sheetHost, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
@@ -568,6 +569,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
     if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
     const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists);
+    r.rows = withRoomExtras(r.rows, book.sheets, r.main);   // e-mail, e-mail συγγενή, ομάδα αίματος από το φύλλο ΘΑΛΑΜΟΙ
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
     // ποιος πίνακας διαβάστηκε: για να γράφονται εκεί οι διορθώσεις (Michael, 11/10)
     const det = b || (() => { const x = bestFor('people', book.sheets.filter(sh => sh.name === r.main)); return x ? { file, sheet: x.sheet, header: x.header, cols: x.cols, write: true } as SourceBinding : null; })();
