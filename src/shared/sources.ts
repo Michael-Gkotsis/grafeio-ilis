@@ -121,7 +121,7 @@ export const KINDS: KindDef[] = [
     fields: [F('am', 'ΑΜ', 'ΑΜ', /^ΑΜ$|^Α\s*\.\s*Μ$/), F('role', 'Θέση', 'ΘΕΣΗ', /^ΘΕΣΗ$/), F('hk', 'Γραμμή ΗΚΑΙ', 'ΓΡΑΜΜΗ ΗΚΑΙ', /^ΓΡΑΜΜΗ(\s+ΗΚΑ[ΙΛ])?$|^ΗΚΑ[ΙΛ]$/),
       F('active', 'Σε δύναμη', 'ΣΕ ΔΥΝΑΜΗ', /^ΣΕ ΔΥΝΑΜΗ$|^ΕΝΕΡΓΟΣ$/),
       // προαιρετικές: μπαίνουν στο τέλος του πίνακα μόνο όταν κάποιο στέλεχος έχει τιμή (timeCols)
-      F('monthMax', 'Όριο υπηρεσιών το μήνα', 'ΟΡΙΟ ΥΠΗΡΕΣΙΩΝ ΤΟ ΜΗΝΑ', /^ΟΡΙΟ ΥΠΗΡ/), F('weapon', 'Όπλο', 'ΟΠΛΟ', /^ΟΠΛΟ$/), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', /^ΤΥΠΟΣ ΟΠΛ/),
+      F('eid', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', /^ΕΙΔΙΚΟΤΗΤΑ$/), F('monthMax', 'Όριο υπηρεσιών το μήνα', 'ΟΡΙΟ ΥΠΗΡΕΣΙΩΝ ΤΟ ΜΗΝΑ', /^ΟΡΙΟ ΥΠΗΡ/), F('weapon', 'Όπλο', 'ΟΠΛΟ', /^ΟΠΛΟ$/), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', /^ΤΥΠΟΣ ΟΠΛ/),
       F('rack', 'Οπλοβάστης', 'ΟΠΛΟΒΑΣΤΗΣ', /^ΟΠΛΟΒΑΣΤ/), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', /^ΘΕΣΗ ΟΠΛΟΥ$/),
       F('iban', 'IBAN', 'IBAN', /^[ΙI][ΒB][ΑA][ΝN]$/), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', /^ΑΜΚΑ$/), F('afm', 'ΑΦΜ', 'ΑΦΜ', /^Α[ΦF]Μ$/)] },
   { id: 'cadreAbs', label: 'Καταστάσεις στελεχών', help: 'Στο ίδιο Excel με τα στελέχη: κατάσταση (άδεια, νοσοκομείο, υπηρεσία…), από, έως', title: 'ΚΑΤΑΣΤΑΣΕΙΣ', write: true,
@@ -144,7 +144,7 @@ export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !==
 export const sheetHost = (k: ListKind): ListKind | null => (inRoster(k) ? 'people' : k === 'cadreAbs' ? 'cadres' : null);
 // Το προσωπικό δεν έχει «ονοματεπώνυμο σε ένα κελί» (το Δυναμολόγιο τα έχει χωριστά) ούτε Α/Α που να μετράει
 const CADRE_PERSON = ['aa', 'rank', 'origin', 'spec', 'last', 'first', 'phone'];
-export const fieldsOf = (k: ListKind): FieldDef[] => (isCadreKind(k) ? [...PERSON_FIELDS.filter(f => CADRE_PERSON.includes(f.k) && (k === 'cadres' || f.k !== 'phone' && f.k !== 'origin')), ...KIND[k].fields]
+export const fieldsOf = (k: ListKind): FieldDef[] => (isCadreKind(k) ? [...PERSON_FIELDS.filter(f => CADRE_PERSON.includes(f.k) && (k === 'cadres' || f.k !== 'phone' && f.k !== 'origin')).map(f => (f.k === 'spec' ? { ...f, re: /^Ο\s*[/\-]\s*Σ$/ } : f)), ...KIND[k].fields]   // στα στελέχη η «ΕΙΔΙΚΟΤΗΤΑ» είναι δικό της πεδίο, όχι Ο/Σ
   : [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields]);
 export const kindOfType = (t: TypeKey): StatusKind | null => (STATUS_KINDS.find(k => KIND[k].types!.includes(t)) || null);
 

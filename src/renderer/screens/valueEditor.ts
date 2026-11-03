@@ -7,6 +7,7 @@ import { Select } from '../select';
 import { useStore } from '../store';
 import { TimeField } from '../common';
 import { normTime } from '../../shared/hours';
+import { DAY_CHOICES } from '../../shared/dates';
 import { HK } from '../../shared/unit';
 import { hkMin, outMinOn } from '../../shared/rules';
 import { AT_CUSTOM, FMTS, exprText, filterChoices, filterText, fmtOf, hasFilter, hhmm, manOf, metricGroups, metricOf, newRow, rowOn, rowTag, tagId, tagText, tagsOf, type TAlign, type VFilter, type VRow, type VTerm } from '../../shared/values';
@@ -83,6 +84,10 @@ function RowEditor({ s, row, n, set, del, move, last, tid, bad }: P) {
     }}/>ως ποσοστό του…</label>
     ${pct && html`<div className="vt-den"><${Terms} s=${s} terms=${row.percentOf} min=${1} set=${(percentOf: VTerm[]) => set({ ...row, percentOf })}/></div>`}
     <small className="vt-sum muted">${row.expr.length ? exprText(s, row.expr) + (pct ? '  ÷  ' + exprText(s, row.percentOf) : '') : ''}</small>`}
+    ${!man && html`<div className="vt-when" style=${{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <label className="field__label" htmlFor=${tid + '-day'}>Μέρα</label><${Select} id=${tid + '-day'} className="ui-select" value=${row.day || ''} onChange=${(e: P) => { const { day: _d, ...rest } = row; set(e.target.value ? { ...rest, day: e.target.value } : rest); }}>${DAY_CHOICES.map(x => html`<option key=${x.value} value=${x.value}>${x.label}</option>`)}<//>
+      <label className="field__label" htmlFor=${tid + '-time'}>Ώρα</label><input id=${tid + '-time'} className="ui-input" style=${{ width: '90px' }} placeholder="όπως το έντυπο" value=${row.time ?? ''} onChange=${(e: P) => { const v = e.target.value.replace(/[^0-9:]/g, '').slice(0, 5); const { time: _t, ...rest } = row; set(v ? { ...rest, time: v } : rest); }}/>
+    </div>`}
     <div className="vt-tag">
       <label className="field__label" htmlFor=${tid}>Ετικέτα στο Excel</label>
       <input id=${tid} className=${cx('ui-input vt-tag__in', bad && 'is-bad')} aria-invalid=${bad ? 'true' : undefined} placeholder=${tagText(row.label) || 'ΟΝΟΜΑ'} value=${row.tag ?? ''}

@@ -18,7 +18,7 @@ import { MAIN, bandsOf, keepBands } from '../../shared/repBands';
 import { BandsPanel } from './repBands';
 import { dropSigMoves, type Layout } from '../../shared/layout';
 import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
-import { addDays, dayName, dm } from '../../shared/dates';
+import { DAY_CHOICES, addDays, dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
 import { blocksOf, shortName, type AppState, type Person, type Status } from '../../shared/domain';
@@ -482,10 +482,10 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   // έτοιμο έντυπο: στήλες και είδος είναι έτοιμα, οπότε ανοίγει κατευθείαν στο «Ποιοι μπαίνουν» (τα βήματα 2-3 μένουν από πάνω)
   const [quick, setQuick] = useState(false);
   // blank: το «Κενός πίνακας» του βήματος 1, ίδιο αποτέλεσμα με το «Κενός πίνακας» του βήματος 2 (setKind), και πάει κατευθείαν στο βήμα 3
-  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false, pre?: { vals?: ValueTable[]; sort?: Report['sort']; bands?: Report['bands'] }) => {
+  const startBuild = (o: BuildOpts, name: string, jump = false, blank = false, pre?: { vals?: ValueTable[]; sort?: Report['sort']; bands?: Report['bands']; kind?: Report['kind']; more?: Partial<RepTable>[] }) => {
     const b: BuildOpts = JSON.parse(JSON.stringify(o)); if (blank) { b.cols = colsForKind(b.cols, 'blank'); b.nrows = BLANK_ROWS; }
     setMode('build'); setTpl(null); setInsp(null); setBuild(b); setNote('');
-    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more), ...(pre?.vals ? { vals: JSON.parse(JSON.stringify(pre.vals)) } : {}), ...(pre?.sort ? { sort: pre.sort } : {}), ...(pre?.bands ? { bands: JSON.parse(JSON.stringify(pre.bands)) } : {}), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
+    upd({ name: r.name || name, title: undefined, cells: [], more: syncMore(undefined, b.more)?.map((t, i) => ({ ...t, ...(pre?.more?.[i] || {}) })), ...(pre?.kind ? { kind: pre.kind } : {}), ...(pre?.vals ? { vals: JSON.parse(JSON.stringify(pre.vals)) } : {}), ...(pre?.sort ? { sort: pre.sort } : {}), ...(pre?.bands ? { bands: JSON.parse(JSON.stringify(pre.bands)) } : {}), ...(blank ? { kind: 'blank' as const, ...pickForKind('people', defaultPick(), 'name', 'blank'), split: 'none' as const } : r.kind === 'blank' ? { kind: 'people' as const, ...pickForKind('blank', r.pick, r.sort, 'people') } : {}) });
     setTi(0); setQuick(jump); setStep(blank ? 3 : jump ? 4 : 2);
   };
   useEffect(() => {
@@ -822,6 +822,10 @@ function LayEditor({ lay, set, n, noEven }: P) {
   </div>`;
 }
 // «Χωρίς γραμμή επικεφαλίδων» (Michael, 29/10): ο πίνακας βγαίνει μόνο με τις γραμμές των ατόμων, χωρίς τη γραμμή Α/Α, ΒΑΘΜΟΣ…
+// «Για ποια μέρα» ενός πίνακα: μικρή λίστα (shared/dates.ts dayFor)
+function DayField({ value, set, n }: P) {
+  return html`<div className="rep-opts"><label className="field__label" htmlFor=${'tday-' + n}>Για ποια μέρα (πίνακας ${n})</label><${Select} id=${'tday-' + n} className="ui-select" value=${value || ''} onChange=${(e: any) => set(e.target.value || undefined)}>${DAY_CHOICES.map(x => html`<option key=${x.value} value=${x.value}>${x.label}</option>`)}<//></div>`;
+}
 function NoHead({ on, set, n }: P) {
   return html`<label className="ui-checkrow" data-tip="Ο πίνακας βγαίνει χωρίς τη γραμμή με τις επικεφαλίδες (Α/Α, ΒΑΘΜΟΣ…), μόνο με τις γραμμές των ατόμων. Οι στήλες μένουν όπως τις έφτιαξες."><input type="checkbox" className="ui-check" aria-label=${'Χωρίς γραμμή επικεφαλίδων στον πίνακα ' + n} checked=${!!on} onChange=${(e: any) => set(e.target.checked)}/>Χωρίς γραμμή επικεφαλίδων</label>`;
 }
@@ -907,11 +911,13 @@ function Builder({ fold, o, setO, kind, signers, setSigners, onExcel, r, upd, se
       ${valEd ? valEd : bt ? html`<${TableHead} t=${bt} n=${ti + 1} kind=${bt.kind} title=${bt.title} ta=${bt.ta} setTa=${(ta?: TAlign) => set({ more: more.map(x => (x.id === bt.id ? noTa(x, ta) : x)) })} setKind=${(k: RepKind) => kindOf(bt.id, k)} setTitle=${(title: string) => { setT(bt.id, { title }); upd({ more: (r.more || []).map((x: RepTable) => (x.id === bt.id ? { ...x, title } : x)) }); }} onDel=${() => delTable(bt.id)}/>
         <${ColsEditor} kind=${bt.kind} cols=${bt.cols} stNew=${(r.more || []).find((t: RepTable) => t.id === bt.id)?.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => setT(bt.id, bt.kind === 'blank' ? { cols, grid: regrid(bt.grid, bt.cols, cols, from) } : { cols })}/>
         ${bt.kind === 'blank' && html`<${BlankGrid} key=${bt.id} o=${bt} set=${(x: Partial<BuildTable>) => setT(bt.id, x)} r=${r} pk=${(r.more || []).find((t: RepTable) => t.id === bt.id)?.pick} onRows=${(x: number) => upd({ more: (r.more || []).map((t: RepTable) => (t.id === bt.id ? { ...t, pick: { ...t.pick, mode: 'all', n: x } } : t)) })} onSrc=${(src: BlankSrc | undefined, n: number) => upd({ more: (r.more || []).map((t: RepTable) => { if (t.id !== bt.id) return t; const { src: _s, ...rest } = t; return { ...rest, ...(src ? { src } : {}), pick: { from: 'all', mode: 'all', n }, sort: 'pick' }; }) })}/>`}
+        <${DayField} n=${ti + 1} value=${bt.tday} set=${(tday?: string) => { setT(bt.id, { tday }); upd({ more: (r.more || []).map((t: RepTable) => (t.id === bt.id ? { ...t, tday } : t)) }); }}/>
         ${layFold(bt.lay, bt.nohead, html`<${LayEditor} n=${ti + 1} lay=${bt.lay} set=${(lay?: TabLay) => setT(bt.id, { lay })}/><${NoHead} n=${ti + 1} on=${bt.nohead} set=${(on: boolean) => noHeadT(bt.id, on)}/>`)}`
         : o.nopeople && !more.length && hasVals(r) ? html`<p className="note" style=${{ margin: 0 }}>Χωρίς πίνακα ατόμων: το έντυπο έχει μόνο τους πίνακες τιμών.</p>`
         : html`<${TableHead} n=${1} kind=${kind} title=${o.t1 || ''} ta=${o.ta1} setTa=${setTa1} setTitle=${setT1}/>
         <${ColsEditor} kind=${kind} cols=${o.cols} stNew=${r.pick.stNew} setCols=${(cols: BuildCol[], from?: number[]) => set(kind === 'blank' ? { cols, grid: regrid(o.grid, o.cols, cols, from) } : { cols })}/>
         ${kind === 'blank' && html`<${BlankGrid} o=${o} set=${set} r=${r} pk=${r.pick} onRows=${(x: number) => upd({ pick: { ...r.pick, mode: 'all', n: x } })} onSrc=${(src: BlankSrc | undefined, n: number) => upd({ src, pick: { from: 'all', mode: 'all', n }, sort: 'pick' })}/>`}
+        <${DayField} n=${1} value=${o.tday} set=${(tday?: string) => { set({ tday }); upd({ tday }); }}/>
         ${layFold(o.lay, o.nohead, html`<${LayEditor} n=${1} lay=${o.lay} set=${(lay?: TabLay) => set({ lay })}/><${NoHead} n=${1} on=${o.nohead} set=${noHead1}/>`)}`}
       </div>
     </section>
@@ -1073,11 +1079,13 @@ function Mapping({ r, upd, setR, insp, tpl, picking, setPicking, view, setView, 
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head:' + m.id} onClick=${() => setPicking(picking === '#head:' + m.id ? null : '#head:' + m.id)}>Άλλη γραμμή…<//></div>
       <${TableHead} t=${m} n=${ti + 1} kind=${m.kind} noBlank=${true} setKind=${(k: RepKind) => subKind(m.id, k)} onDel=${() => delMore(m.id)}/>
       <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${m.kind} headers=${si?.headers} cols=${m.cols} stNew=${m.pick?.stNew} setCols=${(cols: RepCol[]) => setMore(m.id, { cols })}/></div>
+      <${DayField} n=${ti + 1} value=${m.tday} set=${(tday?: string) => setMore(m.id, { tday })}/>
       ${m.nohead && html`<${NoHead} n=${ti + 1} on=${true} set=${(on: boolean) => setMore(m.id, { nohead: on ? true : undefined })}/>`}`
     : html`<div className="rep-opts">
         <span>Επικεφαλίδες στη γραμμή <b>${insp.head}</b>${insp.guessed ? ' (βρέθηκε μόνη της)' : ''} · ${insp.prepared > 1 ? insp.prepared + ' έτοιμες γραμμές' : 'οι γραμμές μπαίνουν όσες χρειάζονται'}</span>
         <${Button} size="sm" variant="outline" aria-pressed=${picking === '#head'} onClick=${() => setPicking(picking === '#head' ? null : '#head')}>Άλλη γραμμή…<//></div>
       <div><span className="field__label">Ποια στήλη παίρνει τι</span><${ColMap} kind=${r.kind} headers=${insp.headers} cols=${r.cols} stNew=${r.pick.stNew} setCols=${(cols: RepCol[]) => upd({ cols })}/></div>
+      <${DayField} n=${1} value=${r.tday} set=${(tday?: string) => upd({ tday })}/>
       ${r.nohead && html`<${NoHead} n=${1} on=${true} set=${(on: boolean) => upd({ nohead: on ? true : undefined })}/>`}`}
     <div><span className="field__label">Στοιχεία σε κελιά (κεφαλίδα, ημερομηνία, υπογραφές…)</span>
       <ul className="rep-cells">
