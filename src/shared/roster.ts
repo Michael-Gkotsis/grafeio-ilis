@@ -4,6 +4,7 @@ import { norm, normGreek } from './text';
 import { OUT_NOTE } from './domain';
 import type { ImportRow } from './commands';
 import { withOrigin, type UserLists } from './ranks';
+import { PKEYS, personalFromCell, type PKey } from './personal';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
 export interface RawSheet { name: string; rows: CellValue[][]; fx?: Set<string>; countif?: string[] }   // fx: κελιά με τύπο («γραμμή:στήλη» από 0)· countif: κελιά με COUNTIF σκέτου γράμματος (π.χ. «L3»)
@@ -22,11 +23,13 @@ export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
 export const isDnYes = (v: string) => { const t = normGreek(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|ΝΟ|Ν\/Α|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
 export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
-export type Field = 'rank' | 'origin' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn';
+export type Field = 'rank' | 'origin' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn' | PKey;
 export const HEADERS: [Field, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
-  ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD]
+  ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD],
+  // IBAN, ΑΜΚΑ, ΑΦΜ (3/11): δεχόμαστε και λατινικά και ελληνικά γράμματα στην επικεφαλίδα
+  ['iban', /^[ΙI]BAN$/], ['amka', /^[ΑA][ΜM][ΚK][ΑA]$/], ['afm', /^[ΑA][ΦF][ΜM]$/]
 ];
 const txt = (v: CellValue): string => {
   if (v == null) return '';
@@ -68,10 +71,11 @@ export function isPersonRow(last: string, first: string, father: string): boolea
   return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(F);
 }
 
-interface Rec { rank: string; origin: string | null; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null }
+type Rec = { rank: string; origin: string | null; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null } & { [K in PKey]: string | null }
 function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
   const h = headerOf(sheet); if (!h) return [];
   const get = (row: CellValue[], f: Field) => (h.cols[f] == null ? '' : txt(row[h.cols[f]!]));
+  const pv = (row: CellValue[], k: PKey) => (h.cols[k] == null ? null : personalFromCell(k, get(row, k)));   // null = ο πίνακας δεν έχει τη στήλη
   const out: Rec[] = [];
   for (const row of sheet.rows.slice(h.row + 1)) {
     if (!row) continue;
@@ -84,7 +88,8 @@ function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
       rank: normGreek(get(row, 'rank')), origin: h.cols.origin == null ? null : normGreek(get(row, 'origin')), spec: normGreek(get(row, 'spec')), last: norm(last), first: norm(first), father: norm(get(row, 'father')),
       asm: get(row, 'asm').replace(/\s/g, ''), phone: get(row, 'phone').replace(/\s/g, ''),
       room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: normGreek(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
-      dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn'))
+      dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn')),
+      iban: pv(row, 'iban'), amka: pv(row, 'amka'), afm: pv(row, 'afm')
     });
   }
   return out;
@@ -175,6 +180,8 @@ function parse(sheets: RawSheet[], ov: RosterOverrides, lists?: UserLists): Rost
     };
     // Πόστο, προσκολλημένος και σημειώσεις μόνο όταν το αρχείο τα γράφει: αλλιώς μένει ό,τι έχει η εφαρμογή
     // (π.χ. πόστα από άλλο αρχείο). Όσοι λείπουν από το φύλλο ΠΟΣΤΑ χάνουν το πόστο τους.
+    // IBAN, ΑΜΚΑ, ΑΦΜ: μόνο όσα έχουν στήλη στο αρχείο (κενό κελί = χωρίς)
+    for (const k of PKEYS) if (r[k] != null) row[k] = r[k]!;
     if (postOf) row.post = postOf(r, all);
     if (off) row.notes = OUT_NOTE + (inactive.get(k) ? ': ' + inactive.get(k) : '');
     // με φύλλο ΕΚΤΟΣ στο αρχείο ξέρουμε ποιος είναι σε δύναμη· χωρίς αυτό αποφασίζει η εισαγωγή (commands.ts)

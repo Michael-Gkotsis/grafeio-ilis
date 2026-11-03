@@ -14,6 +14,7 @@ import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
 import { hkRowNames } from './unit';
+import { PKEYS, personalFromCell, type PKey } from './personal';
 export { OUT_NOTE };
 
 export type ListKind = 'people' | 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn' | 'posts' | 'outside' | 'caps' | 'duties';
@@ -81,9 +82,11 @@ export interface KindDef {
   types?: TypeKey[]; title: string; write: boolean;
 }
 export const KINDS: KindDef[] = [
-  { id: 'people', label: 'Προσωπικό (Δυναμολόγιο)', help: 'Βαθμός, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος, δικαίωμα ΔΝ', title: 'ΣΥΝΟΛΙΚΟ', write: false,
+  { id: 'people', label: 'Προσωπικό (Δυναμολόγιο)', help: 'Βαθμός, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι., ρόλος, δικαίωμα ΔΝ, IBAN, ΑΜΚΑ, ΑΦΜ', title: 'ΣΥΝΟΛΙΚΟ', write: false,
     sheetRe: /ΣΥΝΟΛΙΚΟ|ΔΥΝΑΜΟΛΟΓΙΟ/, fields: [F('si', 'Σ.Ι.', 'Σ.Ι', /^Σ\s*\.?\s*Ι\.?$/), F('remarks', 'Παρατηρήσεις (ρόλος)', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/),
-      F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', DN_HEAD)] },
+      F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', DN_HEAD),
+      // IBAN, ΑΜΚΑ, ΑΦΜ (3/11): προαιρετικές στήλες· όταν λείπουν και κάποιος έχει τιμή, η εφαρμογή τις προσθέτει στο τέλος (timeCols)
+      F('iban', 'IBAN', 'IBAN', /^[ΙI][ΒB][ΑA][ΝN]$/), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', /^ΑΜΚΑ$/), F('afm', 'ΑΦΜ', 'ΑΦΜ', /^Α[ΦF]Μ$/)] },
   { id: 'punish', label: 'Ποινές (τιμωρημένοι)', help: 'Από, έως, είδος ποινής', title: 'ΤΙΜΩΡΗΜΕΝΟΙ', write: true, types: ['PUN'],
     sheetRe: /ΤΙΜΩΡ|ΠΟΙΝ/, titleRe: /ΤΙΜΩΡ|ΠΟΙΝ/,
     fields: [FROM(), TO(), F('kind', 'Είδος ποινής', 'ΕΙΔΟΣ ΠΟΙΝΗΣ', /ΕΙΔΟΣ ΠΟΙΝΗΣ|^ΠΟΙΝΗ$/), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', /^ΗΜΕΡΕΣ$/),
@@ -784,8 +787,10 @@ export function timeCols(kind: ListKind, sheet: RawSheet | null, b: SourceBindin
   const timed = isStatusKind(kind) && TIME_KINDS.includes(kind);
   const want = timed ? wanted(kind as StatusKind, s, b, today) : [];
   // ώρες: όταν κάποια εγγραφή έχει ώρα· κατεύθυνση (μόνο στις άδειες): όταν κάποια άδεια έχει κατεύθυνση
-  const need = [...(want.some(x => x.fromTime || (x.toTime && !x.open)) ? TIME_FIELDS.filter(k => b.cols[k] == null) : []), ...(kind === 'leave' && b.cols.dest == null && want.some(x => x.dest) ? ['dest'] : [])];
-  if (!timed || !need.length) return { b, head: [] };
+  // Δυναμολόγιο: IBAN, ΑΜΚΑ, ΑΦΜ όταν κάποιος σε δύναμη έχει τιμή και ο πίνακας δεν έχει τη στήλη
+  const need = [...(want.some(x => x.fromTime || (x.toTime && !x.open)) ? TIME_FIELDS.filter(k => b.cols[k] == null) : []), ...(kind === 'leave' && b.cols.dest == null && want.some(x => x.dest) ? ['dest'] : []),
+    ...(kind === 'people' ? PKEYS.filter(k => b.cols[k] == null && s.people.some(p => p.active && p[k])) : [])];
+  if (!(timed || kind === 'people') || !need.length) return { b, head: [] };
   const rows = sheet?.rows || [];
   const fresh = !(rows[b.header] || []).some(v => cellText(v));
   const scan = sheet && !fresh ? tableRows(sheet, b.header, b.cols) : null;
@@ -845,7 +850,7 @@ export function listColumns(kind: ListKind, sheet: RawSheet, b: SourceBinding, l
 
 // Προεπιλεγμένη διάταξη για καινούργιο πίνακα (όπως τα φύλλα του Δυναμολογίου)
 export function defaultBinding(kind: ListKind, file: string, sheet = KIND[kind].title.slice(0, 31)): SourceBinding {
-  const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days' && f.k !== 'dest').map(f => f.k)];   // η κατεύθυνση μπαίνει αργότερα, μόνο όταν κάποια άδεια έχει (timeCols)
+  const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days' && f.k !== 'dest' && !PKEYS.includes(f.k as PKey)).map(f => f.k)];   // η κατεύθυνση και τα IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν αργότερα, μόνο όταν υπάρχουν τιμές (timeCols)
   return { file, sheet, header: 1, cols: Object.fromEntries(keys.map((k, i) => [k, i])), write: isStatusKind(kind), scope: 'active' };
 }
 // Τι λείπει από μια αντιστοίχιση για να δουλέψει
@@ -947,7 +952,7 @@ export const hkaiMapOf = (cells?: Partial<HkaiMap>): HkaiMap => ({
 // Γραμμές δεν σβήνονται: το Δυναμολόγιο μένει η λίστα του λοχία. Μόνη εξαίρεση ο «Νέος στρατιώτης» της εφαρμογής:
 // μπαίνει σε νέα γραμμή κάτω από τον τελευταίο (added = οι γραμμές που έβαλε η εφαρμογή), και αν αναιρεθεί, η γραμμή
 // του αδειάζει.
-export const PEOPLE_SYNC = ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'remarks', 'dn'];
+export const PEOPLE_SYNC = ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'remarks', 'dn', ...PKEYS];
 export type PersonSnap = Record<string, string>;
 // Χωρίς στήλη ΔΝ, το δικαίωμα ΔΝ γράφεται ως λέξη στις παρατηρήσεις (όπως το διαβάζει η εισαγωγή)
 const remarksOf = (role: string, dn: boolean, inRemarks: boolean) => [stripDn(role), inRemarks && dn ? 'ΔΝ' : ''].filter(Boolean).join(' ');
@@ -955,7 +960,7 @@ const remarksOf = (role: string, dn: boolean, inRemarks: boolean) => [stripDn(ro
 export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   rank: rankTxt(p), origin: p.origin || '', spec: p.spec || '', last: p.last || '', first: p.first || '', father: p.father || '', asm: p.asm || '',
   phone: p.phone || '', room: p.room == null ? '' : String(p.room), si: p.si || '', remarks: remarksOf(p.role || '', !!p.dn, !!b && b.cols.dn == null),
-  dn: p.dn ? 'ΝΑΙ' : ''
+  dn: p.dn ? 'ΝΑΙ' : '', iban: p.iban || '', amka: p.amka || '', afm: p.afm || ''
 });
 export const snapPeople = (people: Person[]): Record<number, PersonSnap> => Object.fromEntries(people.map(p => [p.id, personVals(p)]));
 // Γραμμές που μπαίνουν σε ένα φύλλο: after/tpl είναι γραμμές του φύλλου όπως ήταν (από 0), με αύξουσα σειρά. steps: πώς
@@ -1031,8 +1036,8 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   for (const p of s.people) {
     const old = snap[p.id]; if (!old) continue;
     const cur = personVals(p, b);
-    // κενό δεν σβήνει κελί, εκτός από το ΔΝ και τις παρατηρήσεις (εκεί το «όχι» είναι κενό)
-    const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || ((k === 'dn' || k === 'remarks' || k === 'origin') && p.active)));
+    // κενό δεν σβήνει κελί, εκτός από το ΔΝ, τις παρατηρήσεις (εκεί το «όχι» είναι κενό) και τα IBAN/ΑΜΚΑ/ΑΦΜ (που τα έσβησες στην καρτέλα)
+    const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || (PKEYS.includes(k as PKey) || ((k === 'dn' || k === 'remarks' || k === 'origin') && p.active))));
     if (!diff.length) continue;
     const row = find(old) || find(cur);
     if (!row) { plan.notFound.push(fullName(p)); continue; }
@@ -1249,7 +1254,7 @@ export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[
       if (k === 'rank' && b.cols.origin != null) { snap[k] = rankTxt({ rank: normGreek(x), origin: normGreek(t('origin') || '') }); continue; }
       if (!p.active && (k === 'remarks' || k === 'dn')) { snap[k] = cur[k]; continue; }   // εκτός δύναμης: ο ρόλος δεν περνά στην εφαρμογή
       snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '')
-        : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null)
+        : PKEYS.includes(k as PKey) ? personalFromCell(k as PKey, x) : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null)
         : k === 'rank' || k === 'spec' || k === 'si' ? normGreek(x) : norm(x);   // όπως τα διαβάζει το Δυναμολόγιο (roster.ts)
     }
     out[m.pid] = snap;
@@ -1812,7 +1817,7 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
 // Ποια είδη αφορά μια αλλαγή στα άτομα (P2): μόνο όσα έχουν στήλη για κάποιο πεδίο που άλλαξε (και τα πεδία που
 // διαβάζει το ίδιο το είδος: πόστο, εκτός δύναμης, Σ.Ι., ρόλος…). Νέο ή σβησμένο άτομο αφορά όλα.
 const KIND_PERSON: Partial<Record<ListKind, string[]>> = {
-  people: ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'role', 'dn', 'added', 'active'],
+  people: ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'role', 'dn', 'added', 'active', ...PKEYS],
   posts: ['post', 'active'], outside: ['active', 'notes'], caps: ['active']
 };
 export function kindsForPeople(prev: Person[], next: Person[], sources: Partial<Record<ListKind, SourceBinding>>): Set<ListKind> {

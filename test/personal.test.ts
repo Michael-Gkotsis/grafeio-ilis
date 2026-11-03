@@ -1,4 +1,4 @@
-// Έξτρα στοιχεία (Michael, 3/11): IBAN, ΑΜΚΑ, ΑΦΜ μόνο στην καρτέλα οπλίτη και στελέχους
+// Έξτρα στοιχεία (Michael, 3/11): IBAN, ΑΜΚΑ, ΑΦΜ στην καρτέλα οπλίτη και στελέχους (στο Excel: personal-excel.test.ts)
 import { describe, expect, it } from 'vitest';
 import { apply, type Command } from '../src/shared/commands';
 import type { AppState } from '../src/shared/domain';
@@ -66,7 +66,7 @@ describe('Έξτρα στοιχεία: αποθήκευση ανά άτομο', 
     const s = run(fakeState(2), { t: 'setPersonal', pid: 1, afm: '123456789' });
     expect(apply(s, { t: 'setPersonal', pid: 1, afm: '123 456 789' }, ctx).text).toBe('');
   });
-  it('τα νούμερα δεν μπαίνουν στο κείμενο της ενέργειας ούτε σε αρχείο Excel', () => {
+  it('τα νούμερα δεν μπαίνουν στο κείμενο της ενέργειας (το Δυναμολόγιο γράφεται χωριστά, από την αλλαγή στα άτομα)', () => {
     const r = apply(fakeState(2), { t: 'setPersonal', pid: 1, iban: IBAN, afm: '123456789' }, ctx);
     expect(r.text).not.toMatch(/GR16|123456789/);
     expect(r.files).toEqual([]);
