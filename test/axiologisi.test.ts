@@ -15,7 +15,7 @@ const base = () => { const s = fakeState(8); s.people = s.people.map(p => ({ ...
 describe('κωδικός μέρας', () => {
   it('κωδικοί ανά είδος', () => {
     const s = base(); s.statuses = [st(1, 'LEAVE'), st(2, 'SICK'), st(3, 'EY'), st(4, 'EA'), st(5, 'NOS'), st(6, 'STEP'), st(7, 'HON')];
-    expect([1, 2, 3, 4, 5, 6, 7, 8].map(i => code(s, i))).toEqual(['Κ.Α', 'ΑΝ.ΑΔ', 'Ε.Υ', 'Ε.Α', 'ΝΟΣ', 'ΣΤΕΠ', 'ΤΙΜΗΤΙΚΗ', '']);
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(i => code(s, i))).toEqual(['Κ.Α', 'ΑΝ.ΑΔ', 'Ε.Υ', 'Ε.Α', 'ΝΟΣ', 'ΣΤΕΠ', 'Τ.Α', '']);
   });
   it('προτεραιότητα: άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό, ΑΟΠΛΟΣ', () => {
     const s = base(); s.people[0].si = 'Ι4'; s.people[1].si = 'Ι4'; s.people[2].si = 'Ι4';
