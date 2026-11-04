@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
+import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, groupKey, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { seatMap, postsOf } from './rules';
 import { rankTxt } from './ranks';
@@ -40,7 +40,7 @@ export const rankName = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' 
 export const dutyName = (p: Person) => (p.cid ? rankTxt(p) + ' ' : '') + fullName(p);   // στέλεχος σε θέση (Michael, 26/10): με βαθμό
 export const lyLine = (p: Person) => rankName(p) + (p.phone ? ', ΤΗΛ: ' + p.phone : '') + (p.weapon ? ', ΟΠΛΟ: ' + p.weapon : '');
 
-export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
+export interface FrouraLayout { cells: Map<string, string[]>; extra: { label: string; k: string; g: string; block: string; name: string; hours: string; slots: string[] | null }[]; foreign: string[] }
 // Τι γράφεται πού: θέσεις με δικό τους κελί, και όσες δεν έχουν (π.χ. νέα υπηρεσία «Πύλη») σε γραμμές από κάτω
 // pos: τα κελιά των θέσεων στο template που βγαίνει (tplmap.ts)· χωρίς αυτά, όπως στο template της εφαρμογής (οθόνη)
 export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(s), pos: Record<string, string> = frouraForm(s, phase).pos): FrouraLayout {
@@ -49,11 +49,13 @@ export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(
   const posts = postsOf(s.settings);
   for (const x of posts) {
     if (x.k === 'ly' || x.k === 'dy') continue;
-    const person = g[x.k] ? pm.get(g[x.k]) : undefined; const at = pos[x.k];
+    const person = g[x.k] ? pm.get(g[x.k]) : undefined;
+    // ζεύγος (Michael, 4/11): το άτομο β γράφεται στο κελί του α, το ένα κάτω από το άλλο
+    const at = pos[x.k] ?? (() => { const gk = groupKey(x); const y = posts.find(z => z.block === x.block && groupKey(z) === gk && pos[z.k]); return y ? pos[y.k] : undefined; })();
     if (at) { if (!cells.has(at)) cells.set(at, []); if (person) cells.get(at)!.push(dutyName(person)); continue; }
     const same = posts.filter(y => y.block === x.block); const b = blocksOf(s.settings, phase).find(y => y.id === x.block);
     const label = norm(b ? b.name : x.label) + (same.length > 1 ? ' ' + (same.indexOf(x) + 1) + 'ο' : '');
-    extra.push({ label, k: x.k, block: x.block, name: person ? dutyName(person) : '', hours: x.hours, slots: x.slots });
+    extra.push({ label, k: x.k, g: groupKey(x), block: x.block, name: person ? dutyName(person) : '', hours: x.hours, slots: x.slots });
   }
   const foreign = Object.keys(g).filter(k => k !== 'ly' && k !== 'dy' && !posts.some(x => x.k === k) && pm.get(g[k]));
   return { cells, extra, foreign };
@@ -65,13 +67,17 @@ export function frouraLayout(s: AppState, date: ISODate, phase: Phase = phaseOf(
 export interface FrouraTable { title: string; hours: boolean; rows: { n: string; name: string; hours: string; shifts?: string[] }[] }
 const realHours = (h: string) => !!h.trim() && norm(h) !== 'ΗΜΕΡΑ';
 export function frouraTables(s: AppState, lay: FrouraLayout, phase: Phase = phaseOf(s)): FrouraTable[] {
-  const out = new Map<string, FrouraTable>();
+  const out = new Map<string, FrouraTable>(); const rowOf = new Map<string, FrouraTable['rows'][number]>();
   for (const x of lay.extra) {
     let t = out.get(x.block);
     if (!t) { const b = blocksOf(s.settings, phase).find(y => y.id === x.block); t = { title: norm(b ? b.name : x.label), hours: false, rows: [] }; out.set(x.block, t); }
-    if (x.slots && x.slots.length) { t.rows.push({ n: (t.rows.length + 1) + 'ο', name: x.name, hours: x.slots[0], shifts: x.slots }); t.hours = true; continue; }
-    t.rows.push({ n: (t.rows.length + 1) + 'ο', name: x.name, hours: realHours(x.hours) ? norm(x.hours) : '' });
-    if (realHours(x.hours)) t.hours = true;
+    // ζεύγος (Michael, 4/11): τα άτομα του ίδιου νούμερου σε μία γραμμή, τα ονόματα το ένα κάτω από το άλλο
+    const prev = rowOf.get(x.block + '|' + x.g);
+    if (prev) { if (x.name) prev.name = prev.name ? prev.name + '\n' + x.name : x.name; continue; }
+    const row: FrouraTable['rows'][number] = { n: (t.rows.length + 1) + 'ο', name: x.name, hours: '' };
+    if (x.slots && x.slots.length) { row.hours = x.slots[0]; row.shifts = x.slots; t.hours = true; }
+    else if (realHours(x.hours)) { row.hours = norm(x.hours); t.hours = true; }
+    rowOf.set(x.block + '|' + x.g, row); t.rows.push(row);
   }
   return [...out.values()];
 }

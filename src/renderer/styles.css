@@ -1376,7 +1376,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .lay-pv__page{position:relative;overflow:hidden}
 /* Βάρδιες ανά νούμερο στην Επεξεργασία υπηρεσίας */
 .shiftprev { display: grid; gap: 2px; margin: 6px 0; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; background: var(--muted); }
-.shiftprev > div { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; align-items: baseline; padding: 2px 0; }
+.shiftprev > div { display: grid; grid-template-columns: minmax(44px, max-content) 1fr auto; gap: 8px; align-items: baseline; padding: 2px 0; }
 .shiftprev > div > span { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
 .shiftprev small { color: var(--muted-fg); }
 .post__pos.is-slots{display:flex;align-items:center;gap:12px}
@@ -1572,3 +1572,9 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .hd__zoom{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;text-align:left}
 .hd__page{background:#fff;color:#000;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
 .rep-more-presets{margin-top:12px}
+
+/* ---------- Υπηρεσίες: σχήμα νούμερα × άτομα (Michael, 4/11) ---------- */
+.bfshape{display:flex;flex-direction:column;gap:6px;margin:4px 0 12px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius)}
+.bfshape small{color:var(--muted-fg)}
+.bfchips{display:flex;flex-wrap:wrap;gap:6px}
+.bfchip{border:1px solid var(--border);border-radius:var(--radius);padding:2px 10px;font-size:13px;background:var(--bg,transparent);white-space:nowrap}

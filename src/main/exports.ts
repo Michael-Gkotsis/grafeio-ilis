@@ -6,7 +6,7 @@ import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { live, hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
@@ -165,25 +165,76 @@ const refOf = (c: number, r: number) => colName(c) + r;
 // μαγειρεία, σκοποί ή δική σου υπηρεσία με το όνομά της), με τη σειρά, μία σε κάθε νούμερο· οι σκοποί ανά ζεύγος, στο νούμερο
 // της σκοπιάς τους («3η»). Ό,τι δεν βρίσκει θέση μπαίνει σε δικό του πίνακα από κάτω (frouraTables).
 interface Seat { ref: string; t: FTable | null; n: FNum | null }
-function seatFroura(map: FrouraMap, posts: Post[]): Map<string, Seat> {
-  const out = new Map<string, Seat>();
+// over (Michael, 4/11): νούμερα που δεν χωρούν στα κουτιά του πίνακά τους· ο πίνακας μεγαλώνει προς τα κάτω (extendFroura)
+function seatFroura(map: FrouraMap, posts: Post[], custom: Set<string> = new Set()): { seats: Map<string, Seat>; over: Map<FTable, Post[][]> } {
+  const out = new Map<string, Seat>(); const over = new Map<FTable, Post[][]>();
   const kindOfPost = (x: Post, own: Set<string>) => (own.has('b:' + x.block) ? 'b:' + x.block : x.kind);
   const own = new Set(map.tables.map(t => t.kind).concat(map.single.map(x => x.kind)).filter(k => k.startsWith('b:')));
-  const groupsOf = (ps: Post[]) => { const g: Post[][] = []; for (const p of ps) { const k = p.rot != null && p.kind === 'sk' ? 'r' + p.rot : p.k; const x = g.find(y => (y[0].rot != null && y[0].kind === 'sk' ? 'r' + y[0].rot : y[0].k) === k); if (x) x.push(p); else g.push([p]); } return g; };
+  // ένα νούμερο = οι θέσεις του ίδιου μπλοκ με το ίδιο rot ή grp (ζεύγος): κάθε είδος, όχι μόνο οι σκοποί
+  const groupsOf = (ps: Post[]) => { const g: Post[][] = []; const at = new Map<string, number>(); for (const p of ps) { const k = p.block + '|' + groupKey(p); const i = at.get(k); if (i != null) g[i].push(p); else { at.set(k, g.length); g.push([p]); } } return g; };
   const kinds = [...new Set(posts.filter(x => x.k !== 'ly' && x.k !== 'dy').map(x => kindOfPost(x, own)))];
   for (const kind of kinds) {
-    const groups = groupsOf(posts.filter(x => x.k !== 'ly' && x.k !== 'dy' && kindOfPost(x, own) === kind));
-    const slots: Seat[] = [...map.tables.filter(t => t.kind === kind).flatMap(t => t.nums.map(n => ({ ref: refOf(t.name, n.r), t, n }))),
-      ...map.single.filter(x => x.kind === kind).map(x => ({ ref: refOf(x.c, x.r), t: null, n: null }))];
+    const ps = posts.filter(x => x.k !== 'ly' && x.k !== 'dy' && kindOfPost(x, own) === kind);
+    const tabs = map.tables.filter(t => t.kind === kind);
+    const singles: Seat[] = map.single.filter(x => x.kind === kind).map(x => ({ ref: refOf(x.c, x.r), t: null, n: null }));
+    const slotsOf = (ts: FTable[]): Seat[] => ts.flatMap(t => t.nums.map(n => ({ ref: refOf(t.name, n.r), t, n })));
     // σκοποί: «3η» → το ζεύγος της 3ης σκοπιάς (αν τα νούμερα του εντύπου ταιριάζουν με των θέσεων)
     const numOf = (x: string) => Number((/^(\d+)/.exec(x) || [])[1] || NaN);
-    const byNum = kind === 'sk' && slots.some(sl => sl.n && groups.some(g => numOf(g[0].short) === numOf(sl.n!.label)));
-    groups.forEach((g, i) => {
-      const sl = byNum ? slots.find(x => x.n && numOf(x.n.label) === numOf(g[0].short)) : slots[i];
-      if (sl) for (const p of g) out.set(p.k, sl);
-    });
+    const place = (groups: Post[][], slots: Seat[], ext: FTable | null) => {
+      const byNum = kind === 'sk' && slots.some(sl => sl.n && groups.some(g => numOf(g[0].short) === numOf(sl.n!.label)));
+      // δική σου υπηρεσία του ίδιου είδους (π.χ. «Θαλαμοφύλακες γ΄») δεν μπαίνει στον πίνακα του εντύπου: δικός της πίνακας από κάτω
+      groups.forEach((g, i) => {
+        const sl = byNum ? slots.find(x => x.n && numOf(x.n.label) === numOf(g[0].short)) : slots[i];
+        if (sl) for (const p of g) out.set(p.k, sl);
+        else if (ext && ext.aa != null && (kind.startsWith('b:') || !custom.has(g[0].block))) over.set(ext, [...(over.get(ext) || []), g]);
+      });
+    };
+    const ids = [...new Set(ps.map(x => x.block))];
+    // τόσα μπλοκ όσοι πίνακες (π.χ. α΄ και β΄ θαλαμοφύλακες): το καθένα στον δικό του πίνακα, αλλιώς με τη σειρά σε όλες τις θέσεις του είδους
+    if (tabs.length && ids.length === tabs.length) ids.forEach((id, i) => place(groupsOf(ps.filter(x => x.block === id)), slotsOf([tabs[i]]), tabs[i]));
+    else place(groupsOf(ps), [...slotsOf(tabs), ...singles], tabs.length ? tabs[tabs.length - 1] : null);
   }
-  return out;
+  return { seats: out, over };
+}
+// Ο πίνακας μεγαλώνει προς τα κάτω (Michael, 4/11: «δεν γίνεται να κάνει extend τον πίνακα;»): μετά το τελευταίο κουτί μπαίνουν
+// γραμμές με το ύψος και το στυλ του (ένα κουτί = ίδιες γραμμές), Α/Α και όνομα ενωμένα όπως στα άλλα κουτιά, και «5ο» στο Α/Α.
+// Πίνακας δίπλα στις ίδιες γραμμές που δεν έχει δικό του κουτί μένει άδειος, χωρίς περίγραμμα. Επιστρέφει πόσες γραμμές μπήκαν.
+function extendFroura(wb: Workbook, ws: Sheet, map: FrouraMap, over: Map<FTable, Post[][]>): { rows: number; stretched: Set<string> } {
+  const last = (t: FTable) => t.nums[t.nums.length - 1];
+  const byEnd = new Map<number, { R: number; h: number; tabs: { t: FTable; gs: Post[][] }[] }>();
+  for (const [t, gs] of over) { const L = last(t); const E = L.r + L.h - 1; const x = byEnd.get(E) || { R: L.r, h: L.h, tabs: [] }; x.tabs.push({ t, gs }); byEnd.set(E, x); }
+  const cols = (t: FTable) => [Math.min(t.aa ?? t.name, t.name), Math.max(t.name, t.hours ?? t.name, t.note ?? t.name)];
+  const numOf = (x: string) => Number((/^(\d+)/.exec(x) || [])[1] || NaN);
+  let total = 0; const stretchedTabs = new Set<string>();
+  // από κάτω προς τα πάνω, να μη μετακινούνται οι γραμμές που δεν έχουν γίνει ακόμα
+  for (const E of [...byEnd.keys()].sort((a, b) => b - a)) {
+    const { R, h, tabs } = byEnd.get(E)!; const K = Math.max(...tabs.map(x => x.gs.length));
+    const merges = ws.merges();
+    const box = merges.filter(m => m.r1 >= R && m.r2 <= E && m.r2 > m.r1);   // Α/Α, όνομα, ΠΑΡ/ΣΕΙΣ ενωμένα κάθετα μέσα στο τελευταίο κουτί
+    const stretched = (c1: number, c2: number) => merges.some(m => m.r1 <= E && m.r2 > E && m.c1 <= c2 && m.c2 >= c1);   // κουτί άλλου πίνακα που περνά πάνω από τη γραμμή
+    for (let j = 0; j < K; j++) for (let i = h - 1; i >= 0; i--) ws.insertRows(E, 1, R + i, wb);
+    total += K * h;
+    for (let j = 0; j < K; j++) {
+      const r0 = E + j * h + 1;
+      const mine = new Set<FTable>();
+      for (const { t, gs } of tabs) {
+        if (j >= gs.length) continue; mine.add(t);
+        const [c1, c2] = cols(t); const suf = /\D+$/.exec(last(t).label)?.[0] || 'ο';
+        const sk = t.kind === 'sk' && Number.isFinite(numOf(gs[j][0].short));
+        ws.set(colName(t.aa!) + r0, (sk ? numOf(gs[j][0].short) : t.nums.length + j + 1) + suf);
+        for (const m of box) if (m.c1 >= c1 && m.c2 <= c2) ws.addMerge(colName(m.c1) + (m.r1 + r0 - R) + ':' + colName(m.c2) + (m.r2 + r0 - R));
+      }
+      // άλλοι πίνακες στις ίδιες γραμμές: άδειοι, χωρίς περίγραμμα
+      for (const u of map.tables) {
+        if (mine.has(u)) continue;
+        const [c1, c2] = cols(u);
+        if ([...mine].some(m => cols(m)[0] <= c2 && cols(m)[1] >= c1)) continue;   // ίδιες στήλες με πίνακα που μεγαλώνει (π.χ. τα μαγειρεία κάτω από τους θαλαμοφύλακες)
+        if (stretched(c1, c2)) { stretchedTabs.add(u.hr + ':' + u.name); continue; }   // κουτί που μεγάλωσε: οι ώρες του ξαναγράφονται
+        ws.clearBox(c1, c2, r0, r0 + h - 1);
+      }
+    }
+  }
+  return { rows: total, stretched: stretchedTabs };
 }
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = αυτό που έχει την «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ» (ή τους πίνακες)
@@ -197,10 +248,17 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const blocks = blocksOf(s.settings, phase);
   const ownNames: Record<string, string> = {};
   for (const b of blocks) if (b.custom || !['ly', 'th', 'op', 'mg', 'sk', 'tae'].includes(b.kind)) ownNames[tnorm(b.name)] = 'b:' + b.id;
-  const vals = await wb.values(name, 400, 40); const raw = (c: TCell) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
-  const map = mapFroura(vals, ws.merges(), ownNames);
+  let vals = await wb.values(name, 400, 40); const raw = (c: TCell) => String(vals[c.r - 1]?.[c.c - 1] ?? '');
+  let map = mapFroura(vals, ws.merges(), ownNames);
   const g = s.guards[d] || {};
-  const posts = postsOf(s.settings); const seats = seatFroura(map, posts);
+  const posts = postsOf(s.settings); const custom = new Set(blocks.filter(b => b.custom).map(b => b.id)); let seated = seatFroura(map, posts, custom);
+  // νούμερα πέρα από τα κουτιά του template: ο πίνακας μεγαλώνει προς τα κάτω και ξαναδιαβάζεται (Michael, 4/11)
+  let stretched = new Set<string>();
+  const ext = seated.over.size ? extendFroura(wb, ws, map, seated.over) : null;
+  if (ext?.rows) {
+    stretched = ext.stretched; vals = await wb.values(name, 400, 40); map = mapFroura(vals, ws.merges(), ownNames); seated = seatFroura(map, posts, custom);
+  }
+  const seats = seated.seats;
   // γραμμές που μπαίνουν (σε γραμμές του template): down() = πού πήγε μια γραμμή του template
   const ins: { after: number; n: number }[] = [];
   const down = (r: number) => r + ins.filter(x => x.after < r).reduce((a, x) => a + x.n, 0);
@@ -247,7 +305,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     const st = seats.get(x.k); const sl = slotsOf(x); if (!st?.t?.hours || !st.n || !sl || done.has(st.ref)) continue;
     const k = rowsOf.get(st.n.r)!; const resized = k.aligned && k.need != null && k.need !== k.h;
     const blank = Array.from({ length: st.n.h }, (_, j) => ws.get(refOf(st.t!.hours!, down(st.n!.r) + j))).every(v => v == null || !String(v).trim());
-    if (!shiftsOwn(x.block) && !resized && !blank) continue; done.add(st.ref);
+    if (!shiftsOwn(x.block) && !resized && !blank && !stretched.has(st.t.hr + ':' + st.t.name)) continue; done.add(st.ref);
     const n = resized ? k.need! : st.n.h;
     const hs = resized || sl.length <= n ? Array.from({ length: n }, (_, j) => sl[j] || '') : rowsN(sl, n);
     hs.forEach((h, j) => ws.set(refOf(st.t!.hours!, down(st.n!.r) + j), h));

@@ -260,7 +260,8 @@ export function shiftReport(start: string, list: ShiftOwn[], count: number): Shi
   return { overlaps, gaps, empty: per.filter(x => !x.count).map(x => x.n), per };
 }
 // code: ο κωδικός της θέσης στον έλεγχο υπηρεσιών (Θ1α, Μ2, ΛΥ…), αλλάζει στις Ρυθμίσεις
-export interface PostDef { k: string; label: string; short: string; rot?: number | null; hrs?: string; hidden?: boolean; code?: string }
+// grp (Michael, 4/11): νούμερο (από 0) σε υπηρεσίες χωρίς rot που έχουν 2+ άτομα στο ίδιο νούμερο· θέσεις με το ίδιο grp = ένα νούμερο, με ίδιες ώρες
+export interface PostDef { k: string; label: string; short: string; rot?: number | null; grp?: number; hrs?: string; hidden?: boolean; code?: string }
 // armWeapon (Michael, 24/10): στις ένοπλες υπηρεσίες, «own» (προεπιλογή, χωρίς πεδίο) = κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του·
 // «post» = ένα όπλο της θέσης, που περνά από χέρι σε χέρι στις αλλαγές (armed.ts)
 export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post' }
@@ -312,9 +313,63 @@ export function withBlocks(st: Settings, ph: Phase, list: BlockDef[]): Settings 
   return { ...st, phases: (st.phases || []).map(x => (x.id === ph ? { ...x, blocks: list } : x)) };
 }
 
-// Νούμερα μιας υπηρεσίας με βάρδιες: οι θέσεις με το ίδιο rot είναι ένα νούμερο (ζεύγος σκοπών)· οι δικές σου, ένα η καθεμία
-export const shiftGroups = (b: BlockDef) => { const ps = b.posts.filter(p => !p.hidden); const keys: string[] = []; for (const p of ps) { const k = p.rot != null ? 'r' + p.rot : p.k; if (!keys.includes(k)) keys.push(k); } return keys; };
-const groupKey = (p: PostDef) => (p.rot != null ? 'r' + p.rot : p.k);
+// Νούμερα μιας υπηρεσίας με βάρδιες: οι θέσεις με το ίδιο rot (ζεύγος σκοπών) ή το ίδιο grp (ζεύγος σε δική σου υπηρεσία) είναι ένα νούμερο· οι άλλες, ένα η καθεμία
+export const groupKey = (p: PostDef) => (p.rot != null ? 'r' + p.rot : p.grp != null ? 'g' + p.grp : p.k);
+export const shiftGroups = (b: BlockDef) => { const keys: string[] = []; for (const p of b.posts) { if (p.hidden) continue; const k = groupKey(p); if (!keys.includes(k)) keys.push(k); } return keys; };
+// Σχήμα μιας υπηρεσίας (Michael, 4/11): πόσα νούμερα και πόσα άτομα σε κάθε νούμερο, από τις ορατές θέσεις
+export function blockShape(b: BlockDef): { nums: number; per: number } {
+  const g = new Map<string, number>();
+  for (const p of b.posts) if (!p.hidden) g.set(groupKey(p), (g.get(groupKey(p)) || 0) + 1);
+  return g.size ? { nums: g.size, per: Math.max(...g.values()) } : { nums: 1, per: 1 };
+}
+export const MAX_NUMS = 10, MAX_PER = 4;
+// Οι θέσεις ανά νούμερο, με τη σειρά, και οι κρυφές (για την αλλαγή σχήματος και τις ώρες ανά νούμερο)
+export function blockGroups(posts: PostDef[]): PostDef[][] {
+  const groups: PostDef[][] = []; const at = new Map<string, number>();
+  for (const p of posts) { const k = groupKey(p); let i = at.get(k); if (i == null) { i = groups.length; at.set(k, i); groups.push([]); } groups[i].push(p); }
+  return groups;
+}
+const GR = ['α', 'β', 'γ', 'δ'], LAT = ['a', 'b', 'c', 'd'];
+// Οι θέσεις μιας υπηρεσίας με νέο πλήθος νούμερων και ατόμων ανά νούμερο (Michael, 4/11). Τα κλειδιά μένουν σταθερά για να μένει το
+// ιστορικό: το άτομο α κρατά το παλιό κλειδί, τα β, γ… παίρνουν «<κλειδί α>_2», «_3»· νέο νούμερο σε υπηρεσία του εντύπου παίρνει
+// «<id υπηρεσίας>_<Ν>» (σκοποί: «sk5a», «sk5b»). Θέσεις που περισσεύουν κρύβονται (ποτέ διαγραφή) και ξαναβγαίνουν οι ίδιες.
+// used: όλα τα κλειδιά θέσεων όλων των εντύπων (νέα κλειδιά μοναδικά). name: το όνομα της υπηρεσίας μετά την αλλαγή.
+export function reshapeBlock(b: BlockDef, nums: number, per: number, name: string, used: ReadonlySet<string> = new Set()): PostDef[] {
+  if (b.kind === 'ly') return b.posts;
+  nums = Math.min(MAX_NUMS, Math.max(1, Math.floor(nums) || 1)); per = Math.min(MAX_PER, Math.max(1, Math.floor(per) || 1));
+  const groups = blockGroups(b.posts);
+  const taken = new Set(used); for (const p of b.posts) taken.add(p.k);
+  const fresh = (k: string) => { while (taken.has(k)) k += '_'; taken.add(k); return k; };
+  const isRot = b.posts.some(p => p.rot != null); const isSk = b.kind === 'sk' && !b.custom;
+  let nextRot = Math.max(-1, ...b.posts.map(p => (p.rot == null ? -1 : p.rot))) + 1;
+  const firstNo = isSk ? +(/\d+/.exec(b.posts[0]?.short || b.posts[0]?.k || '')?.[0] || 3) : 0;
+  // όνομα και κατάληξη των ετικετών: όπως είναι (Θαλαμοφύλακας 1ος (α΄)), εκτός αν άλλαξε το όνομα της υπηρεσίας του εντύπου
+  const lab = /^(.*?)(?: \d+ος)?(?: [α-δ])?( \([^)]*\))?$/.exec(b.posts[0]?.label || '');
+  const renamed = !b.custom && name !== b.name;
+  const base = b.custom || renamed || !lab || !lab[1] ? name : lab[1]; const suffix = b.custom || renamed || !lab ? '' : lab[2] || '';
+  const one = nums === 1 && per === 1;
+  const out: PostDef[] = [];
+  for (let i = 0; i < Math.max(nums, groups.length); i++) {
+    const g = groups[i]; const no = firstNo + i;
+    const baseKey = g ? g[0].k : fresh(isSk ? 'sk' + no + 'a' : b.id + '_' + (i + 1));
+    const rot = g ? g[0].rot : isRot ? nextRot++ : undefined;
+    const hrs = g ? g[0].hrs : b.posts[0]?.hrs || (isRot ? undefined : 'ημέρα');
+    const list = g ? [...g] : [];
+    for (let m = list.length; m < (g ? Math.max(per, 0) : per); m++) {
+      const k = !g && m === 0 ? baseKey : isSk ? fresh('sk' + no + LAT[m]) : fresh(baseKey + '_' + (m + 1));
+      list.push({ k, label: '', short: '', ...(rot != null ? { rot } : {}), ...(hrs != null && rot == null ? { hrs } : {}), ...(isSk ? { code: 'Σ' + no + GR[m] } : {}) });
+    }
+    list.forEach((p, m) => {
+      const q: PostDef = { ...p };
+      if (isSk) { q.label = 'Σκοπός ' + no + 'ης σκοπιάς' + (per > 1 ? ' (' + GR[m] + ')' : ''); q.short = no + 'η' + (per > 1 ? ' ' + GR[m] : ''); }
+      else { q.label = base + (one ? '' : ' ' + (i + 1) + 'ος' + (per > 1 ? ' ' + GR[m] : '')) + suffix; q.short = one ? base : (i + 1) + 'ος' + (per > 1 ? ' ' + GR[m] : ''); }
+      if (!isRot && q.rot == null) { if (list.length > 1) q.grp = i; else delete q.grp; if (m > 0 && hrs != null) q.hrs = hrs; }
+      if (i >= nums || m >= per) q.hidden = true; else delete q.hidden;
+      out.push(q);
+    });
+  }
+  return out;
+}
 export function buildPosts(blocks: BlockDef[], start: string = DEFAULT_DUTY_START): Post[] {
   const def = start === DEFAULT_DUTY_START ? ROT : shiftSlots(start, { every: 120 }, 4);
   return blocks.flatMap(b => {

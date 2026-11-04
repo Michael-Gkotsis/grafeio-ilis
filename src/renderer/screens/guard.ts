@@ -7,10 +7,10 @@ import { Select } from '../select';
 import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, RangeField, MonthField, HoursField, shiftForm, shiftOf, shiftWhy, type HoursMode, useExport, useExportBusy } from '../common';
+import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
-import { TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
+import { blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
 import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
@@ -23,6 +23,7 @@ import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
 import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
+import { BlockForm, useBlockForm } from '../blockForm';
 import { SkipsView } from './skips';
 type P = any;
 
@@ -32,11 +33,13 @@ const opState = (st: P) => { const b = blocksOf(st.settings).filter((x: P) => x.
 // Ώρες σε στενή μορφή («14-16 · 22-00») όταν είναι ακέραιες ώρες· αλλιώς όπως είναι
 const hrs = (x: Post) => (x.slots ? x.slots.map((t: string, i: number, all: string[]) => html`<span key=${i} className="nw">${t.replace(/:00/g, '') + (i < all.length - 1 ? '\u00a0·' : '')}</span>`) : x.hours);
 // Γραμμή του πίνακα θέσεων: Θέση με τις ώρες από κάτω | Ποιος (+ ολόκληρο το «Γιατί») | Είδ./Σύν. | ενέργειες
-function PostRow({ x, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen, hint, pickFrom }: P) {
+function PostRow({ x, same, pid, date, statuses, lists, duty, ruleWarn, why, onAssign, onNext, unavailable, onBlocked, pm, locked, onOpen, hint, pickFrom }: P) {
   const [swap, setSwap] = useState(false);
   const p = pid && pm.get(pid); const r = pid && (dutyBlock(statuses, date, pid, x, lists) || ruleWarn);
   // βάρδιες: όλες οι ώρες η μία κάτω από την άλλη, δίπλα στο νούμερο, όπως στο έντυπο (Michael, 20/10)
-  const head = x.slots && x.slots.length ? html`<div className="post__pos is-slots"><b>${x.short}</b><span className="post__slots">${x.slots.map((t: string, i: number) => html`<span key=${i}>${t}</span>`)}</span></div>`
+  // ζεύγος (Michael, 4/11): το β μέλος δεν επαναλαμβάνει τις ώρες, είναι οι ίδιες με το α του νούμερου
+  const head = same ? html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">ίδιες ώρες με ${/^\d+η/.test(same) ? 'την' : 'τον'} ${same.replace('ος', 'ο')}</span></div>`
+    : x.slots && x.slots.length ? html`<div className="post__pos is-slots"><b>${x.short}</b><span className="post__slots">${x.slots.map((t: string, i: number) => html`<span key=${i}>${t}</span>`)}</span></div>`
     : html`<div className="post__pos"><b>${x.short}</b><span className="post__hrs">${hrs(x)}</span></div>`;
   const kenh = html`<span className="post__who"><span className="kenh-tag">Κενή</span></span>`;
   if (locked) return html`<li className=${cx('post', !p && 'is-empty')}>${head}${p ? html`<span className="post__who"><button type="button" className="post__name linkish" data-tip=${rkFull(p) + ' · άνοιξε την καρτέλα'} onClick=${() => onOpen(p.id)}><${RkName} p=${p} fn=${fullName}/></button>${r && html`<${Badge} tone="bad">⚠ ${r}<//>`}</span>` : kenh}<span className="duty">${duty}</span><span></span></li>`;
@@ -403,8 +406,8 @@ export function GuardScreen() {
       ${blocks.filter(b => !b.hidden).map(b => { const ps = posts.filter(x => x.block === b.id); const emp = ps.filter(x => !g[x.k]).length; const open = fold[b.id] ?? emp > 0;
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
-          <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span><span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
-          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
+          <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span>${blockShape(b).per > 1 && html`<span className="gblock__meta" data-tip="Κάθε νούμερο έχει περισσότερα από ένα άτομα, με τις ίδιες ώρες">· ${blockShape(b).nums} ${blockShape(b).nums === 1 ? 'νούμερο' : 'νούμερα'} × ${blockShape(b).per}</span>`}<span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
+          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; const first = ps.find((y: Post) => groupKey(y) === groupKey(x)); return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} same=${first && first !== x ? first.short : ''} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
     ${!locked && Object.values(g).some(Boolean) && html`<div className="gb-clear"><${Button} size="sm" variant="ghost" onClick=${() => setClearAsk(true)} data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">Άδειασε τη μέρα…<//></div>`}
@@ -532,20 +535,13 @@ export function PhaseDialog({ from, edit, onClose }: { from?: Phase; edit?: Phas
 export function AddBlockDialog({ onClose, phase: ph }: P) {
   const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
   const phase: Phase = ph || state.settings.phase || 'sven'; const now = phase === (state.settings.phase || 'sven');
-  const [f, setF] = useState({ name: '', armed: false, n: 1, hrs: '', off: false });
-  const [mode, setMode] = useState<HoursMode>('day'); const [sh, setSh] = useState(() => shiftForm()); const dirty = useDirty([f, mode, sh]);
-  const save = async () => { if (await run({ t: 'addBlock', phase, ...f, hrs: mode === 'fixed' ? f.hrs : '', shift: mode === 'shift' ? shiftOf(sh) : null }, false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (f.off ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : now ? '. Τη βλέπεις στις θέσεις και στο έντυπο.' : '. Τη βλέπεις όταν ισχύει η ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '.'), ...(f.off ? { actions: [{ label: 'Άνοιξε', fn: () => nav.go('templates', { tab: 'duty', dsub: 'blocks' }) }] } : {}) }); } };
-  const nbWhy = !f.name.trim() ? 'Λείπει: Όνομα' : mode === 'shift' ? shiftWhy(sh) : '';
-  return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '. Βγαίνει στο Excel σε δική της γραμμή κάτω από τα μαγειρεία.'} onClose=${onClose}
+  const form = useBlockForm(undefined, phase); const { f } = form; const dirty = useDirty([f]);
+  const save = async () => { if (await run(form.cmd(), false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (!f.active ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : now ? '. Τη βλέπεις στις θέσεις και στο έντυπο.' : '. Τη βλέπεις όταν ισχύει η ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '.'), ...(!f.active ? { actions: [{ label: 'Άνοιξε', fn: () => nav.go('templates', { tab: 'duty', dsub: 'blocks' }) }] } : {}) }); } };
+  return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '. Βγαίνει στο Excel σε δικό της πίνακα κάτω από τα μαγειρεία.'} onClose=${onClose}
     dirty=${dirty && 'Η υπηρεσία δεν προστέθηκε. Αν κλείσεις, χάνεται.'}
-    footer=${html`<${Why} text=${nbWhy}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!nbWhy} why=${nbWhy} onClick=${save}>Προσθήκη<//>`}>
-    <div className="field"><label className="field__label" htmlFor="nb-n">Όνομα *</label><input id="nb-n" className="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=${f.name} onChange=${(e: any) => setF({ ...f, name: e.target.value })}/></div>
-    <div className="field"><label className="field__label" htmlFor="nb-c">Πόσα άτομα</label><input id="nb-c" type="number" min="1" max="10" className="ui-input" style=${{ maxWidth: '120px' }} value=${f.n} onChange=${(e: any) => setF({ ...f, n: Math.max(1, Math.min(10, +e.target.value || 1)) })}/></div>
+    footer=${html`<${Why} text=${form.why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!form.why} why=${form.why} onClick=${save}>Προσθήκη<//>`}>
     <p className="field__help" style=${{ marginTop: 0 }}>${f.name.trim() ? html`Η «${f.name.trim()}»` : 'Η νέα υπηρεσία'} μετρά ως δική της: δική της στήλη στον Έλεγχο υπηρεσιών, στη σειρά δικαιοσύνης, στο «Ποιος κάνει τι» και στο Excel δυνατοτήτων, όπου την ενεργοποιείς ή απενεργοποιείς για τον καθένα χωριστά.</p>
-    <${HoursField} id="nb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${Array.from({ length: f.n }, (_, i) => (i + 1) + 'ος')} start=${dutyStartOf(state.settings)}
-      fixed=${html`<${RangeField} id="nb-h" aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs} onChange=${(e: any) => setF({ ...f, hrs: e.target.value })}/>`}/>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => setF({ ...f, armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//></small></span></label>
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${!f.off} onChange=${(e: any) => setF({ ...f, off: !e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</small></span></label>
+    <${BlockForm} form=${form} id="nb"/>
   <//>`;
 }
 
