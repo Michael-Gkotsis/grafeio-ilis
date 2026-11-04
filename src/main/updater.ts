@@ -162,7 +162,7 @@ export function createUpdater(d: Deps) {
     if (!dirWritable(RES)) return { ok: false, error: 'Ο φάκελος της εφαρμογής δεν γράφεται· τρέξε το Setup.exe' };
     try { fs.rmSync(path.join(RES, 'app.new'), { recursive: true, force: true }); } catch { /* δεν πειράζει */ }
     if (!swapPrev(RES)) return { ok: false, error: 'Δεν έγινε η επιστροφή (κάποιο αρχείο είναι σε χρήση). Δοκίμασε μετά το κλείσιμο και άνοιγμα της εφαρμογής.' };
-    clearTrial(TRIAL); saved.skip = manifest?.version || saved.skip; persist();
+    clearTrial(TRIAL); saved.skip = version; persist();   // η έκδοση που αφήνουμε να μην ξαναπροσφερθεί αμέσως
     app.relaunch(); app.quit();
     return { ok: true };
   }
