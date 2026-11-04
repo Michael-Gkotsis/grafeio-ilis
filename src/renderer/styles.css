@@ -1567,3 +1567,4 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .hd__add{justify-self:start;border:0;background:none;color:var(--primary);font-weight:600;cursor:pointer;padding:2px 0}.hd__zero{font-size:18px}
 .hd__ta{height:auto;padding:8px 10px;resize:vertical}
 .hd__page{background:#fff;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
+.rep-more-presets{margin-top:12px}

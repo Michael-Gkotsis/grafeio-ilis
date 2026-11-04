@@ -307,7 +307,9 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" onClick=${() => openForm(editForm(r.id))}>Αλλαγή<//>
           <${Button} size="sm" variant="ghost" onClick=${() => copy(r)} data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">Αντίγραφο<//>
           <${Button} size="sm" variant="ghost" aria-label=${'Διαγραφή ' + r.name} data-tip="Διαγραφή (με αναίρεση)" onClick=${() => del(r)}>${Icon.x}<//></td>
-      </tr>`)}</tbody></table></div>` : html`<div className="ui-card"><div className="rep-empty">
+      </tr>`)}</tbody></table></div>
+      <div className="ui-card rep-more-presets"><h3 className="rep-h">Νέο από έτοιμο υπόδειγμα</h3><p className="note">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις· αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
+        <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => openForm(newForm({ start: 'build', preset: p.id }))}><b>${p.name}</b><small>${p.help}</small></button>`)}</div></div>` : html`<div className="ui-card"><div className="rep-empty">
         <h2>Ξεκίνα από ένα υπόδειγμα</h2><p className="muted">Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις. Αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.</p>
         <div className="rep-presets">${PRESETS.map(p => html`<button key=${p.id} type="button" className="rep-preset" onClick=${() => openForm(newForm({ start: 'build', preset: p.id }))}><b>${p.name}</b><small>${p.help}</small></button>`)}
           <button type="button" className="rep-preset rep-preset--up" onClick=${() => openForm(newForm({ start: 'upload' }))}><b>Δικό σου Excel</b><small>Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.</small></button></div>
