@@ -3,13 +3,14 @@
 // εντύπων (capCols): νέα υπηρεσία εμφανίζεται μόνη της. Ίδια δεδομένα με το αρχείο «Δυνατότητα υπηρεσιών».
 // Σ.Ι. και πόστο φαίνονται ως «—» (ισχύουν μόνα τους)· η κατάσταση της μέρας (ΕΥ, άδεια…) γράφεται κάτω από το όνομα.
 // Τίποτα δεν απαγορεύεται: με το χέρι μπαίνει πάντα με επιβεβαίωση, και οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν πάντα.
+import { RkName, rkFull, rkShort } from '../rankName';
 import { UNIT } from '../../shared/unit';
 import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { html, cx, Button, Dialog, Segmented, Strip, VirtualList, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useOpenFrom, useStore } from '../store';
 import { ActiveFilter, GoLink } from '../common';
-import { WEEK, blocksOf, phaseList, phaseName, dutyStartOf, platoonsOf, platoonShort, fullName, shortName, unitOf, type Person, type Settings } from '../../shared/domain';
+import { WEEK, blocksOf, phaseList, phaseName, dutyStartOf, platoonsOf, platoonShort, shortName, unitOf, type Person, type Settings } from '../../shared/domain';
 import { capCell, capCols, statusesOn, type CapCell, type CapCol } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
 import { statusLbl } from '../../shared/ranks';
@@ -46,11 +47,11 @@ const Row = memo(function Row({ p, own, cols, cells, odd, grid, hintTxt, hintTip
   const hint = hintTxt ? { txt: hintTxt, tip: hintTip, bad: hintBad } : null;
   const days: number[] = p.offDays || [];
   return html`<div className=${cx('ptable__row', 'whod__row', odd && 'is-odd')} role="row" style=${{ ...style, gridTemplateColumns: grid }}>
-    <span className="whod__name"><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip=${fullName(p) + " · καρτέλα οπλίτη"}><b>${shortName(p)}</b></button>
+    <span className="whod__name"><button type="button" className="linkish" onClick=${() => onOpen(p.id)} data-tip=${rkFull(p) + " · καρτέλα οπλίτη"}><b><${RkName} p=${p}/></b></button>
       <small>${[p.room != null && 'Θ' + p.room, p.si && 'Σ.Ι. ' + siOf(p, lists).text, p.post && 'πόστο ' + p.post].filter(Boolean).join(' · ')}${hint && html`<span className=${cx('whod__hint', hint.bad && 'is-bad')} data-tip=${hint.tip}>${hint.txt}</span>`}</small></span>
-    ${cols.map((col: CapCol, i: number) => { const v = cellView(cells[i], col); return html`<span key=${col.key} className="whod__c"><button type="button" className=${cx('whod__cell', v.cls)} aria-label=${shortName(p) + ', ' + col.label + ': ' + v.tip.split('.')[0]} data-tip=${v.tip} onClick=${() => onCell(p, col, cells[i])}>${v.sym}</button></span>`; })}
-    <span className="whod__days" role="group" aria-label=${'Μέρες υπηρεσίας ' + shortName(p)}>${WEEK.map(d => { const off = days.includes(d); return html`<button key=${d} type="button" className=${cx('whod__day', off && 'is-off', (d === 6 || d === 0) && 'is-we')} aria-pressed=${!off} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: κάνει' : 'Κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: όχι ' + DOW_FULL[d]} onClick=${() => onDay(p, d)}>${DAY2(d)}</button>`; })}</span>
-    <span className="whod__reset">${own && html`<button type="button" className="whod__x" aria-label=${'Καμία εξαίρεση για ' + shortName(p)} data-tip="Σβήνει ό,τι όρισες με το χέρι (✕, ✓! και μέρες)· μένουν μόνο Σ.Ι. και πόστο" data-tip-side="left" onClick=${() => onReset(p)}>↺</button>`}</span>
+    ${cols.map((col: CapCol, i: number) => { const v = cellView(cells[i], col); return html`<span key=${col.key} className="whod__c"><button type="button" className=${cx('whod__cell', v.cls)} aria-label=${rkShort(p) + ', ' + col.label + ': ' + v.tip.split('.')[0]} data-tip=${v.tip} onClick=${() => onCell(p, col, cells[i])}>${v.sym}</button></span>`; })}
+    <span className="whod__days" role="group" aria-label=${'Μέρες υπηρεσίας ' + rkShort(p)}>${WEEK.map(d => { const off = days.includes(d); return html`<button key=${d} type="button" className=${cx('whod__day', off && 'is-off', (d === 6 || d === 0) && 'is-we')} aria-pressed=${!off} data-tip=${off ? 'Δεν κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: κάνει' : 'Κάνει υπηρεσία ' + DOW_FULL[d] + '. Πάτα: όχι ' + DOW_FULL[d]} onClick=${() => onDay(p, d)}>${DAY2(d)}</button>`; })}</span>
+    <span className="whod__reset">${own && html`<button type="button" className="whod__x" aria-label=${'Καμία εξαίρεση για ' + rkShort(p)} data-tip="Σβήνει ό,τι όρισες με το χέρι (✕, ✓! και μέρες)· μένουν μόνο Σ.Ι. και πόστο" data-tip-side="left" onClick=${() => onReset(p)}>↺</button>`}</span>
   </div>`;
 });
 
@@ -94,7 +95,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   const rooms = useMemo(() => { const m = new Map<number, number>(); people.forEach(p => { if (p.room != null) m.set(p.room, (m.get(p.room) || 0) + 1); }); return [...m].sort((a, b) => a[0] - b[0]); }, [people]);
 
   const done = (r: unknown, txt: string) => { if (r) toast({ text: txt + '. Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.', actions: [undoMark()] }); };
-  const setCap = async (p: Person, col: CapCol, v: 'on' | 'off' | 'clear', txt: string) => done(await run({ t: 'setCap', pid: p.id, key: col.key, v }, false), shortName(p) + ': ' + txt);
+  const setCap = async (p: Person, col: CapCol, v: 'on' | 'off' | 'clear', txt: string) => done(await run({ t: 'setCap', pid: p.id, key: col.key, v }, false), rkShort(p) + ': ' + txt);
   const onCell = (p: Person, col: CapCol, c: CapCell) => {
     const what = col.label.toLowerCase();
     if (c.src === 'force') return setCap(p, col, 'clear', 'ξανά όπως λέει ' + (c.why.startsWith('Πόστο') ? 'το πόστο' : 'η Σ.Ι.') + ', όχι ' + what);
@@ -105,9 +106,9 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   };
   const onDay = async (p: Person, d: number) => {
     const cur = p.offDays || []; const on = cur.includes(d);
-    done(await run({ t: 'setOffDays', pid: p.id, days: on ? cur.filter(x => x !== d) : [...cur, d] }, false), shortName(p) + (on ? ': κάνει ξανά υπηρεσία ' : ': όχι υπηρεσία ') + DOW_FULL[d]);
+    done(await run({ t: 'setOffDays', pid: p.id, days: on ? cur.filter(x => x !== d) : [...cur, d] }, false), rkShort(p) + (on ? ': κάνει ξανά υπηρεσία ' : ': όχι υπηρεσία ') + DOW_FULL[d]);
   };
-  const onReset = async (p: Person) => done(await run({ t: 'setDutyProfile', pid: p.id, reset: true, text: 'χωρίς εξαιρέσεις από τον λοχία' }, false), shortName(p) + ': χωρίς εξαιρέσεις από τον λοχία');
+  const onReset = async (p: Person) => done(await run({ t: 'setDutyProfile', pid: p.id, reset: true, text: 'χωρίς εξαιρέσεις από τον λοχία' }, false), rkShort(p) + ': χωρίς εξαιρέσεις από τον λοχία');
   // σταθερές συναρτήσεις για τις γραμμές (memo): καλούν πάντα τις τωρινές
   const live = useRef({ onCell, onDay, onReset }); live.current = { onCell, onDay, onReset };
   const act = useMemo(() => ({ cell: (p: Person, col: CapCol, c: CapCell) => live.current.onCell(p, col, c), day: (p: Person, d: number) => live.current.onDay(p, d), reset: (p: Person) => live.current.onReset(p) }), []);
@@ -132,7 +133,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
     </div>`}
     <p className="note whod__legend"><b>✓</b> κάνει · <b className="whod__lg is-off">✕</b> δεν κάνει (το όρισες εσύ) · <b className="whod__lg is-auto">—</b> δεν κάνει λόγω Σ.Ι. ή πόστου (<${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//>) · <b className="whod__lg is-force">✓!</b> κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
       Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.</p>
-    ${ask && html`<${Dialog} title=${'Να κάνει ' + ask.col.label.toLowerCase() + ' ο ' + shortName(ask.p) + ';'} description=${'Κανονικά δεν μπαίνει: ' + ask.why + '.'} onClose=${() => setAsk(null)}
+    ${ask && html`<${Dialog} title=${'Να κάνει ' + ask.col.label.toLowerCase() + ' ο ' + rkShort(ask.p) + ';'} description=${'Κανονικά δεν μπαίνει: ' + ask.why + '.'} onClose=${() => setAsk(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setAsk(null)}>Άκυρο<//><${Button} data-autofocus="" onClick=${() => { const a = ask; setAsk(null); setCap(a.p, a.col, 'on', 'κάνει ' + a.col.label.toLowerCase() + ' παρά το «' + a.why + '»'); }}>Να κάνει παρ’ όλα αυτά<//>`}>
       <p className="muted" style=${{ margin: 0 }}>Ισχύει μόνο για αυτόν και μόνο για ${ask.col.label.toLowerCase()}. Φαίνεται με <b>✓!</b> και αναιρείται με ένα κλικ ή Ctrl+Z.</p><//>`}
   </div>`;

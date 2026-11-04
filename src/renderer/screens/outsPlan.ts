@@ -1,5 +1,6 @@
 // features/outs · ώρες της μέρας, διόρθωση επιστροφής ανά άτομο και ο πίνακας ωρών των Κανόνων (Michael, 24/10, 25/10).
 // Οι ώρες και η λογική είναι στο shared/returns.ts· εδώ μόνο οι φόρμες.
+import { rkShort } from '../rankName';
 import { useEffect, useState } from 'react';
 import { html, Button, Dialog, Why, Segmented, useToast } from '../ui';
 import { useStore } from '../store';
@@ -7,7 +8,6 @@ import { DateField, TimeField } from '../common';
 import { normTime, mins } from '../../shared/hours';
 import { addDays, dm, weekday, DOW_FULL } from '../../shared/dates';
 import { baseOf, dayTimes, defaultRow, retTxt, weekRow, type Back, type WeekRow } from '../../shared/returns';
-import { shortName } from '../../shared/domain';
 type P = any;
 
 // Η μπάρα της μέρας D στους Εξοδούχους: αρχή εξόδου και επιστροφή εξοδούχων είναι της D· επιστροφή ΔΝ και εκπαίδευση είναι της επόμενης
@@ -63,10 +63,10 @@ export function BackFixDialog({ b, date, onClose }: { b: Back; date: string; onC
   const t = normTime(time);
   const problem = !why.trim() ? 'Γράψε τον λόγο της διόρθωσης' : mode === 'at' && !t ? 'Η ώρα επιστροφής δεν είναι σωστή' : mode === 'at' && day < first ? 'Η επιστροφή είναι πριν από την έξοδο' : '';
   const save = async () => {
-    if (await run({ t: 'setBackFix', pid: b.p.id, day: date, ...(mode === 'stay' ? { stay: true } : { at: { day, time: t! } }), why }, false)) { onClose(); toast({ text: 'Διόρθωση επιστροφής ' + shortName(b.p), actions: [undoMark()] }); }
+    if (await run({ t: 'setBackFix', pid: b.p.id, day: date, ...(mode === 'stay' ? { stay: true } : { at: { day, time: t! } }), why }, false)) { onClose(); toast({ text: 'Διόρθωση επιστροφής ' + rkShort(b.p), actions: [undoMark()] }); }
   };
-  const del = async () => { if (old && await run({ t: 'delBackFix', id: old.id }, false)) { onClose(); toast({ text: 'Η επιστροφή ' + shortName(b.p) + ' πάλι βγαίνει αυτόματα', actions: [undoMark()] }); } };
-  return html`<${Dialog} title=${'Διόρθωση επιστροφής · ' + shortName(b.p)} description=${'Τώρα: ' + retTxt(b.r)} onClose=${onClose}
+  const del = async () => { if (old && await run({ t: 'delBackFix', id: old.id }, false)) { onClose(); toast({ text: 'Η επιστροφή ' + rkShort(b.p) + ' πάλι βγαίνει αυτόματα', actions: [undoMark()] }); } };
+  return html`<${Dialog} title=${'Διόρθωση επιστροφής · ' + rkShort(b.p)} description=${'Τώρα: ' + retTxt(b.r)} onClose=${onClose}
     footer=${html`<${Why} text=${problem}/>${old ? html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει τη διόρθωση και η επιστροφή βγαίνει πάλι από τους κανόνες">Πίσω στο αυτόματο<//>` : null}<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!problem} why=${problem} onClick=${save}>Αποθήκευση<//>`}>
     <p className="note" style=${{ marginTop: 0 }}>Για ό,τι άλλαξε προφορικά και δεν βγαίνει από τις δηλώσεις. Μπαίνει στο Ιστορικό και αναιρείται.</p>
     <div className="field"><${Segmented} value=${mode} onChange=${setMode} items=${[{ value: 'at', label: 'Γυρνά…' }, { value: 'stay', label: 'Δεν γυρνά, συνεχίζει' }]}/></div>

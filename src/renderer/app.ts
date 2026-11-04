@@ -19,6 +19,7 @@ import { NoteDialog, NotesScreen } from './screens/notes';
 import { WeaponsScreen } from './screens/weapons';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
+import { setRankNamesOn } from './rankName';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { clockChanged, onClockChange, useNowMin } from './clock';
 import { DEFAULT_TZ, addDays, appVsOs, clockOf, clockShift, dm, dmy, dow, durLabel, osParts, today as todayFn, zoneLabel } from '../shared/dates';
@@ -54,6 +55,7 @@ function useToday() {
 // Ρυθμίσεις εμφάνισης του PC. Το μενού «auto» είναι στενό σε οθόνες κάτω από 1200px.
 function usePrefsState(): PrefsValue {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  setRankNamesOn(prefs.rankNames !== false);   // πριν αποδοθούν οι οθόνες (Michael, 4/11)
   const [narrow, setNarrow] = useState(() => window.innerWidth < 1500);
   useEffect(() => { applyPrefs(prefs); savePrefs(prefs); }, [prefs]);
   useEffect(() => {

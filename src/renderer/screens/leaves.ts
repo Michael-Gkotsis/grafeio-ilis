@@ -1,4 +1,5 @@
 // Μενού ΗΚΑΙ › Άδειες (Michael, 18/10): κανονικές, τιμητικές και αναρρωτικές, ποιος λείπει και πότε γυρνά
+import { RkName } from '../rankName';
 import { HK } from '../../shared/unit';
 import { useDeferredValue, useMemo, useState } from 'react';
 import { html, Badge, Button, PageHeader, Segmented } from '../ui';
@@ -47,7 +48,7 @@ export function LeavesTab() {
     <div style=${{ marginBottom: '12px' }}><${Segmented} value=${view} onChange=${(v: string) => nav.set({ leaveTab: v })} items=${[{ value: 'now', label: 'Τώρα (' + nNow + (nSoon ? ' + ' + nSoon + ' φεύγουν' : '') + ')', tip: nNow + ' σε άδεια τώρα' + (nSoon ? ' και ' + nSoon + ' που φεύγουν τις επόμενες μέρες (δεν μετρούν ακόμα στους απόντες)' : '') }, { value: 'back', label: 'Έληξαν', tip: 'Όσοι γύρισαν τις τελευταίες 14 μέρες' }]}/></div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, είδος άδειας, κατεύθυνση ή σημείωση · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>${dq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; const tt = timesTxt(s); return html`<li key=${s.id}>
-      <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}>${fullName(p)}</button> <${Badge} tone=${t.tone} data-tip=${t.long}>${badgeLbl(s, state.settings.lists)}<//>
+      <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${p} fn=${fullName}/></button> <${Badge} tone=${t.tone} data-tip=${t.long}>${badgeLbl(s, state.settings.lists)}<//>
         <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${when(s)}${tt ? ' · ' + tt : ''}${s.dest ? ' · → ' + s.dest : ''}${s.req ? ' · από αίτηση' : ''}${s.note ? ' · ' + s.note : ''}</small></div>
       ${view === 'now' && hasTimes(s.type) && html`<${Button} size="sm" variant="ghost" onClick=${() => setTimes(s)} data-tip="Ώρα αναχώρησης την πρώτη μέρα, ώρα επιστροφής την τελευταία και κατεύθυνση" data-tip-side="left">Ώρες και κατεύθυνση…<//>`}
       ${view === 'now' && html`<${Button} size="sm" variant="ghost" onClick=${() => setFix(s)} data-tip="Μπήκε λάθος; Άλλαξε είδος, ημερομηνίες, ώρες και κατεύθυνση" data-tip-side="left">Διόρθωση…<//>`}

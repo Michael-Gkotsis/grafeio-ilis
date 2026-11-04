@@ -2,8 +2,8 @@
 // Ζουν στο localStorage· αν δεν διαβάζεται (π.χ. κλειδωμένος δίσκος), η εφαρμογή δουλεύει με τις προεπιλογές.
 import { createContext, useContext } from 'react';
 
-export interface Prefs { theme: 'auto' | 'light' | 'dark'; density: 'normal' | 'compact'; nav: 'auto' | 'full' | 'rail'; xlZoom: 'fit' | '100' }
-export const DEFAULT_PREFS: Prefs = { theme: 'auto', density: 'normal', nav: 'auto', xlZoom: 'fit' };
+export interface Prefs { theme: 'auto' | 'light' | 'dark'; density: 'normal' | 'compact'; nav: 'auto' | 'full' | 'rail'; xlZoom: 'fit' | '100'; rankNames: boolean }
+export const DEFAULT_PREFS: Prefs = { theme: 'auto', density: 'normal', nav: 'auto', xlZoom: 'fit', rankNames: true };
 const KEY = 'grafeio.prefs';
 
 export function load<T>(key: string, fallback: T): T {

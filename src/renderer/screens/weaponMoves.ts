@@ -3,6 +3,7 @@
 // μπαίνει μόνος του από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ), με ώρα (τώρα). Κάθε κίνηση διορθώνεται ή σβήνεται στις «Κινήσεις».
 // Στη γραμμή (Michael, 18/10: «πιο ξεκάθαρο… πάνω στο table»): διακόπτης ΕΝΤΟΣ | ΕΚΤΟΣ, και ένα μικρό παράθυρο ακριβώς από κάτω
 // με ώρα (τώρα) και τους λόγους ως κουμπιά: ένα κλικ στον λόγο και βγήκε. Για είσοδο: ώρα και λόγος εισαγωγής έτοιμα, Enter.
+import { RkName, rkShort, rkText } from '../rankName';
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Segmented, VirtualList, typingText, useEscape, useToast, useViewportHeight } from '../ui';
@@ -11,7 +12,7 @@ import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateField, GoLink, TimeField, useTimeOptions } from '../common';
 import { shortName, plainName, fullName, type Person, type WeaponMove } from '../../shared/domain';
 import { seatMap } from '../../shared/rules';
-import { listOf, rankTxt, weaponBack } from '../../shared/ranks';
+import { listOf, weaponBack } from '../../shared/ranks';
 import { normTime } from '../../shared/hours';
 import { dm, dmy, nowHM, today as todayFn } from '../../shared/dates';
 import { armedRows, armWhen, calDay, hmOf, stampMin, stampOf, type ArmRow } from '../../shared/armed';
@@ -41,10 +42,10 @@ export function WeaponOutDialog({ pids, reason: r0 = '', onClose, onDone }: P) {
   const save = async () => {
     if (!ok) return;
     if (!(await run({ t: 'weaponOut', pids: go.map(p => p.id), reason, day, time: normTime(time)!, note }, false))) return;
-    toast({ text: 'Έξοδος όπλων (' + reason.trim().toUpperCase() + ') ' + normTime(time) + ': ' + (go.length === 1 ? shortName(go[0]) : go.length + ' όπλα'), actions: [undoMark()] });
+    toast({ text: 'Έξοδος όπλων (' + reason.trim().toUpperCase() + ') ' + normTime(time) + ': ' + (go.length === 1 ? rkShort(go[0]) : go.length + ' όπλα'), actions: [undoMark()] });
     onDone?.(reason.trim().toUpperCase()); onClose();
   };
-  return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? rankTxt(go[0]) + ' ' + plainName(go[0]) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
+  return html`<${Dialog} title=${'Έξοδος όπλων' + (go.length > 1 ? ' (' + go.length + ')' : '')} description=${go.length === 1 ? rkText(go[0], plainName, true) + ' · όπλο ' + go[0].weapon : go.length ? names(go) : 'Κανένα όπλο για έξοδο'} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} data-autofocus=${r0 ? '' : undefined} onClick=${save}>Έξοδος${go.length > 1 ? ' (' + go.length + ')' : ''}<//>`}>
     <${ChoiceField} id="wo-r" label="Λόγος εξόδου *" value=${reason} options=${reasons} autoFocus=${!r0} placeholder="π.χ. ΦΡΟΥΡΑ" otherLabel="Άλλος λόγος (γράψε τον)…" otherHelp="Για να προτείνεται κάθε φορά, με τον λόγο εισαγωγής του, πρόσθεσέ τον στις Ρυθμίσεις › Λίστες." onChange=${setReason}/>
     ${reason.trim() && html`<p className="note" style=${{ margin: '-4px 0 10px' }}>Όταν μπει πάλι: <b>${weaponBack(reason, state.settings.lists)}</b></p>`}
@@ -71,18 +72,18 @@ export function WeaponInDialog({ ids, onClose, onDone }: P) {
   const save = async () => {
     if (!ok) return;
     if (!(await run({ t: 'weaponIn', ids: moves.map(m => m.id), day, time: normTime(time)!, reason: reason.trim() || undefined }, false))) return;
-    toast({ text: 'Είσοδος όπλων (' + (reason.trim().toUpperCase() || backs.join(', ')) + ') ' + normTime(time) + ': ' + (moves.length === 1 ? shortName(pm.get(moves[0].pid)!) : moves.length + ' όπλα') + stayTxt(stay.map(x => shortName(pm.get(x.m.pid)!) + ': ' + x.s!.text)), actions: [undoMark()] });
+    toast({ text: 'Είσοδος όπλων (' + (reason.trim().toUpperCase() || backs.join(', ')) + ') ' + normTime(time) + ': ' + (moves.length === 1 ? rkShort(pm.get(moves[0].pid)!) : moves.length + ' όπλα') + stayTxt(stay.map(x => rkShort(pm.get(x.m.pid)!) + ': ' + x.s!.text)), actions: [undoMark()] });
     onDone?.(); onClose();
   };
-  return html`<${Dialog} title=${'Είσοδος όπλων' + (moves.length > 1 ? ' (' + moves.length + ')' : '')} description=${moves.length === 1 ? shortName(pm.get(moves[0].pid)!) + ' · όπλο ' + moves[0].weapon + ' · βγήκε ' + moves[0].reason + ' ' + dm(moves[0].outDay) + ' ' + moves[0].outTime : moves.length + ' όπλα που είναι εκτός'} onClose=${onClose}
+  return html`<${Dialog} title=${'Είσοδος όπλων' + (moves.length > 1 ? ' (' + moves.length + ')' : '')} description=${moves.length === 1 ? rkShort(pm.get(moves[0].pid)!) + ' · όπλο ' + moves[0].weapon + ' · βγήκε ' + moves[0].reason + ' ' + dm(moves[0].outDay) + ' ' + moves[0].outTime : moves.length + ' όπλα που είναι εκτός'} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} data-autofocus="" onClick=${save}>Είσοδος${moves.length > 1 ? ' (' + moves.length + ')' : ''}<//>`}>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="wi-d">Μέρα</label><${DateField} id="wi-d" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
       <${TimeField} id="wi-t" now=${true} label="Ώρα εισόδου *" value=${time} onChange=${setTime} help="Η τωρινή· άλλαξέ την αν μπήκε νωρίτερα"/></div>
     <div className="field"><label className="field__label" htmlFor="wi-r">Λόγος εισαγωγής</label><input id="wi-r" className="ui-input" placeholder=${backs.length === 1 ? backs[0] : 'Αυτόματα: ' + backs.join(', ')} value=${reason} onChange=${(e: any) => setReason(e.target.value)}/>
       <span className="field__help">${reason.trim() ? 'Γράφεται σε όλα: ' + reason.trim().toUpperCase() : html`Κενό: ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (<${GoLink} view="templates" params=${{ tab: 'lists' }}>Ρυθμίσεις › Λίστες<//>)`}</span></div>
-    ${moves.length > 1 && html`<ul className="hist weapon-movelist">${moves.map(m => html`<li key=${m.id}><b>${shortName(pm.get(m.pid)!)}</b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${reason.trim().toUpperCase() || weaponBack(m.reason, lists)}</li>`)}</ul>`}
-    ${stay.length > 0 && html`<${Alert} tone="warn"><span>${stay.map((x, i) => html`<span key=${x.m.id}>${i ? html`<br/>` : ''}<b>${shortName(pm.get(x.m.pid)!)}</b>: ${x.s!.text}</span>`)}</span><//>`}
+    ${moves.length > 1 && html`<ul className="hist weapon-movelist">${moves.map(m => html`<li key=${m.id}><b><${RkName} p=${pm.get(m.pid)!}/></b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${reason.trim().toUpperCase() || weaponBack(m.reason, lists)}</li>`)}</ul>`}
+    ${stay.length > 0 && html`<${Alert} tone="warn"><span>${stay.map((x, i) => html`<span key=${x.m.id}>${i ? html`<br/>` : ''}<b><${RkName} p=${pm.get(x.m.pid)!}/></b>: ${x.s!.text}</span>`)}</span><//>`}
     ${early.length > 0 && html`<${Alert} tone="bad"><span>Η ώρα εισόδου είναι πριν την έξοδο για ${early.map(m => shortName(pm.get(m.pid)!) + ' (' + dm(m.outDay) + ' ' + m.outTime + ')').join(', ')}.</span><//>`}
   <//>`;
 }
@@ -98,11 +99,11 @@ function EditMoveDialog({ m, onClose }: P) {
   const save = async () => {
     if (!ok) return;
     const patch = { reason: x.reason, outDay: x.outDay, outTime: normTime(x.outTime)!, note: x.note, ...(x.inDay ? { inDay: x.inDay, inTime: normTime(x.inTime)!, inReason: x.inReason } : { inDay: '' }) };
-    if (await run({ t: 'editWeaponMove', id: m.id, patch }, false)) { toast({ text: 'Διορθώθηκε η κίνηση' + (p ? ' ' + shortName(p) : ''), actions: [undoMark()] }); onClose(); }
+    if (await run({ t: 'editWeaponMove', id: m.id, patch }, false)) { toast({ text: 'Διορθώθηκε η κίνηση' + (p ? ' ' + rkShort(p) : ''), actions: [undoMark()] }); onClose(); }
   };
-  const del = async () => { if (await run({ t: 'deleteWeaponMove', id: m.id }, false)) { toast({ text: 'Σβήστηκε η κίνηση' + (p ? ' ' + shortName(p) : ''), actions: [undoMark()] }); onClose(); } };
+  const del = async () => { if (await run({ t: 'deleteWeaponMove', id: m.id }, false)) { toast({ text: 'Σβήστηκε η κίνηση' + (p ? ' ' + rkShort(p) : ''), actions: [undoMark()] }); onClose(); } };
   const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
-  return html`<${Dialog} title="Διόρθωση κίνησης όπλου" description=${(p ? rankTxt(p) + ' ' + plainName(p) : '') + ' · όπλο ' + m.weapon} onClose=${onClose}
+  return html`<${Dialog} title="Διόρθωση κίνησης όπλου" description=${(p ? rkText(p, plainName, true) : '') + ' · όπλο ' + m.weapon} onClose=${onClose}
     footer=${html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">Σβήσε<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Αποθήκευση<//>`}>
     <${ChoiceField} id="we-r" label="Λόγος εξόδου *" value=${x.reason} options=${reasons} otherLabel="Άλλος λόγος (γράψε τον)…" onChange=${set('reason')}/>
     <div className="field-row">
@@ -126,9 +127,9 @@ function DutyFixDialog({ row, onClose }: P) {
   const set = (k: string) => (v: string) => setX(o => ({ ...o, [k]: v }));
   const why = !ot ? 'Λείπει: Ώρα εξόδου' : !it ? 'Λείπει: Ώρα εισόδου' : stampMin(row.day, inn) < stampMin(row.day, out) ? 'Η είσοδος είναι πριν την έξοδο' : !x.why.trim() ? 'Λείπει: Λόγος διόρθωσης' : out === stampOf(row.day, row.out) && inn === stampOf(row.day, row.in) && x.why.trim() === (row.fix?.why || '') ? 'Άλλαξε μια ώρα' : '';
   const done = (text: string) => { toast({ text, actions: [undoMark()] }); onClose(); };
-  const save = async () => { if (!why && await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, out, in: inn, why: x.why }, false)) done('Διορθώθηκαν οι ώρες: ' + row.reason + (p ? ' ' + shortName(p) : '')); };
-  const reset = async () => { if (await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, why: '', reset: true }, false)) done('Οι ώρες γύρισαν στο αυτόματο: ' + row.reason + (p ? ' ' + shortName(p) : '')); };
-  return html`<${Dialog} title="Διόρθωση ώρας ένοπλης υπηρεσίας" description=${row.reason + (p ? ' · ' + rankTxt(p) + ' ' + plainName(p) : '') + ' · αυτόματα ' + hmOf(row.autoOut) + '–' + hmOf(row.autoIn)} onClose=${onClose}
+  const save = async () => { if (!why && await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, out, in: inn, why: x.why }, false)) done('Διορθώθηκαν οι ώρες: ' + row.reason + (p ? ' ' + rkShort(p) : '')); };
+  const reset = async () => { if (await run({ t: 'fixDutyWeapon', day: row.day, post: row.post, n: row.n, why: '', reset: true }, false)) done('Οι ώρες γύρισαν στο αυτόματο: ' + row.reason + (p ? ' ' + rkShort(p) : '')); };
+  return html`<${Dialog} title="Διόρθωση ώρας ένοπλης υπηρεσίας" description=${row.reason + (p ? ' · ' + rkText(p, plainName, true) : '') + ' · αυτόματα ' + hmOf(row.autoOut) + '–' + hmOf(row.autoIn)} onClose=${onClose}
     footer=${html`${row.fix && html`<${Button} variant="ghost" onClick=${reset} data-tip="Σβήνει τη διόρθωση: οι ώρες ξαναβγαίνουν από τις υπηρεσίες (αναιρείται με Ctrl+Z)">Πίσω στο αυτόματο<//>`}<span style=${{ flex: 1 }}></span><${Why} text=${why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!why} why=${why} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="df-od">Μέρα εξόδου</label><${DateField} id="df-od" className="ui-input" value=${x.od} onChange=${(e: any) => e.target.value && set('od')(e.target.value)}/></div>
@@ -138,7 +139,7 @@ function DutyFixDialog({ row, onClose }: P) {
       <${TimeField} id="df-it" now=${true} label="Ώρα εισόδου *" value=${x.it} onChange=${set('it')} help=${row.give ? 'Πότε το παραδίδει στον επόμενο' : 'Πότε μπαίνει πάλι στον οπλοβαστό'}/></div>
     <div className="field"><label className="field__label" htmlFor="df-w">Λόγος της διόρθωσης *</label><input id="df-w" className="ui-input" placeholder="π.χ. άργησε η αλλαγή φρουράς" value=${x.why} onChange=${(e: any) => set('why')(e.target.value)}/>
       <span className="field__help">Γράφεται στο Ιστορικό και στην Παρατήρηση του Excel κινήσεων.</span></div>
-    ${row.mode === 'post' && html`<${Alert} tone="info"><span>Όπλο της θέσης${owner ? ' (' + shortName(owner) + ')' : ''}: αλλάζει μόνο αυτή η γραμμή· οι άλλες μένουν όπως είναι.</span><//>`}
+    ${row.mode === 'post' && html`<${Alert} tone="info"><span>Όπλο της θέσης${owner ? ' (' + rkShort(owner) + ')' : ''}: αλλάζει μόνο αυτή η γραμμή· οι άλλες μένουν όπως είναι.</span><//>`}
   <//>`;
 }
 
@@ -176,7 +177,7 @@ function BulkFixDialog({ ids, onClose, onDone }: P) {
     ${timeOn && html`<div className="field-row">
       <div className="field"><label className="field__label" htmlFor="bf-d">Μέρα εξόδου</label><${DateField} id="bf-d" className="ui-input" value=${day} onChange=${(e: any) => e.target.value && setDay(e.target.value)}/></div>
       <${TimeField} id="bf-t" now=${true} label="Ώρα εξόδου *" value=${time} onChange=${setTime}/></div>`}
-    ${ms.length > 1 && html`<ul className="hist weapon-movelist">${ms.map(m => html`<li key=${m.id}><b>${pm.get(m.pid) ? shortName(pm.get(m.pid)!) : '—'}</b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${rs || m.reason}${timeOn && t ? ' ' + dm(day) + ' ' + t : ''}</li>`)}</ul>`}
+    ${ms.length > 1 && html`<ul className="hist weapon-movelist">${ms.map(m => html`<li key=${m.id}><b>${pm.get(m.pid) ? rkShort(pm.get(m.pid)!) : '—'}</b> <span className="muted">${m.weapon} · ${m.reason} ${dm(m.outDay)} ${m.outTime} →</span> ${rs || m.reason}${timeOn && t ? ' ' + dm(day) + ' ' + t : ''}</li>`)}</ul>`}
     ${late.length > 0 && html`<${Alert} tone="bad"><span>Η είσοδος είναι πριν τη νέα έξοδο για ${late.map(m => pm.get(m.pid) ? shortName(pm.get(m.pid)!) : '—').join(', ')}.</span><//>`}
   <//>`;
 }
@@ -193,9 +194,9 @@ const MRow = memo(function MRow({ m, i, style, selected, pm, lists, today, onTog
   const post = auto && m.row.mode === 'post';
   const seat = own ? seatTxt(own.rack, own.wpos) : '';
   return html`<div className=${cx('ptable__row', i % 2 === 1 && 'is-odd', auto && 'is-auto')} style=${{ ...style, gridTemplateColumns: MV_GRID, cursor: 'default' }} role="row">
-    <span>${!auto && html`<input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + (p ? shortName(p) : m.weapon)} checked=${selected} onChange=${(e: any) => onToggle(m.id, !!e.nativeEvent?.shiftKey)}/>`}</span>
-    <span className="wmv__who">${p ? html`<button type="button" className="linkish" data-tip=${rankTxt(p) + ' ' + fullName(p)} onClick=${() => onOpen(p.id)}><b>${rankTxt(p)} ${shortName(p)}</b></button>${p.cid && html` <${Badge} tone="outline" data-tip="Στέλεχος σε ένοπλη υπηρεσία: το όπλο του είναι από την κάρτα στελέχους">στέλεχος<//>`}` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
-    <span className="wmv__w">${m.weapon ? html`<span className="num">${m.weapon}</span>` : auto ? html`<${Badge} tone="bad" data-tip=${'Ένοπλη υπηρεσία χωρίς αριθμό όπλου' + (own ? ': ο ' + shortName(own) + ' δεν έχει' : '')}>Χωρίς όπλο<//>` : '—'}${seat && html`<small>${seat}</small>`}</span>
+    <span>${!auto && html`<input type="checkbox" className="ui-check" aria-label=${'Επιλογή ' + (p ? rkShort(p) : m.weapon)} checked=${selected} onChange=${(e: any) => onToggle(m.id, !!e.nativeEvent?.shiftKey)}/>`}</span>
+    <span className="wmv__who">${p ? html`<button type="button" className="linkish" data-tip=${rkText(p, fullName, true)} onClick=${() => onOpen(p.id)}><b><${RkName} p=${p} keep=${true}/></b></button>${p.cid && html` <${Badge} tone="outline" data-tip="Στέλεχος σε ένοπλη υπηρεσία: το όπλο του είναι από την κάρτα στελέχους">στέλεχος<//>`}` : '—'}${owner && html`<small data-tip=${'Όπλο της θέσης (' + m.row.label + '): το έχει βγάλει ο ' + shortName(owner) + ' και περνά από χέρι σε χέρι'}>κρατά το όπλο του ${shortName(owner)}</small>`}</span>
+    <span className="wmv__w">${m.weapon ? html`<span className="num">${m.weapon}</span>` : auto ? html`<${Badge} tone="bad" data-tip=${'Ένοπλη υπηρεσία χωρίς αριθμό όπλου' + (own ? ': ο ' + rkShort(own) + ' δεν έχει' : '')}>Χωρίς όπλο<//>` : '—'}${seat && html`<small>${seat}</small>`}</span>
     <span className="wmv__reason" data-tip=${m.reason}><${Badge} tone="warn">${m.reason}<//></span>
     <span className=${cx('num', post && 'wmv__post')}>${post ? moveOutCell(m) : dt(m.outDay, m.outTime)}</span>
     <span className="wmv__reason" data-tip=${m.inDay ? m.inReason || undefined : undefined}>${m.inDay ? html`<${Badge} tone="ok">${m.inReason || weaponBack(m.reason, lists)}<//>` : html`<${Badge} tone="bad">Εκτός<//>`}</span>
@@ -307,7 +308,7 @@ function OutPop({ p, anchor, onClose }: P) {
   const go = async (reason: string) => {
     const t = normTime(time); if (!reason.trim() || !t) return;
     if (!(await run({ t: 'weaponOut', pids: [p.id], reason, day, time: t, note }, false))) return;
-    toast({ text: shortName(p) + ': όπλο ' + p.weapon + ' ΕΚΤΟΣ (' + reason.trim().toUpperCase() + ') ' + when(day, t, today), actions: [undoMark()] });
+    toast({ text: rkShort(p) + ': όπλο ' + p.weapon + ' ΕΚΤΟΣ (' + reason.trim().toUpperCase() + ') ' + when(day, t, today), actions: [undoMark()] });
     onClose();
   };
   const tip = hover || other.trim();
@@ -318,7 +319,7 @@ function OutPop({ p, anchor, onClose }: P) {
     document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
   }, [reasons]);
   return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Έξοδος όπλου ' + p.weapon}>
-    <div className="wpop__head"><b>Έξοδος όπλου ${p.weapon}</b><small>${rankTxt(p)} ${plainName(p)}</small></div>
+    <div className="wpop__head"><b>Έξοδος όπλου ${p.weapon}</b><small><${RkName} p=${p} fn=${plainName} keep=${true}/></small></div>
     <${WhenRow} label="Ώρα εξόδου" day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
     <input className="ui-input wpop__note" placeholder="Παρατήρηση (αν θες), π.χ. πεδίο βολής" value=${note} onChange=${(e: any) => setNote(e.target.value)} aria-label="Παρατήρηση"/>
     <div className="wpop__lbl">Γιατί βγαίνει; Πάτα τον λόγο ή τον αριθμό του:</div>
@@ -341,11 +342,11 @@ function InPop({ p, m, anchor, onClose, onEdit }: P) {
   const go = async (e?: any) => {
     e?.preventDefault(); if (!ok) return;
     if (!(await run({ t: 'weaponIn', ids: [m.id], day, time: t!, reason: reason.trim() || undefined }, false))) return;
-    toast({ text: shortName(p) + ': όπλο ' + m.weapon + ' ΕΝΤΟΣ (' + (reason.trim().toUpperCase() || auto) + ') ' + when(day, t!, today) + stayTxt(stay ? [stay.text] : []), actions: [undoMark()] });
+    toast({ text: rkShort(p) + ': όπλο ' + m.weapon + ' ΕΝΤΟΣ (' + (reason.trim().toUpperCase() || auto) + ') ' + when(day, t!, today) + stayTxt(stay ? [stay.text] : []), actions: [undoMark()] });
     onClose();
   };
   return html`<${Pop} anchor=${anchor} onClose=${onClose} label=${'Είσοδος όπλου ' + m.weapon}>
-    <div className="wpop__head"><b>Είσοδος όπλου ${m.weapon}</b><small>${rankTxt(p)} ${plainName(p)} · βγήκε ${m.reason} ${when(m.outDay, m.outTime, today)}</small></div>
+    <div className="wpop__head"><b>Είσοδος όπλου ${m.weapon}</b><small><${RkName} p=${p} fn=${plainName} keep=${true}/> · βγήκε ${m.reason} ${when(m.outDay, m.outTime, today)}</small></div>
     <form onSubmit=${go}>
       <${WhenRow} label="Ώρα εισόδου" day=${day} time=${time} setDay=${setDay} setTime=${setTime}/>
       <label className="wpop__field"><span>Λόγος εισαγωγής</span><input className="ui-input" value=${reason} placeholder=${auto} onChange=${(e: any) => setReason(e.target.value)} aria-label="Λόγος εισαγωγής"/></label>

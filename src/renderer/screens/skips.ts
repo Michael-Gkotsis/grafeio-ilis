@@ -1,6 +1,7 @@
 // features/guard › «Εξαιρέσεις» (Michael, 24/10): εφάπαξ εξαίρεση ενός ατόμου από τις υπηρεσίες, από–έως, με προαιρετική
 // αιτιολογία (π.χ. «μην μπει ΣΚ γιατί έχει γάμο»). Δουλεύει όπως οι μέρες χωρίς υπηρεσία: η αυτόματη συμπλήρωση τον προσπερνά
 // εκείνες τις μέρες, με το χέρι μπαίνει μόνο με αιτία. Το «πριν ή μετά» βγαίνει μόνο του από τη σειρά δικαιοσύνης.
+import { RkName, rkShort } from '../rankName';
 import { useMemo, useState } from 'react';
 import { html, cx, Badge, Button, useToast } from '../ui';
 import { useStore } from '../store';
@@ -28,20 +29,20 @@ export function SkipsView({ onPerson }: { onPerson?: (pid: number) => void }) {
   const save = async () => {
     if (!p) return;
     const r = await run({ t: 'setSkip', pid: p.id, id: edit || undefined, from, to, why }, false);
-    if (r) { toast({ text: (edit ? 'Άλλαξε η εξαίρεση: ' : 'Εξαίρεση από υπηρεσίες: ') + shortName(p) + ' ' + when({ id: '', from, to }) + '. Η αυτόματη συμπλήρωση τον προσπερνά εκείνες τις μέρες.', actions: [undoMark()] }); reset(); }
+    if (r) { toast({ text: (edit ? 'Άλλαξε η εξαίρεση: ' : 'Εξαίρεση από υπηρεσίες: ') + rkShort(p) + ' ' + when({ id: '', from, to }) + '. Η αυτόματη συμπλήρωση τον προσπερνά εκείνες τις μέρες.', actions: [undoMark()] }); reset(); }
   };
   const change = (x: Item) => { setPid(x.p.id); setFrom(x.k.from); setTo(x.k.to); setTouched(true); setWhy(x.k.why || ''); setEdit(x.k.id); };
-  const del = async (x: Item) => { if (await run({ t: 'delSkip', pid: x.p.id, id: x.k.id }, false)) { if (edit === x.k.id) reset(); toast({ text: 'Σβήστηκε η εξαίρεση: ' + shortName(x.p), actions: [undoMark()] }); } };
+  const del = async (x: Item) => { if (await run({ t: 'delSkip', pid: x.p.id, id: x.k.id }, false)) { if (edit === x.k.id) reset(); toast({ text: 'Σβήστηκε η εξαίρεση: ' + rkShort(x.p), actions: [undoMark()] }); } };
   const group = (title: string, list: Item[], tone: string) => list.length > 0 && html`<section className="skips__grp"><h3 className="minihd">${title} (${list.length})</h3>
     <div className="skips__list">${list.map(x => {
       const last = statOf(state, x.p.id).last;
       return html`<div key=${x.k.id} className=${cx('skips__row', edit === x.k.id && 'is-edit')}>
-        <span className="skips__who"><button type="button" className="linkish" onClick=${() => onPerson?.(x.p.id)} data-tip="Πάτα: «Ποιος κάνει τι»"><b>${shortName(x.p)}</b></button>
+        <span className="skips__who"><button type="button" className="linkish" onClick=${() => onPerson?.(x.p.id)} data-tip="Πάτα: «Ποιος κάνει τι»"><b><${RkName} p=${x.p}/></b></button>
           <small>${x.p.room != null ? 'Θ' + x.p.room : ''}${last ? (x.p.room != null ? ' · ' : '') + 'τελευταία υπηρεσία ' + dm(last) : ''}</small></span>
         <span className="skips__when num">${when(x.k)}<small>${nDays(x.k)} ${nDays(x.k) === 1 ? 'μέρα' : 'μέρες'}</small></span>
         <span className="skips__why">${x.k.why || html`<span className="muted">—</span>`}</span>
         <span className="skips__act"><${Badge} tone=${tone}>${tone === 'warn' ? 'ισχύει' : tone === 'info' ? (daysBetween(today, x.k.from) <= 2 ? 'αύριο' : 'σε ' + (daysBetween(today, x.k.from) - 1) + ' μέρες') : 'πέρασε'}<//>
-          <${Button} variant="ghost" size="sm" onClick=${() => change(x)}>Αλλαγή<//><${Button} variant="ghost" size="sm" aria-label=${'Σβήσιμο εξαίρεσης ' + shortName(x.p)} onClick=${() => del(x)}>Σβήσιμο<//></span>
+          <${Button} variant="ghost" size="sm" onClick=${() => change(x)}>Αλλαγή<//><${Button} variant="ghost" size="sm" aria-label=${'Σβήσιμο εξαίρεσης ' + rkShort(x.p)} onClick=${() => del(x)}>Σβήσιμο<//></span>
       </div>`;
     })}</div></section>`;
   return html`<div className="skips">

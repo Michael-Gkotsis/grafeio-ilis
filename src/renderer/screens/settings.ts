@@ -54,6 +54,7 @@ function AppearanceCard() {
     ${row('density', 'Πυκνότητα', 'Η συμπαγής χωρά περισσότερες γραμμές σε οθόνη 1024×768.', [{ value: 'normal', label: 'Κανονική' }, { value: 'compact', label: 'Συμπαγής' }])}
     ${row('nav', 'Μενού', 'Αυτόματο: στενό μενού σε οθόνες κάτω από 1500px. Αλλάζει και με Ctrl+B.', [{ value: 'full', label: 'Πλήρες' }, { value: 'rail', label: 'Στενό' }, { value: 'auto', label: 'Αυτόματο' }])}
     ${row('xlZoom', 'Προεπισκόπηση Excel', 'Το «Χωρά» μικραίνει το έντυπο για να φαίνεται όλο το πλάτος.', [{ value: 'fit', label: 'Χωρά' }, { value: '100', label: '100%' }])}
+    <div className="pref"><div><b>Βαθμός και όπλο πριν το όνομα</b><small>π.χ. ΣΤΡ (ΠΖ) ΠΑΠΑΔΟΠΟΥΛΟΣ Γ. στις οθόνες· τα Excel δεν αλλάζουν</small></div><${Segmented} small=${true} value=${prefs.rankNames ? 'on' : 'off'} onChange=${(v: string) => set('rankNames', v === 'on')} items=${[{ value: 'on', label: 'Ναι' }, { value: 'off', label: 'Όχι' }]}/></div>
   <//>`;
 }
 

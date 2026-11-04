@@ -6,6 +6,7 @@ import { requestLeave } from './pending';
 import { Combo, Select, useFloat, type ComboOpt } from './select';
 import { createPortal } from 'react-dom';
 import { usePrefs } from './prefs';
+import { RkName, rkOn } from './rankName';
 import { useStore, useNav, searchPeople } from './store';
 import { useToast } from './ui';
 import { statusesNow, isHol, holName, DEFAULT_HK_TIME } from '../shared/rules';
@@ -65,7 +66,7 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
       ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
       items.map((x, i) => html`${x.p.cid && !items[i - 1]?.p.cid && html`<li key=${'g' + x.p.id} className="picker__hd" role="presentation">Στελέχη</li>`}<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b>${plainName(x.p)}</b><small>${x.p.cid ? 'Στέλεχος · ' + rankTxt(x.p) : 'του ' + (x.p.father || '—') + ' · ' + rankTxt(x.p) + ' · ' + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
+        <div><b><${RkName} p=${x.p} fn=${plainName} keep=${true}/></b><small>${x.p.cid ? 'Στέλεχος' + (rkOn() ? '' : ' · ' + rankTxt(x.p)) : 'του ' + (x.p.father || '—') + ' · ' + (rkOn() ? '' : rankTxt(x.p) + ' · ') + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
         ${x.na ? html`<${Badge}>${x.na}<//>` : x.p.cid ? cadreBadge(state, x.p.cid, date || today) : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
     </ul>`, document.body)}
   </div>`;
