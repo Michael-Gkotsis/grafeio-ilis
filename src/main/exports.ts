@@ -7,7 +7,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
-import { hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
+import { live, hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
@@ -688,7 +688,7 @@ async function allSheet(wb: Workbook, s: AppState, d: ISODate, loc: OutsLoc, L: 
   // Παρατηρήσεις: η κατάσταση (άδεια, ΔΝ, έξοδος) με τις λέξεις των άλλων μορφών, η παρατήρηση της μέρας και η ΠΡΟΣΟΧΗ του γραφείου
   // Στο Γ (εκτός Γ4) οι καταστάσεις που δεν κόβουν την έξοδο (ΕΑ, ΕΟ, κωλυόμενος που βγαίνει…) δεν είναι «γιατί μένει» (Michael, 2/11):
   // γράφονται στις Παρατηρήσεις
-  const stayOf = (x: DayRow) => statusesFrom(s.statuses, x.p.id, d, outMinOn(s, d));
+  const stayOf = (x: DayRow) => statusesFrom(live(s), x.p.id, d, outMinOn(s, d));
   const notWhy = (x: DayRow) => (x.g[0] === 'G' && x.g !== 'G4' ? stayOf(x).filter(y => !statNoOut(y, s.settings.lists)).map(y => statusLbl(y, s.settings.lists)) : []);
   const noteOf = (x: DayRow) => [
     x.lv ? (x.st ? statusLbl(x.lv, s.settings.lists) : norm(withNote(statusLbl(x.lv, s.settings.lists), outNoteOf(s, d, x.p.id)))) : '',

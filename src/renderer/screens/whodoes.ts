@@ -13,7 +13,7 @@ import { ActiveFilter, GoLink } from '../common';
 import { WEEK, blocksOf, phaseList, phaseName, dutyStartOf, platoonsOf, platoonShort, shortName, unitOf, type Person, type Settings } from '../../shared/domain';
 import { capCell, capCols, statusesOn, type CapCell, type CapCol } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
-import { statusLbl } from '../../shared/ranks';
+import { live as liveSts, statusLbl } from '../../shared/ranks';
 import { siOf } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
 import { dayName, dm, DOW, DOW_FULL, type ISODate } from '../../shared/dates';
@@ -78,7 +78,7 @@ export function WhoDoes({ date, pid }: { date: ISODate; pid?: number | null }) {
   // η κατάσταση της μέρας που βλέπεις στις Υπηρεσίες: μόνο για πληροφορία, δεν αλλάζει τίποτα εδώ
   const bl = useMemo(() => (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden), [state.settings]);
   const hintOf = (p: Person) => {
-    const ss = statusesOn(state.statuses, p.id, date); const when = dayName(date, today);
+    const ss = statusesOn(liveSts(state), p.id, date); const when = dayName(date, today);
     const a = ss.find(x => statNoDuty(x, bl, lists)); if (a) return { txt: when + ': ' + statusLbl(a, lists) + untilTxt(a, date), tip: 'Δεν μπαίνει σε καμία υπηρεσία λόγω κατάστασης· ξαναμπαίνει μόνος του όταν λήξει', bad: true };
     const b = ss.find(x => statIsUnarmed(x, bl.filter(y => y.kind !== 'ly'), lists)); if (b) return { txt: when + ': μόνο άοπλες (' + statusLbl(b, lists) + untilTxt(b, date) + ')', tip: 'Λόγω κατάστασης, μέχρι να λήξει', bad: false };
     return null;

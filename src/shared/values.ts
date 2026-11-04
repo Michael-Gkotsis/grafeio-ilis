@@ -6,8 +6,8 @@
 import { dayFor, type ISODate } from './dates';
 import type { TabLay } from './reports';
 import { KOL_COLS, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
-import { HK_A, HK_K, activePeople, isHol, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, strengthAt, strengthOf } from './rules';
-import { listOf, MED_LIKE, ownMed, hkRowList } from './ranks';
+import { HK_A, HK_K, activePeople, isHol, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, statusesFrom, strengthAt, strengthOf } from './rules';
+import { listOf, medNote, MED_LIKE, ownMed, hkRowList } from './ranks';
 import { siCombos, siOf } from './si';
 import { outsTables } from './returns';
 import { outsAndStay } from './outsStay';
@@ -109,6 +109,8 @@ const cadreKeys = (c: VCtx, cols: string[]): VSet => { const h = hk(c); const o 
 // πρόσωπο της θέσης (στρατιώτης ή στέλεχος) από τον αριθμό της υπηρεσίας
 const seatKey = (c: VCtx, pid: number): string | null => { const p = memo(c, 'seats', () => seatMap(c.s)).get(pid); return p ? personKey(p) : null; };
 const pidKeys = (c: VCtx, pids: number[]): VSet => { const o = new Set<string>(); for (const pid of pids) { const k = seatKey(c, pid); if (k) o.add(k); } return o; };
+// «Μόνο σημείωση»: το μέτρο med.kind:<όνομα> είναι το ρητό opt-in, βλέπει και τις σημειώσεις (Michael, 4/11)· τα υπόλοιπα όχι
+const ssRaw = (c: VCtx) => memo(c, 'ssr', () => new Map(activePeople(c.s).map(p => [p.id, statusesFrom(c.s.statuses, p.id, c.d, c.at)] as const)));
 const ssAll = (c: VCtx) => memo(c, 'ss', () => new Map(activePeople(c.s).map(p => [p.id, statusesAt(c.s, p.id, c.d, c.at)] as const)));
 
 // ------------------------------------------------------------------ κατάλογος
@@ -138,7 +140,7 @@ export function metricsOf(s: AppState): Metric[] {
   for (const k of TYPE_KEYS) m.push(S('st.' + k, TYPES[k].cat === 'med' ? G.med : G.st, TYPES[k].long + (TYPES[k].cat === 'med' ? ' (' + TYPES[k].label + ')' : ''), c => keys(stg(c).lists[k])));
   for (const cat of ['abs', 'pun', 'out', 'other', 'med']) m.push(S('cat.' + cat, cat === 'med' ? G.med : G.st, CAT_LBL[cat], c => union(...(TYPE_KEYS as TypeKey[]).filter(k => TYPES[k].cat === cat).map(k => keys(stg(c).lists[k])))));
   for (const mk of listOf(lists, 'medKinds').filter(n => !MED_LIKE.map(k => TYPES[k].label).includes(n))) {
-    m.push(S('med.kind:' + mk, G.med, 'Ιατρικό «' + mk + '»', c => keys(activePeople(c.s).filter(p => (ssAll(c).get(p.id) || []).some(x => MED_LIKE.includes(x.type) && ownMed(c.s.settings.lists, x.kind)?.name === mk)))));
+    m.push(S('med.kind:' + mk, G.med, 'Ιατρικό «' + mk + '»', c => keys(activePeople(c.s).filter(p => ((medNote({ type: 'EA', kind: mk }, lists) ? ssRaw(c) : ssAll(c)).get(p.id) || []).some(x => MED_LIKE.includes(x.type) && ownMed(c.s.settings.lists, x.kind)?.name === mk)))));
   }
   // ---- Αιτήσεις της μέρας
   const reqs = (c: VCtx, f: (x: AppState['requests'][number]) => boolean) => { const pm = new Set(activePeople(c.s).map(p => p.id)); return new Set(c.s.requests.filter(x => x.date === c.d && pm.has(x.pid) && f(x)).map(x => 'p' + x.pid)); };

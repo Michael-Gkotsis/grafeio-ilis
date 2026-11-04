@@ -4,7 +4,7 @@
 import { dmy, type ISODate } from './dates';
 import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
 import { siOf } from './si';
-import { rankTxt, statusLbl } from './ranks';
+import { live, rankTxt, statusLbl } from './ranks';
 import { leavePhrase } from './hkaiText';
 import { collator } from './text';
 import { backBy } from './hours';
@@ -49,7 +49,7 @@ export interface RosterSheet { name: string; title: string; head: string[]; rows
 export function rosterSheets(s: AppState, d: ISODate, at?: number): RosterSheet[] {
   const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
   const byPid = new Map<number, Status[]>();
-  for (const x of s.statuses) if (coversDay(x, d) && !(at != null && backBy(x, d, at))) { const l = byPid.get(x.pid); if (l) l.push(x); else byPid.set(x.pid, [x]); }
+  for (const x of live(s)) if (coversDay(x, d) && !(at != null && backBy(x, d, at))) { const l = byPid.get(x.pid); if (l) l.push(x); else byPid.set(x.pid, [x]); }
   return ROSTER_FILTERS.map(([f, , name]) => {
     const withStatus = f === 'leave' || f === 'pun';
     const rows: (string | number)[][] = [];

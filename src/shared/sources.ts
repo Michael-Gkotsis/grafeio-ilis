@@ -9,7 +9,7 @@ import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { capCols, isHol, postBy, seatMap } from './rules';
-import { listOf, medTypeOf, optionsOf, rankTxt, type ListId, type UserLists } from './ranks';
+import { listOf, medNote, medNoteXl, medTypeOf, optionsOf, rankTxt, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
@@ -620,7 +620,9 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     } else if (what.length) d.update.push({ id: cur.id, patch, who, what: what.join(', '), ...(changedInApp(cur) ? { conflict: appText(cur) } : {}) });
     else d.same++;
   }
-  d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)) && !(today && b.scope === 'active' && x.to < today));
+  // «Μόνο σημείωση» χωρίς «στο Excel» (Michael, 4/11): δεν γράφεται εκεί, άρα ούτε «λείπει από το Excel» ούτε «σβήστηκε από το Excel»· διαβάζεται όμως αν υπάρχει γραμμή
+  const lists = s.settings.lists;
+  d.appOnly = mine.filter(x => !seen.has(statusId(kind, x)) && !(today && b.scope === 'active' && x.to < today) && !(medNote(x, lists) && !medNoteXl(x, lists)));
   const was = new Set(synced);
   const gone = d.appOnly.filter(x => was.has(statusId(kind, x)));
   if (gone.length) {
@@ -727,7 +729,8 @@ export const same = (a: CellValue, b: WVal) => {
 export function wanted(kind: StatusKind, s: AppState, b: SourceBinding, today: ISODate): Status[] {
   const types = KIND[kind].types!; const pm = new Map(s.people.map(p => [p.id, p]));
   // ποινή που ακόμα αιτείται δεν είναι «τιμωρημένος»: μπαίνει στο Excel όταν εγκριθεί
-  return s.statuses.filter(x => types.includes(x.type) && pm.has(x.pid) && !x.pending && (b.scope !== 'active' || x.to >= today))
+  const lists = s.settings.lists;
+  return s.statuses.filter(x => types.includes(x.type) && pm.has(x.pid) && !x.pending && (b.scope !== 'active' || x.to >= today) && !(medNote(x, lists) && !medNoteXl(x, lists)))
     .sort((a, b2) => a.from.localeCompare(b2.from) || collator.compare(pm.get(a.pid)!.last, pm.get(b2.pid)!.last));
 }
 // Καινούργιος πίνακας: επικεφαλίδες (και τίτλος από πάνω) αν η γραμμή είναι κενή
@@ -750,6 +753,8 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
   const scan = sheet ? tableRows(sheet, b.header, b.cols) : { records: [], free: [], end: b.header, open: true, width: [0, 0] as [number, number], partial: [] };
   const match = makeMatcher(s.people);
   const byId = new Map(want.map(x => [statusId(kind, x), x]));
+  // «Μόνο σημείωση» χωρίς «στο Excel»: αν υπάρχει γραμμή (γραμμένη με το χέρι) μένει όπως είναι, δεν σβήνεται ως «την είχε γράψει η εφαρμογή»
+  const quiet = new Set(s.statuses.filter(x => KIND[kind].types!.includes(x.type) && medNote(x, s.settings.lists) && !medNoteXl(x, s.settings.lists)).map(x => statusId(kind, x)));
   const syncedSet = new Set(synced); const placed = new Set<string>(); const hold = new Set<number>();
   const free = [...scan.free];
   const clearRow = (r: number) => {
@@ -782,7 +787,7 @@ export function planWrite(kind: StatusKind, sheet: RawSheet | null, b: SourceBin
         if (TIME_FIELDS.includes(k) ? cellTime(v[k]) !== val : !same(v[k], val)) { plan.sets.push({ r, c: b.cols[k], v: val }); ch = true; }
       }
       if (ch) plan.changed++;
-    } else if (id && syncedSet.has(id) && !byId.has(id)) { clearRow(r); free.push(r); plan.cleared++; }   // την είχε γράψει η εφαρμογή και σβήστηκε
+    } else if (id && syncedSet.has(id) && !byId.has(id) && !quiet.has(id)) { clearRow(r); free.push(r); plan.cleared++; }   // την είχε γράψει η εφαρμογή και σβήστηκε
     else plan.foreign++;
   }
   free.sort((a, c) => a - c);

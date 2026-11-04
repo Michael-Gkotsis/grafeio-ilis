@@ -4,7 +4,7 @@
 import { addDays, type ISODate } from './dates';
 import { TYPES, type AppState, type Cadre, type Person, type Status } from './domain';
 import { cadreAbsOn, statusesOn } from './rules';
-import { isAway, leaveMode, statusLbl } from './ranks';
+import { live, isAway, leaveMode, statusLbl } from './ranks';
 import { cadreStatusOf } from './cadre';
 import { upper } from './text';
 
@@ -22,7 +22,7 @@ export function reasonOf(st: Pick<Status, 'type' | 'kind' | 'note'>, lists?: App
 }
 export function absenceOfPerson(s: AppState, p: Person, d: ISODate): Absence {
   const lists = s.settings.lists;
-  const st = statusesOn(s.statuses, p.id, d).filter(x => isAbsent(x, lists)).sort((a, b) => Number(isAway(b, lists)) - Number(isAway(a, lists)))[0];
+  const st = statusesOn(live(s), p.id, d).filter(x => isAbsent(x, lists)).sort((a, b) => Number(isAway(b, lists)) - Number(isAway(a, lists)))[0];
   if (!st) return NONE;
   const timed = !!st.toTime && !st.open;
   return { absent: true, reason: reasonOf(st, lists), ret: st.open ? '' : timed ? st.to : addDays(st.to, 1) };

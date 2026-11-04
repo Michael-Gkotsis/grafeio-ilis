@@ -14,7 +14,7 @@ import { outTimesTxt, weekRow } from '../shared/returns';
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, effects, hoursTxt, phaseBase, plainName, shiftList, shiftReport, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type ShiftOwn, type Status } from '../shared/domain';
 import { cadreStatusOn } from '../shared/cadre';
-import { MED_LIKE, badgeLbl, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
+import { MED_LIKE, badgeLbl, badgeStatuses, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
@@ -30,7 +30,7 @@ type P = any;
 // lists: για τα δικά σου ιατρικά (δείχνουν το όνομά τους)
 export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, lists }: { statuses: Status[]; pid: number; date: ISODate; lists?: UserLists }) {
   // σήμερα: όποιος γύρισε ως τώρα είναι παρών
-  const now = useNowMin(); const ss = statusesNow(statuses, pid, date, todayFn(), now);
+  const now = useNowMin(); const ss = statusesNow(badgeStatuses(statuses, lists), pid, date, todayFn(), now);
   if (!ss.length) return html`<${Badge} tone="ok">Παρών<//>`;
   const s = ss[0], t = TYPES[s.type];
   const until = s.open ? ' χωρίς λήξη' : s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);

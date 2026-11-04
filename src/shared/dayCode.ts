@@ -4,7 +4,7 @@
 import type { ISODate } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { statusesOn } from './rules';
-import { statusLbl } from './ranks';
+import { live, statusLbl } from './ranks';
 import { weaponInfo } from './weapons';
 import { upper } from './text';
 
@@ -25,7 +25,7 @@ const unarmedOf = (s: AppState, d: ISODate): Set<number> => {
 const RANK = (st: Status): number => (TYPES[st.type].cat === 'abs' || st.type === 'NOS' ? 0 : st.type === 'STEP' ? 1 : TYPES[st.type].cat === 'med' ? 2 : 9);
 // η κατάσταση που κερδίζει τη μέρα d (άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό) ή undefined· το Ημερολόγιο κωλυομένων (imer.ts) τη χρησιμοποιεί χωρίς τον ΑΟΠΛΟΣ
 export function dayStatus(s: AppState, p: Person, d: ISODate): Status | undefined {
-  return statusesOn(s.statuses, p.id, d).filter(x => RANK(x) < 9).sort((a, b) => RANK(a) - RANK(b))[0];
+  return statusesOn(live(s), p.id, d).filter(x => RANK(x) < 9).sort((a, b) => RANK(a) - RANK(b))[0];
 }
 export function dayCode(s: AppState, p: Person, d: ISODate): string {
   const st = dayStatus(s, p, d);
