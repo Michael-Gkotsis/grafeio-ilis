@@ -1,12 +1,13 @@
 // Αρχεία Excel: για κάθε είδος από ποιο αρχείο, φύλλο και στήλες διαβάζει η εφαρμογή και πού γράφει τις αλλαγές της.
 // Αναγνώριση μόνη της· ό,τι δεν βρεθεί ο χρήστης το δείχνει με κλικ στο κελί, με την πρόταση σημειωμένη.
+import { rkFull } from '../rankName';
 import { HK, hkRowLabel } from '../../shared/unit';
 import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Card, Dialog, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
 import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
-import { TYPES, KIND_NAME, codeKey, fullName, shortName, type DutyKind, type Settings, type TypeKey } from '../../shared/domain';
+import { TYPES, KIND_NAME, codeKey, shortName, type DutyKind, type Settings, type TypeKey } from '../../shared/domain';
 import { postBy, postsOf, seatMap } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
 import { addDays, dm, dow } from '../../shared/dates';
@@ -290,18 +291,18 @@ function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; b
       <span className="field__help">Το κείμενο του Excel κρατιέται ως «είδος» (π.χ. ΕΛ ΑΡΒ). Η επιλογή αποθηκεύεται για την επόμενη φορά.</span></div>`}
     ${all.length > 0 && html`<div className="field"><span className="field__label">Δεν βρέθηκαν στην εφαρμογή: ποιος είναι;</span>
       ${all.map(c => html`<div key=${c.r} className="unm"><span><b>${c.who}</b><small>γραμμή ${c.r + 1} · ${dm(c.from)}–${dm(c.to)}</small></span>
-        ${choices[c.r] != null ? html`<span>${pm.get(choices[c.r]!) ? fullName(pm.get(choices[c.r]!)!) : ''} <${Button} size="sm" variant="ghost" onClick=${() => { const x = { ...choices }; delete x[c.r]; setChoices(x); }}>Αλλαγή<//></span>`
+        ${choices[c.r] != null ? html`<span>${pm.get(choices[c.r]!) ? rkFull(pm.get(choices[c.r]!)!) : ''} <${Button} size="sm" variant="ghost" onClick=${() => { const x = { ...choices }; delete x[c.r]; setChoices(x); }}>Αλλαγή<//></span>`
         : html`<div className="unm__pick">${c.cands.map(p => html`<${Button} key=${p.id} size="sm" variant="outline" onClick=${() => setChoices({ ...choices, [c.r]: p.id })}>${p.last} ${p.first}${p.father ? ' του ' + p.father : ''}<//>`)}
           <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
           ${c.r in choices ? html`<${Badge}>παραλείπεται<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//>`}</div>`}</div>`)}</div>`}
-    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? fullName(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}${noDn(a.pid) ? ' · ⚠ χωρίς δικαίωμα ΔΝ' : ''}</li>`)}</ul></details>`}
+    ${d.add.length > 0 && html`<details className="note" open=${d.add.length <= 8}><summary>Νέες (${d.add.length})</summary><ul>${d.add.slice(0, 60).map((a, i) => html`<li key=${i}>${pm.get(a.pid) ? rkFull(pm.get(a.pid)!) : ''} · ${TYPES[a.type].label}${a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · ${dm(a.from)}–${a.open ? 'χωρίς λήξη' : dm(a.to)}${noDn(a.pid) ? ' · ⚠ χωρίς δικαίωμα ΔΝ' : ''}</li>`)}</ul></details>`}
     ${noDnN > 0 && html`<${Alert} tone="warn"><span>${noDnN === 1 ? '1 ΔΝ είναι' : noDnN + ' ΔΝ είναι'} σε άτομα χωρίς δικαίωμα ΔΝ. Θα βγει ✕ στον προέλεγχο των Εξοδούχων μέχρι να δώσεις το δικαίωμα στην καρτέλα τους ή να γίνουν έξοδος.</span><//>`}
     ${both.length > 0 && html`<div className="field"><span className="field__label">Άλλαξαν και στο Excel και στην εφαρμογή (${both.length}): ποιο κρατάς;</span>
       ${both.map(u => html`<div key=${u.id} className="unm"><span><b>${u.who}</b><small>Excel: ${u.what} · Εφαρμογή: ${u.conflict}</small></span>
         <${Segmented} small=${true} value=${keepApp.has(u.id) ? 'app' : 'excel'} onChange=${(v: string) => toggleKeep(u.id, v === 'app')} items=${[{ value: 'excel', label: 'Του Excel' }, { value: 'app', label: 'Της εφαρμογής' }]}/></div>`)}
       <span className="field__help">Ό,τι κρατήσεις από την εφαρμογή γράφεται μετά στο Excel.</span></div>`}
     ${plain.length > 0 && html`<details className="note" open=${plain.length <= 8}><summary>Αλλάζουν (${plain.length})</summary><ul>${plain.slice(0, 60).map(u => html`<li key=${u.id}>${u.who}: ${u.what}</li>`)}</ul></details>`}
-    ${d.removed.length > 0 && html`<div className="field"><span className="field__label">Σβήστηκαν από το Excel (${d.removed.length})</span><ul className="note" style=${{ margin: 0 }}>${d.removed.slice(0, 40).map(x => html`<li key=${x.id}>${pm.get(x.pid) ? fullName(pm.get(x.pid)!) : ''} · ${TYPES[x.type].label}${x.kind && x.kind !== TYPES[x.type].label ? ' (' + x.kind + ')' : ''} · ${dm(x.from)}–${dm(x.to)}</li>`)}</ul>
+    ${d.removed.length > 0 && html`<div className="field"><span className="field__label">Σβήστηκαν από το Excel (${d.removed.length})</span><ul className="note" style=${{ margin: 0 }}>${d.removed.slice(0, 40).map(x => html`<li key=${x.id}>${pm.get(x.pid) ? rkFull(pm.get(x.pid)!) : ''} · ${TYPES[x.type].label}${x.kind && x.kind !== TYPES[x.type].label ? ' (' + x.kind + ')' : ''} · ${dm(x.from)}–${dm(x.to)}</li>`)}</ul>
       <label className="rule"><input type="checkbox" className="ui-check" checked=${del} onChange=${(e: any) => setDel(e.target.checked)}/><span><b>Σβήσε τες και από την εφαρμογή</b><small>Αλλιώς μένουν στην εφαρμογή και ξαναγράφονται στο Excel.</small></span></label></div>`}
     ${parsed.skipped.length > 0 && html`<details className="note"><summary>Παραλείπονται ${parsed.skipped.length} γραμμές</summary><ul>${parsed.skipped.map(x => html`<li key=${x.r}>Γραμμή ${x.r + 1} · ${x.who}: ${x.why}</li>`)}</ul></details>`}
     ${parsed.cands.some(c => c.noEnd) && html`<p className="note">Όσοι δεν έχουν «έως» μπαίνουν χωρίς λήξη: ισχύουν κάθε μέρα μέχρι να γράψεις «έως» στο Excel, και η εφαρμογή δεν γράφει ημερομηνία εκεί.</p>`}
@@ -317,7 +318,7 @@ function Unmatched({ rows, choices, setChoices, detail }: { rows: SheetPerson[];
   if (!rows.length) return null;
   return html`<div className="field"><span className="field__label">Δεν βρέθηκαν στην εφαρμογή: ποιος είναι;</span>
     ${rows.map(c => html`<div key=${c.r} className="unm"><span><b>${c.who}</b><small>γραμμή ${c.r + 1}${detail ? ' · ' + detail(c) : ''}</small></span>
-      ${choices[c.r] != null ? html`<span>${pm.get(choices[c.r]!) ? fullName(pm.get(choices[c.r]!)!) : ''} <${Button} size="sm" variant="ghost" onClick=${() => { const x = { ...choices }; delete x[c.r]; setChoices(x); }}>Αλλαγή<//></span>`
+      ${choices[c.r] != null ? html`<span>${pm.get(choices[c.r]!) ? rkFull(pm.get(choices[c.r]!)!) : ''} <${Button} size="sm" variant="ghost" onClick=${() => { const x = { ...choices }; delete x[c.r]; setChoices(x); }}>Αλλαγή<//></span>`
       : html`<div className="unm__pick">${c.cands.map(p => html`<${Button} key=${p.id} size="sm" variant="outline" onClick=${() => setChoices({ ...choices, [c.r]: p.id })}>${p.last} ${p.first}${p.father ? ' του ' + p.father : ''}<//>`)}
         <div style=${{ minWidth: '200px' }}><${PersonPicker} placeholder="Άλλος…" onChange=${(pid: number) => setChoices({ ...choices, [c.r]: pid })}/></div>
         <${Button} size="sm" variant="ghost" onClick=${() => setChoices({ ...choices, [c.r]: null })}>Παράλειψη<//></div>`}</div>`)}</div>`;

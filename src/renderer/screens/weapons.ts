@@ -3,6 +3,7 @@
 // από Excel γεμίζει τις επόμενες γραμμές με τη σειρά. Ίδιος αριθμός σε άλλον: ρωτά (μεταφορά ή και στους δύο), δεν μπλοκάρει.
 // Τύπος όπλου από τη λίστα «Τύποι όπλων», θέση στον οπλοβαστό (Ε6), «Θέση» του όπλου (ελεύθερο κείμενο, Michael 18/10) και εντός/εκτός τη μέρα (εκτός με ένοπλη υπηρεσία, και γιατί).
 // Έξοδος/είσοδος όπλων με λόγο και ώρα (Michael, 18/10): κουμπί στη γραμμή ή τσέκαρε πολλούς· ημερολόγιο στις «Κινήσεις» (weaponMoves.ts).
+import { RkName, rkShort } from '../rankName';
 import { HK, UNIT } from '../../shared/unit';
 import { Fragment, useCallback, useDeferredValue, useMemo, useRef, useState, useEffect, memo } from 'react';
 import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, typingText, useToast, useViewportHeight } from '../ui';
@@ -83,7 +84,7 @@ function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, s
   const has = !!weaponKey(p.weapon);
   if (has && info.unarmed.has(p.id)) out.push({ tone: 'warn', text: 'Άοπλος', tip: 'Άοπλος κατά τη Σ.Ι. (' + siOf(p, lists).text + ')' });
   const same = has ? sameWeapon(info, p) : [];
-  if (same.length) out.push({ tone: 'bad', text: 'Ίδιος με ' + shortName(same[0]) + (same.length > 1 ? ' +' + (same.length - 1) : ''), tip: 'Ο ίδιος αριθμός: ' + same.map(x => shortName(x) + (x.active ? '' : ' (εκτός δύναμης)')).join(', ') });
+  if (same.length) out.push({ tone: 'bad', text: 'Ίδιος με ' + rkShort(same[0]) + (same.length > 1 ? ' +' + (same.length - 1) : ''), tip: 'Ο ίδιος αριθμός: ' + same.map(x => rkShort(x) + (x.active ? '' : ' (εκτός δύναμης)')).join(', ') });
   // θέση = οπλοβαστός + θέση μαζί (Ε 22 και Ε 23 δεν προειδοποιούν)
   const rk = p.active && rackKey(p.rack) ? sameRack(info, p) : [];
   if (rk.length) out.push({ tone: 'warn', text: 'Ίδια θέση ×' + (rk.length + 1), tip: 'Η ίδια θέση (' + seatTxt(p.rack, p.wpos) + '): ' + rk.map(shortName).join(', ') });
@@ -92,7 +93,7 @@ function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, s
   const soon = info.arm.next.get(p.id);
   if (!has && p.active && (isOut(info, p.id) || soon)) out.push({ tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + (info.out.get(p.id) || soon!.label + ' ' + armWhen(soon!)) + ') χωρίς αριθμό όπλου' });
   const hold = info.arm.holding.get(p.id);
-  if (hold) out.push({ tone: 'info', text: 'Κρατά όπλο θέσης', tip: 'Κρατά το όπλο της θέσης (' + hold.label + ') του ' + (pm.get(hold.owner) ? shortName(pm.get(hold.owner)!) : '—') + ' ως τις ' + hmOf(hold.in) });
+  if (hold) out.push({ tone: 'info', text: 'Κρατά όπλο θέσης', tip: 'Κρατά το όπλο της θέσης (' + hold.label + ') του ' + (pm.get(hold.owner) ? rkShort(pm.get(hold.owner)!) : '—') + ' ως τις ' + hmOf(hold.in) });
   // «αυτόματα»: εκτός λόγω ένοπλης υπηρεσίας (ξεχωρίζει από τον χειροκίνητο λόγο ΥΠΗΡΕΣΙΑ), δεν μετρά στο «⚠ n»
   const auto: any[] = !info.moves.has(p.id) && info.out.has(p.id) ? [html`<${Badge} key="auto" tone="warn" data-tip=${'Αυτόματα από τις ένοπλες υπηρεσίες: ' + info.out.get(p.id)}>αυτόματα<//>`] : [];
   // κατάσταση της μέρας (άδεια, ΔΝ, νοσοκομείο…): πληροφορία, δεν μετρά στο «⚠ n» και δεν μπλοκάρει τίποτα
@@ -117,7 +118,7 @@ const WRow = memo(function WRow({ p, i, style, selected, info, pm, types, lists,
         <span className="weapon-cell"><${WeaponState} p=${p} info=${info} pm=${pm}/></span>
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="rack" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
         <span className="weapon-cell"><${WeaponInput} p=${p} i=${i} f="wpos" reset=${reset} onCommit=${commit} onPaste=${paste}/></span>
-        <span className="badges weapon-notes">${notes(p, info, lists, pm, statuses, date)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: shortName(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
+        <span className="badges weapon-notes">${notes(p, info, lists, pm, statuses, date)}${!p.active && weaponKey(p.weapon) && html`<${Button} size="sm" variant="outline" onClick=${() => save([{ pid: p.id, weapon: '' }], { msg: rkShort(p) + ': παρέδωσε το όπλο ' + p.weapon })} data-tip=${'Παρέδωσε το όπλο ' + p.weapon + ': σβήνεται ο αριθμός'}>Παρέδωσε<//>`}</span>
       </div>`;
 });
 
@@ -210,7 +211,7 @@ export function WeaponsScreen() {
     const c0 = changes[0]; const one = changes.length === 1 ? state.people.find(p => p.id === c0.pid) : null;
     const seatMsg = (rack: unknown, wpos: unknown) => (rackKey(rack) && posKey(wpos) ? 'θέση ' + seatTxt(rack, wpos) : rackKey(rack) ? 'οπλοβαστός ' + normRack(rack) : 'θέση ' + normPos(wpos));
     const part = c0 && (c0.weapon !== undefined ? (normWeapon(c0.weapon) ? 'όπλο ' + normWeapon(c0.weapon) : 'χωρίς όπλο') : c0.rack !== undefined ? (normRack(c0.rack) ? seatMsg(c0.rack, c0.wpos !== undefined ? c0.wpos : one?.wpos) : 'χωρίς οπλοβαστό') : c0.wpos !== undefined ? (normPos(c0.wpos) ? seatMsg(c0.rack !== undefined ? c0.rack : one?.rack, c0.wpos) : 'χωρίς θέση') : (c0.wtype ? 'τύπος ' + c0.wtype : 'χωρίς τύπο όπλου'));
-    const msg = o.msg || (one ? shortName(one) + ': ' + part : 'Οπλισμός: ' + changes.length + ' άτομα');
+    const msg = o.msg || (one ? rkShort(one) + ': ' + part : 'Οπλισμός: ' + changes.length + ' άτομα');
     toast({ text: html`<span>${msg}${o.warn && html`<br/><b>Προσοχή:</b> ${o.warn}`}</span>`, actions: [undoMark()] });
   }, [run, toast, undoMark, state.people]);
   const commit = useCallback((p: Person, raw: string, f: WF = 'weapon') => {
@@ -229,7 +230,7 @@ export function WeaponsScreen() {
       const ch = vals.slice(0, rows.length - i).map((v, j) => ({ pid: rows[i + j].id, [f]: v }));
       const what = f === 'rack' ? [' θέση οπλοβαστού', ' θέσεις οπλοβαστού'] : [' θέση όπλου', ' θέσεις όπλων'];
       setReset(n => n + 1);
-      save(ch, { what: 'επικόλληση θέσεων', msg: 'Επικόλληση: ' + ch.length + (ch.length === 1 ? what[0] : what[1]) + ' από ' + shortName(rows[i]) + ' και κάτω', warn: left > 0 ? left + ' περίσσεψαν (δεν υπάρχουν άλλες γραμμές)' : undefined });
+      save(ch, { what: 'επικόλληση θέσεων', msg: 'Επικόλληση: ' + ch.length + (ch.length === 1 ? what[0] : what[1]) + ' από ' + rkShort(rows[i]) + ' και κάτω', warn: left > 0 ? left + ' περίσσεψαν (δεν υπάρχουν άλλες γραμμές)' : undefined });
       return;
     }
     const changes = vals.slice(0, rows.length - i).map((v, j) => ({ pid: rows[i + j].id, weapon: v }));
@@ -238,7 +239,7 @@ export function WeaponsScreen() {
     const dups = [...next.values()].filter(n => n > 1).length;
     const warn = [left > 0 && left + (left === 1 ? ' αριθμός περίσσεψε' : ' αριθμοί περίσσεψαν') + ' (δεν υπάρχουν άλλες γραμμές)', dups > 0 && dups + (dups === 1 ? ' αριθμός είναι' : ' αριθμοί είναι') + ' σε δύο ή περισσότερους (φίλτρο «Ίδιος αριθμός»)'].filter(Boolean).join(' · ');
     setReset(n => n + 1);
-    save(changes, { warn: warn || undefined, what: 'επικόλληση', msg: 'Επικόλληση: ' + changes.length + (changes.length === 1 ? ' αριθμός όπλου' : ' αριθμοί όπλων') + ' από ' + shortName(rows[i]) + ' και κάτω' });
+    save(changes, { warn: warn || undefined, what: 'επικόλληση', msg: 'Επικόλληση: ' + changes.length + (changes.length === 1 ? ' αριθμός όπλου' : ' αριθμοί όπλων') + ' από ' + rkShort(rows[i]) + ' και κάτω' });
   }, [rows, state.people, save]);
   const exportXl = async (print: boolean, sigs?: Sig[]) => {
     setXl(true);
@@ -272,7 +273,7 @@ export function WeaponsScreen() {
     const x = outSplit(hits, info); const add = x.go.filter(p => !sel.has(p.id)); const again = x.go.filter(p => sel.has(p.id));
     const nm = (l: Person[]) => l.map(shortName).join(', ');
     setSel(s => { const n = new Set(s); x.go.forEach(p => n.add(p.id)); return n; });
-    setPickMsg({ tone: add.length ? 'ok' : 'warn', text: [add.length > 0 && '✓ ' + add.map(p => shortName(p) + ' · ' + p.weapon).join(', '), again.length > 0 && nm(again) + ': ήδη επιλεγμένος', x.already.length > 0 && nm(x.already) + ': ήδη εκτός', x.noW.length > 0 && nm(x.noW) + ': χωρίς αριθμό όπλου'].filter(Boolean).join(' · ') });
+    setPickMsg({ tone: add.length ? 'ok' : 'warn', text: [add.length > 0 && '✓ ' + add.map(p => rkShort(p) + ' · ' + p.weapon).join(', '), again.length > 0 && nm(again) + ': ήδη επιλεγμένος', x.already.length > 0 && nm(x.already) + ': ήδη εκτός', x.noW.length > 0 && nm(x.noW) + ': χωρίς αριθμό όπλου'].filter(Boolean).join(' · ') });
     setScan('');
   };
   // 1-9 = ο λόγος της μπάρας (όταν δεν γράφεις σε πεδίο και δεν είναι ανοιχτό άλλο παράθυρο)· Ctrl+K «Έξοδος όπλων…» φέρνει εδώ με το κουτί σάρωσης
@@ -332,10 +333,10 @@ export function WeaponsScreen() {
     ${outFor && html`<${WeaponOutDialog} pids=${outFor} reason=${outReason} onClose=${() => setOutFor(null)} onDone=${(r: string) => { if (r) setLastReason(r); setSel(new Set()); setOnlySel(false); }}/>`}
     ${inFor && html`<${WeaponInDialog} ids=${inFor} onClose=${() => setInFor(null)} onDone=${() => setSel(new Set())}/>`}
     ${ask && html`<${Dialog} title=${'Το όπλο ' + ask.w + ' είναι ήδη χρεωμένο'} onClose=${() => { setAsk(null); setReset(n => n + 1); }}
-      description=${html`<span>Ο αριθμός <b>${ask.w}</b> είναι στον ${ask.others.map(x => html`<b key=${x.id}>${rankTxt(x)} ${plainName(x)}</b>${x.active ? '' : ' (εκτός δύναμης)'}`).reduce((a: any[], x: any, j: number) => (j ? [...a, ', ', x] : [x]), [])}. Να μεταφερθεί στον ${ask.p.rank} ${plainName(ask.p)};</span>`}
+      description=${html`<span>Ο αριθμός <b>${ask.w}</b> είναι στον ${ask.others.map(x => html`<b key=${x.id}><${RkName} p=${x} fn=${plainName} keep=${true}/></b>${x.active ? '' : ' (εκτός δύναμης)'}`).reduce((a: any[], x: any, j: number) => (j ? [...a, ', ', x] : [x]), [])}. Να μεταφερθεί στον <${RkName} p=${ask.p} fn=${plainName} keep=${true}/>;</span>`}
       footer=${html`<${Button} variant="outline" onClick=${() => { setAsk(null); setReset(n => n + 1); }}>Άκυρο<//>
         <${Button} variant="outline" onClick=${async () => { const a = ask; setAsk(null); await save([{ pid: a.p.id, weapon: a.w }], { warn: 'ο ίδιος αριθμός μένει και σε ' + a.others.map(shortName).join(', ') + '.' }); }}>Κράτα και στους δύο<//>
-        <${Button} data-autofocus="" onClick=${async () => { const a = ask; setAsk(null); await save([...a.others.map(x => ({ pid: x.id, weapon: '' })), { pid: a.p.id, weapon: a.w }], { what: 'μεταφορά όπλου ' + a.w, msg: 'Το όπλο ' + a.w + ' πήγε στον ' + shortName(a.p) + ' (σβήστηκε από ' + a.others.map(shortName).join(', ') + ')', warn: info.unarmed.has(a.p.id) ? 'είναι άοπλος κατά τη Σ.Ι. (' + siOf(a.p, lists).text + ').' : undefined }); }}>Μεταφορά<//>`}>
+        <${Button} data-autofocus="" onClick=${async () => { const a = ask; setAsk(null); await save([...a.others.map(x => ({ pid: x.id, weapon: '' })), { pid: a.p.id, weapon: a.w }], { what: 'μεταφορά όπλου ' + a.w, msg: 'Το όπλο ' + a.w + ' πήγε στον ' + rkShort(a.p) + ' (σβήστηκε από ' + a.others.map(shortName).join(', ') + ')', warn: info.unarmed.has(a.p.id) ? 'είναι άοπλος κατά τη Σ.Ι. (' + siOf(a.p, lists).text + ').' : undefined }); }}>Μεταφορά<//>`}>
       <p className="muted" style=${{ margin: 0 }}>Με τη μεταφορά σβήνεται από ${ask.others.length === 1 ? 'τον άλλον' : 'τους άλλους'}. Αναιρείται με Ctrl+Z.</p><//>`}
   </div>`;
 }

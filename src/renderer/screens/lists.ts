@@ -2,13 +2,14 @@
 // και τα dropdown του Excel. Τα βασικά κρύβονται αλλά δεν σβήνονται· τα δικά σου σβήνονται μόνο αν δεν τα έχει κανείς.
 // Κάθε δικό σου στοιχείο λέει ρητά πώς μετρά (γραμμή ή στήλη της ΗΚΑΙ, κείμενο ποινής): τίποτα δεν μαντεύεται. Τι κάνει ένα
 // ιατρικό ή ένα είδος ποινής (υπηρεσίες, έξοδος, ΗΚΑΙ) ορίζεται στις Υπηρεσίες και αργίες (Michael, 18/10).
+import { rkShort } from '../rankName';
 import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { requestLeave } from '../pending';
 import { collator, normGreek, upper } from '../../shared/text';
-import { CADRE_ABS, TYPES, shortName, type Person, type TypeKey } from '../../shared/domain';
+import { CADRE_ABS, TYPES, type Person, type TypeKey } from '../../shared/domain';
 import { LEAVE_COLS, LEAVE_NO_COL, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveEffect, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { cadreLeaveHk, hkRange, leaveDest, leaveHk } from '../../shared/hkaiText';
 import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
@@ -236,6 +237,6 @@ function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
   const pm = personMap(state.people);
   const ps = [...e.pids].map(id => pm.get(id)).filter((p): p is Person => !!p).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
   const ids = ps.map(p => p.id);
-  return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${shortName(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
+  return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${rkShort(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
 const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };
