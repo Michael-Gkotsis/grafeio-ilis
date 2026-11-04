@@ -38,6 +38,7 @@ import type { ImerReq } from '../shared/imer';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
+import { createUpdater } from './updater';
 import { setUnitKind, unitKindOf, unitText } from '../shared/unit';
 
 const DEV = !app.isPackaged;
@@ -1018,6 +1019,23 @@ async function recover(reason: string, empty = false): Promise<boolean> {
   return true;
 }
 
+// Αυτόματη ενημέρωση: ό,τι χρειάζεται το UI (ο έλεγχος και το κατέβασμα γίνονται στον main, βλ. updater.ts)
+let upd: ReturnType<typeof createUpdater> | null = null;
+function registerUpdate() {
+  const on = <T extends unknown[], R>(ch: string, f: (...a: T) => R, dflt: R) => ipcMain.handle(ch, (_e, ...a: unknown[]) => { try { return f(...(a as T)); } catch (e) { console.error(ch, e); return dflt; } });
+  on('upd:info', () => { upd?.confirm(); return upd!.info(); }, null as any);
+  on('upd:check', () => upd!.check(true), null as any);
+  on('upd:auto', (v: boolean) => upd!.setAuto(v), null as any);
+  on('upd:start', () => upd!.start(), undefined);
+  on('upd:cancel', () => upd!.cancel(), undefined);
+  on('upd:seen', () => upd!.seen(), undefined);
+  on('upd:skip', () => upd!.skip(), undefined);
+  on('upd:restart', () => upd!.restart(), undefined);
+  on('upd:file', () => upd!.fromFile(), { ok: false, error: 'Δεν ξεκίνησε η ενημέρωση' } as any);
+  on('upd:rollback', () => upd!.rollback(), { ok: false, error: 'Δεν έγινε η επιστροφή' });
+  on('upd:releases', () => upd!.openReleases(), undefined);
+}
+
 function createWindow() {
   const icon = path.join(__dirname, '..', 'renderer', 'icon.png');   // λογότυπο στη γραμμή εργασιών (στο dev μπορεί να λείπει)
   win = new BrowserWindow({
@@ -1038,6 +1056,8 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
   app.whenReady().then(async () => {
+    // Αυτόματη ενημέρωση: αν περιμένει αλλαγή του resources\app (ή η νέα έκδοση απέτυχε 2 φορές), γίνεται ΠΡΙΝ ανοίξει παράθυρο
+    try { upd = createUpdater({ dataDir: DATA, getWin: () => win, backup: l => store.backup(l), today }); if (upd.startup()) return; } catch (e) { console.error('update', e); }
     Menu.setApplicationMenu(DEV ? Menu.buildFromTemplate([{ role: 'viewMenu' }]) : null);
     lockdown();
     // το νήμα των Excel: ανάγνωση, έντυπα και εγγραφή στο Δυναμολόγιο χωρίς να παγώνει το παράθυρο
@@ -1493,8 +1513,10 @@ else {
       if (typeof dir !== 'string' || !(okEssoDir(dir) || knownArchives().some(d => sameDir(d, dir)) || sameDir(dir, outputDir()) || sameDir(dir, newRoot())) || !fs.existsSync(dir)) return 'άγνωστος φάκελος';
       return shell.openPath(dir);
     });
+    registerUpdate();
     createWindow();
     ready = Date.now();
+    win?.once('ready-to-show', () => { try { upd?.schedule(); } catch { /* σιωπηλά */ } });
     // Στην εκκίνηση: ό,τι δεν πρόλαβε να γραφτεί την προηγούμενη φορά (κλείσιμο, ρεύμα). Γράφεται μόνο ό,τι λείπει από τα
     // Excel και μόνο όπου ο πίνακας δεν άλλαξε στο μεταξύ, όπως σε κάθε αυτόματη εγγραφή.
     setTimeout(warmWorker, 2500);
@@ -1514,5 +1536,5 @@ else {
     Promise.race([work, new Promise(r => setTimeout(r, 10000))]).catch(err => console.error('quit', err)).finally(() => app.quit());
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', () => { try { store?.close(); } catch { /* ήδη κλειστή */ } });
+  app.on('will-quit', () => { try { store?.close(); } catch { /* ήδη κλειστή */ } try { upd?.atQuit(); } catch { /* θα ξαναδοκιμαστεί στην επόμενη εκκίνηση */ } });
 }

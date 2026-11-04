@@ -27,6 +27,13 @@ export type ExportResult = { ok: true; file: string; warnings: string[] } | { ok
 export interface RepHistEntry { at: string; date: ISODate; ids: (number | string)[]; n: number; file: string; sheets?: string[]; exists: boolean }
 export type RepRunResult = { ok: true; file: string; warnings: string[]; sheets?: string[] } | { ok: false; error: string; locked?: boolean; confirm?: string[] };
 export type UsbResult = { ok: true; file: string; day: string; warning?: string } | { ok: false; error: string } | null;
+// Αυτόματη ενημέρωση (main/update.ts): ο main κρατά την κατάσταση και στέλνει ολόκληρο το UpdInfo σε κάθε αλλαγή
+export interface UpdAvail { version: string; date: string; size: number; notes: string[]; setup: boolean }   // setup: άλλο Electron, χρειάζεται το Setup.exe
+export interface UpdInfo {
+  version: string; canApply: boolean; auto: boolean; lastCheck: number; lastOk: boolean; lastError: string; checking: boolean;
+  avail: UpdAvail | null; offer: boolean; phase: 'idle' | 'working' | 'ready'; step: number; got: number; total: number; backup: string;
+  error: string; target: string; readyVersion: string; prev: string | null; releases: string;
+}
 export interface BackupInfo { name: string; day: string; label: string; size: number }
 export interface Diag { startupMs: number; procs: { type: string; kb: number; cpu: number }[]; gpuDisabled: boolean; versions: Record<string, string>; dbKb: number; people: number; statuses: number; guardDays: number; dataDir: string; backups: number; writes: WriteTime[]; worker: boolean }
 export interface WriteTime { at: string; what: string; ms: number; error?: string }   // μία εγγραφή στο Excel και πόσο κράτησε
@@ -97,6 +104,18 @@ export interface Api {
   listBackups(): Promise<BackupInfo[]>;
   restoreBackup(name: string): Promise<{ ok: boolean; error?: string }>;
   diag(): Promise<Diag>;
+  updInfo(): Promise<UpdInfo>;
+  updCheck(): Promise<UpdInfo>;
+  updAuto(on: boolean): Promise<UpdInfo>;
+  updStart(): Promise<void>;
+  updCancel(): Promise<void>;
+  updSeen(later: boolean): Promise<void>;       // το παράθυρο «Νέα έκδοση» ανοίγει μόνο του μία φορά τη μέρα
+  updSkip(): Promise<void>;                     // «Να μη με ξαναρωτήσει για αυτή την έκδοση»
+  updRestart(): Promise<void>;
+  updFile(): Promise<{ ok: boolean; error?: string } | null>;
+  updRollback(): Promise<{ ok: boolean; error?: string }>;
+  updOpenReleases(): Promise<void>;
+  onUpdate(cb: (i: UpdInfo) => void): () => void;
   setGpu(disable: boolean): Promise<void>;
   usbCopy(): Promise<UsbResult>;
   importBackup(): Promise<{ ok: boolean; error?: string; name?: string } | null>;

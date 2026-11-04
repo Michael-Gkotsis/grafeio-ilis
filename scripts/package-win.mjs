@@ -6,8 +6,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { execFileSync } from 'child_process';
 import * as ResEdit from 'resedit';
+import { EV, copyApp } from './app-files.mjs';
 
-const EV = '22.3.27';
 const ARCH = process.argv[2] || 'x64';
 if (!['x64', 'ia32'].includes(ARCH)) throw new Error(`Άγνωστη αρχιτεκτονική «${ARCH}»: x64 ή ia32`);
 const ZIP = `electron-v${EV}-win32-${ARCH}.zip`;
@@ -67,11 +67,7 @@ fs.rmSync(path.join(OUT, 'LICENSES.chromium.html'), { force: true }); // 8MB, δ
 
 // Η εφαρμογή: μόνο ό,τι χρειάζεται στην εκτέλεση (όλα είναι bundled στο dist/)
 const app = path.join(OUT, 'resources', 'app');
-fs.mkdirSync(app, { recursive: true });
-const runtimePkg = { name: pkg.name, productName: pkg.productName, version: pkg.version, description: pkg.description, main: pkg.main };
-fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify(runtimePkg, null, 2));
-fs.cpSync('dist', path.join(app, 'dist'), { recursive: true });
-fs.cpSync('templates', path.join(app, 'templates'), { recursive: true });
+copyApp(app);   // ίδιο περιεχόμενο με το GrafeioIlis-app-<V>.zip της αυτόματης ενημέρωσης (scripts/package-app.mjs)
 
 fs.writeFileSync(path.join(OUT, 'ΔΙΑΒΑΣΕ ΜΕ.txt'), [
   'Γραφείο Λοχία ' + pkg.version,
@@ -80,6 +76,7 @@ fs.writeFileSync(path.join(OUT, 'ΔΙΑΒΑΣΕ ΜΕ.txt'), [
   'Δεδομένα: φάκελος data\\ δίπλα στο exe (αντίγραφα ασφαλείας στο data\\backups\\).',
   'Δικά σου έντυπα: βάλε froura.xlsx / hkai.xlsx / exodouxoi.xlsx σε φάκελο templates\\ δίπλα στο exe.',
   'Τα Excel βγαίνουν στα Έγγραφα\\Γραφείο Ίλης\\ (αλλάζει από τις Ρυθμίσεις).',
+  'Ενημερώσεις: όταν έχει internet, η εφαρμογή ελέγχει μόνη της για νέα έκδοση και ρωτά πριν ενημερωθεί. Χωρίς internet: Ρυθμίσεις › Ενημερώσεις › «Ενημέρωση από αρχείο (USB)…».',
   'Για μεταφορά σε άλλο PC: αντέγραψε όλο τον φάκελο μαζί με το data\\.',
   'Εναλλακτικά, το GrafeioIlis-win7-<x64|ia32>-Setup-<έκδοση>.exe (στα Releases) εγκαθιστά με συντομεύσεις και ενημερώνει χωρίς να πειράξει το data\\.',
   ''
