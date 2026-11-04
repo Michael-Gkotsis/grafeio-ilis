@@ -8,7 +8,7 @@ import { collator, norm, normGreek, upper } from './text';
 import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
-import { leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
+import { live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
@@ -152,7 +152,7 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
 }
 // Οι καταστάσεις ενός στρατιώτη τη μέρα d (κατηγορίες cats, null: όλες), μία φορά η καθεμία, με κόμμα
 function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string, only?: 'new'): string {
-  const on = statusesOn(s.statuses, pid, d).filter(x => (!cats || cats.includes(TYPES[x.type]?.cat as StCat)) && (only !== 'new' || x.from === d));
+  const on = statusesOn(live(s), pid, d).filter(x => (!cats || cats.includes(TYPES[x.type]?.cat as StCat)) && (only !== 'new' || x.from === d));
   return [...new Set(on.map(x => stText(x, fmt, s.settings.lists, d)).filter(Boolean))].join(', ');
 }
 // Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
@@ -298,7 +298,7 @@ function condTest(s: AppState, d: ISODate, stNew?: boolean) {
     if (c === 'post') return !!p.post;
     if (c === 'dnright') return !!p.dn;
     if (c === 'weapon') return !!(p.weapon || '').trim();
-    const all = statusesOn(s.statuses, p.id, d); const on = stNew ? all.filter(x => x.from === d) : all;
+    const all = statusesOn(live(s), p.id, d); const on = stNew ? all.filter(x => x.from === d) : all;
     if (c === 'med' || c === 'other') return on.some(x => TYPES[x.type]?.cat === c);
     return !!filterStatus(c, on);
   };
@@ -478,7 +478,7 @@ function blankLists(s: AppState, d: ISODate): NonNullable<BlankTags['list']> {
     const key = id.replace(/^\S+/, ''); let o = memo.get(key);   // ΛΙΣΤΑ και ΠΛΗΘΟΣ της ίδιας λίστας μετρούν μία φορά
     if (!o) {
       const t = tst[+e.today]; const f = e.f;
-      const ps = activePeople(s).filter(p => f.type ? statusesOn(s.statuses, p.id, d).some(x => x.type === f.type && (!e.today || x.from === d)) : t(f.cond!, p) !== !!f.neg);
+      const ps = activePeople(s).filter(p => f.type ? statusesOn(live(s), p.id, d).some(x => x.type === f.type && (!e.today || x.from === d)) : t(f.cond!, p) !== !!f.neg);
       o = { s: sortRows(ps, 'rank', s, 'people').map(listName).join(', ') || '—', n: ps.length }; memo.set(key, o);
     }
     return { ...o, cnt: e.cnt };
@@ -640,7 +640,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
     const cats = new Set(pk.cats?.length ? pk.cats : DEF_CATS); const pm = personMap(s.people);
     const people = new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id));
     const out: StatusRow[] = [];
-    for (const st of s.statuses) {
+    for (const st of live(s)) {
       if (!cats.has(TYPES[st.type]?.cat as StCat) || !people.has(st.pid)) continue;
       if (pk.types?.length && !pk.types.includes(st.type)) continue;
       if (pk.when === 'new' ? st.from !== d : pk.when === 'from' ? st.to < d && !st.open : st.from > d || (st.to < d && !st.open)) continue;

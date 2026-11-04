@@ -8,7 +8,7 @@ import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
-import { absCode, rankTxt } from '../shared/ranks';
+import { live, absCode, rankTxt } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, cadreSeats, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { colName, fitBook, sheetSafe } from './xlsx';
@@ -97,7 +97,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
       const v = x.get(d);
       if (v) { if (isHol(s.settings, d)) hol++; c[v.kind] = (c[v.kind] || 0) + 1; if (v.own) o[v.own] = (o[v.own] || 0) + 1; vals.push(v.code); continue; }
       // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
-      const st = statusesFrom(s.statuses, p.id, d, dutyMin(s.settings)).find(t => absCode(t, s.settings.lists));
+      const st = statusesFrom(live(s), p.id, d, dutyMin(s.settings)).find(t => absCode(t, s.settings.lists));
       vals.push(st ? absCode(st, s.settings.lists)! : '');
     }
     vals.push(p.room ?? '', x.size, hol, c.th || '', c.mg || '', c.ly || '', ...OWN.map(n => o[n] || ''));

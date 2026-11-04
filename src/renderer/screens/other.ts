@@ -15,14 +15,14 @@ import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, Excel
 import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
+import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
-import { norm, normGreek, upper } from '../../shared/text';
+import { collator, norm, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName, destNote, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
@@ -31,7 +31,7 @@ import { GUIDE_TITLES } from '../guideTopic';
 import { SourcesAlert } from './srcStatus';
 import { appTitle } from '../../shared/brand';
 import { LeavesTab } from './leaves';
-import { cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
+import { live, medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
@@ -63,7 +63,7 @@ export function TodayScreen() {
   // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
   const { ending, endTom, expired, nRec } = useMemo(() => {
     const o = { ending: [] as Status[], endTom: [] as Status[], expired: [] as Status[], nRec: 0 };
-    for (const s of state.statuses) {
+    for (const s of live(state)) {
       const cat = TYPES[s.type].cat; const rec = RECORD_CATS.includes(cat); const known = pm.has(s.pid);
       if (s.from <= today && s.to >= today && rec) o.nRec++;
       if (!known) continue;
@@ -73,11 +73,11 @@ export function TodayScreen() {
       if (isRecordExpiredOn(s, today)) o.expired.push(s);
     }
     return o;
-  }, [state.statuses, state.people, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.statuses, state.settings.lists, state.people, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const endTxt = (s: Status) => {
     const t = TYPES[s.type]; if (t.cat === 'abs') return awayNow(s, today, now) ? 'Αναμένεται επιστροφή' + (s.toTime ? ' στις ' + s.toTime : '') : 'Γύρισε στις ' + s.toTime;
     // άλλο ιατρικό που συνεχίζει αύριο: λέει τι μένει, όχι ότι ξαναμπαίνει
-    const rest = statusesOn(state.statuses, s.pid, tomorrow).filter(x => x.id !== s.id && TYPES[x.type].cat !== 'out');
+    const rest = statusesOn(live(state), s.pid, tomorrow).filter(x => x.id !== s.id && TYPES[x.type].cat !== 'out');
     const lbl = (x: Status) => statusLbl(x, state.settings.lists) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to));
     const nd = rest.find(x => noDutyOf(x, state.settings.lists)), na = rest.find(x => TYPES[x.type].noArmed);
     if (noDutyOf(s, state.settings.lists)) return nd ? 'Μένει ' + lbl(nd) : na ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες, όχι σε ένοπλες (' + lbl(na) + ')' : 'Από αύριο ξαναμπαίνει σε υπηρεσίες';
@@ -149,7 +149,7 @@ export function TodayScreen() {
 
 // Ιατρικά: δικό τους μενού. Ποινές: καρτέλα μέσα στο μενού ΗΚΑΙ (Michael, 18/10). Ίδια λίστα, άλλο φίλτρο.
 export function RecordsScreen() { return html`<${RecordList} mode="med"/>`; }
-const MED_TABS = ['med', 'changes', 'expired'], PUN_TABS = ['pun', 'expired', 'allpun'];
+const MED_TABS = ['med', 'changes', 'expired', 'notes'], PUN_TABS = ['pun', 'expired', 'allpun'];
 function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const pm = personMap(state.people); const now = useNowMin();
@@ -159,19 +159,23 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   const medF: string = nav.params.medF || '';
   const chDay: string = nav.params.recDate || today;   // καρτέλα «Μεταβολές ημέρας»: ιατρικά που ξεκινούν ή λήγουν αυτή τη μέρα
   const y = addDays(today, -1);
-  const isMed = (s: Status) => ['med', 'other'].includes(TYPES[s.type].cat);
+  // «Μόνο σημείωση» (Michael, 4/11): δεν μετρά στα Τώρα / Μεταβολές / Έληξαν, έχει τη δική της καρτέλα
+  const nl = state.settings.lists; const hasNotes = hasNoteKinds(nl);
+  const isMed = (s: Status) => ['med', 'other'].includes(TYPES[s.type].cat) && !medNote(s, nl);
   const list = useMemo(() => {
     // αναζήτηση σε όλες τις καρτέλες: όνομα, κωδικός, είδος ποινής, σημείωση, ποιος τιμώρησε, λόγος
     const qq = normGreek(dpq.trim());
     const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + TYPES[s.type].label + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '') + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq));
+    if (tab === 'notes') return notesOf(state.statuses, nl).filter(s => pm.has(s.pid) && !s.pending && coversDay(s, today) && ok(s)).sort((a, b) => collator.compare(pm.get(a.pid)!.last, pm.get(b.pid)!.last) || collator.compare(pm.get(a.pid)!.first, pm.get(b.pid)!.first));
     if (tab === 'allpun') return state.statuses.filter(s => s.type === 'PUN' && ok(s)).sort((a, b) => b.from.localeCompare(a.from));
     if (tab === 'changes') return state.statuses.filter(s => isMed(s) && !s.pending && (s.from === chDay || (!s.open && s.to === chDay)) && ok(s)).sort((a, b) => Number(b.from === chDay) - Number(a.from === chDay) || a.to.localeCompare(b.to));
     if (tab === 'expired') return state.statuses.filter(s => (mode === 'med' ? isMed(s) : s.type === 'PUN') && !s.pending && !awayNow(s, today, now) && s.to >= addDays(today, -14) && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
     return state.statuses.filter(s => awayNow(s, today, now) && (tab === 'med' ? isMed(s) && (!medF || statusLbl(s, state.settings.lists) === medF) : s.type === 'PUN') && ok(s)).sort((a, b) => a.to.localeCompare(b.to));
-  }, [state.statuses, tab, today, dpq, medF, mode, now, chDay]);
+  }, [state.statuses, nl, tab, today, dpq, medF, mode, now, chDay]);
   // ΕΥ, ΕΑ, ΕΟ, ΣΤΕΠ… ως φίλτρα, με πόσοι έχουν τον καθένα (Michael, 17/10: τα ιατρικά εδώ, όχι στο Δυναμολόγιο)
   const medCnt = useMemo(() => { const m = new Map<string, number>(); state.statuses.forEach(s => { if (awayNow(s, today, now) && isMed(s) && pm.has(s.pid)) { const l = statusLbl(s, state.settings.lists); m.set(l, (m.get(l) || 0) + 1); } }); return [...m].sort((a, b) => b[1] - a[1]); }, [state.statuses, today, state.settings.lists, now]);
   const nMed = state.statuses.filter(s => awayNow(s, today, now) && isMed(s)).length;
+  const nNote = hasNotes ? notesOf(state.statuses, nl).filter(s => pm.has(s.pid) && !s.pending && coversDay(s, today)).length : 0;
   const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN' && pm.has(s.pid)).length;
   const left = (s: Status) => {
     if (s.to < today) { const d = daysBetween(s.to, today) - 1; return d === 1 ? 'έληξε χθες' : 'έληξε πριν από ' + d + ' ημ.'; }
@@ -187,19 +191,19 @@ function RecordList({ mode }: { mode: 'med' | 'pun' }) {
   return html`<div>
     ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.">
       <${Button} onClick=${() => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><//>
-    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Τώρα (' + nMed + ')', tip: 'Όσα ισχύουν τώρα' }, { value: 'changes', label: 'Μεταβολές ημέρας', tip: 'Όσα ξεκινούν ή λήγουν τη μέρα που διαλέγεις' }, { value: 'expired', label: 'Έληξαν', tip: 'Όσα έληξαν τις τελευταίες 14 μέρες' }]}/>${tab === 'changes' && html`<span style=${{ marginLeft: '12px' }}><${DateBar} value=${chDay} onChange=${(d: string) => nav.set({ recDate: d })} days=${[y, today, addDays(today, 1)]}/></span>`}</div>`
+    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Τώρα (' + nMed + ')', tip: 'Όσα ισχύουν τώρα' }, { value: 'changes', label: 'Μεταβολές ημέρας', tip: 'Όσα ξεκινούν ή λήγουν τη μέρα που διαλέγεις' }, { value: 'expired', label: 'Έληξαν', tip: 'Όσα έληξαν τις τελευταίες 14 μέρες' }, ...(hasNotes ? [{ value: 'notes', label: 'Σημειώσεις (' + nNote + ')', tip: 'Ιατρικά «μόνο σημείωση»: φαίνονται μόνο εδώ και στην καρτέλα του στρατιώτη' }] : [])]}/>${tab === 'changes' && html`<span style=${{ marginLeft: '12px' }}><${DateBar} value=${chDay} onChange=${(d: string) => nav.set({ recDate: d })} days=${[y, today, addDays(today, 1)]}/></span>`}</div>`
     : html`<${PageHeader} title="Ποινές" sub="Ισχύουν αμέσως και γράφονται στην ${HK()} της μέρας που επιβλήθηκαν.">
       <${Button} onClick=${() => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) })}>+ Ποινή<//><//>
     <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ punTab: v })} items=${[{ value: 'pun', label: 'Τώρα (' + nPun + ')', tip: 'Όσες ισχύουν τώρα' }, { value: 'expired', label: 'Έληξαν', tip: 'Όσες έληξαν τις τελευταίες 14 μέρες' }, { value: 'allpun', label: 'Όλες', tip: 'Όλες οι ποινές, με αναζήτηση' }]}/></div>`}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${mode === 'med' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
     ${tab === 'med' && medCnt.length > 1 && html`<div className="filters"><${Strip} role="group" aria-label="Είδος ιατρικού">${[['', 'Όλα', nMed] as [string, string, number], ...medCnt.map(([l, n]) => [l, l, n] as [string, string, number])].map(([k, l, n]) => html`<button key=${k || 'all'} type="button" className="ui-chip" aria-pressed=${medF === k} onClick=${() => nav.set({ medF: medF === k ? '' : k })}>${l}<span className="cnt">${n}</span></button>`)}<//></div>`}
     <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
-      <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${p} fn=${fullName}/></button> <${Badge} tone=${t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>
-        <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${tab === 'changes' ? [s.from === chDay && 'ξεκινά ' + (chDay === today ? 'σήμερα' : dm(chDay)), !s.open && s.to === chDay && (s.to < today ? 'έληξε ' : 'λήγει ') + (chDay === today ? 'σήμερα' : dm(chDay))].filter(Boolean).join(' και ') : tab === 'expired' ? (s.to === today ? timeNames(s.type).to + ' σήμερα ' + s.toTime : 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1)))) : left(s)}${tab !== 'expired' && tab !== 'changes' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}${skipTxt(s)}</small></div>
+      <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${p} fn=${fullName}/></button> <${Badge} tone=${medNote(s, nl) ? 'note' : t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>
+        <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${tab === 'changes' ? [s.from === chDay && 'ξεκινά ' + (chDay === today ? 'σήμερα' : dm(chDay)), !s.open && s.to === chDay && (s.to < today ? 'έληξε ' : 'λήγει ') + (chDay === today ? 'σήμερα' : dm(chDay))].filter(Boolean).join(' και ') : tab === 'expired' ? (s.to === today ? timeNames(s.type).to + ' σήμερα ' + s.toTime : 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1)))) : tab === 'notes' ? (s.open ? 'χωρίς λήξη' : 'ως ' + dm(s.to)) : left(s)}${tab !== 'expired' && tab !== 'changes' && tab !== 'notes' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}${skipTxt(s)}</small></div>
       <${Button} size="sm" variant="ghost" onClick=${() => setFix(s)} data-tip="Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το" data-tip-side="left">Διόρθωση…<//>
       ${s.type === 'PUN' && html`<${Button} size="sm" variant="outline" onClick=${() => setTxt(s)} data-tip="Έτοιμο κείμενο για το Word, με «Αντιγραφή»" data-tip-side="left">Κείμενο<//>`}
       ${tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : tab === 'allpun' || s.to < today ? html`<${Badge} tone=${s.to < today ? 'outline' : 'warn'}>${s.to < today ? 'Έληξε' : 'Ισχύει'}<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => (hasTimes(s.type) ? setEnd(s) : setStop(s))} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Λήξη νωρίτερα…<//>`}
-    </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : tab === 'changes' ? 'Κανένα ιατρικό δεν ξεκινά ή λήγει ' + (chDay === today ? 'σήμερα' : dm(chDay)) + '.' : mode === 'med' ? 'Κανένα ιατρικό σε ισχύ.' : 'Καμία ποινή σε ισχύ.'}</div>`}</div>
+    </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : tab === 'changes' ? 'Κανένα ιατρικό δεν ξεκινά ή λήγει ' + (chDay === today ? 'σήμερα' : dm(chDay)) + '.' : mode === 'med' ? (tab === 'notes' ? 'Καμία σημείωση υγείας σε ισχύ.' : 'Κανένα ιατρικό σε ισχύ.') : 'Καμία ποινή σε ισχύ.'}</div>`}</div>
     ${stop && (() => { const t = TYPES[stop.type]; const p = pm.get(stop.pid)!; const what = (stop.type === 'PUN' ? 'Η ποινή' : t.label) + ' του ' + rkShort(p); return html`<${Dialog} role="alertdialog" title="Λήξη νωρίτερα;" description=${what + ' · ' + dm(stop.from) + '–' + (stop.open ? 'χωρίς λήξη' : dm(stop.to))} onClose=${() => setStop(null)}
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setStop(null)}>Όχι, να λήξει κανονικά<//><${Button} onClick=${async () => { const x = stop; setStop(null); await act(() => run({ t: 'endStatus', id: x.id }, false), what + ': σταμάτησε, από σήμερα δεν ισχύει')(); }}>Ναι, από σήμερα δεν ισχύει<//>`}>
       <p style=${{ margin: 0 }}>${what} ${stop.open ? html`είναι <b>χωρίς λήξη</b>` : html`θα έληγε <b>${dayName(stop.to, today).toLowerCase()} ${dm(stop.to)}</b>`}. Αν πατήσεις «Ναι», σταματά τώρα: από σήμερα ${t.noDuty ? 'ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'ξαναμπαίνει και σε ένοπλες θέσεις' : t.noOut ? 'μπορεί να βγει έξοδο' : 'δεν ισχύει'}.</p><//>`; })()}

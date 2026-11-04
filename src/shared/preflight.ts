@@ -6,7 +6,7 @@ import {
   activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
-import { hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
+import { live, hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
 import { HK, hkRowLabel } from './unit';
 import { normGreek } from './text';
 import type { ExportKind } from './api';
@@ -22,8 +22,8 @@ export function preflight(kind: ExportKind, s: AppState, date: ISODate): Check[]
   return [];
 }
 
-const outOn = (s: AppState, pid: number, date: ISODate) => statusesOn(s.statuses, pid, date).find(x => TYPES[x.type].cat === 'out');
-const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(s.statuses, pid, date, outMinOn(s, date));
+const outOn = (s: AppState, pid: number, date: ISODate) => statusesOn(live(s), pid, date).find(x => TYPES[x.type].cat === 'out');
+const fromOut = (s: AppState, pid: number, date: ISODate) => statusesFrom(live(s), pid, date, outMinOn(s, date));
 
 export function frouraChecks(s: AppState, date: ISODate): Check[] {
   const out: Check[] = []; const pm = seatMap(s);
@@ -41,12 +41,12 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     // δύο θέσεις, κατάσταση, έξοδος: ⚠, όχι ✕· μπορεί να το επέλεξε ο χρήστης με αιτιολογία (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
     if (seen.has(pid)) out.push({ level: 'warn', text: name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
     seen.set(pid, x.label);
-    const hard = dutyBlock(s.statuses, date, pid, x, s.settings.lists);
+    const hard = dutyBlock(live(s), date, pid, x, s.settings.lists);
     if (hard) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
     else if (outOn(s, pid, date)) out.push({ level: 'warn', text: name + ' είναι και υπηρεσία και εξοδούχος', go: 'guard' });
     const sl = seatlessOn(s, date, pid);
     if (sl) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): την ίδια μέρα και ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel), δύο υπηρεσίες', go: 'guard' });
-    const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(s.statuses, date, pid, x, s.settings.lists) || statusWarn(s, date, pid);
+    const soft = capBlock(s, date, pid, x) || ruleBlock(without, date, pid, undefined, x.k) || lastResort(live(s), date, pid, x, s.settings.lists) || statusWarn(s, date, pid);
     if (soft) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + soft, go: 'guard' });
     if (p.cid && x.armed && !p.weapon) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): Ένοπλη χωρίς όπλο (γράψε τον αριθμό όπλου στην κάρτα του στελέχους)', go: 'cadre' });
   }

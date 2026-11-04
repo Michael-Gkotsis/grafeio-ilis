@@ -12,7 +12,7 @@ import { addDays, dm, weekday, DOW_FULL, type ISODate } from './dates';
 import { backBy, hasTimes, mins } from './hours';
 import { activePeople, hkMin, holOf, postOf, statusesAt, statusesOn } from './rules';
 import { collator } from './text';
-import { isAway, leavePhrase, statusLbl } from './ranks';
+import { live, isAway, leavePhrase, statusLbl } from './ranks';
 import { dutyAt, isSat, isWk, outLbl } from './weekend';
 
 export interface WeekRow { out: string; backOut: string; backDn: string; train: boolean }
@@ -55,7 +55,7 @@ const MAX_DAYS = 120;
 // (Michael, 2/11: δεν «γυρίζει σήμερα», ούτε στο «Ποιοι γυρίζουν» ούτε στο Γ4· με ΔΝ/έξοδο σήμερα κρίνεται σαν να μην είχε άδεια)
 export const backAm = (s: Pick<AppState, 'rules'>, x: Status, d: ISODate) => TYPES[x.type].cat !== 'out' && backBy(x, d, hkMin(s.rules));
 // (awayAll: και αυτές, για τη συνέχεια μιας άδειας στις επόμενες μέρες: ΚΑ ως αύριο 06:00 γυρνά αύριο 06:00)
-const awayAll = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(s.statuses, pid, d).filter(y => isAway(y, s.settings.lists) && !y.pending);
+const awayAll = (s: AppState, pid: number, d: ISODate): Status[] => statusesOn(live(s), pid, d).filter(y => isAway(y, s.settings.lists) && !y.pending);
 export const awayOn = (s: AppState, pid: number, d: ISODate): Status[] => awayAll(s, pid, d).filter(y => !backAm(s, y, d));
 // Μέρα «δηλωμένη» = κάποιος έχει έξοδο ή ΔΝ εκείνη τη μέρα (ή παρατήρηση εξοδούχου): οι Εξοδούχοι της μέρας έχουν συμπληρωθεί και όποιος
 // δεν έχει έξοδο/ΔΝ μένει. Αλλιώς δεν ξέρουμε αν ο ΔΝ μένει (η αλλαγή ωρών της μέρας δεν μετρά: μπορεί να μπει από πριν). Η «ΔΝ ΣΚ» του

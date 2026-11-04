@@ -9,7 +9,7 @@ import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
+import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
@@ -414,7 +414,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         const wkIds = new Set(wk.map(x => x.pid));
         statuses = statuses.filter(x => !(pids.has(x.pid) && !wkIds.has(x.pid) && isWk(x) && x.from === sun && x.to === sun));
         for (const x of wk) {
-          const onSun = statusesOn(statuses, x.pid, sun);
+          const onSun = statusesOn(noNotes(statuses, s.settings.lists), x.pid, sun);
           if (onSun.some(y => TYPES[y.type].cat === 'out')) continue;
           if (onSun.some(y => TYPES[y.type].cat === 'abs' && y.from >= c.date)) { leaving.push(shortName(pm.get(x.pid)!)); continue; }
           if (onSun.some(y => isAway(y, s.settings.lists)) || outBlock(s, sun, x.pid)) { kept.push(shortName(pm.get(x.pid)!)); continue; }

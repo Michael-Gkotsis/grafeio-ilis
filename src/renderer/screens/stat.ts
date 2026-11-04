@@ -7,7 +7,7 @@ import { html, Badge, Button, Card, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { TYPES, type BlockDef, type Person, type TypeKey } from '../../shared/domain';
-import { itemKey, listRows, type ListItem, type UserLists } from '../../shared/ranks';
+import { live, itemKey, listRows, type ListItem, type UserLists } from '../../shared/ranks';
 import { statusesOn } from '../../shared/rules';
 import { punLbl } from '../../shared/punish';
 import { statCellOf, statDefault, statOutOf, statRebase, statRowKey, statRowOf, STAT_MED, STAT_TXT, type StatCell, type StatConfig } from '../../shared/stat';
@@ -26,7 +26,7 @@ export function StatCard() {
   const cols = useDutyCols();
   // ιατρικά: οι βασικοί τύποι και από κάτω όλα όσα πρόσθεσες στις Λίστες· ποινές: όλες και κάθε είδος
   const sections = useMemo(() => {
-    const meds = listRows(lists, 'medKinds').filter(r => !r.builtin && !r.hidden && r.like && STAT_MED.includes(r.like));
+    const meds = listRows(lists, 'medKinds').filter(r => !r.builtin && !r.hidden && r.like && STAT_MED.includes(r.like) && !r.note);   // «Μόνο σημείωση»: δεν έχει τίποτα να ρυθμιστεί (Michael, 4/11)
     const puns = listRows(lists, 'punKinds').filter(r => !r.hidden || cells[statRowKey('PUN', r.name)]);
     return [
       { title: 'Ιατρικά', rows: STAT_MED.map(t => ({ type: t, own: '' }) as Row) },
@@ -39,7 +39,7 @@ export function StatCard() {
     const m = new Map<string, number>(); const inc = (k: string) => m.set(k, (m.get(k) || 0) + 1);
     for (const p of state.people as Person[]) {
       if (!p.active) continue;
-      for (const s of statusesOn(state.statuses, p.id, today)) { const r = statRowOf(s, lists); if (!r) continue; inc(statRowKey(r.type, r.own)); if (r.type === 'PUN' && r.own) inc('PUN'); }
+      for (const s of statusesOn(live(state), p.id, today)) { const r = statRowOf(s, lists); if (!r) continue; inc(statRowKey(r.type, r.own)); if (r.type === 'PUN' && r.own) inc('PUN'); }
     }
     return m;
   }, [state.people, state.statuses, today, lists]);

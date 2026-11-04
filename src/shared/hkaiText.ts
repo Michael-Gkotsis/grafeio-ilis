@@ -7,7 +7,7 @@ import { hkWho, punGroupKey, punText } from './punish';
 import { collator, upper } from './text';
 import { genitive } from './greek';
 import { HK } from './unit';
-import { cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
+import { live, cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
 import { cadreStatusOf, orderedCadre } from './cadre';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
@@ -141,7 +141,7 @@ export function hkOrgans(s: AppState, d: ISODate): { ly?: number; dy?: number } 
   const g = s.guards[d] || {}; const pm = personMap(s.people); const out: { ly?: number; dy?: number } = {};
   for (const k of ['ly', 'dy'] as const) {
     const f = s.settings.fixed?.[k]; const post = postBy(s, k);
-    const id = g[k] ?? (f && pm.get(f)?.active && !dutyBlock(s.statuses, d, f, post, s.settings.lists) ? f : undefined);
+    const id = g[k] ?? (f && pm.get(f)?.active && !dutyBlock(live(s), d, f, post, s.settings.lists) ? f : undefined);
     if (id != null) out[k] = id;
   }
   return out;

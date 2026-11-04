@@ -12,7 +12,7 @@ import { activePeople, postOf, statusesFrom } from './rules';
 import { awayOn, dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
-import { isAway } from './ranks';
+import { live, isAway } from './ranks';
 import { dutyAt } from './weekend';
 import { upper } from './text';
 
@@ -38,7 +38,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
     const duty = () => { const u = dutyAt(s, d, p.id); return u ? { warn: 'ΠΡΟΣΟΧΗ: ΚΑΙ ΥΠΗΡΕΣΙΑ ' + upper(u.label) + (u.time ? ' ' + u.time : '') } : {}; };
     if (lv.length) {
       const r = retFor(s, p.id, d);
-      const atT = statusesFrom(s.statuses, p.id, d, T).filter(x => isAway(x, s.settings.lists) && !isOut(x) && !x.pending);
+      const atT = statusesFrom(live(s), p.id, d, T).filter(x => isAway(x, s.settings.lists) && !isOut(x) && !x.pending);
       if (outs.length) {
         const o = outs.find(x => x.type === 'DN') || outs[0];
         // η άδεια τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (leaveOut, κανόνας 26/10), ή έχει τελειώσει πριν την έξοδο: εξοδούχος/ΔΝ της μέρας,
@@ -78,7 +78,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
       // η υπηρεσία μετρά πάνω από τη διόρθωση, αλλά το γραφείο πρέπει να το ξέρει
       R('G1', null, '', stillOut({ ...s, guards: {} }, p.id, d) ? { warn: 'ΠΡΟΣΟΧΗ: Η ΔΙΟΡΘΩΣΗ ΛΕΕΙ ΕΞΩ' } : {}); continue;
     }
-    const ss = statusesFrom(s.statuses, p.id, d, T);
+    const ss = statusesFrom(live(s), p.id, d, T);
     if (ss.some(x => x.type === 'PUN') || s.statuses.some(x => x.pid === p.id && x.type === 'PUN' && x.pending && x.from <= d && d <= x.to)) { R('G2', null); continue; }
     if (ss.some(x => x.type === 'STEP' || x.type === 'KOL' || statNoOut(x, s.settings.lists))) { R('G3', null); continue; }
     R('G5', null);

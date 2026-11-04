@@ -43,9 +43,10 @@ export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punK
 // like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
 // Τα καινούργια μπαίνουν σαν ΕΑΡΒ (χωρίς περιορισμούς ώσπου να τα ρυθμίσεις, Michael 18/10) · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
 // back: λόγος εισαγωγής όπλου για έναν δικό σου λόγο εξόδου (κενό = «ΛΗΞ <λόγος>»)
+// note: «μόνο σημείωση» (Michael, 4/11): μόνο σημείωση πάνω στον στρατιώτη· noteBadge: και σαν σήμα στις οθόνες, noteXl: και στο Excel ΕΑ-ΕΥ
 // warn: «μόνο προειδοποίηση» (checkbox): βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
 // duty/out: μόνο για δικό σου είδος άδειας με col '-' («Πουθενά», παρών): μπαίνει σε υπηρεσίες / βγαίνει έξοδο (αλλιώς όχι) (Michael, 3/11)
-export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; back?: string; duty?: boolean; out?: boolean }
+export interface ListItem { name: string; hk?: string; col?: string; acc?: string; max?: number; like?: TypeKey; code?: string; warn?: boolean; note?: boolean; noteBadge?: boolean; noteXl?: boolean; back?: string; duty?: boolean; out?: boolean }
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
 // hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
@@ -299,7 +300,36 @@ export const medTypeOf = (raw: string | undefined, lists?: UserLists): TypeKey |
 // δικά σου ιατρικά που προτείνονται στη δήλωση (όχι όσα έκρυψες)
 export const medKinds = (lists?: UserLists): ListItem[] => listRows(lists, 'medKinds').filter(r => !r.builtin && !r.hidden && r.like && MED_LIKE.includes(r.like));
 // Δικό σου ιατρικό «μόνο προειδοποίηση» (Michael, 13/10): μπαίνει σε υπηρεσία, αλλά με προειδοποίηση
-export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.warn;
+export const medWarns = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.warn && !ownMed(lists, s.kind)?.note;
+// Δικό σου ιατρικό «μόνο σημείωση» (Michael, 4/11): υπάρχει μόνο σαν σημείωση πάνω στον στρατιώτη, χωρίς καμία επίδραση σε υπηρεσίες, έξοδο,
+// ΗΚΑΙ, Δύναμη. noteBadge: φαίνεται και σαν σήμα στις οθόνες· noteXl: γράφεται και στο Excel ΕΑ-ΕΥ. Όταν είναι σημείωση, δεν προειδοποιεί.
+export const medNote = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => MED_LIKE.includes(s.type) && !!ownMed(lists, s.kind)?.note;
+export const medNoteBadge = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => medNote(s, lists) && !!ownMed(lists, s.kind)?.noteBadge;
+export const medNoteXl = (s: Pick<Status, 'type' | 'kind'>, lists?: UserLists): boolean => medNote(s, lists) && !!ownMed(lists, s.kind)?.noteXl;
+export const hasNoteKinds = (lists: UserLists | undefined): boolean => !!lists?.medKinds?.add?.some(x => x.note && x.like && MED_LIKE.includes(x.like));
+// Οι καταστάσεις χωρίς τις «μόνο σημείωση»: ό,τι δουλεύει με κανόνες (υπηρεσίες, έξοδος, ΗΚΑΙ, Δύναμη, έντυπα) διαβάζει από εδώ. Χωρίς
+// τέτοιο ιατρικό επιστρέφει τον ίδιο πίνακα (ίδια ταυτότητα, ίδια cache)· αλλιώς κρατιέται ανά πίνακα και ανά λίστα.
+const liveIdx = new WeakMap<Status[], { k: object; out: Status[] }>();
+export function noNotes(statuses: Status[], lists: UserLists | undefined): Status[] {
+  if (!hasNoteKinds(lists)) return statuses;
+  const k = lists!.medKinds!.add!; const c = liveIdx.get(statuses);
+  if (c && c.k === k) return c.out;
+  const out = statuses.filter(x => !medNote(x, lists)); liveIdx.set(statuses, { k, out });
+  return out;
+}
+// Για τα σήματα δίπλα στα ονόματα: χωρίς τις σημειώσεις, εκτός από όσες έχουν «σαν σήμα στις οθόνες»
+const badgeIdx = new WeakMap<Status[], { k: object; out: Status[] }>();
+export function badgeStatuses(statuses: Status[], lists: UserLists | undefined): Status[] {
+  if (!hasNoteKinds(lists)) return statuses;
+  const k = lists!.medKinds!.add!; const c = badgeIdx.get(statuses);
+  if (c && c.k === k) return c.out;
+  const out = statuses.filter(x => !medNote(x, lists) || medNoteBadge(x, lists)); badgeIdx.set(statuses, { k, out });
+  return out;
+}
+export const live = (s: Pick<AppState, 'statuses' | 'settings'>): Status[] => noNotes(s.statuses, s.settings.lists);
+// Μόνο οι σημειώσεις (καρτέλα, Ιατρικά › Σημειώσεις)
+export const notesOf = (statuses: Status[], lists: UserLists | undefined): Status[] => (hasNoteKinds(lists) ? statuses.filter(x => medNote(x, lists)) : []);
+
 // Όνομα κατάστασης σε σήματα και λίστες: η ποινή με το είδος της, το δικό σου ιατρικό με το όνομά του
 export function statusLbl(s: Pick<Status, 'type' | 'kind'> & { note?: string }, lists?: UserLists): string {
   if (s.type === 'PUN') return upper(s.kind || TYPES.PUN.label);   // οι ποινές με κεφαλαία παντού (Michael, 13/10)

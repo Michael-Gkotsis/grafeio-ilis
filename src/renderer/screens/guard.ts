@@ -21,7 +21,7 @@ import { dutyAt, isSat, isWk, outLbl } from '../../shared/weekend';
 import { backsAt, dayTimes, theDay, retDay, retWhen, returnsOn, stillOut, type Back } from '../../shared/returns';
 import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
 import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
-import { statusLbl } from '../../shared/ranks';
+import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 import { SkipsView } from './skips';
 type P = any;
@@ -278,7 +278,7 @@ export function GuardScreen() {
     const noDuty: P[] = [], unarmed: P[] = [];
     // όπως ορίζει ο πίνακας καταστάσεων (Ρυθμίσεις › Υπηρεσίες): καμία υπηρεσία του εντύπου, ή καμία ένοπλη
     const lists = state.settings.lists; const blocks = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-    people.forEach(p => { const ss = statusesFrom(state.statuses, p.id, date, dutyMin(state.settings)); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
+    people.forEach(p => { const ss = statusesFrom(live(state), p.id, date, dutyMin(state.settings)); const a = ss.find(s => statNoDuty(s, blocks, lists)); if (a) { noDuty.push({ p, s: a }); return; } const b = ss.find(s => statIsUnarmed(s, blocks.filter(x => x.kind !== 'ly'), lists)); if (b) unarmed.push({ p, s: b }); });
     // με πόστο: χωριστά, με το πόστο τους (μόνο με το χέρι, σε οποιαδήποτε θέση)
     const posted = people.filter(p => p.post && !noDuty.some(x => x.p === p));
     const cols = capCols(state.settings);
@@ -404,7 +404,7 @@ export function GuardScreen() {
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
           <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span><span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
-          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${state.statuses} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
+          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
     ${!locked && Object.values(g).some(Boolean) && html`<div className="gb-clear"><${Button} size="sm" variant="ghost" onClick=${() => setClearAsk(true)} data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">Άδειασε τη μέρα…<//></div>`}
@@ -660,7 +660,7 @@ export function OutsScreen() {
   const blockedN = people.filter(p => reasons[p.id] && !aways.has(p.id)).length;
   const cantN = people.filter(p => reasons[p.id] || aways.has(p.id)).length;
   const awayN = people.filter(p => aways.has(p.id) && !draft[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(state.statuses, p.id, date, outMinOn(state, date)), state.settings.lists) && !stillOut(state, p.id, date)).length;
+  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(live(state), p.id, date, outMinOn(state, date)), state.settings.lists) && !stillOut(state, p.id, date)).length;
   const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
   const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
   const open = useOpenFrom(rows);
