@@ -8,12 +8,12 @@ import type { AppState } from '../src/shared/domain';
 import { parseRoster, type RawSheet } from '../src/shared/roster';
 import { normBlood } from '../src/shared/personal';
 import { planRoomExtras, withRoomExtras } from '../src/shared/roomExtra';
-import { planTotals } from '../src/shared/totals';
+import { planTotals, totalsTouched } from '../src/shared/totals';
 import { sheetTotals } from '../src/shared/strengthView';
 import { guessField, FIELDS } from '../src/shared/reports';
 import { Workbook } from '../src/main/xlsx';
 import { readBook, writeSource } from '../src/main/sources';
-import type { SourceBinding } from '../src/shared/sources';
+import { defaultBinding, kindsForPeople, type ListKind, type SourceBinding } from '../src/shared/sources';
 import { fakeState } from './fixtures';
 
 const D = '2026-11-03';
@@ -163,5 +163,22 @@ describe('σύνολα: σχέδιο', () => {
     expect(planTotals(sh(rows), T, 2, () => false)).toEqual([{ r: 3, c: 5, v: 2 }, { r: 4, c: 5, v: 4 }, { r: 5, c: 5, v: 5 }]);
     expect(planTotals(sh(rows), T, 2, (r, c) => r === 4 && c === 5)).toEqual([{ r: 3, c: 5, v: 2 }, { r: 5, c: 5, v: 5 }]);
     expect(planTotals(sh([[], ['x', 'y']]), T, 0, () => false)).toEqual([]);
+  });
+});
+
+// Έλεγχος «όλα γράφονται στα Excel» (4/11): αλλαγή μόνο στο e-mail/ομάδα αίματος, ή μια άδεια/ΣΤΕΠ/νοσοκομείο, ξαναγράφει
+// το Δυναμολόγιο (φύλλο ΘΑΛΑΜΟΙ, σύνολα κάτω από το ΣΥΝΟΛΙΚΟ) χωρίς να χρειαστεί άλλη αλλαγή σε άτομο
+describe('αυτόματη εγγραφή: τι ξαναγράφει το Δυναμολόγιο', () => {
+  const src: Partial<Record<ListKind, SourceBinding>> = { people: defaultBinding('people', 'x.xlsx') };
+  for (const [k, v] of [['email', 'a@b.gr'], ['relEmail', 'c@d.gr'], ['blood', 'Α+']] as const) it(k + ' μόνο', () => {
+    const s = run(s0, { t: 'setPersonal', pid: 2, [k]: v } as Command);
+    expect([...kindsForPeople(s0.people, s.people, src)]).toEqual(['people']);
+  });
+  it('σύνολα: ΣΤΕΠ, αναρρωτική, άδεια, τιμητική, νοσοκομείο ναι· εξοδούχος, ποινή, ιατρικό όχι', () => {
+    const st = (type: string) => ({ id: type, pid: 1, type, from: D, to: D }) as AppState['statuses'][number];
+    const base = [st('EA')];
+    for (const t of ['STEP', 'SICK', 'LEAVE', 'HON', 'NOS']) { expect(totalsTouched(base, [...base, st(t)])).toBe(true); expect(totalsTouched([...base, st(t)], base)).toBe(true); }
+    for (const t of ['OUT', 'DN', 'PUN', 'EY', 'KOL']) expect(totalsTouched(base, [...base, st(t)])).toBe(false);
+    expect(totalsTouched(base, base)).toBe(false);
   });
 });

@@ -14,7 +14,7 @@ import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
 import { hkRowNames } from './unit';
-import { PKEYS, personalFromCell, type PKey } from './personal';
+import { PKEYS, XKEYS, personalFromCell, type PKey } from './personal';
 import { planCadresWrite, planCadreAbsWrite, CADRE_OPT } from './cadreSource';
 export { OUT_NOTE };
 
@@ -1867,7 +1867,8 @@ export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBind
 // Ποια είδη αφορά μια αλλαγή στα άτομα (P2): μόνο όσα έχουν στήλη για κάποιο πεδίο που άλλαξε (και τα πεδία που
 // διαβάζει το ίδιο το είδος: πόστο, εκτός δύναμης, Σ.Ι., ρόλος…). Νέο ή σβησμένο άτομο αφορά όλα.
 const KIND_PERSON: Partial<Record<ListKind, string[]>> = {
-  people: ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'role', 'dn', 'added', 'active', ...PKEYS],
+  // e-mail, e-mail συγγενή, ομάδα αίματος: γράφονται στο φύλλο ΘΑΛΑΜΟΙ μαζί με το Δυναμολόγιο (roomExtra.ts)
+  people: ['rank', 'origin', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si', 'role', 'dn', 'added', 'active', ...PKEYS, ...XKEYS],
   posts: ['post', 'active'], outside: ['active', 'notes'], caps: ['active']
 };
 export function kindsForPeople(prev: Person[], next: Person[], sources: Partial<Record<ListKind, SourceBinding>>): Set<ListKind> {
