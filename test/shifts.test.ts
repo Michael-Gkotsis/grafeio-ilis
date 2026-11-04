@@ -117,7 +117,7 @@ describe('ΦΡΟΥΡΑ', () => {
     // πίνακας Πύλης κάτω από τα μαγειρεία: κεφαλίδα στη 33, 1ος σε 4 γραμμές με ενωμένο όνομα
     expect(ws.get('C33')).toBe('ΠΥΛΗ');
     expect([34, 35, 36, 37].map(r => ws.get('D' + r))).toEqual(['14:00-16:00', '20:00-22:00', '02:00-04:00', '08:00-10:00']);
-    expect(ws.get('B34')).toBe('1Ο'); expect(ws.get('B38')).toBe('2Ο');
+    expect(ws.get('B34')).toBe('1ο'); expect(ws.get('B38')).toBe('2ο');
     expect(r.data.length).toBeGreaterThan(0);
   });
   it('χωρίς αλλαγές, οι ώρες του template μένουν όπως είναι', async () => {

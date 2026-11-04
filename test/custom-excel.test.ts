@@ -55,13 +55,13 @@ describe('νέες υπηρεσίες', () => {
     // μία κενή γραμμή κάτω από τα Μαγειρεία (31), μετά οι επικεφαλίδες
     expect(['B32', 'C32', 'I32', 'J32'].map(c => ws.get(c))).toEqual([null, null, null, null]);
     expect(['B33', 'C33', 'D33', 'E33'].map(c => ws.get(c))).toEqual(['Α/Α', 'ΠΥΛΗ', 'ΩΡΕΣ', 'ΠΑΡ/ΣΕΙΣ']);
-    expect(['B34', 'D34', 'B35', 'D35'].map(c => ws.get(c))).toEqual(['1Ο', '24ΩΡΗ', '2Ο', '24ΩΡΗ']);
+    expect(['B34', 'D34', 'B35', 'D35'].map(c => ws.get(c))).toEqual(['1ο', '24ΩΡΗ', '2ο', '24ΩΡΗ']);
     expect(ws.get('C34')).toBeTruthy();
     // «ημέρα» = χωρίς ώρες: χωρίς στήλη ΩΡΕΣ, το όνομα πιάνει και τη στήλη τους
     expect(['I33', 'J33', 'K33', 'L33'].map(c => ws.get(c))).toEqual(['Α/Α', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Γ΄', null, 'ΠΑΡ/ΣΕΙΣ']);
     expect(ws.mergeAt('J33')).toEqual({ c1: 10, r1: 33, c2: 11, r2: 33 });
     expect(ws.mergeAt('J34')).toEqual({ c1: 10, r1: 34, c2: 11, r2: 34 });
-    expect(ws.get('I34')).toBe('1Ο'); expect(ws.get('I35')).toBeNull();
+    expect(ws.get('I34')).toBe('1ο'); expect(ws.get('I35')).toBeNull();
     // ίδιο πλαίσιο με τους θαλαμοφύλακες· οι τιμωρημένοι κατέβηκαν 4 γραμμές (κενή + επικεφαλίδα + 2)
     expect(ws.style('B34')).toBe(ws.style('B13')); expect(ws.style('J33')).toBe(ws.style('C13'));
     expect(ws.get('A38')).toBe('ΤΙΜΩΡΗΜΕΝΟΙ'); expect(ws.get('A40')).toBe('1');
