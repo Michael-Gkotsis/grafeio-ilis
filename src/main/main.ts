@@ -16,6 +16,7 @@ import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { withRoomExtras } from '../shared/roomExtra';
+import { totalsTouched } from '../shared/totals';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
 import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isCadreKind, sheetHost, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
@@ -170,7 +171,8 @@ function daily() {
   if (store.state.statuses.some(x => x.open && x.to < d)) runCmd({ t: 'extendOpen' });
   if (!store.hasAuditToday(d, 'auto')) runCmd({ t: 'expire' });
   if (dayOf && dayOf !== d) {
-    const ks = STATUS_KINDS.filter(k => bindingOf(k)?.scope === 'active' && bindingOf(k)?.write !== false);
+    // και το Δυναμολόγιο: τα σύνολα κάτω από το ΣΥΝΟΛΙΚΟ είναι της σημερινής μέρας
+    const ks: ListKind[] = [...STATUS_KINDS.filter(k => bindingOf(k)?.scope === 'active' && bindingOf(k)?.write !== false), ...(bindingOf('people') ? ['people' as const] : [])];
     if (ks.length) { ks.forEach(k => dirty.add(k)); clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200); }
   }
   dayOf = d;
@@ -446,6 +448,8 @@ function kindsOf(prev: AppState, next: AppState): Set<ListKind> {
   const out = new Set<ListKind>();
   if (prev.people !== next.people) kindsForPeople(prev.people, next.people, next.settings.sources || {}).forEach(k => out.add(k));
   if (prev.statuses !== next.statuses) STATUS_KINDS.forEach(k => out.add(k));
+  // σύνολα κάτω από το ΣΥΝΟΛΙΚΟ (ΣΤΕΠ, αναρρωτικές, άδειες, νοσοκομείο): γράφονται με το Δυναμολόγιο
+  if (totalsTouched(prev.statuses, next.statuses)) out.add('people');
   // και νέα (ή ξανά ενεργή) δική σου υπηρεσία: παίρνει μόνη της στήλη στο φύλλο δυνατοτήτων (capExtraCols)
   if (prev.caps !== next.caps || (prev.settings !== next.settings && capSig(prev.settings) !== capSig(next.settings))) out.add('caps');
   if (prev.guards !== next.guards || prev.dutyLog !== next.dutyLog) out.add('duties');

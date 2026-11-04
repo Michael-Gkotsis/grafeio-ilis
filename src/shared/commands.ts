@@ -887,6 +887,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
       // όριο υπηρεσιών τον μήνα (ΕΠΟΠ/ΟΒΑ): ακέραιος πάνω από 0, αλλιώς χωρίς όριο
       const person: Person = withOrigin({ ...c.person }, s.settings.lists); const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
+      // εκτός δύναμης από την καρτέλα (4/11): η σημείωση γίνεται «Εκτός δύναμης: <λόγος>», όπως όσων ήρθαν από το φύλλο ΕΚΤΟΣ ΔΥΝΑΜΗΣ,
+      // ώστε να γράφεται στο φύλλο ΕΚΤΟΣ ΔΥΝΑΜΗΣ και να μη γυρίζει σε δύναμη με την επόμενη εισαγωγή του Δυναμολογίου (mergeRow).
+      // Ξανά σε δύναμη: φεύγει μόνο η λέξη, ο λόγος μένει στη σημείωση.
+      const nt = (person.notes || '').trim();
+      if (old.active && !person.active && !nt.startsWith(OUT_NOTE)) person.notes = OUT_NOTE + (nt ? ': ' + nt : '');
+      else if (!old.active && person.active && nt.startsWith(OUT_NOTE)) person.notes = nt.slice(OUT_NOTE.length).replace(/^[:\s]+/, '');
       let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
       const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
@@ -895,7 +901,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'setPersonal': {
-      // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ): μόνο στο άτομο, δεν ακουμπούν Excel· ούτε τα νούμερα στο ιστορικό ενεργειών
+      // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ, e-mail, ομάδα αίματος): γράφονται μόνα τους στο Δυναμολόγιο/ΣΤΕΛΕΧΗ (kindsForPeople)· όχι τα νούμερα στο ιστορικό ενεργειών
       const keys = ['iban', 'amka', 'afm'] as const;
       const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } return q; };
       const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);

@@ -4,6 +4,7 @@
 import { norm } from './text';
 import type { RawSheet } from './roster';
 import type { SheetTotals } from './strengthView';
+import type { Status, TypeKey } from './domain';
 
 const LABELS: [keyof SheetTotals, RegExp][] = [
   ['step', /^ΣΤΕΠ$/], ['sick', /^ΑΝΑΡ+\S*ΑΔΕΙΕΣ$/], ['leave', /^ΑΔΕΙΕΣ$/], ['hosp', /^(ΕΙΣΑΓΩΓΕΣ)?ΝΟΣΟΚΟΜΕΙΟ$/]
@@ -27,4 +28,14 @@ export function planTotals(sheet: RawSheet, t: SheetTotals, from: number, isFx: 
     }
   }
   return out;
+}
+
+// Άλλαξε κάτι που μετρά στα σύνολα (ΣΤΕΠ, αναρρωτική, άδεια, νοσοκομείο); Τότε ξαναγράφεται και το Δυναμολόγιο, όχι μόνο το φύλλο
+// της κατάστασης: αλλιώς τα σύνολα κάτω από το ΣΥΝΟΛΙΚΟ έμεναν παλιά ως την επόμενη αλλαγή σε άτομο (4/11).
+// Όχι για εξοδούχους/ΔΝ/ποινές: αυτά αλλάζουν συχνά και δεν μετρούν εδώ.
+const TOTAL_TYPES = new Set<TypeKey>(['STEP', 'SICK', 'LEAVE', 'HON', 'NOS']);
+export function totalsTouched(prev: Status[], next: Status[]): boolean {
+  if (prev === next) return false;
+  const a = new Set(prev), b = new Set(next);
+  return next.some(x => !a.has(x) && TOTAL_TYPES.has(x.type)) || prev.some(x => !b.has(x) && TOTAL_TYPES.has(x.type));
 }
