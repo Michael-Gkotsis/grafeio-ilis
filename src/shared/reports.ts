@@ -219,6 +219,7 @@ export interface RepPick {
   even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
   fair?: boolean;                             // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
   cats?: StCat[];                             // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
+  types?: TypeKey[];                          // Καταστάσεις: μόνο αυτά τα είδη μέσα στις κατηγορίες (Michael 4/11: «μόνο οι ελεύθεροι υπηρεσίας»)· κενό = όλα
   when?: 'on' | 'from' | 'new';                // Καταστάσεις: όσες ισχύουν τη μέρα, όσες ισχύουν από τη μέρα και μετά, ή μόνο όσες ξεκινούν τη μέρα
   blocks?: string[];                          // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
   empty?: boolean;                            // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
@@ -305,7 +306,7 @@ function condTest(s: AppState, d: ISODate, stNew?: boolean) {
 export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from' | 'seat';
 export type StCat = 'med' | 'pun' | 'abs' | 'other' | 'out';
 export const ST_CATS: { id: StCat; label: string }[] = [{ id: 'med', label: 'Ιατρικά' }, { id: 'pun', label: 'Ποινές' }, { id: 'abs', label: 'Άδειες' }, { id: 'other', label: 'ΣΤΕΠ, νοσοκομείο' }, { id: 'out', label: 'Έξοδοι' }];
-const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
+export const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
 // Πού βγαίνει ως φύλλο: στο Δυναμολόγιο (το αρχείο του, όποιο είναι τη στιγμή που βγαίνει) ή σε άλλο Excel.
 // auto: ξαναγράφεται μόνο του μετά από κάθε αλλαγή (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
 export interface RepTarget { to: 'people' | 'file'; file?: string; sheet: string; auto?: boolean }
@@ -378,7 +379,7 @@ export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts;
     opts: { title: 'ΑΞΙΟΛΟΓΗΣΗ ΕΚΠΑΙΔΕΥΣΗΣ ΜΑΧΗΤΗ ΤΩΝ ΟΠΛΙΤΩΝ', cols: [bc('aa', 'narrow'), bc('rank', 'narrow', 'ΒΘΜ'), bc('spec', 'narrow'), bc('last'), bc('first'), bc('si', 'narrow', 'ΣΙ'), bc('dcode', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
   // Δυναμολόγιο-Παρουσιολόγιο στελεχών-ΣΤΡ (Michael, 3/11): στελέχη για την επόμενη εργάσιμη, οπλίτες για τη μέρα του εντύπου, αναλύσεις και νούμερα
   { id: 'stelexi', name: 'Δυναμολόγιο-Παρουσιολόγιο στελεχών', help: 'Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου', kind: 'cadre', sort: 'pick',
-    more: [{ pick: { from: 'all', mode: 'all', not: ['present'] }, sort: 'room' }, { pick: { from: 'all', mode: 'all', need: ['med'], cats: ['med'] }, sort: 'room' }],
+    more: [{ pick: { from: 'all', mode: 'all', not: ['present'] }, sort: 'room' }, { pick: { from: 'all', mode: 'all', cats: ['med'], types: ['EY'] }, sort: 'room' }],
     vals: [
       { id: 'v1', title: 'ΤΟΠΟΘΕΤΗΜΕΝΗ ΔΥΝΑΜΗ', rows: [{ label: 'ΑΞΚΟΙ', expr: hkx('row', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ', expr: hkx('row', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ', expr: hkx('row', HK_YPX) }, { label: 'ΦΑΜΥΕΣ', expr: [{ sign: '+', metric: 'str.total' }] }] },
       { id: 'v2', title: 'ΑΠΟΝΤΕΣ', rows: [{ label: 'ΑΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_YPX) }, { label: 'ΦΑΜΥΕΣ ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }] },
@@ -641,6 +642,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
     const out: StatusRow[] = [];
     for (const st of s.statuses) {
       if (!cats.has(TYPES[st.type]?.cat as StCat) || !people.has(st.pid)) continue;
+      if (pk.types?.length && !pk.types.includes(st.type)) continue;
       if (pk.when === 'new' ? st.from !== d : pk.when === 'from' ? st.to < d && !st.open : st.from > d || (st.to < d && !st.open)) continue;
       const p = pm.get(st.pid); if (!p) continue;
       out.push({ ...p, id: st.id, pid: p.id, st, p });
@@ -850,7 +852,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>
   }
   const pk = r.pick; const who = r.kind === 'cadre' ? 'στελέχη' : r.kind === 'status' ? 'καταστάσεις' : 'στρατιώτες';
   if (r.kind === 'status') {
-    const cats = (pk.cats?.length ? pk.cats : DEF_CATS).map(c => ST_CATS.find(x => x.id === c)?.label.toLowerCase()).join(', ');
+    const cats = pk.types?.length ? pk.types.map(t => TYPES[t]?.label || t).join(', ') : (pk.cats?.length ? pk.cats : DEF_CATS).map(c => ST_CATS.find(x => x.id === c)?.label.toLowerCase()).join(', ');
     const lead = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
     return lead + ' (' + cats + ') ' + (pk.when === 'new' ? 'που ξεκινούν τη μέρα' : pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
   }

@@ -60,7 +60,7 @@ export function HdTab() {
       <${Button} disabled=${busy} onClick=${() => go(false)} data-tip="Βγαίνει .docx και ανοίγει στο Word. Κρατιέται όπως βγήκε">${busy ? 'Δημιουργία…' : 'Βγάλε Word'}<//>
       <${Button} variant="outline" disabled=${busy} onClick=${() => go(true)} data-tip="Εκτύπωση της σελίδας χωρίς να ανοίξεις Word">Εκτύπωση<//>
       <${Button} variant="outline" onClick=${() => setSigs(true)} data-tip=${'Υπογραφή: ' + sigsText(sigList)}>Υπογραφή…<//>
-      ${narrow && html`<${Button} variant="outline" onClick=${() => setPrev(true)}>Προεπισκόπηση<//>`}<//>
+      <${Button} variant="outline" onClick=${() => setPrev(true)}>Προεπισκόπηση<//><//>
     <div className="toolbar"><${DateBar} value=${date} onChange=${(d: string) => { setEdit(null); nav.set({ hdDate: d === hdDefaultDay(today) ? undefined : d }); }} days=${days}/>
       <span className="muted">${dayName(date, today)} · μεταβολές της μέρας</span></div>
     ${saved && !dirty && html`<${Alert} tone="info">Αυτή η Ημερήσια Διαταγή έχει βγει και κρατιέται όπως βγήκε, ακόμα κι αν αλλάξουν τα δεδομένα. <${Button} variant="link" onClick=${again}>Ξανά από τα δεδομένα<//><//>`}
@@ -79,8 +79,8 @@ export function HdTab() {
       <${Card} title="Πρότυπο Word"><p className="note" style=${{ marginTop: 0 }}>${tpl ? html`Δικό σου πρότυπο: <b>${tpl.name}</b>.` : 'Χρησιμοποιείται το έτοιμο πρότυπο της εφαρμογής (όπως το έγγραφό σου).'}
         ${' '}Δικό σου .docx με ετικέτες, π.χ. <code>{ΗΜΕΡΟΜΗΝΙΑ}</code>, <code>{ΟΠ3}</code>: δες τη λίστα στον Οδηγό.</p>
         <${Button} variant="outline" size="sm" onClick=${pickTpl}>Δικό μου πρότυπο Word…<//> ${tpl && html`<${Button} variant="ghost" size="sm" onClick=${() => run({ t: 'setSettings', settings: { hdTpl: undefined }, text: 'πρότυπο Ημερήσιας Διαταγής: πίσω στο έτοιμο' }, false)}>Πίσω στο έτοιμο<//>`}<//>
-    </div>${!narrow && html`<div className="hd__right"><${Preview} html=${pageHtml(5)}/></div>`}</div>
-    ${prev && html`<${Dialog} size="lg" title="Προεπισκόπηση" onClose=${() => setPrev(false)}><${Preview} html=${pageHtml(9)}/><//>`}
+    </div>${!narrow && html`<div className="hd__right"><button type="button" className="hd__zoom" data-tip="Μεγάλη προεπισκόπηση" onClick=${() => setPrev(true)}><${Preview} html=${pageHtml(9)}/></button></div>`}</div>
+    ${prev && html`<${Dialog} size="lg" title="Προεπισκόπηση" onClose=${() => setPrev(false)}><${Preview} html=${pageHtml(12)}/><//>`}
     ${sigs && html`<${SigsDialog} title="Ημερήσια Διαταγή" initial=${sigList} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onClose=${() => setSigs(false)}
       onGo=${async (l: Sig[], keep: boolean, pr: boolean) => { if (keep) await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), hd: l } }, text: 'υπογραφή Ημερήσιας Διαταγής: ' + sigsText(l) }, false); go(pr, keep ? undefined : l); }}/>`}
   </div>`;

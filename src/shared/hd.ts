@@ -68,12 +68,12 @@ export function hdPageHtml(t: Record<string, string>, fs: number): string {
   const mid = (h: string, cls = '') => `<tr><td class="l"></td><td colspan="3" class="m ${cls}">${h}</td></tr>`;
   const gap = '<tr><td class="l"></td><td colspan="3" class="g"></td></tr>';
   const sec = (k: string) => HD_SECTIONS.map((n, i) => row((i + 1) + '. ' + n, t[k + (i + 1)])).join('');
-  return `<div class="hd" style="font-size:${fs}px"><style>
-.hd{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1.2em 1em;line-height:1.25}.hd table{border-collapse:collapse;width:100%;table-layout:fixed}
-.hd td{border-bottom:1px dotted #000;padding:.25em .4em;vertical-align:middle}.hd td.l{width:12%;border-left:1px solid #000;border-right:1px solid #000}.hd td.a{width:20%}.hd td.c{width:3%;text-align:center}.hd td.v{width:65%}
-.hd td.m{text-align:center}.hd td.u{text-decoration:underline}.hd td.ul{text-decoration:underline;text-align:left}.hd td.g{height:1.2em}.hd tr:last-child td{border-bottom:1px solid #000}
-.hd .top{display:flex;justify-content:space-between;font-weight:700}.hd h1{font-size:1em;text-align:center;margin:.5em 0 .3em}.hd .sig{text-align:center;padding-left:40%}
-.hd tr.h td{border:1px solid #000;text-align:center}
+  return `<div class="hdp" style="font-size:${fs}px"><style>
+.hdp{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1.2em 1em;line-height:1.25}.hdp table{border-collapse:collapse;width:100%;table-layout:fixed}
+.hdp td{border-bottom:1px dotted #000;padding:.25em .4em;vertical-align:middle}.hdp td.l{width:12%;border-left:1px solid #000;border-right:1px solid #000}.hdp td.a{width:20%}.hdp td.c{width:3%;text-align:center}.hdp td.v{width:65%}
+.hdp td.m{text-align:center}.hdp td.u{text-decoration:underline}.hdp td.ul{text-decoration:underline;text-align:left}.hdp td.g{height:1.2em}.hdp tr:last-child td{border-bottom:1px solid #000}
+.hdp .top{display:flex;justify-content:space-between;font-weight:700}.hdp h1{font-size:1em;text-align:center;margin:.5em 0 .3em}.hdp .sig{text-align:center;padding-left:40%}
+.hdp tr.h td{border:1px solid #000;text-align:center}
 </style><div class="top"><span>ΜΟΝΑΔΑ: ${esc(t['ΜΟΝΑΔΑ'])}</span></div><div class="top" style="justify-content:flex-end;font-size:.8em">1ο ΕΓ/68/80</div>
 <h1>ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ΤΗΣ ${esc(t['ΗΜΕΡΟΜΗΝΙΑ'])}</h1><table><colgroup><col style="width:12%"><col style="width:20%"><col style="width:3%"><col></colgroup>
 <tr class="h"><td class="l" style="width:12%;border-bottom:1px solid #000">ΣΥΝΟΠΤΙΚΗ ΠΕΡΙΓΡΑΦΗ</td><td colspan="3" style="border-bottom:1px solid #000">ΑΝΑΛΥΤΙΚΗ ΠΕΡΙΓΡΑΦΗ</td></tr>

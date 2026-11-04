@@ -21,13 +21,13 @@ import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shar
 import { DAY_CHOICES, addDays, dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
 import { rankTxt, statusLbl } from '../../shared/ranks';
-import { blocksOf, shortName, type AppState, type Person, type Status } from '../../shared/domain';
+import { TYPES, blocksOf, shortName, type TypeKey, type AppState, type Person, type Status } from '../../shared/domain';
 import { cadreSeat, pickPeople } from '../../shared/rules';
 import { WEAPON_FILTERS } from '../../shared/weapons';
 import { PV_MAX, PV_SAMPLES, autoName, clampPage, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../../shared/repPage';
 import type { RepHistEntry, RepPreview, RepSource, TplInspect } from '../../shared/api';
 import {
-  BLANK_MAX, BLANK_ROWS, CELLS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condGroups, setGroupCond, addGroup, removeGroup, matchGroup, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
+  BLANK_MAX, BLANK_ROWS, CELLS, DEF_CATS, FIELDS, PRESETS, REP_CONDS, groupsOf, alwaysOf, drawRows, manualKind, recentIds, refillDraw, REP_KINDS, SPLITS, ST_CATS, ST_FMTS, ST_TAGS, condVal, condGroups, setGroupCond, addGroup, removeGroup, matchGroup, outPlan, setCond, SPLIT_NOUN, blankBuild, candidates, cellOf, dailyOk, defaultPick, fieldOf, isLinked, keepDraw, rowNoun, pickText, replaceOne, repDate, roomList, rowsOf, sortRows,
   DEF_COMBO, TAB_WIDTHS, colsForKind, retypeTable, switchCols, comboFields, comboFmts, comboHead, comboOf, isStatusField, listTags, forBuild, moreRows, newTable, pickForKind, sigsNone, sortsOf, splitOk, stText, subPick, tagKey, withBuilt, blankN, regrid, srcSort, whoOf, whoP, whoC, fieldValue,
   type BlankSrc, type BuildCol, type BuildOpts, type BuildTable, type TabLay, type ColOpts, type RepCol, type RepKind, type RepPick, type RepSort, type RepSplit, type RepTable, type RepTpl, type Report, type Row, type StCat
 } from '../../shared/reports';
@@ -1178,6 +1178,7 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
   return html`<div className="rep-pick">
     <div className="stack">
       ${status && html`<div><span className="field__label">Ποιες καταστάσεις</span><div className="rep-chips">${ST_CATS.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${(pk.cats || []).includes(c.id)} onClick=${() => { const cats = toggle<StCat>(pk.cats, c.id); if (cats.length) set({ cats }); }}>${c.label}</button>`)}</div></div>`}
+      ${status && html`<div><span className="field__label">Μόνο αυτά τα είδη <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${(Object.keys(TYPES) as TypeKey[]).filter(k => (pk.cats?.length ? pk.cats : DEF_CATS).includes(TYPES[k].cat as StCat)).map(k => html`<button key=${k} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.types?.includes(k)} onClick=${() => { const types = toggle<TypeKey>(pk.types, k); set({ types: types.length ? types : undefined }); }}>${TYPES[k].label}</button>`)}</div></div>`}
       ${status && html`<div className="rep-opts"><span className="field__label">Ποιες μπαίνουν</span><${Segmented} small=${true} value=${pk.when || 'on'} onChange=${(when: RepPick['when']) => set({ when })} items=${[{ value: 'on', label: 'Όσες ισχύουν τη μέρα' }, { value: 'from', label: 'Από τη μέρα και μετά' }, { value: 'new', label: 'Μόνο όσες ξεκινούν τη μέρα' }]}/></div>`}
       ${duty && html`<div><span className="field__label">Ποιες υπηρεσίες <small className="muted">(καμία = όλες)</small></span><div className="rep-chips">${blockList.map(b => html`<button key=${b.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.blocks?.includes(b.id)} onClick=${() => set({ blocks: toggle(pk.blocks, b.id) })}>${b.name}</button>`)}</div></div>`}
       ${duty && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!pk.empty} onChange=${(e: any) => set({ empty: e.target.checked })}/>Και οι θέσεις που δεν έχουν κανέναν (όχι με φίλτρο θαλάμου ή Σ.Ι.)</label>`}
