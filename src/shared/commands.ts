@@ -4,7 +4,7 @@ import { HK } from './unit';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, cleanShift, everyBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
@@ -85,8 +85,9 @@ export type Command =
   | { t: 'addPhase'; name: string; from: Phase }
   | { t: 'renamePhase'; id: Phase; name: string }
   | { t: 'delPhase'; id: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; hrs: string; off?: boolean; shift?: ShiftDef | null }
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n: number; hrs: Record<string, string>; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null }
+  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post' }
+  // nums/per (Michael, 4/11): νούμερα και άτομα ανά νούμερο· το παλιό n = nums. armed/hidden/armWeapon αλλάζουν και από εδώ (όχι στον Λ/Υ-Δ/Υ)
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; armWeapon?: 'own' | 'post' }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
   | { t: 'autofillRange'; dates: ISODate[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
@@ -200,6 +201,23 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
   if (p.star !== undefined) { if (p.star) n.star = true; else delete n.star; }
   if (JSON.stringify(n) === JSON.stringify(old)) return { state: s, text: '', files: [] };
   return put(n, 'Άλλαξε σημείωση' + label(n) + (n.rem !== old.rem ? (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ' · χωρίς υπενθύμιση') : ''));
+}
+// Όλα τα κλειδιά θέσεων όλων των εντύπων (νέα κλειδιά μοναδικά, Michael 4/11)
+const usedKeys = (st: Settings) => new Set(everyBlock(st).flatMap(b => b.posts.map(p => p.k)));
+const shapeTxt = (n: number, per: number) => n + (n === 1 ? ' νούμερο' : ' νούμερα') + (per > 1 ? ' × ' + per + ' άτομα' : n === 1 ? ' άτομο' : ' άτομα');
+// Από αύριο και μετά βγαίνουν οι υπηρεσίες των θέσεων keys (όταν κρύβονται), μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά
+function dropFutureGuards(s: AppState, ctx: Ctx, phase: Phase, keys: Set<string>): { guards: AppState['guards']; gone: number } {
+  let guards = s.guards, gone = 0;
+  if (keys.size && phase === (s.settings.phase || 'sven')) {
+    guards = { ...s.guards };
+    for (const d in guards) if (d > ctx.today) {
+      const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !keys.has(k)));
+      const n = Object.keys(g).length - Object.keys(left).length;
+      if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
+    }
+    if (!gone) guards = s.guards;
+  }
+  return { guards, gone };
 }
 // Οι βάρδιες μιας υπηρεσίας όπως αποθηκεύονται (cleanShift). Λίστα που δεν έχει ούτε μία σωστή βάρδια δεν γίνεται σιωπηλά «κάθε τόσες ώρες»
 function blockShift(sh: ShiftDef | null | undefined, count: number): ShiftDef | null {
@@ -1074,53 +1092,53 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'addBlock': {
       const name = c.name.trim(); if (!name) throw new Error('Γράψε όνομα για τη νέα υπηρεσία');
-      const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
+      const n = Math.min(MAX_NUMS, Math.max(1, Math.floor(c.n) || 1)); const per = Math.min(MAX_PER, Math.max(1, Math.floor(c.per || 1) || 1));
       const id = 'x' + ctx.newId().replace(/[^a-z0-9]/gi, '').slice(0, 8);
-      const short = (i: number) => (n === 1 ? name : (i + 1) + 'ος');
       const sh = blockShift(c.shift, n);
       // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
-      const b: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: Array.from({ length: n }, (_, i) => ({ k: id + '_' + (i + 1), label: name + (n === 1 ? '' : ' ' + (i + 1) + 'ος'), short: short(i), hrs: c.hrs.trim() || 'ημέρα' })) };
-      return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + n + (n === 1 ? ' άτομο' : ' άτομα') + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
+      // νούμερα × άτομα (Michael, 4/11): ίδιο σχήμα με την επεξεργασία (reshapeBlock)
+      const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
+      const b: BlockDef = { ...seed, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: reshapeBlock(seed, n, per, name, usedKeys(s.settings)) };
+      return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + shapeTxt(n, per) + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
-      // Επεξεργασία υπηρεσίας: όνομα και πλήθος (μόνο στις δικές σου), ώρες ανά θέση (όσες δεν έχουν βάρδιες), σειρά
+      // Επεξεργασία υπηρεσίας (Michael, 4/11: όλες εκτός Λ/Υ-Δ/Υ): όνομα, νούμερα, άτομα ανά νούμερο, ώρες, κωδικοί, βάρδιες, ένοπλη, ενεργή, όπλο
       const list = [...blocksOf(s.settings, c.phase)]; const i = list.findIndex(x => x.id === c.id); if (i < 0) throw new Error('Δεν βρέθηκε η υπηρεσία');
-      const b = list[i];
+      const b = list[i]; const ly = b.kind === 'ly';
       if (c.move) {
         const j = i + c.move; if (j < 0 || j >= list.length || list[j].kind === 'ly' || b.kind === 'ly') return { state: s, text: '', files: [] };
         [list[i], list[j]] = [list[j], list[i]];
         return { state: { ...s, settings: withBlocks(s.settings, c.phase, list) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': άλλαξε σειρά', files: [] };
       }
-      const name = (b.custom && c.name.trim()) || b.name;
+      const name = (!ly && c.name.trim()) || b.name;
       let posts = b.posts.map(p => (p.rot == null && c.hrs[p.k] != null ? { ...p, hrs: c.hrs[p.k].trim() || 'ημέρα' } : p));
-      if (b.custom) {
-        const n = Math.min(10, Math.max(1, Math.floor(c.n) || 1));
-        // οι θέσεις που περισσεύουν κρύβονται (όχι διαγραφή), για να μη χαθεί το ιστορικό τους
-        for (let j = posts.length; j < n; j++) posts.push({ k: b.id + '_' + (j + 1), label: '', short: '', hrs: posts[0]?.hrs || 'ημέρα' });
-        posts = posts.map((p, j) => ({ ...p, label: name + (n === 1 ? '' : ' ' + (j + 1) + 'ος'), short: n === 1 ? name : (j + 1) + 'ος', hidden: j >= n || undefined }));
-        posts.forEach(p => { if (!p.hidden) delete p.hidden; });
+      if (!ly) {
+        const was = blockShape(b);
+        // οι θέσεις που περισσεύουν κρύβονται (όχι διαγραφή), για να μη χαθεί το ιστορικό τους· ξαναμεγαλώνοντας ξαναβγαίνουν οι ίδιες
+        posts = reshapeBlock({ ...b, posts }, c.nums ?? (c.n && c.n > 0 ? c.n : was.nums), c.per ?? was.per, name, usedKeys(s.settings));
       }
+      // ώρες ανά νούμερο (Michael, 4/11): όλα τα άτομα του νούμερου έχουν τις ίδιες, και τα νέα νούμερα παίρνουν τις δικές τους
+      if (!ly && c.hrsNum) { const hs = blockGroups(posts).flatMap((g, i) => (g[0].rot == null && c.hrsNum![i] != null ? g.map(p => [p.k, c.hrsNum![i].trim() || 'ημέρα'] as const) : [])); const m = new Map(hs); posts = posts.map(p => (m.has(p.k) ? { ...p, hrs: m.get(p.k) } : p)); }
       if (c.codes) posts = posts.map(p => (c.codes![p.k] != null ? { ...p, code: c.codes![p.k].trim() } : p));
       const nb: BlockDef = { ...b, name, posts };
+      if (!ly) {
+        if (c.armed != null) nb.armed = c.armed;
+        if (c.armWeapon != null) { if (c.armWeapon === 'post') nb.armWeapon = 'post'; else delete nb.armWeapon; }
+        if (c.hidden != null) { if (c.hidden) nb.hidden = true; else delete nb.hidden; }
+      }
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
       // δικές μου βάρδιες (Michael, 24/10): το νούμερο κάθε βάρδιας μέσα στα νούμερα της υπηρεσίας
       if (c.shift !== undefined) { const sh = blockShift(c.shift, shiftGroups(nb).length); if (sh) nb.shift = sh; else delete nb.shift; }
+      // το έντυπο έχει ώρες μόνο για 4 νούμερα (ROT): με άλλο πλήθος και χωρίς δικές βάρδιες, κάθε 2 ώρες ώστε να έχουν όλα ώρες (Michael, 4/11)
+      if (!ly && nb.posts.some(p => p.rot != null) && shiftGroups(nb).length !== 4 && !hasShift(nb.shift)) nb.shift = { every: 120 };
       list[i] = nb;
       const settings = fillCodes(withBlocks(s.settings, c.phase, list), c.phase, b.id);
       const errs = codeErrors(settings, { phase: c.phase, id: b.id }); if (errs.length) throw new Error(errs[0]);
       // λιγότερα άτομα (Michael): οι θέσεις που κρύφτηκαν δεν μπορούν να μείνουν γεμάτες για αύριο και μετά (αόρατες υπηρεσίες που
       // θα μετρούσαν στη δικαιοσύνη και θα έκαναν το άτομο «Ήδη» απασχολημένο)· όπως στο setBlock, η σημερινή μένει και μόνο στο έντυπο που ισχύει
-      let guards = s.guards, gone = 0;
       const nowHidden = new Set(posts.filter(p => p.hidden && !b.posts.find(o => o.k === p.k)?.hidden).map(p => p.k));
-      if (nowHidden.size && c.phase === (s.settings.phase || 'sven')) {
-        guards = { ...s.guards };
-        for (const d in guards) if (d > ctx.today) {
-          const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !nowHidden.has(k)));
-          const n = Object.keys(g).length - Object.keys(left).length;
-          if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
-        }
-        if (!gone) guards = s.guards;
-      }
+      if (nb.hidden && !b.hidden) for (const p of b.posts) nowHidden.add(p.k);
+      const { guards, gone } = dropFutureGuards(s, ctx, c.phase, nowHidden);
       return { state: { ...s, guards, settings }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + name + ': άλλαξαν τα στοιχεία' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : ''), files: [] };
     }
     case 'setBlock': {
@@ -1130,17 +1148,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // μπει για αύριο και μετά βγαίνουν (αλλιώς θα μετρούσαν χωρίς να φαίνονται)· η σημερινή μένει, μπορεί να έγινε ήδη.
       // Μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά (θαλαμοφύλακες, μαγειρεία).
       if (c.patch.hidden && b.kind === 'ly') throw new Error('Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)');
-      let guards = s.guards, gone = 0;
-      if (c.patch.hidden && !b.hidden && c.phase === (s.settings.phase || 'sven')) {
-        const ks = new Set(b.posts.map(p => p.k));
-        guards = { ...s.guards };
-        for (const d in guards) if (d > ctx.today) {
-          const g = guards[d]; const left = Object.fromEntries(Object.entries(g).filter(([k]) => !ks.has(k)));
-          const n = Object.keys(g).length - Object.keys(left).length;
-          if (n) { gone += n; if (Object.keys(left).length) guards[d] = left; else delete guards[d]; }
-        }
-        if (!gone) guards = s.guards;
-      }
+      const { guards, gone } = c.patch.hidden && !b.hidden ? dropFutureGuards(s, ctx, c.phase, new Set(b.posts.map(p => p.k))) : { guards: s.guards, gone: 0 };
       const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : c.patch.armWeapon != null ? (c.patch.armWeapon === 'post' ? 'το όπλο είναι της θέσης (περνά από χέρι σε χέρι)' : 'το κάθε άτομο βγάζει το δικό του όπλο') : 'άλλαξε';
       // «δικό του» είναι η προεπιλογή: δεν γράφεται στις ρυθμίσεις
       const nb = (x: BlockDef): BlockDef => { const y = { ...x, ...c.patch }; if (y.armWeapon !== 'post') delete y.armWeapon; return y; };

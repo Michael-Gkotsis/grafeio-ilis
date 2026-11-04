@@ -1,14 +1,14 @@
 // Ρυθμίσεις (μενού Ρυθμίσεις): φορτώνεται όταν ανοίξει η οθόνη, για να ανοίγει πιο γρήγορα η εφαρμογή.
 import { useEffect, useMemo, useState } from 'react';
-import { html, Alert, Badge, Button, Why, missingOf, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
+import { html, Alert, Badge, Button, Why, missingOf, Card, Dialog, PageHeader, Segmented, useDirty, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
-import { DateField, HoursField, RangeField, shiftForm, shiftOf, shiftWhy, useUsbCopy, type HoursMode } from '../common';
-import { normTime } from '../../shared/hours';
+import { DateField, useUsbCopy } from '../common';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
-import { PHASE_NAME, blocksOf, dutyStartOf, isOutsAll, phaseList, phaseName, shiftGroups, withBlocks, type Phase, type Settings, type ShiftDef } from '../../shared/domain';
+import { PHASE_NAME, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type Phase, type Settings } from '../../shared/domain';
 import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
+import { useBlockForm, BlockForm } from '../blockForm';
 import { phaseDelWhy } from '../../shared/commands';
 import { DEFAULT_TZ, DOW_FULL, FIX_MAX, appVsOs, dmy, dow, durLabel, greekHolidays, nowParts, osParts, utcLabel, weekday, zoneLabel, zoneOffset, type Parts } from '../../shared/dates';
 import { useNowMin } from '../clock';
@@ -258,7 +258,7 @@ function BlocksCard() {
     ${cur.custom && html`<div className="toolbar" style=${{ marginBottom: '8px' }}><span className="muted" style=${{ fontSize: '13px' }}>Δικό σου έντυπο · βγαίνει στο Excel με το έντυπο της ${PHASE_NAME[cur.base]}</span>
       <${Button} size="sm" variant="ghost" style=${{ marginLeft: 'auto' }} onClick=${() => setRen(true)}>Μετονομασία…<//><${Button} size="sm" variant="ghost" disabled=${!!delWhy} why=${delWhy} onClick=${del}>Διαγραφή<//></div>`}
     ${list.map(b => { const ps = b.posts.filter(x => !x.hidden); const ly = b.kind === 'ly';
-      return html`<div key=${b.id} className="rule" style=${{ alignItems: 'center', padding: '3px 0', flexWrap: 'wrap', rowGap: '4px' }}><span style=${{ flex: '1 1 200px', minWidth: 0, ...(b.hidden ? { opacity: 0.6 } : {}) }}><b>${b.name}</b><small>${ps.length} ${ps.length === 1 ? 'θέση' : 'θέσεις'} · ${b.hidden ? 'ανενεργή' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''} · κωδικοί ${ps.map(x => x.code || '?').join(', ')}</small></span>
+      return html`<div key=${b.id} className="rule" style=${{ alignItems: 'center', padding: '3px 0', flexWrap: 'wrap', rowGap: '4px' }}><span style=${{ flex: '1 1 200px', minWidth: 0, ...(b.hidden ? { opacity: 0.6 } : {}) }}><b>${b.name}</b><small>${ps.length} ${ps.length === 1 ? 'θέση' : 'θέσεις'}${blockShape(b).per > 1 ? ' (' + blockShape(b).nums + ' νούμερα × ' + blockShape(b).per + ')' : ''} · ${b.hidden ? 'ανενεργή' : b.armed ? 'ένοπλη' : 'άοπλη'}${b.custom ? ' · δική σου' : ''} · κωδικοί ${ps.map(x => x.code || '?').join(', ')}</small></span>
       <label className="ui-checkrow" data-tip=${ly ? 'Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)' : b.hidden ? 'Ανενεργή: δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών. Τσέκαρε για να ξαναμπεί.' : 'Ξετσέκαρε για να μη μπαίνει πια στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, χωρίς να σβηστεί. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών.'}><input type="checkbox" className="ui-check" aria-label=${'Ενεργή: ' + b.name} disabled=${ly} checked=${!b.hidden} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { hidden: !e.target.checked } })}/> Ενεργή</label>
       <label className="ui-checkrow" data-tip=${ly ? undefined : 'Σε ένοπλη θέση δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.)'}><input type="checkbox" className="ui-check" aria-label=${'Ένοπλη: ' + b.name} disabled=${b.hidden || ly} checked=${b.armed} onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armed: e.target.checked } })}/> Ένοπλη</label>
       ${b.armed && !b.hidden && !ly && html`<${Select} className="ui-select" aria-label=${'Όπλο: ' + b.name} value=${b.armWeapon === 'post' ? 'post' : 'own'} data-tip="Δικό του: κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του. Της θέσης: βγαίνει το όπλο του 1ου νούμερου και περνά από χέρι σε χέρι στις αλλαγές· τα όπλα των άλλων μένουν ΕΝΤΟΣ." onChange=${(e: any) => run({ t: 'setBlock', phase, id: b.id, patch: { armWeapon: e.target.value } })}><option value="own">Όπλο: δικό του</option><option value="post">Όπλο: της θέσης</option><//>`}
@@ -270,39 +270,13 @@ function BlocksCard() {
   <//>`;
 }
 function EditBlockDialog({ phase, b, onClose }: P) {
-  const { run, state } = useStore(); const toast = useToast();
-  const [name, setName] = useState(b.name); const [n, setN] = useState(b.posts.filter((x: P) => !x.hidden).length);
-  const [hrs, setHrs] = useState<Record<string, string>>(() => Object.fromEntries(b.posts.filter((x: P) => x.rot == null).map((x: P) => [x.k, x.hrs || ''])));
-  const [codes, setCodes] = useState<Record<string, string>>(() => Object.fromEntries(b.posts.map((x: P) => [x.k, x.code || ''])));
-  const shown = b.posts.filter((x: P) => !x.hidden && x.rot == null);
-  const coded = b.posts.filter((x: P) => !x.hidden);
-  // λάθη στους κωδικούς αυτής της υπηρεσίας όπως θα ήταν μετά την αποθήκευση (ίδιος κωδικός αλλού, σκέτο γράμμα…):
-  // εμποδίζουν την αποθήκευση. Λάθη σε άλλες υπηρεσίες μόνο φαίνονται.
-  const [errs, others] = useMemo(() => {
-    const list = blocksOf(state.settings, phase).map((x: P) => (x.id === b.id ? { ...x, posts: x.posts.map((p: P) => (codes[p.k] != null && codes[p.k].trim() ? { ...p, code: codes[p.k].trim() } : p)) } : x));
-    const st = withBlocks(state.settings, phase, list); const mine = codeErrors(st, { phase, id: b.id });
-    return [mine, codeErrors(st).filter(t => !mine.includes(t))];
-  }, [codes, state.settings, phase, b.id]);
-  // Ώρες (Michael, 20/10): όλη μέρα, ίδιες ώρες για κάθε θέση, ή βάρδιες. Οι υπηρεσίες του εντύπου με νούμερα
-  // (θαλαμοφύλακες, οπλοφύλακες, σκοποί) έχουν πάντα βάρδιες· οι 2 ώρες από την αρχή της υπηρεσίας είναι οι βάρδιες του εντύπου.
-  const rotB = b.posts.some((x: P) => x.rot != null); const start = dutyStartOf(state.settings);
-  const [mode, setMode] = useState<HoursMode>(rotB || b.shift ? 'shift' : shown.some((x: P) => x.hrs && x.hrs !== 'ημέρα') ? 'fixed' : 'day');
-  const [sh, setSh] = useState(() => shiftForm(b));
-  // νούμερα: 1ος, 2ος… (σκοποί: 3η, 4η σκοπιά)
-  const labels = b.custom || !rotB ? Array.from({ length: b.custom ? n : shown.length }, (_, i) => (i + 1) + 'ος') : shiftGroups(b).map(k => (+k.slice(1) + 1) + (b.kind === 'sk' ? 'η' : 'ος'));
-  const shiftOut = (): ShiftDef | null => (mode !== 'shift' ? null : rotB && !sh.own && sh.every === 120 && !normTime(sh.from) && !normTime(sh.to) ? null : shiftOf(sh));
-  const save = async () => { const h = mode === 'day' ? Object.fromEntries(Object.keys(hrs).map(k => [k, ''])) : hrs; if (await run({ t: 'editBlock', phase, id: b.id, name, n, hrs: h, codes, shift: shiftOut() }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.custom ? name : b.name) }); } };
-  const ebWhy = errs.length ? errs[0] : mode === 'shift' ? shiftWhy(sh) : '';
-  return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.custom ? 'Δική σου υπηρεσία: αλλάζουν όνομα, πλήθος και ώρες.' : 'Υπηρεσία του εντύπου: οι θέσεις είναι σταθερές· αλλάζουν οι κωδικοί και οι ώρες.'} onClose=${onClose}
-    footer=${html`<${Why} text=${ebWhy}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!ebWhy} why=${ebWhy} onClick=${save}>Αποθήκευση<//>`}>
-    ${b.custom && html`<div className="field-row"><div className="field"><label className="field__label" htmlFor="eb-n">Όνομα</label><input id="eb-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>
-      <div className="field"><label className="field__label" htmlFor="eb-c">Πόσα άτομα</label><input id="eb-c" type="number" min="1" max="10" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, Math.min(10, +e.target.value || 1)))}/><span className="field__help">Όσες θέσεις φύγουν κρατούν το ιστορικό τους.</span></div></div>`}
-    <div className="field"><span className="field__label">Κωδικός στον έλεγχο υπηρεσιών</span><div className="settings-grid">${coded.map((x: P) => html`<label key=${x.k} className="field"><span className="field__help">${x.label}</span><input className="ui-input" maxLength="8" value=${codes[x.k] ?? ''} placeholder="αυτόματα" onChange=${(e: any) => setCodes({ ...codes, [x.k]: e.target.value })}/></label>`)}</div>
-      <span className="field__help">Αυτό γράφεται στο κελί της μέρας (π.χ. Θ1α) και έτσι διαβάζεται πίσω. Το σκέτο γράμμα (Θ, Μ, Σ) σημαίνει υπηρεσία χωρίς θέση.${b.custom ? ' Νέες θέσεις παίρνουν μόνες τους κωδικό.' : ''}</span>
-      ${errs.map((t: string) => html`<${Alert} key=${t} tone="bad"><span>${t}</span><//>`)}
-      ${others.length > 0 && html`<${Alert} tone="warn"><span>Σε άλλες υπηρεσίες (δεν εμποδίζει την αποθήκευση): ${others.join(' · ')}</span><//>`}</div>
-    ${b.kind !== 'ly' && html`<${HoursField} id="eb" mode=${mode} setMode=${setMode} sh=${sh} setSh=${setSh} labels=${labels} rot=${rotB} start=${start}
-      fixed=${shown.map((x: P) => html`<div key=${x.k} className="field"><label className="field__help" htmlFor=${'eb-h-' + x.k}>${x.label}</label><${RangeField} id=${'eb-h-' + x.k} placeholder="π.χ. 07:30-08:00" value=${hrs[x.k] || ''} onChange=${(e: any) => setHrs({ ...hrs, [x.k]: e.target.value })}/></div>`)}/>`}
+  const { run } = useStore(); const toast = useToast();
+  const form = useBlockForm(b, phase); const { f } = form; const dirty = useDirty([f]);
+  const save = async () => { if (await run(form.cmd(), false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.kind === 'ly' ? b.name : f.name.trim() || b.name) }); } };
+  return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.kind === 'ly' ? 'Ο Λ/Υ και ο Δ/Υ αλλάζουν μόνο κωδικό.' : 'Όλα αλλάζουν όπως στη «Νέα υπηρεσία». Όσες θέσεις φύγουν κρατούν το ιστορικό τους.'} onClose=${onClose}
+    dirty=${dirty && 'Οι αλλαγές δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
+    footer=${html`<${Why} text=${form.why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!form.why} why=${form.why} onClick=${save}>Αποθήκευση<//>`}>
+    <${BlockForm} form=${form} id="eb"/>
   <//>`;
 }
 // Αργίες (10 §4β): ΣΚ μετρούν πάντα· οι επίσημες βγαίνουν μόνες τους κάθε χρονιά (και από το Πάσχα)· εδώ αφαιρείς όποια
