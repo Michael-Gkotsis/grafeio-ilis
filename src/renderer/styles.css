@@ -1558,7 +1558,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .imer__codes .ui-input{width:96px;height:34px}
 
 /* ΗΚΑΙ › Ημερήσια Διαταγή (hd.ts) */
-.hd{display:block}.hd--wide{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.hd{display:block}.hd--wide{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.8fr);gap:16px;align-items:start}
 .hd__left{display:grid;gap:12px;min-width:0}.hd__right{position:sticky;top:8px}
 .hd__f{display:block;margin-bottom:10px}.hd__f>span{display:block;font-weight:600;margin-bottom:4px}.hd__f small,.hd__lab small{font-weight:400;color:var(--muted-fg)}
 .hd__sec{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px;padding:8px 0;border-bottom:1px dashed var(--border)}.hd__lab{font-weight:600}
@@ -1566,5 +1566,6 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .hd__x{flex:none;width:32px;height:32px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);cursor:pointer;font-size:18px;line-height:1}.hd__x:hover{background:var(--bad-bg);color:var(--bad)}
 .hd__add{justify-self:start;border:0;background:none;color:var(--primary);font-weight:600;cursor:pointer;padding:2px 0}.hd__zero{font-size:18px}
 .hd__ta{height:auto;padding:8px 10px;resize:vertical}
-.hd__page{background:#fff;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
+.hd__zoom{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;text-align:left}
+.hd__page{background:#fff;color:#000;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
 .rep-more-presets{margin-top:12px}

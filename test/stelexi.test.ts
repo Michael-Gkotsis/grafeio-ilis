@@ -148,3 +148,17 @@ describe('έτοιμο Δυναμολόγιο-Παρουσιολόγιο στε�
     void forBuild;
   });
 });
+
+describe('Καταστάσεις: μόνο ορισμένα είδη (Michael 4/11)', () => {
+  it('με types: [EY] μπαίνουν μόνο οι ελεύθεροι υπηρεσίας, όχι όλα τα ιατρικά', async () => {
+    const { rowsOf } = await import('../src/shared/reports');
+    const s = fakeState(6); const D = '2026-11-04';
+    s.statuses = [{ id: 'a', pid: 1, type: 'EY', from: D, to: D, note: '' }, { id: 'b', pid: 2, type: 'EA', from: D, to: D, note: '' }] as unknown as Status[];
+    const base = { ...defaultPick(), cats: ['med' as const] };
+    const all = rowsOf(s, { kind: 'status', pick: base } as unknown as Report, D);
+    const ey = rowsOf(s, { kind: 'status', pick: { ...base, types: ['EY'] } } as unknown as Report, D);
+    expect(all.length).toBe(2); expect(ey.map(r => (r as unknown as { st: Status }).st.type)).toEqual(['EY']);
+    const m2 = PRESETS.find(p => p.id === 'stelexi')!.more![1];
+    expect(m2.pick.types).toEqual(['EY']);
+  });
+});
