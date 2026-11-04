@@ -159,6 +159,6 @@ describe('Καταστάσεις: μόνο ορισμένα είδη (Michael 4/
     const ey = rowsOf(s, { kind: 'status', pick: { ...base, types: ['EY'] } } as unknown as Report, D);
     expect(all.length).toBe(2); expect(ey.map(r => (r as unknown as { st: Status }).st.type)).toEqual(['EY']);
     const m2 = PRESETS.find(p => p.id === 'stelexi')!.more![1];
-    expect(m2.pick.types).toEqual(['EY']);
+    expect(m2.pick?.types).toEqual(['EY']);
   });
 });
