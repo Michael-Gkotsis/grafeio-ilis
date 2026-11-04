@@ -120,13 +120,14 @@ function frouraTablesInto(wb: Workbook, ws: Sheet, at0: ExtraAt, tabs: FrouraTab
   const height = (t: FrouraTable) => t.rows.reduce((a, x) => a + tableRowSpan(x), 0);
   const n = groups.reduce((a, g) => a + 2 + Math.max(...g.map(x => height(x.t))), 0);
   const after = at0.after; ws.insertRows(after, n, after + 1, wb);
-  const put = (ref: string, v: string | null, style: number | null) => { ws.set(ref, v); if (style != null) ws.setStyle(ref, style); };
+  const put = (ref: string, v: string | null, style: number | null, keep = false) => { ws.set(ref, v, keep); if (style != null) ws.setStyle(ref, style); };
+  // Α/Α «1ο» όπως γράφεται, όχι «1Ο» (Michael, 4/11)
   // ένα νούμερο σε rs γραμμές (μία ανά βάρδια): Α/Α, όνομα και ΠΑΡ/ΣΕΙΣ ενωμένα κάθετα, οι ώρες μία σε κάθε γραμμή
   const line = (at: TableCols, t: FrouraTable, r: number, v: { aa: string; name: string; hours: string[]; note: string }) => {
     const rs = Math.max(1, v.hours.length); const end = r + rs - 1;
     const last = colName(colNum(t.hours ? at.hours : at.note) - 1);
     for (let rr = r; rr <= end; rr++) {
-      put(at.aa + rr, rr === r ? v.aa : null, st.aa); put(at.note + rr, rr === r ? v.note : null, st.note);
+      put(at.aa + rr, rr === r ? v.aa : null, st.aa, true); put(at.note + rr, rr === r ? v.note : null, st.note);
       for (let c = colNum(at.name); c <= colNum(last); c++) put(colName(c) + rr, rr === r && c === colNum(at.name) ? v.name : null, st.name);
       if (t.hours) put(at.hours + rr, v.hours[rr - r] || '', st.hours);
     }

@@ -120,7 +120,7 @@ describe('ΦΡΟΥΡΑ ΣΠΕΝ', () => {
     expect(ws.get('C33')).toBeTruthy();
     // η «Πύλη» σε δικό της πίνακα κάτω από την ΤΑΕ, αριστερά, μετά από μία κενή γραμμή
     expect(ws.get('B34')).toBeNull(); expect([ws.get('B35'), ws.get('C35')]).toEqual(['Α/Α', 'ΠΥΛΗ']);
-    expect(ws.get('B36')).toBe('1Ο'); expect(ws.get('B37')).toBe('2Ο'); expect(ws.get('C37')).toBeTruthy();
+    expect(ws.get('B36')).toBe('1ο'); expect(ws.get('B37')).toBe('2ο'); expect(ws.get('C37')).toBeTruthy();
     // οι τιμωρημένοι κατέβηκαν τέσσερις γραμμές για τη «Πύλη»
     expect(ws.get('A42')).toBe('1');
     const ly = s.people.find(p => p.id === g.ly)!;
