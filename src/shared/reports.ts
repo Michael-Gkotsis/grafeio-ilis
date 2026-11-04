@@ -2,6 +2,7 @@
 // εφαρμογής. Πρότυπο = το αρχείο (εμφάνιση)· Έντυπο = πρότυπο + τι αφορά + ποια στήλη παίρνει τι + ποιοι μπαίνουν.
 // Εδώ ό,τι είναι κοινό για οθόνη και main: τα στοιχεία, η μαντεψιά από τις επικεφαλίδες, ποιοι μπαίνουν και η τυχαία επιλογή.
 import { dayCode } from './dayCode';
+import { PKEYS } from './personal';
 import { absenceOfCadre, absenceOfPerson } from './absence';
 import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
@@ -64,11 +65,14 @@ const ABS = [F('absent', 'Απών (ΝΑΙ αν λείπει ή είναι κω�
 export const DATE_FIELDS = new Set(['aret']);
 const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός (με την προέλευση, π.χ. ΕΠΟΠ ΛΧΙΑΣ)', 'ΒΑΘΜΟΣ', 11), F('rank1', 'Μόνο βαθμός (χωρίς προέλευση)', 'ΒΑΘΜΟΣ', 10),
   F('origin', 'Προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ…)', 'ΠΡΟΕΛΕΥΣΗ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
+// Προσωπικά στοιχεία (Michael 4/11): e-mail, e-mail συγγενή, ομάδα αίματος και IBAN, ΑΜΚΑ, ΑΦΜ ως στήλες· συμπαγείς τιμές, πάντα κείμενο
+const MAILS = [F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'), F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10)];
+const PERS = [F('iban', 'IBAN', 'IBAN', 29), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', 13), F('afm', 'ΑΦΜ', 'ΑΦΜ', 11)];
 // τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
 const SOLDIER = [
   F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
   F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8)];
+  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS];
 // Καταστάσεις της μέρας σε στήλη, κάθε είδος χωριστά (Michael, 22/10: «να διαλέξω ιατρικές καταστάσεις, άδεια κτλπ»),
 // με τη μορφή που διαλέγεις (ColOpts.sf: ΕΑ, ΕΥ, ΑΔΕΙΑ…)
 const STATUS = [F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12), F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12), F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
@@ -80,14 +84,14 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
     F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
     F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
-    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'), F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10),
+    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, ...MAILS, ...PERS,
     F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
     F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
     ...TAIL],
   cadre: [...COMMON,
     F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
-    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('am', 'ΑΜ', 'ΑΜ', 12), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13),
+    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('am', 'ΑΜ', 'ΑΜ', 12), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), ...PERS,
     F('cspec', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left'), F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18), ...ABS,
     ...TAIL],
   // Καταστάσεις (Φάση 2): τα στοιχεία του στρατιώτη και της κατάστασης
@@ -228,7 +232,7 @@ export interface RepPick {
   stNew?: true;                               // μόνο όσες δηλώθηκαν (ξεκινούν) τη μέρα του εντύπου: στα φίλτρα ιατρικό/ποινή/άδεια/εισαγωγή και σε όλες τις στήλες καταστάσεων
 }
 // Φίλτρα στρατιωτών που συνδυάζονται (Michael 20/10: «π.χ. όχι πόστα και με ιατρικά»), όλα για τη μέρα του εντύπου
-export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'other' | 'dnright' | 'weapon';
+export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'other' | 'dnright' | 'weapon' | 'pdata';
 export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[] = [
   { id: 'present', label: 'Παρών τη μέρα', yes: 'Παρόντες', no: 'Απόντες' },
   { id: 'duty', label: 'Υπηρεσία τη μέρα ή την επόμενη', yes: 'Με υπηρεσία', no: 'Χωρίς υπηρεσία' },
@@ -238,7 +242,8 @@ export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[
   { id: 'leave', label: 'Άδεια τη μέρα', yes: 'Σε άδεια', no: 'Όχι σε άδεια' },
   { id: 'other', label: 'Εισαγωγή τη μέρα (ΣΤΕΠ, νοσοκομείο)', yes: 'Με εισαγωγή', no: 'Χωρίς εισαγωγή' },
   { id: 'dnright', label: 'Δικαίωμα ΔΝ', yes: 'Με δικαίωμα ΔΝ', no: 'Χωρίς δικαίωμα ΔΝ' },
-  { id: 'weapon', label: 'Όπλο', yes: 'Με όπλο', no: 'Χωρίς όπλο' }
+  { id: 'weapon', label: 'Όπλο', yes: 'Με όπλο', no: 'Χωρίς όπλο' },
+  { id: 'pdata', label: 'Προσωπικά στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ)', yes: 'Τα έχουν όλα', no: 'Λείπει κάποιο' }
 ];
 const LEGACY_FROM: Partial<Record<string, RepCond>> = { present: 'present', leave: 'leave', pun: 'pun', post: 'post', dnright: 'dnright' };
 // Τα φίλτρα του εντύπου, και από τα παλιά πεδία (from: παρόντες/άδειες/…, noDuty), ώστε τα αποθηκευμένα έντυπα να δουλεύουν όπως πριν
@@ -298,6 +303,7 @@ function condTest(s: AppState, d: ISODate, stNew?: boolean) {
     if (c === 'post') return !!p.post;
     if (c === 'dnright') return !!p.dn;
     if (c === 'weapon') return !!(p.weapon || '').trim();
+    if (c === 'pdata') return PKEYS.every(k => !!p[k]);
     const all = statusesOn(live(s), p.id, d); const on = stNew ? all.filter(x => x.from === d) : all;
     if (c === 'med' || c === 'other') return on.some(x => TYPES[x.type]?.cat === c);
     return !!filterStatus(c, on);
@@ -420,7 +426,7 @@ const GUESS: [string, RegExp][] = [
   ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/], ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
   ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$|^ΒΘΜ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['cspec', /^ΕΙΔΙΚΟΤΗΤΑ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
   ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
-  ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
+  ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['iban', /^ΙΒΑΝ$/], ['amka', /^ΑΜΚΑ$/], ['afm', /^ΑΦΜ$|^ΑFΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
   ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['dcode', /^ΚΩΔΙΚΟΣΜΕΡΑΣ$|^ΚΑΤΑΣΤΑΣΗΗΜΕΡΑΣ$/], ['absent', /^ΑΠΩΝ$|^ΑΠΟΝ$/], ['areason', /^ΑΙΤΙΑΑΠΟΥΣΙΑΣ$|^ΑΙΤΙΑ$/], ['aret', /^ΗΜΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΗΜΕΡΟΜΗΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΕΠΙΣΤΡΟΦΗ$/], ['email', /^ΕΜΑΙ[LΛ]$|^ΗΛΕΚΤΡΟΝΙΚΟΤΑΧΥΔΡΟΜΕΙΟ$/], ['relEmail', /^ΕΜΑΙ[LΛ].*(ΣΥΓΓ|ΠΡΟΣΩΠ)/], ['blood', /ΟΜΑΔΑΑΙΜΑΤΟΣ$|^ΑΙΜΑΤΟΣ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
   ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/], ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/], ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/], ['rack', /ΟΠΛΟΒΑΣΤΟΣ/], ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
   ['status', /^ΚΑΤΑΣΤΑΣΗ$/], ['duty', /^ΥΠΗΡΕΣΙΑ$/], ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/],
@@ -587,6 +593,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     switch (f) {
       case 'rank': return rankTxt(c); case 'rank1': return c.rank; case 'origin': return c.origin || ''; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
       case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
+      case 'iban': return c.iban || ''; case 'amka': return c.amka || ''; case 'afm': return c.afm || '';
       case 'status': return cadreStatusOn(s, c.id, d)?.label || '';
       case 'cspec': return c.eid || '';
       case 'absent': case 'areason': case 'aret': return absField(absenceOfCadre(s, c, d), f);
@@ -600,7 +607,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
     case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
-    case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || '';
+    case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || ''; case 'iban': return p.iban || ''; case 'amka': return p.amka || ''; case 'afm': return p.afm || '';
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
     case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
     case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
