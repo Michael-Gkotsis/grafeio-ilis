@@ -63,9 +63,10 @@ export function ownerFile(file: string): boolean {
   return [base, base.slice(2)].some(b => fs.existsSync(path.join(dir, '~$' + b)));
 }
 
-async function verifyXlsx(file: string) {
-  const zip = await JSZip.loadAsync(await fsp.readFile(file));
-  if (!zip.file('xl/workbook.xml') || !zip.file('[Content_Types].xml')) throw new Error('Το αρχείο που γράφτηκε δεν διαβάζεται σωστά');
+// ο έλεγχος μετά την εγγραφή: Excel (xl/workbook.xml) ή Word (word/document.xml, Ημερήσια Διαταγή)
+async function verifyXlsx(file: string, name: string) {
+  const zip = await JSZip.loadAsync(await fsp.readFile(file)); const main = /\.docx$/i.test(name) ? 'word/document.xml' : 'xl/workbook.xml';
+  if (!zip.file(main) || !zip.file('[Content_Types].xml')) throw new Error('Το αρχείο που γράφτηκε δεν διαβάζεται σωστά');
 }
 const stamp = () => { const d = nowParts(); const p = (n: number) => String(n).padStart(2, '0'); return d.y + '-' + p(d.mo) + '-' + p(d.d) + ' ' + p(d.h) + p(d.mi) + p(d.s); };
 
@@ -93,7 +94,7 @@ export async function writeAll(items: { dir: string; name: string; data: Buffer 
   for (const x of plan) { if (isLocked(x.file)) throw new LockedError(x.file); }
   try {
     // ασύγχρονα: σε αργό δίσκο ή USB το παράθυρο δεν παγώνει όσο γράφεται το αρχείο
-    for (const x of plan) { await fsp.mkdir(x.dir, { recursive: true }); await fsp.writeFile(x.tmp, x.data); await verifyXlsx(x.tmp); }
+    for (const x of plan) { await fsp.mkdir(x.dir, { recursive: true }); await fsp.writeFile(x.tmp, x.data); await verifyXlsx(x.tmp, x.name); }
   } catch (e) { plan.forEach(x => fs.rmSync(x.tmp, { force: true })); throw e; }
   for (const x of plan) {
     const e = opts.expect?.[x.file]; if (!e) continue;

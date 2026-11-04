@@ -292,3 +292,50 @@ export async function imerBook(s: AppState, o: ImerReq): Promise<Made> {
   const rng = dmy(o.from).replace(/\//g, '-') + ' έως ' + dmy(o.to).replace(/\//g, '-');
   return { name: imerTitle(s.settings) + ' ' + rng + '.xlsx', data, marks };
 }
+
+// Ημερήσια Διαταγή για εκτύπωση (Michael, 4/11): η ίδια σελίδα ως Excel, για να ανοίγει στην ίδια προεπισκόπηση εκτύπωσης με
+// τα άλλα έντυπα (μέγεθος γραμμάτων, σελίδες, εκτυπωτής). Ίδιες γραμμές με τη σελίδα της οθόνης και με το έτοιμο πρότυπο Word.
+export async function hdBook(s: AppState, d: ISODate, t: Record<string, string>, sections: string[]): Promise<Made> {
+  const { F, Z } = lookOf(s);
+  const wb = newBook(d);
+  const ws = wb.addWorksheet('ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
+  const f = (o: { b?: boolean; u?: boolean; sz?: number } = {}) => ({ name: F, size: o.sz ?? Z, bold: !!o.b, underline: !!o.u });
+  const solid = { style: 'thin' as const }; const dot = { style: 'dotted' as const };
+  // γραμμή: στήλη Α «ΣΥΝΟΠΤΙΚΗ ΠΕΡΙΓΡΑΦΗ» (κενή), B ετικέτα, C «:», D τιμή· ή B:D ενωμένα (επικεφαλίδες, Τμήμα 2/3, υπογραφή)
+  let r = 1;
+  const cellIn = (c: ExcelJS.Cell, v: string, o: { b?: boolean; u?: boolean; sz?: number; h?: 'left' | 'center' | 'right' } = {}) => {
+    c.value = v || null; c.font = f(o); c.alignment = { horizontal: o.h || 'left', vertical: 'middle', wrapText: true };
+  };
+  const frame = (row: number, last = false, head = false) => {
+    ws.getCell(row, 1).border = { left: solid, right: solid, top: head ? solid : undefined, bottom: last || head ? solid : dot };
+    for (let c = 2; c <= 4; c++) ws.getCell(row, c).border = { right: c === 4 ? solid : undefined, top: head ? solid : undefined, bottom: last || head ? solid : dot };
+  };
+  // γραμμές που πιάνει ένα κείμενο σε στήλη πλάτους w (με την αναδίπλωση)
+  const lines = (v: string, w: number) => Math.max(1, v.split('\n').reduce((a, l) => a + Math.max(1, Math.ceil(widthChars(l, { name: F, sz: Z, b: false }) / (w - 1))), 0));
+  const height = (row: number, n: number) => { ws.getRow(row).height = Math.max(20, n * (Z + 3) + 6); };
+  const WA = 14, WB = 26, WC = 3, WD = 60;
+  const full = (v: string, o: { u?: boolean; h?: 'left' | 'center'; last?: boolean } = {}) => {
+    ws.mergeCells(r, 2, r, 4); cellIn(ws.getCell(r, 2), v, { u: o.u, h: o.h || 'center' }); frame(r, o.last); height(r, lines(v, WB + WC + WD)); r++;
+  };
+  const lab = (a: string, v: string) => {
+    cellIn(ws.getCell(r, 2), a); cellIn(ws.getCell(r, 3), ':', { h: 'center' }); cellIn(ws.getCell(r, 4), v); frame(r); height(r, Math.max(lines(v, WD), lines(a, WB))); r++;
+  };
+  const gap = () => full('');
+  const sec = (k: string) => sections.forEach((n, i) => lab((i + 1) + '. ' + n, t[k + (i + 1)]));
+  ws.mergeCells(r, 1, r, 4); cellIn(ws.getCell(r, 1), 'ΜΟΝΑΔΑ: ' + t['ΜΟΝΑΔΑ'], { b: true }); r++;
+  ws.mergeCells(r, 1, r, 4); cellIn(ws.getCell(r, 1), '1ο ΕΓ/68/80', { b: true, h: 'right', sz: Math.max(7, Z - 3) }); r++;
+  ws.mergeCells(r, 1, r, 4); cellIn(ws.getCell(r, 1), 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ΤΗΣ ' + t['ΗΜΕΡΟΜΗΝΙΑ'], { b: true, h: 'center' }); ws.getRow(r).height = Z * 2 + 6; r++;
+  const head = r; cellIn(ws.getCell(r, 1), 'ΣΥΝΟΠΤΙΚΗ ΠΕΡΙΓΡΑΦΗ', { h: 'center' }); ws.mergeCells(r, 2, r, 4); cellIn(ws.getCell(r, 2), 'ΑΝΑΛΥΤΙΚΗ ΠΕΡΙΓΡΑΦΗ', { h: 'center' }); frame(r, false, true); height(r, 2); r++;
+  full('ΤΜΗΜΑ 1°', { u: true }); full('1° ΓΡΑΦΕΙΟ - ΣΤΡΑΤΟΛΟΓΙΑ', { u: true }); full('ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ', { u: true, h: 'left' });
+  lab('ΑΥΔΜ', t['ΑΥΔΜ']); lab('Δ/Ν ' + t['ΙΛΗΣ'], t['ΔΝ']); lab('ΙΛΧΟΣ ΕΒΔΟΜΑΔΟΣ', t['ΙΛΧΟΣ']); gap();
+  full('ΜΕΤΑΒΟΛΕΣ ΑΞΙΩΜΑΤΙΚΩΝ', { u: true, h: 'left' }); sec('ΑΞ'); gap();
+  full('ΜΕΤΑΒΟΛΕΣ ΟΠΛΙΤΩΝ', { u: true, h: 'left' }); sec('ΟΠ'); gap();
+  full('ΤΜΗΜΑ 2°', { u: true }); full('4° ΓΡΑΦΕΙΟ', { u: true }); full('ΚΑΤΑΛΟΓΙΣΜΟΣ ΔΗΜΟΣΙΟΥ ΥΛΙΚΟΥ ΣΕ ΒΑΡΟΣ ΟΠΛΙΤΩΝ', { u: true }); full(t['ΤΜΗΜΑ2']); gap();
+  full('ΤΜΗΜΑ 3°', { u: true }); full('ΔΙΟΙΚΗΤΙΚΗ ΜΕΡΙΜΝΑ – ΤΡΟΦΟΔΟΣΙΑ', { u: true }); full('ΜΙΣΘΟΔΟΣΙΑ:', { u: true, h: 'left' }); full(t['ΤΜΗΜΑ3'], { h: 'left' }); gap();
+  // υπογραφή δεξιά (στη στήλη της τιμής), όπως στη σελίδα
+  cellIn(ws.getCell(r, 4), t['ΥΠΟΓΡΑΦΗ'], { h: 'center' }); frame(r, true); height(r, lines(t['ΥΠΟΓΡΑΦΗ'], WD));
+  [WA, WB, WC, WD].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  ws.pageSetup.printArea = 'A1:D' + r; ws.pageSetup.printTitlesRow = head + ':' + head;
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { name: 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' + d.slice(8, 10) + '-' + d.slice(5, 7) + '-' + d.slice(0, 4) + '.xlsx', data, marks: [] };
+}

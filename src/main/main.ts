@@ -24,7 +24,7 @@ import { PKEYS, type PKey } from '../shared/personal';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
 import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
-import { cleanHd, hdPageHtml, hdTags, type HdDoc } from '../shared/hd';
+import { cleanHd, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
@@ -1112,16 +1112,16 @@ else {
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
-    // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση της σελίδας χωρίς Word (παράθυρο εκτύπωσης των Windows)
+    // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
     ipcMain.handle('export:hd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
       try {
         const s = store.state; const g = sigsOf(s, 'hd', req.sigs); const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
         if (req.print) {
-          const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
-          const page = '<!doctype html><meta charset="utf-8"><title>Ημερήσια Διαταγή</title><style>@page{size:A4;margin:10mm}body{margin:0}</style>' + hdPageHtml(tags, 11);
-          await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page));
-          w.webContents.print({ silent: false, printBackground: false }, () => w.destroy());
-          return { ok: true, file: '', warnings: [] };
+          // η ίδια προεπισκόπηση εκτύπωσης με τα Excel (Michael, 4/11): η σελίδα γίνεται ένα Excel και ανοίγει εκεί
+          const r = await excel().hdBook(s, req.date, tags, HD_SECTIONS);
+          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+          const p = await printPreview(out);
+          return p.ok ? { ok: true, file: out, warnings: [] } : { ok: false, error: 'Δεν άνοιξε η εκτύπωση: ' + p.error };
         }
         const own = s.settings.hdTpl?.file; let buf: Buffer | null = null; const warnings: string[] = [];
         if (own) { try { buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own))); } catch { warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.'); } }
