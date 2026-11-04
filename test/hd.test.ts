@@ -115,3 +115,28 @@ describe('Word', () => {
     expect(await checkTemplate(Buffer.from('όχι zip'))).toMatch(/Word/);
   });
 });
+
+describe('Word και εκτύπωση (Michael, 4/11)', () => {
+  it('«Βγάλε Word»: το .docx γράφεται (ο έλεγχος μετά την εγγραφή δεν ζητά Excel)', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const { writeAll } = await import('../src/main/files');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hd-'));
+    const s = base(); const data = await fillDocx(await builtinTemplate(), hdTags(s.settings, D, hdAuto(s, D), sigs));
+    const [out] = await writeAll([{ dir, name: 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ 04-11-2026.docx', data }]);
+    expect(fs.readFileSync(out).equals(data)).toBe(true);
+    // ένα σπασμένο .docx δεν γράφεται
+    await expect(writeAll([{ dir, name: 'Χ.docx', data: Buffer.from('όχι zip') }])).rejects.toThrow();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  it('«Εκτύπωση»: η σελίδα ως Excel που ανοίγει στην προεπισκόπηση εκτύπωσης', async () => {
+    const { hdBook } = await import('../src/main/excel'); const { renderBook } = await import('../src/main/print');
+    const { HD_SECTIONS } = await import('../src/shared/hd');
+    const s = base(); const t = hdTags(s.settings, D, hdAuto(s, D), sigs);
+    const r = await hdBook(s, D, t, HD_SECTIONS);
+    expect(r.name).toBe('ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ 04-11-2026.xlsx');
+    const doc = await renderBook(r.data, { file: r.name });
+    const txt = doc.sheets[0].html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&');
+    for (const x of ['ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ΤΗΣ 04 ΝΟΕΜΒΡΙΟΥ 2026', 'ΣΥΝΟΠΤΙΚΗ ΠΕΡΙΓΡΑΦΗ', 'ΜΕΤΑΒΟΛΕΣ ΟΠΛΙΤΩΝ', '3. ΑΔΕΙΕΣ', 'ΔΚΤΗΣ ΙΛΗΣ', 'ΤΜΗΜΑ 3°']) expect(txt).toContain(x);
+    expect(doc.total).toBeGreaterThanOrEqual(1);
+  });
+});

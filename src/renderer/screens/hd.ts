@@ -58,7 +58,7 @@ export function HdTab() {
   return html`<div>
     <${PageHeader} title=${'Ημερήσια Διαταγή της ' + dm(date) + '/' + date.slice(0, 4)} sub="Γεμίζει μόνη της από τις υπηρεσίες και τις μεταβολές της μέρας. Γράφεις μόνο ό,τι δεν ξέρει η εφαρμογή.">
       <${Button} disabled=${busy} onClick=${() => go(false)} data-tip="Βγαίνει .docx και ανοίγει στο Word. Κρατιέται όπως βγήκε">${busy ? 'Δημιουργία…' : 'Βγάλε Word'}<//>
-      <${Button} variant="outline" disabled=${busy} onClick=${() => go(true)} data-tip="Εκτύπωση της σελίδας χωρίς να ανοίξεις Word">Εκτύπωση<//>
+      <${Button} variant="outline" disabled=${busy} onClick=${() => go(true)} data-tip="Ανοίγει την προεπισκόπηση εκτύπωσης, όπως στα Excel, χωρίς Word">Εκτύπωση<//>
       <${Button} variant="outline" onClick=${() => setSigs(true)} data-tip=${'Υπογραφή: ' + sigsText(sigList)}>Υπογραφή…<//>
       <${Button} variant="outline" onClick=${() => setPrev(true)}>Προεπισκόπηση<//><//>
     <div className="toolbar"><${DateBar} value=${date} onChange=${(d: string) => { setEdit(null); nav.set({ hdDate: d === hdDefaultDay(today) ? undefined : d }); }} days=${days}/>
