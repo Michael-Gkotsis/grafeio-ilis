@@ -12,6 +12,7 @@ const DiagScreen = lazy(() => import('./screens/diag').then(m => ({ default: m.D
 const ReportsScreen = lazy(() => import('./screens/reports').then(m => ({ default: m.ReportsScreen })));
 const GuideScreen = lazy(() => import('./screens/guide').then(m => ({ default: m.GuideScreen })));
 import { topicFor } from './guideTopic';
+import { UpdateChip, UpdateDialog, useUpd, useUpdDialog } from './update';
 import { CadreScreen, CadreSheet } from './screens/cadre';
 import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from './screens/people';
 import { GuardScreen, OutsScreen } from './screens/guard';
@@ -222,6 +223,7 @@ function Shell() {
   }, [undo, go, goBack, toggleRail, help]);
   const Screen = SCREENS[route.view][2];
   // ο τίτλος (Ρυθμίσεις › Εμφάνιση) και στη γραμμή του παραθύρου
+  const upd = useUpd(); const [updOpen, setUpdOpen] = useUpdDialog(upd);
   const title = appTitle(state.settings);
   useEffect(() => { document.title = title; }, [title]);
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
@@ -244,6 +246,7 @@ function Shell() {
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
         ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">
+          <${UpdateChip} u=${upd} onOpen=${() => setUpdOpen(true)}/>
           <${ExcelChip}/>
           ${boot.version === 'dev' && html`<span className="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">Δοκιμαστικό<//>`}
           <${Button} variant="ghost" size="sm" data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)" data-tip-side="left" onClick=${() => setOver('legend')}>Υπόμνημα<//>
@@ -268,6 +271,7 @@ function Shell() {
     ${layer && layer.kind === 'note' && html`<${NoteDialog} start=${layer.data} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
     ${!baseLater && !layer && state && needsBaselineReview(state) && html`<${BaselineReviewDialog} onClose=${() => setBaseLater(true)}/>`}
+    ${updOpen && upd && html`<${UpdateDialog} u=${upd} onClose=${() => setUpdOpen(false)}/>`}
     ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}
     ${over === 'palette' && html`<${CommandPalette} onClose=${() => setOver(null)}/>`}
   <//><//><//>`;

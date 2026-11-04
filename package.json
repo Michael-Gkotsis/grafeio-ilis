@@ -11,6 +11,7 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "package:app": "node scripts/package-app.mjs",
     "package:win": "node scripts/package-win.mjs",
     "package:setup": "node scripts/package-win-setup.mjs",
     "package:linux": "node scripts/package-linux.mjs",

@@ -3,7 +3,7 @@ import { apply, type Command } from '../shared/commands';
 import { emptyState, type AppState, type AuditEntry, type Person } from '../shared/domain';
 import { addDays, nowHM, nowMin, today } from '../shared/dates';
 import { fillDay } from '../shared/rules';
-import type { Api, CmdResult, DirTarget, SourceBook } from '../shared/api';
+import type { Api, CmdResult, DirTarget, SourceBook, UpdInfo } from '../shared/api';
 import type { RawSheet } from '../shared/roster';
 import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
 import { preflight, hasErrors } from '../shared/preflight';
@@ -17,6 +17,11 @@ import { rankTxt } from '../shared/ranks';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
+
+const updM: UpdInfo = { version: '0.1.232', canApply: true, auto: true, lastCheck: Date.now(), lastOk: true, lastError: '', checking: false, avail: { version: '0.1.240', date: '2026-11-04', size: 1782000, setup: false, notes: ['ΦΡΟΥΡΑ: Α/Α των πινάκων «1ο», όχι «1Ο»', 'Επεξεργασία όλων των υπηρεσιών (Νούμερα × Άτομα)', 'Έντυπα: IBAN/ΑΜΚΑ/ΑΦΜ στήλες'] }, offer: false, phase: 'idle', step: 0, got: 0, total: 0, backup: 'ilh_04-11_1830_πριν-ενημέρωση-0.1.240.db', error: '', target: '0.1.240', readyVersion: '', prev: '0.1.231', releases: '' };
+const updCbs = new Set<(i: UpdInfo) => void>();
+const updMock = (): UpdInfo => ({ ...updM });
+const updEmit = () => updCbs.forEach(f => f(updMock()));
 
 function seed(): AppState {
   const s = emptyState();
@@ -159,6 +164,19 @@ export function mockApi(): Api {
     listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
     restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
     diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1, writes: [], worker: false }),
+    // ενημέρωση: στον browser δείχνει μια φανταστική νέα έκδοση, χωρίς να κατεβάζει τίποτα
+    updInfo: async () => updMock(),
+    updCheck: async () => { updM.lastCheck = Date.now(); updM.lastOk = true; return updMock(); },
+    updAuto: async on => { updM.auto = on; return updMock(); },
+    updStart: async () => { updM.phase = 'working'; updM.step = 2; updM.total = 1782000; for (let i = 1; i <= 10; i++) { updM.got = Math.round(updM.total * i / 10); updEmit(); await new Promise(r => setTimeout(r, 250)); if (updM.phase !== 'working') return; } updM.phase = 'ready'; updM.readyVersion = '0.1.240'; updEmit(); },
+    updCancel: async () => { updM.phase = 'idle'; updM.step = 0; updEmit(); },
+    updSeen: async () => { updM.offer = false; updEmit(); },
+    updSkip: async () => { updM.avail = null; updM.offer = false; updEmit(); },
+    updRestart: async () => {},
+    updFile: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    updRollback: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επιστροφή.' }),
+    updOpenReleases: async () => {},
+    onUpdate: cb => { updCbs.add(cb); return () => { updCbs.delete(cb); }; },
     setGpu: async () => {},
     usbCopy: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
     importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),

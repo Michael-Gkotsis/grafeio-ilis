@@ -128,6 +128,10 @@ Section "${APPNAME}" SecMain
 
   ; 3. Μόνο τα αρχεία του προγράμματος: το data\ και το templates\ δίπλα στο exe δεν υπάρχουν στο πακέτο
   RMDir /r "$INSTDIR\resources\app"
+  RMDir /r "$INSTDIR\resources\app.old"
+  RMDir /r "$INSTDIR\resources\app.new"
+  RMDir /r "$INSTDIR\resources\app.new-failed"
+  RMDir /r "$INSTDIR\resources\app.swap"
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
 
@@ -159,6 +163,10 @@ Section "Uninstall"
   !include "${UNINST_INC}"
   ; ο κώδικας της εφαρμογής ολόκληρος, και αρχεία παλιότερων εκδόσεων που δεν είναι στη λίστα
   RMDir /r "$INSTDIR\resources\app"
+  RMDir /r "$INSTDIR\resources\app.old"
+  RMDir /r "$INSTDIR\resources\app.new"
+  RMDir /r "$INSTDIR\resources\app.new-failed"
+  RMDir /r "$INSTDIR\resources\app.swap"
   RMDir "$INSTDIR\resources"
   Delete "$INSTDIR\Uninstall.exe"
   SetShellVarContext current
