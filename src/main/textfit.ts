@@ -55,7 +55,10 @@ export const minSize = (sz: number) => Math.min(sz, Math.max(7, Math.round(sz * 
 // Πώς χωράει: πρώτα σε μία γραμμή με λίγο μικρότερα γράμματα (ως το minSize), ή σε περισσότερες γραμμές στο ύψος που έχει
 // ήδη το κελί· αλλιώς αναδίπλωση και ψηλότερη γραμμή. Μόνο όταν μια λέξη δεν χωράει ούτε έτσι μικραίνει κι άλλο.
 // null: χωράει όπως είναι. min: κάτω όριο (για ομάδα κελιών που ξεκινά ήδη από μικρότερο μέγεθος).
-export function fitText(t: string, f: FontSpec, box: Box, min = minSize(f.sz)): Fit | null {
+// keep: σταθερό μέγεθος (έντυπο με «Σταθερό μέγεθος γραμμάτων», Michael 4/11): δεν μικραίνει ποτέ, αναδιπλώνεται και ψηλώνει η
+// γραμμή· λέξη μεγαλύτερη από τη στήλη κόβεται σε γραμμές (μόνο αριθμός, που δεν αναδιπλώνεται, μικραίνει ακόμα, αλλιώς «####»)
+export function fitText(t: string, f: FontSpec, box: Box, min = minSize(f.sz), keep = false): Fit | null {
+  if (keep) min = f.sz;
   const nl = t.includes('\n');
   const at = (sz: number): FontSpec => ({ ...f, sz });
   const one = (sz: number) => !nl && textPx(t, at(sz)) <= box.w;
@@ -73,7 +76,7 @@ export function fitText(t: string, f: FontSpec, box: Box, min = minSize(f.sz)): 
   // ψηλότερη γραμμή: στο μικρότερο μέγεθος (λιγότερες γραμμές). Λέξη που δεν χωράει ούτε έτσι: μόνη της μικραίνει όσο
   // χρειάζεται· μέσα σε κείμενο ως τα 6 και μετά κόβεται σε γραμμές.
   let s = Math.min(f.sz, min);
-  if (!isFinite(linesOf(t, at(s), box.w))) {
+  if (!keep && !isFinite(linesOf(t, at(s), box.w))) {
     const widest = Math.max(...t.split(/[\n ]|(?<=-)/).map(x => textPx(x, f)));
     const fits = Math.floor((f.sz * box.w) / widest * 2) / 2;
     if (!/[\n -]/.test(t)) return { sz: Math.max(5, fits), wrap: box.wrap, grow: 0 };

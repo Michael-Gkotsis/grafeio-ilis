@@ -209,7 +209,7 @@ function Preview({ pv, busy, picking, marks, heads, onPick, page = 1, none }: P)
 // sample: πόσες γραμμές δείχνει κάθε πίνακας (0: όλοι)· χωρίς αυτό (undefined) όπως πριν
 function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean, sample?: number) {
   const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.split, r.kind, r.sigs, r.layout, r.more, r.vals, r.bands, r.at, ids.length, ids.slice(0, sample == null ? 120 : sample || PV_MAX), d, raw, sample]);
+  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.fixsz, r.split, r.kind, r.sigs, r.layout, r.more, r.vals, r.bands, r.at, ids.length, ids.slice(0, sample == null ? 120 : sample || PV_MAX), d, raw, sample]);
   // μία προεπισκόπηση τη φορά: όσες αλλαγές γίνουν όσο φτιάχνεται μία, ζητείται μόνο η τελευταία (στο Atom κάθε μία θέλει χρόνο)
   const inflight = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
@@ -1269,6 +1269,8 @@ function StepOut({ r, upd, mode, insp, rows, d }: P) {
     </div>`}
     ${sheet && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" disabled=${random} checked=${!!t.auto && !random} onChange=${(e: any) => setT({ auto: e.target.checked })}/>Ενημερώνεται μόνο του μετά από κάθε αλλαγή${random ? ' (όχι με τυχαίους: θα άλλαζαν κάθε φορά)' : ''}</label>`}
     ${mode === 'upload' && insp && insp.prepared > 1 && html`<label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.trim} onChange=${(e: any) => upd({ trim: e.target.checked })}/>Σβήσε τις κενές γραμμές του προτύπου που περισσεύουν (έχει ${insp.prepared})</label>`}
+    <div className="field"><label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!r.fixsz} onChange=${(e: any) => upd({ fixsz: e.target.checked || undefined })}/>Σταθερό μέγεθος γραμμάτων</label>
+      <span className="field__help">${r.fixsz ? 'Τα γράμματα δεν μικραίνουν για να χωρέσουν: ό,τι δεν χωρά πάει σε δεύτερη γραμμή μέσα στο κελί, και η εκτύπωση βγαίνει με τα γράμματα του Excel σε όσες σελίδες χρειαστούν.' : 'Τώρα ένα μεγάλο όνομα μικραίνει λίγο για να χωρέσει, και η εκτύπωση μικραίνει τα γράμματα για να χωρέσει στις σελίδες που διάλεξες.'}</span></div>
     <label className="ui-checkrow"><input type="checkbox" className="ui-check" disabled=${!dailyOk(r)} checked=${!!r.daily && dailyOk(r)} onChange=${(e: any) => upd({ daily: e.target.checked })}/>Βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ και Εξοδούχους${dailyOk(r) ? '' : ' (όχι με τυχαίους ή «Ρώτα κάθε φορά»)'}</label>
     ${noRoster && html`<${Alert} tone="warn">Δεν έχει οριστεί Δυναμολόγιο: όρισέ το στα Αρχεία Excel ή διάλεξε «Φύλλο σε άλλο Excel…».<//>`}
     <${Alert} tone="info"><b>Τι θα γίνει με «Αποθήκευση και Βγάλε»</b><ul className="rep-plan">

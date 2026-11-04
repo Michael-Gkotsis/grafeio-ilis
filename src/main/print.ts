@@ -499,20 +499,23 @@ function titleRows(body: string | null): [number, number] | null {
   return null;
 }
 // &L &C &R κεφαλίδας/υποσέλιδου, με σελίδα, σύνολο σελίδων, ημερομηνία, όνομα φύλλου και αρχείου
-function headerFooter(src: string | null, ctx: { page: number; pages: number; sheet: string; file: string }): [string, string, string] | null {
+// noPage: χωρίς τα κομμάτια (&L/&C/&R) που γράφουν σελίδα ή σύνολο σελίδων, π.χ. «ΣΕΛΙΔΑ &P ΑΠΟ &N» των εντύπων, όταν
+// ο χρήστης έβγαλε το «Σελίδα 1 από 2» στο παράθυρο «Εκτύπωση» (Michael, 4/11: συνέχιζε να βγαίνει)
+function headerFooter(src: string | null, ctx: { page: number; pages: number; sheet: string; file: string }, noPage = false): [string, string, string] | null {
   if (!src) return null;
-  const out: [string, string, string] = ['', '', '']; let sec = 1; const d = nowParts(); const p2 = (n: number) => String(n).padStart(2, '0');
+  const out: [string, string, string] = ['', '', '']; const num = [false, false, false]; let sec = 1; const d = nowParts(); const p2 = (n: number) => String(n).padStart(2, '0');
   const s = src.replace(/&"[^"]*"/g, '').replace(/&K[0-9A-F]{6}/gi, '').replace(/&\d+/g, '');
   for (let i = 0; i < s.length; i++) {
     if (s[i] !== '&') { out[sec] += s[i]; continue; }
     const k = s[++i]?.toUpperCase();
     if (k === 'L') sec = 0; else if (k === 'C') sec = 1; else if (k === 'R') sec = 2;
-    else if (k === 'P') out[sec] += String(ctx.page); else if (k === 'N') out[sec] += String(ctx.pages);
+    else if (k === 'P') { out[sec] += String(ctx.page); num[sec] = true; } else if (k === 'N') { out[sec] += String(ctx.pages); num[sec] = true; }
     else if (k === 'D') out[sec] += p2(d.d) + '/' + p2(d.mo) + '/' + d.y;
     else if (k === 'T') out[sec] += p2(d.h) + ':' + p2(d.mi);
     else if (k === 'A') out[sec] += ctx.sheet; else if (k === 'F') out[sec] += ctx.file; else if (k === 'Z') out[sec] += '';
     else if (k === '&') out[sec] += '&';
   }
+  if (noPage) num.forEach((n, i) => { if (n) out[i] = ''; });
   return out.some(Boolean) ? out : null;
 }
 
@@ -534,6 +537,12 @@ export async function renderBook(buf: Buffer | Uint8Array, opts: RenderOpts): Pr
 }
 export async function openBook(buf: Buffer | Uint8Array): Promise<Book> { return Book.open(buf); }
 export const bookSheets = (book: Book) => book.sheets.filter(x => !x.hidden).map(x => x.name);
+// Το μέγεθος γραμμάτων του φύλλου στο Excel (η πιο συχνή γραμματοσειρά): με αυτό στο «Όσες χρειάζονται» τα γράμματα βγαίνουν
+// στο χαρτί όσο είναι στο Excel (έντυπο με «Σταθερό μέγεθος γραμμάτων»)
+export async function sheetFontSize(book: Book, name: string): Promise<number> {
+  const i = book.sheets.findIndex(x => x.name === name); if (i < 0) return PRINT_DEFAULT.size;
+  return (await geoOf(book, name, i)).dom.sz;
+}
 export async function renderOpen(book: Book, opts: RenderOpts): Promise<PrintDoc> {
   const visible = book.sheets.filter(x => !x.hidden);
   const all = visible.map(x => x.name);
@@ -1127,7 +1136,8 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
     const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
     const no = pageAt + pi + 1;
     const ctx = { page: fit ? no : g.firstNo + pi, pages: fit ? pageTotal : P.order.length, sheet: sh.name, file };
-    const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
+    // στο παράθυρο «Εκτύπωση» η αρίθμηση του αρχείου ακολουθεί το «Σελίδα 1 από 2»: βγαίνει μόνο αν είναι ανοιχτό και οι σελίδες πάνω από μία
+    const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx, fit && !(P.pno && pageTotal > 1)); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
     const pno = P.pno && pageTotal > 1 && !g.oddF ? `<div class="pno" style="bottom:${Math.max(3, M.b / 2 - 7).toFixed(1)}px">Σελίδα ${no} από ${pageTotal}</div>` : '';
     const data = fit ? ` data-n="${no}" data-sheet="${esc(sh.name)}" data-first="${rp[0] ?? 0}" data-land="${P.landscape ? 1 : 0}" data-paper="${P.paper.name}"` : '';
     return `<div class="pg"${data} style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(g.oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${g.grid ? 'grid' : ''}" style="width:${tw.toFixed(2)}px">${cg}<tbody>${body}</tbody></table></div>${hf(g.oddF, false)}${pno}</div>`;

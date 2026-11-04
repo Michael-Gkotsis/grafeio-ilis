@@ -512,6 +512,7 @@ export class Workbook {
   // Οι στήλες των πινάκων φαρδαίνουν όσο χρειάζεται στην αποθήκευση (fitSheet): στα αρχεία που φτιάχνει η εφαρμογή και σε όσα
   // το ζητά ο καλών. Όχι στη ΗΚΑΙ: η διάταξη του εντύπου είναι σταθερή και οι στήλες της μοιράζονται πολλούς πίνακες.
   widen = false;
+  keepSize = false;   // έντυπο με «Σταθερό μέγεθος γραμμάτων»: ό,τι γράφεται δεν μικραίνει (fitText keep), αναδιπλώνεται και ψηλώνει η γραμμή
   private constructor(private zip: JSZip, private workbookXml: string) {}
 
   static async open(buf: Buffer | Uint8Array): Promise<Workbook> {
@@ -849,9 +850,9 @@ export class Workbook {
     type Item = { ref: string; t: string; num: boolean; rich: boolean; s: number; k: ReturnType<typeof info>; font: FontSpec; box: Box; own: number; r2: number; base: number; key: string; r: number; fit: Fit | null };
     const items: Item[] = [];
     const fitOf = (t: string, font: FontSpec, box: Box, own: number, min?: number) => {
-      const fit = fitText(t, font, box, min);
+      const fit = fitText(t, font, box, min, this.keepSize);
       // με αναδίπλωση το κείμενο δεν απλώνεται πια στα διπλανά κελιά: οι γραμμές μετράνε στο δικό του πλάτος
-      return fit?.wrap && !box.wrap && box.w > own - 6 ? fitText(t, font, { ...box, w: own - 6 }, min) : fit;
+      return fit?.wrap && !box.wrap && box.w > own - 6 ? fitText(t, font, { ...box, w: own - 6 }, min, this.keepSize) : fit;
     };
     for (const ref of list) {
       const x = ws.raw(ref); if (!x || x.inner.includes('<f') || inside.has(ref)) continue;
@@ -897,7 +898,7 @@ export class Workbook {
       const runs: Item[][] = [];
       for (const it of list) { const run = runs[runs.length - 1]; if (run && it.r - run[run.length - 1].r <= 3) run.push(it); else runs.push([it]); }
       for (const run of runs) {
-        if (run.length < 2 || run[0].num) continue;
+        if (run.length < 2 || run[0].num || this.keepSize) continue;
         const floor = minSize(run[0].font.sz);
         const ok = run.filter(it => !it.fit || (!it.fit.grow && it.fit.sz >= floor));
         if (!ok.length) continue;

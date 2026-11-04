@@ -25,7 +25,7 @@ import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
 import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
 import { cleanHd, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
-import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
+import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, sheetFontSize, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
@@ -793,10 +793,15 @@ function savePrintPrefs(key: string, o: PrintOpts | null) {
   const keys = Object.keys(all); for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k];   // τα 200 τελευταία έντυπα
   writeMeta({ printPrefs: all });
 }
-async function printPage(file: string, sheets?: string[]): Promise<Omit<PrintJob, 'file'>> {
+// fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): «Όσες χρειάζονται» με τα γράμματα του Excel, πάνω από ό,τι είχε αποθηκευτεί
+async function printPage(file: string, sheets?: string[], fix?: boolean): Promise<Omit<PrintJob, 'file'>> {
   const book = await openBook(await fs.promises.readFile(file));
   const key = printKey(file); const visible = book.sheets.filter(x => !x.hidden).map(x => x.name);
-  const base = printDefaults(key, sheets && sheets.length ? sheets : visible); const { opts, remember } = printPrefs(key, base);
+  let base = printDefaults(key, sheets && sheets.length ? sheets : visible); const { opts, remember } = printPrefs(key, base);
+  if (fix) {
+    const sz = await sheetFontSize(book, (sheets && sheets[0]) || visible[0] || '');
+    const f = cleanOpts({ pages: 'auto', size: sz }, base); base = { ...base, pages: f.pages, size: f.size }; opts.pages = f.pages; opts.size = f.size;
+  }
   // τα φύλλα που είχες διαλέξει την προηγούμενη φορά (αν δεν ζητήθηκαν συγκεκριμένα)· αν λείπει κάποιο, η αρχική επιλογή
   const rem = rememberedSheets(opts.sheets, visible); if (rem) opts.sheets = rem; else delete opts.sheets;
   const want = sheets && sheets.length ? sheets : rem;
@@ -807,12 +812,12 @@ async function printPage(file: string, sheets?: string[]): Promise<Omit<PrintJob
 }
 // Μία προεπισκόπηση τη φορά («Τύπωσε όλα» στα Έντυπα ημέρας): η επόμενη ανοίγει όταν κλείσει η προηγούμενη
 let previewGate: Promise<void> = Promise.resolve();
-async function printPreview(file: string, sheets?: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
+async function printPreview(file: string, sheets?: string[], fix?: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const prev = previewGate; let free = () => {};
   previewGate = new Promise<void>(r => { free = r; });
   await prev;
   try {
-    const p = await printPage(file, sheets);
+    const p = await printPage(file, sheets, fix);
     const pw = new BrowserWindow({
       parent: win || undefined, modal: !!win, width: 1280, height: 880, minWidth: 820, minHeight: 520, show: false, title: 'Εκτύπωση · ' + path.basename(file), backgroundColor: '#5f6368',
       webPreferences: { preload: path.join(__dirname, '..', 'preload', 'print.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
@@ -1227,7 +1232,7 @@ else {
           const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
           logWrite('Έντυπο ' + r.name, t0);
           const warnings = [...(out.warnings || [])];
-          if (print) { const p = await printPreview(f, out.sheets); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else if (!opts?.quiet) shell.openPath(f);
+          if (print) { const p = await printPreview(f, out.sheets, !!r.fixsz); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else if (!opts?.quiet) shell.openPath(f);
           res = { ok: true, file: f, warnings, sheets: out.sheets };
         }
         if (!res.ok) return res;

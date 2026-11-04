@@ -151,7 +151,9 @@ export interface FillOpts { prefix?: string; stale?: GroupKey[]; clock?: { today
 // ενημέρωση) δεν το περνά ποτέ: μπαίνει μόνο από το previewReport, και τότε το αποτέλεσμα έχει counts (πόσες από πόσες, ανά πίνακα του 1ου φύλλου)
 export interface PvOpts { sample: number }
 export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, o: FillOpts = {}, pv?: PvOpts): Promise<{ name: string; data: Buffer; warnings: string[]; sheets: string[]; groups: GroupKey[]; layout: LayoutSheet[]; counts?: PvCount[] }> {
-  const wb = await Workbook.open(tpl); wb.widen = !r.fixed; const warnings: string[] = [];
+  // «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): οι στήλες μένουν όσο είναι στο πρότυπο και ό,τι δεν χωρά αναδιπλώνεται (ψηλώνει η γραμμή),
+  // χωρίς να μικραίνει· αν φάρδαιναν οι στήλες, ο πίνακας θα ξέφευγε από τη σελίδα και η εκτύπωση θα μίκραινε όλα τα γράμματα
+  const wb = await Workbook.open(tpl); wb.widen = !r.fixed && !r.fixsz; wb.keepSize = !!r.fixsz; const warnings: string[] = [];
   await unitWords(wb, s);
   // πίνακες τιμών: υπολογίζονται μία φορά και γράφονται σε κάθε φύλλο, κάτω από τους πίνακες
   const clock = o.clock || { today: todayISO(), now: nowMin() };
