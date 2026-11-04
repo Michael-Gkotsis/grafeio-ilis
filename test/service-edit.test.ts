@@ -150,12 +150,12 @@ describe('ΦΡΟΥΡΑ: πίνακας με ζεύγη', () => {
 let out = 0;
 describe('ΦΡΟΥΡΑ Excel: ο πίνακας μεγαλώνει προς τα κάτω', () => {
   const sheet = async (tpl: string, s: AppState) => { const r = await fillFroura(T(tpl), s, D); if (process.env.EXPORT_OUT) { fs.mkdirSync(process.env.EXPORT_OUT, { recursive: true }); fs.writeFileSync(path.join(process.env.EXPORT_OUT, ++out + ' ' + r.name), r.data); } return { r, ws: await (await Workbook.open(r.data)).sheet(0) }; };
-  it('ΣΠΕΝ: 5ος θαλαμοφύλακας στον ίδιο πίνακα (3 γραμμές), «5Ο» στο Α/Α, ώρες, ζεύγος σκοπών, οπλοφύλακες άδειοι από κάτω', async () => {
+  it('ΣΠΕΝ: 5ος θαλαμοφύλακας στον ίδιο πίνακα (3 γραμμές), «5ο» στο Α/Α, ώρες, ζεύγος σκοπών, οπλοφύλακες άδειοι από κάτω', async () => {
     let s = edit(spen(), 'spen', 'th', { nums: 5 });
     s = run(s, { t: 'autofill', date: D });
     const g = s.guards[D];
     const { r, ws } = await sheet('froura-spen.xlsx', s);
-    expect(ws.get('B25')).toBe('5Ο');
+    expect(ws.get('B25')).toBe('5ο');
     const nm = (ref: string) => ws.get(ref);
     expect(nm('C25')).toBeTruthy();
     expect(nm('C25')).toMatch(/^[Α-Ω]+\d* [Α-Ω]+$/);
@@ -172,7 +172,7 @@ describe('ΦΡΟΥΡΑ Excel: ο πίνακας μεγαλώνει προς τα
     let s = edit(run(fakeState(60), { t: 'setPhase', phase: 'sven' }), 'sven', 'th', { nums: 5 });
     s = run(s, { t: 'autofill', date: D });
     const { r, ws } = await sheet('froura.xlsx', s);
-    expect(ws.get('B25')).toBe('5Ο'); expect(ws.get('C25')).toBeTruthy(); expect(ws.get('D25')).toBeTruthy();
+    expect(ws.get('B25')).toBe('5ο'); expect(ws.get('C25')).toBeTruthy(); expect(ws.get('D25')).toBeTruthy();
     expect(ws.get('I25')).toBeNull(); expect(ws.get('J25')).toBeNull();
     expect(ws.get('F30')).toBeTruthy();   // τα μαγειρεία κατέβηκαν 3 γραμμές (ήταν F27)
     expect(r.warnings).toEqual([]);
@@ -181,7 +181,7 @@ describe('ΦΡΟΥΡΑ Excel: ο πίνακας μεγαλώνει προς τα
     let s = edit(spen(), 'spen', 'mg', { nums: 7 });
     s = run(s, { t: 'autofill', date: D });
     const { r, ws } = await sheet('froura-spen.xlsx', s);
-    expect(ws.get('B32')).toBe('6Ο'); expect(ws.get('B33')).toBe('7Ο');
+    expect(ws.get('B32')).toBe('6ο'); expect(ws.get('B33')).toBe('7ο');
     expect(ws.get('C32')).toBeTruthy(); expect(ws.get('C33')).toBeTruthy();
     expect(ws.get('B35')).toBe('ΤΑΕ');   // η ΤΑΕ κατέβηκε 2 γραμμές
     expect(r.warnings).toEqual([]);
@@ -203,6 +203,6 @@ describe('ΦΡΟΥΡΑ Excel: ο πίνακας μεγαλώνει προς τα
     let s = edit(spen(), 'spen', 'sk', { nums: 3 });
     s = run(s, { t: 'autofill', date: D });
     const { ws } = await sheet('froura-spen.xlsx', s);
-    expect(ws.get('I33')).toBe('5Η'); expect(ws.get('J33')!.split('\n')).toHaveLength(2);
+    expect(ws.get('I33')).toBe('5η'); expect(ws.get('J33')!.split('\n')).toHaveLength(2);
   });
 });

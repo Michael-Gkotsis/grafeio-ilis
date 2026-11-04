@@ -219,9 +219,9 @@ function extendFroura(wb: Workbook, ws: Sheet, map: FrouraMap, over: Map<FTable,
       const mine = new Set<FTable>();
       for (const { t, gs } of tabs) {
         if (j >= gs.length) continue; mine.add(t);
-        const [c1, c2] = cols(t); const suf = /\D+$/.exec(last(t).label)?.[0] || 'ο';
+        const [c1, c2] = cols(t); const suf = (/\D+$/.exec(last(t).label)?.[0] || 'ο').toLowerCase();   // «5ο» όπως το «1ο» του template (η ετικέτα του χάρτη είναι κεφαλαία)
         const sk = t.kind === 'sk' && Number.isFinite(numOf(gs[j][0].short));
-        ws.set(colName(t.aa!) + r0, (sk ? numOf(gs[j][0].short) : t.nums.length + j + 1) + suf);
+        ws.set(colName(t.aa!) + r0, (sk ? numOf(gs[j][0].short) : t.nums.length + j + 1) + suf, true);
         for (const m of box) if (m.c1 >= c1 && m.c2 <= c2) ws.addMerge(colName(m.c1) + (m.r1 + r0 - R) + ':' + colName(m.c2) + (m.r2 + r0 - R));
       }
       // άλλοι πίνακες στις ίδιες γραμμές: άδειοι, χωρίς περίγραμμα
