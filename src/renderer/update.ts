@@ -24,7 +24,7 @@ const dayOf = (t: number) => { const d = new Date(t); return d.getFullYear() + '
 export function UpdateChip({ u, onOpen }: { u: UpdInfo | null; onOpen: () => void }) {
   if (!u || (!u.avail && u.phase === 'idle')) return null;
   const ready = u.phase === 'ready', work = u.phase === 'working';
-  return html`<${Button} variant="outline" size="sm" className="updchip" data-tip=${ready ? 'Η ενημέρωση είναι έτοιμη' : work ? 'Γίνεται ενημέρωση…' : 'Υπάρχει νέα έκδοση (' + u.avail!.version + ')'} data-tip-side="bottom" onClick=${onOpen}>↑ ${ready ? 'Έτοιμη ενημέρωση' : work ? 'Ενημέρωση…' : 'Νέα έκδοση'}<//>`;
+  return html`<${Button} variant="outline" size="sm" className="updchip" data-tip=${ready ? 'Η ενημέρωση είναι έτοιμη' : work ? 'Γίνεται ενημέρωση…' : 'Υπάρχει νέα έκδοση (' + u.avail!.version + ')'} data-tip-side="bottom" onClick=${onOpen}>↑ <span className="updchip__long">${ready ? 'Έτοιμη ενημέρωση' : work ? 'Ενημέρωση…' : 'Νέα έκδοση'}</span><span className="updchip__short">${ready ? 'Έτοιμη' : work ? '…' : 'Νέα'}</span><//>`;
 }
 
 // Το παράθυρο ανοίγει μόνο του όταν ο main το ζητά (offer) ή όταν ξεκινά ενημέρωση από τις Ρυθμίσεις

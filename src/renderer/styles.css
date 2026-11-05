@@ -1586,4 +1586,6 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .updbar>i{display:block;height:100%;background:var(--primary);transition:width .2s}
 .updsteps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .updnotes{margin:6px 0 0;padding-left:20px}.updnotes li{margin:3px 0}
-@media (max-width:720px){.updchip{padding:0 8px}}
+.updchip__short{display:none}
+/* στα 1024 το «Νέα έκδοση» έσπρωχνε την «Αναίρεση» έξω από την οθόνη: γίνεται «↑ Νέα» (όλο το κείμενο στη συμβουλή) */
+@media (max-width:1240px){.updchip{padding:0 8px}.updchip__long{display:none}.updchip__short{display:inline}.today-lbl{gap:6px}.today-lbl b{font-size:19px}.today-lbl .today-time{padding-left:6px}}
