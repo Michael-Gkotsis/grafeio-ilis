@@ -1128,7 +1128,9 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-table tr:last-child td{border-bottom:0}
 .rep-table td small{display:block;color:var(--muted-fg);font-size:12px;margin-top:2px}
 .rep-table__acts{text-align:right;white-space:nowrap}
-.rep-table__acts .ui-btn{margin-left:4px}
+.rep-table__acts .ui-btn{margin-left:4px;vertical-align:middle}
+/* στα 1024 τα 7 κουμπιά δεν χωρούν σε μία γραμμή: σπάνε σε δεύτερη αντί να βγαίνουν έξω από την κάρτα */
+@media (max-width:1280px){.rep-table__acts{white-space:normal;min-width:300px}.rep-table__acts .ui-btn{margin:2px 0 2px 4px}}
 .rep-table--map td{padding:5px 8px}
 .rep-table--map{table-layout:fixed}.rep-table--map td:first-child{width:40%;overflow-wrap:anywhere}   /* δεν βγαίνει έξω από τη στήλη των 410px */
 .rep-table--map .ui-select{width:100%;min-width:0}
@@ -1571,7 +1573,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .hd__ta{height:auto;padding:8px 10px;resize:vertical}
 .hd__zoom{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;text-align:left}
 .hd__page{background:#fff;color:#000;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
-.rep-more-presets{margin-top:12px}
+.rep-more-presets{margin-top:12px;padding:14px 16px 16px}   /* η ui-card δεν έχει δικό της padding */
 
 /* ---------- Υπηρεσίες: σχήμα νούμερα × άτομα (Michael, 4/11) ---------- */
 .bfshape{display:flex;flex-direction:column;gap:6px;margin:4px 0 12px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius)}
