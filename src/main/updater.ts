@@ -1,16 +1,28 @@
 // Αυτόματη ενημέρωση, το κομμάτι με το Electron: έλεγχος μία φορά τη μέρα, κατέβασμα, αλλαγή του resources\app.
 // Η λογική που δοκιμάζεται χωρίς Electron είναι στο update.ts. Εδώ ΤΙΠΟΤΑ δεν πρέπει να εμποδίσει το άνοιγμα της εφαρμογής:
 // κάθε είσοδος είναι τυλιγμένη σε try/catch και κάθε αποτυχία μένει σιωπηλή (μόνο το μήνυμα στις Ρυθμίσεις).
-import { app, BrowserWindow, dialog, net, shell } from 'electron';
+import { app, BrowserWindow, dialog, net, session, shell, type Session } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import type { UpdInfo } from '../shared/api';
 import { RELEASES_URL, APP_MAX, checkZip, clearTrial, cmpVersion, dirWritable, downloadApp, fetchManifest, health, parseManifest, pendingVersion, prevVersion, stage, swap, swapPrev, zipVersion, type Fetcher, type Manifest } from './update';
 
+// Δική του session μόνο για την ενημέρωση: η defaultSession μπλοκάρει κάθε μη τοπικό αίτημα (lockdown στο main.ts),
+// και το net.request πάνω της έδινε net::ERR_BLOCKED_BY_CLIENT. Η οθόνη μένει χωρίς δίκτυο όπως πριν.
+let updSes: Session | null = null;
+export function updateSession(): Session {
+  if (!updSes) {
+    updSes = session.fromPartition('grafeio-update', { cache: false });   // στη μνήμη, όχι στον δίσκο
+    updSes.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+    updSes.setPermissionCheckHandler(() => false);
+  }
+  return updSes;
+}
+
 // Δίκτυο του Chromium (δικό του TLS, δεν εξαρτάται από το SChannel των Windows 7), με ακολούθηση ανακατευθύνσεων
 export const netFetch: Fetcher = (url, o) => new Promise<Buffer>((resolve, reject) => {
   let done = false, timer: NodeJS.Timeout | undefined;
-  const req = net.request({ url, redirect: 'follow' });
+  const req = net.request({ url, redirect: 'follow', session: updateSession() });
   const end = (e?: Error, b?: Buffer) => { if (done) return; done = true; clearTimeout(timer); o.signal?.removeEventListener('abort', onAbort); if (e) { try { req.abort(); } catch { /* ήδη */ } reject(e); } else resolve(b!); };
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => end(new Error('Δεν απάντησε ο διακομιστής (timeout)')), o.timeoutMs); };
   const onAbort = () => end(new Error('Ακυρώθηκε'));

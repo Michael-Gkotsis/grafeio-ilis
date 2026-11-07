@@ -54,12 +54,21 @@ jobs:
           APPZIP="release/GrafeioIlis-app-$V.zip"
           LATEST="release/latest.json"
           NOTES="Γραφείο Λοχία $V, από το commit ${GITHUB_SHA::7}. Η εφαρμογή (Windows) ελέγχει μόνη της για νέα έκδοση και ρωτά πριν ενημερωθεί· τα GrafeioIlis-app-$V.zip και latest.json είναι γι' αυτήν (ή για «Ενημέρωση από αρχείο» χωρίς internet). Windows 7: GrafeioIlis-win7-x64-Setup-$V.exe (64-bit) ή GrafeioIlis-win7-ia32-Setup-$V.exe (32-bit): εγκατάσταση και ενημέρωση· αν το έχεις ήδη, το ενημερώνει και κρατά τα δεδομένα. Αν δουλεύεις με το φορητό zip, διάλεξε τον φάκελό του στην εγκατάσταση. Φορητό zip: GrafeioIlis-win7-x64-$V.zip για 64-bit και GrafeioIlis-win7-ia32-$V.zip για 32-bit (Windows 32-bit ή δοκιμή σε παλιό PC). Ubuntu 64-bit: GrafeioIlis-ubuntu-amd64-$V.deb (sudo apt install ./GrafeioIlis-ubuntu-amd64-$V.deb). macOS: GrafeioIlis-mac-arm64-$V.zip (Apple Silicon) ή GrafeioIlis-mac-x64-$V.zip (Intel), ανεβαίνουν 2-3 λεπτά αργότερα· οδηγίες στο ΔΙΑΒΑΣΕ ΜΕ μέσα στο zip. Η έκδοση φαίνεται μέσα στην εφαρμογή, αν περάσεις το ποντίκι πάνω από το «Γραφείο Λοχία». Κατέβασε το zip, βάλ' το σε USB, αποσυμπίεσέ το στο PC του γραφείου και άνοιξε το GrafeioIlis.exe."
-          if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" "$APPZIP" "$LATEST" --clobber
-            gh release edit "v$V" --notes "$NOTES"
-          else
-            gh release create "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" "$APPZIP" "$LATEST" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V" --notes "$NOTES"
-          fi
+          # Το GitHub απαντά πού και πού HTTP 500/502 (έτσι απέτυχε το 0.1.232): ξαναδοκιμάζει έως 5 φορές.
+          # Κάθε προσπάθεια ξεκινά με «υπάρχει ήδη;», ώστε ένα μισό release να συμπληρωθεί και να μη σκάσει το create.
+          publish() {
+            if gh release view "v$V" >/dev/null 2>&1; then
+              gh release upload "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" "$APPZIP" "$LATEST" --clobber &&
+              gh release edit "v$V" --notes "$NOTES"
+            else
+              gh release create "v$V" "$ZIP64" "$ZIP32" "$SETUP64" "$SETUP32" "$DEB" "$APPZIP" "$LATEST" --target "$GITHUB_SHA" --title "Γραφείο Λοχία $V" --notes "$NOTES"
+            fi
+          }
+          for i in 1 2 3 4 5; do
+            publish && exit 0
+            echo "Προσπάθεια $i απέτυχε, ξανά σε $((i * 20)) δευτερόλεπτα"; sleep $((i * 20))
+          done
+          exit 1
 
   # macOS: χρειάζεται runner macOS (codesign, iconutil)· δωρεάν σε δημόσιο repo. Ανεβαίνει στο release που έφτιαξε η δουλειά παραπάνω.
   mac:
@@ -81,4 +90,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V=$(node -p "require('./package.json').version")
-          gh release upload "v$V" "release/GrafeioIlis-mac-arm64-$V.zip" "release/GrafeioIlis-mac-x64-$V.zip" --clobber
+          for i in 1 2 3 4 5; do
+            gh release upload "v$V" "release/GrafeioIlis-mac-arm64-$V.zip" "release/GrafeioIlis-mac-x64-$V.zip" --clobber && exit 0
+            echo "Προσπάθεια $i απέτυχε, ξανά σε $((i * 20)) δευτερόλεπτα"; sleep $((i * 20))
+          done
+          exit 1
