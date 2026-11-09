@@ -1,0 +1,661 @@
+<div>
+  <div style="margin-bottom:14px">
+    <div class="ui-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">
+        Λίστα (12)
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Ημερολόγιο κωλυομένων
+      </button>
+    </div>
+  </div>
+  <div>
+    <div class="page-head">
+      <div>
+        <h1>
+          Δυναμολόγιο
+        </h1>
+        <p class="page-head__sub">
+          Δύναμη Ίλης: 12 άτομα. Πάτα ένα όνομα για την καρτέλα του.
+        </p>
+      </div>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">
+        + Νέος στρατιώτης
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Από το Excel του Δυναμολογίου (Ρυθμίσεις › Εισαγωγή Δυναμολογίου)">
+        Εισαγωγή Δυναμολογίου
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">
+        Βγάλε το Excel
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" aria-label="Εκτύπωση" data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ΗΚΑΙ· βγαίνει και Excel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M7 9V3h10v6"/>
+          <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+          <path d="M7 14h10v7H7z"/>
+        </svg>
+        Εκτύπωση
+      </button>
+      <button type="button" class="ui-btn ui-btn--ghost" data-tip="Υπογραφές: καμία. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+        Υπογραφές…
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">
+        + Δήλωσε κατάσταση
+      </button>
+    </div>
+    <div class="toolbar">
+      <input type="search" class="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=""/>
+      <div class="ui-seg ui-seg--sm" role="group">
+        <button type="button" aria-pressed="true">
+          Όλη η Ίλη
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Θάλαμοι 1, 2, 3, 4">
+          1ος Ουλ.
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Θάλαμοι 5, 6, 7, 8">
+          2ος Ουλ.
+        </button>
+      </div>
+      <button aria-label="Θάλαμος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+        <span class="ui-dd__v">
+          Όλοι οι θάλαμοι
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      <button aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+        <span class="ui-dd__v">
+          Σήμερα
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+    </div>
+    <div class="filters">
+      <div class="strip" role="group" aria-label="Γρήγορα φίλτρα">
+        <button type="button" class="ui-chip" aria-pressed="true">
+          Όλοι
+          <span class="cnt">
+            12
+          </span>
+        </button>
+        <button type="button" class="ui-chip" aria-pressed="false" data-tip="Σε άδεια σήμερα">
+          Άδειες
+          <span class="cnt">
+            3
+          </span>
+        </button>
+        <button type="button" class="ui-chip" aria-pressed="false" data-tip="Με ποινή σήμερα">
+          Τιμωρημένοι
+          <span class="cnt">
+            0
+          </span>
+        </button>
+        <button type="button" class="ui-chip" aria-pressed="false">
+          Πόστα
+          <span class="cnt">
+            1
+          </span>
+        </button>
+        <button type="button" class="ui-chip" aria-pressed="false">
+          Εκτός δύναμης
+          <span class="cnt">
+            0
+          </span>
+        </button>
+        <button type="button" class="ui-chip" aria-pressed="false">
+          Με δικαίωμα ΔΝ
+          <span class="cnt">
+            0
+          </span>
+        </button>
+      </div>
+      <span class="toolbar__count">
+        12 από 12
+      </span>
+    </div>
+    <div class="ptable ptable--roster" role="table" aria-rowcount="12">
+      <div style="overflow-x:auto">
+        <div style="min-width:1158px">
+          <div class="ptable__head" role="row" style="grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px">
+            <span>
+              Α/Α
+            </span>
+            <button type="button" aria-sort="none">
+              Βαθμός
+            </button>
+            <button type="button" aria-sort="none">
+              Ο/Σ
+            </button>
+            <button type="button" aria-sort="ascending">
+              Επίθετο ▲
+            </button>
+            <button type="button" aria-sort="none">
+              Όνομα
+            </button>
+            <button type="button" aria-sort="none">
+              Πατρώνυμο
+            </button>
+            <button type="button" aria-sort="none">
+              ΑΣΜ
+            </button>
+            <button type="button" aria-sort="none">
+              Τηλέφωνο
+            </button>
+            <button type="button" aria-sort="none">
+              Θάλαμος
+            </button>
+            <button type="button" aria-sort="none">
+              Πόστο
+            </button>
+            <button type="button" aria-sort="none">
+              Ρόλος
+            </button>
+            <button type="button" aria-sort="none">
+              Σ.Ι.
+            </button>
+            <button type="button" aria-sort="none">
+              ΔΝ
+            </button>
+          </div>
+          <div class="vlist" data-rows="12" style="height:482px">
+            <div class="vlist__inner" style="height:480px">
+              <div class="ptable__row" style="position:absolute;top:0;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  1
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΔΒ
+                </span>
+                <span data-tip="ΑΓΝΩΣΤΟΠΟΥΛΟΣ">
+                  <b>
+                    ΑΓΝΩΣΤΟΠΟΥΛΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΔΕΛΤΑΣ">
+                  ΔΕΛΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100222
+                </span>
+                <span class="num">
+                  6900147514
+                </span>
+                <span>
+                  7
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:40px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  2
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΠΖ
+                </span>
+                <span data-tip="ΔΕΙΓΜΑΤΑΣ">
+                  <b>
+                    ΔΕΙΓΜΑΤΑΣ
+                  </b>
+                </span>
+                <span data-tip="ΛΑΜΔΑΣ">
+                  ΛΑΜΔΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100259
+                </span>
+                <span class="num">
+                  6900155433
+                </span>
+                <span>
+                  8
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row" style="position:absolute;top:80px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  3
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΤΘ
+                </span>
+                <span data-tip="ΔΟΚΙΜΙΟΣ">
+                  <b>
+                    ΔΟΚΙΜΙΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΑΛΦΑΣ">
+                  ΑΛΦΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100000
+                </span>
+                <span class="num">
+                  6900100000
+                </span>
+                <span>
+                  1
+                </span>
+                <span>
+                </span>
+                <span data-tip="ΘΑΛΑΜΑΡΧΗΣ">
+                  ΘΑΛΑΜΑΡΧΗΣ
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:120px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  4
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΤΘ
+                </span>
+                <span data-tip="ΕΙΚΟΝΙΚΟΣ">
+                  <b>
+                    ΕΙΚΟΝΙΚΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΕΨΙΛΟΝ">
+                  ΕΨΙΛΟΝ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100296
+                </span>
+                <span class="num">
+                  6900163352
+                </span>
+                <span>
+                  9
+                </span>
+                <span>
+                  ΚΨΜ
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row" style="position:absolute;top:160px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  5
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΔΒ
+                </span>
+                <span data-tip="ΘΕΩΡΗΤΙΚΟΣ">
+                  <b>
+                    ΘΕΩΡΗΤΙΚΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΖΗΤΑΣ">
+                  ΖΗΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100370
+                </span>
+                <span class="num">
+                  6900179190
+                </span>
+                <span>
+                  1
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:200px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  6
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΤΧ
+                </span>
+                <span data-tip="ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ">
+                  <b>
+                    ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ
+                  </b>
+                  <span class="notedot" data-tip="1 σημείωση" aria-label="1 σημειώσεις">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M5 4h14a1 1 0 0 1 1 1v9l-6 6H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>
+                      <path d="M14 20v-5a1 1 0 0 1 1-1h5M8 9h8M8 13h4"/>
+                    </svg>
+                  </span>
+                </span>
+                <span data-tip="ΖΗΤΑΣ">
+                  ΖΗΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100037
+                </span>
+                <span class="num">
+                  6900107919
+                </span>
+                <span>
+                  2
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row" style="position:absolute;top:240px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  7
+                </span>
+                <span data-tip="ΔΝΕΑΣ">
+                  ΔΝΕΑΣ
+                </span>
+                <span>
+                  ΠΖ
+                </span>
+                <span data-tip="ΠΙΘΑΝΟΣ">
+                  <b>
+                    ΠΙΘΑΝΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΒΗΤΑΣ">
+                  ΒΗΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100407
+                </span>
+                <span class="num">
+                  6900187109
+                </span>
+                <span>
+                  2
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:280px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  8
+                </span>
+                <span data-tip="ΕΠΟΠ ΛΧΙΑΣ">
+                  ΕΠΟΠ ΛΧΙΑΣ
+                </span>
+                <span>
+                  ΤΘ
+                </span>
+                <span data-tip="ΠΛΑΣΜΑΤΙΚΟΣ">
+                  <b>
+                    ΠΛΑΣΜΑΤΙΚΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΓΑΜΜΑΣ">
+                  ΓΑΜΜΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100148
+                </span>
+                <span class="num">
+                  6900131676
+                </span>
+                <span>
+                  5
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row" style="position:absolute;top:320px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  9
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΤΧ
+                </span>
+                <span data-tip="ΠΡΟΣΩΡΙΝΟΣ">
+                  <b>
+                    ΠΡΟΣΩΡΙΝΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΑΛΦΑΣ">
+                  ΑΛΦΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100333
+                </span>
+                <span class="num">
+                  6900171271
+                </span>
+                <span>
+                  10
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:360px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  10
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΤΧ
+                </span>
+                <span data-tip="ΤΥΧΑΙΟΣ">
+                  <b>
+                    ΤΥΧΑΙΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΚΑΠΠΑΣ">
+                  ΚΑΠΠΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100185
+                </span>
+                <span class="num">
+                  6900139595
+                </span>
+                <span>
+                  6
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι4
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row" style="position:absolute;top:400px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  11
+                </span>
+                <span data-tip="ΔΝΕΑΣ">
+                  ΔΝΕΑΣ
+                </span>
+                <span>
+                  ΔΒ
+                </span>
+                <span data-tip="ΥΠΟΘΕΤΙΔΗΣ">
+                  <b>
+                    ΥΠΟΘΕΤΙΔΗΣ
+                  </b>
+                </span>
+                <span data-tip="ΒΗΤΑΣ">
+                  ΒΗΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100074
+                </span>
+                <span class="num">
+                  6900115838
+                </span>
+                <span>
+                  3
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span>
+                  Ι1
+                </span>
+                <span>
+                </span>
+              </div>
+              <div class="ptable__row is-odd" style="position:absolute;top:440px;left:0;right:0;height:40px;grid-template-columns:44px 100px 52px minmax(150px,1.6fr) minmax(100px,1fr) minmax(100px,1fr) 84px 102px 76px minmax(76px,.7fr) minmax(120px,.8fr) 96px 40px" role="row" tabindex="0">
+                <span class="num muted">
+                  12
+                </span>
+                <span data-tip="ΣΤΡ">
+                  ΣΤΡ
+                </span>
+                <span>
+                  ΠΖ
+                </span>
+                <span data-tip="ΦΑΝΤΑΣΙΟΣ">
+                  <b>
+                    ΦΑΝΤΑΣΙΟΣ
+                  </b>
+                </span>
+                <span data-tip="ΘΗΤΑΣ">
+                  ΘΗΤΑΣ
+                </span>
+                <span>
+                  ΠΑΤΕΡΑΣ
+                </span>
+                <span class="num">
+                  100111
+                </span>
+                <span class="num">
+                  6900123757
+                </span>
+                <span>
+                  4
+                </span>
+                <span>
+                </span>
+                <span>
+                </span>
+                <span data-tip="Ι3 ΧΩΡΙΣ ΟΠΛΟ">
+                  Ι3 άοπλος
+                </span>
+                <span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

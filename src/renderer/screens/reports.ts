@@ -331,7 +331,7 @@ export function ReportsScreen() {
 }
 
 // Πριν βγει: ποια μέρα (αν ρωτά) και ποιοι τυχαίοι (με ✕ και «Ξανά τυχαία»)
-function RunDialog({ r, print, init, onClose, onDone }: P) {
+export function RunDialog({ r, print, init, onClose, onDone }: P) {
   const { state, today, tomorrow, run } = useStore(); const runReport = useRunReport(); const toast = useToast();
   const [d, setD] = useState(init?.d || repDate(r, today));
   const [n, setN] = useState(r.pick.n || 10);
@@ -363,7 +363,7 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
 }
 
 // Ιστορικό εκδόσεων: οι 30 τελευταίες φορές, με «Ξαναβγάλε» (ίδιοι, ίδια μέρα, με τα τωρινά στοιχεία τους)
-function HistDialog({ r, onClose }: P) {
+export function HistDialog({ r, onClose }: P) {
   const { state, today } = useStore(); const runReport = useRunReport(); const printFile = usePrintFile();
   const [list, setList] = useState<RepHistEntry[] | null>(null);
   useEffect(() => { window.api.repHist(r.id).then(setList, () => setList([])); }, [r.id]);

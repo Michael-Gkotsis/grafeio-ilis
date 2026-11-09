@@ -1,0 +1,280 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Κανόνες υπηρεσιών
+        </h2>
+        <div class="ui-dialog__desc">
+          Ποιος μπαίνει σε υπηρεσία και με ποια σειρά. Ισχύουν στην επιλογή ατόμου και στην αυτόματη συμπλήρωση.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="ui-seg" role="group" aria-label="Καρτέλες των κανόνων">
+        <button type="button" aria-pressed="true">
+          Κανόνες
+        </button>
+        <button type="button" aria-pressed="false">
+          Σειρά δικαιοσύνης
+        </button>
+        <button type="button" aria-pressed="false">
+          Ώρες
+        </button>
+      </div>
+      <div class="rl-tab">
+        <p class="note rl-now">
+          Ισχύουν τώρα: ανάπαυση 1 ημ. μετά από υπηρεσία, 3ο/4ο νούμερο ξανά μετά από 3 ημ., όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες, εναλλαγή υπηρεσιών
+        </p>
+        <section class="rl-grp">
+          <h3>
+            Ανάπαυση
+          </h3>
+          <div class="rl-two">
+            <div class="field">
+              <label class="field__label" for="rrest">
+                Ανάπαυση πριν και μετά από υπηρεσία
+              </label>
+              <div class="field-row" style="align-items:center">
+                <button id="rrest" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                  <span class="ui-dd__v">
+                    1 ημέρα (όχι δύο μέρες στη σειρά)
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field__label" for="rnum">
+                Ξανά στο ίδιο νούμερο
+              </label>
+              <div class="field-row" style="align-items:center">
+                <button id="rnum" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                  <span class="ui-dd__v">
+                    Μετά από 3 ημέρες
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="rl-chips" role="group" aria-label="Ποια νούμερα">
+                <span class="note">
+                  Ποια νούμερα:
+                </span>
+                <button type="button" class="rl-chip" aria-pressed="false">
+                  1ο
+                </button>
+                <button type="button" class="rl-chip" aria-pressed="false">
+                  2ο
+                </button>
+                <button type="button" class="rl-chip" aria-pressed="true">
+                  3ο
+                </button>
+                <button type="button" class="rl-chip" aria-pressed="true">
+                  4ο
+                </button>
+              </div>
+            </div>
+          </div>
+          <span class="note">
+            Ισχύουν μαζί: όποιος ήταν σε ένα από τα νούμερα (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει σε αυτό νωρίτερα.
+          </span>
+        </section>
+        <section class="rl-grp">
+          <h3>
+            ΣΚ και αργίες
+          </h3>
+          <label class="rule">
+            <input type="checkbox" class="ui-check" checked=""/>
+            <span>
+              <b>
+                Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες
+              </b>
+              <small>
+                Όποιος έκανε ΣΚ ή αργία δεν μπαίνει στο επόμενο, ούτε σε αργία δύο μέρες μετά. Αν σε αργία δεν φτάνουν οι υπόλοιποι, μπαίνουν και όσοι έκαναν πρόσφατα αργία (πρώτα όποιος την έκανε πιο παλιά), με ειδοποίηση.
+              </small>
+            </span>
+          </label>
+          <label class="rule">
+            <input type="checkbox" class="ui-check"/>
+            <span>
+              <b>
+                Οι νέοι στη δύναμη ξεκινούν από τον μέσο όρο
+              </b>
+              <small>
+                Όποιος μπαίνει στη δύναμη (νέα ΕΣΣΟ, μετάθεση) μετρά σαν να έχει κάνει όσες αργίες και υπηρεσίες ο μέσος όρος τη μέρα που ήρθε. Κλειστό: ξεκινά από το 0 και παίρνει σχεδόν κάθε δεύτερο ΣΚ ώσπου να φτάσει τους άλλους.
+              </small>
+            </span>
+          </label>
+        </section>
+        <section class="rl-grp">
+          <h3>
+            Μοίρασμα
+          </h3>
+          <label class="rule">
+            <input type="checkbox" class="ui-check" checked=""/>
+            <span>
+              <b>
+                Εναλλαγή υπηρεσιών
+              </b>
+              <small>
+                Από όσους είναι η σειρά τους σήμερα, η θέση πάει σε όποιον έχει κάνει λιγότερο αυτή την υπηρεσία.
+              </small>
+            </span>
+          </label>
+          <div class="rule rl-strict">
+            <input id="rstrict" type="checkbox" class="ui-check"/>
+            <span>
+              <label for="rstrict">
+                <b>
+                  Αυστηρά Άοπλοι
+                </b>
+              </label>
+              <small>
+                Οι άοπλοι μπαίνουν πρώτα με αυτή τη σειρά: 
+                <b>
+                  Μαγειρεία → 2ο-3ο νούμερο → 1ο-4ο νούμερο
+                </b>
+                 
+                <button type="button" class="linkish rl-lnk" aria-expanded="false">
+                  Αλλαγή σειράς
+                </button>
+                . Σκοποί μόνο ένοπλοι.
+              </small>
+            </span>
+          </div>
+        </section>
+        <section class="rl-grp">
+          <h3>
+            Τι άλλο κρίνει ποιος μπαίνει 
+            <small class="muted">
+              (αλλάζουν εκεί, εδώ βλέπεις τι ισχύει)
+            </small>
+          </h3>
+          <div class="rl-box">
+            <div class="rl-i">
+              <b>
+                Καταστάσεις
+              </b>
+               · 
+              <span>
+                όπως η προεπιλογή 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Ρυθμίσεις › Καταστάσεις
+                </button>
+              </span>
+              <small class="muted">
+                Προεπιλογή: ΕΥ, ΣΤΕΠ, κωλυόμενος: καμία υπηρεσία · ΕΑ/ΕΟ: όχι ένοπλη, όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
+              </small>
+            </div>
+            <div class="rl-i">
+              <b>
+                Σ.Ι.
+              </b>
+               · 
+              <span>
+                όπως η προεπιλογή 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Ρυθμίσεις › Σ.Ι.
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                Ποιος κάνει τι
+              </b>
+               · 
+              <span>
+                0 άτομα με «δεν κάνει» 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Άνοιγμα
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                Εξαιρέσεις
+              </b>
+               · 
+              <span>
+                0 τις επόμενες 7 μέρες 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Άνοιγμα
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                Μέρες χωρίς υπηρεσία
+              </b>
+               · 
+              <span>
+                0 άτομα 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Δυναμολόγιο
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                Πόστα
+              </b>
+               · 
+              <span>
+                1 άτομο, μόνο με το χέρι (ούτε Λ/Υ-Δ/Υ) 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Δυναμολόγιο
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                Μόνιμοι Λ/Υ-Δ/Υ
+              </b>
+               · 
+              <span>
+                κανένας 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Όρισε
+                </button>
+              </span>
+            </div>
+            <div class="rl-i">
+              <b>
+                ΕΠΟΠ/ΟΒΑ
+              </b>
+               · 
+              <span>
+                μόνο με το χέρι, 0 με όριο τον μήνα 
+                <button type="button" class="ui-btn ui-btn--link golink">
+                  Στελέχη
+                </button>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Πάντα: ένας άνθρωπος σε μία θέση τη μέρα · όχι όποιος έχει άδεια ή λείπει. Οι αναθέσεις που υπάρχουν δεν αλλάζουν· όσες παραβαίνουν τους νέους κανόνες φαίνονται με ⚠.
+          </span>
+        </section>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

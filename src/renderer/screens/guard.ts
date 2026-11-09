@@ -128,7 +128,7 @@ function TabLink({ onGo, children }: P) {
   const leave = useContext(DialogLeave);
   return html`<${Button} variant="link" className="golink" onClick=${() => (leave ? leave(onGo) : onGo())}>${children}<//>`;
 }
-function RulesDialog({ onClose, onTab, onFixed }: P) {
+export function RulesDialog({ onClose, onTab, onFixed }: P) {
   const { state, run, today } = useStore(); const toast = useToast(); const st = state.settings;
   const [tab, setTab] = useState('rules');
   const [r, setR] = useState<P>(() => ({ ...state.rules, hkTime: state.rules.hkTime || DEFAULT_HK_TIME, ...armMargin(state.rules) }));

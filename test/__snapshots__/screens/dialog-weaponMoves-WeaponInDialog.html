@@ -1,0 +1,62 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Είσοδος όπλων
+        </h2>
+        <div class="ui-dialog__desc">
+          ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ. · όπλο 4810137 · βγήκε ΕΚΠ 09/11 09:30
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="wi-d">
+            Μέρα
+          </label>
+          <input id="wi-d" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="wi-t">
+            Ώρα εισόδου *
+          </label>
+          <input id="wi-t" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="11:00"/>
+          <span class="field__help">
+            Η τωρινή· άλλαξέ την αν μπήκε νωρίτερα
+          </span>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="wi-r">
+          Λόγος εισαγωγής
+        </label>
+        <input id="wi-r" class="ui-input" placeholder="ΛΗΞ ΕΚΠ" value=""/>
+        <span class="field__help">
+          Κενό: ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (
+          <button type="button" class="ui-btn ui-btn--link golink">
+            Ρυθμίσεις › Λίστες
+          </button>
+          )
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" data-autofocus="">
+        Είσοδος
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

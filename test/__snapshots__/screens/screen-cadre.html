@@ -1,0 +1,350 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Στελέχη
+      </h1>
+      <p class="page-head__sub">
+        Δυναμικό στελεχών: 6 · κωλυόμενοι 0 · απόντες 1 σήμερα. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.
+      </p>
+    </div>
+    <button type="button" class="ui-btn ui-btn--outline" data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">
+      Βγάλε το Excel
+    </button>
+    <button type="button" class="ui-btn ui-btn--ghost" data-tip="Υπογραφές: καμία. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+      Υπογραφές…
+    </button>
+    <button type="button" class="ui-btn ui-btn--default">
+      + Νέο στέλεχος
+    </button>
+  </div>
+  <div class="toolbar">
+    <input type="search" class="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=""/>
+    <button aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+      <span class="ui-dd__v">
+        Σήμερα
+      </span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="filters">
+    <div class="strip" role="group" aria-label="Γρήγορα φίλτρα">
+      <button type="button" class="ui-chip" aria-pressed="true">
+        Όλοι
+        <span class="cnt">
+          6
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Στην ΗΚΑΙ σήμερα">
+        Κωλυόμενοι
+        <span class="cnt">
+          0
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Στην ΗΚΑΙ σήμερα">
+        Απόντες
+        <span class="cnt">
+          1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Εκτός δύναμης
+        <span class="cnt">
+          0
+        </span>
+      </button>
+    </div>
+    <span class="toolbar__count">
+      6 από 6
+    </span>
+  </div>
+  <div class="ptable ptable--roster" role="table" aria-rowcount="6">
+    <div style="overflow-x:auto">
+      <div style="min-width:840px">
+        <div class="ptable__head" role="row" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px">
+          <span>
+          </span>
+          <span>
+            Α/Α
+          </span>
+          <span>
+            Βαθμός
+          </span>
+          <span>
+            Ο/Σ
+          </span>
+          <span>
+            Επίθετο
+          </span>
+          <span>
+            Όνομα
+          </span>
+          <span>
+            ΑΜ
+          </span>
+          <span>
+            Τηλέφωνο
+          </span>
+          <span>
+            Θέση
+          </span>
+          <span>
+            Κατάσταση
+          </span>
+          <span>
+          </span>
+        </div>
+        <div class="ptable__row" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            1
+          </span>
+          <span data-tip="ΙΛΧΟΣ">
+            ΙΛΧΟΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΥΠΟΘΕΤΙΚΟΣ">
+            <b>
+              ΥΠΟΘΕΤΙΚΟΣ
+            </b>
+            <span class="notedot" data-tip="1 σημείωση" aria-label="1 σημειώσεις">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 4h14a1 1 0 0 1 1 1v9l-6 6H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>
+                <path d="M14 20v-5a1 1 0 0 1 1-1h5M8 9h8M8 13h4"/>
+              </svg>
+            </span>
+          </span>
+          <span data-tip="ΓΙΑΝΝΗΣ">
+            ΓΙΑΝΝΗΣ
+          </span>
+          <span class="num">
+            20450
+          </span>
+          <span class="num">
+            6900000010
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--warn" data-tip="Κανονική άδεια · 09/11–11/11 · Απών στην ΗΚΑΙ, στήλη «Κ.Άδ.»">
+              Κανονική άδεια · 09/11–11/11
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            2
+          </span>
+          <span data-tip="ΑΝΘΛΓΟΣ">
+            ΑΝΘΛΓΟΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΔΟΚΙΜΑΚΗΣ">
+            <b>
+              ΔΟΚΙΜΑΚΗΣ
+            </b>
+          </span>
+          <span data-tip="ΝΙΚΟΣ">
+            ΝΙΚΟΣ
+          </span>
+          <span class="num">
+            20563
+          </span>
+          <span class="num">
+            6900000011
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--ok">
+              Παρών
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΑΝΘΛΓΟΣ ΔΟΚΙΜΑΚΗΣ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+        <div class="ptable__row" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            3
+          </span>
+          <span data-tip="ΑΛΧΙΑΣ">
+            ΑΛΧΙΑΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΠΑΡΑΔΕΙΓΜΑΤΑΣ">
+            <b>
+              ΠΑΡΑΔΕΙΓΜΑΤΑΣ
+            </b>
+          </span>
+          <span data-tip="ΚΩΣΤΑΣ">
+            ΚΩΣΤΑΣ
+          </span>
+          <span class="num">
+            20676
+          </span>
+          <span class="num">
+            6900000012
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--ok">
+              Παρών
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΑΛΧΙΑΣ ΠΑΡΑΔΕΙΓΜΑΤΑΣ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            4
+          </span>
+          <span data-tip="ΕΠΧΙΑΣ">
+            ΕΠΧΙΑΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΔΕΙΓΜΑΤΙΔΗΣ">
+            <b>
+              ΔΕΙΓΜΑΤΙΔΗΣ
+            </b>
+          </span>
+          <span data-tip="ΠΕΤΡΟΣ">
+            ΠΕΤΡΟΣ
+          </span>
+          <span class="num">
+            20789
+          </span>
+          <span class="num">
+            6900000013
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--ok">
+              Παρών
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΕΠΧΙΑΣ ΔΕΙΓΜΑΤΙΔΗΣ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+        <div class="ptable__row" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            5
+          </span>
+          <span data-tip="ΛΧΙΑΣ">
+            ΛΧΙΑΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΕΙΚΟΝΙΚΗΣ">
+            <b>
+              ΕΙΚΟΝΙΚΗΣ
+            </b>
+          </span>
+          <span data-tip="ΕΛΕΝΗ">
+            ΕΛΕΝΗ
+          </span>
+          <span class="num">
+            21015
+          </span>
+          <span class="num">
+            6900000015
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--ok">
+              Παρών
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΛΧΙΑΣ ΕΙΚΟΝΙΚΗΣ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px" role="row" tabindex="0" draggable="true">
+          <span class="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">
+            ⠿
+          </span>
+          <span class="num muted">
+            6
+          </span>
+          <span data-tip="ΛΧΙΑΣ">
+            ΛΧΙΑΣ
+          </span>
+          <span>
+            ΤΘ
+          </span>
+          <span data-tip="ΤΥΧΑΙΟΥ">
+            <b>
+              ΤΥΧΑΙΟΥ
+            </b>
+          </span>
+          <span data-tip="ΜΑΡΙΑ">
+            ΜΑΡΙΑ
+          </span>
+          <span class="num">
+            20902
+          </span>
+          <span class="num">
+            6900000014
+          </span>
+          <span>
+          </span>
+          <span class="badges">
+            <span class="ui-badge ui-badge--ok">
+              Παρών
+            </span>
+          </span>
+          <span>
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-label="Κατάσταση: ΛΧΙΑΣ ΤΥΧΑΙΟΥ" data-tip="Κατάσταση της ΗΚΑΙ: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">
+              Κατάσταση…
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

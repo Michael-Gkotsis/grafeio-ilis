@@ -1,0 +1,149 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Αλλαγή αίτησης
+        </h2>
+        <div class="ui-dialog__desc">
+          Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ».
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <span class="field__label">
+          Τι αιτείται
+        </span>
+        <div class="ui-seg" role="group">
+          <button type="button" aria-pressed="true">
+            Άδεια
+          </button>
+          <button type="button" aria-pressed="false">
+            Κάτι άλλο
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-p">
+          Ποιος
+        </label>
+        <div class="field-row">
+          <b>
+            <span>
+              <span class="rk">
+                ΣΤΡ (ΤΘ) 
+              </span>
+              ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ
+            </span>
+          </b>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-d">
+          Ημερομηνία ΗΚΑΙ
+        </label>
+        <input id="rq-d" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+        <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-k">
+          Είδος άδειας
+        </label>
+        <button id="rq-k" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+          <span class="ui-dd__v">
+            Κανονική
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="field">
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="dr-from">
+              Από *
+            </label>
+            <input id="dr-from" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="10/11/2026"/>
+            <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-10"/>
+            <span class="field__help">
+              Αύριο
+            </span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="dr-to">
+              Έως *
+            </label>
+            <input id="dr-to" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="10/11/2026"/>
+            <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-10" value="2026-11-10"/>
+            <span class="field__help">
+              Αύριο
+            </span>
+          </div>
+        </div>
+        <span class="field__help">
+          Διάρκεια: 1 ημέρα (μετρούν και οι δύο ημερομηνίες)
+        </span>
+      </div>
+      <div class="field">
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="rq-out">
+              Ώρα αναχώρησης
+            </label>
+            <input id="rq-out" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+            <span class="field__help">
+              Προαιρετικό · Τρί 10/11
+            </span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="rq-in">
+              Ώρα επιστροφής
+            </label>
+            <input id="rq-in" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+            <span class="field__help">
+              Προαιρετικό · Τρί 10/11
+            </span>
+          </div>
+        </div>
+        <span class="field__help">
+          Αν μπουν, γράφονται στην αίτηση της ΗΚΑΙ και περνούν στην άδεια με το «Εγκρίθηκε». Κενές = ολόκληρες μέρες.
+        </span>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-dest">
+          Κατεύθυνση (προαιρετικό)
+        </label>
+        <input id="rq-dest" class="ui-input" placeholder="π.χ. Κόρινθος" value=""/>
+        <span class="field__help">
+          Προαιρετικό · κενό = δεν γράφεται πουθενά.
+        </span>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-t">
+          Αιτιολόγηση (προαιρετικό)
+        </label>
+        <input id="rq-t" class="ui-input" placeholder="π.χ. για οικογενειακούς λόγους" data-autofocus="" value=""/>
+        <span class="field__help">
+          Στην ΗΚΑΙ: «ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ: ΑΙΤΕΙΤΑΙ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΤΡΙ 10 ΝΟΕ 26.»
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

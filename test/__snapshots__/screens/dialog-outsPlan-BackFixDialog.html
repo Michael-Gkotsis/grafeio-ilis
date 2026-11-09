@@ -1,0 +1,70 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διόρθωση επιστροφής · ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.
+        </h2>
+        <div class="ui-dialog__desc">
+          Τώρα: Δευτέρα 09/11 22:00 · εξοδούχος τη Δευτέρα
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <p class="note" style="margin-top:0">
+        Για ό,τι άλλαξε προφορικά και δεν βγαίνει από τις δηλώσεις. Μπαίνει στο Ιστορικό και αναιρείται.
+      </p>
+      <div class="field">
+        <div class="ui-seg" role="group">
+          <button type="button" aria-pressed="true">
+            Γυρνά…
+          </button>
+          <button type="button" aria-pressed="false">
+            Δεν γυρνά, συνεχίζει
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="bfd">
+            Μέρα
+          </label>
+          <input id="bfd" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="bft">
+            Ώρα
+          </label>
+          <input id="bft" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="22:00"/>
+          <span class="field__help">
+          </span>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="bfw">
+          Λόγος (υποχρεωτικό)
+        </label>
+        <input id="bfw" class="ui-input" maxLength="120" placeholder="π.χ. εξετάσεις, το είπε ο λοχαγός" value=""/>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Γράψε τον λόγο της διόρθωσης
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Γράψε τον λόγο της διόρθωσης" aria-description="Γράψε τον λόγο της διόρθωσης">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

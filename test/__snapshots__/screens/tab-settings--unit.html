@@ -1,0 +1,637 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Ρυθμίσεις
+      </h1>
+      <p class="page-head__sub">
+        Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή.
+      </p>
+    </div>
+  </div>
+  <div class="setgrid">
+    <nav class="setnav" aria-label="Ρυθμίσεις">
+      <button type="button" aria-current="page">
+        Μονάδα και έντυπα
+      </button>
+      <button type="button">
+        Θάλαμοι και ουλαμοί
+      </button>
+      <button type="button">
+        Υπηρεσίες και αργίες
+      </button>
+      <button type="button">
+        Λίστες
+      </button>
+      <button type="button">
+        Εισαγωγή Δυναμολογίου
+      </button>
+      <button type="button">
+        Αρχεία Excel
+      </button>
+      <button type="button">
+        Πρότυπα εφαρμογής
+      </button>
+      <button type="button">
+        Γράμματα Excel
+      </button>
+      <button type="button">
+        Εμφάνιση
+      </button>
+      <button type="button">
+        Ώρα και ζώνη ώρας
+      </button>
+      <button type="button">
+        ΕΣΣΟ
+      </button>
+      <button type="button">
+        Αντίγραφα ασφαλείας
+      </button>
+      <button type="button">
+        Ενημερώσεις
+      </button>
+    </nav>
+    <div class="setbody">
+      <div class="stack">
+        <section class="ui-card">
+          <div class="ui-card__head">
+            <h2>
+              Μονάδα και έντυπα
+            </h2>
+          </div>
+          <div class="ui-card__body">
+            <div class="field">
+              <span class="field__label">
+                Τύπος μονάδας
+              </span>
+              <div class="ui-seg" role="group">
+                <button type="button" aria-pressed="true">
+                  Ίλη / Επιλαρχία (ΗΚΑΙ)
+                </button>
+                <button type="button" aria-pressed="false">
+                  Λόχος / Τάγμα (ΗΚΑΛ)
+                </button>
+              </div>
+              <span class="field__help">
+                Η αναφορά λέγεται ΗΚΑΙ σε ίλη και ΗΚΑΛ σε λόχο. Αλλάζουν μόνα τους τα ονόματα στην εφαρμογή και στα έντυπα (τίτλος, γραμμές αξιωματικών, «ΔΚΤΗΣ ΙΛΗΣ» → «ΔΚΤΗΣ ΛΟΧΟΥ»). Δες και την κεφαλίδα από κάτω.
+              </span>
+            </div>
+            <div class="field">
+              <span class="field__label">
+                Κεφαλίδα εντύπων (3 γραμμές)
+              </span>
+              <div class="field-row">
+                <input class="ui-input" style="flex:1;min-width:160px" value="ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)"/>
+                <input class="ui-input" style="flex:1;min-width:160px" value="2η ΕΠΧΙΑ Ν/Σ"/>
+                <input class="ui-input" style="flex:1;min-width:160px" value="4η ΙΛΗ"/>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field__label">
+                Κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά)
+              </span>
+              <div class="field-row">
+                <input class="ui-input" style="flex:1;min-width:160px" aria-label="Κεφαλίδα της ΗΚΑΙ, γραμμή 1" placeholder="ΚΕΤΘ" value=""/>
+                <input class="ui-input" style="flex:1;min-width:160px" aria-label="Κεφαλίδα της ΗΚΑΙ, γραμμή 2" placeholder="2Η ΕΠΧΙΑ" value=""/>
+              </div>
+              <span class="field__help">
+                Κενό: μένει αυτή του εντύπου (φαίνεται αχνά). Η κεφαλίδα των άλλων εντύπων (ΦΡΟΥΡΑ, εξοδούχοι) είναι τα τρία πεδία πιο πάνω.
+              </span>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field__label" for="st-un">
+                  Μονάδα στον τίτλο της ΗΚΑΙ
+                </label>
+                <input id="st-un" class="ui-input" value="4ης ΙΛΗΣ"/>
+              </div>
+              <div class="field">
+                <label class="field__label" for="st-pl">
+                  Τόπος (υπογραφές)
+                </label>
+                <input id="st-pl" class="ui-input" value="Αυλώνας"/>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field__label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                Στελέχη ανά βαθμό (ΗΚΑΙ, στήλη «Τοποθετημένοι») 
+                <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Νέα γραμμή (π.χ. Λοχαγοί) ή άλλο όνομα σε γραμμή της ΗΚΑΙ">
+                  Γραμμές και ονόματα…
+                </button>
+              </span>
+              <div class="settings-grid">
+                <label class="field">
+                  <span class="field__help">
+                    Επίλαρχοι
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Ίλαρχοι
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Ανθυπίλαρχοι-Ανθλγοι
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Ανθυπασπιστές
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    ΔΕΑ
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Αρχιλοχίες
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Επιλοχίες
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Λοχίες
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    Δεκανείς
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    ΕΠΟΠ Στρατιώτης
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+                <label class="field">
+                  <span class="field__help">
+                    ΟΒΑ Στρατιώτης
+                  </span>
+                  <input class="ui-input" type="number" min="0" value="0"/>
+                </label>
+              </div>
+              <span class="field__help">
+                Μόνο τα στελέχη, χωρίς ονόματα. Οι στρατιώτες του Δυναμολογίου μετρώνται μόνοι τους, στη γραμμή του βαθμού τους.
+              </span>
+            </div>
+            <p class="note" style="margin:0">
+              Οι θάλαμοι εξόδου του Σαββατοκύριακου είναι στους 
+              <b>
+                Θαλάμους και ουλαμούς
+              </b>
+              .
+            </p>
+            <div>
+              <button type="button" class="ui-btn ui-btn--default">
+                Αποθήκευση ρυθμίσεων
+              </button>
+            </div>
+            <hr style="border:0;border-top:1px solid var(--border);margin:16px 0"/>
+            <dl class="kv">
+              <dt>
+                Αρχεία
+              </dt>
+              <dd>
+                Στο (δοκιμή), εκτός αν διάλεξες άλλο στους 
+                <b>
+                  Φακέλους αρχείων
+                </b>
+                 παρακάτω.
+              </dd>
+              <dt>
+                Δεδομένα
+              </dt>
+              <dd>
+                (δοκιμή) 
+                <button type="button" class="ui-btn ui-btn--link">
+                  Άνοιξε
+                </button>
+              </dd>
+              <dt>
+                Αντίγραφα
+              </dt>
+              <dd>
+                Κάθε μέρα αυτόματα και πριν από κάθε εισαγωγή (όλα των 14 τελευταίων ημερών, 1 ανά εβδομάδα για 8 εβδομάδες, 1 ανά μήνα). 
+                <button type="button" class="ui-btn ui-btn--link">
+                  Αντίγραφο τώρα
+                </button>
+              </dd>
+              <dt>
+                Έκδοση
+              </dt>
+              <dd>
+                dev
+              </dd>
+            </dl>
+          </div>
+        </section>
+        <section class="ui-card">
+          <div class="ui-card__head">
+            <h2>
+              Υπογραφές
+            </h2>
+            <button aria-label="Έντυπο" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                ΗΚΑΙ
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="ui-card__body">
+            <p class="note" style="margin-top:0">
+              Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή. Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».
+            </p>
+            <div class="sigs">
+              <ol class="sigs__list">
+                <li class="sigs__row">
+                  <span class="sigs__n" data-tip="Σειρά από αριστερά προς τα δεξιά">
+                    1
+                  </span>
+                  <button aria-label="Λέξη από πάνω, υπογραφή 1" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+                    <span class="ui-dd__v">
+                      Ο
+                    </span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                  <input class="ui-input sigs__title" aria-label="Θέση, υπογραφή 1" placeholder="π.χ. ΔΚΤΗΣ ΙΛΗΣ" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="ΑΛΧΙΑΣ ΙΛΗΣ"/>
+                  <input class="ui-input sigs__name" aria-label="Όνομα κάτω από την υπογραφή 1" placeholder="Όνομα (προαιρετικό)" value=""/>
+                  <span class="sigs__acts">
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" disabled="" aria-label="Μία θέση αριστερά" data-tip="Πιο αριστερά">
+                      ←
+                    </button>
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Μία θέση δεξιά" data-tip="Πιο δεξιά">
+                      →
+                    </button>
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Αφαίρεση υπογραφής 1" data-tip="Αφαίρεση">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                        <path d="M6 6l12 12M18 6L6 18"/>
+                      </svg>
+                    </button>
+                  </span>
+                </li>
+                <li class="sigs__row">
+                  <span class="sigs__n" data-tip="Σειρά από αριστερά προς τα δεξιά">
+                    2
+                  </span>
+                  <button aria-label="Λέξη από πάνω, υπογραφή 2" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+                    <span class="ui-dd__v">
+                      Ο
+                    </span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                  <input class="ui-input sigs__title" aria-label="Θέση, υπογραφή 2" placeholder="π.χ. ΔΚΤΗΣ ΙΛΗΣ" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ"/>
+                  <input class="ui-input sigs__name" aria-label="Όνομα κάτω από την υπογραφή 2" placeholder="Όνομα (προαιρετικό)" value=""/>
+                  <span class="sigs__acts">
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Μία θέση αριστερά" data-tip="Πιο αριστερά">
+                      ←
+                    </button>
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" disabled="" aria-label="Μία θέση δεξιά" data-tip="Πιο δεξιά">
+                      →
+                    </button>
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Αφαίρεση υπογραφής 2" data-tip="Αφαίρεση">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                        <path d="M6 6l12 12M18 6L6 18"/>
+                      </svg>
+                    </button>
+                  </span>
+                </li>
+              </ol>
+              <div>
+                <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+                  + Υπογραφή
+                </button>
+              </div>
+              <div class="sigs__strip" aria-hidden="true">
+                <span>
+                  <small>
+                    Ο
+                  </small>
+                  ΑΛΧΙΑΣ ΙΛΗΣ
+                </span>
+                <span>
+                  <small>
+                    Ο
+                  </small>
+                  ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ
+                </span>
+              </div>
+            </div>
+            <label class="ui-checkrow" style="margin-top:10px" data-tip="Σε όλα τα έντυπα και τα Excel, εκτός από την ΗΚΑΙ που έχει πάντα την κεφαλίδα αριστερά: ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα (μονάδα) πάνω δεξιά. Ξετσέκαρε για την παλιά διάταξη.">
+              <input type="checkbox" class="ui-check" aria-label="Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά" checked=""/>
+               Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά
+            </label>
+            <div class="toolbar" style="margin-top:12px">
+              <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Δεν άλλαξε κάτι" aria-description="Δεν άλλαξε κάτι">
+                Αποθήκευση
+              </button>
+              <button type="button" class="ui-btn ui-btn--outline" style="margin-left:auto" data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί">
+                Θέσεις στο χαρτί…
+              </button>
+            </div>
+          </div>
+        </section>
+        <section class="ui-card">
+          <div class="ui-card__head">
+            <h2>
+              Γραμμές (βαθμοί) της ΗΚΑΙ
+            </h2>
+          </div>
+          <div class="ui-card__body">
+            <p class="note" style="margin-top:0">
+              Όλες οι γραμμές του εντύπου με τη σειρά τους, οι βαθμοί που μετρούν σε κάθε μία και πόσοι είναι σήμερα. Κάθε γραμμή παίρνει «Άλλο όνομα» (γράφεται έτσι και στην ΗΚΑΙ). Μια νέα γραμμή (π.χ. Λοχαγοί, Ταγματάρχες) μπαίνει στην ΗΚΑΙ με τους τύπους της και μετρά στο σύνολο της ομάδας της.
+            </p>
+            <div class="field">
+              <span class="field__label">
+                Αξιωματικοί
+              </span>
+              <ul class="hist">
+                <li>
+                  <b>
+                    Επίλαρχοι
+                  </b>
+                   
+                  <span class="muted">
+                    · 0 σήμερα · ΕΠΛΧΟΣ, ΤΧΗΣ, ΕΠΧΙΑΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Ίλαρχοι
+                  </b>
+                   
+                  <span class="muted">
+                    · 1 σήμερα · ΙΛΧΟΣ, ΛΓΟΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Ανθυπίλαρχοι-Ανθλγοι
+                  </b>
+                   
+                  <span class="muted">
+                    · 1 σήμερα · ΑΝΘΛΧΟΣ, ΥΠΛΧΟΣ, ΑΝΘΛΓΟΣ, ΥΠΛΓΟΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Ανθυπασπιστές
+                  </b>
+                   
+                  <span class="muted">
+                    · 0 σήμερα · ΑΝΘΣΤΗΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    ΔΕΑ
+                  </b>
+                   
+                  <span class="muted">
+                    · 0 σήμερα · ΔΕΑ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li class="muted">
+                  ΣΥΝΟΛΟ ΑΞΚΩΝ
+                </li>
+              </ul>
+            </div>
+            <div class="field">
+              <span class="field__label">
+                Οπλίτες
+              </span>
+              <ul class="hist">
+                <li>
+                  <b>
+                    Αρχιλοχίες
+                  </b>
+                   
+                  <span class="muted">
+                    · 1 σήμερα · ΑΛΧΙΑΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Επιλοχίες
+                  </b>
+                   
+                  <span class="muted">
+                    · 1 σήμερα · ΕΠΛΧΙΑΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Λοχίες
+                  </b>
+                   
+                  <span class="muted">
+                    · 3 σήμερα · ΛΧΙΑΣ, ΕΠΟΠ ΛΧΙΑΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Δεκανείς
+                  </b>
+                   
+                  <span class="muted">
+                    · 2 σήμερα · ΔΝΕΑΣ, ΥΔΝΕΑΣ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    ΕΠΟΠ Στρατιώτης
+                  </b>
+                   
+                  <span class="muted">
+                    · 0 σήμερα · ΣΤΡ, ΕΠΟΠ ΣΤΡ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    ΟΒΑ Στρατιώτης
+                  </b>
+                   
+                  <span class="muted">
+                    · 0 σήμερα · ΟΒΑ ΣΤΡ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li>
+                  <b>
+                    Στρατιώτες
+                  </b>
+                   
+                  <span class="muted">
+                    · 9 σήμερα · ΣΤΡ, ΔΕΑ
+                  </span>
+                  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                    Άλλο όνομα
+                  </button>
+                </li>
+                <li class="muted">
+                  ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ
+                </li>
+              </ul>
+            </div>
+            <div class="field">
+              <span class="field__label">
+                Νέα γραμμή
+              </span>
+              <div class="field-row">
+                <div class="field">
+                  <label class="field__label" for="hr-n">
+                    Όνομα
+                  </label>
+                  <input id="hr-n" class="ui-input" placeholder="π.χ. Λοχαγοί" value=""/>
+                </div>
+                <div class="field" style="flex:none">
+                  <span class="field__label">
+                    Ομάδα
+                  </span>
+                  <div class="ui-seg" role="group">
+                    <button type="button" aria-pressed="true">
+                      Αξιωματικοί
+                    </button>
+                    <button type="button" aria-pressed="false">
+                      Οπλίτες
+                    </button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="hr-a">
+                    Κάτω από
+                  </label>
+                  <button id="hr-a" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                    <span class="ui-dd__v">
+                      Στο τέλος (πριν το ΣΥΝΟΛΟ ΑΞΚΩΝ)
+                    </span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <span class="field__label" style="margin-top:6px">
+                Βαθμοί που μετρούν εδώ
+              </span>
+              <div class="filters" style="flex-wrap:wrap;gap:6px">
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΣΤΡ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΔΝΕΑΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΛΧΙΑΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΕΠΛΧΙΑΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΑΛΧΙΑΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΑΝΘΣΤΗΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΑΝΘΛΧΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΥΠΛΧΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΙΛΧΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΑΝΘΛΓΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΥΠΛΓΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΛΓΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΕΠΛΧΟΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΤΧΗΣ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΔΕΑ
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false">
+                  ΕΠΧΙΑΣ
+                </button>
+              </div>
+              <span class="field__help">
+                Στελέχη και στρατιώτες με αυτούς τους βαθμούς μετρούν σε αυτή τη γραμμή (τα στελέχη μετακινούνται μόνα τους). Χωρίς βαθμό, η γραμμή μένει κενή ώσπου να τη διαλέξεις σε στέλεχος.
+              </span>
+              <div class="toolbar">
+                <button type="button" class="ui-btn ui-btn--default">
+                  Προσθήκη γραμμής
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

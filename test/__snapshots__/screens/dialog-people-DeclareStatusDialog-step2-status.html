@@ -1,0 +1,189 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Δήλωση κατάστασης
+        </h2>
+        <div class="ui-dialog__desc">
+          <span>
+            <span style="font-weight:700">
+              1 Κατάσταση
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              2 Στρατιώτης
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              3 Πότε
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              4 Τι θα αλλάξει
+            </span>
+          </span>
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <label class="field__label" for="dsq">
+          Ποια κατάσταση δηλώνεις;
+        </label>
+        <input id="dsq" class="ui-input" data-autofocus="true" placeholder="Αναζήτηση, π.χ. ΕΥ, κανονική, κράτηση" value=""/>
+        <span class="field__help">
+          Μόνο ιατρικά, ΣΤΕΠ και νοσοκομείο. 
+          <button type="button" class="ui-btn ui-btn--link">
+            Δείξε όλες τις καταστάσεις
+          </button>
+        </span>
+      </div>
+      <div class="stpick">
+        <div>
+          <div class="stpick__cat">
+            Ιατρικά
+            <span class="stpick__hint">
+               · ένα ή περισσότερα, γράφεται το καθένα σε δική του γραμμή
+            </span>
+          </div>
+          <div class="stpick__grid">
+            <button type="button" class="stpick__opt" aria-pressed="false">
+              <span>
+                <span class="stpick__box" aria-hidden="true">
+                </span>
+                <span class="ui-badge ui-badge--ey">
+                  ΕΥ
+                </span>
+                 
+                <b>
+                  Ελεύθερος Υπηρεσίας
+                </b>
+              </span>
+              <small>
+                Καμία υπηρεσία · Δεν βγαίνει έξοδο
+              </small>
+            </button>
+            <button type="button" class="stpick__opt" aria-pressed="false">
+              <span>
+                <span class="stpick__box" aria-hidden="true">
+                </span>
+                <span class="ui-badge ui-badge--ey">
+                  ΕΑ
+                </span>
+                 
+                <b>
+                  Ελεύθερος Ασκήσεων
+                </b>
+              </span>
+              <small>
+                Όχι: Μαγειρεία
+              </small>
+            </button>
+            <button type="button" class="stpick__opt" aria-pressed="false">
+              <span>
+                <span class="stpick__box" aria-hidden="true">
+                </span>
+                <span class="ui-badge ui-badge--ey">
+                  ΕΑΡΒ
+                </span>
+                 
+                <b>
+                  Ελεύθερος Αρβύλων
+                </b>
+              </span>
+              <small>
+                Χωρίς περιορισμούς
+              </small>
+            </button>
+            <button type="button" class="stpick__opt" aria-pressed="false">
+              <span>
+                <span class="stpick__box" aria-hidden="true">
+                </span>
+                <span class="ui-badge ui-badge--ey">
+                  ΕΟ
+                </span>
+                 
+                <b>
+                  Ελεύθερος Ορθοστασίας
+                </b>
+              </span>
+              <small>
+                Όχι: Μαγειρεία
+              </small>
+            </button>
+            <button type="button" class="stpick__opt" aria-pressed="false">
+              <span>
+                <span class="stpick__box" aria-hidden="true">
+                </span>
+                <span class="ui-badge ui-badge--note">
+                  ΕΛ. ΞΥΡΙΣΜΑΤΟΣ (σημείωση)
+                </span>
+                 
+                <b>
+                  Μόνο σημείωση
+                </b>
+              </span>
+              <small>
+                Δεν αλλάζει υπηρεσίες, έξοδο, ΗΚΑΙ και Δύναμη
+              </small>
+            </button>
+          </div>
+        </div>
+        <div>
+          <div class="stpick__cat">
+            Άλλα
+          </div>
+          <div class="stpick__grid">
+            <button type="button" class="stpick__opt">
+              <span>
+                <span class="ui-badge ui-badge--ey">
+                  ΣΤΕΠ
+                </span>
+                 
+                <b>
+                  Εισαγωγή ΣΤΕΠ
+                </b>
+              </span>
+              <small>
+                Καμία υπηρεσία · Δεν βγαίνει έξοδο · Κωλυόμενος (δεν μετρά σε στήλη της ΗΚΑΙ)
+              </small>
+            </button>
+            <button type="button" class="stpick__opt">
+              <span>
+                <span class="ui-badge ui-badge--bad">
+                  Νοσοκομείο
+                </span>
+                 
+                <b>
+                  Εισαγωγή σε νοσοκομείο
+                </b>
+              </span>
+              <small>
+                Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο
+              </small>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

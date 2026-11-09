@@ -1,0 +1,205 @@
+<div class="rep-page">
+  <div class="rep-page__bar">
+    <button type="button" class="ui-btn ui-btn--ghost" data-tip="Πίσω στη λίστα των εντύπων (Esc)">
+      ← Έντυπα
+    </button>
+    <label class="rep-page__nm">
+      <span class="field__label">
+        Όνομα
+      </span>
+      <input class="ui-input" aria-label="Όνομα εντύπου" placeholder="Έντυπο" value=""/>
+    </label>
+    <span class="rep-wiz__why rep-page__why" data-tip="Διάλεξε πρότυπο.">
+      Διάλεξε πρότυπο.
+    </span>
+    <button type="button" class="ui-btn ui-btn--ghost" data-tip="Κλείνει χωρίς αποθήκευση (ρωτά αν άλλαξες κάτι)">
+      Άκυρο
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline" disabled="" data-tip="Διάλεξε πρότυπο." aria-description="Διάλεξε πρότυπο.">
+      Αποθήκευση
+    </button>
+    <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Διάλεξε πρότυπο." aria-description="Διάλεξε πρότυπο.">
+      Αποθήκευση και Βγάλε
+    </button>
+  </div>
+  <ol class="rep-steps">
+    <li>
+      <button type="button" aria-current="step" class="">
+        <span>
+          1
+        </span>
+        Πρότυπο
+      </button>
+    </li>
+    <li>
+      <button type="button" class="" disabled="" data-tip="Διάλεξε πρότυπο.">
+        <span>
+          2
+        </span>
+        Τι αφορά
+      </button>
+    </li>
+    <li>
+      <button type="button" class="" disabled="" data-tip="Διάλεξε πρότυπο.">
+        <span>
+          3
+        </span>
+        Η σελίδα και οι πίνακες
+      </button>
+    </li>
+    <li>
+      <button type="button" class="" disabled="" data-tip="Διάλεξε πρότυπο.">
+        <span>
+          4
+        </span>
+        Ποιοι μπαίνουν
+      </button>
+    </li>
+    <li>
+      <button type="button" class="" disabled="" data-tip="Διάλεξε πρότυπο.">
+        <span>
+          5
+        </span>
+        Πού βγαίνει
+      </button>
+    </li>
+  </ol>
+  <div class="rep-page__cols">
+    <div class="rep-page__main">
+      <div class="rep-wiz__main">
+        <div class="stack">
+          <div>
+            <h3 class="rep-h">
+              Δικό σου Excel
+            </h3>
+            <p class="note">
+              Ένα έντυπο που ήδη έχεις (.xlsx). Κρατά τη μορφή του (γραμματοσειρές, πλαίσια, λογότυπο, υπογραφές) και η εφαρμογή συμπληρώνει μόνο τα στοιχεία.
+            </p>
+            <button type="button" class="ui-btn ui-btn--outline">
+              Ανέβασε Excel…
+            </button>
+          </div>
+          <div>
+            <h3 class="rep-h">
+              Φτιάξ&#x27; το εδώ
+            </h3>
+            <p class="note">
+              Η εφαρμογή φτιάχνει το Excel: κεφαλίδα και υπογραφές από τις Ρυθμίσεις, πλαίσια, Α/Α, επικεφαλίδες σε κάθε σελίδα.
+            </p>
+            <div class="rep-presets">
+              <button type="button" class="rep-preset">
+                <b>
+                  Ονομαστική κατάσταση
+                </b>
+                <small>
+                  Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Παρουσιολόγιο με υπογραφή
+                </b>
+                <small>
+                  Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Λίστα θαλάμου
+                </b>
+                <small>
+                  Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Δυναμολόγιο αξιολόγησης
+                </b>
+                <small>
+                  Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Δυναμολόγιο-Παρουσιολόγιο στελεχών
+                </b>
+                <small>
+                  Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Απλή λίστα
+                </b>
+                <small>
+                  Α/Α, βαθμός, ονοματεπώνυμο. Προσθέτεις στήλες στο βήμα 3.
+                </small>
+              </button>
+              <button type="button" class="rep-preset">
+                <b>
+                  Κενός πίνακας
+                </b>
+                <small>
+                  Δικές σου στήλες και γραμμές, χωρίς άτομα· γράφεις ό,τι θες στα κελιά ή βάζεις τιμές από την εφαρμογή
+                </small>
+              </button>
+            </div>
+          </div>
+          <div>
+            <h3 class="rep-h">
+              Πρότυπο που ήδη υπάρχει
+            </h3>
+            <div class="rep-presets">
+              <button type="button" class="rep-preset" aria-pressed="false">
+                <b>
+                  ΛΙΣΤΑ ΔΟΚΙΜΗΣ
+                </b>
+                <small>
+                  Ανεβασμένο Excel
+                </small>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rep-page__nav">
+        <button type="button" class="ui-btn ui-btn--outline" disabled="" data-tip="Είσαι στο πρώτο βήμα" aria-description="Είσαι στο πρώτο βήμα">
+          ‹ Πίσω
+        </button>
+        <button type="button" class="ui-btn ui-btn--outline" disabled="" data-tip="Διάλεξε πρότυπο." aria-description="Διάλεξε πρότυπο.">
+          Επόμενο ›
+        </button>
+      </div>
+    </div>
+    <div class="rep-page__pv">
+      <div class="rep-pvbar">
+        <span class="rep-pvbar__lbl">
+          Δείγμα:
+        </span>
+        <div class="ui-seg ui-seg--sm" role="group">
+          <button type="button" aria-pressed="false" data-tip="Κάθε πίνακας δείχνει ως 5 γραμμές στην προεπισκόπηση. Το έντυπο βγαίνει πάντα με όλους.">
+            5
+          </button>
+          <button type="button" aria-pressed="true" data-tip="Κάθε πίνακας δείχνει ως 10 γραμμές στην προεπισκόπηση. Το έντυπο βγαίνει πάντα με όλους.">
+            10
+          </button>
+          <button type="button" aria-pressed="false" data-tip="Κάθε πίνακας δείχνει ως 20 γραμμές στην προεπισκόπηση. Το έντυπο βγαίνει πάντα με όλους.">
+            20
+          </button>
+          <button type="button" aria-pressed="false" data-tip="Κάθε πίνακας δείχνει όλες τις γραμμές του (ως 400)">
+            Όλοι
+          </button>
+        </div>
+      </div>
+      <div class="rep-pv">
+        <div class="rep-pv__page">
+        </div>
+        <div class="empty">
+          Διάλεξε πρότυπο (βήμα 1) και η προεπισκόπηση φαίνεται εδώ.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,184 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διόρθωση στοιχείων
+        </h2>
+        <div class="ui-dialog__desc">
+          Αλλάζει μόνο στην εφαρμογή. Στην επόμενη εισαγωγή Δυναμολογίου θα πάρει τις τιμές του αρχείου.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="ep-rank">
+            Βαθμός
+          </label>
+          <button id="ep-rank" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΣΤΡ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-origin">
+            Προέλευση
+          </label>
+          <button id="ep-origin" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              —
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-spec">
+            Ο/Σ (όπλο/σώμα)
+          </label>
+          <button id="ep-spec" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΤΘ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="ep-last">
+            Επώνυμο
+          </label>
+          <input id="ep-last" class="ui-input" type="text" placeholder="" value="ΔΟΚΙΜΙΟΣ"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-first">
+            Όνομα
+          </label>
+          <input id="ep-first" class="ui-input" type="text" placeholder="" value="ΑΛΦΑΣ"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-father">
+            Πατρώνυμο
+          </label>
+          <input id="ep-father" class="ui-input" type="text" placeholder="" value="ΠΑΤΕΡΑΣ"/>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="ep-asm">
+            ΑΣΜ
+          </label>
+          <input id="ep-asm" class="ui-input" type="text" placeholder="" value="100000"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-phone">
+            Τηλέφωνο
+          </label>
+          <input id="ep-phone" class="ui-input" type="text" placeholder="" value="6900100000"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-room">
+            Θάλαμος
+          </label>
+          <button id="ep-room" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              Θάλαμος 1 · 1ος Ουλαμός
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:2">
+          <label class="field__label" for="ep-si">
+            Σ.Ι.
+          </label>
+          <div style="display:flex;gap:6px">
+            <button id="ep-si" style="flex:1" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                Ι1
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-post">
+            Πόστο
+          </label>
+          <input id="ep-post" class="ui-input" type="text" placeholder="" value=""/>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="ep-role">
+            Ρόλος
+          </label>
+          <input id="ep-role" class="ui-input" type="text" placeholder="" value="ΘΑΛΑΜΑΡΧΗΣ"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="ep-weapon">
+            Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)
+          </label>
+          <input id="ep-weapon" class="ui-input" type="text" placeholder="" value="4810000"/>
+        </div>
+      </div>
+      <label class="rule">
+        <input type="checkbox" class="ui-check"/>
+        <span>
+          <b>
+            Προσκολλημένος
+          </b>
+          <small>
+            Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.
+          </small>
+        </span>
+      </label>
+      <label class="rule">
+        <input type="checkbox" class="ui-check"/>
+        <span>
+          <b>
+            Εκτός δύναμης
+          </b>
+          <small>
+            Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ΗΚΑΙ. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.
+          </small>
+        </span>
+      </label>
+      <div class="field">
+        <label class="field__label" for="ep-notes">
+          Σημειώσεις
+        </label>
+        <input id="ep-notes" class="ui-input" type="text" placeholder="" value=""/>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

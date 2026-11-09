@@ -1,0 +1,47 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Μόνιμοι Λ/Υ και Δ/Υ
+        </h2>
+        <div class="ui-dialog__desc">
+          Μπαίνουν μόνοι τους κάθε μέρα και δεν μπαίνουν στη σειρά για άλλες υπηρεσίες. Αν λείπει κάποιος, η θέση γεμίζει με τη σειρά. Για μία μέρα, άλλαξέ τον με «Αλλαγή» στη θέση.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <label class="field__label" for="fx-ly">
+          Λ/Υ
+        </label>
+        <div class="picker">
+          <input id="fx-ly" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="fx-dy">
+          Δ/Υ
+        </label>
+        <div class="picker">
+          <input id="fx-dy" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+        </div>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

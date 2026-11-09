@@ -1,0 +1,59 @@
+<div>
+  <div style="margin-bottom:14px">
+    <div class="ui-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="false">
+        ΗΚΑΙ
+      </button>
+      <button type="button" role="tab" aria-selected="true">
+        Ποινές
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Άδειες (4)
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Αιτήσεις (1)
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Ημερήσια Διαταγή
+      </button>
+    </div>
+  </div>
+  <div>
+    <div class="page-head">
+      <div>
+        <h1>
+          Ποινές
+        </h1>
+        <p class="page-head__sub">
+          Ισχύουν αμέσως και γράφονται στην ΗΚΑΙ της μέρας που επιβλήθηκαν.
+        </p>
+      </div>
+      <button type="button" class="ui-btn ui-btn--default">
+        + Ποινή
+      </button>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="ui-seg" role="group">
+        <button type="button" aria-pressed="true" data-tip="Όσες ισχύουν τώρα">
+          Τώρα (0)
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Όσες έληξαν τις τελευταίες 14 μέρες">
+          Έληξαν
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Όλες οι ποινές, με αναζήτηση">
+          Όλες
+        </button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F" value=""/>
+    </div>
+    <div class="ui-card">
+      <div class="empty">
+        Καμία ποινή σε ισχύ.
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

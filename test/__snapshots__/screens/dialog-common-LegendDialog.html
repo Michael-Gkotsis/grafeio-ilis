@@ -1,0 +1,398 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Υπόμνημα κωδικών
+        </h2>
+        <div class="ui-dialog__desc">
+          Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ΗΚΑΙ.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <table class="legend">
+        <thead>
+          <tr>
+            <th>
+              Κωδικός
+            </th>
+            <th>
+              Σημαίνει
+            </th>
+            <th>
+              Τι κάνει
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--ey">
+                ΕΥ
+              </span>
+            </td>
+            <td>
+              Ελεύθερος Υπηρεσίας
+              <small class="muted">
+                 · Ιατρικό · στο ημερολόγιο: Ε.Υ
+              </small>
+            </td>
+            <td>
+              Καμία υπηρεσία · Δεν βγαίνει έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--ey">
+                ΕΑ
+              </span>
+            </td>
+            <td>
+              Ελεύθερος Ασκήσεων
+              <small class="muted">
+                 · Ιατρικό · στο ημερολόγιο: Ε.Α
+              </small>
+            </td>
+            <td>
+              Όχι σε ένοπλη θέση · Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--ey">
+                ΕΑΡΒ
+              </span>
+            </td>
+            <td>
+              Ελεύθερος Αρβύλων
+              <small class="muted">
+                 · Ιατρικό
+              </small>
+            </td>
+            <td>
+              Μπαίνει κανονικά σε υπηρεσίες και έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--ey">
+                ΕΟ
+              </span>
+            </td>
+            <td>
+              Ελεύθερος Ορθοστασίας
+              <small class="muted">
+                 · Ιατρικό
+              </small>
+            </td>
+            <td>
+              Όχι σε ένοπλη θέση · Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--ey">
+                ΣΤΕΠ
+              </span>
+            </td>
+            <td>
+              Εισαγωγή ΣΤΕΠ
+              <small class="muted">
+                 · Άλλο
+              </small>
+            </td>
+            <td>
+              Καμία υπηρεσία · Δεν βγαίνει έξοδο · Κωλυόμενος (δεν μετρά σε στήλη της ΗΚΑΙ)
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--bad">
+                Νοσοκομείο
+              </span>
+            </td>
+            <td>
+              Εισαγωγή σε νοσοκομείο
+              <small class="muted">
+                 · Άλλο
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--bad">
+                Ποινή
+              </span>
+            </td>
+            <td>
+              Τιμωρημένος
+              <small class="muted">
+                 · Ποινή
+              </small>
+            </td>
+            <td>
+              Δεν βγαίνει έξοδο. Αιτείται στην ΗΚΑΙ και ισχύει όταν εγκριθεί.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--info">
+                ΚΑ
+              </span>
+            </td>
+            <td>
+              Κανονική άδεια
+              <small class="muted">
+                 · Απουσία · στο ημερολόγιο: Κ.Α
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--info">
+                Τιμητική
+              </span>
+            </td>
+            <td>
+              Τιμητική άδεια
+              <small class="muted">
+                 · Απουσία
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--bad">
+                Αναρρωτική
+              </span>
+            </td>
+            <td>
+              Αναρρωτική άδεια
+              <small class="muted">
+                 · Απουσία · στο ημερολόγιο: ΑΝ.ΑΔ
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία · Δεν βγαίνει έξοδο
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--warn">
+                Εξοδούχος
+              </span>
+            </td>
+            <td>
+              Εξοδούχος
+              <small class="muted">
+                 · Έξοδος
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--dn">
+                ΔΝ
+              </span>
+            </td>
+            <td>
+              Εξοδούχος με ΔΝ
+              <small class="muted">
+                 · Έξοδος
+              </small>
+            </td>
+            <td>
+              Απών · Καμία υπηρεσία
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="ui-badge ui-badge--warn">
+                Κωλυόμενος
+              </span>
+            </td>
+            <td>
+              Κωλυόμενος (υπηρεσία εκτός δικών μας)
+              <small class="muted">
+                 · Κωλυόμενος
+              </small>
+            </td>
+            <td>
+              Καμία υπηρεσία · Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note" style="margin:10px 0 0">
+        Στις υπηρεσίες: 
+        <b>
+          Ένοπλη
+        </b>
+         θέση = δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ. 
+        <b>
+          ★
+        </b>
+         = υπηρεσία σε ΣΚ ή αργία. 
+        <b>
+          ⚠
+        </b>
+         = πέρασε παρά τον κανόνα. Στον έλεγχο υπηρεσιών: Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ.
+      </p>
+      <h3 style="font-size:15px;margin:14px 0 6px">
+        Συντομεύσεις
+      </h3>
+      <table class="legend">
+        <tbody>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl K
+              </kbd>
+            </td>
+            <td>
+              Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl F
+              </kbd>
+            </td>
+            <td>
+              Αναζήτηση στη λίστα της οθόνης
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl N
+              </kbd>
+            </td>
+            <td>
+              Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl Z
+              </kbd>
+            </td>
+            <td>
+              Αναίρεση της τελευταίας ενέργειας
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Alt 1 … 9
+              </kbd>
+            </td>
+            <td>
+              Σήμερα, Δυναμολόγιο, Στελέχη, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ΗΚΑΙ (με Ποινές, Άδειες, Αιτήσεις), Οπλισμός
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Alt 0
+              </kbd>
+            </td>
+            <td>
+              Ρυθμίσεις
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl E
+              </kbd>
+            </td>
+            <td>
+              Έντυπα (δικά σου Excel)
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Alt ←
+              </kbd>
+            </td>
+            <td>
+              Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Ctrl B
+              </kbd>
+            </td>
+            <td>
+              Μενού πλήρες ή μόνο εικονίδια
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                F1
+              </kbd>
+            </td>
+            <td>
+              Οδηγός χρήσης για την οθόνη που βλέπεις
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Shift F1
+              </kbd>
+            </td>
+            <td>
+              Αυτό το υπόμνημα
+            </td>
+          </tr>
+          <tr>
+            <td class="nw">
+              <kbd class="ui-kbd">
+                Esc
+              </kbd>
+            </td>
+            <td>
+              Κλείσιμο παραθύρου ή καρτέλας
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Οδηγός χρήσης
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Κλείσιμο
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

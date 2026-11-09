@@ -1,0 +1,63 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διακοπή άδειας
+        </h2>
+        <div class="ui-dialog__desc">
+          ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ · ΚΑ 06/11 14:00 – 10/11 20:00
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <p style="margin:0 0 10px">
+        Γύρισε νωρίτερα (π.χ. ανακλήθηκε): η άδεια τελειώνει τη μέρα και ώρα που λες και από εκεί και πέρα μετρά κανονικά σε υπηρεσίες, εξόδους, ΗΚΑΙ, Δύναμη, Δυναμολόγιο και Excel.
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="le-d">
+            Μέρα επιστροφής
+          </label>
+          <input id="le-d" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-06" max="2026-11-10" value="2026-11-09"/>
+          <span class="field__help">
+            Σήμερα
+          </span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="le-t">
+            Ώρα επιστροφής
+          </label>
+          <input id="le-t" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="11:00"/>
+          <span class="field__help">
+            Η τωρινή· άλλαξέ την αν γύρισε άλλη ώρα
+          </span>
+        </div>
+      </div>
+      <span class="field__help">
+        Εκείνη τη μέρα βγαίνει κανονικά έξοδο και μπαίνει σε υπηρεσίες που ξεκινούν μετά τις 11:00· στην ΗΚΑΙ μετρά παρών από την επόμενη μέρα.
+      </span>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--ghost" data-tip="Μόνο αν μπήκε κατά λάθος: φεύγει ολόκληρη">
+        Ακύρωση άδειας…
+      </button>
+      <span style="flex:1">
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Γύρισε
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

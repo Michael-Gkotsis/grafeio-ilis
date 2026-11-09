@@ -154,7 +154,7 @@ function NoteCard({ n, self, onEdit, onOpen }: P) {
         <button type="button" className="note-ib" aria-label="Διαγραφή" data-tip="Διαγραφή (με Αναίρεση)" onClick=${del}>${Icon.trash}</button></span></div></article>`;
 }
 
-function EditDialog({ note, onClose }: P) {
+export function EditDialog({ note, onClose }: P) {
   const { run } = useStore(); const toast = useToast();
   const [f, setF] = useState<Draft>(() => ({ text: note.text, ...noteLinks(note), rem: note.rem || '', star: !!note.star }));
   const set = (x: Partial<Draft>) => setF(o => ({ ...o, ...x }));

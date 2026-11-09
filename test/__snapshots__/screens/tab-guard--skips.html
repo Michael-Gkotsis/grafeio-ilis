@@ -1,0 +1,62 @@
+<div class="skips">
+  <p class="skips__lead">
+    Μία φορά εξαίρεση από τις υπηρεσίες, από–έως. Η αυτόματη συμπλήρωση και ο «Επόμενος» τον προσπερνούν εκείνες τις μέρες· με το χέρι μπαίνει μόνο με αιτία. Η σειρά δικαιοσύνης δεν αλλάζει: όταν τελειώσει, έρχεται η σειρά του με βάση τις μέρες από την τελευταία του υπηρεσία. Παραμένει παρών (ΗΚΑΙ, Δύναμη).
+  </p>
+  <div class="skips__form" role="group" aria-label="Νέα εξαίρεση">
+    <div class="field skips__f-who">
+      <label class="field__label" for="sk-who">
+        Ποιος
+      </label>
+      <div class="picker">
+        <input id="sk-who" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field__label" for="sk-from">
+        Από
+      </label>
+      <input id="sk-from" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+      <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+      <span class="field__help">
+        Σήμερα
+      </span>
+    </div>
+    <div class="field">
+      <label class="field__label" for="sk-to">
+        Έως (μετρά κι αυτή)
+      </label>
+      <input id="sk-to" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+      <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value="2026-11-09"/>
+      <span class="field__help">
+        Σήμερα · 1 μέρα
+      </span>
+    </div>
+    <div class="field skips__f-why">
+      <label class="field__label" for="sk-why">
+        Αιτιολογία (προαιρετική)
+      </label>
+      <input id="sk-why" class="ui-input" placeholder="π.χ. γάμος αδελφού" value=""/>
+    </div>
+    <div class="skips__f-btn">
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Διάλεξε ποιος" aria-description="Διάλεξε ποιος">
+        + Πρόσθεσε
+      </button>
+    </div>
+  </div>
+  <div class="skips__quick">
+    <span>
+      Γρήγορα:
+    </span>
+    <button type="button" class="ui-chip">
+      Αυτό το ΣΚ
+    </button>
+    <button type="button" class="ui-chip">
+      Επόμενο ΣΚ
+    </button>
+  </div>
+  <p class="skips__empty">
+    Καμία εξαίρεση ακόμη. Διάλεξε ποιος, από ποια μέρα ως ποια, και πάτα «Πρόσθεσε».
+  </p>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

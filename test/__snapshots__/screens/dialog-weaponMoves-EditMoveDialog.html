@@ -1,0 +1,76 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διόρθωση κίνησης όπλου
+        </h2>
+        <div class="ui-dialog__desc">
+          ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ · όπλο 4810137
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <label class="field__label" for="we-r">
+          Λόγος εξόδου *
+        </label>
+        <button id="we-r" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+          <span class="ui-dd__v">
+            ΕΚΠ
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="we-od">
+            Μέρα εξόδου
+          </label>
+          <input id="we-od" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="we-ot">
+            Ώρα εξόδου *
+          </label>
+          <input id="we-ot" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09:30"/>
+          <span class="field__help">
+          </span>
+        </div>
+      </div>
+      <label class="ui-checkrow" style="margin:4px 0 10px">
+        <input type="checkbox" class="ui-check" checked=""/>
+         Είναι ακόμα εκτός (χωρίς είσοδο)
+      </label>
+      <div class="field">
+        <label class="field__label" for="we-n">
+          Παρατήρηση
+        </label>
+        <input id="we-n" class="ui-input" value=""/>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--ghost" data-tip="Σβήνει την κίνηση (αναιρείται με Ctrl+Z)">
+        Σβήσε
+      </button>
+      <span style="flex:1">
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

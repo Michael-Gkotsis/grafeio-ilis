@@ -1,0 +1,63 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Ώρες και κατεύθυνση
+        </h2>
+        <div class="ui-dialog__desc">
+          ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ · ΚΑ 06/11–10/11
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="lt-out">
+            Ώρα αναχώρησης
+          </label>
+          <input id="lt-out" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="14:00"/>
+          <span class="field__help">
+            Παρ 06/11
+          </span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="lt-in">
+            Ώρα επιστροφής
+          </label>
+          <input id="lt-in" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="20:00"/>
+          <span class="field__help">
+            Τρί 10/11
+          </span>
+        </div>
+      </div>
+      <span class="field__help">
+        Η μέρα της υπηρεσίας είναι 14:00 → 14:00. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως την ώρα εξόδου της μέρας (17:00), βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις 08:00 μετρά παρών και στην ΗΚΑΙ. Χωρίς ώρες μετρά όλη η μέρα. Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.
+      </span>
+      <div class="field">
+        <label class="field__label" for="lt-dest">
+          Κατεύθυνση (προαιρετικό)
+        </label>
+        <input id="lt-dest" class="ui-input" placeholder="π.χ. Κόρινθος" value=""/>
+        <span class="field__help">
+          Προαιρετικό · κενό = δεν γράφεται πουθενά.
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

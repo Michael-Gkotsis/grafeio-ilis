@@ -126,7 +126,7 @@ function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onRead, on
 }
 
 // Νέο Excel: ποιοι πίνακες βρέθηκαν και σε ποιο είδος πάει ο καθένας (με την πρόταση της αναγνώρισης)
-function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () => void; onMap: (k: ListKind, b: SourceBinding) => void }) {
+export function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () => void; onMap: (k: ListKind, b: SourceBinding) => void }) {
   const { state, refresh } = useStore(); const toast = useToast();
   const [pick, setPick] = useState<Record<number, ListKind | ''>>(() => Object.fromEntries(book.hits.map((h, i) => [i, h.best || ''])));
   const chosen = Object.entries(pick).filter(([, k]) => k) as [string, ListKind][];
@@ -164,7 +164,7 @@ function MatchDialog({ book, onClose, onMap }: { book: SourceBook; onClose: () =
 
 // Αντιστοίχιση: φύλλο, γραμμή επικεφαλίδων και στήλη ανά πεδίο. Κλικ σε πεδίο και μετά κλικ σε κελί του πίνακα.
 const NEW_SHEET = '\u0000new';
-function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; book: SourceBook; initial: SourceBinding; onClose: () => void; onSaved: (b: SourceBinding, andRead: boolean) => void }) {
+export function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; book: SourceBook; initial: SourceBinding; onClose: () => void; onSaved: (b: SourceBinding, andRead: boolean) => void }) {
   const { state, refresh, today } = useStore(); const toast = useToast();
   const [b, setB] = useState<SourceBinding>(() => ({ ...initial, cols: { ...initial.cols } }));
   const [active, setActive] = useState<string | null>(null);
@@ -246,7 +246,7 @@ function MapDialog({ list, book, initial, onClose, onSaved }: { list: ListKind; 
 }
 
 // Ανανέωση από Excel: τι είναι νέο, τι αλλάζει, ποιοι δεν βρέθηκαν και άγνωστα είδη, πριν περάσει οτιδήποτε
-function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; book: SourceBook; b: SourceBinding; onClose: () => void }) {
+export function ImportDialog({ list, book, b: initial, onClose }: { list: StatusKind; book: SourceBook; b: SourceBinding; onClose: () => void }) {
   const { state, today, refresh } = useStore(); const toast = useToast();
   const [b, setB] = useState<SourceBinding>(initial);
   const [choices, setChoices] = useState<Record<number, number | null>>({});
@@ -328,7 +328,7 @@ const List = ({ title, items, open }: { title: string; items: string[]; open?: b
 const prevMonth = (today: string) => addDays(today.slice(0, 8) + '01', -1).slice(0, 7);
 
 // Πόστα, εκτός δύναμης, δυνατότητες, έλεγχος υπηρεσιών: τι διαβάζεται από αυτό το φύλλο, με τα δικά του νούμερα
-function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: SourceBook; b: SourceBinding; onClose: () => void }) {
+export function SheetImportDialog({ list, book, b, onClose }: { list: ListKind; book: SourceBook; b: SourceBinding; onClose: () => void }) {
   const { state, today, refresh } = useStore(); const toast = useToast();
   const [choices, setChoices] = useState<Record<number, number | null>>({});
   const [busy, setBusy] = useState(false);
@@ -447,7 +447,7 @@ function DutyAliases({ codes }: { codes: string[] }) {
 }
 
 // Ενημέρωση Excel: τι θα γραφτεί, γραμμή-γραμμή, πριν γραφτεί
-function WriteDialog({ list, onClose }: { list: ListKind; onClose: () => void }) {
+export function WriteDialog({ list, onClose }: { list: ListKind; onClose: () => void }) {
   const toast = useToast();
   const [pv, setPv] = useState<WritePreview | { ok: false; error: string } | null>(null); const [busy, setBusy] = useState(false);
   useEffect(() => { window.api.srcPlan(list).then(setPv); }, [list]);
@@ -563,7 +563,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
     ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS(state.settings).find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
   <//>`;
 }
-function FormDialog({ form, info, current, onClose, onSave }: P) {
+export function FormDialog({ form, info, current, onClose, onSave }: P) {
   const i: FormInfo = info;
   const [sheet, setSheet] = useState(i.sheet); const [sheet2, setSheet2] = useState(i.sheet2 || '');
   const [map, setMap] = useState<HkaiMap | null>(i.hkai ? i.hkai.map : null);

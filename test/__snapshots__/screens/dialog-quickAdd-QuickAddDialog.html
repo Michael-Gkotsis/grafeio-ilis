@@ -1,0 +1,167 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--xl" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Γρήγορη εισαγωγή στρατιωτών
+        </h2>
+        <div class="ui-dialog__desc">
+          Γράψε τον έναν κάτω από τον άλλον, σαν στο Excel. Στο τέλος μία προσθήκη για όλους.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="qa__top">
+        <div class="field" style="width:150px;flex:none">
+          <label class="field__label" for="qa-essos">
+            ΕΣΣΟ για όλους
+          </label>
+          <input id="qa-essos" class="ui-input" placeholder="π.χ. 2026 Γ΄" value="2026 Γ΄"/>
+        </div>
+        <ul class="qa__keys">
+          <li>
+            <kbd class="ui-kbd">
+              Tab
+            </kbd>
+             επόμενο κελί
+          </li>
+          <li>
+            <kbd class="ui-kbd">
+              Enter
+            </kbd>
+             επόμενος στρατιώτης
+          </li>
+          <li>
+            <kbd class="ui-kbd">
+              ↑
+            </kbd>
+            <kbd class="ui-kbd">
+              ↓
+            </kbd>
+             πάνω, κάτω
+          </li>
+          <li>
+            <kbd class="ui-kbd">
+              Ctrl
+            </kbd>
+            +
+            <kbd class="ui-kbd">
+              V
+            </kbd>
+             πολλές γραμμές από Excel ή Word
+          </li>
+          <li>
+            <kbd class="ui-kbd">
+              Ctrl
+            </kbd>
+            +
+            <kbd class="ui-kbd">
+              Enter
+            </kbd>
+             προσθήκη όλων
+          </li>
+        </ul>
+      </div>
+      <div class="qa">
+        <table>
+          <thead>
+            <tr>
+              <th class="qa__n">
+                #
+              </th>
+              <th class="qa__rank">
+                Βαθμός
+              </th>
+              <th class="qa__spec">
+                Ο/Σ
+              </th>
+              <th class="qa__last">
+                Επώνυμο *
+              </th>
+              <th class="qa__first">
+                Όνομα *
+              </th>
+              <th class="qa__father">
+                Πατρώνυμο
+              </th>
+              <th class="qa__asm">
+                ΑΣΜ
+              </th>
+              <th class="qa__phone">
+                Τηλέφωνο
+              </th>
+              <th class="qa__room">
+                Θάλαμος
+              </th>
+              <th class="qa__si">
+                Σ.Ι.
+              </th>
+              <th class="qa__st">
+              </th>
+              <th>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="is-tail">
+              <td class="qa__n">
+                1
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="0" aria-label="Βαθμός, γραμμή 1" autoComplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" value="ΣΤΡ"/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="1" aria-label="Ο/Σ, γραμμή 1" autoComplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="2" aria-label="Επώνυμο *, γραμμή 1" data-autofocus="" autoComplete="off" spellcheck="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="3" aria-label="Όνομα *, γραμμή 1" autoComplete="off" spellcheck="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="4" aria-label="Πατρώνυμο, γραμμή 1" autoComplete="off" spellcheck="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="5" aria-label="ΑΣΜ, γραμμή 1" inputMode="numeric" autoComplete="off" spellcheck="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="6" aria-label="Τηλέφωνο, γραμμή 1" inputMode="tel" autoComplete="off" spellcheck="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="7" aria-label="Θάλαμος, γραμμή 1" inputMode="numeric" autoComplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+              </td>
+              <td>
+                <input class="qa__in" data-r="0" data-c="8" aria-label="Σ.Ι., γραμμή 1" autoComplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" value="Ι1"/>
+              </td>
+              <td class="qa__st">
+              </td>
+              <td>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        Πατρώνυμο, ΑΣΜ, τηλέφωνο και θάλαμος δεν είναι υποχρεωτικά. Το Σ.Ι. ξεκινά Ι1 σε κάθε γραμμή. Πόστο, ρόλος και όπλο μπαίνουν μετά από την καρτέλα του καθενός ή από την οθόνη Οπλισμός. 
+      </p>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="qa__sum">
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Κλείσιμο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Ctrl+Enter">
+        Πρόσθεσε
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,212 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Σημειώσεις
+      </h1>
+      <p class="page-head__sub">
+        5 ανοιχτές · 1 υπενθύμιση ζητά προσοχή σήμερα
+      </p>
+    </div>
+    <button type="button" class="ui-btn ui-btn--outline" data-tip="Από οποιαδήποτε οθόνη: Ctrl+Shift+N">
+      + Νέα σημείωση
+    </button>
+  </div>
+  <div class="notes-layout">
+    <aside class="notes-side" aria-label="Φίλτρα σημειώσεων">
+      <div class="notes-filters" role="group">
+        <button type="button" class="notes-f" aria-pressed="false">
+          Όλες
+          <span class="cnt">
+            5
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          Υπενθυμίσεις
+          <span class="cnt is-hot">
+            1
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          Σημαντικές
+          <span class="cnt">
+            1
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          Γενικές
+          <span class="cnt">
+            3
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          Στρατιώτες
+          <span class="cnt">
+            1
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="true">
+          Στελέχη
+          <span class="cnt">
+            1
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          Ολοκληρωμένες
+          <span class="cnt">
+            1
+          </span>
+        </button>
+      </div>
+      <div class="notes-sep">
+        Άτομα με σημειώσεις
+      </div>
+      <div class="notes-filters notes-people" role="group">
+        <button type="button" class="notes-f" aria-pressed="false">
+          <span class="notes-f__t">
+            ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ Γ.
+          </span>
+          <span class="cnt">
+            1
+          </span>
+        </button>
+        <button type="button" class="notes-f" aria-pressed="false">
+          <span class="notes-f__t">
+            ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.
+          </span>
+          <span class="cnt">
+            1
+          </span>
+        </button>
+      </div>
+    </aside>
+    <div class="notes-main">
+      <div class="ui-card note-quick">
+        <div class="note-comp">
+          <div class="note-comp__box">
+            <textarea id="nt-text" class="ui-input note-text" rows="2" maxLength="2000" aria-label="Κείμενο σημείωσης" placeholder="Γράψε τη σημείωση εδώ… (Ctrl+Enter για αποθήκευση)
+Με @ δένεις το όνομα (όσα θες) με τη σημείωση, π.χ. @Παπαδ">
+            </textarea>
+          </div>
+          <div class="note-who">
+            <span class="note-lbl">
+              Για
+            </span>
+            <div class="note-pick note-pick--multi">
+              <div class="picker__chips">
+                <span class="muted">
+                  Γενική σημείωση (κανένας συγκεκριμένα)
+                </span>
+              </div>
+              <div class="note-pick__add">
+                <div class="picker">
+                  <input id="nt-pid" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="+ Στρατιώτης: επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+                </div>
+                <button id="nt-cid" aria-label="Πρόσθεσε στέλεχος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                  <span class="ui-dd__v">
+                    + Στέλεχος…
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="note-rem">
+            <span class="note-lbl">
+              Υπενθύμιση
+            </span>
+            <button type="button" class="ui-chip" aria-pressed="true">
+              Καμία
+            </button>
+            <button type="button" class="ui-chip" aria-pressed="false">
+              Αύριο
+            </button>
+            <button type="button" class="ui-chip" aria-pressed="false">
+              Σε μία εβδομάδα
+            </button>
+            <div class="note-rem__date">
+              <input id="nt-rem" aria-label="Άλλη μέρα υπενθύμισης" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+              <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value=""/>
+            </div>
+          </div>
+          <div class="note-comp__foot">
+            <label class="ui-checkrow">
+              <input type="checkbox" class="ui-check"/>
+              Σημαντική
+            </label>
+            <span class="note-comp__sp">
+            </span>
+            <span class="btn-why" role="status">
+              Λείπει: Κείμενο σημείωσης
+            </span>
+            <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Κείμενο σημείωσης" aria-description="Λείπει: Κείμενο σημείωσης">
+              Αποθήκευση
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input type="search" class="ui-input" aria-label="Αναζήτηση στις σημειώσεις" placeholder="Αναζήτηση στο κείμενο και στο όνομα (χωρίς τόνους) · Ctrl+F" value=""/>
+        <button type="button" class="actfilter__act">
+          Καθάρισε τα φίλτρα
+        </button>
+        <span class="toolbar__count">
+          1 από 5
+        </span>
+      </div>
+      <section class="note-group">
+        <div class="note-group__h">
+          <h2>
+            Σημειώσεις · 1
+          </h2>
+          <span class="note-group__line">
+          </span>
+        </div>
+        <div class="note-list">
+          <article class="note-card">
+            <div class="note-card__top">
+              <button type="button" class="note-ck" role="checkbox" aria-checked="false" aria-label="Ολοκληρώθηκε" data-tip="Ολοκληρώθηκε">
+              </button>
+              <div class="note-card__txt">
+                Σημείωση για στέλεχος
+              </div>
+            </div>
+            <div class="note-card__meta">
+              <button type="button" class="who-chip" data-tip="Άνοιγμα καρτέλας">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="22" height="22">
+                  <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/>
+                </svg>
+                ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ Γ.
+              </button>
+              <span class="note-card__date">
+                09/11
+              </span>
+              <span class="note-card__acts">
+                <button type="button" class="note-ib" aria-label="Σημαντική" aria-pressed="false" data-tip="Σημείωσέ τη σημαντική">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="14" height="14">
+                    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>
+                  </svg>
+                </button>
+                <button type="button" class="note-ib" aria-label="Επεξεργασία" data-tip="Επεξεργασία, υπενθύμιση">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M4 20l1-4L16 5l3 3L8 19z"/>
+                    <path d="M14 7l3 3"/>
+                  </svg>
+                </button>
+                <button type="button" class="note-ib" aria-label="Διαγραφή" data-tip="Διαγραφή (με Αναίρεση)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
+                  </svg>
+                </button>
+              </span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,180 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Έντυπα
+      </h1>
+      <p class="page-head__sub">
+        Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.
+      </p>
+    </div>
+    <div class="page-head__acts">
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">
+        Ανέβασε Excel…
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        + Νέο έντυπο
+      </button>
+    </div>
+  </div>
+  <div class="dayrow" role="group" aria-label="Έντυπα της μέρας">
+    <span class="dayrow__lbl">
+      Της μέρας (βγαίνουν από την οθόνη τους):
+    </span>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      ΦΡΟΥΡΑ αύριο
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      ΗΚΑΙ σήμερα
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Η Ημερήσια Διαταγή της επόμενης μέρας, με Word και εκτύπωση">
+      Ημερήσια Διαταγή αύριο
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      Εξοδούχοι
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Αυριανή ΦΡΟΥΡΑ, σημερινή ΗΚΑΙ και Εξοδούχοι: ένας έλεγχος για όλα">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M7 9V3h10v6"/>
+        <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+        <path d="M7 14h10v7H7z"/>
+      </svg>
+      Έντυπα ημέρας
+    </button>
+  </div>
+  <div class="ui-tabs" role="tablist">
+    <button type="button" role="tab" aria-selected="true">
+      Τα έντυπά μου (1)
+    </button>
+    <button type="button" role="tab" aria-selected="false">
+      Πρότυπα (1)
+    </button>
+  </div>
+  <div class="ui-card">
+    <table class="rep-table">
+      <thead>
+        <tr>
+          <th>
+            Έντυπο
+          </th>
+          <th>
+            Ποιοι μπαίνουν
+          </th>
+          <th>
+            Τελευταία φορά
+          </th>
+          <th>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <b>
+              ΛΙΣΤΑ ΔΟΚΙΜΗΣ
+            </b>
+            <small>
+              ΛΙΣΤΑ ΔΟΚΙΜΗΣ · Excel
+            </small>
+          </td>
+          <td>
+            Όλοι οι στρατιώτες
+          </td>
+          <td class="nw muted">
+            Δεν έχει βγει
+          </td>
+          <td class="rep-table__acts">
+            <button type="button" class="ui-btn ui-btn--default ui-btn--sm" data-tip="Βγαίνει τώρα, για σήμερα">
+              Βγάλε
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M7 9V3h10v6"/>
+                <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+                <path d="M7 14h10v7H7z"/>
+              </svg>
+              Τύπωσε
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Υπογραφές: Ο ΛΟΧΙΑΣ · Ο ΔΙΟΙΚΗΤΗΣ. Αλλάζεις, προσθέτεις ή αλλάζεις σειρά πριν βγει, ή σέρνεις κεφαλίδα, τίτλο και υπογραφές αλλού («Θέσεις στο χαρτί…»).">
+              Υπογραφές…
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Πότε βγήκε και ποιοι μπήκαν· ξαναβγαίνει ίδιο αν χαθεί το χαρτί">
+              Ιστορικό
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+              Αλλαγή
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Ίδιο έντυπο με άλλο όνομα, για να αλλάξεις κάτι">
+              Αντίγραφο
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Διαγραφή ΛΙΣΤΑ ΔΟΚΙΜΗΣ" data-tip="Διαγραφή (με αναίρεση)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="ui-card rep-more-presets">
+    <h3 class="rep-h">
+      Νέο από έτοιμο υπόδειγμα
+    </h3>
+    <p class="note">
+      Φτιάχνεται εδώ, με την κεφαλίδα και τις υπογραφές από τις Ρυθμίσεις· αλλάζεις ό,τι θέλεις πριν το αποθηκεύσεις.
+    </p>
+    <div class="rep-presets">
+      <button type="button" class="rep-preset">
+        <b>
+          Ονομαστική κατάσταση
+        </b>
+        <small>
+          Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις
+        </small>
+      </button>
+      <button type="button" class="rep-preset">
+        <b>
+          Παρουσιολόγιο με υπογραφή
+        </b>
+        <small>
+          Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή
+        </small>
+      </button>
+      <button type="button" class="rep-preset">
+        <b>
+          Λίστα θαλάμου
+        </b>
+        <small>
+          Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.
+        </small>
+      </button>
+      <button type="button" class="rep-preset">
+        <b>
+          Δυναμολόγιο αξιολόγησης
+        </b>
+        <small>
+          Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις
+        </small>
+      </button>
+      <button type="button" class="rep-preset">
+        <b>
+          Δυναμολόγιο-Παρουσιολόγιο στελεχών
+        </b>
+        <small>
+          Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου
+        </small>
+      </button>
+      <button type="button" class="rep-preset rep-preset--up">
+        <b>
+          Δικό σου Excel
+        </b>
+        <small>
+          Ανέβασε ένα έντυπο που ήδη έχεις. Η εφαρμογή βρίσκει μόνη της τις στήλες.
+        </small>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

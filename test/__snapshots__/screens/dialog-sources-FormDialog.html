@@ -1,0 +1,62 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Template: ΕΞΟΔΟΥΧΟΙ.xlsx
+        </h2>
+        <div class="ui-dialog__desc">
+          ΕΞΟΔΟΥΧΟΙ.xlsx
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="fd-s1">
+            Φύλλο εξοδούχων
+          </label>
+          <button id="fd-s1" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΕΞΟΔΟΥΧΟΙ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fd-s2">
+            Φύλλο παραμενόντων
+          </label>
+          <button id="fd-s2" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΠΑΡΑΜΕΝΟΝΤΕΣ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <p class="note">
+        Η λίστα ξεκινά στη γραμμή 7 με στήλες Βαθμός, Ο-Σ, Επίθετο, Όνομα, Θάλαμος, Τηλέφωνο, Παρατηρήσεις (B έως H), όπως στο έντυπο της μονάδας.
+      </p>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,801 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Εξοδούχοι Δευτέρας 09/11/2026
+      </h1>
+      <p class="page-head__sub">
+        Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ· όσοι έχουν ⚠ βγαίνουν μόνο με επιβεβαίωση.
+      </p>
+    </div>
+    <div class="page-head__acts">
+      <div class="strip datebar" role="group" aria-label="Ημερομηνία">
+        <button type="button" class="daybtn" aria-pressed="true">
+          <span class="daybtn__d">
+            Δευ σήμερα
+          </span>
+          <span class="daybtn__n">
+            09/11
+          </span>
+        </button>
+        <button type="button" class="daybtn" aria-pressed="false">
+          <span class="daybtn__d">
+            Τρί αύριο
+          </span>
+          <span class="daybtn__n">
+            10/11
+          </span>
+        </button>
+        <button type="button" class="daybtn is-hol" aria-pressed="false" data-tip="Αργία: ΣΚ">
+          <span class="daybtn__d">
+            Σάβ
+          </span>
+          <span class="daybtn__n">
+            14/11
+          </span>
+        </button>
+        <button type="button" class="daybtn is-hol" aria-pressed="false" data-tip="Αργία: ΣΚ">
+          <span class="daybtn__d">
+            Κυρ
+          </span>
+          <span class="daybtn__n">
+            15/11
+          </span>
+        </button>
+        <input aria-label="Άλλη ημερομηνία" class="ui-input datebar__pick" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+        <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+      </div>
+      <label class="strict-sw" data-tip="Όταν έχει βραδινή εκπαίδευση, η μέρα δεν μετρά στη στέρηση εξόδου (όπως και οι μέρες με υπηρεσία): η λήξη μετακινείται μία μέρα. Δεν αλλάζει τους εξοδούχους." data-tip-side="bottom">
+        <input type="checkbox" class="ui-check"/>
+        Βραδινή εκπαίδευση
+      </label>
+    </div>
+  </div>
+  <div class="daybar" role="group" aria-label="Ώρες της μέρας">
+    <div class="field">
+      <label class="field__label" for="dbo">
+        Αρχή εξόδου
+      </label>
+      <input id="dbo" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="17:00"/>
+      <span class="field__help">
+      </span>
+    </div>
+    <div class="field">
+      <label class="field__label" for="dbb">
+        Επιστροφή εξοδούχων
+      </label>
+      <input id="dbb" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="22:00"/>
+      <span class="field__help">
+        το ίδιο βράδυ
+      </span>
+    </div>
+    <div class="field">
+      <label class="field__label" for="dbd">
+        Επιστροφή ΔΝ · Τρίτη
+      </label>
+      <input id="dbd" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="06:00"/>
+      <span class="field__help">
+        το πρωί της επόμενης
+      </span>
+    </div>
+    <div class="field">
+      <span class="field__label">
+        Αύριο εκπαίδευση
+      </span>
+      <div class="ui-seg ui-seg--sm" role="group">
+        <button type="button" aria-pressed="true">
+          Ναι
+        </button>
+        <button type="button" aria-pressed="false">
+          Όχι
+        </button>
+      </div>
+      <span class="field__help">
+         
+      </span>
+    </div>
+    <div class="daybar__acts">
+    </div>
+  </div>
+  <details class="note backs-box">
+    <summary>
+      Ποιοι γυρίζουν και πότε 
+      <span class="cnt">
+        6
+      </span>
+       
+      <span class="ui-badge ui-badge--bad">
+        κάποιοι για υπηρεσία
+      </span>
+      <button type="button" class="linkish backs-box__all" data-tip="Όλοι με το πότε γυρνούν: παρόντες, κωλυόμενοι, απόντες">
+        Όλοι στη Δύναμη →
+      </button>
+    </summary>
+    <div class="backs">
+      <div>
+        <div class="backs__day">
+          Δευτέρα 09/11
+        </div>
+        <ul class="rows">
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΤΧ) 
+                </span>
+                ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.
+              </span>
+            </button>
+            <span class="muted">
+              <span class="ui-badge ui-badge--warn tag">
+                Εξοδούχος
+              </span>
+               22:00 · εξοδούχος τη Δευτέρα
+              <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Άλλαξε πότε γυρνά, με λόγο">
+                Διόρθωση…
+              </button>
+            </span>
+          </li>
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) 
+                </span>
+                ΠΛΑΣΜΑΤΙΚΟΣ Γ.
+              </span>
+            </button>
+            <span class="muted">
+              <span class="ui-badge ui-badge--warn tag">
+                Εξοδούχος
+              </span>
+               22:00 · εξοδούχος τη Δευτέρα
+              <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Άλλαξε πότε γυρνά, με λόγο">
+                Διόρθωση…
+              </button>
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <div class="backs__day">
+          Τρίτη 10/11
+        </div>
+        <ul class="rows">
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΠΖ) 
+                </span>
+                ΦΑΝΤΑΣΙΟΣ Θ.
+              </span>
+            </button>
+            <span class="txt-bad">
+              <span class="ui-badge ui-badge--info tag">
+                ΚΑ
+              </span>
+               20:00 · Θαλαμοφύλακας 4ος (α΄)
+            </span>
+          </li>
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΤΧ) 
+                </span>
+                ΠΡΟΣΩΡΙΝΟΣ Α.
+              </span>
+            </button>
+            <span class="txt-bad">
+              <span class="ui-badge ui-badge--info tag">
+                ΚΑ
+              </span>
+               πρωί · Λ/Υ από 14:00
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <div class="backs__day">
+          Τετάρτη 11/11
+        </div>
+        <ul class="rows">
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΔΒ) 
+                </span>
+                ΘΕΩΡΗΤΙΚΟΣ Ζ.
+              </span>
+            </button>
+            <span class="txt-bad">
+              <span class="ui-badge ui-badge--bad tag">
+                Αναρρωτική
+              </span>
+               πρωί · Λ/Υ από 14:00
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <div class="backs__day">
+          Παρασκευή 13/11
+        </div>
+        <ul class="rows">
+          <li>
+            <button type="button" class="linkish">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΤΘ) 
+                </span>
+                ΔΟΚΙΜΙΟΣ Α.
+              </span>
+            </button>
+            <span class="txt-bad">
+              <span class="ui-badge ui-badge--info tag">
+                ΚΑ
+              </span>
+               20:00 · Θαλαμοφύλακας 4ος (α΄)
+            </span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </details>
+  <div class="bulkbar outbar">
+    <span>
+      Έξοδος 
+      <b>
+        2
+      </b>
+       · ΔΝ 
+      <b>
+        0
+      </b>
+       · Παραμένοντες 
+      <b>
+        6
+      </b>
+       
+      <span class="muted">
+        (3 λόγω κανόνων)
+      </span>
+       · Σε άδεια 
+      <b>
+        4
+      </b>
+    </span>
+    <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">
+      Όλοι όσοι μπορούν: έξοδος
+    </button>
+    <span class="outbar__xl">
+      <div class="gb-mon">
+        <small class="gb-mon__lbl" data-tip="Τωρινή: Εξοδούχοι και Παραμένοντες σε δύο φύλλα. Όλη η δύναμη: κάθε άτομο μία φορά, σε δύο σελίδες: σελίδα 1 οι εξοδούχοι (Πίνακας Α), σελίδα 2 η υπόλοιπη δύναμη (είναι ήδη έξω, μένουν μέσα) με το άθροισμα της δύναμης και πότε γυρίζουν οι απόντες. Η επιλογή σου μένει και για τις επόμενες φορές.">
+          Μορφή:
+        </small>
+        <button style="flex:0 0 150px;width:150px;height:32px;font-size:13px" aria-label="Μορφή Excel εξοδούχων" data-tip="Τωρινή: Εξοδούχοι και Παραμένοντες σε δύο φύλλα. Όλη η δύναμη: κάθε άτομο μία φορά, σε δύο σελίδες: σελίδα 1 οι εξοδούχοι (Πίνακας Α), σελίδα 2 η υπόλοιπη δύναμη (είναι ήδη έξω, μένουν μέσα) με το άθροισμα της δύναμης και πότε γυρίζουν οι απόντες. Η επιλογή σου μένει και για τις επόμενες φορές." type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+          <span class="ui-dd__v">
+            Τωρινή
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+        Βγάλε το Excel
+      </button>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βγαίνει το Excel και ανοίγει προεπισκόπηση εκτύπωσης. Δεν χρειάζεται Excel.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M7 9V3h10v6"/>
+          <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+          <path d="M7 14h10v7H7z"/>
+        </svg>
+        Εκτύπωση
+      </button>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Υπογραφές: Ο ΑΛΧΙΑΣ ΙΛΗΣ · Ο ΔΚΤΗΣ ΙΛΗΣ. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+        Υπογραφές…
+      </button>
+    </span>
+  </div>
+  <div class="toolbar">
+    <div class="strip chips chips--wrap" role="group" aria-label="Θάλαμος">
+      <button type="button" class="ui-chip" aria-pressed="true">
+        Όλοι οι θάλαμοι
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 2 βγαίνουν">
+        Θ1
+        <span class="cnt">
+          0/2
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="1 από 2 βγαίνουν">
+        Θ2
+        <span class="cnt">
+          1/2
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ3
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ4
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="1 από 1 βγαίνουν">
+        Θ5
+        <span class="cnt">
+          1/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ6
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ7
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ8
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ9
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="0 από 1 βγαίνουν">
+        Θ10
+        <span class="cnt">
+          0/1
+        </span>
+      </button>
+    </div>
+    <div class="ui-seg ui-seg--sm" role="group">
+      <button type="button" aria-pressed="true">
+        Ανά θάλαμο
+      </button>
+      <button type="button" aria-pressed="false">
+        Αλφαβητικά
+      </button>
+    </div>
+  </div>
+  <div class="toolbar outs__find">
+    <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους) · Ctrl+F" value=""/>
+    <div class="strip chips chips--wrap" role="group" aria-label="Φίλτρα">
+      <button type="button" class="ui-chip" aria-pressed="true">
+        Όλοι
+        <span class="cnt">
+          12
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Μπορούν να βγουν
+        <span class="cnt">
+          5
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Δεν μπορούν
+        <span class="cnt">
+          7
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Επιλεγμένοι
+        <span class="cnt">
+          2
+        </span>
+      </button>
+    </div>
+    <span class="toolbar__count">
+      12 άτομα
+    </span>
+  </div>
+  <div class="ui-card" style="overflow:hidden">
+    <div class="vlist" data-rows="12" style="height:570px">
+      <div class="vlist__inner" style="height:624px">
+        <div class="orow" style="position:absolute;top:0;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΘ) 
+                  </span>
+                  ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ1 · 1ος Ουλ. · 
+              <span class="orow__away" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια.">
+                Κανονική άδεια · γυρνά Παρ 13/11 20:00 για υπηρεσία
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ">
+            <button type="button" class="is-away is-away--info" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια." aria-pressed="true">
+              Σε άδεια
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ έως 13/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ έως 13/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:52px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΔΒ) 
+                  </span>
+                  ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ1 · 1ος Ουλ. · 
+              <span class="orow__away" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια.">
+                Αναρρωτική άδεια ως 10/11 · γυρνά Τετ 11/11 πρωί για υπηρεσία
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ">
+            <button type="button" class="is-away is-away--bad" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια." aria-pressed="true">
+              Σε άδεια
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Αναρρωτική έως 10/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Αναρρωτική έως 10/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:104px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ2 · 1ος Ουλ.
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ">
+            <button type="button" aria-pressed="false">
+              Μένει
+            </button>
+            <button type="button" aria-pressed="true">
+              Έξοδος
+            </button>
+            <button type="button" aria-pressed="false">
+              ΔΝ
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:156px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΔΝΕΑΣ (ΠΖ) 
+                  </span>
+                  ΠΙΘΑΝΟΣ ΒΗΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ2 · 1ος Ουλ.
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ ΒΗΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ ΒΗΤΑΣ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" aria-pressed="false">
+              Έξοδος
+            </button>
+            <button type="button" aria-pressed="false">
+              ΔΝ
+            </button>
+          </div>
+        </div>
+        <div class="orow is-blocked" style="position:absolute;top:208px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΔΝΕΑΣ (ΔΒ) 
+                  </span>
+                  ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ3 · 1ος Ουλ. · 
+              <span class="orow__warn" data-tip="Έχει υπηρεσία: Θαλαμοφύλακας 2ος (α΄). Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">
+                ⚠ Έχει υπηρεσία: Θαλαμοφύλακας 2ος (α΄)
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Έχει υπηρεσία: Θαλαμοφύλακας 2ος (α΄)): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Έχει υπηρεσία: Θαλαμοφύλακας 2ος (α΄)): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:260px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΠΖ) 
+                  </span>
+                  ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ4 · 1ος Ουλ. · 
+              <span class="orow__away" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια.">
+                Κανονική άδεια · γυρνά Τρί 10/11 20:00 για υπηρεσία
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ">
+            <button type="button" class="is-away is-away--info" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια." aria-pressed="true">
+              Σε άδεια
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ έως 10/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ έως 10/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:312px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) 
+                  </span>
+                  ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ5 · 2ος Ουλ.
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ">
+            <button type="button" aria-pressed="false">
+              Μένει
+            </button>
+            <button type="button" aria-pressed="true">
+              Έξοδος
+            </button>
+            <button type="button" aria-pressed="false">
+              ΔΝ
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:364px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ6 · 2ος Ουλ.
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" aria-pressed="false">
+              Έξοδος
+            </button>
+            <button type="button" aria-pressed="false">
+              ΔΝ
+            </button>
+          </div>
+        </div>
+        <div class="orow is-blocked" style="position:absolute;top:416px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΔΒ) 
+                  </span>
+                  ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ7 · 2ος Ουλ. · 
+              <span class="orow__warn" data-tip="Έχει υπηρεσία: Λ/Υ. Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">
+                ⚠ Έχει υπηρεσία: Λ/Υ
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Έχει υπηρεσία: Λ/Υ): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (Έχει υπηρεσία: Λ/Υ): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow is-blocked" style="position:absolute;top:468px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΠΖ) 
+                  </span>
+                  ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ8 · 2ος Ουλ. · 
+              <span class="orow__warn" data-tip="ΕΥ έως 11/11. Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση">
+                ⚠ ΕΥ έως 11/11
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΕΥ έως 11/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΕΥ έως 11/11): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:520px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΘ) 
+                  </span>
+                  ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ9 · —
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ">
+            <button type="button" aria-pressed="true">
+              Μένει
+            </button>
+            <button type="button" aria-pressed="false">
+              Έξοδος
+            </button>
+            <button type="button" aria-pressed="false">
+              ΔΝ
+            </button>
+          </div>
+        </div>
+        <div class="orow" style="position:absolute;top:572px;left:0;right:0;height:52px">
+          <div>
+            <button type="button" class="linkish">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ10 · — · 
+              <span class="orow__away" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια.">
+                Κανονική άδεια · γυρνά Τρί 10/11 πρωί για υπηρεσία
+              </span>
+            </small>
+          </div>
+          <input class="ui-input orow__note" aria-label="Παρατήρηση ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ" placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=""/>
+          <div class="ui-seg ui-seg--sm" role="group" aria-label="Έξοδος ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ">
+            <button type="button" class="is-away is-away--info" data-tip="Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια." aria-pressed="true">
+              Σε άδεια
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              Έξοδος ⚠
+            </button>
+            <button type="button" class="is-warn" data-tip="Δεν βγαίνει έξοδο (ΚΑ): θα ζητηθεί επιβεβαίωση" aria-pressed="false">
+              ΔΝ ⚠
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin:8px 0 0">
+    <span class="tplnote">
+      Από template: 
+      <span>
+        <b>
+          Εξοδούχοι / Παραμένοντες
+        </b>
+      </span>
+       · 
+      <button type="button" class="ui-btn ui-btn--link">
+        Templates
+      </button>
+    </span>
+  </p>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

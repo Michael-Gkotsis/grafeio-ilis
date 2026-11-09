@@ -73,7 +73,7 @@ export function ImerTab() {
   </div>`;
 }
 
-function CellDialog({ p, d, onClose, run, undoMark, toast }: P) {
+export function CellDialog({ p, d, onClose, run, undoMark, toast }: P) {
   const { state } = useStore();
   const cur = handOf(state, d, p.id); const [text, setText] = useState(cur);
   const auto = (grid1(state, p, d)) || 'κενό (στην εκπαίδευση)';
@@ -89,7 +89,7 @@ function CellDialog({ p, d, onClose, run, undoMark, toast }: P) {
 // ο αυτόματος κωδικός ενός κελιού (χωρίς το χέρι), για να φαίνεται στο παράθυρο
 const grid1 = (s: P, p: Person, d: ISODate): string => autoCell(s, p, d)?.code || '';
 
-function CodesDialog({ onClose, onPrint }: P) {
+export function CodesDialog({ onClose, onPrint }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const cur: ImerSettings = state.settings.imer || {};
   const [title, setTitle] = useState<ImerTitle>(cur.title === 'ekp' ? 'ekp' : 'imer'); const [sheets, setSheets] = useState<ImerSheets>(imerSheets(state.settings));

@@ -58,7 +58,7 @@ export function EssoCards() {
 }
 
 const STEPS = ['ΕΣΣΟ', 'Αρχείο τωρινής', 'Excel νέας', 'Επιβεβαίωση'];
-function NewEssoWizard({ info, onClose, onDone }: P) {
+export function NewEssoWizard({ info, onClose, onDone }: P) {
   const { state, refresh, today } = useStore(); const toast = useToast();
   const cur = currentEsso(state);
   const [step, setStep] = useState(1);
@@ -130,7 +130,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   <//>`;
 }
 
-function EssoDone({ r, onClose }: P) {
+export function EssoDone({ r, onClose }: P) {
   const { state } = useStore(); const nav = useNav(); const name = state.settings.essos ? essoName(state.settings.essos) : 'νέα ΕΣΣΟ';
   const n = state.people.filter(p => p.active).length;
   return html`<${Dialog} title=${'Ξεκίνησε η ' + name} onClose=${onClose}
@@ -143,7 +143,7 @@ function EssoDone({ r, onClose }: P) {
   <//>`;
 }
 
-function RestoreDialog({ a, onClose }: P) {
+export function RestoreDialog({ a, onClose }: P) {
   const { state } = useStore(); const toast = useToast(); const [busy, setBusy] = useState(false);
   const cur = currentEsso(state);
   const go = async () => { setBusy(true); const r = await window.api.essoRestore(a.dir); setBusy(false); if (!r.ok) toast({ text: r.error }); };

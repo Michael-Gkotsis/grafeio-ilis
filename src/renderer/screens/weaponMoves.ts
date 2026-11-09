@@ -89,7 +89,7 @@ export function WeaponInDialog({ ids, onClose, onDone }: P) {
 }
 
 // Διόρθωση μιας κίνησης: λόγοι, μέρες, ώρες, παρατήρηση· «Είναι ακόμα εκτός» σβήνει την είσοδο
-function EditMoveDialog({ m, onClose }: P) {
+export function EditMoveDialog({ m, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
   const [x, setX] = useState({ reason: m.reason, outDay: m.outDay, outTime: m.outTime, inDay: m.inDay || '', inTime: m.inTime || '', inReason: m.inReason || '', note: m.note || '' });
@@ -119,7 +119,7 @@ function EditMoveDialog({ m, onClose }: P) {
 }
 
 // Διόρθωση ώρας ενός ένοπλου νούμερου (Michael, 24/10): οι ώρες βγαίνουν από τις υπηρεσίες· εδώ αλλάζουν για αυτό το νούμερο, με λόγο
-function DutyFixDialog({ row, onClose }: P) {
+export function DutyFixDialog({ row, onClose }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const pm = seatMap(state); const p = pm.get(row.who); const owner = pm.get(row.owner);
   const [x, setX] = useState(() => ({ od: calDay(row.day, row.out), ot: hmOf(row.out), id: calDay(row.day, row.in), it: hmOf(row.in), why: row.fix?.why || '' }));
@@ -144,7 +144,7 @@ function DutyFixDialog({ row, onClose }: P) {
 }
 
 // Ομαδική διόρθωση λόγου/ώρας εξόδου για τις τσεκαρισμένες κινήσεις (Michael, 24/10): ένας λόγος με ένα κλικ (ή πλήκτρο 1-9), μία εντολή, μία αναίρεση
-function BulkFixDialog({ ids, onClose, onDone }: P) {
+export function BulkFixDialog({ ids, onClose, onDone }: P) {
   const { state, run, undoMark } = useStore(); const toast = useToast();
   const reasons: string[] = useMemo(() => listOf(state.settings.lists, 'weaponOut'), [state.settings.lists]);
   const pm = seatMap(state);
