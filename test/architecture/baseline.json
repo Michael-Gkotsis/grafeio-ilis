@@ -14,32 +14,28 @@
     ],
     "withTypes": [
       [
-        "src/shared/absence.ts",
         "src/shared/api.ts",
-        "src/shared/armed.ts",
-        "src/shared/cadre.ts",
         "src/shared/cadreSource.ts",
         "src/shared/commands.ts",
-        "src/shared/dayCode.ts",
-        "src/shared/esso.ts",
         "src/shared/hd.ts",
-        "src/shared/hkaiText.ts",
-        "src/shared/hours.ts",
-        "src/shared/imer.ts",
         "src/shared/layout.ts",
-        "src/shared/notes.ts",
-        "src/shared/outsStay.ts",
         "src/shared/preflight.ts",
-        "src/shared/punish.ts",
-        "src/shared/reports.ts",
-        "src/shared/returns.ts",
         "src/shared/roster.ts",
-        "src/shared/rosterLists.ts",
-        "src/shared/rules.ts",
         "src/shared/sigs.ts",
-        "src/shared/sources.ts",
-        "src/shared/values.ts",
-        "src/shared/weapons.ts",
+        "src/shared/sources.ts"
+      ],
+      [
+        "src/shared/cadre.ts",
+        "src/shared/hkaiText.ts",
+        "src/shared/rosterLists.ts"
+      ],
+      [
+        "src/shared/reports.ts",
+        "src/shared/values.ts"
+      ],
+      [
+        "src/shared/returns.ts",
+        "src/shared/rules.ts",
         "src/shared/weekend.ts"
       ]
     ]
@@ -64,7 +60,6 @@
     "src/renderer/screens/sources.ts": 605,
     "src/shared/cadreSource.ts": 746,
     "src/shared/commands.ts": 3113,
-    "src/shared/ranks.ts": 599,
     "src/shared/reports.ts": 2317,
     "src/shared/returns.ts": 511,
     "src/shared/rules.ts": 2788,
