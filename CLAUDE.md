@@ -18,6 +18,7 @@ All user-facing texts (screens, Excel, Word, guide) are Greek. Code, identifiers
 | `node bench/ui/styles-diff.mjs` (`npm run bench:styles`) | browser DOM + computed-style + box diff of every screen, tab and click-opened dialog (light/dark, 3 widths) vs `rewrite`; local, needs Playwright, report in `dist/styles-diff/` | yes for structural renderer PRs and CSS PRs (0 differences, or each one explained) |
 | `npm run bench` | node micro-benchmarks of core rules and Excel (`bench/bench.ts`) | when touching hot paths |
 | `npm run bench:full` | full-app benchmark with Electron (`bench/full.ts`) | when touching main/db |
+| `npm run bench:compare -- new.json` | compares a JSON from `node bench/collect.mjs --out new.json` with `bench/baseline/phase0.json`; exits 1 if a timing is >5% slower (`--threshold`) | for UI/structure PRs, on the same machine |
 | `npm run dev` | `scripts/dev.mjs`: dev run of the app | no |
 Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases only, see Workflow).
 
