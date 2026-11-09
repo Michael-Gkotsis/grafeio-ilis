@@ -1,19 +1,10 @@
 // Κωδικοί υπηρεσιών στον έλεγχο υπηρεσιών (δείγμα 03): κωδικός θέσης (Θ1α, Μ2, ΛΥ…) ή σκέτο γράμμα είδους (Θ, Μ, Σ).
 // Ο κωδικός θέσης λέει ακριβώς ποια θέση· το σκέτο γράμμα μόνο το είδος (υπηρεσία χωρίς θέση).
-import { normGreek } from './text';
-import {
-  KIND_CODE,
-  KIND_NAME,
-  codeKey,
-  blocksOf,
-  defaultCode,
-  everyBlock,
-  phaseBase,
-  phaseBlocks,
-  type DutyKind,
-  type Phase,
-  type Settings,
-} from './domain';
+import { normGreek } from '../core/lib/text';
+import { KIND_CODE, KIND_NAME, type DutyKind, type Phase } from '../core/model/duty';
+import { codeKey, defaultCode } from '../core/model/codes';
+import { blocksOf, everyBlock, phaseBase, phaseBlocks } from '../core/model/settingsAccess';
+import type { Settings } from '../core/model/settings';
 
 // σκέτο γράμμα ή λέξη → είδος υπηρεσίας (και θέση, για Λ/Υ και Δ/Υ που είναι πάντα μία)
 export function dutyCode(raw: string): { kind: DutyKind; pref?: string } | null {

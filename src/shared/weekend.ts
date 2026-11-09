@@ -1,8 +1,9 @@
 // Σαββατοκύριακο (Michael, 18/10, 24/10): «ΔΝ ΣΚ» το Σάββατο = ΔΝ και το Σάββατο και την Κυριακή (το πότε γυρίζουν είναι στο returns.ts).
 // Οι παρατηρήσεις των εξοδούχων και των παραμενόντων γράφονται δίπλα στην κατάσταση, σε παρένθεση: «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)».
-import { TYPES, type AppState, type Status } from './domain';
+import { TYPES, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
 import { postOf, postSpan } from './rules';
-import { addDays, dm, parseD, DOW_FULL, type ISODate } from './dates';
+import { addDays, dm, parseD, DOW_FULL, type ISODate } from '../core/lib/dates';
 
 // Το είδος («kind») της ΔΝ του Σαββάτου και της ΔΝ της Κυριακής που μπήκε μόνη της από αυτήν (πριν 24/10 ήταν έξοδος)
 export const WK = 'ΣΚ';

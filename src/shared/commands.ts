@@ -1,61 +1,29 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
-import { HK } from './unit';
+import { HK } from '../core/model/unit';
 import { cleanHd, type HdDoc } from './hd';
-import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
-import { norm, normGreek, upper } from './text';
+import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from '../core/lib/dates';
+import { norm, normGreek, upper } from '../core/lib/text';
+import { noPending, TYPES, RECORD_CATS, PUN_KINDS, type Status, type TypeKey } from '../core/model/status';
 import {
-  noPending,
-  TYPES,
   DEFAULT_NUM_ROTS,
   DEFAULT_STRICT_ORDER,
-  RECORD_CATS,
-  kolColOf,
-  WEEK,
-  CAP_ACC,
-  OUT_NOTE,
-  PUN_KINDS,
-  KIND_NAME,
-  blocksOf,
-  blockGroups,
-  blockShape,
-  cleanShift,
-  everyBlock,
-  hasShift,
-  MAX_NUMS,
-  MAX_PER,
-  reshapeBlock,
-  phaseBase,
-  phaseList,
-  phaseName,
-  shiftGroups,
-  withBlocks,
-  postTxt,
-  shortName,
-  fullName,
-  type AppState,
-  type Baseline,
-  type Cadre,
-  type CadreAbs,
-  type DutyFix,
-  type Note,
-  type BlockDef,
-  type ShiftDef,
   type BackFix,
   type CapKey,
   type DayPlan,
-  type DutyKind,
-  type HkaiManual,
-  type Person,
-  type PersonRequest,
-  type Phase,
   type Rules,
-  type Settings,
-  type Skip,
-  type Status,
-  type TypeKey,
-  type WeaponMove,
-} from './domain';
+} from '../core/model/dutyRules';
+import { kolColOf } from '../core/model/kol';
+import { WEEK, OUT_NOTE, shortName, fullName, type Person, type Skip } from '../core/model/person';
+import { CAP_ACC, KIND_NAME, type BlockDef, type DutyKind, type Phase } from '../core/model/duty';
+import { blocksOf, everyBlock, phaseBase, phaseList, phaseName, withBlocks } from '../core/model/settingsAccess';
+import { blockGroups, blockShape, MAX_NUMS, MAX_PER, reshapeBlock, shiftGroups, postTxt } from '../core/model/blocks';
+import { cleanShift, hasShift, type ShiftDef } from '../core/model/shifts';
+import type { AppState, Baseline } from '../core/model/state';
+import type { Cadre, CadreAbs } from '../core/model/cadreRecord';
+import type { DutyFix, Note, PersonRequest, WeaponMove } from '../core/model/records';
+import type { HkaiManual } from '../core/model/hkaiSettings';
+import type { Settings } from '../core/model/settings';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';

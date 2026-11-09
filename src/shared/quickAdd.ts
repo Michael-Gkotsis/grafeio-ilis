@@ -1,9 +1,9 @@
 // Γρήγορη εισαγωγή στρατιωτών (Michael, 19/10: στη Νέα ΕΣΣΟ «τον ένα στρατιώτη μετά τον άλλον» χωρίς αποθήκευση κάθε φορά):
 // πίνακας σαν το Excel, επικόλληση πολλών γραμμών, έλεγχος για διπλούς πριν από την προσθήκη
 import { HEADERS } from './roster';
-import { norm } from './text';
+import { norm } from '../core/lib/text';
 import { personKey, type NewPerson } from './commands';
-import type { Person } from './domain';
+import type { Person } from '../core/model/person';
 
 export const QA_COLS = ['rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', 'si'] as const;
 export type QaKey = (typeof QA_COLS)[number];

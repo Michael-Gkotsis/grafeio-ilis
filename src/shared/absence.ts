@@ -1,12 +1,15 @@
 // ΑΠΩΝ, ΑΙΤΙΑ ΑΠΟΥΣΙΑΣ, ΗΜ/ΝΙΑ ΕΠΙΣΤΡΟΦΗΣ ενός στρατιώτη ή στελέχους για μια μέρα (Έντυπα, Δυναμολόγιο-Παρουσιολόγιο στελεχών).
 // Απών = άδεια, νοσοκομείο, ΣΤΕΠ ή δηλωμένος κωλυόμενος (όπως οι απόντες και οι κωλυόμενοι της Δύναμης)· οι έξοδοι (εξοδούχος, ΔΝ) δεν μετρούν.
 // Επιστροφή: η μέρα μετά το «Έως», ή το ίδιο το «Έως» αν η κατάσταση έχει ώρα επιστροφής· χωρίς λήξη = κενό.
-import { addDays, type ISODate } from './dates';
-import { TYPES, type AppState, type Cadre, type Person, type Status } from './domain';
+import { addDays, type ISODate } from '../core/lib/dates';
+import { TYPES, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Cadre } from '../core/model/cadreRecord';
+import type { Person } from '../core/model/person';
 import { cadreAbsOn, statusesOn } from './rules';
 import { live, isAway, leaveMode, statusLbl } from './ranks';
 import { cadreStatusOf } from './cadre';
-import { upper } from './text';
+import { upper } from '../core/lib/text';
 
 export interface Absence {
   absent: boolean;

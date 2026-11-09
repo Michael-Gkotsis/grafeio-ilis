@@ -1,6 +1,6 @@
 // Υπενθυμίσεις του «Σήμερα» (έρευνα §4.2 και 11): αντίγραφο σε USB, τι άλλαξε από το προηγούμενο άνοιγμα
-import { daysBetween, type ISODate } from './dates';
-import type { AuditEntry } from './domain';
+import { daysBetween, type ISODate } from '../core/lib/dates';
+import type { AuditEntry } from '../core/model/state';
 
 export const USB_DAYS = 7;
 /** Μέρες από το τελευταίο αντίγραφο σε USB (null = ποτέ). */

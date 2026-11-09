@@ -1,12 +1,14 @@
 // Κωδικός μέρας ενός στρατιώτη (Michael, 3/11): ένας σύντομος κωδικός για την κατάστασή του τη μέρα d, για το «Δυναμολόγιο αξιολόγησης»
 // και (αργότερα) το Ημερολόγιο. Προτεραιότητα: άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό (Ε.Υ, Ε.Α…), ΑΟΠΛΟΣ· κενό = κανονικός.
 // Οι κωδικοί είναι των TYPES (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Ε.Α) ή το όνομα (δικά σου είδη άδειας/ιατρικού, Τ.Α = τιμητική, ΝΟΣ, ΣΤΕΠ).
-import type { ISODate } from './dates';
-import { TYPES, type AppState, type Person, type Status } from './domain';
+import type { ISODate } from '../core/lib/dates';
+import { TYPES, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
 import { statusesOn } from './rules';
 import { live, statusLbl } from './ranks';
 import { weaponInfo } from './weapons';
-import { upper } from './text';
+import { upper } from '../core/lib/text';
 
 const NAMES: Partial<Record<string, string>> = { NOS: 'ΝΟΣ', HON: 'Τ.Α', STEP: 'ΣΤΕΠ' };
 // ο κωδικός μιας κατάστασης: κωδικός του είδους, αλλιώς το όνομά του· δικό σου είδος άδειας/ιατρικού με το όνομά του

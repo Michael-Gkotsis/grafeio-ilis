@@ -1,9 +1,9 @@
 // E-mail, e-mail συγγενή και ομάδα αίματος στο φύλλο ΘΑΛΑΜΟΙ του Δυναμολογίου (Michael, 3/11). Οι στήλες βρίσκονται από την
 // επικεφαλίδα κάθε πίνακα θαλάμου (όχι από θέση)· αν δεν υπάρχει στήλη, δεν προστίθεται ούτε διαβάζεται τίποτα.
 // Η στήλη «Νούμερο παραλλαγής» δεν ακουμπιέται ποτέ.
-import { norm } from './text';
+import { norm } from '../core/lib/text';
 import type { ImportRow } from './commands';
-import type { Person } from './domain';
+import type { Person } from '../core/model/person';
 import type { RawSheet } from './roster';
 import { cellText, makeMatcher, roomBlocks, type TableRow, type WVal } from './sources';
 import { XKEYS, normExtra, type XKey } from './personal';

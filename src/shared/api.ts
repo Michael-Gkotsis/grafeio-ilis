@@ -1,7 +1,8 @@
 // Το συμβόλαιο ανάμεσα στο UI (renderer) και στο main process. Ό,τι γράφει δεδομένα περνά από εδώ.
-import type { AppState, AuditEntry, Settings } from './domain';
+import type { AppState, AuditEntry } from '../core/model/state';
+import type { Settings } from '../core/model/settings';
 import type { Command } from './commands';
-import type { ISODate } from './dates';
+import type { ISODate } from '../core/lib/dates';
 import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';

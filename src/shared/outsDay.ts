@@ -4,9 +4,11 @@
 //  Γ. μένουν μέσα απόψε: G1 υπηρεσία, G2 ποινή, G3 ΣΤΕΠ/κωλυόμενοι/ιατρικά, G4 γυρίζουν σήμερα και μένουν, G5 δεν βγήκαν
 // Οι κανόνες ταξινόμησης έχουν σειρά προτεραιότητας και βγαίνουν μόνο από τις συναρτήσεις που ήδη χρησιμοποιούν η οθόνη και τα άλλα Excel
 // (returnOf, leaveEnd, retFor, stillOut, outHeldBy, postOf, statusesFrom, dayTimes): μία πηγή. Ελέγχονται στα test/outs-day.test.ts και outs-combos.test.ts.
-import type { ISODate } from './dates';
-import { addDays, dm } from './dates';
-import { TYPES, type AppState, type Person, type Status } from './domain';
+import type { ISODate } from '../core/lib/dates';
+import { addDays, dm } from '../core/lib/dates';
+import { TYPES, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
 import { mins } from './hours';
 import { activePeople, postOf, statusesFrom } from './rules';
 import {
@@ -26,7 +28,7 @@ import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
 import { live, isAway } from './ranks';
 import { dutyAt } from './weekend';
-import { upper } from './text';
+import { upper } from '../core/lib/text';
 
 export type DayGroup = 'A1' | 'A2' | 'A3' | 'B1' | 'B2' | 'B3' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5';
 // st: η έξοδος/ΔΝ της μέρας (αλλιώς η άδεια, ή η έξοδος/ΔΝ που κρατά ακόμα έξω)· lv: η άδεια/νοσοκομείο της μέρας· warn: ΠΡΟΣΟΧΗ για το γραφείο

@@ -1,14 +1,16 @@
 // Εξοδούχοι και παραμένοντες μιας μέρας (δείγμα 10, Excel «Εξοδούχοι / Παραμένοντες»): στη Δύναμη των εντύπων (shared/values.ts) μετρούν οι ίδιοι.
 // Ώρα εξόδου: όποιος γύρισε ως τότε μετρά σαν να ήταν μέσα.
-import type { ISODate } from './dates';
-import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
+import type { ISODate } from '../core/lib/dates';
+import { TYPES, coversDay, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
 import { activePeople, outMinOn, postOf, statusesFrom } from './rules';
 import { byName } from './hkaiText';
 import { live, isAway, leavePhrase, statusLbl, type UserLists } from './ranks';
-import { norm } from './text';
+import { norm } from '../core/lib/text';
 import { outNoteOf, withNote } from './weekend';
 import { stillOut, retFor } from './returns';
-import { dm, dow } from './dates';
+import { dm, dow } from '../core/lib/dates';
 import { hasTimes } from './hours';
 
 export const byRoom = (a: Person, b: Person) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b);

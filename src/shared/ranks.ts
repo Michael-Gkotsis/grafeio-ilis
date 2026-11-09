@@ -2,8 +2,8 @@
 // Πάντα επιτρέπεται και άλλη τιμή γραμμένη με το χέρι· η λίστα συμπληρώνεται με όσες υπάρχουν ήδη στα δεδομένα.
 import { collator, norm, normGreek, upper } from './text';
 import { CADRE_ABS, LEAVE_KINDS, PUN_KINDS, TYPES, type AppState, type Status, type TypeKey } from './domain';
-import type { SiConfig } from './si';
-import type { StatConfig } from './stat';
+import type { UserLists, ListId, ListItem, LeaveText } from '../core/model/lists';
+export type { HkRowDef, UserLists, LeaveText, UserList, ListItem, ListId } from '../core/model/lists';
 
 // Βαθμοί στρατιωτών (Δυναμολόγιο)· η προέλευση (ΕΠΟΠ, ΟΒΑ…) είναι δικό της πεδίο, όχι μέρος του βαθμού (Michael, 22/10)
 export const SOLDIER_RANKS = ['ΣΤΡ', 'ΥΔΝΕΑΣ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ', 'ΔΕΑ'];
@@ -59,66 +59,6 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
   return [...base, ...extra.sort(collator.compare)];
 }
 
-// ---------------------------------------------------------------------------
-// Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
-// και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
-// ---------------------------------------------------------------------------
-export type ListId =
-  | 'soldierRanks'
-  | 'cadreRanks'
-  | 'origins'
-  | 'specs'
-  | 'punKinds'
-  | 'leaveKinds'
-  | 'cadreAbs'
-  | 'medKinds'
-  | 'siUnarmed'
-  | 'weaponTypes'
-  | 'weaponOut';
-// hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
-// acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
-// like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
-// Τα καινούργια μπαίνουν σαν ΕΑΡΒ (χωρίς περιορισμούς ώσπου να τα ρυθμίσεις, Michael 18/10) · code: κωδικός στο ημερολόγιο (κενό = του βασικού)
-// back: λόγος εισαγωγής όπλου για έναν δικό σου λόγο εξόδου (κενό = «ΛΗΞ <λόγος>»)
-// note: «μόνο σημείωση» (Michael, 4/11): μόνο σημείωση πάνω στον στρατιώτη· noteBadge: και σαν σήμα στις οθόνες, noteXl: και στο Excel ΕΑ-ΕΥ
-// warn: «μόνο προειδοποίηση» (checkbox): βγάζει προειδοποίηση όταν μπαίνει σε υπηρεσία (π.χ. παραπεμπτικό για 401)
-// duty/out: μόνο για δικό σου είδος άδειας με col '-' («Πουθενά», παρών): μπαίνει σε υπηρεσίες / βγαίνει έξοδο (αλλιώς όχι) (Michael, 3/11)
-export interface ListItem {
-  name: string;
-  hk?: string;
-  col?: string;
-  acc?: string;
-  max?: number;
-  like?: TypeKey;
-  code?: string;
-  warn?: boolean;
-  note?: boolean;
-  noteBadge?: boolean;
-  noteXl?: boolean;
-  back?: string;
-  duty?: boolean;
-  out?: boolean;
-}
-export interface UserList {
-  add?: ListItem[];
-  hide?: string[];
-}
-// si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
-// hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
-// hkNames: άλλο όνομα για μια γραμμή (κλειδί → όνομα), π.χ. «Ίλαρχοι» → «Ίλαρχοι-Λοχαγοί»· το κλειδί δεν αλλάζει
-// leaveText: «Κείμενο στην ΗΚΑΙ» ανά είδος άδειας (1/11), κλειδί leaveKey: t = πώς γράφεται το είδος στο 3. ΑΔΕΙΕΣ και στο 5. ΑΙΤΗΣΕΙΣ
-// (κενό = αυτόματο), dest = γράφεται και η κατεύθυνση της άδειας («… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»)
-export interface LeaveText {
-  t?: string;
-  dest?: boolean;
-}
-export type UserLists = Partial<Record<ListId, UserList>> & {
-  si?: SiConfig;
-  stat?: StatConfig;
-  hkRows?: HkRowDef[];
-  hkNames?: Record<string, string>;
-  leaveText?: Record<string, LeaveText>;
-};
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS,
   cadreRanks: CADRE_RANKS,
@@ -302,14 +242,6 @@ export const HK_NCO = [
   'ΟΒΑ Στρατιώτης',
   'Στρατιώτες',
 ];
-// name: όνομα (και κλειδί) της γραμμής · grp: αξιωματικοί ή οπλίτες · after: κάτω από ποια (κενό = στο τέλος της ομάδας)
-// ranks: βαθμοί που μετρούν σε αυτήν (στελέχη και στρατιώτες), αντί για τη γραμμή που θα έπαιρναν
-export interface HkRowDef {
-  name: string;
-  grp: 'off' | 'nco';
-  after?: string;
-  ranks?: string[];
-}
 export interface HkRows {
   off: string[];
   nco: string[];

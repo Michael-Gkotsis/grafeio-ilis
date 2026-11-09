@@ -8,7 +8,7 @@ const st = (pid: number, type: string, from: string, to: string, x: Record<strin
 let R: typeof import('../src/shared/rules'), SV: typeof import('../src/shared/strengthView'), DM: typeof import('../src/shared/domain'), V: typeof import('../src/shared/values');
 beforeAll(async () => {
   vi.resetModules();
-  vi.doMock('../src/shared/domain', async importOriginal => ({ ...(await importOriginal<typeof import('../src/shared/domain')>()), STEP_COL: 'ey' }));
+  vi.doMock('../src/core/model/kol', async importOriginal => ({ ...(await importOriginal<typeof import('../src/core/model/kol')>()), STEP_COL: 'ey' }));
   R = await import('../src/shared/rules'); SV = await import('../src/shared/strengthView'); DM = await import('../src/shared/domain'); V = await import('../src/shared/values');
 });
 

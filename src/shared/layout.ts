@@ -1,12 +1,10 @@
 // Θέσεις πάνω στο χαρτί (Michael, 20/10): οι υπογραφές, η κεφαλίδα και ο τόπος/ημερομηνία πάνε όπου τα σύρεις.
 // Κρατιέται πόσο μετακινήθηκε το καθένα από τη θέση του εντύπου (γραμμές κάτω, στήλες δεξιά), όχι το κελί: έτσι μένει
 // σωστό και όταν το έντυπο μακραίνει (π.χ. περισσότεροι εξοδούχοι σπρώχνουν τις υπογραφές πιο κάτω).
-import type { Sig, SigForm } from './sigs';
+import type { Sig } from './sigs';
+import type { Move, Layout, LayoutForm } from '../core/model/documents';
+export type { Layout, LayoutForm, Moves, Move } from '../core/model/documents';
 
-export type Move = [number, number]; // [γραμμές κάτω, στήλες δεξιά]· αρνητικά = πάνω, αριστερά
-export type Moves = Record<string, Move>; // ανά κομμάτι: 'head', 'date', 'title', 's0', 's1', …
-// Κάθε έντυπο εκτός από τα «Έντυπα» (εκεί οι θέσεις είναι ανά έντυπο, Report.layout)
-export type LayoutForm = Exclude<SigForm, 'reports'>;
 // τα φύλλα κάθε εντύπου (το καθένα με τις δικές του θέσεις)· όπου πολλά φύλλα έχουν την ίδια μορφή (ένα ανά φίλτρο),
 // μοιράζονται ένα key και ό,τι μετακινείς πάει σε όλα
 export const LAYOUT_SHEETS: Record<LayoutForm, { key: string; label: string }[]> = {
@@ -32,7 +30,6 @@ export const LAYOUT_SHEETS: Record<LayoutForm, { key: string; label: string }[]>
   imer: [{ key: 'main', label: 'Ημερολόγιο κωλυομένων' }],
   hd: [{ key: 'main', label: 'Ημερήσια Διαταγή' }],
 };
-export type Layout = Record<string, Moves>; // ανά φύλλο (key)
 
 // Ένα κομμάτι του χαρτιού: γραμμές r1..r2, στήλες c1..c2 (από 1)
 export interface Block {

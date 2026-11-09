@@ -1,21 +1,13 @@
 // Έντυπο υπηρεσιών «ΦΡΟΥΡΑ»: ΣΒΕΝ (δείγμα 01) και ΣΠΕΝ (φωτογραφία του γραφέα, 10/10/2026).
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
-import { norm } from './text';
-import type { ISODate } from './dates';
-import {
-  TYPES,
-  blocksOf,
-  buildPosts,
-  dutyStartOf,
-  fullName,
-  groupKey,
-  phaseBase,
-  type AppState,
-  type BasePhase,
-  type Person,
-  type Phase,
-  type Status,
-} from './domain';
+import { norm } from '../core/lib/text';
+import type { ISODate } from '../core/lib/dates';
+import { TYPES, type Status } from '../core/model/status';
+import { blocksOf, dutyStartOf, phaseBase } from '../core/model/settingsAccess';
+import { buildPosts, groupKey } from '../core/model/blocks';
+import { fullName, type Person } from '../core/model/person';
+import type { AppState } from '../core/model/state';
+import type { BasePhase, Phase } from '../core/model/duty';
 import { leaveName } from './hkaiText';
 import { seatMap, postsOf } from './rules';
 import { rankTxt } from './ranks';

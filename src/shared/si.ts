@@ -4,17 +4,12 @@
 // Πίνακα Νοσημάτων του π.δ. 11/2014). Για κάθε Σ.Ι. ορίζεις σε ποιες υπηρεσίες μπαίνει (Ρυθμίσεις › Σ.Ι.), ανά υπηρεσία.
 // Στις ρυθμίσεις μένουν μόνο οι αλλαγές σου (lists.si). Προεπιλογή: ο άοπλος (περιέχει «ΑΟΠΛ»/«ΧΩΡΙΣ ΟΠΛ» ή αρχίζει από «Ι4», όπως
 // πριν, ranks.ts siUnarmed) δεν μπαίνει σε ένοπλη υπηρεσία· όλοι οι άλλοι παντού.
-import { normGreek } from './text';
-import type { BlockDef } from './domain';
+import { normGreek } from '../core/lib/text';
+import type { BlockDef } from '../core/model/duty';
 import { siUnarmed, type UserLists } from './ranks';
+import type { SiConfig } from '../core/model/lists';
+export type { SiConfig } from '../core/model/lists';
 
-// add: δικές σου βασικές (π.χ. Ι5) · cats: δικές σου ή κρυμμένες κατηγορίες πάθησης
-// cells: γραμμή του πίνακα («Ι3 ΧΩΡΙΣ ΟΠΛΟ» ή «Ι3 ΧΩΡΙΣ ΟΠΛΟ · ΟΡΘΟΠΑΙΔΙΚΟ») → υπηρεσία (id μπλοκ) → μπαίνει ή όχι
-export interface SiConfig {
-  add?: string[];
-  cats?: { add?: string[]; hide?: string[] };
-  cells?: Record<string, Record<string, boolean>>;
-}
 export const SI_BASES = ['Ι1', 'Ι2', 'Ι3', 'Ι4'];
 export const SI_SUBS: Record<string, string[]> = { Ι3: ['ΜΕ ΟΠΛΟ', 'ΧΩΡΙΣ ΟΠΛΟ'] };
 // Σ.Ι. που παίρνουν κατηγορία πάθησης

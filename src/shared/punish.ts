@@ -1,10 +1,12 @@
 // Κείμενο ποινής για το Word (από την εφαρμογή του άλλου γραφέα): «Ο ΣΤΡ (ΠΖ) … τιμωρήθηκε την … από τον … με δύο (02) ημέρες κράτηση, διότι …»
-import { addDays, daysBetween, hkDate, type ISODate } from './dates';
-import { fullName, type AppState, type Person, type Status } from './domain';
+import { addDays, daysBetween, hkDate, type ISODate } from '../core/lib/dates';
+import { fullName, type Person } from '../core/model/person';
+import type { AppState } from '../core/model/state';
+import type { Status } from '../core/model/status';
 import { itemKey, rankTxt, userItem, type UserLists } from './ranks';
 import { dutyIndexOf } from './rules';
-import { upper } from './text';
-import { withArticle } from './greek';
+import { upper } from '../core/lib/text';
+import { withArticle } from '../core/lib/greek';
 
 // Ανώτατες ημέρες ανά είδος· πάνω από αυτές η εφαρμογή προειδοποιεί (δεν απαγορεύει)
 export const PUN_MAX: Record<string, number> = { Κράτηση: 8, 'Στέρηση εξόδου': 4 };
