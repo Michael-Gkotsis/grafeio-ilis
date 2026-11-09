@@ -92,7 +92,8 @@ describe('Δείγμα προεπισκόπησης', () => {
   it('στον main το δείγμα μπαίνει μόνο στο rep:preview, όχι στο rep:run ούτε στις αυτόματες ενημερώσεις', () => {
     const files = readSources(path.join(SRC_DIR, 'main'), 5);
     const body = (name: string) => files.flatMap(f => {
-      const i = f.text.indexOf("ipcMain.handle('" + name + "'");
+      // whitespace-tolerant: the formatter may break the call after `(`
+      const i = f.text.search(new RegExp("ipcMain\\.handle\\(\\s*'" + name + "'"));
       if (i < 0) return [];
       const j = f.text.indexOf('ipcMain.handle(', i + 10);
       return [f.text.slice(i, j < 0 ? undefined : j)];
