@@ -1,44 +1,5 @@
 /* Στυλ της εφαρμογής: εμφάνιση «Α · Πίνακας βάρδιας» (σκούρα μπάρα, πυκνοί πίνακες). Χωρίς web fonts (χωρίς internet): γραμματοσειρές των Windows. */
 /* Layout: AppShell = TopBar + SideNav (desktop) | BottomNav (κινητό) + οθόνη. Tokens σε στυλ shadcn (CSS variables), χωρίς color-mix/oklch για συμβατότητα με Chromium 108. */
-:root{
-  --background:#eef0ea; --foreground:#1b1f16; --card:#ffffff; --muted:#f3f4ef; --muted-fg:#4a5141;
-  --border:#c5cbb7; --input:#848c75; --ring:#4f6d22; --ring-soft:rgba(91,122,43,.28);
-  --primary:#4b5320; --primary-fg:#ffffff; --secondary:#e3e7d8; --secondary-fg:#262d1c; --hover:#eef1e4;
-  --destructive:#b42318; --destructive-fg:#ffffff;
-  --ok:#18592b; --ok-bg:#ddf0e2; --warn:#6a3d00; --warn-bg:#fbedd2; --bad:#7f1a10; --bad-bg:#fadfdc; --bad-line:#d9381e; --on-bad:#ffffff; --empty-row:#fdf1ef;
-  --info:#1a4478; --info-bg:#dfeaf8; --ey:#52288a; --ey-bg:#ece3f7; --dn:#084b51; --dn-bg:#d9eff1;
-  --bar:#4b5320; --bar-fg:#ffffff; --bar-muted:#e0e4cc; --bar-field:#535c27; --bar-line:#7d8750;
-  --rail:#3d4419; --rail-on:#535b2a; --gold:#d8b23a; --band:#e8ecdd; --band-fg:#2f3518; --band-line:#6f7c3a; --thead:#f6f7f1; --h2:#3f4720;
-  --xl-grid:#c6c6c6; --xl-head:#f3f3f3; --xl-bg:#ffffff; --xl-fg:#111111; --xl-hdr:#d9d9d9; --xl-kenh:#ffc7ce; --xl-kenh-fg:#9c0006; --flash:#ffe680; --flash-ring:#d9a400;
-  --overlay:rgba(15,18,10,.42); --shadow:0 16px 40px rgba(15,18,10,.18),0 2px 6px rgba(15,18,10,.08); --shadow-sm:0 1px 2px rgba(27,31,22,.06);
-  --radius:8px; --radius-lg:12px; --sb-thumb:rgba(27,31,22,.2); --sb-thumb-hover:rgba(27,31,22,.42);
-  --f-display:"Segoe UI",Tahoma,Arial,sans-serif;
-  --f-body:"Segoe UI",Tahoma,Arial,sans-serif;
-  --f-mono:Consolas,"Courier New",monospace;
-  --nav-h:62px; --top-h:60px; --side-w:236px; --rail-w:88px;
-}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --background:#1c1f18; --foreground:#f0f2ea; --card:#252a21; --muted:#2e3429; --muted-fg:#d0d6c3;
-  --border:#5a634d; --input:#8d977c; --ring:#b9dc80; --ring-soft:rgba(185,220,128,.32);
-  --primary:#cdd796; --primary-fg:#1b1f0c; --secondary:#3b4530; --secondary-fg:#f0f4e4; --hover:#353c2f;
-  --destructive:#f7a59c; --destructive-fg:#2a0d0a;
-  --ok:#a3e9b6; --ok-bg:#1f3b28; --warn:#f8d084; --warn-bg:#3e3014; --bad:#ffbdb5; --bad-bg:#4b231e; --bad-line:#f59a90; --on-bad:#2a0d0a; --empty-row:#38221d;
-  --info:#b8d6fa; --info-bg:#1e3150; --ey:#dfcaf9; --ey-bg:#35284c; --dn:#a0e8ef; --dn-bg:#153c41;
-  --bar:#303718; --bar-fg:#f4f6ee; --bar-muted:#d3d9bb; --bar-field:#414925; --bar-line:#6a754b;
-  --rail:#262c12; --rail-on:#4a552b; --gold:#d4b03a; --band:#313a26; --band-fg:#e6edd2; --band-line:#a9ba68; --thead:#2b3126; --h2:#e2e7d6;
-  --xl-grid:#5b6055; --xl-head:#30332c; --xl-bg:#202219; --xl-fg:#efefe9; --xl-hdr:#464b41; --xl-kenh:#5f2128; --xl-kenh-fg:#ffb3bc; --flash:#6b5a00; --flash-ring:#d9a400;
-  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(240,242,234,.26); --sb-thumb-hover:rgba(240,242,234,.5); color-scheme:dark}}
-:root[data-theme="dark"]{
-  --background:#1c1f18; --foreground:#f0f2ea; --card:#252a21; --muted:#2e3429; --muted-fg:#d0d6c3;
-  --border:#5a634d; --input:#8d977c; --ring:#b9dc80; --ring-soft:rgba(185,220,128,.32);
-  --primary:#cdd796; --primary-fg:#1b1f0c; --secondary:#3b4530; --secondary-fg:#f0f4e4; --hover:#353c2f;
-  --destructive:#f7a59c; --destructive-fg:#2a0d0a;
-  --ok:#a3e9b6; --ok-bg:#1f3b28; --warn:#f8d084; --warn-bg:#3e3014; --bad:#ffbdb5; --bad-bg:#4b231e; --bad-line:#f59a90; --on-bad:#2a0d0a; --empty-row:#38221d;
-  --info:#b8d6fa; --info-bg:#1e3150; --ey:#dfcaf9; --ey-bg:#35284c; --dn:#a0e8ef; --dn-bg:#153c41;
-  --bar:#303718; --bar-fg:#f4f6ee; --bar-muted:#d3d9bb; --bar-field:#414925; --bar-line:#6a754b;
-  --rail:#262c12; --rail-on:#4a552b; --gold:#d4b03a; --band:#313a26; --band-fg:#e6edd2; --band-line:#a9ba68; --thead:#2b3126; --h2:#e2e7d6;
-  --xl-grid:#5b6055; --xl-head:#30332c; --xl-bg:#202219; --xl-fg:#efefe9; --xl-hdr:#464b41; --xl-kenh:#5f2128; --xl-kenh-fg:#ffb3bc; --flash:#6b5a00; --flash-ring:#d9a400;
-  --overlay:rgba(0,0,0,.55); --shadow:0 16px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3); --shadow-sm:0 1px 2px rgba(0,0,0,.3); --sb-thumb:rgba(240,242,234,.26); --sb-thumb-hover:rgba(240,242,234,.5); color-scheme:dark}
 
 html,body{height:100%;margin:0}
 /* ο χώρος της μπάρας κύλισης κρατιέται πάντα: η σελίδα δεν πηδά όταν αλλάζεις οθόνη (π.χ. Δυναμολόγιο → Στελέχη) */

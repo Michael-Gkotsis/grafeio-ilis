@@ -34,7 +34,7 @@ const PAIRS: [string, string, number][] = [
   // κύριο κείμενο: AAA
   ...['background', 'card', 'muted', 'hover', 'thead'].map(b => ['foreground', b, 7] as [string, string, number]),
   ['band-fg', 'band', 7], ['h2', 'card', 7], ['primary-fg', 'primary', 7], ['secondary-fg', 'secondary', 7],
-  ['bar-fg', 'bar', 7], ['bar-fg', 'rail-on', 7], ['bar-fg', 'bar-field', 7], ['xl-fg', 'xl-bg', 7], ['xl-fg', 'xl-head', 7],
+  ['bar-fg', 'bar', 7], ['bar-fg', 'rail-on', 7], ['bar-fg', 'bar-field', 7], ['xl-fg', 'xl-bg', 7], ['xl-fg', 'xl-head', 7], ['paper-fg', 'paper', 7],
   // ετικέτες (μικρά έντονα γράμματα): AAA
   ['ok', 'ok-bg', 7], ['warn', 'warn-bg', 7], ['bad', 'bad-bg', 7], ['info', 'info-bg', 7], ['ey', 'ey-bg', 7], ['dn', 'dn-bg', 7],
   // δευτερεύον κείμενο: τουλάχιστον AA, στην κάρτα σχεδόν AAA

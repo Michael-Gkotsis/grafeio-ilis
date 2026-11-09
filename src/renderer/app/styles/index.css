@@ -26,4 +26,5 @@
  */
 @layer reset, tokens, base, shared-ui, entities, features, widgets, pages, utilities, legacy;
 
+@import url("../../shared/ui/tokens.css") layer(tokens);
 @import url("./legacy.css") layer(legacy);

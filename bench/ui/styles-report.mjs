@@ -34,13 +34,27 @@ export function diffLines(a, b) {
 
 const styleMap = (cap, idx) => (idx < 0 ? null : cap.styles[idx].split('\n'));
 
-/** Property differences of two style indexes (cached per pair, the same pair repeats on many elements). */
+/** Custom properties are compared without spaces and leading zeros: `rgba(15, 18, 10, 0.18)` is `rgba(15,18,10,.18)`. */
+const norm = (p, v) => (p.startsWith('--') ? v.replace(/\s+/g, '').replace(/\b0\./g, '.') : v);
+
+/**
+ * Property differences of two style indexes (cached per pair, the same pair repeats on many elements). Properties are
+ * matched by NAME, because the list of custom properties on <html> differs when a PR adds tokens; a custom property that
+ * exists only in the current build (a new, so far unused token) is not a difference, one that disappeared is.
+ */
 function propDiffs(base, cur, bi, ci, cache) {
   const key = bi + ':' + ci;
   if (cache.has(key)) return cache.get(key);
   const b = styleMap(base, bi), c = styleMap(cur, ci);
-  const out = !b || !c ? [['(pseudo-element)', b ? 'present' : 'absent', c ? 'present' : 'absent']]
-    : base.props.flatMap((p, k) => (b[k] === c[k] ? [] : [[p, b[k], c[k]]]));
+  let out;
+  if (!b || !c) out = [['(pseudo-element)', b ? 'present' : 'absent', c ? 'present' : 'absent']];
+  else {
+    const curValues = new Map(cur.props.map((p, k) => [p, c[k]]));
+    out = base.props.flatMap((p, k) => {
+      const now = curValues.get(p);
+      return now !== undefined && norm(p, b[k]) === norm(p, now) ? [] : [[p, b[k], now ?? '(missing)']];
+    });
+  }
   cache.set(key, out);
   return out;
 }
@@ -48,7 +62,7 @@ function propDiffs(base, cur, bi, ci, cache) {
 /** Differences of one pseudo-element (`::before`/`::after`) of an element; index -1 = it has no generated content. */
 function pseudoDiffs(base, cur, bp, cp, where, cache) {
   if ((bp < 0) !== (cp < 0)) return [`${where} › (pseudo-element): ${bp < 0 ? 'absent' : 'present'} → ${cp < 0 ? 'absent' : 'present'}`];
-  if (bp < 0 || base.styles[bp] === cur.styles[cp]) return [];
+  if (bp < 0) return [];
   return propDiffs(base, cur, bp, cp, cache).map(([p, x, y]) => `${where} › ${p}: ${x} → ${y}`);
 }
 
@@ -63,9 +77,7 @@ export function compareCapture(base, cur) {
     if (!ce) { only.push(`removed ${be.p} (${be.c})`); continue; }
     seen.add(be.p);
     const where = `${be.p}${be.c ? ' .' + be.c : ''}`;
-    if (be.s !== ce.s || base.styles[be.s] !== cur.styles[ce.s]) {
-      style.push(...propDiffs(base, cur, be.s, ce.s, cache).map(([p, x, y]) => `${where} › ${p}: ${x} → ${y}`));
-    }
+    style.push(...propDiffs(base, cur, be.s, ce.s, cache).map(([p, x, y]) => `${where} › ${p}: ${x} → ${y}`));
     style.push(...be.ps.flatMap((bp, k) => pseudoDiffs(base, cur, bp, ce.ps[k], `${where}${pseudoName[k]}`, cache)));
     if (be.b.join() !== ce.b.join()) box.push(`${where} › box [x,y,w,h]: ${be.b.join(',')} → ${ce.b.join(',')}`);
   }
