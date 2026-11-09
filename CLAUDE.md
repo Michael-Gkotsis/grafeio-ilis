@@ -72,7 +72,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 - Final `rewrite` -> main merge is done only by Michael. Fixes landing on main are merged into `rewrite` in their own PR.
 - Releases are built by CI (`paketo.yml`) from main only. Never build or attach zip/exe/deb packages by hand or in a PR
   (`package:*` scripts are for CI).
-- Ownership (architecture work vs UI redesign work): `styles.css`, tokens, themes, look and markup of a screen = UI work, and
+- Ownership (architecture work vs UI redesign work): `app/styles/*.css`, tokens, themes, look and markup of a screen = UI work, and
   only AFTER that screen's structural PR. `core/`, `main/`, `preload/`, store, IPC, build config (vite/esbuild) = architecture.
   Shared UI primitives: architecture splits them with the same API, then their look is UI work. Print window: markup = UI,
   pagination = architecture.
@@ -91,7 +91,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | App startup, windows | `src/main/main.ts` |
 | Screens (one file each; htm today, TSX later) | `src/renderer/screens/*.ts` |
 | Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app.ts`, `store.ts`, `prefs.ts`, `ui.ts`, `common.ts` |
-| Look and feel | `src/renderer/styles.css` (UI work), `index.html` |
+| Look and feel | `src/renderer/app/styles/index.css` (layer order) + `legacy.css` (UI work), `index.html` |
 | Tests | `test/*.test.ts` (175 files; helpers `fixtures.ts`, `duty-sim.ts`, `outs-gen.ts`, `tplgen.ts`; snapshots in `test/__snapshots__/`) |
 | Benchmarks, golden hashes | `bench/` (`golden-reports.ts`, `bench.ts`, `full.ts`, `ui/`) |
 | Build, packaging, dev | `scripts/` (`build.mjs`, `dev.mjs`, `package-*.mjs`), `vite.config.mjs`, `build/` |

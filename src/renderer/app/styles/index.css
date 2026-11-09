@@ -1,0 +1,29 @@
+/*
+ * Renderer stylesheet entry: declares the cascade layer order and pulls every stylesheet into its layer.
+ *
+ * Purpose: one place that fixes which CSS wins over which, so the UI redesign can move rules out of legacy.css
+ *   one component at a time without specificity fights.
+ * Does NOT: hold any rule itself. Print-window CSS (src/main/print.ts) and the shadow-DOM page previews
+ *   (PAGE_CSS in pageCss.ts) are separate stylesheets and stay outside this order on purpose.
+ * Owner layer: renderer app shell. Imported by src/renderer/main.ts and bench/ui/main.ts.
+ * Covering tests: test/contrast.test.ts (reads every .css under src/renderer, follows @import), bench:styles.
+ *
+ * Layers, lowest to highest priority (a later layer wins regardless of selector specificity):
+ *   reset      - browser-default resets only.
+ *   tokens     - CSS variables only (colours, spacing, radii, themes). Owned by UI work.
+ *   base       - element selectors (html, body, a, table ...), no classes.
+ *   shared-ui  - co-located component CSS of src/renderer/shared/ui, imported by the component.
+ *   entities   - co-located component CSS of the entities layer, imported by its slice.
+ *   features   - co-located component CSS of the features layer, imported by its slice.
+ *   widgets    - co-located component CSS of the widgets layer, imported by its slice.
+ *   pages      - co-located component CSS of the pages layer, imported by its slice.
+ *   utilities  - single-purpose helper classes; the only place where !important is allowed.
+ *   legacy     - today's whole stylesheet (legacy.css), emptied step by step by UI PRs. Last, so it wins as before.
+ *
+ * Rules for every file: no CSS nesting (needs Chromium 112, Electron 22 has 108); BEM class names; no !important
+ *   outside utilities (inside layers it inverts the priority between layers).
+ * Why `@import ... layer()`: supported since Chromium 99; Vite bundles it into the single renderer CSS file.
+ */
+@layer reset, tokens, base, shared-ui, entities, features, widgets, pages, utilities, legacy;
+
+@import url("./legacy.css") layer(legacy);

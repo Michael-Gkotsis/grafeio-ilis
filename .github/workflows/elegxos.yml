@@ -35,5 +35,5 @@ jobs:
         run: npx biome lint --changed --since=origin/${{ github.base_ref }} --no-errors-on-unmatched
       - if: github.event_name == 'pull_request'
         run: |
-          added=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD)
+          added=$(git diff --name-only -M --diff-filter=A origin/${{ github.base_ref }}...HEAD)
           if [ -n "$added" ]; then echo "$added" | xargs npx biome ci --no-errors-on-unmatched; fi

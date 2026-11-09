@@ -1,5 +1,5 @@
 // Το UI της εφαρμογής με ρεαλιστικά δεδομένα (bench/state.ts) και απαντήσεις όπως του main: μόνο ό,τι άλλαξε.
-import '../../src/renderer/styles.css';
+import '../../src/renderer/app/styles/index.css';
 import { createRoot } from 'react-dom/client';
 import { html } from '../../src/renderer/ui';
 import { App } from '../../src/renderer/app';
