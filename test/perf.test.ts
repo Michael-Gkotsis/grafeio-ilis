@@ -1,7 +1,8 @@
 // Φύλακας απόδοσης (review απόδοσης 18/10): ρεαλιστικά δεδομένα (180 άτομα, 2 μήνες υπηρεσιών, άδειες, ιατρικά, ποινές,
 // εξοδούχοι, όπλα) και όρια πολύ πάνω από τους σημερινούς χρόνους (×20 και πάνω), ώστε να πιάνει μόνο πραγματική
 // χειροτέρευση (π.χ. βρόχος μέσα σε βρόχο) και όχι ένα αργό μηχάνημα. Λεπτομέρειες: npm run bench:full, npm run bench:ui.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { createElement } from 'react';
 import fs from 'fs';
 import path from 'path';
 import { apply } from '../src/shared/commands';
@@ -14,6 +15,16 @@ import { buildTemplate, fillReport } from '../src/main/reports';
 import { PRINT_DEFAULT, renderBook } from '../src/main/print';
 import { PRESETS, defaultPick, withBuilt } from '../src/shared/reports';
 import { benchState } from '../bench/state';
+import * as H from './support/screens-harness';
+import { startSession } from './support/probe';
+import { elementOf, loadWorld } from './support/behaviour';
+import { VirtualList } from '../src/renderer/ui';
+import { WeaponsScreen } from '../src/renderer/screens/weapons';
+import { WhoDoes } from '../src/renderer/screens/whodoes';
+
+// Phase 0.4: the VirtualList check renders the screens (it used to grep their source); the file's other tests do not use react.
+vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReactProbe(orig));
+vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
 
 const END = '2026-10-16';
 const ms = (f: () => unknown) => { const a = performance.now(); f(); return performance.now() - a; };
@@ -50,10 +61,26 @@ describe('απόδοση με ρεαλιστικά δεδομένα', () => {
     // η σελιδοποίηση ψάχνει κλίμακα με δεκάδες δοκιμές και προτείνει σελίδες (ως 8): μετρά σελίδες χωρίς να τις φτιάχνει
     expect(await ams(() => renderBook(data!, { file: 'x.xlsx', layout: PRINT_DEFAULT }))).toBeLessThan(1500);
   }, 20_000);
-  it('οι μεγάλοι πίνακες δεν στήνουν τις γραμμές εκτός οθόνης', () => {
+  it('οι μεγάλοι πίνακες δεν στήνουν τις γραμμές εκτός οθόνης', async () => {
     // Οπλισμός ~3 δευτ. → ~0,8 (content-visibility, 18/10) → ~0,2 (VirtualList, 19/10) με 180 άτομα (bench/ui)
     // από 19/10 στήνονται μόνο οι γραμμές που φαίνονται (VirtualList), όπως στο Δυναμολόγιο
     // Έντυπα (22/10): η λίστα «ποιοι μπαίνουν» του βήματος 4 (300 άτομα: ~6.000 κόμβοι → ~2.400)
-    for (const f of ['weapons.ts', 'whodoes.ts', 'reports.ts']) expect(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'screens', f), 'utf8')).toMatch(/<\$\{VirtualList\}/);
+    // the three tables are rendered through VirtualList (only the visible rows exist); `data-rows` is its row count
+    const bw = await loadWorld();
+    try {
+      const views: [string, () => ReturnType<typeof createElement>][] = [
+        ['Οπλισμός', () => createElement(WeaponsScreen as never)],
+        ['Ποιος κάνει τι', () => createElement(WhoDoes as never, { date: H.TOMORROW })],
+        ['Έντυπα (λίστα «ποιοι μπαίνουν»)', () => elementOf(bw, 'reports-RunDialog')],
+      ];
+      for (const [name, element] of views) {
+        const session = startSession(() => H.renderIn(bw.world, 'home', {}, element()));
+        try {
+          const out = session.render();
+          expect(session.elements().some(r => r.type === VirtualList), name).toBe(true);
+          expect(out, name).toMatch(/class="vlist[ "]/);
+        } finally { session.stop(); }
+      }
+    } finally { vi.useRealTimers(); vi.restoreAllMocks(); }
   });
 });
