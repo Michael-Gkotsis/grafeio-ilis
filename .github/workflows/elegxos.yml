@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Biome --changed needs the base branch history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -26,3 +28,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Biome: lint errors on every file this PR changed; format + lint on files this PR adds.
+      # Existing files are not reformatted here (that would grow them past the architecture size ratchet);
+      # they are formatted in their own PRs (Phase 1.2 for core/main, Phase 6 per screen).
+      - if: github.event_name == 'pull_request'
+        run: npx biome lint --changed --since=origin/${{ github.base_ref }} --no-errors-on-unmatched
+      - if: github.event_name == 'pull_request'
+        run: |
+          added=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD)
+          if [ -n "$added" ]; then echo "$added" | xargs npx biome ci --no-errors-on-unmatched; fi

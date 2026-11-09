@@ -11,6 +11,7 @@ All user-facing texts (screens, Excel, Word, guide) are Greek. Code, identifiers
 | Command | What it does | PR must pass |
 |---|---|---|
 | `npm test` | vitest, ~2000 tests (rules, Excel/Word output, UI render, text-reading tests) | yes |
+| `npm run check` | Biome format + lint (`lint`, `format` also exist); CI lints every changed file and runs full `biome ci` (format + lint) on files the PR adds; existing files are reformatted only in their own PRs (1.2, Phase 6), and import sorting is off (import order can carry side effects) | changed/added files |
 | `npm run typecheck` | `tsc --noEmit` over src, test, scripts, bench (strict, noUnusedLocals) | yes |
 | `npm run build` | `scripts/build.mjs`: esbuild main/preload + vite renderer into `dist/` | yes |
 | `npm run bench:golden` | writes every Excel/print output and prints hashes; hashes must be IDENTICAL before/after | yes (compare to `rewrite`) |
@@ -20,6 +21,7 @@ All user-facing texts (screens, Excel, Word, guide) are Greek. Code, identifiers
 | `npm run bench:full` | full-app benchmark with Electron (`bench/full.ts`) | when touching main/db |
 | `npm run bench:compare -- new.json` | compares a JSON from `node bench/collect.mjs --out new.json` with `bench/baseline/phase0.json`; exits 1 if a timing is >5% slower (`--threshold`) | for UI/structure PRs, on the same machine |
 | `npm run dev` | `scripts/dev.mjs`: dev run of the app | no |
+Biome (`biome.json`): `noForEach` and `noExplicitAny` are "warn" for now (the ratchet in `test/architecture.test.ts` enforces them per file); they become "error" when the baseline reaches 0.
 Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases only, see Workflow).
 
 ## Hard rules (non-negotiable)

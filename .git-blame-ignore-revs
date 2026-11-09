@@ -1,0 +1,3 @@
+# Commits listed here are skipped by `git blame` (use: git config blame.ignoreRevsFile .git-blame-ignore-revs).
+# Phase 1.2 will add the hash of the mass Biome formatting commit of core/main, and later the per-screen
+# formatting commits of Phase 6, so blame still points at the real author of each line.
