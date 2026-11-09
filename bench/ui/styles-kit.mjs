@@ -113,6 +113,23 @@ export class Session {
     }
   }
 
+  /**
+   * Scrolls the screen (`.main`) and every virtual list (`.vlist`) back to the top before a capture. Why: a click
+   * auto-scrolls its target into view, and under CPU contention (two parallel walks) whether it had to scroll
+   * differs between runs, so a later state was captured with the list some rows down («Οπλισμός › Όπλα»: 5 rows of
+   * 46 px, zebra swapped). The walk never scrolls on purpose, and both sides get the same reset, so the diff stays
+   * valid. The scroll event lets VirtualList recompute its first row; quiet() then waits for that render.
+   */
+  async resetScroll() {
+    await this.page.evaluate(() => {
+      for (const el of document.querySelectorAll('.main, .vlist')) {
+        if (!el.scrollTop) continue;
+        el.scrollTop = 0;
+        el.dispatchEvent(new Event('scroll'));
+      }
+    });
+  }
+
   /** Waits until the page has stopped changing (no DOM mutation for 80 ms, at most 2 s), so slow machines agree. */
   async quiet() {
     await this.page.evaluate(() => new Promise(resolve => {
@@ -129,6 +146,7 @@ export class Session {
     if (this.out[key]) throw new Error(`duplicate state "${key}"`);
     const t = Date.now();
     await this.page.mouse.move(0, 0);
+    await this.resetScroll();
     await this.quiet();
     await settle(this.page);
     const t1 = Date.now();
