@@ -1,19 +1,16 @@
 // ΕΣΣΟ (σειρά στρατεύσιμων): ποια τρέχει τώρα, ποια ακολουθεί, και τι μένει όταν ξεκινά νέα (Michael, 17/10).
 // Η τωρινή ΕΣΣΟ κρατιέται στις Ρυθμίσεις (settings.essos)· αν δεν έχει οριστεί, βγαίνει από την πιο συχνή ΕΣΣΟ όσων
 // είναι σε δύναμη (το «2026 Γ΄» που γράφει το Δυναμολόγιο). Το essoLabel() είναι ό,τι δείχνει η εφαρμογή (πάνω δεξιά κ.λπ.).
-import { emptyState, type AppState, type Person, type Settings } from './domain';
+import { emptyState, type AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
+import type { Settings } from '../core/model/settings';
 import { normNote } from './notes';
-import type { ISODate } from './dates';
-import { norm } from './text';
+import type { ISODate } from '../core/lib/dates';
+import { norm } from '../core/lib/text';
+import type { Esso, EssoSeries } from '../core/model/documents';
+export type { Esso, EssoSeries } from '../core/model/documents';
 
-export type EssoSeries = 'Α' | 'Β' | 'Γ' | 'Δ';
 export const ESSO_SERIES: EssoSeries[] = ['Α', 'Β', 'Γ', 'Δ'];
-// from: πότε ξεκίνησε στην εφαρμογή («Νέα ΕΣΣΟ»)
-export interface Esso {
-  s: EssoSeries;
-  y: number;
-  from?: ISODate;
-}
 
 export const essoName = (e: Esso) => e.s + '΄ ΕΣΣΟ ' + e.y; // «Γ΄ ΕΣΣΟ 2026»
 export const essoPersonTxt = (e: Esso) => e.y + ' ' + e.s + '΄'; // όπως στο Person.essos και στο Δυναμολόγιο: «2026 Γ΄»

@@ -1,12 +1,15 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
-import { hkDay, type ISODate } from './dates';
-import { OUT_NOTE, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { hkDay, type ISODate } from '../core/lib/dates';
+import { OUT_NOTE, type Person } from '../core/model/person';
+import { hkLvOn, type AppState } from '../core/model/state';
+import type { PersonRequest } from '../core/model/records';
+import type { Status } from '../core/model/status';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
-import { collator, upper } from './text';
-import { genitive } from './greek';
-import { HK } from './unit';
+import { collator, upper } from '../core/lib/text';
+import { genitive } from '../core/lib/greek';
+import { HK } from '../core/model/unit';
 import { live, cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
 import { cadreStatusOf, orderedCadre } from './cadre';
 

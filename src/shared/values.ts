@@ -3,19 +3,14 @@
 // τον ίδιο μετρητή με την οθόνη της (strengthOf, kolView, hkaiCounts, outsTables, weaponInfo…), άρα οι αριθμοί βγαίνουν ίδιοι.
 // Μέτρηση = σύνολο ατόμων (κλειδί 'p12' στρατιώτης, 'cΧΧΧ' στέλεχος) ή απλός αριθμός (θέσεις, ΗΚΑΙ). Σε ένα άθροισμα
 // κάθε άτομο μετρά μία φορά (ένωση συνόλων, όπως η Δύναμη)· οι αριθμοί προστίθενται. Καθαρή λογική, χωρίς οθόνη.
-import { dayFor, type ISODate } from './dates';
+import { dayFor, type ISODate } from '../core/lib/dates';
 import type { TabLay } from './reports';
-import {
-  KOL_COLS,
-  isWaiting,
-  TYPES,
-  TYPE_KEYS,
-  blocksOf,
-  unitOf,
-  type AppState,
-  type Person,
-  type TypeKey,
-} from './domain';
+import { KOL_COLS } from '../core/model/kol';
+import { isWaiting } from '../core/model/records';
+import { TYPES, TYPE_KEYS, type TypeKey } from '../core/model/status';
+import { blocksOf, unitOf } from '../core/model/settingsAccess';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
 import {
   HK_A,
   HK_K,
@@ -52,57 +47,11 @@ import {
 } from './weapons';
 import { hmOf } from './armed';
 import { mins } from './hours';
-import { norm, normGreek, upper } from './text';
-import { reportOf } from './unit';
+import { norm, normGreek, upper } from '../core/lib/text';
+import { reportOf } from '../core/model/unit';
+import type { ValueTable, TAlign, VRow, VExpr, VFilter, VFmt, Spot, VAt } from '../core/model/reportTypes';
+export type { VAt, ValueTable, TAlign, Spot, VRow, VFmt, VExpr, VTerm, VFilter } from '../core/model/reportTypes';
 
-// ------------------------------------------------------------------ μοντέλο
-export interface VFilter {
-  unit?: string;
-  room?: number;
-  rank?: string;
-  arm?: 'armed' | 'unarmed';
-  who?: 'soldiers' | 'cadre';
-}
-export interface VTerm {
-  sign: '+' | '-';
-  metric: string;
-  filter?: VFilter;
-}
-export type VExpr = VTerm[];
-export type VFmt = 'int' | 'pct' | 'pct1';
-// tag: η ετικέτα {ΟΝΟΜΑ} της γραμμής σε δικό σου πρότυπο Excel (κενό: από το κείμενο της γραμμής)
-// man: «Δική σου τιμή» (Michael, 29/10): αριθμός ή κείμενο που γράφεις εσύ και μένει σταθερό στο έντυπο. Όταν υπάρχει (ακόμα και κενό) η γραμμή
-// είναι χειροκίνητη: το expr (και το percentOf, fmt) δεν μετρά, αλλά μένει στη γραμμή για να γυρίσεις στον «Υπολογισμό» χωρίς να χαθεί
-export interface VRow {
-  day?: string;
-  time?: string;
-  label: string;
-  expr: VExpr;
-  percentOf?: VExpr;
-  fmt?: VFmt;
-  tag?: string;
-  man?: string;
-}
-// Θέση στο φύλλο που άφησε το «Φτιάξ' το εδώ» (στήλες c1–c2, και row αν είναι μόνος του σε ζώνη): μπαίνει από το withBuilt, όχι από τον χρήστη.
-// Η θέση του πίνακα ως προς τους άλλους (κάτω από, δίπλα σε) είναι το Report.bands (shared/repBands.ts)· lay: πλάτος και στοίχιση (TabLay)
-// tagsOnly: δεν γράφεται πίνακας, μόνο στα κελιά του Excel με την ετικέτα της γραμμής
-// tt: ο τίτλος του πίνακα τιμών είναι ήδη γραμμένος στο πρότυπο, στη γραμμή τίτλων της ζώνης του (δίπλα σε πίνακα με τίτλο, Michael 29/10)
-export interface Spot {
-  c1: number;
-  c2: number;
-  row?: number;
-  tt?: true;
-}
-export type TAlign = 'left' | 'center' | 'right'; // στοίχιση τίτλου (Michael, 29/10): κενό = όπως πριν (πίνακες αριστερά, γενικός τίτλος κέντρο)
-export interface ValueTable {
-  id: string;
-  title?: string;
-  ta?: TAlign;
-  rows: VRow[];
-  lay?: TabLay;
-  spot?: Spot;
-  tagsOnly?: boolean;
-}
 export const FMTS: { id: VFmt; label: string }[] = [
   { id: 'int', label: 'Αριθμός' },
   { id: 'pct', label: 'Ποσοστό (96%)' },
@@ -158,10 +107,6 @@ export function tagsOf(
 // έντυπο μόνο με πίνακες τιμών: χωρίς στήλες ατόμων (τίποτα να διαλέξεις, τίποτα να μετρήσεις σε «κανείς δεν περνά τα φίλτρα»)
 export const noPeople = (r: { vals?: ValueTable[]; cols: unknown[] }) => hasVals(r) && !r.cols.length;
 
-// ------------------------------------------------------------------ στιγμή μέτρησης
-// undefined: όπως η Δύναμη της μέρας (σήμερα η ώρα της ΗΚΑΙ ή η τωρινή αν είναι μετά, αλλιώς η ώρα της ΗΚΑΙ)· 'hkai': ώρα ΗΚΑΙ· 'out': ώρα εξόδου
-// της μέρας (Αρχή εξόδου)· 'now': η ώρα που βγαίνει το έντυπο· 'ΩΩ:ΛΛ': δική σου
-export type VAt = string | undefined;
 export const AT_CUSTOM = /^([01]\d|2[0-3]):[0-5]\d$/;
 export function atOf(
   s: Pick<AppState, 'rules' | 'settings'> & Partial<Pick<AppState, 'dayPlan'>>,

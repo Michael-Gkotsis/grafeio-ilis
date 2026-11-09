@@ -1,7 +1,17 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
-import { HK } from './unit';
-import { collator, upper } from './text';
-import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
+import { HK } from '../core/model/unit';
+import { collator, upper } from '../core/lib/text';
+import {
+  addDays,
+  daysBetween,
+  dm,
+  greekHolidays,
+  isWeekend,
+  parseD,
+  weekday,
+  DOW_FULL,
+  type ISODate,
+} from '../core/lib/dates';
 import {
   cadreAbsOf,
   guessHk,
@@ -32,51 +42,25 @@ import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import { dayTimes, leaveOut, outHeld } from './returns'; // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
+import { TYPES, TYPE_KEYS, RECORD_CATS, coversDay, type Status, type TypeKey } from '../core/model/status';
 import {
-  TYPES,
-  TYPE_KEYS,
-  RECORD_CATS,
   DEFAULT_NUM_ROTS,
   DEFAULT_STRICT_ORDER,
-  KOL_COLS,
-  STEP_COL,
-  kolColName,
-  kolColOf,
-  kolHk,
-  coversDay,
-  CAP_KINDS,
-  CAP_ACC,
-  buildPosts,
-  blocksOf,
-  everyBlock,
-  phaseBlocks,
-  dutyStartOf,
-  DEFAULT_BLOCKS,
-  DEFAULT_BLOCKS_SPEN,
-  postTxt,
-  shortName,
-  noteNamesakes,
-  KIND_NAME,
-  type AppState,
   type CapKey,
   type Caps,
-  type Phase,
-  type Baseline,
-  type Cadre,
-  type CadreAbs,
-  type DutyLog,
-  type Person,
-  type PersonRequest,
-  type Post,
-  type Skip,
-  type Status,
-  type TypeKey,
-  type DutyKind,
   type Guards,
-  type Settings,
   type Rules,
-  type BlockDef,
-} from './domain';
+} from '../core/model/dutyRules';
+import { KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk } from '../core/model/kol';
+import { CAP_KINDS, CAP_ACC, KIND_NAME, type Phase, type Post, type DutyKind, type BlockDef } from '../core/model/duty';
+import { buildPosts, postTxt } from '../core/model/blocks';
+import { blocksOf, everyBlock, phaseBlocks, dutyStartOf } from '../core/model/settingsAccess';
+import { DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN } from '../core/model/defaultBlocks';
+import { shortName, noteNamesakes, type Person, type Skip } from '../core/model/person';
+import type { AppState, Baseline } from '../core/model/state';
+import type { Cadre, CadreAbs } from '../core/model/cadreRecord';
+import type { DutyLog, PersonRequest } from '../core/model/records';
+import type { Settings } from '../core/model/settings';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
 const peopleIdx = new WeakMap<Person[], Map<number, Person>>();

@@ -1,9 +1,10 @@
 // Σημειώσεις του γραφείου (Michael, 24/10): γενικές, ανά στρατιώτη, ανά στέλεχος, με προαιρετική υπενθύμιση.
 // Μένουν μόνο στη βάση της εφαρμογής: δεν γράφονται σε Excel ούτε βγαίνουν σε έντυπα.
-import { addDays, daysBetween, dm, dow, type ISODate } from './dates';
-import type { AppState, Note } from './domain';
+import { addDays, daysBetween, dm, dow, type ISODate } from '../core/lib/dates';
+import type { AppState } from '../core/model/state';
+import type { Note } from '../core/model/records';
 import { personMap } from './rules';
-import { normGreek } from './text';
+import { normGreek } from '../core/lib/text';
 import { rankTxt } from './ranks';
 
 export const NOTE_MAX = 2000;

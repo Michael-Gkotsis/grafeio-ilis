@@ -5,15 +5,12 @@
 // Το δικό σου ιατρικό ρυθμίζεται μόνο εδώ (Michael, 18/10: όχι «συμπεριφέρεται σαν» στις Λίστες): ό,τι δεν αλλάξεις
 // μένει όπως ο βασικός του τύπος (τα παλιά όπως ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ, τα καινούργια χωρίς περιορισμούς).
 // Ποινές (Michael, 18/10): μία γραμμή για όλες και μία για κάθε είδος· αρχικά μπαίνουν παντού, όπως πριν. Έξοδο ποτέ.
-import { TYPES, effects, type DutyKind, type Status, type TypeDef, type TypeKey } from './domain';
+import { TYPES, effects, type Status, type TypeDef, type TypeKey } from '../core/model/status';
+import type { DutyKind } from '../core/model/duty';
 import { itemKey, leaveMode, listRows, noDutyOf, noOutOf, ownMed, type UserLists } from './ranks';
+import type { StatCell } from '../core/model/lists';
+export type { StatConfig, StatCell } from '../core/model/lists';
 
-export type StatCell = 'yes' | 'last' | 'no';
-// cells: γραμμή («EA» ή «EA:ΕΛ ΓΥΜΝ») → υπηρεσία (id μπλοκ) → τιμή · out: γραμμή → βγαίνει έξοδο
-export interface StatConfig {
-  cells?: Record<string, Record<string, StatCell>>;
-  out?: Record<string, boolean>;
-}
 // το ΣΤΕΠ (εισαγωγή μέσα στο στρατόπεδο) δεν μπαίνει σε καμία υπηρεσία: όχι εδώ (Michael, 13-14/10)
 export const STAT_MED: TypeKey[] = ['EY', 'EA', 'EO', 'EARV'];
 export const STAT_ROWS: TypeKey[] = [...STAT_MED, 'PUN'];

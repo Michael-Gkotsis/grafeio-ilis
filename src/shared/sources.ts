@@ -2,84 +2,38 @@
 // ποιο φύλλο και ποιον πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές της.
 // Αναγνώριση από τις επικεφαλίδες (06 §3.2)· ό,τι δεν βρεθεί το διαλέγει ο χρήστης με κλικ, με πρόταση όπου υπάρχει.
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
-import { addDays, type ISODate } from './dates';
-import { norm, normGreek, collator, upper } from './text';
-import {
-  CAP_ACC,
-  KIND_NAME,
-  OUT_NOTE,
-  PUN_KINDS,
-  TYPES,
-  codeKey,
-  everyBlock,
-  fatherTxt,
-  fullName,
-  roomCfg,
-  type AppState,
-  type CapKey,
-  type Settings,
-  type DutyKind,
-  type Person,
-  type SeatlessDuty,
-  type Status,
-  type TypeKey,
-} from './domain';
+import { addDays, type ISODate } from '../core/lib/dates';
+import { norm, normGreek, collator, upper } from '../core/lib/text';
+import { CAP_ACC, KIND_NAME, type DutyKind } from '../core/model/duty';
+import { OUT_NOTE, fatherTxt, fullName, type Person } from '../core/model/person';
+import { PUN_KINDS, TYPES, type Status, type TypeKey } from '../core/model/status';
+import { codeKey } from '../core/model/codes';
+import { everyBlock, roomCfg } from '../core/model/settingsAccess';
+import type { AppState } from '../core/model/state';
+import type { CapKey } from '../core/model/dutyRules';
+import type { Settings } from '../core/model/settings';
+import type { SeatlessDuty } from '../core/model/records';
 import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
-import { dm, MONTHS as MONTH_NAMES } from './dates';
+import { dm, MONTHS as MONTH_NAMES } from '../core/lib/dates';
 import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { capCols, isHol, postBy, seatMap } from './rules';
 import { listOf, medNote, medNoteXl, medTypeOf, optionsOf, rankTxt, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
 import { essoName } from './esso';
-import { hkRowNames } from './unit';
+import { hkRowNames } from '../core/model/unit';
 import { PKEYS, XKEYS, personalFromCell, type PKey } from './personal';
 import { planCadresWrite, planCadreAbsWrite, CADRE_OPT } from './cadreSource';
+import type { HkaiMap, SourceBinding, ListKind, FormKind } from '../core/model/bindings';
+export type { HkaiMap, FormBinding, SourceBinding, FormKind, ListKind } from '../core/model/bindings';
 export { OUT_NOTE };
 
-export type ListKind =
-  | 'people'
-  | 'punish'
-  | 'medical'
-  | 'hospital'
-  | 'step'
-  | 'leave'
-  | 'dn'
-  | 'posts'
-  | 'outside'
-  | 'caps'
-  | 'duties'
-  | 'cadres'
-  | 'cadreAbs';
 export type StatusKind = 'punish' | 'medical' | 'hospital' | 'step' | 'leave' | 'dn';
-export type FormKind = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'check';
 export const FORM_KINDS: FormKind[] = ['froura', 'frouraSpen', 'hkai', 'outs', 'check'];
 
-// Πού βρίσκεται ένα είδος: αρχείο, φύλλο, γραμμή επικεφαλίδων (από 0) και στήλη κάθε πεδίου (από 0)
-export interface SourceBinding {
-  file: string;
-  sheet: string;
-  header: number;
-  cols: Record<string, number>;
-  write?: boolean; // η εφαρμογή γράφει εδώ τις αλλαγές της (μόνο για καταστάσεις)
-  scope?: 'all' | 'active'; // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά (προεπιλογή από 30/10: active, τα ληγμένα σβήνονται)
-  values?: Record<string, TypeKey>; // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
-  month?: string; // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
-  autoRead?: boolean; // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
-  heads?: Record<string, string>; // επικεφαλίδα (headText) της στήλης κάθε πεδίου όπως ήταν όταν την είδε ο main (stampHeads): ξεχωρίζει «άλλαξε η στήλη του πεδίου» από «πάντα είχε δική σου επικεφαλίδα»
-}
 // Ο μήνας ενός φύλλου ελέγχου υπηρεσιών: από τον τίτλο, αλλιώς αυτός που διάλεξε ο χρήστης στην ανάγνωση
 export const bindingMonth = (sheet: RawSheet, b: SourceBinding, today: ISODate) =>
   sheetMonth(sheet, b.header, today) || b.month || null;
-// Έντυπο: ποιο template (αρχείο και φύλλο) και πού βγαίνει. Κενό = προεπιλογή της εφαρμογής.
-export interface FormBinding {
-  file?: string;
-  sheet?: string; // ΗΚΑΙ: μπροστινή σελίδα· Εξοδούχοι: φύλλο εξοδούχων
-  sheet2?: string; // ΗΚΑΙ: πίσω σελίδα· Εξοδούχοι: φύλλο παραμενόντων
-  dir?: string; // φάκελος εξόδου (κενό = ο γενικός των Ρυθμίσεων)
-  monthly?: boolean; // υποφάκελος ανά μήνα (προεπιλογή ναι), και στον γενικό φάκελο
-  cells?: Partial<HkaiMap>; // ΗΚΑΙ: κελιά που άλλαξε ο χρήστης
-}
 
 // ------------------------------------------------------------------ πεδία
 export interface FieldDef {
@@ -1839,14 +1793,6 @@ export const bindingText = (b: SourceBinding) =>
   b.file.split(/[\\/]/).pop() + ' › ' + b.sheet + ' · γραμμή ' + (b.header + 1);
 export const addDaysSafe = addDays;
 
-// ------------------------------------------------------------------ ΗΚΑΙ: πού μπαίνει κάθε αριθμός
-// Γραμμή ανά βαθμό και στήλη ανά είδος (κωλυόμενοι, απόντες), όπως στο έντυπο του δείγματος 15.
-export interface HkaiMap {
-  title: string;
-  date: string;
-  rows: Record<string, number>;
-  cols: Record<string, string>;
-}
 export const HK_RANKS = [
   'Επίλαρχοι',
   'Ίλαρχοι',

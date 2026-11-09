@@ -4,24 +4,15 @@
 import { dayCode } from './dayCode';
 import { PKEYS } from './personal';
 import { absenceOfCadre, absenceOfPerson } from './absence';
-import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
-import { collator, norm, normGreek, upper } from './text';
-import {
-  TYPES,
-  blocksOf,
-  everyBlock,
-  fullName,
-  shortName,
-  unitOf,
-  roomCfg,
-  type AppState,
-  type Cadre,
-  type Person,
-  type Post,
-  type Status,
-  type TypeKey,
-  type WeaponMove,
-} from './domain';
+import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from '../core/lib/dates';
+import { collator, norm, normGreek, upper } from '../core/lib/text';
+import { TYPES, type Status, type TypeKey } from '../core/model/status';
+import { blocksOf, everyBlock, unitOf, roomCfg } from '../core/model/settingsAccess';
+import { fullName, shortName, type Person } from '../core/model/person';
+import type { AppState } from '../core/model/state';
+import type { Cadre } from '../core/model/cadreRecord';
+import type { Post } from '../core/model/duty';
+import type { WeaponMove } from '../core/model/records';
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import {
   WEAPON_FILTERS,
@@ -34,15 +25,12 @@ import {
   isAuto,
   weaponInfo,
   weaponMatch,
-  type WeaponFilter,
   type WeaponInfo,
 } from './weapons';
 import { live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
-import type { Sig } from './sigs';
-import type { Moves } from './layout';
 import {
   metricByTag,
   rowValue,
@@ -52,16 +40,53 @@ import {
   valueText,
   vctx,
   type Spot,
-  type TAlign,
   type ValueOut,
   type ValueTable,
-  type VAt,
   type VCtx,
   type VFmt,
 } from './values';
 import { MAIN, bandsOf, hasBeside, isDefault, type Bands } from './repBands';
+import type {
+  Report,
+  RepKind,
+  RepCol,
+  ColOpts,
+  RepCell,
+  RepPick,
+  RepCond,
+  StCat,
+  RepSort,
+  RepSplit,
+  BlankSrc,
+  RepTable,
+  TabLay,
+  RepTpl,
+  BuildOpts,
+  BuildCol,
+  BuildTable,
+} from '../core/model/reportTypes';
+export type {
+  BuildOpts,
+  TabLay,
+  BuildTable,
+  BuildVal,
+  BuildCol,
+  RepTpl,
+  RepTable,
+  Report,
+  RepSplit,
+  RepTarget,
+  StCat,
+  RepSort,
+  RepCond,
+  RepPick,
+  RepCell,
+  RepCol,
+  ColOpts,
+  BlankSrc,
+  RepKind,
+} from '../core/model/reportTypes';
 
-export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove' | 'blank';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
   { id: 'people', label: 'Στρατιώτες', help: 'Μία γραμμή για κάθε στρατιώτη' },
   { id: 'cadre', label: 'Στελέχη', help: 'Μία γραμμή για κάθε στέλεχος' },
@@ -98,9 +123,6 @@ export const blankN = (n: unknown, src?: unknown) =>
   src
     ? Math.max(0, Math.min(BLANK_MAX, Math.round(Number(n)) || 0))
     : Math.max(1, Math.min(BLANK_MAX, Math.round(Number(n)) || BLANK_ROWS));
-// «Γραμμές από φίλτρο» (Michael, 31/10): ο Κενός πίνακας με src ('people' | 'cadre') έχει πρώτα τα άτομα που διαλέγει το pick του πίνακα (τα φίλτρα του βήματος 4,
-// όπως στον πίνακα ατόμων) και από κάτω τις δικές σου γραμμές (pick.n, grid, who· εδώ μπορεί να είναι και 0)
-export type BlankSrc = 'people' | 'cadre';
 // η σειρά των γραμμών από φίλτρο: όπως στον πίνακα ατόμων (δεν υπάρχει «όπως διάλεξα»)
 export const srcSort = (src: BlankSrc, sort: RepSort): RepSort =>
   sort !== 'pick' && sortsOf(src).some((x) => x.value === sort) ? sort : src === 'cadre' ? 'rank' : 'name';
@@ -311,15 +333,6 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
 };
 export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find((x) => x.k === k);
 
-// ------------------------------------------------------------------ μορφή στήλης (καταστάσεις, συνδυασμός)
-// sf: πώς γράφεται κάθε κατάσταση, με {ΕΤΙΚΕΤΕΣ} (ST_TAGS)· parts/fmt: τα στοιχεία του συνδυασμού και η μορφή του με {1}, {2}…
-export interface ColOpts {
-  sf?: string;
-  st?: 'new';
-  parts?: string[];
-  fmt?: string;
-  vals?: string[];
-} // st: 'new' = μόνο όσες ξεκινούν τη μέρα του εντύπου (κενό: όσες ισχύουν)
 // στήλες με καταστάσεις της μέρας: ποιες κατηγορίες παίρνει η καθεμία (null: όλες)
 const ST_FIELD: Record<string, StCat[] | null> = {
   status: null,
@@ -478,44 +491,6 @@ export const cellOf = (k: string) => CELLS.find((x) => x.k === k);
 const TAG_KEY = new Map(CELLS.map((c) => [normGreek(c.tag), c.k]));
 export const TAG_RE = /\{([^{}]{1,40})\}/g;
 
-export interface RepCol {
-  c: number;
-  f: string;
-  text?: string;
-  h?: string;
-  o?: ColOpts;
-} // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
-export interface RepCell {
-  ref: string;
-  k: string;
-}
-export interface RepPick {
-  from: 'all' | 'present' | RosterFilter; // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
-  view?: string; // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
-  noDuty?: boolean; // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
-  need?: RepCond[];
-  not?: RepCond[]; // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
-  or?: { need?: RepCond[]; not?: RepCond[] }[]; // (Michael 03/11) άλλες ομάδες φίλτρων: μπαίνει όποιος περνά την ομάδα 1 (need/not) Ή μία από αυτές
-  always?: number[];
-  never?: number[]; // στρατιώτες: πάντα μέσα (ό,τι κι αν λένε τα φίλτρα) / ποτέ σε αυτό το έντυπο
-  gap?: number; // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
-  si?: string[];
-  rooms?: number[]; // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
-  mode: 'all' | 'first' | 'random';
-  n?: number;
-  even?: boolean; // τυχαία: ισομερώς από κάθε θάλαμο
-  fair?: boolean; // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
-  cats?: StCat[]; // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
-  types?: TypeKey[]; // Καταστάσεις: μόνο αυτά τα είδη μέσα στις κατηγορίες (Michael 4/11: «μόνο οι ελεύθεροι υπηρεσίας»)· κενό = όλα
-  when?: 'on' | 'from' | 'new'; // Καταστάσεις: όσες ισχύουν τη μέρα, όσες ισχύουν από τη μέρα και μετά, ή μόνο όσες ξεκινούν τη μέρα
-  blocks?: string[]; // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
-  empty?: boolean; // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
-  wf?: WeaponFilter; // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
-  open?: boolean; // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
-  stNew?: true; // μόνο όσες δηλώθηκαν (ξεκινούν) τη μέρα του εντύπου: στα φίλτρα ιατρικό/ποινή/άδεια/εισαγωγή και σε όλες τις στήλες καταστάσεων
-}
-// Φίλτρα στρατιωτών που συνδυάζονται (Michael 20/10: «π.χ. όχι πόστα και με ιατρικά»), όλα για τη μέρα του εντύπου
-export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'other' | 'dnright' | 'weapon' | 'pdata';
 export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[] = [
   { id: 'present', label: 'Παρών τη μέρα', yes: 'Παρόντες', no: 'Απόντες' },
   { id: 'duty', label: 'Υπηρεσία τη μέρα ή την επόμενη', yes: 'Με υπηρεσία', no: 'Χωρίς υπηρεσία' },
@@ -644,8 +619,6 @@ function condTest(s: AppState, d: ISODate, stNew?: boolean) {
     return !!filterStatus(c, on);
   };
 }
-export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from' | 'seat';
-export type StCat = 'med' | 'pun' | 'abs' | 'other' | 'out';
 export const ST_CATS: { id: StCat; label: string }[] = [
   { id: 'med', label: 'Ιατρικά' },
   { id: 'pun', label: 'Ποινές' },
@@ -654,113 +627,12 @@ export const ST_CATS: { id: StCat; label: string }[] = [
   { id: 'out', label: 'Έξοδοι' },
 ];
 export const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
-// Πού βγαίνει ως φύλλο: στο Δυναμολόγιο (το αρχείο του, όποιο είναι τη στιγμή που βγαίνει) ή σε άλλο Excel.
-// auto: ξαναγράφεται μόνο του μετά από κάθε αλλαγή (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
-export interface RepTarget {
-  to: 'people' | 'file';
-  file?: string;
-  sheet: string;
-  auto?: boolean;
-}
-export type RepSplit = 'none' | 'room' | 'unit' | 'si';
 export const SPLITS: { value: RepSplit; label: string }[] = [
   { value: 'none', label: 'Ένα για όλους' },
   { value: 'room', label: 'Ανά θάλαμο' },
   { value: 'unit', label: 'Ανά ουλαμό' },
   { value: 'si', label: 'Ανά Σ.Ι.' },
 ];
-export interface Report {
-  id: string;
-  name: string;
-  tpl: string;
-  kind: RepKind;
-  sheet: string;
-  head: number; // φύλλο και γραμμή επικεφαλίδων (από 1)
-  cols: RepCol[];
-  cells: RepCell[];
-  title?: string; // για το στοιχείο «Τίτλος»
-  tday?: string; // «Για ποια μέρα» ο 1ος πίνακας: κενό = όπως το έντυπο, 'next' = επόμενη εργάσιμη, '+N'
-
-  pick: RepPick;
-  sort: RepSort;
-  day: 'today' | 'tomorrow' | 'ask';
-  out: 'file' | 'print' | 'sheet';
-  target?: RepTarget; // out = 'sheet'
-  split?: RepSplit; // ένα φύλλο ανά θάλαμο, ουλαμό ή Σ.Ι.
-  trim?: boolean; // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
-  daily?: boolean; // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
-  sigs?: Sig[]; // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
-  layout?: Moves; // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
-  src?: BlankSrc; // «Κενός πίνακας»: γραμμές από φίλτρο (τα άτομα του pick, πριν τις δικές σου)
-  who?: (string | null)[]; // «Κενός πίνακας» (kind blank): το άτομο κάθε γραμμής, 'p:12' (στρατιώτης) ή 'c:3' (στέλεχος)· κενό/σβησμένο = κενή γραμμή
-  more?: RepTable[]; // κι άλλοι πίνακες κάτω από τον πρώτο, με δικές τους στήλες και δικούς τους ποιοι μπαίνουν
-  fixed?: boolean; // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
-  vals?: ValueTable[]; // πίνακες τιμών (shared/values.ts): κείμενο και τιμή, κάτω από τους πίνακες, πριν τις υπογραφές· χωρίς πίνακα ατόμων επιτρέπεται το έντυπο να έχει μόνο αυτούς
-  at?: VAt; // στιγμή μέτρησης των πινάκων τιμών (κενό: όπως η Δύναμη της μέρας)
-  bands?: Bands; // θέσεις πινάκων (Φάση 3, shared/repBands.ts): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη οι πίνακες δίπλα-δίπλα· κενό: ο ένας κάτω από τον άλλον όπως πριν
-  fixsz?: boolean; // «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): ό,τι γράφεται δεν μικραίνει για να χωρέσει (αναδιπλώνεται, ψηλώνει η γραμμή) και η εκτύπωση βγαίνει με τα γράμματα του Excel σε όσες σελίδες χρειαστούν
-  nohead?: boolean; // ο 1ος πίνακας βγαίνει χωρίς γραμμή επικεφαλίδων (η γραμμή μένει στο πρότυπο για να βρίσκονται οι στήλες, κρύβεται στο έντυπο)· μπαίνει από το «Φτιάξ' το εδώ»
-}
-// Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
-// επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
-export interface RepTable {
-  id: string;
-  tday?: string;
-  title?: string;
-  kind: RepKind;
-  head: number;
-  cols: RepCol[];
-  pick: RepPick;
-  sort: RepSort;
-  nohead?: boolean;
-  who?: (string | null)[];
-  src?: BlankSrc;
-} // who, src: όπως στο Report (μόνο στο kind blank)
-// Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
-export interface RepTpl {
-  id: string;
-  name: string;
-  file: string;
-  built?: BuildOpts;
-  mtime?: number;
-}
-export interface BuildCol {
-  f: string;
-  h: string;
-  w: 'auto' | 'narrow' | 'wide';
-  text?: string;
-  o?: ColOpts;
-}
-// «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
-// Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
-export interface BuildVal {
-  id: string;
-  title?: string;
-  ta?: TAlign;
-  lay?: TabLay;
-}
-export interface BuildTable {
-  id: string;
-  tday?: string;
-  title: string;
-  ta?: TAlign;
-  kind: RepKind;
-  cols: BuildCol[];
-  lay?: TabLay;
-  nohead?: boolean;
-  grid?: string[][];
-  nrows?: number;
-  who?: (string | null)[];
-  src?: BlankSrc;
-} // who: άτομο ανά γραμμή (Report.who), src: γραμμές από φίλτρο (Report.src) · nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
-// Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
-// στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
-export interface TabLay {
-  w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4';
-  at?: 'left' | 'center' | 'right';
-  even?: boolean;
-  gap?: number;
-}
 export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: number }[] = [
   { value: 'auto', label: 'Όσο χρειάζονται οι στήλες', f: 0 },
   { value: 'full', label: 'Όλο το πλάτος', f: 1 },
@@ -776,31 +648,6 @@ export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOp
   [o.lay, ...(o.more || []).map((t) => t.lay), ...(o.vals || []).map((t) => t.lay)].some(
     (l) => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even),
   ) || hasBeside(o.bands || []);
-// sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts {
-  tday?: string;
-  title: string;
-  cols: BuildCol[];
-  head: boolean;
-  date: boolean;
-  sig: 'none' | 'list' | 'sgt' | 'both';
-  land: boolean;
-  sz: 10 | 11 | 12;
-  fill: 'none' | 'gray' | 'olive';
-  more?: BuildTable[];
-  lay?: TabLay;
-  nopeople?: boolean;
-  bands?: Bands;
-  vals?: BuildVal[];
-  nohead?: boolean;
-  t1?: string;
-  ta1?: TAlign;
-  tta?: TAlign;
-  grid?: string[][];
-  nrows?: number;
-  who?: (string | null)[];
-  src?: BlankSrc;
-} // src: γραμμές από φίλτρο ('people'/'cadre': πρώτα όσοι περνούν τα φίλτρα του βήματος 4, οι nrows είναι οι δικές σου από κάτω, ως 0)· who: το άτομο κάθε γραμμής ('p:12', 'c:3', null), όπως στο Report.who · grid, nrows: «Κενό» (1ος πίνακας), τα κελιά που έγραψες (γραμμή × στήλη, χωρίς το Α/Α· κρατιούνται και πέρα από τις nrows) και πόσες γραμμές βγαίνουν (προεπιλογή 10) · ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)

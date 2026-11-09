@@ -12,6 +12,8 @@ import { siIsUnarmed, siOf } from './si';
 import { byRoomName } from './rosterLists';
 import { normGreek, upper } from './text';
 import { rankTxt } from './ranks';
+import type { WeaponFilter } from '../core/model/lists';
+export type { WeaponFilter } from '../core/model/lists';
 
 // Όπως γράφεται στα Excel: κεφαλαία, ένα κενό το πολύ
 export const normWeapon = (v: unknown) =>
@@ -58,8 +60,6 @@ export const bySeat = (a: Pick<Person, 'rack' | 'wpos'>, b: Pick<Person, 'rack' 
 // Οπλοβαστός χωρίς Θέση, σε δύναμη και με όπλο: προειδοποίηση «Χωρίς θέση»
 export const noSeat = (p: Pick<Person, 'active' | 'weapon' | 'rack' | 'wpos'>) =>
   !!p.active && !!weaponKey(p.weapon) && !!rackKey(p.rack) && !posKey(p.wpos);
-
-export type WeaponFilter = 'all' | 'with' | 'out' | 'without' | 'unarmed' | 'dup' | 'return';
 export const WEAPON_FILTERS: [WeaponFilter, string, string, string][] = [
   ['all', 'Όλοι', 'ΟΠΛΙΣΜΟΣ', 'Όλοι σε δύναμη'],
   ['with', 'Με όπλο', 'ΜΕ ΟΠΛΟ', 'Σε δύναμη, με αριθμό όπλου'],

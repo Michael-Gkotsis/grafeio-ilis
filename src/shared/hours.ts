@@ -1,7 +1,10 @@
 // Ώρες στις άδειες (Michael, 13/10): ώρα αναχώρησης την πρώτη μέρα και ώρα επιστροφής την τελευταία. Προαιρετικές:
 // χωρίς ώρα όλα μένουν όπως πριν (η άδεια πιάνει ολόκληρες τις μέρες από–έως).
 import type { CellValue } from './roster';
-import type { Status, TypeKey } from './domain';
+import type { Status, TypeKey } from '../core/model/status';
+import { normTime } from '../core/lib/time';
+
+export { normTime };
 
 // Ποια είδη έχουν ώρες: οι άδειες (κανονική, τιμητική, αναρρωτική), το νοσοκομείο, ο ΣΤΕΠ (Michael, 18/10: «και για
 // τις υπόλοιπες καταστάσεις όπου έχει σημασία») και ο κωλυόμενος. Τα ιατρικά (ΕΥ, ΕΑ…), οι ποινές και οι έξοδοι είναι ολόκληρες μέρες.
@@ -16,17 +19,6 @@ export const timeNames = (t?: TypeKey) =>
       ? { from: 'εισαγωγή', to: 'έξοδος', fromG: 'εισαγωγής', toG: 'εξόδου' }
       : { from: 'αναχώρηση', to: 'επιστροφή', fromG: 'αναχώρησης', toG: 'επιστροφής' };
 
-// «14», «1400», «14.00», «14:00», «9:30» → «14:00», «09:30». Κενό → ''. Άκυρο → null.
-export function normTime(raw: unknown): string | null {
-  const s = String(raw ?? '').trim();
-  if (!s) return '';
-  const m = /^(\d{1,2})(?:\s*[:.,]\s*(\d{2})|(\d{2}))?$/.exec(s);
-  if (!m) return null;
-  const h = +m[1],
-    mi = +(m[2] ?? m[3] ?? 0);
-  if (h > 24 || mi > 59 || (h === 24 && mi > 0)) return null;
-  return String(h === 24 ? 0 : h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
-}
 // Λεπτά από τα μεσάνυχτα
 export const mins = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
 

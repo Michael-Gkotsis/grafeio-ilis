@@ -1,9 +1,10 @@
 // Κείμενα των Κανόνων υπηρεσιών (Υπηρεσίες › Κανόνες): μία γραμμή «τι ισχύει» και η περιγραφή των «Αυστηρά Άοπλοι» με τη σειρά τους.
 // Καθαρές συναρτήσεις, ώστε να ελέγχονται· η οθόνη (guard.ts) τα δείχνει.
-import { DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, type Rules, type Settings } from './domain';
+import { DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, type Rules } from '../core/model/dutyRules';
+import type { Settings } from '../core/model/settings';
 import { ARM_AFTER, ARM_BEFORE } from './armed';
 import { DEFAULT_HK_TIME, strictKeyTxt, strictKeys } from './rules';
-import { HK } from './unit';
+import { HK } from '../core/model/unit';
 
 // «3ο/4ο», «1ο/3ο/4ο»: τα νούμερα με «ξανά στο ίδιο νούμερο» (rules.numRots, προεπιλογή 3ο και 4ο)
 export const numRotsTxt = (r: Pick<Rules, 'numRots'>) =>

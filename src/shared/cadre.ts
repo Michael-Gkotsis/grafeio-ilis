@@ -1,11 +1,12 @@
 // Στελέχη (Michael, 17/10): δική τους καρτέλα, χωριστά από το Δυναμολόγιο των οπλιτών. Οι καταστάσεις τους είναι οι
 // στήλες της ΗΚΑΙ (κωλυόμενοι ή απόντες), όχι οι καταστάσεις των οπλιτών. Ίδια λογική για την οθόνη και το Excel.
-import { formText, hkRowLabel } from './unit';
-import { dmy, type ISODate } from './dates';
-import type { AppState, Cadre, CadreAbs } from './domain';
+import { formText, hkRowLabel } from '../core/model/unit';
+import { dmy, type ISODate } from '../core/lib/dates';
+import type { AppState } from '../core/model/state';
+import type { Cadre, CadreAbs } from '../core/model/cadreRecord';
 import { cadreAbsOf, hkRowsOf, rankTxt, type UserLists } from './ranks';
 import { cadreAbsOn, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
-import { collator, normGreek } from './text';
+import { collator, normGreek } from '../core/lib/text';
 import type { RosterSheet } from './rosterLists';
 
 // οι γραμμές της ΗΚΑΙ όπου μπαίνει στέλεχος: όλες εκτός από τους Στρατιώτες (υπαξιωματικοί ως και ΟΒΑ, Michael 21/10)

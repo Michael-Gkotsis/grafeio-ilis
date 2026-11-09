@@ -4,18 +4,13 @@
 // σε υπογραφές που έγραψες εσύ πριν αλλάξεις από ίλη σε λόχο.
 // Όλα τα έντυπα με τον ίδιο τρόπο (Michael, 22/10): και τα Excel που φτιάχνει η ίδια η εφαρμογή (Έλεγχος υπηρεσιών,
 // Δυναμολόγιο, Στελέχη, Οπλισμός) έχουν λίστα υπογραφών, κενή αρχικά, όπως ήταν.
-import type { Settings } from './domain';
+import type { Settings } from '../core/model/settings';
 import type { ExportKind } from './api';
-import { unitKindOf, unitText } from './unit';
-import { upper } from './text';
+import { unitKindOf, unitText } from '../core/model/unit';
+import { upper } from '../core/lib/text';
+import type { Sig, SigForm } from '../core/model/documents';
+export type { SigForm, Sig } from '../core/model/documents';
 
-// art: η λέξη από πάνω («Ο», «Η», «ΤΟ» ή κενό) · title: η θέση («ΑΛΧΙΑΣ ΙΛΗΣ») · name: όνομα κάτω από την υπογραφή (προαιρετικό)
-export interface Sig {
-  art: string;
-  title: string;
-  name?: string;
-}
-export type SigForm = 'hkai' | 'froura' | 'outs' | 'check' | 'roster' | 'cadre' | 'weapons' | 'imer' | 'hd' | 'reports';
 export const SIG_FORMS: SigForm[] = [
   'hkai',
   'froura',

@@ -1,15 +1,18 @@
 // Δυναμολόγιο (Michael, 17/10): η οθόνη δείχνει μόνο τα στοιχεία του στρατιώτη, με τα φίλτρα Όλοι, Άδειες,
 // Τιμωρημένοι, Πόστα, Εκτός δύναμης, Με δικαίωμα ΔΝ. Το ίδιο, για μία ημερομηνία, βγαίνει σε ένα Excel με ένα φύλλο
 // ανά φίλτρο. Τα ιατρικά είναι στην οθόνη «Ιατρικά και ποινές».
-import { dmy, type ISODate } from './dates';
-import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
+import { dmy, type ISODate } from '../core/lib/dates';
+import { TYPES, coversDay, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
 import { siOf } from './si';
 import { live, rankTxt, statusLbl } from './ranks';
 import { leavePhrase } from './hkaiText';
-import { collator } from './text';
+import { collator } from '../core/lib/text';
 import { backBy } from './hours';
+import type { RosterFilter } from '../core/model/lists';
+export type { RosterFilter } from '../core/model/lists';
 
-export type RosterFilter = 'all' | 'leave' | 'pun' | 'post' | 'inactive' | 'dnright';
 export const ROSTER_FILTERS: [RosterFilter, string, string][] = [
   ['all', 'Όλοι', 'ΔΥΝΑΜΟΛΟΓΙΟ'],
   ['leave', 'Άδειες', 'ΑΔΕΙΕΣ'],

@@ -8,10 +8,14 @@
 //  - «της θέσης»: βγαίνει το όπλο του ατόμου του 1ου νούμερου (πριν το 1ο, μπαίνει μετά το τελευταίο) και περνά από χέρι σε χέρι στις αλλαγές·
 //    τα όπλα των άλλων μένουν ΕΝΤΟΣ. Παράλληλες γραμμές την ίδια ώρα (α/β της ίδιας υπηρεσίας) έχουν η καθεμία το δικό της όπλο θέσης:
 //    του 1ου νούμερου της γραμμής της, που περνά στα επόμενα νούμερα της ίδιας γραμμής.
-import { addDays, daysBetween, type ISODate } from './dates';
-import { everyBlock, type AppState, type BlockDef, type DutyFix, type Post, type Rules } from './domain';
+import { addDays, daysBetween, type ISODate } from '../core/lib/dates';
+import { everyBlock } from '../core/model/settingsAccess';
+import type { AppState } from '../core/model/state';
+import type { BlockDef, Post } from '../core/model/duty';
+import type { DutyFix } from '../core/model/records';
+import type { Rules } from '../core/model/dutyRules';
 import { dutyMin, postBy, postSpan, postsOf, slotSpans } from './rules';
-import { upper } from './text';
+import { upper } from '../core/lib/text';
 
 export type ArmWeapon = 'own' | 'post';
 export const ARM_BEFORE = 15,

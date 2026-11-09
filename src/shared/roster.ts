@@ -1,7 +1,7 @@
 // Ανάγνωση Δυναμολογίου (δείγμα 12): βρίσκει τις στήλες από τις επικεφαλίδες, όχι από θέσεις κελιών,
 // ώστε να δουλεύει και όταν ο λοχίας προσθέσει/μετακινήσει στήλη.
-import { norm, normGreek } from './text';
-import { OUT_NOTE } from './domain';
+import { norm, normGreek } from '../core/lib/text';
+import { OUT_NOTE } from '../core/model/person';
 import type { ImportRow } from './commands';
 import { withOrigin, type UserLists } from './ranks';
 import { PKEYS, personalFromCell, type PKey } from './personal';

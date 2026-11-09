@@ -1,10 +1,14 @@
 // Οπλισμός: Κινήσεις ανά λόγο, αναζήτηση, ενδείξεις καταστάσεων και «μένει ΕΚΤΟΣ λόγω υπηρεσίας» (Michael, 24/10). Καθαρή λογική, χωρίς οθόνη.
-import { dm, type ISODate } from './dates';
-import { TYPES, type AppState, type Cadre, type Person, type Status, type WeaponMove } from './domain';
+import { dm, type ISODate } from '../core/lib/dates';
+import { TYPES, type Status } from '../core/model/status';
+import type { AppState } from '../core/model/state';
+import type { Cadre } from '../core/model/cadreRecord';
+import type { Person } from '../core/model/person';
+import type { WeaponMove } from '../core/model/records';
 import { armedLive, calDay, hmOf, type ArmRow, type ArmState } from './armed';
 import { isAway, noDutyOf, statusLbl, type UserLists } from './ranks';
 import { statusesOn } from './rules';
-import { normGreek, norm, translit } from './text';
+import { normGreek, norm, translit } from '../core/lib/text';
 import {
   AUTO_KEY,
   armMap,

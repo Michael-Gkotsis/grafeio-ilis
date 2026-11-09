@@ -1,10 +1,10 @@
 // Σύνολα κάτω από τον πίνακα του ΣΥΝΟΛΙΚΟ (Michael, 3/11): «ΣΤΕΠ :», «ΑΝΑΡΡΩΤΙΚΕΣ ΑΔΕΙΕΣ», « ΑΔΕΙΕΣ», «ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ».
 // Η τιμή είναι το πρώτο μη κενό κελί δεξιά από την ετικέτα στην ίδια γραμμή (ως 3 στήλες). Γράφεται μόνο αν εκεί υπάρχει απλός αριθμός
 // (ποτέ πάνω σε τύπο)· ετικέτα που δεν βρέθηκε δεν γράφει τίποτα.
-import { norm } from './text';
+import { norm } from '../core/lib/text';
 import type { RawSheet } from './roster';
 import type { SheetTotals } from './strengthView';
-import type { Status, TypeKey } from './domain';
+import type { Status, TypeKey } from '../core/model/status';
 
 const LABELS: [keyof SheetTotals, RegExp][] = [
   ['step', /^ΣΤΕΠ$/],

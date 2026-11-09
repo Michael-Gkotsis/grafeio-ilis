@@ -1,39 +1,25 @@
 // Ημερολόγιο κωλυομένων-απόντων (Michael, 3/11): ένα κελί ανά στρατιώτη και μέρα εκπαίδευσης, με τον κωδικό της κατάστασής του.
 // Το γεμίζει μόνη της η εφαρμογή (άδειες, ιατρικά, υπηρεσίες, πόστα) και ό,τι γράφεις με το χέρι (AppState.imer) μένει πάνω από
 // το αυτόματο, μόνο στο ημερολόγιο. Τα σύνολα Π (παρόντες) και Α (απόντες) βγαίνουν από το «Μετρά ως» κάθε κωδικού.
-import { addDays, parseD, type ISODate } from './dates';
-import {
-  KIND_CODE,
-  TYPES,
-  platoonsOf,
-  platoonShort,
-  unitOf,
-  type AppState,
-  type DutyKind,
-  type Person,
-  type Settings,
-} from './domain';
+import { addDays, parseD, type ISODate } from '../core/lib/dates';
+import { KIND_CODE, type DutyKind } from '../core/model/duty';
+import { TYPES } from '../core/model/status';
+import { platoonsOf, unitOf } from '../core/model/settingsAccess';
+import { platoonShort } from '../core/model/rooms';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
+import type { Settings } from '../core/model/settings';
 import { dayStatus, codeOfStatus } from './dayCode';
 import { postOf } from './rules';
 import { dayTimes } from './returns';
-import { collator, normGreek, upper } from './text';
+import { collator, normGreek, upper } from '../core/lib/text';
+import type { ImerSettings, ImerTitle, ImerSheets, Count } from '../core/model/documents';
+export type { ImerSettings, ImerCodeSet, ImerSheets, ImerTitle, Count } from '../core/model/documents';
 
 export interface ImerReq {
   from: ISODate;
   to: ISODate;
   all?: boolean;
-}
-export type Count = 'P' | 'A';
-export type ImerTitle = 'imer' | 'ekp';
-export type ImerSheets = 'unit' | 'all' | 'both';
-export interface ImerCodeSet {
-  code?: string;
-  count?: Count;
-}
-export interface ImerSettings {
-  title?: ImerTitle;
-  sheets?: ImerSheets;
-  codes?: Record<string, ImerCodeSet>;
 }
 export const IMER_TITLES: Record<ImerTitle, string> = {
   imer: 'ΗΜΕΡΟΛΟΓΙΟ ΚΩΛΥΟΜΕΝΩΝ-ΑΠΟΝΤΩΝ',

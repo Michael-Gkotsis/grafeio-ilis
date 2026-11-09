@@ -1,7 +1,11 @@
 // Προέλεγχος πριν από κάθε έντυπο (έρευνα §3.6): ✕ μπλοκάρει, ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό.
 // Τρέχει και στο UI (για να δείξει τη λίστα) και στο main (για να μη βγει ποτέ έντυπο με ✕).
-import { dm, dow, pskDays, type ISODate } from './dates';
-import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
+import { dm, dow, pskDays, type ISODate } from '../core/lib/dates';
+import { KIND_NAME } from '../core/model/duty';
+import { TYPES, type TypeKey } from '../core/model/status';
+import { postTxt } from '../core/model/blocks';
+import { shortName } from '../core/model/person';
+import type { AppState } from '../core/model/state';
 import {
   activePeople,
   seatMap,
@@ -24,8 +28,8 @@ import {
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { live, hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
-import { HK, hkRowLabel } from './unit';
-import { normGreek } from './text';
+import { HK, hkRowLabel } from '../core/model/unit';
+import { normGreek } from '../core/lib/text';
 import type { ExportKind } from './api';
 
 export interface Check {

@@ -1,7 +1,7 @@
 // Ημερήσια Διαταγή (Michael, 3/11): η σελίδα που ετοιμάζεται σήμερα για αύριο. Γεμίζει από τα δεδομένα (όργανα υπηρεσίας, άδειες στελεχών,
 // εγγραφές/διαγραφές/άδειες/ποινές οπλιτών ακριβώς όπως στην πίσω σελίδα της ΗΚΑΙ) και ό,τι γράφεις (ΛΟΙΠΑ, Τμήμα 2 και 3).
 // Κάθε γραμμή αλλάζει ή σβήνεται μόνο σε αυτή την ΗΔ. Η ΗΔ που βγήκε κρατιέται όπως βγήκε (AppState.hd).
-import { addDays, type ISODate } from './dates';
+import { addDays, type ISODate } from '../core/lib/dates';
 import {
   hkaiCadreLeaveLines,
   hkaiDiaLines,
@@ -14,21 +14,15 @@ import {
 import { hkOffText, orderedCadre } from './cadre';
 import { rankTxt } from './ranks';
 import { mondayOf } from './imer';
-import { upper } from './text';
-import type { AppState, Cadre, Settings } from './domain';
+import { upper } from '../core/lib/text';
+import type { AppState } from '../core/model/state';
+import type { Cadre } from '../core/model/cadreRecord';
+import type { Settings } from '../core/model/settings';
 import type { Sig } from './sigs';
 import { sigsFor } from './sigs';
+import type { HdDoc } from '../core/model/documents';
+export type { HdDoc } from '../core/model/documents';
 
-// ax: μεταβολές αξιωματικών 1–5, op: μεταβολές οπλιτών 1–5 (γραμμές κειμένου)· τα 3 των αξιωματικών και τα 1–4 των οπλιτών βγαίνουν από τα δεδομένα
-export interface HdDoc {
-  aydm: string;
-  dn: string;
-  ilxos: string;
-  ax: string[][];
-  op: string[][];
-  t2: string;
-  t3: string;
-}
 export const HD_SECTIONS = ['ΕΓΓΡΑΦΕΣ', 'ΔΙΑΓΡΑΦΕΣ', 'ΑΔΕΙΕΣ', 'ΠΟΙΝΕΣ', 'ΛΟΙΠΑ'];
 const MON = [
   'ΙΑΝΟΥΑΡΙΟΥ',

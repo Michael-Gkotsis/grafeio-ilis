@@ -4,13 +4,16 @@
 // κωλυόμενο χωρίς αφαίρεση μένουν Παρόντες, με δική τους υποομάδα. Η εισαγωγή ΣΤΕΠ είναι κωλυόμενος αυτόματα (Michael, 29/10): στους Κωλυόμενους,
 // στη δική της υποομάδα «Εισαγωγή ΣΤΕΠ» (όχι ανά σημείωση), με τη στήλη STEP_COL της ΗΚΑΙ μόνο αν έχει (τώρα πουθενά, χωρίς ετικέτα). Η ΗΚΑΙ κρατά τον δικό της ορισμό κωλυομένων (hkaiCounts, kolView.cols).
 // Ίδια στιγμή και ίδιοι κανόνες με το strengthOf (statusesAt), ώστε τα νούμερα να βγαίνουν ίδια με το «Σήμερα».
-import { TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
-import { dm, type ISODate } from './dates';
+import { TYPES, TYPE_KEYS, type Status } from '../core/model/status';
+import { kolColName } from '../core/model/kol';
+import type { AppState } from '../core/model/state';
+import type { Person } from '../core/model/person';
+import { dm, type ISODate } from '../core/lib/dates';
 import { hasTimes } from './hours';
 import { activePeople, kolView, statusesAt, type KolRow } from './rules';
 import { leaveBack, outHeldBy, retLine, returnOf, type Ret } from './returns';
 import { isAway, leaveMode, statusLbl } from './ranks';
-import { collator, norm } from './text';
+import { collator, norm } from '../core/lib/text';
 import { dutyAt, outLbl } from './weekend';
 
 export type SvCat = 'present' | 'kol' | 'away';
