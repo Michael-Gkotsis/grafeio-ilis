@@ -90,13 +90,14 @@ function reactAttrs(store: Store, width: number): Record<string, string> {
 }
 
 describe('index.html skeleton', () => {
-  it('has the frame, the title and the loading text, and no old boot div', () => {
+  it('has the frame and the loading text, no title text, and no old boot div', () => {
     for (const html of [INDEX, BENCH_INDEX]) {
       expect(html).toContain('class="shell boot-shell"');
       expect(html).toContain('<header class="topbar">');
       expect(html).toContain('<nav class="sidenav"');
       expect(html).toContain('<main class="main boot-shell__main">Φόρτωση…</main>');
-      expect(html).toContain('<span>Γραφείο Λοχία</span>');
+      // the title follows the user's rank or a custom brand (core/model/brand.ts), unknown before JS runs: no text
+      expect(html).toContain('<div class="boot-shell__logo"></div><span></span>');
       expect(html).not.toContain('<div class="boot">');
     }
   });
