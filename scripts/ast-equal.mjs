@@ -25,9 +25,12 @@ if (!baseRef) {
 }
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28 });
-const files = explicit.length > 0
-  ? explicit
-  : git('diff', '--name-only', baseRef, '--').split('\n').filter((name) => /\.(tsx?|mjs|js)$/.test(name));
+const files =
+  explicit.length > 0
+    ? explicit
+    : git('diff', '--name-only', baseRef, '--')
+        .split('\n')
+        .filter((name) => /\.(tsx?|mjs|js)$/.test(name));
 
 const skippable = new Set([ts.SyntaxKind.ParenthesizedExpression, ts.SyntaxKind.ParenthesizedType]);
 const nameLike = new Set([ts.SyntaxKind.Identifier, ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NumericLiteral]);
@@ -35,7 +38,11 @@ const nameLike = new Set([ts.SyntaxKind.Identifier, ts.SyntaxKind.StringLiteral,
 // && || ?? are associative in value AND in short-circuit order, so `a && (b && c)` and `a && b && c` are the same
 // program; Biome drops such parentheses. Nested chains of the SAME operator are therefore compared as one flat list.
 // Other operators (+, *, -, ...) are never flattened, because for them grouping can change the result.
-const logicalOps = new Set([ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken]);
+const logicalOps = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+]);
 const unwrap = (node) => (ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node);
 const operandsOf = (node, op) => {
   const inner = unwrap(node);
@@ -45,7 +52,13 @@ const operandsOf = (node, op) => {
 };
 
 const parse = (name, text) =>
-  ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, name.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  ts.createSourceFile(
+    name,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    name.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
 
 /** Flattens a tree to comparable tokens; `parens` counts the skipped parenthesis nodes. */
 function flatten(sf) {
@@ -61,13 +74,14 @@ function flatten(sf) {
     if (ts.isBinaryExpression(node) && logicalOps.has(node.operatorToken.kind)) {
       out.push(`Logical|${ts.SyntaxKind[node.operatorToken.kind]}|`);
       where.push(node);
-      operandsOf(node, node.operatorToken.kind).forEach(visit);
+      for (const operand of operandsOf(node, node.operatorToken.kind)) visit(operand);
       out.push('/');
       where.push(null);
       return;
     }
-    const isName = nameLike.has(node.kind) && node.parent && node.parent.name === node
-      || (node.parent && ts.isPropertyAssignment(node.parent) && node.parent.name === node);
+    const isName =
+      (nameLike.has(node.kind) && node.parent && node.parent.name === node) ||
+      (node.parent && ts.isPropertyAssignment(node.parent) && node.parent.name === node);
     const kind = isName ? 'Name' : ts.SyntaxKind[node.kind];
     // SourceFile.text is the whole file (trivia included), so it is not compared here
     const text = node.kind !== ts.SyntaxKind.SourceFile && typeof node.text === 'string' ? node.text : '';
@@ -87,17 +101,24 @@ function comments(sf) {
   const text = sf.getFullText();
   const found = [];
   const seen = new Set();
-  const scan = (ranges) =>
-    (ranges ?? []).forEach((range) => {
-      if (seen.has(range.pos)) return;
-      seen.add(range.pos);
-      found.push(text.slice(range.pos, range.end).split('\n').map((line) => line.trim()).join('\n'));
-    });
+  const scan = (ranges) => {
+    const fresh = (ranges ?? []).filter((range) => !seen.has(range.pos));
+    for (const range of fresh) seen.add(range.pos);
+    found.push(
+      ...fresh.map((range) =>
+        text
+          .slice(range.pos, range.end)
+          .split('\n')
+          .map((line) => line.trim())
+          .join('\n'),
+      ),
+    );
+  };
   const visit = (node) => {
     // getChildren(sf) also yields punctuation tokens, so comments before a `)` or `}` are not missed
     scan(ts.getLeadingCommentRanges(text, node.getFullStart()));
     scan(ts.getTrailingCommentRanges(text, node.getEnd()));
-    node.getChildren(sf).forEach(visit);
+    for (const child of node.getChildren(sf)) visit(child);
   };
   visit(sf);
   scan(ts.getLeadingCommentRanges(text, sf.endOfFileToken.getFullStart()));
@@ -106,7 +127,8 @@ function comments(sf) {
 
 const firstDiff = (a, b) => {
   const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index++) if (a[index] !== b[index]) return { index, before: a[index], after: b[index] };
+  for (let index = 0; index < length; index++)
+    if (a[index] !== b[index]) return { index, before: a[index], after: b[index] };
   return null;
 };
 
@@ -134,12 +156,17 @@ for (const file of files) {
   }
   const commentDiff = firstDiff(comments(a), comments(b));
   if (commentDiff) {
-    problems.push(`${file}: comments differ: ${JSON.stringify(commentDiff.before)} -> ${JSON.stringify(commentDiff.after)}`);
+    problems.push(
+      `${file}: comments differ: ${JSON.stringify(commentDiff.before)} -> ${JSON.stringify(commentDiff.after)}`,
+    );
   }
   if (flatA.parens !== flatB.parens) parenNotes.push(`${file}: parenthesis nodes ${flatA.parens} -> ${flatB.parens}`);
 }
 
-parenNotes.forEach((note) => console.log(`note (normalised): ${note}`));
-problems.forEach((problem) => console.log(`DIFF ${problem}`));
-console.log(`${files.length} files checked, ${problems.length} with differences, ${parenNotes.length} with parenthesis changes`);
+console.log(
+  [...parenNotes.map((note) => `note (normalised): ${note}`), ...problems.map((p) => `DIFF ${p}`)].join('\n'),
+);
+console.log(
+  `${files.length} files checked, ${problems.length} with differences, ${parenNotes.length} with parenthesis changes`,
+);
 process.exit(problems.length > 0 ? 1 : 0);
