@@ -21,11 +21,13 @@
 //   - Screen component = a function in src/renderer/screens/** or src/renderer/pages/** whose name starts with a
 //     capital letter (limit 150); every other function is limited to 80.
 // Covering test of itself: the "rules bite" sections below run each rule on hand-made graphs.
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FILE_LINE_LIMIT, MIN_SCANNED_FILES, type ArchFile, type ArchImport, type Baseline, type ImportKind,
 } from './support/arch-model';
-import { resolveImports, scanSource, scanTree } from './support/arch-scan';
+import { REPO_ROOT, listSourcePaths, resolveImports, scanSource, scanTree } from './support/arch-scan';
 import {
   FILE_TEXT, FUNCTION_TEXT, checkBoundaries, checkBoundaryBaseline, checkCounts, checkCycles, checkFsd,
   findCycles, oversizeFiles, oversizeFunctions, perFileCounts, styleText,
@@ -52,6 +54,25 @@ const need = (): Baseline => {
   return baseline;
 };
 const expectClean = (problems: string[]): void => { expect(problems, `\n${problems.join('\n')}\n`).toEqual([]); };
+
+// Where each ambient setter may be called. Defining file + src/core/ambient.ts; rules.ts keeps its own noteNamesakes
+// call in personMap (the people index must stay right for any caller, including the worker). Test files are not scanned.
+const AMBIENT_DEFINERS = { clockOf: 'src/core/lib/dates.ts', setClock: 'src/core/lib/dates.ts',
+  noteNamesakes: 'src/core/model/person.ts', setUnitKind: 'src/core/model/unit.ts' } as const;
+const AMBIENT_ALLOWED: Record<keyof typeof AMBIENT_DEFINERS, string[]> = {
+  clockOf: [AMBIENT_DEFINERS.clockOf, 'src/core/ambient.ts'],
+  setClock: [AMBIENT_DEFINERS.setClock],
+  noteNamesakes: [AMBIENT_DEFINERS.noteNamesakes, 'src/core/ambient.ts', 'src/shared/rules.ts'],
+  setUnitKind: [AMBIENT_DEFINERS.setUnitKind, 'src/core/ambient.ts'],
+};
+/** Every `setter(` call (comments removed) in src/, as setter + repo-relative file. */
+function ambientCallers(): { setter: keyof typeof AMBIENT_DEFINERS; file: string }[] {
+  const setters = Object.keys(AMBIENT_DEFINERS) as (keyof typeof AMBIENT_DEFINERS)[];
+  return listSourcePaths().flatMap(file => {
+    const code = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    return setters.filter(setter => new RegExp(`\\b${setter}\\(`).test(code)).map(setter => ({ setter, file }));
+  });
+}
 
 describe('architecture: the real src/ tree', () => {
   it('scans enough files (a broken glob must not pass vacuously)', () => {
@@ -92,6 +113,18 @@ describe('architecture: the real src/ tree', () => {
 
   it("rule 5: 'any' type annotations only go down; new files have none", () => {
     expectClean(checkCounts(perFileCounts(files, file => file.anyCount), need().any, styleText('any')));
+  });
+
+  it('ambient setters (clockOf, setClock, noteNamesakes, setUnitKind) are called only where the allowlist says', () => {
+    expectClean(ambientCallers().filter(hit => !AMBIENT_ALLOWED[hit.setter].includes(hit.file)).map(hit =>
+      `${hit.file} calls ${hit.setter}(; go through applyAmbient() from src/core/ambient.ts instead`));
+  });
+
+  it('ambient allowlist: the scan really sees the defining files and ambient.ts', () => {
+    const seen = ambientCallers().map(hit => `${hit.setter}@${hit.file}`);
+    expect(seen).toContain('noteNamesakes@src/core/ambient.ts');
+    expect(seen).toContain('noteNamesakes@src/shared/rules.ts');
+    expect(seen).toContain('setClock@src/core/lib/dates.ts');
   });
 });
 

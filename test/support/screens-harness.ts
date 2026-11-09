@@ -28,9 +28,8 @@ import { clockChanged } from '../../src/renderer/clock';
 import { App } from '../../src/renderer/app';
 import { ExportProvider } from '../../src/renderer/common';
 import { addDays, type ISODate } from '../../src/shared/dates';
-import { clockOf } from '../../src/shared/dates';
-import { setUnitKind } from '../../src/shared/unit';
-import { noteNamesakes, type AppState, type AuditEntry, type Status } from '../../src/shared/domain';
+import { SCREEN_AMBIENT, applyAmbient } from '../../src/core/ambient';
+import { type AppState, type AuditEntry, type Status } from '../../src/shared/domain';
 import type { UserLists } from '../../src/shared/ranks';
 import type { Report } from '../../src/shared/reports';
 import { apply, type Command } from '../../src/shared/commands';
@@ -134,9 +133,7 @@ export async function makeWorld(): Promise<World> {
 
 /** Same side effects Root has before it renders screens (clock zone, unit words, namesakes). */
 export function primeGlobals(state: AppState): void {
-  noteNamesakes(state.people);
-  clockOf(state.settings);
-  setUnitKind(state.settings);
+  applyAmbient(state, SCREEN_AMBIENT);
   // clock.ts caches "now" in a module variable at import time (real time); re-read it under the frozen clock
   clockChanged();
 }

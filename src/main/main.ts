@@ -165,7 +165,7 @@ import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
-import { setUnitKind, unitKindOf, unitText } from '../shared/unit';
+import { unitKindOf, unitText } from '../shared/unit'; import { HISTORY_AMBIENT, applyAmbient } from '../core/ambient';
 
 const DEV = !app.isPackaged;
 const BUNDLED = DEV ? process.cwd() : path.join(process.resourcesPath, 'app');
@@ -383,7 +383,7 @@ const fail = (e: unknown): { ok: false; error: string } => ({
 function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: string } {
   try {
     const prev = store.state;
-    setUnitKind(prev.settings); // ΗΚΑΙ ή ΗΚΑΛ στα κείμενα του ιστορικού
+    applyAmbient(prev, HISTORY_AMBIENT); // ΗΚΑΙ ή ΗΚΑΛ στα κείμενα του ιστορικού
     const r = apply(store.state, cmd, ctx());
     const changed = r.state !== store.state;
     // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού· αν δεν γραφτεί, γυρίζουν όλα πίσω
