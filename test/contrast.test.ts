@@ -2,14 +2,14 @@
 // Στόχος για παλιές οθόνες χαμηλής αντίθεσης: κείμενο 7:1 (AAA), δευτερεύον κείμενο 4.5:1+ (AA), όρια κουμπιών/πεδίων 3:1.
 // Ο λόγος του WCAG 2 υπερεκτιμά την αντίθεση στο σκοτεινό (ανοιχτό κείμενο σε σκούρο φόντο), γι' αυτό ελέγχεται και το APCA (Lc).
 import { describe, expect, it } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import { colourTokens, readStyles } from './support/css';
 
-const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
-const block = (start: string) => { const i = css.indexOf(start); const j = css.indexOf('}', i); return css.slice(i, j); };
-const tokens = (src: string) => Object.fromEntries([...src.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map(m => [m[1], m[2]]));
-const light = tokens(block(':root{'));
-const dark = { ...light, ...tokens(block(':root[data-theme="dark"]{')) };
+// Phase 0.4: the tokens used to come from `indexOf(':root{')` in styles.css. They now come from every .css under
+// src/renderer (@import followed, var() chains resolved, see test/support/css.ts), so the same checks hold when the
+// redesign moves the tokens to shared/ui/tokens.css with values like `var(--p-...)`.
+const rules = readStyles();
+const light = colourTokens(rules, 'light');
+const dark = colourTokens(rules, 'dark');
 
 const lum = (hex: string) => {
   const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -77,7 +77,12 @@ describe('αντίθεση χρωμάτων', () => {
     });
   }
   it('το σκοτεινό θέμα είναι ίδιο στο «Όπως τα Windows» και στο «Σκοτεινό»', () => {
-    const auto = block('@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){');
-    expect(tokens(auto)).toEqual(tokens(block(':root[data-theme="dark"]{')));
+    const auto = colourTokens(rules, 'auto-dark');
+    expect(Object.keys(auto).length).toBeGreaterThan(30);
+    expect(auto).toEqual(dark);
+  });
+  it('τα tokens βρέθηκαν και στα δύο θέματα (όχι έλεγχος πάνω σε άδειο σύνολο)', () => {
+    for (const t of [light, dark]) expect(Object.keys(t)).toEqual(expect.arrayContaining(['background', 'foreground', 'card', 'muted-fg', 'primary']));
+    expect(dark.background).not.toBe(light.background);
   });
 });

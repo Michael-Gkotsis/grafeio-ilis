@@ -52,10 +52,11 @@ export function installBrowserStubs(seed: Record<string, string> = {}): void {
     removeItem: (k: string) => { data.delete(k); }, clear: () => data.clear(),
   };
   const noop = () => {};
-  const root = { setAttribute: noop, removeAttribute: noop, classList: { add: noop, remove: noop, toggle: noop } };
+  const root = { style: {}, setAttribute: noop, removeAttribute: noop, classList: { add: noop, remove: noop, toggle: noop } };
   const doc = {
     documentElement: root, body: { ...root, appendChild: noop }, title: '', activeElement: null,
     addEventListener: noop, removeEventListener: noop, querySelector: () => null, querySelectorAll: () => [],
+    getElementById: () => null,
   };
   const media = (query: string) =>
     ({ matches: false, media: query, addEventListener: noop, removeEventListener: noop });
@@ -149,16 +150,20 @@ export function navOf(view: string, params: Params = {}): Nav {
   };
 }
 
-/** Server-render `element` inside the app providers. `prefs` overrides display preferences. */
+/**
+ * Server-render `element` inside the app providers. `prefs` overrides display preferences; `nav` replaces callbacks of the
+ * no-op Nav (behaviour tests pass spies, e.g. `{ go: spy }`).
+ */
 export function renderIn(
   world: World, view: string, params: Params, element: ReactElement, prefs: Partial<Prefs> = {},
+  nav: Partial<Nav> = {},
 ): string {
   primeGlobals(world.state);
   const p = { ...DEFAULT_PREFS, ...prefs };
   const tree = createElement(ToastProvider, null,
     createElement(StoreCtx.Provider, { value: world.store },
       createElement(PrefsCtx.Provider, { value: { prefs: p, set: noop, rail: p.nav === 'rail' } },
-        createElement(NavCtx.Provider, { value: navOf(view, params) },
+        createElement(NavCtx.Provider, { value: { ...navOf(view, params), ...nav } },
           createElement(ExportProvider, null, element)))));
   return prettyHtml(renderToStaticMarkup(tree));
 }

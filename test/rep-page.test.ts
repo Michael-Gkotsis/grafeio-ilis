@@ -1,11 +1,32 @@
 // Έντυπα › σελίδα δημιουργίας (Φάση 2): δείγμα ανά πίνακα στην προεπισκόπηση, σελίδες, διαδρομή. Το δείγμα δεν φτάνει ποτέ στο βγάλσιμο.
-import { describe, it, expect } from 'vitest';
-import fs from 'node:fs';
+//
+// Phase 0.4: "Σελίδα δημιουργίας: σύνδεση με την εφαρμογή" used to grep reports.ts and app.ts for `usePending(dirty,`,
+// `<${DiscardAsk}`, `reports: FORM_PARAM` ...; it now opens the page (and the whole app) with the SSR harness and presses.
+// The main-process wiring test stays a source scan (ipcMain handlers cannot be called), but over all of src/main.
+import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
+import path from 'node:path';
+import { createElement } from 'react';
 import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport, previewReport } from '../src/main/reports';
 import { defaultPick, withBuilt, type BuildOpts, type Report } from '../src/shared/reports';
 import { FORM_PARAM, autoName, PV_MAX, PV_PAGES, PV_SAMPLES, PV_SAMPLE_DEF, clampPage, cutSample, editForm, formOpen, formSnap, getSample, isFormDirty, newForm, noForm, pageText, sampleName, sampleLabel, setSample, shownPages } from '../src/shared/repPage';
 import { fakeState } from './fixtures';
+import * as H from './support/screens-harness';
+import { captureDocumentListeners, settle, startSession, type DocumentKeys, type Session } from './support/probe';
+import { textOfHtml, textsIn } from './support/html';
+import { readSources, SRC_DIR } from './support/source-scan';
+import { appRenderer, loadWorld, withState, type BehaviourWorld } from './support/behaviour';
+import { pendingNow } from '../src/renderer/pending';
+import { ReportsScreen } from '../src/renderer/screens/reports';
+
+vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReactProbe(orig));
+vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
+
+let bw: BehaviourWorld;
+let session: Session | null = null;
+let keys: DocumentKeys | null = null;
+beforeAll(async () => { bw = await loadWorld(); });
+afterEach(() => { session?.stop(); session = null; keys?.restore(); keys = null; });
 
 const D = '2026-10-19';
 const rep = (x: Partial<Report>): Report => ({ id: 'r1', name: 'Κατάσταση', tpl: 't1', kind: 'people', sheet: '', head: 1, cols: [], cells: [], pick: defaultPick(), sort: 'name', day: 'today', out: 'file', ...x });
@@ -66,16 +87,30 @@ describe('Δείγμα προεπισκόπησης', () => {
     expect(ws.get('A' + (title! + 2))).toBe('1'); expect(ws.get('A' + (title! + 131))).toBe('130'); expect(ws.get('A' + (title! + 132))).toBeNull();
   });
 
+  // Genuine source rule (not behaviour): the handlers live inside Electron's ipcMain, which no test can call. So the scan
+  // walks all of src/main (wherever the rewrite moves the handlers) and finds them by their channel name.
   it('στον main το δείγμα μπαίνει μόνο στο rep:preview, όχι στο rep:run ούτε στις αυτόματες ενημερώσεις', () => {
-    const src = fs.readFileSync(new URL('../src/main/main.ts', import.meta.url), 'utf8');
-    const body = (name: string) => { const i = src.indexOf("ipcMain.handle('" + name + "'"); const j = src.indexOf('ipcMain.handle(', i + 10); return src.slice(i, j); };
-    expect(body('rep:preview')).toMatch(/sample/); expect(body('rep:run')).not.toMatch(/sample|PV_/);
-    // κάθε εμφάνιση της λέξης sample στον main είναι μέσα στο σχόλιο και τον χειριστή του rep:preview
-    const from = src.indexOf('// opts.sample'), to = src.indexOf('ipcMain.handle(', src.indexOf("ipcMain.handle('rep:preview'") + 10);
-    for (const m of src.matchAll(/\bsample\b/g)) expect(m.index! >= from && m.index! < to).toBe(true);
-    // και το fillReport της εξαγωγής (worker) παίρνει μόνο τα 5 ορίσματα
-    const w = fs.readFileSync(new URL('../src/main/worker.ts', import.meta.url), 'utf8');
-    expect(w).toMatch(/fillReport: \(tpl, r, ids, d, o\) => fillReport\(buf\(tpl\), state, r, ids, d, o\)/);
+    const files = readSources(path.join(SRC_DIR, 'main'), 5);
+    const body = (name: string) => files.flatMap(f => {
+      const i = f.text.indexOf("ipcMain.handle('" + name + "'");
+      if (i < 0) return [];
+      const j = f.text.indexOf('ipcMain.handle(', i + 10);
+      return [f.text.slice(i, j < 0 ? undefined : j)];
+    });
+    expect(body('rep:preview')).toHaveLength(1); expect(body('rep:run')).toHaveLength(1);
+    expect(body('rep:preview')[0]).toMatch(/sample/); expect(body('rep:run')[0]).not.toMatch(/sample|PV_/);
+    // every other code line that names `sample` is the engine itself (the file that declares PvOpts) or hands it to
+    // previewReport / previewBuilt; comments may mention it anywhere
+    const engine = files.filter(f => /export interface PvOpts\b/.test(f.text));
+    expect(engine).toHaveLength(1);
+    const stray = files.filter(f => f !== engine[0]).flatMap(f => {
+      const handler = body('rep:preview')[0];
+      return f.text.split('\n').filter(l => /\bsample\b/.test(l) && !/^\s*\/\//.test(l) && !/previewReport|previewBuilt/.test(l) && !handler.includes(l.trim()));
+    });
+    expect(stray).toEqual([]);
+    // the export's fillReport (worker side) takes exactly the 5 arguments, so no sample can reach it
+    const w = files.filter(f => /fillReport: \(tpl, r, ids, d, o\) => fillReport\(buf\(tpl\), state, r, ids, d, o\)/.test(f.text));
+    expect(w).toHaveLength(1);
   });
 });
 
@@ -104,19 +139,97 @@ describe('Διαδρομή της σελίδας δημιουργίας', () => 
 });
 
 describe('Σελίδα δημιουργίας: σύνδεση με την εφαρμογή', () => {
-  const src = (f: string) => fs.readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
+  const h2 = (out: string) => textsIn(out, 'h2');
+  const NAME = 'Όνομα εντύπου';
+  /** The report page (ReportsScreen on a new-form route) in the app providers; `nav` replaces Nav callbacks. */
+  const openPage = (world = bw.world, nav: Record<string, unknown> = {}, start: Parameters<typeof newForm>[0] = {}): Session => {
+    session?.stop(); keys?.restore();
+    keys = captureDocumentListeners();
+    session = startSession(() => H.renderIn(world, 'reports', newForm(start), createElement(ReportsScreen as never), {}, nav));
+    session.render(); session.flushEffects();
+    return session;
+  };
+  const refresh = (s: Session): string => { s.render(); s.flushEffects(); return s.render(); };
+
   it('δεν είναι πια παράθυρο· μη αποθηκευμένες αλλαγές ρωτούν σε πίσω, Esc και αλλαγή οθόνης', () => {
-    const r = src('renderer/screens/reports.ts');
-    expect(r).not.toMatch(/ReportWizard/); expect(r).toMatch(/function ReportPage/);
-    expect(r).toMatch(/usePending\(dirty,/); expect(r).toMatch(/useEscape\(/); expect(r).toMatch(/<\$\{DiscardAsk\}/);
-    const a = src('renderer/app.ts');
-    expect(a).toMatch(/reports: FORM_PARAM/);   // από το μενού: η λίστα, όχι η σελίδα που είχε μείνει
-    expect(a).toMatch(/r\.params\[FORM_PARAM\] && !next\.params\[FORM_PARAM\]\) \{ guard\(\(\) => requestLeave\(doIt\)\)/);
+    const s = openPage();
+    const page = s.render();
+    expect(page).toContain('class="rep-page"');
+    expect(page).not.toContain('role="dialog"'); expect(page).not.toContain('role="alertdialog"');   // a page, not a dialog
+    // nothing written: back and Esc leave at once (onClose = back to the list)
+    const left = vi.fn();
+    const clean = openPage(bw.world, { go: left });
+    clean.press('← Έντυπα');
+    expect(h2(clean.render())).not.toContain('Να κλείσει χωρίς αποθήκευση;');
+    // something written: the page registers an unsaved change (its own ask, no bottom bar) ...
+    const dirty = openPage();
+    dirty.type('ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ', NAME); refresh(dirty);
+    expect(dirty.render()).toContain('data-dirty="true"');
+    expect(pendingNow().map(p => [p.label, p.bar])).toEqual([['Έντυπο «ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ»', false]]);
+    // ... and back, Esc ask first, then «Πίσω στη φόρμα» keeps the page
+    for (const how of ['back', 'Esc']) {
+      if (how === 'back') dirty.press('← Έντυπα'); else keys!.dispatch('keydown', { key: 'Escape' });
+      expect(h2(dirty.render()), how).toContain('Να κλείσει χωρίς αποθήκευση;');
+      dirty.press('Πίσω στη φόρμα');
+      expect(h2(dirty.render()), how).not.toContain('Να κλείσει χωρίς αποθήκευση;');
+      expect(dirty.render(), how).toContain('class="rep-page"');
+    }
   });
-  it('το δείγμα και η σελίδα μένουν έξω από το έντυπο που αποθηκεύεται', () => {
-    const r = src('renderer/screens/reports.ts');
-    const save = r.slice(r.indexOf('const save = async (andRun'), r.indexOf('const canGo = '));
-    expect(save).not.toMatch(/sample|setPage|PV_/);
+
+  it('αλλαγή οθόνης και πάτημα «Έντυπα» στο μενού: ρωτά όταν υπάρχουν αλλαγές, αλλιώς πάει στη λίστα', async () => {
+    const open = async () => {
+      session?.stop(); keys?.restore();
+      const render = appRenderer(bw.world);
+      keys = captureDocumentListeners();
+      session = startSession(render);
+      session.render(); session.flushEffects();
+      const nav = session.contextValue<Record<string, (...a: unknown[]) => void>>(v => typeof v.openPerson === 'function');
+      nav.go('reports', newForm({}));
+      refresh(session);
+      await settle(); await settle();   // the screen is a lazy chunk: the first render shows «Φόρτωση…», the next one the page
+      refresh(session);
+      return session;
+    };
+    const menu = (s: Session, label: string) => s.press(new RegExp('^' + label), { index: 0 });
+    // clean page: the menu entry «Έντυπα» shows the list (no page), without asking
+    const clean = await open();
+    expect(clean.render()).toContain('class="rep-page"');
+    menu(clean, 'Έντυπα'); const list = refresh(clean);
+    expect(list).not.toContain('class="rep-page"'); expect(textOfHtml(list)).not.toContain('Δεν αποθηκεύτηκαν οι αλλαγές');
+    // written page: both the menu entry and another screen ask (alertdialog of the app), «Μείνε εδώ» keeps the page
+    for (const target of ['Έντυπα', 'Οπλισμός']) {
+      const s = await open();
+      s.type('ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ', NAME); refresh(s);
+      menu(s, target); const asked = refresh(s);
+      expect(asked, target).toContain('role="alertdialog"');
+      expect(h2(asked), target).toContain('Δεν αποθηκεύτηκαν οι αλλαγές');
+      expect(asked, target).toContain('class="rep-page"');
+      s.press('Μείνε εδώ');
+      expect(s.render(), target).not.toContain('role="alertdialog"');
+      expect(s.render(), target).toContain('class="rep-page"');
+    }
+    // «Πέτα τις αλλαγές» closes the page and goes where the user pressed
+    const s = await open();
+    s.type('ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ', NAME); refresh(s);
+    menu(s, 'Έντυπα'); refresh(s);
+    s.press('Πέτα τις αλλαγές'); await settle();
+    expect(refresh(s)).not.toContain('class="rep-page"');
+  });
+
+  it('το δείγμα και η σελίδα μένουν έξω από το έντυπο που αποθηκεύεται', async () => {
+    const run = vi.fn(async () => null);
+    const s = openPage(withState(bw.world, bw.world.state, { run }), {}, { start: 'build', preset: 'onomastiki' });
+    s.type('ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ', NAME); refresh(s);
+    s.press('Αποθήκευση'); await settle();
+    expect(run).toHaveBeenCalledTimes(1);
+    const [cmd] = run.mock.calls[0] as unknown as [{ t: string; settings: { reports: Record<string, unknown>[] } }];
+    expect(cmd.t).toBe('setSettings');
+    const saved = cmd.settings.reports.find(r => r.name === 'ΚΑΤΑΣΤΑΣΗ ΔΟΚΙΜΗ')!;
+    expect(saved).toBeDefined();
+    // the preview's sample size / page and the PV_* constants never become fields of the saved report
+    const keysOf = (o: unknown): string[] => (o && typeof o === 'object')
+      ? Object.entries(o).flatMap(([k, v]) => [k, ...keysOf(v)]) : [];
+    expect(keysOf(cmd).filter(k => /^(sample|page|pg|pv)$/i.test(k) || k.startsWith('PV_'))).toEqual([]);
   });
 });
 
