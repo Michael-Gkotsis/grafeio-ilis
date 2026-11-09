@@ -15,6 +15,7 @@ All user-facing texts (screens, Excel, Word, guide) are Greek. Code, identifiers
 | `npm run build` | `scripts/build.mjs`: esbuild main/preload + vite renderer into `dist/` | yes |
 | `npm run bench:golden` | writes every Excel/print output and prints hashes; hashes must be IDENTICAL before/after | yes (compare to `rewrite`) |
 | `npm run bench:ui` | Electron UI timing per screen (CPU x4); no screen may get slower | yes for UI/structure PRs |
+| `node bench/ui/styles-diff.mjs` (`npm run bench:styles`) | browser DOM + computed-style + box diff of every screen, tab and click-opened dialog (light/dark, 3 widths) vs `rewrite`; local, needs Playwright, report in `dist/styles-diff/` | yes for structural renderer PRs and CSS PRs (0 differences, or each one explained) |
 | `npm run bench` | node micro-benchmarks of core rules and Excel (`bench/bench.ts`) | when touching hot paths |
 | `npm run bench:full` | full-app benchmark with Electron (`bench/full.ts`) | when touching main/db |
 | `npm run dev` | `scripts/dev.mjs`: dev run of the app | no |
