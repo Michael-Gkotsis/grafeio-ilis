@@ -11,6 +11,9 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "lint": "biome lint .",
+    "format": "biome format --write",
+    "check": "biome check .",
     "package:app": "node scripts/package-app.mjs",
     "package:win": "node scripts/package-win.mjs",
     "package:setup": "node scripts/package-win-setup.mjs",
@@ -37,6 +40,7 @@
     "sql.js": "1.10.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.3",
     "@types/node": "18.19.33",
     "@types/react": "18.3.1",
     "@types/react-dom": "18.3.0",

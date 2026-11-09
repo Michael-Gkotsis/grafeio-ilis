@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "defaultBranch": "rewrite" },
+  "files": {
+    "includes": [
+      "src/**",
+      "test/**",
+      "bench/**",
+      "scripts/**",
+      "*.json",
+      "*.mjs",
+      "!**/dist",
+      "!**/node_modules",
+      "!templates",
+      "!test/__snapshots__",
+      "!test/golden",
+      "!bench/baseline",
+      "!**/*.min.*",
+      "!package-lock.json"
+    ]
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "always", "trailingCommas": "all" } },
+  "css": { "formatter": { "enabled": true }, "linter": { "enabled": true } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noForEach": "warn",
+        "useLiteralKeys": "off",
+        "noCommaOperator": "info"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noVar": "error",
+        "useIterableCallbackReturn": "info",
+        "noAssignInExpressions": "info",
+        "noControlCharactersInRegex": "info",
+        "noImplicitAnyLet": "info",
+        "noExportsInTest": "info",
+        "noSparseArray": "info",
+        "noRedeclare": "info",
+        "noDuplicateTestHooks": "info"
+      },
+      "style": {
+        "useConst": "warn",
+        "useTemplate": "off",
+        "noNonNullAssertion": "off",
+        "useNodejsImportProtocol": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off",
+        "noComponentHookFactories": "off",
+        "useHookAtTopLevel": "info"
+      },
+      "a11y": { "useButtonType": "info", "noSvgWithoutTitle": "info" }
+    }
+  },
+  "overrides": [{ "includes": ["**/*.css"], "linter": { "rules": { "style": { "noDescendingSpecificity": "off" } } } }]
+}
