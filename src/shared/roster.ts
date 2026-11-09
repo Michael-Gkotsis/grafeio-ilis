@@ -5,8 +5,9 @@ import { OUT_NOTE } from '../core/model/person';
 import type { ImportRow } from './commands';
 import { withOrigin, type UserLists } from './ranks';
 import { PKEYS, personalFromCell, type PKey } from './personal';
+import type { CellValue } from '../core/model/cells';
 
-export type CellValue = string | number | boolean | Date | null | undefined;
+export type { CellValue };
 export interface RawSheet {
   name: string;
   rows: CellValue[][];
