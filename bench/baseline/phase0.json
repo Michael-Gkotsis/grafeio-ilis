@@ -1,0 +1,3135 @@
+{
+ "format": 1,
+ "commit": "21b7d93d20b81d710e66409b648d95f029afffc6",
+ "appCodeDirty": false,
+ "date": "2026-11-09T17:29:21.700Z",
+ "runs": 5,
+ "machine": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.30GHz",
+  "cores": 4,
+  "ramMb": 16086,
+  "node": "v22.23.4",
+  "os": "Linux 6.18.44-fc-v310",
+  "electron": "22.3.27"
+ },
+ "bundleFiles": [
+  {
+   "file": "dist/main/excel.js",
+   "rawBytes": 1209328,
+   "gzipBytes": 355390,
+   "eager": false
+  },
+  {
+   "file": "dist/main/main.js",
+   "rawBytes": 1037539,
+   "gzipBytes": 314263,
+   "eager": false
+  },
+  {
+   "file": "dist/main/sql-wasm.wasm",
+   "rawBytes": 655300,
+   "gzipBytes": 321568,
+   "eager": false
+  },
+  {
+   "file": "dist/main/worker.js",
+   "rawBytes": 635181,
+   "gzipBytes": 201349,
+   "eager": false
+  },
+  {
+   "file": "dist/preload/preload.js",
+   "rawBytes": 4237,
+   "gzipBytes": 1089,
+   "eager": false
+  },
+  {
+   "file": "dist/preload/print.js",
+   "rawBytes": 417,
+   "gzipBytes": 189,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/assets/diag-DTptALAH.js",
+   "rawBytes": 5874,
+   "gzipBytes": 2743,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/assets/guide-CU5MQdyM.js",
+   "rawBytes": 216795,
+   "gzipBytes": 56995,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/assets/index-BrhwKSUI.js",
+   "rawBytes": 1055149,
+   "gzipBytes": 351845,
+   "eager": true
+  },
+  {
+   "file": "dist/renderer/assets/index-CWUtVx-W.css",
+   "rawBytes": 128251,
+   "gzipBytes": 23459,
+   "eager": true
+  },
+  {
+   "file": "dist/renderer/assets/mockApi-DvAhdByj.js",
+   "rawBytes": 23363,
+   "gzipBytes": 9446,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/assets/reports-DE74Lggt.js",
+   "rawBytes": 132596,
+   "gzipBytes": 42057,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/assets/settings-2O7xuCKm.js",
+   "rawBytes": 154831,
+   "gzipBytes": 46468,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/icon.png",
+   "rawBytes": 17117,
+   "gzipBytes": 17106,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/index.html",
+   "rawBytes": 627,
+   "gzipBytes": 423,
+   "eager": false
+  },
+  {
+   "file": "dist/renderer/logo.svg",
+   "rawBytes": 982,
+   "gzipBytes": 425,
+   "eager": false
+  }
+ ],
+ "metrics": {
+  "bundle/renderer eager JS (raw)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "dist/renderer/index.html: script tags, no modulepreload",
+   "runs": [
+    1030.42
+   ],
+   "median": 1030.42,
+   "min": 1030.42,
+   "max": 1030.42
+  },
+  "bundle/renderer eager JS (gzip)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "dist/renderer/index.html: script tags, no modulepreload",
+   "runs": [
+    343.6
+   ],
+   "median": 343.6,
+   "min": 343.6,
+   "max": 343.6
+  },
+  "bundle/renderer eager JS+CSS (raw)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "dist/renderer/index.html: script and stylesheet tags",
+   "runs": [
+    1155.66
+   ],
+   "median": 1155.66,
+   "min": 1155.66,
+   "max": 1155.66
+  },
+  "bundle/renderer eager JS+CSS (gzip)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "dist/renderer/index.html: script and stylesheet tags",
+   "runs": [
+    366.51
+   ],
+   "median": 366.51,
+   "min": 366.51,
+   "max": 366.51
+  },
+  "bundle/renderer total (raw)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/renderer/",
+   "runs": [
+    1694.91
+   ],
+   "median": 1694.91,
+   "min": 1694.91,
+   "max": 1694.91
+  },
+  "bundle/renderer total (gzip)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/renderer/",
+   "runs": [
+    538.05
+   ],
+   "median": 538.05,
+   "min": 538.05,
+   "max": 538.05
+  },
+  "bundle/main total (raw)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/main/",
+   "runs": [
+    3454.44
+   ],
+   "median": 3454.44,
+   "min": 3454.44,
+   "max": 3454.44
+  },
+  "bundle/main total (gzip)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/main/",
+   "runs": [
+    1164.62
+   ],
+   "median": 1164.62,
+   "min": 1164.62,
+   "max": 1164.62
+  },
+  "bundle/preload total (raw)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/preload/",
+   "runs": [
+    4.54
+   ],
+   "median": 4.54,
+   "min": 4.54,
+   "max": 4.54
+  },
+  "bundle/preload total (gzip)": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "sum of dist/preload/",
+   "runs": [
+    1.25
+   ],
+   "median": 1.25,
+   "min": 1.25,
+   "max": 1.25
+  },
+  "bench/day 91: db KB": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "npm run bench",
+   "runs": [
+    364,
+    364,
+    364,
+    364,
+    364
+   ],
+   "median": 364,
+   "min": 364,
+   "max": 364
+  },
+  "bench/day 91: autofill": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    6.5,
+    6.1,
+    6.2,
+    6.2,
+    6.2
+   ],
+   "median": 6.2,
+   "min": 6.1,
+   "max": 6.5
+  },
+  "bench/day 91: outs": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.3,
+    0.2,
+    0.2,
+    0.2,
+    0.2
+   ],
+   "median": 0.2,
+   "min": 0.2,
+   "max": 0.3
+  },
+  "bench/day 91: commit": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.9,
+    0.8,
+    0.8,
+    0.7,
+    0.8
+   ],
+   "median": 0.8,
+   "min": 0.7,
+   "max": 0.9
+  },
+  "bench/day 91: audit+flush": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.7,
+    1.8,
+    1.9,
+    1.7,
+    1.8
+   ],
+   "median": 1.8,
+   "min": 1.7,
+   "max": 1.9
+  },
+  "bench/day 91: ipc-ser": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "median": 0.5,
+   "min": 0.5,
+   "max": 0.5
+  },
+  "bench/day 182: db KB": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "npm run bench",
+   "runs": [
+    608,
+    608,
+    608,
+    608,
+    608
+   ],
+   "median": 608,
+   "min": 608,
+   "max": 608
+  },
+  "bench/day 182: autofill": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    6.7,
+    6.9,
+    9.7,
+    7.2,
+    7.3
+   ],
+   "median": 7.2,
+   "min": 6.7,
+   "max": 9.7
+  },
+  "bench/day 182: outs": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.4,
+    0.5,
+    0.6,
+    0.4,
+    0.5
+   ],
+   "median": 0.5,
+   "min": 0.4,
+   "max": 0.6
+  },
+  "bench/day 182: commit": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.1,
+    1.4,
+    1.2,
+    1.1,
+    1.4
+   ],
+   "median": 1.2,
+   "min": 1.1,
+   "max": 1.4
+  },
+  "bench/day 182: audit+flush": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.9,
+    2.3,
+    2.2,
+    2.1,
+    2.3
+   ],
+   "median": 2.2,
+   "min": 1.9,
+   "max": 2.3
+  },
+  "bench/day 182: ipc-ser": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.5,
+    0.7,
+    0.8,
+    0.6,
+    0.7
+   ],
+   "median": 0.7,
+   "min": 0.5,
+   "max": 0.8
+  },
+  "bench/day 335: db KB": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "npm run bench",
+   "runs": [
+    1024,
+    1024,
+    1024,
+    1024,
+    1024
+   ],
+   "median": 1024,
+   "min": 1024,
+   "max": 1024
+  },
+  "bench/day 335: autofill": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    9,
+    9.2,
+    8.9,
+    8.2,
+    8.9
+   ],
+   "median": 8.9,
+   "min": 8.2,
+   "max": 9.2
+  },
+  "bench/day 335: outs": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.7,
+    0.7,
+    0.6,
+    0.8,
+    0.8
+   ],
+   "median": 0.7,
+   "min": 0.6,
+   "max": 0.8
+  },
+  "bench/day 335: commit": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.8,
+    2.2,
+    2.1,
+    2,
+    2.1
+   ],
+   "median": 2.1,
+   "min": 1.8,
+   "max": 2.2
+  },
+  "bench/day 335: audit+flush": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    3,
+    3,
+    3.1,
+    2.6,
+    3
+   ],
+   "median": 3,
+   "min": 2.6,
+   "max": 3.1
+  },
+  "bench/day 335: ipc-ser": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.9,
+    0.9,
+    0.9,
+    0.8,
+    0.9
+   ],
+   "median": 0.9,
+   "min": 0.8,
+   "max": 0.9
+  },
+  "bench/db size KB": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "npm run bench",
+   "runs": [
+    1096,
+    1096,
+    1096,
+    1096,
+    1096
+   ],
+   "median": 1096,
+   "min": 1096,
+   "max": 1096
+  },
+  "bench/open/load": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    26.2,
+    26.4,
+    26.3,
+    21.7,
+    27.7
+   ],
+   "median": 26.3,
+   "min": 21.7,
+   "max": 27.7
+  },
+  "bench/dutyStats cold": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.7,
+    0.8,
+    0.8,
+    1.2,
+    0.8
+   ],
+   "median": 0.8,
+   "min": 0.7,
+   "max": 1.2
+  },
+  "bench/strengthOf": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.1,
+    1.1,
+    1.2,
+    1.3,
+    1.1
+   ],
+   "median": 1.1,
+   "min": 1.1,
+   "max": 1.3
+  },
+  "bench/hkaiCounts": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.1,
+    1.1,
+    1.1,
+    1,
+    1.1
+   ],
+   "median": 1.1,
+   "min": 1,
+   "max": 1.1
+  },
+  "bench/preflight froura": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.8,
+    1.7,
+    1.6,
+    3.1,
+    2.1
+   ],
+   "median": 1.8,
+   "min": 1.6,
+   "max": 3.1
+  },
+  "bench/preflight hkai": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    1.9,
+    1.8,
+    1.8,
+    1.9,
+    2
+   ],
+   "median": 1.9,
+   "min": 1.8,
+   "max": 2
+  },
+  "bench/preflight outs": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    0.2,
+    0.2,
+    0.3,
+    0.2,
+    0.2
+   ],
+   "median": 0.2,
+   "min": 0.2,
+   "max": 0.3
+  },
+  "bench/fillDay (next day)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    12.2,
+    12.6,
+    12.2,
+    10.8,
+    12.2
+   ],
+   "median": 12.2,
+   "min": 10.8,
+   "max": 12.6
+  },
+  "bench/boot (full) payload KB": {
+   "unit": "KB",
+   "kind": "size",
+   "how": "npm run bench",
+   "runs": [
+    560,
+    560,
+    560,
+    560,
+    560
+   ],
+   "median": 560,
+   "min": 560,
+   "max": 560
+  },
+  "bench/boot (full) serialize": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench",
+   "runs": [
+    3.5,
+    3.9,
+    3.6,
+    3.5,
+    3.8
+   ],
+   "median": 3.6,
+   "min": 3.5,
+   "max": 3.9
+  },
+  "full/χτίσιμο κατάστασης": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1146.5,
+    1083.9,
+    1130.9,
+    1090.7,
+    1125.3
+   ],
+   "median": 1125.3,
+   "min": 1083.9,
+   "max": 1146.5
+  },
+  "full/apply:autofill (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    7.9,
+    7.7,
+    8,
+    8,
+    7.6
+   ],
+   "median": 7.9,
+   "min": 7.6,
+   "max": 8
+  },
+  "full/apply:declare (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.3,
+    0.3,
+    0.3,
+    0.2,
+    0.3
+   ],
+   "median": 0.3,
+   "min": 0.2,
+   "max": 0.3
+  },
+  "full/apply:weaponOut (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.1
+  },
+  "full/apply:weaponIn (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.1
+  },
+  "full/apply:addRequest (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.1
+  },
+  "full/apply:addCadreAbs (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.2,
+    0.2,
+    0.2,
+    0.1,
+    0.2
+   ],
+   "median": 0.2,
+   "min": 0.1,
+   "max": 0.2
+  },
+  "full/apply:outs (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+    0.4
+   ],
+   "median": 0.4,
+   "min": 0.4,
+   "max": 0.4
+  },
+  "full/apply:decideRequest (τελευταίες 20)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+    0.4
+   ],
+   "median": 0.4,
+   "min": 0.4,
+   "max": 0.4
+  },
+  "full/apply autofill αύριο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.1,
+    1,
+    1.2,
+    1.2,
+    1.1
+   ],
+   "median": 1.1,
+   "min": 1,
+   "max": 1.2
+  },
+  "full/apply assign μία θέση": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.2,
+    0.2,
+    0.1,
+    0.2
+   ],
+   "median": 0.2,
+   "min": 0.1,
+   "max": 0.2
+  },
+  "full/apply declare άδεια": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.4,
+    0.5,
+    0.5,
+    0.4,
+    0.5
+   ],
+   "median": 0.5,
+   "min": 0.4,
+   "max": 0.5
+  },
+  "full/apply updatePerson τηλέφωνο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.5,
+    0.6,
+    0.7,
+    0.6,
+    0.6
+   ],
+   "median": 0.6,
+   "min": 0.5,
+   "max": 0.7
+  },
+  "full/apply outs 60 άτομα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.5,
+    0.7,
+    0.6,
+    0.6,
+    0.6
+   ],
+   "median": 0.6,
+   "min": 0.5,
+   "max": 0.7
+  },
+  "full/apply weaponOut 10": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.2,
+    0.1,
+    0.1,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.2
+  },
+  "full/dutyStats κρύο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.8,
+    1.2,
+    0.9,
+    0.8,
+    0.9
+   ],
+   "median": 0.9,
+   "min": 0.8,
+   "max": 1.2
+  },
+  "full/dutyStats ζεστό": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0,
+    0.1,
+    0,
+    0,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 0.1
+  },
+  "full/monthStats": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.5,
+    0.6,
+    0.4,
+    0.4,
+    0.4
+   ],
+   "median": 0.4,
+   "min": 0.4,
+   "max": 0.6
+  },
+  "full/dutyMonths": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.1
+  },
+  "full/strengthOf κρύο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.8,
+    2.1,
+    2,
+    2.6,
+    1.9
+   ],
+   "median": 2,
+   "min": 1.8,
+   "max": 2.6
+  },
+  "full/strengthOf ζεστό": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.7,
+    0.8,
+    0.8,
+    0.8,
+    0.8
+   ],
+   "median": 0.8,
+   "min": 0.7,
+   "max": 0.8
+  },
+  "full/hkaiCounts": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.3,
+    1.3,
+    1.3,
+    1.4,
+    1.4
+   ],
+   "median": 1.3,
+   "min": 1.3,
+   "max": 1.4
+  },
+  "full/whyAll (αύριο)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.8,
+    2.8,
+    2.2,
+    2.5,
+    2.1
+   ],
+   "median": 2.2,
+   "min": 1.8,
+   "max": 2.8
+  },
+  "full/fairAvg": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.5,
+    0.8,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "median": 0.5,
+   "min": 0.5,
+   "max": 0.8
+  },
+  "full/returnsOn": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.5,
+    0.9,
+    0.5,
+    0.5,
+    1.5
+   ],
+   "median": 0.5,
+   "min": 0.5,
+   "max": 1.5
+  },
+  "full/outsAndStay": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    5.9,
+    6.8,
+    6.4,
+    6.1,
+    6.3
+   ],
+   "median": 6.3,
+   "min": 5.9,
+   "max": 6.8
+  },
+  "full/capCells όλοι × στήλες": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    4.3,
+    3.9,
+    4.6,
+    3.9,
+    3.3
+   ],
+   "median": 3.9,
+   "min": 3.3,
+   "max": 4.6
+  },
+  "full/preflight froura": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.6,
+    1.3,
+    0.8,
+    0.9,
+    0.8
+   ],
+   "median": 0.8,
+   "min": 0.6,
+   "max": 1.3
+  },
+  "full/preflight hkai": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    2.2,
+    3.3,
+    2.7,
+    2.6,
+    2.2
+   ],
+   "median": 2.6,
+   "min": 2.2,
+   "max": 3.3
+  },
+  "full/preflight outs": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.2,
+    0.2,
+    0.2,
+    0.3,
+    0.2
+   ],
+   "median": 0.2,
+   "min": 0.2,
+   "max": 0.3
+  },
+  "full/preflight check": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 0
+  },
+  "full/fillDay αύριο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.6,
+    1.4,
+    0.8,
+    0.9,
+    0.7
+   ],
+   "median": 0.8,
+   "min": 0.6,
+   "max": 1.4
+  },
+  "full/fillDay 7 μέρες": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    3.5,
+    5.6,
+    4.1,
+    4.1,
+    3.8
+   ],
+   "median": 4.1,
+   "min": 3.5,
+   "max": 5.6
+  },
+  "full/commit πρώτο (όλη η κατάσταση)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    36.2,
+    45.7,
+    37.7,
+    38.5,
+    40.3
+   ],
+   "median": 38.5,
+   "min": 36.2,
+   "max": 45.7
+  },
+  "full/commit μετά από autofill": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.4,
+    1.8,
+    4.3,
+    1.2,
+    3
+   ],
+   "median": 1.8,
+   "min": 1.2,
+   "max": 4.3
+  },
+  "full/addAudit+flush": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    4.8,
+    8,
+    2.8,
+    2,
+    2.6
+   ],
+   "median": 2.8,
+   "min": 2,
+   "max": 8
+  },
+  "full/flush βάσης": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    3.3,
+    2.3,
+    2.9,
+    1.5,
+    2.4
+   ],
+   "median": 2.4,
+   "min": 1.5,
+   "max": 3.3
+  },
+  "full/άνοιγμα βάσης": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    21.7,
+    27.8,
+    24.8,
+    20.2,
+    24.4
+   ],
+   "median": 24.4,
+   "min": 20.2,
+   "max": 27.8
+  },
+  "full/boot serialize": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    2.6,
+    2.6,
+    2.8,
+    3.6,
+    2.6
+   ],
+   "median": 2.6,
+   "min": 2.6,
+   "max": 3.6
+  },
+  "full/boot deserialize": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    2.2,
+    2.2,
+    2.2,
+    3.3,
+    2.3
+   ],
+   "median": 2.2,
+   "min": 2.2,
+   "max": 3.3
+  },
+  "full/reply serialize (autofill)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.1
+   ],
+   "median": 0.1,
+   "min": 0.1,
+   "max": 0.2
+  },
+  "full/reply serialize (statuses)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    0.7,
+    0.7,
+    0.8,
+    0.9,
+    0.6
+   ],
+   "median": 0.7,
+   "min": 0.6,
+   "max": 0.9
+  },
+  "full/ΦΡΟΥΡΑ (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    45.7,
+    47,
+    48.8,
+    61.1,
+    48.4
+   ],
+   "median": 48.4,
+   "min": 45.7,
+   "max": 61.1
+  },
+  "full/ΦΡΟΥΡΑ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    12.2,
+    9.2,
+    10.6,
+    10.6,
+    10.5
+   ],
+   "median": 10.6,
+   "min": 9.2,
+   "max": 12.2
+  },
+  "full/ΗΚΑΙ (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    36.7,
+    31.5,
+    33.6,
+    27.8,
+    33.1
+   ],
+   "median": 33.1,
+   "min": 27.8,
+   "max": 36.7
+  },
+  "full/ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    17.9,
+    17.8,
+    16.5,
+    15.6,
+    18.3
+   ],
+   "median": 17.8,
+   "min": 15.6,
+   "max": 18.3
+  },
+  "full/Εξοδούχοι (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    41,
+    44.2,
+    42,
+    39.3,
+    44.8
+   ],
+   "median": 42,
+   "min": 39.3,
+   "max": 44.8
+  },
+  "full/Εξοδούχοι": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    31.4,
+    32.6,
+    29.5,
+    28.9,
+    32.3
+   ],
+   "median": 31.4,
+   "min": 28.9,
+   "max": 32.6
+  },
+  "full/ΦΡΟΥΡΑ ΠΣΚ (3 φύλλα) (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    20.9,
+    22.4,
+    28.4,
+    21.8,
+    25.5
+   ],
+   "median": 22.4,
+   "min": 20.9,
+   "max": 28.4
+  },
+  "full/ΦΡΟΥΡΑ ΠΣΚ (3 φύλλα)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    20.2,
+    22,
+    25.3,
+    18.8,
+    22.3
+   ],
+   "median": 22,
+   "min": 18.8,
+   "max": 25.3
+  },
+  "full/Έλεγχος υπηρεσιών μήνα (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    141.9,
+    189,
+    160.8,
+    140.9,
+    157.1
+   ],
+   "median": 157.1,
+   "min": 140.9,
+   "max": 189
+  },
+  "full/Έλεγχος υπηρεσιών μήνα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    116.5,
+    126.1,
+    115.9,
+    106.2,
+    112
+   ],
+   "median": 115.9,
+   "min": 106.2,
+   "max": 126.1
+  },
+  "full/Λίστες Δυναμολογίου (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    62.2,
+    58,
+    72.5,
+    62.7,
+    67.5
+   ],
+   "median": 62.7,
+   "min": 58,
+   "max": 72.5
+  },
+  "full/Λίστες Δυναμολογίου": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    50.4,
+    58,
+    57.6,
+    48.1,
+    55.6
+   ],
+   "median": 55.6,
+   "min": 48.1,
+   "max": 58
+  },
+  "full/Δυναμικό στελεχών (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    9.1,
+    9.3,
+    9.1,
+    6.8,
+    10
+   ],
+   "median": 9.1,
+   "min": 6.8,
+   "max": 10
+  },
+  "full/Δυναμικό στελεχών": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    7.6,
+    8.3,
+    8.6,
+    6.8,
+    10
+   ],
+   "median": 8.3,
+   "min": 6.8,
+   "max": 10
+  },
+  "full/Δυναμολόγιο εκτύπωση (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    47.8,
+    48.6,
+    47.5,
+    42.5,
+    46.9
+   ],
+   "median": 47.5,
+   "min": 42.5,
+   "max": 48.6
+  },
+  "full/Δυναμολόγιο εκτύπωση": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    41.3,
+    43.5,
+    47.5,
+    37.9,
+    43.7
+   ],
+   "median": 43.5,
+   "min": 37.9,
+   "max": 47.5
+  },
+  "full/Οπλισμός (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    95.8,
+    105.2,
+    101.8,
+    96.3,
+    93
+   ],
+   "median": 96.3,
+   "min": 93,
+   "max": 105.2
+  },
+  "full/Οπλισμός": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    91.9,
+    99.3,
+    94.9,
+    89.6,
+    95.6
+   ],
+   "median": 94.9,
+   "min": 89.6,
+   "max": 99.3
+  },
+  "full/zipHash ΗΚΑΙ (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.8,
+    2.1,
+    2.1,
+    1.9,
+    1.9
+   ],
+   "median": 1.9,
+   "min": 1.8,
+   "max": 2.1
+  },
+  "full/zipHash ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    1.8,
+    3.6,
+    2.1,
+    1.9,
+    1.9
+   ],
+   "median": 1.9,
+   "min": 1.8,
+   "max": 3.6
+  },
+  "full/valuesHash ΗΚΑΙ (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    2.8,
+    3.3,
+    3.2,
+    2.7,
+    3
+   ],
+   "median": 3,
+   "min": 2.7,
+   "max": 3.3
+  },
+  "full/valuesHash ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    2.5,
+    2.8,
+    2.9,
+    2.7,
+    2.8
+   ],
+   "median": 2.8,
+   "min": 2.5,
+   "max": 2.9
+  },
+  "full/regenForms 4 έντυπα (χωρίς αλλαγή) (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    57.9,
+    65,
+    64.7,
+    58.5,
+    59.2
+   ],
+   "median": 59.2,
+   "min": 57.9,
+   "max": 65
+  },
+  "full/regenForms 4 έντυπα (χωρίς αλλαγή)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    54.9,
+    62.2,
+    60.2,
+    58.5,
+    56.3
+   ],
+   "median": 58.5,
+   "min": 54.9,
+   "max": 62.2
+  },
+  "full/Προεπισκόπηση εκτύπωσης ΗΚΑΙ (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    21.2,
+    24.2,
+    24.1,
+    22.2,
+    22.4
+   ],
+   "median": 22.4,
+   "min": 21.2,
+   "max": 24.2
+  },
+  "full/Προεπισκόπηση εκτύπωσης ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    8.9,
+    10.7,
+    10.6,
+    9.8,
+    9.8
+   ],
+   "median": 9.8,
+   "min": 8.9,
+   "max": 10.7
+  },
+  "full/Προεπισκόπηση εκτύπωσης Δυναμολογίου (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    14.7,
+    18.3,
+    17.6,
+    15.2,
+    16.6
+   ],
+   "median": 16.6,
+   "min": 14.7,
+   "max": 18.3
+  },
+  "full/Προεπισκόπηση εκτύπωσης Δυναμολογίου": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    12.9,
+    15,
+    17.5,
+    13.7,
+    15.7
+   ],
+   "median": 15,
+   "min": 12.9,
+   "max": 17.5
+  },
+  "full/Νέο Δυναμολόγιο 9 φύλλα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    206.4,
+    254.5,
+    244.9,
+    199,
+    242.3
+   ],
+   "median": 242.3,
+   "min": 199,
+   "max": 254.5
+  },
+  "full/readBook Δυναμολόγιο (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    9.8,
+    10.6,
+    10,
+    11.4,
+    10.9
+   ],
+   "median": 10.6,
+   "min": 9.8,
+   "max": 11.4
+  },
+  "full/readBook Δυναμολόγιο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    8.9,
+    9.5,
+    9.8,
+    9.5,
+    10.9
+   ],
+   "median": 9.5,
+   "min": 8.9,
+   "max": 10.9
+  },
+  "full/autoCheck 9 ειδών": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    19,
+    19.1,
+    20.1,
+    21,
+    27.4
+   ],
+   "median": 20.1,
+   "min": 19,
+   "max": 27.4
+  },
+  "full/writeGroup αλλαγή τηλεφώνου (9 είδη)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    104,
+    107.1,
+    108.9,
+    134.1,
+    116.1
+   ],
+   "median": 108.9,
+   "min": 104,
+   "max": 134.1
+  },
+  "full/writeGroup νέο ιατρικό (6 είδη καταστάσεων)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:full (node, 180 people)",
+   "runs": [
+    20.9,
+    24,
+    23.5,
+    25.6,
+    24.9
+   ],
+   "median": 24,
+   "min": 20.9,
+   "max": 25.6
+  },
+  "memory/bench:full peak RSS": {
+   "unit": "MB",
+   "kind": "size",
+   "how": "VmHWM of node dist/bench-full.js, polled every 20 ms",
+   "runs": [
+    229.79,
+    211.62,
+    227.76,
+    214.54,
+    226.02
+   ],
+   "median": 226.02,
+   "min": 211.62,
+   "max": 229.79
+  },
+  "reports/candidates (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "median": 1,
+   "min": 1,
+   "max": 1
+  },
+  "reports/candidates": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0.3,
+    0.2,
+    0.3,
+    0.4,
+    0.3
+   ],
+   "median": 0.3,
+   "min": 0.2,
+   "max": 0.4
+  },
+  "reports/rowsOf (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 1
+  },
+  "reports/rowsOf": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0.3,
+    0.2,
+    0.3,
+    0.4,
+    0.3
+   ],
+   "median": 0.3,
+   "min": 0.2,
+   "max": 0.4
+  },
+  "reports/απλό: buildTemplate (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    24,
+    23,
+    24,
+    37,
+    24
+   ],
+   "median": 24,
+   "min": 23,
+   "max": 37
+  },
+  "reports/απλό: buildTemplate": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    5.5,
+    4.9,
+    5.6,
+    8.4,
+    4.4
+   ],
+   "median": 5.5,
+   "min": 4.4,
+   "max": 8.4
+  },
+  "reports/απλό: moreRows (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 0
+  },
+  "reports/απλό: moreRows": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 0
+  },
+  "reports/απλό: fillReport (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    58,
+    59,
+    62,
+    60,
+    80
+   ],
+   "median": 60,
+   "min": 58,
+   "max": 80
+  },
+  "reports/απλό: fillReport": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    28.5,
+    29.7,
+    29.7,
+    34.2,
+    46.1
+   ],
+   "median": 29.7,
+   "min": 28.5,
+   "max": 46.1
+  },
+  "reports/απλό: previewReport (120) (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    28,
+    30,
+    30,
+    30,
+    32
+   ],
+   "median": 30,
+   "min": 28,
+   "max": 32
+  },
+  "reports/απλό: previewReport (120)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    14.9,
+    17.5,
+    16.6,
+    16.7,
+    17.1
+   ],
+   "median": 16.7,
+   "min": 14.9,
+   "max": 17.5
+  },
+  "reports/απλό: inspectTemplate (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    5,
+    9,
+    6,
+    6,
+    6
+   ],
+   "median": 6,
+   "min": 5,
+   "max": 9
+  },
+  "reports/απλό: inspectTemplate": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    3.3,
+    3.5,
+    4,
+    3.5,
+    4
+   ],
+   "median": 3.5,
+   "min": 3.3,
+   "max": 4
+  },
+  "reports/απλό: renderBook 1 σελίδα (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    36,
+    51,
+    38,
+    44,
+    39
+   ],
+   "median": 39,
+   "min": 36,
+   "max": 51
+  },
+  "reports/απλό: renderBook 1 σελίδα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    21.2,
+    20,
+    24.4,
+    21.7,
+    25.6
+   ],
+   "median": 21.7,
+   "min": 20,
+   "max": 25.6
+  },
+  "reports/απλό: renderBook auto (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    11,
+    28,
+    12,
+    11,
+    14
+   ],
+   "median": 12,
+   "min": 11,
+   "max": 28
+  },
+  "reports/απλό: renderBook auto": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    11.5,
+    12.7,
+    12.7,
+    13.7,
+    11.8
+   ],
+   "median": 12.7,
+   "min": 11.5,
+   "max": 13.7
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: buildTemplate (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    5,
+    5,
+    6,
+    5,
+    6
+   ],
+   "median": 5,
+   "min": 5,
+   "max": 6
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: buildTemplate": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    4,
+    4.1,
+    4.2,
+    4.4,
+    3.7
+   ],
+   "median": 4.1,
+   "min": 3.7,
+   "max": 4.4
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: moreRows (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "median": 1,
+   "min": 1,
+   "max": 1
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: moreRows": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    0.5,
+    0.6,
+    0.5,
+    0.6,
+    0.5
+   ],
+   "median": 0.5,
+   "min": 0.5,
+   "max": 0.6
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: fillReport (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    82,
+    81,
+    88,
+    88,
+    87
+   ],
+   "median": 87,
+   "min": 81,
+   "max": 88
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: fillReport": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    77.2,
+    67.2,
+    73.4,
+    73.6,
+    87.2
+   ],
+   "median": 73.6,
+   "min": 67.2,
+   "max": 87.2
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: previewReport (120) (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    37,
+    36,
+    39,
+    38,
+    39
+   ],
+   "median": 38,
+   "min": 36,
+   "max": 39
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: previewReport (120)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    38,
+    38.3,
+    41.2,
+    37.8,
+    39.5
+   ],
+   "median": 38.3,
+   "min": 37.8,
+   "max": 41.2
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: inspectTemplate (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    4,
+    6,
+    4,
+    4,
+    5
+   ],
+   "median": 4,
+   "min": 4,
+   "max": 6
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: inspectTemplate": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    4,
+    4.1,
+    4.1,
+    3.9,
+    4.4
+   ],
+   "median": 4.1,
+   "min": 3.9,
+   "max": 4.4
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: renderBook 1 σελίδα (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    56,
+    40,
+    54,
+    60,
+    59
+   ],
+   "median": 56,
+   "min": 40,
+   "max": 60
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: renderBook 1 σελίδα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    44.8,
+    38.7,
+    40.3,
+    48.5,
+    53.4
+   ],
+   "median": 44.8,
+   "min": 38.7,
+   "max": 53.4
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: renderBook auto (1η)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    50,
+    37,
+    38,
+    48,
+    61
+   ],
+   "median": 48,
+   "min": 37,
+   "max": 61
+  },
+  "reports/πολλές στήλες + 2ος πίνακας: renderBook auto": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:reports",
+   "runs": [
+    27.9,
+    26.2,
+    23.5,
+    24.8,
+    26.2
+   ],
+   "median": 26.2,
+   "min": 23.5,
+   "max": 27.9
+  },
+  "ui/boot ως την πρώτη οθόνη": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    834,
+    836,
+    920,
+    798,
+    1093
+   ],
+   "median": 836,
+   "min": 798,
+   "max": 1093
+  },
+  "ui/boot: από τα δεδομένα ως την πρώτη οθόνη": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    330,
+    325,
+    378,
+    341,
+    508
+   ],
+   "median": 341,
+   "min": 325,
+   "max": 508
+  },
+  "ui/οθόνη Σήμερα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    14,
+    11,
+    14,
+    10,
+    10
+   ],
+   "median": 11,
+   "min": 10,
+   "max": 14
+  },
+  "ui/οθόνη Δυναμολόγιο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    90,
+    57,
+    79,
+    65,
+    85
+   ],
+   "median": 79,
+   "min": 57,
+   "max": 90
+  },
+  "ui/Δυναμολόγιο › Λίστα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    104,
+    94,
+    103,
+    90,
+    97
+   ],
+   "median": 97,
+   "min": 90,
+   "max": 104
+  },
+  "ui/Δυναμολόγιο › Ημερολόγιο κωλυομένων": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    595,
+    518,
+    530,
+    519,
+    513
+   ],
+   "median": 519,
+   "min": 513,
+   "max": 595
+  },
+  "ui/οθόνη Στελέχη": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    48,
+    38,
+    65,
+    46,
+    41
+   ],
+   "median": 46,
+   "min": 38,
+   "max": 65
+  },
+  "ui/οθόνη Υπηρεσίες": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    106,
+    84,
+    84,
+    82,
+    89
+   ],
+   "median": 84,
+   "min": 82,
+   "max": 106
+  },
+  "ui/Υπηρεσίες › Θέσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    35,
+    25,
+    31,
+    46,
+    23
+   ],
+   "median": 31,
+   "min": 23,
+   "max": 46
+  },
+  "ui/Υπηρεσίες › Έλεγχος υπηρεσιών": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    64,
+    51,
+    50,
+    64,
+    59
+   ],
+   "median": 59,
+   "min": 50,
+   "max": 64
+  },
+  "ui/Υπηρεσίες › Ποιος κάνει τι": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    108,
+    86,
+    85,
+    112,
+    109
+   ],
+   "median": 108,
+   "min": 85,
+   "max": 112
+  },
+  "ui/Υπηρεσίες › Εξαιρέσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    23,
+    27,
+    32,
+    42,
+    24
+   ],
+   "median": 27,
+   "min": 23,
+   "max": 42
+  },
+  "ui/οθόνη Εξοδούχοι": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    111,
+    118,
+    82,
+    109,
+    100
+   ],
+   "median": 109,
+   "min": 82,
+   "max": 118
+  },
+  "ui/οθόνη Ιατρικά": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    31,
+    22,
+    32,
+    28,
+    28
+   ],
+   "median": 28,
+   "min": 22,
+   "max": 32
+  },
+  "ui/οθόνη Δύναμη": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    44,
+    34,
+    36,
+    45,
+    80
+   ],
+   "median": 44,
+   "min": 34,
+   "max": 80
+  },
+  "ui/οθόνη ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    153,
+    207,
+    177,
+    187,
+    192
+   ],
+   "median": 187,
+   "min": 153,
+   "max": 207
+  },
+  "ui/ΗΚΑΙ › ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    164,
+    198,
+    165,
+    160,
+    185
+   ],
+   "median": 165,
+   "min": 160,
+   "max": 198
+  },
+  "ui/ΗΚΑΙ › Ποινές": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    21,
+    25,
+    22,
+    32,
+    20
+   ],
+   "median": 22,
+   "min": 20,
+   "max": 32
+  },
+  "ui/ΗΚΑΙ › Άδειες": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    23,
+    23,
+    22,
+    22,
+    21
+   ],
+   "median": 22,
+   "min": 21,
+   "max": 23
+  },
+  "ui/ΗΚΑΙ › Αιτήσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    28,
+    28,
+    37,
+    28,
+    23
+   ],
+   "median": 28,
+   "min": 23,
+   "max": 37
+  },
+  "ui/ΗΚΑΙ › Ημερήσια Διαταγή": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    19,
+    9,
+    13,
+    9,
+    11
+   ],
+   "median": 11,
+   "min": 9,
+   "max": 19
+  },
+  "ui/οθόνη Οπλισμός": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    153,
+    178,
+    243,
+    195,
+    251
+   ],
+   "median": 195,
+   "min": 153,
+   "max": 251
+  },
+  "ui/Οπλισμός › Όπλα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    161,
+    130,
+    130,
+    150,
+    141
+   ],
+   "median": 141,
+   "min": 130,
+   "max": 161
+  },
+  "ui/Οπλισμός › Κινήσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    33,
+    30,
+    23,
+    28,
+    41
+   ],
+   "median": 30,
+   "min": 23,
+   "max": 41
+  },
+  "ui/οθόνη Έντυπα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    29,
+    37,
+    29,
+    29,
+    30
+   ],
+   "median": 29,
+   "min": 29,
+   "max": 37
+  },
+  "ui/Έντυπα › Τα έντυπά μου": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    18,
+    15,
+    15,
+    17,
+    15
+   ],
+   "median": 15,
+   "min": 15,
+   "max": 18
+  },
+  "ui/Έντυπα › Πρότυπα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    13,
+    10,
+    10,
+    11,
+    12
+   ],
+   "median": 11,
+   "min": 10,
+   "max": 13
+  },
+  "ui/οθόνη Σημειώσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    34,
+    38,
+    44,
+    40,
+    47
+   ],
+   "median": 40,
+   "min": 34,
+   "max": 47
+  },
+  "ui/οθόνη Ρυθμίσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    80,
+    85,
+    83,
+    103,
+    75
+   ],
+   "median": 83,
+   "min": 75,
+   "max": 103
+  },
+  "ui/μετά από εντολή (statuses): Σήμερα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    29,
+    34,
+    30,
+    40,
+    47
+   ],
+   "median": 34,
+   "min": 29,
+   "max": 47
+  },
+  "ui/μετά από εντολή (people): Δυναμολόγιο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    96,
+    100,
+    94,
+    116,
+    101
+   ],
+   "median": 100,
+   "min": 94,
+   "max": 116
+  },
+  "ui/μετά από εντολή (guards): Υπηρεσίες › Θέσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    41,
+    27,
+    33,
+    25,
+    26
+   ],
+   "median": 27,
+   "min": 25,
+   "max": 41
+  },
+  "ui/μετά από εντολή (guards): Υπηρεσίες › Έλεγχος": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    30,
+    30,
+    30,
+    26,
+    38
+   ],
+   "median": 30,
+   "min": 26,
+   "max": 38
+  },
+  "ui/μετά από εντολή (guards): Υπηρεσίες › Ποιος": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    26,
+    32,
+    29,
+    29,
+    36
+   ],
+   "median": 29,
+   "min": 26,
+   "max": 36
+  },
+  "ui/μετά από εντολή (statuses): Εξοδούχοι": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    32,
+    41,
+    55,
+    46,
+    46
+   ],
+   "median": 46,
+   "min": 32,
+   "max": 55
+  },
+  "ui/μετά από εντολή (statuses): ΗΚΑΙ": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    29,
+    24,
+    34,
+    25,
+    37
+   ],
+   "median": 29,
+   "min": 24,
+   "max": 37
+  },
+  "ui/μετά από εντολή (people): Οπλισμός › Όπλα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    43,
+    48,
+    35,
+    36,
+    62
+   ],
+   "median": 43,
+   "min": 35,
+   "max": 62
+  },
+  "ui/σφάλματα σελίδας": {
+   "unit": "n",
+   "kind": "count",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "median": 0,
+   "min": 0,
+   "max": 0
+  },
+  "ui/μνήμη JS (MB)": {
+   "unit": "MB",
+   "kind": "size",
+   "how": "npm run bench:ui (Electron, CPU x4, 180 people)",
+   "runs": [
+    13,
+    21,
+    21,
+    13,
+    23
+   ],
+   "median": 21,
+   "min": 13,
+   "max": 23
+  },
+  "ui-reports/Έντυπα (Ctrl+E)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    57,
+    68,
+    65,
+    67,
+    57
+   ],
+   "median": 65,
+   "min": 57,
+   "max": 68
+  },
+  "ui-reports/+ Νέο έντυπο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    208,
+    255,
+    193,
+    201,
+    181
+   ],
+   "median": 201,
+   "min": 181,
+   "max": 255
+  },
+  "ui-reports/έτοιμο: Ονομαστική κατάσταση (βήμα 4)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    124,
+    162,
+    135,
+    180,
+    197
+   ],
+   "median": 162,
+   "min": 124,
+   "max": 197
+  },
+  "ui-reports/βήμα 3": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    148,
+    215,
+    165,
+    164,
+    151
+   ],
+   "median": 164,
+   "min": 148,
+   "max": 215
+  },
+  "ui-reports/(κλικ χωρίς αλλαγή: χρόνος του Playwright)": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    65,
+    73,
+    61,
+    77,
+    62
+   ],
+   "median": 65,
+   "min": 61,
+   "max": 77
+  },
+  "ui-reports/πλήκτρο στον τίτλο": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    36,
+    47,
+    51,
+    45,
+    57
+   ],
+   "median": 47,
+   "min": 36,
+   "max": 57
+  },
+  "ui-reports/άνοιγμα λίστας στήλης": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    142,
+    153,
+    246,
+    135,
+    203
+   ],
+   "median": 153,
+   "min": 135,
+   "max": 246
+  },
+  "ui-reports/διάλεξε Συνδυασμός": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    227,
+    173,
+    140,
+    144,
+    158
+   ],
+   "median": 158,
+   "min": 140,
+   "max": 227
+  },
+  "ui-reports/στήλη: Ιατρικό τη μέρα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    374,
+    375,
+    297,
+    314,
+    299
+   ],
+   "median": 314,
+   "min": 297,
+   "max": 375
+  },
+  "ui-reports/πλήκτρο σε επικεφαλίδα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    47,
+    49,
+    45,
+    41,
+    44
+   ],
+   "median": 45,
+   "min": 41,
+   "max": 49
+  },
+  "ui-reports/+ Πίνακας": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    178,
+    196,
+    209,
+    216,
+    165
+   ],
+   "median": 196,
+   "min": 165,
+   "max": 216
+  },
+  "ui-reports/πίνακας 2: Καταστάσεις": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    346,
+    369,
+    327,
+    294,
+    314
+   ],
+   "median": 327,
+   "min": 294,
+   "max": 369
+  },
+  "ui-reports/βήμα 4": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    230,
+    255,
+    170,
+    263,
+    224
+   ],
+   "median": 230,
+   "min": 170,
+   "max": 263
+  },
+  "ui-reports/βήμα 4: πίνακας 1": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    157,
+    190,
+    208,
+    233,
+    226
+   ],
+   "median": 208,
+   "min": 157,
+   "max": 233
+  },
+  "ui-reports/φίλτρο στο βήμα 4": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    128,
+    141,
+    177,
+    155,
+    149
+   ],
+   "median": 149,
+   "min": 128,
+   "max": 177
+  },
+  "ui-reports/βήμα 5": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    145,
+    147,
+    141,
+    120,
+    158
+   ],
+   "median": 145,
+   "min": 120,
+   "max": 158
+  },
+  "ui-reports/πλήκτρο στο όνομα": {
+   "unit": "ms",
+   "kind": "time",
+   "how": "npm run bench:ui:reports (Electron, CPU x4, 300 people)",
+   "runs": [
+    55,
+    50,
+    50,
+    43,
+    42
+   ],
+   "median": 50,
+   "min": 42,
+   "max": 55
+  }
+ }
+}
