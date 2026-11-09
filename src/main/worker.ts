@@ -1,5 +1,5 @@
 // Το νήμα των Excel (offload.ts): ό,τι βαρύ γίνεται με τα αρχεία, με τα ίδια δεδομένα που έχει το παράθυρο.
-import { clockOf } from '../shared/dates';
+import { WORKER_AMBIENT, applyAmbient } from '../core/ambient';
 import { parentPort } from 'worker_threads';
 import path from 'path';
 import { fillFroura, fillHkai, fillOuts, signMade, TemplateError } from './exports';
@@ -42,7 +42,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
 parentPort!.on('message', async (m: { id: number; fn: string; args: unknown[]; state?: AppState }) => {
   if (m.state) {
     state = m.state;
-    clockOf(state.settings);
+    applyAmbient(state, WORKER_AMBIENT);
   }
   try {
     parentPort!.postMessage({ id: m.id, ok: true, r: await FNS[m.fn](...m.args) });

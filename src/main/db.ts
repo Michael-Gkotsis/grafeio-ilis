@@ -9,14 +9,14 @@ import {
   markOldRequests,
   migrateSettings,
   noPending,
-  noteNamesakes,
   DEFAULT_RULES,
   DEFAULT_SETTINGS,
   type AppState,
   type AuditEntry,
 } from '../shared/domain';
 import { normNote } from '../shared/notes';
-import { clockOf, daysBetween, nowParts, today } from '../shared/dates';
+import { daysBetween, nowParts, today } from '../shared/dates';
+import { STORE_AMBIENT, applyAmbient } from '../core/ambient';
 import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
 import { splitOrigins } from '../shared/ranks';
@@ -345,8 +345,7 @@ export class Store {
     s.lastExpire = kv.get('lastExpire') || '';
     s.requests = this.all<{ data: string }>('SELECT data FROM request').map((r) => JSON.parse(r.data));
     this.state = s;
-    clockOf(s.settings);
-    noteNamesakes(s.people);
+    applyAmbient(s, STORE_AMBIENT);
   }
 
   // Γράφει τη νέα κατάσταση: μόνο ό,τι άλλαξε, και επιστρέφει το patch για αναίρεση
@@ -419,8 +418,7 @@ export class Store {
       throw e;
     }
     this.state = next;
-    clockOf(next.settings);
-    noteNamesakes(next.people);
+    applyAmbient(next, STORE_AMBIENT);
     return patch;
   }
 

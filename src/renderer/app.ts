@@ -23,14 +23,15 @@ import { ExportProvider, LegendDialog } from './common';
 import { setRankNamesOn } from './rankName';
 import { PrefsCtx, applyPrefs, load, loadPrefs, pushRecent, save, savePrefs, type Prefs, type PrefsValue } from './prefs';
 import { clockChanged, onClockChange, useNowMin } from './clock';
-import { DEFAULT_TZ, addDays, appVsOs, clockOf, clockShift, dm, dmy, dow, durLabel, osParts, today as todayFn, zoneLabel } from '../shared/dates';
+import { DEFAULT_TZ, addDays, appVsOs, clockShift, dm, dmy, dow, durLabel, osParts, today as todayFn, zoneLabel } from '../shared/dates';
 import type { Boot, CmdResult, ExcelBusy } from '../shared/api';
-import { isWaiting, noteNamesakes } from '../shared/domain';
+import { isWaiting } from '../shared/domain';
 import { dueCount } from '../shared/notes';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
 import { essoPersonTxt } from '../shared/esso';
-import { HK, setUnitKind } from '../shared/unit';
+import { HK } from '../shared/unit';
+import { SCREEN_AMBIENT, applyAmbient } from '../core/ambient';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
@@ -80,9 +81,7 @@ function Root({ boot: initial }: { boot: Boot }) {
   const [boot, setBoot] = useState(initial);
   const [state, setState] = useState(initial.state);
   const [audit, setAudit] = useState(initial.audit);
-  noteNamesakes(state.people);   // πατρώνυμο στους συνονόματους, πριν αποδοθούν οι οθόνες
-  clockOf(state.settings);       // ζώνη ώρας και διόρθωση, πριν χρησιμοποιηθεί το today()
-  setUnitKind(state.settings);   // ΗΚΑΙ ή ΗΚΑΛ, Ίλη ή Λόχος στα κείμενα των οθονών
+  applyAmbient(state, SCREEN_AMBIENT);   // συνώνυμα, ζώνη ώρας και ΗΚΑΙ/ΗΚΑΛ, πριν αποδοθούν οι οθόνες
   const cur = useRef({ state: initial.state, audit: initial.audit });
   const today = useToday();
   useEffect(() => { clockChanged(); }, [state.settings.tz, state.settings.clockFix]);   // ισχύει αμέσως, χωρίς να περιμένει το ρολόι

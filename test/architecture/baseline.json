@@ -46,7 +46,7 @@
   },
   "boundaries": [],
   "oversizeFiles": {
-    "src/main/db.ts": 578,
+    "src/main/db.ts": 576,
     "src/main/excel.ts": 893,
     "src/main/exports.ts": 1749,
     "src/main/main.ts": 3746,
