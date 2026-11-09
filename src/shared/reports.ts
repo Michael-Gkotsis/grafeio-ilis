@@ -6,46 +6,119 @@ import { PKEYS } from './personal';
 import { absenceOfCadre, absenceOfPerson } from './absence';
 import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
-import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
+import {
+  TYPES,
+  blocksOf,
+  everyBlock,
+  fullName,
+  shortName,
+  unitOf,
+  roomCfg,
+  type AppState,
+  type Cadre,
+  type Person,
+  type Post,
+  type Status,
+  type TypeKey,
+  type WeaponMove,
+} from './domain';
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
-import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
+import {
+  WEAPON_FILTERS,
+  byOut,
+  inOutText,
+  moveById,
+  moveInCell,
+  moveOutCell,
+  movesAll,
+  isAuto,
+  weaponInfo,
+  weaponMatch,
+  type WeaponFilter,
+  type WeaponInfo,
+} from './weapons';
 import { live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
-import { metricByTag, rowValue, tagId, tagsOf as valTags, valsUsed, valueText, vctx, type Spot, type TAlign, type ValueOut, type ValueTable, type VAt, type VCtx, type VFmt } from './values';
+import {
+  metricByTag,
+  rowValue,
+  tagId,
+  tagsOf as valTags,
+  valsUsed,
+  valueText,
+  vctx,
+  type Spot,
+  type TAlign,
+  type ValueOut,
+  type ValueTable,
+  type VAt,
+  type VCtx,
+  type VFmt,
+} from './values';
 import { MAIN, bandsOf, hasBeside, isDefault, type Bands } from './repBands';
 
 export type RepKind = 'people' | 'cadre' | 'status' | 'duty' | 'weapon' | 'wmove' | 'blank';
 export const REP_KINDS: { id: RepKind; label: string; help: string }[] = [
   { id: 'people', label: 'Στρατιώτες', help: 'Μία γραμμή για κάθε στρατιώτη' },
   { id: 'cadre', label: 'Στελέχη', help: 'Μία γραμμή για κάθε στέλεχος' },
-  { id: 'status', label: 'Καταστάσεις', help: 'Μία γραμμή για κάθε ιατρικό, ποινή ή άδεια, με τα στοιχεία του στρατιώτη' },
-  { id: 'duty', label: 'Υπηρεσίες ημέρας', help: 'Μία γραμμή για κάθε θέση υπηρεσίας της μέρας (θέση, ώρες), με τον στρατιώτη που την έχει' },
-  { id: 'weapon', label: 'Οπλισμός', help: 'Μία γραμμή για κάθε στρατιώτη με όπλο: αριθμός, τύπος, οπλοβαστός, εντός ή εκτός' },
-  { id: 'wmove', label: 'Κινήσεις όπλων', help: 'Μία γραμμή για κάθε έξοδο όπλου της μέρας: λόγος, ώρα εξόδου και εισόδου' },
-  { id: 'blank', label: 'Κενός πίνακας', help: 'Δικές σου στήλες και γραμμές, χωρίς άτομα· γράφεις ό,τι θες στα κελιά ή τα αφήνεις για το χέρι' }
+  {
+    id: 'status',
+    label: 'Καταστάσεις',
+    help: 'Μία γραμμή για κάθε ιατρικό, ποινή ή άδεια, με τα στοιχεία του στρατιώτη',
+  },
+  {
+    id: 'duty',
+    label: 'Υπηρεσίες ημέρας',
+    help: 'Μία γραμμή για κάθε θέση υπηρεσίας της μέρας (θέση, ώρες), με τον στρατιώτη που την έχει',
+  },
+  {
+    id: 'weapon',
+    label: 'Οπλισμός',
+    help: 'Μία γραμμή για κάθε στρατιώτη με όπλο: αριθμός, τύπος, οπλοβαστός, εντός ή εκτός',
+  },
+  {
+    id: 'wmove',
+    label: 'Κινήσεις όπλων',
+    help: 'Μία γραμμή για κάθε έξοδο όπλου της μέρας: λόγος, ώρα εξόδου και εισόδου',
+  },
+  {
+    id: 'blank',
+    label: 'Κενός πίνακας',
+    help: 'Δικές σου στήλες και γραμμές, χωρίς άτομα· γράφεις ό,τι θες στα κελιά ή τα αφήνεις για το χέρι',
+  },
 ];
 // «Κενό» (Michael, 29/10): πίνακας από το μηδέν, χωρίς άτομα. Οι γραμμές είναι όσες γράφεις (pick.n), τα κελιά του πλέγματος του «Φτιάξ' το εδώ» (ColOpts.vals ανά στήλη)
-export const BLANK_ROWS = 10, BLANK_MAX = 200;
-export const blankN = (n: unknown, src?: unknown) => (src ? Math.max(0, Math.min(BLANK_MAX, Math.round(Number(n)) || 0)) : Math.max(1, Math.min(BLANK_MAX, Math.round(Number(n)) || BLANK_ROWS)));
+export const BLANK_ROWS = 10,
+  BLANK_MAX = 200;
+export const blankN = (n: unknown, src?: unknown) =>
+  src
+    ? Math.max(0, Math.min(BLANK_MAX, Math.round(Number(n)) || 0))
+    : Math.max(1, Math.min(BLANK_MAX, Math.round(Number(n)) || BLANK_ROWS));
 // «Γραμμές από φίλτρο» (Michael, 31/10): ο Κενός πίνακας με src ('people' | 'cadre') έχει πρώτα τα άτομα που διαλέγει το pick του πίνακα (τα φίλτρα του βήματος 4,
 // όπως στον πίνακα ατόμων) και από κάτω τις δικές σου γραμμές (pick.n, grid, who· εδώ μπορεί να είναι και 0)
 export type BlankSrc = 'people' | 'cadre';
 // η σειρά των γραμμών από φίλτρο: όπως στον πίνακα ατόμων (δεν υπάρχει «όπως διάλεξα»)
-export const srcSort = (src: BlankSrc, sort: RepSort): RepSort => (sort !== 'pick' && sortsOf(src).some(x => x.value === sort) ? sort : src === 'cadre' ? 'rank' : 'name');
+export const srcSort = (src: BlankSrc, sort: RepSort): RepSort =>
+  sort !== 'pick' && sortsOf(src).some((x) => x.value === sort) ? sort : src === 'cadre' ? 'rank' : 'name';
 // τα είδη που χωρίζονται σε φύλλα ανά θάλαμο, ουλαμό, Σ.Ι. (τα στελέχη και το «Κενό» όχι)
 export const splitOk = (k: RepKind) => k !== 'cadre' && k !== 'blank';
 // «Φτιάξ' το εδώ», «Κενό»: το πλέγμα (γραμμή × στήλη χωρίς το Α/Α) ακολουθεί τις στήλες όταν μπαίνουν, βγαίνουν ή μετακινούνται.
 // from: από ποια παλιά στήλη (θέση στο was) προέρχεται κάθε νέα (-1: καινούργια)· χωρίς from: στην ίδια θέση. Οι κενές γραμμές στο τέλος φεύγουν.
-export function regrid(grid: string[][] | undefined, was: Pick<BuildCol, 'f'>[], now: Pick<BuildCol, 'f'>[], from?: number[]): string[][] {
+export function regrid(
+  grid: string[][] | undefined,
+  was: Pick<BuildCol, 'f'>[],
+  now: Pick<BuildCol, 'f'>[],
+  from?: number[],
+): string[][] {
   const src = was.flatMap((c, i) => (c.f === 'aa' ? [] : [i]));
   const pick = now.flatMap((c, i) => (c.f === 'aa' ? [] : [src.indexOf(from ? from[i] : i)]));
-  if (grid && pick.length === src.length && pick.every((j, i) => j === i)) return grid;   // δεν άλλαξε η σειρά των στηλών
-  const out = (grid || []).map(row => pick.map(j => (j < 0 ? '' : row?.[j] ?? '')));
-  while (out.length && out[out.length - 1].every(x => !x)) out.pop();
+  if (grid && pick.length === src.length && pick.every((j, i) => j === i)) return grid; // δεν άλλαξε η σειρά των στηλών
+  const out = (grid || []).map((row) => pick.map((j) => (j < 0 ? '' : (row?.[j] ?? ''))));
+  while (out.length && out[out.length - 1].every((x) => !x)) out.pop();
   return out;
 }
 // Είδη με μία γραμμή ανά «κάτι» ενός στρατιώτη (κατάσταση, θέση, κίνηση όπλου): τα στοιχεία του στρατιώτη είναι στο p
@@ -53,102 +126,273 @@ export const isLinked = (k: RepKind) => k === 'status' || k === 'duty' || k === 
 // «Έντυπα ημέρας»: βγαίνει χωρίς ερώτηση, άρα όχι με τυχαίους ή με «Ρώτα κάθε φορά»
 export const dailyOk = (r: Pick<Report, 'pick' | 'day'>) => r.pick.mode !== 'random' && r.day !== 'ask';
 // τι μετράει κάθε είδος: «20 άτομα», «12 θέσεις»
-export const rowNoun = (k: RepKind) => (k === 'cadre' ? 'στελέχη' : k === 'status' ? 'καταστάσεις' : k === 'duty' ? 'θέσεις' : k === 'wmove' ? 'κινήσεις' : k === 'blank' ? 'γραμμές' : 'άτομα');
+export const rowNoun = (k: RepKind) =>
+  k === 'cadre'
+    ? 'στελέχη'
+    : k === 'status'
+      ? 'καταστάσεις'
+      : k === 'duty'
+        ? 'θέσεις'
+        : k === 'wmove'
+          ? 'κινήσεις'
+          : k === 'blank'
+            ? 'γραμμές'
+            : 'άτομα';
 
 // Στοιχεία (στήλες) ανά είδος: [κλειδί, όνομα στη λίστα, επικεφαλίδα όταν το φτιάχνεις εδώ, πλάτος σε χαρακτήρες, στοίχιση]
 export type Align = 'left' | 'center';
-export interface FieldDef { k: string; label: string; head: string; w: number; al: Align }
-const F = (k: string, label: string, head: string, w: number, al: Align = 'center'): FieldDef => ({ k, label, head, w, al });
+export interface FieldDef {
+  k: string;
+  label: string;
+  head: string;
+  w: number;
+  al: Align;
+}
+const F = (k: string, label: string, head: string, w: number, al: Align = 'center'): FieldDef => ({
+  k,
+  label,
+  head,
+  w,
+  al,
+});
 // Βαθμός: με την προέλευση μπροστά (ΕΠΟΠ ΛΧΙΑΣ), όπως το ονοματεπώνυμο ενώνει επώνυμο και όνομα· και χωριστά (Michael, 22/10)
 // Απουσία τη μέρα (Δυναμολόγιο-Παρουσιολόγιο στελεχών): ΑΠΩΝ ΝΑΙ, αιτία, ημερομηνία επιστροφής (πραγματική ημερομηνία στο Excel)
-const ABS = [F('absent', 'Απών (ΝΑΙ αν λείπει ή είναι κωλυόμενος)', 'ΑΠΩΝ', 7), F('areason', 'Αιτία απουσίας (π.χ. ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ)', 'ΑΙΤΙΑ ΑΠΟΥΣΙΑΣ', 22, 'left'), F('aret', 'Ημερομηνία επιστροφής', 'ΗΜ/ΝΙΑ ΕΠΙΣΤΡΟΦΗΣ', 13)];
+const ABS = [
+  F('absent', 'Απών (ΝΑΙ αν λείπει ή είναι κωλυόμενος)', 'ΑΠΩΝ', 7),
+  F('areason', 'Αιτία απουσίας (π.χ. ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ)', 'ΑΙΤΙΑ ΑΠΟΥΣΙΑΣ', 22, 'left'),
+  F('aret', 'Ημερομηνία επιστροφής', 'ΗΜ/ΝΙΑ ΕΠΙΣΤΡΟΦΗΣ', 13),
+];
 export const DATE_FIELDS = new Set(['aret']);
-const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός (με την προέλευση, π.χ. ΕΠΟΠ ΛΧΙΑΣ)', 'ΒΑΘΜΟΣ', 11), F('rank1', 'Μόνο βαθμός (χωρίς προέλευση)', 'ΒΑΘΜΟΣ', 10),
-  F('origin', 'Προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ…)', 'ΠΡΟΕΛΕΥΣΗ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
+const COMMON = [
+  F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5),
+  F('rank', 'Βαθμός (με την προέλευση, π.χ. ΕΠΟΠ ΛΧΙΑΣ)', 'ΒΑΘΜΟΣ', 11),
+  F('rank1', 'Μόνο βαθμός (χωρίς προέλευση)', 'ΒΑΘΜΟΣ', 10),
+  F('origin', 'Προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ…)', 'ΠΡΟΕΛΕΥΣΗ', 10),
+  F('spec', 'Ο/Σ', 'Ο/Σ', 6),
+];
 // Προσωπικά στοιχεία (Michael 4/11): e-mail, e-mail συγγενή, ομάδα αίματος και IBAN, ΑΜΚΑ, ΑΦΜ ως στήλες· συμπαγείς τιμές, πάντα κείμενο
-const MAILS = [F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'), F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10)];
+const MAILS = [
+  F('email', 'E-mail', 'E-MAIL', 28, 'left'),
+  F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'),
+  F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10),
+];
 const PERS = [F('iban', 'IBAN', 'IBAN', 29), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', 13), F('afm', 'ΑΦΜ', 'ΑΦΜ', 11)];
 // τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
 const SOLDIER = [
-  F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
-  F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS];
+  F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'),
+  F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
+  F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'),
+  F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'),
+  F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
+  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13),
+  F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13),
+  F('room', 'Θάλαμος', 'ΘΑΛ.', 6),
+  F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
+  F('si', 'Σ.Ι.', 'Σ.Ι.', 8),
+  ...MAILS,
+  ...PERS,
+];
 // Καταστάσεις της μέρας σε στήλη, κάθε είδος χωριστά (Michael, 22/10: «να διαλέξω ιατρικές καταστάσεις, άδεια κτλπ»),
 // με τη μορφή που διαλέγεις (ColOpts.sf: ΕΑ, ΕΥ, ΑΔΕΙΑ…)
-const STATUS = [F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12), F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12), F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
-  F('sother', 'ΣΤΕΠ ή νοσοκομείο τη μέρα', 'ΣΤΕΠ / ΝΟΣ.', 12), F('sout', 'Έξοδος τη μέρα (εξοδούχος, ΔΝ)', 'ΕΞΟΔΟΣ', 11)];
+const STATUS = [
+  F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12),
+  F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12),
+  F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
+  F('sother', 'ΣΤΕΠ ή νοσοκομείο τη μέρα', 'ΣΤΕΠ / ΝΟΣ.', 12),
+  F('sout', 'Έξοδος τη μέρα (εξοδούχος, ΔΝ)', 'ΕΞΟΔΟΣ', 11),
+];
 // Συνδυασμός: πολλά στοιχεία σε μία στήλη, με τη μορφή που γράφεις (ColOpts.parts, fmt: «{1} ({2})» → ΣΤΡ (ΜΧ))
-const TAIL = [F('combo', 'Συνδυασμός στοιχείων (π.χ. ΣΤΡ (ΜΧ))', 'ΒΑΘΜΟΣ (Ο/Σ)', 16), F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18), F('text', 'Σταθερό κείμενο', '', 12)];
+const TAIL = [
+  F('combo', 'Συνδυασμός στοιχείων (π.χ. ΣΤΡ (ΜΧ))', 'ΒΑΘΜΟΣ (Ο/Σ)', 16),
+  F('blank', 'Κενή (π.χ. για υπογραφή)', 'ΥΠΟΓΡΑΦΗ', 18),
+  F('text', 'Σταθερό κείμενο', '', 12),
+];
 export const FIELDS: Record<RepKind, FieldDef[]> = {
-  people: [...COMMON,
-    F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
-    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-    F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
-    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, ...MAILS, ...PERS,
-    F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
-    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
-    F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
-    ...TAIL],
-  cadre: [...COMMON,
-    F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
-    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('am', 'ΑΜ', 'ΑΜ', 12), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), ...PERS,
-    F('cspec', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left'), F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18), ...ABS,
-    ...TAIL],
+  people: [
+    ...COMMON,
+    F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'),
+    F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
+    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'),
+    F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'),
+    F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
+    F('asm', 'ΑΣΜ', 'ΑΣΜ', 13),
+    F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13),
+    F('room', 'Θάλαμος', 'ΘΑΛ.', 6),
+    F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
+    F('si', 'Σ.Ι.', 'Σ.Ι.', 8),
+    F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12),
+    ...ABS,
+    ...MAILS,
+    ...PERS,
+    F('post', 'Πόστο', 'ΠΟΣΤΟ', 14),
+    F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14),
+    F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10),
+    F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12),
+    F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
+    F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
+    F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16),
+    ...STATUS,
+    F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16),
+    F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
+    ...TAIL,
+  ],
+  cadre: [
+    ...COMMON,
+    F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'),
+    F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
+    F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'),
+    F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'),
+    F('am', 'ΑΜ', 'ΑΜ', 12),
+    F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13),
+    ...PERS,
+    F('cspec', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left'),
+    F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'),
+    F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18),
+    ...ABS,
+    ...TAIL,
+  ],
   // Καταστάσεις (Φάση 2): τα στοιχεία του στρατιώτη και της κατάστασης
-  status: [...COMMON, ...SOLDIER,
-    F('stype', 'Είδος (ΚΑ, ΕΥ, ποινή…)', 'ΕΙΔΟΣ', 16), F('from', 'Από', 'ΑΠΟ', 11), F('to', 'Έως', 'ΕΩΣ', 11), F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', 7),
-    F('note', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'), F('by', 'Ποιος τιμώρησε', 'ΤΙΜΩΡΗΣΕ', 18, 'left'), F('reason', 'Διότι', 'ΔΙΟΤΙ', 30, 'left'), F('on', 'Ημερομηνία τιμωρίας', 'ΗΜ. ΤΙΜΩΡΙΑΣ', 11),
-    ...TAIL],
+  status: [
+    ...COMMON,
+    ...SOLDIER,
+    F('stype', 'Είδος (ΚΑ, ΕΥ, ποινή…)', 'ΕΙΔΟΣ', 16),
+    F('from', 'Από', 'ΑΠΟ', 11),
+    F('to', 'Έως', 'ΕΩΣ', 11),
+    F('days', 'Ημέρες', 'ΗΜΕΡΕΣ', 7),
+    F('note', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'),
+    F('by', 'Ποιος τιμώρησε', 'ΤΙΜΩΡΗΣΕ', 18, 'left'),
+    F('reason', 'Διότι', 'ΔΙΟΤΙ', 30, 'left'),
+    F('on', 'Ημερομηνία τιμωρίας', 'ΗΜ. ΤΙΜΩΡΙΑΣ', 11),
+    ...TAIL,
+  ],
   // Φάση 3: θέσεις υπηρεσίας της μέρας, όπλα, κινήσεις όπλων
-  duty: [...COMMON,
-    F('seat', 'Θέση (π.χ. Θαλαμοφύλακας 1ος)', 'ΘΕΣΗ', 24, 'left'), F('code', 'Κωδικός θέσης (Θ1α, Μ2…)', 'ΚΩΔ.', 7), F('block', 'Υπηρεσία (ομάδα θέσεων)', 'ΥΠΗΡΕΣΙΑ', 20, 'left'),
-    F('hours', 'Ώρες', 'ΩΡΕΣ', 16), F('armed', 'Ένοπλη (ΝΑΙ)', 'ΕΝΟΠΛΗ', 8),
-    ...SOLDIER, F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), ...STATUS,
-    ...TAIL],
-  weapon: [...COMMON, ...SOLDIER,
-    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
-    F('inout', 'Εντός ή εκτός (με τον λόγο)', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 26, 'left'), ...STATUS,
-    ...TAIL],
-  wmove: [...COMMON, ...SOLDIER,
-    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
-    F('mreason', 'Λόγος εξόδου (ΕΚΠ, βολή…)', 'ΛΟΓΟΣ ΕΞΟΔΟΥ', 16), F('mout', 'Έξοδος (ημερομηνία και ώρα)', 'ΕΞΟΔΟΣ', 17),
-    F('minr', 'Λόγος εισόδου', 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ', 16), F('min', 'Είσοδος (ημερομηνία και ώρα)', 'ΕΙΣΟΔΟΣ', 17), F('mnote', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'), ...STATUS,
-    ...TAIL],
+  duty: [
+    ...COMMON,
+    F('seat', 'Θέση (π.χ. Θαλαμοφύλακας 1ος)', 'ΘΕΣΗ', 24, 'left'),
+    F('code', 'Κωδικός θέσης (Θ1α, Μ2…)', 'ΚΩΔ.', 7),
+    F('block', 'Υπηρεσία (ομάδα θέσεων)', 'ΥΠΗΡΕΣΙΑ', 20, 'left'),
+    F('hours', 'Ώρες', 'ΩΡΕΣ', 16),
+    F('armed', 'Ένοπλη (ΝΑΙ)', 'ΕΝΟΠΛΗ', 8),
+    ...SOLDIER,
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12),
+    F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    ...STATUS,
+    ...TAIL,
+  ],
+  weapon: [
+    ...COMMON,
+    ...SOLDIER,
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12),
+    F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
+    F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
+    F('inout', 'Εντός ή εκτός (με τον λόγο)', 'ΕΝΤΟΣ / ΕΚΤΟΣ', 26, 'left'),
+    ...STATUS,
+    ...TAIL,
+  ],
+  wmove: [
+    ...COMMON,
+    ...SOLDIER,
+    F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12),
+    F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12),
+    F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11),
+    F('mreason', 'Λόγος εξόδου (ΕΚΠ, βολή…)', 'ΛΟΓΟΣ ΕΞΟΔΟΥ', 16),
+    F('mout', 'Έξοδος (ημερομηνία και ώρα)', 'ΕΞΟΔΟΣ', 17),
+    F('minr', 'Λόγος εισόδου', 'ΛΟΓΟΣ ΕΙΣΟΔΟΥ', 16),
+    F('min', 'Είσοδος (ημερομηνία και ώρα)', 'ΕΙΣΟΔΟΣ', 17),
+    F('mnote', 'Παρατήρηση', 'ΠΑΡΑΤΗΡΗΣΗ', 22, 'left'),
+    ...STATUS,
+    ...TAIL,
+  ],
   // Κενό: μόνο Α/Α και στήλες με δική σου επικεφαλίδα και δικά σου κελιά
-  blank: [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('col', 'Στήλη (δική σου επικεφαλίδα και κελιά)', '', 16, 'left')]
+  blank: [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('col', 'Στήλη (δική σου επικεφαλίδα και κελιά)', '', 16, 'left')],
 };
-export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find(x => x.k === k);
+export const fieldOf = (kind: RepKind, k: string) => FIELDS[kind].find((x) => x.k === k);
 
 // ------------------------------------------------------------------ μορφή στήλης (καταστάσεις, συνδυασμός)
 // sf: πώς γράφεται κάθε κατάσταση, με {ΕΤΙΚΕΤΕΣ} (ST_TAGS)· parts/fmt: τα στοιχεία του συνδυασμού και η μορφή του με {1}, {2}…
-export interface ColOpts { sf?: string; st?: 'new'; parts?: string[]; fmt?: string; vals?: string[] }   // st: 'new' = μόνο όσες ξεκινούν τη μέρα του εντύπου (κενό: όσες ισχύουν)
+export interface ColOpts {
+  sf?: string;
+  st?: 'new';
+  parts?: string[];
+  fmt?: string;
+  vals?: string[];
+} // st: 'new' = μόνο όσες ξεκινούν τη μέρα του εντύπου (κενό: όσες ισχύουν)
 // στήλες με καταστάσεις της μέρας: ποιες κατηγορίες παίρνει η καθεμία (null: όλες)
-const ST_FIELD: Record<string, StCat[] | null> = { status: null, smed: ['med'], sabs: ['abs'], spun: ['pun'], sother: ['other'], sout: ['out'] };
+const ST_FIELD: Record<string, StCat[] | null> = {
+  status: null,
+  smed: ['med'],
+  sabs: ['abs'],
+  spun: ['pun'],
+  sother: ['other'],
+  sout: ['out'],
+};
 export const isStatusField = (f: string) => f === 'stype' || Object.prototype.hasOwnProperty.call(ST_FIELD, f);
 const CAT_WORD: Partial<Record<string, string>> = { med: 'ΙΑΤΡΙΚΟ', abs: 'ΑΔΕΙΑ', pun: 'ΠΟΙΝΗ', out: 'ΕΞΟΔΟΣ' };
 export const ST_TAGS: { tag: string; help: string }[] = [
-  { tag: 'ΚΩΔ', help: 'ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ' }, { tag: 'ΣΥΝΤΟΜΑ', help: 'ΕΑ, ΕΥ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΟΝΟΜΑ', help: 'ΕΛΕΥΘΕΡΟΣ ΑΣΚΗΣΕΩΝ' },
-  { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' }, { tag: 'ΑΠΟ', help: '20/10' }, { tag: 'ΕΩΣ', help: '24/10' }, { tag: 'ΗΜΕΡΕΣ', help: '5' },
-  { tag: 'ΜΕΝΟΥΝ', help: '2' },   // μέρες που μένουν από τη μέρα του εντύπου, με τη σημερινή
-  { tag: 'ΚΑΤΕΥΘΥΝΣΗ', help: 'ΚΟΡΙΝΘΟΣ (άδειες)' }   // κατεύθυνση της άδειας (1/11), κενό αν δεν έχει
+  { tag: 'ΚΩΔ', help: 'ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ' },
+  { tag: 'ΣΥΝΤΟΜΑ', help: 'ΕΑ, ΕΥ, ΑΔΕΙΑ, ΠΟΙΝΗ' },
+  { tag: 'ΟΝΟΜΑ', help: 'ΕΛΕΥΘΕΡΟΣ ΑΣΚΗΣΕΩΝ' },
+  { tag: 'ΚΑΤΗΓΟΡΙΑ', help: 'ΙΑΤΡΙΚΟ, ΑΔΕΙΑ, ΠΟΙΝΗ' },
+  { tag: 'ΑΠΟ', help: '20/10' },
+  { tag: 'ΕΩΣ', help: '24/10' },
+  { tag: 'ΗΜΕΡΕΣ', help: '5' },
+  { tag: 'ΜΕΝΟΥΝ', help: '2' }, // μέρες που μένουν από τη μέρα του εντύπου, με τη σημερινή
+  { tag: 'ΚΑΤΕΥΘΥΝΣΗ', help: 'ΚΟΡΙΝΘΟΣ (άδειες)' }, // κατεύθυνση της άδειας (1/11), κενό αν δεν έχει
 ];
 // έτοιμες μορφές· ό,τι άλλο γράψεις είναι «δική σου»
-export const ST_FMTS = ['{ΚΩΔ}', '{ΣΥΝΤΟΜΑ}', '{ΟΝΟΜΑ}', '{ΚΑΤΗΓΟΡΙΑ}', '{ΚΩΔ} ΕΩΣ {ΕΩΣ}', '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}', '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)', 'ΝΑΙ', '{ΚΩΔ} X{ΜΕΝΟΥΝ}'];   // στο τέλος: οι παλιές θέσεις μένουν ίδιες
+export const ST_FMTS = [
+  '{ΚΩΔ}',
+  '{ΣΥΝΤΟΜΑ}',
+  '{ΟΝΟΜΑ}',
+  '{ΚΑΤΗΓΟΡΙΑ}',
+  '{ΚΩΔ} ΕΩΣ {ΕΩΣ}',
+  '{ΚΩΔ} {ΑΠΟ}-{ΕΩΣ}',
+  '{ΚΩΔ} ({ΗΜΕΡΕΣ} ΗΜ.)',
+  'ΝΑΙ',
+  '{ΚΩΔ} X{ΜΕΝΟΥΝ}',
+]; // στο τέλος: οι παλιές θέσεις μένουν ίδιες
 // Μία κατάσταση με τη μορφή fmt (χωρίς: ΕΑ, ΚΑ, ΠΕΡΙΟΡΙΣΜΟΣ, όπως πριν)
-export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open' | 'dest'>, fmt: string | undefined, lists?: AppState['settings']['lists'], d?: ISODate): string {
-  const lbl = statusLbl(st, lists); if (!fmt || fmt === '{ΚΩΔ}') return lbl;
-  const t = TYPES[st.type]; const cat = t?.cat || '';
+export function stText(
+  st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open' | 'dest'>,
+  fmt: string | undefined,
+  lists?: AppState['settings']['lists'],
+  d?: ISODate,
+): string {
+  const lbl = statusLbl(st, lists);
+  if (!fmt || fmt === '{ΚΩΔ}') return lbl;
+  const t = TYPES[st.type];
+  const cat = t?.cat || '';
   const tag = (name: string): string | null => {
     switch (normGreek(name).replace(/\s+/g, '')) {
-      case 'ΚΩΔ': case 'ΚΩΔΙΚΟΣ': return lbl;
-      case 'ΣΥΝΤΟΜΑ': return cat === 'abs' || cat === 'pun' ? CAT_WORD[cat]! : st.type === 'OUT' ? 'ΕΞΟΔΟΣ' : lbl;
-      case 'ΟΝΟΜΑ': return st.type === 'PUN' ? lbl : st.type === 'LEAVE' && st.kind ? leavePhrase(st) : lbl !== t?.label ? lbl : t?.long || lbl;
-      case 'ΚΑΤΗΓΟΡΙΑ': return CAT_WORD[cat] || lbl;
-      case 'ΚΑΤΕΥΘΥΝΣΗ': return st.dest?.trim() || '';   // της άδειας (κενό αν δεν έχει)
-      case 'ΑΠΟ': return dm(st.from);
-      case 'ΕΩΣ': return st.open ? '…' : dm(st.to);
-      case 'ΗΜΕΡΕΣ': return st.open ? '…' : String(daysBetween(st.from, st.to));
-      case 'ΜΕΝΟΥΝ': case 'ΜΕΝΟΥΝΗΜΕΡΕΣ': return st.open ? '…' : String(Math.max(0, daysBetween(d && d > st.from ? d : st.from, st.to)));   // από τη μέρα d, με αυτήν
+      case 'ΚΩΔ':
+      case 'ΚΩΔΙΚΟΣ':
+        return lbl;
+      case 'ΣΥΝΤΟΜΑ':
+        return cat === 'abs' || cat === 'pun' ? CAT_WORD[cat]! : st.type === 'OUT' ? 'ΕΞΟΔΟΣ' : lbl;
+      case 'ΟΝΟΜΑ':
+        return st.type === 'PUN'
+          ? lbl
+          : st.type === 'LEAVE' && st.kind
+            ? leavePhrase(st)
+            : lbl !== t?.label
+              ? lbl
+              : t?.long || lbl;
+      case 'ΚΑΤΗΓΟΡΙΑ':
+        return CAT_WORD[cat] || lbl;
+      case 'ΚΑΤΕΥΘΥΝΣΗ':
+        return st.dest?.trim() || ''; // της άδειας (κενό αν δεν έχει)
+      case 'ΑΠΟ':
+        return dm(st.from);
+      case 'ΕΩΣ':
+        return st.open ? '…' : dm(st.to);
+      case 'ΗΜΕΡΕΣ':
+        return st.open ? '…' : String(daysBetween(st.from, st.to));
+      case 'ΜΕΝΟΥΝ':
+      case 'ΜΕΝΟΥΝΗΜΕΡΕΣ':
+        return st.open ? '…' : String(Math.max(0, daysBetween(d && d > st.from ? d : st.from, st.to))); // από τη μέρα d, με αυτήν
     }
     return null;
   };
@@ -156,42 +400,68 @@ export function stText(st: Pick<Status, 'type' | 'kind' | 'from' | 'to' | 'open'
 }
 // Οι καταστάσεις ενός στρατιώτη τη μέρα d (κατηγορίες cats, null: όλες), μία φορά η καθεμία, με κόμμα
 function stCol(s: AppState, pid: number, d: ISODate, cats: StCat[] | null, fmt?: string, only?: 'new'): string {
-  const on = statusesOn(live(s), pid, d).filter(x => (!cats || cats.includes(TYPES[x.type]?.cat as StCat)) && (only !== 'new' || x.from === d));
-  return [...new Set(on.map(x => stText(x, fmt, s.settings.lists, d)).filter(Boolean))].join(', ');
+  const on = statusesOn(live(s), pid, d).filter(
+    (x) => (!cats || cats.includes(TYPES[x.type]?.cat as StCat)) && (only !== 'new' || x.from === d),
+  );
+  return [...new Set(on.map((x) => stText(x, fmt, s.settings.lists, d)).filter(Boolean))].join(', ');
 }
 // Συνδυασμός: στοιχεία που δεν μπαίνουν σε συνδυασμό, η προεπιλογή (ΣΤΡ (ΜΧ)) και έτοιμες μορφές για n στοιχεία
 const COMBO_NO = new Set(['aa', 'blank', 'text', 'combo', 'col']);
 // «Κενός πίνακας», άτομο ανά γραμμή (Michael, 30/10): το FIELDS.blank έχει και τα στοιχεία των ατόμων. Κλειδιά: του στρατιώτη όπως είναι (rank, name, asm…),
 // του στελέχους ίδια όταν υπάρχουν και στους δύο (rank, name, who, phone, role, status) και μόνο ό,τι έχει το στέλεχος με δικό του κλειδί ('am'), άρα δεν συγκρούονται.
 // Στέλεχος σε στοιχείο που δεν έχει (ΑΣΜ, θάλαμος…) δίνει κενό κελί, στρατιώτης σε 'am' επίσης
-FIELDS.blank.push(...FIELDS.people.filter(f => !COMBO_NO.has(f.k)), ...FIELDS.cadre.filter(f => !COMBO_NO.has(f.k) && !FIELDS.people.some(x => x.k === f.k)));
-export const comboFields = (kind: RepKind) => FIELDS[kind].filter(f => !COMBO_NO.has(f.k));
+FIELDS.blank.push(
+  ...FIELDS.people.filter((f) => !COMBO_NO.has(f.k)),
+  ...FIELDS.cadre.filter((f) => !COMBO_NO.has(f.k) && !FIELDS.people.some((x) => x.k === f.k)),
+);
+export const comboFields = (kind: RepKind) => FIELDS[kind].filter((f) => !COMBO_NO.has(f.k));
 export const DEF_COMBO: Required<Pick<ColOpts, 'parts' | 'fmt'>> = { parts: ['rank1', 'spec'], fmt: '{1} ({2})' };
 export function comboFmts(n: number): string[] {
   const p = Array.from({ length: Math.max(1, n) }, (_, i) => '{' + (i + 1) + '}');
   if (p.length === 1) return ['{1}'];
   return [p.join(' '), p[0] + ' (' + p.slice(1).join(' ') + ')', p.join(' - '), p.join('/'), p.join(', ')];
 }
-export const comboOf = (o?: ColOpts) => (o?.parts?.length ? { parts: o.parts, fmt: o.fmt ?? comboFmts(o.parts.length)[0] } : DEF_COMBO);
+export const comboOf = (o?: ColOpts) =>
+  o?.parts?.length ? { parts: o.parts, fmt: o.fmt ?? comboFmts(o.parts.length)[0] } : DEF_COMBO;
 // Γέμισμα της μορφής· αν κάποιο στοιχείο είναι κενό, φεύγουν οι άδειες παρενθέσεις και τα διπλά/ακραία διαχωριστικά
 // («ΣΤΡ ()» → «ΣΤΡ», «Α - - Γ» → «Α - Γ»)
 export function fillFmt(fmt: string, vals: string[]): string {
   let empty = false;
-  const out = fmt.replace(/\{(\d{1,2})\}/g, (_m, n: string) => { const v = vals[+n - 1] ?? ''; if (!v) empty = true; return v; });
+  const out = fmt.replace(/\{(\d{1,2})\}/g, (_m, n: string) => {
+    const v = vals[+n - 1] ?? '';
+    if (!v) empty = true;
+    return v;
+  });
   if (!empty) return out.trim();
   let t = out;
   for (let i = 0; i < 3; i++) t = t.replace(/\(\s*\)|\[\s*\]/g, '');
-  t = t.replace(/([,/\-–·])(?:\s*\1)+/g, '$1').replace(/\s+/g, ' ').replace(/\s+([,)\]])/g, '$1').replace(/([([])\s+/g, '$1');
+  t = t
+    .replace(/([,/\-–·])(?:\s*\1)+/g, '$1')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,)\]])/g, '$1')
+    .replace(/([([])\s+/g, '$1');
   return t.replace(/^[\s,/\-–·]+|[\s,/\-–·]+$/g, '').trim();
 }
 // Η επικεφαλίδα του συνδυασμού από τα ονόματα των στοιχείων (ΒΑΘΜΟΣ (Ο/Σ))· και για τις έτοιμες μορφές στη λίστα
-export const comboHead = (kind: RepKind, o?: ColOpts, fmt?: string) => { const c = comboOf(o); return fillFmt(fmt ?? c.fmt, c.parts.map(k => fieldOf(kind, k)?.head || '')); };
+export const comboHead = (kind: RepKind, o?: ColOpts, fmt?: string) => {
+  const c = comboOf(o);
+  return fillFmt(
+    fmt ?? c.fmt,
+    c.parts.map((k) => fieldOf(kind, k)?.head || ''),
+  );
+};
 
 // Στοιχεία εντύπου: ένα κελί (κεφαλίδα, ημερομηνία, υπογραφές…), είτε με κλικ στο κελί είτε με {ΕΤΙΚΕΤΑ} μέσα στο Excel
-export interface CellDef { k: string; label: string; tag: string }
+export interface CellDef {
+  k: string;
+  label: string;
+  tag: string;
+}
 export const CELLS: CellDef[] = [
   { k: 'head', label: 'Κεφαλίδα εγγράφων (3 γραμμές, Ρυθμίσεις)', tag: 'ΚΕΦΑΛΙΔΑ' },
-  { k: 'head1', label: 'Κεφαλίδα, 1η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 1' }, { k: 'head2', label: 'Κεφαλίδα, 2η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 2' }, { k: 'head3', label: 'Κεφαλίδα, 3η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 3' },
+  { k: 'head1', label: 'Κεφαλίδα, 1η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 1' },
+  { k: 'head2', label: 'Κεφαλίδα, 2η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 2' },
+  { k: 'head3', label: 'Κεφαλίδα, 3η γραμμή', tag: 'ΚΕΦΑΛΙΔΑ 3' },
   { k: 'unitName', label: 'Όνομα μονάδας (π.χ. 4ης ΙΛΗΣ)', tag: 'ΜΟΝΑΔΑ' },
   { k: 'placeDate', label: 'Τόπος και ημερομηνία (ΑΥΛΩΝΑΣ, 19 ΟΚΤ 26)', tag: 'ΤΟΠΟΣ ΗΜΕΡΟΜΗΝΙΑ' },
   { k: 'date', label: 'Ημερομηνία (19/10/2026)', tag: 'ΗΜΕΡΟΜΗΝΙΑ' },
@@ -202,34 +472,47 @@ export const CELLS: CellDef[] = [
   { k: 'cmdName', label: 'Υπογραφή Διοικητή (όνομα, Ρυθμίσεις)', tag: 'ΔΙΟΙΚΗΤΗΣ' },
   { k: 'esso', label: 'ΕΣΣΟ (Γ΄ ΕΣΣΟ 2026)', tag: 'ΕΣΣΟ' },
   { k: 'officer', label: 'Αξιωματικός υπηρεσίας', tag: 'ΑΞΙΩΜΑΤΙΚΟΣ ΥΠΗΡΕΣΙΑΣ' },
-  { k: 'group', label: 'Ομάδα του φύλλου (π.χ. ΘΑΛΑΜΟΣ 3, όταν χωρίζεται σε φύλλα)', tag: 'ΟΜΑΔΑ' }
+  { k: 'group', label: 'Ομάδα του φύλλου (π.χ. ΘΑΛΑΜΟΣ 3, όταν χωρίζεται σε φύλλα)', tag: 'ΟΜΑΔΑ' },
 ];
-export const cellOf = (k: string) => CELLS.find(x => x.k === k);
-const TAG_KEY = new Map(CELLS.map(c => [normGreek(c.tag), c.k]));
+export const cellOf = (k: string) => CELLS.find((x) => x.k === k);
+const TAG_KEY = new Map(CELLS.map((c) => [normGreek(c.tag), c.k]));
 export const TAG_RE = /\{([^{}]{1,40})\}/g;
 
-export interface RepCol { c: number; f: string; text?: string; h?: string; o?: ColOpts }   // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
-export interface RepCell { ref: string; k: string }
+export interface RepCol {
+  c: number;
+  f: string;
+  text?: string;
+  h?: string;
+  o?: ColOpts;
+} // c: στήλη από 1 · h: η επικεφαλίδα όταν αντιστοιχίστηκε (για να ξαναβρεθεί)
+export interface RepCell {
+  ref: string;
+  k: string;
+}
 export interface RepPick {
-  from: 'all' | 'present' | RosterFilter;   // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
-  view?: string;                              // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
-  noDuty?: boolean;                           // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
-  need?: RepCond[]; not?: RepCond[];          // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
-  or?: { need?: RepCond[]; not?: RepCond[] }[];  // (Michael 03/11) άλλες ομάδες φίλτρων: μπαίνει όποιος περνά την ομάδα 1 (need/not) Ή μία από αυτές
-  always?: number[]; never?: number[];        // στρατιώτες: πάντα μέσα (ό,τι κι αν λένε τα φίλτρα) / ποτέ σε αυτό το έντυπο
-  gap?: number;                               // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
-  si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
-  mode: 'all' | 'first' | 'random'; n?: number;
-  even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
-  fair?: boolean;                             // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
-  cats?: StCat[];                             // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
-  types?: TypeKey[];                          // Καταστάσεις: μόνο αυτά τα είδη μέσα στις κατηγορίες (Michael 4/11: «μόνο οι ελεύθεροι υπηρεσίας»)· κενό = όλα
-  when?: 'on' | 'from' | 'new';                // Καταστάσεις: όσες ισχύουν τη μέρα, όσες ισχύουν από τη μέρα και μετά, ή μόνο όσες ξεκινούν τη μέρα
-  blocks?: string[];                          // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
-  empty?: boolean;                            // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
-  wf?: WeaponFilter;                          // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
-  open?: boolean;                             // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
-  stNew?: true;                               // μόνο όσες δηλώθηκαν (ξεκινούν) τη μέρα του εντύπου: στα φίλτρα ιατρικό/ποινή/άδεια/εισαγωγή και σε όλες τις στήλες καταστάσεων
+  from: 'all' | 'present' | RosterFilter; // όλοι σε δύναμη, οι παρόντες τη μέρα, ή ένα φίλτρο του Δυναμολογίου
+  view?: string; // αποθηκευμένη λίστα του Δυναμολογίου (SavedView.id)
+  noDuty?: boolean; // (παλιό) χωρίς όσους έχουν υπηρεσία τη μέρα ή την επόμενη: τώρα not: ['duty']
+  need?: RepCond[];
+  not?: RepCond[]; // φίλτρα που συνδυάζονται: πρέπει να ισχύουν όλα τα need και κανένα από τα not
+  or?: { need?: RepCond[]; not?: RepCond[] }[]; // (Michael 03/11) άλλες ομάδες φίλτρων: μπαίνει όποιος περνά την ομάδα 1 (need/not) Ή μία από αυτές
+  always?: number[];
+  never?: number[]; // στρατιώτες: πάντα μέσα (ό,τι κι αν λένε τα φίλτρα) / ποτέ σε αυτό το έντυπο
+  gap?: number; // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
+  si?: string[];
+  rooms?: number[]; // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
+  mode: 'all' | 'first' | 'random';
+  n?: number;
+  even?: boolean; // τυχαία: ισομερώς από κάθε θάλαμο
+  fair?: boolean; // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
+  cats?: StCat[]; // Καταστάσεις: ποια είδη (κενό = ιατρικά, ποινές, άδειες)
+  types?: TypeKey[]; // Καταστάσεις: μόνο αυτά τα είδη μέσα στις κατηγορίες (Michael 4/11: «μόνο οι ελεύθεροι υπηρεσίας»)· κενό = όλα
+  when?: 'on' | 'from' | 'new'; // Καταστάσεις: όσες ισχύουν τη μέρα, όσες ισχύουν από τη μέρα και μετά, ή μόνο όσες ξεκινούν τη μέρα
+  blocks?: string[]; // Υπηρεσίες: μόνο αυτές οι ομάδες θέσεων (κενό = όλες)
+  empty?: boolean; // Υπηρεσίες: και οι θέσεις που δεν έχουν κανέναν
+  wf?: WeaponFilter; // Οπλισμός: φίλτρο της καρτέλας Οπλισμός (προεπιλογή: με όπλο)
+  open?: boolean; // Κινήσεις όπλων: μόνο όσα είναι ακόμα έξω
+  stNew?: true; // μόνο όσες δηλώθηκαν (ξεκινούν) τη μέρα του εντύπου: στα φίλτρα ιατρικό/ποινή/άδεια/εισαγωγή και σε όλες τις στήλες καταστάσεων
 }
 // Φίλτρα στρατιωτών που συνδυάζονται (Michael 20/10: «π.χ. όχι πόστα και με ιατρικά»), όλα για τη μέρα του εντύπου
 export type RepCond = 'present' | 'duty' | 'post' | 'med' | 'pun' | 'leave' | 'other' | 'dnright' | 'weapon' | 'pdata';
@@ -243,13 +526,21 @@ export const REP_CONDS: { id: RepCond; label: string; yes: string; no: string }[
   { id: 'other', label: 'Εισαγωγή τη μέρα (ΣΤΕΠ, νοσοκομείο)', yes: 'Με εισαγωγή', no: 'Χωρίς εισαγωγή' },
   { id: 'dnright', label: 'Δικαίωμα ΔΝ', yes: 'Με δικαίωμα ΔΝ', no: 'Χωρίς δικαίωμα ΔΝ' },
   { id: 'weapon', label: 'Όπλο', yes: 'Με όπλο', no: 'Χωρίς όπλο' },
-  { id: 'pdata', label: 'Προσωπικά στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ)', yes: 'Τα έχουν όλα', no: 'Λείπει κάποιο' }
+  { id: 'pdata', label: 'Προσωπικά στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ)', yes: 'Τα έχουν όλα', no: 'Λείπει κάποιο' },
 ];
-const LEGACY_FROM: Partial<Record<string, RepCond>> = { present: 'present', leave: 'leave', pun: 'pun', post: 'post', dnright: 'dnright' };
+const LEGACY_FROM: Partial<Record<string, RepCond>> = {
+  present: 'present',
+  leave: 'leave',
+  pun: 'pun',
+  post: 'post',
+  dnright: 'dnright',
+};
 // Τα φίλτρα του εντύπου, και από τα παλιά πεδία (from: παρόντες/άδειες/…, noDuty), ώστε τα αποθηκευμένα έντυπα να δουλεύουν όπως πριν
 export function condsOf(pk: RepPick): { need: RepCond[]; not: RepCond[] } {
-  const need = new Set(pk.need || []); const not = new Set(pk.not || []);
-  const old = LEGACY_FROM[pk.from]; if (old) need.add(old);
+  const need = new Set(pk.need || []);
+  const not = new Set(pk.not || []);
+  const old = LEGACY_FROM[pk.from];
+  if (old) need.add(old);
   if (pk.noDuty) not.add('duty');
   for (const c of need) not.delete(c);
   return { need: [...need], not: [...not] };
@@ -257,21 +548,34 @@ export function condsOf(pk: RepPick): { need: RepCond[]; not: RepCond[] } {
 // Αλλάζει ένα φίλτρο (any: όλοι, yes: μόνο όσοι το έχουν, no: χωρίς όσους το έχουν). Γράφει μόνο τα νέα πεδία.
 export function setCond(pk: RepPick, c: RepCond, v: 'any' | 'yes' | 'no'): RepPick {
   const { need, not } = condsOf(pk);
-  const n = need.filter(x => x !== c); const o = not.filter(x => x !== c);
-  if (v === 'yes') n.push(c); if (v === 'no') o.push(c);
-  const order = (l: RepCond[]) => REP_CONDS.map(x => x.id).filter(x => l.includes(x));
+  const n = need.filter((x) => x !== c);
+  const o = not.filter((x) => x !== c);
+  if (v === 'yes') n.push(c);
+  if (v === 'no') o.push(c);
+  const order = (l: RepCond[]) => REP_CONDS.map((x) => x.id).filter((x) => l.includes(x));
   return { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: order(n), not: order(o) };
 }
 // Οι ομάδες φίλτρων: η 1η από τα need/not (και τα παλιά πεδία), οι άλλες από το or· κάθε ομάδα με σειρά REP_CONDS, χωρίς διπλά
 type CondGroup = { need: RepCond[]; not: RepCond[] };
-const condOrder = (l: Iterable<RepCond>) => { const s = new Set(l); return REP_CONDS.map(x => x.id).filter(x => s.has(x)); };
-const normGroup = (g: { need?: RepCond[]; not?: RepCond[] }): CondGroup => { const need = condOrder(g.need || []); return { need, not: condOrder((g.not || []).filter(c => !need.includes(c))) }; };
-export function condGroups(pk: RepPick): CondGroup[] { return [condsOf(pk), ...(pk.or || []).map(normGroup)]; }
+const condOrder = (l: Iterable<RepCond>) => {
+  const s = new Set(l);
+  return REP_CONDS.map((x) => x.id).filter((x) => s.has(x));
+};
+const normGroup = (g: { need?: RepCond[]; not?: RepCond[] }): CondGroup => {
+  const need = condOrder(g.need || []);
+  return { need, not: condOrder((g.not || []).filter((c) => !need.includes(c))) };
+};
+export function condGroups(pk: RepPick): CondGroup[] {
+  return [condsOf(pk), ...(pk.or || []).map(normGroup)];
+}
 // Αλλάζει ένα φίλτρο της ομάδας gi (0: η 1η, όπως το setCond)
 export function setGroupCond(pk: RepPick, gi: number, c: RepCond, v: 'any' | 'yes' | 'no'): RepPick {
   if (gi <= 0 || !pk.or?.[gi - 1]) return setCond(pk, c, v);
-  const g = normGroup(pk.or[gi - 1]); const need = g.need.filter(x => x !== c); const not = g.not.filter(x => x !== c);
-  if (v === 'yes') need.push(c); if (v === 'no') not.push(c);
+  const g = normGroup(pk.or[gi - 1]);
+  const need = g.need.filter((x) => x !== c);
+  const not = g.not.filter((x) => x !== c);
+  if (v === 'yes') need.push(c);
+  if (v === 'no') not.push(c);
   return { ...pk, or: pk.or.map((x, i) => (i === gi - 1 ? normGroup({ need, not }) : x)) };
 }
 // Νέα ομάδα: αντίγραφο της ομάδας copyFrom
@@ -281,167 +585,586 @@ export function addGroup(pk: RepPick, copyFrom: number): RepPick {
 }
 // Σβήνει την ομάδα gi· αν σβηστεί η 1η, η 2η παίρνει τη θέση της
 export function removeGroup(pk: RepPick, gi: number): RepPick {
-  const or = pk.or || []; if (!or.length) return pk;
-  if (gi > 0) { const left = or.filter((_, i) => i !== gi - 1); return { ...pk, or: left.length ? left : undefined }; }
-  const g = normGroup(or[0]); const rest = or.slice(1);
-  return { ...pk, from: pk.from === 'inactive' ? 'inactive' : 'all', noDuty: undefined, need: g.need, not: g.not, or: rest.length ? rest : undefined };
+  const or = pk.or || [];
+  if (!or.length) return pk;
+  if (gi > 0) {
+    const left = or.filter((_, i) => i !== gi - 1);
+    return { ...pk, or: left.length ? left : undefined };
+  }
+  const g = normGroup(or[0]);
+  const rest = or.slice(1);
+  return {
+    ...pk,
+    from: pk.from === 'inactive' ? 'inactive' : 'all',
+    noDuty: undefined,
+    need: g.need,
+    not: g.not,
+    or: rest.length ? rest : undefined,
+  };
 }
-export const condVal = (pk: RepPick, c: RepCond): 'any' | 'yes' | 'no' => { const { need, not } = condsOf(pk); return need.includes(c) ? 'yes' : not.includes(c) ? 'no' : 'any'; };
+export const condVal = (pk: RepPick, c: RepCond): 'any' | 'yes' | 'no' => {
+  const { need, not } = condsOf(pk);
+  return need.includes(c) ? 'yes' : not.includes(c) ? 'no' : 'any';
+};
 // Ελέγχει ένα φίλτρο για έναν στρατιώτη τη μέρα d (τα σύνολα φτιάχνονται μία φορά, μόνο όσα χρειάζονται)
-const passGroup = (t: (c: RepCond, p: Person) => boolean, g: CondGroup, p: Person) => g.need.every(c => t(c, p)) && !g.not.some(c => t(c, p));
+const passGroup = (t: (c: RepCond, p: Person) => boolean, g: CondGroup, p: Person) =>
+  g.need.every((c) => t(c, p)) && !g.not.some((c) => t(c, p));
 // Ποια ομάδα φίλτρων (0, 1…) περνά πρώτη ο στρατιώτης, ή -1 (για το σήμα «Ομ. K» στη λίστα)
 export function matchGroup(s: AppState, pk: RepPick, d: ISODate): (p: Person) => number {
-  const gs = condGroups(pk); const t = condTest(s, d, pk.stNew);
-  return p => gs.findIndex(g => passGroup(t, g, p));
+  const gs = condGroups(pk);
+  const t = condTest(s, d, pk.stNew);
+  return (p) => gs.findIndex((g) => passGroup(t, g, p));
 }
 // stNew: μόνο οι καταστάσεις που ξεκινούν τη μέρα d
 function condTest(s: AppState, d: ISODate, stNew?: boolean) {
-  let present: Set<number> | null = null; let busy: Set<number> | null = null;
+  let present: Set<number> | null = null;
+  let busy: Set<number> | null = null;
   return (c: RepCond, p: Person): boolean => {
-    if (c === 'present') { present = present || new Set(strengthOf(s, d).lists.present.map(x => x.id)); return present.has(p.id); }
-    if (c === 'duty') { busy = busy || new Set<number>([...Object.values(s.guards[d] || {}), ...Object.values(s.guards[addDays(d, 1)] || {})].filter((x): x is number => typeof x === 'number')); return busy.has(p.id); }
+    if (c === 'present') {
+      present = present || new Set(strengthOf(s, d).lists.present.map((x) => x.id));
+      return present.has(p.id);
+    }
+    if (c === 'duty') {
+      busy =
+        busy ||
+        new Set<number>(
+          [...Object.values(s.guards[d] || {}), ...Object.values(s.guards[addDays(d, 1)] || {})].filter(
+            (x): x is number => typeof x === 'number',
+          ),
+        );
+      return busy.has(p.id);
+    }
     if (c === 'post') return !!p.post;
     if (c === 'dnright') return !!p.dn;
     if (c === 'weapon') return !!(p.weapon || '').trim();
-    if (c === 'pdata') return PKEYS.every(k => !!p[k]);
-    const all = statusesOn(live(s), p.id, d); const on = stNew ? all.filter(x => x.from === d) : all;
-    if (c === 'med' || c === 'other') return on.some(x => TYPES[x.type]?.cat === c);
+    if (c === 'pdata') return PKEYS.every((k) => !!p[k]);
+    const all = statusesOn(live(s), p.id, d);
+    const on = stNew ? all.filter((x) => x.from === d) : all;
+    if (c === 'med' || c === 'other') return on.some((x) => TYPES[x.type]?.cat === c);
     return !!filterStatus(c, on);
   };
 }
 export type RepSort = 'name' | 'room' | 'rank' | 'pick' | 'from' | 'seat';
 export type StCat = 'med' | 'pun' | 'abs' | 'other' | 'out';
-export const ST_CATS: { id: StCat; label: string }[] = [{ id: 'med', label: 'Ιατρικά' }, { id: 'pun', label: 'Ποινές' }, { id: 'abs', label: 'Άδειες' }, { id: 'other', label: 'ΣΤΕΠ, νοσοκομείο' }, { id: 'out', label: 'Έξοδοι' }];
+export const ST_CATS: { id: StCat; label: string }[] = [
+  { id: 'med', label: 'Ιατρικά' },
+  { id: 'pun', label: 'Ποινές' },
+  { id: 'abs', label: 'Άδειες' },
+  { id: 'other', label: 'ΣΤΕΠ, νοσοκομείο' },
+  { id: 'out', label: 'Έξοδοι' },
+];
 export const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
 // Πού βγαίνει ως φύλλο: στο Δυναμολόγιο (το αρχείο του, όποιο είναι τη στιγμή που βγαίνει) ή σε άλλο Excel.
 // auto: ξαναγράφεται μόνο του μετά από κάθε αλλαγή (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
-export interface RepTarget { to: 'people' | 'file'; file?: string; sheet: string; auto?: boolean }
+export interface RepTarget {
+  to: 'people' | 'file';
+  file?: string;
+  sheet: string;
+  auto?: boolean;
+}
 export type RepSplit = 'none' | 'room' | 'unit' | 'si';
-export const SPLITS: { value: RepSplit; label: string }[] = [{ value: 'none', label: 'Ένα για όλους' }, { value: 'room', label: 'Ανά θάλαμο' }, { value: 'unit', label: 'Ανά ουλαμό' }, { value: 'si', label: 'Ανά Σ.Ι.' }];
+export const SPLITS: { value: RepSplit; label: string }[] = [
+  { value: 'none', label: 'Ένα για όλους' },
+  { value: 'room', label: 'Ανά θάλαμο' },
+  { value: 'unit', label: 'Ανά ουλαμό' },
+  { value: 'si', label: 'Ανά Σ.Ι.' },
+];
 export interface Report {
-  id: string; name: string; tpl: string; kind: RepKind;
-  sheet: string; head: number;                // φύλλο και γραμμή επικεφαλίδων (από 1)
-  cols: RepCol[]; cells: RepCell[];
-  title?: string;                             // για το στοιχείο «Τίτλος»
-  tday?: string;                              // «Για ποια μέρα» ο 1ος πίνακας: κενό = όπως το έντυπο, 'next' = επόμενη εργάσιμη, '+N'
+  id: string;
+  name: string;
+  tpl: string;
+  kind: RepKind;
+  sheet: string;
+  head: number; // φύλλο και γραμμή επικεφαλίδων (από 1)
+  cols: RepCol[];
+  cells: RepCell[];
+  title?: string; // για το στοιχείο «Τίτλος»
+  tday?: string; // «Για ποια μέρα» ο 1ος πίνακας: κενό = όπως το έντυπο, 'next' = επόμενη εργάσιμη, '+N'
 
-  pick: RepPick; sort: RepSort;
+  pick: RepPick;
+  sort: RepSort;
   day: 'today' | 'tomorrow' | 'ask';
   out: 'file' | 'print' | 'sheet';
-  target?: RepTarget;                         // out = 'sheet'
-  split?: RepSplit;                           // ένα φύλλο ανά θάλαμο, ουλαμό ή Σ.Ι.
-  trim?: boolean;                             // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
-  daily?: boolean;                            // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
-  sigs?: Sig[];                               // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
-  layout?: Moves;                             // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
-  src?: BlankSrc;                             // «Κενός πίνακας»: γραμμές από φίλτρο (τα άτομα του pick, πριν τις δικές σου)
-  who?: (string | null)[];                    // «Κενός πίνακας» (kind blank): το άτομο κάθε γραμμής, 'p:12' (στρατιώτης) ή 'c:3' (στέλεχος)· κενό/σβησμένο = κενή γραμμή
-  more?: RepTable[];                          // κι άλλοι πίνακες κάτω από τον πρώτο, με δικές τους στήλες και δικούς τους ποιοι μπαίνουν
-  fixed?: boolean;                            // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
-  vals?: ValueTable[];                        // πίνακες τιμών (shared/values.ts): κείμενο και τιμή, κάτω από τους πίνακες, πριν τις υπογραφές· χωρίς πίνακα ατόμων επιτρέπεται το έντυπο να έχει μόνο αυτούς
-  at?: VAt;                                   // στιγμή μέτρησης των πινάκων τιμών (κενό: όπως η Δύναμη της μέρας)
-  bands?: Bands;                              // θέσεις πινάκων (Φάση 3, shared/repBands.ts): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη οι πίνακες δίπλα-δίπλα· κενό: ο ένας κάτω από τον άλλον όπως πριν
-  fixsz?: boolean;                            // «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): ό,τι γράφεται δεν μικραίνει για να χωρέσει (αναδιπλώνεται, ψηλώνει η γραμμή) και η εκτύπωση βγαίνει με τα γράμματα του Excel σε όσες σελίδες χρειαστούν
-  nohead?: boolean;                           // ο 1ος πίνακας βγαίνει χωρίς γραμμή επικεφαλίδων (η γραμμή μένει στο πρότυπο για να βρίσκονται οι στήλες, κρύβεται στο έντυπο)· μπαίνει από το «Φτιάξ' το εδώ»
+  target?: RepTarget; // out = 'sheet'
+  split?: RepSplit; // ένα φύλλο ανά θάλαμο, ουλαμό ή Σ.Ι.
+  trim?: boolean; // σβήνονται οι έτοιμες κενές γραμμές του προτύπου που περισσεύουν
+  daily?: boolean; // βγαίνει και από τα «Έντυπα ημέρας» (Σήμερα), μαζί με ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχους
+  sigs?: Sig[]; // δικές του υπογραφές (κενό = Ρυθμίσεις › Υπογραφές › Έντυπα)
+  layout?: Moves; // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία (όλα τα φύλλα του), layout.ts
+  src?: BlankSrc; // «Κενός πίνακας»: γραμμές από φίλτρο (τα άτομα του pick, πριν τις δικές σου)
+  who?: (string | null)[]; // «Κενός πίνακας» (kind blank): το άτομο κάθε γραμμής, 'p:12' (στρατιώτης) ή 'c:3' (στέλεχος)· κενό/σβησμένο = κενή γραμμή
+  more?: RepTable[]; // κι άλλοι πίνακες κάτω από τον πρώτο, με δικές τους στήλες και δικούς τους ποιοι μπαίνουν
+  fixed?: boolean; // πρότυπο σε πλέγμα (πίνακες με δικό τους πλάτος/θέση): οι στήλες δεν φαρδαίνουν όταν γεμίζει
+  vals?: ValueTable[]; // πίνακες τιμών (shared/values.ts): κείμενο και τιμή, κάτω από τους πίνακες, πριν τις υπογραφές· χωρίς πίνακα ατόμων επιτρέπεται το έντυπο να έχει μόνο αυτούς
+  at?: VAt; // στιγμή μέτρησης των πινάκων τιμών (κενό: όπως η Δύναμη της μέρας)
+  bands?: Bands; // θέσεις πινάκων (Φάση 3, shared/repBands.ts): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη οι πίνακες δίπλα-δίπλα· κενό: ο ένας κάτω από τον άλλον όπως πριν
+  fixsz?: boolean; // «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): ό,τι γράφεται δεν μικραίνει για να χωρέσει (αναδιπλώνεται, ψηλώνει η γραμμή) και η εκτύπωση βγαίνει με τα γράμματα του Excel σε όσες σελίδες χρειαστούν
+  nohead?: boolean; // ο 1ος πίνακας βγαίνει χωρίς γραμμή επικεφαλίδων (η γραμμή μένει στο πρότυπο για να βρίσκονται οι στήλες, κρύβεται στο έντυπο)· μπαίνει από το «Φτιάξ' το εδώ»
 }
 // Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
 // επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
-export interface RepTable { id: string; tday?: string; title?: string; kind: RepKind; head: number; cols: RepCol[]; pick: RepPick; sort: RepSort; nohead?: boolean; who?: (string | null)[]; src?: BlankSrc }   // who, src: όπως στο Report (μόνο στο kind blank)
+export interface RepTable {
+  id: string;
+  tday?: string;
+  title?: string;
+  kind: RepKind;
+  head: number;
+  cols: RepCol[];
+  pick: RepPick;
+  sort: RepSort;
+  nohead?: boolean;
+  who?: (string | null)[];
+  src?: BlankSrc;
+} // who, src: όπως στο Report (μόνο στο kind blank)
 // Πρότυπο: αρχείο στον φάκελο «Πρότυπα εντύπων» (file = όνομα αρχείου)· built: φτιαγμένο στην εφαρμογή με αυτές τις επιλογές
-export interface RepTpl { id: string; name: string; file: string; built?: BuildOpts; mtime?: number }
-export interface BuildCol { f: string; h: string; w: 'auto' | 'narrow' | 'wide'; text?: string; o?: ColOpts }
+export interface RepTpl {
+  id: string;
+  name: string;
+  file: string;
+  built?: BuildOpts;
+  mtime?: number;
+}
+export interface BuildCol {
+  f: string;
+  h: string;
+  w: 'auto' | 'narrow' | 'wide';
+  text?: string;
+  o?: ColOpts;
+}
 // «Φτιάξ' το εδώ»: ένας ακόμα πίνακας κάτω από τον πρώτο (τίτλος του πίνακα, είδος, στήλες)
 // Πίνακας τιμών στο «Φτιάξ' το εδώ»: δεν έχει στήλες στο πρότυπο, μόνο κρατά χώρο (δίπλα σε πίνακα ατόμων ή σε δική του γραμμή) που τον γεμίζει το έντυπο
-export interface BuildVal { id: string; title?: string; ta?: TAlign; lay?: TabLay }
-export interface BuildTable { id: string; tday?: string; title: string; ta?: TAlign; kind: RepKind; cols: BuildCol[]; lay?: TabLay; nohead?: boolean; grid?: string[][]; nrows?: number; who?: (string | null)[]; src?: BlankSrc }   // who: άτομο ανά γραμμή (Report.who), src: γραμμές από φίλτρο (Report.src) · nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
+export interface BuildVal {
+  id: string;
+  title?: string;
+  ta?: TAlign;
+  lay?: TabLay;
+}
+export interface BuildTable {
+  id: string;
+  tday?: string;
+  title: string;
+  ta?: TAlign;
+  kind: RepKind;
+  cols: BuildCol[];
+  lay?: TabLay;
+  nohead?: boolean;
+  grid?: string[][];
+  nrows?: number;
+  who?: (string | null)[];
+  src?: BlankSrc;
+} // who: άτομο ανά γραμμή (Report.who), src: γραμμές από φίλτρο (Report.src) · nohead: χωρίς γραμμή επικεφαλίδων (Michael, 29/10) · grid, nrows: «Κενός πίνακας» (όπως στο BuildOpts, για τους πίνακες 2, 3…)
 // Μέγεθος και θέση ενός πίνακα στο χαρτί (Michael, 22/10: «ένας πίνακας σε όλη τη σελίδα και ένας με 2 στήλες στο μισό,
 // στο κέντρο»): πλάτος (όσο χρειάζονται οι στήλες ή μέρος της σελίδας), αριστερά/κέντρο/δεξιά, ίσες στήλες, κενές γραμμές από πάνω
-export interface TabLay { w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4'; at?: 'left' | 'center' | 'right'; even?: boolean; gap?: number }
+export interface TabLay {
+  w?: 'auto' | 'full' | '3/4' | '2/3' | '1/2' | '1/3' | '1/4';
+  at?: 'left' | 'center' | 'right';
+  even?: boolean;
+  gap?: number;
+}
 export const TAB_WIDTHS: { value: NonNullable<TabLay['w']>; label: string; f: number }[] = [
-  { value: 'auto', label: 'Όσο χρειάζονται οι στήλες', f: 0 }, { value: 'full', label: 'Όλο το πλάτος', f: 1 }, { value: '3/4', label: 'Τα 3/4', f: 3 / 4 },
-  { value: '2/3', label: 'Τα 2/3', f: 2 / 3 }, { value: '1/2', label: 'Το μισό', f: 1 / 2 }, { value: '1/3', label: 'Το 1/3', f: 1 / 3 }, { value: '1/4', label: 'Το 1/4', f: 1 / 4 }];
+  { value: 'auto', label: 'Όσο χρειάζονται οι στήλες', f: 0 },
+  { value: 'full', label: 'Όλο το πλάτος', f: 1 },
+  { value: '3/4', label: 'Τα 3/4', f: 3 / 4 },
+  { value: '2/3', label: 'Τα 2/3', f: 2 / 3 },
+  { value: '1/2', label: 'Το μισό', f: 1 / 2 },
+  { value: '1/3', label: 'Το 1/3', f: 1 / 3 },
+  { value: '1/4', label: 'Το 1/4', f: 1 / 4 },
+];
 // Με κάποιον πίνακα σε δικό του πλάτος ή θέση, το φύλλο στήνεται σε πλέγμα στηλών (κάθε στήλη πίνακα = συγχωνευμένα κελιά)
 // Και όταν κάποιοι πίνακες είναι δίπλα-δίπλα (bands): μοιράζονται τις 24 στήλες
-export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOpts, 'bands' | 'vals'>>) => [o.lay, ...(o.more || []).map(t => t.lay), ...(o.vals || []).map(t => t.lay)].some(l => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even)) || hasBeside(o.bands || []);
+export const gridOn = (o: Pick<BuildOpts, 'lay' | 'more'> & Partial<Pick<BuildOpts, 'bands' | 'vals'>>) =>
+  [o.lay, ...(o.more || []).map((t) => t.lay), ...(o.vals || []).map((t) => t.lay)].some(
+    (l) => !!l && ((l.w && l.w !== 'auto') || (l.at && l.at !== 'left') || !!l.even),
+  ) || hasBeside(o.bands || []);
 // sig: 'list' = οι υπογραφές του εντύπου ή των Ρυθμίσεων (όσες είναι)· 'sgt'/'both': πρότυπα πριν τις 20/10 (λοχίας, διοικητής)
-export interface BuildOpts { tday?: string; title: string; cols: BuildCol[]; head: boolean; date: boolean; sig: 'none' | 'list' | 'sgt' | 'both'; land: boolean; sz: 10 | 11 | 12; fill: 'none' | 'gray' | 'olive'; more?: BuildTable[]; lay?: TabLay; nopeople?: boolean; bands?: Bands; vals?: BuildVal[]; nohead?: boolean; t1?: string; ta1?: TAlign; tta?: TAlign; grid?: string[][]; nrows?: number; who?: (string | null)[]; src?: BlankSrc }   // src: γραμμές από φίλτρο ('people'/'cadre': πρώτα όσοι περνούν τα φίλτρα του βήματος 4, οι nrows είναι οι δικές σου από κάτω, ως 0)· who: το άτομο κάθε γραμμής ('p:12', 'c:3', null), όπως στο Report.who · grid, nrows: «Κενό» (1ος πίνακας), τα κελιά που έγραψες (γραμμή × στήλη, χωρίς το Α/Α· κρατιούνται και πέρα από τις nrows) και πόσες γραμμές βγαίνουν (προεπιλογή 10) · ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
+export interface BuildOpts {
+  tday?: string;
+  title: string;
+  cols: BuildCol[];
+  head: boolean;
+  date: boolean;
+  sig: 'none' | 'list' | 'sgt' | 'both';
+  land: boolean;
+  sz: 10 | 11 | 12;
+  fill: 'none' | 'gray' | 'olive';
+  more?: BuildTable[];
+  lay?: TabLay;
+  nopeople?: boolean;
+  bands?: Bands;
+  vals?: BuildVal[];
+  nohead?: boolean;
+  t1?: string;
+  ta1?: TAlign;
+  tta?: TAlign;
+  grid?: string[][];
+  nrows?: number;
+  who?: (string | null)[];
+  src?: BlankSrc;
+} // src: γραμμές από φίλτρο ('people'/'cadre': πρώτα όσοι περνούν τα φίλτρα του βήματος 4, οι nrows είναι οι δικές σου από κάτω, ως 0)· who: το άτομο κάθε γραμμής ('p:12', 'c:3', null), όπως στο Report.who · grid, nrows: «Κενό» (1ος πίνακας), τα κελιά που έγραψες (γραμμή × στήλη, χωρίς το Α/Α· κρατιούνται και πέρα από τις nrows) και πόσες γραμμές βγαίνουν (προεπιλογή 10) · ta1, tta: στοίχιση του τίτλου του 1ου πίνακα και του γενικού τίτλου (κενό: αριστερά και κέντρο, όπως πριν) · t1: τίτλος του 1ου πίνακα (Michael, 29/10), πάνω αριστερά όπως των πινάκων 2, 3… (το title είναι ο γενικός τίτλος της σελίδας) · nohead: ο 1ος πίνακας χωρίς γραμμή επικεφαλίδων · nopeople: χωρίς πίνακα ατόμων (μόνο πίνακες τιμών, χωρίς πίνακες 2, 3…) · bands, vals: θέσεις πινάκων και πίνακες τιμών (μπαίνουν από το forBuild, δεν τα διαλέγει ο χρήστης εδώ)
 export const FILLS: Record<BuildOpts['fill'], string> = { none: '', gray: 'D9D9D9', olive: 'D8DFC4' };
 
 // Έτοιμα για αρχή (Φτιάξ' το εδώ)
-const bk = (kind: RepKind, f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf(kind, f)!.head, w });
-const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({ f, h: h ?? fieldOf('people', f)!.head, w });
+const bk = (kind: RepKind, f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({
+  f,
+  h: h ?? fieldOf(kind, f)!.head,
+  w,
+});
+const bc = (f: string, w: BuildCol['w'] = 'auto', h?: string): BuildCol => ({
+  f,
+  h: h ?? fieldOf('people', f)!.head,
+  w,
+});
 // στελέχη ανά κατηγορία από τις γραμμές της ΗΚΑΙ (ΔΕΑ = αξιωματικοί)· κάθε γραμμή είναι ένα «+» στον πίνακα τιμών, άρα αλλάζει από τον χρήστη
-const HK_AXK = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΕΑ'], HK_ANTH = ['Ανθυπασπιστές'], HK_YPX = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες'];
-const hkx = (w: 'row' | 'rowa', rows: string[]) => rows.map(r => ({ sign: '+' as const, metric: 'hk.' + w + ':' + r }));
-export const PRESETS: { id: string; name: string; help: string; opts: BuildOpts; vals?: ValueTable[]; sort?: RepSort; bands?: Bands; kind?: RepKind; more?: Partial<RepTable>[] }[] = [
-  { id: 'onomastiki', name: 'Ονομαστική κατάσταση', help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις', opts: { title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('asm'), bc('room', 'narrow'), bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
-  { id: 'parousiologio', name: 'Παρουσιολόγιο με υπογραφή', help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή', opts: { title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
-  { id: 'thalamos', name: 'Λίστα θαλάμου', help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.', opts: { title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')], head: true, date: true, sig: 'none', land: false, sz: 12, fill: 'gray' } },
+const HK_AXK = ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΕΑ'],
+  HK_ANTH = ['Ανθυπασπιστές'],
+  HK_YPX = ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες'];
+const hkx = (w: 'row' | 'rowa', rows: string[]) =>
+  rows.map((r) => ({ sign: '+' as const, metric: 'hk.' + w + ':' + r }));
+export const PRESETS: {
+  id: string;
+  name: string;
+  help: string;
+  opts: BuildOpts;
+  vals?: ValueTable[];
+  sort?: RepSort;
+  bands?: Bands;
+  kind?: RepKind;
+  more?: Partial<RepTable>[];
+}[] = [
+  {
+    id: 'onomastiki',
+    name: 'Ονομαστική κατάσταση',
+    help: 'Α/Α, βαθμός, ονοματεπώνυμο, ΑΣΜ, θάλαμος, παρατηρήσεις',
+    opts: {
+      title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ',
+      cols: [
+        bc('aa', 'narrow'),
+        bc('rank'),
+        bc('name'),
+        bc('asm'),
+        bc('room', 'narrow'),
+        bc('blank', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'),
+      ],
+      head: true,
+      date: true,
+      sig: 'list',
+      land: false,
+      sz: 12,
+      fill: 'gray',
+    },
+  },
+  {
+    id: 'parousiologio',
+    name: 'Παρουσιολόγιο με υπογραφή',
+    help: 'Α/Α, βαθμός, ονοματεπώνυμο, θάλαμος, υπογραφή',
+    opts: {
+      title: 'ΠΑΡΟΥΣΙΟΛΟΓΙΟ',
+      cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('room', 'narrow'), bc('blank', 'wide')],
+      head: true,
+      date: true,
+      sig: 'list',
+      land: false,
+      sz: 12,
+      fill: 'gray',
+    },
+  },
+  {
+    id: 'thalamos',
+    name: 'Λίστα θαλάμου',
+    help: 'Α/Α, βαθμός, ονοματεπώνυμο, τηλέφωνο, Σ.Ι.',
+    opts: {
+      title: 'ΚΑΤΑΣΤΑΣΗ ΘΑΛΑΜΟΥ',
+      cols: [bc('aa', 'narrow'), bc('rank'), bc('name'), bc('phone'), bc('si', 'narrow')],
+      head: true,
+      date: true,
+      sig: 'none',
+      land: false,
+      sz: 12,
+      fill: 'gray',
+    },
+  },
   // Δυναμολόγιο αξιολόγησης (Michael, 3/11): πίνακας νούμερων (οι ΤΟΠΟΘΕΤΗΜΕΝΟΙ… από τη Δύναμη, ΕΚΠΑΙΔΕΥΟΜΕΝΟΙ δική σου τιμή) και κάτω οι οπλίτες με κωδικό μέρας στις ΠΑΡΑΤΗΡΗΣΕΙΣ
-  { id: 'axiologisi', name: 'Δυναμολόγιο αξιολόγησης', help: 'Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις', sort: 'room', bands: [['v1'], ['main']],   // τα νούμερα πάνω, όπως στο δικό του αρχείο
-    vals: [{ id: 'v1', title: '', rows: [
-      { label: 'ΤΟΠΟΘΕΤΗΜΕΝΟΙ', expr: [{ sign: '+', metric: 'str.total' }] }, { label: 'ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }, { label: 'ΠΑΡΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.inside' }] },
-      { label: 'ΕΚΠΑΙΔΕΥΟΜΕΝΟΙ ΣμηΕΑ', expr: [], man: '' }, { label: 'ΕΛΕΥΘΕΡΟΙ ΥΠΗΡΕΣΙΑΣ/ΑΣΚΗΣΕΩΝ', expr: [{ sign: '+', metric: 'st.EY' }, { sign: '+', metric: 'st.EA' }] },
-      { label: 'ΑΟΠΛΟΙ', expr: [{ sign: '+', metric: 'str.unarmed' }] }] }],
-    opts: { title: 'ΑΞΙΟΛΟΓΗΣΗ ΕΚΠΑΙΔΕΥΣΗΣ ΜΑΧΗΤΗ ΤΩΝ ΟΠΛΙΤΩΝ', cols: [bc('aa', 'narrow'), bc('rank', 'narrow', 'ΒΘΜ'), bc('spec', 'narrow'), bc('last'), bc('first'), bc('si', 'narrow', 'ΣΙ'), bc('dcode', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' } },
-  // Δυναμολόγιο-Παρουσιολόγιο στελεχών-ΣΤΡ (Michael, 3/11): στελέχη για την επόμενη εργάσιμη, οπλίτες για τη μέρα του εντύπου, αναλύσεις και νούμερα
-  { id: 'stelexi', name: 'Δυναμολόγιο-Παρουσιολόγιο στελεχών', help: 'Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου', kind: 'cadre', sort: 'pick',
-    more: [{ pick: { from: 'all', mode: 'all', not: ['present'] }, sort: 'room' }, { pick: { from: 'all', mode: 'all', cats: ['med'], types: ['EY'] }, sort: 'room' }],
+  {
+    id: 'axiologisi',
+    name: 'Δυναμολόγιο αξιολόγησης',
+    help: 'Νούμερα (τοποθετημένοι, απόντες, παρόντες…) και οπλίτες με κωδικό μέρας στις παρατηρήσεις',
+    sort: 'room',
+    bands: [['v1'], ['main']], // τα νούμερα πάνω, όπως στο δικό του αρχείο
     vals: [
-      { id: 'v1', title: 'ΤΟΠΟΘΕΤΗΜΕΝΗ ΔΥΝΑΜΗ', rows: [{ label: 'ΑΞΚΟΙ', expr: hkx('row', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ', expr: hkx('row', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ', expr: hkx('row', HK_YPX) }, { label: 'ΦΑΜΥΕΣ', expr: [{ sign: '+', metric: 'str.total' }] }] },
-      { id: 'v2', title: 'ΑΠΟΝΤΕΣ', rows: [{ label: 'ΑΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_AXK) }, { label: 'ΑΝΘΣΤΕΣ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_ANTH) }, { label: 'ΥΠΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_YPX) }, { label: 'ΦΑΜΥΕΣ ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] }] },
-      { id: 'v3', title: 'ΔΥΝΑΜΗ ΣΥΣΣΙΤΙΟΥΝΤΩΝ ΓΙΑ ΔΕΙΠΝΟ (19:00)', rows: [{ label: 'ΠΑΡΑΣΚΕΥΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd5', time: '19:00' }, { label: 'ΣΑΒΒΑΤΟ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd6', time: '19:00' }, { label: 'ΚΥΡΙΑΚΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd0', time: '19:00' }] }],
-    opts: { title: 'ΔΥΝΑΜΟΛΟΓΙΟ - ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΣΤΕΛΕΧΩΝ ΤΗΣ {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ}', tday: 'next', head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray',
-      cols: [bk('cadre', 'aa', 'narrow'), bk('cadre', 'rank'), bk('cadre', 'last'), bk('cadre', 'first'), bk('cadre', 'cspec'), bk('cadre', 'role'), bk('cadre', 'absent', 'narrow'), bk('cadre', 'areason'), bk('cadre', 'aret')],
-      more: [{ id: 'm1', title: 'ΟΠΛΙΤΕΣ ΘΗΤΕΙΑΣ ΤΗΣ {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ 2} - ΑΝΑΛΥΣΗ ΑΠΟΝΤΩΝ ΣΤΡ/ΤΩΝ', kind: 'people', cols: [bk('people', 'aa', 'narrow'), bk('people', 'rank', 'narrow'), bk('people', 'spec', 'narrow', 'Ο-Σ'), bk('people', 'last'), bk('people', 'first'), bk('people', 'areason'), bk('people', 'aret')] },
-        { id: 'm2', title: 'ΑΝΑΛΥΣΗ ΕΛΕΥΘΕΡΩΝ ΥΠΗΡΕΣΙΑΣ', kind: 'status', cols: [bk('status', 'aa', 'narrow'), bk('status', 'rank', 'narrow'), bk('status', 'spec', 'narrow', 'Ο-Σ'), bk('status', 'last'), bk('status', 'first'), bk('status', 'days', 'narrow'), bk('status', 'from'), bk('status', 'to')] }] } }
+      {
+        id: 'v1',
+        title: '',
+        rows: [
+          { label: 'ΤΟΠΟΘΕΤΗΜΕΝΟΙ', expr: [{ sign: '+', metric: 'str.total' }] },
+          { label: 'ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] },
+          { label: 'ΠΑΡΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.inside' }] },
+          { label: 'ΕΚΠΑΙΔΕΥΟΜΕΝΟΙ ΣμηΕΑ', expr: [], man: '' },
+          {
+            label: 'ΕΛΕΥΘΕΡΟΙ ΥΠΗΡΕΣΙΑΣ/ΑΣΚΗΣΕΩΝ',
+            expr: [
+              { sign: '+', metric: 'st.EY' },
+              { sign: '+', metric: 'st.EA' },
+            ],
+          },
+          { label: 'ΑΟΠΛΟΙ', expr: [{ sign: '+', metric: 'str.unarmed' }] },
+        ],
+      },
+    ],
+    opts: {
+      title: 'ΑΞΙΟΛΟΓΗΣΗ ΕΚΠΑΙΔΕΥΣΗΣ ΜΑΧΗΤΗ ΤΩΝ ΟΠΛΙΤΩΝ',
+      cols: [
+        bc('aa', 'narrow'),
+        bc('rank', 'narrow', 'ΒΘΜ'),
+        bc('spec', 'narrow'),
+        bc('last'),
+        bc('first'),
+        bc('si', 'narrow', 'ΣΙ'),
+        bc('dcode', 'auto', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'),
+      ],
+      head: true,
+      date: true,
+      sig: 'list',
+      land: false,
+      sz: 12,
+      fill: 'gray',
+    },
+  },
+  // Δυναμολόγιο-Παρουσιολόγιο στελεχών-ΣΤΡ (Michael, 3/11): στελέχη για την επόμενη εργάσιμη, οπλίτες για τη μέρα του εντύπου, αναλύσεις και νούμερα
+  {
+    id: 'stelexi',
+    name: 'Δυναμολόγιο-Παρουσιολόγιο στελεχών',
+    help: 'Στελέχη (επόμενη εργάσιμη), οπλίτες θητείας, ανάλυση απόντων και ελεύθερων, συσσιτιούντες δείπνου',
+    kind: 'cadre',
+    sort: 'pick',
+    more: [
+      { pick: { from: 'all', mode: 'all', not: ['present'] }, sort: 'room' },
+      { pick: { from: 'all', mode: 'all', cats: ['med'], types: ['EY'] }, sort: 'room' },
+    ],
+    vals: [
+      {
+        id: 'v1',
+        title: 'ΤΟΠΟΘΕΤΗΜΕΝΗ ΔΥΝΑΜΗ',
+        rows: [
+          { label: 'ΑΞΚΟΙ', expr: hkx('row', HK_AXK) },
+          { label: 'ΑΝΘΣΤΕΣ', expr: hkx('row', HK_ANTH) },
+          { label: 'ΥΠΞΚΟΙ', expr: hkx('row', HK_YPX) },
+          { label: 'ΦΑΜΥΕΣ', expr: [{ sign: '+', metric: 'str.total' }] },
+        ],
+      },
+      {
+        id: 'v2',
+        title: 'ΑΠΟΝΤΕΣ',
+        rows: [
+          { label: 'ΑΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_AXK) },
+          { label: 'ΑΝΘΣΤΕΣ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_ANTH) },
+          { label: 'ΥΠΞΚΟΙ ΑΠΟΝΤΕΣ', expr: hkx('rowa', HK_YPX) },
+          { label: 'ΦΑΜΥΕΣ ΑΠΟΝΤΕΣ', expr: [{ sign: '+', metric: 'str.away' }] },
+        ],
+      },
+      {
+        id: 'v3',
+        title: 'ΔΥΝΑΜΗ ΣΥΣΣΙΤΙΟΥΝΤΩΝ ΓΙΑ ΔΕΙΠΝΟ (19:00)',
+        rows: [
+          { label: 'ΠΑΡΑΣΚΕΥΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd5', time: '19:00' },
+          { label: 'ΣΑΒΒΑΤΟ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd6', time: '19:00' },
+          { label: 'ΚΥΡΙΑΚΗ', expr: [{ sign: '+', metric: 'str.inside' }], day: 'wd0', time: '19:00' },
+        ],
+      },
+    ],
+    opts: {
+      title: 'ΔΥΝΑΜΟΛΟΓΙΟ - ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΣΤΕΛΕΧΩΝ ΤΗΣ {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ}',
+      tday: 'next',
+      head: true,
+      date: true,
+      sig: 'list',
+      land: false,
+      sz: 12,
+      fill: 'gray',
+      cols: [
+        bk('cadre', 'aa', 'narrow'),
+        bk('cadre', 'rank'),
+        bk('cadre', 'last'),
+        bk('cadre', 'first'),
+        bk('cadre', 'cspec'),
+        bk('cadre', 'role'),
+        bk('cadre', 'absent', 'narrow'),
+        bk('cadre', 'areason'),
+        bk('cadre', 'aret'),
+      ],
+      more: [
+        {
+          id: 'm1',
+          title: 'ΟΠΛΙΤΕΣ ΘΗΤΕΙΑΣ ΤΗΣ {ΗΜΕΡΟΜΗΝΙΑ ΠΙΝΑΚΑ 2} - ΑΝΑΛΥΣΗ ΑΠΟΝΤΩΝ ΣΤΡ/ΤΩΝ',
+          kind: 'people',
+          cols: [
+            bk('people', 'aa', 'narrow'),
+            bk('people', 'rank', 'narrow'),
+            bk('people', 'spec', 'narrow', 'Ο-Σ'),
+            bk('people', 'last'),
+            bk('people', 'first'),
+            bk('people', 'areason'),
+            bk('people', 'aret'),
+          ],
+        },
+        {
+          id: 'm2',
+          title: 'ΑΝΑΛΥΣΗ ΕΛΕΥΘΕΡΩΝ ΥΠΗΡΕΣΙΑΣ',
+          kind: 'status',
+          cols: [
+            bk('status', 'aa', 'narrow'),
+            bk('status', 'rank', 'narrow'),
+            bk('status', 'spec', 'narrow', 'Ο-Σ'),
+            bk('status', 'last'),
+            bk('status', 'first'),
+            bk('status', 'days', 'narrow'),
+            bk('status', 'from'),
+            bk('status', 'to'),
+          ],
+        },
+      ],
+    },
+  },
 ];
 // στήλες που μπαίνουν μόνες τους όταν διαλέγεις είδος σε «Φτιάξ' το εδώ»
-const KIND_COLS: Partial<Record<RepKind, string[]>> = { status: ['stype', 'from', 'to'], duty: ['seat', 'hours'], weapon: ['weapon', 'wtype', 'rack', 'inout'], wmove: ['weapon', 'mreason', 'mout', 'min'] };
+const KIND_COLS: Partial<Record<RepKind, string[]>> = {
+  status: ['stype', 'from', 'to'],
+  duty: ['seat', 'hours'],
+  weapon: ['weapon', 'wtype', 'rack', 'inout'],
+  wmove: ['weapon', 'mreason', 'mout', 'min'],
+};
 // «Φτιάξ' το εδώ», άλλαξε το είδος: φεύγουν οι στήλες που δεν υπάρχουν σε αυτό (π.χ. ΑΣΜ στα στελέχη) και μπαίνουν οι βασικές του
 // (Καταστάσεις: είδος, από, έως· Υπηρεσίες: θέση πρώτη, μετά το Α/Α)· ο συνδυασμός κρατά όσα στοιχεία υπάρχουν
 export function colsForKind(cs: BuildCol[], kind: RepKind): BuildCol[] {
-  if (kind === 'blank') { const aa = cs.find(c => c.f === 'aa'); const col = cs.filter(c => c.f === 'col'); return [...(aa ? [aa] : [{ f: 'aa', h: 'Α/Α', w: 'narrow' as const }]), ...(col.length ? col : [1, 2].map(n => ({ f: 'col', h: 'ΣΤΗΛΗ ' + n, w: 'auto' as const })))]; }
-  const cols = cs.filter(c => fieldOf(kind, c.f) && !Object.values(KIND_COLS).some(l => l!.includes(c.f) && !fieldOf('people', c.f)))
-    .map(c => (c.f === 'combo' && c.o?.parts ? { ...c, o: { ...c.o, parts: c.o.parts.filter(k => fieldOf(kind, k)) } } : c));
-  for (const f of KIND_COLS[kind] || []) if (!cols.some(c => c.f === f)) cols.push({ f, h: fieldOf(kind, f)!.head, w: ['stype', 'seat', 'inout', 'mreason'].includes(f) ? 'auto' : 'narrow' });
-  if (kind === 'duty') { const i = cols.findIndex(c => c.f === 'seat'); const [x] = cols.splice(i, 1); cols.splice(cols[0]?.f === 'aa' ? 1 : 0, 0, x); }
+  if (kind === 'blank') {
+    const aa = cs.find((c) => c.f === 'aa');
+    const col = cs.filter((c) => c.f === 'col');
+    return [
+      ...(aa ? [aa] : [{ f: 'aa', h: 'Α/Α', w: 'narrow' as const }]),
+      ...(col.length ? col : [1, 2].map((n) => ({ f: 'col', h: 'ΣΤΗΛΗ ' + n, w: 'auto' as const }))),
+    ];
+  }
+  const cols = cs
+    .filter(
+      (c) => fieldOf(kind, c.f) && !Object.values(KIND_COLS).some((l) => l!.includes(c.f) && !fieldOf('people', c.f)),
+    )
+    .map((c) =>
+      c.f === 'combo' && c.o?.parts ? { ...c, o: { ...c.o, parts: c.o.parts.filter((k) => fieldOf(kind, k)) } } : c,
+    );
+  for (const f of KIND_COLS[kind] || [])
+    if (!cols.some((c) => c.f === f))
+      cols.push({
+        f,
+        h: fieldOf(kind, f)!.head,
+        w: ['stype', 'seat', 'inout', 'mreason'].includes(f) ? 'auto' : 'narrow',
+      });
+  if (kind === 'duty') {
+    const i = cols.findIndex((c) => c.f === 'seat');
+    const [x] = cols.splice(i, 1);
+    cols.splice(cols[0]?.f === 'aa' ? 1 : 0, 0, x);
+  }
   return cols;
 }
 // Αλλαγή είδους από «from» σε «to» με τις στήλες της: από το «Κενός πίνακας» πίσω, χωρίς στήλες δεν γίνεται πίνακας, οπότε μπαίνουν βαθμός και ονοματεπώνυμο
 export function switchCols(cs: BuildCol[], from: RepKind, to: RepKind): BuildCol[] {
   const cols = colsForKind(cs, to);
-  return from === 'blank' && !cols.some(c => c.f !== 'aa') ? [...cols, ...['rank', 'name'].filter(f => fieldOf(to, f)).map(f => ({ f, h: fieldOf(to, f)!.head, w: 'auto' as const }))] : cols;
+  return from === 'blank' && !cols.some((c) => c.f !== 'aa')
+    ? [
+        ...cols,
+        ...['rank', 'name']
+          .filter((f) => fieldOf(to, f))
+          .map((f) => ({ f, h: fieldOf(to, f)!.head, w: 'auto' as const })),
+      ]
+    : cols;
 }
 // Πίνακας 2, 3… (Φτιάξ' το εδώ) αλλάζει είδος: στήλες όπως στον 1ο πίνακα (switchCols)· στο «Κενός πίνακας» 10 γραμμές και κενό πλέγμα, πίσω χωρίς πλέγμα
 export function retypeTable(t: BuildTable, kind: RepKind): BuildTable {
   const { grid: _g, nrows: _n, who: _w, src: _s, ...rest } = t;
   return { ...rest, kind, cols: switchCols(t.cols, t.kind, kind), ...(kind === 'blank' ? { nrows: BLANK_ROWS } : {}) };
 }
-export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols: [bc('aa', 'narrow'), bc('rank'), bc('name')], head: true, date: true, sig: 'list', land: false, sz: 12, fill: 'gray' });
+export const blankBuild = (): BuildOpts => ({
+  title: 'ΚΑΤΑΣΤΑΣΗ',
+  cols: [bc('aa', 'narrow'), bc('rank'), bc('name')],
+  head: true,
+  date: true,
+  sig: 'list',
+  land: false,
+  sz: 12,
+  fill: 'gray',
+});
 
 // ------------------------------------------------------------------ μαντεψιά από τις επικεφαλίδες του Excel
 const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');
 const GUESS: [string, RegExp][] = [
-  ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/], ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
-  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$|^ΒΘΜ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['cspec', /^ΕΙΔΙΚΟΤΗΤΑ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
-  ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
-  ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['iban', /^ΙΒΑΝ$/], ['amka', /^ΑΜΚΑ$/], ['afm', /^ΑΦΜ$|^ΑFΜ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
-  ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['dcode', /^ΚΩΔΙΚΟΣΜΕΡΑΣ$|^ΚΑΤΑΣΤΑΣΗΗΜΕΡΑΣ$/], ['absent', /^ΑΠΩΝ$|^ΑΠΟΝ$/], ['areason', /^ΑΙΤΙΑΑΠΟΥΣΙΑΣ$|^ΑΙΤΙΑ$/], ['aret', /^ΗΜΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΗΜΕΡΟΜΗΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΕΠΙΣΤΡΟΦΗ$/], ['email', /^ΕΜΑΙ[LΛ]$|^ΗΛΕΚΤΡΟΝΙΚΟΤΑΧΥΔΡΟΜΕΙΟ$/], ['relEmail', /^ΕΜΑΙ[LΛ].*(ΣΥΓΓ|ΠΡΟΣΩΠ)/], ['blood', /ΟΜΑΔΑΑΙΜΑΤΟΣ$|^ΑΙΜΑΤΟΣ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
-  ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/], ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/], ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/], ['rack', /ΟΠΛΟΒΑΣΤΟΣ/], ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
-  ['status', /^ΚΑΤΑΣΤΑΣΗ$/], ['duty', /^ΥΠΗΡΕΣΙΑ$/], ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/],
-  ['stype', /^ΕΙΔΟΣ$|^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣΑΔΕΙΑΣ$|^ΠΟΙΝΗ$/], ['from', /^ΑΠΟ$|^ΕΝΑΡΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΑΠΟ$/], ['to', /^ΕΩΣ$|^ΜΕΧΡΙ$|^ΛΗΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΕΩΣ$/],
-  ['days', /^ΗΜΕΡΕΣ$|^ΗΜΕΡΩΝ$|^ΗΜ$/], ['note', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['by', /ΤΙΜΩΡΗΣΕ|^ΥΠΟ$/], ['reason', /^ΔΙΟΤΙ$|^ΑΙΤΙΟΛΟΓΙΑ$|^ΑΙΤΙΑ$/], ['on', /^ΗΜΤΙΜΩΡΙΑΣ$|^ΗΜΕΡΟΜΗΝΙΑΤΙΜΩΡΙΑΣ$/],
-  ['seat', /^ΘΕΣΗ$|^ΘΕΣΗΥΠΗΡΕΣΙΑΣ$/], ['hours', /^ΩΡΕΣ$|^ΩΡΑ$/], ['block', /^ΥΠΗΡΕΣΙΑ$/], ['armed', /^ΕΝΟΠΛΗ$|^ΕΝΟΠΛΟΣ$/], ['code', /^ΚΩΔ$|^ΚΩΔΙΚΟΣ$/],
-  ['inout', /^ΕΝΤΟΣΕΚΤΟΣ$|^ΕΝΤΟΣ$|^ΕΚΤΟΣ$/], ['mreason', /^ΛΟΓΟΣΕΞΟΔΟΥ$|^ΛΟΓΟΣ$/], ['mout', /^ΕΞΟΔΟΣ$|^ΩΡΑΕΞΟΔΟΥ$/], ['minr', /^ΛΟΓΟΣΕΙΣΟΔΟΥ$/], ['min', /^ΕΙΣΟΔΟΣ$|^ΩΡΑΕΙΣΟΔΟΥ$/], ['mnote', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/],
-  ['smed', /^ΙΑΤΡΙΚΟ$|^ΙΑΤΡΙΚΑ$/], ['sabs', /^ΑΔΕΙΑ$|^ΑΔΕΙΕΣ$/], ['spun', /^ΠΟΙΝΗ$|^ΠΟΙΝΕΣ$/], ['sother', /^ΣΤΕΠ|^ΝΟΣΟΚΟΜΕΙΟ$/], ['sout', /^ΕΞΟΔΟΣ$|^ΕΞΟΔΟΥΧΟΣ$/]
+  ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/],
+  ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
+  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$|^ΒΘΜ$/],
+  ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/],
+  ['cspec', /^ΕΙΔΙΚΟΤΗΤΑ$/],
+  ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
+  ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/],
+  ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/],
+  ['first', /^ΟΝΟΜΑ$/],
+  ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/],
+  ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/],
+  ['am', /^ΑΜ$/],
+  ['iban', /^ΙΒΑΝ$/],
+  ['amka', /^ΑΜΚΑ$/],
+  ['afm', /^ΑΦΜ$|^ΑFΜ$/],
+  ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
+  ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/],
+  ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/],
+  ['si', /^ΣΙ$/],
+  ['dcode', /^ΚΩΔΙΚΟΣΜΕΡΑΣ$|^ΚΑΤΑΣΤΑΣΗΗΜΕΡΑΣ$/],
+  ['absent', /^ΑΠΩΝ$|^ΑΠΟΝ$/],
+  ['areason', /^ΑΙΤΙΑΑΠΟΥΣΙΑΣ$|^ΑΙΤΙΑ$/],
+  ['aret', /^ΗΜΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΗΜΕΡΟΜΗΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΕΠΙΣΤΡΟΦΗ$/],
+  ['email', /^ΕΜΑΙ[LΛ]$|^ΗΛΕΚΤΡΟΝΙΚΟΤΑΧΥΔΡΟΜΕΙΟ$/],
+  ['relEmail', /^ΕΜΑΙ[LΛ].*(ΣΥΓΓ|ΠΡΟΣΩΠ)/],
+  ['blood', /ΟΜΑΔΑΑΙΜΑΤΟΣ$|^ΑΙΜΑΤΟΣ$/],
+  ['post', /^ΠΟΣΤΟ$/],
+  ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/],
+  ['essos', /^ΕΣΣΟ$/],
+  ['dn', /^ΔΝ$|ΔΙΚΑΙΩΜΑΔΝ/],
+  ['weapon', /^ΑΡΟΠΛΟΥ$|^ΑΡΙΘΜΟΣΟΠΛΟΥ$|^ΟΠΛΟ$/],
+  ['wtype', /^ΤΥΠΟΣΟΠΛΟΥ$|^ΤΥΠΟΣ$/],
+  ['rack', /ΟΠΛΟΒΑΣΤΟΣ/],
+  ['wpos', /^ΘΕΣΗΟΠΛΟΥ$/],
+  ['status', /^ΚΑΤΑΣΤΑΣΗ$/],
+  ['duty', /^ΥΠΗΡΕΣΙΑ$/],
+  ['blank', /^ΥΠΟΓΡΑΦΗ$|^ΥΠΟΓΡ$/],
+  ['stype', /^ΕΙΔΟΣ$|^ΚΑΤΑΣΤΑΣΗ$|^ΕΙΔΟΣΑΔΕΙΑΣ$|^ΠΟΙΝΗ$/],
+  ['from', /^ΑΠΟ$|^ΕΝΑΡΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΑΠΟ$/],
+  ['to', /^ΕΩΣ$|^ΜΕΧΡΙ$|^ΛΗΞΗ$|^ΗΜΕΡΟΜΗΝΙΑΕΩΣ$/],
+  ['days', /^ΗΜΕΡΕΣ$|^ΗΜΕΡΩΝ$|^ΗΜ$/],
+  ['note', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/],
+  ['by', /ΤΙΜΩΡΗΣΕ|^ΥΠΟ$/],
+  ['reason', /^ΔΙΟΤΙ$|^ΑΙΤΙΟΛΟΓΙΑ$|^ΑΙΤΙΑ$/],
+  ['on', /^ΗΜΤΙΜΩΡΙΑΣ$|^ΗΜΕΡΟΜΗΝΙΑΤΙΜΩΡΙΑΣ$/],
+  ['seat', /^ΘΕΣΗ$|^ΘΕΣΗΥΠΗΡΕΣΙΑΣ$/],
+  ['hours', /^ΩΡΕΣ$|^ΩΡΑ$/],
+  ['block', /^ΥΠΗΡΕΣΙΑ$/],
+  ['armed', /^ΕΝΟΠΛΗ$|^ΕΝΟΠΛΟΣ$/],
+  ['code', /^ΚΩΔ$|^ΚΩΔΙΚΟΣ$/],
+  ['inout', /^ΕΝΤΟΣΕΚΤΟΣ$|^ΕΝΤΟΣ$|^ΕΚΤΟΣ$/],
+  ['mreason', /^ΛΟΓΟΣΕΞΟΔΟΥ$|^ΛΟΓΟΣ$/],
+  ['mout', /^ΕΞΟΔΟΣ$|^ΩΡΑΕΞΟΔΟΥ$/],
+  ['minr', /^ΛΟΓΟΣΕΙΣΟΔΟΥ$/],
+  ['min', /^ΕΙΣΟΔΟΣ$|^ΩΡΑΕΙΣΟΔΟΥ$/],
+  ['mnote', /^ΠΑΡΑΤΗΡΗΣΗ$|^ΠΑΡΑΤΗΡΗΣΕΙΣ$/],
+  ['smed', /^ΙΑΤΡΙΚΟ$|^ΙΑΤΡΙΚΑ$/],
+  ['sabs', /^ΑΔΕΙΑ$|^ΑΔΕΙΕΣ$/],
+  ['spun', /^ΠΟΙΝΗ$|^ΠΟΙΝΕΣ$/],
+  ['sother', /^ΣΤΕΠ|^ΝΟΣΟΚΟΜΕΙΟ$/],
+  ['sout', /^ΕΞΟΔΟΣ$|^ΕΞΟΔΟΥΧΟΣ$/],
 ];
 // Ποιο στοιχείο ταιριάζει σε μια επικεφαλίδα (ή σε {ΕΤΙΚΕΤΑ} μέσα στη γραμμή)· null = δεν το ξέρω
 export function guessField(kind: RepKind, head: unknown): string | null {
-  const t = k(String(head ?? '').replace(/[{}]/g, '')); if (!t) return null;
-  const ok = new Set(FIELDS[kind].map(f => f.k));
+  const t = k(String(head ?? '').replace(/[{}]/g, ''));
+  if (!t) return null;
+  const ok = new Set(FIELDS[kind].map((f) => f.k));
   for (const [f, re] of GUESS) if (ok.has(f) && re.test(t)) return f;
-  for (const f of FIELDS[kind]) if (f.k !== 'text' && f.k !== 'blank' && (k(f.head) === t || k(f.label) === t)) return f.k;
+  for (const f of FIELDS[kind])
+    if (f.k !== 'text' && f.k !== 'blank' && (k(f.head) === t || k(f.label) === t)) return f.k;
   return null;
 }
 // {ΗΜΕΡΟΜΗΝΙΑ} → 'date'
@@ -451,72 +1174,162 @@ export const tagKey = (tag: string) => TAG_KEY.get(normGreek(tag).replace(/\s+/g
 // ίδιου εντύπου (όπως στα δικά σου Excel, μια ετικέτα που είναι ήδη στοιχείο εντύπου δεν μετρά ως γραμμή: προειδοποίηση), στοιχείο εντύπου ({ΗΜΕΡΟΜΗΝΙΑ},
 // {ΤΙΤΛΟΣ}…) ή μέτρηση του καταλόγου των πινάκων τιμών ({ΠΑΡΟΝΤΕΣ}, χωρίς να χρειάζεται πίνακας τιμών). Ολόκληρο το κελί ετικέτα = αριθμός (η γραμμή
 // πίνακα τιμών με τη μορφή της), μέσα σε κείμενο = κείμενο. Άγνωστη ετικέτα μένει όπως γράφτηκε. Όλα βγαίνουν με κεφαλαία εκτός από τους αριθμούς.
-export interface BlankTags { std: (k: string) => string | number | null; row: (tag: string) => ValueOut['rows'][number] | undefined; met: (tag: string) => number | undefined; list?: (tag: string) => { s: string; n: number; cnt: boolean } | undefined }   // list: κείμενο, πλήθος, και αν ζητήθηκε το πλήθος
+export interface BlankTags {
+  std: (k: string) => string | number | null;
+  row: (tag: string) => ValueOut['rows'][number] | undefined;
+  met: (tag: string) => number | undefined;
+  list?: (tag: string) => { s: string; n: number; cnt: boolean } | undefined;
+} // list: κείμενο, πλήθος, και αν ζητήθηκε το πλήθος
 // d: η μέρα του εντύπου, για τις λίστες ονομάτων ({ΛΙΣΤΑ ΕΥ}…)· χωρίς αυτήν δεν υπάρχουν λίστες
-export function blankTags(s: AppState, r: Pick<Report, 'vals'>, vo: ValueOut[], mv: (id: string) => number | null, std: (k: string) => string | number | null, d?: ISODate): BlankTags {
-  const vt = valTags(valsUsed(r.vals), id => !!tagKey(id));
+export function blankTags(
+  s: AppState,
+  r: Pick<Report, 'vals'>,
+  vo: ValueOut[],
+  mv: (id: string) => number | null,
+  std: (k: string) => string | number | null,
+  d?: ISODate,
+): BlankTags {
+  const vt = valTags(valsUsed(r.vals), (id) => !!tagKey(id));
   return {
     std,
-    row: tg => { const e = vt.map.get(tagId(tg)); return e ? vo.find(x => x.id === e.t.id)?.rows[e.i] : undefined; },
-    met: tg => { const m = metricByTag(s, tg); const v = m ? mv(m.id) : null; return v ?? undefined; },
-    ...(d ? { list: blankLists(s, d) } : {})
+    row: (tg) => {
+      const e = vt.map.get(tagId(tg));
+      return e ? vo.find((x) => x.id === e.t.id)?.rows[e.i] : undefined;
+    },
+    met: (tg) => {
+      const m = metricByTag(s, tg);
+      const v = m ? mv(m.id) : null;
+      return v ?? undefined;
+    },
+    ...(d ? { list: blankLists(s, d) } : {}),
   };
 }
 // «Λίστες ονομάτων» (Michael, 30/10): {ΛΙΣΤΑ ΕΥ} γράφει σε ένα κελί τα ονόματα, χωρισμένα με κόμμα, π.χ. «ΣΤΡ ΑΛΦΑΣ Α., ΣΤΡ ΒΗΤΑΣ Β.». Λίστες: ανά φίλτρο του εντύπου
 // (REP_CONDS, η πλευρά «ναι») και ανά είδος κατάστασης (ΕΑ, ΕΥ, ΚΑ…)· με το «ΣΗΜΕΡΑ» μόνο όσες καταστάσεις ξεκινούν τη μέρα του εντύπου (όπως το pick.stNew).
 // {ΠΛΗΘΟΣ ΕΥ}: το πλήθος της ίδιας λίστας (αριθμός). Άδεια λίστα: «—», όπως η γραμμή πίνακα τιμών χωρίς τιμή
-interface ListDef { name: string; cond?: RepCond; neg?: true; type?: TypeKey; st: boolean }   // st: έχει και παραλλαγή «ΣΗΜΕΡΑ» (βασίζεται σε καταστάσεις)
+interface ListDef {
+  name: string;
+  cond?: RepCond;
+  neg?: true;
+  type?: TypeKey;
+  st: boolean;
+} // st: έχει και παραλλαγή «ΣΗΜΕΡΑ» (βασίζεται σε καταστάσεις)
 const LIST_CONDS: RepCond[] = ['present', 'duty', 'med', 'pun', 'leave', 'other'];
 const LIST_DEFS = (): ListDef[] => {
-  const cs = LIST_CONDS.map(id => REP_CONDS.find(c => c.id === id)!);
-  return [...cs.map((c): ListDef => ({ name: upper(c.yes), cond: c.id, st: c.id !== 'present' && c.id !== 'duty' })), { name: upper(cs[0].no), cond: 'present', neg: true, st: false },
-    ...(Object.keys(TYPES) as TypeKey[]).filter(k => ['med', 'abs', 'pun', 'other'].includes(TYPES[k].cat)).map((k): ListDef => ({ name: upper(TYPES[k].label), type: k, st: true }))];
+  const cs = LIST_CONDS.map((id) => REP_CONDS.find((c) => c.id === id)!);
+  return [
+    ...cs.map((c): ListDef => ({ name: upper(c.yes), cond: c.id, st: c.id !== 'present' && c.id !== 'duty' })),
+    { name: upper(cs[0].no), cond: 'present', neg: true, st: false },
+    ...(Object.keys(TYPES) as TypeKey[])
+      .filter((k) => ['med', 'abs', 'pun', 'other'].includes(TYPES[k].cat))
+      .map((k): ListDef => ({ name: upper(TYPES[k].label), type: k, st: true })),
+  ];
 };
 // Όλες οι ετικέτες των λιστών, όπως μπαίνουν από το «Βάλε τιμή…» (χωρίς τα {ΠΛΗΘΟΣ …}, που γράφονται με το χέρι)
-export const listTags = (): string[] => LIST_DEFS().flatMap(f => ['ΛΙΣΤΑ ' + f.name, ...(f.st ? ['ΛΙΣΤΑ ' + f.name + ' ΣΗΜΕΡΑ'] : [])]);
+export const listTags = (): string[] =>
+  LIST_DEFS().flatMap((f) => ['ΛΙΣΤΑ ' + f.name, ...(f.st ? ['ΛΙΣΤΑ ' + f.name + ' ΣΗΜΕΡΑ'] : [])]);
 let LIST_IDX: Map<string, { f: ListDef; today: boolean; cnt: boolean }> | undefined;
-const listIdx = () => LIST_IDX ||= new Map(LIST_DEFS().flatMap(f => (['ΛΙΣΤΑ', 'ΠΛΗΘΟΣ'] as const).flatMap(w => [false, true].filter(t => !t || f.st).map(t => [tagId(w + ' ' + f.name + (t ? ' ΣΗΜΕΡΑ' : '')), { f, today: t, cnt: w === 'ΠΛΗΘΟΣ' }] as const))));
+const listIdx = () =>
+  (LIST_IDX ||= new Map(
+    LIST_DEFS().flatMap((f) =>
+      (['ΛΙΣΤΑ', 'ΠΛΗΘΟΣ'] as const).flatMap((w) =>
+        [false, true]
+          .filter((t) => !t || f.st)
+          .map((t) => [tagId(w + ' ' + f.name + (t ? ' ΣΗΜΕΡΑ' : '')), { f, today: t, cnt: w === 'ΠΛΗΘΟΣ' }] as const),
+      ),
+    ),
+  ));
 // Όνομα στη λίστα: βαθμός (χωρίς προέλευση) και συντομογραφία (επώνυμο, αρχικό ονόματος, «του πατρός» στους ομώνυμους), όπως στις υπόλοιπες οθόνες (shortName)
 const listName = (p: Person) => [p.rank, shortName(p)].filter(Boolean).join(' ');
 function blankLists(s: AppState, d: ISODate): NonNullable<BlankTags['list']> {
-  const tst = [condTest(s, d), condTest(s, d, true)]; const memo = new Map<string, { s: string; n: number }>();
-  return tg => {
-    const id = tagId(tg); const e = listIdx().get(id); if (!e) return undefined;
-    const key = id.replace(/^\S+/, ''); let o = memo.get(key);   // ΛΙΣΤΑ και ΠΛΗΘΟΣ της ίδιας λίστας μετρούν μία φορά
+  const tst = [condTest(s, d), condTest(s, d, true)];
+  const memo = new Map<string, { s: string; n: number }>();
+  return (tg) => {
+    const id = tagId(tg);
+    const e = listIdx().get(id);
+    if (!e) return undefined;
+    const key = id.replace(/^\S+/, '');
+    let o = memo.get(key); // ΛΙΣΤΑ και ΠΛΗΘΟΣ της ίδιας λίστας μετρούν μία φορά
     if (!o) {
-      const t = tst[+e.today]; const f = e.f;
-      const ps = activePeople(s).filter(p => f.type ? statusesOn(live(s), p.id, d).some(x => x.type === f.type && (!e.today || x.from === d)) : t(f.cond!, p) !== !!f.neg);
-      o = { s: sortRows(ps, 'rank', s, 'people').map(listName).join(', ') || '—', n: ps.length }; memo.set(key, o);
+      const t = tst[+e.today];
+      const f = e.f;
+      const ps = activePeople(s).filter((p) =>
+        f.type
+          ? statusesOn(live(s), p.id, d).some((x) => x.type === f.type && (!e.today || x.from === d))
+          : t(f.cond!, p) !== !!f.neg,
+      );
+      o = { s: sortRows(ps, 'rank', s, 'people').map(listName).join(', ') || '—', n: ps.length };
+      memo.set(key, o);
     }
     return { ...o, cnt: e.cnt };
   };
 }
 // Η μέτρηση ενός μετρητή (id του καταλόγου) τη μέρα d και στιγμή at (λεπτά), με κοινά αποτελέσματα μεταξύ των κελιών
 export function metricFn(s: AppState, d: ISODate, at: () => number, today: ISODate = d): (id: string) => number | null {
-  let c: VCtx | undefined; const memo = new Map<string, number | null>();
-  return id => { if (!memo.has(id)) { const a = at(); c ||= vctx(s, d, a, today); memo.set(id, rowValue(s, d, a, { label: '', expr: [{ sign: '+', metric: id }] }, c)); } return memo.get(id)!; };
+  let c: VCtx | undefined;
+  const memo = new Map<string, number | null>();
+  return (id) => {
+    if (!memo.has(id)) {
+      const a = at();
+      c ||= vctx(s, d, a, today);
+      memo.set(id, rowValue(s, d, a, { label: '', expr: [{ sign: '+', metric: id }] }, c));
+    }
+    return memo.get(id)!;
+  };
 }
 // bad: οι ετικέτες που δεν ταίριαξαν με τίποτα (για την προειδοποίηση)
 // wrap: έχει λίστα ονομάτων (μεγάλο κείμενο: αναδίπλωση στο κελί)
-export function blankFill(raw: string, x: BlankTags, bad?: Set<string>): { v: string | number | null; fmt?: VFmt; wrap?: true } {
+export function blankFill(
+  raw: string,
+  x: BlankTags,
+  bad?: Set<string>,
+): { v: string | number | null; fmt?: VFmt; wrap?: true } {
   let wrap = false;
   const one = (tg: string): { s: string; n?: number; fmt?: VFmt } | null => {
-    const w = x.row(tg); if (w) return w.txt != null ? { s: w.txt } : w.v == null ? { s: '—' } : { s: valueText(w.v, w.fmt), n: w.v, fmt: w.fmt };
+    const w = x.row(tg);
+    if (w)
+      return w.txt != null ? { s: w.txt } : w.v == null ? { s: '—' } : { s: valueText(w.v, w.fmt), n: w.v, fmt: w.fmt };
     const k = tagKey(tg);
-    if (k) { const v = x.std(k); return typeof v === 'number' ? { s: String(v), n: v } : { s: String(v ?? '').replace(/\n/g, ' ') }; }
-    const m = x.met(tg); if (m != null) return { s: valueText(m, 'int'), n: m };
-    const l = x.list?.(tg); if (!l) return null;
-    return l.cnt ? { s: String(l.n), n: l.n } : (wrap = true, { s: l.s });
+    if (k) {
+      const v = x.std(k);
+      return typeof v === 'number' ? { s: String(v), n: v } : { s: String(v ?? '').replace(/\n/g, ' ') };
+    }
+    const m = x.met(tg);
+    if (m != null) return { s: valueText(m, 'int'), n: m };
+    const l = x.list?.(tg);
+    if (!l) return null;
+    return l.cnt ? { s: String(l.n), n: l.n } : ((wrap = true), { s: l.s });
   };
-  const t = raw.trim(); const whole = /^\{([^{}]{1,40})\}$/.exec(t);
-  if (whole) { const o = one(whole[1]); if (!o) { bad?.add(whole[1].trim()); return { v: upper(t) || null }; } return o.n != null ? { v: o.n, ...(o.fmt && o.fmt !== 'int' ? { fmt: o.fmt } : {}) } : { v: upper(o.s.trim()) || null, ...(wrap ? { wrap: true as const } : {}) }; }
-  const out = t.replace(TAG_RE, (m, tg: string) => { const o = one(tg); if (!o) { bad?.add(tg.trim()); return m; } return o.s; });
+  const t = raw.trim();
+  const whole = /^\{([^{}]{1,40})\}$/.exec(t);
+  if (whole) {
+    const o = one(whole[1]);
+    if (!o) {
+      bad?.add(whole[1].trim());
+      return { v: upper(t) || null };
+    }
+    return o.n != null
+      ? { v: o.n, ...(o.fmt && o.fmt !== 'int' ? { fmt: o.fmt } : {}) }
+      : { v: upper(o.s.trim()) || null, ...(wrap ? { wrap: true as const } : {}) };
+  }
+  const out = t.replace(TAG_RE, (m, tg: string) => {
+    const o = one(tg);
+    if (!o) {
+      bad?.add(tg.trim());
+      return m;
+    }
+    return o.s;
+  });
   return { v: upper(out.trim()) || null, ...(wrap ? { wrap: true as const } : {}) };
 }
 
 // ------------------------------------------------------------------ τιμές
-const shortDate = (d: ISODate) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + String(x.getFullYear()).slice(2); };
-export const repDate = (r: Pick<Report, 'day'>, today: ISODate, asked?: ISODate) => (r.day === 'tomorrow' ? addDays(today, 1) : r.day === 'ask' && asked ? asked : today);
+const shortDate = (d: ISODate) => {
+  const x = parseD(d);
+  return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + String(x.getFullYear()).slice(2);
+};
+export const repDate = (r: Pick<Report, 'day'>, today: ISODate, asked?: ISODate) =>
+  r.day === 'tomorrow' ? addDays(today, 1) : r.day === 'ask' && asked ? asked : today;
 
 // Καταστάσεις: μία γραμμή = μία κατάσταση, με τα στοιχεία του στρατιώτη (θάλαμος, βαθμός… για φίλτρα, σειρά, χωρισμό)
 export type StatusRow = Omit<Person, 'id'> & { id: string; pid: number; st: Status; p: Person };
@@ -525,191 +1338,484 @@ export type DutyRow = Omit<Person, 'id'> & { id: string; pid: number | null; p: 
 // Κινήσεις όπλων: μία γραμμή = μία έξοδος όπλου (id = της κίνησης)
 export type MoveRow = Omit<Person, 'id'> & { id: string; pid: number; p: Person; m: WeaponMove };
 export type Row = Person | Cadre | StatusRow | DutyRow | MoveRow;
-const blockName = (s: AppState, id: string) => ((blocksOf(s.settings) || s.settings.blocks).find(b => b.id === id) || everyBlock(s.settings).find(b => b.id === id))?.name || '';
+const blockName = (s: AppState, id: string) =>
+  (
+    (blocksOf(s.settings) || s.settings.blocks).find((b) => b.id === id) ||
+    everyBlock(s.settings).find((b) => b.id === id)
+  )?.name || '';
 // εντός/εκτός για όλους μαζί: μία φορά ανά κατάσταση και μέρα (καλείται για κάθε γραμμή)
 let wiMemo: { s: AppState; d: ISODate; info: WeaponInfo } | null = null;
-const wInfo = (s: AppState, d: ISODate) => { if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) }; return wiMemo.info; };
+const wInfo = (s: AppState, d: ISODate) => {
+  if (!wiMemo || wiMemo.s !== s || wiMemo.d !== d) wiMemo = { s, d, info: weaponInfo(s, d) };
+  return wiMemo.info;
+};
 const when = (day?: ISODate, t?: string) => (day ? dmy(day) + (t ? ' ' + t : '') : '');
 // Οι στήλες ενός πίνακα όταν το φίλτρο λέει «μόνο όσα δηλώθηκαν τη μέρα» (pick.stNew): οι στήλες καταστάσεων και οι συνδυασμοί παίρνουν st: 'new'
 export const stNewCols = <T extends { f: string; o?: ColOpts }>(cols: T[], pk?: Pick<RepPick, 'stNew'>): T[] =>
-  (pk?.stNew ? cols.map(c => (c.f === 'combo' || (c.f !== 'stype' && isStatusField(c.f)) ? { ...c, o: { ...c.o, st: 'new' as const } } : c)) : cols);
+  pk?.stNew
+    ? cols.map((c) =>
+        c.f === 'combo' || (c.f !== 'stype' && isStatusField(c.f)) ? { ...c, o: { ...c.o, st: 'new' as const } } : c,
+      )
+    : cols;
 // Άτομο γραμμής του «Κενός πίνακας»: 'p:12' στρατιώτης (id), 'c:3' στέλεχος (id του Cadre, κείμενο)· σβησμένο ή άγνωστο = null (κενή γραμμή)
 export type WhoAt = { kind: 'people'; x: Person } | { kind: 'cadre'; x: Cadre };
-export const whoP = (id: number) => 'p:' + id, whoC = (id: string) => 'c:' + id;
-export function whoOf(s: Pick<AppState, 'people' | 'cadreList'>, ref: string | null | undefined, pm?: Map<number, Person>): WhoAt | null {
-  if (!ref) return null; const id = ref.slice(2);
-  if (ref.startsWith('c:')) { const c = (s.cadreList || []).find(x => x.id === id); return c ? { kind: 'cadre', x: c } : null; }
-  if (ref.startsWith('p:')) { const p = (pm || personMap(s.people)).get(+id); return p ? { kind: 'people', x: p } : null; }
+export const whoP = (id: number) => 'p:' + id,
+  whoC = (id: string) => 'c:' + id;
+export function whoOf(
+  s: Pick<AppState, 'people' | 'cadreList'>,
+  ref: string | null | undefined,
+  pm?: Map<number, Person>,
+): WhoAt | null {
+  if (!ref) return null;
+  const id = ref.slice(2);
+  if (ref.startsWith('c:')) {
+    const c = (s.cadreList || []).find((x) => x.id === id);
+    return c ? { kind: 'cadre', x: c } : null;
+  }
+  if (ref.startsWith('p:')) {
+    const p = (pm || personMap(s.people)).get(+id);
+    return p ? { kind: 'people', x: p } : null;
+  }
   return null;
 }
 // Η θέση μιας γραμμής του «Κενός πίνακας» ανάμεσα στις δικές σου (κελιά, who): χωρίς γραμμές από φίλτρο όσο και η γραμμή· -1 η γραμμή από φίλτρο
 export const blankIdx = (x: unknown, i: number) => (x as { bm?: number }).bm ?? i;
 // o: μορφή της στήλης (καταστάσεις, συνδυασμός)
-const absField = (a: ReturnType<typeof absenceOfPerson>, f: string): string => (f === 'absent' ? (a.absent ? 'ΝΑΙ' : '') : f === 'areason' ? a.reason : a.ret ? dmy(a.ret) : '');
-export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: number, d: ISODate, text?: string, o?: ColOpts): string | number | null {
+const absField = (a: ReturnType<typeof absenceOfPerson>, f: string): string =>
+  f === 'absent' ? (a.absent ? 'ΝΑΙ' : '') : f === 'areason' ? a.reason : a.ret ? dmy(a.ret) : '';
+export function fieldValue(
+  s: AppState,
+  kind: RepKind,
+  x: Row,
+  f: string,
+  i: number,
+  d: ISODate,
+  text?: string,
+  o?: ColOpts,
+): string | number | null {
   if (f === 'aa') return i + 1;
   if (f === 'blank') return null;
   if (f === 'text') return text || null;
   if (kind === 'blank') {
-    const m = blankIdx(x, i); const typed = m < 0 ? null : upper(String(o?.vals?.[m] ?? '').trim()) || null;   // τα κελιά που έγραψες (ColOpts.vals), με κεφαλαία· νικούν πάντα (οι γραμμές από φίλτρο δεν έχουν)
+    const m = blankIdx(x, i);
+    const typed = m < 0 ? null : upper(String(o?.vals?.[m] ?? '').trim()) || null; // τα κελιά που έγραψες (ColOpts.vals), με κεφαλαία· νικούν πάντα (οι γραμμές από φίλτρο δεν έχουν)
     const w = (x as unknown as { bw?: WhoAt }).bw;
     if (typed || f === 'col' || !w) return typed;
-    const v = fieldValue(s, w.kind, w.x as Row, f, i, d, undefined, o);   // άτομο γραμμής: το στοιχείο του (στρατιώτη ή στελέχους) τη μέρα d
-    return v == null || v === '' ? null : typeof v === 'string' ? (f === 'email' || f === 'relEmail' ? v : upper(v)) : v;   // τα e-mail μένουν όπως γράφτηκαν
+    const v = fieldValue(s, w.kind, w.x as Row, f, i, d, undefined, o); // άτομο γραμμής: το στοιχείο του (στρατιώτη ή στελέχους) τη μέρα d
+    return v == null || v === ''
+      ? null
+      : typeof v === 'string'
+        ? f === 'email' || f === 'relEmail'
+          ? v
+          : upper(v)
+        : v; // τα e-mail μένουν όπως γράφτηκαν
   }
   if (f === 'combo') {
     const c = comboOf(o);
-    const vals = c.parts.map(k => { const v = COMBO_NO.has(k) ? null : fieldValue(s, kind, x, k, i, d, undefined, o); return v == null ? '' : String(v); });
+    const vals = c.parts.map((k) => {
+      const v = COMBO_NO.has(k) ? null : fieldValue(s, kind, x, k, i, d, undefined, o);
+      return v == null ? '' : String(v);
+    });
     return fillFmt(c.fmt, vals) || null;
   }
   if (kind === 'status') {
-    const r = x as StatusRow; const st = r.st;
+    const r = x as StatusRow;
+    const st = r.st;
     switch (f) {
-      case 'stype': return stText(st, o?.sf, s.settings.lists, d); case 'from': return dmy(st.from); case 'to': return st.open ? '' : dmy(st.to);
-      case 'days': return st.open ? '' : daysBetween(st.from, st.to); case 'note': return st.note || ''; case 'by': return st.by || ''; case 'reason': return st.reason || '';
-      case 'on': return st.type === 'PUN' ? dmy(st.on || st.from) : '';
+      case 'stype':
+        return stText(st, o?.sf, s.settings.lists, d);
+      case 'from':
+        return dmy(st.from);
+      case 'to':
+        return st.open ? '' : dmy(st.to);
+      case 'days':
+        return st.open ? '' : daysBetween(st.from, st.to);
+      case 'note':
+        return st.note || '';
+      case 'by':
+        return st.by || '';
+      case 'reason':
+        return st.reason || '';
+      case 'on':
+        return st.type === 'PUN' ? dmy(st.on || st.from) : '';
     }
     return fieldValue(s, 'people', r.p, f, i, d, text, o);
   }
   if (kind === 'duty') {
-    const r = x as DutyRow; const po = r.seat;
+    const r = x as DutyRow;
+    const po = r.seat;
     switch (f) {
-      case 'seat': return po.label; case 'code': return po.code || ''; case 'block': return blockName(s, po.block); case 'hours': return po.hours || '';
-      case 'armed': return po.armed ? 'ΝΑΙ' : '';
+      case 'seat':
+        return po.label;
+      case 'code':
+        return po.code || '';
+      case 'block':
+        return blockName(s, po.block);
+      case 'hours':
+        return po.hours || '';
+      case 'armed':
+        return po.armed ? 'ΝΑΙ' : '';
     }
     return r.p ? fieldValue(s, 'people', r.p, f, i, d, text, o) : null;
   }
   if (kind === 'wmove') {
-    const r = x as MoveRow; const m = r.m;
+    const r = x as MoveRow;
+    const m = r.m;
     switch (f) {
-      case 'weapon': return m.weapon || r.p.weapon || ''; case 'mreason': return m.reason; case 'mout': return isAuto(m) ? moveOutCell(m) : when(m.outDay, m.outTime);
-      case 'minr': return m.inReason || ''; case 'min': return isAuto(m) ? moveInCell(m) : when(m.inDay, m.inTime); case 'mnote': return isAuto(m) ? 'ΑΥΤΟΜΑΤΑ' + (m.note ? ' · ' + m.note : '') : m.note || '';
+      case 'weapon':
+        return m.weapon || r.p.weapon || '';
+      case 'mreason':
+        return m.reason;
+      case 'mout':
+        return isAuto(m) ? moveOutCell(m) : when(m.outDay, m.outTime);
+      case 'minr':
+        return m.inReason || '';
+      case 'min':
+        return isAuto(m) ? moveInCell(m) : when(m.inDay, m.inTime);
+      case 'mnote':
+        return isAuto(m) ? 'ΑΥΤΟΜΑΤΑ' + (m.note ? ' · ' + m.note : '') : m.note || '';
     }
     return fieldValue(s, 'people', r.p, f, i, d, text, o);
   }
   if (kind === 'weapon' && f === 'inout') return inOutText(x as Person, wInfo(s, d));
   if (kind === 'cadre') {
-    const c = x as Cadre; const nm = [c.last, c.first].filter(Boolean).join(' ');
+    const c = x as Cadre;
+    const nm = [c.last, c.first].filter(Boolean).join(' ');
     switch (f) {
-      case 'rank': return rankTxt(c); case 'rank1': return c.rank; case 'origin': return c.origin || ''; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
-      case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
-      case 'iban': return c.iban || ''; case 'amka': return c.amka || ''; case 'afm': return c.afm || '';
-      case 'status': return cadreStatusOn(s, c.id, d)?.label || '';
-      case 'cspec': return c.eid || '';
-      case 'absent': case 'areason': case 'aret': return absField(absenceOfCadre(s, c, d), f);
+      case 'rank':
+        return rankTxt(c);
+      case 'rank1':
+        return c.rank;
+      case 'origin':
+        return c.origin || '';
+      case 'spec':
+        return c.spec || '';
+      case 'name':
+        return nm;
+      case 'who':
+        return [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
+      case 'last':
+        return c.last;
+      case 'first':
+        return c.first;
+      case 'am':
+        return c.am || '';
+      case 'phone':
+        return c.phone || '';
+      case 'role':
+        return c.role || '';
+      case 'iban':
+        return c.iban || '';
+      case 'amka':
+        return c.amka || '';
+      case 'afm':
+        return c.afm || '';
+      case 'status':
+        return cadreStatusOn(s, c.id, d)?.label || '';
+      case 'cspec':
+        return c.eid || '';
+      case 'absent':
+      case 'areason':
+      case 'aret':
+        return absField(absenceOfCadre(s, c, d), f);
     }
     return null;
   }
   const p = x as Person;
   if (f !== 'stype' && isStatusField(f)) return stCol(s, p.id, d, ST_FIELD[f], o?.sf, o?.st);
   switch (f) {
-    case 'rank': return rankTxt(p); case 'rank1': return p.rank; case 'origin': return p.origin || ''; case 'spec': return p.spec; case 'name': return fullName(p);
-    case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
-    case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
-    case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
-    case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || ''; case 'iban': return p.iban || ''; case 'amka': return p.amka || ''; case 'afm': return p.afm || '';
-    case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
-    case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
-    case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
-    case 'notes': return p.notes;
+    case 'rank':
+      return rankTxt(p);
+    case 'rank1':
+      return p.rank;
+    case 'origin':
+      return p.origin || '';
+    case 'spec':
+      return p.spec;
+    case 'name':
+      return fullName(p);
+    case 'who':
+      return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
+    case 'last':
+      return p.last;
+    case 'first':
+      return p.first;
+    case 'father':
+      return p.father;
+    case 'asm':
+      return p.asm;
+    case 'phone':
+      return p.phone;
+    case 'room':
+      return p.room;
+    case 'unit': {
+      const u = unitOf(p, s.settings);
+      return u === '—' ? '' : u;
+    }
+    case 'dcode':
+      return dayCode(s, p, d);
+    case 'absent':
+    case 'areason':
+    case 'aret':
+      return absField(absenceOfPerson(s, p, d), f);
+    case 'email':
+      return p.email || '';
+    case 'relEmail':
+      return p.relEmail || '';
+    case 'blood':
+      return p.blood || '';
+    case 'iban':
+      return p.iban || '';
+    case 'amka':
+      return p.amka || '';
+    case 'afm':
+      return p.afm || '';
+    case 'si':
+      return p.si;
+    case 'post':
+      return p.post || '';
+    case 'role':
+      return p.role || '';
+    case 'essos':
+      return p.essos;
+    case 'dn':
+      return p.dn ? 'ΝΑΙ' : '';
+    case 'weapon':
+      return p.weapon || '';
+    case 'wtype':
+      return p.wtype || '';
+    case 'rack':
+      return p.rack || '';
+    case 'wpos':
+      return p.wpos || '';
+    case 'duty':
+      return Object.entries(s.guards[d] || {})
+        .filter(([, pid]) => pid === p.id)
+        .map(([key]) => postBy(s, key)?.label || '')
+        .filter(Boolean)
+        .join(', ');
+    case 'notes':
+      return p.notes;
   }
   return null;
 }
-export function cellValue(s: AppState, key: string, d: ISODate, r: Pick<Report, 'title' | 'name'>, n: number, group = ''): string | number | null {
-  const st = s.settings; const head = st.unit.filter(Boolean);
+export function cellValue(
+  s: AppState,
+  key: string,
+  d: ISODate,
+  r: Pick<Report, 'title' | 'name'>,
+  n: number,
+  group = '',
+): string | number | null {
+  const st = s.settings;
+  const head = st.unit.filter(Boolean);
   switch (key) {
-    case 'head': return head.join('\n');
-    case 'head1': return st.unit[0] || ''; case 'head2': return st.unit[1] || ''; case 'head3': return st.unit[2] || '';
-    case 'unitName': return st.unitName; case 'place': return st.place;
-    case 'placeDate': return (st.place ? st.place + ', ' : '') + shortDate(d);
-    case 'date': return dmy(d); case 'title': return r.title || r.name; case 'count': return n;
-    case 'sgtName': return st.signers?.sergeant || ''; case 'cmdName': return st.signers?.commander || '';
-    case 'esso': { const e = currentEsso(s); return e ? essoName(e) : ''; }
-    case 'officer': return dutyOfficers(s, d);
-    case 'group': return group;
+    case 'head':
+      return head.join('\n');
+    case 'head1':
+      return st.unit[0] || '';
+    case 'head2':
+      return st.unit[1] || '';
+    case 'head3':
+      return st.unit[2] || '';
+    case 'unitName':
+      return st.unitName;
+    case 'place':
+      return st.place;
+    case 'placeDate':
+      return (st.place ? st.place + ', ' : '') + shortDate(d);
+    case 'date':
+      return dmy(d);
+    case 'title':
+      return r.title || r.name;
+    case 'count':
+      return n;
+    case 'sgtName':
+      return st.signers?.sergeant || '';
+    case 'cmdName':
+      return st.signers?.commander || '';
+    case 'esso': {
+      const e = currentEsso(s);
+      return e ? essoName(e) : '';
+    }
+    case 'officer':
+      return dutyOfficers(s, d);
+    case 'group':
+      return group;
   }
   return null;
 }
 
 // ------------------------------------------------------------------ ποιοι μπαίνουν
-export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick => (mode === 'random' ? { from: 'all', need: ['present'], not: ['duty'], mode, n: 10, even: false } : { from: 'all', mode });
+export const defaultPick = (mode: RepPick['mode'] = 'all'): RepPick =>
+  mode === 'random'
+    ? { from: 'all', need: ['present'], not: ['duty'], mode, n: 10, even: false }
+    : { from: 'all', mode };
 // τα φίλτρα στρατιωτών χωρίς «ποιοι» φίλτρα (για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση)
-const soldiersPick = (pk: RepPick): RepPick => ({ ...pk, from: 'all', noDuty: false, need: undefined, not: undefined, or: undefined, mode: 'all' });
+const soldiersPick = (pk: RepPick): RepPick => ({
+  ...pk,
+  from: 'all',
+  noDuty: false,
+  need: undefined,
+  not: undefined,
+  or: undefined,
+  mode: 'all',
+});
 // Όσοι περνούν τα φίλτρα (πριν από «πόσοι»), με τη σειρά του Δυναμολογίου (αλφαβητικά)
-export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'who' | 'src' | 'sort'>, d: ISODate): Row[] {
+export function candidates(
+  s: AppState,
+  r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'who' | 'src' | 'sort'>,
+  d: ISODate,
+): Row[] {
   const pk = r.pick;
   if (r.kind === 'blank') {
     const pm = r.who?.some(Boolean) ? personMap(s.people) : undefined;
     // γραμμές από φίλτρο: πρώτα όσοι περνούν τα φίλτρα του πίνακα (όπως ο πίνακας ατόμων ή στελεχών, όλοι), μετά οι δικές σου
-    const top: Row[] = r.src ? rowsOf(s, { kind: r.src, pick: { ...pk, mode: 'all' }, sort: srcSort(r.src, r.sort || 'pick') }, d) : [];
-    return [...top.map((x, i) => blankRow(i, { kind: r.src, x } as WhoAt, -1)), ...Array.from({ length: blankN(pk.n, r.src) }, (_, j) => blankRow(top.length + j, whoOf(s, r.who?.[j], pm), j))];
+    const top: Row[] = r.src
+      ? rowsOf(s, { kind: r.src, pick: { ...pk, mode: 'all' }, sort: srcSort(r.src, r.sort || 'pick') }, d)
+      : [];
+    return [
+      ...top.map((x, i) => blankRow(i, { kind: r.src, x } as WhoAt, -1)),
+      ...Array.from({ length: blankN(pk.n, r.src) }, (_, j) => blankRow(top.length + j, whoOf(s, r.who?.[j], pm), j)),
+    ];
   }
   if (r.kind === 'status') {
-    const cats = new Set(pk.cats?.length ? pk.cats : DEF_CATS); const pm = personMap(s.people);
-    const people = new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id));
+    const cats = new Set(pk.cats?.length ? pk.cats : DEF_CATS);
+    const pm = personMap(s.people);
+    const people = new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map((p) => p.id));
     const out: StatusRow[] = [];
     for (const st of live(s)) {
       if (!cats.has(TYPES[st.type]?.cat as StCat) || !people.has(st.pid)) continue;
       if (pk.types?.length && !pk.types.includes(st.type)) continue;
-      if (pk.when === 'new' ? st.from !== d : pk.when === 'from' ? st.to < d && !st.open : st.from > d || (st.to < d && !st.open)) continue;
-      const p = pm.get(st.pid); if (!p) continue;
+      if (
+        pk.when === 'new'
+          ? st.from !== d
+          : pk.when === 'from'
+            ? st.to < d && !st.open
+            : st.from > d || (st.to < d && !st.open)
+      )
+        continue;
+      const p = pm.get(st.pid);
+      if (!p) continue;
       out.push({ ...p, id: st.id, pid: p.id, st, p });
     }
-    return out.sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first) || (a.st.from < b.st.from ? -1 : 1));
+    return out.sort(
+      (a, b) =>
+        collator.compare(a.last, b.last) || collator.compare(a.first, b.first) || (a.st.from < b.st.from ? -1 : 1),
+    );
   }
   // Υπηρεσίες: οι θέσεις της μέρας με τη σειρά της ΦΡΟΥΡΑΣ (και όσες έχουν κάποιον αλλά δεν είναι πια στο έντυπο)
   if (r.kind === 'duty') {
     const filtered = !!(pk.view || pk.si?.length || pk.rooms?.length);
-    const ok = filtered ? soldiersOf(s, pk, d) : null; const pm = seatMap(s);   // και στελέχη σε θέση (Michael, 26/10)
+    const ok = filtered ? soldiersOf(s, pk, d) : null;
+    const pm = seatMap(s); // και στελέχη σε θέση (Michael, 26/10)
     const blocks = pk.blocks?.length ? new Set(pk.blocks) : null;
-    const g = s.guards[d] || {}; const posts = postsOf(s.settings); const have = new Set(posts.map(x => x.k));
+    const g = s.guards[d] || {};
+    const posts = postsOf(s.settings);
+    const have = new Set(posts.map((x) => x.k));
     const out: DutyRow[] = [];
-    for (const po of [...posts, ...Object.keys(g).filter(k => !have.has(k)).map(k => postBy(s, k)).filter((x): x is Post => !!x)]) {
+    for (const po of [
+      ...posts,
+      ...Object.keys(g)
+        .filter((k) => !have.has(k))
+        .map((k) => postBy(s, k))
+        .filter((x): x is Post => !!x),
+    ]) {
       if (blocks && !blocks.has(po.block)) continue;
       const row = dutyRow(pm, po, g[po.k]);
-      if (row.p ? (!ok || ok.has(row.p.id)) : pk.empty && !filtered) out.push(row);
+      if (row.p ? !ok || ok.has(row.p.id) : pk.empty && !filtered) out.push(row);
     }
     return out;
   }
   // Κινήσεις όπλων της μέρας (έξοδοι της μέρας, είσοδοι της μέρας, όσα είναι ακόμα έξω), με τη σειρά που βγήκαν
   if (r.kind === 'wmove') {
-    const ok = soldiersOf(s, pk, d); const pm = seatMap(s); const all = !(pk.view || pk.si?.length || pk.rooms?.length);   // στελέχη (ένοπλη υπηρεσία) μόνο χωρίς φίλτρο στρατιωτών
+    const ok = soldiersOf(s, pk, d);
+    const pm = seatMap(s);
+    const all = !(pk.view || pk.si?.length || pk.rooms?.length); // στελέχη (ένοπλη υπηρεσία) μόνο χωρίς φίλτρο στρατιωτών
     const out: MoveRow[] = [];
     for (const m of movesAll(s, d)) {
       if (pk.open && m.inDay && m.inDay <= d) continue;
-      const p = pm.get(m.pid); if (p && (ok.has(p.id) || (all && p.cid))) out.push({ ...p, id: m.id, pid: p.id, p, m });
+      const p = pm.get(m.pid);
+      if (p && (ok.has(p.id) || (all && p.cid))) out.push({ ...p, id: m.id, pid: p.id, p, m });
     }
     return out;
   }
   // Οπλισμός: όπως οι στρατιώτες, με το φίλτρο της καρτέλας Οπλισμός («Να παραδώσουν»: και όσοι είναι εκτός δύναμης)
   if (r.kind === 'weapon') {
-    const wf = pk.wf || 'with'; const info = wInfo(s, d);
-    const base = wf === 'return' ? s.people.filter(p => !p.active) : (candidates(s, { kind: 'people', pick: pk }, d) as Person[]);
-    return base.filter(p => weaponMatch(wf, p, info)).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
+    const wf = pk.wf || 'with';
+    const info = wInfo(s, d);
+    const base =
+      wf === 'return'
+        ? s.people.filter((p) => !p.active)
+        : (candidates(s, { kind: 'people', pick: pk }, d) as Person[]);
+    return base
+      .filter((p) => weaponMatch(wf, p, info))
+      .sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
   }
   if (r.kind === 'cadre') {
-    const list = orderedCadre(s.cadreList || []).filter(c => c.active);
-    return pk.from === 'present' ? list.filter(c => !cadreStatusOn(s, c.id, d)) : list;
+    const list = orderedCadre(s.cadreList || []).filter((c) => c.active);
+    return pk.from === 'present' ? list.filter((c) => !cadreStatusOn(s, c.id, d)) : list;
   }
-  const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
-  let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
+  const view = pk.view ? (s.settings.views || []).find((v) => v.id === pk.view) : undefined;
+  let list: Person[] = pk.from === 'inactive' ? s.people.filter((p) => !p.active) : activePeople(s);
   const gs = condGroups(pk);
-  if (gs.length > 1) { const t = condTest(s, d, pk.stNew); list = list.filter(p => gs.some(g => passGroup(t, g, p))); }   // Ή ανάμεσα στις ομάδες· κενή ομάδα = περνούν όλοι
-  else if (gs[0].need.length || gs[0].not.length) { const t = condTest(s, d, pk.stNew); list = list.filter(p => passGroup(t, gs[0], p)); }
-  if (view) list = list.filter(p => (view.room == null || p.room === view.room) && (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) && (!view.filter || view.filter === 'all' || rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) && (!view.q || normGreek([p.last, p.first, p.rank, p.origin, p.post, p.role].join(' ')).includes(normGreek(view.q))));
-  if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
-  if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
-  if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }
+  if (gs.length > 1) {
+    const t = condTest(s, d, pk.stNew);
+    list = list.filter((p) => gs.some((g) => passGroup(t, g, p)));
+  } // Ή ανάμεσα στις ομάδες· κενή ομάδα = περνούν όλοι
+  else if (gs[0].need.length || gs[0].not.length) {
+    const t = condTest(s, d, pk.stNew);
+    list = list.filter((p) => passGroup(t, gs[0], p));
+  }
+  if (view)
+    list = list.filter(
+      (p) =>
+        (view.room == null || p.room === view.room) &&
+        (view.unit === 'all' || !view.unit || unitOf(p, s.settings) === view.unit) &&
+        (!view.filter ||
+          view.filter === 'all' ||
+          rosterMatch(view.filter as RosterFilter, p, statusesOn(s.statuses, p.id, d))) &&
+        (!view.q ||
+          normGreek([p.last, p.first, p.rank, p.origin, p.post, p.role].join(' ')).includes(normGreek(view.q))),
+    );
+  if (pk.never?.length) {
+    const nv = new Set(pk.never);
+    list = list.filter((p) => !nv.has(p.id));
+  }
+  if (pk.si?.length) {
+    const si = new Set(pk.si.map(norm));
+    list = list.filter((p) => si.has(norm(p.si)));
+  }
+  if (pk.rooms?.length) {
+    const rs = new Set(pk.rooms);
+    list = list.filter((p) => p.room != null && rs.has(p.room));
+  }
   return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
 }
 export const rowId = (x: Row) => x.id;
 // στρατιώτες που περνούν τα φίλτρα του Δυναμολογίου (λίστα, θάλαμοι, Σ.Ι.): για τα είδη με μία γραμμή ανά κατάσταση, θέση, κίνηση
 function soldiersOf(s: AppState, pk: RepPick, d: ISODate): Set<number> {
-  return new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map(p => p.id as number));
+  return new Set(candidates(s, { kind: 'people', pick: soldiersPick(pk) }, d).map((p) => p.id as number));
 }
 // Κενό: μία γραμμή = ο αριθμός της (0, 1, 2…), χωρίς στοιχεία ατόμου
-const blankRow = (i: number, w?: WhoAt | null, bm?: number) => ({ ...NOBODY, id: i, ...(w ? { bw: w } : {}), ...(bm != null && (bm < 0 || bm !== i) ? { bm } : {}) }) as unknown as Person;   // bw: το άτομο της γραμμής (Report.who ή γραμμή από φίλτρο) · bm: η θέση της ανάμεσα στις δικές σου (-1: από φίλτρο), μόνο όταν διαφέρει από το i
-const NOBODY = { rank: '', spec: '', last: '', first: '', father: '', asm: '', phone: '', si: '', room: null } as unknown as Omit<Person, 'id'>;
+const blankRow = (i: number, w?: WhoAt | null, bm?: number) =>
+  ({
+    ...NOBODY,
+    id: i,
+    ...(w ? { bw: w } : {}),
+    ...(bm != null && (bm < 0 || bm !== i) ? { bm } : {}),
+  }) as unknown as Person; // bw: το άτομο της γραμμής (Report.who ή γραμμή από φίλτρο) · bm: η θέση της ανάμεσα στις δικές σου (-1: από φίλτρο), μόνο όταν διαφέρει από το i
+const NOBODY = {
+  rank: '',
+  spec: '',
+  last: '',
+  first: '',
+  father: '',
+  asm: '',
+  phone: '',
+  si: '',
+  room: null,
+} as unknown as Omit<Person, 'id'>;
 function dutyRow(pm: Map<number, Person>, po: Post, pid: number | undefined): DutyRow {
   const p = pid != null ? pm.get(pid) : undefined;
   return p ? { ...p, id: po.k, pid: p.id, p, seat: po } : { ...NOBODY, id: po.k, pid: null, p: null, seat: po };
@@ -717,21 +1823,47 @@ function dutyRow(pm: Map<number, Person>, po: Post, pid: number | undefined): Du
 
 // Τυχαίοι n από τη λίστα. even: ισομερώς από κάθε θάλαμο (όσοι λείπουν από έναν θάλαμο συμπληρώνονται από τους άλλους).
 // rnd: για τα τεστ (Math.random)
-function shuffle<X>(a: X[], rnd: () => number): X[] { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; }
+function shuffle<X>(a: X[], rnd: () => number): X[] {
+  const x = [...a];
+  for (let i = x.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [x[i], x[j]] = [x[j], x[i]];
+  }
+  return x;
+}
 // times: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο («Πρώτα όσοι βγήκαν λιγότερες φορές»): πρώτα οι λιγότερες,
 // τυχαία ανάμεσα σε όσους έχουν τις ίδιες (η ταξινόμηση κρατά τη σειρά της ανακατεμένης λίστας)
 function ordered<X extends Row>(a: X[], rnd: () => number, times?: Record<string, number>): X[] {
-  const x = shuffle(a, rnd); return times ? x.sort((p, q) => (times[p.id] || 0) - (times[q.id] || 0)) : x;
+  const x = shuffle(a, rnd);
+  return times ? x.sort((p, q) => (times[p.id] || 0) - (times[q.id] || 0)) : x;
 }
-export function pickRandom<T extends Row>(list: T[], n: number, even = false, rnd: () => number = Math.random, times?: Record<string, number>): T[] {
+export function pickRandom<T extends Row>(
+  list: T[],
+  n: number,
+  even = false,
+  rnd: () => number = Math.random,
+  times?: Record<string, number>,
+): T[] {
   n = Math.max(0, Math.min(n, list.length));
   if (!even) return ordered(list, rnd, times).slice(0, n);
   const groups = new Map<string, T[]>();
-  for (const x of list) { const g = String((x as Person).room ?? '—'); const l = groups.get(g); if (l) l.push(x); else groups.set(g, [x]); }
-  const gs = shuffle([...groups.values()].map(g => ordered(g, rnd, times)), rnd);
-  const out: T[] = []; const at = gs.map(() => 0);
+  for (const x of list) {
+    const g = String((x as Person).room ?? '—');
+    const l = groups.get(g);
+    if (l) l.push(x);
+    else groups.set(g, [x]);
+  }
+  const gs = shuffle(
+    [...groups.values()].map((g) => ordered(g, rnd, times)),
+    rnd,
+  );
+  const out: T[] = [];
+  const at = gs.map(() => 0);
   // γύρω γύρω: ένας από κάθε θάλαμο με τη σειρά, μέχρι να φτάσουν οι n (οι θάλαμοι που τελείωσαν παραλείπονται)
-  while (out.length < n) gs.forEach((g, i) => { if (out.length < n && at[i] < g.length) out.push(g[at[i]++]); });
+  while (out.length < n)
+    gs.forEach((g, i) => {
+      if (out.length < n && at[i] < g.length) out.push(g[at[i]++]);
+    });
   return out;
 }
 // Ένας άλλος τυχαίος στη θέση του i (από όσους δεν είναι ήδη μέσα, πρώτα όσοι βγήκαν λιγότερες φορές)· null: δεν υπάρχει άλλος
@@ -739,66 +1871,170 @@ export function pickRandom<T extends Row>(list: T[], n: number, even = false, rn
 // null αν κάποιος δεν περνά πια τα φίλτρα: τότε γίνεται νέα κλήρωση.
 // more: όσοι μπήκαν με το όνομα (μπορεί να μην περνούν τα φίλτρα)
 export function keepDraw(pool: Row[], ids: (number | string)[], more: Row[] = []): Row[] | null {
-  const by = new Map([...more, ...pool].map(x => [x.id, x])); const got: Row[] = [];
-  for (const id of ids) { const x = by.get(id); if (!x) return null; got.push(x); }
+  const by = new Map([...more, ...pool].map((x) => [x.id, x]));
+  const got: Row[] = [];
+  for (const id of ids) {
+    const x = by.get(id);
+    if (!x) return null;
+    got.push(x);
+  }
   return got;
 }
-export function replaceOne<T extends Row>(picked: T[], i: number, pool: T[], rnd: () => number = Math.random, times?: Record<string, number>): T[] | null {
-  const ids = new Set(picked.map(x => x.id)); let rest = pool.filter(x => !ids.has(x.id));
+export function replaceOne<T extends Row>(
+  picked: T[],
+  i: number,
+  pool: T[],
+  rnd: () => number = Math.random,
+  times?: Record<string, number>,
+): T[] | null {
+  const ids = new Set(picked.map((x) => x.id));
+  let rest = pool.filter((x) => !ids.has(x.id));
   if (!rest.length) return null;
-  if (times) { const min = Math.min(...rest.map(x => times[x.id] || 0)); rest = rest.filter(x => (times[x.id] || 0) === min); }
-  const nx = [...picked]; nx[i] = rest[Math.floor(rnd() * rest.length)]; return nx;
+  if (times) {
+    const min = Math.min(...rest.map((x) => times[x.id] || 0));
+    rest = rest.filter((x) => (times[x.id] || 0) === min);
+  }
+  const nx = [...picked];
+  nx[i] = rest[Math.floor(rnd() * rest.length)];
+  return nx;
 }
 // Χωρισμός σε φύλλα: ομάδες με τη σειρά θαλάμου / ουλαμού / Σ.Ι., και μέσα στην καθεμία η σειρά της λίστας
-export interface RepGroup { key: string; label: string; short: string; rows: Row[] }
+export interface RepGroup {
+  key: string;
+  label: string;
+  short: string;
+  rows: Row[];
+}
 // η ομάδα μιας γραμμής (θάλαμος, ουλαμός ή Σ.Ι. του στρατιώτη)
 export function groupOf(s: Pick<AppState, 'settings'>, x: Row, split: RepSplit): Omit<RepGroup, 'rows'> {
-  const p = x as Person; let key: string, label: string, short: string;
-  if (split === 'room') { key = p.room == null ? '~' : String(p.room).padStart(3, '0'); label = p.room == null ? 'ΧΩΡΙΣ ΘΑΛΑΜΟ' : 'ΘΑΛΑΜΟΣ ' + p.room; short = p.room == null ? 'ΧΩΡΙΣ ΘΑΛ' : 'Θ' + p.room; }
-  else if (split === 'unit') { const u = unitOf(p, s.settings); key = u === '—' ? '~' : u; label = u === '—' ? 'ΧΩΡΙΣ ΟΥΛΑΜΟ' : 'ΟΥΛΑΜΟΣ ' + u; short = u === '—' ? 'ΧΩΡΙΣ ΟΥΛ' : u; }
-  else { const si = (p.si || '').trim(); key = si || '~'; label = si || 'ΧΩΡΙΣ Σ.Ι.'; short = si || 'ΧΩΡΙΣ ΣΙ'; }
+  const p = x as Person;
+  let key: string, label: string, short: string;
+  if (split === 'room') {
+    key = p.room == null ? '~' : String(p.room).padStart(3, '0');
+    label = p.room == null ? 'ΧΩΡΙΣ ΘΑΛΑΜΟ' : 'ΘΑΛΑΜΟΣ ' + p.room;
+    short = p.room == null ? 'ΧΩΡΙΣ ΘΑΛ' : 'Θ' + p.room;
+  } else if (split === 'unit') {
+    const u = unitOf(p, s.settings);
+    key = u === '—' ? '~' : u;
+    label = u === '—' ? 'ΧΩΡΙΣ ΟΥΛΑΜΟ' : 'ΟΥΛΑΜΟΣ ' + u;
+    short = u === '—' ? 'ΧΩΡΙΣ ΟΥΛ' : u;
+  } else {
+    const si = (p.si || '').trim();
+    key = si || '~';
+    label = si || 'ΧΩΡΙΣ Σ.Ι.';
+    short = si || 'ΧΩΡΙΣ ΣΙ';
+  }
   return { key, label: label.toUpperCase(), short: short.toUpperCase() };
 }
-export const byGroup = (a: { key: string }, b: { key: string }) => Number(a.key === '~') - Number(b.key === '~') || collator.compare(a.key, b.key);   // «χωρίς» στο τέλος
-export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row[], split: RepSplit | undefined): RepGroup[] {
+export const byGroup = (a: { key: string }, b: { key: string }) =>
+  Number(a.key === '~') - Number(b.key === '~') || collator.compare(a.key, b.key); // «χωρίς» στο τέλος
+export function groupsOf(
+  s: Pick<AppState, 'settings'>,
+  kind: RepKind,
+  rows: Row[],
+  split: RepSplit | undefined,
+): RepGroup[] {
   if (!split || split === 'none' || !splitOk(kind)) return [{ key: '', label: '', short: '', rows }];
   const by = new Map<string, RepGroup>();
   for (const x of rows) {
     const k = groupOf(s, x, split);
-    const g = by.get(k.key); if (g) g.rows.push(x); else by.set(k.key, { ...k, rows: [x] });
+    const g = by.get(k.key);
+    if (g) g.rows.push(x);
+    else by.set(k.key, { ...k, rows: [x] });
   }
   return [...by.values()].sort(byGroup);
 }
 // Τι θα γίνει όταν πατηθεί «Βγάλε», σε απλά λόγια (οδηγός, «Βγάλε…»): πόσα φύλλα/σελίδες, ποια, πού
-export const repFileName = (r: Pick<Report, 'name'>, d: ISODate) => upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
+export const repFileName = (r: Pick<Report, 'name'>, d: ISODate) =>
+  upper(r.name || 'ΕΝΤΥΠΟ')
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .trim() +
+  ' ' +
+  d.split('-').reverse().join('-') +
+  '.xlsx';
 const baseName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
-export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'] };
-export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d: ISODate): { groups: RepGroup[]; text: string } {
+export const SPLIT_NOUN: Record<RepSplit, [string, string]> = {
+  none: ['', ''],
+  room: ['θάλαμο', 'θαλάμους'],
+  unit: ['ουλαμό', 'ουλαμούς'],
+  si: ['Σ.Ι.', 'Σ.Ι.'],
+};
+export function outPlan(
+  s: Pick<AppState, 'settings'>,
+  r: Report,
+  rows: Row[],
+  d: ISODate,
+): { groups: RepGroup[]; text: string } {
   const split = splitOk(r.kind) && !!r.split && r.split !== 'none';
   const groups = split ? groupsOf(s, r.kind, rows, r.split) : [];
-  const gl = (f: (g: RepGroup) => string) => groups.slice(0, 6).map(g => f(g) + ' (' + g.rows.length + ')').join(', ') + (groups.length > 6 ? ' κ.ά.' : '');
+  const gl = (f: (g: RepGroup) => string) =>
+    groups
+      .slice(0, 6)
+      .map((g) => f(g) + ' (' + g.rows.length + ')')
+      .join(', ') + (groups.length > 6 ? ' κ.ά.' : '');
   const one = SPLIT_NOUN[r.split || 'none'][0];
   const file = repFileName(r, d);
-  const parts = (page: boolean) => (groups.length === 1 ? (page ? '1 σελίδα' : '1 φύλλο') : groups.length + (page ? ' σελίδες' : ' φύλλα')) + (page ? ', μία' : ', ένα') + ' για κάθε ' + one + (groups.length ? ': ' + gl(g => g.short) : '');
+  const parts = (page: boolean) =>
+    (groups.length === 1 ? (page ? '1 σελίδα' : '1 φύλλο') : groups.length + (page ? ' σελίδες' : ' φύλλα')) +
+    (page ? ', μία' : ', ένα') +
+    ' για κάθε ' +
+    one +
+    (groups.length ? ': ' + gl((g) => g.short) : '');
   let text: string;
-  if (r.out === 'print') text = 'Ανοίγει η προεπισκόπηση εκτύπωσης' + (split ? ' με ' + parts(true) : '') + '. Το αρχείο «' + file + '» μένει και στον φάκελο των Excel.';
+  if (r.out === 'print')
+    text =
+      'Ανοίγει η προεπισκόπηση εκτύπωσης' +
+      (split ? ' με ' + parts(true) : '') +
+      '. Το αρχείο «' +
+      file +
+      '» μένει και στον φάκελο των Excel.';
   else if (r.out === 'sheet') {
     const t = r.target || { to: 'people', sheet: '' };
     const where = t.to === 'file' ? baseName(t.file) : baseName(s.settings.sources?.people?.file) || 'Δυναμολόγιο';
     const base = upper(t.sheet || r.name || 'ΕΝΤΥΠΟ').trim();
-    text = (split ? 'Γράφονται ' + parts(false) + ', μέσα στο ' + where : 'Γράφεται το φύλλο «' + base.slice(0, 31) + '» μέσα στο ' + where) + '. Τα άλλα φύλλα του αρχείου δεν αλλάζουν.';
-  } else text = 'Φτιάχνεται το αρχείο «' + file + '» στον φάκελο των Excel' + (split ? ', με ' + parts(false) : '') + ', και ανοίγει.';
+    text =
+      (split
+        ? 'Γράφονται ' + parts(false) + ', μέσα στο ' + where
+        : 'Γράφεται το φύλλο «' + base.slice(0, 31) + '» μέσα στο ' + where) +
+      '. Τα άλλα φύλλα του αρχείου δεν αλλάζουν.';
+  } else
+    text =
+      'Φτιάχνεται το αρχείο «' +
+      file +
+      '» στον φάκελο των Excel' +
+      (split ? ', με ' + parts(false) : '') +
+      ', και ανοίγει.';
   return { groups, text };
 }
 // Σειρά στο έντυπο
 export function sortRows<T extends Row>(rows: T[], sort: RepSort, s: AppState, kind: RepKind): T[] {
   if (kind === 'blank' || sort === 'pick' || (sort === 'seat' && kind === 'duty')) return rows;
   if (sort === 'from' && kind === 'wmove') return [...rows].sort((a, b) => byOut((a as MoveRow).m, (b as MoveRow).m));
-  if (sort === 'from' && kind === 'status') return [...rows].sort((a, b) => ((a as StatusRow).st.from < (b as StatusRow).st.from ? -1 : (a as StatusRow).st.from > (b as StatusRow).st.from ? 1 : collator.compare(a.last, b.last)));
-  if (kind === 'cadre') { if (sort !== 'rank') return [...rows].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first)); const ord = orderedCadre(s.cadreList || []).map(c => c.id); return [...rows].sort((a, b) => ord.indexOf(a.id as string) - ord.indexOf(b.id as string)); }
+  if (sort === 'from' && kind === 'status')
+    return [...rows].sort((a, b) =>
+      (a as StatusRow).st.from < (b as StatusRow).st.from
+        ? -1
+        : (a as StatusRow).st.from > (b as StatusRow).st.from
+          ? 1
+          : collator.compare(a.last, b.last),
+    );
+  if (kind === 'cadre') {
+    if (sort !== 'rank')
+      return [...rows].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
+    const ord = orderedCadre(s.cadreList || []).map((c) => c.id);
+    return [...rows].sort((a, b) => ord.indexOf(a.id as string) - ord.indexOf(b.id as string));
+  }
   const byName = (a: Row, b: Row) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
-  if (sort === 'room') return [...rows].sort((a, b) => ((a as Person).room ?? 99) - ((b as Person).room ?? 99) || byName(a, b));
-  if (sort === 'rank') { const rk = listOf(s.settings.lists, 'soldierRanks'); const ix = (r: string) => { const i = rk.indexOf(r); return i < 0 ? -1 : i; }; return [...rows].sort((a, b) => ix(b.rank) - ix(a.rank) || byName(a, b)); }
+  if (sort === 'room')
+    return [...rows].sort((a, b) => ((a as Person).room ?? 99) - ((b as Person).room ?? 99) || byName(a, b));
+  if (sort === 'rank') {
+    const rk = listOf(s.settings.lists, 'soldierRanks');
+    const ix = (r: string) => {
+      const i = rk.indexOf(r);
+      return i < 0 ? -1 : i;
+    };
+    return [...rows].sort((a, b) => ix(b.rank) - ix(a.rank) || byName(a, b));
+  }
   return [...rows].sort(byName);
 }
 // Τα άτομα του εντύπου, χωρίς τυχαία επιλογή (αυτή γίνεται στην οθόνη, για να βγει ό,τι είδες)
@@ -807,103 +2043,300 @@ export const manualKind = (k: RepKind) => k === 'people' || k === 'weapon';
 // «Πάντα μέσα»: μπαίνουν ό,τι κι αν λένε τα φίλτρα (όχι όσοι είναι και στο «Ποτέ»)
 export function alwaysOf(s: AppState, r: Pick<Report, 'kind' | 'pick'>): Person[] {
   if (!manualKind(r.kind) || !r.pick.always?.length) return [];
-  const pm = personMap(s.people); const nv = new Set(r.pick.never || []);
-  return r.pick.always.map(id => pm.get(id)).filter((p): p is Person => !!p && !nv.has(p.id));
+  const pm = personMap(s.people);
+  const nv = new Set(r.pick.never || []);
+  return r.pick.always.map((id) => pm.get(id)).filter((p): p is Person => !!p && !nv.has(p.id));
 }
 // Κλήρωση: οι «πάντα μέσα» και τυχαίοι μέχρι να γίνουν n
-export function drawRows(always: Row[], pool: Row[], n: number, even = false, rnd: () => number = Math.random, times?: Record<string, number>): Row[] {
-  const ids = new Set(always.map(x => x.id));
-  return [...always, ...pickRandom(pool.filter(x => !ids.has(x.id)), Math.max(0, n - always.length), even, rnd, times)];
+export function drawRows(
+  always: Row[],
+  pool: Row[],
+  n: number,
+  even = false,
+  rnd: () => number = Math.random,
+  times?: Record<string, number>,
+): Row[] {
+  const ids = new Set(always.map((x) => x.id));
+  return [
+    ...always,
+    ...pickRandom(
+      pool.filter((x) => !ids.has(x.id)),
+      Math.max(0, n - always.length),
+      even,
+      rnd,
+      times,
+    ),
+  ];
 }
 // Όταν αλλάζουν τα φίλτρα ή το πόσοι, η κλήρωση κρατά όσους περνούν ακόμα και συμπληρώνει (ή κόβει) μέχρι n
-export function refillDraw(prev: Row[], always: Row[], pool: Row[], n: number, even = false, rnd: () => number = Math.random, times?: Record<string, number>): Row[] {
-  const by = new Map(pool.map(x => [x.id, x])); const aIds = new Set(always.map(x => x.id));
-  const kept = [...always, ...prev.filter(x => !aIds.has(x.id) && by.has(x.id)).map(x => by.get(x.id)!)].slice(0, Math.max(n, always.length));
-  const used = new Set(kept.map(x => x.id));
-  return [...kept, ...pickRandom(pool.filter(x => !used.has(x.id)), Math.max(0, n - kept.length), even, rnd, times)];
+export function refillDraw(
+  prev: Row[],
+  always: Row[],
+  pool: Row[],
+  n: number,
+  even = false,
+  rnd: () => number = Math.random,
+  times?: Record<string, number>,
+): Row[] {
+  const by = new Map(pool.map((x) => [x.id, x]));
+  const aIds = new Set(always.map((x) => x.id));
+  const kept = [...always, ...prev.filter((x) => !aIds.has(x.id) && by.has(x.id)).map((x) => by.get(x.id)!)].slice(
+    0,
+    Math.max(n, always.length),
+  );
+  const used = new Set(kept.map((x) => x.id));
+  return [
+    ...kept,
+    ...pickRandom(
+      pool.filter((x) => !used.has(x.id)),
+      Math.max(0, n - kept.length),
+      even,
+      rnd,
+      times,
+    ),
+  ];
 }
 // Όσοι βγήκαν σε αυτό το έντυπο τις gap μέρες πριν από τη d (το Ιστορικό κρατά ποιοι και για ποια μέρα)
-export function recentIds(hist: { date: ISODate; ids: (number | string)[] }[], d: ISODate, gap: number): Set<number | string> {
-  const from = addDays(d, -Math.max(0, gap)); const out = new Set<number | string>();
-  for (const h of hist) if (h.date < d && h.date >= from) h.ids.forEach(i => out.add(i));
+export function recentIds(
+  hist: { date: ISODate; ids: (number | string)[] }[],
+  d: ISODate,
+  gap: number,
+): Set<number | string> {
+  const from = addDays(d, -Math.max(0, gap));
+  const out = new Set<number | string>();
+  for (const h of hist) if (h.date < d && h.date >= from) h.ids.forEach((i) => out.add(i));
   return out;
 }
-export function rowsOf(s: AppState, r: Pick<Report, 'kind' | 'pick' | 'sort'> & Pick<Partial<Report>, 'who' | 'src'>, d: ISODate): Row[] {
-  const a = alwaysOf(s, r); const aIds = new Set(a.map(p => p.id));
-  const c = [...a, ...candidates(s, r, d).filter(x => !aIds.has(x.id as number))];
+export function rowsOf(
+  s: AppState,
+  r: Pick<Report, 'kind' | 'pick' | 'sort'> & Pick<Partial<Report>, 'who' | 'src'>,
+  d: ISODate,
+): Row[] {
+  const a = alwaysOf(s, r);
+  const aIds = new Set(a.map((p) => p.id));
+  const c = [...a, ...candidates(s, r, d).filter((x) => !aIds.has(x.id as number))];
   const n = r.pick.mode === 'all' ? c.length : Math.max(0, r.pick.n || 0);
   return sortRows(r.pick.mode === 'first' ? c.slice(0, n) : c, r.sort, s, r.kind);
 }
-export const byIds = (s: AppState, kind: RepKind, ids: (number | string)[], d?: ISODate, who?: (string | null)[]): Row[] => {
-  if (kind === 'blank') { const pm = who?.some(Boolean) ? personMap(s.people) : undefined; return ids.map(i => blankRow(+i, whoOf(s, who?.[+i], pm))); }
+export const byIds = (
+  s: AppState,
+  kind: RepKind,
+  ids: (number | string)[],
+  d?: ISODate,
+  who?: (string | null)[],
+): Row[] => {
+  if (kind === 'blank') {
+    const pm = who?.some(Boolean) ? personMap(s.people) : undefined;
+    return ids.map((i) => blankRow(+i, whoOf(s, who?.[+i], pm)));
+  }
   if (kind === 'duty') {
-    const pm = seatMap(s); const g = (d && s.guards[d]) || {};
-    return ids.map(k => { const po = postBy(s, String(k)); return po ? dutyRow(pm, po, g[po.k]) : null; }).filter((x): x is DutyRow => !!x);
+    const pm = seatMap(s);
+    const g = (d && s.guards[d]) || {};
+    return ids
+      .map((k) => {
+        const po = postBy(s, String(k));
+        return po ? dutyRow(pm, po, g[po.k]) : null;
+      })
+      .filter((x): x is DutyRow => !!x);
   }
   if (kind === 'wmove') {
     const pm = seatMap(s);
-    return ids.map(id => { const m = moveById(s, id as string); const p = m && pm.get(m.pid); return m && p ? { ...p, id: m.id, pid: p.id, p, m } as MoveRow : null; }).filter((x): x is MoveRow => !!x);
+    return ids
+      .map((id) => {
+        const m = moveById(s, id as string);
+        const p = m && pm.get(m.pid);
+        return m && p ? ({ ...p, id: m.id, pid: p.id, p, m } as MoveRow) : null;
+      })
+      .filter((x): x is MoveRow => !!x);
   }
   if (kind === 'status') {
-    const pm = personMap(s.people); const sm = new Map(s.statuses.map(x => [x.id, x]));
-    return ids.map(id => { const st = sm.get(id as string); const p = st && pm.get(st.pid); return st && p ? { ...p, id: st.id, pid: p.id, st, p } as StatusRow : null; }).filter((x): x is StatusRow => !!x);
+    const pm = personMap(s.people);
+    const sm = new Map(s.statuses.map((x) => [x.id, x]));
+    return ids
+      .map((id) => {
+        const st = sm.get(id as string);
+        const p = st && pm.get(st.pid);
+        return st && p ? ({ ...p, id: st.id, pid: p.id, st, p } as StatusRow) : null;
+      })
+      .filter((x): x is StatusRow => !!x);
   }
-  if (kind === 'cadre') { const m = new Map((s.cadreList || []).map(c => [c.id, c])); return ids.map(id => m.get(id as string)).filter((x): x is Cadre => !!x); }
-  const pm = personMap(s.people); return ids.map(id => pm.get(id as number)).filter((x): x is Person => !!x);
+  if (kind === 'cadre') {
+    const m = new Map((s.cadreList || []).map((c) => [c.id, c]));
+    return ids.map((id) => m.get(id as string)).filter((x): x is Cadre => !!x);
+  }
+  const pm = personMap(s.people);
+  return ids.map((id) => pm.get(id as number)).filter((x): x is Person => !!x);
 };
 
 // Σύνοψη για τη λίστα των εντύπων: «57 τυχαίοι από τους παρόντες»
-export function pickText(r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'src'>, s: Pick<AppState, 'settings'>): string {
+export function pickText(
+  r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>, 'src'>,
+  s: Pick<AppState, 'settings'>,
+): string {
   if (r.kind === 'blank') {
-    const n = blankN(r.pick.n, r.src), mine = n + (n === 1 ? ' γραμμή' : ' γραμμές') + ' που γράφεις εσύ';
+    const n = blankN(r.pick.n, r.src),
+      mine = n + (n === 1 ? ' γραμμή' : ' γραμμές') + ' που γράφεις εσύ';
     return r.src ? (r.src === 'cadre' ? 'Στελέχη' : 'Στρατιώτες') + ' από φίλτρο' + (n ? ' και ' + mine : '') : mine;
   }
-  const pk = r.pick; const who = r.kind === 'cadre' ? 'στελέχη' : r.kind === 'status' ? 'καταστάσεις' : 'στρατιώτες';
+  const pk = r.pick;
+  const who = r.kind === 'cadre' ? 'στελέχη' : r.kind === 'status' ? 'καταστάσεις' : 'στρατιώτες';
   if (r.kind === 'status') {
-    const cats = pk.types?.length ? pk.types.map(t => TYPES[t]?.label || t).join(', ') : (pk.cats?.length ? pk.cats : DEF_CATS).map(c => ST_CATS.find(x => x.id === c)?.label.toLowerCase()).join(', ');
-    const lead = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
-    return lead + ' (' + cats + ') ' + (pk.when === 'new' ? 'που ξεκινούν τη μέρα' : pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
+    const cats = pk.types?.length
+      ? pk.types.map((t) => TYPES[t]?.label || t).join(', ')
+      : (pk.cats?.length ? pk.cats : DEF_CATS)
+          .map((c) => ST_CATS.find((x) => x.id === c)?.label.toLowerCase())
+          .join(', ');
+    const lead =
+      pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
+    return (
+      lead +
+      ' (' +
+      cats +
+      ') ' +
+      (pk.when === 'new' ? 'που ξεκινούν τη μέρα' : pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα')
+    );
   }
-  const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', ')].filter(Boolean).join(', ');
+  const rest = [
+    pk.view && 'λίστα «' + ((s.settings.views || []).find((v) => v.id === pk.view)?.name || '') + '»',
+    pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '),
+    pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '),
+  ]
+    .filter(Boolean)
+    .join(', ');
   const tail = rest ? ' (' + rest + ')' : '';
   if (r.kind === 'duty') {
-    const bl = pk.blocks?.length ? pk.blocks.map(id => everyBlock(s.settings).find(b => b.id === id)?.name).filter(Boolean).join(', ') : '';
+    const bl = pk.blocks?.length
+      ? pk.blocks
+          .map((id) => everyBlock(s.settings).find((b) => b.id === id)?.name)
+          .filter(Boolean)
+          .join(', ')
+      : '';
     return (bl ? 'Θέσεις: ' + bl : 'Όλες οι θέσεις υπηρεσίας') + (pk.empty ? ', και οι κενές' : '') + tail;
   }
   if (r.kind === 'wmove') return (pk.open ? 'Τα όπλα που είναι ακόμα έξω' : 'Οι κινήσεις όπλων της μέρας') + tail;
   if (r.kind === 'weapon') {
-    const wf = WEAPON_FILTERS.find(x => x[0] === (pk.wf || 'with'));
-    return (pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι: ' : '') + 'Οπλισμός, ' + (wf ? wf[1].toLowerCase() : '') + tail;
+    const wf = WEAPON_FILTERS.find((x) => x[0] === (pk.wf || 'with'));
+    return (
+      (pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι: ' : '') + 'Οπλισμός, ' + (wf ? wf[1].toLowerCase() : '') + tail
+    );
   }
   const cadre = r.kind === 'cadre';
-  const gs = cadre || !pk.or?.length ? null : condGroups(pk);   // ομάδες φίλτρων (Ή)
+  const gs = cadre || !pk.or?.length ? null : condGroups(pk); // ομάδες φίλτρων (Ή)
   const { need, not } = cadre || gs ? { need: [] as RepCond[], not: [] as RepCond[] } : condsOf(pk);
-  const pres = cadre ? pk.from === 'present' : gs ? gs.every(g => g.need.includes('present')) : need.includes('present');
-  const from = pk.from === 'inactive' ? 'τους εκτός δύναμης' : pres ? (cadre ? 'τα παρόντα στελέχη' : 'τους παρόντες') : cadre ? 'όλα τα στελέχη' : 'όλους';
-  const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view)?.name : '';
-  const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
+  const pres = cadre
+    ? pk.from === 'present'
+    : gs
+      ? gs.every((g) => g.need.includes('present'))
+      : need.includes('present');
+  const from =
+    pk.from === 'inactive'
+      ? 'τους εκτός δύναμης'
+      : pres
+        ? cadre
+          ? 'τα παρόντα στελέχη'
+          : 'τους παρόντες'
+        : cadre
+          ? 'όλα τα στελέχη'
+          : 'όλους';
+  const view = pk.view ? (s.settings.views || []).find((v) => v.id === pk.view)?.name : '';
+  const word = (c: RepCond, yes: boolean) => {
+    const x = REP_CONDS.find((k) => k.id === c)!;
+    return (yes ? x.yes : x.no).toLowerCase();
+  };
   const man = manualKind(r.kind);
-  const gtxt = gs ? gs.map(g => [...g.need.filter(c => !pres || c !== 'present').map(c => word(c, true)), ...g.not.map(c => word(c, false))]).map(w => (w.length === 1 ? w[0] : w.length ? '(' + w.join(' και ') + ')' : 'όλοι')).join(' ή ') : '';
-  const extra = [view && 'λίστα «' + view + '»', gtxt, ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
-    pk.mode === 'random' && pk.gap ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες') : '',
-    man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '', man && pk.never?.length ? pk.never.length + ' ποτέ' : ''].filter(Boolean).join(', ');
-  const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
+  const gtxt = gs
+    ? gs
+        .map((g) => [
+          ...g.need.filter((c) => !pres || c !== 'present').map((c) => word(c, true)),
+          ...g.not.map((c) => word(c, false)),
+        ])
+        .map((w) => (w.length === 1 ? w[0] : w.length ? '(' + w.join(' και ') + ')' : 'όλοι'))
+        .join(' ή ')
+    : '';
+  const extra = [
+    view && 'λίστα «' + view + '»',
+    gtxt,
+    ...need.filter((c) => c !== 'present').map((c) => word(c, true)),
+    pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '),
+    pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '),
+    ...not.map((c) => word(c, false)),
+    !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
+    pk.mode === 'random' && pk.gap
+      ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες')
+      : '',
+    man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '',
+    man && pk.never?.length ? pk.never.length + ' ποτέ' : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const head =
+    pk.mode === 'random'
+      ? (pk.n || 0) +
+        ' τυχαίοι από ' +
+        from +
+        (pk.even ? ', ισομερώς ανά θάλαμο' : '') +
+        (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '')
+      : pk.mode === 'first'
+        ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from
+        : from === 'όλους' || from === 'όλα τα στελέχη'
+          ? 'Όλοι οι ' + who
+          : 'Όλοι από ' + from;
   return head + (extra ? ' (' + extra + ')' : '');
 }
 // Σειρές ανά είδος (οι «Ημερομηνία» μόνο στις καταστάσεις και στις κινήσεις όπλων, η «Σειρά ΦΡΟΥΡΑΣ» μόνο στις υπηρεσίες)
-const SORTS: { value: RepSort; label: string }[] = [{ value: 'seat', label: 'Σειρά ΦΡΟΥΡΑΣ' }, { value: 'name', label: 'Αλφαβητικά' }, { value: 'room', label: 'Θάλαμος' }, { value: 'rank', label: 'Βαθμός' }, { value: 'from', label: 'Ημερομηνία' }, { value: 'pick', label: 'Όπως βγήκαν' }];
-export const sortsOf = (kind: RepKind) => SORTS.filter(s => kind === 'blank' ? s.value === 'pick' : (kind !== 'cadre' || s.value !== 'room') && ((kind === 'status' || kind === 'wmove') || s.value !== 'from') && (kind === 'duty' || s.value !== 'seat')
-  && !((kind === 'duty' || kind === 'wmove') && s.value === 'pick')).map(s => (kind === 'wmove' && s.value === 'from' ? { ...s, label: 'Ώρα εξόδου' } : s));
+const SORTS: { value: RepSort; label: string }[] = [
+  { value: 'seat', label: 'Σειρά ΦΡΟΥΡΑΣ' },
+  { value: 'name', label: 'Αλφαβητικά' },
+  { value: 'room', label: 'Θάλαμος' },
+  { value: 'rank', label: 'Βαθμός' },
+  { value: 'from', label: 'Ημερομηνία' },
+  { value: 'pick', label: 'Όπως βγήκαν' },
+];
+export const sortsOf = (kind: RepKind) =>
+  SORTS.filter((s) =>
+    kind === 'blank'
+      ? s.value === 'pick'
+      : (kind !== 'cadre' || s.value !== 'room') &&
+        (kind === 'status' || kind === 'wmove' || s.value !== 'from') &&
+        (kind === 'duty' || s.value !== 'seat') &&
+        !((kind === 'duty' || kind === 'wmove') && s.value === 'pick'),
+  ).map((s) => (kind === 'wmove' && s.value === 'from' ? { ...s, label: 'Ώρα εξόδου' } : s));
 // Άλλαξε «Τι αφορά»: κάθε είδος κρατά μόνο τα δικά του φίλτρα· θάλαμοι, Σ.Ι. και λίστα μένουν σε όσα έχουν στρατιώτες
-export function pickForKind(from: RepKind, pk: RepPick, sort: RepSort, kind: RepKind): { pick: RepPick; sort: RepSort } {
+export function pickForKind(
+  from: RepKind,
+  pk: RepPick,
+  sort: RepSort,
+  kind: RepKind,
+): { pick: RepPick; sort: RepSort } {
   const { cats, when, blocks, empty, wf, open, stNew, ...rest } = pk;
-  const sn = stNew && (kind === 'people' || kind === 'weapon') ? { stNew } : {};   // μόνο στα είδη με φίλτρα στρατιωτών
+  const sn = stNew && (kind === 'people' || kind === 'weapon') ? { stNew } : {}; // μόνο στα είδη με φίλτρα στρατιωτών
   const base = { ...rest, from: 'all' as const, noDuty: false };
-  const pick: RepPick = kind === 'blank' ? { from: 'all', mode: 'all', n: from === 'blank' ? blankN(pk.n) : BLANK_ROWS } : kind === 'cadre' ? { from: pk.from === 'present' ? 'present' : 'all', mode: pk.mode, n: pk.n }
-    : kind === 'status' ? { ...base, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' }
-    : kind === 'duty' ? { ...base, mode: 'all', blocks, empty } : kind === 'wmove' ? { ...base, mode: 'all', open }
-    : kind === 'weapon' ? { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from, wf: wf || 'with' } : { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from };
-  const so: RepSort = kind === 'blank' ? 'pick' : kind === 'duty' ? 'seat' : kind === 'wmove' ? 'from' : sortsOf(kind).some(x => x.value === sort) && from !== 'blank' ? sort : kind === 'cadre' ? 'rank' : 'name';
+  const pick: RepPick =
+    kind === 'blank'
+      ? { from: 'all', mode: 'all', n: from === 'blank' ? blankN(pk.n) : BLANK_ROWS }
+      : kind === 'cadre'
+        ? { from: pk.from === 'present' ? 'present' : 'all', mode: pk.mode, n: pk.n }
+        : kind === 'status'
+          ? { ...base, cats: cats || ['med', 'pun', 'abs'], when: when || 'on' }
+          : kind === 'duty'
+            ? { ...base, mode: 'all', blocks, empty }
+            : kind === 'wmove'
+              ? { ...base, mode: 'all', open }
+              : kind === 'weapon'
+                ? { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from, wf: wf || 'with' }
+                : { ...rest, ...sn, from: isLinked(from) ? 'all' : rest.from };
+  const so: RepSort =
+    kind === 'blank'
+      ? 'pick'
+      : kind === 'duty'
+        ? 'seat'
+        : kind === 'wmove'
+          ? 'from'
+          : sortsOf(kind).some((x) => x.value === sort) && from !== 'blank'
+            ? sort
+            : kind === 'cadre'
+              ? 'rank'
+              : 'name';
   return { pick, sort: so };
 }
 // Νέος πίνακας 2, 3…: όλοι, χωρίς φίλτρα, με τη σειρά που ταιριάζει στο είδος
@@ -912,49 +2345,126 @@ export function newTable(kind: RepKind, id: string): RepTable {
   return { id, kind, head: 1, cols: [], pick: x.pick, sort: x.sort };
 }
 // Οι πίνακες 2, 3… χωρίς τυχαίους: η κλήρωση είναι μόνο του πρώτου
-export const subPick = (pk: RepPick): RepPick => (pk.mode === 'random' ? { ...pk, mode: 'all', even: undefined, fair: undefined, gap: undefined } : pk);
+export const subPick = (pk: RepPick): RepPick =>
+  pk.mode === 'random' ? { ...pk, mode: 'all', even: undefined, fair: undefined, gap: undefined } : pk;
 // Μετά το «Φτιάξ' το εδώ»: πού κατέληξαν οι πίνακες στο πρότυπο, μαζί με ό,τι διάλεξες για τον καθένα (ποιοι, σειρά)
-export interface BuiltOut { sheet: string; head: number; cols: RepCol[]; cells: RepCell[]; more?: { id: string; head: number; cols: RepCol[] }[]; fixed?: boolean; vals?: ({ id: string } & Spot)[] }
+export interface BuiltOut {
+  sheet: string;
+  head: number;
+  cols: RepCol[];
+  cells: RepCell[];
+  more?: { id: string; head: number; cols: RepCol[] }[];
+  fixed?: boolean;
+  vals?: ({ id: string } & Spot)[];
+}
 // Το BuildOpts όπως το χρειάζεται το buildTemplate: με τις θέσεις των πινάκων και τους πίνακες τιμών του εντύπου, αλλά μόνο όταν η διάταξη δεν είναι
 // η προεπιλεγμένη (ο ένας κάτω από τον άλλον)· αλλιώς το ίδιο αντικείμενο, άρα το ίδιο πρότυπο όπως πριν τη Φάση 3
 export function forBuild(o: BuildOpts, r: Pick<Report, 'bands' | 'vals'>): BuildOpts {
   if (o.nopeople && !(o.more || []).length) return o;
-  const vs = valsUsed(r.vals); const ids = [MAIN, ...(o.more || []).map(t => t.id), ...vs.map(v => v.id)];
-  const bands = bandsOf(ids, r.bands); if (isDefault(ids, bands)) return o;
-  return { ...o, bands, vals: vs.map(v => ({ id: v.id, title: (v.title || '').trim(), ...(v.ta ? { ta: v.ta } : {}), ...(v.lay ? { lay: v.lay } : {}) })) };
+  const vs = valsUsed(r.vals);
+  const ids = [MAIN, ...(o.more || []).map((t) => t.id), ...vs.map((v) => v.id)];
+  const bands = bandsOf(ids, r.bands);
+  if (isDefault(ids, bands)) return o;
+  return {
+    ...o,
+    bands,
+    vals: vs.map((v) => ({
+      id: v.id,
+      title: (v.title || '').trim(),
+      ...(v.ta ? { ta: v.ta } : {}),
+      ...(v.lay ? { lay: v.lay } : {}),
+    })),
+  };
 }
 // Τα άτομα των γραμμών όπως σώζονται: μόνο μέσα στις nrows γραμμές, χωρίς κενά στο τέλος· τίποτα = undefined
-export function whoCut(who: (string | null)[] | undefined, nrows?: number, src?: unknown): (string | null)[] | undefined {
-  const w = (who || []).slice(0, blankN(nrows, src)).map(x => x || null); while (w.length && !w[w.length - 1]) w.pop();
+export function whoCut(
+  who: (string | null)[] | undefined,
+  nrows?: number,
+  src?: unknown,
+): (string | null)[] | undefined {
+  const w = (who || []).slice(0, blankN(nrows, src)).map((x) => x || null);
+  while (w.length && !w[w.length - 1]) w.pop();
   return w.length ? w : undefined;
 }
 export function withBuilt(r: Report, b: BuiltOut, o: BuildOpts): Report {
-  const more = (o.more || []).map(t => {
-    const prev = r.more?.find(x => x.id === t.id); const got = b.more?.find(x => x.id === t.id);
-    const base = !prev ? newTable(t.kind, t.id) : prev.kind === t.kind ? prev : { ...prev, ...pickForKind(prev.kind, prev.pick, prev.sort, t.kind) };
+  const more = (o.more || []).map((t) => {
+    const prev = r.more?.find((x) => x.id === t.id);
+    const got = b.more?.find((x) => x.id === t.id);
+    const base = !prev
+      ? newTable(t.kind, t.id)
+      : prev.kind === t.kind
+        ? prev
+        : { ...prev, ...pickForKind(prev.kind, prev.pick, prev.sort, t.kind) };
     const { nohead: _h, who: _w, src: _sr, ...b0 } = base;
     // «Κενός πίνακας»: οι γραμμές είναι οι nrows του πλέγματος του πίνακα (όπως στον 1ο)
-    const pick = t.kind === 'blank' && t.nrows != null ? { pick: { ...b0.pick, mode: 'all' as const, n: blankN(t.nrows, t.src) } } : {};
+    const pick =
+      t.kind === 'blank' && t.nrows != null
+        ? { pick: { ...b0.pick, mode: 'all' as const, n: blankN(t.nrows, t.src) } }
+        : {};
     const who = t.kind === 'blank' ? whoCut(t.who, t.nrows, t.src) : undefined;
-    return { ...b0, ...pick, ...(who ? { who } : {}), ...(t.kind === 'blank' && t.src ? { src: t.src } : {}), title: t.title, ...(t.tday ? { tday: t.tday } : {}), kind: t.kind, head: got?.head ?? base.head, cols: got?.cols || [], ...(t.nohead ? { nohead: true } : {}) };
+    return {
+      ...b0,
+      ...pick,
+      ...(who ? { who } : {}),
+      ...(t.kind === 'blank' && t.src ? { src: t.src } : {}),
+      title: t.title,
+      ...(t.tday ? { tday: t.tday } : {}),
+      kind: t.kind,
+      head: got?.head ?? base.head,
+      cols: got?.cols || [],
+      ...(t.nohead ? { nohead: true } : {}),
+    };
   });
   const { more: _, fixed: _f, nohead: _n, who: _w, src: _sr, tday: _td, ...rest } = r;
   // πίνακες τιμών: η θέση που τους άφησε το πρότυπο (δεν υπάρχει όταν η διάταξη είναι η προεπιλεγμένη: γράφονται στο τέλος, όπως πριν)
-  const vals = r.vals?.map(v => { const { spot: _s, ...w } = v; const p = b.vals?.find(x => x.id === v.id); return p ? { ...w, spot: { c1: p.c1, c2: p.c2, ...(p.row != null ? { row: p.row } : {}), ...(p.tt ? { tt: true as const } : {}) } } : w; });
+  const vals = r.vals?.map((v) => {
+    const { spot: _s, ...w } = v;
+    const p = b.vals?.find((x) => x.id === v.id);
+    return p
+      ? {
+          ...w,
+          spot: {
+            c1: p.c1,
+            c2: p.c2,
+            ...(p.row != null ? { row: p.row } : {}),
+            ...(p.tt ? { tt: true as const } : {}),
+          },
+        }
+      : w;
+  });
   // «Κενό»: οι γραμμές είναι οι nrows του πλέγματος (το pick.n το κρατά η οθόνη για να ξέρει πόσες γραμμές έχει)
-  const pick: Partial<Report> = r.kind === 'blank' && o.nrows != null ? { pick: { ...r.pick, mode: 'all', n: blankN(o.nrows, o.src) } } : {};
+  const pick: Partial<Report> =
+    r.kind === 'blank' && o.nrows != null ? { pick: { ...r.pick, mode: 'all', n: blankN(o.nrows, o.src) } } : {};
   const who = r.kind === 'blank' ? whoCut(o.who, o.nrows, o.src) : undefined;
-  return { ...rest, ...(o.tday ? { tday: o.tday } : {}), ...pick, ...(who ? { who } : {}), ...(r.kind === 'blank' && o.src ? { src: o.src } : {}), ...(vals ? { vals } : {}), sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, ...(more.length ? { more } : {}), ...(b.fixed ? { fixed: true } : {}), ...(o.nohead && !o.nopeople ? { nohead: true } : {}), ...(o.sig === 'none' && !r.sigs ? { sigs: [] } : {}) };
+  return {
+    ...rest,
+    ...(o.tday ? { tday: o.tday } : {}),
+    ...pick,
+    ...(who ? { who } : {}),
+    ...(r.kind === 'blank' && o.src ? { src: o.src } : {}),
+    ...(vals ? { vals } : {}),
+    sheet: b.sheet,
+    head: b.head,
+    cols: b.cols,
+    cells: b.cells,
+    ...(more.length ? { more } : {}),
+    ...(b.fixed ? { fixed: true } : {}),
+    ...(o.nohead && !o.nopeople ? { nohead: true } : {}),
+    ...(o.sig === 'none' && !r.sigs ? { sigs: [] } : {}),
+  };
 }
 // «Υπογραφές: Καμία» στο «Φτιάξ' το εδώ» (Michael, 29/10: «οι υπογραφές δεν φεύγουν»): το πρότυπο δεν έχει γραμμή υπογραφών, και χωρίς
 // sigs το έντυπο έπαιρνε κάτω από τον πίνακα τις υπογραφές των Ρυθμίσεων (όταν τις έχεις αλλάξει εκεί). Τώρα «Καμία» = καμία (withBuilt
 // βάζει sigs: [])· τα έντυπα που αποθηκεύτηκαν πριν διορθώνονται εδώ όταν βγαίνουν (edited: το πρότυπο άλλαξε μετά στο Excel, μένει όπως ήταν)
 export function sigsNone(r: Report, tpls: RepTpl[] | undefined, edited = false): Report {
   if (r.sigs || edited) return r;
-  return tpls?.find(t => t.id === r.tpl)?.built?.sig === 'none' ? { ...r, sigs: [] } : r;
+  return tpls?.find((t) => t.id === r.tpl)?.built?.sig === 'none' ? { ...r, sigs: [] } : r;
 }
 // Οι γραμμές των πινάκων 2, 3… (όλες ή οι πρώτες Ν, με τη σειρά τους)
-export const moreRows = (s: AppState, r: Pick<Report, 'more'>, d: ISODate): Row[][] => (r.more || []).map(t => rowsOf(s, { ...t, pick: subPick(t.pick) }, tableDay(s, t.tday, d)));
+export const moreRows = (s: AppState, r: Pick<Report, 'more'>, d: ISODate): Row[][] =>
+  (r.more || []).map((t) => rowsOf(s, { ...t, pick: subPick(t.pick) }, tableDay(s, t.tday, d)));
 // Η μέρα ενός πίνακα («Για ποια μέρα»): όπως το έντυπο, επόμενη εργάσιμη, +N μέρες
-export const tableDay = (s: Pick<AppState, 'settings'>, spec: string | undefined, d: ISODate): ISODate => dayFor(spec, d, x => isHol(s.settings, x));
-export const roomList = (s: Pick<AppState, 'settings'>) => Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1);
+export const tableDay = (s: Pick<AppState, 'settings'>, spec: string | undefined, d: ISODate): ISODate =>
+  dayFor(spec, d, (x) => isHol(s.settings, x));
+export const roomList = (s: Pick<AppState, 'settings'>) =>
+  Array.from({ length: roomCfg(s.settings).n }, (_, i) => i + 1);

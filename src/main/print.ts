@@ -8,65 +8,246 @@ import crypto from 'crypto';
 import JSZip from 'jszip';
 import { FIXED_MARK, NOHEAD_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
 
-const attr = (s: string, n: string) => { const m = attrRe(n).exec(s); return m ? unesc(m[1]) : null; };
-const num = (s: string, n: string, d: number) => { const v = attr(s, n); return v == null || v === '' || isNaN(+v) ? d : +v; };
-const on = (s: string, tag: string) => { const m = new RegExp('<' + tag + '\\b([^>]*)/?>').exec(s); return !!m && !/val="(0|false)"/.test(m[1]); };
-const block = (xml: string, tag: string) => new RegExp('<' + tag + '\\b[^>]*>([\\s\\S]*?)</' + tag + '>').exec(xml)?.[1] || '';
-const items = (xml: string, tag: string) => [...xml.matchAll(new RegExp('<' + tag + '\\b[^>]*?(?:/>|>[\\s\\S]*?</' + tag + '>)', 'g'))].map(m => m[0]);
+const attr = (s: string, n: string) => {
+  const m = attrRe(n).exec(s);
+  return m ? unesc(m[1]) : null;
+};
+const num = (s: string, n: string, d: number) => {
+  const v = attr(s, n);
+  return v == null || v === '' || isNaN(+v) ? d : +v;
+};
+const on = (s: string, tag: string) => {
+  const m = new RegExp('<' + tag + '\\b([^>]*)/?>').exec(s);
+  return !!m && !/val="(0|false)"/.test(m[1]);
+};
+const block = (xml: string, tag: string) =>
+  new RegExp('<' + tag + '\\b[^>]*>([\\s\\S]*?)</' + tag + '>').exec(xml)?.[1] || '';
+const items = (xml: string, tag: string) =>
+  [...xml.matchAll(new RegExp('<' + tag + '\\b[^>]*?(?:/>|>[\\s\\S]*?</' + tag + '>)', 'g'))].map((m) => m[0]);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const key = (r: number, c: number) => r * 16384 + c;
 
 // ------------------------------------------------------------------ χρώματα
-const INDEXED = ['000000', 'FFFFFF', 'FF0000', '00FF00', '0000FF', 'FFFF00', 'FF00FF', '00FFFF',
-  '000000', 'FFFFFF', 'FF0000', '00FF00', '0000FF', 'FFFF00', 'FF00FF', '00FFFF', '800000', '008000', '000080', '808000', '800080', '008080', 'C0C0C0', '808080',
-  '9999FF', '993366', 'FFFFCC', 'CCFFFF', '660066', 'FF8080', '0066CC', 'CCCCFF', '000080', 'FF00FF', 'FFFF00', '00FFFF', '800080', '800000', '008080', '0000FF',
-  '00CCFF', 'CCFFFF', 'CCFFCC', 'FFFF99', '99CCFF', 'FF99CC', 'CC99FF', 'FFCC99', '3366FF', '33CCCC', '99CC00', 'FFCC00', 'FF9900', 'FF6600', '666699', '969696',
-  '003366', '339966', '003300', '333300', '993300', '993366', '333399', '333333', '000000', 'FFFFFF'];
+const INDEXED = [
+  '000000',
+  'FFFFFF',
+  'FF0000',
+  '00FF00',
+  '0000FF',
+  'FFFF00',
+  'FF00FF',
+  '00FFFF',
+  '000000',
+  'FFFFFF',
+  'FF0000',
+  '00FF00',
+  '0000FF',
+  'FFFF00',
+  'FF00FF',
+  '00FFFF',
+  '800000',
+  '008000',
+  '000080',
+  '808000',
+  '800080',
+  '008080',
+  'C0C0C0',
+  '808080',
+  '9999FF',
+  '993366',
+  'FFFFCC',
+  'CCFFFF',
+  '660066',
+  'FF8080',
+  '0066CC',
+  'CCCCFF',
+  '000080',
+  'FF00FF',
+  'FFFF00',
+  '00FFFF',
+  '800080',
+  '800000',
+  '008080',
+  '0000FF',
+  '00CCFF',
+  'CCFFFF',
+  'CCFFCC',
+  'FFFF99',
+  '99CCFF',
+  'FF99CC',
+  'CC99FF',
+  'FFCC99',
+  '3366FF',
+  '33CCCC',
+  '99CC00',
+  'FFCC00',
+  'FF9900',
+  'FF6600',
+  '666699',
+  '969696',
+  '003366',
+  '339966',
+  '003300',
+  '333300',
+  '993300',
+  '993366',
+  '333399',
+  '333333',
+  '000000',
+  'FFFFFF',
+];
 function tint(hex: string, t: number): string {
   if (!t) return hex;
-  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; let l = (mx + mn) / 2;
-  if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b),
+    mn = Math.min(r, g, b);
+  let h = 0,
+    s = 0;
+  let l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
   l = t < 0 ? l * (1 + t) : l * (1 - t) + t;
-  const f = (p: number, q: number, x: number) => { if (x < 0) x += 1; if (x > 1) x -= 1; return x < 1 / 6 ? p + (q - p) * 6 * x : x < 1 / 2 ? q : x < 2 / 3 ? p + (q - p) * (2 / 3 - x) * 6 : p; };
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = (p: number, q: number, x: number) => {
+    if (x < 0) x += 1;
+    if (x > 1) x -= 1;
+    return x < 1 / 6 ? p + (q - p) * 6 * x : x < 1 / 2 ? q : x < 2 / 3 ? p + (q - p) * (2 / 3 - x) * 6 : p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s,
+    p = 2 * l - q;
   const out = s === 0 ? [l, l, l] : [f(p, q, h + 1 / 3), f(p, q, h), f(p, q, h - 1 / 3)];
-  return out.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  return out
+    .map((v) =>
+      Math.round(v * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')
+    .toUpperCase();
 }
 // <color rgb|theme|indexed|auto …/> → #RRGGBB (null = προεπιλογή)
 function color(tag: string | undefined, theme: string[]): string | null {
   if (!tag || attr(tag, 'auto') === '1') return null;
   let hex: string | null = null;
-  const rgb = attr(tag, 'rgb'), th = attr(tag, 'theme'), ix = attr(tag, 'indexed');
-  if (rgb) hex = rgb.slice(-6); else if (th != null) hex = theme[+th] || null; else if (ix != null) hex = INDEXED[+ix] || null;
+  const rgb = attr(tag, 'rgb'),
+    th = attr(tag, 'theme'),
+    ix = attr(tag, 'indexed');
+  if (rgb) hex = rgb.slice(-6);
+  else if (th != null) hex = theme[+th] || null;
+  else if (ix != null) hex = INDEXED[+ix] || null;
   if (!hex) return null;
   return '#' + tint(hex.toUpperCase(), num(tag, 'tint', 0));
 }
 function themeColors(xml: string): string[] {
-  const sch = block(xml, 'a:clrScheme'); const get = (n: string) => { const b = block(sch, 'a:' + n); return attr(b, 'lastClr') || attr(b, 'val') || '000000'; };
+  const sch = block(xml, 'a:clrScheme');
+  const get = (n: string) => {
+    const b = block(sch, 'a:' + n);
+    return attr(b, 'lastClr') || attr(b, 'val') || '000000';
+  };
   // σειρά του Excel: lt1, dk1, lt2, dk2, accent1…6, hlink, folHlink
-  return ['lt1', 'dk1', 'lt2', 'dk2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'].map(get).map(x => (/^[0-9a-f]{6}$/i.test(x) ? x : x === 'window' ? 'FFFFFF' : '000000'));
+  return [
+    'lt1',
+    'dk1',
+    'lt2',
+    'dk2',
+    'accent1',
+    'accent2',
+    'accent3',
+    'accent4',
+    'accent5',
+    'accent6',
+    'hlink',
+    'folHlink',
+  ]
+    .map(get)
+    .map((x) => (/^[0-9a-f]{6}$/i.test(x) ? x : x === 'window' ? 'FFFFFF' : '000000'));
 }
 
 // ------------------------------------------------------------------ στυλ
-interface Font { name: string; sz: number; b: boolean; i: boolean; u: string | null; strike: boolean; color: string | null; serif: boolean }
-interface Side { w: number; style: string; color: string }
-interface Xf { font: number; fill: string | null; border: { l?: Side; r?: Side; t?: Side; b?: Side }; fmt: number; h: string; v: string; wrap: boolean; indent: number; rot: number }
-interface Styles { fonts: Font[]; xfs: Xf[]; codes: Map<number, string> }
-const BORDER: Record<string, [number, string]> = { thin: [1, 'solid'], hair: [1, 'dotted'], dotted: [1, 'dotted'], dashed: [1, 'dashed'], dashDot: [1, 'dashed'], dashDotDot: [1, 'dashed'],
-  medium: [2, 'solid'], mediumDashed: [2, 'dashed'], mediumDashDot: [2, 'dashed'], mediumDashDotDot: [2, 'dashed'], slantDashDot: [2, 'dashed'], thick: [3, 'solid'], double: [3, 'double'] };
-const DENSITY: Record<string, number> = { darkGray: 0.75, mediumGray: 0.5, lightGray: 0.25, gray125: 0.125, gray0625: 0.0625 };
-const mix = (a: string, b: string, k: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
+interface Font {
+  name: string;
+  sz: number;
+  b: boolean;
+  i: boolean;
+  u: string | null;
+  strike: boolean;
+  color: string | null;
+  serif: boolean;
+}
+interface Side {
+  w: number;
+  style: string;
+  color: string;
+}
+interface Xf {
+  font: number;
+  fill: string | null;
+  border: { l?: Side; r?: Side; t?: Side; b?: Side };
+  fmt: number;
+  h: string;
+  v: string;
+  wrap: boolean;
+  indent: number;
+  rot: number;
+}
+interface Styles {
+  fonts: Font[];
+  xfs: Xf[];
+  codes: Map<number, string>;
+}
+const BORDER: Record<string, [number, string]> = {
+  thin: [1, 'solid'],
+  hair: [1, 'dotted'],
+  dotted: [1, 'dotted'],
+  dashed: [1, 'dashed'],
+  dashDot: [1, 'dashed'],
+  dashDotDot: [1, 'dashed'],
+  medium: [2, 'solid'],
+  mediumDashed: [2, 'dashed'],
+  mediumDashDot: [2, 'dashed'],
+  mediumDashDotDot: [2, 'dashed'],
+  slantDashDot: [2, 'dashed'],
+  thick: [3, 'solid'],
+  double: [3, 'double'],
+};
+const DENSITY: Record<string, number> = {
+  darkGray: 0.75,
+  mediumGray: 0.5,
+  lightGray: 0.25,
+  gray125: 0.125,
+  gray0625: 0.0625,
+};
+const mix = (a: string, b: string, k: number) =>
+  '#' +
+  [1, 3, 5]
+    .map((i) =>
+      Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
 function parseStyles(xml: string, theme: string[]): Styles {
   const codes = new Map<number, string>();
   for (const m of xml.matchAll(/<numFmt\b[^>]*>/g)) codes.set(num(m[0], 'numFmtId', 0), attr(m[0], 'formatCode') || '');
   const fonts = items(block(xml, 'fonts'), 'font').map((f): Font => {
     const u = /<u\b([^>]*)\/?>/.exec(f);
-    return { name: attr(/<name\b[^>]*>/.exec(f)?.[0] || '', 'val') || 'Calibri', sz: num(/<sz\b[^>]*>/.exec(f)?.[0] || '', 'val', 11), b: on(f, 'b'), i: on(f, 'i'),
-      u: u ? (attr(u[1], 'val') || 'single') : null, strike: on(f, 'strike'), color: color(/<color\b[^>]*>/.exec(f)?.[0], theme), serif: attr(/<family\b[^>]*>/.exec(f)?.[0] || '', 'val') === '1' };
+    return {
+      name: attr(/<name\b[^>]*>/.exec(f)?.[0] || '', 'val') || 'Calibri',
+      sz: num(/<sz\b[^>]*>/.exec(f)?.[0] || '', 'val', 11),
+      b: on(f, 'b'),
+      i: on(f, 'i'),
+      u: u ? attr(u[1], 'val') || 'single' : null,
+      strike: on(f, 'strike'),
+      color: color(/<color\b[^>]*>/.exec(f)?.[0], theme),
+      serif: attr(/<family\b[^>]*>/.exec(f)?.[0] || '', 'val') === '1',
+    };
   });
-  const fills = items(block(xml, 'fills'), 'fill').map(f => {
-    const p = /<patternFill\b([^>]*)>?/.exec(f); const type = p ? attr(p[1], 'patternType') || 'none' : 'none';
+  const fills = items(block(xml, 'fills'), 'fill').map((f) => {
+    const p = /<patternFill\b([^>]*)>?/.exec(f);
+    const type = p ? attr(p[1], 'patternType') || 'none' : 'none';
     if (/<gradientFill/.test(f)) return color(/<color\b[^>]*>/.exec(f)?.[0], theme);
     if (type === 'none') return null;
     const fg = color(/<fgColor\b[^>]*>/.exec(f)?.[0], theme) || '#000000';
@@ -74,47 +255,124 @@ function parseStyles(xml: string, theme: string[]): Styles {
     const bg = color(/<bgColor\b[^>]*>/.exec(f)?.[0], theme) || '#FFFFFF';
     return mix(fg, bg, DENSITY[type] ?? 0.5);
   });
-  const borders = items(block(xml, 'borders'), 'border').map(b => {
+  const borders = items(block(xml, 'borders'), 'border').map((b) => {
     const side = (n: string): Side | undefined => {
-      const m = new RegExp('<' + n + '\\b([^>]*?)(?:/>|>([\\s\\S]*?)</' + n + '>)').exec(b); const st = m && attr(m[1], 'style');
+      const m = new RegExp('<' + n + '\\b([^>]*?)(?:/>|>([\\s\\S]*?)</' + n + '>)').exec(b);
+      const st = m && attr(m[1], 'style');
       if (!st || st === 'none' || !BORDER[st]) return undefined;
-      return { w: BORDER[st][0], style: BORDER[st][1], color: color(/<color\b[^>]*>/.exec(m[2] || '')?.[0], theme) || (st === 'hair' ? '#808080' : '#000000') };
+      return {
+        w: BORDER[st][0],
+        style: BORDER[st][1],
+        color: color(/<color\b[^>]*>/.exec(m[2] || '')?.[0], theme) || (st === 'hair' ? '#808080' : '#000000'),
+      };
     };
     return { l: side('left') || side('start'), r: side('right') || side('end'), t: side('top'), b: side('bottom') };
   });
   const xfs = items(block(xml, 'cellXfs'), 'xf').map((x): Xf => {
-    const head = x.slice(0, x.indexOf('>') + 1); const al = /<alignment\b[^>]*>/.exec(x)?.[0] || '';
-    return { font: num(head, 'fontId', 0), fill: fills[num(head, 'fillId', 0)] ?? null, border: borders[num(head, 'borderId', 0)] || {}, fmt: num(head, 'numFmtId', 0),
-      h: attr(al, 'horizontal') || 'general', v: attr(al, 'vertical') || 'bottom', wrap: attr(al, 'wrapText') === '1' || attr(al, 'wrapText') === 'true', indent: num(al, 'indent', 0), rot: num(al, 'textRotation', 0) };
+    const head = x.slice(0, x.indexOf('>') + 1);
+    const al = /<alignment\b[^>]*>/.exec(x)?.[0] || '';
+    return {
+      font: num(head, 'fontId', 0),
+      fill: fills[num(head, 'fillId', 0)] ?? null,
+      border: borders[num(head, 'borderId', 0)] || {},
+      fmt: num(head, 'numFmtId', 0),
+      h: attr(al, 'horizontal') || 'general',
+      v: attr(al, 'vertical') || 'bottom',
+      wrap: attr(al, 'wrapText') === '1' || attr(al, 'wrapText') === 'true',
+      indent: num(al, 'indent', 0),
+      rot: num(al, 'textRotation', 0),
+    };
   });
-  if (!fonts.length) fonts.push({ name: 'Calibri', sz: 11, b: false, i: false, u: null, strike: false, color: null, serif: false });
-  if (!xfs.length) xfs.push({ font: 0, fill: null, border: {}, fmt: 0, h: 'general', v: 'bottom', wrap: false, indent: 0, rot: 0 });
+  if (!fonts.length)
+    fonts.push({ name: 'Calibri', sz: 11, b: false, i: false, u: null, strike: false, color: null, serif: false });
+  if (!xfs.length)
+    xfs.push({ font: 0, fill: null, border: {}, fmt: 0, h: 'general', v: 'bottom', wrap: false, indent: 0, rot: 0 });
   return { fonts, xfs, codes };
 }
 
 // ------------------------------------------------------------------ μορφές αριθμών και ημερομηνιών
-const BUILTIN: Record<number, string> = { 1: '0', 2: '0.00', 3: '#,##0', 4: '#,##0.00', 9: '0%', 10: '0.00%', 11: '0.00E+00', 12: '# ?/?', 13: '# ??/??', 14: 'd/m/yyyy', 15: 'd-mmm-yy', 16: 'd-mmm', 17: 'mmm-yy',
-  18: 'h:mm AM/PM', 19: 'h:mm:ss AM/PM', 20: 'h:mm', 21: 'h:mm:ss', 22: 'd/m/yyyy h:mm', 37: '#,##0 ;(#,##0)', 38: '#,##0 ;[Red](#,##0)', 39: '#,##0.00;(#,##0.00)', 40: '#,##0.00;[Red](#,##0.00)',
-  45: 'mm:ss', 46: '[h]:mm:ss', 47: 'mm:ss.0', 48: '##0.0E+0', 49: '@' };
+const BUILTIN: Record<number, string> = {
+  1: '0',
+  2: '0.00',
+  3: '#,##0',
+  4: '#,##0.00',
+  9: '0%',
+  10: '0.00%',
+  11: '0.00E+00',
+  12: '# ?/?',
+  13: '# ??/??',
+  14: 'd/m/yyyy',
+  15: 'd-mmm-yy',
+  16: 'd-mmm',
+  17: 'mmm-yy',
+  18: 'h:mm AM/PM',
+  19: 'h:mm:ss AM/PM',
+  20: 'h:mm',
+  21: 'h:mm:ss',
+  22: 'd/m/yyyy h:mm',
+  37: '#,##0 ;(#,##0)',
+  38: '#,##0 ;[Red](#,##0)',
+  39: '#,##0.00;(#,##0.00)',
+  40: '#,##0.00;[Red](#,##0.00)',
+  45: 'mm:ss',
+  46: '[h]:mm:ss',
+  47: 'mm:ss.0',
+  48: '##0.0E+0',
+  49: '@',
+};
 const MON = ['Ιαν', 'Φεβ', 'Μαρ', 'Απρ', 'Μαΐ', 'Ιουν', 'Ιουλ', 'Αυγ', 'Σεπ', 'Οκτ', 'Νοε', 'Δεκ'];
-const MONTH = ['Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος', 'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος'];
-const DAY = ['Κυρ', 'Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ'], DAYL = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
+const MONTH = [
+  'Ιανουάριος',
+  'Φεβρουάριος',
+  'Μάρτιος',
+  'Απρίλιος',
+  'Μάιος',
+  'Ιούνιος',
+  'Ιούλιος',
+  'Αύγουστος',
+  'Σεπτέμβριος',
+  'Οκτώβριος',
+  'Νοέμβριος',
+  'Δεκέμβριος',
+];
+const DAY = ['Κυρ', 'Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ'],
+  DAYL = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
 // ελληνικές ρυθμίσεις των Windows: κόμμα για δεκαδικά, τελεία για χιλιάδες
 const group = (s: string) => s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-const isDateFmt = (code: string) => /[dmyhs]/i.test(code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, '').replace(/General/i, ''));
+const isDateFmt = (code: string) =>
+  /[dmyhs]/i.test(
+    code
+      .replace(/"[^"]*"/g, '')
+      .replace(/\\./g, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/General/i, ''),
+  );
 function general(n: number): string {
   if (Number.isInteger(n) && Math.abs(n) < 1e11) return String(n);
-  let s = Math.abs(n) >= 1e11 || (Math.abs(n) < 1e-9 && n !== 0) ? n.toExponential(5).replace(/\.?0+e/, 'E').replace(/E\+?/, 'E+').replace('E+-', 'E-') : String(+n.toPrecision(10));
+  let s =
+    Math.abs(n) >= 1e11 || (Math.abs(n) < 1e-9 && n !== 0)
+      ? n
+          .toExponential(5)
+          .replace(/\.?0+e/, 'E')
+          .replace(/E\+?/, 'E+')
+          .replace('E+-', 'E-')
+      : String(+n.toPrecision(10));
   return s.replace('.', ',');
 }
 function fmtDate(n: number, code: string, y1904: boolean): string {
-  const ms = Math.round(((y1904 ? n + 1462 : n) - 25569) * 86400000); const d = new Date(ms);
+  const ms = Math.round(((y1904 ? n + 1462 : n) - 25569) * 86400000);
+  const d = new Date(ms);
   if (isNaN(d.getTime())) return general(n);
   const ampm = /AM\/PM|A\/P/i.test(code);
-  const parts = code.replace(/\[[^\]]*\]/g, '').match(/"[^"]*"|\\.|yyyy|yy|mmmmm|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|AM\/PM|A\/P|\.0+|./gi) || [];
-  const out: string[] = []; let prevH = false;
+  const parts =
+    code
+      .replace(/\[[^\]]*\]/g, '')
+      .match(/"[^"]*"|\\.|yyyy|yy|mmmmm|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|AM\/PM|A\/P|\.0+|./gi) || [];
+  const out: string[] = [];
+  let prevH = false;
   parts.forEach((p, i) => {
-    const l = p.toLowerCase(); const H = d.getUTCHours();
+    const l = p.toLowerCase();
+    const H = d.getUTCHours();
     if (p.startsWith('"')) out.push(p.slice(1, -1));
     else if (p.startsWith('\\')) out.push(p.slice(1));
     else if (l === 'yyyy') out.push(String(d.getUTCFullYear()));
@@ -124,41 +382,72 @@ function fmtDate(n: number, code: string, y1904: boolean): string {
     else if (l === 'mmm') out.push(MON[d.getUTCMonth()]);
     else if (l === 'mm' || l === 'm') {
       // λεπτά αν ακολουθεί ώρα ή ακολουθούν δευτερόλεπτα
-      const next = parts.slice(i + 1).find(x => /^[a-z]/i.test(x) && !/^(am\/pm|a\/p)$/i.test(x));
+      const next = parts.slice(i + 1).find((x) => /^[a-z]/i.test(x) && !/^(am\/pm|a\/p)$/i.test(x));
       const minute = prevH || (!!next && /^s/i.test(next));
-      const v = minute ? d.getUTCMinutes() : d.getUTCMonth() + 1; out.push(l === 'mm' ? String(v).padStart(2, '0') : String(v));
+      const v = minute ? d.getUTCMinutes() : d.getUTCMonth() + 1;
+      out.push(l === 'mm' ? String(v).padStart(2, '0') : String(v));
     } else if (l === 'dddd') out.push(DAYL[d.getUTCDay()]);
     else if (l === 'ddd') out.push(DAY[d.getUTCDay()]);
     else if (l === 'dd') out.push(String(d.getUTCDate()).padStart(2, '0'));
     else if (l === 'd') out.push(String(d.getUTCDate()));
-    else if (l === 'hh' || l === 'h') { const h = ampm ? (H % 12 || 12) : H; out.push(l === 'hh' ? String(h).padStart(2, '0') : String(h)); }
-    else if (l === 'ss' || l === 's') out.push(l === 'ss' ? String(d.getUTCSeconds()).padStart(2, '0') : String(d.getUTCSeconds()));
+    else if (l === 'hh' || l === 'h') {
+      const h = ampm ? H % 12 || 12 : H;
+      out.push(l === 'hh' ? String(h).padStart(2, '0') : String(h));
+    } else if (l === 'ss' || l === 's')
+      out.push(l === 'ss' ? String(d.getUTCSeconds()).padStart(2, '0') : String(d.getUTCSeconds()));
     else if (l === 'am/pm') out.push(H < 12 ? 'πμ' : 'μμ');
     else if (l === 'a/p') out.push(H < 12 ? 'π' : 'μ');
-    else if (p.startsWith('.0')) out.push(',' + String(d.getUTCMilliseconds()).padStart(3, '0').slice(0, p.length - 1));
+    else if (p.startsWith('.0'))
+      out.push(
+        ',' +
+          String(d.getUTCMilliseconds())
+            .padStart(3, '0')
+            .slice(0, p.length - 1),
+      );
     else out.push(p);
-    if (/^h/i.test(p)) prevH = true; else if (/^[a-z]/i.test(p) && !/^m/i.test(p)) prevH = false;
+    if (/^h/i.test(p)) prevH = true;
+    else if (/^[a-z]/i.test(p) && !/^m/i.test(p)) prevH = false;
   });
   return out.join('');
 }
 function fmtNumber(n: number, code: string): string {
-  const neg = n < 0; let x = Math.abs(n);
-  let lit = ''; const tokens = code.match(/"[^"]*"|\\.|_.|\*.|[0#?.,%Ee+\-]|./g) || [];
-  const body = tokens.filter(t => /^[0#?.,%]$/.test(t)).join('');
-  const pct = (body.match(/%/g) || []).length; x *= Math.pow(100, pct);
-  const dot = body.indexOf('.'); const dec = dot < 0 ? 0 : (body.slice(dot + 1).match(/[0#?]/g) || []).length;
+  const neg = n < 0;
+  let x = Math.abs(n);
+  let lit = '';
+  const tokens = code.match(/"[^"]*"|\\.|_.|\*.|[0#?.,%Ee+\-]|./g) || [];
+  const body = tokens.filter((t) => /^[0#?.,%]$/.test(t)).join('');
+  const pct = (body.match(/%/g) || []).length;
+  x *= Math.pow(100, pct);
+  const dot = body.indexOf('.');
+  const dec = dot < 0 ? 0 : (body.slice(dot + 1).match(/[0#?]/g) || []).length;
   const minDec = dot < 0 ? 0 : (body.slice(dot + 1).match(/0/g) || []).length;
   const intPart = dot < 0 ? body : body.slice(0, dot);
-  const thousands = /[0#?],[0#?]/.test(intPart); const scale = (intPart.match(/,+$/)?.[0].length || 0); x /= Math.pow(1000, scale);
+  const thousands = /[0#?],[0#?]/.test(intPart);
+  const scale = intPart.match(/,+$/)?.[0].length || 0;
+  x /= Math.pow(1000, scale);
   let [ip, fp = ''] = x.toFixed(dec).split('.');
-  fp = fp.replace(/0+$/, ''); while (fp.length < minDec) fp += '0';
-  const minInt = (intPart.match(/0/g) || []).length; if (ip === '0' && minInt === 0) ip = ''; while (ip.length < minInt) ip = '0' + ip;
+  fp = fp.replace(/0+$/, '');
+  while (fp.length < minDec) fp += '0';
+  const minInt = (intPart.match(/0/g) || []).length;
+  if (ip === '0' && minInt === 0) ip = '';
+  while (ip.length < minInt) ip = '0' + ip;
   if (thousands) ip = group(ip);
   const numStr = ip + (fp ? ',' + fp : '');
   let placed = false;
   for (const t of tokens) {
-    if (/^[0#?.,%]$/.test(t)) { if (!placed) { lit += numStr; placed = true; } if (t === '%') lit += '%'; continue; }
-    if (t.startsWith('"')) lit += t.slice(1, -1); else if (t.startsWith('\\')) lit += t.slice(1); else if (t.startsWith('_')) lit += ' '; else if (t.startsWith('*')) continue; else lit += t;
+    if (/^[0#?.,%]$/.test(t)) {
+      if (!placed) {
+        lit += numStr;
+        placed = true;
+      }
+      if (t === '%') lit += '%';
+      continue;
+    }
+    if (t.startsWith('"')) lit += t.slice(1, -1);
+    else if (t.startsWith('\\')) lit += t.slice(1);
+    else if (t.startsWith('_')) lit += ' ';
+    else if (t.startsWith('*')) continue;
+    else lit += t;
   }
   if (!placed) lit += numStr;
   return (neg ? '-' : '') + lit;
@@ -170,9 +459,16 @@ export function formatValue(v: unknown, fmtId: number, codes: Map<number, string
   if (typeof v !== 'number' || !isFinite(v)) return String(v);
   const raw = codes.get(fmtId) ?? BUILTIN[fmtId] ?? 'General';
   const secs = raw.split(/;(?=(?:[^"]*"[^"]*")*[^"]*$)/);
-  let code = secs[0]; let n = v;
-  if (v < 0 && secs.length > 1 && secs[1] !== '') { code = secs[1]; n = -v; } else if (v === 0 && secs.length > 2 && secs[2] !== '') code = secs[2];
-  code = code.replace(/\[(Red|Black|Blue|Green|White|Yellow|Cyan|Magenta|Color\s*\d+|[<>=][^\]]*)\]/gi, '').replace(/\[\$([^-\]]*)-[0-9A-F]+\]/gi, '$1').trim();
+  let code = secs[0];
+  let n = v;
+  if (v < 0 && secs.length > 1 && secs[1] !== '') {
+    code = secs[1];
+    n = -v;
+  } else if (v === 0 && secs.length > 2 && secs[2] !== '') code = secs[2];
+  code = code
+    .replace(/\[(Red|Black|Blue|Green|White|Yellow|Cyan|Magenta|Color\s*\d+|[<>=][^\]]*)\]/gi, '')
+    .replace(/\[\$([^-\]]*)-[0-9A-F]+\]/gi, '$1')
+    .trim();
   if (!code || /^General$/i.test(code)) return general(n === v ? v : -n);
   if (code === '@') return general(v);
   if (isDateFmt(code)) return fmtDate(v, code, y1904);
@@ -181,19 +477,37 @@ export function formatValue(v: unknown, fmtId: number, codes: Map<number, string
 }
 
 // ------------------------------------------------------------------ τύποι: υπολογισμός των απλών (ό,τι δεν καταλαβαίνουμε κρατά την τιμή που έχει το αρχείο)
-class XErr { constructor(public code: string) {} toString() { return this.code; } }
+class XErr {
+  constructor(public code: string) {}
+  toString() {
+    return this.code;
+  }
+}
 type Val = number | string | boolean | null | XErr;
 type Arg = Val | { range: Val[]; r: number; c: number };
-type Node = { t: 'v'; v: Val } | { t: 'ref'; sheet: string | null; r1: number; c1: number; r2: number; c2: number; area: boolean } | { t: 'fn'; name: string; args: Node[] } | { t: 'op'; op: string; a: Node; b?: Node };
+type Node =
+  | { t: 'v'; v: Val }
+  | { t: 'ref'; sheet: string | null; r1: number; c1: number; r2: number; c2: number; area: boolean }
+  | { t: 'fn'; name: string; args: Node[] }
+  | { t: 'op'; op: string; a: Node; b?: Node };
 class Unsupported extends Error {}
-const TOK = /\s+|("(?:[^"]|"")*")|((?:'(?:[^']|'')+'|[^\s'!:(),;"+\-*/^&=<>%]+)!)?(\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)(?![\w(])|(\d+(?:\.\d+)?(?:E[+-]?\d+)?)|([A-Z_][A-Z0-9_.]*)\(|(TRUE|FALSE)(?![\w(])|(<>|<=|>=|[-+*/^&=<>(),;%])/giy;
+const TOK =
+  /\s+|("(?:[^"]|"")*")|((?:'(?:[^']|'')+'|[^\s'!:(),;"+\-*/^&=<>%]+)!)?(\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)(?![\w(])|(\d+(?:\.\d+)?(?:E[+-]?\d+)?)|([A-Z_][A-Z0-9_.]*)\(|(TRUE|FALSE)(?![\w(])|(<>|<=|>=|[-+*/^&=<>(),;%])/giy;
 function tokenize(f: string) {
-  const out: { k: string; v: string; sheet?: string }[] = []; TOK.lastIndex = 0; let m: RegExpExecArray | null;
+  const out: { k: string; v: string; sheet?: string }[] = [];
+  TOK.lastIndex = 0;
+  let m: RegExpExecArray | null;
   while (TOK.lastIndex < f.length) {
-    const at = TOK.lastIndex; m = TOK.exec(f);
+    const at = TOK.lastIndex;
+    m = TOK.exec(f);
     if (!m || TOK.lastIndex === at) throw new Unsupported(f);
     if (m[1]) out.push({ k: 'str', v: m[1].slice(1, -1).replace(/""/g, '"') });
-    else if (m[3]) out.push({ k: 'ref', v: m[3].toUpperCase(), sheet: m[2] ? m[2].slice(0, -1).replace(/^'|'$/g, '').replace(/''/g, "'") : undefined });
+    else if (m[3])
+      out.push({
+        k: 'ref',
+        v: m[3].toUpperCase(),
+        sheet: m[2] ? m[2].slice(0, -1).replace(/^'|'$/g, '').replace(/''/g, "'") : undefined,
+      });
     else if (m[4]) out.push({ k: 'num', v: m[4] });
     else if (m[5]) out.push({ k: 'fn', v: m[5].toUpperCase().replace(/^_XLFN\./, '') });
     else if (m[6]) out.push({ k: 'bool', v: m[6].toUpperCase() });
@@ -201,26 +515,91 @@ function tokenize(f: string) {
   }
   return out;
 }
-const MAXR = 1048576, MAXC = 16384;
+const MAXR = 1048576,
+  MAXC = 16384;
 function parseRef(v: string, sheet: string | null): Node {
   const [a, b] = v.split(':');
-  const one = (x: string) => { const m = /^\$?([A-Z]+)?\$?(\d+)?$/.exec(x)!; return { c: m[1] ? colNum(m[1]) : 0, r: m[2] ? +m[2] : 0 }; };
-  const p = one(a), q = one(b || a);
+  const one = (x: string) => {
+    const m = /^\$?([A-Z]+)?\$?(\d+)?$/.exec(x)!;
+    return { c: m[1] ? colNum(m[1]) : 0, r: m[2] ? +m[2] : 0 };
+  };
+  const p = one(a),
+    q = one(b || a);
   const area = !!b;
-  return { t: 'ref', sheet, r1: p.r || 1, c1: p.c || 1, r2: q.r || (p.r ? q.r : MAXR), c2: q.c || (p.c ? q.c : MAXC), area };
+  return {
+    t: 'ref',
+    sheet,
+    r1: p.r || 1,
+    c1: p.c || 1,
+    r2: q.r || (p.r ? q.r : MAXR),
+    c2: q.c || (p.c ? q.c : MAXC),
+    area,
+  };
 }
 function parseFormula(f: string): Node {
-  const tk = tokenize(f.replace(/^=/, '')); let i = 0;
-  const peek = () => tk[i]; const isOp = (...o: string[]) => tk[i]?.k === 'op' && o.includes(tk[i].v);
-  const expr = (): Node => { let a = cat(); while (isOp('=', '<>', '<', '>', '<=', '>=')) { const op = tk[i++].v; a = { t: 'op', op, a, b: cat() }; } return a; };
-  const cat = (): Node => { let a = add(); while (isOp('&')) { i++; a = { t: 'op', op: '&', a, b: add() }; } return a; };
-  const add = (): Node => { let a = mul(); while (isOp('+', '-')) { const op = tk[i++].v; a = { t: 'op', op, a, b: mul() }; } return a; };
-  const mul = (): Node => { let a = pow(); while (isOp('*', '/')) { const op = tk[i++].v; a = { t: 'op', op, a, b: pow() }; } return a; };
-  const pow = (): Node => { let a = unary(); while (isOp('^')) { i++; a = { t: 'op', op: '^', a, b: unary() }; } return a; };
-  const unary = (): Node => { if (isOp('-', '+')) { const op = tk[i++].v; const a = unary(); return op === '-' ? { t: 'op', op: 'neg', a } : a; } return post(); };
-  const post = (): Node => { let a = prim(); while (isOp('%')) { i++; a = { t: 'op', op: '%', a }; } return a; };
+  const tk = tokenize(f.replace(/^=/, ''));
+  let i = 0;
+  const peek = () => tk[i];
+  const isOp = (...o: string[]) => tk[i]?.k === 'op' && o.includes(tk[i].v);
+  const expr = (): Node => {
+    let a = cat();
+    while (isOp('=', '<>', '<', '>', '<=', '>=')) {
+      const op = tk[i++].v;
+      a = { t: 'op', op, a, b: cat() };
+    }
+    return a;
+  };
+  const cat = (): Node => {
+    let a = add();
+    while (isOp('&')) {
+      i++;
+      a = { t: 'op', op: '&', a, b: add() };
+    }
+    return a;
+  };
+  const add = (): Node => {
+    let a = mul();
+    while (isOp('+', '-')) {
+      const op = tk[i++].v;
+      a = { t: 'op', op, a, b: mul() };
+    }
+    return a;
+  };
+  const mul = (): Node => {
+    let a = pow();
+    while (isOp('*', '/')) {
+      const op = tk[i++].v;
+      a = { t: 'op', op, a, b: pow() };
+    }
+    return a;
+  };
+  const pow = (): Node => {
+    let a = unary();
+    while (isOp('^')) {
+      i++;
+      a = { t: 'op', op: '^', a, b: unary() };
+    }
+    return a;
+  };
+  const unary = (): Node => {
+    if (isOp('-', '+')) {
+      const op = tk[i++].v;
+      const a = unary();
+      return op === '-' ? { t: 'op', op: 'neg', a } : a;
+    }
+    return post();
+  };
+  const post = (): Node => {
+    let a = prim();
+    while (isOp('%')) {
+      i++;
+      a = { t: 'op', op: '%', a };
+    }
+    return a;
+  };
   const prim = (): Node => {
-    const x = peek(); if (!x) throw new Unsupported(f);
+    const x = peek();
+    if (!x) throw new Unsupported(f);
     i++;
     if (x.k === 'num') return { t: 'v', v: +x.v };
     if (x.k === 'str') return { t: 'v', v: x.v };
@@ -228,28 +607,83 @@ function parseFormula(f: string): Node {
     if (x.k === 'ref') return parseRef(x.v, x.sheet ?? null);
     if (x.k === 'fn') {
       const args: Node[] = [];
-      if (!isOp(')')) { do { if (isOp(',') || isOp(')')) args.push({ t: 'v', v: null }); else args.push(expr()); } while (isOp(',') && ++i); }
-      if (!isOp(')')) throw new Unsupported(f); i++;
+      if (!isOp(')')) {
+        do {
+          if (isOp(',') || isOp(')')) args.push({ t: 'v', v: null });
+          else args.push(expr());
+        } while (isOp(',') && ++i);
+      }
+      if (!isOp(')')) throw new Unsupported(f);
+      i++;
       return { t: 'fn', name: x.v, args };
     }
-    if (x.k === 'op' && x.v === '(') { const e = expr(); if (!isOp(')')) throw new Unsupported(f); i++; return e; }
+    if (x.k === 'op' && x.v === '(') {
+      const e = expr();
+      if (!isOp(')')) throw new Unsupported(f);
+      i++;
+      return e;
+    }
     throw new Unsupported(f);
   };
-  const n = expr(); if (i !== tk.length) throw new Unsupported(f);
+  const n = expr();
+  if (i !== tk.length) throw new Unsupported(f);
   return n;
 }
-const toNum = (v: Val): number | XErr => { if (v instanceof XErr) return v; if (v == null || v === '') return 0; if (typeof v === 'boolean') return v ? 1 : 0; if (typeof v === 'number') return v; const n = Number(String(v).replace(',', '.')); return isNaN(n) ? new XErr('#VALUE!') : n; };
-const toStr = (v: Val) => (v == null ? '' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : typeof v === 'number' ? general(v) : String(v));
-const toBool = (v: Val): boolean | XErr => { if (v instanceof XErr) return v; if (typeof v === 'string') { const u = v.toUpperCase(); if (u === 'TRUE') return true; if (u === 'FALSE') return false; return new XErr('#VALUE!'); } const n = toNum(v); return n instanceof XErr ? n : n !== 0; };
+const toNum = (v: Val): number | XErr => {
+  if (v instanceof XErr) return v;
+  if (v == null || v === '') return 0;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'number') return v;
+  const n = Number(String(v).replace(',', '.'));
+  return isNaN(n) ? new XErr('#VALUE!') : n;
+};
+const toStr = (v: Val) =>
+  v == null ? '' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : typeof v === 'number' ? general(v) : String(v);
+const toBool = (v: Val): boolean | XErr => {
+  if (v instanceof XErr) return v;
+  if (typeof v === 'string') {
+    const u = v.toUpperCase();
+    if (u === 'TRUE') return true;
+    if (u === 'FALSE') return false;
+    return new XErr('#VALUE!');
+  }
+  const n = toNum(v);
+  return n instanceof XErr ? n : n !== 0;
+};
 function crit(c: Val): (v: Val) => boolean {
   const s = typeof c === 'string' ? c : null;
   const m = s ? /^(<>|<=|>=|=|<|>)?([\s\S]*)$/.exec(s)! : null;
-  const op = m?.[1] || '=', rhs = m ? m[2] : c;
+  const op = m?.[1] || '=',
+    rhs = m ? m[2] : c;
   const rn = typeof rhs === 'number' ? rhs : rhs != null && rhs !== '' && !isNaN(Number(rhs)) ? Number(rhs) : null;
-  return v => {
-    if (rn != null && typeof v === 'number') { const d = v - rn; return op === '=' ? d === 0 : op === '<>' ? d !== 0 : op === '<' ? d < 0 : op === '>' ? d > 0 : op === '<=' ? d <= 0 : d >= 0; }
-    const a = toStr(v).toLowerCase(), b = toStr(rhs as Val).toLowerCase();
-    if (op === '=') return b.includes('*') || b.includes('?') ? new RegExp('^' + b.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$').test(a) : a === b;
+  return (v) => {
+    if (rn != null && typeof v === 'number') {
+      const d = v - rn;
+      return op === '='
+        ? d === 0
+        : op === '<>'
+          ? d !== 0
+          : op === '<'
+            ? d < 0
+            : op === '>'
+              ? d > 0
+              : op === '<='
+                ? d <= 0
+                : d >= 0;
+    }
+    const a = toStr(v).toLowerCase(),
+      b = toStr(rhs as Val).toLowerCase();
+    if (op === '=')
+      return b.includes('*') || b.includes('?')
+        ? new RegExp(
+            '^' +
+              b
+                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '.*')
+                .replace(/\?/g, '.') +
+              '$',
+          ).test(a)
+        : a === b;
     if (op === '<>') return a !== b;
     return false;
   };
@@ -257,7 +691,12 @@ function crit(c: Val): (v: Val) => boolean {
 
 // ------------------------------------------------------------------ φύλλα
 // rich: κείμενο με μορφή ανά κομμάτι (π.χ. η υπογραμμισμένη διάρκεια ποινής στην ΗΚΑΙ)
-interface XCell { v: Val; f?: string; s: number | null; rich?: Rich }
+interface XCell {
+  v: Val;
+  f?: string;
+  s: number | null;
+  rich?: Rich;
+}
 type Rich = { t: string; u: boolean; b: boolean; i: boolean }[];
 // Τα κομμάτια <r> ενός κειμένου· null αν δεν έχει (απλό κείμενο)
 function richOf(xml: string): Rich | null {
@@ -268,12 +707,29 @@ function richOf(xml: string): Rich | null {
     const u = /<u\b([^>]*)\/?>/.exec(pr);
     out.push({ t: texts(m[1]), u: !!u && !/val="none"/.test(u[1]), b: on(pr, 'b'), i: on(pr, 'i') });
   }
-  return out.some(r => r.u || r.b || r.i) ? out : null;
+  return out.some((r) => r.u || r.b || r.i) ? out : null;
 }
-const richHtml = (r: Rich) => r.map(x => { let h = esc(x.t); if (x.u) h = '<u>' + h + '</u>'; if (x.b) h = '<b>' + h + '</b>'; if (x.i) h = '<i>' + h + '</i>'; return h; }).join('');
+const richHtml = (r: Rich) =>
+  r
+    .map((x) => {
+      let h = esc(x.t);
+      if (x.u) h = '<u>' + h + '</u>';
+      if (x.b) h = '<b>' + h + '</b>';
+      if (x.i) h = '<i>' + h + '</i>';
+      return h;
+    })
+    .join('');
 interface ParsedSheet {
-  name: string; cells: Map<number, XCell>; rows: Map<number, { ht?: number; hidden: boolean; s?: number }>; cols: { min: number; max: number; w?: number; hidden: boolean; s?: number }[];
-  merges: { r1: number; c1: number; r2: number; c2: number }[]; maxR: number; maxC: number; xml: string; defH: number; defW: number;
+  name: string;
+  cells: Map<number, XCell>;
+  rows: Map<number, { ht?: number; hidden: boolean; s?: number }>;
+  cols: { min: number; max: number; w?: number; hidden: boolean; s?: number }[];
+  merges: { r1: number; c1: number; r2: number; c2: number }[];
+  maxR: number;
+  maxC: number;
+  xml: string;
+  defH: number;
+  defW: number;
 }
 const colPx = (w: number) => Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7);
 const ptPx = (pt: number) => (pt * 96) / 72;
@@ -282,81 +738,158 @@ export class Book {
   private parsed = new Map<string, ParsedSheet>();
   private memo = new Map<string, Map<number, Val>>();
   private busy = new Set<string>();
-  sst: string[] = []; sstRich: (Rich | null)[] = []; styles!: Styles; y1904 = false;
-  sheets: { name: string; path: string; hidden: boolean }[] = []; wbXml = ''; activeTab = 0;
+  sst: string[] = [];
+  sstRich: (Rich | null)[] = [];
+  styles!: Styles;
+  y1904 = false;
+  sheets: { name: string; path: string; hidden: boolean }[] = [];
+  wbXml = '';
+  activeTab = 0;
   constructor(private zip: JSZip) {}
   static async open(buf: Buffer | Uint8Array): Promise<Book> {
-    const zip = await JSZip.loadAsync(buf); const b = new Book(zip);
+    const zip = await JSZip.loadAsync(buf);
+    const b = new Book(zip);
     const wbx = await zip.file('xl/workbook.xml')?.async('string');
     if (!wbx) throw new Error('Το αρχείο δεν είναι Excel (.xlsx)');
-    b.wbXml = wbx; b.y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(wbx); b.activeTab = num(/<workbookView\b[^>]*>/.exec(wbx)?.[0] || '', 'activeTab', 0);
+    b.wbXml = wbx;
+    b.y1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(wbx);
+    b.activeTab = num(/<workbookView\b[^>]*>/.exec(wbx)?.[0] || '', 'activeTab', 0);
     const rels = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) || '';
     const rel = new Map<string, string>();
-    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) { const id = attr(m[0], 'Id'), t = attr(m[0], 'Target'); if (id && t) rel.set(id, t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, '')); }
-    for (const m of wbx.matchAll(/<sheet\b[^>]*>/g)) { const p = rel.get(attr(m[0], 'r:id') || ''); if (p && zip.file(p)) b.sheets.push({ name: attr(m[0], 'name') || '', path: p, hidden: /state="(hidden|veryHidden)"/.test(m[0]) }); }
+    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+      const id = attr(m[0], 'Id'),
+        t = attr(m[0], 'Target');
+      if (id && t) rel.set(id, t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, ''));
+    }
+    for (const m of wbx.matchAll(/<sheet\b[^>]*>/g)) {
+      const p = rel.get(attr(m[0], 'r:id') || '');
+      if (p && zip.file(p))
+        b.sheets.push({ name: attr(m[0], 'name') || '', path: p, hidden: /state="(hidden|veryHidden)"/.test(m[0]) });
+    }
     const sst = zip.file('xl/sharedStrings.xml') || zip.file(/sharedStrings\.xml$/i)[0];
-    if (sst) { const si = [...(await sst.async('string')).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => m[1] || ''); b.sst = si.map(texts); b.sstRich = si.map(richOf); }
+    if (sst) {
+      const si = [...(await sst.async('string')).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map((m) => m[1] || '');
+      b.sst = si.map(texts);
+      b.sstRich = si.map(richOf);
+    }
     const th = zip.file(/theme\d*\.xml$/i)[0];
-    b.styles = parseStyles((await zip.file('xl/styles.xml')?.async('string')) || '', themeColors(th ? await th.async('string') : ''));
+    b.styles = parseStyles(
+      (await zip.file('xl/styles.xml')?.async('string')) || '',
+      themeColors(th ? await th.async('string') : ''),
+    );
     return b;
   }
   async load(name: string): Promise<ParsedSheet | null> {
     if (this.parsed.has(name)) return this.parsed.get(name)!;
-    const e = this.sheets.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!e) return null;
+    const e = this.sheets.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (!e) return null;
     const xml = await this.zip.file(e.path)!.async('string');
     const sh = parseSheet(e.name, xml, this.sst, this.sstRich);
-    this.parsed.set(e.name, sh); if (e.name !== name) this.parsed.set(name, sh);
+    this.parsed.set(e.name, sh);
+    if (e.name !== name) this.parsed.set(name, sh);
     return sh;
   }
   // όλα τα φύλλα στα οποία αναφέρονται οι τύποι, πριν τον (σύγχρονο) υπολογισμό
   async loadRefs(sh: ParsedSheet) {
-    const seen = new Set<string>([sh.name]); const todo = [sh];
+    const seen = new Set<string>([sh.name]);
+    const todo = [sh];
     while (todo.length) {
       const x = todo.pop()!;
-      for (const c of x.cells.values()) if (c.f) for (const m of c.f.matchAll(/(?:'((?:[^']|'')+)'|([^\s'!:(),;"+\-*/^&=<>%]+))!/g)) {
-        const n = (m[1] || m[2]).replace(/''/g, "'"); if (seen.has(n)) continue; seen.add(n);
-        const y = await this.load(n); if (y) todo.push(y);
-      }
+      for (const c of x.cells.values())
+        if (c.f)
+          for (const m of c.f.matchAll(/(?:'((?:[^']|'')+)'|([^\s'!:(),;"+\-*/^&=<>%]+))!/g)) {
+            const n = (m[1] || m[2]).replace(/''/g, "'");
+            if (seen.has(n)) continue;
+            seen.add(n);
+            const y = await this.load(n);
+            if (y) todo.push(y);
+          }
     }
   }
   value(sheet: string, r: number, c: number): Val {
-    const sh = this.parsed.get(sheet); if (!sh) return new XErr('#REF!');
-    const cell = sh.cells.get(key(r, c)); if (!cell) return null;
+    const sh = this.parsed.get(sheet);
+    if (!sh) return new XErr('#REF!');
+    const cell = sh.cells.get(key(r, c));
+    if (!cell) return null;
     if (!cell.f) return cell.v;
-    let m = this.memo.get(sh.name); if (!m) { m = new Map(); this.memo.set(sh.name, m); }
-    const k = key(r, c); if (m.has(k)) return m.get(k)!;
+    let m = this.memo.get(sh.name);
+    if (!m) {
+      m = new Map();
+      this.memo.set(sh.name, m);
+    }
+    const k = key(r, c);
+    if (m.has(k)) return m.get(k)!;
     const id = sh.name + '!' + k;
-    if (this.busy.has(id)) return cell.v;   // κυκλική αναφορά: η τιμή του αρχείου
+    if (this.busy.has(id)) return cell.v; // κυκλική αναφορά: η τιμή του αρχείου
     this.busy.add(id);
     let v: Val;
-    try { v = this.evalNode(parseFormula(cell.f), sh.name, r, c); if (v === null) v = 0; }
-    catch { v = cell.v; }
-    finally { this.busy.delete(id); }
+    try {
+      v = this.evalNode(parseFormula(cell.f), sh.name, r, c);
+      if (v === null) v = 0;
+    } catch {
+      v = cell.v;
+    } finally {
+      this.busy.delete(id);
+    }
     m.set(k, v);
     return v;
   }
   private range(n: Extract<Node, { t: 'ref' }>, sheet: string): Val[] {
-    const sh = this.parsed.get(n.sheet || sheet); if (!sh) return [new XErr('#REF!')];
-    const r2 = Math.min(n.r2, sh.maxR), c2 = Math.min(n.c2, sh.maxC); const out: Val[] = [];
+    const sh = this.parsed.get(n.sheet || sheet);
+    if (!sh) return [new XErr('#REF!')];
+    const r2 = Math.min(n.r2, sh.maxR),
+      c2 = Math.min(n.c2, sh.maxC);
+    const out: Val[] = [];
     for (let r = n.r1; r <= r2; r++) for (let c = n.c1; c <= c2; c++) out.push(this.value(sh.name, r, c));
     return out;
   }
   private evalNode(n: Node, sheet: string, r: number, c: number): Val {
-    const ev = (x: Node) => { const a = this.evalArg(x, sheet, r, c); return isRange(a) ? (a.range.length === 1 ? a.range[0] : new XErr('#VALUE!')) : a; };
+    const ev = (x: Node) => {
+      const a = this.evalArg(x, sheet, r, c);
+      return isRange(a) ? (a.range.length === 1 ? a.range[0] : new XErr('#VALUE!')) : a;
+    };
     if (n.t === 'v') return n.v;
     if (n.t === 'ref') return ev(n);
     if (n.t === 'op') {
-      if (n.op === 'neg') { const a = toNum(ev(n.a)); return a instanceof XErr ? a : -a; }
-      if (n.op === '%') { const a = toNum(ev(n.a)); return a instanceof XErr ? a : a / 100; }
-      const A = ev(n.a), B = ev(n.b!);
-      if (A instanceof XErr) return A; if (B instanceof XErr) return B;
+      if (n.op === 'neg') {
+        const a = toNum(ev(n.a));
+        return a instanceof XErr ? a : -a;
+      }
+      if (n.op === '%') {
+        const a = toNum(ev(n.a));
+        return a instanceof XErr ? a : a / 100;
+      }
+      const A = ev(n.a),
+        B = ev(n.b!);
+      if (A instanceof XErr) return A;
+      if (B instanceof XErr) return B;
       if (n.op === '&') return toStr(A) + toStr(B);
       if (['=', '<>', '<', '>', '<=', '>='].includes(n.op)) {
-        const cmp = typeof A === 'number' && typeof B === 'number' ? A - B : typeof A === 'string' || typeof B === 'string' ? toStr(A).toLowerCase().localeCompare(toStr(B).toLowerCase()) : (toNum(A) as number) - (toNum(B) as number);
-        return n.op === '=' ? cmp === 0 : n.op === '<>' ? cmp !== 0 : n.op === '<' ? cmp < 0 : n.op === '>' ? cmp > 0 : n.op === '<=' ? cmp <= 0 : cmp >= 0;
+        const cmp =
+          typeof A === 'number' && typeof B === 'number'
+            ? A - B
+            : typeof A === 'string' || typeof B === 'string'
+              ? toStr(A).toLowerCase().localeCompare(toStr(B).toLowerCase())
+              : (toNum(A) as number) - (toNum(B) as number);
+        return n.op === '='
+          ? cmp === 0
+          : n.op === '<>'
+            ? cmp !== 0
+            : n.op === '<'
+              ? cmp < 0
+              : n.op === '>'
+                ? cmp > 0
+                : n.op === '<='
+                  ? cmp <= 0
+                  : cmp >= 0;
       }
-      const a = toNum(A), b = toNum(B); if (a instanceof XErr) return a; if (b instanceof XErr) return b;
-      if (n.op === '+') return a + b; if (n.op === '-') return a - b; if (n.op === '*') return a * b;
+      const a = toNum(A),
+        b = toNum(B);
+      if (a instanceof XErr) return a;
+      if (b instanceof XErr) return b;
+      if (n.op === '+') return a + b;
+      if (n.op === '-') return a - b;
+      if (n.op === '*') return a * b;
       if (n.op === '/') return b === 0 ? new XErr('#DIV/0!') : a / b;
       if (n.op === '^') return Math.pow(a, b);
       throw new Unsupported(n.op);
@@ -365,101 +898,260 @@ export class Book {
   }
   private evalArg(n: Node, sheet: string, r: number, c: number): Arg {
     if (n.t === 'ref') {
-      if (n.r1 === n.r2 && n.c1 === n.c2) return this.parsed.has(n.sheet || sheet) ? this.value(this.parsed.get(n.sheet || sheet)!.name, n.r1, n.c1) : new XErr('#REF!');
+      if (n.r1 === n.r2 && n.c1 === n.c2)
+        return this.parsed.has(n.sheet || sheet)
+          ? this.value(this.parsed.get(n.sheet || sheet)!.name, n.r1, n.c1)
+          : new XErr('#REF!');
       return { range: this.range(n, sheet), r: n.r1, c: n.c1 };
     }
     return this.evalNode(n, sheet, r, c);
   }
   private fn(name: string, args: Node[], sheet: string, r: number, c: number, ev: (x: Node) => Val): Val {
-    const all = () => { const out: { v: Val; direct: boolean }[] = []; for (const a of args) { const x = this.evalArg(a, sheet, r, c); if (isRange(x)) x.range.forEach(v => out.push({ v, direct: false })); else out.push({ v: x, direct: true }); } return out; };
-    const nums = () => { const out: number[] = []; for (const { v, direct } of all()) { if (v instanceof XErr) throw v; if (typeof v === 'number') out.push(v); else if (direct && v != null) { const n = toNum(v); if (n instanceof XErr) throw n; out.push(n); } } return out; };
+    const all = () => {
+      const out: { v: Val; direct: boolean }[] = [];
+      for (const a of args) {
+        const x = this.evalArg(a, sheet, r, c);
+        if (isRange(x)) x.range.forEach((v) => out.push({ v, direct: false }));
+        else out.push({ v: x, direct: true });
+      }
+      return out;
+    };
+    const nums = () => {
+      const out: number[] = [];
+      for (const { v, direct } of all()) {
+        if (v instanceof XErr) throw v;
+        if (typeof v === 'number') out.push(v);
+        else if (direct && v != null) {
+          const n = toNum(v);
+          if (n instanceof XErr) throw n;
+          out.push(n);
+        }
+      }
+      return out;
+    };
     try {
       switch (name) {
-        case 'SUM': return nums().reduce((a, b) => a + b, 0);
-        case 'AVERAGE': { const n = nums(); return n.length ? n.reduce((a, b) => a + b, 0) / n.length : new XErr('#DIV/0!'); }
-        case 'MIN': { const n = nums(); return n.length ? Math.min(...n) : 0; }
-        case 'MAX': { const n = nums(); return n.length ? Math.max(...n) : 0; }
-        case 'PRODUCT': return nums().reduce((a, b) => a * b, 1);
-        case 'COUNT': return all().filter(x => typeof x.v === 'number').length;
-        case 'COUNTA': return all().filter(x => x.v != null && x.v !== '').length;
-        case 'COUNTBLANK': return all().filter(x => x.v == null || x.v === '').length;
-        case 'COUNTIF': case 'SUMIF': {
-          const rg = this.evalArg(args[0], sheet, r, c); const list = isRange(rg) ? rg.range : [rg as Val]; const ok = crit(ev(args[1]));
+        case 'SUM':
+          return nums().reduce((a, b) => a + b, 0);
+        case 'AVERAGE': {
+          const n = nums();
+          return n.length ? n.reduce((a, b) => a + b, 0) / n.length : new XErr('#DIV/0!');
+        }
+        case 'MIN': {
+          const n = nums();
+          return n.length ? Math.min(...n) : 0;
+        }
+        case 'MAX': {
+          const n = nums();
+          return n.length ? Math.max(...n) : 0;
+        }
+        case 'PRODUCT':
+          return nums().reduce((a, b) => a * b, 1);
+        case 'COUNT':
+          return all().filter((x) => typeof x.v === 'number').length;
+        case 'COUNTA':
+          return all().filter((x) => x.v != null && x.v !== '').length;
+        case 'COUNTBLANK':
+          return all().filter((x) => x.v == null || x.v === '').length;
+        case 'COUNTIF':
+        case 'SUMIF': {
+          const rg = this.evalArg(args[0], sheet, r, c);
+          const list = isRange(rg) ? rg.range : [rg as Val];
+          const ok = crit(ev(args[1]));
           if (name === 'COUNTIF') return list.filter(ok).length;
-          const sr = args[2] ? this.evalArg(args[2], sheet, r, c) : rg; const sl = isRange(sr) ? sr.range : [sr as Val];
+          const sr = args[2] ? this.evalArg(args[2], sheet, r, c) : rg;
+          const sl = isRange(sr) ? sr.range : [sr as Val];
           return list.reduce((a: number, v, i) => a + (ok(v) && typeof sl[i] === 'number' ? (sl[i] as number) : 0), 0);
         }
-        case 'ROW': case 'COLUMN': { if (!args.length) return name === 'ROW' ? r : c; const x = args[0]; if (x.t !== 'ref') throw new Unsupported(name); return name === 'ROW' ? x.r1 : x.c1; }
-        case 'IF': { const t = toBool(ev(args[0])); if (t instanceof XErr) return t; return t ? (args[1] ? ev(args[1]) : true) : args[2] ? ev(args[2]) : false; }
-        case 'IFERROR': { const v = ev(args[0]); return v instanceof XErr ? ev(args[1]) : v; }
-        case 'AND': case 'OR': { const bs = all().filter(x => x.v != null).map(x => toBool(x.v)); const e = bs.find(b => b instanceof XErr); if (e) return e as XErr; return name === 'AND' ? bs.every(Boolean) : bs.some(Boolean); }
-        case 'NOT': { const b = toBool(ev(args[0])); return b instanceof XErr ? b : !b; }
-        case 'ABS': case 'INT': { const n = toNum(ev(args[0])); if (n instanceof XErr) return n; return name === 'ABS' ? Math.abs(n) : Math.floor(n); }
-        case 'ROUND': case 'ROUNDUP': case 'ROUNDDOWN': {
-          const n = toNum(ev(args[0])), d = args[1] ? toNum(ev(args[1])) : 0; if (n instanceof XErr) return n; if (d instanceof XErr) return d;
-          const k = Math.pow(10, d); const x = n * k; const f = name === 'ROUND' ? Math.round(Math.abs(x)) : name === 'ROUNDUP' ? Math.ceil(Math.abs(x) - 1e-9) : Math.floor(Math.abs(x) + 1e-9);
+        case 'ROW':
+        case 'COLUMN': {
+          if (!args.length) return name === 'ROW' ? r : c;
+          const x = args[0];
+          if (x.t !== 'ref') throw new Unsupported(name);
+          return name === 'ROW' ? x.r1 : x.c1;
+        }
+        case 'IF': {
+          const t = toBool(ev(args[0]));
+          if (t instanceof XErr) return t;
+          return t ? (args[1] ? ev(args[1]) : true) : args[2] ? ev(args[2]) : false;
+        }
+        case 'IFERROR': {
+          const v = ev(args[0]);
+          return v instanceof XErr ? ev(args[1]) : v;
+        }
+        case 'AND':
+        case 'OR': {
+          const bs = all()
+            .filter((x) => x.v != null)
+            .map((x) => toBool(x.v));
+          const e = bs.find((b) => b instanceof XErr);
+          if (e) return e as XErr;
+          return name === 'AND' ? bs.every(Boolean) : bs.some(Boolean);
+        }
+        case 'NOT': {
+          const b = toBool(ev(args[0]));
+          return b instanceof XErr ? b : !b;
+        }
+        case 'ABS':
+        case 'INT': {
+          const n = toNum(ev(args[0]));
+          if (n instanceof XErr) return n;
+          return name === 'ABS' ? Math.abs(n) : Math.floor(n);
+        }
+        case 'ROUND':
+        case 'ROUNDUP':
+        case 'ROUNDDOWN': {
+          const n = toNum(ev(args[0])),
+            d = args[1] ? toNum(ev(args[1])) : 0;
+          if (n instanceof XErr) return n;
+          if (d instanceof XErr) return d;
+          const k = Math.pow(10, d);
+          const x = n * k;
+          const f =
+            name === 'ROUND'
+              ? Math.round(Math.abs(x))
+              : name === 'ROUNDUP'
+                ? Math.ceil(Math.abs(x) - 1e-9)
+                : Math.floor(Math.abs(x) + 1e-9);
           return (Math.sign(x) * f) / k;
         }
-        case 'MOD': { const a = toNum(ev(args[0])), b = toNum(ev(args[1])); if (a instanceof XErr) return a; if (b instanceof XErr) return b; return b === 0 ? new XErr('#DIV/0!') : a - b * Math.floor(a / b); }
-        case 'CONCATENATE': case 'CONCAT': return all().map(x => toStr(x.v)).join('');
-        case 'LEN': return toStr(ev(args[0])).length;
-        case 'UPPER': return toStr(ev(args[0])).toUpperCase();
-        case 'LOWER': return toStr(ev(args[0])).toLowerCase();
-        case 'TRIM': return toStr(ev(args[0])).trim().replace(/\s+/g, ' ');
-        case 'LEFT': case 'RIGHT': { const s = toStr(ev(args[0])); const n = args[1] ? toNum(ev(args[1])) : 1; if (n instanceof XErr) return n; return name === 'LEFT' ? s.slice(0, n) : n ? s.slice(-n) : ''; }
-        case 'MID': { const s = toStr(ev(args[0])); const a = toNum(ev(args[1])), b = toNum(ev(args[2])); if (a instanceof XErr) return a; if (b instanceof XErr) return b; return s.substr(a - 1, b); }
-        case 'TODAY': { const d = nowParts(); return Math.floor((Date.UTC(d.y, d.mo - 1, d.d) - Date.UTC(1899, 11, 30)) / 86400000); }
+        case 'MOD': {
+          const a = toNum(ev(args[0])),
+            b = toNum(ev(args[1]));
+          if (a instanceof XErr) return a;
+          if (b instanceof XErr) return b;
+          return b === 0 ? new XErr('#DIV/0!') : a - b * Math.floor(a / b);
+        }
+        case 'CONCATENATE':
+        case 'CONCAT':
+          return all()
+            .map((x) => toStr(x.v))
+            .join('');
+        case 'LEN':
+          return toStr(ev(args[0])).length;
+        case 'UPPER':
+          return toStr(ev(args[0])).toUpperCase();
+        case 'LOWER':
+          return toStr(ev(args[0])).toLowerCase();
+        case 'TRIM':
+          return toStr(ev(args[0])).trim().replace(/\s+/g, ' ');
+        case 'LEFT':
+        case 'RIGHT': {
+          const s = toStr(ev(args[0]));
+          const n = args[1] ? toNum(ev(args[1])) : 1;
+          if (n instanceof XErr) return n;
+          return name === 'LEFT' ? s.slice(0, n) : n ? s.slice(-n) : '';
+        }
+        case 'MID': {
+          const s = toStr(ev(args[0]));
+          const a = toNum(ev(args[1])),
+            b = toNum(ev(args[2]));
+          if (a instanceof XErr) return a;
+          if (b instanceof XErr) return b;
+          return s.substr(a - 1, b);
+        }
+        case 'TODAY': {
+          const d = nowParts();
+          return Math.floor((Date.UTC(d.y, d.mo - 1, d.d) - Date.UTC(1899, 11, 30)) / 86400000);
+        }
       }
-    } catch (e) { if (e instanceof XErr) return e; throw e; }
+    } catch (e) {
+      if (e instanceof XErr) return e;
+      throw e;
+    }
     throw new Unsupported(name);
   }
 }
 const isRange = (a: Arg): a is { range: Val[]; r: number; c: number } => !!a && typeof a === 'object' && 'range' in a;
 
 function parseSheet(name: string, xml: string, sst: string[], sstRich: (Rich | null)[] = []): ParsedSheet {
-  const cells = new Map<number, XCell>(); const rows = new Map<number, { ht?: number; hidden: boolean; s?: number }>();
+  const cells = new Map<number, XCell>();
+  const rows = new Map<number, { ht?: number; hidden: boolean; s?: number }>();
   const fmt = /<sheetFormatPr\b[^>]*>/.exec(xml)?.[0] || '';
   const defH = num(fmt, 'defaultRowHeight', 15);
-  const defW = attr(fmt, 'defaultColWidth') != null ? colPx(num(fmt, 'defaultColWidth', 8.43)) : Math.ceil((num(fmt, 'baseColWidth', 8) * 7 + 5) / 8) * 8;
-  const cols = [...(block(xml, 'cols').matchAll(/<col\b[^>]*>/g))].map(m => ({ min: num(m[0], 'min', 1), max: num(m[0], 'max', 1), w: attr(m[0], 'width') != null ? colPx(num(m[0], 'width', 0)) : undefined, hidden: attr(m[0], 'hidden') === '1' || attr(m[0], 'hidden') === 'true', s: attr(m[0], 'style') != null ? num(m[0], 'style', 0) : undefined }));
+  const defW =
+    attr(fmt, 'defaultColWidth') != null
+      ? colPx(num(fmt, 'defaultColWidth', 8.43))
+      : Math.ceil((num(fmt, 'baseColWidth', 8) * 7 + 5) / 8) * 8;
+  const cols = [...block(xml, 'cols').matchAll(/<col\b[^>]*>/g)].map((m) => ({
+    min: num(m[0], 'min', 1),
+    max: num(m[0], 'max', 1),
+    w: attr(m[0], 'width') != null ? colPx(num(m[0], 'width', 0)) : undefined,
+    hidden: attr(m[0], 'hidden') === '1' || attr(m[0], 'hidden') === 'true',
+    s: attr(m[0], 'style') != null ? num(m[0], 'style', 0) : undefined,
+  }));
   const shared = new Map<string, { f: string; r: number; c: number }>();
-  let maxR = 0, maxC = 0, lastR = 0;
+  let maxR = 0,
+    maxC = 0,
+    lastR = 0;
   const data = /<sheetData\b[^>]*\/>/.test(xml) ? '' : block(xml, 'sheetData');
   for (const m of data.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
-    const r = attr(m[1], 'r') ? num(m[1], 'r', 0) : lastR + 1; lastR = r;
-    rows.set(r, { ht: attr(m[1], 'ht') != null ? num(m[1], 'ht', defH) : undefined, hidden: attr(m[1], 'hidden') === '1' || attr(m[1], 'hidden') === 'true', s: attr(m[1], 'customFormat') === '1' ? num(m[1], 's', 0) : undefined });
+    const r = attr(m[1], 'r') ? num(m[1], 'r', 0) : lastR + 1;
+    lastR = r;
+    rows.set(r, {
+      ht: attr(m[1], 'ht') != null ? num(m[1], 'ht', defH) : undefined,
+      hidden: attr(m[1], 'hidden') === '1' || attr(m[1], 'hidden') === 'true',
+      s: attr(m[1], 'customFormat') === '1' ? num(m[1], 's', 0) : undefined,
+    });
     let lastC = 0;
     for (const k of (m[2] || '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      const ref = attr(k[1], 'r'); const c = ref ? colNum(ref.replace(/\d+/g, '')) : lastC + 1; lastC = c;
-      const t = attr(k[1], 't'); const inner = k[2] || ''; const s = attr(k[1], 's') != null ? num(k[1], 's', 0) : null;
+      const ref = attr(k[1], 'r');
+      const c = ref ? colNum(ref.replace(/\d+/g, '')) : lastC + 1;
+      lastC = c;
+      const t = attr(k[1], 't');
+      const inner = k[2] || '';
+      const s = attr(k[1], 's') != null ? num(k[1], 's', 0) : null;
       const raw = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1];
-      let v: Val = null; let rich: Rich | null = null;
-      if (t === 's') { v = raw != null ? sst[+raw] ?? null : null; rich = raw != null ? sstRich[+raw] ?? null : null; }
-      else if (t === 'inlineStr') { v = texts(inner); rich = richOf(inner); }
-      else if (t === 'str') v = raw != null ? unesc(raw) : null;
+      let v: Val = null;
+      let rich: Rich | null = null;
+      if (t === 's') {
+        v = raw != null ? (sst[+raw] ?? null) : null;
+        rich = raw != null ? (sstRich[+raw] ?? null) : null;
+      } else if (t === 'inlineStr') {
+        v = texts(inner);
+        rich = richOf(inner);
+      } else if (t === 'str') v = raw != null ? unesc(raw) : null;
       else if (t === 'b') v = raw === '1';
       else if (t === 'e') v = raw ? new XErr(unesc(raw)) : null;
-      else if (t === 'd') { const d = raw ? Date.parse(unesc(raw)) : NaN; v = isNaN(d) ? null : (d - Date.UTC(1899, 11, 30)) / 86400000; }
-      else if (raw != null && raw !== '') v = isNaN(+raw) ? unesc(raw) : +raw;
+      else if (t === 'd') {
+        const d = raw ? Date.parse(unesc(raw)) : NaN;
+        v = isNaN(d) ? null : (d - Date.UTC(1899, 11, 30)) / 86400000;
+      } else if (raw != null && raw !== '') v = isNaN(+raw) ? unesc(raw) : +raw;
       // τύποι: και οι «κοινοί» (shared) με μετακίνηση των σχετικών αναφορών
       let f: string | undefined;
       const fm = /<f\b([^>]*?)(?:\/>|>([\s\S]*?)<\/f>)/.exec(inner);
       if (fm) {
-        const si = attr(fm[1], 'si'); const body = fm[2] != null ? unesc(fm[2]) : '';
+        const si = attr(fm[1], 'si');
+        const body = fm[2] != null ? unesc(fm[2]) : '';
         if (attr(fm[1], 't') === 'shared' && si != null) {
-          if (body) shared.set(si, { f: body, r, c }); else { const base = shared.get(si); if (base) f = shiftFormula(base.f, r - base.r, c - base.c); }
+          if (body) shared.set(si, { f: body, r, c });
+          else {
+            const base = shared.get(si);
+            if (base) f = shiftFormula(base.f, r - base.r, c - base.c);
+          }
         }
         if (body && attr(fm[1], 't') !== 'array') f = body;
       }
       if (v === null && !f && s == null) continue;
       cells.set(key(r, c), rich && !f ? { v, f, s, rich } : { v, f, s });
-      if (v !== null || f) { if (r > maxR) maxR = r; if (c > maxC) maxC = c; }
+      if (v !== null || f) {
+        if (r > maxR) maxR = r;
+        if (c > maxC) maxC = c;
+      }
     }
   }
-  const merges = [...xml.matchAll(/<mergeCell\b[^>]*ref="([^"]+)"/g)].map(m => { const [a, b] = m[1].split(':'); const A = cellRef(a), B = cellRef(b || a); return { r1: A.r, c1: A.c, r2: B.r, c2: B.c }; });
+  const merges = [...xml.matchAll(/<mergeCell\b[^>]*ref="([^"]+)"/g)].map((m) => {
+    const [a, b] = m[1].split(':');
+    const A = cellRef(a),
+      B = cellRef(b || a);
+    return { r1: A.r, c1: A.c, r2: B.r, c2: B.c };
+  });
   return { name, cells, rows, cols, merges, maxR, maxC, xml, defH, defW };
 }
-const cellRef = (x: string) => { const m = /^\$?([A-Z]+)\$?(\d+)$/i.exec(x)!; return { c: colNum(m[1].toUpperCase()), r: +m[2] }; };
+const cellRef = (x: string) => {
+  const m = /^\$?([A-Z]+)\$?(\d+)$/i.exec(x)!;
+  return { c: colNum(m[1].toUpperCase()), r: +m[2] };
+};
 function shiftFormula(f: string, dr: number, dc: number): string {
   return f.replace(/"(?:[^"]|"")*"|(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\w(])/g, (m, d1, col, d2, row) => {
     if (m.startsWith('"')) return m;
@@ -469,135 +1161,255 @@ function shiftFormula(f: string, dr: number, dc: number): string {
 
 // ------------------------------------------------------------------ διάταξη σελίδας
 const PAPER: Record<number, { name: string; w: number; h: number }> = {
-  1: { name: 'Letter', w: 215.9, h: 279.4 }, 5: { name: 'Legal', w: 215.9, h: 355.6 }, 8: { name: 'A3', w: 297, h: 420 }, 9: { name: 'A4', w: 210, h: 297 }, 11: { name: 'A5', w: 148, h: 210 }
+  1: { name: 'Letter', w: 215.9, h: 279.4 },
+  5: { name: 'Legal', w: 215.9, h: 355.6 },
+  8: { name: 'A3', w: 297, h: 420 },
+  9: { name: 'A4', w: 210, h: 297 },
+  11: { name: 'A5', w: 148, h: 210 },
 };
 // pt: το μέγεθος στο χαρτί της γραμματοσειράς των περισσότερων κελιών (font, size στο Excel)· titles: έχει γραμμές τίτλων
-export interface PrintSheet { name: string; paper: string; landscape: boolean; pages: number; scale: number; html: string; pt: number; font: string; size: number; titles: boolean }
+export interface PrintSheet {
+  name: string;
+  paper: string;
+  landscape: boolean;
+  pages: number;
+  scale: number;
+  html: string;
+  pt: number;
+  font: string;
+  size: number;
+  titles: boolean;
+}
 // total: όλες οι σελίδες· sug: σε πόσες σελίδες τα γράμματα βγαίνουν καθαρά (όταν είναι μικρά)
 // cols: οι στήλες των πινάκων που ταξινομούνται (για το «Ταξινόμηση» του παραθύρου)
-export interface PrintDoc { sheets: PrintSheet[]; all: string[]; css: string; total: number; sug?: { n: number; pt: number }; cols?: SortCol[] }
+export interface PrintDoc {
+  sheets: PrintSheet[];
+  all: string[];
+  css: string;
+  total: number;
+  sug?: { n: number; pt: number };
+  cols?: SortCol[];
+}
 
 function definedName(wbx: string, name: string, idx: number): string | null {
-  for (const m of wbx.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)) if (attr(m[1], 'name') === name && attr(m[1], 'localSheetId') === String(idx)) return unesc(m[2]);
+  for (const m of wbx.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g))
+    if (attr(m[1], 'name') === name && attr(m[1], 'localSheetId') === String(idx)) return unesc(m[2]);
   return null;
 }
 // 'Φύλλο'!$A$1:$M$46 (ή πολλές περιοχές με κόμμα: κρατάμε την πρώτη)
 function areaOf(body: string | null): { r1: number; c1: number; r2: number; c2: number } | null {
   if (!body) return null;
-  const first = body.split(/,(?=(?:[^']*'[^']*')*[^']*$)/)[0].replace(/^.*!/, '').replace(/\$/g, '');
-  const m = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i.exec(first); if (!m) return null;
+  const first = body
+    .split(/,(?=(?:[^']*'[^']*')*[^']*$)/)[0]
+    .replace(/^.*!/, '')
+    .replace(/\$/g, '');
+  const m = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i.exec(first);
+  if (!m) return null;
   return { c1: colNum(m[1].toUpperCase()), r1: +m[2], c2: colNum((m[3] || m[1]).toUpperCase()), r2: +(m[4] || m[2]) };
 }
 // όλες οι περιοχές ενός ονόματος (π.χ. τα σταθερά κομμάτια: κεφαλίδα, ημερομηνία, υπογραφές)
 function areasOf(body: string | null): { r1: number; c1: number; r2: number; c2: number }[] {
   if (!body) return [];
-  return body.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(areaOf).filter((a): a is NonNullable<typeof a> => !!a);
+  return body
+    .split(/,(?=(?:[^']*'[^']*')*[^']*$)/)
+    .map(areaOf)
+    .filter((a): a is NonNullable<typeof a> => !!a);
 }
 function titleRows(body: string | null): [number, number] | null {
   if (!body) return null;
-  for (const part of body.split(',')) { const m = /!?\$?(\d+):\$?(\d+)$/.exec(part.trim()); if (m) return [+m[1], +m[2]]; }
+  for (const part of body.split(',')) {
+    const m = /!?\$?(\d+):\$?(\d+)$/.exec(part.trim());
+    if (m) return [+m[1], +m[2]];
+  }
   return null;
 }
 // &L &C &R κεφαλίδας/υποσέλιδου, με σελίδα, σύνολο σελίδων, ημερομηνία, όνομα φύλλου και αρχείου
 // noPage: χωρίς τα κομμάτια (&L/&C/&R) που γράφουν σελίδα ή σύνολο σελίδων, π.χ. «ΣΕΛΙΔΑ &P ΑΠΟ &N» των εντύπων, όταν
 // ο χρήστης έβγαλε το «Σελίδα 1 από 2» στο παράθυρο «Εκτύπωση» (Michael, 4/11: συνέχιζε να βγαίνει)
-function headerFooter(src: string | null, ctx: { page: number; pages: number; sheet: string; file: string }, noPage = false): [string, string, string] | null {
+function headerFooter(
+  src: string | null,
+  ctx: { page: number; pages: number; sheet: string; file: string },
+  noPage = false,
+): [string, string, string] | null {
   if (!src) return null;
-  const out: [string, string, string] = ['', '', '']; const num = [false, false, false]; let sec = 1; const d = nowParts(); const p2 = (n: number) => String(n).padStart(2, '0');
-  const s = src.replace(/&"[^"]*"/g, '').replace(/&K[0-9A-F]{6}/gi, '').replace(/&\d+/g, '');
+  const out: [string, string, string] = ['', '', ''];
+  const num = [false, false, false];
+  let sec = 1;
+  const d = nowParts();
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const s = src
+    .replace(/&"[^"]*"/g, '')
+    .replace(/&K[0-9A-F]{6}/gi, '')
+    .replace(/&\d+/g, '');
   for (let i = 0; i < s.length; i++) {
-    if (s[i] !== '&') { out[sec] += s[i]; continue; }
+    if (s[i] !== '&') {
+      out[sec] += s[i];
+      continue;
+    }
     const k = s[++i]?.toUpperCase();
-    if (k === 'L') sec = 0; else if (k === 'C') sec = 1; else if (k === 'R') sec = 2;
-    else if (k === 'P') { out[sec] += String(ctx.page); num[sec] = true; } else if (k === 'N') { out[sec] += String(ctx.pages); num[sec] = true; }
-    else if (k === 'D') out[sec] += p2(d.d) + '/' + p2(d.mo) + '/' + d.y;
+    if (k === 'L') sec = 0;
+    else if (k === 'C') sec = 1;
+    else if (k === 'R') sec = 2;
+    else if (k === 'P') {
+      out[sec] += String(ctx.page);
+      num[sec] = true;
+    } else if (k === 'N') {
+      out[sec] += String(ctx.pages);
+      num[sec] = true;
+    } else if (k === 'D') out[sec] += p2(d.d) + '/' + p2(d.mo) + '/' + d.y;
     else if (k === 'T') out[sec] += p2(d.h) + ':' + p2(d.mi);
-    else if (k === 'A') out[sec] += ctx.sheet; else if (k === 'F') out[sec] += ctx.file; else if (k === 'Z') out[sec] += '';
+    else if (k === 'A') out[sec] += ctx.sheet;
+    else if (k === 'F') out[sec] += ctx.file;
+    else if (k === 'Z') out[sec] += '';
     else if (k === '&') out[sec] += '&';
   }
-  if (noPage) num.forEach((n, i) => { if (n) out[i] = ''; });
+  if (noPage)
+    num.forEach((n, i) => {
+      if (n) out[i] = '';
+    });
   return out.some(Boolean) ? out : null;
 }
 
-const FONT_FALLBACK: Record<string, string> = { calibri: '"Calibri","Carlito",Arial,sans-serif', cambria: '"Cambria","Caladea",serif', arial: 'Arial,"Liberation Sans",sans-serif', 'times new roman': '"Times New Roman","Liberation Serif",serif', 'book antiqua': '"Book Antiqua","Palatino Linotype",Palatino,serif' };
+const FONT_FALLBACK: Record<string, string> = {
+  calibri: '"Calibri","Carlito",Arial,sans-serif',
+  cambria: '"Cambria","Caladea",serif',
+  arial: 'Arial,"Liberation Sans",sans-serif',
+  'times new roman': '"Times New Roman","Liberation Serif",serif',
+  'book antiqua': '"Book Antiqua","Palatino Linotype",Palatino,serif',
+};
 // Το όνομα γραμματοσειράς έρχεται από το αρχείο: μόνο γράμματα, αριθμοί, κενά και . , _ - (αλλιώς θα μπορούσε να κλείσει
 // το <style> και να βάλει δικό του script στη σελίδα)
 function fontCss(f: Font): string {
   const name = f.name.replace(/[^\p{L}\p{N} _.,-]/gu, '').trim() || 'Calibri';
   const fam = FONT_FALLBACK[name.toLowerCase()] || `"${name}",${f.serif ? 'serif' : 'sans-serif'}`;
-  return `font:${f.i ? 'italic ' : ''}${f.b ? '700 ' : ''}${f.sz}pt ${fam};` + (f.color ? `color:${f.color};` : '') + (f.u || f.strike ? `text-decoration:${f.u ? 'underline' + (/double/.test(f.u) ? ' double' : '') : ''}${f.strike ? ' line-through' : ''};` : '');
+  return (
+    `font:${f.i ? 'italic ' : ''}${f.b ? '700 ' : ''}${f.sz}pt ${fam};` +
+    (f.color ? `color:${f.color};` : '') +
+    (f.u || f.strike
+      ? `text-decoration:${f.u ? 'underline' + (/double/.test(f.u) ? ' double' : '') : ''}${f.strike ? ' line-through' : ''};`
+      : '')
+  );
 }
 const sideCss = (s?: Side) => (s ? `${s.w}px ${s.style} ${s.color}` : '0');
 
 // refs: κάθε κελί με data-a="B4" (προεπισκόπηση των Εντύπων, όπου διαλέγεις κελί με κλικ)· maxPages: μόνο οι πρώτες σελίδες·
 // layout: η διάταξη του παραθύρου «Εκτύπωση» (σελίδες, προσανατολισμός, περιθώρια…) αντί για τη διάταξη σελίδας του αρχείου
-export interface RenderOpts { file: string; sheets?: string[]; refs?: boolean; maxPages?: number; layout?: PrintOpts }
+export interface RenderOpts {
+  file: string;
+  sheets?: string[];
+  refs?: boolean;
+  maxPages?: number;
+  layout?: PrintOpts;
+}
 export async function renderBook(buf: Buffer | Uint8Array, opts: RenderOpts): Promise<PrintDoc> {
   return renderOpen(await Book.open(buf), opts);
 }
-export async function openBook(buf: Buffer | Uint8Array): Promise<Book> { return Book.open(buf); }
-export const bookSheets = (book: Book) => book.sheets.filter(x => !x.hidden).map(x => x.name);
+export async function openBook(buf: Buffer | Uint8Array): Promise<Book> {
+  return Book.open(buf);
+}
+export const bookSheets = (book: Book) => book.sheets.filter((x) => !x.hidden).map((x) => x.name);
 // Το μέγεθος γραμμάτων του φύλλου στο Excel (η πιο συχνή γραμματοσειρά): με αυτό στο «Όσες χρειάζονται» τα γράμματα βγαίνουν
 // στο χαρτί όσο είναι στο Excel (έντυπο με «Σταθερό μέγεθος γραμμάτων»)
 export async function sheetFontSize(book: Book, name: string): Promise<number> {
-  const i = book.sheets.findIndex(x => x.name === name); if (i < 0) return PRINT_DEFAULT.size;
+  const i = book.sheets.findIndex((x) => x.name === name);
+  if (i < 0) return PRINT_DEFAULT.size;
   return (await geoOf(book, name, i)).dom.sz;
 }
 export async function renderOpen(book: Book, opts: RenderOpts): Promise<PrintDoc> {
-  const visible = book.sheets.filter(x => !x.hidden);
-  const all = visible.map(x => x.name);
-  let want = opts.sheets?.filter(n => all.includes(n)) || [];
+  const visible = book.sheets.filter((x) => !x.hidden);
+  const all = visible.map((x) => x.name);
+  let want = opts.sheets?.filter((n) => all.includes(n)) || [];
   // χωρίς επιλογή (ή φύλλο που δεν υπάρχει πια): όλα τα φύλλα αν είναι λίγα (έντυπα), αλλιώς το ενεργό φύλλο του βιβλίου.
   // Άδεια λίστα = ο χρήστης ξετσέκαρε όλα τα φύλλα.
-  if (!want.length && !(opts.sheets && !opts.sheets.length)) want = all.length <= 4 ? all : [book.sheets[book.activeTab] && !book.sheets[book.activeTab].hidden ? book.sheets[book.activeTab].name : all[0]];
-  const geos: Geo[] = []; const cols: SortCol[] = [];
+  if (!want.length && !(opts.sheets && !opts.sheets.length))
+    want =
+      all.length <= 4
+        ? all
+        : [
+            book.sheets[book.activeTab] && !book.sheets[book.activeTab].hidden
+              ? book.sheets[book.activeTab].name
+              : all[0],
+          ];
+  const geos: Geo[] = [];
+  const cols: SortCol[] = [];
   for (const name of want) {
-    const g = await geoOf(book, name, book.sheets.findIndex(x => x.name === name));
-    for (const t of g.tables) for (const c of t.cols) if (!cols.some(x => x.k === c.k)) cols.push({ k: c.k, label: c.label, kind: c.kind });
+    const g = await geoOf(
+      book,
+      name,
+      book.sheets.findIndex((x) => x.name === name),
+    );
+    for (const t of g.tables)
+      for (const c of t.cols) if (!cols.some((x) => x.k === c.k)) cols.push({ k: c.k, label: c.label, kind: c.kind });
     geos.push(opts.layout?.sort?.length ? sortedGeo(book, g, opts.layout.sort) : g);
   }
   const used = new Set<number>();
-  let plans: Plan[]; let sug: { n: number; pt: number } | undefined;
+  let plans: Plan[];
+  let sug: { n: number; pt: number } | undefined;
   if (opts.layout) {
     const o = opts.layout;
     plans = planDoc(geos, o);
     // μικρά γράμματα: σε πόσες σελίδες διαβάζεται καθαρά (10 pt)
-    const pt = Math.min(...plans.map(p => p.pt));
+    const pt = Math.min(...plans.map((p) => p.pt));
     if (plans.length && pt < 9.75 && typeof o.pages === 'number' && !hasBreaks(o)) {
       // η πρώτη που φτάνει τα 10 pt, αλλιώς αυτή με τα μεγαλύτερα γράμματα (αν κερδίζει τουλάχιστον 1 pt)
       let best: { n: number; pt: number } | undefined;
       for (let n = o.pages + 1; n <= 8; n++) {
-        const tp = Math.min(...planDoc(geos, { ...o, pages: n }).map(p => p.pt));
-        if (tp >= 9.75) { best = { n, pt: tp }; break; }
+        const tp = Math.min(...planDoc(geos, { ...o, pages: n }).map((p) => p.pt));
+        if (tp >= 9.75) {
+          best = { n, pt: tp };
+          break;
+        }
         if (!best || tp > best.pt + 0.25) best = { n, pt: tp };
       }
       if (best && best.pt >= pt + 1) sug = { n: best.n, pt: Math.round(best.pt * 2) / 2 };
     }
-  } else plans = geos.map(g => planFile(g));
+  } else plans = geos.map((g) => planFile(g));
   const total = plans.reduce((a, p) => a + p.order.length, 0);
   let at = 0;
   const sheets: PrintSheet[] = geos.map((g, i) => {
-    const p = plans[i]; const s = drawSheet(book, g, p, opts.file, used, opts, at, total); at += p.order.length; return s;
+    const p = plans[i];
+    const s = drawSheet(book, g, p, opts.file, used, opts, at, total);
+    at += p.order.length;
+    return s;
   });
-  const css = [...used].map(i => { const x = book.styles.xfs[i] || book.styles.xfs[0]; return `.s${i}{${fontCss(book.styles.fonts[x.font] || book.styles.fonts[0])}${x.fill ? 'background:' + x.fill + ';' : ''}}`; }).join('\n');
+  const css = [...used]
+    .map((i) => {
+      const x = book.styles.xfs[i] || book.styles.xfs[0];
+      return `.s${i}{${fontCss(book.styles.fonts[x.font] || book.styles.fonts[0])}${x.fill ? 'background:' + x.fill + ';' : ''}}`;
+    })
+    .join('\n');
   return { sheets, all, css, total, sug, cols };
 }
 
 // ------------------------------------------------------------------ το φύλλο: περιοχή, γραμμές, στήλες, τίτλοι
 interface Geo {
-  sh: ParsedSheet; idx: number; ps: string; pm: string; po: string;
-  rowsAll: number[]; colsAll: number[]; rowH: (r: number) => number; colW: (c: number) => number; W: number;
-  titles: [number, number] | null; titleList: number[]; titleH: number;
-  oddH?: string; oddF?: string; firstNo: number; grid: boolean;
-  dom: { name: string; sz: number };      // η γραμματοσειρά των περισσότερων κελιών (για «Arial 12 → 10 pt»)
-  units: number[][][];                    // μπλοκ (θάλαμος, πίνακας ανάμεσα σε κενές γραμμές) από ενότητες (γραμμές με κάθετη συγχώνευση)
-  framed: Set<number>;                    // γραμμές με πλαίσιο (μόνο αυτές ψηλώνουν στο «Ψηλότερες γραμμές»)
-  tables: Table[];                        // πίνακες με γραμμή επικεφαλίδων, που ταξινομούνται στην εκτύπωση
+  sh: ParsedSheet;
+  idx: number;
+  ps: string;
+  pm: string;
+  po: string;
+  rowsAll: number[];
+  colsAll: number[];
+  rowH: (r: number) => number;
+  colW: (c: number) => number;
+  W: number;
+  titles: [number, number] | null;
+  titleList: number[];
+  titleH: number;
+  oddH?: string;
+  oddF?: string;
+  firstNo: number;
+  grid: boolean;
+  dom: { name: string; sz: number }; // η γραμματοσειρά των περισσότερων κελιών (για «Arial 12 → 10 pt»)
+  units: number[][][]; // μπλοκ (θάλαμος, πίνακας ανάμεσα σε κενές γραμμές) από ενότητες (γραμμές με κάθετη συγχώνευση)
+  framed: Set<number>; // γραμμές με πλαίσιο (μόνο αυτές ψηλώνουν στο «Ψηλότερες γραμμές»)
+  tables: Table[]; // πίνακες με γραμμή επικεφαλίδων, που ταξινομούνται στην εκτύπωση
   regroup: (rows: number[]) => number[][][];
-  fix?: Map<number, number>;              // ταξινομημένο: κελί του Α/Α (key) → η γραμμή που είχε αυτή τη θέση (το Α/Α μένει 1, 2, 3…)
+  fix?: Map<number, number>; // ταξινομημένο: κελί του Α/Α (key) → η γραμμή που είχε αυτή τη θέση (το Α/Α μένει 1, 2, 3…)
   // Έντυπα (Michael, 22/10): κεφαλίδα, ημερομηνία, τίτλος, υπογραφές (FIXED_MARK) τυπώνονται στο μέγεθός τους, όποια κι αν
   // είναι η κλίμακα του πίνακα· fixC: τα κελιά τους, fixR: οι γραμμές που έχουν μόνο αυτά (ψηλώνουν/κονταίνουν μαζί τους)
-  fixC?: Set<number>; fixR?: Set<number>;
+  fixC?: Set<number>;
+  fixR?: Set<number>;
 }
 // πόσο μεγαλώνει ένα σταθερό κομμάτι μέσα σε φύλλο με κλίμακα s, ώστε να βγει στο μέγεθός του (με όρια, για τα άκρα)
 const fixK = (s: number) => Math.min(6, Math.max(0.4, 1 / s));
@@ -606,93 +1418,208 @@ const rowAt = (g: Geo, r: number, s: number) => g.rowH(r) * (g.fixR?.has(r) ? fi
 const sums = new WeakMap<number[], [number, number]>();
 function sumsOf(g: Geo, rows: number[]): [number, number] {
   let x = sums.get(rows);
-  if (!x) { let a = 0, f = 0; for (const r of rows) { const h = g.rowH(r); if (g.fixR?.has(r)) f += h; else a += h; } x = [a, f]; sums.set(rows, x); }
+  if (!x) {
+    let a = 0,
+      f = 0;
+    for (const r of rows) {
+      const h = g.rowH(r);
+      if (g.fixR?.has(r)) f += h;
+      else a += h;
+    }
+    x = [a, f];
+    sums.set(rows, x);
+  }
   return x;
 }
 // Ένας πίνακας του φύλλου: η γραμμή επικεφαλίδων, οι γραμμές του από κάτω (ως τα σύνολα ή το πρώτο κελί χωρίς πλαίσιο),
 // οι στήλες που ταξινομούνται (με το κλειδί της επικεφαλίδας: «Ο/Σ» → «ΟΣ») και οι στήλες Α/Α που μένουν στη θέση τους
 export type SortKind = 'text' | 'num' | 'date' | 'rank';
-export interface SortCol { k: string; label: string; kind: SortKind }
+export interface SortCol {
+  k: string;
+  label: string;
+  kind: SortKind;
+}
 // span: οι στήλες του πίνακα όταν είναι δίπλα σε άλλον (Φάση 3 των Εντύπων): ταξινομείται μόνος του, κελί προς κελί, όχι ολόκληρες οι γραμμές
-interface Table { head: number; rows: number[]; cols: (SortCol & { c: number })[]; fixed: number[]; span?: number[] }
+interface Table {
+  head: number;
+  rows: number[];
+  cols: (SortCol & { c: number })[];
+  fixed: number[];
+  span?: number[];
+}
 const geoCache = new WeakMap<Book, Map<string, Geo>>();
-const normHead = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω]/g, '');
+const normHead = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-ZΑ-Ω]/g, '');
 async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
-  let m = geoCache.get(book); if (!m) { m = new Map(); geoCache.set(book, m); }
-  const hit = m.get(name); if (hit) return hit;
-  const sh = (await book.load(name))!; await book.loadRefs(sh);
-  const x = sh.xml; const st = book.styles;
-  const ps = /<pageSetup\b[^>]*>/.exec(x)?.[0] || '', pm = /<pageMargins\b[^>]*>/.exec(x)?.[0] || '', po = /<printOptions\b[^>]*>/.exec(x)?.[0] || '';
+  let m = geoCache.get(book);
+  if (!m) {
+    m = new Map();
+    geoCache.set(book, m);
+  }
+  const hit = m.get(name);
+  if (hit) return hit;
+  const sh = (await book.load(name))!;
+  await book.loadRefs(sh);
+  const x = sh.xml;
+  const st = book.styles;
+  const ps = /<pageSetup\b[^>]*>/.exec(x)?.[0] || '',
+    pm = /<pageMargins\b[^>]*>/.exec(x)?.[0] || '',
+    po = /<printOptions\b[^>]*>/.exec(x)?.[0] || '';
   // περιοχή εκτύπωσης: ορισμένη, αλλιώς ό,τι έχει τιμή, πλαίσιο ή γέμισμα
   let area = areaOf(definedName(book.wbXml, '_xlnm.Print_Area', idx));
   if (!area) {
-    let r2 = sh.maxR, c2 = sh.maxC;
-    for (const [k, c] of sh.cells) { if (c.s == null) continue; const xf = st.xfs[c.s]; if (!xf || (!xf.fill && !xf.border.l && !xf.border.r && !xf.border.t && !xf.border.b)) continue; const r = Math.floor(k / 16384), cc = k % 16384; if (r > r2) r2 = r; if (cc > c2) c2 = cc; }
-    for (const mg of sh.merges) { if (mg.r2 > r2 && sh.cells.has(key(mg.r1, mg.c1))) r2 = mg.r2; if (mg.c2 > c2 && sh.cells.has(key(mg.r1, mg.c1))) c2 = mg.c2; }
+    let r2 = sh.maxR,
+      c2 = sh.maxC;
+    for (const [k, c] of sh.cells) {
+      if (c.s == null) continue;
+      const xf = st.xfs[c.s];
+      if (!xf || (!xf.fill && !xf.border.l && !xf.border.r && !xf.border.t && !xf.border.b)) continue;
+      const r = Math.floor(k / 16384),
+        cc = k % 16384;
+      if (r > r2) r2 = r;
+      if (cc > c2) c2 = cc;
+    }
+    for (const mg of sh.merges) {
+      if (mg.r2 > r2 && sh.cells.has(key(mg.r1, mg.c1))) r2 = mg.r2;
+      if (mg.c2 > c2 && sh.cells.has(key(mg.r1, mg.c1))) c2 = mg.c2;
+    }
     area = { r1: 1, c1: 1, r2: Math.max(1, r2), c2: Math.max(1, c2) };
   }
-  const colInfo = (c: number) => sh.cols.find(k => c >= k.min && c <= k.max);
-  const colW = (c: number) => { const k = colInfo(c); return k?.hidden ? 0 : k?.w ?? sh.defW; };
-  const rowH = (r: number) => { const k = sh.rows.get(r); return k?.hidden ? 0 : ptPx(k?.ht ?? sh.defH); };
-  const rowsAll: number[] = [], colsAll: number[] = [];
+  const colInfo = (c: number) => sh.cols.find((k) => c >= k.min && c <= k.max);
+  const colW = (c: number) => {
+    const k = colInfo(c);
+    return k?.hidden ? 0 : (k?.w ?? sh.defW);
+  };
+  const rowH = (r: number) => {
+    const k = sh.rows.get(r);
+    return k?.hidden ? 0 : ptPx(k?.ht ?? sh.defH);
+  };
+  const rowsAll: number[] = [],
+    colsAll: number[] = [];
   for (let r = area.r1; r <= area.r2; r++) if (rowH(r) > 0) rowsAll.push(r);
   for (let c = area.c1; c <= area.c2; c++) if (colW(c) > 0) colsAll.push(c);
   const titles = titleRows(definedName(book.wbXml, '_xlnm.Print_Titles', idx));
-  const titleList = titles ? Array.from({ length: titles[1] - titles[0] + 1 }, (_, i) => titles[0] + i).filter(r => rowH(r) > 0) : [];
+  const titleList = titles
+    ? Array.from({ length: titles[1] - titles[0] + 1 }, (_, i) => titles[0] + i).filter((r) => rowH(r) > 0)
+    : [];
   const hdr = /<headerFooter\b[^>]*>([\s\S]*?)<\/headerFooter>/.exec(x)?.[1] || '';
-  const oddH = /<oddHeader>([\s\S]*?)<\/oddHeader>/.exec(hdr)?.[1], oddF = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(hdr)?.[1];
+  const oddH = /<oddHeader>([\s\S]*?)<\/oddHeader>/.exec(hdr)?.[1],
+    oddF = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(hdr)?.[1];
 
   // κελιά: τιμή, πλαίσιο, γραμματοσειρά (για τις ενότητες, τα μπλοκ και το «κυρίαρχο» μέγεθος γραμμάτων)
-  const styleOf = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
-  const shown = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v == null ? '' : v instanceof XErr ? v.code : String(v); };
-  const sizes = new Map<string, number>(); const framed = new Set<number>(); const blank = new Set<number>(); const usedC = new Set<number>();
-  const painted = (f: string | null) => !!f && !/^#?F{6}$/i.test(f);   // λευκό γέμισμα = κενό
+  const styleOf = (r: number, c: number) => {
+    const k = sh.cells.get(key(r, c));
+    if (k?.s != null) return k.s;
+    const rw = sh.rows.get(r);
+    if (rw?.s != null) return rw.s;
+    return colInfo(c)?.s ?? 0;
+  };
+  const shown = (r: number, c: number) => {
+    const k = sh.cells.get(key(r, c));
+    if (!k) return '';
+    const v = k.f ? book.value(sh.name, r, c) : k.v;
+    return v == null ? '' : v instanceof XErr ? v.code : String(v);
+  };
+  const sizes = new Map<string, number>();
+  const framed = new Set<number>();
+  const blank = new Set<number>();
+  const usedC = new Set<number>();
+  const painted = (f: string | null) => !!f && !/^#?F{6}$/i.test(f); // λευκό γέμισμα = κενό
   for (const r of rowsAll) {
     let any = false;
     for (const c of colsAll) {
-      const xf = st.xfs[styleOf(r, c)] || st.xfs[0]; const v = shown(r, c);
-      if (xf.border.l || xf.border.r || xf.border.t || xf.border.b) { framed.add(r); any = true; usedC.add(c); }
-      if (painted(xf.fill)) { any = true; usedC.add(c); }
-      if (v !== '') { any = true; usedC.add(c); const f = st.fonts[xf.font] || st.fonts[0]; const k = f.name + '|' + f.sz; sizes.set(k, (sizes.get(k) || 0) + 1); }
+      const xf = st.xfs[styleOf(r, c)] || st.xfs[0];
+      const v = shown(r, c);
+      if (xf.border.l || xf.border.r || xf.border.t || xf.border.b) {
+        framed.add(r);
+        any = true;
+        usedC.add(c);
+      }
+      if (painted(xf.fill)) {
+        any = true;
+        usedC.add(c);
+      }
+      if (v !== '') {
+        any = true;
+        usedC.add(c);
+        const f = st.fonts[xf.font] || st.fonts[0];
+        const k = f.name + '|' + f.sz;
+        sizes.set(k, (sizes.get(k) || 0) + 1);
+      }
     }
     if (!any) blank.add(r);
   }
-  for (const mg of sh.merges) if ((mg.r1 !== mg.r2 || mg.c1 !== mg.c2) && shown(mg.r1, mg.c1) !== '') { for (let r = mg.r1; r <= mg.r2; r++) blank.delete(r); for (let c = mg.c1; c <= mg.c2; c++) usedC.add(c); }
+  for (const mg of sh.merges)
+    if ((mg.r1 !== mg.r2 || mg.c1 !== mg.c2) && shown(mg.r1, mg.c1) !== '') {
+      for (let r = mg.r1; r <= mg.r2; r++) blank.delete(r);
+      for (let c = mg.c1; c <= mg.c2; c++) usedC.add(c);
+    }
   // κενές γραμμές και στήλες στο τέλος (τύποι που βγάζουν "", περιοχή εκτύπωσης μεγαλύτερη από τον πίνακα) δεν τυπώνονται,
   // αλλιώς μικραίνουν τα γράμματα για να χωρέσει χαρτί που μένει άγραφο
   while (rowsAll.length > 1 && blank.has(rowsAll[rowsAll.length - 1])) rowsAll.pop();
   while (colsAll.length > 1 && !usedC.has(colsAll[colsAll.length - 1])) colsAll.pop();
   const W = colsAll.reduce((a, c) => a + colW(c), 0);
-  const top = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] || (st.fonts[0].name + '|' + st.fonts[0].sz);
+  const top = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] || st.fonts[0].name + '|' + st.fonts[0].sz;
   const dom = { name: top.split('|')[0], sz: +top.split('|')[1] || 11 };
 
   // ενότητες: γραμμές που ενώνει κάθετη συγχώνευση δεν χωρίζονται ποτέ
   const unitsOf = (list: number[]) => {
-    const at = new Map(list.map((r, i) => [r, i])); const link = new Array(list.length).fill(false);
-    for (const mg of sh.merges) if (mg.r2 > mg.r1) for (let r = mg.r1; r < mg.r2; r++) { const i = at.get(r); if (i != null) link[i] = true; }
+    const at = new Map(list.map((r, i) => [r, i]));
+    const link = new Array(list.length).fill(false);
+    for (const mg of sh.merges)
+      if (mg.r2 > mg.r1)
+        for (let r = mg.r1; r < mg.r2; r++) {
+          const i = at.get(r);
+          if (i != null) link[i] = true;
+        }
     const out: number[][] = [];
-    list.forEach((r, i) => { if (i && link[i - 1]) out[out.length - 1].push(r); else out.push([r]); });
+    list.forEach((r, i) => {
+      if (i && link[i - 1]) out[out.length - 1].push(r);
+      else out.push([r]);
+    });
     return out;
   };
   // μπλοκ: ανάμεσα σε κενές γραμμές (πίνακες της ΦΡΟΥΡΑΣ) ή όπου αλλάζει ο θάλαμος/ουλαμός (στήλη στη γραμμή τίτλων)
-  const groupCol = titleList.length ? colsAll.find(c => titleList.some(r => /^(ΘΑΛΑΜΟΣ|ΘΑΛ|ΟΥΛΑΜΟΣ)$/.test(normHead(shown(r, c))))) : undefined;
+  const groupCol = titleList.length
+    ? colsAll.find((c) => titleList.some((r) => /^(ΘΑΛΑΜΟΣ|ΘΑΛ|ΟΥΛΑΜΟΣ)$/.test(normHead(shown(r, c)))))
+    : undefined;
   const after = titles ? titles[1] : 0;
   const regroup = (list: number[]) => {
-    const units: number[][][] = []; let cur: number[][] = []; let prevG: string | null = null; let prevBlank = false;
+    const units: number[][][] = [];
+    let cur: number[][] = [];
+    let prevG: string | null = null;
+    let prevBlank = false;
     for (const u of unitsOf(list)) {
-      const r = u[0]; const isBlank = u.every(y => blank.has(y));
+      const r = u[0];
+      const isBlank = u.every((y) => blank.has(y));
       const g = groupCol != null && r > after ? shown(r, groupCol) : null;
       const brk = cur.length && ((prevBlank && !isBlank) || (g != null && prevG != null && g !== prevG));
-      if (brk) { units.push(cur); cur = []; }
-      cur.push(u); prevBlank = isBlank; if (g != null) prevG = g;
+      if (brk) {
+        units.push(cur);
+        cur = [];
+      }
+      cur.push(u);
+      prevBlank = isBlank;
+      if (g != null) prevG = g;
     }
     if (cur.length) units.push(cur);
     // υπογραφές: το τελευταίο μπλοκ χωρίς πλαίσια μένει μαζί με τις 2 τελευταίες γραμμές του πίνακα από πάνω
     if (units.length > 1) {
-      const last = units[units.length - 1]; const rows = last.flat();
-      if (rows.length <= 12 && !rows.some(r => framed.has(r))) {
-        const prev = units[units.length - 2]; let n = 0; const glue: number[][] = [];
-        while (prev.length && n < 2) { const u = prev.pop()!; glue.unshift(u); if (!u.every(y => blank.has(y))) n++; }
+      const last = units[units.length - 1];
+      const rows = last.flat();
+      if (rows.length <= 12 && !rows.some((r) => framed.has(r))) {
+        const prev = units[units.length - 2];
+        let n = 0;
+        const glue: number[][] = [];
+        while (prev.length && n < 2) {
+          const u = prev.pop()!;
+          glue.unshift(u);
+          if (!u.every((y) => blank.has(y))) n++;
+        }
         if (!prev.length) units.splice(units.length - 2, 1);
         units[units.length - 1] = [[...glue.flat(), ...rows]];
       }
@@ -701,24 +1628,69 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
   };
   // Έντυπα, πίνακες χωρίς γραμμή επικεφαλίδων (NOHEAD_MARK): η κρυφή γραμμή μένει στην αναζήτηση πινάκων (έχει ακόμα τις επικεφαλίδες, άρα ταξινομείται κανονικά),
   // και οι περιοχές της που αδειάστηκαν (διπλανός πίνακας με επικεφαλίδες) λένε στο tablesOf ότι εκεί δεν υπάρχει επικεφαλίδα
-  const noHead = new Set<number>(); const hid: number[] = [];
+  const noHead = new Set<number>();
+  const hid: number[] = [];
   for (const a of areasOf(definedName(book.wbXml, NOHEAD_MARK, idx))) {
-    if (rowH(a.r1) === 0) { if (!hid.includes(a.r1)) hid.push(a.r1); continue; }
-    if (Array.from({ length: a.c2 - a.c1 + 1 }, (_, i) => a.c1 + i).every(c => shown(a.r1, c) === '')) for (let c = a.c1; c <= a.c2; c++) noHead.add(key(a.r1, c));
+    if (rowH(a.r1) === 0) {
+      if (!hid.includes(a.r1)) hid.push(a.r1);
+      continue;
+    }
+    if (Array.from({ length: a.c2 - a.c1 + 1 }, (_, i) => a.c1 + i).every((c) => shown(a.r1, c) === ''))
+      for (let c = a.c1; c <= a.c2; c++) noHead.add(key(a.r1, c));
   }
   const withHidden = hid.length ? [...rowsAll, ...hid].sort((a, b) => a - b) : rowsAll;
-  const framedT = hid.length ? new Set([...framed, ...hid.filter(r => colsAll.some(c => { const xf = st.xfs[styleOf(r, c)] || st.xfs[0]; return xf.border.l || xf.border.r || xf.border.t || xf.border.b; }))]) : framed;
-  const g: Geo = { sh, idx, ps, pm, po, rowsAll, colsAll, rowH, colW, W, titles, titleList, titleH: titleList.reduce((a, r) => a + rowH(r), 0),
-    oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
-    grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units: regroup(rowsAll), framed,
-    tables: tablesOf(book, sh, unitsOf(withHidden), colsAll, framedT, noHead), regroup };
+  const framedT = hid.length
+    ? new Set([
+        ...framed,
+        ...hid.filter((r) =>
+          colsAll.some((c) => {
+            const xf = st.xfs[styleOf(r, c)] || st.xfs[0];
+            return xf.border.l || xf.border.r || xf.border.t || xf.border.b;
+          }),
+        ),
+      ])
+    : framed;
+  const g: Geo = {
+    sh,
+    idx,
+    ps,
+    pm,
+    po,
+    rowsAll,
+    colsAll,
+    rowH,
+    colW,
+    W,
+    titles,
+    titleList,
+    titleH: titleList.reduce((a, r) => a + rowH(r), 0),
+    oddH,
+    oddF,
+    firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
+    grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true',
+    dom,
+    units: regroup(rowsAll),
+    framed,
+    tables: tablesOf(book, sh, unitsOf(withHidden), colsAll, framedT, noHead),
+    regroup,
+  };
   const fixed = areasOf(definedName(book.wbXml, FIXED_MARK, idx));
   if (fixed.length) {
-    const fixC = new Set<number>(), near = new Set<number>();
-    for (const a of fixed) for (let r = a.r1; r <= a.r2; r++) { near.add(r); for (let c = a.c1; c <= a.c2; c++) fixC.add(key(r, c)); }
+    const fixC = new Set<number>(),
+      near = new Set<number>();
+    for (const a of fixed)
+      for (let r = a.r1; r <= a.r2; r++) {
+        near.add(r);
+        for (let c = a.c1; c <= a.c2; c++) fixC.add(key(r, c));
+      }
     // γραμμή μόνο με σταθερά κομμάτια (και κενά): χωρίς πλαίσιο και χωρίς τίποτα άλλο γραμμένο
-    const fixR = new Set([...near].filter(r => rowH(r) > 0 && !framed.has(r) && colsAll.every(c => fixC.has(key(r, c)) || shown(r, c) === '')));
-    g.fixC = fixC; g.fixR = fixR;
+    const fixR = new Set(
+      [...near].filter(
+        (r) => rowH(r) > 0 && !framed.has(r) && colsAll.every((c) => fixC.has(key(r, c)) || shown(r, c) === ''),
+      ),
+    );
+    g.fixC = fixC;
+    g.fixR = fixR;
   }
   m.set(name, g);
   return g;
@@ -728,73 +1700,168 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
 // «Πρώτα θάλαμος, μετά αλφαβητικά…»: ταξινομούνται μόνο οι γραμμές κάθε πίνακα. Κεφαλίδα, τίτλοι, σύνολα και υπογραφές
 // μένουν στη θέση τους, και το Α/Α (1, 2, 3… ή 1ο, 2ο…) μένει στη σειρά. Πίνακες με γραμμές που ενώνει κάθετη συγχώνευση
 // (ΦΡΟΥΡΑ) ή με δύο πίνακες δίπλα-δίπλα (ίδια επικεφαλίδα δύο φορές) δεν ταξινομούνται.
-export const sortKey = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-ZΑ-Ω0-9]/g, '');
+export const sortKey = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-ZΑ-Ω0-9]/g, '');
 // βαθμοί από τον ανώτερο στον κατώτερο: «Ανώτεροι πρώτα»
-const RANKS = ['ΤΧΗΣ', 'ΕΠΛΧΟΣ', 'ΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΑΝΘΛΓΟΣ', 'ΙΛΧΟΣ', 'ΥΠΛΧΟΣ', 'ΑΝΘΛΧΟΣ', 'ΔΕΑ', 'ΑΝΘΣΤΗΣ', 'ΑΛΧΙΑΣ', 'ΕΠΛΧΙΑΣ', 'ΛΧΙΑΣ', 'ΔΝΕΑΣ', 'ΥΔΝΕΑΣ', 'ΣΤΡ'];
-const NUMERIC = /^[-+]?\d+(?:[.,]\d+)?$/, DATE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?!\d)/;
+const RANKS = [
+  'ΤΧΗΣ',
+  'ΕΠΛΧΟΣ',
+  'ΛΓΟΣ',
+  'ΥΠΛΓΟΣ',
+  'ΑΝΘΛΓΟΣ',
+  'ΙΛΧΟΣ',
+  'ΥΠΛΧΟΣ',
+  'ΑΝΘΛΧΟΣ',
+  'ΔΕΑ',
+  'ΑΝΘΣΤΗΣ',
+  'ΑΛΧΙΑΣ',
+  'ΕΠΛΧΙΑΣ',
+  'ΛΧΙΑΣ',
+  'ΔΝΕΑΣ',
+  'ΥΔΝΕΑΣ',
+  'ΣΤΡ',
+];
+const NUMERIC = /^[-+]?\d+(?:[.,]\d+)?$/,
+  DATE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?!\d)/;
 const SEQ = /^(\d+)\s*(?:ο|η|\.|\))?$/i;
 const greekOrder = new Intl.Collator('el', { numeric: true, sensitivity: 'base' });
-function tablesOf(book: Book, sh: ParsedSheet, units: number[][], cols: number[], framed: Set<number>, noHead: Set<number> = new Set()): Table[] {
-  const raw = (r: number, c: number): Val => { const k = sh.cells.get(key(r, c)); if (!k) return null; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? null : v; };
-  const text = (r: number, c: number) => { const v = raw(r, c); return v == null ? '' : String(v).trim(); };
-  const dateFmt = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; if (!xf || !xf.fmt) return false; const code = book.styles.codes.get(xf.fmt) ?? BUILTIN[xf.fmt] ?? ''; return isDateFmt(code); };
-  const bord = (r: number, c: number) => { const k = sh.cells.get(key(r, c)); const xf = k?.s != null ? book.styles.xfs[k.s] : null; return !!xf && !!(xf.border.l || xf.border.r || xf.border.t || xf.border.b); };
+function tablesOf(
+  book: Book,
+  sh: ParsedSheet,
+  units: number[][],
+  cols: number[],
+  framed: Set<number>,
+  noHead: Set<number> = new Set(),
+): Table[] {
+  const raw = (r: number, c: number): Val => {
+    const k = sh.cells.get(key(r, c));
+    if (!k) return null;
+    const v = k.f ? book.value(sh.name, r, c) : k.v;
+    return v instanceof XErr ? null : v;
+  };
+  const text = (r: number, c: number) => {
+    const v = raw(r, c);
+    return v == null ? '' : String(v).trim();
+  };
+  const dateFmt = (r: number, c: number) => {
+    const k = sh.cells.get(key(r, c));
+    const xf = k?.s != null ? book.styles.xfs[k.s] : null;
+    if (!xf || !xf.fmt) return false;
+    const code = book.styles.codes.get(xf.fmt) ?? BUILTIN[xf.fmt] ?? '';
+    return isDateFmt(code);
+  };
+  const bord = (r: number, c: number) => {
+    const k = sh.cells.get(key(r, c));
+    const xf = k?.s != null ? book.styles.xfs[k.s] : null;
+    return !!xf && !!(xf.border.l || xf.border.r || xf.border.t || xf.border.b);
+  };
   // κελί της γραμμής h χωρίς επικεφαλίδα επειδή ο πίνακας βγήκε χωρίς (NOHEAD_MARK): ο πίνακας υπάρχει, δεν ταξινομείται, και δεν παίρνεται για επικεφαλίδα η πρώτη γραμμή του
   const blind = (h: number, c: number) => noHead.has(key(h, c));
   const out: Table[] = [];
   // ένας πίνακας με επικεφαλίδες στη μονάδα i και στήλες cs· split: είναι δίπλα σε άλλον, οπότε οι γραμμές του είναι όσες έχουν πλαίσιο στις στήλες του (όχι σε όλη τη γραμμή).
   // j: από ποια μονάδα συνεχίζει η αναζήτηση (η i + 1 όταν δεν είναι πίνακας ή δεν ταξινομείται)
   const one = (i: number, cs: number[], split: boolean): { t?: Table; j: number } => {
-    const h = units[i][0]; const none = { j: i + 1 };
-    const heads = cs.map(c => ({ c, t: text(h, c) })).filter(x => /\p{L}/u.test(x.t));
-    if (cs.some(c => blind(h, c))) {
+    const h = units[i][0];
+    const none = { j: i + 1 };
+    const heads = cs.map((c) => ({ c, t: text(h, c) })).filter((x) => /\p{L}/u.test(x.t));
+    if (cs.some((c) => blind(h, c))) {
       // πίνακας χωρίς επικεφαλίδες: μόνο να φανεί πού τελειώνουν οι γραμμές του, για να μη θεωρηθούν επικεφαλίδα του επόμενου
-      let j = i + 1; while (j < units.length && units[j].every(r => cs.some(c => bord(r, c)))) j++;
+      let j = i + 1;
+      while (j < units.length && units[j].every((r) => cs.some((c) => bord(r, c)))) j++;
       return { j };
     }
     if (heads.length < 2) return none;
-    const keys = heads.map(x => sortKey(x.t));
+    const keys = heads.map((x) => sortKey(x.t));
     // κάθε επικεφαλίδα μία φορά (όχι πίνακες δίπλα-δίπλα, όχι γραμμή με 0 | 0 | 0 όπως οι βαθμοί της ΗΚΑΙ)
-    const all = cs.map(c => text(h, c)).filter(Boolean);
-    if (new Set(keys).size !== keys.length || new Set(all).size !== all.length || keys.some(k => !k || /^ΣΥΝΟΛ/.test(k))) return none;
+    const all = cs.map((c) => text(h, c)).filter(Boolean);
+    if (
+      new Set(keys).size !== keys.length ||
+      new Set(all).size !== all.length ||
+      keys.some((k) => !k || /^ΣΥΝΟΛ/.test(k))
+    )
+      return none;
     // τίτλοι πινάκων πάνω από τις επικεφαλίδες («ΤΙΜΩΡΗΜΕΝΟΙ», «ΑΠΟΝΤΕΣ» σε συγχωνευμένα κελιά): όχι επικεφαλίδα. Επικεφαλίδες που είναι συγχωνευμένες
     // και στη γραμμή από κάτω με τον ίδιο τρόπο (πίνακας σε πλέγμα στηλών, «Φτιάξ' το εδώ») είναι επικεφαλίδες στηλών
     const nr = units[i + 1]?.[0];
-    const title = (x: { c: number }) => { const m = sh.merges.find(y => y.r1 === h && y.c1 === x.c && y.c2 > y.c1); return !!m && !(nr != null && sh.merges.some(y => y.r1 === nr && y.c1 === m.c1 && y.c2 === m.c2)); };
+    const title = (x: { c: number }) => {
+      const m = sh.merges.find((y) => y.r1 === h && y.c1 === x.c && y.c2 > y.c1);
+      return !!m && !(nr != null && sh.merges.some((y) => y.r1 === nr && y.c1 === m.c1 && y.c2 === m.c2));
+    };
     if (heads.filter(title).length * 2 >= heads.length) return none;
-    const rows: number[] = []; let multi = false; let j = i + 1;
+    const rows: number[] = [];
+    let multi = false;
+    let j = i + 1;
     for (; j < units.length; j++) {
-      const v = units[j]; if (!(split ? v.every(r => cs.some(c => bord(r, c))) : v.every(r => framed.has(r)))) break;
-      if (cs.some(c => /^ΣΥΝΟΛ/.test(sortKey(text(v[0], c))))) break;
+      const v = units[j];
+      if (!(split ? v.every((r) => cs.some((c) => bord(r, c))) : v.every((r) => framed.has(r)))) break;
+      if (cs.some((c) => /^ΣΥΝΟΛ/.test(sortKey(text(v[0], c))))) break;
       if (v.length > 1) multi = true;
       rows.push(...v);
     }
     if (multi || rows.length < 2) return { j };
-    const list: (SortCol & { c: number })[] = []; const fixed: number[] = [];
+    const list: (SortCol & { c: number })[] = [];
+    const fixed: number[] = [];
     heads.forEach((x, n) => {
-      const k = keys[n]; const full = rows.filter(r => raw(r, x.c) != null && raw(r, x.c) !== ''); const vals = full.map(r => raw(r, x.c));
+      const k = keys[n];
+      const full = rows.filter((r) => raw(r, x.c) != null && raw(r, x.c) !== '');
+      const vals = full.map((r) => raw(r, x.c));
       // Α/Α: η επικεφαλίδα, ή αριθμοί που ανεβαίνουν ένα-ένα από πάνω προς τα κάτω
-      const seq = rows.map(r => SEQ.exec(text(r, x.c))?.[1]);
-      if (/^(ΑΑ|ΑΡ|ΑΡΙΘ|NO|ΝΟ)$/.test(k) || (seq.length >= 2 && seq.every((v, m) => v != null && +v === +seq[0]! + m))) { fixed.push(x.c); return; }
-      if (/^\d+$/.test(k) || !vals.length) return;   // στήλες-μέρες του Ελέγχου (1, 2… 31) και άδειες στήλες (ΥΠΟΓΡΑΦΗ)
-      const kind: SortKind = /^ΒΑΘΜ/.test(k) ? 'rank'
-        : vals.length && full.every((r, m) => (typeof vals[m] === 'string' && DATE.test(String(vals[m]).trim())) || (typeof vals[m] === 'number' && dateFmt(r, x.c))) ? 'date'
-        : vals.length && vals.every(v => typeof v === 'number' || NUMERIC.test(String(v).trim())) ? 'num' : 'text';
+      const seq = rows.map((r) => SEQ.exec(text(r, x.c))?.[1]);
+      if (
+        /^(ΑΑ|ΑΡ|ΑΡΙΘ|NO|ΝΟ)$/.test(k) ||
+        (seq.length >= 2 && seq.every((v, m) => v != null && +v === +seq[0]! + m))
+      ) {
+        fixed.push(x.c);
+        return;
+      }
+      if (/^\d+$/.test(k) || !vals.length) return; // στήλες-μέρες του Ελέγχου (1, 2… 31) και άδειες στήλες (ΥΠΟΓΡΑΦΗ)
+      const kind: SortKind = /^ΒΑΘΜ/.test(k)
+        ? 'rank'
+        : vals.length &&
+            full.every(
+              (r, m) =>
+                (typeof vals[m] === 'string' && DATE.test(String(vals[m]).trim())) ||
+                (typeof vals[m] === 'number' && dateFmt(r, x.c)),
+            )
+          ? 'date'
+          : vals.length && vals.every((v) => typeof v === 'number' || NUMERIC.test(String(v).trim()))
+            ? 'num'
+            : 'text';
       list.push({ c: x.c, k, label: x.t.replace(/\s+/g, ' '), kind });
     });
     return { j, ...(list.length ? { t: { head: h, rows, cols: list, fixed, ...(split ? { span: cs } : {}) } } : {}) };
   };
   for (let i = 0; i < units.length; i++) {
-    const u = units[i]; if (u.length !== 1 || !framed.has(u[0])) continue;
+    const u = units[i];
+    if (u.length !== 1 || !framed.has(u[0])) continue;
     const h = u[0];
     // πίνακες δίπλα-δίπλα: ομάδες στηλών με πλαίσιο στη γραμμή των επικεφαλίδων, χωρισμένες από στήλες χωρίς (το κενό που αφήνει το «Φτιάξ' το εδώ»)
     // (ο καθένας με δύο τουλάχιστον επικεφαλίδες): ταξινομούνται ξεχωριστά
-    const segs: number[][] = []; let cur: number[] = [];
-    for (const c of cols) { if (bord(h, c) || blind(h, c)) cur.push(c); else if (cur.length) { segs.push(cur); cur = []; } }
+    const segs: number[][] = [];
+    let cur: number[] = [];
+    for (const c of cols) {
+      if (bord(h, c) || blind(h, c)) cur.push(c);
+      else if (cur.length) {
+        segs.push(cur);
+        cur = [];
+      }
+    }
     if (cur.length) segs.push(cur);
-    const parts = segs.length > 1 ? segs.filter(g => g.some(c => blind(h, c)) || g.filter(c => /\p{L}/u.test(text(h, c))).length >= 2) : [];
-    const split = parts.length > 1; let end = i + 1;
-    for (const g of split ? parts : [cols]) { const x = one(i, g, split); if (x.t) out.push(x.t); end = Math.max(end, x.j); }
+    const parts =
+      segs.length > 1
+        ? segs.filter((g) => g.some((c) => blind(h, c)) || g.filter((c) => /\p{L}/u.test(text(h, c))).length >= 2)
+        : [];
+    const split = parts.length > 1;
+    let end = i + 1;
+    for (const g of split ? parts : [cols]) {
+      const x = one(i, g, split);
+      if (x.t) out.push(x.t);
+      end = Math.max(end, x.j);
+    }
     i = end - 1;
   }
   return out;
@@ -804,173 +1871,343 @@ function sortVal(v: Val, kind: SortKind): number | string | null {
   if (v == null || v === '' || v instanceof XErr) return null;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (typeof v === 'number') return v;
-  const s = v.trim(); if (!s) return null;
-  if (kind === 'rank') { const i = RANKS.indexOf(sortKey(s.split(/[\s(]/)[0])); if (i >= 0) return i; }
+  const s = v.trim();
+  if (!s) return null;
+  if (kind === 'rank') {
+    const i = RANKS.indexOf(sortKey(s.split(/[\s(]/)[0]));
+    if (i >= 0) return i;
+  }
   if (NUMERIC.test(s)) return +s.replace(',', '.');
-  const d = DATE.exec(s); if (d) { const y = +d[3] < 100 ? 2000 + +d[3] : +d[3]; return y * 10000 + +d[2] * 100 + +d[1]; }
+  const d = DATE.exec(s);
+  if (d) {
+    const y = +d[3] < 100 ? 2000 + +d[3] : +d[3];
+    return y * 10000 + +d[2] * 100 + +d[1];
+  }
   return s;
 }
-const cmpVal = (a: number | string, b: number | string) => (typeof a === 'number' ? (typeof b === 'number' ? a - b : -1) : typeof b === 'number' ? 1 : greekOrder.compare(a, b));
+const cmpVal = (a: number | string, b: number | string) =>
+  typeof a === 'number' ? (typeof b === 'number' ? a - b : -1) : typeof b === 'number' ? 1 : greekOrder.compare(a, b);
 // το φύλλο με τις γραμμές των πινάκων στη νέα σειρά (οι στήλες που δεν έχει ο πίνακας δεν μετράνε)
 const sortCache = new WeakMap<Geo, Map<string, Geo>>();
 function sortedGeo(book: Book, g: Geo, sort: PrintSort[]): Geo {
-  const sig = sort.map(x => x.c + (x.d ? '-' : '+')).join('|');
-  let m = sortCache.get(g); if (!m) { m = new Map(); sortCache.set(g, m); }
-  const hit = m.get(sig); if (hit) return hit;
-  const out = sortRows(book, g, sort); m.set(sig, out); return out;
+  const sig = sort.map((x) => x.c + (x.d ? '-' : '+')).join('|');
+  let m = sortCache.get(g);
+  if (!m) {
+    m = new Map();
+    sortCache.set(g, m);
+  }
+  const hit = m.get(sig);
+  if (hit) return hit;
+  const out = sortRows(book, g, sort);
+  m.set(sig, out);
+  return out;
 }
 function sortRows(book: Book, g: Geo, sort: PrintSort[]): Geo {
-  const rowsAll = g.rowsAll.slice(); const fix = new Map<number, number>(); let moved = false;
+  const rowsAll = g.rowsAll.slice();
+  const fix = new Map<number, number>();
+  let moved = false;
   for (const t of g.tables) {
-    const lv = sort.map(s => ({ s, col: t.cols.find(c => c.k === s.c) })).filter(x => x.col) as { s: PrintSort; col: SortCol & { c: number } }[];
+    const lv = sort.map((s) => ({ s, col: t.cols.find((c) => c.k === s.c) })).filter((x) => x.col) as {
+      s: PrintSort;
+      col: SortCol & { c: number };
+    }[];
     if (!lv.length) continue;
-    const vals = new Map(t.rows.map(r => [r, lv.map(x => { const k = g.sh.cells.get(key(r, x.col.c)); const v = k ? (k.f ? book.value(g.sh.name, r, x.col.c) : k.v) : null; return sortVal(v, x.col.kind); })]));
+    const vals = new Map(
+      t.rows.map((r) => [
+        r,
+        lv.map((x) => {
+          const k = g.sh.cells.get(key(r, x.col.c));
+          const v = k ? (k.f ? book.value(g.sh.name, r, x.col.c) : k.v) : null;
+          return sortVal(v, x.col.kind);
+        }),
+      ]),
+    );
     const sorted = t.rows.slice().sort((a, b) => {
-      const A = vals.get(a)!, B = vals.get(b)!;
+      const A = vals.get(a)!,
+        B = vals.get(b)!;
       for (let i = 0; i < lv.length; i++) {
-        if (A[i] == null || B[i] == null) { if (A[i] == null && B[i] == null) continue; return A[i] == null ? 1 : -1; }
-        const d = cmpVal(A[i]!, B[i]!); if (d) return lv[i].s.d ? -d : d;
+        if (A[i] == null || B[i] == null) {
+          if (A[i] == null && B[i] == null) continue;
+          return A[i] == null ? 1 : -1;
+        }
+        const d = cmpVal(A[i]!, B[i]!);
+        if (d) return lv[i].s.d ? -d : d;
       }
       return 0;
     });
     if (sorted.every((r, i) => r === t.rows[i])) continue;
     moved = true;
     // πίνακας δίπλα σε άλλον: οι γραμμές δεν μετακινούνται (θα έσερναν και τον διπλανό)· κάθε κελί του δείχνει το κελί της γραμμής που ήταν εκεί πριν, εκτός από το Α/Α
-    if (t.span) { sorted.forEach((r, i) => { if (r !== t.rows[i]) for (const c of t.span!) if (!t.fixed.includes(c)) fix.set(key(t.rows[i], c), r); }); continue; }
-    const at = rowsAll.indexOf(t.rows[0]); rowsAll.splice(at, sorted.length, ...sorted);
-    sorted.forEach((r, i) => { for (const c of t.fixed) if (r !== t.rows[i]) fix.set(key(r, c), t.rows[i]); });
+    if (t.span) {
+      sorted.forEach((r, i) => {
+        if (r !== t.rows[i]) for (const c of t.span!) if (!t.fixed.includes(c)) fix.set(key(t.rows[i], c), r);
+      });
+      continue;
+    }
+    const at = rowsAll.indexOf(t.rows[0]);
+    rowsAll.splice(at, sorted.length, ...sorted);
+    sorted.forEach((r, i) => {
+      for (const c of t.fixed) if (r !== t.rows[i]) fix.set(key(r, c), t.rows[i]);
+    });
   }
-  return moved ? { ...g, rowsAll, units: rowsAll.every((r, i) => r === g.rowsAll[i]) ? g.units : g.regroup(rowsAll), fix } : g;
+  return moved
+    ? { ...g, rowsAll, units: rowsAll.every((r, i) => r === g.rowsAll[i]) ? g.units : g.regroup(rowsAll), fix }
+    : g;
 }
 
 // ------------------------------------------------------------------ το σχέδιο: χαρτί, κλίμακα, ποιες γραμμές σε κάθε σελίδα
 interface Plan {
-  paper: { name: string; w: number; h: number }; landscape: boolean; pw: number; ph: number;
-  M: { l: number; r: number; t: number; b: number; h: number; f: number }; availW: number; availH: number;
-  scale: number; maxScale: number; pt: number; cs: number; f: number; centerH: boolean; centerV: boolean; pno: boolean; repeat: boolean;
+  paper: { name: string; w: number; h: number };
+  landscape: boolean;
+  pw: number;
+  ph: number;
+  M: { l: number; r: number; t: number; b: number; h: number; f: number };
+  availW: number;
+  availH: number;
+  scale: number;
+  maxScale: number;
+  pt: number;
+  cs: number;
+  f: number;
+  centerH: boolean;
+  centerV: boolean;
+  pno: boolean;
+  repeat: boolean;
   order: [number[], number[]][];
 }
-const geomOf = (paper: { w: number; h: number }, landscape: boolean) => ({ pw: ((landscape ? paper.h : paper.w) / 25.4) * 96, ph: ((landscape ? paper.w : paper.h) / 25.4) * 96 });
+const geomOf = (paper: { w: number; h: number }, landscape: boolean) => ({
+  pw: ((landscape ? paper.h : paper.w) / 25.4) * 96,
+  ph: ((landscape ? paper.w : paper.h) / 25.4) * 96,
+});
 // η διάταξη σελίδας του ίδιου του αρχείου (Excel): ποσοστό ή «προσαρμογή σε Χ × Υ σελίδες», αλλαγές σελίδας, στήλες σε σελίδες
 function planFile(g: Geo): Plan {
-  const x = g.sh.xml, ps = g.ps, pm = g.pm;
+  const x = g.sh.xml,
+    ps = g.ps,
+    pm = g.pm;
   const paper = PAPER[num(ps, 'paperSize', 9)] || PAPER[9];
   const landscape = attr(ps, 'orientation') === 'landscape';
   const { pw, ph } = geomOf(paper, landscape);
-  const M = { l: num(pm, 'left', 0.7) * 96, r: num(pm, 'right', 0.7) * 96, t: num(pm, 'top', 0.75) * 96, b: num(pm, 'bottom', 0.75) * 96, h: num(pm, 'header', 0.3) * 96, f: num(pm, 'footer', 0.3) * 96 };
-  const availW = Math.max(50, pw - M.l - M.r), availH = Math.max(50, ph - M.t - M.b);
+  const M = {
+    l: num(pm, 'left', 0.7) * 96,
+    r: num(pm, 'right', 0.7) * 96,
+    t: num(pm, 'top', 0.75) * 96,
+    b: num(pm, 'bottom', 0.75) * 96,
+    h: num(pm, 'header', 0.3) * 96,
+    f: num(pm, 'footer', 0.3) * 96,
+  };
+  const availW = Math.max(50, pw - M.l - M.r),
+    availH = Math.max(50, ph - M.t - M.b);
   const H = g.rowsAll.reduce((a, r) => a + g.rowH(r), 0);
   const fit = /<pageSetUpPr\b[^>]*fitToPage="(1|true)"/.test(x);
   let scale = num(ps, 'scale', 100) / 100;
   if (fit) {
-    const fw = num(ps, 'fitToWidth', 1), fh = num(ps, 'fitToHeight', 1); scale = 1;
+    const fw = num(ps, 'fitToWidth', 1),
+      fh = num(ps, 'fitToHeight', 1);
+    scale = 1;
     if (fw > 0 && g.W > 0) scale = Math.min(scale, (availW * fw) / g.W);
     if (fh > 0 && H > 0) scale = Math.min(scale, (availH * fh) / H);
     scale = Math.floor(scale * 100) / 100;
   }
   scale = Math.min(4, Math.max(0.1, scale));
   // σελίδες: χειροκίνητες αλλαγές και ό,τι δεν χωρά, με τις γραμμές τίτλων σε κάθε σελίδα
-  const brk = (tag: string) => new Set([...block(x, tag).matchAll(/<brk\b[^>]*>/g)].map(m => num(m[0], 'id', 0)));
-  const rowBrk = brk('rowBreaks'), colBrk = brk('colBreaks');
+  const brk = (tag: string) => new Set([...block(x, tag).matchAll(/<brk\b[^>]*>/g)].map((m) => num(m[0], 'id', 0)));
+  const rowBrk = brk('rowBreaks'),
+    colBrk = brk('colBreaks');
   const split = (list: number[], size: (n: number) => number, room: (first: number) => number, breaks: Set<number>) => {
-    const out: number[][] = []; let cur: number[] = []; let acc = 0;
+    const out: number[][] = [];
+    let cur: number[] = [];
+    let acc = 0;
     for (const n of list) {
       const s = size(n);
-      if (cur.length && (acc + s > room(cur[0]) + 0.5 || breaks.has(n - 1))) { out.push(cur); cur = []; acc = 0; }
-      cur.push(n); acc += s;
+      if (cur.length && (acc + s > room(cur[0]) + 0.5 || breaks.has(n - 1))) {
+        out.push(cur);
+        cur = [];
+        acc = 0;
+      }
+      cur.push(n);
+      acc += s;
     }
     if (cur.length) out.push(cur);
     return out;
   };
   const withT = (first: number) => !!g.titles && first > g.titles[1];
-  const rowPages = split(g.rowsAll, r => rowAt(g, r, scale), f => availH / scale - (withT(f) ? g.titleH : 0), rowBrk);
+  const rowPages = split(
+    g.rowsAll,
+    (r) => rowAt(g, r, scale),
+    (f) => availH / scale - (withT(f) ? g.titleH : 0),
+    rowBrk,
+  );
   const colPages = split(g.colsAll, g.colW, () => availW / scale, colBrk);
   const order: [number[], number[]][] = [];
-  if (attr(ps, 'pageOrder') === 'overThenDown') rowPages.forEach(rp => colPages.forEach(cp => order.push([rp, cp])));
-  else colPages.forEach(cp => rowPages.forEach(rp => order.push([rp, cp])));
+  if (attr(ps, 'pageOrder') === 'overThenDown')
+    rowPages.forEach((rp) => colPages.forEach((cp) => order.push([rp, cp])));
+  else colPages.forEach((cp) => rowPages.forEach((rp) => order.push([rp, cp])));
   const on1 = (n: string) => attr(g.po, n) === '1' || attr(g.po, n) === 'true';
-  return { paper, landscape, pw, ph, M, availW, availH, scale, maxScale: scale, pt: g.dom.sz * scale, cs: 1, f: 1, centerH: on1('horizontalCentered'), centerV: on1('verticalCentered'), pno: false, repeat: true, order };
+  return {
+    paper,
+    landscape,
+    pw,
+    ph,
+    M,
+    availW,
+    availH,
+    scale,
+    maxScale: scale,
+    pt: g.dom.sz * scale,
+    cs: 1,
+    f: 1,
+    centerH: on1('horizontalCentered'),
+    centerV: on1('verticalCentered'),
+    pno: false,
+    repeat: true,
+    order,
+  };
 }
 
 // Οι επιλογές του παραθύρου «Εκτύπωση» (Michael, 20/10): πάντα όλες οι στήλες στο πλάτος της σελίδας, και οι γραμμές σε όσες
 // σελίδες διαλέξει, με τα μεγαλύτερα γράμματα που χωράνε. Ίδια κλίμακα σε όλες τις σελίδες ενός φύλλου (και, με same, σε όλα τα
 // φύλλα), ώστε π.χ. Arial 12 να βγαίνει ίδιο μέγεθος στη σελίδα 1 και 2, μπρος και πίσω.
 export interface PrintOpts {
-  pages: number | 'auto';                // σελίδες ανά φύλλο· 'auto' = όσες χρειάζονται με γράμματα size pt
+  pages: number | 'auto'; // σελίδες ανά φύλλο· 'auto' = όσες χρειάζονται με γράμματα size pt
   size: number;
   or: 'auto' | 'p' | 'l';
   paper: 'A4' | 'A3';
   m: 'narrow' | 'normal' | 'wide';
-  sp: 'top' | 'center' | 'fill';          // ό,τι περισσεύει από κάτω: πάνω, στο κέντρο, ψηλότερες γραμμές
-  stretch: boolean;                       // λίγες στήλες φαρδαίνουν ως το πλάτος της σελίδας
-  repeat: boolean;                        // οι γραμμές τίτλων (Print_Titles) σε κάθε σελίδα
-  keep: boolean;                          // δεν κόβεται μπλοκ (θάλαμος, πίνακας) στη μέση
-  pno: boolean;                           // «Σελίδα 1 από 2» κάτω, όταν είναι πάνω από μία
-  side: 'new' | 'back';                   // η επόμενη σελίδα στην πίσω όψη ή σε νέο φύλλο
-  same: boolean;                          // ίδια γράμματα σε όλα τα φύλλα του Excel
-  breaks?: Record<string, number[]>;      // ανά φύλλο: γραμμές του Excel από όπου ξεκινά νέα σελίδα (κλικ στην προεπισκόπηση)
-  sort?: PrintSort[];                     // ταξινόμηση των γραμμών κάθε πίνακα: 1η, 2η, 3η στήλη
-  sheets?: string[];                      // τα φύλλα που διάλεξε ο χρήστης (κουτάκια πάνω στην προεπισκόπηση)· θυμούνται ανά έντυπο, rememberedSheets
+  sp: 'top' | 'center' | 'fill'; // ό,τι περισσεύει από κάτω: πάνω, στο κέντρο, ψηλότερες γραμμές
+  stretch: boolean; // λίγες στήλες φαρδαίνουν ως το πλάτος της σελίδας
+  repeat: boolean; // οι γραμμές τίτλων (Print_Titles) σε κάθε σελίδα
+  keep: boolean; // δεν κόβεται μπλοκ (θάλαμος, πίνακας) στη μέση
+  pno: boolean; // «Σελίδα 1 από 2» κάτω, όταν είναι πάνω από μία
+  side: 'new' | 'back'; // η επόμενη σελίδα στην πίσω όψη ή σε νέο φύλλο
+  same: boolean; // ίδια γράμματα σε όλα τα φύλλα του Excel
+  breaks?: Record<string, number[]>; // ανά φύλλο: γραμμές του Excel από όπου ξεκινά νέα σελίδα (κλικ στην προεπισκόπηση)
+  sort?: PrintSort[]; // ταξινόμηση των γραμμών κάθε πίνακα: 1η, 2η, 3η στήλη
+  sheets?: string[]; // τα φύλλα που διάλεξε ο χρήστης (κουτάκια πάνω στην προεπισκόπηση)· θυμούνται ανά έντυπο, rememberedSheets
 }
 // c: η επικεφαλίδα της στήλης ως κλειδί (sortKey), l: όπως γράφεται, d: φθίνουσα (Ω→Α, 9→1, κατώτεροι πρώτα)
-export interface PrintSort { c: string; l?: string; d?: boolean }
-export const PRINT_DEFAULT: PrintOpts = { pages: 1, size: 12, or: 'auto', paper: 'A4', m: 'normal', sp: 'top', stretch: true, repeat: true, keep: true, pno: true, side: 'new', same: true };
-const MARGIN = { narrow: 0.5, normal: 1.2, wide: 2.5 };   // εκ.
+export interface PrintSort {
+  c: string;
+  l?: string;
+  d?: boolean;
+}
+export const PRINT_DEFAULT: PrintOpts = {
+  pages: 1,
+  size: 12,
+  or: 'auto',
+  paper: 'A4',
+  m: 'normal',
+  sp: 'top',
+  stretch: true,
+  repeat: true,
+  keep: true,
+  pno: true,
+  side: 'new',
+  same: true,
+};
+const MARGIN = { narrow: 0.5, normal: 1.2, wide: 2.5 }; // εκ.
 const pick = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
 // ό,τι έρχεται από το παράθυρο (IPC) ή από τις αποθηκευμένες ρυθμίσεις, καθαρισμένο
 export function cleanOpts(x: unknown, base: PrintOpts = PRINT_DEFAULT): PrintOpts {
   const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
   const bool = (k: keyof PrintOpts) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : (base[k] as boolean));
-  const pages = o.pages === 'auto' ? 'auto' : Number.isInteger(o.pages) && (o.pages as number) >= 1 && (o.pages as number) <= 20 ? (o.pages as number) : base.pages;
+  const pages =
+    o.pages === 'auto'
+      ? 'auto'
+      : Number.isInteger(o.pages) && (o.pages as number) >= 1 && (o.pages as number) <= 20
+        ? (o.pages as number)
+        : base.pages;
   const size = typeof o.size === 'number' && o.size >= 5 && o.size <= 24 ? Math.round(o.size * 2) / 2 : base.size;
   let breaks: Record<string, number[]> | undefined;
   if (o.breaks && typeof o.breaks === 'object') {
     breaks = {};
-    for (const [k, v] of Object.entries(o.breaks as Record<string, unknown>).slice(0, 50)) if (Array.isArray(v)) breaks[String(k)] = [...new Set(v.filter(n => Number.isInteger(n) && n > 0 && n < 1048577) as number[])].sort((a, b) => a - b).slice(0, 500);
+    for (const [k, v] of Object.entries(o.breaks as Record<string, unknown>).slice(0, 50))
+      if (Array.isArray(v))
+        breaks[String(k)] = [...new Set(v.filter((n) => Number.isInteger(n) && n > 0 && n < 1048577) as number[])]
+          .sort((a, b) => a - b)
+          .slice(0, 500);
   }
   const sort = Array.isArray(o.sort) ? o.sort : base.sort;
   const sorts: PrintSort[] = [];
   for (const x of (sort || []).slice(0, 3)) {
-    if (!x || typeof x !== 'object') continue; const c = sortKey(String((x as PrintSort).c ?? '')).slice(0, 60);
-    if (!c || sorts.some(y => y.c === c)) continue;
+    if (!x || typeof x !== 'object') continue;
+    const c = sortKey(String((x as PrintSort).c ?? '')).slice(0, 60);
+    if (!c || sorts.some((y) => y.c === c)) continue;
     const l = typeof (x as PrintSort).l === 'string' ? (x as PrintSort).l!.slice(0, 60) : '';
     sorts.push({ c, ...(l ? { l } : {}), ...((x as PrintSort).d === true ? { d: true } : {}) });
   }
-  const sheets = Array.isArray(o.sheets) ? o.sheets.filter((n): n is string => typeof n === 'string' && !!n).map(n => n.slice(0, 40)).slice(0, 50) : undefined;
+  const sheets = Array.isArray(o.sheets)
+    ? o.sheets
+        .filter((n): n is string => typeof n === 'string' && !!n)
+        .map((n) => n.slice(0, 40))
+        .slice(0, 50)
+    : undefined;
   return {
-    pages, size, or: pick(o.or, ['auto', 'p', 'l'] as const, base.or), paper: pick(o.paper, ['A4', 'A3'] as const, base.paper), m: pick(o.m, ['narrow', 'normal', 'wide'] as const, base.m),
-    sp: pick(o.sp, ['top', 'center', 'fill'] as const, base.sp), stretch: bool('stretch'), repeat: bool('repeat'), keep: bool('keep'), pno: bool('pno'),
-    side: pick(o.side, ['new', 'back'] as const, base.side), same: bool('same'), ...(breaks ? { breaks } : {}), ...(sorts.length ? { sort: sorts } : {}), ...(sheets?.length ? { sheets } : {})
+    pages,
+    size,
+    or: pick(o.or, ['auto', 'p', 'l'] as const, base.or),
+    paper: pick(o.paper, ['A4', 'A3'] as const, base.paper),
+    m: pick(o.m, ['narrow', 'normal', 'wide'] as const, base.m),
+    sp: pick(o.sp, ['top', 'center', 'fill'] as const, base.sp),
+    stretch: bool('stretch'),
+    repeat: bool('repeat'),
+    keep: bool('keep'),
+    pno: bool('pno'),
+    side: pick(o.side, ['new', 'back'] as const, base.side),
+    same: bool('same'),
+    ...(breaks ? { breaks } : {}),
+    ...(sorts.length ? { sort: sorts } : {}),
+    ...(sheets?.length ? { sheets } : {}),
   };
 }
 // Τα φύλλα που διάλεξε την προηγούμενη φορά (π.χ. «μόνο ΕΞΟΔΟΥΧΟΙ»)· αν λείπει έστω ένα από το αρχείο, ισχύει η αρχική επιλογή (undefined)
 export function rememberedSheets(saved: string[] | undefined, visible: string[]): string[] | undefined {
-  if (!saved?.length || !saved.every(n => visible.includes(n))) return undefined;
-  return visible.filter(n => saved.includes(n));
+  if (!saved?.length || !saved.every((n) => visible.includes(n))) return undefined;
+  return visible.filter((n) => saved.includes(n));
 }
-const hasBreaks = (o: PrintOpts) => !!o.breaks && Object.values(o.breaks).some(b => b.length);
+const hasBreaks = (o: PrintOpts) => !!o.breaks && Object.values(o.breaks).some((b) => b.length);
 const PAPERS = { A4: PAPER[9], A3: PAPER[8] };
 
 function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan {
-  const paper = PAPERS[o.paper]; const { pw, ph } = geomOf(paper, landscape);
+  const paper = PAPERS[o.paper];
+  const { pw, ph } = geomOf(paper, landscape);
   const m = (MARGIN[o.m] / 2.54) * 96;
   // κεφαλίδα/υποσέλιδο του αρχείου: χώρος στο περιθώριο
   const M = { l: m, r: m, t: g.oddH ? Math.max(m, 38) : m, b: g.oddF ? Math.max(m, 38) : m, h: 12, f: 12 };
-  const availW = Math.max(50, pw - M.l - M.r), availH = Math.max(50, ph - M.t - M.b);
+  const availW = Math.max(50, pw - M.l - M.r),
+    availH = Math.max(50, ph - M.t - M.b);
   const maxScale = Math.min(availW / Math.max(1, g.W), 2, 16 / g.dom.sz);
   const repeat = o.repeat && !!g.titles;
   const tH = (first: number) => (repeat && g.titles && first > g.titles[1] ? g.titleH : 0);
   // ύψος γραμμών με κλίμακα s (τα σταθερά κομμάτια πιάνουν πάντα τον ίδιο χώρο στο χαρτί)
-  const hOf = (rows: number[], s: number) => { const [a, f] = sumsOf(g, rows); return f ? a + f * fixK(s) : a; };
-  const blocks = o.keep ? g.units : g.units.flat().map(u => [u]);
+  const hOf = (rows: number[], s: number) => {
+    const [a, f] = sumsOf(g, rows);
+    return f ? a + f * fixK(s) : a;
+  };
+  const blocks = o.keep ? g.units : g.units.flat().map((u) => [u]);
   // γεμίζει σελίδες με τη σειρά· limit = μέγιστο ύψος ανά σελίδα (για ισόποσο μοίρασμα)
   const split = (s: number, limit: number): number[][] => {
-    const cap = availH / s; const pages: number[][] = []; let cur: number[] = []; let h = 0;
+    const cap = availH / s;
+    const pages: number[][] = [];
+    let cur: number[] = [];
+    let h = 0;
     const room = (first: number) => Math.min(limit, cap - tH(first));
-    const put = (u: number[]) => { const uh = hOf(u, s); if (cur.length && h + uh > room(cur[0]) + 0.5) { pages.push(cur); cur = []; h = 0; } cur.push(...u); h += uh; };
+    const put = (u: number[]) => {
+      const uh = hOf(u, s);
+      if (cur.length && h + uh > room(cur[0]) + 0.5) {
+        pages.push(cur);
+        cur = [];
+        h = 0;
+      }
+      cur.push(...u);
+      h += uh;
+    };
     for (const b of blocks) {
       const bh = b.reduce((a, u) => a + hOf(u, s), 0);
-      if (cur.length && h + bh > room(cur[0]) + 0.5 && bh <= room(b[0][0]) + 0.5) { pages.push(cur); cur = []; h = 0; }
+      if (cur.length && h + bh > room(cur[0]) + 0.5 && bh <= room(b[0][0]) + 0.5) {
+        pages.push(cur);
+        cur = [];
+        h = 0;
+      }
       b.forEach(put);
     }
     if (cur.length || !pages.length) pages.push(cur);
@@ -978,56 +2215,98 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
   };
   // πόσες σελίδες βγάζει το split, χωρίς να φτιάχνει τις σελίδες (το ψάξιμο της κλίμακας το καλεί δεκάδες φορές)·
   // ίδιοι υπολογισμοί με την ίδια σειρά, άρα πάντα ίδιο αποτέλεσμα με το split(s, limit).length
-  const flat = blocks.map(b => ({ first: b[0][0], us: b.map(u => ({ first: u[0], ab: sumsOf(g, u) })) }));
+  const flat = blocks.map((b) => ({ first: b[0][0], us: b.map((u) => ({ first: u[0], ab: sumsOf(g, u) })) }));
   const count = (s: number, limit: number): number => {
-    const cap = availH / s; const k = fixK(s); let n = 0, has = false, first = 0, h = 0;
+    const cap = availH / s;
+    const k = fixK(s);
+    let n = 0,
+      has = false,
+      first = 0,
+      h = 0;
     const room = (r: number) => Math.min(limit, cap - tH(r));
     for (const b of flat) {
-      let bh = 0; for (const u of b.us) bh += u.ab[1] ? u.ab[0] + u.ab[1] * k : u.ab[0];
-      if (has && h + bh > room(first) + 0.5 && bh <= room(b.first) + 0.5) { n++; has = false; h = 0; }
+      let bh = 0;
+      for (const u of b.us) bh += u.ab[1] ? u.ab[0] + u.ab[1] * k : u.ab[0];
+      if (has && h + bh > room(first) + 0.5 && bh <= room(b.first) + 0.5) {
+        n++;
+        has = false;
+        h = 0;
+      }
       for (const u of b.us) {
         const uh = u.ab[1] ? u.ab[0] + u.ab[1] * k : u.ab[0];
-        if (has && h + uh > room(first) + 0.5) { n++; has = false; h = 0; }
-        if (!has) { has = true; first = u.first; }
+        if (has && h + uh > room(first) + 0.5) {
+          n++;
+          has = false;
+          h = 0;
+        }
+        if (!has) {
+          has = true;
+          first = u.first;
+        }
         h += uh;
       }
     }
     return has || !n ? n + 1 : n;
   };
-  const fitsAll = (s: number, pages: number[][]) => pages.every(p => tH(p[0] ?? 0) + hOf(p, s) <= availH / s + 0.5);
-  let s: number; let pages: number[][];
-  const br = (o.breaks?.[g.sh.name] || []).filter(r => r > g.rowsAll[0] && g.rowsAll.includes(r));
+  const fitsAll = (s: number, pages: number[][]) => pages.every((p) => tH(p[0] ?? 0) + hOf(p, s) <= availH / s + 0.5);
+  let s: number;
+  let pages: number[][];
+  const br = (o.breaks?.[g.sh.name] || []).filter((r) => r > g.rowsAll[0] && g.rowsAll.includes(r));
   if (br.length) {
-    pages = []; let cur: number[] = [];
-    for (const r of g.rowsAll) { if (cur.length && br.includes(r)) { pages.push(cur); cur = []; } cur.push(r); }
+    pages = [];
+    let cur: number[] = [];
+    for (const r of g.rowsAll) {
+      if (cur.length && br.includes(r)) {
+        pages.push(cur);
+        cur = [];
+      }
+      cur.push(r);
+    }
     pages.push(cur);
     // η μεγαλύτερη κλίμακα που χωρά κάθε σελίδα (με σταθερά κομμάτια το ύψος δεν είναι ανάλογο της κλίμακας: ψάξιμο)
     const fitOne = (p: number[]) => {
       if (!g.fixR?.size) return availH / Math.max(1, tH(p[0]) + hOf(p, 1));
-      let lo = 0.02, hi = maxScale;
+      let lo = 0.02,
+        hi = maxScale;
       if (hi * (tH(p[0]) + hOf(p, hi)) <= availH) return hi;
-      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (mid * (tH(p[0]) + hOf(p, mid)) <= availH) lo = mid; else hi = mid; }
+      for (let i = 0; i < 26; i++) {
+        const mid = (lo + hi) / 2;
+        if (mid * (tH(p[0]) + hOf(p, mid)) <= availH) lo = mid;
+        else hi = mid;
+      }
       return lo;
     };
     s = Math.min(maxScale, ...pages.map(fitOne));
     if (sFix) s = Math.min(s, sFix);
   } else if (o.pages === 'auto') {
-    s = Math.min(maxScale, o.size / g.dom.sz); if (sFix) s = Math.min(s, sFix);
+    s = Math.min(maxScale, o.size / g.dom.sz);
+    if (sFix) s = Math.min(s, sFix);
     pages = split(s, Infinity);
   } else {
     const N = o.pages;
     if (sFix) s = Math.min(sFix, maxScale);
     else if (count(maxScale, Infinity) <= N) s = maxScale;
     else {
-      let lo = 0.02, hi = maxScale;
-      for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (count(mid, Infinity) <= N) lo = mid; else hi = mid; }
+      let lo = 0.02,
+        hi = maxScale;
+      for (let i = 0; i < 26; i++) {
+        const mid = (lo + hi) / 2;
+        if (count(mid, Infinity) <= N) lo = mid;
+        else hi = mid;
+      }
       s = lo;
     }
     s = Math.max(0.02, Math.floor(s * 1000) / 1000);
     // ισόποσο μοίρασμα: το μικρότερο όριο ανά σελίδα που κρατά τις ίδιες σελίδες
-    const need = count(s, Infinity); const total = hOf(g.rowsAll, s);
-    let a = total / Math.max(1, need), b = availH / s;
-    for (let i = 0; i < 22; i++) { const L = (a + b) / 2; if (count(s, L) <= need) b = L; else a = L; }
+    const need = count(s, Infinity);
+    const total = hOf(g.rowsAll, s);
+    let a = total / Math.max(1, need),
+      b = availH / s;
+    for (let i = 0; i < 22; i++) {
+      const L = (a + b) / 2;
+      if (count(s, L) <= need) b = L;
+      else a = L;
+    }
     pages = split(s, b + 0.5);
     if (pages.length > need || !fitsAll(s, pages)) pages = split(s, Infinity);
   }
@@ -1040,90 +2319,206 @@ function planFit(g: Geo, o: PrintOpts, landscape: boolean, sFix?: number): Plan 
     f = 1.9;
     pages.forEach((p, i) => {
       if (pages.length > 1 && i === pages.length - 1) return;
-      const grow = p.filter(r => g.framed.has(r)); const gh = hOf(grow, s); if (!gh) return;
+      const grow = p.filter((r) => g.framed.has(r));
+      const gh = hOf(grow, s);
+      if (!gh) return;
       f = Math.min(f, (availH / s - tH(p[0]) - (hOf(p, s) - gh)) / gh);
     });
     f = Math.max(1, Math.floor(f * 100) / 100);
   }
-  return { paper, landscape, pw, ph, M, availW, availH, scale: s, maxScale, pt: g.dom.sz * s, cs, f, centerH: true, centerV: o.sp === 'center', pno: o.pno, repeat, order: pages.map(p => [p, g.colsAll]) };
+  return {
+    paper,
+    landscape,
+    pw,
+    ph,
+    M,
+    availW,
+    availH,
+    scale: s,
+    maxScale,
+    pt: g.dom.sz * s,
+    cs,
+    f,
+    centerH: true,
+    centerV: o.sp === 'center',
+    pno: o.pno,
+    repeat,
+    order: pages.map((p) => [p, g.colsAll]),
+  };
 }
 // όλα τα φύλλα: προσανατολισμός (αυτόματα: όποιος βγάζει μεγαλύτερα γράμματα· με μπρος-πίσω ίδιος για όλα) και κοινή κλίμακα
 function planDoc(geos: Geo[], o: PrintOpts): Plan[] {
   if (!geos.length) return [];
-  const better = (a: Plan[], b: Plan[]) => {   // true αν το b είναι καλύτερο: μεγαλύτερα γράμματα, και με ίδια γράμματα λιγότερες σελίδες
-    const sa = Math.min(...a.map(p => p.scale)), sb = Math.min(...b.map(p => p.scale));
+  const better = (a: Plan[], b: Plan[]) => {
+    // true αν το b είναι καλύτερο: μεγαλύτερα γράμματα, και με ίδια γράμματα λιγότερες σελίδες
+    const sa = Math.min(...a.map((p) => p.scale)),
+      sb = Math.min(...b.map((p) => p.scale));
     if (Math.abs(sa - sb) > 0.005) return sb > sa;
     return b.reduce((x, p) => x + p.order.length, 0) < a.reduce((x, p) => x + p.order.length, 0);
   };
   let lands: boolean[];
   if (o.or !== 'auto') lands = geos.map(() => o.or === 'l');
   else if (o.side === 'back' || o.same) {
-    const P = geos.map(g => planFit(g, o, false)), L = geos.map(g => planFit(g, o, true));
-    const same = (ps: Plan[]) => (o.same && ps.length > 1 ? geos.map((g, i) => planFit(g, o, ps[i].landscape, Math.min(...ps.map(p => p.scale)))) : ps);
+    const P = geos.map((g) => planFit(g, o, false)),
+      L = geos.map((g) => planFit(g, o, true));
+    const same = (ps: Plan[]) =>
+      o.same && ps.length > 1
+        ? geos.map((g, i) => planFit(g, o, ps[i].landscape, Math.min(...ps.map((p) => p.scale))))
+        : ps;
     lands = geos.map(() => better(same(P), same(L)));
-  } else lands = geos.map(g => better([planFit(g, o, false)], [planFit(g, o, true)]));
+  } else lands = geos.map((g) => better([planFit(g, o, false)], [planFit(g, o, true)]));
   let plans = geos.map((g, i) => planFit(g, o, lands[i]));
-  if (o.same && plans.length > 1) { const s = Math.min(...plans.map(p => p.scale)); plans = geos.map((g, i) => planFit(g, o, lands[i], s)); }
+  if (o.same && plans.length > 1) {
+    const s = Math.min(...plans.map((p) => p.scale));
+    plans = geos.map((g, i) => planFit(g, o, lands[i], s));
+  }
   return plans;
 }
 
 // ------------------------------------------------------------------ οι σελίδες σε HTML
-function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>, opt: RenderOpts, pageAt: number, pageTotal: number): PrintSheet {
-  const sh = g.sh; const st = book.styles; const fit = !!opt.layout;
+function drawSheet(
+  book: Book,
+  g: Geo,
+  P: Plan,
+  file: string,
+  used: Set<number>,
+  opt: RenderOpts,
+  pageAt: number,
+  pageTotal: number,
+): PrintSheet {
+  const sh = g.sh;
+  const st = book.styles;
+  const fit = !!opt.layout;
   const { pw, ph, M, availW, availH, scale } = P;
   const mergeAt = new Map<number, { r1: number; c1: number; r2: number; c2: number }>();
-  for (const m of sh.merges) for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) mergeAt.set(key(r, c), m);
-  const colInfo = (c: number) => sh.cols.find(k => c >= k.min && c <= k.max);
+  for (const m of sh.merges)
+    for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) mergeAt.set(key(r, c), m);
+  const colInfo = (c: number) => sh.cols.find((k) => c >= k.min && c <= k.max);
   const cellOf = (r: number, c: number) => sh.cells.get(key(r, c));
-  const styleOf = (r: number, c: number) => { const k = cellOf(r, c); if (k?.s != null) return k.s; const rw = sh.rows.get(r); if (rw?.s != null) return rw.s; return colInfo(c)?.s ?? 0; };
+  const styleOf = (r: number, c: number) => {
+    const k = cellOf(r, c);
+    if (k?.s != null) return k.s;
+    const rw = sh.rows.get(r);
+    if (rw?.s != null) return rw.s;
+    return colInfo(c)?.s ?? 0;
+  };
   // ταξινομημένο: το Α/Α δείχνει τον αριθμό της θέσης (της γραμμής που ήταν εκεί πριν)
-  const shown = (r0: number, c: number) => { const r = g.fix?.get(key(r0, c)) ?? r0; const k = cellOf(r, c); if (!k) return ''; const v = k.f ? book.value(sh.name, r, c) : k.v; return v instanceof XErr ? v.code : v; };
-  const fk = fixK(scale);   // σταθερά κομμάτια: όσο μίκρυνε ο πίνακας, τόσο μεγαλώνουν μέσα του
+  const shown = (r0: number, c: number) => {
+    const r = g.fix?.get(key(r0, c)) ?? r0;
+    const k = cellOf(r, c);
+    if (!k) return '';
+    const v = k.f ? book.value(sh.name, r, c) : k.v;
+    return v instanceof XErr ? v.code : v;
+  };
+  const fk = fixK(scale); // σταθερά κομμάτια: όσο μίκρυνε ο πίνακας, τόσο μεγαλώνουν μέσα του
   const rowH = (r: number) => rowAt(g, r, scale) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
   const colW = (c: number) => g.colW(c) * P.cs;
   const withTitles = (first: number) => P.repeat && !!g.titles && first > g.titles[1];
 
   const pages = (opt.maxPages ? P.order.slice(0, opt.maxPages) : P.order).map(([rp, cp], pi) => {
-    const rep = new Set(withTitles(rp[0]) ? g.titleList : []);   // οι γραμμές τίτλων που επαναλαμβάνονται (δεν είναι για κλικ)
+    const rep = new Set(withTitles(rp[0]) ? g.titleList : []); // οι γραμμές τίτλων που επαναλαμβάνονται (δεν είναι για κλικ)
     const rows = rep.size ? [...rep, ...rp] : rp;
-    const rowIx = new Map(rows.map((r, i) => [r, i])); const colIx = new Map(cp.map((c, i) => [c, i]));
-    const tw = cp.reduce((a, c) => a + colW(c), 0), th = rows.reduce((a, r) => a + rowH(r), 0);
+    const rowIx = new Map(rows.map((r, i) => [r, i]));
+    const colIx = new Map(cp.map((c, i) => [c, i]));
+    const tw = cp.reduce((a, c) => a + colW(c), 0),
+      th = rows.reduce((a, r) => a + rowH(r), 0);
     let body = '';
     for (const r of rows) {
       let tr = '';
       for (const c of cp) {
         const m = mergeAt.get(key(r, c));
-        let rs = 1, cs = 1, ar = r, ac = c, isAnchor = true;
+        let rs = 1,
+          cs = 1,
+          ar = r,
+          ac = c,
+          isAnchor = true;
         if (m) {
           // το κομμάτι της συγχώνευσης που πέφτει σε αυτή τη σελίδα· η τιμή μόνο εκεί που είναι το πάνω-αριστερό κελί
-          const vr = rows.filter(y => y >= m.r1 && y <= m.r2), vc = cp.filter(y => y >= m.c1 && y <= m.c2);
+          const vr = rows.filter((y) => y >= m.r1 && y <= m.r2),
+            vc = cp.filter((y) => y >= m.c1 && y <= m.c2);
           if (vr[0] !== r || vc[0] !== c) continue;
-          let k = rowIx.get(r)!; while (k + 1 < rows.length && rows[k + 1] <= m.r2 && rows[k + 1] === rows[k] + 1 + countHidden(rows[k], rows[k + 1], g.rowH)) { k++; rs++; }
-          let j = colIx.get(c)!; while (j + 1 < cp.length && cp[j + 1] <= m.c2) { j++; cs++; }
-          ar = m.r1; ac = m.c1; isAnchor = r === m.r1 && c === m.c1;
+          let k = rowIx.get(r)!;
+          while (
+            k + 1 < rows.length &&
+            rows[k + 1] <= m.r2 &&
+            rows[k + 1] === rows[k] + 1 + countHidden(rows[k], rows[k + 1], g.rowH)
+          ) {
+            k++;
+            rs++;
+          }
+          let j = colIx.get(c)!;
+          while (j + 1 < cp.length && cp[j + 1] <= m.c2) {
+            j++;
+            cs++;
+          }
+          ar = m.r1;
+          ac = m.c1;
+          isAnchor = r === m.r1 && c === m.c1;
         }
-        const s = styleOf(ar, ac); used.add(s);
+        const s = styleOf(ar, ac);
+        used.add(s);
         const xf = st.xfs[s] || st.xfs[0];
         const v = isAnchor ? shown(ar, ac) : '';
         const rich = isAnchor ? cellOf(ar, ac)?.rich : undefined;
-        const txt = typeof v === 'number' ? formatValue(v, xf.fmt, st.codes, book.y1904) : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : v == null ? '' : String(v);
+        const txt =
+          typeof v === 'number'
+            ? formatValue(v, xf.fmt, st.codes, book.y1904)
+            : typeof v === 'boolean'
+              ? v
+                ? 'TRUE'
+                : 'FALSE'
+              : v == null
+                ? ''
+                : String(v);
         // πλαίσια: από τις άκρες της συγχώνευσης
-        const lastR = rs > 1 ? rows[rowIx.get(r)! + rs - 1] : r, lastC = cs > 1 ? cp[colIx.get(c)! + cs - 1] : c;
-        const bT = xf.border.t, bL = xf.border.l;
-        const bR = (cs > 1 ? (st.xfs[styleOf(r, lastC)] || xf) : xf).border.r, bB = (rs > 1 ? (st.xfs[styleOf(lastR, c)] || xf) : xf).border.b;
+        const lastR = rs > 1 ? rows[rowIx.get(r)! + rs - 1] : r,
+          lastC = cs > 1 ? cp[colIx.get(c)! + cs - 1] : c;
+        const bT = xf.border.t,
+          bL = xf.border.l;
+        const bR = (cs > 1 ? st.xfs[styleOf(r, lastC)] || xf : xf).border.r,
+          bB = (rs > 1 ? st.xfs[styleOf(lastR, c)] || xf : xf).border.b;
         let style = '';
-        if (bT || bL || bR || bB) style += `border-top:${sideCss(bT)};border-left:${sideCss(bL)};border-right:${sideCss(bR)};border-bottom:${sideCss(bB)};`;
+        if (bT || bL || bR || bB)
+          style += `border-top:${sideCss(bT)};border-left:${sideCss(bL)};border-right:${sideCss(bR)};border-bottom:${sideCss(bB)};`;
         const h = rows.slice(rowIx.get(r)!, rowIx.get(r)! + rs).reduce((a, y) => a + rowH(y), 0);
         let inner = '';
         if (txt !== '') {
-          const hal = xf.h === 'general' ? (typeof v === 'number' ? 'right' : typeof v === 'boolean' ? 'center' : 'left') : xf.h === 'centerContinuous' || xf.h === 'distributed' ? 'center' : xf.h === 'justify' || xf.h === 'fill' ? 'left' : xf.h;
-          const val = xf.v === 'center' || xf.v === 'distributed' || xf.v === 'justify' ? 'center' : xf.v === 'top' ? 'flex-start' : 'flex-end';
+          const hal =
+            xf.h === 'general'
+              ? typeof v === 'number'
+                ? 'right'
+                : typeof v === 'boolean'
+                  ? 'center'
+                  : 'left'
+              : xf.h === 'centerContinuous' || xf.h === 'distributed'
+                ? 'center'
+                : xf.h === 'justify' || xf.h === 'fill'
+                  ? 'left'
+                  : xf.h;
+          const val =
+            xf.v === 'center' || xf.v === 'distributed' || xf.v === 'justify'
+              ? 'center'
+              : xf.v === 'top'
+                ? 'flex-start'
+                : 'flex-end';
           // κείμενο χωρίς αναδίπλωση συνεχίζει στα διπλανά άδεια κελιά (όπως στον Excel), αλλιώς κόβεται
-          const nextEmpty = (dc: number) => { const y = cp[colIx.get(c)! + (dc > 0 ? cs : -1)]; if (y == null || mergeAt.get(key(r, y))) return false; const w = shown(r, y); return w == null || w === ''; };
-          const spill = !xf.wrap && !m && typeof v !== 'number' && (hal === 'left' ? nextEmpty(1) : hal === 'right' ? nextEmpty(-1) : nextEmpty(1) && nextEmpty(-1));
+          const nextEmpty = (dc: number) => {
+            const y = cp[colIx.get(c)! + (dc > 0 ? cs : -1)];
+            if (y == null || mergeAt.get(key(r, y))) return false;
+            const w = shown(r, y);
+            return w == null || w === '';
+          };
+          const spill =
+            !xf.wrap &&
+            !m &&
+            typeof v !== 'number' &&
+            (hal === 'left' ? nextEmpty(1) : hal === 'right' ? nextEmpty(-1) : nextEmpty(1) && nextEmpty(-1));
           const just = hal === 'left' ? 'flex-start' : hal === 'right' ? 'flex-end' : 'center';
           const pad = xf.indent ? `padding-${hal === 'right' ? 'right' : 'left'}:${xf.indent * 9 + 2}px;` : '';
-          const rot = xf.rot === 90 || xf.rot === 180 || xf.rot === 255 ? 'writing-mode:vertical-rl;' + (xf.rot === 90 ? 'transform:rotate(180deg);' : '') : '';
+          const rot =
+            xf.rot === 90 || xf.rot === 180 || xf.rot === 255
+              ? 'writing-mode:vertical-rl;' + (xf.rot === 90 ? 'transform:rotate(180deg);' : '')
+              : '';
           // σταθερό κομμάτι: στο μέγεθός του, και ό,τι δεν χωρά στο (μικρότερο πια) κελί του φαίνεται δίπλα
           const fx = g.fixC?.has(key(ar, ac)) && Math.abs(fk - 1) > 0.005;
           inner = `<div class="x${xf.wrap ? ' w' : ''}${spill || fx ? ' o' : ''}" style="height:${Math.max(1, h - 1).toFixed(2)}px;justify-content:${just};align-items:${val};${pad}${xf.wrap ? 'text-align:' + hal + ';' : ''}${rot}"><span${fx ? ` style="font-size:${fk.toFixed(3)}em"` : ''}>${rich ? richHtml(rich) : esc(txt)}</span></div>`;
@@ -1132,44 +2527,118 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
       }
       body += `<tr${fit ? ` data-r="${r}"${rep.has(r) ? ' data-t="1"' : ''}` : ''} style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
     }
-    const cg = '<colgroup>' + cp.map(c => `<col style="width:${colW(c).toFixed(2)}px">`).join('') + '</colgroup>';
-    const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
+    const cg = '<colgroup>' + cp.map((c) => `<col style="width:${colW(c).toFixed(2)}px">`).join('') + '</colgroup>';
+    const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0),
+      top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
     const no = pageAt + pi + 1;
     const ctx = { page: fit ? no : g.firstNo + pi, pages: fit ? pageTotal : P.order.length, sheet: sh.name, file };
     // στο παράθυρο «Εκτύπωση» η αρίθμηση του αρχείου ακολουθεί το «Σελίδα 1 από 2»: βγαίνει μόνο αν είναι ανοιχτό και οι σελίδες πάνω από μία
-    const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx, fit && !(P.pno && pageTotal > 1)); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
-    const pno = P.pno && pageTotal > 1 && !g.oddF ? `<div class="pno" style="bottom:${Math.max(3, M.b / 2 - 7).toFixed(1)}px">Σελίδα ${no} από ${pageTotal}</div>` : '';
-    const data = fit ? ` data-n="${no}" data-sheet="${esc(sh.name)}" data-first="${rp[0] ?? 0}" data-land="${P.landscape ? 1 : 0}" data-paper="${P.paper.name}"` : '';
+    const hf = (src: string | undefined, isHead: boolean) => {
+      const p = headerFooter(src ? unesc(src) : null, ctx, fit && !(P.pno && pageTotal > 1));
+      return p
+        ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>`
+        : '';
+    };
+    const pno =
+      P.pno && pageTotal > 1 && !g.oddF
+        ? `<div class="pno" style="bottom:${Math.max(3, M.b / 2 - 7).toFixed(1)}px">Σελίδα ${no} από ${pageTotal}</div>`
+        : '';
+    const data = fit
+      ? ` data-n="${no}" data-sheet="${esc(sh.name)}" data-first="${rp[0] ?? 0}" data-land="${P.landscape ? 1 : 0}" data-paper="${P.paper.name}"`
+      : '';
     return `<div class="pg"${data} style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(g.oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${g.grid ? 'grid' : ''}" style="width:${tw.toFixed(2)}px">${cg}<tbody>${body}</tbody></table></div>${hf(g.oddF, false)}${pno}</div>`;
   });
-  return { name: sh.name, paper: P.paper.name, landscape: P.landscape, pages: P.order.length, scale, html: pages.join(''), pt: Math.round(P.pt * 2) / 2, font: g.dom.name, size: g.dom.sz, titles: !!g.titles };
+  return {
+    name: sh.name,
+    paper: P.paper.name,
+    landscape: P.landscape,
+    pages: P.order.length,
+    scale,
+    html: pages.join(''),
+    pt: Math.round(P.pt * 2) / 2,
+    font: g.dom.name,
+    size: g.dom.sz,
+    titles: !!g.titles,
+  };
 }
 // κρυφές γραμμές ανάμεσα σε δύο ορατές (για να συνεχίζει η συγχώνευση από πάνω τους)
-const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let n = 0; for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++; return n; };
+const countHidden = (a: number, b: number, rowH: (r: number) => number) => {
+  let n = 0;
+  for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++;
+  return n;
+};
 
 // Το κλειδί των ρυθμίσεων εκτύπωσης ενός εντύπου: το όνομα του αρχείου χωρίς ημερομηνίες, αριθμούς και κατάληξη
 // («ΗΚΑΙ 2Η ΕΠΧΙΑ 21.10.26.xlsx» και «… 22.10.26.xlsx» → ίδιο κλειδί), ώστε να θυμάται το ίδιο έντυπο κάθε μέρα
-const GR_MONTHS = /(ΙΑΝΟΥΑΡΙΟΣ|ΦΕΒΡΟΥΑΡΙΟΣ|ΜΑΡΤΙΟΣ|ΑΠΡΙΛΙΟΣ|ΜΑΙΟΣ|ΙΟΥΝΙΟΣ|ΙΟΥΛΙΟΣ|ΑΥΓΟΥΣΤΟΣ|ΣΕΠΤΕΜΒΡΙΟΣ|ΟΚΤΩΒΡΙΟΣ|ΝΟΕΜΒΡΙΟΣ|ΔΕΚΕΜΒΡΙΟΣ)/g;
+const GR_MONTHS =
+  /(ΙΑΝΟΥΑΡΙΟΣ|ΦΕΒΡΟΥΑΡΙΟΣ|ΜΑΡΤΙΟΣ|ΑΠΡΙΛΙΟΣ|ΜΑΙΟΣ|ΙΟΥΝΙΟΣ|ΙΟΥΛΙΟΣ|ΑΥΓΟΥΣΤΟΣ|ΣΕΠΤΕΜΒΡΙΟΣ|ΟΚΤΩΒΡΙΟΣ|ΝΟΕΜΒΡΙΟΣ|ΔΕΚΕΜΒΡΙΟΣ)/g;
 export function printKey(file: string): string {
   const base = file.split(/[\\/]/).pop() || file;
-  const k = base.replace(/\.xls[xm]?$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
-    .replace(GR_MONTHS, ' ').replace(/\d{1,4}([-./]\d{1,4})+/g, ' ').replace(/\(\d+\)/g, ' ').replace(/\b(ΕΩΣ)\b/g, ' ').replace(/\b\d+\b/g, ' ')
-    .replace(/[-_.,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const k = base
+    .replace(/\.xls[xm]?$/i, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(GR_MONTHS, ' ')
+    .replace(/\d{1,4}([-./]\d{1,4})+/g, ' ')
+    .replace(/\(\d+\)/g, ' ')
+    .replace(/\b(ΕΩΣ)\b/g, ' ')
+    .replace(/\b\d+\b/g, ' ')
+    .replace(/[-_.,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   return k.slice(0, 80) || 'ΑΡΧΕΙΟ';
 }
 // αρχικές ρυθμίσεις ανά έντυπο: ΗΚΑΙ μπρος-πίσω, στενά περιθώρια, στο κέντρο· ΦΡΟΥΡΑ στενά (το template είχε μηδενικά)
 export function printDefaults(key: string, sheets: string[]): PrintOpts {
-  const low = sheets.map(s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase());
-  if (low.includes('μπροστινο') && low.includes('πισω')) return { ...PRINT_DEFAULT, side: 'back', m: 'narrow', sp: 'center', pno: false };
+  const low = sheets.map((s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase());
+  if (low.includes('μπροστινο') && low.includes('πισω'))
+    return { ...PRINT_DEFAULT, side: 'back', m: 'narrow', sp: 'center', pno: false };
   if (/^ΦΡΟΥΡΑ/.test(key)) return { ...PRINT_DEFAULT, m: 'narrow' };
   return { ...PRINT_DEFAULT };
 }
 
 // ------------------------------------------------------------------ το παράθυρο «Εκτύπωση»
 // Τα στοιχεία που χρειάζεται η στήλη ρυθμίσεων: σελίδες, προσανατολισμός και γράμματα κάθε φύλλου
-export interface PrintInfo { sheets: { name: string; pages: number; landscape: boolean; pt: number; font: string; size: number; titles: boolean; scale: number }[]; all: string[]; total: number; sug?: { n: number; pt: number }; cols: SortCol[] }
-export const infoOf = (doc: PrintDoc): PrintInfo => ({ sheets: doc.sheets.map(s => ({ name: s.name, pages: s.pages, landscape: s.landscape, pt: s.pt, font: s.font, size: s.size, titles: s.titles, scale: s.scale })), all: doc.all, total: doc.total, ...(doc.sug ? { sug: doc.sug } : {}), cols: doc.cols || [] });
-export const sectionsHtml = (doc: PrintDoc) => doc.sheets.map((s, i) => `<section data-i="${i}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)}</h2>` : ''}${s.html}</section>`).join('') || '<p class="empty">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>';
+export interface PrintInfo {
+  sheets: {
+    name: string;
+    pages: number;
+    landscape: boolean;
+    pt: number;
+    font: string;
+    size: number;
+    titles: boolean;
+    scale: number;
+  }[];
+  all: string[];
+  total: number;
+  sug?: { n: number; pt: number };
+  cols: SortCol[];
+}
+export const infoOf = (doc: PrintDoc): PrintInfo => ({
+  sheets: doc.sheets.map((s) => ({
+    name: s.name,
+    pages: s.pages,
+    landscape: s.landscape,
+    pt: s.pt,
+    font: s.font,
+    size: s.size,
+    titles: s.titles,
+    scale: s.scale,
+  })),
+  all: doc.all,
+  total: doc.total,
+  ...(doc.sug ? { sug: doc.sug } : {}),
+  cols: doc.cols || [],
+});
+export const sectionsHtml = (doc: PrintDoc) =>
+  doc.sheets
+    .map(
+      (s, i) =>
+        `<section data-i="${i}" aria-label="${esc(s.name)}">${doc.sheets.length > 1 ? `<h2>${esc(s.name)}</h2>` : ''}${s.html}</section>`,
+    )
+    .join('') || '<p class="empty">Δεν διαλέχτηκε φύλλο για εκτύπωση.</p>';
 
 // Το script της προεπισκόπησης. Είναι το μόνο που επιτρέπει το CSP (με το hash του), ώστε ό,τι άλλο βρεθεί μέσα στη σελίδα
 // από το αρχείο να μην τρέχει. Κάθε αλλαγή ρύθμισης ζητά από την εφαρμογή νέα διάταξη (το Excel έχει ήδη διαβαστεί μία φορά).
@@ -1465,9 +2934,18 @@ const SCRIPT_HASH = crypto.createHash('sha256').update(PREVIEW_SCRIPT).digest('b
 const seg = (name: string, label: string, opts: [string, string, string?][]) =>
   `<div class="grp"><span class="lbl" id="l-${name}">${label}</span><div class="seg" role="radiogroup" aria-labelledby="l-${name}">${opts.map(([v, t, id]) => `<label><input type="radio" name="${name}" value="${v}"><span${id ? ` id="${id}"` : ''}>${t}</span></label>`).join('')}</div>`;
 // Η σελίδα της προεπισκόπησης: αριστερά οι σελίδες όπως θα τυπωθούν, δεξιά οι ρυθμίσεις (σελίδες, όψεις, προσανατολισμός…)
-export function previewHtml(doc: PrintDoc, file: string, init: { opts?: PrintOpts; remember?: boolean; duplex?: boolean } = {}): string {
+export function previewHtml(
+  doc: PrintDoc,
+  file: string,
+  init: { opts?: PrintOpts; remember?: boolean; duplex?: boolean } = {},
+): string {
   const one = doc.sheets[0];
-  const data = { opts: init.opts || PRINT_DEFAULT, info: infoOf(doc), remember: init.remember !== false, duplex: !!init.duplex };
+  const data = {
+    opts: init.opts || PRINT_DEFAULT,
+    info: infoOf(doc),
+    remember: init.remember !== false,
+    duplex: !!init.duplex,
+  };
   return `<!doctype html><html lang="el"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'">
 <title>Εκτύπωση · ${esc(file)}</title>
@@ -1545,20 +3023,43 @@ ${doc.css}
 <div class="wrap">
 <div id="view"><div id="pages">${sectionsHtml(doc)}</div><p class="hint">Κλικ σε μια γραμμή: η νέα σελίδα ξεκινά από εκεί. Κλικ στην πρώτη γραμμή μιας σελίδας: ενώνεται με την προηγούμενη.</p></div>
 <aside class="side" aria-label="Ρυθμίσεις εκτύπωσης"><div class="scroll">
-${seg('pages', 'Σε πόσες σελίδες', [['1', '1'], ['2', '2'], ['3', '3'], ['auto', 'Όσες χρειάζονται']])}
+${seg('pages', 'Σε πόσες σελίδες', [
+  ['1', '1'],
+  ['2', '2'],
+  ['3', '3'],
+  ['auto', 'Όσες χρειάζονται'],
+])}
 <div class="manual" id="manual" hidden><span>Χειροκίνητα: <b id="mcount"></b> σελίδες</span><button type="button" class="sm" id="mreset">Αρχικό</button></div>
 <p class="help" id="pagesHelp"></p></div>
 <div class="legible" id="legible" role="status"></div>
 <div class="grp" id="sizeGrp" hidden><span class="lbl" id="l-size">Μέγεθος γραμμάτων</span><div class="range"><input type="range" id="size" min="6" max="16" step="0.5" aria-labelledby="l-size"><output id="sizeOut" for="size"></output></div><p class="help">Οι στήλες χωράνε πάντα στο πλάτος: αν δεν χωράει, σταματά στο μέγιστο που χωράει.</p></div>
 <div class="grp" id="sortGrp" hidden><span class="lbl">Ταξινόμηση</span><div id="sorts" class="sorts"></div><button type="button" class="sm" id="sortAdd" aria-haspopup="listbox"></button><p class="help" id="sortHelp"></p></div>
-${seg('side', 'Η σελίδα 2 τυπώνεται', [['back', 'Στην πίσω όψη'], ['new', 'Σε νέο φύλλο']])}
+${seg('side', 'Η σελίδα 2 τυπώνεται', [
+  ['back', 'Στην πίσω όψη'],
+  ['new', 'Σε νέο φύλλο'],
+])}
 <label class="chk" id="duplexRow"><input type="checkbox" id="duplex"> <span>Ο εκτυπωτής γυρίζει μόνος του το χαρτί</span></label>
 <p class="help" id="sideHelp"></p></div>
 <div class="grp" id="sameGrp"><label class="chk"><input type="checkbox" id="same"> <span>Ίδια γράμματα σε όλα τα φύλλα (μπρος και πίσω)</span></label><p class="help">Αν ένα φύλλο του Excel χρειάζεται μικρότερα γράμματα, μικραίνουν και τα άλλα, ώστε π.χ. Arial 12 να βγαίνει ίδιο παντού.</p></div>
-${seg('or', 'Προσανατολισμός', [['auto', 'Αυτόματα', 'oaText'], ['p', 'Κατακόρυφα'], ['l', 'Οριζόντια']])}<p class="help">«Αυτόματα» διαλέγει όποιον βγάζει τα μεγαλύτερα γράμματα.</p></div>
-${seg('sp', 'Αν περισσεύει χώρος από κάτω', [['top', 'Πάνω'], ['center', 'Στο κέντρο'], ['fill', 'Ψηλότερες γραμμές']])}<p class="help">«Ψηλότερες γραμμές» αφήνει χώρο για υπογραφή με το χέρι.</p></div>
-${seg('m', 'Περιθώρια', [['narrow', 'Στενά'], ['normal', 'Κανονικά'], ['wide', 'Φαρδιά']])}</div>
-${seg('pa', 'Χαρτί', [['A4', 'A4'], ['A3', 'A3']])}</div>
+${seg('or', 'Προσανατολισμός', [
+  ['auto', 'Αυτόματα', 'oaText'],
+  ['p', 'Κατακόρυφα'],
+  ['l', 'Οριζόντια'],
+])}<p class="help">«Αυτόματα» διαλέγει όποιον βγάζει τα μεγαλύτερα γράμματα.</p></div>
+${seg('sp', 'Αν περισσεύει χώρος από κάτω', [
+  ['top', 'Πάνω'],
+  ['center', 'Στο κέντρο'],
+  ['fill', 'Ψηλότερες γραμμές'],
+])}<p class="help">«Ψηλότερες γραμμές» αφήνει χώρο για υπογραφή με το χέρι.</p></div>
+${seg('m', 'Περιθώρια', [
+  ['narrow', 'Στενά'],
+  ['normal', 'Κανονικά'],
+  ['wide', 'Φαρδιά'],
+])}</div>
+${seg('pa', 'Χαρτί', [
+  ['A4', 'A4'],
+  ['A3', 'A3'],
+])}</div>
 <div class="grp"><span class="lbl">Σε κάθε σελίδα</span>
 <label class="chk"><input type="checkbox" id="stretch"> <span>Οι στήλες πιάνουν όλο το πλάτος</span></label>
 <label class="chk" id="repeatRow"><input type="checkbox" id="repeat"> <span>Η κεφαλίδα του πίνακα ξανά πάνω</span></label>

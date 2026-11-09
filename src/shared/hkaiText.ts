@@ -11,35 +11,55 @@ import { live, cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, r
 import { cadreStatusOf, orderedCadre } from './cadre';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
-export interface Run { t: string; u?: boolean }
+export interface Run {
+  t: string;
+  u?: boolean;
+}
 export type Line = Run[];
 
 export const byName = (a: Person, b: Person) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first);
 // «1. », «2. » μπροστά από κάθε πρόταση
-const numbered = (ls: Line[]): Line[] => ls.map((l, i) => [{ ...l[0], t: (i + 1) + '. ' + l[0].t }, ...l.slice(1)]);
+const numbered = (ls: Line[]): Line[] => ls.map((l, i) => [{ ...l[0], t: i + 1 + '. ' + l[0].t }, ...l.slice(1)]);
 
 // 4. ΠΟΙΝΕΣ: όσες επιβλήθηκαν αυτή τη μέρα (ημερομηνία τιμωρίας, αλλιώς η έναρξη). Ισχύουν αμέσως, χωρίς έγκριση.
 // Ίδια ποινή σε πολλούς: μία πρόταση με όλους. «1. Ο ΣΤΡ (ΠΖ) … ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 12 ΟΚΤ 26 ΑΠΟ ΤΟΝ … ΜΕ <u>ΔΥΟ (02) ΗΜΕΡΕΣ ΚΡΑΤΗΣΗ</u>, ΔΙΟΤΙ ….»
 export function hkaiPunLines(s: AppState, d: ISODate): Line[] {
-  const pm = personMap(s.people); const groups = new Map<string, { st: Status; ps: Person[] }>();
+  const pm = personMap(s.people);
+  const groups = new Map<string, { st: Status; ps: Person[] }>();
   for (const x of s.statuses) {
     if (x.type !== 'PUN' || (x.on || x.from) !== d || !pm.has(x.pid)) continue;
-    const k = punGroupKey(x, s.settings.lists); const g = groups.get(k);
-    if (g) g.ps.push(pm.get(x.pid)!); else groups.set(k, { st: x, ps: [pm.get(x.pid)!] });
+    const k = punGroupKey(x, s.settings.lists);
+    const g = groups.get(k);
+    if (g) g.ps.push(pm.get(x.pid)!);
+    else groups.set(k, { st: x, ps: [pm.get(x.pid)!] });
   }
-  const list = [...groups.values()].map(g => ({ ...g, ps: g.ps.sort(byName) })).sort((a, b) => byName(a.ps[0], b.ps[0]));
-  return numbered(list.map(({ st, ps }) => { const t = punText(ps, st, s.settings.lists); return [{ t: t.before }, { t: t.dur, u: true }, { t: t.after }]; }));
+  const list = [...groups.values()]
+    .map((g) => ({ ...g, ps: g.ps.sort(byName) }))
+    .sort((a, b) => byName(a.ps[0], b.ps[0]));
+  return numbered(
+    list.map(({ st, ps }) => {
+      const t = punText(ps, st, s.settings.lists);
+      return [{ t: t.before }, { t: t.dur, u: true }, { t: t.after }];
+    }),
+  );
 }
 
 // Τι αιτείται: «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 <αιτιολόγηση>» ή το κείμενο της αίτησης. Με lists: το «Κείμενο στην ΗΚΑΙ» του είδους
 // και η κατεύθυνση (leaveHk, leaveDest)
-export const reqWhat = (x: PersonRequest, lists?: UserLists) => (x.leave ? leaveHk(x.leave, lists) + ' ' + hkRange(x.leave) + leaveDest(x.leave, lists) + (x.text ? ' ' + x.text : '') : x.text);
+export const reqWhat = (x: PersonRequest, lists?: UserLists) =>
+  x.leave
+    ? leaveHk(x.leave, lists) + ' ' + hkRange(x.leave) + leaveDest(x.leave, lists) + (x.text ? ' ' + x.text : '')
+    : x.text;
 // 5. ΑΙΤΗΣΕΙΣ: «1. ΣΤΡ (ΔΒ-ΗΠ) ΔΕΜΕΛΗΣ ΑΝΑΣΤΑΣΙΟΣ: ΑΙΤΕΙΤΑΙ …», και στο τέλος ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ
 export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people);
-  const out: Line[] = numbered(s.requests.filter(x => x.date === d && pm.has(x.pid))
-    .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-    .map(({ x, p }) => [{ t: upper(hkWho(p) + ': αιτείται ' + reqWhat(x, s.settings.lists) + '.') }]));
+  const out: Line[] = numbered(
+    s.requests
+      .filter((x) => x.date === d && pm.has(x.pid))
+      .map((x) => ({ x, p: pm.get(x.pid)! }))
+      .sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
+      .map(({ x, p }) => [{ t: upper(hkWho(p) + ': αιτείται ' + reqWhat(x, s.settings.lists) + '.') }]),
+  );
   const free = s.hkaiManual?.[d]?.text?.ait?.trim();
   if (free) out.push([{ t: free }]);
   return out;
@@ -48,29 +68,40 @@ export function hkaiReqLines(s: AppState, d: ISODate): Line[] {
 export { leavePhrase, leaveName };
 // Πώς γράφεται το είδος στην ΗΚΑΙ (3. ΑΔΕΙΕΣ, 5. ΑΙΤΗΣΕΙΣ): το «Κείμενο στην ΗΚΑΙ» που όρισες στις Λίστες, αλλιώς το όνομα του είδους.
 // Οι Εξοδούχοι, τα Έντυπα και η Φρουρά λένε πάντα το είδος (leavePhrase).
-export const leaveHk = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string => upper(leaveTextOf(st, lists)?.t?.trim() || leavePhrase(st));
+export const leaveHk = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): string =>
+  upper(leaveTextOf(st, lists)?.t?.trim() || leavePhrase(st));
 // « ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»: μόνο όταν το είδος έχει τη ρύθμιση και η άδεια έχει κατεύθυνση (αλλιώς κενό)
 export const leaveDest = (st: Pick<Status, 'type' | 'kind' | 'dest'>, lists?: UserLists): string => {
-  const d = st.dest?.trim(); return d && leaveTextOf(st, lists)?.dest ? upper(' ΜΕ ΚΑΤΕΥΘΥΝΣΗ ' + d) : '';
+  const d = st.dest?.trim();
+  return d && leaveTextOf(st, lists)?.dest ? upper(' ΜΕ ΚΑΤΕΥΘΥΝΣΗ ' + d) : '';
 };
 // Βοήθεια κάτω από το πεδίο «Κατεύθυνση» (Δήλωση, Αίτηση, Ώρες και κατεύθυνση): γράφεται ή όχι στην ΗΚΑΙ, ανάλογα με το είδος
 export function destNote(st: Pick<Status, 'type' | 'kind'>, dest: string, lists?: UserLists): string {
   if (!dest.trim()) return 'Προαιρετικό · κενό = δεν γράφεται πουθενά.';
   if (leaveTextOf(st, lists)?.dest) return 'Γράφεται στην ' + HK() + '.';
-  return 'Φαίνεται στις Άδειες και στο Excel. Δεν γράφεται στην ' + HK() + ' για «' + (st.type === 'HON' ? 'Τιμητική' : st.type === 'SICK' ? 'Αναρρωτική' : st.kind?.trim() || 'Κανονική') + '»: άνοιξέ το στις Λίστες › Είδη άδειας.';
+  return (
+    'Φαίνεται στις Άδειες και στο Excel. Δεν γράφεται στην ' +
+    HK() +
+    ' για «' +
+    (st.type === 'HON' ? 'Τιμητική' : st.type === 'SICK' ? 'Αναρρωτική' : st.kind?.trim() || 'Κανονική') +
+    '»: άνοιξέ το στις Λίστες › Είδη άδειας.'
+  );
 }
 // Στέλεχος: το «Κείμενο στην ΗΚΑΙ» της κατάστασής του (Σ:κωδικός), αλλιώς «Κανονική άδεια»…
 export const cadreLeaveHk = (kind: string, label: string, lists?: UserLists): string => {
-  const code = cadreAbsOf(kind, lists)?.[0]; const t = code ? lists?.leaveText?.[cadreLeaveKey(code)]?.t?.trim() : '';
+  const code = cadreAbsOf(kind, lists)?.[0];
+  const t = code ? lists?.leaveText?.[cadreLeaveKey(code)]?.t?.trim() : '';
   return t ? upper(t) : leaveName({ type: 'LEAVE', kind: label });
 };
 // «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26» ή «ΑΠΟ ΠΑΡ 16 ΟΚΤ 26 ΕΩΣ ΚΥΡ 18 ΟΚΤ 26», με τις ώρες αν γράφτηκαν
 export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 'open'>): string {
-  const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''), back = x.toTime && !x.open ? ' ' + x.toTime : '';
+  const a = hkDay(x.from) + (x.fromTime ? ' ' + x.fromTime : ''),
+    back = x.toTime && !x.open ? ' ' + x.toTime : '';
   if (x.open) return 'ΑΠΟ ' + a + ' (ΧΩΡΙΣ ΛΗΞΗ)';
   if (x.from === x.to && !x.fromTime && !back) return 'ΓΙΑ ΤΗΝ ' + a;
   // μία μέρα με μόνο τη μία ώρα: «ΓΙΑ ΤΗΝ ΠΑΡ 16 ΟΚΤ 26 ΑΠΟ 14:00» / «… ΕΩΣ 22:00»
-  if (x.from === x.to && !(x.fromTime && back)) return 'ΓΙΑ ΤΗΝ ' + hkDay(x.from) + (x.fromTime ? ' ΑΠΟ ' + x.fromTime : ' ΕΩΣ' + back);
+  if (x.from === x.to && !(x.fromTime && back))
+    return 'ΓΙΑ ΤΗΝ ' + hkDay(x.from) + (x.fromTime ? ' ΑΠΟ ' + x.fromTime : ' ΕΩΣ' + back);
   return 'ΑΠΟ ' + a + ' ΕΩΣ ' + (x.from === x.to ? back.trim() : hkDay(x.to) + back);
 }
 // 3. ΑΔΕΙΕΣ: άδειες και αναρρωτικές που ξεκινούν τη μέρα. Όσες ζητήθηκαν με αίτηση δεν ξαναγράφονται: στην πίσω σελίδα
@@ -84,14 +115,43 @@ function leaveParts(s: AppState, d: ISODate, force = false): { cadre: Line[]; so
   if (!force && !hkLvOn(s, d)) return { cadre: [], soldiers: [] };
   const pm = personMap(s.people);
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
-  const cadre = orderedCadre(s.cadreList || []).filter(c => c.active).flatMap(c => (s.cadreAbs || []).filter(a => a.cid === c.id && a.from === d)
-    .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => CADRE_LEAVE_COLS.includes(x.st.col))
-    .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)));
+  const cadre = orderedCadre(s.cadreList || [])
+    .filter((c) => c.active)
+    .flatMap((c) =>
+      (s.cadreAbs || [])
+        .filter((a) => a.cid === c.id && a.from === d)
+        .map((a) => ({ c, st: cadreStatusOf(a, s.settings.lists) }))
+        .filter((x) => CADRE_LEAVE_COLS.includes(x.st.col))
+        .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)),
+    );
   return {
-    cadre: cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) + ' ' + hkRange(st.abs) + '.') }]),
-    soldiers: s.statuses.filter(x => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
-      .map(x => ({ x, p: pm.get(x.pid)! })).sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
-      .map(({ x, p }): Line => [{ t: upper(hkWho(p) + ': ' + leaveHk(x, s.settings.lists) + ' ' + hkRange(x) + leaveDest(x, s.settings.lists) + '.') }])
+    cadre: cadre.map(
+      ({ c, st }): Line => [
+        {
+          t: upper(
+            [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') +
+              ': ' +
+              cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) +
+              ' ' +
+              hkRange(st.abs) +
+              '.',
+          ),
+        },
+      ],
+    ),
+    soldiers: s.statuses
+      .filter((x) => leave(x) && pm.get(x.pid)?.active && !x.req && x.from === d)
+      .map((x) => ({ x, p: pm.get(x.pid)! }))
+      .sort((a, b) => byName(a.p, b.p) || a.x.id.localeCompare(b.x.id))
+      .map(
+        ({ x, p }): Line => [
+          {
+            t: upper(
+              hkWho(p) + ': ' + leaveHk(x, s.settings.lists) + ' ' + hkRange(x) + leaveDest(x, s.settings.lists) + '.',
+            ),
+          },
+        ],
+      ),
   };
 }
 export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
@@ -106,7 +166,8 @@ export function hkaiLeaveLines(s: AppState, d: ISODate): Line[] {
 // Γράφονται πάντα, όποια κι αν είναι η επιλογή «Άδειες στο 3. Άδειες» της ΗΚΑΙ: η ΗΔ ανακοινώνει τις άδειες της μέρας
 export const hkaiCadreLeaveLines = (s: AppState, d: ISODate): Line[] => numbered(leaveParts(s, d, true).cadre);
 export function hkaiSoldierLeaveLines(s: AppState, d: ISODate): Line[] {
-  const out = numbered(leaveParts(s, d, true).soldiers); const free = s.hkaiManual?.[d]?.text?.lv?.trim();
+  const out = numbered(leaveParts(s, d, true).soldiers);
+  const free = s.hkaiManual?.[d]?.text?.lv?.trim();
   if (free) out.push([{ t: free }]);
   return out;
 }
@@ -114,14 +175,26 @@ export function hkaiSoldierLeaveLines(s: AppState, d: ISODate): Line[] {
 // 1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ: όσοι μπήκαν στη δύναμη ή βγήκαν εκτός δύναμης τη μέρα, με τα στοιχεία τους από το Δυναμολόγιο,
 // και μετά ό,τι γράφτηκε ελεύθερα στην οθόνη της ΗΚΑΙ. «1. ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ ΤΟΥ ΠΑΤΡΩΝΥΜΟΥ, ΑΣΜ …, ΕΣΣΟ …: <λόγος>.»
 export function personLine(p: Person): string {
-  return upper([rankTxt(p), p.spec ? '(' + p.spec + ')' : '', p.last, p.first, p.father ? 'του ' + genitive(p.father) : ''].filter(Boolean).join(' ')
-    + (p.asm ? ', ΑΣΜ ' + p.asm : '') + (p.essos ? ', ΕΣΣΟ ' + p.essos : ''));
+  return upper(
+    [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', p.last, p.first, p.father ? 'του ' + genitive(p.father) : '']
+      .filter(Boolean)
+      .join(' ') +
+      (p.asm ? ', ΑΣΜ ' + p.asm : '') +
+      (p.essos ? ', ΕΣΣΟ ' + p.essos : ''),
+  );
 }
 // Ο λόγος της διαγραφής: από το φύλλο «ΕΚΤΟΣ ΔΥΝΑΜΗΣ» («Εκτός δύναμης: μετάθεση») ή οι σημειώσεις του
-export const outReason = (p: Person) => (p.notes.startsWith(OUT_NOTE) ? p.notes.slice(OUT_NOTE.length).replace(/^[:\s]+/, '') : p.notes).trim();
-export const movesOn = (s: AppState, field: 'inOn' | 'outOn', d: ISODate) => s.people.filter(p => p[field] === d).sort(byName);
+export const outReason = (p: Person) =>
+  (p.notes.startsWith(OUT_NOTE) ? p.notes.slice(OUT_NOTE.length).replace(/^[:\s]+/, '') : p.notes).trim();
+export const movesOn = (s: AppState, field: 'inOn' | 'outOn', d: ISODate) =>
+  s.people.filter((p) => p[field] === d).sort(byName);
 function moveLines(s: AppState, d: ISODate, field: 'inOn' | 'outOn', free: 'egr' | 'dia'): Line[] {
-  const out = numbered(movesOn(s, field, d).map(p => { const why = field === 'outOn' ? outReason(p) : ''; return [{ t: personLine(p) + (why ? ': ' + upper(why.replace(/[.\s]+$/, '')) : '') + '.' }]; }));
+  const out = numbered(
+    movesOn(s, field, d).map((p) => {
+      const why = field === 'outOn' ? outReason(p) : '';
+      return [{ t: personLine(p) + (why ? ': ' + upper(why.replace(/[.\s]+$/, '')) : '') + '.' }];
+    }),
+  );
   const t = s.hkaiManual?.[d]?.text?.[free]?.trim();
   if (t) out.push([{ t }]);
   return out;
@@ -129,18 +202,22 @@ function moveLines(s: AppState, d: ISODate, field: 'inOn' | 'outOn', free: 'egr'
 export const hkaiEgrLines = (s: AppState, d: ISODate) => moveLines(s, d, 'inOn', 'egr');
 export const hkaiDiaLines = (s: AppState, d: ISODate) => moveLines(s, d, 'outOn', 'dia');
 
-export const lineText = (l: Line) => l.map(r => r.t).join('');
+export const lineText = (l: Line) => l.map((r) => r.t).join('');
 export const linesText = (ls: Line[]) => ls.map(lineText).join('\n');
 // Γραμμές που πιάνει το κελί στο χαρτί: στο κελί του προτύπου (G11:K11) χωρούν περίπου 130 χαρακτήρες ανά γραμμή
 export const HK_LINE_CHARS = 130;
-export const paperLines = (ls: Line[], chars = HK_LINE_CHARS) => ls.reduce((a, l) => a + Math.max(1, Math.ceil(lineText(l).length / chars)), 0);
+export const paperLines = (ls: Line[], chars = HK_LINE_CHARS) =>
+  ls.reduce((a, l) => a + Math.max(1, Math.ceil(lineText(l).length / chars)), 0);
 
 // Όργανα υπηρεσίας › Λ/Υ και Δ/Υ: όποιος είναι στη θέση τη μέρα (με το χέρι ή από τη συμπλήρωση)· αν η θέση είναι κενή,
 // ο μόνιμος Λ/Υ ή Δ/Υ, όταν είναι σε δύναμη και δεν τον κρατά κάποια κατάσταση (Michael, 17/10)
 export function hkOrgans(s: AppState, d: ISODate): { ly?: number; dy?: number } {
-  const g = s.guards[d] || {}; const pm = personMap(s.people); const out: { ly?: number; dy?: number } = {};
+  const g = s.guards[d] || {};
+  const pm = personMap(s.people);
+  const out: { ly?: number; dy?: number } = {};
   for (const k of ['ly', 'dy'] as const) {
-    const f = s.settings.fixed?.[k]; const post = postBy(s, k);
+    const f = s.settings.fixed?.[k];
+    const post = postBy(s, k);
     const id = g[k] ?? (f && pm.get(f)?.active && !dutyBlock(live(s), d, f, post, s.settings.lists) ? f : undefined);
     if (id != null) out[k] = id;
   }

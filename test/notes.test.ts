@@ -343,7 +343,7 @@ describe('σύνδεση στην εφαρμογή', () => {
     // stays a source rule; it finds the function by name instead of by file path
     const holders = readSources(SRC_DIR, 20).filter(f => /function scheduleAuto\b/.test(f.text));
     expect(holders).toHaveLength(1);
-    expect(holders[0].text).toMatch(/k !== 'lastExpire' && k !== 'notes'/);
+    expect(holders[0].text).toMatch(/k !== 'lastExpire'\s*&&\s*k !== 'notes'/);
   });
   it('Ctrl+K: Νέα σημείωση, Σημειώσεις, και αναζήτηση μέσα στις σημειώσεις', () => {
     const palette = (query = '') => {

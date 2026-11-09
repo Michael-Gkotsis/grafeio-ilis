@@ -14,7 +14,8 @@ import { forBuild, withBuilt } from '../shared/reports';
 
 const nodeRequire: NodeRequire = require;
 let state: AppState;
-const buf = (v: any) => (v instanceof Uint8Array && !Buffer.isBuffer(v) ? Buffer.from(v.buffer, v.byteOffset, v.byteLength) : v);
+const buf = (v: any) =>
+  v instanceof Uint8Array && !Buffer.isBuffer(v) ? Buffer.from(v.buffer, v.byteOffset, v.byteLength) : v;
 const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   fillFroura: (tpl, d, phase, sheet, sigs) => fillFroura(buf(tpl), state, d, phase, sheet, sigs),
   fillHkai: (tpl, d, opts) => fillHkai(buf(tpl), state, d, opts),
@@ -26,20 +27,37 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   placeSheets: (target, out, pairs, mine) => placeSheets(buf(target), buf(out), pairs, mine),
   previewReport: (tpl, r, ids, d, pages, sample) => previewReport(buf(tpl), state, r, ids, d, pages, sample),
   previewTemplate: (tpl, sheet) => previewTemplate(buf(tpl), sheet),
-  previewBuilt: async (o0, r, ids, d, pages, sample) => { const o = forBuild(o0, r); const b = await buildTemplate(o, r.kind, xlLook(state.settings)); return previewReport(b.data, state, withBuilt(r, b, o), ids, d, pages, sample); },
-  zipHash: b => zipHash(buf(b)),
-  valuesHash: b => valuesHash(buf(b)),
+  previewBuilt: async (o0, r, ids, d, pages, sample) => {
+    const o = forBuild(o0, r);
+    const b = await buildTemplate(o, r.kind, xlLook(state.settings));
+    return previewReport(b.data, state, withBuilt(r, b, o), ids, d, pages, sample);
+  },
+  zipHash: (b) => zipHash(buf(b)),
+  valuesHash: (b) => valuesHash(buf(b)),
   readBook: (file, rows, cols) => readBook(file, rows, cols),
   writeGroup: (jobs, today, opts) => writeGroup(jobs, state, today, opts),
   // ExcelJS (βαρύ): φορτώνεται μόνο αν χρειαστεί, όπως στο main
-  dutyCheck: ym => (nodeRequire(path.join(__dirname, 'excel.js')) as typeof import('./excel')).dutyCheck(state, ym)
+  dutyCheck: (ym) => (nodeRequire(path.join(__dirname, 'excel.js')) as typeof import('./excel')).dutyCheck(state, ym),
 };
 parentPort!.on('message', async (m: { id: number; fn: string; args: unknown[]; state?: AppState }) => {
-  if (m.state) { state = m.state; clockOf(state.settings); }
-  try { parentPort!.postMessage({ id: m.id, ok: true, r: await FNS[m.fn](...m.args) }); }
-  catch (e: any) {
+  if (m.state) {
+    state = m.state;
+    clockOf(state.settings);
+  }
+  try {
+    parentPort!.postMessage({ id: m.id, ok: true, r: await FNS[m.fn](...m.args) });
+  } catch (e: any) {
     // τα ονόματα των κλάσεων χάνονται στο minify: το είδος του λάθους με instanceof
-    const name = e instanceof LockedError ? 'LockedError' : e instanceof ChangedError ? 'ChangedError' : e instanceof TemplateError ? 'TemplateError' : e instanceof OldFormatError ? 'OldFormatError' : 'Error';
+    const name =
+      e instanceof LockedError
+        ? 'LockedError'
+        : e instanceof ChangedError
+          ? 'ChangedError'
+          : e instanceof TemplateError
+            ? 'TemplateError'
+            : e instanceof OldFormatError
+              ? 'OldFormatError'
+              : 'Error';
     parentPort!.postMessage({ id: m.id, ok: false, err: { name, message: e?.message || String(e), file: e?.file } });
   }
 });

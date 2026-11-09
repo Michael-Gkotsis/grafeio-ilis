@@ -2,7 +2,15 @@
 // εγγραφές/διαγραφές/άδειες/ποινές οπλιτών ακριβώς όπως στην πίσω σελίδα της ΗΚΑΙ) και ό,τι γράφεις (ΛΟΙΠΑ, Τμήμα 2 και 3).
 // Κάθε γραμμή αλλάζει ή σβήνεται μόνο σε αυτή την ΗΔ. Η ΗΔ που βγήκε κρατιέται όπως βγήκε (AppState.hd).
 import { addDays, type ISODate } from './dates';
-import { hkaiCadreLeaveLines, hkaiDiaLines, hkaiEgrLines, hkaiPunLines, hkaiSoldierLeaveLines, lineText, type Line } from './hkaiText';
+import {
+  hkaiCadreLeaveLines,
+  hkaiDiaLines,
+  hkaiEgrLines,
+  hkaiPunLines,
+  hkaiSoldierLeaveLines,
+  lineText,
+  type Line,
+} from './hkaiText';
 import { hkOffText, orderedCadre } from './cadre';
 import { rankTxt } from './ranks';
 import { mondayOf } from './imer';
@@ -12,51 +20,150 @@ import type { Sig } from './sigs';
 import { sigsFor } from './sigs';
 
 // ax: μεταβολές αξιωματικών 1–5, op: μεταβολές οπλιτών 1–5 (γραμμές κειμένου)· τα 3 των αξιωματικών και τα 1–4 των οπλιτών βγαίνουν από τα δεδομένα
-export interface HdDoc { aydm: string; dn: string; ilxos: string; ax: string[][]; op: string[][]; t2: string; t3: string }
+export interface HdDoc {
+  aydm: string;
+  dn: string;
+  ilxos: string;
+  ax: string[][];
+  op: string[][];
+  t2: string;
+  t3: string;
+}
 export const HD_SECTIONS = ['ΕΓΓΡΑΦΕΣ', 'ΔΙΑΓΡΑΦΕΣ', 'ΑΔΕΙΕΣ', 'ΠΟΙΝΕΣ', 'ΛΟΙΠΑ'];
-const MON = ['ΙΑΝΟΥΑΡΙΟΥ', 'ΦΕΒΡΟΥΑΡΙΟΥ', 'ΜΑΡΤΙΟΥ', 'ΑΠΡΙΛΙΟΥ', 'ΜΑΪΟΥ', 'ΙΟΥΝΙΟΥ', 'ΙΟΥΛΙΟΥ', 'ΑΥΓΟΥΣΤΟΥ', 'ΣΕΠΤΕΜΒΡΙΟΥ', 'ΟΚΤΩΒΡΙΟΥ', 'ΝΟΕΜΒΡΙΟΥ', 'ΔΕΚΕΜΒΡΙΟΥ'];
+const MON = [
+  'ΙΑΝΟΥΑΡΙΟΥ',
+  'ΦΕΒΡΟΥΑΡΙΟΥ',
+  'ΜΑΡΤΙΟΥ',
+  'ΑΠΡΙΛΙΟΥ',
+  'ΜΑΪΟΥ',
+  'ΙΟΥΝΙΟΥ',
+  'ΙΟΥΛΙΟΥ',
+  'ΑΥΓΟΥΣΤΟΥ',
+  'ΣΕΠΤΕΜΒΡΙΟΥ',
+  'ΟΚΤΩΒΡΙΟΥ',
+  'ΝΟΕΜΒΡΙΟΥ',
+  'ΔΕΚΕΜΒΡΙΟΥ',
+];
 export const hdDate = (d: ISODate) => d.slice(8, 10) + ' ' + MON[+d.slice(5, 7) - 1] + ' ' + d.slice(0, 4);
 // ετοιμάζεται σήμερα για αύριο
 export const hdDefaultDay = (today: ISODate): ISODate => addDays(today, 1);
-export const cadreTxt = (c: Cadre) => upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' '));
-export const hdCadreNames = (s: Pick<AppState, 'cadreList'>): string[] => orderedCadre(s.cadreList || []).filter(c => c.active).map(cadreTxt);
+export const cadreTxt = (c: Cadre) =>
+  upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' '));
+export const hdCadreNames = (s: Pick<AppState, 'cadreList'>): string[] =>
+  orderedCadre(s.cadreList || [])
+    .filter((c) => c.active)
+    .map(cadreTxt);
 const texts = (ls: Line[]) => ls.map(lineText);
 
 // η προηγούμενη ΗΔ (πριν από τη μέρα d) και η τελευταία της ίδιας εβδομάδας (Δευτέρα–Κυριακή)
-const before = (s: Pick<AppState, 'hd'>, d: ISODate): ISODate[] => Object.keys(s.hd || {}).filter(x => x < d).sort();
+const before = (s: Pick<AppState, 'hd'>, d: ISODate): ISODate[] =>
+  Object.keys(s.hd || {})
+    .filter((x) => x < d)
+    .sort();
 export function hdAuto(s: AppState, d: ISODate): HdDoc {
-  const prev = before(s, d); const last = prev.length ? s.hd![prev[prev.length - 1]] : undefined;
-  const wk = prev.filter(x => mondayOf(x) === mondayOf(d)); const lastWk = wk.length ? s.hd![wk[wk.length - 1]] : undefined;
+  const prev = before(s, d);
+  const last = prev.length ? s.hd![prev[prev.length - 1]] : undefined;
+  const wk = prev.filter((x) => mondayOf(x) === mondayOf(d));
+  const lastWk = wk.length ? s.hd![wk[wk.length - 1]] : undefined;
   return {
-    aydm: last?.aydm || '', dn: hkOffText(s, d), ilxos: lastWk?.ilxos || '',
+    aydm: last?.aydm || '',
+    dn: hkOffText(s, d),
+    ilxos: lastWk?.ilxos || '',
     ax: [[], [], texts(hkaiCadreLeaveLines(s, d)), [], []],
-    op: [texts(hkaiEgrLines(s, d)), texts(hkaiDiaLines(s, d)), texts(hkaiSoldierLeaveLines(s, d)), texts(hkaiPunLines(s, d)), []],
-    t2: last?.t2 || '', t3: last?.t3 || ''
+    op: [
+      texts(hkaiEgrLines(s, d)),
+      texts(hkaiDiaLines(s, d)),
+      texts(hkaiSoldierLeaveLines(s, d)),
+      texts(hkaiPunLines(s, d)),
+      [],
+    ],
+    t2: last?.t2 || '',
+    t3: last?.t3 || '',
   };
 }
 // η ΗΔ που βγήκε (όπως βγήκε), αλλιώς η αυτόματη
 export const hdDocOf = (s: AppState, d: ISODate): HdDoc => s.hd?.[d] || hdAuto(s, d);
 
 // καθαρισμός πριν την αποθήκευση: κεφαλαία, χωρίς κενές γραμμές, πάντα 5 ενότητες
-const clean = (t: unknown) => upper(String(t ?? '')).replace(/[ \t]+/g, ' ').trim().slice(0, 4000);
+const clean = (t: unknown) =>
+  upper(String(t ?? ''))
+    .replace(/[ \t]+/g, ' ')
+    .trim()
+    .slice(0, 4000);
 const cleanLines = (x: unknown): string[] => (Array.isArray(x) ? x : []).map(clean).filter(Boolean).slice(0, 60);
 export const cleanHd = (d: HdDoc): HdDoc => ({
-  aydm: clean(d.aydm).slice(0, 160), dn: clean(d.dn).slice(0, 160), ilxos: clean(d.ilxos).slice(0, 160),
-  ax: Array.from({ length: 5 }, (_, i) => cleanLines(d.ax?.[i])), op: Array.from({ length: 5 }, (_, i) => cleanLines(d.op?.[i])),
-  t2: upper(String(d.t2 ?? '')).split('\n').map(x => x.trim()).filter(Boolean).join('\n').slice(0, 4000), t3: upper(String(d.t3 ?? '')).split('\n').map(x => x.trim()).filter(Boolean).join('\n').slice(0, 4000)
+  aydm: clean(d.aydm).slice(0, 160),
+  dn: clean(d.dn).slice(0, 160),
+  ilxos: clean(d.ilxos).slice(0, 160),
+  ax: Array.from({ length: 5 }, (_, i) => cleanLines(d.ax?.[i])),
+  op: Array.from({ length: 5 }, (_, i) => cleanLines(d.op?.[i])),
+  t2: upper(String(d.t2 ?? ''))
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 4000),
+  t3: upper(String(d.t3 ?? ''))
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 4000),
 });
 
 // οι ετικέτες {…} του προτύπου Word και η τιμή τους· πολλές γραμμές χωρίζονται με \n και γίνονται παράγραφοι
-export const HD_TAGS = ['ΜΟΝΑΔΑ', 'ΙΛΗΣ', 'ΗΜΕΡΟΜΗΝΙΑ', 'ΑΥΔΜ', 'ΔΝ', 'ΙΛΧΟΣ', 'ΑΞ1', 'ΑΞ2', 'ΑΞ3', 'ΑΞ4', 'ΑΞ5', 'ΟΠ1', 'ΟΠ2', 'ΟΠ3', 'ΟΠ4', 'ΟΠ5', 'ΤΜΗΜΑ2', 'ΤΜΗΜΑ3', 'ΥΠΟΓΡΑΦΗ'];
+export const HD_TAGS = [
+  'ΜΟΝΑΔΑ',
+  'ΙΛΗΣ',
+  'ΗΜΕΡΟΜΗΝΙΑ',
+  'ΑΥΔΜ',
+  'ΔΝ',
+  'ΙΛΧΟΣ',
+  'ΑΞ1',
+  'ΑΞ2',
+  'ΑΞ3',
+  'ΑΞ4',
+  'ΑΞ5',
+  'ΟΠ1',
+  'ΟΠ2',
+  'ΟΠ3',
+  'ΟΠ4',
+  'ΟΠ5',
+  'ΤΜΗΜΑ2',
+  'ΤΜΗΜΑ3',
+  'ΥΠΟΓΡΑΦΗ',
+];
 const or0 = (t: string) => t.trim() || 'Ø';
 // υπογραφή: «- Ο -», θέση, όνομα (όσα βάλεις στις Ρυθμίσεις › Υπογραφές)
-export const hdSigLines = (st: Pick<Settings, 'unitKind'>, sigs: Sig[]): string[] => sigsFor(st, sigs).flatMap(x => [x.art ? '- ' + x.art + ' -' : '', x.title, x.name || ''].filter(Boolean));
-export function hdTags(st: Pick<Settings, 'unit' | 'unitName' | 'unitKind'>, d: ISODate, doc: HdDoc, sigs: Sig[]): Record<string, string> {
-  const x = cleanHd(doc); const t: Record<string, string> = {
-    'ΜΟΝΑΔΑ': st.unit.map(u => upper(u)).filter(Boolean).join('/'), 'ΙΛΗΣ': upper(st.unitName || ''), 'ΗΜΕΡΟΜΗΝΙΑ': hdDate(d),
-    'ΑΥΔΜ': or0(x.aydm), 'ΔΝ': or0(x.dn), 'ΙΛΧΟΣ': or0(x.ilxos), 'ΤΜΗΜΑ2': or0(x.t2), 'ΤΜΗΜΑ3': or0(x.t3), 'ΥΠΟΓΡΑΦΗ': hdSigLines(st, sigs).join('\n')
+export const hdSigLines = (st: Pick<Settings, 'unitKind'>, sigs: Sig[]): string[] =>
+  sigsFor(st, sigs).flatMap((x) => [x.art ? '- ' + x.art + ' -' : '', x.title, x.name || ''].filter(Boolean));
+export function hdTags(
+  st: Pick<Settings, 'unit' | 'unitName' | 'unitKind'>,
+  d: ISODate,
+  doc: HdDoc,
+  sigs: Sig[],
+): Record<string, string> {
+  const x = cleanHd(doc);
+  const t: Record<string, string> = {
+    ΜΟΝΑΔΑ: st.unit
+      .map((u) => upper(u))
+      .filter(Boolean)
+      .join('/'),
+    ΙΛΗΣ: upper(st.unitName || ''),
+    ΗΜΕΡΟΜΗΝΙΑ: hdDate(d),
+    ΑΥΔΜ: or0(x.aydm),
+    ΔΝ: or0(x.dn),
+    ΙΛΧΟΣ: or0(x.ilxos),
+    ΤΜΗΜΑ2: or0(x.t2),
+    ΤΜΗΜΑ3: or0(x.t3),
+    ΥΠΟΓΡΑΦΗ: hdSigLines(st, sigs).join('\n'),
   };
-  x.ax.forEach((ls, i) => { t['ΑΞ' + (i + 1)] = or0(ls.join('\n')); }); x.op.forEach((ls, i) => { t['ΟΠ' + (i + 1)] = or0(ls.join('\n')); });
+  x.ax.forEach((ls, i) => {
+    t['ΑΞ' + (i + 1)] = or0(ls.join('\n'));
+  });
+  x.op.forEach((ls, i) => {
+    t['ΟΠ' + (i + 1)] = or0(ls.join('\n'));
+  });
   return t;
 }
 
@@ -64,10 +171,11 @@ export function hdTags(st: Pick<Settings, 'unit' | 'unitName' | 'unitKind'>, d: 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const ml = (s: string) => s.split('\n').map(esc).join('<br>');
 export function hdPageHtml(t: Record<string, string>, fs: number): string {
-  const row = (a: string, b: string) => `<tr><td class="l"></td><td class="a">${a}</td><td class="c">:</td><td class="v">${ml(b)}</td></tr>`;
+  const row = (a: string, b: string) =>
+    `<tr><td class="l"></td><td class="a">${a}</td><td class="c">:</td><td class="v">${ml(b)}</td></tr>`;
   const mid = (h: string, cls = '') => `<tr><td class="l"></td><td colspan="3" class="m ${cls}">${h}</td></tr>`;
   const gap = '<tr><td class="l"></td><td colspan="3" class="g"></td></tr>';
-  const sec = (k: string) => HD_SECTIONS.map((n, i) => row((i + 1) + '. ' + n, t[k + (i + 1)])).join('');
+  const sec = (k: string) => HD_SECTIONS.map((n, i) => row(i + 1 + '. ' + n, t[k + (i + 1)])).join('');
   return `<div class="hdp" style="font-size:${fs}px"><style>
 .hdp{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1.2em 1em;line-height:1.25}.hdp table{border-collapse:collapse;width:100%;table-layout:fixed}
 .hdp td{border-bottom:1px dotted #000;padding:.25em .4em;vertical-align:middle}.hdp td.l{width:12%;border-left:1px solid #000;border-right:1px solid #000}.hdp td.a{width:20%}.hdp td.c{width:3%;text-align:center}.hdp td.v{width:65%}
