@@ -8,8 +8,8 @@
 //   - `setRankNamesOn` (src/renderer/rankName.ts): a per-PC display preference from localStorage, not app state,
 //     and renderer-only; core may not import the renderer. It moves to the renderer store in Phase 5.1.
 //   - roster.ts `OV`: call-scoped, set and reset inside `parseRoster` with try/finally, so it is not ambient.
-//   - rules.ts `personMap` calling `noteNamesakes`: it stays, as part of the people index. It keeps the namesakes
-//     right for any caller, including the worker.
+//   - core/duty/indexes.ts `personMap` calling `noteNamesakes`: it stays, as part of the people index. It keeps the
+//     namesakes right for any caller, including the worker.
 // Owner layer: core (no fs, no Electron, no React); imports only from src/core.
 // Why: the rules read the zone, the namesake set and the unit kind from module variables. Five call sites set them
 //   by hand, each with its own subset; one documented, tested entry point keeps those subsets visible and stops a
@@ -55,7 +55,7 @@ export const STORE_AMBIENT: readonly AmbientPart[] = Object.freeze(['clock', 'na
 
 /**
  * Worker `worker.ts`, when it receives a new state. Only the clock is set. The worker gets the namesakes through
- * `personMap` in rules.ts, which calls `noteNamesakes` itself. The unit kind was never set here; keeping that
+ * `personMap` in duty/indexes.ts, which calls `noteNamesakes` itself. The unit kind was never set here; keeping that
  * is part of this refactor (adding it would be a behaviour change for its own PR).
  */
 export const WORKER_AMBIENT: readonly AmbientPart[] = Object.freeze(['clock'] as const);

@@ -5,11 +5,6 @@
       [
         "src/shared/cadreSource.ts",
         "src/shared/sources.ts"
-      ],
-      [
-        "src/shared/returns.ts",
-        "src/shared/rules.ts",
-        "src/shared/weekend.ts"
       ]
     ],
     "withTypes": [
@@ -32,11 +27,6 @@
       [
         "src/shared/reports.ts",
         "src/shared/values.ts"
-      ],
-      [
-        "src/shared/returns.ts",
-        "src/shared/rules.ts",
-        "src/shared/weekend.ts"
       ]
     ]
   },
@@ -61,13 +51,15 @@
     "src/shared/cadreSource.ts": 746,
     "src/shared/commands.ts": 3113,
     "src/shared/reports.ts": 2317,
-    "src/shared/returns.ts": 511,
-    "src/shared/rules.ts": 2788,
     "src/shared/sources.ts": 3996,
     "src/shared/values.ts": 931,
     "src/shared/weapons.ts": 492
   },
   "oversizeFunctions": {
+    "src/core/duty/autofill.ts::fillDay": 109,
+    "src/core/duty/autofillRepair.ts::repair": 102,
+    "src/core/duty/hkaiCount.ts::hkaiCounts": 86,
+    "src/core/duty/planChange.ts::planStatusChange": 154,
     "src/main/excel.ts::dutyCheck": 137,
     "src/main/excel.ts::hdBook": 134,
     "src/main/excel.ts::imerBook": 189,
@@ -121,10 +113,6 @@
     "src/shared/reports.ts::fieldValue": 216,
     "src/shared/reports.ts::pickText": 114,
     "src/shared/roster.ts::parse": 129,
-    "src/shared/rules.ts::fillDay": 109,
-    "src/shared/rules.ts::hkaiCounts": 86,
-    "src/shared/rules.ts::planStatusChange": 154,
-    "src/shared/rules.ts::repair": 102,
     "src/shared/sources.ts::detectHkai": 83,
     "src/shared/sources.ts::diffStatuses": 223,
     "src/shared/sources.ts::planDuties": 127,
@@ -138,6 +126,14 @@
     "src/shared/values.ts::metricsOf": 424
   },
   "forEach": {
+    "src/core/duty/autofillRepair.ts": 1,
+    "src/core/duty/capability.ts": 1,
+    "src/core/duty/hkaiCount.ts": 2,
+    "src/core/duty/holdBack.ts": 1,
+    "src/core/duty/kolyomenoi.ts": 1,
+    "src/core/duty/nextFor.ts": 1,
+    "src/core/duty/planChange.ts": 8,
+    "src/core/duty/presence.ts": 2,
     "src/core/model/blocks.ts": 1,
     "src/main/db.ts": 15,
     "src/main/excel.ts": 29,
@@ -183,7 +179,6 @@
     "src/shared/reports.ts": 2,
     "src/shared/roomExtra.ts": 1,
     "src/shared/roster.ts": 2,
-    "src/shared/rules.ts": 17,
     "src/shared/sources.ts": 30,
     "src/shared/strengthView.ts": 1,
     "src/shared/values.ts": 7,

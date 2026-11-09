@@ -55,14 +55,15 @@ const need = (): Baseline => {
 };
 const expectClean = (problems: string[]): void => { expect(problems, `\n${problems.join('\n')}\n`).toEqual([]); };
 
-// Where each ambient setter may be called. Defining file + src/core/ambient.ts; rules.ts keeps its own noteNamesakes
-// call in personMap (the people index must stay right for any caller, including the worker). Test files are not scanned.
+// Where each ambient setter may be called. Defining file + src/core/ambient.ts; core/duty/indexes.ts keeps its own
+// noteNamesakes call in personMap (the people index must stay right for any caller, including the worker). Test files
+// are not scanned.
 const AMBIENT_DEFINERS = { clockOf: 'src/core/lib/dates.ts', setClock: 'src/core/lib/dates.ts',
   noteNamesakes: 'src/core/model/person.ts', setUnitKind: 'src/core/model/unit.ts' } as const;
 const AMBIENT_ALLOWED: Record<keyof typeof AMBIENT_DEFINERS, string[]> = {
   clockOf: [AMBIENT_DEFINERS.clockOf, 'src/core/ambient.ts'],
   setClock: [AMBIENT_DEFINERS.setClock],
-  noteNamesakes: [AMBIENT_DEFINERS.noteNamesakes, 'src/core/ambient.ts', 'src/shared/rules.ts'],
+  noteNamesakes: [AMBIENT_DEFINERS.noteNamesakes, 'src/core/ambient.ts', 'src/core/duty/indexes.ts'],
   setUnitKind: [AMBIENT_DEFINERS.setUnitKind, 'src/core/ambient.ts'],
 };
 /** Every `setter(` call (comments removed) in src/, as setter + repo-relative file. */
@@ -123,7 +124,7 @@ describe('architecture: the real src/ tree', () => {
   it('ambient allowlist: the scan really sees the defining files and ambient.ts', () => {
     const seen = ambientCallers().map(hit => `${hit.setter}@${hit.file}`);
     expect(seen).toContain('noteNamesakes@src/core/ambient.ts');
-    expect(seen).toContain('noteNamesakes@src/shared/rules.ts');
+    expect(seen).toContain('noteNamesakes@src/core/duty/indexes.ts');
     expect(seen).toContain('setClock@src/core/lib/dates.ts');
   });
 });
