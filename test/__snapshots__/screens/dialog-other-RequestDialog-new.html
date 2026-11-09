@@ -1,0 +1,71 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Νέα αίτηση
+        </h2>
+        <div class="ui-dialog__desc">
+          Γράφεται στην ΗΚΑΙ της ημέρας, στο «5. ΑΙΤΗΣΕΙΣ».
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <span class="field__label">
+          Τι αιτείται
+        </span>
+        <div class="ui-seg" role="group">
+          <button type="button" aria-pressed="false">
+            Άδεια
+          </button>
+          <button type="button" aria-pressed="true">
+            Κάτι άλλο
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-p">
+          Ποιος
+        </label>
+        <div class="picker">
+          <input id="rq-p" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" data-autofocus="" placeholder="Επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-d">
+          Ημερομηνία ΗΚΑΙ
+        </label>
+        <input id="rq-d" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+        <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+      </div>
+      <div class="field">
+        <label class="field__label" for="rq-t">
+          Αιτείται
+        </label>
+        <input id="rq-t" class="ui-input" placeholder="π.χ. μετάθεση στην 2η ΕΠΧΙΑ" value=""/>
+        <span class="field__help">
+          Γράψε μόνο το τι ζητά· το «αιτείται» και η τελεία μπαίνουν μόνα τους.
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Λείπει: Στρατιώτης
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Στρατιώτης" aria-description="Λείπει: Στρατιώτης">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

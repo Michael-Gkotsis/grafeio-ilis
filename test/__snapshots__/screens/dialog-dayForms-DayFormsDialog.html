@@ -1,0 +1,96 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Έντυπα ημέρας
+        </h2>
+        <div class="ui-dialog__desc">
+          Έλεγχος πριν βγουν. Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="dayforms">
+        <section class="dayforms__item">
+          <label class="dayforms__head">
+            <input type="checkbox" class="ui-check" checked=""/>
+            <b>
+              ΦΡΟΥΡΑ
+            </b>
+            <span class="muted">
+              Αύριο 10/11/2026
+            </span>
+            <span class="dayforms__st txt-warn">
+              ⚠ 1 προειδοποίηση
+            </span>
+          </label>
+          <ul class="preflight">
+            <li class="is-warn">
+              <span class="preflight__ic">
+                ⚠
+              </span>
+              <span>
+                10 κενές θέσεις (θα γραφτεί «ΚΕΝΗ»): Θαλαμοφύλακας 3ος (α΄), Θαλαμοφύλακας 1ος (β΄), Θαλαμοφύλακας 2ος (β΄), Θαλαμοφύλακας 3ος (β΄), Θαλαμοφύλακας 4ος (β΄), Μαγειρεία 1ος, Μαγειρεία 2ος, Μαγειρεία 3ος, Μαγειρεία 4ος, Μαγειρεία 5ος
+              </span>
+              <button type="button" class="ui-btn ui-btn--link ui-btn--sm">
+                Δείξε μου
+              </button>
+            </li>
+          </ul>
+        </section>
+        <section class="dayforms__item">
+          <label class="dayforms__head">
+            <input type="checkbox" class="ui-check" checked=""/>
+            <b>
+              ΗΚΑΙ
+            </b>
+            <span class="muted">
+              Σήμερα 09/11/2026
+            </span>
+            <span class="dayforms__st txt-ok">
+              ✓ έτοιμο
+            </span>
+          </label>
+        </section>
+        <section class="dayforms__item">
+          <label class="dayforms__head">
+            <input type="checkbox" class="ui-check" checked=""/>
+            <b>
+              Εξοδούχοι και παραμένοντες
+            </b>
+            <span class="muted">
+              Σήμερα 09/11/2026
+            </span>
+            <span class="dayforms__st txt-ok">
+              ✓ έτοιμο
+            </span>
+          </label>
+        </section>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Βγαίνουν τα Excel και ανοίγει η προεπισκόπηση εκτύπωσης του καθενός, το ένα μετά το άλλο. Δεν χρειάζεται Excel.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M7 9V3h10v6"/>
+          <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+          <path d="M7 14h10v7H7z"/>
+        </svg>
+        Τύπωσε όλα
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" data-autofocus="">
+        Βγάλε όλα
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

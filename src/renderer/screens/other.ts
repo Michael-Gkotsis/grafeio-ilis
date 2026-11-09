@@ -224,7 +224,7 @@ function copyRich(htmlStr: string, plain: string): boolean {
   if (!ok && navigator.clipboard) { navigator.clipboard.writeText(plain).catch(() => undefined); ok = true; }
   return ok;
 }
-function PunTextDialog({ st, onClose }: P) {
+export function PunTextDialog({ st, onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const p = personMap(state.people).get(st.pid)!;
   const [f, setF] = useState({ by: st.by || '', reason: st.reason || '', on: st.on || st.from });
@@ -512,7 +512,7 @@ function RequestsCard({ date }: { date: string }) {
   <//>`;
 }
 // Έγκριση αίτησης άδειας που θέλει προσοχή (Λ1, Λ2): τα ίδια μηνύματα με τη Δήλωση, και «Έγκριση παρ' όλα αυτά» / «Άκυρο»
-function ApproveDialog({ r, plan, onClose, onGo }: { r: PersonRequest; plan: StatusPlan; onClose: () => void; onGo: () => void }) {
+export function ApproveDialog({ r, plan, onClose, onGo }: { r: PersonRequest; plan: StatusPlan; onClose: () => void; onGo: () => void }) {
   const { state } = useStore(); const pm = personMap(state.people); const lv = r.leave!;
   const files = plan.files.filter(f => f.fn.startsWith('Υπηρεσίες'));
   return html`<${Dialog} role="alertdialog" title=${'Έγκριση: ' + rkShort(pm.get(r.pid)!) + ', άδεια ' + (lv.from === lv.to ? dm(lv.from) : dm(lv.from) + '–' + dm(lv.to))} onClose=${onClose}

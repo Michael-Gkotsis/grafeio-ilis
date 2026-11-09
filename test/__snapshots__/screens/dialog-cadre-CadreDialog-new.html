@@ -1,0 +1,177 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Νέο στέλεχος
+        </h2>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="cd-rank">
+            Βαθμός
+          </label>
+          <button id="cd-rank" data-autofocus="" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΛΧΙΑΣ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field__label" for="cd-origin">
+            Προέλευση
+          </label>
+          <button id="cd-origin" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              —
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field__label" for="cd-spec">
+            Ο/Σ
+          </label>
+          <button id="cd-spec" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              —
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="cd-last">
+            Επώνυμο *
+          </label>
+          <input id="cd-last" class="ui-input" placeholder="" value=""/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="cd-first">
+            Όνομα
+          </label>
+          <input id="cd-first" class="ui-input" placeholder="" value=""/>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="cd-am">
+            ΑΜ
+          </label>
+          <input id="cd-am" class="ui-input" placeholder="αριθμός μητρώου" value=""/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="cd-phone">
+            Τηλέφωνο
+          </label>
+          <input id="cd-phone" class="ui-input" placeholder="" value=""/>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="cd-eid">
+            Ειδικότητα
+          </label>
+          <button id="cd-eid" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              —
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="cd-role">
+            Θέση
+          </label>
+          <input id="cd-role" class="ui-input" placeholder="π.χ. Διοικητής Ίλης" value=""/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="cd-hk">
+            Γραμμή στην ΗΚΑΙ
+          </label>
+          <button id="cd-hk" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              Λοχίες
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field__label">
+          Όπλο (προαιρετικό)
+        </span>
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="cd-wtype">
+              Τύπος
+            </label>
+            <button id="cd-wtype" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="field">
+            <label class="field__label" for="cd-weapon">
+              Αριθμός όπλου
+            </label>
+            <input id="cd-weapon" class="ui-input" placeholder="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="cd-rack">
+              Οπλοβ.
+            </label>
+            <input id="cd-rack" class="ui-input" placeholder="π.χ. Ε" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="cd-wpos">
+              Θέση
+            </label>
+            <input id="cd-wpos" class="ui-input" placeholder="π.χ. 23" value=""/>
+          </div>
+        </div>
+        <span class="field__help">
+          Αν μπει σε ένοπλη υπηρεσία, το όπλο του βγαίνει ΕΚΤΟΣ στις ώρες του νούμερου (Οπλισμός › Κινήσεις). Χωρίς αριθμό φαίνεται «Ένοπλη χωρίς όπλο».
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Λείπει: Επώνυμο
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Επώνυμο" aria-description="Λείπει: Επώνυμο">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

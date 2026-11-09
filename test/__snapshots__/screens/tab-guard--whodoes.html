@@ -1,0 +1,982 @@
+<div class="whod">
+  <div class="toolbar">
+    <input type="search" class="ui-input" aria-label="Αναζήτηση στρατιώτη" placeholder="Όνομα, ΑΣΜ, θάλαμος, Σ.Ι., πόστο (χωρίς τόνους) · Ctrl+F" value=""/>
+    <div class="ui-seg ui-seg--sm" role="group">
+      <button type="button" aria-pressed="true">
+        Όλη η Ίλη
+      </button>
+      <button type="button" aria-pressed="false" data-tip="Θάλαμοι 1, 2, 3, 4">
+        1ος Ουλ.
+      </button>
+      <button type="button" aria-pressed="false" data-tip="Θάλαμοι 5, 6, 7, 8">
+        2ος Ουλ.
+      </button>
+    </div>
+    <button aria-label="Θάλαμος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+      <span class="ui-dd__v">
+        Όλοι οι θάλαμοι
+      </span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="filters">
+    <div class="strip" role="group" aria-label="Φίλτρα">
+      <button type="button" class="ui-chip" aria-pressed="true" data-tip="Όλοι σε δύναμη">
+        Όλοι
+        <span class="cnt">
+          12
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Δεν κάνουν κάποια υπηρεσία ή κάποια μέρα, από οπουδήποτε">
+        Με περιορισμό
+        <span class="cnt">
+          3
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Όσα όρισες εσύ (✕ και μέρες), όχι Σ.Ι. ή πόστο">
+        Από τον λοχία
+        <span class="cnt">
+          0
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Όσοι δεν κάνουν κάτι λόγω Σ.Ι. ή πόστου (—), ή το κάνουν παρ’ όλα αυτά (✓!)">
+        Από Σ.Ι. ή πόστο
+        <span class="cnt">
+          3
+        </span>
+      </button>
+    </div>
+    <span class="toolbar__count">
+      12 άτομα
+    </span>
+  </div>
+  <div class="ptable ptable--whod" role="table" aria-rowcount="12">
+    <div class="vlist whod__body" data-rows="12" style="height:560px">
+      <div class="vlist__head" style="min-width:836px;height:60px">
+        <div class="ptable__head whod__head" role="row" style="grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span>
+            Στρατιώτης
+          </span>
+          <button type="button" class="whod__colhd" aria-pressed="false" data-tip="Θαλαμοφύλακας · ΣΒΕΝ και ΣΠΕΝ. Πάτα: μόνο όσοι δεν κάνουν θαλαμοφύλακας">
+            <span class="whod__lbl">
+              Θαλαμοφ.
+            </span>
+            <small class="has-n">
+              όχι 1
+            </small>
+          </button>
+          <button type="button" class="whod__colhd" aria-pressed="false" data-tip="Οπλοφύλακας · μόνο ΣΠΕΝ · ένοπλη. Πάτα: μόνο όσοι δεν κάνουν οπλοφύλακας">
+            <span class="whod__lbl">
+              Οπλοφ.
+            </span>
+            <small class="has-n">
+              όχι 3
+            </small>
+          </button>
+          <button type="button" class="whod__colhd" aria-pressed="false" data-tip="Μαγειρεία · ΣΒΕΝ και ΣΠΕΝ. Πάτα: μόνο όσοι δεν κάνουν μαγειρεία">
+            <span class="whod__lbl">
+              Μαγειρεία
+            </span>
+            <small class="has-n">
+              όχι 1
+            </small>
+          </button>
+          <button type="button" class="whod__colhd" aria-pressed="false" data-tip="Σκοπιά · μόνο ΣΠΕΝ · ένοπλη. Πάτα: μόνο όσοι δεν κάνουν σκοπιά">
+            <span class="whod__lbl">
+              Σκοπιά
+            </span>
+            <small class="has-n">
+              όχι 3
+            </small>
+          </button>
+          <button type="button" class="whod__colhd" aria-pressed="false" data-tip="ΤΑΕ · μόνο ΣΠΕΝ · ένοπλη. Πάτα: μόνο όσοι δεν κάνουν ταε">
+            <span class="whod__lbl">
+              ΤΑΕ
+            </span>
+            <small class="has-n">
+              όχι 3
+            </small>
+          </button>
+          <span class="whod__dayhd" data-tip="Μέρες που κάνει υπηρεσία (καμία υπηρεσία τις άλλες). Μετρά η μέρα που ξεκινά η υπηρεσία, 14:00.">
+            <span>
+              Μέρες υπηρεσίας
+            </span>
+            <small>
+              <i>
+                Δε
+              </i>
+              <i>
+                Τρ
+              </i>
+              <i>
+                Τε
+              </i>
+              <i>
+                Πέ
+              </i>
+              <i>
+                Πα
+              </i>
+              <i>
+                Σά
+              </i>
+              <i>
+                Κυ
+              </i>
+            </small>
+          </span>
+          <span>
+          </span>
+        </div>
+      </div>
+      <div class="vlist__inner" style="height:552px;min-width:836px">
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:0;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΘ) 
+                  </span>
+                  ΔΟΚΙΜΙΟΣ Α.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ1 · Σ.Ι. Ι1
+              <span class="whod__hint is-bad" data-tip="Δεν μπαίνει σε καμία υπηρεσία λόγω κατάστασης· ξαναμπαίνει μόνος του όταν λήξει">
+                Αύριο: ΚΑ έως 13/11
+              </span>
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ Α.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:46px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΔΒ) 
+                  </span>
+                  ΘΕΩΡΗΤΙΚΟΣ Ζ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ1 · Σ.Ι. Ι1
+              <span class="whod__hint is-bad" data-tip="Δεν μπαίνει σε καμία υπηρεσία λόγω κατάστασης· ξαναμπαίνει μόνος του όταν λήξει">
+                Αύριο: Αναρρωτική
+              </span>
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΔΒ) ΘΕΩΡΗΤΙΚΟΣ Ζ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:92px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ2 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΤΧ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:138px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ ΒΗΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΔΝΕΑΣ (ΠΖ) 
+                  </span>
+                  ΠΙΘΑΝΟΣ Β.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ2 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΔΝΕΑΣ (ΠΖ) ΠΙΘΑΝΟΣ Β.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:184px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΔΝΕΑΣ (ΔΒ) 
+                  </span>
+                  ΥΠΟΘΕΤΙΔΗΣ Β.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ3 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ Β.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:230px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΠΖ) 
+                  </span>
+                  ΦΑΝΤΑΣΙΟΣ Θ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ4 · Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ
+              <span class="whod__hint is-bad" data-tip="Δεν μπαίνει σε καμία υπηρεσία λόγω κατάστασης· ξαναμπαίνει μόνος του όταν λήξει">
+                Αύριο: ΚΑ
+              </span>
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ., Οπλοφύλακας: Δεν κάνει οπλοφύλακας (Σ" data-tip="Δεν κάνει οπλοφύλακας (Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ., Σκοπιά: Δεν κάνει σκοπιά (Σ" data-tip="Δεν κάνει σκοπιά (Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ., ΤΑΕ: Δεν κάνει ταε (Σ" data-tip="Δεν κάνει ταε (Σ.Ι. Ι3 ΧΩΡΙΣ ΟΠΛΟ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΠΖ) ΦΑΝΤΑΣΙΟΣ Θ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:276px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) 
+                  </span>
+                  ΠΛΑΣΜΑΤΙΚΟΣ Γ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ5 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΕΠΟΠ ΛΧΙΑΣ (ΤΘ) ΠΛΑΣΜΑΤΙΚΟΣ Γ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:322px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΤΥΧΑΙΟΣ Κ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ6 · Σ.Ι. Ι4
+              <span class="whod__hint" data-tip="Λόγω κατάστασης, μέχρι να λήξει">
+                Αύριο: μόνο άοπλες (ΕΟ έως 12/11)
+              </span>
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ., Οπλοφύλακας: Δεν κάνει οπλοφύλακας (Σ" data-tip="Δεν κάνει οπλοφύλακας (Σ.Ι. Ι4). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ., Σκοπιά: Δεν κάνει σκοπιά (Σ" data-tip="Δεν κάνει σκοπιά (Σ.Ι. Ι4). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ., ΤΑΕ: Δεν κάνει ταε (Σ" data-tip="Δεν κάνει ταε (Σ.Ι. Ι4). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΤΧ) ΤΥΧΑΙΟΣ Κ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:368px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΔΒ) 
+                  </span>
+                  ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ7 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:414px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΠΖ) 
+                  </span>
+                  ΔΕΙΓΜΑΤΑΣ Λ.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ8 · Σ.Ι. Ι1
+              <span class="whod__hint is-bad" data-tip="Δεν μπαίνει σε καμία υπηρεσία λόγω κατάστασης· ξαναμπαίνει μόνος του όταν λήξει">
+                Αύριο: ΕΥ έως 11/11
+              </span>
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΠΖ) ΔΕΙΓΜΑΤΑΣ Λ.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row" role="row" style="position:absolute;top:460px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΘ) 
+                  </span>
+                  ΕΙΚΟΝΙΚΟΣ Ε.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ9 · Σ.Ι. Ι1 · πόστο ΚΨΜ
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε., Θαλαμοφύλακας: Δεν κάνει θαλαμοφύλακας (Πόστο: ΚΨΜ)" data-tip="Δεν κάνει θαλαμοφύλακας (Πόστο: ΚΨΜ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε., Οπλοφύλακας: Δεν κάνει οπλοφύλακας (Πόστο: ΚΨΜ)" data-tip="Δεν κάνει οπλοφύλακας (Πόστο: ΚΨΜ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε., Μαγειρεία: Δεν κάνει μαγειρεία (Πόστο: ΚΨΜ)" data-tip="Δεν κάνει μαγειρεία (Πόστο: ΚΨΜ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε., Σκοπιά: Δεν κάνει σκοπιά (Πόστο: ΚΨΜ)" data-tip="Δεν κάνει σκοπιά (Πόστο: ΚΨΜ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-auto" aria-label="ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε., ΤΑΕ: Δεν κάνει ταε (Πόστο: ΚΨΜ)" data-tip="Δεν κάνει ταε (Πόστο: ΚΨΜ). Πάτα για να κάνει παρ’ όλα αυτά">
+              —
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΤΘ) ΕΙΚΟΝΙΚΟΣ Ε.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+        <div class="ptable__row whod__row is-odd" role="row" style="position:absolute;top:506px;left:0;right:0;height:46px;grid-template-columns:minmax(190px,1.6fr) repeat(5,minmax(80px,88px)) 212px 34px">
+          <span class="whod__name">
+            <button type="button" class="linkish" data-tip="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ · καρτέλα οπλίτη">
+              <b>
+                <span>
+                  <span class="rk">
+                    ΣΤΡ (ΤΧ) 
+                  </span>
+                  ΠΡΟΣΩΡΙΝΟΣ Α.
+                </span>
+              </b>
+            </button>
+            <small>
+              Θ10 · Σ.Ι. Ι1
+            </small>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α., Θαλαμοφύλακας: Κάνει θαλαμοφύλακας" data-tip="Κάνει θαλαμοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α., Οπλοφύλακας: Κάνει οπλοφύλακας" data-tip="Κάνει οπλοφύλακας. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α., Μαγειρεία: Κάνει μαγειρεία" data-tip="Κάνει μαγειρεία. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α., Σκοπιά: Κάνει σκοπιά" data-tip="Κάνει σκοπιά. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__c">
+            <button type="button" class="whod__cell is-on" aria-label="ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α., ΤΑΕ: Κάνει ταε" data-tip="Κάνει ταε. Πάτα: δεν κάνει">
+              ✓
+            </button>
+          </span>
+          <span class="whod__days" role="group" aria-label="Μέρες υπηρεσίας ΣΤΡ (ΤΧ) ΠΡΟΣΩΡΙΝΟΣ Α.">
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Δευτέρα. Πάτα: όχι Δευτέρα">
+              Δε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τρίτη. Πάτα: όχι Τρίτη">
+              Τρ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Τετάρτη. Πάτα: όχι Τετάρτη">
+              Τε
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Πέμπτη. Πάτα: όχι Πέμπτη">
+              Πέ
+            </button>
+            <button type="button" class="whod__day" aria-pressed="true" data-tip="Κάνει υπηρεσία Παρασκευή. Πάτα: όχι Παρασκευή">
+              Πα
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Σάββατο. Πάτα: όχι Σάββατο">
+              Σά
+            </button>
+            <button type="button" class="whod__day is-we" aria-pressed="true" data-tip="Κάνει υπηρεσία Κυριακή. Πάτα: όχι Κυριακή">
+              Κυ
+            </button>
+          </span>
+          <span class="whod__reset">
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note whod__legend">
+    <b>
+      ✓
+    </b>
+     κάνει · 
+    <b class="whod__lg is-off">
+      ✕
+    </b>
+     δεν κάνει (το όρισες εσύ) · 
+    <b class="whod__lg is-auto">
+      —
+    </b>
+     δεν κάνει λόγω Σ.Ι. ή πόστου (
+    <button type="button" class="ui-btn ui-btn--link golink">
+      Ρυθμίσεις › Σ.Ι.
+    </button>
+    ) · 
+    <b class="whod__lg is-force">
+      ✓!
+    </b>
+     κάνει παρά τη Σ.Ι./το πόστο · μέρα με γραμμή: καμία υπηρεσία εκείνη τη μέρα.
+      Ισχύει στην επιλογή ατόμου και στην αυτόματη συμπλήρωση· με το χέρι μπαίνει πάντα, με επιβεβαίωση. Οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση, με προειδοποίηση. Κάθε νέα υπηρεσία («+ Νέα υπηρεσία») γίνεται μόνη της στήλη εδώ.
+  </p>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -270,7 +270,7 @@ function BlocksCard() {
     ${ed && html`<${EditBlockDialog} phase=${phase} b=${list.find(x => x.id === ed)} onClose=${() => setEd(null)}/>`}
   <//>`;
 }
-function EditBlockDialog({ phase, b, onClose }: P) {
+export function EditBlockDialog({ phase, b, onClose }: P) {
   const { run } = useStore(); const toast = useToast();
   const form = useBlockForm(b, phase); const { f } = form; const dirty = useDirty([f]);
   const save = async () => { if (await run(form.cmd(), false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.kind === 'ly' ? b.name : f.name.trim() || b.name) }); } };

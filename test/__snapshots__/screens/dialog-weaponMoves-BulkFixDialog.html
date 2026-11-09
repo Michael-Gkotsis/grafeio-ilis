@@ -1,0 +1,85 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διόρθωση λόγου/ώρας (1)
+        </h2>
+        <div class="ui-dialog__desc">
+          ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ Ζ.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <span class="field__label">
+          Νέος λόγος εξόδου
+        </span>
+        <div class="wpop__reasons" tabindex="-1" data-autofocus="" style="outline:none">
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              1
+            </kbd>
+            ΕΚΠ
+          </button>
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              2
+            </kbd>
+            ΒΟΛΗ
+          </button>
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              3
+            </kbd>
+            ΑΣΚΗΣΗ
+          </button>
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              4
+            </kbd>
+            ΥΠΗΡΕΣΙΑ
+          </button>
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              5
+            </kbd>
+            ΚΑΘΑΡΙΣΜΟΣ
+          </button>
+          <button type="button" class="wpop__reason wpop__reason--pick" aria-pressed="false">
+            <kbd class="wkey" aria-hidden="true">
+              6
+            </kbd>
+            ΕΠΙΣΚΕΥΗ
+          </button>
+        </div>
+        <input class="ui-input" style="margin-top:8px" placeholder="Άλλος λόγος (γράψε τον)…" aria-label="Άλλος λόγος" value=""/>
+        <span class="field__help">
+          Άφησέ το κενό αν αλλάζεις μόνο την ώρα.
+        </span>
+      </div>
+      <label class="ui-checkrow" style="margin:4px 0 10px">
+        <input type="checkbox" class="ui-check"/>
+         Άλλαξε και την ώρα εξόδου (ίδια για όλες)
+      </label>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Διάλεξε τον νέο λόγο ή άλλαξε την ώρα εξόδου
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Διάλεξε τον νέο λόγο ή άλλαξε την ώρα εξόδου" aria-description="Διάλεξε τον νέο λόγο ή άλλαξε την ώρα εξόδου">
+        Διόρθωση (1)
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,129 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Νέα ΕΣΣΟ
+        </h2>
+        <div class="ui-dialog__desc">
+          <span>
+            <span style="font-weight:700">
+              1 ΕΣΣΟ
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              2 Αρχείο τωρινής
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              3 Excel νέας
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              4 Επιβεβαίωση
+            </span>
+          </span>
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <span class="field__label">
+          Ποια ΕΣΣΟ ξεκινά;
+        </span>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="field" style="flex:none">
+            <span class="field__label">
+              Σειρά
+            </span>
+            <div class="ui-seg" role="group">
+              <button type="button" aria-pressed="false">
+                Α΄
+              </button>
+              <button type="button" aria-pressed="false">
+                Β΄
+              </button>
+              <button type="button" aria-pressed="false">
+                Γ΄
+              </button>
+              <button type="button" aria-pressed="true">
+                Δ΄
+              </button>
+            </div>
+          </div>
+          <div class="field" style="flex:none;width:120px">
+            <label class="field__label" for="ne-y">
+              Έτος
+            </label>
+            <input id="ne-y" class="ui-input" type="number" min="2000" max="2100" value="2026"/>
+          </div>
+        </div>
+        <span class="field__help">
+          Τωρινή: Γ΄ ΕΣΣΟ 2026. Προτείνεται η επόμενη.
+        </span>
+      </div>
+      <div class="field">
+        <span class="field__label">
+          Τύπος μονάδας
+        </span>
+        <div class="ui-seg" role="group">
+          <button type="button" aria-pressed="true">
+            Ίλη / Επιλαρχία (ΗΚΑΙ)
+          </button>
+          <button type="button" aria-pressed="false">
+            Λόχος / Τάγμα (ΗΚΑΛ)
+          </button>
+        </div>
+        <span class="field__help">
+          Η αναφορά λέγεται ΗΚΑΙ σε ίλη και ΗΚΑΛ σε λόχο. Αλλάζουν μόνα τους τα ονόματα στην εφαρμογή και στα έντυπα (τίτλος, γραμμές αξιωματικών, «ΔΚΤΗΣ ΙΛΗΣ» → «ΔΚΤΗΣ ΛΟΧΟΥ»). Δες και την κεφαλίδα από κάτω.
+        </span>
+      </div>
+      <div class="field">
+        <span class="field__label">
+          Κεφαλίδα εντύπων και μονάδα στον τίτλο της ΗΚΑΙ
+        </span>
+        <div class="field-row">
+          <input class="ui-input" aria-label="Κεφαλίδα, γραμμή 1" style="flex:1;min-width:140px" value="ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)"/>
+          <input class="ui-input" aria-label="Κεφαλίδα, γραμμή 2" style="flex:1;min-width:140px" value="2η ΕΠΧΙΑ Ν/Σ"/>
+          <input class="ui-input" aria-label="Κεφαλίδα, γραμμή 3" style="flex:1;min-width:140px" value="4η ΙΛΗ"/>
+          <input class="ui-input" aria-label="Μονάδα στον τίτλο" style="flex:1;min-width:120px" value="4ης ΙΛΗΣ"/>
+        </div>
+        <span class="field__help">
+          «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ης ΙΛΗΣ ΤΗΣ …». Ισχύουν για όλα τα Excel της νέας ΕΣΣΟ· αλλάζουν και μετά από Ρυθμίσεις › Μονάδα και έντυπα.
+        </span>
+      </div>
+      <div class="ui-alert ui-alert--warn">
+        <span>
+          <b>
+            Η εφαρμογή θα ξεκινήσει χωρίς στρατιώτες.
+          </b>
+           Φεύγουν οι 12 στρατιώτες της τωρινής ΕΣΣΟ με τις καταστάσεις, τις υπηρεσίες, τις αιτήσεις, την ΗΚΑΙ και το ιστορικό τους. Όλα κρατιούνται πρώτα στο αρχείο (επόμενο βήμα) και ξαναφορτώνονται από την «Επαναφορά ΕΣΣΟ».
+        </span>
+      </div>
+      <p class="note">
+        Μένουν: κεφαλίδα και μονάδα, υπηρεσίες και κωδικοί, κανόνες, λίστες, Σ.Ι., αργίες, στελέχη, templates εντύπων. Το έντυπο υπηρεσιών ξεκινά από τη ΦΡΟΥΡΑ ΣΒΕΝ.
+      </p>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Συνέχεια
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

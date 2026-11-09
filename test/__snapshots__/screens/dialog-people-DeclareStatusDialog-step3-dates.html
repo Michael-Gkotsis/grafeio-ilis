@@ -1,0 +1,119 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Δήλωση κατάστασης
+        </h2>
+        <div class="ui-dialog__desc">
+          <span>
+            <span style="font-weight:400">
+              1 Στρατιώτης
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              2 Κατάσταση
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:700">
+              3 Πότε
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              4 Τι θα αλλάξει
+            </span>
+          </span>
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="declsum">
+        <span>
+          <b>
+            ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ
+          </b>
+        </span>
+        <button type="button" class="ui-btn ui-btn--link">
+          Αλλαγή
+        </button>
+        <span class="declsum__sep">
+          ·
+        </span>
+        <span>
+          <span class="ui-badge ui-badge--ey">
+            ΕΥ
+          </span>
+           Ελεύθερος Υπηρεσίας
+        </span>
+        <button type="button" class="ui-btn ui-btn--link">
+          Αλλαγή
+        </button>
+      </div>
+      <div class="field">
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="dr-from">
+              Από *
+            </label>
+            <input id="dr-from" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+            <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+            <span class="field__help">
+              Σήμερα
+            </span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="dr-to">
+              Έως *
+            </label>
+            <input id="dr-to" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+            <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value="2026-11-09"/>
+            <span class="field__help">
+              Σήμερα
+            </span>
+          </div>
+        </div>
+        <span class="field__help">
+          Διάρκεια: 1 ημέρα (μετρούν και οι δύο ημερομηνίες)
+        </span>
+      </div>
+      <label class="rule">
+        <input type="checkbox" class="ui-check"/>
+        <span>
+          <b>
+            Χωρίς λήξη
+          </b>
+          <small>
+            Ισχύει μέχρι να πατήσεις «Λήξη νωρίτερα…» στα Ιατρικά. Στο Excel το «έως» μένει κενό.
+          </small>
+        </span>
+      </label>
+      <div class="field">
+        <label class="field__label" for="dsn">
+          Παρατήρηση (λόγος)
+        </label>
+        <input id="dsn" class="ui-input" placeholder="Προαιρετικό, π.χ. γιατί ή αριθμός διαταγής" value=""/>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Πίσω
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Συνέχεια: Τι θα αλλάξει
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,80 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Σημείωση
+        </h2>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="note-comp">
+        <textarea id="ne-text" class="ui-input note-text" rows="4" maxLength="2000" data-autofocus="" aria-label="Κείμενο σημείωσης">
+          Γενική σημείωση της ημέρας
+        </textarea>
+        <div class="note-who">
+          <span class="note-lbl">
+            Για
+          </span>
+          <div class="note-pick note-pick--multi">
+            <div class="picker__chips">
+              <span class="muted">
+                Γενική σημείωση (κανένας συγκεκριμένα)
+              </span>
+            </div>
+            <div class="note-pick__add">
+              <div class="picker">
+                <input id="nt-pid" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="+ Στρατιώτης: επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+              </div>
+              <button id="nt-cid" aria-label="Πρόσθεσε στέλεχος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                <span class="ui-dd__v">
+                  + Στέλεχος…
+                </span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="note-rem">
+          <span class="note-lbl">
+            Υπενθύμιση
+          </span>
+          <button type="button" class="ui-chip" aria-pressed="true">
+            Καμία
+          </button>
+          <button type="button" class="ui-chip" aria-pressed="false">
+            Αύριο
+          </button>
+          <button type="button" class="ui-chip" aria-pressed="false">
+            Σε μία εβδομάδα
+          </button>
+          <div class="note-rem__date">
+            <input id="ne-rem" aria-label="Άλλη μέρα υπενθύμισης" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value=""/>
+            <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value=""/>
+          </div>
+        </div>
+        <label class="ui-checkrow">
+          <input type="checkbox" class="ui-check"/>
+          Σημαντική
+        </label>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

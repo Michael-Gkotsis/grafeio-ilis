@@ -1,0 +1,800 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Υπηρεσίες Δευτέρας 09/11
+      </h1>
+      <p class="page-head__sub">
+        Κύκλος 
+        <b class="mono-lg">
+          Δευ 09/11 14:00 → Τρί 10/11 14:00
+        </b>
+      </p>
+    </div>
+    <div class="page-head__acts">
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Ισχύουν: ανάπαυση 1 ημ. μετά από υπηρεσία, 3ο/4ο νούμερο ξανά μετά από 3 ημ., όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες, εναλλαγή υπηρεσιών">
+        Κανόνες
+      </button>
+      <label class="strict-sw" data-tip="Οι άοπλοι μπαίνουν πρώτα στα μαγειρεία, μετά στο 2ο και 3ο νούμερο θαλαμοφύλακα και οπλοφύλακα (αν ο οπλοφύλακας είναι άοπλος στις Ρυθμίσεις), μετά στο 1ο και 4ο νούμερο θαλαμοφύλακα. Σκοποί μόνο ένοπλοι." data-tip-side="bottom">
+        <input type="checkbox" class="ui-check"/>
+        Αυστηρά Άοπλοι
+      </label>
+      <button type="button" class="ui-btn ui-btn--default" data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες· από όσους είναι η σειρά τους, η υπηρεσία πάει σε όποιον δεν την έχει κάνει (εναλλαγή υπηρεσιών), μετά κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">
+        Αυτόματη συμπλήρωση
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Βγάλε το Excel
+      </button>
+    </div>
+  </div>
+  <div class="guard__days">
+    <div class="strip datebar" role="group" aria-label="Ημερομηνία">
+      <button type="button" class="daybtn" aria-pressed="true" data-tip="13 κενές θέσεις">
+        <span class="daybtn__d">
+          Δευ σήμερα
+        </span>
+        <span class="daybtn__n">
+          09/11 · 
+          <b>
+            13
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn" aria-pressed="false" data-tip="10 κενές θέσεις">
+        <span class="daybtn__d">
+          Τρί αύριο
+        </span>
+        <span class="daybtn__n">
+          10/11 · 
+          <b>
+            10
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn" aria-pressed="false" data-tip="12 κενές θέσεις">
+        <span class="daybtn__d">
+          Τετ
+        </span>
+        <span class="daybtn__n">
+          11/11 · 
+          <b>
+            12
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn" aria-pressed="false" data-tip="9 κενές θέσεις">
+        <span class="daybtn__d">
+          Πέμ
+        </span>
+        <span class="daybtn__n">
+          12/11 · 
+          <b>
+            9
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn" aria-pressed="false" data-tip="11 κενές θέσεις">
+        <span class="daybtn__d">
+          Παρ
+        </span>
+        <span class="daybtn__n">
+          13/11 · 
+          <b>
+            11
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn is-hol" aria-pressed="false" data-tip="Αργία: ΣΚ · 9 κενές θέσεις">
+        <span class="daybtn__d">
+          Σάβ
+        </span>
+        <span class="daybtn__n">
+          14/11 · 
+          <b>
+            9
+          </b>
+        </span>
+      </button>
+      <button type="button" class="daybtn is-hol" aria-pressed="false" data-tip="Αργία: ΣΚ · 11 κενές θέσεις">
+        <span class="daybtn__d">
+          Κυρ
+        </span>
+        <span class="daybtn__n">
+          15/11 · 
+          <b>
+            11
+          </b>
+        </span>
+      </button>
+      <input aria-label="Άλλη ημερομηνία" class="ui-input datebar__pick" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+      <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+    </div>
+  </div>
+  <div style="margin-bottom:14px">
+    <div class="ui-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">
+        Θέσεις (13)
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Έλεγχος υπηρεσιών
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Ποιος κάνει τι
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Εξαιρέσεις
+      </button>
+    </div>
+  </div>
+  <div class="guard">
+    <div class="guard__left">
+      <div aria-hidden="true">
+      </div>
+      <div class="guard__bar">
+        <span class="gb-stuck">
+          <b>
+            Δευ 09/11
+          </b>
+        </span>
+        <button aria-label="Έντυπο υπηρεσιών" data-tip="2 πίνακες θαλαμοφυλάκων και μαγειρεία" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+          <span class="ui-dd__v">
+            ΦΡΟΥΡΑ ΣΒΕΝ
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <span class="ui-badge ui-badge--bad">
+          13 κενές από 15
+        </span>
+        <button type="button" class="ui-btn ui-btn--outline ui-btn--sm gb-keep" data-tip="Πάει στην επόμενη κενή θέση και ανοίγει την επιλογή ατόμου (πλήκτρο Ν)">
+          Επόμενη κενή
+        </button>
+        <span class="gb-stuck">
+          <button type="button" class="ui-btn ui-btn--default ui-btn--sm">
+            Αυτόματη συμπλήρωση
+          </button>
+          <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+            Βγάλε το Excel
+          </button>
+        </span>
+        <span class="guard__rules">
+        </span>
+        <span class="gb-mon">
+          <span class="gb-mon__lbl" data-tip="Από ποιον μήνα μετρά τις υπηρεσίες (στήλη Είδ./Σύν. και σειρά)">
+            Μετρά:
+          </span>
+          <button style="flex:0 0 150px;width:150px;height:32px;font-size:13px" aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              Νοέμβριος 2026
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </span>
+        <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Π.χ. σκοπιά, πύλη, ΤΑΕ. Μπαίνει στο έντυπο σε δική της γραμμή.">
+          + Νέα υπηρεσία
+        </button>
+      </div>
+      <div class="gtable">
+        <div class="gtable__head post" aria-hidden="true">
+          <span>
+            Θέση · ώρες
+          </span>
+          <span>
+            Ποιος
+          </span>
+          <span data-tip="Υπηρεσίες αυτού του είδους / σύνολο · Νοέμβριος 2026 (αλλάζει από τον μήνα πάνω δεξιά)">
+            Είδ./Σύν.
+          </span>
+          <span>
+          </span>
+        </div>
+        <section class="gblock">
+          <h2 class="gblock__hd">
+            <button type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span>
+                Λ/Υ και Δ/Υ
+              </span>
+              <span class="gblock__meta" data-tip="Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ">
+                · Άοπλη
+              </span>
+              <span class="gblock__meta is-bad">
+                · 1 κενή
+              </span>
+            </button>
+          </h2>
+          <ul class="posts">
+            <li class="post">
+              <div class="post__pos">
+                <b>
+                  Λ/Υ
+                </b>
+                <span class="post__hrs">
+                  14:00 → 14:00
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="post__name">
+                  <button type="button" class="linkish" data-tip="ΣΤΡ (ΔΒ) ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ · άνοιξε την καρτέλα">
+                    <span>
+                      <span class="rk">
+                        ΣΤΡ (ΔΒ) 
+                      </span>
+                      ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ
+                    </span>
+                  </button>
+                </span>
+                <small class="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">
+                  Γιατί: 1 μέρες χωρίς υπηρεσία · 23 υπηρεσίες, αναλογούν 19,6 · έχει ήδη υπηρεσία 11/11 · ly 10 φορές πριν
+                </small>
+              </span>
+              <span class="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">
+                3 / 6
+              </span>
+              <span class="post__acts">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left">
+                  Αλλαγή
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βάλε τον επόμενο στη σειρά δικαιοσύνης, με τους ίδιους κανόνες. Ξαναπάτα για τον μεθεπόμενο." data-tip-side="left">
+                  Επόμενος
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M6 6l12 12M18 6L6 18"/>
+                  </svg>
+                </button>
+              </span>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  Δ/Υ
+                </b>
+                <span class="post__hrs">
+                  14:00 → 14:00
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-dy" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div class="fixedline">
+            <span>
+              Μόνιμοι: Λ/Υ 
+              <b>
+                —
+              </b>
+               · Δ/Υ 
+              <b>
+                —
+              </b>
+            </span>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Μπαίνουν μόνοι τους κάθε μέρα, εκτός σειράς δικαιοσύνης. Για μία μέρα άλλαξέ τους με «Αλλαγή» στη θέση· ο αντικαταστάτης μετρά υπηρεσία κανονικά.">
+              Όρισε μόνιμους
+            </button>
+          </div>
+        </section>
+        <section class="gblock">
+          <h2 class="gblock__hd">
+            <button type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span>
+                Θαλαμοφύλακες (α΄ πίνακας)
+              </span>
+              <span class="gblock__meta" data-tip="Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ">
+                · Άοπλη
+              </span>
+              <span class="gblock__meta is-bad">
+                · 3 κενές
+              </span>
+            </button>
+          </h2>
+          <ul class="posts">
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  1ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    14:00-16:00
+                  </span>
+                  <span>
+                    22:00-00:00
+                  </span>
+                  <span>
+                    06:00-08:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th1" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post">
+              <div class="post__pos is-slots">
+                <b>
+                  2ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    16:00-18:00
+                  </span>
+                  <span>
+                    00:00-02:00
+                  </span>
+                  <span>
+                    08:00-10:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="post__name">
+                  <button type="button" class="linkish" data-tip="ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ · άνοιξε την καρτέλα">
+                    <span>
+                      <span class="rk">
+                        ΔΝΕΑΣ (ΔΒ) 
+                      </span>
+                      ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ
+                    </span>
+                  </button>
+                </span>
+                <small class="post__why" data-tip="Γιατί αυτός; Η σειρά δικαιοσύνης είναι στο κουμπί «Κανόνες»">
+                  Γιατί: 1 μέρες χωρίς υπηρεσία · 30 υπηρεσίες, αναλογούν 29,7 · έχει ήδη υπηρεσία 11/11 · θαλαμοφύλακας 16 φορές πριν
+                </small>
+              </span>
+              <span class="duty" data-tip="Υπηρεσίες αυτού του είδους / σύνολο" data-tip-side="left">
+                4 / 8
+              </span>
+              <span class="post__acts">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βάλε άλλον στη θέση του (π.χ. αλλαγή τελευταίας στιγμής)" data-tip-side="left">
+                  Αλλαγή
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βάλε τον επόμενο στη σειρά δικαιοσύνης, με τους ίδιους κανόνες. Ξαναπάτα για τον μεθεπόμενο." data-tip-side="left">
+                  Επόμενος
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Αφαίρεση από τη θέση" data-tip="Αφαίρεση από τη θέση" data-tip-side="left">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                    <path d="M6 6l12 12M18 6L6 18"/>
+                  </svg>
+                </button>
+              </span>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  3ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    18:00-20:00
+                  </span>
+                  <span>
+                    02:00-04:00
+                  </span>
+                  <span>
+                    10:00-12:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th3" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  4ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    20:00-22:00
+                  </span>
+                  <span>
+                    04:00-06:00
+                  </span>
+                  <span>
+                    12:00-14:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th4" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+        <section class="gblock">
+          <h2 class="gblock__hd">
+            <button type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span>
+                Θαλαμοφύλακες (β΄ πίνακας)
+              </span>
+              <span class="gblock__meta" data-tip="Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ">
+                · Άοπλη
+              </span>
+              <span class="gblock__meta is-bad">
+                · 4 κενές
+              </span>
+            </button>
+          </h2>
+          <ul class="posts">
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  1ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    14:00-16:00
+                  </span>
+                  <span>
+                    22:00-00:00
+                  </span>
+                  <span>
+                    06:00-08:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th5" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  2ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    16:00-18:00
+                  </span>
+                  <span>
+                    00:00-02:00
+                  </span>
+                  <span>
+                    08:00-10:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th6" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  3ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    18:00-20:00
+                  </span>
+                  <span>
+                    02:00-04:00
+                  </span>
+                  <span>
+                    10:00-12:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th7" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos is-slots">
+                <b>
+                  4ος
+                </b>
+                <span class="post__slots">
+                  <span>
+                    20:00-22:00
+                  </span>
+                  <span>
+                    04:00-06:00
+                  </span>
+                  <span>
+                    12:00-14:00
+                  </span>
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-th8" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+        <section class="gblock">
+          <h2 class="gblock__hd">
+            <button type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span>
+                Μαγειρεία
+              </span>
+              <span class="gblock__meta" data-tip="Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ">
+                · Άοπλη
+              </span>
+              <span class="gblock__meta is-bad">
+                · 5 κενές
+              </span>
+            </button>
+          </h2>
+          <ul class="posts">
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  1ος
+                </b>
+                <span class="post__hrs">
+                  ημέρα
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-mg1" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  2ος
+                </b>
+                <span class="post__hrs">
+                  ημέρα
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-mg2" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  3ος
+                </b>
+                <span class="post__hrs">
+                  ημέρα
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-mg3" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  4ος
+                </b>
+                <span class="post__hrs">
+                  ημέρα
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-mg4" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+            <li class="post is-empty">
+              <div class="post__pos">
+                <b>
+                  5ος
+                </b>
+                <span class="post__hrs">
+                  ημέρα
+                </span>
+              </div>
+              <span class="post__who">
+                <span class="kenh-tag">
+                  Κενή
+                </span>
+              </span>
+              <div class="post__pick">
+                <div class="picker">
+                  <input id="gp-mg5" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" placeholder="Διάλεξε άτομο…" value=""/>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </div>
+      <div class="gb-clear">
+        <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">
+          Άδειασε τη μέρα…
+        </button>
+      </div>
+    </div>
+    <div class="guard__right">
+      <section class="ui-card side">
+        <h2 class="side__hd">
+          Δεν μπαίνουν σήμερα
+        </h2>
+        <ul class="side__sum">
+          <li>
+            <button type="button" class="linkish" aria-expanded="false">
+              <b>
+                7
+              </b>
+               σε καμία υπηρεσία
+            </button>
+          </li>
+          <li>
+            <button type="button" class="linkish" aria-expanded="false">
+              <b>
+                1
+              </b>
+               μόνο σε άοπλες
+            </button>
+          </li>
+          <li>
+            <button type="button" class="linkish" aria-expanded="false">
+              <b>
+                1
+              </b>
+               με πόστο
+            </button>
+          </li>
+          <li>
+            <button type="button" class="linkish" aria-expanded="false">
+              <b>
+                1
+              </b>
+               ΕΠΟΠ/ΟΒΑ, μόνο με το χέρι
+            </button>
+          </li>
+          <li>
+            <button type="button" class="linkish" aria-expanded="false">
+              <b>
+                2
+              </b>
+               μόνιμα όχι σε κάποιες θέσεις
+            </button>
+          </li>
+        </ul>
+        <button type="button" class="side__link">
+          Ποιοι είναι
+        </button>
+      </section>
+      <section class="xlcard">
+        <h2 class="xlcard__hd">
+          Excel
+        </h2>
+        <p>
+          <span class="mono">
+            ΦΡΟΥΡΑ 09-11-2026.xlsx
+          </span>
+           · A4 οριζόντιο. Με 13 κενές γράφεται «ΚΕΝΗ».
+        </p>
+        <button type="button" class="ui-btn ui-btn--outline">
+          Προεπισκόπηση
+        </button>
+        <button type="button" class="ui-btn ui-btn--ghost" data-tip="Βγαίνει το Excel και ανοίγει προεπισκόπηση εκτύπωσης. Δεν χρειάζεται Excel.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M7 9V3h10v6"/>
+            <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+            <path d="M7 14h10v7H7z"/>
+          </svg>
+          Εκτύπωση
+        </button>
+        <button type="button" class="ui-btn ui-btn--ghost" data-tip="Υπογραφές: Ο ΑΛΧΙΑΣ ΙΛΗΣ · Ο ΔΚΤΗΣ ΙΛΗΣ · ΤΟ 2ο ΓΡΑΦΕΙΟ · Ο ΔΚΤΗΣ ΕΠΧΙΑΣ. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+          Υπογραφές…
+        </button>
+        <span class="tplnote">
+          Από template: 
+          <span>
+            <b>
+              Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)
+            </b>
+          </span>
+          <span>
+            , 
+            <b>
+              Έλεγχος υπηρεσιών (μηνιαίο πλέγμα)
+            </b>
+          </span>
+           · 
+          <button type="button" class="ui-btn ui-btn--link">
+            Templates
+          </button>
+        </span>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

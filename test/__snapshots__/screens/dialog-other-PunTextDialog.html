@@ -1,0 +1,61 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Κείμενο ποινής
+        </h2>
+        <div class="ui-dialog__desc">
+          ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ · ΠΕΡΙΟΡΙΣΜΟΣ 10/09–13/09
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="pt-by">
+            Ποιος τιμώρησε
+          </label>
+          <input id="pt-by" class="ui-input" placeholder="σε αιτιατική, π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="pt-on">
+            Ημερομηνία τιμωρίας
+          </label>
+          <input id="pt-on" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="10/09/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-09-10"/>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="pt-r">
+          Λόγος (διότι…)
+        </label>
+        <textarea id="pt-r" class="ui-input" rows="2">
+          ΑΡΓΗΣΕ
+        </textarea>
+      </div>
+      <div class="puntext" aria-label="Προεπισκόπηση">
+        Ο ΔΝΕΑΣ (ΔΒ) ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ ΤΙΜΩΡΗΘΗΚΕ ΤΗΝ 10 ΣΕΠ 26 ΑΠΟ ΤΟΝ ΛΧΙΑΣ ΔΟΚΙΜΙΟΣ ΜΕ 
+        <u>
+          ΤΕΣΣΕΡΙΣ (04) ΗΜΕΡΕΣ ΠΕΡΙΟΡΙΣΜΟ
+        </u>
+        , ΔΙΟΤΙ ΑΡΓΗΣΕ.
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Κλείσιμο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αντιγραφή
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

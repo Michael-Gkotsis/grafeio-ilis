@@ -1,0 +1,250 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Ρυθμίσεις
+      </h1>
+      <p class="page-head__sub">
+        Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή.
+      </p>
+    </div>
+  </div>
+  <div class="setgrid">
+    <nav class="setnav" aria-label="Ρυθμίσεις">
+      <button type="button">
+        Μονάδα και έντυπα
+      </button>
+      <button type="button" aria-current="page">
+        Θάλαμοι και ουλαμοί
+      </button>
+      <button type="button">
+        Υπηρεσίες και αργίες
+      </button>
+      <button type="button">
+        Λίστες
+      </button>
+      <button type="button">
+        Εισαγωγή Δυναμολογίου
+      </button>
+      <button type="button">
+        Αρχεία Excel
+      </button>
+      <button type="button">
+        Πρότυπα εφαρμογής
+      </button>
+      <button type="button">
+        Γράμματα Excel
+      </button>
+      <button type="button">
+        Εμφάνιση
+      </button>
+      <button type="button">
+        Ώρα και ζώνη ώρας
+      </button>
+      <button type="button">
+        ΕΣΣΟ
+      </button>
+      <button type="button">
+        Αντίγραφα ασφαλείας
+      </button>
+      <button type="button">
+        Ενημερώσεις
+      </button>
+    </nav>
+    <div class="setbody">
+      <section class="ui-card">
+        <div class="ui-card__head">
+          <h2>
+            Θάλαμοι και ουλαμοί
+          </h2>
+        </div>
+        <div class="ui-card__body">
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label" for="rm-n">
+                Αριθμός θαλάμων
+              </label>
+              <input id="rm-n" class="ui-input" type="number" min="1" max="40" value="8"/>
+              <span class="field__help">
+                Γίνεται η λίστα του πεδίου «Θάλαμος» όταν βάζεις ή διορθώνεις στρατιώτη.
+              </span>
+            </div>
+            <div class="field">
+              <label class="field__label" for="rm-p">
+                Θάλαμοι ανά ουλαμό
+              </label>
+              <input id="rm-p" class="ui-input" type="number" min="1" max="40" value="4"/>
+              <span class="field__help">
+                Οι ουλαμοί φτιάχνονται μόνοι τους με τη σειρά των θαλάμων.
+              </span>
+            </div>
+          </div>
+          <div class="ui-alert ui-alert--warn">
+            <span>
+              2 στρατιώτες είναι σε θάλαμο μεγαλύτερο από 8 (Θ9, Θ10). Δεν ανήκουν σε ουλαμό μέχρι να τους αλλάξεις θάλαμο ή να αυξήσεις τους θαλάμους.
+            </span>
+          </div>
+          <div class="field">
+            <span class="field__label">
+              Ουλαμοί
+            </span>
+            <span class="field__help">
+              Πάτα έναν θάλαμο για να τον βάλεις σε αυτόν τον ουλαμό· ξαναπάτα για να τον βγάλεις. Ο ουλαμός φαίνεται στο Δυναμολόγιο, στην καρτέλα και στο φίλτρο «Ουλαμός».
+            </span>
+            <div class="stack" style="gap:10px;margin-top:8px">
+              <div class="field-row" style="align-items:center">
+                <input class="ui-input" style="width:170px;flex:none" aria-label="Όνομα ουλαμού 1" value="1ος Ουλαμός"/>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1">
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 1 στον 1ος Ουλαμός" data-tip="2 στρατιώτες">
+                    Θ1
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 2 στον 1ος Ουλαμός" data-tip="2 στρατιώτες">
+                    Θ2
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 3 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ3
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 4 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ4
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 5 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ5
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 6 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ6
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 7 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ7
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 8 στον 1ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ8
+                  </button>
+                </div>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Αφαίρεση: 1ος Ουλαμός" data-tip="Αφαίρεση ουλαμού (οι θάλαμοί του μένουν χωρίς ουλαμό)">
+                  ✕
+                </button>
+              </div>
+              <div class="field-row" style="align-items:center">
+                <input class="ui-input" style="width:170px;flex:none" aria-label="Όνομα ουλαμού 2" value="2ος Ουλαμός"/>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1">
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 1 στον 2ος Ουλαμός" data-tip="2 στρατιώτες">
+                    Θ1
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 2 στον 2ος Ουλαμός" data-tip="2 στρατιώτες">
+                    Θ2
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 3 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ3
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 4 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ4
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 5 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ5
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 6 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ6
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 7 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ7
+                  </button>
+                  <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 8 στον 2ος Ουλαμός" data-tip="1 στρατιώτες">
+                    Θ8
+                  </button>
+                </div>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Αφαίρεση: 2ος Ουλαμός" data-tip="Αφαίρεση ουλαμού (οι θάλαμοί του μένουν χωρίς ουλαμό)">
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+                + Ουλαμός
+              </button>
+              <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" disabled="" data-tip="Από την αρχή: ανά 4 θαλάμους">
+                Ξαναφτιάξε τους ουλαμούς
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field__label">
+              Θάλαμοι εξόδου το Σαββατοκύριακο (Κ-16)
+            </span>
+            <div class="field-row" style="align-items:center">
+              <span style="width:80px;flex:none;font-size:13px">
+                Σάββατο
+              </span>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1">
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 1 βγαίνει Σάββατο" data-tip="2 στρατιώτες">
+                  Θ1
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 2 βγαίνει Σάββατο" data-tip="2 στρατιώτες">
+                  Θ2
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 3 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ3
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 4 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ4
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 5 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ5
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 6 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ6
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 7 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ7
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 8 βγαίνει Σάββατο" data-tip="1 στρατιώτες">
+                  Θ8
+                </button>
+              </div>
+            </div>
+            <div class="field-row" style="align-items:center">
+              <span style="width:80px;flex:none;font-size:13px">
+                Κυριακή
+              </span>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1">
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 1 βγαίνει Κυριακή" data-tip="2 στρατιώτες">
+                  Θ1
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 2 βγαίνει Κυριακή" data-tip="2 στρατιώτες">
+                  Θ2
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 3 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ3
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" aria-label="Θάλαμος 4 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ4
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 5 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ5
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 6 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ6
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 7 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ7
+                </button>
+                <button type="button" class="ui-chip ui-chip--sm" aria-pressed="true" aria-label="Θάλαμος 8 βγαίνει Κυριακή" data-tip="1 στρατιώτες">
+                  Θ8
+                </button>
+              </div>
+            </div>
+            <span class="field__help">
+              Από αυτούς προτείνει τους εξοδούχους στις Εξόδους.
+            </span>
+          </div>
+          <div>
+            <button type="button" class="ui-btn ui-btn--default">
+              Αποθήκευση
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

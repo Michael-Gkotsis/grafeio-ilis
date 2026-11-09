@@ -1,0 +1,81 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Διόρθωση ώρας ένοπλης υπηρεσίας
+        </h2>
+        <div class="ui-dialog__desc">
+          ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΣ 3ΗΣ ΣΚΟΠΙΑΣ (Α) · ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ · αυτόματα 13:45–16:15
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="df-od">
+            Μέρα εξόδου
+          </label>
+          <input id="df-od" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="df-ot">
+            Ώρα εξόδου *
+          </label>
+          <input id="df-ot" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="13:45"/>
+          <span class="field__help">
+            Πότε βγαίνει το όπλο από τον οπλοβαστό
+          </span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="df-id">
+            Μέρα εισόδου
+          </label>
+          <input id="df-id" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" min="2026-11-09" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="df-it">
+            Ώρα εισόδου *
+          </label>
+          <input id="df-it" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="16:15"/>
+          <span class="field__help">
+            Πότε μπαίνει πάλι στον οπλοβαστό
+          </span>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="df-w">
+          Λόγος της διόρθωσης *
+        </label>
+        <input id="df-w" class="ui-input" placeholder="π.χ. άργησε η αλλαγή φρουράς" value=""/>
+        <span class="field__help">
+          Γράφεται στο Ιστορικό και στην Παρατήρηση του Excel κινήσεων.
+        </span>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span style="flex:1">
+      </span>
+      <span class="btn-why" role="status">
+        Λείπει: Λόγος διόρθωσης
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Λόγος διόρθωσης" aria-description="Λείπει: Λόγος διόρθωσης">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

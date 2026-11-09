@@ -1,0 +1,71 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Έξοδος όπλων
+        </h2>
+        <div class="ui-dialog__desc">
+          ΣΤΡ (ΤΘ) ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ · όπλο 4810000
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <label class="field__label" for="wo-r">
+          Λόγος εξόδου *
+        </label>
+        <button id="wo-r" data-autofocus="" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+          <span class="ui-dd__v">
+            —
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="wo-d">
+            Μέρα
+          </label>
+          <input id="wo-d" class="ui-input" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+          <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+        </div>
+        <div class="field">
+          <label class="field__label" for="wo-t">
+            Ώρα εξόδου *
+          </label>
+          <input id="wo-t" class="ui-input" inputMode="numeric" placeholder="π.χ. 14:00" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="11:00"/>
+          <span class="field__help">
+            Η τωρινή· άλλαξέ την αν βγήκε νωρίτερα
+          </span>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="wo-n">
+          Παρατήρηση
+        </label>
+        <input id="wo-n" class="ui-input" placeholder="π.χ. πεδίο βολής Σχιστού" value=""/>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Λείπει: Λόγος
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Λόγος" aria-description="Λείπει: Λόγος">
+        Έξοδος
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

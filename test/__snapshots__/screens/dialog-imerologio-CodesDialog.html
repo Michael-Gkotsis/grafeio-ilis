@@ -1,0 +1,300 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--lg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Κωδικοί ημερολογίου
+        </h2>
+        <div class="ui-dialog__desc">
+          Ισχύουν για την οθόνη, το Excel και την εκτύπωση. Όποιος έχει δύο πράγματα την ίδια μέρα παίρνει το πρώτο της λίστας (π.χ. άδεια πριν από υπηρεσία).
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="imer__opt">
+        <span>
+          Τίτλος
+        </span>
+        <div class="ui-seg ui-seg--sm" role="group">
+          <button type="button" aria-pressed="true">
+            ΗΜΕΡΟΛΟΓΙΟ ΚΩΛΥΟΜΕΝΩΝ-ΑΠΟΝΤΩΝ
+          </button>
+          <button type="button" aria-pressed="false">
+            ΔΥΝΑΜΟΛΟΓΙΟ ΕΚΠΑΙΔΕΥΣΗΣ
+          </button>
+        </div>
+      </div>
+      <div class="imer__opt">
+        <span>
+          Φύλλα
+        </span>
+        <div class="ui-seg ui-seg--sm" role="group">
+          <button type="button" aria-pressed="true">
+            Ένα ανά ουλαμό
+          </button>
+          <button type="button" aria-pressed="false">
+            Ένα για όλη την ίλη
+          </button>
+          <button type="button" aria-pressed="false">
+            Και τα δύο
+          </button>
+        </div>
+      </div>
+      <table class="imer__codes">
+        <thead>
+          <tr>
+            <th scope="col">
+              Κατάσταση στην εφαρμογή
+            </th>
+            <th scope="col">
+              Κωδικός
+            </th>
+            <th scope="col">
+              Μετρά ως
+            </th>
+            <th scope="col">
+              Από πού
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              Κανονική άδεια
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Κανονική άδεια" maxLength="8" value="Κ.Α"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="false" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="true" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Άδειες
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Αναρρωτική άδεια
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Αναρρωτική άδεια" maxLength="8" value="ΑΝ.ΑΔ"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="false" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="true" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Άδειες
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Νοσοκομείο
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Νοσοκομείο" maxLength="8" value="ΝΟΣ"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="false" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="true" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Ιατρικά
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Ελεύθερος υπηρεσίας
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Ελεύθερος υπηρεσίας" maxLength="8" value="Ε.Υ"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="true" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="false" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Ιατρικά
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Ελεύθερος ασκήσεων
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Ελεύθερος ασκήσεων" maxLength="8" value="Ε.Α"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="true" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="false" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Ιατρικά
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Σκοπός · Θαλαμοφύλακας · Οπλοφύλακας · …
+            </td>
+            <td>
+              <span class="muted">
+                ΣΚ · Θ · ΟΠ · ΠΕΡ
+              </span>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="true" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="false" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Υπηρεσίες της μέρας
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Γραφέας · Εστιάτορας (πόστο)
+            </td>
+            <td>
+              <span class="muted">
+                ΓΡ · ΕΣΤ
+              </span>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="true" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="false" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Πόστα
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Αδικαιολόγητα απών
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Αδικαιολόγητα απών" maxLength="8" value="Α/Α"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="false" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="true" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Νέο: δηλώνεται στην καρτέλα
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Εργασίες επιλαρχίας
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Εργασίες επιλαρχίας" maxLength="8" value="Ε/Ε"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="true" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="false" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Νέο: δηλώνεται στην καρτέλα
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Πριν την κατάταξη / μετά τη διαγραφή
+            </td>
+            <td>
+              <input class="ui-input" aria-label="Κωδικός: Πριν την κατάταξη / μετά τη διαγραφή" maxLength="8" value="-"/>
+            </td>
+            <td>
+              <div class="ui-seg ui-seg--sm" role="group">
+                <button type="button" aria-pressed="false" data-tip="Παρών">
+                  Π
+                </button>
+                <button type="button" aria-pressed="true" data-tip="Απών">
+                  Α
+                </button>
+              </div>
+            </td>
+            <td class="muted">
+              Εγγραφή / διαγραφή
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" style="font-size:13px">
+        Κενό κελί = στην εκπαίδευση = Π. Άλλες άδειες και ιατρικά (π.χ. τιμητική) βγαίνουν με τον κωδικό τους και μετράνε Α αν είναι άδεια.
+      </p>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--ghost">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Εκτύπωση
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

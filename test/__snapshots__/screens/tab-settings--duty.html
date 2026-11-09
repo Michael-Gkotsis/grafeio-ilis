@@ -1,0 +1,208 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Ρυθμίσεις
+      </h1>
+      <p class="page-head__sub">
+        Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή.
+      </p>
+    </div>
+  </div>
+  <div class="setgrid">
+    <nav class="setnav" aria-label="Ρυθμίσεις">
+      <button type="button">
+        Μονάδα και έντυπα
+      </button>
+      <button type="button">
+        Θάλαμοι και ουλαμοί
+      </button>
+      <button type="button" aria-current="page">
+        Υπηρεσίες και αργίες
+      </button>
+      <button type="button">
+        Λίστες
+      </button>
+      <button type="button">
+        Εισαγωγή Δυναμολογίου
+      </button>
+      <button type="button">
+        Αρχεία Excel
+      </button>
+      <button type="button">
+        Πρότυπα εφαρμογής
+      </button>
+      <button type="button">
+        Γράμματα Excel
+      </button>
+      <button type="button">
+        Εμφάνιση
+      </button>
+      <button type="button">
+        Ώρα και ζώνη ώρας
+      </button>
+      <button type="button">
+        ΕΣΣΟ
+      </button>
+      <button type="button">
+        Αντίγραφα ασφαλείας
+      </button>
+      <button type="button">
+        Ενημερώσεις
+      </button>
+    </nav>
+    <div class="setbody">
+      <div class="stack">
+        <div class="ui-seg" role="group">
+          <button type="button" aria-pressed="true">
+            Υπηρεσίες
+          </button>
+          <button type="button" aria-pressed="false">
+            Σ.Ι.
+          </button>
+          <button type="button" aria-pressed="false">
+            Καταστάσεις
+          </button>
+          <button type="button" aria-pressed="false">
+            Αργίες
+          </button>
+        </div>
+        <section class="ui-card">
+          <div class="ui-card__head">
+            <h2>
+              Υπηρεσίες
+            </h2>
+            <button aria-label="Έντυπο υπηρεσιών" data-tip="2 πίνακες θαλαμοφυλάκων και μαγειρεία" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                ΣΒΕΝ
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="ui-card__body">
+            <p class="note" style="margin-top:0">
+              Τώρα ισχύει η 
+              <b>
+                ΦΡΟΥΡΑ ΣΒΕΝ
+              </b>
+               (αλλάζει από τις Θέσεις). Διάλεξε πάνω δεξιά ποιου εντύπου τις υπηρεσίες βλέπεις, ή «+ Νέο έντυπο υπηρεσιών…». Σε ένοπλη θέση δεν μπαίνει όποιος έχει ΕΑ, ΕΥ, ΕΟ, ΝΟΣ ή ΣΤΕΠ.
+            </p>
+            <div class="rule" style="align-items:center;padding:3px 0;flex-wrap:wrap;row-gap:4px">
+              <span style="flex:1 1 200px;min-width:0">
+                <b>
+                  Λ/Υ και Δ/Υ
+                </b>
+                <small>
+                  2 θέσεις · άοπλη · κωδικοί ΛΥ, ΔΥ
+                </small>
+              </span>
+              <label class="ui-checkrow" data-tip="Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)">
+                <input type="checkbox" class="ui-check" aria-label="Ενεργή: Λ/Υ και Δ/Υ" disabled="" checked=""/>
+                 Ενεργή
+              </label>
+              <label class="ui-checkrow">
+                <input type="checkbox" class="ui-check" aria-label="Ένοπλη: Λ/Υ και Δ/Υ" disabled=""/>
+                 Ένοπλη
+              </label>
+              <span style="display:flex;visibility:hidden">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Πιο πάνω: Λ/Υ και Δ/Υ" data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)">
+                  ↑
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                  Επεξεργασία
+                </button>
+              </span>
+            </div>
+            <div class="rule" style="align-items:center;padding:3px 0;flex-wrap:wrap;row-gap:4px">
+              <span style="flex:1 1 200px;min-width:0">
+                <b>
+                  Θαλαμοφύλακες (α΄ πίνακας)
+                </b>
+                <small>
+                  4 θέσεις · άοπλη · κωδικοί Θ1α, Θ2α, Θ3α, Θ4α
+                </small>
+              </span>
+              <label class="ui-checkrow" data-tip="Ξετσέκαρε για να μη μπαίνει πια στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, χωρίς να σβηστεί. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών.">
+                <input type="checkbox" class="ui-check" aria-label="Ενεργή: Θαλαμοφύλακες (α΄ πίνακας)" checked=""/>
+                 Ενεργή
+              </label>
+              <label class="ui-checkrow" data-tip="Σε ένοπλη θέση δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.)">
+                <input type="checkbox" class="ui-check" aria-label="Ένοπλη: Θαλαμοφύλακες (α΄ πίνακας)"/>
+                 Ένοπλη
+              </label>
+              <span style="display:flex">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Πιο πάνω: Θαλαμοφύλακες (α΄ πίνακας)" data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)">
+                  ↑
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                  Επεξεργασία
+                </button>
+              </span>
+            </div>
+            <div class="rule" style="align-items:center;padding:3px 0;flex-wrap:wrap;row-gap:4px">
+              <span style="flex:1 1 200px;min-width:0">
+                <b>
+                  Θαλαμοφύλακες (β΄ πίνακας)
+                </b>
+                <small>
+                  4 θέσεις · άοπλη · κωδικοί Θ1β, Θ2β, Θ3β, Θ4β
+                </small>
+              </span>
+              <label class="ui-checkrow" data-tip="Ξετσέκαρε για να μη μπαίνει πια στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, χωρίς να σβηστεί. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών.">
+                <input type="checkbox" class="ui-check" aria-label="Ενεργή: Θαλαμοφύλακες (β΄ πίνακας)" checked=""/>
+                 Ενεργή
+              </label>
+              <label class="ui-checkrow" data-tip="Σε ένοπλη θέση δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.)">
+                <input type="checkbox" class="ui-check" aria-label="Ένοπλη: Θαλαμοφύλακες (β΄ πίνακας)"/>
+                 Ένοπλη
+              </label>
+              <span style="display:flex">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Πιο πάνω: Θαλαμοφύλακες (β΄ πίνακας)" data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)">
+                  ↑
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                  Επεξεργασία
+                </button>
+              </span>
+            </div>
+            <div class="rule" style="align-items:center;padding:3px 0;flex-wrap:wrap;row-gap:4px">
+              <span style="flex:1 1 200px;min-width:0">
+                <b>
+                  Μαγειρεία
+                </b>
+                <small>
+                  5 θέσεις · άοπλη · κωδικοί Μ1, Μ2, Μ3, Μ4, Μ5
+                </small>
+              </span>
+              <label class="ui-checkrow" data-tip="Ξετσέκαρε για να μη μπαίνει πια στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, χωρίς να σβηστεί. Οι υπηρεσίες που έγιναν μένουν στον έλεγχο υπηρεσιών.">
+                <input type="checkbox" class="ui-check" aria-label="Ενεργή: Μαγειρεία" checked=""/>
+                 Ενεργή
+              </label>
+              <label class="ui-checkrow" data-tip="Σε ένοπλη θέση δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.)">
+                <input type="checkbox" class="ui-check" aria-label="Ένοπλη: Μαγειρεία"/>
+                 Ένοπλη
+              </label>
+              <span style="display:flex">
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" aria-label="Πιο πάνω: Μαγειρεία" data-tip="Πιο πάνω (μπαίνει νωρίτερα στην αυτόματη συμπλήρωση)">
+                  ↑
+                </button>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm">
+                  Επεξεργασία
+                </button>
+              </span>
+            </div>
+            <div style="margin-top:8px">
+              <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+                + Νέα υπηρεσία στη ΦΡΟΥΡΑ ΣΒΕΝ
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

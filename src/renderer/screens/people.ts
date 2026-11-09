@@ -214,7 +214,7 @@ function PeopleList() {
   </div>`;
 }
 
-function SaveViewDialog({ onClose, onSave }: P) {
+export function SaveViewDialog({ onClose, onSave }: P) {
   const [name, setName] = useState('');
   const ok = name.trim().length > 0;
   return html`<${Dialog} title="Αποθήκευση λίστας" description="Το φίλτρο που βλέπεις γίνεται κουμπί στη γραμμή φίλτρων, με τον αριθμό ατόμων πάντα ενημερωμένο." onClose=${onClose}
@@ -437,7 +437,7 @@ function PersonFields({ x, setX, id, isNew }: P) {
     ${F('notes', 'Σημειώσεις')}`;
 }
 
-function EditPersonDialog({ p, onClose }: P) {
+export function EditPersonDialog({ p, onClose }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const [x, setX] = useState<Person>({ ...p }); const dirty = useDirty(x);
   // εκτός δύναμης (Michael, 17/10): περνά στους «Εκτός δύναμης» του Δυναμολογίου και βγαίνει από τις υπηρεσίες που έχει από σήμερα
@@ -456,7 +456,7 @@ function EditPersonDialog({ p, onClose }: P) {
 
 // Νέος στρατιώτης (π.χ. ήρθε μετάθεση): μπαίνει στην εφαρμογή και σε νέα γραμμή στο Δυναμολόγιο.
 // «Προσθήκη και επόμενος» (Michael, 19/10): το παράθυρο μένει ανοιχτό με τον ίδιο βαθμό, Ο/Σ, θάλαμο και ΕΣΣΟ
-function NewPersonDialog({ onClose, onMany }: P) {
+export function NewPersonDialog({ onClose, onMany }: P) {
   const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);

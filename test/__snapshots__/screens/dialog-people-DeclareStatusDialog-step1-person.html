@@ -1,0 +1,64 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Δήλωση κατάστασης
+        </h2>
+        <div class="ui-dialog__desc">
+          <span>
+            <span style="font-weight:700">
+              1 Στρατιώτης
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              2 Κατάσταση
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              3 Πότε
+            </span>
+          </span>
+          <span>
+             › 
+            <span style="font-weight:400">
+              4 Τι θα αλλάξει
+            </span>
+          </span>
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field">
+        <label class="field__label" for="dsp">
+          Ποιος στρατιώτης * 
+          <span class="muted" style="font-weight:400">
+            (ένας ή περισσότεροι)
+          </span>
+        </label>
+        <div class="picker">
+          <input id="dsp" class="ui-input" autoComplete="off" role="combobox" aria-expanded="false" data-autofocus="" placeholder="Επώνυμο, όνομα ή ΑΣΜ…" value=""/>
+        </div>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Συνέχεια: Κατάσταση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

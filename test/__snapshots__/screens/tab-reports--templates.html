@@ -1,0 +1,102 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Έντυπα
+      </h1>
+      <p class="page-head__sub">
+        Δικά σου έντυπα Excel που γεμίζουν με στοιχεία της εφαρμογής. Το στήνεις μία φορά και μετά βγαίνει με ένα κλικ.
+      </p>
+    </div>
+    <div class="page-head__acts">
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Ένα Excel που ήδη έχεις (.xlsx) γίνεται πρότυπο: κρατά τη μορφή του">
+        Ανέβασε Excel…
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        + Νέο έντυπο
+      </button>
+    </div>
+  </div>
+  <div class="dayrow" role="group" aria-label="Έντυπα της μέρας">
+    <span class="dayrow__lbl">
+      Της μέρας (βγαίνουν από την οθόνη τους):
+    </span>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      ΦΡΟΥΡΑ αύριο
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      ΗΚΑΙ σήμερα
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Η Ημερήσια Διαταγή της επόμενης μέρας, με Word και εκτύπωση">
+      Ημερήσια Διαταγή αύριο
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      Εξοδούχοι
+    </button>
+    <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Αυριανή ΦΡΟΥΡΑ, σημερινή ΗΚΑΙ και Εξοδούχοι: ένας έλεγχος για όλα">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M7 9V3h10v6"/>
+        <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+        <path d="M7 14h10v7H7z"/>
+      </svg>
+      Έντυπα ημέρας
+    </button>
+  </div>
+  <div class="ui-tabs" role="tablist">
+    <button type="button" role="tab" aria-selected="false">
+      Τα έντυπά μου (1)
+    </button>
+    <button type="button" role="tab" aria-selected="true">
+      Πρότυπα (1)
+    </button>
+  </div>
+  <div class="ui-card">
+    <table class="rep-table">
+      <thead>
+        <tr>
+          <th>
+            Πρότυπο
+          </th>
+          <th>
+            Από πού
+          </th>
+          <th>
+            Έντυπα
+          </th>
+          <th>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <b>
+              ΛΙΣΤΑ ΔΟΚΙΜΗΣ
+            </b>
+          </td>
+          <td>
+            Ανεβασμένο Excel
+          </td>
+          <td>
+            ΛΙΣΤΑ ΔΟΚΙΜΗΣ
+          </td>
+          <td class="rep-table__acts">
+            <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+              Νέο έντυπο από αυτό
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Άλλαξε μορφή, λογότυπο, στήλες στο Excel. Οι αλλαγές ισχύουν από το επόμενο έντυπο.">
+              Άνοιξέ το στο Excel
+            </button>
+            <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" disabled="" aria-label="Διαγραφή ΛΙΣΤΑ ΔΟΚΙΜΗΣ" data-tip="Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

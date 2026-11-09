@@ -139,7 +139,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
   <//>`;
 }
 
-function CadreDialog({ c, onClose }: P) {
+export function CadreDialog({ c, onClose }: P) {
   const { run, state } = useStore(); const toast = useToast();
   const lists = state.settings.lists;
   const ranks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(x => x.rank)), [state.cadreList, lists]);
@@ -174,7 +174,7 @@ function CadreDialog({ c, onClose }: P) {
 }
 
 // Κατάσταση στελέχους = στήλη της ΗΚΑΙ. Μία τη μέρα: αν πέφτει πάνω σε άλλη, ρωτά και η νέα μπαίνει στη θέση της
-function StatusDialog({ c, abs, onClose }: P) {
+export function StatusDialog({ c, abs, onClose }: P) {
   const { run, today, state } = useStore(); const toast = useToast();
   const lists = state.settings.lists;
   const [f, setF] = useState({ kind: abs?.kind || 'ka', from: abs?.from || today, to: abs?.to || addDays(today, 4), note: abs?.note || '' });

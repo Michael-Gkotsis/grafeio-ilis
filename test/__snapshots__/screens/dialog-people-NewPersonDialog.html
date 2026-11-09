@@ -1,0 +1,193 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Νέος στρατιώτης
+        </h2>
+        <div class="ui-dialog__desc">
+          Μένει μόνο στην εφαρμογή: δεν έχει οριστεί Δυναμολόγιο στα Αρχεία Excel για να γραφτεί και εκεί.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="stack" style="gap:14px">
+        <span class="note" style="margin:0">
+          Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; 
+          <button type="button" class="ui-btn ui-btn--link">
+            Γρήγορη εισαγωγή σε πίνακα
+          </button>
+        </span>
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="np-rank">
+              Βαθμός
+            </label>
+            <button id="np-rank" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                ΣΤΡ
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-origin">
+              Προέλευση
+            </label>
+            <button id="np-origin" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-spec">
+              Ο/Σ (όπλο/σώμα)
+            </label>
+            <button id="np-spec" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="np-last">
+              Επώνυμο *
+            </label>
+            <input id="np-last" class="ui-input" type="text" placeholder="" data-autofocus="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-first">
+              Όνομα *
+            </label>
+            <input id="np-first" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-father">
+              Πατρώνυμο
+            </label>
+            <input id="np-father" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="np-asm">
+              ΑΣΜ
+            </label>
+            <input id="np-asm" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-phone">
+              Τηλέφωνο
+            </label>
+            <input id="np-phone" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-room">
+              Θάλαμος
+            </label>
+            <button id="np-room" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:2">
+            <label class="field__label" for="np-si">
+              Σ.Ι.
+            </label>
+            <div style="display:flex;gap:6px">
+              <button id="np-si" style="flex:1" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+                <span class="ui-dd__v">
+                  Ι1
+                </span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-post">
+              Πόστο
+            </label>
+            <input id="np-post" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field__label" for="np-role">
+              Ρόλος
+            </label>
+            <input id="np-role" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-essos">
+              ΕΣΣΟ
+            </label>
+            <input id="np-essos" class="ui-input" type="text" placeholder="π.χ. 2026 Γ΄" value="2026 Γ΄"/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="np-weapon">
+              Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)
+            </label>
+            <input id="np-weapon" class="ui-input" type="text" placeholder="" value=""/>
+          </div>
+        </div>
+        <label class="rule">
+          <input type="checkbox" class="ui-check"/>
+          <span>
+            <b>
+              Προσκολλημένος
+            </b>
+            <small>
+              Μετράει στη στήλη «Προσκολλημένοι» της ΗΚΑΙ.
+            </small>
+          </span>
+        </label>
+        <div class="field">
+          <label class="field__label" for="np-notes">
+            Σημειώσεις
+          </label>
+          <input id="np-notes" class="ui-input" type="text" placeholder="" value=""/>
+        </div>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Λείπει: Επώνυμο, Όνομα
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" disabled="" data-tip="Λείπει: Επώνυμο, Όνομα" aria-description="Λείπει: Επώνυμο, Όνομα">
+        Προσθήκη και επόμενος
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Επώνυμο, Όνομα" aria-description="Λείπει: Επώνυμο, Όνομα">
+        Προσθήκη
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

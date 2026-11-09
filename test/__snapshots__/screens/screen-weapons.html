@@ -1,0 +1,1056 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Οπλισμός
+      </h1>
+      <p class="page-head__quote">
+        «Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ&#x27; ΕΣΣΟ 2026
+      </p>
+      <p class="page-head__sub">
+        Με όπλο 11 από 12 σε δύναμη, εκτός οπλοβαστού τώρα 2. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.
+      </p>
+    </div>
+    <div class="page-head__acts weapons__acts">
+      <div class="strip datebar" role="group" aria-label="Ημερομηνία">
+        <button type="button" class="daybtn" aria-pressed="true">
+          <span class="daybtn__d">
+            Δευ σήμερα
+          </span>
+          <span class="daybtn__n">
+            09/11
+          </span>
+        </button>
+        <button type="button" class="daybtn" aria-pressed="false">
+          <span class="daybtn__d">
+            Τρί αύριο
+          </span>
+          <span class="daybtn__n">
+            10/11
+          </span>
+        </button>
+        <input aria-label="Άλλη ημερομηνία" class="ui-input datebar__pick" inputMode="numeric" placeholder="ηη/μμ/εεεε" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="09/11/2026"/>
+        <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
+      </div>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">
+        Βγάλε το Excel
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline" data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ΗΚΑΙ και στήλη υπογραφής" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M7 9V3h10v6"/>
+          <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+          <path d="M7 14h10v7H7z"/>
+        </svg>
+        Εκτύπωση
+      </button>
+      <button type="button" class="ui-btn ui-btn--ghost" data-tip="Υπογραφές: καμία. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+        Υπογραφές…
+      </button>
+    </div>
+  </div>
+  <div style="margin-bottom:12px">
+    <div class="ui-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">
+        Όπλα (11)
+      </button>
+      <button type="button" role="tab" aria-selected="false">
+        Κινήσεις · εκτός 2
+      </button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=""/>
+    <div class="ui-seg ui-seg--sm" role="group">
+      <button type="button" aria-pressed="true">
+        Όλη η Ίλη
+      </button>
+      <button type="button" aria-pressed="false" data-tip="Θάλαμοι 1, 2, 3, 4">
+        1ος Ουλ.
+      </button>
+      <button type="button" aria-pressed="false" data-tip="Θάλαμοι 5, 6, 7, 8">
+        2ος Ουλ.
+      </button>
+    </div>
+    <button aria-label="Θάλαμος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+      <span class="ui-dd__v">
+        Όλοι οι θάλαμοι
+      </span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="wpick">
+    <input type="text" class="ui-input wpick__scan" aria-label="Επιλογή με θέση, αριθμό όπλου ή ΑΣΜ" placeholder="Γράψε θέση (Ε 23), αριθμό όπλου ή ΑΣΜ και Enter" spellcheck="false" autoComplete="off" data-tip="Τσεκάρει τον άνθρωπο από όλη τη δύναμη (όχι μόνο όσους φαίνονται). Πολλά Enter στη σειρά για πολλούς." value=""/>
+    <span>
+      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-haspopup="true" aria-expanded="false" data-tip="Οι τελευταίες ομαδικές έξοδοι: τσεκάρει όσους είναι ακόμα σε δύναμη με όπλο και μέσα στον οπλοβαστό">
+        Ξανά οι ίδιοι ▾
+      </button>
+    </span>
+    <span>
+      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" aria-haspopup="true" aria-expanded="false" data-tip="Οι υπηρεσίες σήμερα: τσεκάρει τους ανθρώπους τους">
+        Από υπηρεσία ▾
+      </button>
+    </span>
+  </div>
+  <div class="wreasons" role="group" aria-label="Εκτός οπλοβαστού ανά λόγο">
+    <b>
+      Εκτός τώρα:
+    </b>
+    <button type="button" class="ui-chip ui-chip--sm" aria-pressed="false" data-tip="Κλικ: δείξε μόνο όσους βγήκαν για ΕΚΠ">
+      ΕΚΠ
+      <span class="cnt">
+        2
+      </span>
+    </button>
+  </div>
+  <div class="filters">
+    <div class="strip" role="group" aria-label="Φίλτρα οπλισμού">
+      <button type="button" class="ui-chip" aria-pressed="true" data-tip="Όλοι σε δύναμη">
+        Όλοι
+        <span class="cnt">
+          12
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Σε δύναμη, με αριθμό όπλου">
+        Με όπλο
+        <span class="cnt">
+          11
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Το όπλο τους βγήκε με λόγο (ΕΚΠ, βολή…) και δεν μπήκε ακόμα, ή έχουν ένοπλη υπηρεσία τη μέρα">
+        Εκτός οπλοβαστού
+        <span class="cnt">
+          2
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Σε δύναμη, ένοπλοι κατά τη Σ.Ι., χωρίς αριθμό όπλου">
+        Χωρίς όπλο
+        <span class="cnt">
+          1
+        </span>
+      </button>
+      <button type="button" class="ui-chip ui-chip--warn" aria-pressed="false" data-tip="Άοπλοι κατά τη Σ.Ι. (Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4 ή ό,τι όρισες στις Ρυθμίσεις › Σ.Ι.) που έχουν όπλο">
+        Άοπλοι με όπλο
+        <span class="cnt">
+          2
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Ο ίδιος αριθμός όπλου ή η ίδια θέση οπλοβαστού σε δύο ή περισσότερους">
+        Ίδιος αριθμός
+        <span class="cnt">
+          0
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Εκτός δύναμης που έχουν ακόμα όπλο">
+        Να παραδώσουν
+        <span class="cnt">
+          0
+        </span>
+      </button>
+    </div>
+    <span class="toolbar__count">
+      12 άτομα
+    </span>
+  </div>
+  <div class="ptable ptable--weapons" role="table" aria-rowcount="12">
+    <div class="vlist weapons__body" data-rows="12" style="height:592px">
+      <div class="vlist__head" style="min-width:1186px;height:52px">
+        <div class="ptable__head" role="row" style="grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr)">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή όλων" data-tip="Όλοι όσοι φαίνονται ΚΑΙ μπορούν να βγουν: έχουν αριθμό και δεν είναι ήδη εκτός (π.χ. ένας ουλαμός για ΕΚΠ). Αν δεν υπάρχει κανείς, όσοι είναι εκτός, για ΕΝΤΟΣ. Shift-κλικ σε δύο γραμμές τσεκάρει ό,τι είναι ανάμεσα."/>
+          </span>
+          <span>
+            Α/Α
+          </span>
+          <span>
+            Βαθμός
+          </span>
+          <button type="button" data-tip="Επίθετο" aria-sort="none">
+            Επίθετο
+          </button>
+          <span>
+            Όνομα
+          </span>
+          <span>
+            ΑΣΜ
+          </span>
+          <button type="button" data-tip="Θάλ." aria-sort="ascending">
+            Θάλ. ▲
+          </button>
+          <span>
+            Σ.Ι.
+          </span>
+          <span data-tip="Από τη λίστα «Τύποι όπλων» (Ρυθμίσεις › Λίστες)">
+            Τύπος
+          </span>
+          <button type="button" data-tip="Αριθμός όπλου" aria-sort="none">
+            Αριθμός όπλου
+          </button>
+          <span data-tip="ΕΝΤΟΣ ή ΕΚΤΟΣ οπλοβαστού τώρα, και γιατί. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή· η ώρα μπαίνει μόνη της και αλλάζει. Ένοπλη υπηρεσία: εκτός αυτόματα.">
+            Κατάσταση όπλου
+          </span>
+          <button type="button" data-tip="Οπλοβ." aria-sort="none">
+            Οπλοβ.
+          </button>
+          <span data-tip="Η θέση του όπλου, ό,τι θέλεις να γράψεις (γράφεται με κεφαλαία και στο Excel)">
+            Θέση
+          </span>
+          <span>
+            Παρατήρηση
+          </span>
+        </div>
+      </div>
+      <div class="vlist__inner" style="height:552px;min-width:1186px">
+        <div class="ptable__row" style="position:absolute;top:0;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ"/>
+          </span>
+          <span class="num muted">
+            1
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΔΟΚΙΜΙΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΑΛΦΑΣ
+          </span>
+          <span class="num">
+            100000
+          </span>
+          <span>
+            1
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="0" placeholder="—" aria-label="Αριθμός όπλου ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value="4810000"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810000">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="0" placeholder="—" aria-label="Θέση οπλοβαστού ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value="Ε1"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="0" placeholder="—" aria-label="Θέση όπλου ΔΟΚΙΜΙΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Κανονική άδεια έως 13/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Άδεια
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε1) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:46px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            2
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΘΕΩΡΗΤΙΚΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΖΗΤΑΣ
+          </span>
+          <span class="num">
+            100370
+          </span>
+          <span>
+            1
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="1" placeholder="—" aria-label="Αριθμός όπλου ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value="4811370"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4811370">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="1" placeholder="—" aria-label="Θέση οπλοβαστού ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value="Ε11"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="1" placeholder="—" aria-label="Θέση όπλου ΘΕΩΡΗΤΙΚΟΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Αναρρωτική άδεια έως 10/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Αναρρωτική
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε11) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-wout" style="position:absolute;top:92px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            3
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΖΗΤΑΣ
+          </span>
+          <span class="num">
+            100037
+          </span>
+          <span>
+            2
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="2" placeholder="—" aria-label="Αριθμός όπλου ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value="4810137"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate is-out">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810137">
+                  <button type="button" aria-pressed="false" data-tip="Μπαίνει στον οπλοβαστό: ώρα και λόγος εισαγωγής">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="true">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+              <span class="wstate__why" data-tip="Βγήκε: ΕΚΠ από 09/11 09:30 · μπαίνει με ΛΗΞ ΕΚΠ">
+                <b>
+                  ΕΚΠ
+                </b>
+                 
+                <span>
+                  09:30
+                </span>
+              </span>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="2" placeholder="—" aria-label="Θέση οπλοβαστού ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value="Ε2"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="2" placeholder="—" aria-label="Θέση όπλου ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΖΗΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Εξοδούχος έως 09/11 · Ελεύθερος Ορθοστασίας έως 09/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Εξοδούχος +1
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε2) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:138px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΠΙΘΑΝΟΣ ΒΗΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            4
+          </span>
+          <span>
+            ΔΝΕΑΣ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΠΙΘΑΝΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΒΗΤΑΣ
+          </span>
+          <span class="num">
+            100407
+          </span>
+          <span>
+            2
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΠΙΘΑΝΟΣ ΒΗΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="3" placeholder="—" aria-label="Αριθμός όπλου ΠΙΘΑΝΟΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value="4811507"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4811507">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="3" placeholder="—" aria-label="Θέση οπλοβαστού ΠΙΘΑΝΟΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value="Ε12"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="3" placeholder="—" aria-label="Θέση όπλου ΠΙΘΑΝΟΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε12) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-wout" style="position:absolute;top:184px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            5
+          </span>
+          <span>
+            ΔΝΕΑΣ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΥΠΟΘΕΤΙΔΗΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΒΗΤΑΣ
+          </span>
+          <span class="num">
+            100074
+          </span>
+          <span>
+            3
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="4" placeholder="—" aria-label="Αριθμός όπλου ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value="4810274"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate is-out">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810274">
+                  <button type="button" aria-pressed="false" data-tip="Μπαίνει στον οπλοβαστό: ώρα και λόγος εισαγωγής">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="true">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+              <span class="wstate__why" data-tip="Βγήκε: ΕΚΠ από 09/11 09:30 · μπαίνει με ΛΗΞ ΕΚΠ">
+                <b>
+                  ΕΚΠ
+                </b>
+                 
+                <span>
+                  09:30
+                </span>
+              </span>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="4" placeholder="—" aria-label="Θέση οπλοβαστού ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value="Ε3"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="4" placeholder="—" aria-label="Θέση όπλου ΥΠΟΘΕΤΙΔΗΣ ΒΗΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε3) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:230px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            6
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΦΑΝΤΑΣΙΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΘΗΤΑΣ
+          </span>
+          <span class="num">
+            100111
+          </span>
+          <span>
+            4
+          </span>
+          <span data-tip="Ι3 ΧΩΡΙΣ ΟΠΛΟ">
+            Ι3 άοπλος
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="5" placeholder="—" aria-label="Αριθμός όπλου ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ" spellcheck="false" autoComplete="off" value="4810411"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810411">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="5" placeholder="—" aria-label="Θέση οπλοβαστού ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ" spellcheck="false" autoComplete="off" value="Ε4"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="5" placeholder="—" aria-label="Θέση όπλου ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Κανονική άδεια έως 10/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Άδεια
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Άοπλος κατά τη Σ.Ι. (Ι3 ΧΩΡΙΣ ΟΠΛΟ) · Έχει οπλοβαστό (Ε4) αλλά όχι θέση: γράψε τη Θέση">
+              ⚠ 2
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row" style="position:absolute;top:276px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ"/>
+          </span>
+          <span class="num muted">
+            7
+          </span>
+          <span>
+            ΕΠΟΠ ΛΧΙΑΣ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΠΛΑΣΜΑΤΙΚΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΓΑΜΜΑΣ
+          </span>
+          <span class="num">
+            100148
+          </span>
+          <span>
+            5
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="6" placeholder="—" aria-label="Αριθμός όπλου ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ" spellcheck="false" autoComplete="off" value="4810548"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810548">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="6" placeholder="—" aria-label="Θέση οπλοβαστού ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ" spellcheck="false" autoComplete="off" value="Ε5"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="6" placeholder="—" aria-label="Θέση όπλου ΠΛΑΣΜΑΤΙΚΟΣ ΓΑΜΜΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Εξοδούχος έως 09/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Εξοδούχος
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε5) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:322px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ"/>
+          </span>
+          <span class="num muted">
+            8
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΤΥΧΑΙΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΚΑΠΠΑΣ
+          </span>
+          <span class="num">
+            100185
+          </span>
+          <span>
+            6
+          </span>
+          <span data-tip="Ι4">
+            Ι4
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="7" placeholder="—" aria-label="Αριθμός όπλου ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ" spellcheck="false" autoComplete="off" value="4810685"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810685">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="7" placeholder="—" aria-label="Θέση οπλοβαστού ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ" spellcheck="false" autoComplete="off" value="Ε6"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="7" placeholder="—" aria-label="Θέση όπλου ΤΥΧΑΙΟΣ ΚΑΠΠΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Ελεύθερος Ορθοστασίας έως 12/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              ΕΟ
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Άοπλος κατά τη Σ.Ι. (Ι4) · Έχει οπλοβαστό (Ε6) αλλά όχι θέση: γράψε τη Θέση">
+              ⚠ 2
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row" style="position:absolute;top:368px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ"/>
+          </span>
+          <span class="num muted">
+            9
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΑΓΝΩΣΤΟΠΟΥΛΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΔΕΛΤΑΣ
+          </span>
+          <span class="num">
+            100222
+          </span>
+          <span>
+            7
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="8" placeholder="—" aria-label="Αριθμός όπλου ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="weapon-cell">
+            <span class="muted wstate__none">
+              χωρίς όπλο
+            </span>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="8" placeholder="—" aria-label="Θέση οπλοβαστού ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ" spellcheck="false" autoComplete="off" value="Ε7"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="8" placeholder="—" aria-label="Θέση όπλου ΑΓΝΩΣΤΟΠΟΥΛΟΣ ΔΕΛΤΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:414px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ"/>
+          </span>
+          <span class="num muted">
+            10
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΔΕΙΓΜΑΤΑΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΛΑΜΔΑΣ
+          </span>
+          <span class="num">
+            100259
+          </span>
+          <span>
+            8
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="9" placeholder="—" aria-label="Αριθμός όπλου ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ" spellcheck="false" autoComplete="off" value="4810959"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4810959">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="9" placeholder="—" aria-label="Θέση οπλοβαστού ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ" spellcheck="false" autoComplete="off" value="Ε8"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="9" placeholder="—" aria-label="Θέση όπλου ΔΕΙΓΜΑΤΑΣ ΛΑΜΔΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Ελεύθερος Υπηρεσίας έως 11/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              ΕΥ
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε8) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row" style="position:absolute;top:460px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ"/>
+          </span>
+          <span class="num muted">
+            11
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΕΙΚΟΝΙΚΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΕΨΙΛΟΝ
+          </span>
+          <span class="num">
+            100296
+          </span>
+          <span>
+            9
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="10" placeholder="—" aria-label="Αριθμός όπλου ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ" spellcheck="false" autoComplete="off" value="4811096"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4811096">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="10" placeholder="—" aria-label="Θέση οπλοβαστού ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ" spellcheck="false" autoComplete="off" value="Ε9"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="10" placeholder="—" aria-label="Θέση όπλου ΕΙΚΟΝΙΚΟΣ ΕΨΙΛΟΝ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε9) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+        <div class="ptable__row is-odd" style="position:absolute;top:506px;left:0;right:0;height:46px;grid-template-columns:26px 30px 58px minmax(120px,1fr) minmax(70px,.8fr) 66px 40px 80px 80px 92px minmax(236px,2fr) 64px 64px minmax(160px,1fr);cursor:default" role="row">
+          <span>
+            <input type="checkbox" class="ui-check" aria-label="Επιλογή ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ"/>
+          </span>
+          <span class="num muted">
+            12
+          </span>
+          <span>
+            ΣΤΡ
+          </span>
+          <span>
+            <button type="button" class="linkish" data-tip="Καρτέλα οπλίτη">
+              <b>
+                ΠΡΟΣΩΡΙΝΟΣ
+              </b>
+            </button>
+          </span>
+          <span>
+            ΑΛΦΑΣ
+          </span>
+          <span class="num">
+            100333
+          </span>
+          <span>
+            10
+          </span>
+          <span data-tip="Ι1">
+            Ι1
+          </span>
+          <span class="weapon-cell">
+            <button aria-label="Τύπος όπλου ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select weapon-type">
+              <span class="ui-dd__v">
+                G3A3
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="weapon" data-wrow="11" placeholder="—" aria-label="Αριθμός όπλου ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value="4811233"/>
+          </span>
+          <span class="weapon-cell">
+            <div class="wstate">
+              <div class="wstate__row">
+                <div class="wstate__sw" role="group" aria-label="Κατάσταση όπλου 4811233">
+                  <button type="button" aria-pressed="true">
+                    ΕΝΤΟΣ
+                  </button>
+                  <button type="button" aria-pressed="false" data-tip="Βγαίνει από τον οπλοβαστό: ώρα και λόγος">
+                    ΕΚΤΟΣ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="rack" data-wrow="11" placeholder="—" aria-label="Θέση οπλοβαστού ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value="Ε10"/>
+          </span>
+          <span class="weapon-cell">
+            <input class="ui-input weapon-input" data-wf="wpos" data-wrow="11" placeholder="—" aria-label="Θέση όπλου ΠΡΟΣΩΡΙΝΟΣ ΑΛΦΑΣ" spellcheck="false" autoComplete="off" value=""/>
+          </span>
+          <span class="badges weapon-notes">
+            <span class="ui-badge ui-badge--info" data-tip="Κανονική άδεια έως 09/11 (η κατάσταση της μέρας: δεν αλλάζει το όπλο)">
+              Άδεια
+            </span>
+            <span class="ui-badge ui-badge--warn" data-tip="Έχει οπλοβαστό (Ε10) αλλά όχι θέση: γράψε τη Θέση">
+              Χωρίς θέση
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

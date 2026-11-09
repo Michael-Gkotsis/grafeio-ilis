@@ -1,0 +1,659 @@
+<div class="ui-overlay">
+  <div class="ui-dialog ui-dialog--xl" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Ποινές (τιμωρημένοι): πού βρίσκεται στο Excel
+        </h2>
+        <div class="ui-dialog__desc">
+          ΔΥΝΑΜΟΛΟΓΙΟ Β ΕΣΣΟ 2026.xlsm
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <div class="field-row" style="align-items:flex-end">
+        <div class="field">
+          <label class="field__label" for="mp-sh">
+            Φύλλο
+          </label>
+          <button id="mp-sh" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              ΤΙΜΩΡΗΜΕΝΟΙ
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="field" style="max-width:170px">
+          <label class="field__label" for="mp-hd">
+            Γραμμή επικεφαλίδων
+          </label>
+          <input id="mp-hd" type="number" min="1" class="ui-input" value="2"/>
+        </div>
+        <div class="field">
+          <span class="field__label">
+            Τι γράφει η εφαρμογή
+          </span>
+          <button aria-label="Ποιες εγγραφές γράφονται" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-input">
+            <span class="ui-dd__v">
+              Όλες τις εγγραφές (και τα ληγμένα)
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="mapper">
+        <ul class="mapper__fields" aria-label="Πεδία">
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Α/Α
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Α/Α" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                A · Α/Α (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Βαθμός
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Βαθμός" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                B · Βαθμός (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Προέλευση (ΕΠΟΠ, ΟΒΑ…)
+              </b>
+            </button>
+            <button aria-label="Στήλη για Προέλευση (ΕΠΟΠ, ΟΒΑ…)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Ο/Σ (ειδικότητα)
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Ο/Σ (ειδικότητα)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                C · Ο/Σ (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Επώνυμο
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Επώνυμο" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                D · Επώνυμο (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Όνομα
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Όνομα" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                E · Όνομα (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Ονοματεπώνυμο (σε ένα κελί)
+              </b>
+            </button>
+            <button aria-label="Στήλη για Ονοματεπώνυμο (σε ένα κελί)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Πατρώνυμο
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Πατρώνυμο" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                F · Πατρώνυμο (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                ΑΣΜ
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για ΑΣΜ" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                G · ΑΣΜ (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Τηλέφωνο
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Τηλέφωνο" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                H · Τηλέφωνο (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Θάλαμος
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Θάλαμος" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                I · Θάλαμος (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Από (ημερομηνία)
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Από (ημερομηνία)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                J · ΑΠΌ (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Έως (ημερομηνία)
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Έως (ημερομηνία)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                K · ΕΩΣ (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Είδος ποινής
+              </b>
+              <span class="ui-badge ui-badge--ok" data-tip="Βρέθηκε από την επικεφαλίδα">
+                αναγνωρίστηκε
+              </span>
+            </button>
+            <button aria-label="Στήλη για Είδος ποινής" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                L · ΕΙΔΟΣ ΠΟΙΝΗΣ (προτείνεται)
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Ημέρες
+              </b>
+            </button>
+            <button aria-label="Στήλη για Ημέρες" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Ποιος την επέβαλε
+              </b>
+            </button>
+            <button aria-label="Στήλη για Ποιος την επέβαλε" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Αιτία (διότι…)
+              </b>
+            </button>
+            <button aria-label="Στήλη για Αιτία (διότι…)" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+          <li class="mapper__f">
+            <button type="button" class="mapper__fb" aria-pressed="false">
+              <b>
+                Παρατηρήσεις
+              </b>
+            </button>
+            <button aria-label="Στήλη για Παρατηρήσεις" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+              <span class="ui-dd__v">
+                —
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </li>
+        </ul>
+        <div class="mapper__grid">
+          <div class="xl__scroll mapper__scroll">
+            <table class="mapgrid">
+              <thead>
+                <tr>
+                  <th>
+                  </th>
+                  <th class="is-mapped">
+                    A
+                    <span class="mapgrid__tag">
+                      Α/Α
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    B
+                    <span class="mapgrid__tag">
+                      Βαθμός
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    C
+                    <span class="mapgrid__tag">
+                      Ο/Σ
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    D
+                    <span class="mapgrid__tag">
+                      Επώνυμο
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    E
+                    <span class="mapgrid__tag">
+                      Όνομα
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    F
+                    <span class="mapgrid__tag">
+                      Πατρώνυμο
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    G
+                    <span class="mapgrid__tag">
+                      ΑΣΜ
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    H
+                    <span class="mapgrid__tag">
+                      Τηλέφωνο
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    I
+                    <span class="mapgrid__tag">
+                      Θάλαμος
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    J
+                    <span class="mapgrid__tag">
+                      Από
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    K
+                    <span class="mapgrid__tag">
+                      Έως
+                    </span>
+                  </th>
+                  <th class="is-mapped">
+                    L
+                    <span class="mapgrid__tag">
+                      Είδος ποινής
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="">
+                  <th>
+                    <button type="button" class="mapgrid__rn" data-tip="Αυτή είναι η γραμμή των επικεφαλίδων">
+                      1
+                    </button>
+                  </th>
+                  <td class="is-mapped" title="ΤΙΜΩΡΗΜΕΝΟΙ">
+                    ΤΙΜΩΡΗΜΕΝΟΙ
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                </tr>
+                <tr class="is-head">
+                  <th>
+                    <button type="button" class="mapgrid__rn" data-tip="Αυτή είναι η γραμμή των επικεφαλίδων">
+                      2
+                    </button>
+                  </th>
+                  <td class="is-mapped" title="Α/Α">
+                    Α/Α
+                  </td>
+                  <td class="is-mapped" title="Βαθμός">
+                    Βαθμός
+                  </td>
+                  <td class="is-mapped" title="Ο/Σ">
+                    Ο/Σ
+                  </td>
+                  <td class="is-mapped" title="Επώνυμο">
+                    Επώνυμο
+                  </td>
+                  <td class="is-mapped" title="Όνομα">
+                    Όνομα
+                  </td>
+                  <td class="is-mapped" title="Πατρώνυμο">
+                    Πατρώνυμο
+                  </td>
+                  <td class="is-mapped" title="ΑΣΜ">
+                    ΑΣΜ
+                  </td>
+                  <td class="is-mapped" title="Τηλέφωνο">
+                    Τηλέφωνο
+                  </td>
+                  <td class="is-mapped" title="Θάλαμος">
+                    Θάλαμος
+                  </td>
+                  <td class="is-mapped" title="ΑΠΌ">
+                    ΑΠΌ
+                  </td>
+                  <td class="is-mapped" title="ΕΩΣ">
+                    ΕΩΣ
+                  </td>
+                  <td class="is-mapped" title="ΕΙΔΟΣ ΠΟΙΝΗΣ">
+                    ΕΙΔΟΣ ΠΟΙΝΗΣ
+                  </td>
+                </tr>
+                <tr class="">
+                  <th>
+                    <button type="button" class="mapgrid__rn" data-tip="Αυτή είναι η γραμμή των επικεφαλίδων">
+                      3
+                    </button>
+                  </th>
+                  <td class="is-mapped" title="1">
+                    1
+                  </td>
+                  <td class="is-mapped" title="ΣΤΡ">
+                    ΣΤΡ
+                  </td>
+                  <td class="is-mapped" title="ΠΖ">
+                    ΠΖ
+                  </td>
+                  <td class="is-mapped" title="ΦΑΝΤΑΣΙΟΣ">
+                    ΦΑΝΤΑΣΙΟΣ
+                  </td>
+                  <td class="is-mapped" title="ΒΗΤΑΣ">
+                    ΒΗΤΑΣ
+                  </td>
+                  <td class="is-mapped" title="ΠΑΤΕΡΑΣ">
+                    ΠΑΤΕΡΑΣ
+                  </td>
+                  <td class="is-mapped" title="100111">
+                    100111
+                  </td>
+                  <td class="is-mapped" title="6900123757">
+                    6900123757
+                  </td>
+                  <td class="is-mapped" title="4">
+                    4
+                  </td>
+                  <td class="is-mapped" title="2026-11-08">
+                    2026-11-08
+                  </td>
+                  <td class="is-mapped" title="2026-11-11">
+                    2026-11-11
+                  </td>
+                  <td class="is-mapped" title="ΠΕΡΙΟΡΙΣΜΟΣ">
+                    ΠΕΡΙΟΡΙΣΜΟΣ
+                  </td>
+                </tr>
+                <tr class="">
+                  <th>
+                    <button type="button" class="mapgrid__rn" data-tip="Αυτή είναι η γραμμή των επικεφαλίδων">
+                      4
+                    </button>
+                  </th>
+                  <td class="is-mapped" title="2">
+                    2
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                </tr>
+                <tr class="">
+                  <th>
+                    <button type="button" class="mapgrid__rn" data-tip="Αυτή είναι η γραμμή των επικεφαλίδων">
+                      5
+                    </button>
+                  </th>
+                  <td class="is-mapped" title="3">
+                    3
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                  <td class="is-mapped" title="">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mapper__sample">
+            <b>
+              Έτσι διαβάζει η εφαρμογή τις πρώτες γραμμές:
+            </b>
+            <ul>
+              <li>
+                ΣΤΡ ΦΑΝΤΑΣΙΟΣ ΒΗΤΑΣ · Ποινή (Περιορισμός) · 08/11–11/11
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="note" style="margin-right:auto">
+        1 εγγραφή στον πίνακα
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Αποθήκευση
+      </button>
+      <button type="button" class="ui-btn ui-btn--default">
+        Αποθήκευση και ανάγνωση
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

@@ -1,0 +1,80 @@
+<div>
+  <div class="page-head">
+    <div>
+      <h1>
+        Στελέχη
+      </h1>
+      <p class="page-head__sub">
+        Δυναμικό στελεχών: 6 · κωλυόμενοι 0 · απόντες 1 σήμερα. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.
+      </p>
+    </div>
+    <button type="button" class="ui-btn ui-btn--outline" data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">
+      Βγάλε το Excel
+    </button>
+    <button type="button" class="ui-btn ui-btn--ghost" data-tip="Υπογραφές: καμία. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.">
+      Υπογραφές…
+    </button>
+    <button type="button" class="ui-btn ui-btn--default">
+      + Νέο στέλεχος
+    </button>
+  </div>
+  <div class="toolbar">
+    <input type="search" class="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=""/>
+    <button aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" class="ui-dd ui-select">
+      <span class="ui-dd__v">
+        Σήμερα
+      </span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="filters">
+    <div class="strip" role="group" aria-label="Γρήγορα φίλτρα">
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Όλοι
+        <span class="cnt">
+          6
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="true" data-tip="Στην ΗΚΑΙ σήμερα">
+        Κωλυόμενοι
+        <span class="cnt">
+          0
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false" data-tip="Στην ΗΚΑΙ σήμερα">
+        Απόντες
+        <span class="cnt">
+          1
+        </span>
+      </button>
+      <button type="button" class="ui-chip" aria-pressed="false">
+        Εκτός δύναμης
+        <span class="cnt">
+          0
+        </span>
+      </button>
+    </div>
+    <span class="actfilter" role="status">
+      Φίλτρο: 
+      <b>
+        Κωλυόμενοι
+      </b>
+      <button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο">
+        ✕
+      </button>
+    </span>
+    <span class="toolbar__count">
+      0 από 6
+    </span>
+  </div>
+  <div class="ui-card empty">
+    Κανείς δεν ταιριάζει. 
+    <button type="button" class="ui-btn ui-btn--link">
+      Καθάρισε αναζήτηση και φίλτρα
+    </button>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>

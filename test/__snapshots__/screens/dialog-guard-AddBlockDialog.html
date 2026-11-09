@@ -1,0 +1,125 @@
+<div class="ui-overlay">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="ui-dialog__head">
+      <div>
+        <h2 id="dlg-t">
+          Νέα υπηρεσία
+        </h2>
+        <div class="ui-dialog__desc">
+          Στη ΦΡΟΥΡΑ ΣΒΕΝ. Βγαίνει στο Excel σε δικό της πίνακα κάτω από τα μαγειρεία.
+        </div>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ui-dialog__body">
+      <p class="field__help" style="margin-top:0">
+        Η νέα υπηρεσία μετρά ως δική της: δική της στήλη στον Έλεγχο υπηρεσιών, στη σειρά δικαιοσύνης, στο «Ποιος κάνει τι» και στο Excel δυνατοτήτων, όπου την ενεργοποιείς ή απενεργοποιείς για τον καθένα χωριστά.
+      </p>
+      <div>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="field" style="flex:2 1 220px">
+            <label class="field__label" for="nb-n">
+              Όνομα *
+            </label>
+            <input id="nb-n" class="ui-input" data-autofocus="" placeholder="π.χ. Πύλη, Σκοπιά ΤΑΕ" value=""/>
+          </div>
+          <div class="field">
+            <label class="field__label" for="nb-c">
+              Νούμερα
+            </label>
+            <input id="nb-c" type="number" min="1" max="10" class="ui-input" value="1"/>
+            <span class="field__help">
+              1–10
+            </span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="nb-p">
+              Άτομα σε κάθε νούμερο
+            </label>
+            <input id="nb-p" type="number" min="1" max="4" class="ui-input" value="1"/>
+            <span class="field__help">
+              1 = ένας, 2 = ζεύγος…
+            </span>
+          </div>
+        </div>
+        <div class="bfshape" aria-live="polite">
+          <b>
+            Θέσεις: 1 νούμερο × 1 άτομο = 1
+          </b>
+          <div class="bfchips">
+            <span class="bfchip">
+              <b>
+                1ος
+              </b>
+            </span>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field__label">
+            Ώρες
+          </span>
+          <div class="ui-seg ui-seg--sm" role="group">
+            <button type="button" aria-pressed="true">
+              Όλη μέρα
+            </button>
+            <button type="button" aria-pressed="false">
+              Ίδιες ώρες
+            </button>
+            <button type="button" aria-pressed="false">
+              Βάρδιες
+            </button>
+          </div>
+          <span class="field__help">
+            Χωρίς ώρες στις Θέσεις και στο έντυπο, όπως η μαγειρεία.
+          </span>
+        </div>
+        <label class="rule">
+          <input type="checkbox" class="ui-check"/>
+          <span>
+            <b>
+              Ένοπλη
+            </b>
+            <small>
+              Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις 
+              <button type="button" class="ui-btn ui-btn--link golink">
+                Ρυθμίσεις › Σ.Ι.
+              </button>
+            </small>
+          </span>
+        </label>
+        <label class="rule">
+          <input type="checkbox" class="ui-check" checked=""/>
+          <span>
+            <b>
+              Ενεργή
+            </b>
+            <small>
+              Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις 
+              <button type="button" class="ui-btn ui-btn--link golink">
+                Ρυθμίσεις › Υπηρεσίες
+              </button>
+              .
+            </small>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="ui-dialog__foot">
+      <span class="btn-why" role="status">
+        Λείπει: Όνομα
+      </span>
+      <button type="button" class="ui-btn ui-btn--outline">
+        Άκυρο
+      </button>
+      <button type="button" class="ui-btn ui-btn--default" disabled="" data-tip="Λείπει: Όνομα" aria-description="Λείπει: Όνομα">
+        Προσθήκη
+      </button>
+    </div>
+  </div>
+</div>
+<div class="ui-toasts" aria-live="polite">
+</div>
