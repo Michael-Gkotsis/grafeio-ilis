@@ -1,104 +1,26 @@
-// Γέφυρα: το UI βλέπει μόνο αυτές τις συναρτήσεις (contextIsolation, χωρίς Node στο renderer)
+// Bridge: the UI sees only these functions (contextIsolation, no Node in the renderer).
+//
+// Purpose: exposes `window.api`, built from the INVOKE and EVENTS tables of shared/ipc/contract.ts.
+// Does NOT: contain any channel string, any logic, or validate input; it only forwards.
+// Owner layer: preload.
+// Why: 77 hand-written arrows used to repeat every channel and argument list; the table says it once and the type
+//   system checks it against `Api`.
+// Covering test: test/ipc-contract.test.ts.
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Api } from '../shared/api';
+import { EVENTS, INVOKE } from '../shared/ipc/contract';
+import { buildInvokers } from '../shared/ipc/spec';
+import type { Api } from '../shared/ipc/types';
 
-const api: Api = {
-  boot: () => ipcRenderer.invoke('boot'),
-  run: (cmd) => ipcRenderer.invoke('cmd', cmd),
-  undo: (id) => ipcRenderer.invoke('undo', id),
-  sync: () => ipcRenderer.invoke('sync'),
-  dayCheck: () => ipcRenderer.invoke('day:check'),
-  exportFile: (kind, date, opts) => ipcRenderer.invoke('export', kind, date, opts || {}),
-  exportLists: (date, sigs) => ipcRenderer.invoke('export:lists', date, sigs),
-  exportHd: (req) => ipcRenderer.invoke('export:hd', req),
-  pickHdTpl: () => ipcRenderer.invoke('hd:tpl'),
-  exportImer: (req, print, sigs) => ipcRenderer.invoke('export:imer', req, print, sigs),
-  exportRoster: (date, print, sigs) => ipcRenderer.invoke('export:roster', date, print, sigs),
-  exportWeapons: (date, print, sigs) => ipcRenderer.invoke('export:weapons', date, print, sigs),
-  exportCadre: (date, sigs) => ipcRenderer.invoke('export:cadre', date, sigs),
-  pickRoster: () => ipcRenderer.invoke('roster:pick'),
-  applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),
-  backup: () => ipcRenderer.invoke('backup'),
-  openFolder: (which) => ipcRenderer.invoke('open', which),
-  chooseOutputDir: () => ipcRenderer.invoke('outputDir:choose'),
-  dirChoose: (t) => ipcRenderer.invoke('dir:choose', t),
-  dirReset: (t) => ipcRenderer.invoke('dir:reset', t),
-  dirOpen: (t) => ipcRenderer.invoke('dir:open', t),
-  listBackups: () => ipcRenderer.invoke('backups:list'),
-  restoreBackup: (name) => ipcRenderer.invoke('backups:restore', name),
-  diag: () => ipcRenderer.invoke('diag'),
-  updInfo: () => ipcRenderer.invoke('upd:info'),
-  updCheck: () => ipcRenderer.invoke('upd:check'),
-  updAuto: (on) => ipcRenderer.invoke('upd:auto', !!on),
-  updStart: () => ipcRenderer.invoke('upd:start'),
-  updCancel: () => ipcRenderer.invoke('upd:cancel'),
-  updSeen: (later) => ipcRenderer.invoke('upd:seen', !!later),
-  updSkip: () => ipcRenderer.invoke('upd:skip'),
-  updRestart: () => ipcRenderer.invoke('upd:restart'),
-  updFile: () => ipcRenderer.invoke('upd:file'),
-  updRollback: () => ipcRenderer.invoke('upd:rollback'),
-  updOpenReleases: () => ipcRenderer.invoke('upd:releases'),
-  onUpdate: (cb) => {
-    const h = (_e: unknown, i: any) => cb(i);
-    ipcRenderer.on('update', h);
-    return () => {
-      ipcRenderer.removeListener('update', h);
-    };
-  },
-  setGpu: (disable) => ipcRenderer.invoke('flags:gpu', disable),
-  usbCopy: () => ipcRenderer.invoke('usb:copy'),
-  importBackup: () => ipcRenderer.invoke('backups:import'),
-  srcPick: (kind) => ipcRenderer.invoke('src:pick', kind),
-  srcRead: (kind) => ipcRenderer.invoke('src:read', kind),
-  srcSave: (kind, b) => ipcRenderer.invoke('src:save', kind, b),
-  srcImport: (kind, b, choices, keepRemoved, keepApp) =>
-    ipcRenderer.invoke('src:import', kind, b, choices, !!keepRemoved, keepApp || []),
-  srcKeys: (kind) => ipcRenderer.invoke('src:keys', kind),
-  srcApply: (kind, b, cmd, keys) => ipcRenderer.invoke('src:apply', kind, b, cmd, keys || []),
-  srcPeople: (b) => ipcRenderer.invoke('src:people', b),
-  srcPlan: (kind) => ipcRenderer.invoke('src:plan', kind),
-  srcWrite: (kind) => ipcRenderer.invoke('src:write', kind),
-  srcNewFile: (kind) => ipcRenderer.invoke('src:new', kind),
-  srcStatus: () => ipcRenderer.invoke('src:status'),
-  onBusy: (cb) => {
-    const h = (_e: unknown, b: any) => cb(b);
-    ipcRenderer.on('excel:busy', h);
-    return () => {
-      ipcRenderer.removeListener('excel:busy', h);
-    };
-  },
-  onSources: (cb) => {
-    const h = (_e: unknown, st: any) => cb(st);
-    ipcRenderer.on('sources', h);
-    return () => {
-      ipcRenderer.removeListener('sources', h);
-    };
-  },
-  formPick: (form) => ipcRenderer.invoke('form:pick', form),
-  formInfo: (form) => ipcRenderer.invoke('form:info', form),
-  formSave: (form, b) => ipcRenderer.invoke('form:save', form, b),
-  formDir: (form) => ipcRenderer.invoke('form:dir', form),
-  openPath: (file) => ipcRenderer.invoke('open:path', file),
-  printFile: (file, sheet) => ipcRenderer.invoke('print:file', file, sheet),
-  essoInfo: () => ipcRenderer.invoke('esso:info'),
-  essoDir: (def) => ipcRenderer.invoke('esso:dir', def),
-  essoRoster: () => ipcRenderer.invoke('esso:roster'),
-  essoStart: (o) => ipcRenderer.invoke('esso:start', o),
-  essoPick: () => ipcRenderer.invoke('esso:pick'),
-  essoRestore: (dir) => ipcRenderer.invoke('esso:restore', dir),
-  essoOpen: (dir) => ipcRenderer.invoke('esso:open', dir),
-  repUpload: (kind) => ipcRenderer.invoke('rep:upload', kind),
-  repInspect: (file, kind, sheet, head) => ipcRenderer.invoke('rep:inspect', file, kind, sheet, head),
-  repBuild: (o, kind, file) => ipcRenderer.invoke('rep:build', o, kind, file),
-  repPreview: (src, r, ids, date, raw, opts) => ipcRenderer.invoke('rep:preview', src, r, ids, date, !!raw, opts),
-  layoutPreview: (q) => ipcRenderer.invoke('layout:preview', q),
-  repRun: (r, file, ids, date, print, force, opts) =>
-    ipcRenderer.invoke('rep:run', r, file, ids, date, !!print, !!force, opts || {}),
-  repHist: (id) => ipcRenderer.invoke('rep:hist', id),
-  repTimes: (id) => ipcRenderer.invoke('rep:times', id),
-  repPickFile: () => ipcRenderer.invoke('rep:pickFile'),
-  repOpenTpl: (file) => ipcRenderer.invoke('rep:openTpl', file),
-  repFiles: (files) => ipcRenderer.invoke('rep:files', files),
-  repLast: () => ipcRenderer.invoke('rep:last'),
+/** `on` + the unsubscribe function; the listener drops the IPC event and hands only the payload to the callback. */
+const subscribe = (channel: string) => (cb: (payload: unknown) => void) => {
+  const listener = (_e: unknown, payload: unknown) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
 };
+
+const invokers = buildInvokers(INVOKE, (channel, ...args) => ipcRenderer.invoke(channel, ...args));
+const events = Object.fromEntries(Object.entries(EVENTS).map(([method, { channel }]) => [method, subscribe(channel)]));
+const api = { ...invokers, ...events } as unknown as Api;
 contextBridge.exposeInMainWorld('api', api);
