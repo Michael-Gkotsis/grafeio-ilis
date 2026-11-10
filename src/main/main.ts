@@ -6,8 +6,6 @@ import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
 import {
   copyDurable,
-  ownBinding,
-  ownOsDir,
   writeAll,
   writeJson,
   freeName,
@@ -15,11 +13,13 @@ import {
   ChangedError,
   LockedError,
 } from './files';
-import { preflight, hasErrors } from '../shared/preflight';
+// The next three bare imports keep the module evaluation order of the file: their code moved into features/exports,
+// but they must still be evaluated at this position, before app/paths.ts runs setPath('userData').
+import '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
-import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../shared/dates';
-import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
-import { zipHash } from './ziphash';
+import { nowHM, nowParts, today, type ISODate } from '../shared/dates';
+import { Workbook, sheetSafe } from './xlsx';
+import './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
 import { eventChannel, handle, handleGuarded, handlePrint } from './ipc/handle';
 import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
@@ -35,14 +35,10 @@ import type {
   EssoInfo,
   EssoResult,
   EssoStart,
-  ExportKind,
-  ExportOpts,
-  ExportResult,
   FormInfo,
   ImportPreview,
   SourceBook,
   SourceStatus,
-  TemplateInfo,
   WritePreview,
 } from '../shared/api';
 import {
@@ -58,7 +54,6 @@ import {
   type WriteOutcome,
   readBook,
   stamp,
-  valuesHash,
   syncStamp,
   syncStampNow,
   tableState,
@@ -116,9 +111,8 @@ import {
 import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
-import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
-import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
-import { cleanHd, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
+import { TemplateError } from './exports';
+import './hdDocx';
 import {
   cleanOpts,
   infoOf,
@@ -154,21 +148,25 @@ import {
   type Report,
 } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
-import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState } from '../shared/domain';
-import type { Sig } from '../shared/sigs';
-import type { ImerReq } from '../shared/imer';
+import type { AppState } from '../shared/domain';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
-import { FORM_FILE, MADE_FORM, SHEET_CMDS, TPL, type MadeKind } from './app/tables';
-import type { NewOut, OutRec, PrintJob, RepOut, SyncOut } from './app/types';
-import { unitKindOf, unitText } from '../shared/unit';
+import { SHEET_CMDS, type MadeKind } from './app/tables';
+import type { NewOut, PrintJob, RepOut, SyncOut } from './app/types';
 import {
   autoBusy, autoTimer, dirty, formsDirty, pending, repDirty, seenUntil, sessionStart, store, win,
   setAutoBusy, setAutoTimer, setFormsDirty, setRepDirty, setSeenUntil, setSessionStart, setStore, setWin,
 } from './app/state';
 import { ctx, fail, onCommandApplied, registerCommandsIpc, reply, runCmd, snapshot } from './features/commands';
+import { newDir, outputDir } from './app/dirs';
+import { serial } from './app/serial';
+// The exports feature (and, through it, app/paths.ts) is evaluated right before the last two imports below.
+import {
+  formBinding, formTpl, lastDay, made, onPrintPreview, produce, readOuts, regenForms,
+  registerExportsIpc, registerHdIpc, registerImerIpc, templates, writeOuts,
+} from './features/exports';
 // These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
 // after every other imported module and before this file's body (as when it was a line of this file).
 import {
@@ -177,7 +175,6 @@ import {
   DATA_AT,
   DEV,
   DOCS,
-  OUTS_FILE,
   TPL_DIR,
   TPL_MAX,
   TPL_NAME,
@@ -186,7 +183,6 @@ import {
   USER_TPL,
   archiveRoot,
   tplBuf,
-  tplPath,
   writableDir,
 } from './app/paths';
 import { FLAGS, HIST_MAX, readFlags, readMeta, writeMeta, type RepHist } from './app/meta';
@@ -208,72 +204,9 @@ const savedSigs = (r: Report, file: string): Report => {
   }
   return sigsNone(r, store.state.settings.reportTpls, edited);
 };
-// Έντυπα: ποιο template και ποιος φάκελος (Αρχεία Excel). Χωρίς επιλογή: τα templates της εφαρμογής.
-const formBinding = (f: FormKind): FormBinding => ownBinding(store.state.settings.forms?.[f]);
-const formOf = (kind: ExportKind, s: AppState): FormKind =>
-  kind === 'froura' || kind === 'frouraPsk'
-    ? phaseBase(s.settings) === 'spen'
-      ? 'frouraSpen'
-      : 'froura'
-    : kind === 'hkai'
-      ? 'hkai'
-      : kind === 'check'
-        ? 'check'
-        : 'outs';
-function formTpl(f: Exclude<FormKind, 'check'>): string {
-  const b = formBinding(f);
-  if (b.file) {
-    if (!fs.existsSync(b.file))
-      throw new Error(
-        'Δεν βρέθηκε το template ' + b.file + '. Διάλεξε άλλο στα «Αρχεία Excel» ή γύρνα στο template της εφαρμογής.',
-      );
-    return b.file;
-  }
-  const file = tplPath(FORM_FILE[f]);
-  if (!fs.existsSync(file)) throw new Error('Λείπει το έντυπο ' + FORM_FILE[f] + ' από τον φάκελο templates');
-  return file;
-}
-const formDir = (f: FormKind, date: ISODate) => {
-  const b = formBinding(f);
-  const dir = b.dir || outputDir();
-  return b.monthly === false ? dir : path.join(dir, date.slice(0, 7));
-};
-// Νέα Excel ανά είδος: στον φάκελο του είδους (Ρυθμίσεις → Φάκελοι), αλλιώς στον γενικό
-const newDir = (k: ListKind) => ownOsDir(store.state.settings.newDirs?.[k]) || outputDir();
 const dirOf = (t: DirTarget) =>
   t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind);
-const templates = (): TemplateInfo[] => [
-  ...TPL.map((t) => {
-    const f: FormKind =
-      t.file === 'froura.xlsx'
-        ? 'froura'
-        : t.file === 'froura-spen.xlsx'
-          ? 'frouraSpen'
-          : t.id === 'hkai'
-            ? 'hkai'
-            : 'outs';
-    const b = ownBinding(store?.state.settings.forms?.[f]);
-    const name = unitText(t.name, unitKindOf(store?.state.settings));
-    return b?.file
-      ? { id: t.id, name, file: b.file, ok: fs.existsSync(b.file), custom: true }
-      : {
-          id: t.id,
-          name,
-          file: t.file,
-          ok: fs.existsSync(tplPath(t.file)),
-          custom: fs.existsSync(path.join(USER_TPL, t.file)),
-        };
-  }),
-  {
-    id: 'check',
-    name: 'Έλεγχος υπηρεσιών (μηνιαίο πλέγμα)',
-    file: 'δημιουργείται από την εφαρμογή',
-    ok: true,
-    custom: false,
-  },
-];
 
-const outputDir = () => ownOsDir(store.state.settings.outputDir) || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
 // Κάθε μέρα: όσα ιατρικά/ποινές έληξαν χθες γράφονται στο ιστορικό (Κ-04, Κ-10), και ένα αντίγραφο της βάσης
 // Με την εφαρμογή ανοιχτή από μέρα σε μέρα: τα φύλλα με «Μόνο όσες ισχύουν» ξαναγράφονται, ώστε να σβηστούν όσα έληξαν χθες
 // (χωρίς αλλαγή στα δεδομένα δεν θα γράφονταν ως την επόμενη εκκίνηση)
@@ -307,298 +240,6 @@ function daily() {
   }
 }
 
-// το βαρύ ExcelJS φορτώνεται μόνο όταν χρειαστεί
-const nodeRequire: NodeRequire = require;
-const excel = (): typeof import('./excel') => nodeRequire(path.join(__dirname, 'excel.js'));
-
-// Μία εξαγωγή τη φορά, και ποτέ ατελείωτη αναμονή: αν κάτι κολλήσει (αργός δίσκος, antivirus), μετά από EXPORT_MAX
-// το κουμπί ξεκλειδώνει με μήνυμα αντί να μένει στο «Δημιουργία…»
-const EXPORT_MAX = 60000;
-let exporting = false;
-async function exportGuarded(kind: ExportKind, date: ISODate, opts: ExportOpts): Promise<ExportResult> {
-  if (exporting) return { ok: false, error: 'Βγαίνει ήδη άλλο έντυπο. Περίμενε να τελειώσει και ξαναπάτα.' };
-  exporting = true;
-  let timer: NodeJS.Timeout | undefined;
-  const slow = new Promise<ExportResult>((res) => {
-    timer = setTimeout(
-      () =>
-        res({
-          ok: false,
-          error:
-            'Η εξαγωγή άργησε πάνω από ένα λεπτό. Δες αν ο φάκελος των Excel είναι σε USB ή δίσκο δικτύου που δεν απαντά (Ρυθμίσεις → Φάκελος για τα Excel) και ξαναπάτα.',
-        }),
-      EXPORT_MAX,
-    );
-  });
-  const work = exportFile(kind, date, opts);
-  try {
-    return await Promise.race([work, slow]);
-  } finally {
-    clearTimeout(timer);
-    work.finally(() => {
-      exporting = false;
-    });
-  }
-}
-
-// Τα βαριά των εντύπων στο νήμα των Excel (offload.ts), με την κατάσταση s· αν το νήμα δεν δουλεύει, εδώ όπως πριν
-const X = {
-  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string, sigs?: Sig[] | null) =>
-    off('fillFroura', [buf, d, undefined, sheet, sigs], () => fillFroura(buf, s, d, undefined, sheet, sigs), s),
-  hkai: (buf: Buffer, s: AppState, d: ISODate, opts: Parameters<typeof fillHkai>[3]) =>
-    off('fillHkai', [buf, d, opts], () => fillHkai(buf, s, d, opts), s),
-  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3], sigs?: Sig[] | null) =>
-    off('fillOuts', [buf, d, sheets, sigs], () => fillOuts(buf, s, d, sheets, sigs), s),
-  merge: (bufs: Buffer[], names: string[], pick?: string) =>
-    off('mergeFirstSheets', [bufs, names, pick], () => mergeFirstSheets(bufs, names, pick)),
-  mergeSheets: (bufs: Buffer[], picks: string[][], names: string[][]) =>
-    off('mergeSheets', [bufs, picks, names], () => mergeSheets(bufs, picks, names)),
-  zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
-  valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b)),
-};
-// Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
-async function made(
-  what: MadeKind,
-  date: ISODate,
-  s: AppState,
-  sigs?: Sig[] | null,
-  imer?: ImerReq,
-): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
-  const m =
-    what === 'check'
-      ? await off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s)
-      : what === 'lists'
-        ? await excel().rosterLists(s, date)
-        : what === 'rosterPrint'
-          ? await excel().rosterPrint(s, date)
-          : what === 'rosterPreview'
-            ? await excel().rosterPreview(s, date)
-            : what === 'cadre'
-              ? await excel().cadreLists(s, date)
-              : what === 'imer'
-                ? await excel().imerBook(s, imer!)
-                : await excel().weaponsBook(s, date);
-  const form = MADE_FORM[what];
-  const r = await off('signMade', [m.data, form, m.marks, sigs], () => signMade(m.data, s, form, m.marks, sigs), s);
-  return { name: m.name, ...r };
-}
-// Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
-// sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
-async function produce(
-  kind: ExportKind,
-  date: ISODate,
-  s: AppState,
-  sigs?: Sig[] | null,
-): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
-  const form = formOf(kind, s);
-  if (kind === 'check') return made('check', date, s, sigs);
-  const b = formBinding(form);
-  const buf = await fs.promises.readFile(formTpl(form as Exclude<FormKind, 'check'>));
-  if (kind === 'frouraPsk' || kind === 'outsPsk') {
-    // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
-    const fr = kind === 'frouraPsk';
-    const days = pskDays(date);
-    const parts = await Promise.all(
-      days.map((d) =>
-        fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs),
-      ),
-    );
-    const tabs = days.map((d) => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-'));
-    // «Όλη η δύναμη»: δύο φύλλα ανά μέρα, «ΠΑΡ 30-10» (εξοδούχοι) και «ΠΑΡ 30-10 ΔΥΝ» (η υπόλοιπη δύναμη)· αλλιώς το πρώτο φύλλο κάθε μέρας
-    const two = !fr && isOutsAll(s.settings) && parts.every((x) => x.sheets && x.sheets.length === 2);
-    const data = two
-      ? await X.mergeSheets(
-          parts.map((x) => x.data),
-          parts.map((x) => x.sheets!),
-          tabs.map((n) => [n, n + ' ΔΥΝ']),
-        )
-      : await X.merge(
-          parts.map((x) => x.data),
-          tabs,
-          parts[0].sheet || (fr ? b.sheet : undefined),
-        );
-    return {
-      name:
-        (fr ? frouraFile(s.settings) : isOutsAll(s.settings) ? 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') +
-        'ΠΣΚ ' +
-        dm(days[0]).replace('/', '-') +
-        ' έως ' +
-        dm(days[2]).replace('/', '-') +
-        '-' +
-        days[2].slice(0, 4) +
-        '.xlsx',
-      data,
-      warnings: [...new Set(parts.flatMap((x) => x.warnings || []))],
-    };
-  }
-  if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
-  // ΗΚΑΙ: οι θέσεις βρίσκονται από τα κείμενα του εντύπου (και του δικού σου στον φάκελο templates), και από πάνω ό,τι διόρθωσες
-  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, cells: b.cells, sigs });
-  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 }, sigs);
-}
-// Ένα γράψιμο αρχείων τη φορά: η αυτόματη ενημέρωση, το «Ενημέρωση Excel» και η εξαγωγή εντύπου δεν διαβάζουν και
-// γράφουν το ίδιο Excel ή το forms.json ταυτόχρονα (αλλιώς χάνεται ό,τι έγραψε ο ένας)
-let ioChain: Promise<unknown> = Promise.resolve();
-function serial<T>(f: () => Promise<T>): Promise<T> {
-  const p = ioChain.then(f, f);
-  ioChain = p.catch(() => undefined);
-  return p;
-}
-
-async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Promise<ExportResult> {
-  try {
-    const s = store.state;
-    // Προέλεγχος: με ✕ δεν βγαίνει έντυπο, με ⚠ χρειάζεται επιβεβαίωση που γράφεται στο ιστορικό
-    const checks = preflight(kind, s, date);
-    if (hasErrors(checks))
-      return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη που πρέπει να διορθωθούν πρώτα', checks };
-    if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
-    const { r, out } = await serial(async () => {
-      const r = await produce(kind, date, s, opts.sigs);
-      const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
-      // οι υπογραφές αυτής της φοράς μένουν και στις αυτόματες ενημερώσεις του ίδιου αρχείου
-      rememberOut({
-        form: formOf(kind, s),
-        kind,
-        date,
-        file: out,
-        at: nowHM(),
-        hash: await X.zipHash(r.data),
-        vhash: await X.valuesHash(r.data),
-        ...(stamp(out) || {}),
-        ...(opts.sigs ? { sigs: opts.sigs } : {}),
-      });
-      return { r, out };
-    });
-    // ΗΚΑΙ: το «3. Άδειες» που χρησιμοποιήθηκε μένει για τη μέρα (αλλιώς μια νέα προεπιλογή θα άλλαζε το ξαναβγάλσιμο)
-    if (kind === 'hkai') runCmd({ t: 'freezeHkaiLv', date, on: hkLvOn(s, date) });
-    for (const d of kind === 'frouraPsk' || kind === 'outsPsk' ? pskDays(date) : [date])
-      runCmd({ t: 'printed', date: d, at: nowHM(), files: [path.basename(out)] });
-    for (const c of checks)
-      store.addAudit(
-        {
-          at: nowHM(),
-          day: today(),
-          text: 'Βγήκε ' + path.basename(out) + ' με προειδοποίηση: ' + c.text,
-          files: [],
-          source: 'app',
-          undoable: false,
-        },
-        null,
-        false,
-      );
-    if (checks.length) store.flush();
-    const warnings = r.warnings || [];
-    // «Εκτύπωση»: το Excel γράφεται όπως πάντα και ανοίγει η προεπισκόπηση εκτύπωσης αντί για τον Excel
-    if (opts.print) {
-      const p = await printPreview(out);
-      if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-    } else if (opts.open) shell.openPath(out);
-    return { ok: true, file: out, warnings };
-  } catch (e) {
-    if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
-    if (e instanceof TemplateError) return { ok: false, error: e.message, checks: [{ level: 'err', text: e.message }] };
-    return fail(e);
-  }
-}
-
-// ------------------------------------------------------------------ Excel που έχουν ήδη βγει: ενημερώνονται μόνα τους
-// Κάθε έντυπο που βγήκε για σήμερα ή επόμενη μέρα ξαναγράφεται όταν αλλάξει κάτι στην εφαρμογή (Michael, 11/10).
-// Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
-// vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
-const readOuts = (): OutRec[] => {
-  try {
-    return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8'));
-  } catch {
-    return [];
-  }
-};
-const writeOuts = (l: OutRec[]) => {
-  try {
-    writeJson(OUTS_FILE, l);
-  } catch (e) {
-    console.error('forms.json', e);
-  }
-};
-const lastDay = (o: { kind: ExportKind; date: ISODate }) =>
-  o.kind === 'frouraPsk' || o.kind === 'outsPsk'
-    ? pskDays(o.date)[2]
-    : o.kind === 'check'
-      ? o.date.slice(0, 7) + '-31'
-      : o.date;
-function rememberOut(o: OutRec) {
-  const t = today();
-  writeOuts([...readOuts().filter((x) => x.file !== o.file && lastDay(x) >= t), o]);
-}
-const regenForms = () => serial(regenFormsNow);
-async function regenFormsNow(): Promise<boolean> {
-  const t = today();
-  const list = readOuts().filter((o) => lastDay(o) >= t);
-  let any = false;
-  for (const o of list) {
-    if (!fs.existsSync(o.file)) {
-      o.error = undefined;
-      o.pending = false;
-      continue;
-    } // το έσβησε ο χρήστης: δεν το ξαναφτιάχνουμε
-    if (o.manual) continue;
-    try {
-      // Το διόρθωσε ο χρήστης με το χέρι στο Excel: δεν το πατάμε. Ξαναβγαίνει μόνο με το κουμπί της εφαρμογής.
-      const st = stamp(o.file);
-      if (st && o.vhash && (st.mtime !== o.mtime || st.size !== o.size)) {
-        if ((await X.valuesHash(await fs.promises.readFile(o.file))) !== o.vhash) {
-          o.manual = true;
-          o.pending = false;
-          o.error =
-            "Το άλλαξες με το χέρι στο Excel, οπότε δεν ξαναγράφεται μόνο του. Αν θες τα νέα στοιχεία της εφαρμογής, βγάλ' το ξανά από την εφαρμογή.";
-          continue;
-        }
-        o.mtime = st.mtime;
-        o.size = st.size; // απλώς ανοίχτηκε και σώθηκε: ίδιες τιμές
-      }
-      const s = store.state;
-      const errs = preflight(o.kind, s, o.date).filter((c) => c.level === 'err');
-      if (errs.length) {
-        o.pending = true;
-        o.error = 'Ο προέλεγχος βρήκε λάθος: ' + errs[0].text;
-        continue;
-      }
-      const r = await produce(o.kind, o.date, s, o.sigs);
-      const h = await X.zipHash(r.data);
-      if (h === o.hash) {
-        o.pending = false;
-        o.error = undefined;
-        continue;
-      }
-      await writeAll([{ dir: path.dirname(o.file), name: path.basename(o.file), data: r.data }]);
-      o.hash = h;
-      o.vhash = await X.valuesHash(r.data);
-      Object.assign(o, stamp(o.file) || {});
-      o.at = nowHM();
-      o.pending = false;
-      o.error = undefined;
-      any = true;
-      store.addAudit(
-        {
-          at: nowHM(),
-          day: t,
-          text: 'Ενημερώθηκε μόνο του το ' + path.basename(o.file) + ' (άλλαξαν δεδομένα)',
-          files: [path.basename(o.file)],
-          source: 'auto',
-          undoable: false,
-        },
-        null,
-        false,
-      );
-    } catch (e) {
-      o.pending = true;
-      o.error = e instanceof Error ? e.message : String(e);
-    }
-  }
-  writeOuts(list);
-  if (any) store.flush();
-  return any;
-}
 
 // ------------------------------------------------------------------ Αρχεία Excel (πηγές ανά είδος)
 const srcMeta = new SourceMetaStore(path.join(DATA, 'sources.json'));
@@ -1022,6 +663,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
 // runCmd (features/commands) may not import this file: it calls the auto-write scheduling through this hook, which is
 // installed while main.ts loads, before any command can run.
 onCommandApplied((prev, next) => scheduleAuto(prev, next));
+onPrintPreview(printPreview);
 // Είδη που δεν γράφονται μόνα τους μέχρι νέα ανάγνωση ή «Ενημέρωση Excel»: το Excel ξέρει πράγματα που η εφαρμογή έχασε
 const HOLD_UNDO =
   'Αναιρέθηκε μια ανάγνωση από αυτό το Excel και το Excel δεν άλλαξε. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
@@ -2327,147 +1969,6 @@ function registerUpdate() {
 }
 
 // IPC registrations by future feature area (Phase 4.2-4.6); the boot closure calls them in the original order.
-function registerExportsIpc() {
-  handle('exportFile', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
-  // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
-  handle('exportLists', async (_e, date: ISODate, sigs?: Sig[]) => {
-    try {
-      const r = await made('lists', date, store.state, sigs);
-      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-      shell.openPath(out);
-      return { ok: true, file: out, warnings: r.warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-  handle('exportCadre', async (_e, date: ISODate, sigs?: Sig[]) => {
-    try {
-      const r = await made('cadre', date, store.state, sigs);
-      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-      shell.openPath(out);
-      return { ok: true, file: out, warnings: r.warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-  handle('exportRoster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
-    try {
-      const r = await made('rosterPrint', date, store.state, sigs);
-      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-      const warnings = r.warnings;
-      if (print) {
-        const p = await printPreview(out);
-        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-      } else shell.openPath(out);
-      return { ok: true, file: out, warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-  // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
-  handle('exportWeapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
-    try {
-      const r = await made('weapons', date, store.state, sigs);
-      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-      const warnings = r.warnings;
-      if (print) {
-        const p = await printPreview(out);
-        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-      } else shell.openPath(out);
-      return { ok: true, file: out, warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-}
-function registerHdIpc() {
-  // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
-  handle('exportHd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
-    try {
-      const s = store.state;
-      const g = sigsOf(s, 'hd', req.sigs);
-      const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
-      if (req.print) {
-        // η ίδια προεπισκόπηση εκτύπωσης με τα Excel (Michael, 4/11): η σελίδα γίνεται ένα Excel και ανοίγει εκεί
-        const r = await excel().hdBook(s, req.date, tags, HD_SECTIONS);
-        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const p = await printPreview(out);
-        return p.ok
-          ? { ok: true, file: out, warnings: [] }
-          : { ok: false, error: 'Δεν άνοιξε η εκτύπωση: ' + p.error };
-      }
-      const own = s.settings.hdTpl?.file;
-      let buf: Buffer | null = null;
-      const warnings: string[] = [];
-      if (own) {
-        try {
-          buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own)));
-        } catch {
-          warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.');
-        }
-      }
-      const data = await fillDocx(buf || (await builtinTemplate()), tags);
-      const [out] = await serial(() =>
-        writeAll([
-          {
-            dir: outputDir(),
-            name:
-              'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' +
-              req.date.slice(8, 10) +
-              '-' +
-              req.date.slice(5, 7) +
-              '-' +
-              req.date.slice(0, 4) +
-              '.docx',
-            data,
-          },
-        ]),
-      );
-      shell.openPath(out);
-      return { ok: true, file: out, warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-  handle('pickHdTpl', async () => {
-    const res = await dialog.showOpenDialog(win!, {
-      title: 'Διάλεξε το Word που θα γίνει πρότυπο της Ημερήσιας Διαταγής',
-      filters: [{ name: 'Word', extensions: ['docx'] }],
-      properties: ['openFile'],
-    });
-    const src = res.canceled ? null : res.filePaths[0];
-    if (!src) return null;
-    try {
-      if (fs.statSync(src).size > TPL_MAX) return fail('Το αρχείο είναι πάνω από 5 MB.');
-      const buf = await fs.promises.readFile(src);
-      const bad = await checkTemplate(buf);
-      if (bad) return fail(bad);
-      const file = crypto.randomUUID() + '.docx';
-      await fs.promises.mkdir(TPL_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
-      return { ok: true, file, name: path.basename(src) };
-    } catch (e) {
-      return fail(e);
-    }
-  });
-}
-function registerImerIpc() {
-  // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
-  handle('exportImer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
-    try {
-      const r = await made('imer', req.to, store.state, sigs, req);
-      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-      const warnings = r.warnings;
-      if (print) {
-        const p = await printPreview(out);
-        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-      } else shell.openPath(out);
-      return { ok: true, file: out, warnings };
-    } catch (e) {
-      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-    }
-  });
-}
 function registerReportTemplatesIpc() {
   // Έντυπα: πρότυπα στον φάκελο «Πρότυπα εντύπων», έντυπα που βγαίνουν στον φάκελο των Excel
   handle('repUpload', async (_e, kind: RepKind) => {
