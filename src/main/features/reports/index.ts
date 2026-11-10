@@ -6,7 +6,7 @@
 // Owner layer: main (architecture), `features/reports`.
 // Why: one entry point per slice, as the target layout in CLAUDE.md asks.
 // Covering test: test/architecture.test.ts (layers, no cycle).
-export { registerReportRunIpc, type ReportRunDeps } from './runIpc';
+export { registerReportRunIpc } from './runIpc';
 export { registerLayoutPreviewIpc, registerReportPreviewIpc } from './previewIpc';
 export { registerReportFilesIpc, registerReportTemplatesIpc } from './templatesIpc';
 export { regenReports } from './regen';
