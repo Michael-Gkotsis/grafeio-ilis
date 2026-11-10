@@ -4,14 +4,6 @@
     "value": [],
     "withTypes": [
       [
-        "src/shared/api.ts",
-        "src/shared/commands.ts",
-        "src/shared/hd.ts",
-        "src/shared/layout.ts",
-        "src/shared/preflight.ts",
-        "src/shared/sigs.ts"
-      ],
-      [
         "src/shared/reports.ts",
         "src/shared/values.ts"
       ]
@@ -57,6 +49,7 @@
     "src/core/excel-in/roster.ts::parse": 129,
     "src/core/excel-in/statusDiff.ts::diffStatuses": 223,
     "src/core/excel-in/writePlan.ts::planWrite": 140,
+    "src/core/forms/preflight.ts::hkaiChecks": 82,
     "src/core/outs/outsDay.ts::dayBook": 100,
     "src/core/outs/strengthView.ts::strengthView": 153,
     "src/main/excel.ts::dutyCheck": 137,
@@ -103,7 +96,6 @@
     "src/renderer/screens/weapons.ts::WeaponsScreen": 209,
     "src/shared/commands.ts::noteCmd": 93,
     "src/shared/commands.ts::run": 2260,
-    "src/shared/preflight.ts::hkaiChecks": 82,
     "src/shared/reports.ts::candidates": 130,
     "src/shared/reports.ts::fieldValue": 216,
     "src/shared/reports.ts::pickText": 114,
@@ -132,9 +124,12 @@
     "src/core/excel-in/planSource.ts": 1,
     "src/core/excel-in/planText.ts": 1,
     "src/core/excel-in/postsBack.ts": 2,
+    "src/core/excel-in/roomExtra.ts": 1,
     "src/core/excel-in/rooms.ts": 2,
     "src/core/excel-in/roster.ts": 2,
     "src/core/excel-in/writePlan.ts": 3,
+    "src/core/forms/hd.ts": 2,
+    "src/core/forms/preflight.ts": 2,
     "src/core/model/blocks.ts": 1,
     "src/core/outs/strengthView.ts": 1,
     "src/core/statuses/punish.ts": 1,
@@ -175,11 +170,8 @@
     "src/renderer/sheets.ts": 5,
     "src/renderer/update.ts": 1,
     "src/shared/commands.ts": 10,
-    "src/shared/hd.ts": 2,
-    "src/shared/preflight.ts": 2,
     "src/shared/quickAdd.ts": 2,
     "src/shared/reports.ts": 2,
-    "src/shared/roomExtra.ts": 1,
     "src/shared/values.ts": 7
   },
   "any": {
