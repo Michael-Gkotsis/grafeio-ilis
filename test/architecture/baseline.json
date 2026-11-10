@@ -20,11 +20,6 @@
         "src/shared/sources.ts"
       ],
       [
-        "src/shared/cadre.ts",
-        "src/shared/hkaiText.ts",
-        "src/shared/rosterLists.ts"
-      ],
-      [
         "src/shared/reports.ts",
         "src/shared/values.ts"
       ]
@@ -52,14 +47,14 @@
     "src/shared/commands.ts": 3113,
     "src/shared/reports.ts": 2317,
     "src/shared/sources.ts": 3996,
-    "src/shared/values.ts": 931,
-    "src/shared/weapons.ts": 492
+    "src/shared/values.ts": 931
   },
   "oversizeFunctions": {
     "src/core/duty/autofill.ts::fillDay": 109,
     "src/core/duty/autofillRepair.ts::repair": 102,
     "src/core/duty/hkaiCount.ts::hkaiCounts": 86,
     "src/core/duty/planChange.ts::planStatusChange": 154,
+    "src/core/outs/outsDay.ts::dayBook": 100,
     "src/core/outs/strengthView.ts::strengthView": 153,
     "src/main/excel.ts::dutyCheck": 137,
     "src/main/excel.ts::hdBook": 134,
@@ -108,7 +103,6 @@
     "src/shared/cadreSource.ts::planCadresWrite": 83,
     "src/shared/commands.ts::noteCmd": 93,
     "src/shared/commands.ts::run": 2260,
-    "src/shared/outsDay.ts::dayBook": 100,
     "src/shared/preflight.ts::hkaiChecks": 82,
     "src/shared/reports.ts::candidates": 130,
     "src/shared/reports.ts::fieldValue": 216,
@@ -126,6 +120,7 @@
     "src/shared/values.ts::metricsOf": 424
   },
   "forEach": {
+    "src/core/cadre/cadre.ts": 1,
     "src/core/duty/autofillRepair.ts": 1,
     "src/core/duty/capability.ts": 1,
     "src/core/duty/hkaiCount.ts": 2,
@@ -138,6 +133,8 @@
     "src/core/outs/strengthView.ts": 1,
     "src/core/statuses/punish.ts": 1,
     "src/core/weapons/armed.ts": 3,
+    "src/core/weapons/weaponInfo.ts": 2,
+    "src/core/weapons/weaponSheets.ts": 1,
     "src/main/db.ts": 15,
     "src/main/excel.ts": 29,
     "src/main/exports.ts": 13,
@@ -171,7 +168,6 @@
     "src/renderer/select.ts": 1,
     "src/renderer/sheets.ts": 5,
     "src/renderer/update.ts": 1,
-    "src/shared/cadre.ts": 1,
     "src/shared/cadreSource.ts": 3,
     "src/shared/commands.ts": 10,
     "src/shared/hd.ts": 2,
@@ -181,8 +177,7 @@
     "src/shared/roomExtra.ts": 1,
     "src/shared/roster.ts": 2,
     "src/shared/sources.ts": 30,
-    "src/shared/values.ts": 7,
-    "src/shared/weapons.ts": 3
+    "src/shared/values.ts": 7
   },
   "any": {
     "src/main/db.ts": 13,
