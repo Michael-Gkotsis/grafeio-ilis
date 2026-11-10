@@ -88,7 +88,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | Forms (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι), Word ΗΔ | `src/main/exports.ts`, `hdDocx.ts`, `tplmap.ts`, `templates/*.xlsx` (frozen) |
 | Printing / pagination | `src/main/print.ts`, `src/preload/print.ts`, `src/shared/repPage.ts`, `layout.ts` |
 | Auto-update | `src/main/update.ts`, `updater.ts`, `src/renderer/update.ts`, `scripts/package-app.mjs` |
-| App startup, windows | `src/main/main.ts` |
+| App startup, windows | `src/main/main.ts` (entry) + `src/main/app/` (boot, window, recover, lockdown, quit) |
 | Screens (one file each; htm today, TSX later) | `src/renderer/screens/*.ts` |
 | Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app.ts`, `store.ts`, `prefs.ts`, `ui.ts`, `common.ts` |
 | Look and feel | `src/renderer/app/styles/index.css` (layer order) + `legacy.css` (UI work), `index.html` |
