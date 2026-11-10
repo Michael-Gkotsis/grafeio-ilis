@@ -154,7 +154,7 @@ import {
   type Report,
 } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
-import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
+import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState } from '../shared/domain';
 import type { Sig } from '../shared/sigs';
 import type { ImerReq } from '../shared/imer';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
@@ -163,11 +163,12 @@ import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
 import { FORM_FILE, MADE_FORM, SHEET_CMDS, TPL, type MadeKind } from './app/tables';
 import type { NewOut, OutRec, PrintJob, RepOut, SyncOut } from './app/types';
-import { unitKindOf, unitText } from '../shared/unit'; import { HISTORY_AMBIENT, applyAmbient } from '../core/ambient';
+import { unitKindOf, unitText } from '../shared/unit';
 import {
   autoBusy, autoTimer, dirty, formsDirty, pending, repDirty, seenUntil, sessionStart, store, win,
   setAutoBusy, setAutoTimer, setFormsDirty, setRepDirty, setSeenUntil, setSessionStart, setStore, setWin,
 } from './app/state';
+import { ctx, fail, onCommandApplied, registerCommandsIpc, reply, runCmd, snapshot } from './features/commands';
 // These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
 // after every other imported module and before this file's body (as when it was a line of this file).
 import {
@@ -272,74 +273,7 @@ const templates = (): TemplateInfo[] => [
   },
 ];
 
-const ctx = () => ({ today: today(), newId: () => crypto.randomUUID() });
 const outputDir = () => ownOsDir(store.state.settings.outputDir) || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
-// Τι έχει ήδη το UI: η κατάσταση και η τελευταία γραμμή ιστορικού που του στάλθηκαν. Οι εντολές δεν αλλάζουν
-// αντικείμενα, φτιάχνουν νέα, οπότε ό,τι έχει την ίδια αναφορά με πριν δεν άλλαξε και δεν ξαναστέλνεται.
-let sent: AppState | null = null,
-  sentAudit = 0;
-function snapshot(): { state: AppState; audit: AuditEntry[] } {
-  const audit = store.audit();
-  sent = store.state;
-  sentAudit = Math.max(sentAudit, audit[0]?.id || 0);
-  return { state: store.state, audit };
-}
-function reply(text: string, fullAudit = false): CmdResult {
-  const s = store.state;
-  const changes: Partial<AppState> = {};
-  for (const k of Object.keys(s) as (keyof AppState)[]) if (!sent || s[k] !== sent[k]) (changes as any)[k] = s[k];
-  sent = s;
-  const newAudit = fullAudit ? [] : store.audit(300, sentAudit);
-  const audit = fullAudit ? store.audit() : undefined;
-  sentAudit = Math.max(sentAudit, (audit || newAudit)[0]?.id || 0);
-  return { ok: true, changes, newAudit, audit, text };
-}
-const fail = (e: unknown): { ok: false; error: string } => ({
-  ok: false,
-  error: e instanceof Error ? e.message : String(e),
-});
-
-// Τρέχει μια εντολή και τη γράφει. Ό,τι άλλαξε φτάνει στο UI με την επόμενη απάντηση reply() (και όσα έγιναν χωρίς αυτό, π.χ. λήξεις)
-function runCmd(cmd: Command): { ok: true; text: string } | { ok: false; error: string } {
-  try {
-    const prev = store.state;
-    applyAmbient(prev, HISTORY_AMBIENT); // ΗΚΑΙ ή ΗΚΑΛ στα κείμενα του ιστορικού
-    const r = apply(store.state, cmd, ctx());
-    const changed = r.state !== store.state;
-    // μία εγγραφή της βάσης στον δίσκο ανά ενέργεια, όχι μία ανά γραμμή ιστορικού· αν δεν γραφτεί, γυρίζουν όλα πίσω
-    store.transact(
-      () => {
-        if (changed) {
-          const patch = store.commit(r.state);
-          const undoable = r.undoable !== false;
-          if (r.text)
-            store.addAudit(
-              { at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable },
-              undoable ? patch : null,
-              false,
-            );
-        } else if (r.text)
-          store.addAudit(
-            { at: nowHM(), day: today(), text: r.text, files: r.files, source: r.source || 'app', undoable: false },
-            null,
-            false,
-          );
-        for (const t of r.extra || [])
-          store.addAudit(
-            { at: nowHM(), day: today(), text: t, files: [], source: 'auto', undoable: false },
-            null,
-            false,
-          );
-      },
-      !!(changed || r.text || r.extra?.length),
-    );
-    if (changed) scheduleAuto(prev, store.state);
-    return { ok: true, text: r.text };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
 // Κάθε μέρα: όσα ιατρικά/ποινές έληξαν χθες γράφονται στο ιστορικό (Κ-04, Κ-10), και ένα αντίγραφο της βάσης
 // Με την εφαρμογή ανοιχτή από μέρα σε μέρα: τα φύλλα με «Μόνο όσες ισχύουν» ξαναγράφονται, ώστε να σβηστούν όσα έληξαν χθες
 // (χωρίς αλλαγή στα δεδομένα δεν θα γράφονταν ως την επόμενη εκκίνηση)
@@ -1085,6 +1019,9 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   clearTimeout(autoTimer);
   setAutoTimer(setTimeout(runAuto, 1200));
 }
+// runCmd (features/commands) may not import this file: it calls the auto-write scheduling through this hook, which is
+// installed while main.ts loads, before any command can run.
+onCommandApplied((prev, next) => scheduleAuto(prev, next));
 // Είδη που δεν γράφονται μόνα τους μέχρι νέα ανάγνωση ή «Ενημέρωση Excel»: το Excel ξέρει πράγματα που η εφαρμογή έχασε
 const HOLD_UNDO =
   'Αναιρέθηκε μια ανάγνωση από αυτό το Excel και το Excel δεν άλλαξε. Η εφαρμογή δεν γράφει εδώ μόνη της μέχρι να πατήσεις «Ανανέωση από Excel» ή «Ενημέρωση Excel» (με προεπισκόπηση).';
@@ -2390,63 +2327,6 @@ function registerUpdate() {
 }
 
 // IPC registrations by future feature area (Phase 4.2-4.6); the boot closure calls them in the original order.
-function registerCommandsIpc(answer: (r: ReturnType<typeof runCmd>) => CmdResult, MAIN_ONLY: string[]) {
-  handle('run', (_e, cmd: Command) =>
-    cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some((k) => MAIN_ONLY.includes(k))
-      ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους')
-      : answer(runCmd(cmd)),
-  );
-  handle('sync', () => reply(''));
-  // νέα μέρα με την εφαρμογή ανοιχτή: οι εργασίες της μέρας τώρα (όχι σε ως 10 λεπτά) και μόνο ό,τι άλλαξε
-  handle('dayCheck', () => {
-    daily();
-    return reply('');
-  });
-  handle('undo', (_e, id?: number): CmdResult => {
-    const last = store.lastUndoable();
-    if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
-    // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
-    if (typeof id === 'number' && last.id !== id)
-      return {
-        ok: false,
-        error:
-          'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ. Η τελευταία ήταν: «' +
-          last.text +
-          '». Δες το Ιστορικό.',
-      };
-    try {
-      const prev = store.state;
-      store.transact(
-        () => {
-          store.revert(last.patch);
-          store.markUndone(last.id, false);
-        },
-        true,
-        () => store.markUndone(last.id, false, false),
-      );
-      // Αναίρεση ανάγνωσης από Excel: η εφαρμογή γυρίζει πίσω, το Excel όχι. Αν γράφαμε τώρα, θα σβήναμε από το Excel
-      // όσα μόλις διαβάστηκαν (ή θα ξαναγράφαμε παλιές τιμές στο Δυναμολόγιο). Τα είδη περιμένουν νέα ανάγνωση.
-      const fromExcel = last.source === 'excel' || last.source === 'import';
-      if (fromExcel) hold(kindsOf(prev, store.state), HOLD_UNDO);
-      scheduleAuto(prev, store.state, !fromExcel);
-      store.addAudit(
-        {
-          at: nowHM(),
-          day: today(),
-          text: 'Αναίρεση: ' + last.text + (fromExcel ? ' (το Excel δεν άλλαξε)' : ''),
-          files: [],
-          source: 'app',
-          undoable: false,
-        },
-        null,
-      );
-      if (fromExcel) notify();
-      return reply('Αναιρέθηκε: ' + last.text + (fromExcel ? '. Το Excel δεν άλλαξε.' : ''), true); // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
-    } catch (e) {
-      return fail(e);
-    }
-  });
-}
 function registerExportsIpc() {
   handle('exportFile', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
   // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
@@ -3572,7 +3452,7 @@ else {
       const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
       // αρχεία και φάκελοι αλλάζουν μόνο από τους διαλόγους του main (src:save, form:save, φάκελοι), όχι με εντολή από το UI
       const MAIN_ONLY = ['sources', 'forms', 'outputDir', 'newDirs'];
-      registerCommandsIpc(answer, MAIN_ONLY);
+      registerCommandsIpc(answer, MAIN_ONLY, { daily, hold, kindsOf, HOLD_UNDO, scheduleAuto, notify });
       registerExportsIpc();
       registerHdIpc();
       registerImerIpc();
