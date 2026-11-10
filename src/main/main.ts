@@ -39,7 +39,6 @@ import type {
   ExportOpts,
   ExportResult,
   FormInfo,
-  FormOut,
   ImportPreview,
   SourceBook,
   SourceStatus,
@@ -132,7 +131,6 @@ import {
   renderOpen,
   sectionsHtml,
   sheetFontSize,
-  type Book,
   type PrintOpts,
 } from './print';
 import { xlLook } from '../shared/xlLook';
@@ -156,15 +154,20 @@ import {
   type Report,
 } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
-import type { ImportRow } from '../shared/commands';
 import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
-import type { Sig, SigForm } from '../shared/sigs';
+import type { Sig } from '../shared/sigs';
 import type { ImerReq } from '../shared/imer';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
+import { FORM_FILE, MADE_FORM, SHEET_CMDS, TPL, type MadeKind } from './app/tables';
+import type { NewOut, OutRec, PrintJob, RepOut, SyncOut } from './app/types';
 import { unitKindOf, unitText } from '../shared/unit'; import { HISTORY_AMBIENT, applyAmbient } from '../core/ambient';
+import {
+  autoBusy, autoTimer, dirty, formsDirty, pending, repDirty, seenUntil, sessionStart, store, win,
+  setAutoBusy, setAutoTimer, setFormsDirty, setRepDirty, setSeenUntil, setSessionStart, setStore, setWin,
+} from './app/state';
 // These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
 // after every other imported module and before this file's body (as when it was a line of this file).
 import {
@@ -204,19 +207,7 @@ const savedSigs = (r: Report, file: string): Report => {
   }
   return sigsNone(r, store.state.settings.reportTpls, edited);
 };
-const TPL: { id: ExportKind; name: string; file: string }[] = [
-  { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΒΕΝ)', file: 'froura.xlsx' },
-  { id: 'froura', name: 'Κατάσταση υπηρεσιών (ΦΡΟΥΡΑ ΣΠΕΝ)', file: 'froura-spen.xlsx' },
-  { id: 'hkai', name: 'ΗΚΑΙ (μπροστινο, πισω)', file: 'hkai.xlsx' },
-  { id: 'outs', name: 'Εξοδούχοι / Παραμένοντες', file: 'exodouxoi.xlsx' },
-];
 // Έντυπα: ποιο template και ποιος φάκελος (Αρχεία Excel). Χωρίς επιλογή: τα templates της εφαρμογής.
-const FORM_FILE: Record<Exclude<FormKind, 'check'>, string> = {
-  froura: 'froura.xlsx',
-  frouraSpen: 'froura-spen.xlsx',
-  hkai: 'hkai.xlsx',
-  outs: 'exodouxoi.xlsx',
-};
 const formBinding = (f: FormKind): FormBinding => ownBinding(store.state.settings.forms?.[f]);
 const formOf = (kind: ExportKind, s: AppState): FormKind =>
   kind === 'froura' || kind === 'frouraPsk'
@@ -281,10 +272,6 @@ const templates = (): TemplateInfo[] => [
   },
 ];
 
-let store: Store;
-let seenUntil = 0,
-  sessionStart = 0; // «Τι άλλαξε από το προηγούμενο άνοιγμα»: ενέργειες με id σε (seenUntil, sessionStart]
-let win: BrowserWindow | null = null;
 const ctx = () => ({ today: today(), newId: () => crypto.randomUUID() });
 const outputDir = () => ownOsDir(store.state.settings.outputDir) || path.join(app.getPath('documents'), 'Γραφείο Ίλης');
 // Τι έχει ήδη το UI: η κατάσταση και η τελευταία γραμμή ιστορικού που του στάλθηκαν. Οι εντολές δεν αλλάζουν
@@ -370,7 +357,7 @@ function daily() {
     if (ks.length) {
       ks.forEach((k) => dirty.add(k));
       clearTimeout(autoTimer);
-      autoTimer = setTimeout(runAuto, 1200);
+      setAutoTimer(setTimeout(runAuto, 1200));
     }
   }
   dayOf = d;
@@ -436,16 +423,6 @@ const X = {
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b)),
 };
 // Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
-type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons' | 'imer';
-const MADE_FORM: Record<MadeKind, SigForm> = {
-  check: 'check',
-  lists: 'roster',
-  rosterPrint: 'roster',
-  rosterPreview: 'roster',
-  cadre: 'cadre',
-  weapons: 'weapons',
-  imer: 'imer',
-};
 async function made(
   what: MadeKind,
   date: ISODate,
@@ -595,7 +572,6 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
 // Κάθε έντυπο που βγήκε για σήμερα ή επόμενη μέρα ξαναγράφεται όταν αλλάξει κάτι στην εφαρμογή (Michael, 11/10).
 // Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
 // vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
-type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number; sigs?: Sig[] };
 const readOuts = (): OutRec[] => {
   try {
     return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8'));
@@ -944,9 +920,6 @@ function writeText(
   );
 }
 // Γράφει ένα είδος στο Excel του. auto: μόνο αν έχει ξαναγραφτεί/διαβαστεί και το αρχείο δεν άλλαξε από τότε.
-type SyncOut =
-  | { ok: true; text: string; file: string; unchanged: boolean }
-  | { ok: false; error: string; locked?: boolean };
 const syncOut = (kind: ListKind, auto: boolean, create = false): Promise<SyncOut> =>
   serial(() => syncOutNow(kind, auto, create));
 // Πριν από αυτόματη εγγραφή: γράφει μόνη της εδώ; πού είναι τώρα ο πίνακας και οι στήλες του· άλλαξε εκτός εφαρμογής;
@@ -1064,11 +1037,6 @@ async function syncFileAuto(kinds: ListKind[]) {
   const rs = await off('writeGroup', [jobs, t, { tidy: false }], () => writeGroup(jobs, s, t, { tidy: false }), s);
   jobs.forEach((j, i) => afterWrite(j.kind, j.b, rs[i]));
 }
-// Μετά από κάθε αλλαγή: τα είδη που άλλαξαν γράφονται στα Excel τους και τα έντυπα που έχουν βγει ενημερώνονται
-const dirty = new Set<ListKind>();
-let formsDirty = false;
-let autoTimer: NodeJS.Timeout | undefined;
-let autoBusy = false;
 // Ποια είδη αφορά μια αλλαγή: ό,τι αλλάζει στα άτομα (βαθμός, θάλαμος, πόστο…) γράφεται στα φύλλα που έχουν στήλη γι' αυτό
 const capSig = (st: AppState['settings']) =>
   capExtras(st)
@@ -1110,12 +1078,12 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
         prev[k] !== next[k],
     )
   ) {
-    formsDirty = true;
-    if (autoReps().length) repDirty = true;
+    setFormsDirty(true);
+    if (autoReps().length) setRepDirty(true);
   }
   if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer);
-  autoTimer = setTimeout(runAuto, 1200);
+  setAutoTimer(setTimeout(runAuto, 1200));
 }
 // Είδη που δεν γράφονται μόνα τους μέχρι νέα ανάγνωση ή «Ενημέρωση Excel»: το Excel ξέρει πράγματα που η εφαρμογή έχασε
 const HOLD_UNDO =
@@ -1151,10 +1119,10 @@ const busy = (b: ExcelBusy) => {
 async function runAuto() {
   if (autoBusy) {
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(runAuto, 1500);
+    setAutoTimer(setTimeout(runAuto, 1500));
     return;
   }
-  autoBusy = true;
+  setAutoBusy(true);
   let wrote = false,
     err: string | undefined;
   try {
@@ -1178,12 +1146,12 @@ async function runAuto() {
       logWrite(path.basename(f), t0, srcMeta.get(ks[0])?.error);
     }
     if (formsDirty) {
-      formsDirty = false;
+      setFormsDirty(false);
       const t0 = Date.now();
       if (await regenForms()) logWrite('Έντυπα (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι)', t0);
     }
     if (repDirty) {
-      repDirty = false;
+      setRepDirty(false);
       if (!wrote && autoReps().length) {
         wrote = true;
         busy({ on: true });
@@ -1194,7 +1162,7 @@ async function runAuto() {
     console.error('auto', e);
     err = e instanceof Error ? e.message : String(e);
   } finally {
-    autoBusy = false;
+    setAutoBusy(false);
     notify();
     if (wrote) busy({ on: false, at: nowHM(), error: err });
   }
@@ -1209,7 +1177,7 @@ function retryPending() {
       any = true;
     }
   if (readOuts().some((o) => o.pending)) {
-    formsDirty = true;
+    setFormsDirty(true);
     any = true;
   }
   if (repDirty) any = true;
@@ -1218,9 +1186,6 @@ function retryPending() {
 
 // Έντυπα › «Φύλλο στο Δυναμολόγιο» / «Φύλλο σε άλλο Excel…»: το έντυπο γράφεται ως φύλλο (ή φύλλα, ένα ανά θάλαμο) μέσα
 // στο αρχείο. Κάθε φορά ξαναγράφονται μόνο τα φύλλα του εντύπου· η εφαρμογή δεν τα διαβάζει ποτέ (εισαγωγή, Αρχεία Excel).
-type RepOut =
-  | { ok: true; file: string; warnings: string[]; sheets?: string[] }
-  | { ok: false; error: string; locked?: boolean; confirm?: string[] };
 const repSheetBase = (r: Report) => sheetSafe(upper((r.target?.sheet || r.name || '').trim())).trim() || 'ΕΝΤΥΠΟ';
 function repFileOf(r: Report): string | { error: string } {
   const t = r.target;
@@ -1334,7 +1299,6 @@ function countTimes(id: string, ids: (number | string)[]) {
 // «Ενημερώνεται μόνο του»: μετά από κάθε αλλαγή, μέσα στην αυτόματη ενημέρωση (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
 const autoReps = () =>
   (store.state.settings.reports || []).filter((r) => r.out === 'sheet' && r.target?.auto && r.pick.mode !== 'random');
-let repDirty = false;
 async function regenReports(): Promise<boolean> {
   let wrote = false;
   for (const r of autoReps()) {
@@ -1348,7 +1312,7 @@ async function regenReports(): Promise<boolean> {
       logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0, res.ok ? undefined : res.error);
       wrote = true;
     } catch (e) {
-      if (e instanceof LockedError) repDirty = true;
+      if (e instanceof LockedError) setRepDirty(true);
       logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0, msgOf(e));
     }
   }
@@ -1356,16 +1320,6 @@ async function regenReports(): Promise<boolean> {
 }
 
 // Εισαγωγή προσωπικού: από το κουμπί (αναγνώριση μόνη της) ή από τα Αρχεία Excel (με την αντιστοίχιση του χρήστη)
-const pending = new Map<
-  string,
-  {
-    rows: ImportRow[];
-    file: string;
-    binding: SourceBinding | null;
-    stamp: { mtime: number; size: number };
-    sheet: RawSheet | null;
-  }
->();
 async function rosterPreview(
   file: string,
   b: SourceBinding | null,
@@ -1548,7 +1502,7 @@ async function importStatuses(
     if (b.write !== false && (d.appOnly.length || d.kept.length || kept.size)) {
       dirty.add(kind);
       clearTimeout(autoTimer);
-      autoTimer = setTimeout(runAuto, 1200);
+      setAutoTimer(setTimeout(runAuto, 1200));
     }
     notify();
     // αυτόματα (από τον έλεγχο αλλαγών): η απάντηση δεν φτάνει στο UI, οπότε δεν σημειώνουμε τις αλλαγές ως σταλμένες.
@@ -1572,14 +1526,6 @@ async function markSynced(kind: ListKind, b: SourceBinding, extra: Partial<Sourc
     ...extra,
   });
 }
-const SHEET_CMDS: Partial<Record<ListKind, Command['t']>> = {
-  posts: 'setPeopleFields',
-  outside: 'setPeopleFields',
-  caps: 'importCaps',
-  duties: 'importDuties',
-  cadres: 'importCadres',
-  cadreAbs: 'importCadreAbs',
-};
 // keys (έλεγχος υπηρεσιών): «μέρα|άτομο» του Excel που είδε πια η εφαρμογή· μόνο αυτά σβήνει μετά η εγγραφή
 async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keys: string[] = []): Promise<CmdResult> {
   if (SHEET_CMDS[kind] !== cmd.t) return fail('Λάθος είδος εισαγωγής');
@@ -1594,7 +1540,7 @@ async function applySheet(kind: ListKind, b: SourceBinding, cmd: Command, keys: 
     );
     dirty.add(kind);
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(runAuto, 1200);
+    setAutoTimer(setTimeout(runAuto, 1200));
     notify();
     return reply(r.text || 'Δεν βρέθηκε κάτι νέο στο ' + path.basename(b.file) + ' › ' + b.sheet);
   } catch (e) {
@@ -1702,9 +1648,6 @@ async function newPlace(
   return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
 }
 // «Νέο αρχείο…» ενός είδους (Αρχεία Excel) και τα Excel της νέας ΕΣΣΟ
-type NewOut =
-  | { ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] }
-  | { ok: false; error: string; locked?: boolean };
 async function createNew(kind: ListKind): Promise<NewOut> {
   if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
   const prev = bindingOf(kind);
@@ -1880,15 +1823,6 @@ function knownPath(file: string): boolean {
 }
 
 // ------------------------------------------------------------------ Εκτύπωση χωρίς Excel (print.ts): προεπισκόπηση και διάλογος εκτυπωτή των Windows
-type PrintJob = {
-  file: string;
-  sheets: string[];
-  tmp: string;
-  book: Book;
-  key: string;
-  base: PrintOpts;
-  opts: PrintOpts;
-};
 const printJobs = new Map<number, PrintJob>(); // ανά παράθυρο προεπισκόπησης (webContents)
 // οι ρυθμίσεις του εντύπου: οι αποθηκευμένες (χωρίς τις αλλαγές σελίδας, που αφορούν μόνο το σημερινό), αλλιώς οι αρχικές του
 function printPrefs(key: string, base: PrintOpts): { opts: PrintOpts; remember: boolean } {
@@ -2158,12 +2092,12 @@ async function startEsso(o: EssoStart): Promise<EssoResult> {
     // ό,τι ήξερε η εφαρμογή για τα παλιά Excel και τα έντυπα που βγήκαν δεν ισχύει πια
     clearTimeout(autoTimer);
     dirty.clear();
-    formsDirty = false;
+    setFormsDirty(false);
     srcMeta.reset();
     writeOuts([]);
     store.clearAudit();
-    seenUntil = 0;
-    sessionStart = 0;
+    setSeenUntil(0);
+    setSessionStart(0);
     writeMeta({ seenAudit: 0 });
     srcMeta.allow([dir]);
     store.addAudit(
@@ -2455,9 +2389,1093 @@ function registerUpdate() {
   on('updOpenReleases', () => upd!.openReleases(), undefined);
 }
 
+// IPC registrations by future feature area (Phase 4.2-4.6); the boot closure calls them in the original order.
+function registerCommandsIpc(answer: (r: ReturnType<typeof runCmd>) => CmdResult, MAIN_ONLY: string[]) {
+  handle('run', (_e, cmd: Command) =>
+    cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some((k) => MAIN_ONLY.includes(k))
+      ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους')
+      : answer(runCmd(cmd)),
+  );
+  handle('sync', () => reply(''));
+  // νέα μέρα με την εφαρμογή ανοιχτή: οι εργασίες της μέρας τώρα (όχι σε ως 10 λεπτά) και μόνο ό,τι άλλαξε
+  handle('dayCheck', () => {
+    daily();
+    return reply('');
+  });
+  handle('undo', (_e, id?: number): CmdResult => {
+    const last = store.lastUndoable();
+    if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
+    // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
+    if (typeof id === 'number' && last.id !== id)
+      return {
+        ok: false,
+        error:
+          'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ. Η τελευταία ήταν: «' +
+          last.text +
+          '». Δες το Ιστορικό.',
+      };
+    try {
+      const prev = store.state;
+      store.transact(
+        () => {
+          store.revert(last.patch);
+          store.markUndone(last.id, false);
+        },
+        true,
+        () => store.markUndone(last.id, false, false),
+      );
+      // Αναίρεση ανάγνωσης από Excel: η εφαρμογή γυρίζει πίσω, το Excel όχι. Αν γράφαμε τώρα, θα σβήναμε από το Excel
+      // όσα μόλις διαβάστηκαν (ή θα ξαναγράφαμε παλιές τιμές στο Δυναμολόγιο). Τα είδη περιμένουν νέα ανάγνωση.
+      const fromExcel = last.source === 'excel' || last.source === 'import';
+      if (fromExcel) hold(kindsOf(prev, store.state), HOLD_UNDO);
+      scheduleAuto(prev, store.state, !fromExcel);
+      store.addAudit(
+        {
+          at: nowHM(),
+          day: today(),
+          text: 'Αναίρεση: ' + last.text + (fromExcel ? ' (το Excel δεν άλλαξε)' : ''),
+          files: [],
+          source: 'app',
+          undoable: false,
+        },
+        null,
+      );
+      if (fromExcel) notify();
+      return reply('Αναιρέθηκε: ' + last.text + (fromExcel ? '. Το Excel δεν άλλαξε.' : ''), true); // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
+    } catch (e) {
+      return fail(e);
+    }
+  });
+}
+function registerExportsIpc() {
+  handle('exportFile', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
+  // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
+  handle('exportLists', async (_e, date: ISODate, sigs?: Sig[]) => {
+    try {
+      const r = await made('lists', date, store.state, sigs);
+      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+      shell.openPath(out);
+      return { ok: true, file: out, warnings: r.warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+  handle('exportCadre', async (_e, date: ISODate, sigs?: Sig[]) => {
+    try {
+      const r = await made('cadre', date, store.state, sigs);
+      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+      shell.openPath(out);
+      return { ok: true, file: out, warnings: r.warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+  handle('exportRoster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+    try {
+      const r = await made('rosterPrint', date, store.state, sigs);
+      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+      const warnings = r.warnings;
+      if (print) {
+        const p = await printPreview(out);
+        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
+      } else shell.openPath(out);
+      return { ok: true, file: out, warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+  // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
+  handle('exportWeapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+    try {
+      const r = await made('weapons', date, store.state, sigs);
+      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+      const warnings = r.warnings;
+      if (print) {
+        const p = await printPreview(out);
+        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
+      } else shell.openPath(out);
+      return { ok: true, file: out, warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+}
+function registerHdIpc() {
+  // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
+  handle('exportHd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
+    try {
+      const s = store.state;
+      const g = sigsOf(s, 'hd', req.sigs);
+      const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
+      if (req.print) {
+        // η ίδια προεπισκόπηση εκτύπωσης με τα Excel (Michael, 4/11): η σελίδα γίνεται ένα Excel και ανοίγει εκεί
+        const r = await excel().hdBook(s, req.date, tags, HD_SECTIONS);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const p = await printPreview(out);
+        return p.ok
+          ? { ok: true, file: out, warnings: [] }
+          : { ok: false, error: 'Δεν άνοιξε η εκτύπωση: ' + p.error };
+      }
+      const own = s.settings.hdTpl?.file;
+      let buf: Buffer | null = null;
+      const warnings: string[] = [];
+      if (own) {
+        try {
+          buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own)));
+        } catch {
+          warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.');
+        }
+      }
+      const data = await fillDocx(buf || (await builtinTemplate()), tags);
+      const [out] = await serial(() =>
+        writeAll([
+          {
+            dir: outputDir(),
+            name:
+              'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' +
+              req.date.slice(8, 10) +
+              '-' +
+              req.date.slice(5, 7) +
+              '-' +
+              req.date.slice(0, 4) +
+              '.docx',
+            data,
+          },
+        ]),
+      );
+      shell.openPath(out);
+      return { ok: true, file: out, warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+  handle('pickHdTpl', async () => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε το Word που θα γίνει πρότυπο της Ημερήσιας Διαταγής',
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+      properties: ['openFile'],
+    });
+    const src = res.canceled ? null : res.filePaths[0];
+    if (!src) return null;
+    try {
+      if (fs.statSync(src).size > TPL_MAX) return fail('Το αρχείο είναι πάνω από 5 MB.');
+      const buf = await fs.promises.readFile(src);
+      const bad = await checkTemplate(buf);
+      if (bad) return fail(bad);
+      const file = crypto.randomUUID() + '.docx';
+      await fs.promises.mkdir(TPL_DIR, { recursive: true });
+      await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
+      return { ok: true, file, name: path.basename(src) };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+}
+function registerImerIpc() {
+  // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
+  handle('exportImer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
+    try {
+      const r = await made('imer', req.to, store.state, sigs, req);
+      const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+      const warnings = r.warnings;
+      if (print) {
+        const p = await printPreview(out);
+        if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
+      } else shell.openPath(out);
+      return { ok: true, file: out, warnings };
+    } catch (e) {
+      return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
+    }
+  });
+}
+function registerReportTemplatesIpc() {
+  // Έντυπα: πρότυπα στον φάκελο «Πρότυπα εντύπων», έντυπα που βγαίνουν στον φάκελο των Excel
+  handle('repUpload', async (_e, kind: RepKind) => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε το Excel που θα γίνει πρότυπο',
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
+      properties: ['openFile'],
+    });
+    const src = res.canceled ? null : res.filePaths[0];
+    if (!src) return null;
+    try {
+      if (/\.xls$/i.test(src))
+        return fail(
+          'Το ' + path.basename(src) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx.',
+        );
+      const st = fs.statSync(src);
+      if (st.size > TPL_MAX)
+        return fail(
+          'Το αρχείο είναι πάνω από 5 MB. Κράτα σε ένα αρχείο μόνο το φύλλο του εντύπου και ξαναδοκίμασε.',
+        );
+      const buf = await fs.promises.readFile(src);
+      const insp = await inspectTemplate(buf, kind);
+      const file = crypto.randomUUID() + (/\.xlsm$/i.test(src) ? '.xlsm' : '.xlsx');
+      await fs.promises.mkdir(TPL_DIR, { recursive: true });
+      await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
+      return {
+        ok: true,
+        tpl: {
+          id: crypto.randomUUID(),
+          name: path.basename(src).replace(/\.xls[xm]$/i, ''),
+          file,
+          mtime: Math.round(fs.statSync(path.join(TPL_DIR, file)).mtimeMs),
+        },
+        insp,
+      };
+    } catch (e) {
+      return fail('Δεν διαβάστηκε το ' + path.basename(src) + ': ' + msgOf(e));
+    }
+  });
+  handle('repInspect', async (_e, file: string, kind: RepKind, sheet?: string, head?: number) => {
+    try {
+      return await inspectTemplate(await tplBuf(file), kind, sheet, head);
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  handle('repBuild', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
+    try {
+      const b = await buildTemplate(o, kind, xlLook(store.state.settings));
+      const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
+      await fs.promises.mkdir(TPL_DIR, { recursive: true });
+      const f = path.join(TPL_DIR, name);
+      if (isLocked(f)) return fail('Το πρότυπο είναι ανοιχτό στο Excel. Κλείσε το Excel και ξαναπάτα.');
+      await fs.promises.writeFile(f, b.data);
+      return {
+        ok: true,
+        file: name,
+        mtime: Math.round(fs.statSync(f).mtimeMs),
+        sheet: b.sheet,
+        head: b.head,
+        cols: b.cols,
+        cells: b.cells,
+        ...(b.more ? { more: b.more } : {}),
+        ...(b.vals ? { vals: b.vals } : {}),
+        ...(b.fixed ? { fixed: true } : {}),
+      };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+}
+function registerReportPreviewIpc() {
+  // opts.sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας· τότε και πολλές σελίδες. Μόνο εδώ, ποτέ στο rep:run
+  handle(
+    'repPreview',
+    async (
+      _e,
+      src: { file?: string; build?: BuildOpts },
+      r: Report,
+      ids: (number | string)[],
+      date: ISODate,
+      raw: boolean,
+      opts?: { sample?: number },
+    ) => {
+      try {
+        const s = store.state;
+        const sample = typeof opts?.sample === 'number' ? opts.sample : undefined;
+        const pages = sample == null ? 1 : PV_PAGES;
+        if (src.build)
+          return await off(
+            'previewBuilt',
+            [src.build, r, ids, date, pages, sample],
+            async () => {
+              const o = forBuild(src.build!, r);
+              const b = await buildTemplate(o, r.kind, xlLook(s.settings));
+              return previewReport(b.data, s, withBuilt(r, b, o), ids, date, pages, sample);
+            },
+            s,
+          );
+        const buf = await tplBuf(src.file || '');
+        if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
+        return await off(
+          'previewReport',
+          [buf, r, ids, date, pages, sample],
+          () => previewReport(buf, s, r, ids, date, pages, sample),
+          s,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+}
+function registerLayoutPreviewIpc() {
+  // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
+  // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
+  // opts.quiet: δεν ανοίγει το Excel (Έντυπα ημέρας › «Τύπωσε όλα») · opts.again: «Ξαναβγάλε» από το ιστορικό (δεν μετρά ξανά τους τυχαίους)
+  // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (σήμερα), με 8 γραμμές παραπάνω για να μπορείς να κατεβάσεις κάτι
+  handle('layoutPreview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
+    try {
+      const s = store.state;
+      let out: { data: Buffer; warnings?: string[]; layout?: LayoutSheet[] };
+      if ('report' in q) {
+        // «Φτιάξ' το εδώ» μέσα στον οδηγό: το πρότυπο από τις επιλογές, χωρίς αρχείο ακόμα (όπως η προεπισκόπηση)
+        const bo = q.build ? forBuild(q.build, q.report) : null;
+        const b = bo ? await buildTemplate(bo, q.report.kind, xlLook(s.settings)) : null;
+        const buf = b ? b.data : await tplBuf(q.file || '');
+        const rep = b ? withBuilt(q.report, b, bo!) : savedSigs(q.report, q.file || '');
+        out = await off(
+          'fillReport',
+          [buf, rep, q.ids.slice(0, 120), q.date],
+          () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date),
+          s,
+        );
+      } else {
+        const s2 = q.layout
+          ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } }
+          : s;
+        const f = q.form;
+        out =
+          f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check'
+            ? await produce(f, q.date, s2, q.sigs)
+            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs);
+      }
+      // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
+      const ls = (out.layout || []).filter((l, i, a) => a.findIndex((x) => x.key === l.key) === i);
+      const wb = await Workbook.open(out.data);
+      for (const l of ls) {
+        const r = wb.printLastRow(l.sheet);
+        if (r) wb.printDownTo(l.sheet, r + 8);
+      }
+      const doc = await renderBook(await wb.save(), {
+        file: 'προεπισκόπηση.xlsx',
+        sheets: ls.map((l) => l.sheet),
+        refs: true,
+        maxPages: 2,
+      });
+      return {
+        css: doc.css,
+        warnings: out.warnings || [],
+        sheets: ls.map((l) => {
+          const sh = doc.sheets.find((x) => x.name === l.sheet);
+          return { ...l, html: sh?.html || '', pages: sh?.pages || 0 };
+        }),
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+}
+function registerReportRunIpc() {
+  handle(
+    'repRun',
+    async (
+      _e,
+      r: Report,
+      file: string,
+      ids: (number | string)[],
+      date: ISODate,
+      print: boolean,
+      force?: boolean,
+      opts?: { quiet?: boolean; again?: boolean },
+    ): Promise<RepOut> => {
+      try {
+        const s = store.state;
+        const t0 = Date.now();
+        let res: RepOut;
+        if (r.out === 'sheet' && !print) {
+          res = await serial(() => writeRepSheet(r, file, ids, date, !!force));
+          if (res.ok) {
+            logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0);
+            notify();
+          }
+        } else {
+          const buf = await tplBuf(file);
+          const rs = savedSigs(r, file);
+          const out = await off('fillReport', [buf, rs, ids, date], () => fillReport(buf, s, rs, ids, date), s);
+          const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
+          const [f] = await serial(() =>
+            writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]),
+          );
+          logWrite('Έντυπο ' + r.name, t0);
+          const warnings = [...(out.warnings || [])];
+          if (print) {
+            const p = await printPreview(f, out.sheets, !!r.fixsz);
+            if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
+          } else if (!opts?.quiet) shell.openPath(f);
+          res = { ok: true, file: f, warnings, sheets: out.sheets };
+        }
+        if (!res.ok) return res;
+        if (r.pick.mode === 'random' && !opts?.again) countTimes(r.id, ids);
+        const at = today() + ' ' + nowHM();
+        const m = readMeta();
+        const h: RepHist = {
+          at,
+          date,
+          ids: ids.slice(0, 2000),
+          n: ids.length,
+          file: res.file,
+          ...(res.sheets && r.out === 'sheet' && !print ? { sheets: res.sheets } : {}),
+        };
+        writeMeta({
+          repLast: { ...(m.repLast || {}), [r.id]: at },
+          repHist: { ...(m.repHist || {}), [r.id]: [h, ...(m.repHist?.[r.id] || [])].slice(0, HIST_MAX) },
+        });
+        return res;
+      } catch (e) {
+        if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
+        if (e instanceof ChangedError)
+          return {
+            ok: false,
+            error: 'Το ' + path.basename(e.file || '') + ' άλλαξε την ώρα που γραφόταν. Πάτα ξανά.',
+          };
+        if (e instanceof TemplateError) return { ok: false, error: e.message };
+        return fail(e);
+      }
+    },
+  );
+  handle('repTimes', (_e, id: string) => repTimes(id));
+  handle('repHist', (_e, id: string) =>
+    (readMeta().repHist?.[id] || []).map((h) => ({ ...h, exists: fs.existsSync(h.file) })),
+  );
+}
+function registerReportFilesIpc() {
+  // «Φύλλο σε άλλο Excel…»: το αρχείο που θα πάρει το φύλλο
+  handle('repPickFile', async () => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Σε ποιο Excel θα γράφεται το φύλλο',
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
+      properties: ['openFile'],
+    });
+    return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
+  });
+  handle('repOpenTpl', async (_e, file: string) => {
+    if (TPL_NAME.test(file) && fs.existsSync(path.join(TPL_DIR, file)))
+      await shell.openPath(path.join(TPL_DIR, file));
+  });
+  handle('repFiles', (_e, files: string[]) =>
+    Object.fromEntries(
+      (Array.isArray(files) ? files : [])
+        .filter((f) => TPL_NAME.test(f))
+        .map((f) => {
+          try {
+            return [f, { exists: true, mtime: Math.round(fs.statSync(path.join(TPL_DIR, f)).mtimeMs) }];
+          } catch {
+            return [f, { exists: false, mtime: 0 }];
+          }
+        }),
+    ),
+  );
+  handle('repLast', () => readMeta().repLast || {});
+}
+function registerRosterIpc(answer: (r: ReturnType<typeof runCmd>) => CmdResult) {
+  handle('pickRoster', () => pickRoster());
+  handle('applyRoster', (_e, token: string, deactivateMissing: boolean) => {
+    const p = pending.get(token);
+    if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
+    pending.delete(token);
+    try {
+      store.backup('πριν-εισαγωγή');
+    } catch (e) {
+      return fail('Δεν πάρθηκε αντίγραφο ασφαλείας πριν την εισαγωγή: ' + String(e));
+    }
+    const r = runCmd({ t: 'importPeople', rows: p.rows, source: path.basename(p.file), deactivateMissing });
+    if (r.ok) afterRoster(p);
+    return answer(r);
+  });
+}
+function registerSourcesIpc(pickXlsx: (title: string) => Promise<string | null>) {
+  handle('srcPick', async (_e, kind: ListKind | null) => {
+    const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel');
+    if (!file) return null;
+    try {
+      return await bookOf(file);
+    } catch (e) {
+      return fail(e instanceof OldFormatError ? e.message : e);
+    }
+  });
+  handle('srcRead', async (_e, kind: ListKind) => {
+    try {
+      const b = await current(kind);
+      if (!b) return fail('Δεν έχει οριστεί αρχείο');
+      return { ...(await bookOf(b.file)), binding: b };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  handle('srcSave', async (_e, kind: ListKind, b: SourceBinding | null) => {
+    if (b && (typeof b.file !== 'string' || !srcMeta.allowed(b.file)))
+      return fail('Άγνωστο αρχείο: διάλεξέ το με το «Διάλεξε Excel…»');
+    try {
+      saveBinding(kind, b);
+      // προσωπικό: αφετηρία για τις διορθώσεις είναι ό,τι γράφει τώρα το Excel
+      // αν η εφαρμογή έχει ήδη τα ίδια με το Excel γράφει μόνη της από εδώ και πέρα· αλλιώς πρώτα «Ενημέρωση Excel» με προεπισκόπηση
+      if (b && kind === 'people' && !srcMeta.get('people')) {
+        const book = await readBook(b.file);
+        const sh = sheetOf(book.sheets, b.sheet);
+        if (sh) {
+          const snap = snapFromSheet(sh, b, store.state.people);
+          srcMeta.set('people', {
+            snap,
+            keys: [],
+            ...syncStamp(b, book),
+            at: planPeopleWrite(sh, b, store.state, snap).sets.length ? '' : stampNow(),
+          });
+        }
+      }
+      notify();
+      return reply('');
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  const known = (b: SourceBinding | null | undefined) =>
+    !!b && typeof b.file === 'string' && srcMeta.allowed(b.file);
+  handle(
+    'srcImport',
+    (
+      _e,
+      kind: StatusKind,
+      b: SourceBinding,
+      choices: Record<number, number | null>,
+      keepRemoved: boolean,
+      keepApp: string[],
+    ) =>
+      !known(b)
+        ? fail('Άγνωστο αρχείο')
+        : importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []),
+  );
+  handle('srcApply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) =>
+    !known(b) ? fail('Άγνωστο αρχείο') : applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []),
+  );
+  handle('srcKeys', (_e, kind: ListKind) => ({
+    keys: srcMeta.get(kind)?.keys || [],
+    base: srcMeta.get(kind)?.base || {},
+  }));
+  handle('srcPeople', async (_e, b: SourceBinding) => {
+    if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο');
+    const nb = (await current('people', b))!;
+    return rosterPreview(nb.file, nb);
+  });
+}
+function registerSourcesWriteIpc() {
+  handle('srcPlan', (_e, kind: ListKind) => planOut(kind));
+  handle('srcWrite', async (_e, kind: ListKind) => {
+    const r = await syncOut(kind, false);
+    notify();
+    return r.ok ? { ok: true, text: r.text, file: r.file } : r;
+  });
+  handle('srcNewFile', (_e, kind: ListKind) => createNew(kind));
+  handle('srcStatus', async () => {
+    retryPending();
+    return statusAll();
+  });
+}
+function registerFormsIpc(pickXlsx: (title: string) => Promise<string | null>) {
+  handle('formPick', async (_e, f: FormKind) => {
+    const file = await pickXlsx('Template για ' + f);
+    if (!file) return null;
+    return formInfo(f, file);
+  });
+  handle('formInfo', (_e, f: FormKind) => formInfo(f));
+  handle('formSave', (_e, f: FormKind, b: FormBinding | null) => {
+    const cur = formBinding(f);
+    if (b?.file && b.file !== cur.file && !srcMeta.allowed(b.file))
+      return fail('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
+    if (b?.dir && b.dir !== cur.dir && !srcMeta.allowed(b.dir))
+      return fail('Άγνωστος φάκελος: διάλεξέ τον με το «Φάκελος…»');
+    const forms = { ...(store.state.settings.forms || {}) };
+    if (b && Object.values(b).some((v) => v !== undefined && v !== '')) forms[f] = b;
+    else delete forms[f];
+    const r = runCmd({
+      t: 'setSettings',
+      settings: { forms },
+      text:
+        'έντυπο ' + f + (b?.file ? ': ' + path.basename(b.file) : b?.dir ? ': φάκελος ' + b.dir : ': προεπιλογή'),
+    });
+    return r.ok ? reply(r.text, false) : r;
+  });
+  handle('formDir', async (_e, f: FormKind) => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Φάκελος για το έντυπο',
+      defaultPath: formBinding(f).dir || outputDir(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    const dir = r.canceled ? null : r.filePaths[0] || null;
+    if (dir) srcMeta.allow([dir]);
+    return dir;
+  });
+  handle('openPath', (_e, file: string) => {
+    if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file))
+      return shell.openPath(file);
+    return 'άγνωστο αρχείο';
+  });
+}
+function registerPrintIpc() {
+  handle('printFile', (_e, file: string, sheet?: string | string[]) => {
+    // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
+    const inside = (dir?: string) =>
+      !!dir &&
+      !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') &&
+      !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
+    const known =
+      knownPath(file) ||
+      [outputDir(), ...Object.values(store.state.settings.forms || {}).map((b) => b?.dir)].some(inside);
+    if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file))
+      return fail('Δεν βρέθηκε το ' + path.basename(file));
+    if (/\.xls$/i.test(file))
+      return fail(
+        'Το ' +
+          path.basename(file) +
+          ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.',
+      );
+    return printPreview(
+      file,
+      Array.isArray(sheet) ? sheet.filter((x) => typeof x === 'string') : sheet ? [sheet] : undefined,
+    );
+  });
+  // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
+  handlePrint('layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
+    const job = printJobs.get(e.sender.id);
+    if (!job) return fail('Έκλεισε η εκτύπωση');
+    try {
+      const opts = cleanOpts(req?.opts, job.base);
+      const sheets = Array.isArray(req?.sheets)
+        ? req!.sheets.filter((x): x is string => typeof x === 'string')
+        : job.sheets;
+      const doc = await renderOpen(job.book, { file: path.basename(job.file), sheets, layout: opts });
+      job.sheets = doc.sheets.map((x) => x.name);
+      job.opts = opts;
+      if (req?.save) savePrintPrefs(job.key, opts);
+      return { ok: true, html: sectionsHtml(doc), css: doc.css, info: infoOf(doc) };
+    } catch (err) {
+      return fail(err);
+    }
+  });
+  // «Να θυμάται» ξετσεκαρισμένο ή «Αρχικές ρυθμίσεις»: σβήνει τις αποθηκευμένες, γυρίζει τις αρχικές του εντύπου
+  handlePrint('forget', (e) => {
+    const job = printJobs.get(e.sender.id);
+    if (!job) return null;
+    savePrintPrefs(job.key, null);
+    return job.base;
+  });
+  handlePrint('duplex', (_e, on: unknown) => {
+    writeMeta({ printDuplex: on === true });
+  });
+}
+function registerPrintOutputIpc() {
+  // PDF: ίδιο με το χαρτί, στον φάκελο του αρχείου (ή όπου διαλέξει)
+  handlePrint('pdf', async (e) => {
+    const job = printJobs.get(e.sender.id);
+    if (!job) return fail('Έκλεισε η εκτύπωση');
+    const pw = BrowserWindow.fromWebContents(e.sender);
+    const r = await dialog.showSaveDialog(pw!, {
+      title: 'Αποθήκευση PDF',
+      defaultPath: path.join(path.dirname(job.file), path.basename(job.file).replace(/\.xls[xm]?$/i, '') + '.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (r.canceled || !r.filePath) return { ok: false, error: '' };
+    try {
+      const data = await e.sender.printToPDF({ printBackground: true, preferCSSPageSize: true });
+      await fs.promises.writeFile(r.filePath, data);
+      store.addAudit(
+        {
+          at: nowHM(),
+          day: today(),
+          text: 'PDF ' + path.basename(r.filePath) + ' από ' + path.basename(job.file),
+          files: [path.basename(job.file)],
+          source: 'app',
+          undoable: false,
+        },
+        null,
+      );
+      return { ok: true, name: path.basename(r.filePath) };
+    } catch (err) {
+      return fail(err);
+    }
+  });
+  handlePrint('printers', async (e) => {
+    try {
+      return (await e.sender.getPrintersAsync()).map((p) => ({
+        name: p.name,
+        label: p.displayName || p.name,
+        def: !!p.isDefault,
+      }));
+    } catch {
+      return [];
+    }
+  });
+}
+function registerPrintJobIpc() {
+  // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
+  // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
+  handlePrint(
+    'print',
+    async (
+      e,
+      o: {
+        landscape?: boolean;
+        pageSize?: string;
+        part?: string;
+        device?: string;
+        copies?: number;
+        duplex?: string;
+      },
+    ) => {
+      const job = printJobs.get(e.sender.id);
+      if (!job) return fail('Έκλεισε η εκτύπωση');
+      const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize))
+        ? String(o.pageSize)
+        : 'A4';
+      let device = typeof o?.device === 'string' && o.device ? o.device : '';
+      if (device) {
+        try {
+          if (!(await e.sender.getPrintersAsync()).some((p) => p.name === device)) device = '';
+        } catch {
+          device = '';
+        }
+      }
+      const copies = Math.min(99, Math.max(1, Math.floor(Number(o?.copies) || 1)));
+      const duplexMode = o?.duplex === 'longEdge' || o?.duplex === 'shortEdge' ? o.duplex : 'simplex';
+      return new Promise((res) =>
+        e.sender.print(
+          {
+            silent: !!device,
+            ...(device ? { deviceName: device, copies, collate: true } : {}),
+            printBackground: true,
+            landscape: !!o?.landscape,
+            pageSize,
+            duplexMode,
+            margins: { marginType: 'none' },
+          },
+          (ok, reason) => {
+            if (ok)
+              store.addAudit(
+                {
+                  at: nowHM(),
+                  day: today(),
+                  text:
+                    'Εκτύπωση ' +
+                    path.basename(job.file) +
+                    (job.sheets.length > 1 || o?.part
+                      ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')'
+                      : ''),
+                  files: [path.basename(job.file)],
+                  source: 'app',
+                  undoable: false,
+                },
+                null,
+              );
+            res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
+          },
+        ),
+      );
+    },
+  );
+  handlePrint('close', (e) => {
+    BrowserWindow.fromWebContents(e.sender)?.close();
+  });
+}
+function registerBackupsIpc() {
+  handle('listBackups', () => listBackups(BACKUPS));
+  handle('restoreBackup', async (_e, name: string) => {
+    const file = path.join(BACKUPS, path.basename(name));
+    const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
+    if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
+    // πρώτα αντίγραφο δίπλα στη βάση και έλεγχος· η τωρινή βάση κλείνει μόνο αν αυτό πέτυχε
+    const db = path.join(DATA, 'ilh.db'),
+      tmp = db + '.restore.tmp';
+    try {
+      copyDurable(file, tmp);
+      const b2 = store.validate(tmp);
+      if (b2) throw new Error(b2);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      return fail(
+        'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
+      );
+    }
+    // χωρίς αντίγραφο της τωρινής βάσης δεν γίνεται επαναφορά: αλλιώς ό,τι έγινε μετά το αντίγραφο θα χανόταν οριστικά
+    try {
+      store.backup('πριν-επαναφορά');
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      return fail(
+        'Δεν έγινε η επαναφορά: δεν κρατήθηκε αντίγραφο της τωρινής βάσης πριν από αυτή (' +
+          (e instanceof Error ? e.message : String(e)) +
+          '). Η βάση έμεινε όπως ήταν. Δες αν ο φάκελος data\\backups γράφεται ή αν ο δίσκος είναι γεμάτος.',
+      );
+    }
+    try {
+      store.close();
+    } catch {
+      /* συνεχίζουμε */
+    }
+    try {
+      for (let i = 0; ; i++) {
+        try {
+          fs.renameSync(tmp, db);
+          break;
+        } catch (e: any) {
+          if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+        }
+      }
+    } catch (e) {
+      // η βάση ξανανοίγει όπως ήταν, ώστε η εφαρμογή να συνεχίσει να δουλεύει
+      fs.rmSync(tmp, { force: true });
+      try {
+        await store.open();
+      } catch (e2) {
+        dialog.showErrorBox('Γραφείο Λοχία', 'Δεν ξανάνοιξε η βάση: ' + String(e2));
+        app.exit(1);
+      }
+      return fail(
+        'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
+      );
+    }
+    holdAll(HOLD_RESTORE);
+    app.relaunch();
+    app.exit(0);
+    return { ok: true };
+  });
+}
+function registerDiagIpc() {
+  handle(
+    'diag',
+    (): Diag => ({
+      startupMs: ready - T0,
+      procs: app.getAppMetrics().map((m) => ({
+        type: m.type,
+        kb: m.memory.workingSetSize,
+        cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10,
+      })),
+      gpuDisabled: !!readFlags().disableGpu,
+      versions: {
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        node: process.versions.node,
+      },
+      dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024),
+      people: store.state.people.length,
+      statuses: store.state.statuses.length,
+      guardDays: Object.keys(store.state.guards).length,
+      dataDir: DATA,
+      backups: listBackups(BACKUPS).length,
+      writes: writeLog,
+      worker: workerUp(),
+    }),
+  );
+  handle('setGpu', (_e, disable: boolean) => {
+    writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable });
+    app.relaunch();
+    app.exit(0);
+  });
+  // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
+  handle('usbCopy', async () => {
+    const m = readMeta();
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε το USB (ή φάκελο σε άλλο δίσκο)',
+      defaultPath: m.usbDir && fs.existsSync(m.usbDir) ? m.usbDir : undefined,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const chosen = r.filePaths[0];
+    const dir = path.join(chosen, USB_DIR);
+    try {
+      const file = store.backup('usb', dir);
+      const bad = store.validate(file);
+      if (bad) {
+        fs.rmSync(file, { force: true });
+        return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' };
+      }
+      listBackups(dir)
+        .slice(USB_KEEP)
+        .forEach((b) => fs.rmSync(path.join(dir, b.name), { force: true }));
+      const day = today();
+      writeMeta({ lastUsb: day, usbDir: chosen });
+      store.addAudit(
+        { at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false },
+        null,
+      );
+      const same =
+        path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
+      return {
+        ok: true,
+        file,
+        day,
+        warning: same
+          ? 'Ο φάκελος είναι στον ίδιο δίσκο με την εφαρμογή. Αν χαλάσει ο δίσκος, χάνεται και το αντίγραφο. Προτίμησε USB.'
+          : undefined,
+      };
+    } catch (e) {
+      return fail('Δεν γράφτηκε στο ' + chosen + ': ' + (e instanceof Error ? e.message : String(e)));
+    }
+  });
+}
+function registerBackupFoldersIpc() {
+  // Φέρνει ένα αντίγραφο από USB στη λίστα αντιγράφων, για να γίνει επαναφορά από εκεί (π.χ. σε καινούργιο PC)
+  handle('importBackup', async () => {
+    const m = readMeta();
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε αντίγραφο (ilh_….db)',
+      defaultPath: m.usbDir ? path.join(m.usbDir, USB_DIR) : undefined,
+      filters: [{ name: 'Αντίγραφο Γραφείου Ίλης', extensions: ['db'] }],
+      properties: ['openFile'],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const src = r.filePaths[0];
+    const bad = store.validate(src);
+    if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
+    const d = nowParts();
+    const name =
+      'ilh_' + today() + '_' + [d.h, d.mi, d.s].map((n) => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
+    fs.mkdirSync(BACKUPS, { recursive: true });
+    copyDurable(src, path.join(BACKUPS, name));
+    return { ok: true, name };
+  });
+  handle('backup', () => {
+    try {
+      return { ok: true, file: store.backup('χειροκίνητο') };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  });
+  handle('openFolder', (_e, which: string) => {
+    const dir =
+      which === 'output'
+        ? outputDir()
+        : which === 'templates'
+          ? USER_TPL
+          : which === 'backups'
+            ? path.join(DATA, 'backups')
+            : DATA;
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+  });
+  handle('chooseOutputDir', async () => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Φάκελος για τα Excel',
+      defaultPath: outputDir(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    runCmd({
+      t: 'setSettings',
+      settings: { outputDir: r.filePaths[0] },
+      text: 'φάκελος αρχείων ' + r.filePaths[0],
+    });
+    return r.filePaths[0];
+  });
+}
+function registerDirsIpc() {
+  // Φάκελοι αρχείων (Ρυθμίσεις): ο γενικός, ένας ανά έντυπο και ένας ανά είδος για τα νέα Excel. Κενό = ο γενικός.
+  const setDir = (t: DirTarget, dir: string | undefined, what: string) => {
+    if (t === 'output')
+      return runCmd({ t: 'setSettings', settings: { outputDir: dir || '' }, text: 'φάκελος αρχείων ' + what });
+    if ('form' in t) {
+      const forms = { ...(store.state.settings.forms || {}) };
+      const b = { ...formBinding(t.form), dir };
+      if (Object.values(b).some((v) => v !== undefined && v !== '')) forms[t.form] = b;
+      else delete forms[t.form];
+      return runCmd({
+        t: 'setSettings',
+        settings: { forms },
+        text: 'φάκελος για το έντυπο ' + t.form + ': ' + what,
+      });
+    }
+    const newDirs = { ...(store.state.settings.newDirs || {}) };
+    if (dir) newDirs[t.kind] = dir;
+    else delete newDirs[t.kind];
+    return runCmd({
+      t: 'setSettings',
+      settings: { newDirs },
+      text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what,
+    });
+  };
+  const okTarget = (t: DirTarget) =>
+    t === 'output' ||
+    (!!t &&
+      typeof t === 'object' &&
+      (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && canCreate(t.kind))));
+  handle('dirChoose', async (_e, t: DirTarget) => {
+    if (!okTarget(t)) return fail('άγνωστος φάκελος');
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε φάκελο',
+      defaultPath: dirOf(t),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const dir = r.filePaths[0];
+    if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλον.');
+    const c = setDir(t, dir, dir);
+    return c.ok ? reply(c.text, false) : c;
+  });
+  handle('dirReset', (_e, t: DirTarget) => {
+    if (!okTarget(t)) return fail('άγνωστος φάκελος');
+    const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός');
+    return c.ok ? reply(c.text, false) : c;
+  });
+  handle('dirOpen', (_e, t: DirTarget) => {
+    if (!okTarget(t)) return 'άγνωστος φάκελος';
+    const dir = dirOf(t);
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+  });
+}
+function registerEssoIpc() {
+  // ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)
+  handle('essoInfo', () => essoInfo());
+  handle('essoDir', async (_e, def?: string) => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Διάλεξε φάκελο',
+      defaultPath: typeof def === 'string' && def ? def : DOCS(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    const dir = r.canceled ? null : r.filePaths[0] || null;
+    if (dir) essoDirs.add(dir);
+    return dir;
+  });
+  handle('essoRoster', async () => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Δυναμολόγιο της νέας ΕΣΣΟ',
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
+      properties: ['openFile'],
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return rosterPreview(res.filePaths[0], null);
+  });
+  handle('essoStart', (_e, o: EssoStart) => startEsso(o));
+  handle('essoPick', async (): Promise<EssoArchiveInfo | { ok: false; error: string } | null> => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Φάκελος αρχείου ΕΣΣΟ (με το ΕΣΣΟ.json)',
+      defaultPath: fs.existsSync(archiveRoot()) ? archiveRoot() : DOCS(),
+      properties: ['openDirectory'],
+    });
+    const dir = r.canceled ? null : r.filePaths[0] || null;
+    if (!dir) return null;
+    const a = readArchive(dir);
+    if (!a.ok) return a;
+    essoDirs.add(dir);
+    return {
+      dir,
+      name: a.manifest.name,
+      at: a.manifest.at,
+      people: a.manifest.people,
+      files: new Set(a.manifest.files.map((f) => f.copy)).size,
+    };
+  });
+  handle('essoRestore', (_e, dir: string) => restoreEsso(dir));
+  handle('essoOpen', (_e, dir: string) => {
+    if (
+      typeof dir !== 'string' ||
+      !(
+        okEssoDir(dir) ||
+        knownArchives().some((d) => sameDir(d, dir)) ||
+        sameDir(dir, outputDir()) ||
+        sameDir(dir, newRoot())
+      ) ||
+      !fs.existsSync(dir)
+    )
+      return 'άγνωστος φάκελος';
+    return shell.openPath(dir);
+  });
+}
 function createWindow() {
   const icon = path.join(__dirname, '..', 'renderer', 'icon.png'); // λογότυπο στη γραμμή εργασιών (στο dev μπορεί να λείπει)
-  win = new BrowserWindow({
+  setWin(new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 980,
@@ -2473,18 +3491,18 @@ function createWindow() {
       sandbox: true,
       spellcheck: false,
     },
-  });
-  win.once('ready-to-show', () => {
+  }));
+  win!.once('ready-to-show', () => {
     win!.maximize();
     win!.show();
   });
   // καμία πλοήγηση ή νέο παράθυρο προς τα έξω
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  if (DEV && process.env.VITE_URL) win.loadURL(process.env.VITE_URL);
-  else win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  win.on('closed', () => {
-    win = null;
+  win!.webContents.on('will-navigate', (e) => e.preventDefault());
+  win!.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  if (DEV && process.env.VITE_URL) win!.loadURL(process.env.VITE_URL);
+  else win!.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  win!.on('closed', () => {
+    setWin(null);
   });
 }
 
@@ -2511,7 +3529,7 @@ else {
       // το νήμα των Excel: ανάγνωση, έντυπα και εγγραφή στο Δυναμολόγιο χωρίς να παγώνει το παράθυρο
       useWorker(path.join(__dirname, 'worker.js'));
       setBookReader((f) => off('readBook', [f], () => readBook(f)));
-      store = new Store(DATA, path.join(__dirname, 'sql-wasm.wasm'));
+      setStore(new Store(DATA, path.join(__dirname, 'sql-wasm.wasm')));
       try {
         await store.open();
       } catch (e) {
@@ -2529,9 +3547,11 @@ else {
         ...Object.values(st0.sources || {}).map((x) => x?.file || ''),
         ...Object.values(st0.forms || {}).flatMap((x) => [x?.file || '', x?.dir || '']),
       ]);
-      sessionStart = store.audit(1)[0]?.id || 0;
+      setSessionStart(store.audit(1)[0]?.id || 0);
       const meta = readMeta();
-      seenUntil = typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart;
+      setSeenUntil(
+        typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart,
+      );
       writeMeta({ seenAudit: sessionStart });
 
       handle(
@@ -2552,472 +3572,16 @@ else {
       const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
       // αρχεία και φάκελοι αλλάζουν μόνο από τους διαλόγους του main (src:save, form:save, φάκελοι), όχι με εντολή από το UI
       const MAIN_ONLY = ['sources', 'forms', 'outputDir', 'newDirs'];
-      handle('run', (_e, cmd: Command) =>
-        cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some((k) => MAIN_ONLY.includes(k))
-          ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους')
-          : answer(runCmd(cmd)),
-      );
-      handle('sync', () => reply(''));
-      // νέα μέρα με την εφαρμογή ανοιχτή: οι εργασίες της μέρας τώρα (όχι σε ως 10 λεπτά) και μόνο ό,τι άλλαξε
-      handle('dayCheck', () => {
-        daily();
-        return reply('');
-      });
-      handle('undo', (_e, id?: number): CmdResult => {
-        const last = store.lastUndoable();
-        if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
-        // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
-        if (typeof id === 'number' && last.id !== id)
-          return {
-            ok: false,
-            error:
-              'Έγινε άλλη ενέργεια μετά από αυτή, οπότε δεν αναιρείται από εδώ. Η τελευταία ήταν: «' +
-              last.text +
-              '». Δες το Ιστορικό.',
-          };
-        try {
-          const prev = store.state;
-          store.transact(
-            () => {
-              store.revert(last.patch);
-              store.markUndone(last.id, false);
-            },
-            true,
-            () => store.markUndone(last.id, false, false),
-          );
-          // Αναίρεση ανάγνωσης από Excel: η εφαρμογή γυρίζει πίσω, το Excel όχι. Αν γράφαμε τώρα, θα σβήναμε από το Excel
-          // όσα μόλις διαβάστηκαν (ή θα ξαναγράφαμε παλιές τιμές στο Δυναμολόγιο). Τα είδη περιμένουν νέα ανάγνωση.
-          const fromExcel = last.source === 'excel' || last.source === 'import';
-          if (fromExcel) hold(kindsOf(prev, store.state), HOLD_UNDO);
-          scheduleAuto(prev, store.state, !fromExcel);
-          store.addAudit(
-            {
-              at: nowHM(),
-              day: today(),
-              text: 'Αναίρεση: ' + last.text + (fromExcel ? ' (το Excel δεν άλλαξε)' : ''),
-              files: [],
-              source: 'app',
-              undoable: false,
-            },
-            null,
-          );
-          if (fromExcel) notify();
-          return reply('Αναιρέθηκε: ' + last.text + (fromExcel ? '. Το Excel δεν άλλαξε.' : ''), true); // άλλαξε και η παλιά γραμμή (Αναιρέθηκε): όλο το ιστορικό
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      handle('exportFile', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
-      // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
-      handle('exportLists', async (_e, date: ISODate, sigs?: Sig[]) => {
-        try {
-          const r = await made('lists', date, store.state, sigs);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-          shell.openPath(out);
-          return { ok: true, file: out, warnings: r.warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      handle('exportCadre', async (_e, date: ISODate, sigs?: Sig[]) => {
-        try {
-          const r = await made('cadre', date, store.state, sigs);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-          shell.openPath(out);
-          return { ok: true, file: out, warnings: r.warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      handle('exportRoster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
-        try {
-          const r = await made('rosterPrint', date, store.state, sigs);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-          const warnings = r.warnings;
-          if (print) {
-            const p = await printPreview(out);
-            if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-          } else shell.openPath(out);
-          return { ok: true, file: out, warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
-      handle('exportWeapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
-        try {
-          const r = await made('weapons', date, store.state, sigs);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-          const warnings = r.warnings;
-          if (print) {
-            const p = await printPreview(out);
-            if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-          } else shell.openPath(out);
-          return { ok: true, file: out, warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
-      handle('exportHd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
-        try {
-          const s = store.state;
-          const g = sigsOf(s, 'hd', req.sigs);
-          const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
-          if (req.print) {
-            // η ίδια προεπισκόπηση εκτύπωσης με τα Excel (Michael, 4/11): η σελίδα γίνεται ένα Excel και ανοίγει εκεί
-            const r = await excel().hdBook(s, req.date, tags, HD_SECTIONS);
-            const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-            const p = await printPreview(out);
-            return p.ok
-              ? { ok: true, file: out, warnings: [] }
-              : { ok: false, error: 'Δεν άνοιξε η εκτύπωση: ' + p.error };
-          }
-          const own = s.settings.hdTpl?.file;
-          let buf: Buffer | null = null;
-          const warnings: string[] = [];
-          if (own) {
-            try {
-              buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own)));
-            } catch {
-              warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.');
-            }
-          }
-          const data = await fillDocx(buf || (await builtinTemplate()), tags);
-          const [out] = await serial(() =>
-            writeAll([
-              {
-                dir: outputDir(),
-                name:
-                  'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' +
-                  req.date.slice(8, 10) +
-                  '-' +
-                  req.date.slice(5, 7) +
-                  '-' +
-                  req.date.slice(0, 4) +
-                  '.docx',
-                data,
-              },
-            ]),
-          );
-          shell.openPath(out);
-          return { ok: true, file: out, warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      handle('pickHdTpl', async () => {
-        const res = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε το Word που θα γίνει πρότυπο της Ημερήσιας Διαταγής',
-          filters: [{ name: 'Word', extensions: ['docx'] }],
-          properties: ['openFile'],
-        });
-        const src = res.canceled ? null : res.filePaths[0];
-        if (!src) return null;
-        try {
-          if (fs.statSync(src).size > TPL_MAX) return fail('Το αρχείο είναι πάνω από 5 MB.');
-          const buf = await fs.promises.readFile(src);
-          const bad = await checkTemplate(buf);
-          if (bad) return fail(bad);
-          const file = crypto.randomUUID() + '.docx';
-          await fs.promises.mkdir(TPL_DIR, { recursive: true });
-          await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
-          return { ok: true, file, name: path.basename(src) };
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
-      handle('exportImer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
-        try {
-          const r = await made('imer', req.to, store.state, sigs, req);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-          const warnings = r.warnings;
-          if (print) {
-            const p = await printPreview(out);
-            if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-          } else shell.openPath(out);
-          return { ok: true, file: out, warnings };
-        } catch (e) {
-          return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
-        }
-      });
-      // Έντυπα: πρότυπα στον φάκελο «Πρότυπα εντύπων», έντυπα που βγαίνουν στον φάκελο των Excel
-      handle('repUpload', async (_e, kind: RepKind) => {
-        const res = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε το Excel που θα γίνει πρότυπο',
-          filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
-          properties: ['openFile'],
-        });
-        const src = res.canceled ? null : res.filePaths[0];
-        if (!src) return null;
-        try {
-          if (/\.xls$/i.test(src))
-            return fail(
-              'Το ' + path.basename(src) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx.',
-            );
-          const st = fs.statSync(src);
-          if (st.size > TPL_MAX)
-            return fail(
-              'Το αρχείο είναι πάνω από 5 MB. Κράτα σε ένα αρχείο μόνο το φύλλο του εντύπου και ξαναδοκίμασε.',
-            );
-          const buf = await fs.promises.readFile(src);
-          const insp = await inspectTemplate(buf, kind);
-          const file = crypto.randomUUID() + (/\.xlsm$/i.test(src) ? '.xlsm' : '.xlsx');
-          await fs.promises.mkdir(TPL_DIR, { recursive: true });
-          await fs.promises.writeFile(path.join(TPL_DIR, file), buf);
-          return {
-            ok: true,
-            tpl: {
-              id: crypto.randomUUID(),
-              name: path.basename(src).replace(/\.xls[xm]$/i, ''),
-              file,
-              mtime: Math.round(fs.statSync(path.join(TPL_DIR, file)).mtimeMs),
-            },
-            insp,
-          };
-        } catch (e) {
-          return fail('Δεν διαβάστηκε το ' + path.basename(src) + ': ' + msgOf(e));
-        }
-      });
-      handle('repInspect', async (_e, file: string, kind: RepKind, sheet?: string, head?: number) => {
-        try {
-          return await inspectTemplate(await tplBuf(file), kind, sheet, head);
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      handle('repBuild', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
-        try {
-          const b = await buildTemplate(o, kind, xlLook(store.state.settings));
-          const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
-          await fs.promises.mkdir(TPL_DIR, { recursive: true });
-          const f = path.join(TPL_DIR, name);
-          if (isLocked(f)) return fail('Το πρότυπο είναι ανοιχτό στο Excel. Κλείσε το Excel και ξαναπάτα.');
-          await fs.promises.writeFile(f, b.data);
-          return {
-            ok: true,
-            file: name,
-            mtime: Math.round(fs.statSync(f).mtimeMs),
-            sheet: b.sheet,
-            head: b.head,
-            cols: b.cols,
-            cells: b.cells,
-            ...(b.more ? { more: b.more } : {}),
-            ...(b.vals ? { vals: b.vals } : {}),
-            ...(b.fixed ? { fixed: true } : {}),
-          };
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      // opts.sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας· τότε και πολλές σελίδες. Μόνο εδώ, ποτέ στο rep:run
-      handle(
-        'repPreview',
-        async (
-          _e,
-          src: { file?: string; build?: BuildOpts },
-          r: Report,
-          ids: (number | string)[],
-          date: ISODate,
-          raw: boolean,
-          opts?: { sample?: number },
-        ) => {
-          try {
-            const s = store.state;
-            const sample = typeof opts?.sample === 'number' ? opts.sample : undefined;
-            const pages = sample == null ? 1 : PV_PAGES;
-            if (src.build)
-              return await off(
-                'previewBuilt',
-                [src.build, r, ids, date, pages, sample],
-                async () => {
-                  const o = forBuild(src.build!, r);
-                  const b = await buildTemplate(o, r.kind, xlLook(s.settings));
-                  return previewReport(b.data, s, withBuilt(r, b, o), ids, date, pages, sample);
-                },
-                s,
-              );
-            const buf = await tplBuf(src.file || '');
-            if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
-            return await off(
-              'previewReport',
-              [buf, r, ids, date, pages, sample],
-              () => previewReport(buf, s, r, ids, date, pages, sample),
-              s,
-            );
-          } catch (e) {
-            return fail(e);
-          }
-        },
-      );
-      // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
-      // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
-      // opts.quiet: δεν ανοίγει το Excel (Έντυπα ημέρας › «Τύπωσε όλα») · opts.again: «Ξαναβγάλε» από το ιστορικό (δεν μετρά ξανά τους τυχαίους)
-      // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (σήμερα), με 8 γραμμές παραπάνω για να μπορείς να κατεβάσεις κάτι
-      handle('layoutPreview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
-        try {
-          const s = store.state;
-          let out: { data: Buffer; warnings?: string[]; layout?: LayoutSheet[] };
-          if ('report' in q) {
-            // «Φτιάξ' το εδώ» μέσα στον οδηγό: το πρότυπο από τις επιλογές, χωρίς αρχείο ακόμα (όπως η προεπισκόπηση)
-            const bo = q.build ? forBuild(q.build, q.report) : null;
-            const b = bo ? await buildTemplate(bo, q.report.kind, xlLook(s.settings)) : null;
-            const buf = b ? b.data : await tplBuf(q.file || '');
-            const rep = b ? withBuilt(q.report, b, bo!) : savedSigs(q.report, q.file || '');
-            out = await off(
-              'fillReport',
-              [buf, rep, q.ids.slice(0, 120), q.date],
-              () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date),
-              s,
-            );
-          } else {
-            const s2 = q.layout
-              ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } }
-              : s;
-            const f = q.form;
-            out =
-              f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check'
-                ? await produce(f, q.date, s2, q.sigs)
-                : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs);
-          }
-          // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
-          const ls = (out.layout || []).filter((l, i, a) => a.findIndex((x) => x.key === l.key) === i);
-          const wb = await Workbook.open(out.data);
-          for (const l of ls) {
-            const r = wb.printLastRow(l.sheet);
-            if (r) wb.printDownTo(l.sheet, r + 8);
-          }
-          const doc = await renderBook(await wb.save(), {
-            file: 'προεπισκόπηση.xlsx',
-            sheets: ls.map((l) => l.sheet),
-            refs: true,
-            maxPages: 2,
-          });
-          return {
-            css: doc.css,
-            warnings: out.warnings || [],
-            sheets: ls.map((l) => {
-              const sh = doc.sheets.find((x) => x.name === l.sheet);
-              return { ...l, html: sh?.html || '', pages: sh?.pages || 0 };
-            }),
-          };
-        } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : String(e) };
-        }
-      });
-      handle(
-        'repRun',
-        async (
-          _e,
-          r: Report,
-          file: string,
-          ids: (number | string)[],
-          date: ISODate,
-          print: boolean,
-          force?: boolean,
-          opts?: { quiet?: boolean; again?: boolean },
-        ): Promise<RepOut> => {
-          try {
-            const s = store.state;
-            const t0 = Date.now();
-            let res: RepOut;
-            if (r.out === 'sheet' && !print) {
-              res = await serial(() => writeRepSheet(r, file, ids, date, !!force));
-              if (res.ok) {
-                logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0);
-                notify();
-              }
-            } else {
-              const buf = await tplBuf(file);
-              const rs = savedSigs(r, file);
-              const out = await off('fillReport', [buf, rs, ids, date], () => fillReport(buf, s, rs, ids, date), s);
-              const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
-              const [f] = await serial(() =>
-                writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]),
-              );
-              logWrite('Έντυπο ' + r.name, t0);
-              const warnings = [...(out.warnings || [])];
-              if (print) {
-                const p = await printPreview(f, out.sheets, !!r.fixsz);
-                if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error);
-              } else if (!opts?.quiet) shell.openPath(f);
-              res = { ok: true, file: f, warnings, sheets: out.sheets };
-            }
-            if (!res.ok) return res;
-            if (r.pick.mode === 'random' && !opts?.again) countTimes(r.id, ids);
-            const at = today() + ' ' + nowHM();
-            const m = readMeta();
-            const h: RepHist = {
-              at,
-              date,
-              ids: ids.slice(0, 2000),
-              n: ids.length,
-              file: res.file,
-              ...(res.sheets && r.out === 'sheet' && !print ? { sheets: res.sheets } : {}),
-            };
-            writeMeta({
-              repLast: { ...(m.repLast || {}), [r.id]: at },
-              repHist: { ...(m.repHist || {}), [r.id]: [h, ...(m.repHist?.[r.id] || [])].slice(0, HIST_MAX) },
-            });
-            return res;
-          } catch (e) {
-            if (e instanceof LockedError) return { ok: false, error: e.message, locked: true };
-            if (e instanceof ChangedError)
-              return {
-                ok: false,
-                error: 'Το ' + path.basename(e.file || '') + ' άλλαξε την ώρα που γραφόταν. Πάτα ξανά.',
-              };
-            if (e instanceof TemplateError) return { ok: false, error: e.message };
-            return fail(e);
-          }
-        },
-      );
-      handle('repTimes', (_e, id: string) => repTimes(id));
-      handle('repHist', (_e, id: string) =>
-        (readMeta().repHist?.[id] || []).map((h) => ({ ...h, exists: fs.existsSync(h.file) })),
-      );
-      // «Φύλλο σε άλλο Excel…»: το αρχείο που θα πάρει το φύλλο
-      handle('repPickFile', async () => {
-        const res = await dialog.showOpenDialog(win!, {
-          title: 'Σε ποιο Excel θα γράφεται το φύλλο',
-          filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
-          properties: ['openFile'],
-        });
-        return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
-      });
-      handle('repOpenTpl', async (_e, file: string) => {
-        if (TPL_NAME.test(file) && fs.existsSync(path.join(TPL_DIR, file)))
-          await shell.openPath(path.join(TPL_DIR, file));
-      });
-      handle('repFiles', (_e, files: string[]) =>
-        Object.fromEntries(
-          (Array.isArray(files) ? files : [])
-            .filter((f) => TPL_NAME.test(f))
-            .map((f) => {
-              try {
-                return [f, { exists: true, mtime: Math.round(fs.statSync(path.join(TPL_DIR, f)).mtimeMs) }];
-              } catch {
-                return [f, { exists: false, mtime: 0 }];
-              }
-            }),
-        ),
-      );
-      handle('repLast', () => readMeta().repLast || {});
-      handle('pickRoster', () => pickRoster());
-      handle('applyRoster', (_e, token: string, deactivateMissing: boolean) => {
-        const p = pending.get(token);
-        if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
-        pending.delete(token);
-        try {
-          store.backup('πριν-εισαγωγή');
-        } catch (e) {
-          return fail('Δεν πάρθηκε αντίγραφο ασφαλείας πριν την εισαγωγή: ' + String(e));
-        }
-        const r = runCmd({ t: 'importPeople', rows: p.rows, source: path.basename(p.file), deactivateMissing });
-        if (r.ok) afterRoster(p);
-        return answer(r);
-      });
+      registerCommandsIpc(answer, MAIN_ONLY);
+      registerExportsIpc();
+      registerHdIpc();
+      registerImerIpc();
+      registerReportTemplatesIpc();
+      registerReportPreviewIpc();
+      registerLayoutPreviewIpc();
+      registerReportRunIpc();
+      registerReportFilesIpc();
+      registerRosterIpc(answer);
       // Αρχεία Excel
       const pickXlsx = async (title: string) => {
         const res = await dialog.showOpenDialog(win!, {
@@ -3029,582 +3593,18 @@ else {
         if (file) srcMeta.allow([file]);
         return file;
       };
-      handle('srcPick', async (_e, kind: ListKind | null) => {
-        const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel');
-        if (!file) return null;
-        try {
-          return await bookOf(file);
-        } catch (e) {
-          return fail(e instanceof OldFormatError ? e.message : e);
-        }
-      });
-      handle('srcRead', async (_e, kind: ListKind) => {
-        try {
-          const b = await current(kind);
-          if (!b) return fail('Δεν έχει οριστεί αρχείο');
-          return { ...(await bookOf(b.file)), binding: b };
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      handle('srcSave', async (_e, kind: ListKind, b: SourceBinding | null) => {
-        if (b && (typeof b.file !== 'string' || !srcMeta.allowed(b.file)))
-          return fail('Άγνωστο αρχείο: διάλεξέ το με το «Διάλεξε Excel…»');
-        try {
-          saveBinding(kind, b);
-          // προσωπικό: αφετηρία για τις διορθώσεις είναι ό,τι γράφει τώρα το Excel
-          // αν η εφαρμογή έχει ήδη τα ίδια με το Excel γράφει μόνη της από εδώ και πέρα· αλλιώς πρώτα «Ενημέρωση Excel» με προεπισκόπηση
-          if (b && kind === 'people' && !srcMeta.get('people')) {
-            const book = await readBook(b.file);
-            const sh = sheetOf(book.sheets, b.sheet);
-            if (sh) {
-              const snap = snapFromSheet(sh, b, store.state.people);
-              srcMeta.set('people', {
-                snap,
-                keys: [],
-                ...syncStamp(b, book),
-                at: planPeopleWrite(sh, b, store.state, snap).sets.length ? '' : stampNow(),
-              });
-            }
-          }
-          notify();
-          return reply('');
-        } catch (e) {
-          return fail(e);
-        }
-      });
-      const known = (b: SourceBinding | null | undefined) =>
-        !!b && typeof b.file === 'string' && srcMeta.allowed(b.file);
-      handle(
-        'srcImport',
-        (
-          _e,
-          kind: StatusKind,
-          b: SourceBinding,
-          choices: Record<number, number | null>,
-          keepRemoved: boolean,
-          keepApp: string[],
-        ) =>
-          !known(b)
-            ? fail('Άγνωστο αρχείο')
-            : importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []),
-      );
-      handle('srcApply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) =>
-        !known(b) ? fail('Άγνωστο αρχείο') : applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []),
-      );
-      handle('srcKeys', (_e, kind: ListKind) => ({
-        keys: srcMeta.get(kind)?.keys || [],
-        base: srcMeta.get(kind)?.base || {},
-      }));
-      handle('srcPeople', async (_e, b: SourceBinding) => {
-        if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο');
-        const nb = (await current('people', b))!;
-        return rosterPreview(nb.file, nb);
-      });
-      handle('srcPlan', (_e, kind: ListKind) => planOut(kind));
-      handle('srcWrite', async (_e, kind: ListKind) => {
-        const r = await syncOut(kind, false);
-        notify();
-        return r.ok ? { ok: true, text: r.text, file: r.file } : r;
-      });
-      handle('srcNewFile', (_e, kind: ListKind) => createNew(kind));
-      handle('srcStatus', async () => {
-        retryPending();
-        return statusAll();
-      });
-      handle('formPick', async (_e, f: FormKind) => {
-        const file = await pickXlsx('Template για ' + f);
-        if (!file) return null;
-        return formInfo(f, file);
-      });
-      handle('formInfo', (_e, f: FormKind) => formInfo(f));
-      handle('formSave', (_e, f: FormKind, b: FormBinding | null) => {
-        const cur = formBinding(f);
-        if (b?.file && b.file !== cur.file && !srcMeta.allowed(b.file))
-          return fail('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
-        if (b?.dir && b.dir !== cur.dir && !srcMeta.allowed(b.dir))
-          return fail('Άγνωστος φάκελος: διάλεξέ τον με το «Φάκελος…»');
-        const forms = { ...(store.state.settings.forms || {}) };
-        if (b && Object.values(b).some((v) => v !== undefined && v !== '')) forms[f] = b;
-        else delete forms[f];
-        const r = runCmd({
-          t: 'setSettings',
-          settings: { forms },
-          text:
-            'έντυπο ' + f + (b?.file ? ': ' + path.basename(b.file) : b?.dir ? ': φάκελος ' + b.dir : ': προεπιλογή'),
-        });
-        return r.ok ? reply(r.text, false) : r;
-      });
-      handle('formDir', async (_e, f: FormKind) => {
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Φάκελος για το έντυπο',
-          defaultPath: formBinding(f).dir || outputDir(),
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        const dir = r.canceled ? null : r.filePaths[0] || null;
-        if (dir) srcMeta.allow([dir]);
-        return dir;
-      });
-      handle('openPath', (_e, file: string) => {
-        if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file))
-          return shell.openPath(file);
-        return 'άγνωστο αρχείο';
-      });
-      handle('printFile', (_e, file: string, sheet?: string | string[]) => {
-        // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
-        const inside = (dir?: string) =>
-          !!dir &&
-          !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') &&
-          !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
-        const known =
-          knownPath(file) ||
-          [outputDir(), ...Object.values(store.state.settings.forms || {}).map((b) => b?.dir)].some(inside);
-        if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file))
-          return fail('Δεν βρέθηκε το ' + path.basename(file));
-        if (/\.xls$/i.test(file))
-          return fail(
-            'Το ' +
-              path.basename(file) +
-              ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.',
-          );
-        return printPreview(
-          file,
-          Array.isArray(sheet) ? sheet.filter((x) => typeof x === 'string') : sheet ? [sheet] : undefined,
-        );
-      });
-      // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
-      handlePrint('layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
-        const job = printJobs.get(e.sender.id);
-        if (!job) return fail('Έκλεισε η εκτύπωση');
-        try {
-          const opts = cleanOpts(req?.opts, job.base);
-          const sheets = Array.isArray(req?.sheets)
-            ? req!.sheets.filter((x): x is string => typeof x === 'string')
-            : job.sheets;
-          const doc = await renderOpen(job.book, { file: path.basename(job.file), sheets, layout: opts });
-          job.sheets = doc.sheets.map((x) => x.name);
-          job.opts = opts;
-          if (req?.save) savePrintPrefs(job.key, opts);
-          return { ok: true, html: sectionsHtml(doc), css: doc.css, info: infoOf(doc) };
-        } catch (err) {
-          return fail(err);
-        }
-      });
-      // «Να θυμάται» ξετσεκαρισμένο ή «Αρχικές ρυθμίσεις»: σβήνει τις αποθηκευμένες, γυρίζει τις αρχικές του εντύπου
-      handlePrint('forget', (e) => {
-        const job = printJobs.get(e.sender.id);
-        if (!job) return null;
-        savePrintPrefs(job.key, null);
-        return job.base;
-      });
-      handlePrint('duplex', (_e, on: unknown) => {
-        writeMeta({ printDuplex: on === true });
-      });
-      // PDF: ίδιο με το χαρτί, στον φάκελο του αρχείου (ή όπου διαλέξει)
-      handlePrint('pdf', async (e) => {
-        const job = printJobs.get(e.sender.id);
-        if (!job) return fail('Έκλεισε η εκτύπωση');
-        const pw = BrowserWindow.fromWebContents(e.sender);
-        const r = await dialog.showSaveDialog(pw!, {
-          title: 'Αποθήκευση PDF',
-          defaultPath: path.join(path.dirname(job.file), path.basename(job.file).replace(/\.xls[xm]?$/i, '') + '.pdf'),
-          filters: [{ name: 'PDF', extensions: ['pdf'] }],
-        });
-        if (r.canceled || !r.filePath) return { ok: false, error: '' };
-        try {
-          const data = await e.sender.printToPDF({ printBackground: true, preferCSSPageSize: true });
-          await fs.promises.writeFile(r.filePath, data);
-          store.addAudit(
-            {
-              at: nowHM(),
-              day: today(),
-              text: 'PDF ' + path.basename(r.filePath) + ' από ' + path.basename(job.file),
-              files: [path.basename(job.file)],
-              source: 'app',
-              undoable: false,
-            },
-            null,
-          );
-          return { ok: true, name: path.basename(r.filePath) };
-        } catch (err) {
-          return fail(err);
-        }
-      });
-      handlePrint('printers', async (e) => {
-        try {
-          return (await e.sender.getPrintersAsync()).map((p) => ({
-            name: p.name,
-            label: p.displayName || p.name,
-            def: !!p.isDefault,
-          }));
-        } catch {
-          return [];
-        }
-      });
-      // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
-      // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
-      handlePrint(
-        'print',
-        async (
-          e,
-          o: {
-            landscape?: boolean;
-            pageSize?: string;
-            part?: string;
-            device?: string;
-            copies?: number;
-            duplex?: string;
-          },
-        ) => {
-          const job = printJobs.get(e.sender.id);
-          if (!job) return fail('Έκλεισε η εκτύπωση');
-          const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize))
-            ? String(o.pageSize)
-            : 'A4';
-          let device = typeof o?.device === 'string' && o.device ? o.device : '';
-          if (device) {
-            try {
-              if (!(await e.sender.getPrintersAsync()).some((p) => p.name === device)) device = '';
-            } catch {
-              device = '';
-            }
-          }
-          const copies = Math.min(99, Math.max(1, Math.floor(Number(o?.copies) || 1)));
-          const duplexMode = o?.duplex === 'longEdge' || o?.duplex === 'shortEdge' ? o.duplex : 'simplex';
-          return new Promise((res) =>
-            e.sender.print(
-              {
-                silent: !!device,
-                ...(device ? { deviceName: device, copies, collate: true } : {}),
-                printBackground: true,
-                landscape: !!o?.landscape,
-                pageSize,
-                duplexMode,
-                margins: { marginType: 'none' },
-              },
-              (ok, reason) => {
-                if (ok)
-                  store.addAudit(
-                    {
-                      at: nowHM(),
-                      day: today(),
-                      text:
-                        'Εκτύπωση ' +
-                        path.basename(job.file) +
-                        (job.sheets.length > 1 || o?.part
-                          ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')'
-                          : ''),
-                      files: [path.basename(job.file)],
-                      source: 'app',
-                      undoable: false,
-                    },
-                    null,
-                  );
-                res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
-              },
-            ),
-          );
-        },
-      );
-      handlePrint('close', (e) => {
-        BrowserWindow.fromWebContents(e.sender)?.close();
-      });
+      registerSourcesIpc(pickXlsx);
+      registerSourcesWriteIpc();
+      registerFormsIpc(pickXlsx);
+      registerPrintIpc();
+      registerPrintOutputIpc();
+      registerPrintJobIpc();
       setInterval(retryPending, 60 * 1000);
-      handle('listBackups', () => listBackups(BACKUPS));
-      handle('restoreBackup', async (_e, name: string) => {
-        const file = path.join(BACKUPS, path.basename(name));
-        const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
-        if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
-        // πρώτα αντίγραφο δίπλα στη βάση και έλεγχος· η τωρινή βάση κλείνει μόνο αν αυτό πέτυχε
-        const db = path.join(DATA, 'ilh.db'),
-          tmp = db + '.restore.tmp';
-        try {
-          copyDurable(file, tmp);
-          const b2 = store.validate(tmp);
-          if (b2) throw new Error(b2);
-        } catch (e) {
-          fs.rmSync(tmp, { force: true });
-          return fail(
-            'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
-          );
-        }
-        // χωρίς αντίγραφο της τωρινής βάσης δεν γίνεται επαναφορά: αλλιώς ό,τι έγινε μετά το αντίγραφο θα χανόταν οριστικά
-        try {
-          store.backup('πριν-επαναφορά');
-        } catch (e) {
-          fs.rmSync(tmp, { force: true });
-          return fail(
-            'Δεν έγινε η επαναφορά: δεν κρατήθηκε αντίγραφο της τωρινής βάσης πριν από αυτή (' +
-              (e instanceof Error ? e.message : String(e)) +
-              '). Η βάση έμεινε όπως ήταν. Δες αν ο φάκελος data\\backups γράφεται ή αν ο δίσκος είναι γεμάτος.',
-          );
-        }
-        try {
-          store.close();
-        } catch {
-          /* συνεχίζουμε */
-        }
-        try {
-          for (let i = 0; ; i++) {
-            try {
-              fs.renameSync(tmp, db);
-              break;
-            } catch (e: any) {
-              if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
-              Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-            }
-          }
-        } catch (e) {
-          // η βάση ξανανοίγει όπως ήταν, ώστε η εφαρμογή να συνεχίσει να δουλεύει
-          fs.rmSync(tmp, { force: true });
-          try {
-            await store.open();
-          } catch (e2) {
-            dialog.showErrorBox('Γραφείο Λοχία', 'Δεν ξανάνοιξε η βάση: ' + String(e2));
-            app.exit(1);
-          }
-          return fail(
-            'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
-          );
-        }
-        holdAll(HOLD_RESTORE);
-        app.relaunch();
-        app.exit(0);
-        return { ok: true };
-      });
-      handle(
-        'diag',
-        (): Diag => ({
-          startupMs: ready - T0,
-          procs: app.getAppMetrics().map((m) => ({
-            type: m.type,
-            kb: m.memory.workingSetSize,
-            cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10,
-          })),
-          gpuDisabled: !!readFlags().disableGpu,
-          versions: {
-            electron: process.versions.electron,
-            chrome: process.versions.chrome,
-            node: process.versions.node,
-          },
-          dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024),
-          people: store.state.people.length,
-          statuses: store.state.statuses.length,
-          guardDays: Object.keys(store.state.guards).length,
-          dataDir: DATA,
-          backups: listBackups(BACKUPS).length,
-          writes: writeLog,
-          worker: workerUp(),
-        }),
-      );
-      handle('setGpu', (_e, disable: boolean) => {
-        writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable });
-        app.relaunch();
-        app.exit(0);
-      });
-      // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
-      handle('usbCopy', async () => {
-        const m = readMeta();
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε το USB (ή φάκελο σε άλλο δίσκο)',
-          defaultPath: m.usbDir && fs.existsSync(m.usbDir) ? m.usbDir : undefined,
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        if (r.canceled || !r.filePaths[0]) return null;
-        const chosen = r.filePaths[0];
-        const dir = path.join(chosen, USB_DIR);
-        try {
-          const file = store.backup('usb', dir);
-          const bad = store.validate(file);
-          if (bad) {
-            fs.rmSync(file, { force: true });
-            return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' };
-          }
-          listBackups(dir)
-            .slice(USB_KEEP)
-            .forEach((b) => fs.rmSync(path.join(dir, b.name), { force: true }));
-          const day = today();
-          writeMeta({ lastUsb: day, usbDir: chosen });
-          store.addAudit(
-            { at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false },
-            null,
-          );
-          const same =
-            path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
-          return {
-            ok: true,
-            file,
-            day,
-            warning: same
-              ? 'Ο φάκελος είναι στον ίδιο δίσκο με την εφαρμογή. Αν χαλάσει ο δίσκος, χάνεται και το αντίγραφο. Προτίμησε USB.'
-              : undefined,
-          };
-        } catch (e) {
-          return fail('Δεν γράφτηκε στο ' + chosen + ': ' + (e instanceof Error ? e.message : String(e)));
-        }
-      });
-      // Φέρνει ένα αντίγραφο από USB στη λίστα αντιγράφων, για να γίνει επαναφορά από εκεί (π.χ. σε καινούργιο PC)
-      handle('importBackup', async () => {
-        const m = readMeta();
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε αντίγραφο (ilh_….db)',
-          defaultPath: m.usbDir ? path.join(m.usbDir, USB_DIR) : undefined,
-          filters: [{ name: 'Αντίγραφο Γραφείου Ίλης', extensions: ['db'] }],
-          properties: ['openFile'],
-        });
-        if (r.canceled || !r.filePaths[0]) return null;
-        const src = r.filePaths[0];
-        const bad = store.validate(src);
-        if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
-        const d = nowParts();
-        const name =
-          'ilh_' + today() + '_' + [d.h, d.mi, d.s].map((n) => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
-        fs.mkdirSync(BACKUPS, { recursive: true });
-        copyDurable(src, path.join(BACKUPS, name));
-        return { ok: true, name };
-      });
-      handle('backup', () => {
-        try {
-          return { ok: true, file: store.backup('χειροκίνητο') };
-        } catch (e) {
-          return { ok: false, error: String(e) };
-        }
-      });
-      handle('openFolder', (_e, which: string) => {
-        const dir =
-          which === 'output'
-            ? outputDir()
-            : which === 'templates'
-              ? USER_TPL
-              : which === 'backups'
-                ? path.join(DATA, 'backups')
-                : DATA;
-        fs.mkdirSync(dir, { recursive: true });
-        return shell.openPath(dir);
-      });
-      handle('chooseOutputDir', async () => {
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Φάκελος για τα Excel',
-          defaultPath: outputDir(),
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        if (r.canceled || !r.filePaths[0]) return null;
-        runCmd({
-          t: 'setSettings',
-          settings: { outputDir: r.filePaths[0] },
-          text: 'φάκελος αρχείων ' + r.filePaths[0],
-        });
-        return r.filePaths[0];
-      });
-      // Φάκελοι αρχείων (Ρυθμίσεις): ο γενικός, ένας ανά έντυπο και ένας ανά είδος για τα νέα Excel. Κενό = ο γενικός.
-      const setDir = (t: DirTarget, dir: string | undefined, what: string) => {
-        if (t === 'output')
-          return runCmd({ t: 'setSettings', settings: { outputDir: dir || '' }, text: 'φάκελος αρχείων ' + what });
-        if ('form' in t) {
-          const forms = { ...(store.state.settings.forms || {}) };
-          const b = { ...formBinding(t.form), dir };
-          if (Object.values(b).some((v) => v !== undefined && v !== '')) forms[t.form] = b;
-          else delete forms[t.form];
-          return runCmd({
-            t: 'setSettings',
-            settings: { forms },
-            text: 'φάκελος για το έντυπο ' + t.form + ': ' + what,
-          });
-        }
-        const newDirs = { ...(store.state.settings.newDirs || {}) };
-        if (dir) newDirs[t.kind] = dir;
-        else delete newDirs[t.kind];
-        return runCmd({
-          t: 'setSettings',
-          settings: { newDirs },
-          text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what,
-        });
-      };
-      const okTarget = (t: DirTarget) =>
-        t === 'output' ||
-        (!!t &&
-          typeof t === 'object' &&
-          (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && canCreate(t.kind))));
-      handle('dirChoose', async (_e, t: DirTarget) => {
-        if (!okTarget(t)) return fail('άγνωστος φάκελος');
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε φάκελο',
-          defaultPath: dirOf(t),
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        if (r.canceled || !r.filePaths[0]) return null;
-        const dir = r.filePaths[0];
-        if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλον.');
-        const c = setDir(t, dir, dir);
-        return c.ok ? reply(c.text, false) : c;
-      });
-      handle('dirReset', (_e, t: DirTarget) => {
-        if (!okTarget(t)) return fail('άγνωστος φάκελος');
-        const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός');
-        return c.ok ? reply(c.text, false) : c;
-      });
-      handle('dirOpen', (_e, t: DirTarget) => {
-        if (!okTarget(t)) return 'άγνωστος φάκελος';
-        const dir = dirOf(t);
-        fs.mkdirSync(dir, { recursive: true });
-        return shell.openPath(dir);
-      });
-      // ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)
-      handle('essoInfo', () => essoInfo());
-      handle('essoDir', async (_e, def?: string) => {
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Διάλεξε φάκελο',
-          defaultPath: typeof def === 'string' && def ? def : DOCS(),
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        const dir = r.canceled ? null : r.filePaths[0] || null;
-        if (dir) essoDirs.add(dir);
-        return dir;
-      });
-      handle('essoRoster', async () => {
-        const res = await dialog.showOpenDialog(win!, {
-          title: 'Δυναμολόγιο της νέας ΕΣΣΟ',
-          filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
-          properties: ['openFile'],
-        });
-        if (res.canceled || !res.filePaths[0]) return null;
-        return rosterPreview(res.filePaths[0], null);
-      });
-      handle('essoStart', (_e, o: EssoStart) => startEsso(o));
-      handle('essoPick', async (): Promise<EssoArchiveInfo | { ok: false; error: string } | null> => {
-        const r = await dialog.showOpenDialog(win!, {
-          title: 'Φάκελος αρχείου ΕΣΣΟ (με το ΕΣΣΟ.json)',
-          defaultPath: fs.existsSync(archiveRoot()) ? archiveRoot() : DOCS(),
-          properties: ['openDirectory'],
-        });
-        const dir = r.canceled ? null : r.filePaths[0] || null;
-        if (!dir) return null;
-        const a = readArchive(dir);
-        if (!a.ok) return a;
-        essoDirs.add(dir);
-        return {
-          dir,
-          name: a.manifest.name,
-          at: a.manifest.at,
-          people: a.manifest.people,
-          files: new Set(a.manifest.files.map((f) => f.copy)).size,
-        };
-      });
-      handle('essoRestore', (_e, dir: string) => restoreEsso(dir));
-      handle('essoOpen', (_e, dir: string) => {
-        if (
-          typeof dir !== 'string' ||
-          !(
-            okEssoDir(dir) ||
-            knownArchives().some((d) => sameDir(d, dir)) ||
-            sameDir(dir, outputDir()) ||
-            sameDir(dir, newRoot())
-          ) ||
-          !fs.existsSync(dir)
-        )
-          return 'άγνωστος φάκελος';
-        return shell.openPath(dir);
-      });
+      registerBackupsIpc();
+      registerDiagIpc();
+      registerBackupFoldersIpc();
+      registerDirsIpc();
+      registerEssoIpc();
       registerUpdate();
       createWindow();
       ready = Date.now();
@@ -3620,7 +3620,7 @@ else {
       setTimeout(warmWorker, 2500);
       setTimeout(() => {
         for (const k of KINDS) if (bindingOf(k.id)) dirty.add(k.id);
-        formsDirty = true;
+        setFormsDirty(true);
         runAuto();
       }, 4000);
     })
