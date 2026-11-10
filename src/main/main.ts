@@ -1,22 +1,22 @@
 // Main process: βάση, κανόνες, αρχεία. Το UI ζητά ενέργειες μέσω IPC και παίρνει πίσω τη νέα κατάσταση.
-import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { copyDurable, writeJson } from './files';
+import { copyDurable } from './files';
 // The bare imports keep the module evaluation order of the file: their code moved into features/exports,
 // features/sources and features/reports, but they must still be evaluated at this position, before app/paths.ts runs
 // setPath('userData').
 import '../shared/preflight';
 import '../shared/commands';
-import { nowHM, nowParts, today } from '../shared/dates';
+import { nowHM, today } from '../shared/dates';
 import './xlsx';
 import './ziphash';
-import { off, useWorker, warmWorker, workerUp } from './offload';
-import { handle, handleGuarded } from './ipc/handle';
-import type { Boot, CmdResult, Diag, DirTarget } from '../shared/api';
+import { off, useWorker, warmWorker } from './offload';
+import { handle } from './ipc/handle';
+import type { Boot, CmdResult } from '../shared/api';
 import { setBookReader, readBook } from './sources';
-import { FORM_KINDS, KIND, KINDS, canCreate } from '../shared/sources';
+import { KINDS } from '../shared/sources';
 import '../shared/cadreSource';
 import './hdDocx';
 // Bare import: the print engine's code is still used (by features/print), but it must stay evaluated at this position.
@@ -31,19 +31,18 @@ import {
   autoBusy, autoTimer, dirty, formsDirty, seenUntil, sessionStart, store, win,
   setFormsDirty, setSeenUntil, setSessionStart, setStore, setWin,
 } from './app/state';
-import { fail, onCommandApplied, registerCommandsIpc, reply, runCmd, snapshot } from './features/commands';
-import { newDir, outputDir } from './app/dirs';
+import { onCommandApplied, registerCommandsIpc, reply, runCmd, snapshot } from './features/commands';
+import { outputDir } from './app/dirs';
 // Bare import: features/esso uses it now, but it stays evaluated at this position.
 import './app/serial';
 // The exports feature (and, through it, app/paths.ts) is evaluated right before the last two imports below.
 import {
-  formBinding, onPrintPreview, registerExportsIpc, registerHdIpc, registerImerIpc, templates,
+  onPrintPreview, registerExportsIpc, registerHdIpc, registerImerIpc, templates,
 } from './features/exports';
 // bindings/autowrite stay after the exports import: app/bindings reads DATA, so app/paths.ts must not run earlier.
 import { bindingOf, srcMeta } from './app/bindings';
 import {
   HOLD_RESTORE, HOLD_UNDO, daily, hold, holdAll, kindsOf, onAutoWriteDeps, retryPending, runAuto, scheduleAuto,
-  writeLog,
 } from './features/autowrite';
 import { notify, registerRosterIpc, registerSourcesIpc, registerSourcesWriteIpc } from './features/sources';
 import {
@@ -53,6 +52,11 @@ import {
 import { registerFormsIpc } from './features/forms';
 import { printPreview, registerPrintIpc, registerPrintJobIpc, registerPrintOutputIpc } from './features/print';
 import { registerEssoIpc } from './features/esso';
+// The backups, diag, dirs and update features come after the exports import, so app/paths.ts is already evaluated.
+import { registerBackupFoldersIpc, registerBackupsIpc } from './features/backups';
+import { registerDiagIpc } from './features/diag';
+import { registerDirsIpc } from './features/dirs';
+import { registerUpdate, setUpd, upd } from './features/update';
 // These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
 // after every other imported module and before this file's body (as when it was a line of this file).
 import {
@@ -60,20 +64,15 @@ import {
   DATA,
   DATA_AT,
   DEV,
-  USB_DIR,
-  USB_KEEP,
   USER_TPL,
-  writableDir,
 } from './app/paths';
-import { FLAGS, readFlags, readMeta, writeMeta } from './app/meta';
+import { readFlags, readMeta, writeMeta } from './app/meta';
 
 const T0 = Date.now();
 // GPU switch and Chromium switches stay here, at their boot position: flags.json is read by app/meta.ts.
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
 // Ελληνικά για το Chromium: τα πεδία ημερομηνίας δείχνουν ημέρα/μήνα/έτος και σε Windows με αγγλικές ρυθμίσεις (αλλιώς μήνας/ημέρα)
 app.commandLine.appendSwitch('lang', 'el');
-const dirOf = (t: DirTarget) =>
-  t === 'output' ? outputDir() : 'form' in t ? formBinding(t.form).dir || outputDir() : newDir(t.kind);
 // runCmd (features/commands) may not import this file: it calls the auto-write scheduling through this hook, which is
 // installed while main.ts loads, before any command can run.
 onCommandApplied((prev, next) => scheduleAuto(prev, next));
@@ -176,278 +175,6 @@ async function recover(reason: string, empty = false): Promise<boolean> {
   return true;
 }
 
-// Αυτόματη ενημέρωση: ό,τι χρειάζεται το UI (ο έλεγχος και το κατέβασμα γίνονται στον main, βλ. updater.ts)
-let upd: ReturnType<typeof createUpdater> | null = null;
-function registerUpdate() {
-  const on = handleGuarded;
-  on(
-    'updInfo',
-    () => {
-      upd?.confirm();
-      return upd!.info();
-    },
-    null as any,
-  );
-  on('updCheck', () => upd!.check(true), null as any);
-  on('updAuto', (v: boolean) => upd!.setAuto(v), null as any);
-  on('updStart', () => upd!.start(), undefined);
-  on('updCancel', () => upd!.cancel(), undefined);
-  on('updSeen', () => upd!.seen(), undefined);
-  on('updSkip', () => upd!.skip(), undefined);
-  on('updRestart', () => upd!.restart(), undefined);
-  on('updFile', () => upd!.fromFile(), { ok: false, error: 'Δεν ξεκίνησε η ενημέρωση' } as any);
-  on('updRollback', () => upd!.rollback(), { ok: false, error: 'Δεν έγινε η επιστροφή' });
-  on('updOpenReleases', () => upd!.openReleases(), undefined);
-}
-
-// IPC registrations by future feature area (Phase 4.2-4.6); the boot closure calls them in the original order.
-function registerBackupsIpc() {
-  handle('listBackups', () => listBackups(BACKUPS));
-  handle('restoreBackup', async (_e, name: string) => {
-    const file = path.join(BACKUPS, path.basename(name));
-    const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
-    if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
-    // πρώτα αντίγραφο δίπλα στη βάση και έλεγχος· η τωρινή βάση κλείνει μόνο αν αυτό πέτυχε
-    const db = path.join(DATA, 'ilh.db'),
-      tmp = db + '.restore.tmp';
-    try {
-      copyDurable(file, tmp);
-      const b2 = store.validate(tmp);
-      if (b2) throw new Error(b2);
-    } catch (e) {
-      fs.rmSync(tmp, { force: true });
-      return fail(
-        'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
-      );
-    }
-    // χωρίς αντίγραφο της τωρινής βάσης δεν γίνεται επαναφορά: αλλιώς ό,τι έγινε μετά το αντίγραφο θα χανόταν οριστικά
-    try {
-      store.backup('πριν-επαναφορά');
-    } catch (e) {
-      fs.rmSync(tmp, { force: true });
-      return fail(
-        'Δεν έγινε η επαναφορά: δεν κρατήθηκε αντίγραφο της τωρινής βάσης πριν από αυτή (' +
-          (e instanceof Error ? e.message : String(e)) +
-          '). Η βάση έμεινε όπως ήταν. Δες αν ο φάκελος data\\backups γράφεται ή αν ο δίσκος είναι γεμάτος.',
-      );
-    }
-    try {
-      store.close();
-    } catch {
-      /* συνεχίζουμε */
-    }
-    try {
-      for (let i = 0; ; i++) {
-        try {
-          fs.renameSync(tmp, db);
-          break;
-        } catch (e: any) {
-          if (i >= 20 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-        }
-      }
-    } catch (e) {
-      // η βάση ξανανοίγει όπως ήταν, ώστε η εφαρμογή να συνεχίσει να δουλεύει
-      fs.rmSync(tmp, { force: true });
-      try {
-        await store.open();
-      } catch (e2) {
-        dialog.showErrorBox('Γραφείο Λοχία', 'Δεν ξανάνοιξε η βάση: ' + String(e2));
-        app.exit(1);
-      }
-      return fail(
-        'Δεν έγινε η επαναφορά, η βάση έμεινε όπως ήταν: ' + (e instanceof Error ? e.message : String(e)),
-      );
-    }
-    holdAll(HOLD_RESTORE);
-    app.relaunch();
-    app.exit(0);
-    return { ok: true };
-  });
-}
-function registerDiagIpc() {
-  handle(
-    'diag',
-    (): Diag => ({
-      startupMs: ready - T0,
-      procs: app.getAppMetrics().map((m) => ({
-        type: m.type,
-        kb: m.memory.workingSetSize,
-        cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10,
-      })),
-      gpuDisabled: !!readFlags().disableGpu,
-      versions: {
-        electron: process.versions.electron,
-        chrome: process.versions.chrome,
-        node: process.versions.node,
-      },
-      dbKb: Math.round(fs.statSync(path.join(DATA, 'ilh.db')).size / 1024),
-      people: store.state.people.length,
-      statuses: store.state.statuses.length,
-      guardDays: Object.keys(store.state.guards).length,
-      dataDir: DATA,
-      backups: listBackups(BACKUPS).length,
-      writes: writeLog,
-      worker: workerUp(),
-    }),
-  );
-  handle('setGpu', (_e, disable: boolean) => {
-    writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable });
-    app.relaunch();
-    app.exit(0);
-  });
-  // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
-  handle('usbCopy', async () => {
-    const m = readMeta();
-    const r = await dialog.showOpenDialog(win!, {
-      title: 'Διάλεξε το USB (ή φάκελο σε άλλο δίσκο)',
-      defaultPath: m.usbDir && fs.existsSync(m.usbDir) ? m.usbDir : undefined,
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    if (r.canceled || !r.filePaths[0]) return null;
-    const chosen = r.filePaths[0];
-    const dir = path.join(chosen, USB_DIR);
-    try {
-      const file = store.backup('usb', dir);
-      const bad = store.validate(file);
-      if (bad) {
-        fs.rmSync(file, { force: true });
-        return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' };
-      }
-      listBackups(dir)
-        .slice(USB_KEEP)
-        .forEach((b) => fs.rmSync(path.join(dir, b.name), { force: true }));
-      const day = today();
-      writeMeta({ lastUsb: day, usbDir: chosen });
-      store.addAudit(
-        { at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false },
-        null,
-      );
-      const same =
-        path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
-      return {
-        ok: true,
-        file,
-        day,
-        warning: same
-          ? 'Ο φάκελος είναι στον ίδιο δίσκο με την εφαρμογή. Αν χαλάσει ο δίσκος, χάνεται και το αντίγραφο. Προτίμησε USB.'
-          : undefined,
-      };
-    } catch (e) {
-      return fail('Δεν γράφτηκε στο ' + chosen + ': ' + (e instanceof Error ? e.message : String(e)));
-    }
-  });
-}
-function registerBackupFoldersIpc() {
-  // Φέρνει ένα αντίγραφο από USB στη λίστα αντιγράφων, για να γίνει επαναφορά από εκεί (π.χ. σε καινούργιο PC)
-  handle('importBackup', async () => {
-    const m = readMeta();
-    const r = await dialog.showOpenDialog(win!, {
-      title: 'Διάλεξε αντίγραφο (ilh_….db)',
-      defaultPath: m.usbDir ? path.join(m.usbDir, USB_DIR) : undefined,
-      filters: [{ name: 'Αντίγραφο Γραφείου Ίλης', extensions: ['db'] }],
-      properties: ['openFile'],
-    });
-    if (r.canceled || !r.filePaths[0]) return null;
-    const src = r.filePaths[0];
-    const bad = store.validate(src);
-    if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
-    const d = nowParts();
-    const name =
-      'ilh_' + today() + '_' + [d.h, d.mi, d.s].map((n) => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
-    fs.mkdirSync(BACKUPS, { recursive: true });
-    copyDurable(src, path.join(BACKUPS, name));
-    return { ok: true, name };
-  });
-  handle('backup', () => {
-    try {
-      return { ok: true, file: store.backup('χειροκίνητο') };
-    } catch (e) {
-      return { ok: false, error: String(e) };
-    }
-  });
-  handle('openFolder', (_e, which: string) => {
-    const dir =
-      which === 'output'
-        ? outputDir()
-        : which === 'templates'
-          ? USER_TPL
-          : which === 'backups'
-            ? path.join(DATA, 'backups')
-            : DATA;
-    fs.mkdirSync(dir, { recursive: true });
-    return shell.openPath(dir);
-  });
-  handle('chooseOutputDir', async () => {
-    const r = await dialog.showOpenDialog(win!, {
-      title: 'Φάκελος για τα Excel',
-      defaultPath: outputDir(),
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    if (r.canceled || !r.filePaths[0]) return null;
-    runCmd({
-      t: 'setSettings',
-      settings: { outputDir: r.filePaths[0] },
-      text: 'φάκελος αρχείων ' + r.filePaths[0],
-    });
-    return r.filePaths[0];
-  });
-}
-function registerDirsIpc() {
-  // Φάκελοι αρχείων (Ρυθμίσεις): ο γενικός, ένας ανά έντυπο και ένας ανά είδος για τα νέα Excel. Κενό = ο γενικός.
-  const setDir = (t: DirTarget, dir: string | undefined, what: string) => {
-    if (t === 'output')
-      return runCmd({ t: 'setSettings', settings: { outputDir: dir || '' }, text: 'φάκελος αρχείων ' + what });
-    if ('form' in t) {
-      const forms = { ...(store.state.settings.forms || {}) };
-      const b = { ...formBinding(t.form), dir };
-      if (Object.values(b).some((v) => v !== undefined && v !== '')) forms[t.form] = b;
-      else delete forms[t.form];
-      return runCmd({
-        t: 'setSettings',
-        settings: { forms },
-        text: 'φάκελος για το έντυπο ' + t.form + ': ' + what,
-      });
-    }
-    const newDirs = { ...(store.state.settings.newDirs || {}) };
-    if (dir) newDirs[t.kind] = dir;
-    else delete newDirs[t.kind];
-    return runCmd({
-      t: 'setSettings',
-      settings: { newDirs },
-      text: 'φάκελος για νέα Excel (' + KIND[t.kind].label + '): ' + what,
-    });
-  };
-  const okTarget = (t: DirTarget) =>
-    t === 'output' ||
-    (!!t &&
-      typeof t === 'object' &&
-      (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && canCreate(t.kind))));
-  handle('dirChoose', async (_e, t: DirTarget) => {
-    if (!okTarget(t)) return fail('άγνωστος φάκελος');
-    const r = await dialog.showOpenDialog(win!, {
-      title: 'Διάλεξε φάκελο',
-      defaultPath: dirOf(t),
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    if (r.canceled || !r.filePaths[0]) return null;
-    const dir = r.filePaths[0];
-    if (!writableDir(dir)) return fail('Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλον.');
-    const c = setDir(t, dir, dir);
-    return c.ok ? reply(c.text, false) : c;
-  });
-  handle('dirReset', (_e, t: DirTarget) => {
-    if (!okTarget(t)) return fail('άγνωστος φάκελος');
-    const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός');
-    return c.ok ? reply(c.text, false) : c;
-  });
-  handle('dirOpen', (_e, t: DirTarget) => {
-    if (!okTarget(t)) return 'άγνωστος φάκελος';
-    const dir = dirOf(t);
-    fs.mkdirSync(dir, { recursive: true });
-    return shell.openPath(dir);
-  });
-}
 function createWindow() {
   const icon = path.join(__dirname, '..', 'renderer', 'icon.png'); // λογότυπο στη γραμμή εργασιών (στο dev μπορεί να λείπει)
   setWin(new BrowserWindow({
@@ -494,8 +221,9 @@ else {
     .then(async () => {
       // Αυτόματη ενημέρωση: αν περιμένει αλλαγή του resources\app (ή η νέα έκδοση απέτυχε 2 φορές), γίνεται ΠΡΙΝ ανοίξει παράθυρο
       try {
-        upd = createUpdater({ dataDir: DATA, getWin: () => win, backup: (l) => store.backup(l), today });
-        if (upd.startup()) return;
+        const updater = createUpdater({ dataDir: DATA, getWin: () => win, backup: (l) => store.backup(l), today });
+        setUpd(updater);
+        if (updater.startup()) return;
       } catch (e) {
         console.error('update', e);
       }
@@ -576,7 +304,8 @@ else {
       registerPrintJobIpc();
       setInterval(retryPending, 60 * 1000);
       registerBackupsIpc();
-      registerDiagIpc();
+      // ready is assigned after createWindow, later in this closure: the diag handler reads it when it is asked.
+      registerDiagIpc({ startupMs: () => ready - T0 });
       registerBackupFoldersIpc();
       registerDirsIpc();
       registerEssoIpc();

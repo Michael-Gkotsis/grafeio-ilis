@@ -4,8 +4,8 @@
 //   main reads or writes, as ESM live bindings plus one tiny setter each.
 // Does NOT: hold any rule, I/O or Electron call; evaluate any path (it imports only TYPES, so loading it can never
 //   run app/paths.ts and `app.setPath('userData', ...)` early); own state that belongs to a single area (the
-//   `sent` snapshot and `upd` stay private in main.ts until their area moves; `exporting`, `previewGate` and
-//   `essoBusy` live in `features/exports`, `features/print` and `features/esso`).
+//   `sent` snapshot stays private in main.ts until its area moves; `exporting`, `previewGate`, `essoBusy` and `upd`
+//   live in `features/exports`, `features/print`, `features/esso` and `features/update`).
 // Owner layer: main (architecture), `app/`.
 // Why: the state lived as private `let`s of the 3700-line main.ts and the IPC handlers closed over it, so no handler
 //   group could move to `features/<area>/` (Phase 4.2-4.6). Importers read the binding by its plain name
