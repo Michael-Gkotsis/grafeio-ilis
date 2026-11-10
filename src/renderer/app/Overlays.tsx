@@ -3,26 +3,19 @@
 // Does NOT: open or close anything on its own (it only calls the setters it is given), or know the keys.
 // Owner layer: renderer/app. Why: the last 12 lines of Shell's markup; the order below is the stacking order.
 // Covering test: test/notes.test.ts (note dialog, unsaved-note question), test/screens-dialogs-*.test.ts (markup).
-import { Suspense, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { UpdInfo } from '../../shared/api';
 import { DiscardAsk, Sheet } from '../ui';
 import { LegendDialog } from '../common';
 import { UpdateDialog } from '../update';
-import { needsBaselineReview } from '../screens/baselineReview';
+import { CadreSheet } from '../screens/cadre';
+import { PersonSheet, DeclareStatusDialog, BaselineReviewDialog, needsBaselineReview } from '../screens/people';
+import { NoteDialog } from '../screens/notes';
 import { CommandPalette } from './CommandPalette';
-import { OVERLAY_SOURCES } from './loaders';
 import { MOBILE_MORE } from './routes';
 import type { ScreenId } from './screenId';
 import { useStore } from './store';
 import type { OverlayState } from './useOverlays';
-
-// The cards and dialogs load when first opened (loaders.ts); prefetch.ts loads them while the app is idle, so a click
-// normally finds them ready. While one loads nothing is drawn (`fallback={null}`): no extra markup appears or moves.
-const PersonSheet = OVERLAY_SOURCES.personSheet.component;
-const CadreSheet = OVERLAY_SOURCES.cadreSheet.component;
-const DeclareStatusDialog = OVERLAY_SOURCES.declareDialog.component;
-const BaselineReviewDialog = OVERLAY_SOURCES.baselineDialog.component;
-const NoteDialog = OVERLAY_SOURCES.noteDialog.component;
 
 interface OverlaysProps {
   overlays: OverlayState;
@@ -39,24 +32,20 @@ function Cards({ overlays: o }: Pick<OverlaysProps, 'overlays'>) {
   return (
     <>
       {o.personId != null && (
-        <Suspense fallback={null}>
-          <PersonSheet
-            pid={o.personId}
-            list={o.personList}
-            onMove={(id: number) => guard(() => setPersonId(id))}
-            onClose={() => guard(() => setPersonId(null))}
-          />
-        </Suspense>
+        <PersonSheet
+          pid={o.personId}
+          list={o.personList}
+          onMove={(id: number) => guard(() => setPersonId(id))}
+          onClose={() => guard(() => setPersonId(null))}
+        />
       )}
       {o.cadreId != null && (
-        <Suspense fallback={null}>
-          <CadreSheet
-            cid={o.cadreId}
-            list={o.cadreOrder}
-            onMove={(id: string) => guard(() => setCadreId(id))}
-            onClose={() => guard(() => setCadreId(null))}
-          />
-        </Suspense>
+        <CadreSheet
+          cid={o.cadreId}
+          list={o.cadreOrder}
+          onMove={(id: string) => guard(() => setCadreId(id))}
+          onClose={() => guard(() => setCadreId(null))}
+        />
       )}
       {leaveNote && (
         <DiscardAsk
@@ -83,24 +72,16 @@ function Layers({ overlays: o, renderNavItem }: Pick<OverlaysProps, 'overlays' |
   return (
     <>
       {layer && layer.kind === 'declare' && (
-        <Suspense fallback={null}>
-          <DeclareStatusDialog initial={layer.data || {}} onClose={() => setLayer(null)} />
-        </Suspense>
+        <DeclareStatusDialog initial={layer.data || {}} onClose={() => setLayer(null)} />
       )}
-      {layer && layer.kind === 'note' && (
-        <Suspense fallback={null}>
-          <NoteDialog start={layer.data} onClose={() => setLayer(null)} />
-        </Suspense>
-      )}
+      {layer && layer.kind === 'note' && <NoteDialog start={layer.data} onClose={() => setLayer(null)} />}
       {layer && layer.kind === 'more' && (
         <Sheet title={<h2 style={{ fontSize: '18px' }}>Άλλα</h2>} onClose={() => setLayer(null)}>
           <div className="morelist">{MOBILE_MORE.map((v) => renderNavItem(v))}</div>
         </Sheet>
       )}
       {!o.baseLater && !layer && state && needsBaselineReview(state) && (
-        <Suspense fallback={null}>
-          <BaselineReviewDialog onClose={() => o.setBaseLater(true)} />
-        </Suspense>
+        <BaselineReviewDialog onClose={() => o.setBaseLater(true)} />
       )}
     </>
   );

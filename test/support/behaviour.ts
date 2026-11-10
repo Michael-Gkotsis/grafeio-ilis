@@ -14,7 +14,6 @@ import { DEFAULT_PREFS } from '../../src/renderer/prefs';
 import type { SourceBook } from '../../src/shared/api';
 import { mockApi } from '../../src/renderer/mockApi';
 import * as H from './screens-harness';
-import { lazyReady } from './ssr-shims';
 import { pickRows, type Rows } from './dialog-fixtures';
 import { SHELL_CASES } from './dialog-cases-shell';
 import { FORMS_CASES } from './dialog-cases-forms';
@@ -29,7 +28,6 @@ export async function loadWorld(): Promise<BehaviourWorld> {
   H.installBrowserStubs();
   H.freezeClock();
   const world = await H.makeWorld();
-  await lazyReady();   // lazy screens and cards are loaded before the first render (see the `lazy` shim in ssr-shims.ts)
   const book = (await mockApi().srcRead('people')) as SourceBook;
   return { world, rows: pickRows(world, book) };
 }

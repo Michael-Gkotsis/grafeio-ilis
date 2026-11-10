@@ -10,16 +10,20 @@ import { FORM_PARAM } from '../../shared/repPage';
 import { HK } from '../../shared/unit';
 import { Icon } from '../ui';
 import { TodayScreen } from '../screens/today';
+import { RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen } from '../screens/other';
+import { CadreScreen } from '../screens/cadre';
+import { PeopleScreen } from '../screens/people';
+import { GuardScreen, OutsScreen } from '../screens/guard';
+import { NotesScreen } from '../screens/notes';
+import { WeaponsScreen } from '../screens/weapons';
 import { SCREEN_SOURCES } from './loaders';
 import { SCREEN_IDS, type ScreenId } from './screenId';
 
 export { SCREEN_IDS };
 export type { Route, RouteParams, ScreenId } from './screenId';
 
-/**
- * Every screen except «Σήμερα» loads when it is first opened (or earlier, when prefetch.ts finds the app idle).
- * @decision Phase 5.1b: only «Σήμερα» is in the first JS file; see loaders.ts for the importers.
- */
+// Settings, Diagnostics, Reports and the Guide load when you open them (and earlier, when prefetch.ts finds the app
+// idle): less code to read when the app starts. See loaders.ts for the measured reason the others stay eager.
 const lazyScreen = (id: keyof typeof SCREEN_SOURCES): ComponentType => SCREEN_SOURCES[id].component;
 
 /** One row of the registry. `name` is the menu text; `hkai` is shown through {@link screenName} (ΗΚΑΙ or ΗΚΑΛ). */
@@ -33,17 +37,17 @@ export interface ScreenEntry {
 /** Keyed by `ScreenId`, so a missing or misspelled key is a compile error. The id is added below. */
 const TABLE: Record<ScreenId, Omit<ScreenEntry, 'id'>> = {
   home: { name: 'Σήμερα', icon: Icon.home, component: TodayScreen },
-  people: { name: 'Δυναμολόγιο', icon: Icon.people, component: lazyScreen('people') },
-  cadre: { name: 'Στελέχη', icon: Icon.cadre, component: lazyScreen('cadre') },
-  guard: { name: 'Υπηρεσίες', icon: Icon.guard, component: lazyScreen('guard') },
-  outs: { name: 'Εξοδούχοι', icon: Icon.out, component: lazyScreen('outs') },
-  records: { name: 'Ιατρικά', icon: Icon.med, component: lazyScreen('records') },
-  strength: { name: 'Δύναμη', icon: Icon.strength, component: lazyScreen('strength') },
-  hkai: { name: 'ΗΚΑΙ', icon: Icon.file, component: lazyScreen('hkai') },
-  weapons: { name: 'Οπλισμός', icon: Icon.weapon, component: lazyScreen('weapons') },
+  people: { name: 'Δυναμολόγιο', icon: Icon.people, component: PeopleScreen },
+  cadre: { name: 'Στελέχη', icon: Icon.cadre, component: CadreScreen },
+  guard: { name: 'Υπηρεσίες', icon: Icon.guard, component: GuardScreen },
+  outs: { name: 'Εξοδούχοι', icon: Icon.out, component: OutsScreen },
+  records: { name: 'Ιατρικά', icon: Icon.med, component: RecordsScreen },
+  strength: { name: 'Δύναμη', icon: Icon.strength, component: StrengthScreen },
+  hkai: { name: 'ΗΚΑΙ', icon: Icon.file, component: HkaiScreen },
+  weapons: { name: 'Οπλισμός', icon: Icon.weapon, component: WeaponsScreen },
   reports: { name: 'Έντυπα', icon: Icon.print, component: lazyScreen('reports') },
-  notes: { name: 'Σημειώσεις', icon: Icon.notes, component: lazyScreen('notes') },
-  history: { name: 'Ιστορικό', icon: Icon.history, component: lazyScreen('history') },
+  notes: { name: 'Σημειώσεις', icon: Icon.notes, component: NotesScreen },
+  history: { name: 'Ιστορικό', icon: Icon.history, component: HistoryScreen },
   templates: { name: 'Ρυθμίσεις', icon: Icon.gear, component: lazyScreen('templates') },
   guide: { name: 'Οδηγός', icon: Icon.help, component: lazyScreen('guide') },
   // hidden: Ctrl+Shift+D or the search box

@@ -1,37 +1,19 @@
-// Loads the on-demand code of the app (screens, cards, dialogs) while the app is idle, so a click finds it ready.
+// Loads the on-demand screens of the app (Έντυπα, Ρυθμίσεις, Οδηγός, Διάγνωση) while the app is idle, so a click finds them ready.
 // Purpose: `startPrefetch()` walks `PREFETCH_ORDER` and imports ONE module per idle callback; `holdPrefetch()` pauses
 //   the walk while a command runs; typing pauses it by itself.
 // Does NOT: render anything, change what a route or overlay shows (loaders.ts + React.lazy do that), or load a module
 //   twice (`import()` of the same module is the same promise, so a click during prefetch just joins the load).
-// Owner layer: renderer/app (architecture). Why: the first JS file holds only the shell and «Σήμερα» (Phase 5.1b);
-//   without prefetch the first click on every other screen would wait for its chunk to be read and compiled, which is
-//   slow on the unit's Intel Atom.
+// Owner layer: renderer/app (architecture). Why: those four screens load on demand (they were lazy before), so their
+//   first open waited for the chunk; measured at 4x CPU, prefetch brings it from 126 to 46 ms (Έντυπα) and from 206 to
+//   132 ms (Ρυθμίσεις). The daily screens stay eager (see the @decision in loaders.ts).
 // Covering test: test/prefetch.test.ts (order, one module per idle slot, pauses, idempotent, errors do not stop it).
 import { MODULES, type ModuleName } from './loaders';
 
 /**
- * Order of the walk: most used first.
- *  1. people: the Δυναμολόγιο and, above all, the soldier card and the declaration dialog, which open from «Σήμερα»,
- *     from every list and from Ctrl+K;
- *  2. guard: Υπηρεσίες and Εξοδούχοι, the daily work;
- *  3. other: Ιατρικά, Δύναμη, ΗΚΑΙ, Ιστορικό (the screens «Σήμερα» links to);
- *  4. dayForms: the button next to the title of «Σήμερα»;
- *  5. cadre, weapons, notes: Στελέχη (and the cadre card), Οπλισμός, Σημειώσεις (and the note dialog, Ctrl+Shift+N);
- *  6. reports, settings, guide, diag: used least often and the biggest, so they go last.
+ * Order of the walk: the screens that load on demand (loaders.ts), most used first: Έντυπα (daily printing), Ρυθμίσεις,
+ * then the Οδηγός and Διάγνωση, which are rarely opened and are the biggest.
  */
-export const PREFETCH_ORDER: readonly ModuleName[] = [
-  'people',
-  'guard',
-  'other',
-  'dayForms',
-  'cadre',
-  'weapons',
-  'notes',
-  'reports',
-  'settings',
-  'guide',
-  'diag',
-];
+export const PREFETCH_ORDER: readonly ModuleName[] = ['reports', 'settings', 'guide', 'diag'];
 
 /** Wait after the first screen before the first module: the first paint and the effects of the first render run first. */
 export const START_DELAY_MS = 250;

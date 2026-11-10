@@ -6,9 +6,10 @@
 //   first JS file (Phase 5.1b).
 // Covering test: test/screens-main.test.ts (HTML snapshot), test/notes.test.ts (note reminders on the screen).
 import { RkName } from '../rankName';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, Icon, PageHeader } from '../ui';
 import { useNav, useStore } from '../store';
+import { DayFormsDialog } from './dayForms';
 import { useNowMin } from '../clock';
 import { useUsbCopy } from '../common';
 import { newsSince, usbDue } from '../../shared/reminders';
@@ -34,12 +35,6 @@ export const SRC: Record<string, [string, string]> = {
   import: ['Εισαγωγή', 'ey'],
   auto: ['Αυτόματα', 'ok'],
 };
-
-/**
- * The «Έλεγχος εντύπων» dialog opens from a button, so its code (preflight and report rules) loads on demand. Nothing is
- * drawn while it loads: prefetch.ts loads it while the app is idle, so a click normally finds it ready.
- */
-const DayFormsDialog = lazy(async () => ({ default: (await import('./dayForms')).DayFormsDialog }));
 
 /** The «Σήμερα» screen. */
 export function TodayScreen() {
@@ -151,6 +146,6 @@ export function TodayScreen() {
       <//>`
       }
     </div>
-    ${forms && html`<${Suspense} fallback=${null}><${DayFormsDialog} onClose=${() => setForms(false)}/><//>`}
+    ${forms && html`<${DayFormsDialog} onClose=${() => setForms(false)}/>`}
   </div>`;
 }

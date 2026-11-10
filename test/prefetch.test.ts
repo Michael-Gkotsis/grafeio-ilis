@@ -1,10 +1,10 @@
-// The idle prefetch of screens (src/renderer/app/prefetch.ts) and the table of loaders it walks (loaders.ts).
+// The idle prefetch of the on-demand screens (src/renderer/app/prefetch.ts) and the table it walks (loaders.ts).
 // Purpose: pins the order, "one module per idle slot", the pauses (typing, running command), idempotence and that a
 //   failed import does not stop the walk.
 // Does NOT: load real screens through the walk (the fake `load` only records), or measure time (bench/ui does).
 // Covering for: src/renderer/app/prefetch.ts, src/renderer/app/loaders.ts, src/renderer/app/routes.ts.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MODULES, OVERLAY_SOURCES, SCREEN_SOURCES } from '../src/renderer/app/loaders';
+import { MODULES, SCREEN_SOURCES } from '../src/renderer/app/loaders';
 import {
   PAUSE_RETRY_MS,
   PREFETCH_ORDER,
@@ -65,18 +65,17 @@ describe('prefetch: the walk', () => {
     expect(env.idleSlots).toBe(PREFETCH_ORDER.length);
   });
 
-  it('PREFETCH_ORDER names each module of MODULES exactly once, most used first (people, guard, other)', () => {
+  it('PREFETCH_ORDER names each module of MODULES exactly once, Έντυπα first, Διάγνωση last', () => {
     expect([...PREFETCH_ORDER].sort()).toEqual(Object.keys(MODULES).sort());
-    expect(PREFETCH_ORDER.slice(0, 3)).toEqual(['people', 'guard', 'other']);
-    expect(PREFETCH_ORDER.slice(-3)).toEqual(['settings', 'guide', 'diag']);
+    expect(PREFETCH_ORDER).toEqual(['reports', 'settings', 'guide', 'diag']);
   });
 
   it('does not load while the user types: waits until TYPING_QUIET_MS after the last key', async () => {
     const { api, env, log } = fakeEnv();
     // a key is pressed right after the start delay; the walk must sit it out
     noteKeyPress(START_DELAY_MS);
-    await startPrefetch(api, ['people']);
-    expect(env.loads).toEqual(['people']);
+    await startPrefetch(api, ['reports']);
+    expect(env.loads).toEqual(['reports']);
     const typedAt = START_DELAY_MS;
     expect(env.time - typedAt).toBeGreaterThanOrEqual(TYPING_QUIET_MS);
     expect(log.filter((l) => l === 'wait ' + PAUSE_RETRY_MS).length).toBeGreaterThan(0);
@@ -98,9 +97,9 @@ describe('prefetch: the walk', () => {
       }
       original(fn, ms);
     };
-    await startPrefetch(api, ['people', 'guard']);
+    await startPrefetch(api, ['reports', 'settings']);
     expect(seenWhileHeld).toEqual([[]]);
-    expect(env.loads).toEqual(['people', 'guard']);
+    expect(env.loads).toEqual(['reports', 'settings']);
   });
 
   it("releasing a hold twice does not release another command's hold", async () => {
@@ -117,39 +116,36 @@ describe('prefetch: the walk', () => {
       if (ms === PAUSE_RETRY_MS && waits > 3) return;
       original(fn, ms);
     };
-    void startPrefetch(api, ['people']);
+    void startPrefetch(api, ['reports']);
     await new Promise((r) => setTimeout(r, 20));
     expect(env.loads).toEqual([]);
   });
 
   it('a failed import does not stop the walk', async () => {
-    const { api, env } = fakeEnv({ fail: 'guard' });
-    await startPrefetch(api, ['people', 'guard', 'other']);
-    expect(env.loads).toEqual(['people', 'guard', 'other']);
+    const { api, env } = fakeEnv({ fail: 'settings' });
+    await startPrefetch(api, ['reports', 'settings', 'guide']);
+    expect(env.loads).toEqual(['reports', 'settings', 'guide']);
   });
 });
 
 describe('loaders and routes', () => {
-  it('every screen but «Σήμερα» has an on-demand source, and «Σήμερα» is the only one without', () => {
-    expect(Object.keys(SCREEN_SOURCES).sort()).toEqual(SCREEN_IDS.filter((id) => id !== 'home').sort());
+  it('exactly Έντυπα, Ρυθμίσεις, Οδηγός and Διάγνωση load on demand; every other screen is a static import', () => {
+    expect(Object.keys(SCREEN_SOURCES).sort()).toEqual(['diag', 'guide', 'reports', 'templates']);
     expect(SCREENS.home.component.name).toBe('TodayScreen');
+    expect(SCREENS.people.component.name).toBe('PeopleScreen');
+    expect(SCREEN_IDS.length).toBe(15);
   });
 
-  it('each loader resolves to a function component (the same one the screen module exports)', async () => {
-    const people = await import('../src/renderer/screens/people');
-    const other = await import('../src/renderer/screens/other');
-    expect((await SCREEN_SOURCES.people.load()).default).toBe(people.PeopleScreen);
-    expect((await SCREEN_SOURCES.history.load()).default).toBe(other.HistoryScreen);
-    expect((await OVERLAY_SOURCES.personSheet.load()).default).toBe(people.PersonSheet);
-    const all = await Promise.all([
-      ...Object.values(SCREEN_SOURCES).map((src) => src.load()),
-      ...Object.values(OVERLAY_SOURCES).map((src) => src.load()),
-    ]);
+  it('each source resolves to the component its screen module exports', async () => {
+    const settings = await import('../src/renderer/screens/settings');
+    const reports = await import('../src/renderer/screens/reports');
+    expect((await SCREEN_SOURCES.templates.load()).default).toBe(settings.TemplatesScreen);
+    expect((await SCREEN_SOURCES.reports.load()).default).toBe(reports.ReportsScreen);
+    const all = await Promise.all(Object.values(SCREEN_SOURCES).map((src) => src.load()));
     expect(all.every((m) => typeof m.default === 'function')).toBe(true);
   });
 
   it('a module is the same object however it is asked for: prefetch and a click never load it twice', async () => {
-    expect(await MODULES.guard()).toBe(await MODULES.guard());
-    expect((await SCREEN_SOURCES.guard.load()).default).not.toBe((await SCREEN_SOURCES.outs.load()).default);
+    expect(await MODULES.settings()).toBe(await MODULES.settings());
   });
 });
