@@ -1,12 +1,7 @@
 {
   "_readme": "Ratchet baseline of test/architecture.test.ts. These are the structure problems that existed when the test was added. Entries may only be REMOVED or LOWERED (fix the code, then run ARCH_UPDATE=1 npx vitest run test/architecture.test.ts). Adding an entry or raising a number is forbidden in review. A pure file move may rename a key with the same or a smaller number. cycles: sets of files that import each other; boundaries: file -> import that crosses a process boundary; oversizeFiles/oversizeFunctions: physical lines; forEach/any: count per file.",
   "cycles": {
-    "value": [
-      [
-        "src/shared/cadreSource.ts",
-        "src/shared/sources.ts"
-      ]
-    ],
+    "value": [],
     "withTypes": [
       [
         "src/shared/api.ts",
@@ -15,10 +10,6 @@
         "src/shared/layout.ts",
         "src/shared/preflight.ts",
         "src/shared/sigs.ts"
-      ],
-      [
-        "src/shared/cadreSource.ts",
-        "src/shared/sources.ts"
       ],
       [
         "src/shared/reports.ts",
@@ -44,10 +35,8 @@
     "src/renderer/screens/people.ts": 656,
     "src/renderer/screens/reports.ts": 1284,
     "src/renderer/screens/sources.ts": 605,
-    "src/shared/cadreSource.ts": 746,
     "src/shared/commands.ts": 3108,
     "src/shared/reports.ts": 2317,
-    "src/shared/sources.ts": 3996,
     "src/shared/values.ts": 931
   },
   "oversizeFunctions": {
@@ -55,7 +44,19 @@
     "src/core/duty/autofillRepair.ts::repair": 102,
     "src/core/duty/hkaiCount.ts::hkaiCounts": 86,
     "src/core/duty/planChange.ts::planStatusChange": 154,
+    "src/core/excel-in/cadreAbsWrite.ts::planCadreAbsWrite": 119,
+    "src/core/excel-in/cadreRead.ts::planCadres": 94,
+    "src/core/excel-in/cadreWrite.ts::planCadresWrite": 83,
+    "src/core/excel-in/dutyCheckBack.ts::planDutiesWrite": 152,
+    "src/core/excel-in/dutyCheckIn.ts::planDuties": 127,
+    "src/core/excel-in/dutyCheckSheet.ts::planDutiesNew": 87,
+    "src/core/excel-in/hkaiSheet.ts::detectHkai": 83,
+    "src/core/excel-in/personnelBack.ts::planPeopleWrite": 215,
+    "src/core/excel-in/postsBack.ts::planList": 119,
+    "src/core/excel-in/rooms.ts::planRoomSheet": 86,
     "src/core/excel-in/roster.ts::parse": 129,
+    "src/core/excel-in/statusDiff.ts::diffStatuses": 223,
+    "src/core/excel-in/writePlan.ts::planWrite": 140,
     "src/core/outs/outsDay.ts::dayBook": 100,
     "src/core/outs/strengthView.ts::strengthView": 153,
     "src/main/excel.ts::dutyCheck": 137,
@@ -100,24 +101,12 @@
     "src/renderer/screens/people.ts::DeclareStatusDialog": 155,
     "src/renderer/screens/reports.ts::ReportPage": 262,
     "src/renderer/screens/weapons.ts::WeaponsScreen": 209,
-    "src/shared/cadreSource.ts::planCadreAbsWrite": 119,
-    "src/shared/cadreSource.ts::planCadres": 94,
-    "src/shared/cadreSource.ts::planCadresWrite": 83,
     "src/shared/commands.ts::noteCmd": 93,
     "src/shared/commands.ts::run": 2260,
     "src/shared/preflight.ts::hkaiChecks": 82,
     "src/shared/reports.ts::candidates": 130,
     "src/shared/reports.ts::fieldValue": 216,
     "src/shared/reports.ts::pickText": 114,
-    "src/shared/sources.ts::detectHkai": 83,
-    "src/shared/sources.ts::diffStatuses": 223,
-    "src/shared/sources.ts::planDuties": 127,
-    "src/shared/sources.ts::planDutiesNew": 87,
-    "src/shared/sources.ts::planDutiesWrite": 152,
-    "src/shared/sources.ts::planList": 119,
-    "src/shared/sources.ts::planPeopleWrite": 215,
-    "src/shared/sources.ts::planRoomSheet": 86,
-    "src/shared/sources.ts::planWrite": 140,
     "src/shared/values.ts::metricsOf": 424
   },
   "forEach": {
@@ -130,7 +119,22 @@
     "src/core/duty/nextFor.ts": 1,
     "src/core/duty/planChange.ts": 8,
     "src/core/duty/presence.ts": 2,
+    "src/core/excel-in/cadreMeta.ts": 1,
+    "src/core/excel-in/cadreRows.ts": 1,
+    "src/core/excel-in/cadreWrite.ts": 1,
+    "src/core/excel-in/columns.ts": 2,
+    "src/core/excel-in/dutyCheckBack.ts": 1,
+    "src/core/excel-in/dutyCheckIn.ts": 3,
+    "src/core/excel-in/dutyCheckSheet.ts": 7,
+    "src/core/excel-in/hkaiSheet.ts": 2,
+    "src/core/excel-in/newRoster.ts": 3,
+    "src/core/excel-in/personnelBack.ts": 3,
+    "src/core/excel-in/planSource.ts": 1,
+    "src/core/excel-in/planText.ts": 1,
+    "src/core/excel-in/postsBack.ts": 2,
+    "src/core/excel-in/rooms.ts": 2,
     "src/core/excel-in/roster.ts": 2,
+    "src/core/excel-in/writePlan.ts": 3,
     "src/core/model/blocks.ts": 1,
     "src/core/outs/strengthView.ts": 1,
     "src/core/statuses/punish.ts": 1,
@@ -170,14 +174,12 @@
     "src/renderer/select.ts": 1,
     "src/renderer/sheets.ts": 5,
     "src/renderer/update.ts": 1,
-    "src/shared/cadreSource.ts": 3,
     "src/shared/commands.ts": 10,
     "src/shared/hd.ts": 2,
     "src/shared/preflight.ts": 2,
     "src/shared/quickAdd.ts": 2,
     "src/shared/reports.ts": 2,
     "src/shared/roomExtra.ts": 1,
-    "src/shared/sources.ts": 30,
     "src/shared/values.ts": 7
   },
   "any": {
