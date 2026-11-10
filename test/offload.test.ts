@@ -24,7 +24,7 @@ describe('νήμα των Excel', () => {
     let s = apply(fakeState(60), { t: 'autofill', date: '2026-10-12' }, { today: '2026-10-12', newId: () => 'x' }).state;
     const tpl = T('froura.xlsx');
     const local = await fillFroura(tpl, s, '2026-10-12');
-    const far = await off<typeof local>('fillFroura', [tpl, '2026-10-12', undefined, undefined], () => { throw new Error('όχι εδώ'); }, s);
+    const far = await off('fillFroura', [tpl, '2026-10-12', undefined, undefined], () => { throw new Error('όχι εδώ'); }, s);
     expect(workerUp()).toBe(true);
     expect(Buffer.isBuffer(far.data)).toBe(true);
     expect(far.name).toBe(local.name);
@@ -33,11 +33,11 @@ describe('νήμα των Excel', () => {
     // άλλη κατάσταση: το νήμα παίρνει τη νέα
     s = apply(s, { t: 'clearDay', date: '2026-10-12' }, { today: '2026-10-12', newId: () => 'y' }).state;
     const local2 = await fillFroura(tpl, s, '2026-10-12');
-    const far2 = await off<typeof local>('fillFroura', [tpl, '2026-10-12', undefined, undefined], () => { throw new Error('όχι εδώ'); }, s);
+    const far2 = await off('fillFroura', [tpl, '2026-10-12', undefined, undefined], () => { throw new Error('όχι εδώ'); }, s);
     expect(await valuesHash(far2.data)).toBe(await valuesHash(local2.data));
   }, 30_000);
   it('τα λάθη έρχονται του ίδιου είδους', async () => {
     const f = path.join(dir, 'παλιό.xls'); fs.writeFileSync(f, 'x');
-    await expect(off('readBook', [f], async () => 0)).rejects.toBeInstanceOf(OldFormatError);
+    await expect(off('readBook', [f], async () => ({ sheets: [], mtime: 0, size: 0 }))).rejects.toBeInstanceOf(OldFormatError);
   });
 });
