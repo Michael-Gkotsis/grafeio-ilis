@@ -2,15 +2,11 @@
   "_readme": "Ratchet baseline of test/architecture.test.ts. These are the structure problems that existed when the test was added. Entries may only be REMOVED or LOWERED (fix the code, then run ARCH_UPDATE=1 npx vitest run test/architecture.test.ts). Adding an entry or raising a number is forbidden in review. A pure file move may rename a key with the same or a smaller number. cycles: sets of files that import each other; boundaries: file -> import that crosses a process boundary; oversizeFiles/oversizeFunctions: physical lines; forEach/any: count per file.",
   "cycles": {
     "value": [],
-    "withTypes": [
-      [
-        "src/shared/reports.ts",
-        "src/shared/values.ts"
-      ]
-    ]
+    "withTypes": []
   },
   "boundaries": [],
   "oversizeFiles": {
+    "src/core/reports/metrics.ts": 484,
     "src/main/db.ts": 576,
     "src/main/excel.ts": 893,
     "src/main/exports.ts": 1749,
@@ -27,9 +23,7 @@
     "src/renderer/screens/people.ts": 656,
     "src/renderer/screens/reports.ts": 1284,
     "src/renderer/screens/sources.ts": 605,
-    "src/shared/commands.ts": 3108,
-    "src/shared/reports.ts": 2317,
-    "src/shared/values.ts": 931
+    "src/shared/commands.ts": 3108
   },
   "oversizeFunctions": {
     "src/core/duty/autofill.ts::fillDay": 109,
@@ -52,6 +46,10 @@
     "src/core/forms/preflight.ts::hkaiChecks": 82,
     "src/core/outs/outsDay.ts::dayBook": 100,
     "src/core/outs/strengthView.ts::strengthView": 153,
+    "src/core/reports/candidates.ts::candidates": 130,
+    "src/core/reports/fieldValue.ts::fieldValue": 216,
+    "src/core/reports/metrics.ts::metricsOf": 424,
+    "src/core/reports/picks.ts::pickText": 114,
     "src/main/excel.ts::dutyCheck": 137,
     "src/main/excel.ts::hdBook": 134,
     "src/main/excel.ts::imerBook": 189,
@@ -95,11 +93,7 @@
     "src/renderer/screens/reports.ts::ReportPage": 262,
     "src/renderer/screens/weapons.ts::WeaponsScreen": 209,
     "src/shared/commands.ts::noteCmd": 93,
-    "src/shared/commands.ts::run": 2260,
-    "src/shared/reports.ts::candidates": 130,
-    "src/shared/reports.ts::fieldValue": 216,
-    "src/shared/reports.ts::pickText": 114,
-    "src/shared/values.ts::metricsOf": 424
+    "src/shared/commands.ts::run": 2260
   },
   "forEach": {
     "src/core/cadre/cadre.ts": 1,
@@ -132,6 +126,11 @@
     "src/core/forms/preflight.ts": 2,
     "src/core/model/blocks.ts": 1,
     "src/core/outs/strengthView.ts": 1,
+    "src/core/reports/randomDraw.ts": 2,
+    "src/core/reports/valueCtx.ts": 2,
+    "src/core/reports/valueEval.ts": 3,
+    "src/core/reports/valueFilters.ts": 1,
+    "src/core/reports/valueTags.ts": 1,
     "src/core/statuses/punish.ts": 1,
     "src/core/weapons/armed.ts": 3,
     "src/core/weapons/weaponInfo.ts": 2,
@@ -170,11 +169,10 @@
     "src/renderer/sheets.ts": 5,
     "src/renderer/update.ts": 1,
     "src/shared/commands.ts": 10,
-    "src/shared/quickAdd.ts": 2,
-    "src/shared/reports.ts": 2,
-    "src/shared/values.ts": 7
+    "src/shared/quickAdd.ts": 2
   },
   "any": {
+    "src/core/reports/formPage.ts": 4,
     "src/main/db.ts": 13,
     "src/main/files.ts": 3,
     "src/main/main.ts": 9,
@@ -221,7 +219,6 @@
     "src/renderer/store.ts": 4,
     "src/renderer/ui.ts": 9,
     "src/renderer/update.ts": 2,
-    "src/shared/commands.ts": 4,
-    "src/shared/repPage.ts": 4
+    "src/shared/commands.ts": 4
   }
 }
