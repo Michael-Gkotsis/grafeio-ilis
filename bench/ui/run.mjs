@@ -13,7 +13,7 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const CPU = +arg('cpu', 4), N = +arg('n', 180), DAYS = +arg('days', 120), REPS = +arg('reps', 3), PROF = arg('profile', '');
-const cfg = { root: 'bench/ui', base: './', plugins: [react()], logLevel: 'warn', build: { outDir: '../../dist/bench-ui', emptyOutDir: true, target: 'chrome108', minify: !PROF }, preview: { port: 4179 } };
+const cfg = { root: 'bench/ui', base: './', publicDir: path.resolve('src/renderer/public'), plugins: [react()], logLevel: 'warn', build: { outDir: '../../dist/bench-ui', emptyOutDir: true, target: 'chrome108', minify: !PROF }, preview: { port: 4179 } };
 await build(cfg);
 // τα δεδομένα χτίζονται εδώ (node), όχι στη σελίδα: η μέτρηση είναι μόνο το UI
 await esbuild({ entryPoints: ['bench/state.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: 'dist/bench-state.cjs', logLevel: 'warning' });
@@ -39,6 +39,8 @@ const R = {}, D = {};   // D: στοιχεία στη σελίδα
 const t0 = Date.now();
 if (!process.argv.includes('--electron')) await page.goto(url);
 await page.waitForSelector('.sidenav .navbtn');
+// το πρώτο ζωγράφισμα είναι ο σκελετός του index.html· το «boot» είναι η πρώτη πραγματική οθόνη
+R['πρώτο ζωγράφισμα (σκελετός)'] = Math.round(await page.evaluate(() => (performance.getEntriesByName('first-contentful-paint')[0] || performance.getEntriesByName('first-paint')[0] || { startTime: -1 }).startTime));
 R['boot ως την πρώτη οθόνη'] = Math.round(await page.evaluate(() => performance.now()));
 R['boot: από τα δεδομένα ως την πρώτη οθόνη'] = R['boot ως την πρώτη οθόνη'] - Math.round(await page.evaluate(() => window.__benchData));
 // κλικ και αναμονή ως την επόμενη εικόνα (απόδοση React + layout + paint)
