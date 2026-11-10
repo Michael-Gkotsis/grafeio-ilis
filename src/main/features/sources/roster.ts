@@ -4,7 +4,7 @@
 //   and `afterRoster` (makes the file the personnel source and reads the linked posts / out-of-strength sheets).
 // Does NOT: apply the import (the `applyRoster` handler runs the command), write a file or read the statuses.
 // Owner layer: main (architecture), `features/sources`. Imports app/*, `features/commands`, shared/*.
-// Why: moved verbatim from main.ts (Phase 4.3b). The new-ΕΣΣΟ start in main.ts calls the same three.
+// Why: moved verbatim from main.ts (Phase 4.3b). The new-ΕΣΣΟ start (features/esso) calls the same three.
 // Covering test: test/roster*.test.ts; the Electron comparison in the PR description.
 import crypto from 'crypto';
 import path from 'path';
