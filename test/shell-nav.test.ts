@@ -4,7 +4,7 @@
 //   lost, what SideNav draws (three headings, hints, rail) and how TopBarMore behaves (items, disabled Back, update dot,
 //   Esc, arrows, Enter).
 // Does NOT: lay anything out; real focus and pixel sizes are covered by `npm run bench:styles` and the screenshots.
-// Covering: src/renderer/app/routes.ts, SideNav.tsx, TopBarMore.tsx, topBarMoreView.ts, app/styles/shell.css.
+// Covering: src/renderer/app/routes.ts, SideNav.tsx, TopBarMore.tsx, topBarMoreView.ts, app/styles/shell.css, shell-nav.css.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
