@@ -196,10 +196,10 @@ describe('main-side helpers (src/main/ipc/handle.ts)', () => {
   it('handle and handlePrint register on the contract channel; eventChannel names the push channels', async () => {
     const { eventChannel, handle, handlePrint } = await import('../src/main/ipc/handle');
     const fn = () => 'x';
-    handle('exportLists', fn);
+    handle('listBackups', fn);
     handlePrint('pdf', fn);
     expect(electron.handle.mock.calls).toEqual([
-      ['export:lists', fn],
+      ['backups:list', fn],
       ['print:pdf', fn],
     ]);
     expect([eventChannel('onUpdate'), eventChannel('onBusy'), eventChannel('onSources')]).toEqual([
