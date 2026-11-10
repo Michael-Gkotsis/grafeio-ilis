@@ -80,7 +80,7 @@ function reactAttrs(store: Store, width: number): Record<string, string> {
   try {
     const prefs = loadPrefs();
     applyPrefs(prefs);
-    const rail = prefs.nav === 'auto' ? width < 1500 : prefs.nav === 'rail';
+    const rail = prefs.nav === 'auto' ? width < 1280 : prefs.nav === 'rail';
     if (rail) attrs['data-boot-nav'] = 'rail';
   } finally {
     g.localStorage = saved.localStorage;
@@ -126,7 +126,7 @@ describe('boot-prefs.js', () => {
   const cases = themes.flatMap((theme) => densities.flatMap((density) => navs.map((nav) => ({ theme, density, nav }))));
 
   it.each(cases)('sets what prefs.ts sets: %o', (p) => {
-    for (const width of [1280, 1499, 1500, 1920]) {
+    for (const width of [1279, 1280, 1499, 1500, 1920]) {
       const store = { 'grafeio.prefs': JSON.stringify({ ...DEFAULT_PREFS, ...p }) };
       const env = fakePage(store, width, SCRIPT);
       expect(env.attrs).toEqual(reactAttrs(store, width));
@@ -136,9 +136,9 @@ describe('boot-prefs.js', () => {
   it('matches the defaults with empty storage, broken JSON and non-object JSON', () => {
     for (const raw of [undefined, '{broken', 'null', '5', '"x"', '[]', '{}']) {
       const store: Store = raw === undefined ? {} : { 'grafeio.prefs': raw };
-      const env = fakePage(store, 1400, SCRIPT);
+      const env = fakePage(store, 1200, SCRIPT);
       expect(env.attrs).toEqual({ 'data-density': 'normal', 'data-boot-nav': 'rail' });
-      expect(env.attrs).toEqual(reactAttrs(store, 1400));
+      expect(env.attrs).toEqual(reactAttrs(store, 1200));
       expect(env.writes).toEqual([]);
     }
   });

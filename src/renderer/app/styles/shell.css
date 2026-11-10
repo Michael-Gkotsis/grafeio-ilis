@@ -1,0 +1,478 @@
+/*
+ * App shell: the 44 px top bar, the grouped side menu (wide and 60 px rail) and the «⋯» menu.
+ *
+ * Purpose: one stylesheet for TopBar.tsx, TopBarMore.tsx and SideNav.tsx (direction B of the redesign).
+ * Does NOT: touch the phone layout (the max-width 767px block of legacy.css keeps hiding the menu and showing the
+ *   bottom bar) or any screen. Tokens only, no colour literals, no nesting, no !important.
+ * Owner layer: renderer app shell. Layer: legacy, imported BEFORE legacy.css: the .topbar .ui-btn* and .searchbtn .ui-kbd
+ *   overrides must beat the shared .ui-btn/.ui-kbd rules that still live in legacy.css (U3 moves those out), and the
+ *   phone rules of legacy.css, which come later, must still beat the rules here.
+ * Why own file: the rules were scattered through legacy.css between lines 212 and 266 and in four media queries.
+ * Covering tests: test/shell-nav.test.ts, test/contrast.test.ts (--nav-* pairs), bench:styles (shell parts).
+ */
+
+/* ---------- top bar ---------- */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: var(--top-h);
+  background: var(--bar);
+  color: var(--bar-fg);
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 40;
+}
+
+.topbar :focus-visible {
+  outline-color: var(--gold);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.brand .logo {
+  flex: none;
+}
+
+.brand > span {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.brand small {
+  font-family: var(--f-mono);
+  font-weight: 400;
+  color: var(--bar-muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* under 1280 px only the logo stays: the title is in the tooltip, so the search keeps its text at 1024 */
+@media (max-width: 1279px) {
+  .brand__text {
+    display: none;
+  }
+}
+
+.searchbtn {
+  flex: 1 1 auto;
+  max-width: 420px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--bar-line);
+  border-radius: var(--radius);
+  background: var(--bar-field);
+  color: var(--bar-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.searchbtn:hover {
+  border-color: var(--bar-muted);
+}
+
+.searchbtn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.searchbtn span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchbtn .ui-kbd {
+  background: transparent;
+  border-color: var(--bar-line);
+  color: var(--bar-muted);
+}
+
+/* a cut «Ctrl K» looks broken: it disappears before the text starts to be cut */
+@media (max-width: 1099px) {
+  .searchbtn .ui-kbd {
+    display: none;
+  }
+}
+
+.essochip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  color: var(--bar-fg);
+  white-space: nowrap;
+  line-height: 24px;
+}
+
+.essochip small {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--gold);
+}
+
+.essochip b {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .essochip small {
+    display: none;
+  }
+
+  .essochip {
+    padding: 0 8px;
+  }
+}
+
+.topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* (review 29/10) at 1024 the Excel chip pushed the bar past the window and cut «Αναίρεση»: only the chip shrinks */
+.topbar__right > :not(.xlchip) {
+  flex-shrink: 0;
+}
+
+.topbar .ui-btn--ghost {
+  color: var(--bar-fg);
+  border-color: var(--bar-line);
+}
+
+.topbar .ui-btn--ghost:hover {
+  background: var(--bar-field);
+  border-color: var(--bar-muted);
+}
+
+.topbar .ui-btn--outline {
+  background: transparent;
+  border-color: var(--bar-fg);
+  color: var(--bar-fg);
+  box-shadow: none;
+}
+
+.topbar .ui-btn--outline:hover {
+  background: var(--bar-fg);
+  color: var(--bar);
+}
+
+.topbar .ui-btn--icon,
+.topbar .topmore__btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.topbar .ui-btn:disabled:not(.ui-btn--link) {
+  background: transparent;
+  color: var(--bar-muted);
+  border-color: var(--bar-line);
+}
+
+.mockchip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--p-neutral-895);
+  background: var(--gold);
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* two lines: day and date small on top, time bold below; a click opens Settings > Time */
+.today-lbl {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--bar-muted);
+}
+
+button.today-lbl {
+  background: none;
+  border: 0;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.today-lbl:hover {
+  background: var(--bar-field);
+}
+
+.today-lbl__day {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.today-lbl .today-time {
+  color: var(--bar-fg);
+  font-family: var(--f-mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ---------- «⋯» menu ---------- */
+.topmore {
+  position: relative;
+  flex: none;
+}
+
+.topmore__dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+/* inside the bar's stacking context (z 40): above the page, below dialogs (60), the palette and the tooltips */
+.topmore__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 270px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.topmore__item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--h-row);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topmore__item:hover,
+.topmore__item:focus-visible {
+  background: var(--hover);
+}
+
+.topmore__item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.topmore__item:disabled {
+  color: var(--muted-fg);
+  cursor: not-allowed;
+}
+
+.topmore__item:disabled:hover {
+  background: none;
+}
+
+.topmore__lbl {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* ---------- side menu ---------- */
+.sidenav {
+  background: var(--nav-bg);
+  color: var(--nav-fg);
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: var(--top-h);
+  height: calc(100vh - var(--top-h));
+  align-self: start;
+  z-index: 30;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidenav :focus-visible {
+  outline-color: var(--nav-accent);
+}
+
+.sidenav__grp {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidenav__grp--bare {
+  margin-top: 12px;
+}
+
+.sidenav__group {
+  margin: 12px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+}
+
+.sidenav__grp:first-child .sidenav__group {
+  margin-top: 2px;
+}
+
+/* Settings and the fold button sit at the bottom of the column */
+.sidenav__more {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.navbtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--h-row);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navbtn:hover {
+  background: var(--nav-hover);
+}
+
+.navbtn[aria-current="page"] {
+  background: var(--nav-on);
+  color: var(--nav-on-fg);
+  font-weight: 700;
+}
+
+/* the 3 px accent bar is a pseudo-element: shadows are for menus and dialogs only */
+.navbtn[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--nav-accent);
+}
+
+.navbtn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.navbtn .ui-badge {
+  margin-left: auto;
+  font-family: var(--f-mono);
+  border-radius: 999px;
+}
+
+.navbtn__lbl {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidenav__toggle {
+  margin-top: 8px;
+  color: var(--nav-muted);
+  font-size: 13px;
+}
+
+/* ---------- rail (60 px): icons only, group headings hidden for the eye but kept for screen readers ---------- */
+.is-rail .sidenav {
+  padding: 8px 6px;
+}
+
+.is-rail .navbtn {
+  justify-content: center;
+  padding: 0;
+}
+
+.is-rail .navbtn__lbl,
+.is-rail .sidenav__group {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.is-rail .sidenav__grp + .sidenav__grp {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.is-rail .navbtn .ui-badge {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  margin: 0;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  justify-content: center;
+}
+
+.is-rail .sidenav__more {
+  padding-top: 0;
+}

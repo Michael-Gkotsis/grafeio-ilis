@@ -79,7 +79,13 @@ export class Session {
 
   /** Clicks a top-bar icon button by its aria-label (Ιστορικό ενεργειών, Οδηγός χρήσης…). */
   async top(ariaLabel) {
-    await this.page.locator(`[aria-label^="${ariaLabel}"]`).first().click();
+    const direct = this.page.locator(`[aria-label^="${ariaLabel}"]`);
+    if (await direct.count()) await direct.first().click();
+    else {
+      // U4: Ιστορικό ενεργειών and Υπόμνημα moved into the «⋯» menu of the top bar (the base side has no such button)
+      await this.page.locator('[aria-label^="Περισσότερα"]').click();
+      await this.page.locator('.topmore__menu [role=menuitem]').filter({ hasText: ariaLabel }).click();
+    }
     await this.quiet();
   }
 

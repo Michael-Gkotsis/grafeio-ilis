@@ -208,62 +208,14 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 @container (max-width:520px){.xl__meta{margin-left:0;flex-basis:100%}}
 
 /* ---------- app shell ---------- */
-/* σκούρα μπάρα πάνω, σκούρο μενού αριστερά (στενό: εικονίδιο με τίτλο από κάτω) */
+/* πάνω μπάρα 44 px και ομαδοποιημένο μενού (στενό: μόνο εικονίδια): app/styles/shell.css */
 .shell{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
 .shell.is-rail{--side-w:var(--rail-w)}
-.topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:10px 16px;min-height:var(--top-h);background:var(--bar);color:var(--bar-fg);position:sticky;top:env(safe-area-inset-top,0px);z-index:40}
-.topbar :focus-visible{outline-color:var(--gold)}
-.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;height:40px}
-.brand .logo{flex:none}
-.brand > span{font-family:var(--f-display);font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.05em}
-.brand small{font-family:var(--f-mono);font-weight:400;color:var(--bar-muted);font-size:13px;letter-spacing:0;text-transform:none;margin-left:6px}
-.searchbtn{flex:1;max-width:560px;display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border:1px solid var(--bar-line);border-radius:999px;background:var(--bar-field);color:var(--bar-muted);cursor:pointer;text-align:left;min-width:0}
-.searchbtn:hover{border-color:var(--bar-muted)}
-.searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.searchbtn .ui-kbd{background:transparent;border-color:var(--bar-line);color:var(--bar-muted)}
-/* στενή οθόνη (1024): μόνο ο φακός, όχι ένα σπασμένο «Ctrl K» */
-@media (max-width:1240px){.searchbtn{flex:none;width:40px;padding:0;justify-content:center}.searchbtn span,.searchbtn .ui-kbd{display:none}.topbar{gap:10px}.topbar__right{gap:6px}}
-.topbar__right{margin-left:auto;display:flex;align-items:center;gap:10px;min-width:0}
-.topbar__right > :not(.xlchip){flex-shrink:0} /* (review 29/10) στα 1024 το chip του Excel έσπρωχνε τη μπάρα στα 1050px και έκοβε την «Αναίρεση»: μικραίνει μόνο το chip, με «…» */
-.topbar .ui-btn--ghost{color:var(--bar-fg);border-color:var(--bar-line)}
-.topbar .ui-btn--ghost:hover{background:var(--bar-field);border-color:var(--bar-muted)}
-.topbar .ui-btn--outline{background:transparent;border-color:var(--bar-fg);color:var(--bar-fg)}
-.topbar .ui-btn--outline:hover{background:var(--bar-fg);color:var(--bar)}
-.topbar .ui-btn:disabled:not(.ui-btn--link),.xlcard .ui-btn:disabled:not(.ui-btn--link){background:transparent;color:var(--bar-muted);border-color:var(--bar-line)}
-.mockchip{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1b1f16;background:var(--gold);padding:3px 9px;border-radius:999px;white-space:nowrap}
-.today-lbl{display:flex;align-items:baseline;gap:8px;white-space:nowrap;font-family:var(--f-mono);color:var(--bar-muted);font-size:13px;text-transform:uppercase}
-.today-lbl b{color:var(--bar-fg);font-size:22px;font-weight:700;letter-spacing:.02em}
-button.today-lbl{background:none;border:0;padding:4px 6px;border-radius:8px;cursor:pointer}
-button.today-lbl:hover{background:rgba(255,255,255,.08)}
-.today-lbl .today-time{color:var(--gold);padding-left:8px;border-left:1px solid var(--bar-muted)}
-@media (max-width:1180px){.today-yr{display:none}}
 .clockbig{font-family:var(--f-mono);font-size:30px;font-weight:700}.clockbig small{display:block;margin-top:4px;font-size:13px;font-weight:400;color:var(--muted-fg);font-family:var(--f-body)}
 .clockcmp{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:10px 0 4px;font-size:14px}.clockcmp dt{color:var(--muted-fg)}.clockcmp dd{margin:0;font-family:var(--f-mono)}
 .syncbar{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 16px;background:var(--info-bg);border-bottom:1px solid var(--border);font-size:14px}
 .syncbar > div{flex:1;min-width:200px}
-/* το μενού μένει ορατό όσο κυλά η σελίδα (π.χ. στις Υπηρεσίες) */
-.sidenav{background:var(--rail);color:var(--bar-muted);padding:12px 10px;display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--top-h);height:calc(100vh - var(--top-h));align-self:start;z-index:30;overflow-x:hidden;overflow-y:auto}
-.sidenav :focus-visible{outline-color:var(--gold)}
-.navbtn{display:flex;align-items:center;gap:10px;height:42px;padding:0 12px;border:0;background:none;border-radius:10px;cursor:pointer;text-align:left;font-weight:600;width:100%;color:inherit}
-.navbtn:hover{background:var(--rail-on);color:var(--bar-fg)}
-.navbtn[aria-current="page"]{background:var(--rail-on);color:var(--bar-fg);box-shadow:inset 3px 0 0 var(--gold)}
-.is-rail .navbtn[aria-current="page"] svg{color:var(--gold)}
-.navbtn svg{width:20px;height:20px;flex:none}
-.navbtn .ui-badge{margin-left:auto;background:var(--bad-line);color:var(--on-bad);font-family:var(--f-mono);border-radius:999px}
-.navbtn .ui-badge--warn{background:var(--gold);color:var(--bar)}
-.navbtn__lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
-.is-rail .sidenav{padding:10px 6px}
-/* 11 οθόνες + σύμπτυξη χωρούν σε ύψος 768 (1366×768) χωρίς να κυλά το μενού· κάθε όνομα σε μία γραμμή */
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:48px;padding:5px 0;position:relative;text-align:center}
-.is-rail .navbtn[aria-current="page"]{box-shadow:none}
-.is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.3px}
-.is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
-.is-rail .sidenav__toggle{min-height:42px;font-size:11px}
-.is-rail .sidenav__toggle .navbtn__lbl{display:none}
-@media (max-height:700px){.is-rail .navbtn{min-height:44px;padding:4px 0}.is-rail .navbtn svg{width:18px;height:18px}}
-.is-rail .sidenav__sep{margin:4px 8px}
-.sidenav__sep{height:1px;background:var(--bar-line);margin:8px 4px}
+.xlcard .ui-btn:disabled:not(.ui-btn--link){background:transparent;color:var(--bar-muted);border-color:var(--bar-line)}
 .main{padding:20px 32px 48px;min-width:0}
 .bottomnav{display:none}
 
@@ -675,9 +627,6 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
 
 /* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
-.backbtn{margin:0 -4px 0 -6px;color:var(--muted-fg)}
-.backbtn:disabled{opacity:.35}
-.topbar .backbtn.ui-btn:disabled{border-color:transparent}
 .ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%;transition:border-color .12s,box-shadow .12s}
 .ui-select:hover{border-color:var(--muted-fg)}
 .ui-select:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
@@ -736,7 +685,6 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 [data-density="compact"] .ui-btn--sm{height:28px;padding:0 8px}
 [data-density="compact"] .ui-input{height:34px}
 [data-density="compact"] .ui-chip{height:28px;padding:0 10px}
-[data-density="compact"] .navbtn{height:36px}
 [data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
 [data-density="compact"] .ptable__row{font-size:13px}
 [data-density="compact"] .ptable__head > *{padding:6px 10px}
@@ -856,10 +804,6 @@ dl.kv dt.kv__sub{padding-left:14px;font-size:13px}
 dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .kv__check{display:inline-flex;gap:8px;align-items:center;cursor:pointer}
 /* ΕΣΣΟ πάνω δεξιά, δίπλα στην αναζήτηση */
-.essochip{display:inline-flex;align-items:baseline;gap:6px;height:30px;padding:0 12px;border:1px solid var(--gold);border-radius:999px;color:var(--bar-fg);white-space:nowrap;line-height:28px}
-.essochip small{font-size:11px;font-weight:600;letter-spacing:.6px;color:var(--gold)}
-.essochip b{font-size:13px;font-weight:700}
-@media (max-width:720px){.essochip small{display:none}.essochip{padding:0 8px}}
 /* Εξοδούχοι: όποιος δεν βγαίνει κατά τους κανόνες επιλέγεται με ⚠ */
 .orow__warn{color:var(--warn);font-weight:600}
 .orow__note{width:170px;flex:none;height:32px;padding:0 8px;font-size:13px}
@@ -1549,4 +1493,4 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .updnotes{margin:6px 0 0;padding-left:20px}.updnotes li{margin:3px 0}
 .updchip__short{display:none}
 /* στα 1024 το «Νέα έκδοση» έσπρωχνε την «Αναίρεση» έξω από την οθόνη: γίνεται «↑ Νέα» (όλο το κείμενο στη συμβουλή) */
-@media (max-width:1240px){.updchip{padding:0 8px}.updchip__long{display:none}.updchip__short{display:inline}.today-lbl{gap:6px}.today-lbl b{font-size:19px}.today-lbl .today-time{padding-left:6px}}
+@media (max-width:1240px){.updchip{padding:0 8px}.updchip__long{display:none}.updchip__short{display:inline}}

@@ -19,6 +19,7 @@
  *   pages      - co-located component CSS of the pages layer, imported by its slice.
  *   utilities  - single-purpose helper classes; the only place where !important is allowed.
  *   legacy     - today's whole stylesheet (legacy.css), emptied step by step by UI PRs. Last, so it wins as before.
+ *                shell.css (top bar, side menu, «⋯») is imported into it first, so legacy.css still wins ties (phone).
  *
  * Rules for every file: no CSS nesting (needs Chromium 112, Electron 22 has 108); BEM class names; no !important
  *   outside utilities (inside layers it inverts the priority between layers).
@@ -28,4 +29,5 @@
 
 @import url("../../shared/ui/tokens.css") layer(tokens);
 @import url("./boot.css") layer(base);
+@import url("./shell.css") layer(legacy);
 @import url("./legacy.css") layer(legacy);
