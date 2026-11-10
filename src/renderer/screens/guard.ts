@@ -17,14 +17,15 @@ import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
-import { dutyAt, isSat, isWk, outLbl } from '../../shared/weekend';
-import { backsAt, dayTimes, theDay, retDay, retWhen, returnsOn, stillOut, type Back } from '../../shared/returns';
+import { dutyAt, isSat, isWk } from '../../shared/weekend';
+import { dayTimes, theDay, returnsOn, stillOut } from '../../shared/returns';
 import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
-import { BackFixDialog, OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
+import { OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 import { BlockForm, useBlockForm } from '../blockForm';
 import { SkipsView } from './skips';
+import { ReturnsList } from './returnsList';
 type P = any;
 
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
@@ -568,22 +569,6 @@ const OutRow = memo(function OutRow({ p, unit, style, reason, away, awayTxt, val
     <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + rkFull(p)}>${(sat ? OUT_OPTS_SAT : OUT_OPTS).map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : (o.value === 'DN' || o.value === 'DNSK') && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; const aw: Status | null = o.value ? null : away || null; return html`<button key=${o.value} type="button" className=${aw ? 'is-away is-away--' + TYPES[aw.type].tone : warn ? 'is-warn' : undefined} data-tip=${aw ? AWAY_TIP : warn || (o.value === 'DNSK' ? DNSK_TIP : undefined)} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${aw ? awayName(aw) : o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
   </div>`;
 });
-// Ποιοι λείπουν τη μέρα d και πότε πρέπει να γυρίσουν, ανά μέρα επιστροφής· πρώτοι όσοι γυρίζουν για υπηρεσία.
-// fixable (οθόνη Εξοδούχοι): «Διόρθωση…» ανά εξοδούχο/ΔΝ. Όσοι δεν ξέρουμε πότε γυρίζουν (δεν έχει δηλωθεί η επόμενη μέρα) στο τέλος, με προειδοποίηση.
-const PENDING = 'Να δηλωθεί η επόμενη μέρα';
-// at (Σήμερα, λεπτά): χωρίς όσους γύρισαν ήδη ως τώρα (Michael, 2/11: έδειχνε ΚΑ που είχαν λήξει)
-export function ReturnsList({ date, limit, fixable, at }: { date: string; limit?: number; fixable?: boolean; at?: number }) {
-  const { state } = useStore(); const nav = useNav();
-  const list = useMemo(() => backsAt(state, returnsOn(state, date), date, at), [state, date, at]);
-  const [fix, setFix] = useState<Back | null>(null);
-  if (!list.length) return html`<div className="empty">Κανείς δεν λείπει.</div>`;
-  const shown = limit ? list.slice(0, limit) : list;
-  const grp = (b: Back) => (b.r.pending ? PENDING : retDay(b.r));
-  const days = [...new Set(shown.map(grp))];
-  return html`<div className="backs">${days.map(d => html`<div key=${d}><div className=${cx('backs__day', d === PENDING && 'txt-bad')}>${d}</div><ul className="rows">${shown.filter(b => grp(b) === d).map(b => html`<li key=${b.p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(b.p.id)}><${RkName} p=${b.p}/></button><span className=${b.r.duty || b.r.pending ? 'txt-bad' : 'muted'}><${Badge} tone=${TYPES[b.st.type].tone} className="tag">${TYPES[b.st.type].cat === 'out' ? outLbl(b.st) : statusLbl(b.st, state.settings.lists)}<//> ${retWhen(b.r)}${b.r.fix ? html` <${Badge} tone="outline" data-tip="Διόρθωση του γραφείου">διόρθωση<//>` : null}${fixable && TYPES[b.st.type].cat === 'out' ? html`<${Button} size="sm" variant="ghost" onClick=${() => setFix(b)} data-tip="Άλλαξε πότε γυρνά, με λόγο">Διόρθωση…<//>` : null}</span></li>`)}</ul></div>`)}
-    ${limit && list.length > limit && html`<p className="note rows__more">Και άλλοι ${list.length - limit} στους Εξοδούχους.</p>`}
-    ${fix && html`<${BackFixDialog} b=${fix} date=${date} onClose=${() => setFix(null)}/>`}</div>`;
-}
 const NO_NOTES: Record<number, string> = {};
 // Μορφή του Excel (Michael, 26/10, 30/10): Τωρινή ή Όλη η δύναμη. Η τελευταία επιλογή μένει στις ρυθμίσεις· ισχύει και στο ΠΣΚ και στο αυτόματο ξαναγράψιμο όσων έχουν βγει
 const OUTS_FMT_TIP = 'Τωρινή: Εξοδούχοι και Παραμένοντες σε δύο φύλλα. Όλη η δύναμη: κάθε άτομο μία φορά, σε δύο σελίδες: σελίδα 1 οι εξοδούχοι (Πίνακας Α), σελίδα 2 η υπόλοιπη δύναμη (είναι ήδη έξω, μένουν μέσα) με το άθροισμα της δύναμης και πότε γυρίζουν οι απόντες. Η επιλογή σου μένει και για τις επόμενες φορές.';

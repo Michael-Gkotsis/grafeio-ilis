@@ -13,6 +13,7 @@ import { addDays } from '../../shared/dates';
 import { clockChanged } from '../clock';
 import { useToast } from '../ui';
 import { useToday } from './hooks';
+import { holdPrefetch } from './prefetch';
 import type { StoreValue } from './store';
 
 /** The audit list keeps this many entries; the main process sends more only on a full refresh. */
@@ -31,7 +32,13 @@ function useCommands(cur: Latest, merge: Merge) {
   const toast = useToast();
   const run = useCallback(
     async (cmd: Command, okText?: string | false) => {
-      const r = await window.api.run(cmd);
+      const release = holdPrefetch(); // a chunk must not be parsed while this command waits for its answer
+      let r: CmdResult;
+      try {
+        r = await window.api.run(cmd);
+      } finally {
+        release();
+      }
       if (!r.ok) {
         toast({
           text: (

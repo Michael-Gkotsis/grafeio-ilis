@@ -5,26 +5,26 @@
 // Owner layer: renderer/app (architecture). Why: this table replaces `SCREENS: Record<string, [string, any, any]>`;
 //   a wrong id in a menu list or a missing screen now fails `tsc`.
 // Covering test: test/ux-names.test.ts (menu names), test/screens-main.test.ts, test/guide.test.ts (screen list).
-import { lazy, type ComponentType, type ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { FORM_PARAM } from '../../shared/repPage';
 import { HK } from '../../shared/unit';
 import { Icon } from '../ui';
-import { TodayScreen, RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen } from '../screens/other';
+import { TodayScreen } from '../screens/today';
+import { RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen } from '../screens/other';
 import { CadreScreen } from '../screens/cadre';
 import { PeopleScreen } from '../screens/people';
 import { GuardScreen, OutsScreen } from '../screens/guard';
 import { NotesScreen } from '../screens/notes';
 import { WeaponsScreen } from '../screens/weapons';
+import { SCREEN_SOURCES } from './loaders';
 import { SCREEN_IDS, type ScreenId } from './screenId';
 
 export { SCREEN_IDS };
 export type { Route, RouteParams, ScreenId } from './screenId';
 
-// Settings, Diagnostics, Reports and the Guide load when you open them: less code to read when the app starts.
-const TemplatesScreen = lazy(() => import('../screens/settings').then((m) => ({ default: m.TemplatesScreen })));
-const DiagScreen = lazy(() => import('../screens/diag').then((m) => ({ default: m.DiagScreen })));
-const ReportsScreen = lazy(() => import('../screens/reports').then((m) => ({ default: m.ReportsScreen })));
-const GuideScreen = lazy(() => import('../screens/guide').then((m) => ({ default: m.GuideScreen })));
+// Settings, Diagnostics, Reports and the Guide load when you open them (and earlier, when prefetch.ts finds the app
+// idle): less code to read when the app starts. See loaders.ts for the measured reason the others stay eager.
+const lazyScreen = (id: keyof typeof SCREEN_SOURCES): ComponentType => SCREEN_SOURCES[id].component;
 
 /** One row of the registry. `name` is the menu text; `hkai` is shown through {@link screenName} (ΗΚΑΙ or ΗΚΑΛ). */
 export interface ScreenEntry {
@@ -45,13 +45,13 @@ const TABLE: Record<ScreenId, Omit<ScreenEntry, 'id'>> = {
   strength: { name: 'Δύναμη', icon: Icon.strength, component: StrengthScreen },
   hkai: { name: 'ΗΚΑΙ', icon: Icon.file, component: HkaiScreen },
   weapons: { name: 'Οπλισμός', icon: Icon.weapon, component: WeaponsScreen },
-  reports: { name: 'Έντυπα', icon: Icon.print, component: ReportsScreen },
+  reports: { name: 'Έντυπα', icon: Icon.print, component: lazyScreen('reports') },
   notes: { name: 'Σημειώσεις', icon: Icon.notes, component: NotesScreen },
   history: { name: 'Ιστορικό', icon: Icon.history, component: HistoryScreen },
-  templates: { name: 'Ρυθμίσεις', icon: Icon.gear, component: TemplatesScreen },
-  guide: { name: 'Οδηγός', icon: Icon.help, component: GuideScreen },
+  templates: { name: 'Ρυθμίσεις', icon: Icon.gear, component: lazyScreen('templates') },
+  guide: { name: 'Οδηγός', icon: Icon.help, component: lazyScreen('guide') },
   // hidden: Ctrl+Shift+D or the search box
-  diag: { name: 'Διάγνωση', icon: Icon.gear, component: DiagScreen },
+  diag: { name: 'Διάγνωση', icon: Icon.gear, component: lazyScreen('diag') },
 };
 
 /** Every screen by id. */

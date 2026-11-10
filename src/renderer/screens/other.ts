@@ -1,148 +1,32 @@
 // Σήμερα, ιατρικά/ποινές, δύναμη, ΗΚΑΙ, ιστορικό, templates/εισαγωγή/ρυθμίσεις, αναζήτηση (Ctrl+K)
 import { RkName, rkFull, rkShort } from '../rankName';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useMedia, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Why, Card, Dialog, PageHeader, Segmented, Strip, Tabs, useMedia, useToast } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { useNowMin } from '../clock';
 import { LeaveEndDialog, StatusFixDialog } from './people';
 import { hasTimes, normTime, timeNames } from '../../shared/hours';
-import { DayFormsDialog } from './dayForms';
 import { HdTab } from './hd';
-import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, TemplateNote, TimeField, useUsbCopy } from '../common';
-import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
-import { noteDue, noteGroups, noteHead, noteWho } from '../../shared/notes';
-import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
-import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
-import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
-import { outCountOn } from '../../shared/weaponView';
-import { returnOf } from '../../shared/returns';
+import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, TemplateNote, TimeField } from '../common';
+import { hkaiFront, hkaiBack } from '../sheets';
+import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
+import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, hkaiCounts, personMap, strengthAt, type StatusPlan } from '../../shared/rules';
+import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
 import { collator, normGreek, upper } from '../../shared/text';
 import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
 import { byName, destNote, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
-import { SourcesAlert } from './srcStatus';
-import { appTitle } from '../../shared/brand';
 import { LeavesTab } from './leaves';
-import { live, medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
+import { medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, listOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
+import { SRC } from './today';
+import { reqWaiting } from './todayView';
 type P = any;
-
-export function TodayScreen() {
-  const { state, today, tomorrow, boot, audit } = useStore(); const nav = useNav(); const usb = useUsbCopy();
-  const [forms, setForms] = useState(false);
-  const due = usbDue(boot.lastUsb, today);
-  const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
-  const pm = personMap(state.people);
-  const now = useNowMin();
-  const c = useMemo(() => strengthOf(state, today, strengthAt(state.rules, today, today, now)), [state, today, now]);
-  // Απόντες σήμερα με τον λόγο και ως πότε· η λίστα τελειώνει στους 12, οι υπόλοιποι στη Δύναμη
-  const away = useMemo(() => {
-    const out: { p: Person; s: Status }[] = [];
-    // όπως η ΗΚΑΙ (ως τις 08:00 παρών), και μετά όποιος γύρισε ως τώρα (Michael, 20/10)
-    // και ο εξοδούχος/ΔΝ με την ώρα (παρών ως την αρχή εξόδου, απών ως την επιστροφή του), όπως η Δύναμη
-    const at = strengthAt(state.rules, today, today, now); activePeople(state).forEach(p => { const x = statusesAt(state, p.id, today, at).find(q => isAway(q, state.settings.lists)); if (x) out.push({ p, s: x }); });
-    return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
-  }, [state, today, now]);
-  // έξοδος/ΔΝ: ως πότε λείπει («ως 22:00», «ως Δευ 06:00»), αλλιώς «σήμερα» όταν δεν ξέρουμε πότε γυρνά
-  const outUntil = (s: Status) => { const r = returnOf(state, s.pid, s.from); return !r || r.pending || r.open ? 'σήμερα' : 'ως ' + (r.day === today ? '' : dow(r.day) + ' ') + r.time; };
-  const empty = frouraEmpty(state, tomorrow);
-  // κωλυόμενοι που δήλωσες σήμερα (υπηρεσία εκτός δικών μας), στην ίδια στιγμή με τους παρόντες
-  const kol = useMemo(() => kolView(state, today, strengthAt(state.rules, today, today, now)), [state, today, now]);
-  // Όπλα εκτός τώρα: όσους μετράει και η κεφαλίδα του Οπλισμού (κινήσεις και ένοπλες υπηρεσίες)
-  const wOut = useMemo(() => outCountOn(state, today, nowHM()), [state.people, state.settings, state.rules, state.guards, state.dutyLog, state.weaponLog, state.dutyFix, today, now]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // μία σάρωση όλων των καταστάσεων, μόνο όταν αλλάξουν (όχι σε κάθε απόδοση του «Σήμερα»)
-  const { ending, endTom, expired, nRec } = useMemo(() => {
-    const o = { ending: [] as Status[], endTom: [] as Status[], expired: [] as Status[], nRec: 0 };
-    for (const s of live(state)) {
-      const cat = TYPES[s.type].cat; const rec = RECORD_CATS.includes(cat); const known = pm.has(s.pid);
-      if (s.from <= today && s.to >= today && rec) o.nRec++;
-      if (!known) continue;
-      // μόνο ιατρικά και ποινές: οι άδειες φαίνονται στο «Ποιοι γυρίζουν» (όχι ο ίδιος τρεις φορές)
-      if (s.to === today && rec) o.ending.push(s);
-      if (s.to === tomorrow && (rec || s.type === 'PUN')) o.endTom.push(s);
-      if (isRecordExpiredOn(s, today)) o.expired.push(s);
-    }
-    return o;
-  }, [state.statuses, state.settings.lists, state.people, today, tomorrow]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const endTxt = (s: Status) => {
-    const t = TYPES[s.type]; if (t.cat === 'abs') return awayNow(s, today, now) ? 'Αναμένεται επιστροφή' + (s.toTime ? ' στις ' + s.toTime : '') : 'Γύρισε στις ' + s.toTime;
-    // άλλο ιατρικό που συνεχίζει αύριο: λέει τι μένει, όχι ότι ξαναμπαίνει
-    const rest = statusesOn(live(state), s.pid, tomorrow).filter(x => x.id !== s.id && TYPES[x.type].cat !== 'out');
-    const lbl = (x: Status) => statusLbl(x, state.settings.lists) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to));
-    const nd = rest.find(x => noDutyOf(x, state.settings.lists)), na = rest.find(x => TYPES[x.type].noArmed);
-    if (noDutyOf(s, state.settings.lists)) return nd ? 'Μένει ' + lbl(nd) : na ? 'Από αύριο ξαναμπαίνει σε υπηρεσίες, όχι σε ένοπλες (' + lbl(na) + ')' : 'Από αύριο ξαναμπαίνει σε υπηρεσίες';
-    if (t.noArmed) return nd || na ? 'Μένει ' + lbl((nd || na)!) : 'Από αύριο ξαναμπαίνει και σε ένοπλες θέσεις';
-    return 'Από αύριο μπορεί να βγει έξοδο';
-  };
-  const what = (s: Status) => (s.type === 'PUN' ? 'ποινή (' + punLbl(s.kind) + ')' : statusLbl(s, state.settings.lists));
-  if (!c.total) return html`<div className="onboard"><${Card} title=${'Καλώς ήρθες στο ' + appTitle(state.settings)}>
-    <p style=${{ marginTop: 0 }}>Για να ξεκινήσεις χρειάζεται το προσωπικό ${UNIT().nom === 'Λόχος' ? 'του Λόχου' : 'της Ίλης'}. Πάρ' το από το Δυναμολόγιο (το αρχείο .xlsm με το φύλλο «ΣΥΝΟΛΙΚΟ»).</p>
-    <ol><li>Πάτα <b>Εισαγωγή Δυναμολογίου</b> και διάλεξε το αρχείο.</li><li>Δες τι βρέθηκε και πάτα <b>Εισαγωγή</b>.</li><li>Στις <b>Ρυθμίσεις</b> βάλε τα στελέχη ανά βαθμό για την ${HK()}.</li></ol>
-    <${Button} onClick=${() => nav.go('templates', { tab: 'import' })}>Εισαγωγή Δυναμολογίου<//>
-  <//></div>`;
-  // Τι πρέπει να γίνει σήμερα (με αριθμό) και τι απλώς λήγει
-  const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
-  if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις ' + dutyStartOf(state.settings), urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
-  const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
-  if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση περιμένει απάντηση' : waiting.length + ' αιτήσεις περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
-  // σημειώσεις με υπενθύμιση που έφτασε (Michael, 24/10): πρώτες οι πιο παλιές
-  const remNotes = noteGroups((state.notes || []).filter(n => noteDue(n, today)), today).due;
-  if (remNotes.length) tasks.push({ key: 'notes', title: remNotes.length === 1 ? 'Σημείωση με υπενθύμιση' : remNotes.length + ' σημειώσεις με υπενθύμιση',
-    sub: remNotes.slice(0, 2).map(n => { const w = noteWho(state, n); return (w.kind === 'gen' ? '' : w.label + ': ') + '«' + noteHead(n.text, 46) + '»' + (n.rem! < today ? ' (εκπρόθεσμη)' : ''); }).join(' · ') + (remNotes.length > 2 ? ' · και ' + (remNotes.length - 2) + ' ακόμα' : ''),
-    urgent: remNotes.some(n => n.rem! < today), btn: 'Δες τις', fn: () => nav.go('notes', { nfilter: 'rem' }) });
-  if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
-  const ends = [
-    ...expired.map(s => ({ s, when: 'έληξε χθες, αφαιρέθηκε αυτόματα', tip: 'Από σήμερα δεν ισχύει· γράφτηκε στο Ιστορικό' })),
-    ...ending.map(s => ({ s, when: 'λήγει σήμερα', tip: endTxt(s) })),
-    ...endTom.map(s => ({ s, when: 'λήγει αύριο', tip: '' }))
-  ];
-  const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string) => html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
-  return html`<div>
-    <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις ' + dutyStartOf(state.settings) + '.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
-      <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setForms(true)} data-tip=${'Αυριανή ΦΡΟΥΡΑ, σημερινή ' + HK() + ' και Εξοδούχοι: ένας έλεγχος για όλα, μετά «Βγάλε όλα» ή «Τύπωσε όλα»'}>${Icon.print}Έντυπα ημέρας<//><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip="Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις">${HK()} σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
-    ${boot.dataFallback && html`<${Alert} tone="warn"><span><b>Τα δεδομένα είναι στο προφίλ του χρήστη</b> (${boot.dataDir}), όχι δίπλα στο GrafeioIlis.exe. Αν μεταφέρεις την εφαρμογή σε άλλο PC, πάρε μαζί και αυτόν τον φάκελο, ή κάνε «Αντίγραφο σε USB».</span><//>`}
-    <${SourcesAlert}/>
-    <div className="kpis">
-      ${kpi('Στρατιώτες', c.total, () => nav.go('people', { filter: 'all' }), undefined, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη, με τις 08:00')}
-      ${kpi('Παρόντες', c.present - kol.minus.length, () => nav.go('strength', { strengthDate: today, svCat: 'present' }), undefined, 'Χωρίς τους απόντες και τους κωλυόμενους που αφαιρούνται (' + kol.minus.length + '), όπως η Δύναμη')}
-      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today, svCat: 'away' }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
-      ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
-      ${wOut > 0 && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
-      ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
-    </div>
-    <div className="cols">
-      <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
-        ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
-      <//>
-      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
-        ${away.length ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? outUntil(s) : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}</ul>
-          ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
-      <//>
-    </div>
-    <div className="cols cols--b">
-      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
-        <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><small className="muted" style=${{ display: 'block' }}>${st.type === 'STEP' ? [TYPES.STEP.long, st.note].filter(Boolean).join(' · ') : st.type === 'LEAVE' ? [statusLbl(st, state.settings.lists), st.note].filter(Boolean).join(' · ') : st.note || 'Κωλυόμενος'}${st.noOut || st.type === 'LEAVE' ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· ' + (col && col !== '-' ? 'στην ' + HK() + ': ' + kolColName(col) : 'δεν μετρά σε στήλη της ' + HK()) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? (col && col !== '-' ? kolColName(col) : 'εκτός ' + HK()) : 'παρών'}<//></li>`)}</ul>
-        <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
-      <//>`}
-      ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12} at=${strengthAt(state.rules, today, today, now)}/><//>`}
-      ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
-        <ul className="rows">${ends.map(({ s, when, tip }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${pm.get(s.pid)!}/></button><span className="muted" data-tip=${tip || undefined} data-tip-side="left">${what(s)} · ${when}</span></li>`)}</ul>
-      <//>`}
-      ${news.length > 0 && html`<${Card} flush=${true} title="Από το προηγούμενο άνοιγμα" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('history')}>Όλο το ιστορικό<//>`}>
-        <ul className="log log--compact">${news.slice(0, 10).map(e => html`<li key=${e.id}><span className="log__time">${e.day === today ? '' : dow(e.day) + ' ' + dm(e.day) + ' '}<b>${e.at}</b></span><div>${e.text}</div><span className="log__src">${SRC[e.source][0]}</span></li>`)}</ul>
-        ${news.length > 10 && html`<p className="note" style=${{ margin: '8px 0 0' }}>Και άλλες ${news.length - 10} ενέργειες στο Ιστορικό.</p>`}
-      <//>`}
-    </div>
-    ${forms && html`<${DayFormsDialog} onClose=${() => setForms(false)}/>`}
-  </div>`;
-}
 
 // Ιατρικά: δικό τους μενού. Ποινές: καρτέλα μέσα στο μενού ΗΚΑΙ (Michael, 18/10). Ίδια λίστα, άλλο φίλτρο.
 export function RecordsScreen() { return html`<${RecordList} mode="med"/>`; }
@@ -473,7 +357,6 @@ function HkaiSectionsCard() {
 }
 // 5. ΑΙΤΗΣΕΙΣ: αιτήσεις στρατιωτών της μέρας, αριθμημένες όπως θα βγουν στην ΗΚΑΙ. Όλες οι αιτήσεις περιμένουν «Εγκρίθηκε» ή
 // «Απορρίφθηκε» (1/11)· η αίτηση άδειας με την έγκριση γίνεται άδεια (στην ΗΚΑΙ μένει μόνο η αίτηση). Οι παλιές χωρίς απάντηση (old) δεν μετρούν.
-export const reqWaiting = (rs: PersonRequest[]) => rs.filter(isWaiting);
 function RequestsCard({ date }: { date: string }) {
   const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
   const [edit, setEdit] = useState<Partial<PersonRequest> | null>(null);
@@ -561,7 +444,6 @@ export function RequestDialog({ req, onClose }: { req: Partial<PersonRequest>; o
   <//>`;
 }
 
-const SRC: Record<string, [string, string]> = { app: ['Εφαρμογή', 'outline'], excel: ['Excel', 'info'], import: ['Εισαγωγή', 'ey'], auto: ['Αυτόματα', 'ok'] };
 const HISTORY_PAGE = 60;
 export function HistoryScreen() {
   const { audit, today, undo } = useStore();

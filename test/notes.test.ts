@@ -16,7 +16,8 @@ import { buttonsOf, flat, textOfHtml, textsIn } from './support/html';
 import { readSources, SRC_DIR } from './support/source-scan';
 import { appRenderer, loadWorld, renderCase as renderCaseOf, withState, type BehaviourWorld } from './support/behaviour';
 import { activePeople } from '../src/shared/rules';
-import { CommandPalette, HkaiScreen, TodayScreen } from '../src/renderer/screens/other';
+import { CommandPalette, HkaiScreen } from '../src/renderer/screens/other';
+import { TodayScreen } from '../src/renderer/screens/today';
 import { NoteDialog, NotesTab } from '../src/renderer/screens/notes';
 import { PeopleScreen, PersonSheet } from '../src/renderer/screens/people';
 
