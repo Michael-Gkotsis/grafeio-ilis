@@ -53,24 +53,21 @@ describe('διάταξη', () => {
     }
     expect(header.indexOf('page-head__acts')).toBeGreaterThan(0);
   });
-  it('μενού: ο Οδηγός και το Ιστορικό βγήκαν (? και F1, ρολόι πάνω δεξιά), μπήκαν οι Σημειώσεις· κουμπιά 48/44 px ώστε να χωρά και σε ύψος 638', () => {
+  it('μενού: ο Οδηγός και το Ιστορικό βγήκαν (? και «⋯»), μπήκαν οι Σημειώσεις· κουμπιά 34 px ώστε να χωρά σε 1366×698 χωρίς κύλιση', () => {
     const out = H.renderApp(bw.world, { nav: 'rail' });
     const html = flatten(out);
     const nav = /<nav class="sidenav"[^>]*>(.*?)<\/nav>/.exec(html)![1];
     const items = [...nav.matchAll(/<button[^>]*class="navbtn"[^>]*aria-label="([^"]*)"/g)].map(m => m[1].replace(/ \(\d+\)$/, ''));
     expect(items).toContain('Σημειώσεις'); expect(items).not.toContain('Οδηγός'); expect(items).not.toContain('Ιστορικό');
-    expect(items.at(-1)).toBe('Ρυθμίσεις');   // «Άλλα» below the separator is Ρυθμίσεις only
-    expect(html).toContain('aria-label="Ιστορικό ενεργειών"');   // the history is the clock button of the top bar
-    expect(html).toContain('aria-label="Οδηγός χρήσης"');          // and the guide the «?» button
+    expect(items.at(-1)).toBe('Ρυθμίσεις');   // Ρυθμίσεις is the last screen, pushed to the bottom
+    expect(html).toContain('aria-label="Περισσότερα"');       // U4: the history is an item of the «⋯» menu of the top bar
+    expect(html).toContain('aria-label="Οδηγός χρήσης"');     // and the guide the «?» button
     const nMenu = items.length;
-    // στενό μενού: κουμπιά, ο διακόπτης, η γραμμή και τα περιθώρια. 1366×768 χωρίς γραμμή εργασιών: 708 px για το μενού·
-    // στο PC με τη γραμμή εργασιών (698 ύψος): 638, όπου τα κουμπιά γίνονται 44 px
-    const fit = (h: number) => nMenu * h + 42 + 9 + 20 + (nMenu + 1) * 2;
-    expect(fit(48)).toBeLessThanOrEqual(708);
-    expect(fit(44)).toBeLessThanOrEqual(638);
+    // one column: padding 16 + 3 headings (12 + 14 + 4) + the gap before Notes 12 + Settings block 8 + fold button 34 + 1 px gaps
+    const fit = (rowHeight: number) => nMenu * rowHeight + 16 + 3 * 30 + 12 + 8 + 34 + nMenu;
+    expect(fit(34)).toBeLessThanOrEqual(698 - 44);   // the PC with a task bar: 698 high, 44 of them the top bar
     expect(html).toContain('class="shell is-rail"');
-    expect(declsOf('.is-rail .navbtn').some(d => d['min-height'] === '48px')).toBe(true);
-    expect(declsOf('.is-rail .navbtn', /max-height:\s*700px/).some(d => d['min-height'] === '44px')).toBe(true);
+    expect(declsOf('.navbtn').some(d => d.height === 'var(--h-row)')).toBe(true);   // compact density shrinks it through the token
   });
   it('F1 = Οδηγός, Shift+F1 = Υπόμνημα, και το Υπόμνημα είναι θέμα του Οδηγού', () => {
     const open = () => {

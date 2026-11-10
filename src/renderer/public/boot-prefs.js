@@ -5,7 +5,7 @@
  *   or throw. Any problem leaves the defaults, the same as prefs.ts does.
  * Why a plain file: CSP is script-src 'self', so no inline script; plain ES2017 (no bundler) runs before the CSS.
  * Mirrors: prefs.ts (loadPrefs/applyPrefs: data-theme, data-density, old key grafeio.nav) and app.ts
- *   (usePrefsState: nav 'auto' is the rail below 1500 px). Covering test: test/boot-skeleton.test.ts.
+ *   (usePrefsState: nav 'auto' is the rail below 1280 px). Covering test: test/boot-skeleton.test.ts.
  */
 (() => {
   let theme = 'auto',
@@ -28,6 +28,6 @@
   const root = document.documentElement;
   if (theme !== 'auto') root.setAttribute('data-theme', theme);
   root.setAttribute('data-density', density);
-  const rail = nav === 'auto' ? window.innerWidth < 1500 : nav === 'rail';
+  const rail = nav === 'auto' ? window.innerWidth < 1280 : nav === 'rail';
   if (rail) root.setAttribute('data-boot-nav', 'rail');
 })();

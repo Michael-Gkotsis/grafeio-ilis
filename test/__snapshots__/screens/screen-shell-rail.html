@@ -1,12 +1,7 @@
 <div class="shell is-rail">
   <header class="topbar">
-    <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon backbtn" disabled="" aria-label="Πίσω" data-tip="Πίσω (Alt+←)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M19 12H5M11 18l-6-6 6-6"/>
-      </svg>
-    </button>
-    <div class="brand" data-tip="Έκδοση dev">
-      <svg class="logo" viewBox="0 0 64 64" width="30" height="30" aria-hidden="true">
+    <div class="brand" data-tip="Γραφείο Λοχία · Έκδοση dev" data-tip-side="bottom">
+      <svg class="logo" viewBox="0 0 64 64" width="24" height="24" aria-hidden="true">
         <defs>
           <linearGradient id="lg-f" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="#5b7f2b"/>
@@ -24,20 +19,20 @@
         <path d="M19 37 L32 30 L45 37 V42.5 L32 35.5 L19 42.5 Z" fill="url(#lg-g)"/>
         <path d="M19 45.5 L32 38.5 L45 45.5 V51 L32 44 L19 51 Z" fill="url(#lg-g)"/>
       </svg>
-      <span>
+      <span class="brand__text">
         Γραφείο Λοχία
         <small>
           4η ΙΛΗ
         </small>
       </span>
     </div>
-    <button type="button" class="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)">
+    <button type="button" class="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο, οθόνη ή ενέργεια από οπουδήποτε (Ctrl+K)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="18" height="18">
         <circle cx="11" cy="11" r="7"/>
         <path d="M20 20l-3.5-3.5"/>
       </svg>
       <span>
-        Αναζήτηση προσώπου ή ενέργειας…
+        Βρες άνθρωπο, οθόνη ή ενέργεια…
       </span>
       <kbd class="ui-kbd">
         Ctrl K
@@ -55,14 +50,8 @@
       <span class="mockchip" data-tip="Δοκιμή στον browser: φανταστικά δεδομένα, τίποτα δεν αποθηκεύεται" data-tip-side="left">
         Δοκιμαστικό
       </span>
-      <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)" data-tip-side="left">
-        Υπόμνημα
-      </button>
-      <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Ιστορικό ενεργειών" data-tip="Ιστορικό ενεργειών και αναίρεση" data-tip-side="bottom">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
-          <path d="M3 3v5h5M12 7v5l3 2"/>
-        </svg>
+      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Αναίρεση: Δήλωση: άδεια (10:40) · Ctrl+Z" data-tip-side="left">
+        Αναίρεση
       </button>
       <button type="button" class="ui-btn ui-btn--ghost ui-btn--icon" aria-label="Οδηγός χρήσης" data-tip="Οδηγός: πώς δουλεύει αυτή η οθόνη και τι επηρεάζει (F1)" data-tip-side="left">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -71,147 +60,166 @@
           <circle cx="12" cy="17.2" r="0.6" fill="currentColor"/>
         </svg>
       </button>
+      <div class="topmore">
+        <button type="button" class="ui-btn ui-btn--outline ui-btn--sm topmore__btn" aria-haspopup="menu" aria-expanded="false" aria-label="Περισσότερα" data-tip="Περισσότερα: Πίσω, Ιστορικό, Υπόμνημα, Διάγνωση" data-tip-side="bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.5"/>
+            <circle cx="12" cy="12" r="1.5"/>
+            <circle cx="19" cy="12" r="1.5"/>
+          </svg>
+        </button>
+      </div>
       <button type="button" class="today-lbl" aria-label="Σήμερα Δευ 09/11/2026 ώρα 11:00" data-tip="Η ώρα της εφαρμογής (Ελλάδα, Αθήνα). Με αυτήν μετρούν η ΗΚΑΙ των 08:00, οι έξοδοι και οι επιστροφές. Κλικ: Ρυθμίσεις › Ώρα και ζώνη ώρας" data-tip-side="bottom">
-        Δευ
-        <b>
-          09/11
-          <span class="today-yr">
-            /2026
-          </span>
-        </b>
+        <span class="today-lbl__day">
+          Δευ 09/11
+        </span>
         <b class="today-time">
           11:00
         </b>
       </button>
-      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Αναίρεση: Δήλωση: άδεια (10:40) · Ctrl+Z" data-tip-side="left">
-        Αναίρεση
-      </button>
     </div>
   </header>
   <nav class="sidenav" aria-label="Κύριο μενού">
-    <button type="button" class="navbtn" aria-current="page" aria-label="Σήμερα" aria-keyshortcuts="Alt+1" data-tip="Σήμερα (Alt+1)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Σήμερα
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Δυναμολόγιο" aria-keyshortcuts="Alt+2" data-tip="Δυναμολόγιο (Alt+2)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="9" cy="8" r="3.5"/>
-        <path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/>
-        <circle cx="17" cy="9" r="2.5"/>
-        <path d="M16 14.6c2.7.2 4.6 2 5.3 5"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Δυναμολόγιο
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Στελέχη" aria-keyshortcuts="Alt+3" data-tip="Στελέχη (Alt+3)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="12" cy="7" r="3.5"/>
-        <path d="M5 21c.9-4 3.7-6.5 7-6.5s6.1 2.5 7 6.5"/>
-        <path d="M8.5 17.5l3.5-1.8 3.5 1.8"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Στελέχη
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Υπηρεσίες (10)" aria-keyshortcuts="Alt+4" data-tip="Υπηρεσίες: 10 κενές θέσεις αύριο (Alt+4)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/>
-        <path d="M9 12l2 2 4-4"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Υπηρεσίες
-      </span>
-      <span class="ui-badge ui-badge--bad" data-tip-side="left">
-        10
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Εξοδούχοι" aria-keyshortcuts="Alt+5" data-tip="Εξοδούχοι (Alt+5)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M14 3h5a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-5"/>
-        <path d="M9 17l5-5-5-5M14 12H3"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Εξοδούχοι
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Ιατρικά" aria-keyshortcuts="Alt+6" data-tip="Ιατρικά (Alt+6)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="3"/>
-        <path d="M12 8v8M8 12h8"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Ιατρικά
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Δύναμη" aria-keyshortcuts="Alt+7" data-tip="Δύναμη (Alt+7)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="2"/>
-        <path d="M7 15v-3M12 15V8M17 15v-5"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Δύναμη
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="ΗΚΑΙ (1)" aria-keyshortcuts="Alt+8" data-tip="ΗΚΑΙ: 1 αιτήσεις περιμένουν (Alt+8)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/>
-        <path d="M14 3v5h5M9 13h6M9 17h6"/>
-      </svg>
-      <span class="navbtn__lbl">
-        ΗΚΑΙ
-      </span>
-      <span class="ui-badge ui-badge--warn" data-tip-side="left">
-        1
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Οπλισμός" aria-keyshortcuts="Alt+9" data-tip="Οπλισμός (Alt+9)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="12" cy="12" r="7.5"/>
-        <path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>
-        <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Οπλισμός
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Έντυπα" data-tip="Έντυπα (Ctrl+E)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M7 9V3h10v6"/>
-        <rect x="3" y="9" width="18" height="8" rx="1.5"/>
-        <path d="M7 14h10v7H7z"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Έντυπα
-      </span>
-    </button>
-    <button type="button" class="navbtn" aria-label="Σημειώσεις (1)" data-tip="Σημειώσεις: 1 υπενθυμίσεις σημειώσεων" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M5 4h14a1 1 0 0 1 1 1v9l-6 6H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>
-        <path d="M14 20v-5a1 1 0 0 1 1-1h5M8 9h8M8 13h4"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Σημειώσεις
-      </span>
-      <span class="ui-badge ui-badge--bad" data-tip-side="left">
-        1
-      </span>
-    </button>
-    <div class="sidenav__sep">
+    <div role="group" class="sidenav__grp" aria-labelledby="sidenav-grp-0">
+      <div class="sidenav__group" id="sidenav-grp-0">
+        ΗΜΕΡΑ
+      </div>
+      <button type="button" class="navbtn" aria-current="page" aria-label="Σήμερα" aria-keyshortcuts="Alt+1" data-tip="Σήμερα (Alt+1)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Σήμερα
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Υπηρεσίες (10)" aria-keyshortcuts="Alt+4" data-tip="Υπηρεσίες: 10 κενές θέσεις αύριο (Alt+4)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Υπηρεσίες
+        </span>
+        <span class="ui-badge ui-badge--bad" data-tip-side="left">
+          10
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Εξοδούχοι" aria-keyshortcuts="Alt+5" data-tip="Εξοδούχοι (Alt+5)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14 3h5a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-5"/>
+          <path d="M9 17l5-5-5-5M14 12H3"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Εξοδούχοι
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Δύναμη" aria-keyshortcuts="Alt+7" data-tip="Δύναμη (Alt+7)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M7 15v-3M12 15V8M17 15v-5"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Δύναμη
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="ΗΚΑΙ (1)" aria-keyshortcuts="Alt+8" data-tip="ΗΚΑΙ: 1 αιτήσεις περιμένουν (Alt+8)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/>
+          <path d="M14 3v5h5M9 13h6M9 17h6"/>
+        </svg>
+        <span class="navbtn__lbl">
+          ΗΚΑΙ
+        </span>
+        <span class="ui-badge ui-badge--warn" data-tip-side="left">
+          1
+        </span>
+      </button>
     </div>
-    <button type="button" class="navbtn" aria-label="Ρυθμίσεις" aria-keyshortcuts="Alt+0" data-tip="Ρυθμίσεις (Alt+0)" data-tip-side="right">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
-      </svg>
-      <span class="navbtn__lbl">
-        Ρυθμίσεις
-      </span>
-    </button>
+    <div role="group" class="sidenav__grp" aria-labelledby="sidenav-grp-1">
+      <div class="sidenav__group" id="sidenav-grp-1">
+        ΑΝΘΡΩΠΟΙ
+      </div>
+      <button type="button" class="navbtn" aria-label="Δυναμολόγιο" aria-keyshortcuts="Alt+2" data-tip="Δυναμολόγιο (Alt+2)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="9" cy="8" r="3.5"/>
+          <path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/>
+          <circle cx="17" cy="9" r="2.5"/>
+          <path d="M16 14.6c2.7.2 4.6 2 5.3 5"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Δυναμολόγιο
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Στελέχη" aria-keyshortcuts="Alt+3" data-tip="Στελέχη (Alt+3)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="7" r="3.5"/>
+          <path d="M5 21c.9-4 3.7-6.5 7-6.5s6.1 2.5 7 6.5"/>
+          <path d="M8.5 17.5l3.5-1.8 3.5 1.8"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Στελέχη
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Ιατρικά" aria-keyshortcuts="Alt+6" data-tip="Ιατρικά (Alt+6)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M12 8v8M8 12h8"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Ιατρικά
+        </span>
+      </button>
+    </div>
+    <div role="group" class="sidenav__grp" aria-labelledby="sidenav-grp-2">
+      <div class="sidenav__group" id="sidenav-grp-2">
+        ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ
+      </div>
+      <button type="button" class="navbtn" aria-label="Έντυπα" data-tip="Έντυπα (Ctrl+E)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M7 9V3h10v6"/>
+          <rect x="3" y="9" width="18" height="8" rx="1.5"/>
+          <path d="M7 14h10v7H7z"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Έντυπα
+        </span>
+      </button>
+      <button type="button" class="navbtn" aria-label="Οπλισμός" aria-keyshortcuts="Alt+9" data-tip="Οπλισμός (Alt+9)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5"/>
+          <path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>
+          <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Οπλισμός
+        </span>
+      </button>
+    </div>
+    <div role="group" class="sidenav__grp sidenav__grp--bare">
+      <button type="button" class="navbtn" aria-label="Σημειώσεις (1)" data-tip="Σημειώσεις: 1 υπενθυμίσεις σημειώσεων" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M5 4h14a1 1 0 0 1 1 1v9l-6 6H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>
+          <path d="M14 20v-5a1 1 0 0 1 1-1h5M8 9h8M8 13h4"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Σημειώσεις
+        </span>
+        <span class="ui-badge ui-badge--bad" data-tip-side="left">
+          1
+        </span>
+      </button>
+    </div>
+    <div class="sidenav__more">
+      <button type="button" class="navbtn" aria-label="Ρυθμίσεις" aria-keyshortcuts="Alt+0" data-tip="Ρυθμίσεις (Alt+0)" data-tip-side="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+        <span class="navbtn__lbl">
+          Ρυθμίσεις
+        </span>
+      </button>
+    </div>
     <button type="button" class="navbtn sidenav__toggle" aria-expanded="false" aria-label="Άνοιγμα μενού" data-tip="Άνοιγμα μενού (Ctrl+B)" data-tip-side="right">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="2"/>

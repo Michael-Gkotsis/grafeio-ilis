@@ -34,9 +34,12 @@ beforeAll(async () => {
     const seen = new Set<string>([viewNow()]);
     const menu = flat(app.render()).match(/<nav class="sidenav"[^>]*>(.*?)<\/nav>/)![1];
     const labels = [...menu.matchAll(/<span class="navbtn__lbl">([^<]*)</g)].map(m => m[1]).filter(l => !/μενού|Άνοιγμα/.test(l));
-    for (const label of [...labels, 'Ιστορικό ενεργειών', 'Οδηγός χρήσης']) {
+    for (const label of [...labels, 'Οδηγός χρήσης']) {
       app.press(new RegExp('^' + label), { index: 0 }); app.render(); seen.add(viewNow());
     }
+    // U4: the history button moved into the «⋯» menu of the top bar
+    app.press('Περισσότερα'); app.render();
+    app.press(/^Ιστορικό ενεργειών/, { index: 0 }); app.render(); seen.add(viewNow());
     keys.dispatch('keydown', { key: 'D', ctrlKey: true, shiftKey: true }); app.render(); seen.add(viewNow());   // the hidden Διάγνωση
     views = [...seen];
   } finally { app.stop(); keys.restore(); keys = null; }

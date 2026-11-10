@@ -296,19 +296,20 @@ describe('σύνδεση στην εφαρμογή', () => {
     await settle();
     expect(run).toHaveBeenCalledWith({ t: 'addNote', note: { text: typed, pids: [a.id, b.id] } }, false);
   });
-  it('μενού: Σημειώσεις μετά τα Έντυπα, με αριθμό υπενθυμίσεων· Ιστορικό από την πάνω μπάρα', () => {
+  it('μενού: Σημειώσεις μετά τις ομάδες, με αριθμό υπενθυμίσεων· Ιστορικό από την πάνω μπάρα', () => {
     const s = openApp();
     const out = s.render();
     const side = flat(out).match(/<nav class="sidenav"[^>]*>(.*?)<\/nav>/)![1];
     const labels = [...side.matchAll(/<span class="navbtn__lbl">([^<]*)</g)].map(m => m[1]);
-    expect(labels.indexOf('Σημειώσεις')).toBe(labels.indexOf('Έντυπα') + 1);
+    expect(labels.indexOf('Σημειώσεις')).toBe(labels.indexOf('Οπλισμός') + 1);   // U4: Notes follow the last group (ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ)
     // the badge on «Σημειώσεις» is the number of reminders that arrived
     const due = dueCount(bw.world.state.notes, H.TODAY);
     expect(due).toBeGreaterThan(0);
     expect(side).toMatch(new RegExp('Σημειώσεις</span><span class="ui-badge ui-badge--bad"[^>]*>' + due + '<'));
     s.press(/^Σημειώσεις/, { index: 0 });
     expect(h1(s.render())).toBe('Σημειώσεις');
-    s.press('Ιστορικό ενεργειών');   // the history button of the top bar
+    s.press('Περισσότερα'); s.render();   // U4: the history item lives in the «⋯» menu of the top bar
+    s.press(/^Ιστορικό ενεργειών/);
     expect(h1(s.render())).toBe('Ιστορικό');
   });
   it('Ctrl+Shift+N (νέα σημείωση) προηγείται του Ctrl+N (δήλωση), και δένει στην ανοιχτή καρτέλα στρατιώτη ή στελέχους', () => {

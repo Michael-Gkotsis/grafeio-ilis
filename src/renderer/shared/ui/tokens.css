@@ -164,6 +164,13 @@
   --bar-line: var(--p-neutral-580);
   --rail: var(--p-olive-820);
   --rail-on: var(--p-olive-740);
+  --nav-bg: var(--p-neutral-50);
+  --nav-fg: var(--p-neutral-860);
+  --nav-muted: var(--p-neutral-715);
+  --nav-hover: var(--p-olive-80);
+  --nav-on: var(--p-olive-125);
+  --nav-on-fg: var(--p-olive-850);
+  --nav-accent: var(--p-olive-775);
   --gold: var(--p-gold-465);
   --band: var(--p-neutral-105);
   --band-fg: var(--p-olive-850);
@@ -190,9 +197,9 @@
   --f-body: "Segoe UI", Tahoma, Arial, sans-serif;
   --f-mono: Consolas, "Courier New", monospace;
   --nav-h: 62px;
-  --top-h: 60px;
-  --side-w: 236px;
-  --rail-w: 88px;
+  --top-h: 44px;
+  --side-w: 196px;
+  --rail-w: 60px;
 }
 /* σκοτεινό θέμα «Όπως τα Windows»: ίδιοι selectors με πριν ώστε να μείνει ίδια η ειδικότητα */
 @media (prefers-color-scheme: dark) {
@@ -235,6 +242,13 @@
     --bar-line: var(--p-neutral-625);
     --rail: var(--p-olive-880);
     --rail-on: var(--p-olive-750);
+    --nav-bg: var(--p-neutral-855);
+    --nav-fg: var(--p-neutral-65);
+    --nav-muted: var(--p-neutral-200);
+    --nav-hover: var(--p-neutral-790);
+    --nav-on: var(--p-olive-750);
+    --nav-on-fg: var(--p-olive-50);
+    --nav-accent: var(--p-olive-285);
     --gold: var(--p-gold-470);
     --band: var(--p-neutral-810);
     --band-fg: var(--p-olive-125);
@@ -298,6 +312,13 @@
   --bar-line: var(--p-neutral-625);
   --rail: var(--p-olive-880);
   --rail-on: var(--p-olive-750);
+  --nav-bg: var(--p-neutral-855);
+  --nav-fg: var(--p-neutral-65);
+  --nav-muted: var(--p-neutral-200);
+  --nav-hover: var(--p-neutral-790);
+  --nav-on: var(--p-olive-750);
+  --nav-on-fg: var(--p-olive-50);
+  --nav-accent: var(--p-olive-285);
   --gold: var(--p-gold-470);
   --band: var(--p-neutral-810);
   --band-fg: var(--p-olive-125);
@@ -333,9 +354,6 @@
   /* μεγέθη στοιχείων */
   --h-ctl: 32px;
   --h-row: 34px;
-  --top-h-new: 44px;
-  --nav-w: 196px;
-  --rail-w-new: 60px;
   --dock-w: 420px;
   --chip-h: 22px;
   --target-min: 24px;

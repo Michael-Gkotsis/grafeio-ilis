@@ -1,9 +1,9 @@
-// The top bar: back button, brand, search button, ESSO chip, update/Excel chips, legend, history, guide, clock, undo.
+// The top bar (44 px): brand, search, ESSO chip, update/Excel chips, undo, guide, «⋯» menu and clock.
 // Purpose: `TopBar` draws the header from props and the store; every click calls back into the shell.
 // Does NOT: keep state, bind keys (useShortcuts.ts) or decide the texts of the clock and undo (useShellInfo.ts).
 // Owner layer: renderer/app. Why: it was the first 25 lines of Shell's markup. It re-renders with Shell on purpose, so
-//   the clock text and tooltips stay as fresh as before.
-// Covering test: test/screens-main.test.ts (screen-shell-full / screen-shell-rail snapshots), test/guide.test.ts.
+//   the clock text and tooltips stay as fresh as before. Back, Legend and History moved into TopBarMore.tsx.
+// Covering test: test/screens-main.test.ts (screen-shell-full / screen-shell-rail snapshots), test/shell-nav.test.ts.
 import type { AuditEntry } from '../../shared/domain';
 import type { ISODate } from '../../shared/dates';
 import type { UpdInfo } from '../../shared/api';
@@ -12,6 +12,7 @@ import { dm, dmy, dow } from '../../shared/dates';
 import { Button, Icon, Kbd, Logo } from '../ui';
 import { UpdateChip } from '../update';
 import { ExcelChip } from './ExcelChip';
+import { TopBarMore } from './TopBarMore';
 import { useNav, type Nav } from './nav';
 import { screenName } from './routes';
 import type { ScreenId } from './screenId';
@@ -47,11 +48,9 @@ function clockButton(p: Pick<TopBarProps, 'hm' | 'clockTip'>, today: ISODate, go
       data-tip-side="bottom"
       onClick={() => go('templates', { tab: 'clock' })}
     >
-      {dow(today)}
-      <b>
-        {dm(today)}
-        <span className="today-yr">{dmy(today).slice(5)}</span>
-      </b>
+      <span className="today-lbl__day">
+        {dow(today)} {dm(today)}
+      </span>
       <b className="today-time">{p.hm}</b>
     </button>
   );
@@ -82,7 +81,7 @@ function undoButton(lastUndo: AuditEntry | undefined, today: ISODate, undo: Stor
   );
 }
 
-/** The right side of the bar: update and Excel chips, legend, history, guide, clock, undo. */
+/** The right side of the bar: update and Excel chips, undo, guide, «⋯» menu and clock. */
 function TopBarTools(p: TopBarProps) {
   const { boot, today, undo } = useStore();
   const { view, go } = useNav();
@@ -100,26 +99,7 @@ function TopBarTools(p: TopBarProps) {
           Δοκιμαστικό
         </span>
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        data-tip="Τι σημαίνει κάθε κωδικός (Shift+F1)"
-        data-tip-side="left"
-        onClick={p.onOpenLegend}
-      >
-        Υπόμνημα
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Ιστορικό ενεργειών"
-        data-tip="Ιστορικό ενεργειών και αναίρεση"
-        data-tip-side="bottom"
-        className={view === 'history' ? 'is-on' : undefined}
-        onClick={() => go('history')}
-      >
-        {Icon.history}
-      </Button>
+      {undoButton(lastUndo, today, undo)}
       <Button
         variant="ghost"
         size="icon"
@@ -130,8 +110,17 @@ function TopBarTools(p: TopBarProps) {
       >
         {Icon.help}
       </Button>
+      <TopBarMore
+        backTo={p.backTo ? screenName(p.backTo) : undefined}
+        hasUpdate={!!p.upd && (!!p.upd.avail || p.upd.phase !== 'idle')}
+        routeKey={view}
+        onBack={p.goBack}
+        onOpenHistory={() => go('history')}
+        onOpenLegend={p.onOpenLegend}
+        onOpenUpdate={p.onOpenUpdate}
+        onOpenDiag={() => go('diag')}
+      />
       {clockButton(p, today, go)}
-      {undoButton(lastUndo, today, undo)}
     </div>
   );
 }
@@ -141,20 +130,9 @@ export function TopBar(p: TopBarProps) {
   const { state, boot } = useStore();
   return (
     <header className="topbar">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="backbtn"
-        aria-label="Πίσω"
-        data-tip={p.backTo ? 'Πίσω στο ' + screenName(p.backTo) + ' (Alt+←)' : 'Πίσω (Alt+←)'}
-        disabled={!p.backTo}
-        onClick={p.goBack}
-      >
-        {Icon.back}
-      </Button>
-      <div className="brand" data-tip={'Έκδοση ' + boot.version}>
-        <Logo size={30} {...appLogo(state.settings)} />
-        <span>
+      <div className="brand" data-tip={p.title + ' · Έκδοση ' + boot.version} data-tip-side="bottom">
+        <Logo size={24} {...appLogo(state.settings)} />
+        <span className="brand__text">
           {p.title}
           <small>{state.settings.unit[2] || ''}</small>
         </span>
@@ -163,11 +141,11 @@ export function TopBar(p: TopBarProps) {
         type="button"
         className="searchbtn"
         aria-label="Αναζήτηση"
-        data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)"
+        data-tip="Βρες άνθρωπο, οθόνη ή ενέργεια από οπουδήποτε (Ctrl+K)"
         onClick={p.onOpenPalette}
       >
         {Icon.search}
-        <span>Αναζήτηση προσώπου ή ενέργειας…</span>
+        <span>Βρες άνθρωπο, οθόνη ή ενέργεια…</span>
         <Kbd>Ctrl K</Kbd>
       </button>
       {p.essos && (

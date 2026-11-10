@@ -63,9 +63,35 @@ export const SCREENS = Object.fromEntries(SCREEN_IDS.map((id) => [id, { id, ...T
  */
 export const screenName = (view: ScreenId): string => (view === 'hkai' ? HK() : SCREENS[view].name);
 
-// The Guide has «?» top right and F1; History has a button top right (the menu fits 1366×768 with Notes too).
-/** Side menu, top block. */
-export const NAV_MAIN: readonly ScreenId[] = [
+/** One block of the side menu: a small heading (empty for the unlabelled block) and its screens in visual order. */
+export interface NavGroup {
+  label: string;
+  items: readonly ScreenId[];
+}
+
+// The Guide has «?» top right and F1; History, Legend and Back live in the «⋯» menu of the top bar.
+/**
+ * Side menu, top block, in the order they are drawn. The visual order is NOT the Alt+digit order ({@link NAV_ALL}).
+ * @decision Michael 9/11: groups ΗΜΕΡΑ · ΑΝΘΡΩΠΟΙ · ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ, then Notes alone (direction B).
+ */
+export const NAV_GROUPS: readonly NavGroup[] = [
+  { label: 'ΗΜΕΡΑ', items: ['home', 'guard', 'outs', 'strength', 'hkai'] },
+  { label: 'ΑΝΘΡΩΠΟΙ', items: ['people', 'cadre', 'records'] },
+  { label: 'ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ', items: ['reports', 'weapons'] },
+  { label: '', items: ['notes'] },
+];
+/** Every screen of the top block of the side menu, flat. */
+export const NAV_MAIN: readonly ScreenId[] = NAV_GROUPS.flatMap((g) => g.items);
+/** Side menu, block pushed to the bottom. */
+export const NAV_MORE: readonly ScreenId[] = ['templates'];
+
+/**
+ * Alt+1 … Alt+9 open these nine screens in this order, Alt+0 opens Settings. Reports have Ctrl+E; Notes come from the
+ * menu and a new note with Ctrl+Shift+N.
+ * @decision Michael 9/11: frozen literal. The shortcuts must not follow the visual order of {@link NAV_GROUPS}.
+ * @see test/shell-nav.test.ts
+ */
+export const NAV_ALL: readonly ScreenId[] = [
   'home',
   'people',
   'cadre',
@@ -75,17 +101,8 @@ export const NAV_MAIN: readonly ScreenId[] = [
   'strength',
   'hkai',
   'weapons',
-  'reports',
-  'notes',
+  'templates',
 ];
-/** Side menu, block under the separator. */
-export const NAV_MORE: readonly ScreenId[] = ['templates'];
-
-/**
- * Alt+1 … Alt+9 open the first nine of the main menu in this order, Alt+0 opens Settings. Reports have Ctrl+E; Notes
- * come from the menu and a new note with Ctrl+Shift+N.
- */
-export const NAV_ALL: readonly ScreenId[] = [...NAV_MAIN.slice(0, 9), 'templates'];
 
 /**
  * Screens with tabs that always open on the first tab when entered from the menu.
