@@ -5,7 +5,7 @@
 //   (`writeLog`, `logWrite`) and `autoReps` (which saved reports update themselves).
 // Does NOT: decide what is dirty or when to run (schedule.ts, daily.ts, the boot code), write a file itself
 //   (sync.ts, `features/exports` `regenForms`), or know the report writer and the sources status: the status push is
-//   in `features/sources` (which imports this feature), the report writer in main.ts until its area moves; main.ts
+//   in `features/sources` and the report writer in `features/reports`, which both import this feature; main.ts
 //   installs both with `onAutoWriteDeps`.
 // Owner layer: main (architecture), `features/autowrite`. Imports app/*, shared/*, `features/exports`, `ipc/handle`.
 // Why: moved verbatim from main.ts (Phase 4.3a). The two upward calls (`notify`, `regenReports`) are a hook for the
@@ -36,7 +36,7 @@ import {
 import { lastDay, readOuts, regenForms } from '../exports';
 import { syncFileAuto } from './sync';
 
-/** What the run needs from areas that import this feature or still live in main.ts: see `onAutoWriteDeps`. */
+/** What the run needs from areas that import this feature: see `onAutoWriteDeps`. */
 export interface AutoWriteDeps {
   /** Pushes the Excel status to the UI. */
   notify: () => void;
@@ -53,11 +53,13 @@ let deps: AutoWriteDeps = {
 };
 
 /**
- * Installs `notify` (`features/sources`) and `regenReports` (main.ts), which `runAuto` calls. main.ts installs them
- * once while it loads, before any run can start (the first run is a timer).
+ * Installs `notify` (`features/sources`) and `regenReports` (`features/reports`), which `runAuto` calls. main.ts
+ * installs them once while it loads, before any run can start (the first run is a timer).
  * @decision Phase 4.3a: a hook instead of an import, so the feature never imports main.ts (no cycle).
  * @decision Phase 4.3b: `notify` stays a hook: `features/sources` imports this feature (`importStatuses` arms the
  *   auto-write), so importing it here would be a cycle.
+ * @decision Phase 4.4: `regenReports` stays a hook for the same reason: `features/reports` imports `autoReps` and
+ *   `logWrite` from this feature.
  */
 export function onAutoWriteDeps(next: AutoWriteDeps): void {
   deps = next;
