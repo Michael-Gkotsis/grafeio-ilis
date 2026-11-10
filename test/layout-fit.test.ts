@@ -20,6 +20,8 @@ import { readStyles, type CssRule } from './support/css';
 
 vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReactProbe(orig));
 vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
+vi.mock('react/jsx-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
+vi.mock('react/jsx-dev-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
 
 let bw: BehaviourWorld;
 let session: Session | null = null;
