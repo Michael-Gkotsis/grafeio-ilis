@@ -17,7 +17,7 @@
     "src/renderer/common.ts": 492,
     "src/renderer/guideText.ts": 1006,
     "src/renderer/screens/guard.ts": 714,
-    "src/renderer/screens/other.ts": 687,
+    "src/renderer/screens/other.ts": 590,
     "src/renderer/screens/people.ts": 656,
     "src/renderer/screens/reports.ts": 1284,
     "src/renderer/screens/sources.ts": 605
@@ -86,7 +86,6 @@
     "src/main/sources.ts::writeGroup": 111,
     "src/main/tplmap.ts::mapFroura": 97,
     "src/main/updater.ts::createUpdater": 364,
-    "src/renderer/app.ts::Shell": 152,
     "src/renderer/layout.ts::LayoutDialog": 91,
     "src/renderer/mockApi.ts::mockApi": 192,
     "src/renderer/screens/guard.ts::GuardScreen": 215,
@@ -197,7 +196,7 @@
     "src/main/files.ts": 3,
     "src/main/shared/db/store.ts": 13,
     "src/main/update.ts": 1,
-    "src/renderer/app.ts": 10,
+    "src/renderer/app/screenId.ts": 1,
     "src/renderer/blockForm.ts": 10,
     "src/renderer/common.ts": 18,
     "src/renderer/guideTopic.ts": 1,
@@ -214,7 +213,7 @@
     "src/renderer/screens/leaves.ts": 1,
     "src/renderer/screens/lists.ts": 36,
     "src/renderer/screens/notes.ts": 1,
-    "src/renderer/screens/other.ts": 29,
+    "src/renderer/screens/other.ts": 22,
     "src/renderer/screens/outsPlan.ts": 5,
     "src/renderer/screens/people.ts": 37,
     "src/renderer/screens/personal.ts": 9,
@@ -233,7 +232,6 @@
     "src/renderer/screens/whodoes.ts": 3,
     "src/renderer/select.ts": 4,
     "src/renderer/sigs.ts": 1,
-    "src/renderer/store.ts": 4,
     "src/renderer/ui.ts": 9,
     "src/renderer/update.ts": 2
   }

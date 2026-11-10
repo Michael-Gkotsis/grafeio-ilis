@@ -13,6 +13,8 @@ import { appRenderer, loadWorld, type BehaviourWorld } from './support/behaviour
 
 vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReactProbe(orig));
 vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
+vi.mock('react/jsx-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
+vi.mock('react/jsx-dev-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
 
 // Phase 0.4: the list of screens and of Ρυθμίσεις sections used to be cut out of src/renderer/app.ts and settings.ts with a
 // regex. They are now discovered from the running UI: every screen the shell can open (menu, top bar, Ctrl+Shift+D) and every
