@@ -97,7 +97,7 @@ export class Store {
       this.commit({ ...s0, settings: { ...s0.settings, sources, rev: 8 } });
       this.flush();
     }
-    // origin (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» in the rank becomes rank ΛΧΙΑΣ with origin ΕΠΟΠ (only for those who have it)
+    // origin (Michael, 22/10): rank «ΕΠΟΠ ΛΧΙΑΣ» becomes rank ΛΧΙΑΣ with origin ΕΠΟΠ (only for those who have it)
     const so = splitOrigins(this.state);
     if (so) {
       this.commit(so);
