@@ -2,7 +2,7 @@
 import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { Store, CorruptDbError, listBackups } from './db';
+import { Store, CorruptDbError, listBackups } from './shared/db';
 import { copyDurable } from './files';
 // The bare imports keep the module evaluation order of the file: their code moved into features/exports,
 // features/sources and features/reports, but they must still be evaluated at this position, before app/paths.ts runs

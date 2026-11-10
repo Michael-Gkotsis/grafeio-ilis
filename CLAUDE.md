@@ -31,8 +31,8 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
    `bench:golden` must give identical hashes.
 2. Everything the app writes into Excel is in CAPITALS. Dates are shown dd/mm/yyyy. Seat codes are exact (e.g. `Θ1α`).
 3. **Frozen data contracts** (users upgrade in place; breaking any loses data or settings):
-   - `data/ilh.db`: tables, `SCHEMA_VERSION`, `KV_KEYS`/`KV_ENTRIES` (src/main/db.ts), format of undo patches
-     (actions of the previous version must stay undoable).
+   - `data/ilh.db`: tables, `SCHEMA_VERSION`, `KV_KEYS`/`KV_ENTRIES` (src/main/shared/db/schema.ts, kv.ts),
+     format of undo patches (actions of the previous version must stay undoable).
    - Files `data/meta.json`, `sources.json`, `forms.json`, `flags.json`, folder `data/Πρότυπα εντύπων`,
      backup names `ilh_YYYY-MM-DD_*.db` in `data/backups`.
    - localStorage keys `grafeio.prefs`, `grafeio.nav`, `grafeio.people`, `grafeio.recent`, `grafeio.quickAdd`.
@@ -83,7 +83,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | Duty/outs/leave/HKAI rules, dates, text, ranks, status logic (pure, no fs/Electron) | `src/shared/` (`rules.ts`, `returns.ts`, `outsDay.ts`, `hd.ts`, `dates.ts`, `greek.ts`, `ranks.ts`, `domain.ts`) |
 | Commands with undo (every user action) | `src/shared/commands.ts` |
 | IPC contract between UI and main | `src/shared/api.ts`, `src/preload/preload.ts`, `src/main/main.ts` (handlers), `src/renderer/mockApi.ts` |
-| Database, migrations, backups | `src/main/db.ts` (+ `worker.ts`, `offload.ts`) |
+| Database, migrations, backups | `src/main/shared/db/` (+ `worker.ts`, `offload.ts`) |
 | Excel writing / reading Ίλη's Excel files | `src/main/xlsx.ts`, `excel.ts`, `exports.ts`, `sources.ts`, `src/shared/sources.ts`, `xlLook.ts` |
 | Forms (ΦΡΟΥΡΑ, ΗΚΑΙ, Εξοδούχοι), Word ΗΔ | `src/main/exports.ts`, `hdDocx.ts`, `tplmap.ts`, `templates/*.xlsx` (frozen) |
 | Printing / pagination | `src/main/print.ts`, `src/preload/print.ts`, `src/shared/repPage.ts`, `layout.ts` |
