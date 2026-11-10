@@ -24,6 +24,7 @@ import type { Cadre, CadreAbs } from '../core/model/cadreRecord';
 import type { DutyFix, Note, PersonRequest, WeaponMove } from '../core/model/records';
 import type { HkaiManual } from '../core/model/hkaiSettings';
 import type { Settings } from '../core/model/settings';
+import type { ImportRow } from '../core/model/importRow';
 import { codeErrors, freeCode } from './codes';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
@@ -308,13 +309,7 @@ export interface WeaponChange {
   wpos?: string;
 }
 
-// Πόστο, προσκολλημένος, σημειώσεις και «σε δύναμη» μόνο όταν το αρχείο έχει πηγή γι' αυτά· ό,τι λείπει μένει όπως είναι
-export interface ImportRow extends Omit<Person, 'id' | 'active' | 'post' | 'attached' | 'notes'> {
-  active?: boolean;
-  post?: string | null;
-  attached?: boolean;
-  notes?: string;
-}
+export type { ImportRow };
 
 // Νέος στρατιώτης από την εφαρμογή: ό,τι γράφει η φόρμα (το id, το «σε δύναμη» και το «νέος» τα βάζει η εντολή)
 export type NewPerson = Omit<Person, 'id' | 'active' | 'added'>;

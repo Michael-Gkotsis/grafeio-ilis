@@ -10,13 +10,14 @@
     "withTypes": [
       [
         "src/shared/api.ts",
-        "src/shared/cadreSource.ts",
         "src/shared/commands.ts",
         "src/shared/hd.ts",
         "src/shared/layout.ts",
         "src/shared/preflight.ts",
-        "src/shared/roster.ts",
-        "src/shared/sigs.ts",
+        "src/shared/sigs.ts"
+      ],
+      [
+        "src/shared/cadreSource.ts",
         "src/shared/sources.ts"
       ],
       [
@@ -44,7 +45,7 @@
     "src/renderer/screens/reports.ts": 1284,
     "src/renderer/screens/sources.ts": 605,
     "src/shared/cadreSource.ts": 746,
-    "src/shared/commands.ts": 3113,
+    "src/shared/commands.ts": 3108,
     "src/shared/reports.ts": 2317,
     "src/shared/sources.ts": 3996,
     "src/shared/values.ts": 931
@@ -54,6 +55,7 @@
     "src/core/duty/autofillRepair.ts::repair": 102,
     "src/core/duty/hkaiCount.ts::hkaiCounts": 86,
     "src/core/duty/planChange.ts::planStatusChange": 154,
+    "src/core/excel-in/roster.ts::parse": 129,
     "src/core/outs/outsDay.ts::dayBook": 100,
     "src/core/outs/strengthView.ts::strengthView": 153,
     "src/main/excel.ts::dutyCheck": 137,
@@ -107,7 +109,6 @@
     "src/shared/reports.ts::candidates": 130,
     "src/shared/reports.ts::fieldValue": 216,
     "src/shared/reports.ts::pickText": 114,
-    "src/shared/roster.ts::parse": 129,
     "src/shared/sources.ts::detectHkai": 83,
     "src/shared/sources.ts::diffStatuses": 223,
     "src/shared/sources.ts::planDuties": 127,
@@ -129,6 +130,7 @@
     "src/core/duty/nextFor.ts": 1,
     "src/core/duty/planChange.ts": 8,
     "src/core/duty/presence.ts": 2,
+    "src/core/excel-in/roster.ts": 2,
     "src/core/model/blocks.ts": 1,
     "src/core/outs/strengthView.ts": 1,
     "src/core/statuses/punish.ts": 1,
@@ -175,7 +177,6 @@
     "src/shared/quickAdd.ts": 2,
     "src/shared/reports.ts": 2,
     "src/shared/roomExtra.ts": 1,
-    "src/shared/roster.ts": 2,
     "src/shared/sources.ts": 30,
     "src/shared/values.ts": 7
   },
