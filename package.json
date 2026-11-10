@@ -9,6 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "start": "electron .",
+    "gen:print-window": "node scripts/gen-print-window.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "lint": "biome lint .",

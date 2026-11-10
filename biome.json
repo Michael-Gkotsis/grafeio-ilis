@@ -16,6 +16,7 @@
       "!test/golden",
       "!bench/baseline",
       "!**/*.min.*",
+      "!**/*.gen.ts",
       "!package-lock.json"
     ]
   },
