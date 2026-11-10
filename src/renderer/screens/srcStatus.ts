@@ -3,7 +3,7 @@
 import { html, Alert, Button } from '../ui';
 import { useNav, useStore } from '../store';
 import { MONTHS } from '../../shared/dates';
-import { KIND } from '../../shared/sources';
+import { KIND } from '../../core/excel-in/fields';
 import type { FormOut, SourceStatus } from '../../shared/api';
 import { useEffect, useState } from 'react';
 

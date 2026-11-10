@@ -390,7 +390,7 @@ const BASE_KINDS: DutyKind[] = ['th', 'op', 'sk', 'mg', 'ly', 'tae', 'other'];
 
 // Μία φορά μετά την αναβάθμιση στους κωδικούς θέσεων: οι παλιές «προηγούμενες υπηρεσίες» μπορεί να είναι διπλομετρημένες,
 // γιατί κάθε ανάγνωση του ελέγχου υπηρεσιών πρόσθετε εκεί όσους δεν χωρούσαν σε θέση
-export const needsBaselineReview = (state: any) => !state.settings.baselineReviewed && Object.values(state.baseline || {}).some((b: any) => baseTotal(b) > 0 || (b?.hol || 0) > 0);
+export { needsBaselineReview } from './baselineReview';
 export function BaselineReviewDialog({ onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const pm = personMap(state.people);

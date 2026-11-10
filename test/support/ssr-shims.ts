@@ -135,9 +135,32 @@ export async function mockReactProbe(orig: Original): Promise<Dict> {
     probe.effects.push({ fn, deps });
     return undefined;
   };
-  const patch = { createElement, useState, useEffect, useRef };
+  // React.lazy for a server render that cannot wait: the module starts loading when `lazy()` is called (routes.ts and
+  // Overlays.tsx call it at import time) and `lazyReady()` (awaited by loadWorld) resolves when all are loaded; after
+  // that a lazy screen or card renders in the same pass, as the eager ones did before Phase 5.1b. Before that it throws
+  // the promise, like React does, so the Suspense fallback shows.
+  const lazy = (load: () => Promise<{ default: unknown }>) => {
+    let loaded: unknown = null;
+    const loading = load().then(m => { loaded = m.default; });
+    (globalThis as unknown as Record<string, Promise<void>[]>)[LAZY_KEY] ??= [];
+    (globalThis as unknown as Record<string, Promise<void>[]>)[LAZY_KEY].push(loading);
+    return function LazyShim(props: Record<string, unknown>) {
+      if (loaded === null) throw loading;
+      return createElement(loaded, props);
+    };
+  };
+  const patch = { createElement, useState, useEffect, useRef, lazy };
   const def = base.default as Dict | undefined;
   return { ...base, ...patch, ...(def ? { default: { ...def, ...patch } } : {}) };
+}
+
+/** Where `lazy` (above) parks the loading promises of the lazy screens and cards. */
+const LAZY_KEY = '__grafeioLazyLoads';
+
+/** Resolves when every `React.lazy` module created so far has loaded (see the `lazy` shim in mockReactProbe). */
+export async function lazyReady(): Promise<void> {
+  const loads = (globalThis as unknown as Record<string, Promise<void>[] | undefined>)[LAZY_KEY] ?? [];
+  await Promise.all(loads);
 }
 
 /** react/jsx-runtime and react/jsx-dev-runtime shim: records the elements TSX screens create (htm screens do not use it). */
