@@ -22,10 +22,14 @@
     "src/renderer/screens/other.ts": 687,
     "src/renderer/screens/people.ts": 656,
     "src/renderer/screens/reports.ts": 1284,
-    "src/renderer/screens/sources.ts": 605,
-    "src/shared/commands.ts": 3108
+    "src/renderer/screens/sources.ts": 605
   },
   "oversizeFunctions": {
+    "src/core/commands/handlers/cadre.ts::handleSaveCadre": 92,
+    "src/core/commands/handlers/declare.ts::handleDeclare": 82,
+    "src/core/commands/handlers/declare.ts::handleOuts": 87,
+    "src/core/commands/handlers/phases.ts::handleEditBlock": 88,
+    "src/core/commands/noteCmd.ts::noteCmd": 93,
     "src/core/duty/autofill.ts::fillDay": 109,
     "src/core/duty/autofillRepair.ts::repair": 102,
     "src/core/duty/hkaiCount.ts::hkaiCounts": 86,
@@ -91,12 +95,16 @@
     "src/renderer/screens/lists.ts::ListsCard": 165,
     "src/renderer/screens/people.ts::DeclareStatusDialog": 155,
     "src/renderer/screens/reports.ts::ReportPage": 262,
-    "src/renderer/screens/weapons.ts::WeaponsScreen": 209,
-    "src/shared/commands.ts::noteCmd": 93,
-    "src/shared/commands.ts::run": 2260
+    "src/renderer/screens/weapons.ts::WeaponsScreen": 209
   },
   "forEach": {
     "src/core/cadre/cadre.ts": 1,
+    "src/core/commands/handlers/declare.ts": 1,
+    "src/core/commands/handlers/dutyRules.ts": 2,
+    "src/core/commands/handlers/people.ts": 2,
+    "src/core/commands/handlers/statusEdits.ts": 2,
+    "src/core/commands/importPeople.ts": 2,
+    "src/core/commands/stamp.ts": 1,
     "src/core/duty/autofillRepair.ts": 1,
     "src/core/duty/capability.ts": 1,
     "src/core/duty/hkaiCount.ts": 2,
@@ -126,6 +134,7 @@
     "src/core/forms/preflight.ts": 2,
     "src/core/model/blocks.ts": 1,
     "src/core/outs/strengthView.ts": 1,
+    "src/core/people/quickAdd.ts": 2,
     "src/core/reports/randomDraw.ts": 2,
     "src/core/reports/valueCtx.ts": 2,
     "src/core/reports/valueEval.ts": 3,
@@ -167,11 +176,12 @@
     "src/renderer/screens/whodoes.ts": 2,
     "src/renderer/select.ts": 1,
     "src/renderer/sheets.ts": 5,
-    "src/renderer/update.ts": 1,
-    "src/shared/commands.ts": 10,
-    "src/shared/quickAdd.ts": 2
+    "src/renderer/update.ts": 1
   },
   "any": {
+    "src/core/commands/handlers/dayPlans.ts": 2,
+    "src/core/commands/handlers/dutyRules.ts": 1,
+    "src/core/commands/handlers/weapons.ts": 1,
     "src/core/reports/formPage.ts": 4,
     "src/main/db.ts": 13,
     "src/main/files.ts": 3,
@@ -218,7 +228,6 @@
     "src/renderer/sigs.ts": 1,
     "src/renderer/store.ts": 4,
     "src/renderer/ui.ts": 9,
-    "src/renderer/update.ts": 2,
-    "src/shared/commands.ts": 4
+    "src/renderer/update.ts": 2
   }
 }
