@@ -6,7 +6,6 @@ import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
 import {
   copyDurable,
-  dataDirOf,
   ownBinding,
   ownOsDir,
   writeAll,
@@ -144,7 +143,6 @@ import {
   placeSheets,
   previewReport,
   previewTemplate,
-  type GroupKey,
 } from './reports';
 import {
   forBuild,
@@ -167,97 +165,33 @@ import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
 import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
 import { unitKindOf, unitText } from '../shared/unit'; import { HISTORY_AMBIENT, applyAmbient } from '../core/ambient';
+// These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
+// after every other imported module and before this file's body (as when it was a line of this file).
+import {
+  BACKUPS,
+  DATA,
+  DATA_AT,
+  DEV,
+  DOCS,
+  OUTS_FILE,
+  TPL_DIR,
+  TPL_MAX,
+  TPL_NAME,
+  USB_DIR,
+  USB_KEEP,
+  USER_TPL,
+  archiveRoot,
+  tplBuf,
+  tplPath,
+  writableDir,
+} from './app/paths';
+import { FLAGS, HIST_MAX, readFlags, readMeta, writeMeta, type RepHist } from './app/meta';
 
-const DEV = !app.isPackaged;
-const BUNDLED = DEV ? process.cwd() : path.join(process.resourcesPath, 'app');
-
-// Φορητή εγκατάσταση: τα δεδομένα δίπλα στο .exe αν ο φάκελος γράφεται, αλλιώς στο προφίλ του χρήστη
-function writableDir(dir: string): boolean {
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    const t = path.join(dir, '.w');
-    fs.writeFileSync(t, '');
-    fs.unlinkSync(t);
-    return true;
-  } catch {
-    return false;
-  }
-}
-// Το όνομα άλλαξε σε «Γραφείο Λοχία» (11/10). Το προφίλ μένει στον παλιό φάκελο για να βρίσκει τα δεδομένα και τις προτιμήσεις.
-app.setPath('userData', path.join(app.getPath('appData'), 'Γραφείο Ίλης'));
-// Windows: φορητός φάκελος δίπλα στο .exe. Linux (/opt) και macOS (μέσα στο .app) δεν γράφονται ή χαλάνε με τις ενημερώσεις, οπότε data\ και templates\ μένουν στο προφίλ του χρήστη.
-const ROOT = DEV
-  ? process.cwd()
-  : process.platform === 'win32'
-    ? path.dirname(process.execPath)
-    : app.getPath('userData');
-// Όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe): μια στιγμιαία αποτυχία του ελέγχου εγγραφής δεν χωρίζει πια τα δεδομένα στα δύο
-const DATA_AT = dataDirOf(path.join(ROOT, 'data'), path.join(app.getPath('userData'), 'data'), writableDir);
-const DATA = DATA_AT.dir;
-const BACKUPS = path.join(DATA, 'backups');
 const T0 = Date.now();
-// Διακόπτης GPU (έρευνα §5.6): σε παλιές κάρτες γραφικών με Windows 7 η επιτάχυνση μπορεί να κοστίζει μνήμη ή να δίνει μαύρη οθόνη.
-// Αλλάζει από την οθόνη «Διάγνωση» και ισχύει στην επόμενη εκκίνηση.
-const FLAGS = path.join(DATA, 'flags.json');
-const readFlags = (): { disableGpu?: boolean } => {
-  try {
-    return JSON.parse(fs.readFileSync(FLAGS, 'utf8'));
-  } catch {
-    return {};
-  }
-};
-// Μικρά στοιχεία που δεν ανήκουν στη βάση (για να μη χάνονται με μια επαναφορά): τελευταίο αντίγραφο σε USB, ως πού είδε ο χρήστης το ιστορικό
-const META = path.join(DATA, 'meta.json');
-type Meta = {
-  lastUsb?: string;
-  usbDir?: string;
-  seenAudit?: number;
-  essoArchives?: string[];
-  repLast?: Record<string, string>;
-  repTimes?: Record<string, RepTimes>;
-  repSheets?: Record<string, RepSheets>;
-  repHist?: Record<string, RepHist[]>;
-  printPrefs?: Record<string, Partial<PrintOpts>>;
-  printDuplex?: boolean;
-};
-// printPrefs: οι ρυθμίσεις του παραθύρου «Εκτύπωση» ανά έντυπο (printKey)· printDuplex: ο εκτυπωτής τυπώνει μόνος του διπλή όψη
-// Έντυπα: πόσες φορές βγήκε ο καθένας σε κάθε έντυπο με τυχαίους (ανά ΕΣΣΟ: η Νέα ΕΣΣΟ ξεκινά από το μηδέν) και ποια φύλλα
-// έγραψε κάθε έντυπο σε ποιο αρχείο (για να μη γράψει πάνω σε φύλλο που δεν έφτιαξε, και να μην τα διαβάζει η εισαγωγή)
-type RepTimes = { essos: string; n: Record<string, number> };
-type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };
-// ιστορικό εκδόσεων: ποιοι μπήκαν κάθε φορά που βγήκε (για να ξαναβγεί ίδιο αν χαθεί το χαρτί)· τα 10 τελευταία ανά έντυπο
-type RepHist = { at: string; date: ISODate; ids: (number | string)[]; n: number; file: string; sheets?: string[] };
-const HIST_MAX = 30; // repLast: πότε βγήκε κάθε έντυπο   // essoArchives: φάκελοι αρχείων ΕΣΣΟ που γράφτηκαν
-const readMeta = (): Meta => {
-  try {
-    return JSON.parse(fs.readFileSync(META, 'utf8'));
-  } catch {
-    return {};
-  }
-};
-const writeMeta = (m: Partial<Meta>) => {
-  try {
-    writeJson(META, { ...readMeta(), ...m });
-  } catch (e) {
-    console.error('meta', e);
-  }
-};
-const USB_DIR = 'Γραφείο Ίλης αντίγραφα';
-const USB_KEEP = 10;
+// GPU switch and Chromium switches stay here, at their boot position: flags.json is read by app/meta.ts.
 if (readFlags().disableGpu || process.argv.includes('--disable-gpu')) app.disableHardwareAcceleration();
 // Ελληνικά για το Chromium: τα πεδία ημερομηνίας δείχνουν ημέρα/μήνα/έτος και σε Windows με αγγλικές ρυθμίσεις (αλλιώς μήνας/ημέρα)
 app.commandLine.appendSwitch('lang', 'el');
-const USER_TPL = path.join(ROOT, 'templates');
-// Έντυπα: τα πρότυπά σου (ανεβασμένα ή φτιαγμένα εδώ), με όνομα αρχείου <id>.xlsx· μένουν και στη Νέα ΕΣΣΟ
-const TPL_DIR = path.join(DATA, 'Πρότυπα εντύπων');
-const TPL_NAME = /^[0-9a-f-]{36}\.xls[xm]$/i;
-const TPL_MAX = 5 * 1024 * 1024;
-const tplBuf = (file: string) => {
-  if (!TPL_NAME.test(file)) throw new Error('Άγνωστο πρότυπο');
-  const f = path.join(TPL_DIR, file);
-  if (!fs.existsSync(f)) throw new Error('Λείπει το αρχείο του προτύπου. Ανέβασέ το ξανά στα Έντυπα › Πρότυπα.');
-  return fs.promises.readFile(f);
-}; // ο λοχίας μπορεί να βάλει εδώ δική του έκδοση εντύπου
 // αποθηκευμένο έντυπο που βγαίνει: «Υπογραφές: Καμία» του «Φτιάξ' το εδώ» ισχύει και για όσα αποθηκεύτηκαν πριν τη διόρθωση (shared/reports sigsNone)
 const savedSigs = (r: Report, file: string): Report => {
   const t = (store.state.settings.reportTpls || []).find((x) => x.id === r.tpl);
@@ -276,8 +210,6 @@ const TPL: { id: ExportKind; name: string; file: string }[] = [
   { id: 'hkai', name: 'ΗΚΑΙ (μπροστινο, πισω)', file: 'hkai.xlsx' },
   { id: 'outs', name: 'Εξοδούχοι / Παραμένοντες', file: 'exodouxoi.xlsx' },
 ];
-const tplPath = (file: string) =>
-  fs.existsSync(path.join(USER_TPL, file)) ? path.join(USER_TPL, file) : path.join(BUNDLED, 'templates', file);
 // Έντυπα: ποιο template και ποιος φάκελος (Αρχεία Excel). Χωρίς επιλογή: τα templates της εφαρμογής.
 const FORM_FILE: Record<Exclude<FormKind, 'check'>, string> = {
   froura: 'froura.xlsx',
@@ -664,7 +596,6 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
 // Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
 // vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
 type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number; sigs?: Sig[] };
-const OUTS_FILE = path.join(DATA, 'forms.json');
 const readOuts = (): OutRec[] => {
   try {
     return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8'));
@@ -2062,8 +1993,6 @@ async function printPreview(
 }
 
 // ------------------------------------------------------------------ ΕΣΣΟ: αρχείο, νέα ΕΣΣΟ, επαναφορά (Ρυθμίσεις › ΕΣΣΟ, Michael 17/10)
-const DOCS = () => path.join(app.getPath('documents'), 'Γραφείο Ίλης');
-const archiveRoot = () => path.join(DOCS(), 'Αρχείο ΕΣΣΟ');
 // ο φάκελος της νέας ΕΣΣΟ φτιάχνεται δίπλα στον τωρινό αν αυτός είναι φάκελος ΕΣΣΟ («Β΄ ΕΣΣΟ 2026»), αλλιώς στα Έγγραφα
 const newRoot = () => {
   const o = outputDir();
