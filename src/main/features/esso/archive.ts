@@ -6,7 +6,7 @@
 // Owner layer: main (architecture), `features/esso`. Imports app/*, `features/autowrite`, the archive engine
 //   (src/main/esso.ts) and the pure ΕΣΣΟ rules; never main.ts.
 // Why: moved verbatim from main.ts (Phase 4.6a). Only the ΕΣΣΟ code used these helpers (the backups, folders,
-//   diagnostics and boot code in main.ts do not), so they stay inside the slice and are not promoted to `app/`.
+//   diagnostics and boot code do not), so they stay inside the slice and are not promoted to `app/`.
 // Covering test: test/esso.test.ts (archive engine, names, restored paths); the flow itself by the Electron comparison.
 import fs from 'fs';
 import path from 'path';
