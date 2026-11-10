@@ -1,7 +1,7 @@
 // The IPC handlers of the exports: forms, own Excel books, the Ημερήσια Διαταγή Word and the absence calendar.
 //
 // Purpose: `registerExportsIpc`, `registerHdIpc` and `registerImerIpc` register the export channels of the contract.
-// Does NOT: build or write a file itself (build.ts / service.ts do); open the print window (main.ts's print preview
+// Does NOT: build or write a file itself (build.ts / service.ts do); open the print window (`features/print`'s preview
 //   arrives through the `onPrintPreview` hook of service.ts).
 // Owner layer: main (architecture), `features/exports`. Imports only app/*, ipc/*, shared/* and its own files.
 // Why: part of taking the exports out of main.ts (Phase 4.2b). The handler bodies are unchanged and registered in the

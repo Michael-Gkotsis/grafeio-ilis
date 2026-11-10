@@ -3,10 +3,10 @@
 // Purpose: `exportGuarded` (one export at a time, one-minute limit) around `exportFile`, and the print-preview hook the
 //   export uses to print instead of opening Excel.
 // Does NOT: fill the forms (build.ts), keep the list of made forms (outs.ts), register IPC (ipc.ts) or own the print
-//   window: that belongs to main.ts until the print area moves, hence the hook.
+//   window (`features/print`): that feature imports `features/forms`, which imports this one, hence the hook.
 // Owner layer: main (architecture), `features/exports`. Imports app/*, shared/*, core files, `features/commands`.
-// Why: moved verbatim from main.ts (Phase 4.2b). The print preview cannot be imported (main.ts must not be), so
-//   main.ts installs it once with `onPrintPreview`, as it does with `onCommandApplied`.
+// Why: moved verbatim from main.ts (Phase 4.2b). The print preview cannot be imported (Phase 4.5: print -> forms ->
+//   exports -> print would be an import cycle), so main.ts installs it once with `onPrintPreview`.
 // Covering test: test/exports*.test.ts, test/preflight*.test.ts; `npm run bench:golden`.
 import path from 'path';
 import { shell } from 'electron';
@@ -32,10 +32,11 @@ let preview: PreviewHook = () => {
 };
 
 /**
- * Installs the print preview (main.ts's `printPreview`) that the exports use to print a just-made file. It lives in
- * main.ts because the print window belongs to an area this module may not import; main.ts installs it once while it
- * loads, before any export can run.
- * @decision Phase 4.2b: a hook instead of an import, so the feature never imports main.ts (no cycle).
+ * Installs the print preview (`printPreview` of `features/print`) that the exports use to print a just-made file.
+ * main.ts installs it once while it loads, before any export can run.
+ * @decision Phase 4.2b: a hook instead of an import. Phase 4.5 kept it: `features/print` needs `knownPath` of
+ *   `features/forms`, which needs this feature's `readOuts`, so a direct import would close a cycle (the
+ *   architecture test refuses it).
  */
 export function onPrintPreview(fn: PreviewHook): void {
   preview = fn;

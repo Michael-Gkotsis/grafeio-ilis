@@ -2,11 +2,10 @@
 //
 // Purpose: `registerReportRunIpc` registers `repRun` (write the sheet, or make the file and open or print it, then
 //   count the random picks and write the history), `repTimes` and `repHist`.
-// Does NOT: fill a report (reports.ts), write a sheet (sheet.ts), or own the print window: `printPreview` belongs to
-//   main.ts until the print area moves, so it is passed in.
+// Does NOT: fill a report (reports.ts), write a sheet (sheet.ts) or own the print window (`features/print`).
 // Owner layer: main (architecture), `features/reports`. Imports app/*, `ipc/handle`, `features/*`, shared/*.
-// Why: moved verbatim from main.ts (Phase 4.4), same channels in the same order. A parameter object instead of a hook:
-//   there is exactly one call site and it is the boot closure that already holds `printPreview`.
+// Why: moved verbatim from main.ts (Phase 4.4), same channels in the same order. Since Phase 4.5 `printPreview` is a
+//   direct import of `features/print` (it was a parameter while the print window lived in main.ts).
 // Covering test: test/ipc-contract.test.ts (channels); the Electron comparison in the PR description.
 import fs from 'fs';
 import path from 'path';
@@ -26,25 +25,16 @@ import { off } from '../../offload';
 import { fillReport } from '../../reports';
 import { fail } from '../commands';
 import { logWrite } from '../autowrite';
+import { printPreview } from '../print';
 import { notify } from '../sources';
 import { countTimes, repTimes } from './times';
 import { savedSigs, writeRepSheet } from './sheet';
-
-/** What the run needs from main.ts until the print area moves: the print preview window. */
-export interface ReportRunDeps {
-  /** Opens the print preview of `file` (all sheets, or `sheets`); `fix` is the report's «σταθερό μέγεθος». */
-  printPreview: (
-    file: string,
-    sheets?: string[],
-    fix?: boolean,
-  ) => Promise<{ ok: true } | { ok: false; error: string }>;
-}
 
 /**
  * Registers `repRun`, `repTimes` and `repHist`: produce a report (a sheet in an Excel, or a new file that is opened or
  * printed), then remember it in `meta.json` (`repLast`, `repHist`, `repTimes`).
  */
-export function registerReportRunIpc({ printPreview }: ReportRunDeps) {
+export function registerReportRunIpc() {
   handle(
     'repRun',
     async (

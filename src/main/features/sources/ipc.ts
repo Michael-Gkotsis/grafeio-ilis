@@ -4,7 +4,7 @@
 //   `applyRoster`, `srcPick`, `srcRead`, `srcSave`, `srcImport`, `srcApply`, `srcKeys`, `srcPeople`, `srcPlan`,
 //   `srcWrite`, `srcNewFile` and `srcStatus` on their contract channels.
 // Does NOT: know how a file is read or planned (the sibling files do), and does not register the form-template
-//   handlers (`formPick`, `formInfo`, ...): those stay in main.ts with the form and print file handlers.
+//   handlers (`formPick`, `formInfo`, ...): those live in `features/forms`.
 // Owner layer: main (architecture), `features/sources`. Imports app/*, `ipc/handle`, `features/*`, shared/*.
 // Why: moved verbatim from main.ts (Phase 4.3b), same channels in the same order (main.ts calls the three in the
 //   same places of the boot closure). The file picker stays in main.ts and is passed in, as before.

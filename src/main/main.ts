@@ -1,6 +1,5 @@
 // Main process: βάση, κανόνες, αρχεία. Το UI ζητά ενέργειες μέσω IPC και παίρνει πίσω τη νέα κατάσταση.
 import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
@@ -14,7 +13,7 @@ import { nowHM, nowParts, today } from '../shared/dates';
 import './xlsx';
 import './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
-import { handle, handleGuarded, handlePrint } from './ipc/handle';
+import { handle, handleGuarded } from './ipc/handle';
 import type {
   Boot,
   CmdResult,
@@ -24,7 +23,6 @@ import type {
   EssoInfo,
   EssoResult,
   EssoStart,
-  FormInfo,
 } from '../shared/api';
 import { setBookReader, readBook, stamp } from './sources';
 import {
@@ -33,37 +31,23 @@ import {
   KINDS,
   NEW_KINDS,
   canCreate,
-  detectHkai,
   inRoster,
   type FormBinding,
   type FormKind,
   type ListKind,
   type SourceBinding,
 } from '../shared/sources';
-import { normGreek } from '../shared/text';
 import '../shared/cadreSource';
 import './hdDocx';
-import {
-  cleanOpts,
-  infoOf,
-  openBook,
-  previewHtml,
-  printDefaults,
-  printKey,
-  rememberedSheets,
-  renderOpen,
-  sectionsHtml,
-  sheetFontSize,
-  type PrintOpts,
-} from './print';
+// Bare import: the print engine's code is still used (by features/print), but it must stay evaluated at this position.
+import './print';
 import './reports';
 import type { AppState } from '../shared/domain';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
 import { SOURCES_FILE, listArchives, readArchive, writeArchive } from './esso';
-import { hkRowsOf } from '../shared/ranks';
 import { createUpdater } from './updater';
 import './app/tables';
-import type { NewOut, PrintJob } from './app/types';
+import type { NewOut } from './app/types';
 import {
   autoBusy, autoTimer, dirty, formsDirty, pending, seenUntil, sessionStart, store, win,
   setFormsDirty, setSeenUntil, setSessionStart, setStore, setWin,
@@ -73,7 +57,7 @@ import { newDir, outputDir } from './app/dirs';
 import { serial } from './app/serial';
 // The exports feature (and, through it, app/paths.ts) is evaluated right before the last two imports below.
 import {
-  formBinding, formTpl, onPrintPreview, readOuts, registerExportsIpc, registerHdIpc, registerImerIpc, templates,
+  formBinding, onPrintPreview, registerExportsIpc, registerHdIpc, registerImerIpc, templates,
   writeOuts,
 } from './features/exports';
 // bindings/autowrite stay after the exports import: app/bindings reads DATA, so app/paths.ts must not run earlier.
@@ -89,6 +73,8 @@ import {
   regenReports, registerLayoutPreviewIpc, registerReportFilesIpc, registerReportPreviewIpc, registerReportRunIpc,
   registerReportTemplatesIpc,
 } from './features/reports';
+import { registerFormsIpc } from './features/forms';
+import { printPreview, registerPrintIpc, registerPrintJobIpc, registerPrintOutputIpc } from './features/print';
 import { msgOf } from './app/errors';
 // These two stay the LAST imports: app/paths.ts runs app.setPath('userData', ...) when it is evaluated, which must stay
 // after every other imported module and before this file's body (as when it was a line of this file).
@@ -116,194 +102,13 @@ const dirOf = (t: DirTarget) =>
 // runCmd (features/commands) may not import this file: it calls the auto-write scheduling through this hook, which is
 // installed while main.ts loads, before any command can run.
 onCommandApplied((prev, next) => scheduleAuto(prev, next));
+// The exports print through this hook: features/print imports features/forms, which imports features/exports, so a
+// direct import there would close a cycle.
 onPrintPreview(printPreview);
 // runAuto (features/autowrite) calls the status push (features/sources, which imports autowrite) and the report writer
 // (features/reports, which imports autowrite's autoReps and logWrite): either import would be a cycle, so main.ts hands
 // both over.
 onAutoWriteDeps({ notify, regenReports });
-
-// Έντυπο: φύλλα του template και (ΗΚΑΙ) πού βρέθηκαν οι γραμμές και οι στήλες
-async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: false; error: string }> {
-  if (f === 'check') return { ok: true, file: '', custom: false, sheets: [], sheet: '' };
-  try {
-    const b = formBinding(f);
-    const src = file || formTpl(f);
-    const book = await readBook(src, 120, 40);
-    const names = book.sheets.map((x) => x.name);
-    const has = (n?: string) => (n && names.includes(n) ? n : undefined);
-    const find = (re: RegExp) =>
-      book.sheets.find(
-        (x) =>
-          re.test(normGreek(x.name)) ||
-          x.rows.slice(0, 12).some((r) => (r || []).some((v) => typeof v === 'string' && re.test(normGreek(v)))),
-      )?.name;
-    const keep = !file || (b.file && path.resolve(b.file) === path.resolve(file));
-    const custom = !!file || !!b.file;
-    if (f === 'hkai') {
-      const scored = book.sheets
-        .map((x) => ({ x, d: detectHkai(x, store.state.settings.place) }))
-        .sort((a, c) => c.d.found - a.d.found);
-      const front = (keep && has(b.sheet)) || scored[0]?.x.name || names[0];
-      const back =
-        (keep && has(b.sheet2)) ||
-        find(/ΑΠΟΦΑΣΕΙΣ|ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|ΦΡΟΥΡΕΣ/) ||
-        names.find((n) => n !== front) ||
-        front;
-      const d = detectHkai(
-        book.sheets.find((x) => x.name === front)!,
-        store.state.settings.place,
-        [...hkRowsOf(store.state.settings.lists).own],
-        store.state.settings.lists?.hkNames,
-      );
-      if (keep && b.cells)
-        d.map = {
-          title: b.cells.title || d.map.title,
-          date: b.cells.date || d.map.date,
-          rows: { ...d.map.rows, ...(b.cells.rows || {}) },
-          cols: { ...d.map.cols, ...(b.cells.cols || {}) },
-        };
-      return { ok: true, file: src, custom, sheets: names, sheet: front, sheet2: back, hkai: d };
-    }
-    if (f === 'outs')
-      return {
-        ok: true,
-        file: src,
-        custom,
-        sheets: names,
-        sheet: (keep && has(b.sheet)) || find(/ΕΞΟΔΟΥΧ/) || names[0],
-        sheet2: (keep && has(b.sheet2)) || find(/ΠΑΡΑΜΕΝ/) || names[1] || names[0],
-      };
-    return {
-      ok: true,
-      file: src,
-      custom,
-      sheets: names,
-      sheet: (keep && has(b.sheet)) || find(/ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ|ΦΡΟΥΡΑ/) || names[0],
-    };
-  } catch (e) {
-    return fail(e);
-  }
-}
-// Ο χρήστης ανοίγει μόνο αρχεία και φακέλους που ξέρει η εφαρμογή (πηγές, templates, έντυπα που βγήκαν)
-function knownPath(file: string): boolean {
-  const f = path.resolve(file);
-  const known = [
-    ...Object.values(store.state.settings.sources || {}).map((b) => b && b.file),
-    ...Object.values(store.state.settings.forms || {}).map((b) => b && b.file),
-    ...readOuts().map((o) => o.file),
-    ...Object.values(readMeta().repSheets || {}).map((x) => x.file),
-    ...Object.values(readMeta().repHist || {})
-      .flat()
-      .map((x) => x.file),
-  ]
-    .filter(Boolean)
-    .map((x) => path.resolve(x as string));
-  return known.some((k) => k === f || path.dirname(k) === f);
-}
-
-// ------------------------------------------------------------------ Εκτύπωση χωρίς Excel (print.ts): προεπισκόπηση και διάλογος εκτυπωτή των Windows
-const printJobs = new Map<number, PrintJob>(); // ανά παράθυρο προεπισκόπησης (webContents)
-// οι ρυθμίσεις του εντύπου: οι αποθηκευμένες (χωρίς τις αλλαγές σελίδας, που αφορούν μόνο το σημερινό), αλλιώς οι αρχικές του
-function printPrefs(key: string, base: PrintOpts): { opts: PrintOpts; remember: boolean } {
-  const saved = readMeta().printPrefs?.[key];
-  return { opts: cleanOpts({ ...(saved || {}), breaks: undefined }, base), remember: true };
-}
-function savePrintPrefs(key: string, o: PrintOpts | null) {
-  const all = { ...(readMeta().printPrefs || {}) };
-  if (o) {
-    const { breaks: _b, ...keep } = o;
-    delete all[key];
-    all[key] = keep;
-  } else delete all[key];
-  const keys = Object.keys(all);
-  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k]; // τα 200 τελευταία έντυπα
-  writeMeta({ printPrefs: all });
-}
-// fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): «Όσες χρειάζονται» με τα γράμματα του Excel, πάνω από ό,τι είχε αποθηκευτεί
-async function printPage(file: string, sheets?: string[], fix?: boolean): Promise<Omit<PrintJob, 'file'>> {
-  const book = await openBook(await fs.promises.readFile(file));
-  const key = printKey(file);
-  const visible = book.sheets.filter((x) => !x.hidden).map((x) => x.name);
-  let base = printDefaults(key, sheets && sheets.length ? sheets : visible);
-  const { opts, remember } = printPrefs(key, base);
-  if (fix) {
-    const sz = await sheetFontSize(book, (sheets && sheets[0]) || visible[0] || '');
-    const f = cleanOpts({ pages: 'auto', size: sz }, base);
-    base = { ...base, pages: f.pages, size: f.size };
-    opts.pages = f.pages;
-    opts.size = f.size;
-  }
-  // τα φύλλα που είχες διαλέξει την προηγούμενη φορά (αν δεν ζητήθηκαν συγκεκριμένα)· αν λείπει κάποιο, η αρχική επιλογή
-  const rem = rememberedSheets(opts.sheets, visible);
-  if (rem) opts.sheets = rem;
-  else delete opts.sheets;
-  const want = sheets && sheets.length ? sheets : rem;
-  const doc = await renderOpen(book, { file: path.basename(file), sheets: want, layout: opts });
-  const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
-  await fs.promises.writeFile(
-    tmp,
-    previewHtml(doc, path.basename(file), { opts, remember, duplex: !!readMeta().printDuplex }),
-  );
-  return { tmp, sheets: doc.sheets.map((x) => x.name), book, key, base, opts };
-}
-// Μία προεπισκόπηση τη φορά («Τύπωσε όλα» στα Έντυπα ημέρας): η επόμενη ανοίγει όταν κλείσει η προηγούμενη
-let previewGate: Promise<void> = Promise.resolve();
-async function printPreview(
-  file: string,
-  sheets?: string[],
-  fix?: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const prev = previewGate;
-  let free = () => {};
-  previewGate = new Promise<void>((r) => {
-    free = r;
-  });
-  await prev;
-  try {
-    const p = await printPage(file, sheets, fix);
-    const pw = new BrowserWindow({
-      parent: win || undefined,
-      modal: !!win,
-      width: 1280,
-      height: 880,
-      minWidth: 820,
-      minHeight: 520,
-      show: false,
-      title: 'Εκτύπωση · ' + path.basename(file),
-      backgroundColor: '#5f6368',
-      webPreferences: {
-        preload: path.join(__dirname, '..', 'preload', 'print.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        spellcheck: false,
-      },
-    });
-    pw.setMenu(null);
-    const id = pw.webContents.id;
-    printJobs.set(id, { file, ...p });
-    pw.once('ready-to-show', () => {
-      if (win && win.isMaximized()) pw.maximize();
-      pw.show();
-    });
-    pw.on('closed', () => {
-      const j = printJobs.get(id);
-      if (j) fs.rmSync(j.tmp, { force: true });
-      printJobs.delete(id);
-      free();
-    });
-    try {
-      await pw.loadFile(p.tmp);
-    } catch (e) {
-      pw.destroy();
-      throw e;
-    }
-    return { ok: true };
-  } catch (e) {
-    free();
-    return fail(e);
-  }
-}
 
 // ------------------------------------------------------------------ ΕΣΣΟ: αρχείο, νέα ΕΣΣΟ, επαναφορά (Ρυθμίσεις › ΕΣΣΟ, Michael 17/10)
 // ο φάκελος της νέας ΕΣΣΟ φτιάχνεται δίπλα στον τωρινό αν αυτός είναι φάκελος ΕΣΣΟ («Β΄ ΕΣΣΟ 2026»), αλλιώς στα Έγγραφα
@@ -768,211 +573,6 @@ function registerUpdate() {
 }
 
 // IPC registrations by future feature area (Phase 4.2-4.6); the boot closure calls them in the original order.
-function registerFormsIpc(pickXlsx: (title: string) => Promise<string | null>) {
-  handle('formPick', async (_e, f: FormKind) => {
-    const file = await pickXlsx('Template για ' + f);
-    if (!file) return null;
-    return formInfo(f, file);
-  });
-  handle('formInfo', (_e, f: FormKind) => formInfo(f));
-  handle('formSave', (_e, f: FormKind, b: FormBinding | null) => {
-    const cur = formBinding(f);
-    if (b?.file && b.file !== cur.file && !srcMeta.allowed(b.file))
-      return fail('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
-    if (b?.dir && b.dir !== cur.dir && !srcMeta.allowed(b.dir))
-      return fail('Άγνωστος φάκελος: διάλεξέ τον με το «Φάκελος…»');
-    const forms = { ...(store.state.settings.forms || {}) };
-    if (b && Object.values(b).some((v) => v !== undefined && v !== '')) forms[f] = b;
-    else delete forms[f];
-    const r = runCmd({
-      t: 'setSettings',
-      settings: { forms },
-      text:
-        'έντυπο ' + f + (b?.file ? ': ' + path.basename(b.file) : b?.dir ? ': φάκελος ' + b.dir : ': προεπιλογή'),
-    });
-    return r.ok ? reply(r.text, false) : r;
-  });
-  handle('formDir', async (_e, f: FormKind) => {
-    const r = await dialog.showOpenDialog(win!, {
-      title: 'Φάκελος για το έντυπο',
-      defaultPath: formBinding(f).dir || outputDir(),
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    const dir = r.canceled ? null : r.filePaths[0] || null;
-    if (dir) srcMeta.allow([dir]);
-    return dir;
-  });
-  handle('openPath', (_e, file: string) => {
-    if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file))
-      return shell.openPath(file);
-    return 'άγνωστο αρχείο';
-  });
-}
-function registerPrintIpc() {
-  handle('printFile', (_e, file: string, sheet?: string | string[]) => {
-    // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
-    const inside = (dir?: string) =>
-      !!dir &&
-      !path.relative(path.resolve(dir), path.resolve(file)).startsWith('..') &&
-      !path.isAbsolute(path.relative(path.resolve(dir), path.resolve(file)));
-    const known =
-      knownPath(file) ||
-      [outputDir(), ...Object.values(store.state.settings.forms || {}).map((b) => b?.dir)].some(inside);
-    if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file))
-      return fail('Δεν βρέθηκε το ' + path.basename(file));
-    if (/\.xls$/i.test(file))
-      return fail(
-        'Το ' +
-          path.basename(file) +
-          ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.',
-      );
-    return printPreview(
-      file,
-      Array.isArray(sheet) ? sheet.filter((x) => typeof x === 'string') : sheet ? [sheet] : undefined,
-    );
-  });
-  // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
-  handlePrint('layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
-    const job = printJobs.get(e.sender.id);
-    if (!job) return fail('Έκλεισε η εκτύπωση');
-    try {
-      const opts = cleanOpts(req?.opts, job.base);
-      const sheets = Array.isArray(req?.sheets)
-        ? req!.sheets.filter((x): x is string => typeof x === 'string')
-        : job.sheets;
-      const doc = await renderOpen(job.book, { file: path.basename(job.file), sheets, layout: opts });
-      job.sheets = doc.sheets.map((x) => x.name);
-      job.opts = opts;
-      if (req?.save) savePrintPrefs(job.key, opts);
-      return { ok: true, html: sectionsHtml(doc), css: doc.css, info: infoOf(doc) };
-    } catch (err) {
-      return fail(err);
-    }
-  });
-  // «Να θυμάται» ξετσεκαρισμένο ή «Αρχικές ρυθμίσεις»: σβήνει τις αποθηκευμένες, γυρίζει τις αρχικές του εντύπου
-  handlePrint('forget', (e) => {
-    const job = printJobs.get(e.sender.id);
-    if (!job) return null;
-    savePrintPrefs(job.key, null);
-    return job.base;
-  });
-  handlePrint('duplex', (_e, on: unknown) => {
-    writeMeta({ printDuplex: on === true });
-  });
-}
-function registerPrintOutputIpc() {
-  // PDF: ίδιο με το χαρτί, στον φάκελο του αρχείου (ή όπου διαλέξει)
-  handlePrint('pdf', async (e) => {
-    const job = printJobs.get(e.sender.id);
-    if (!job) return fail('Έκλεισε η εκτύπωση');
-    const pw = BrowserWindow.fromWebContents(e.sender);
-    const r = await dialog.showSaveDialog(pw!, {
-      title: 'Αποθήκευση PDF',
-      defaultPath: path.join(path.dirname(job.file), path.basename(job.file).replace(/\.xls[xm]?$/i, '') + '.pdf'),
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-    });
-    if (r.canceled || !r.filePath) return { ok: false, error: '' };
-    try {
-      const data = await e.sender.printToPDF({ printBackground: true, preferCSSPageSize: true });
-      await fs.promises.writeFile(r.filePath, data);
-      store.addAudit(
-        {
-          at: nowHM(),
-          day: today(),
-          text: 'PDF ' + path.basename(r.filePath) + ' από ' + path.basename(job.file),
-          files: [path.basename(job.file)],
-          source: 'app',
-          undoable: false,
-        },
-        null,
-      );
-      return { ok: true, name: path.basename(r.filePath) };
-    } catch (err) {
-      return fail(err);
-    }
-  });
-  handlePrint('printers', async (e) => {
-    try {
-      return (await e.sender.getPrintersAsync()).map((p) => ({
-        name: p.name,
-        label: p.displayName || p.name,
-        def: !!p.isDefault,
-      }));
-    } catch {
-      return [];
-    }
-  });
-}
-function registerPrintJobIpc() {
-  // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
-  // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
-  handlePrint(
-    'print',
-    async (
-      e,
-      o: {
-        landscape?: boolean;
-        pageSize?: string;
-        part?: string;
-        device?: string;
-        copies?: number;
-        duplex?: string;
-      },
-    ) => {
-      const job = printJobs.get(e.sender.id);
-      if (!job) return fail('Έκλεισε η εκτύπωση');
-      const pageSize = ['A3', 'A4', 'A5', 'Legal', 'Letter'].includes(String(o?.pageSize))
-        ? String(o.pageSize)
-        : 'A4';
-      let device = typeof o?.device === 'string' && o.device ? o.device : '';
-      if (device) {
-        try {
-          if (!(await e.sender.getPrintersAsync()).some((p) => p.name === device)) device = '';
-        } catch {
-          device = '';
-        }
-      }
-      const copies = Math.min(99, Math.max(1, Math.floor(Number(o?.copies) || 1)));
-      const duplexMode = o?.duplex === 'longEdge' || o?.duplex === 'shortEdge' ? o.duplex : 'simplex';
-      return new Promise((res) =>
-        e.sender.print(
-          {
-            silent: !!device,
-            ...(device ? { deviceName: device, copies, collate: true } : {}),
-            printBackground: true,
-            landscape: !!o?.landscape,
-            pageSize,
-            duplexMode,
-            margins: { marginType: 'none' },
-          },
-          (ok, reason) => {
-            if (ok)
-              store.addAudit(
-                {
-                  at: nowHM(),
-                  day: today(),
-                  text:
-                    'Εκτύπωση ' +
-                    path.basename(job.file) +
-                    (job.sheets.length > 1 || o?.part
-                      ? ' (' + job.sheets.join(', ') + (o?.part ? ', μέρος ' + o.part : '') + ')'
-                      : ''),
-                  files: [path.basename(job.file)],
-                  source: 'app',
-                  undoable: false,
-                },
-                null,
-              );
-            res(ok ? { ok: true } : { ok: false, error: reason === 'cancelled' ? '' : 'Δεν τυπώθηκε: ' + reason });
-          },
-        ),
-      );
-    },
-  );
-  handlePrint('close', (e) => {
-    BrowserWindow.fromWebContents(e.sender)?.close();
-  });
-}
 function registerBackupsIpc() {
   handle('listBackups', () => listBackups(BACKUPS));
   handle('restoreBackup', async (_e, name: string) => {
@@ -1384,7 +984,7 @@ else {
       registerReportTemplatesIpc();
       registerReportPreviewIpc();
       registerLayoutPreviewIpc();
-      registerReportRunIpc({ printPreview });
+      registerReportRunIpc();
       registerReportFilesIpc();
       registerRosterIpc(answer);
       // Αρχεία Excel
