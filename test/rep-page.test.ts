@@ -88,24 +88,25 @@ describe('Δείγμα προεπισκόπησης', () => {
   });
 
   // Genuine source rule (not behaviour): the handlers live inside Electron's ipcMain, which no test can call. So the scan
-  // walks all of src/main (wherever the rewrite moves the handlers) and finds them by their channel name.
+  // walks all of src/main (wherever the rewrite moves the handlers) and finds them by their Api method name
+  // (the channel string lives only in src/shared/ipc/contract.ts).
   it('στον main το δείγμα μπαίνει μόνο στο rep:preview, όχι στο rep:run ούτε στις αυτόματες ενημερώσεις', () => {
     const files = readSources(path.join(SRC_DIR, 'main'), 5);
     const body = (name: string) => files.flatMap(f => {
       // whitespace-tolerant: the formatter may break the call after `(`
-      const i = f.text.search(new RegExp("ipcMain\\.handle\\(\\s*'" + name + "'"));
+      const i = f.text.search(new RegExp("\\bhandle\\(\\s*'" + name + "'"));
       if (i < 0) return [];
-      const j = f.text.indexOf('ipcMain.handle(', i + 10);
+      const j = f.text.indexOf('handle(', i + 10);
       return [f.text.slice(i, j < 0 ? undefined : j)];
     });
-    expect(body('rep:preview')).toHaveLength(1); expect(body('rep:run')).toHaveLength(1);
-    expect(body('rep:preview')[0]).toMatch(/sample/); expect(body('rep:run')[0]).not.toMatch(/sample|PV_/);
+    expect(body('repPreview')).toHaveLength(1); expect(body('repRun')).toHaveLength(1);
+    expect(body('repPreview')[0]).toMatch(/sample/); expect(body('repRun')[0]).not.toMatch(/sample|PV_/);
     // every other code line that names `sample` is the engine itself (the file that declares PvOpts) or hands it to
     // previewReport / previewBuilt; comments may mention it anywhere
     const engine = files.filter(f => /export interface PvOpts\b/.test(f.text));
     expect(engine).toHaveLength(1);
     const stray = files.filter(f => f !== engine[0]).flatMap(f => {
-      const handler = body('rep:preview')[0];
+      const handler = body('repPreview')[0];
       return f.text.split('\n').filter(l => /\bsample\b/.test(l) && !/^\s*\/\//.test(l) && !/previewReport|previewBuilt/.test(l) && !handler.includes(l.trim()));
     });
     expect(stray).toEqual([]);

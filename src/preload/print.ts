@@ -1,19 +1,13 @@
-// Γέφυρα του παραθύρου εκτύπωσης: εκτυπωτές, διάταξη, τύπωσε, PDF, ρυθμίσεις του εντύπου και «κλείσε»
+// Bridge of the print window: printers, layout, print, PDF, the form's settings and «close».
+//
+// Purpose: exposes `window.printer`, built from the PRINT table of shared/ipc/print.ts (channels and arguments).
+// Does NOT: contain any print logic, and exposes nothing but those seven methods (contextIsolation, no Node).
+// Owner layer: preload.
+// Why: the channel strings used to be written by hand here and again in main.
+// Covering test: test/ipc-contract.test.ts.
 import { contextBridge, ipcRenderer } from 'electron';
+import { PRINT, type Printer } from '../shared/ipc/print';
+import { buildInvokers } from '../shared/ipc/spec';
 
-contextBridge.exposeInMainWorld('printer', {
-  print: (o: {
-    landscape: boolean;
-    pageSize: string;
-    part: string;
-    device?: string;
-    copies?: number;
-    duplex?: string;
-  }) => ipcRenderer.invoke('print:go', o),
-  printers: () => ipcRenderer.invoke('print:printers'),
-  layout: (req: { opts: unknown; sheets: string[] | null; save: boolean }) => ipcRenderer.invoke('print:layout', req),
-  forget: () => ipcRenderer.invoke('print:forget'),
-  duplex: (on: boolean) => ipcRenderer.invoke('print:duplex', on),
-  pdf: () => ipcRenderer.invoke('print:pdf'),
-  close: () => ipcRenderer.invoke('print:close'),
-});
+const printer = buildInvokers(PRINT, (channel, ...args) => ipcRenderer.invoke(channel, ...args)) as unknown as Printer;
+contextBridge.exposeInMainWorld('printer', printer);

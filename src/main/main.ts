@@ -1,5 +1,5 @@
 // Main process: βάση, κανόνες, αρχεία. Το UI ζητά ενέργειες μέσω IPC και παίρνει πίσω τη νέα κατάσταση.
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -22,6 +22,7 @@ import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../share
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
+import { eventChannel, handle, handleGuarded, handlePrint } from './ipc/handle';
 import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
 import type { LayoutSheet } from '../shared/layout';
 import type {
@@ -907,7 +908,7 @@ const notify = () => {
   statusAll().then(
     (st) => {
       try {
-        win?.webContents.send('sources', st);
+        win?.webContents.send(eventChannel('onSources'), st);
       } catch {
         /* παράθυρο κλειστό */
       }
@@ -1211,7 +1212,7 @@ const logWrite = (what: string, t0: number, error?: string) => {
 // ένδειξη στην πάνω μπάρα: «Γράφεται στο Excel…» / «Γράφτηκε 10:42»
 const busy = (b: ExcelBusy) => {
   try {
-    win?.webContents.send('excel:busy', b);
+    win?.webContents.send(eventChannel('onBusy'), b);
   } catch {
     /* παράθυρο κλειστό */
   }
@@ -2504,33 +2505,25 @@ async function recover(reason: string, empty = false): Promise<boolean> {
 // Αυτόματη ενημέρωση: ό,τι χρειάζεται το UI (ο έλεγχος και το κατέβασμα γίνονται στον main, βλ. updater.ts)
 let upd: ReturnType<typeof createUpdater> | null = null;
 function registerUpdate() {
-  const on = <T extends unknown[], R>(ch: string, f: (...a: T) => R, dflt: R) =>
-    ipcMain.handle(ch, (_e, ...a: unknown[]) => {
-      try {
-        return f(...(a as T));
-      } catch (e) {
-        console.error(ch, e);
-        return dflt;
-      }
-    });
+  const on = handleGuarded;
   on(
-    'upd:info',
+    'updInfo',
     () => {
       upd?.confirm();
       return upd!.info();
     },
     null as any,
   );
-  on('upd:check', () => upd!.check(true), null as any);
-  on('upd:auto', (v: boolean) => upd!.setAuto(v), null as any);
-  on('upd:start', () => upd!.start(), undefined);
-  on('upd:cancel', () => upd!.cancel(), undefined);
-  on('upd:seen', () => upd!.seen(), undefined);
-  on('upd:skip', () => upd!.skip(), undefined);
-  on('upd:restart', () => upd!.restart(), undefined);
-  on('upd:file', () => upd!.fromFile(), { ok: false, error: 'Δεν ξεκίνησε η ενημέρωση' } as any);
-  on('upd:rollback', () => upd!.rollback(), { ok: false, error: 'Δεν έγινε η επιστροφή' });
-  on('upd:releases', () => upd!.openReleases(), undefined);
+  on('updCheck', () => upd!.check(true), null as any);
+  on('updAuto', (v: boolean) => upd!.setAuto(v), null as any);
+  on('updStart', () => upd!.start(), undefined);
+  on('updCancel', () => upd!.cancel(), undefined);
+  on('updSeen', () => upd!.seen(), undefined);
+  on('updSkip', () => upd!.skip(), undefined);
+  on('updRestart', () => upd!.restart(), undefined);
+  on('updFile', () => upd!.fromFile(), { ok: false, error: 'Δεν ξεκίνησε η ενημέρωση' } as any);
+  on('updRollback', () => upd!.rollback(), { ok: false, error: 'Δεν έγινε η επιστροφή' });
+  on('updOpenReleases', () => upd!.openReleases(), undefined);
 }
 
 function createWindow() {
@@ -2612,7 +2605,7 @@ else {
       seenUntil = typeof meta.seenAudit === 'number' && meta.seenAudit <= sessionStart ? meta.seenAudit : sessionStart;
       writeMeta({ seenAudit: sessionStart });
 
-      ipcMain.handle(
+      handle(
         'boot',
         (): Boot => ({
           ...snapshot(),
@@ -2630,18 +2623,18 @@ else {
       const answer = (r: ReturnType<typeof runCmd>): CmdResult => (r.ok ? reply(r.text) : r);
       // αρχεία και φάκελοι αλλάζουν μόνο από τους διαλόγους του main (src:save, form:save, φάκελοι), όχι με εντολή από το UI
       const MAIN_ONLY = ['sources', 'forms', 'outputDir', 'newDirs'];
-      ipcMain.handle('cmd', (_e, cmd: Command) =>
+      handle('run', (_e, cmd: Command) =>
         cmd?.t === 'setSettings' && Object.keys(cmd.settings || {}).some((k) => MAIN_ONLY.includes(k))
           ? fail('Αυτή η ρύθμιση αλλάζει μόνο από τα Αρχεία Excel / τους Φακέλους')
           : answer(runCmd(cmd)),
       );
-      ipcMain.handle('sync', () => reply(''));
+      handle('sync', () => reply(''));
       // νέα μέρα με την εφαρμογή ανοιχτή: οι εργασίες της μέρας τώρα (όχι σε ως 10 λεπτά) και μόνο ό,τι άλλαξε
-      ipcMain.handle('day:check', () => {
+      handle('dayCheck', () => {
         daily();
         return reply('');
       });
-      ipcMain.handle('undo', (_e, id?: number): CmdResult => {
+      handle('undo', (_e, id?: number): CmdResult => {
         const last = store.lastUndoable();
         if (!last) return { ok: false, error: 'Δεν υπάρχει κάτι για αναίρεση' };
         // «Αναίρεση» από μήνυμα: μόνο η ενέργεια του μηνύματος, όχι κάποια που έγινε μετά
@@ -2685,9 +2678,9 @@ else {
           return fail(e);
         }
       });
-      ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
+      handle('exportFile', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
       // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
-      ipcMain.handle('export:lists', async (_e, date: ISODate, sigs?: Sig[]) => {
+      handle('exportLists', async (_e, date: ISODate, sigs?: Sig[]) => {
         try {
           const r = await made('lists', date, store.state, sigs);
           const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
@@ -2697,7 +2690,7 @@ else {
           return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
         }
       });
-      ipcMain.handle('export:cadre', async (_e, date: ISODate, sigs?: Sig[]) => {
+      handle('exportCadre', async (_e, date: ISODate, sigs?: Sig[]) => {
         try {
           const r = await made('cadre', date, store.state, sigs);
           const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
@@ -2707,7 +2700,7 @@ else {
           return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
         }
       });
-      ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+      handle('exportRoster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
         try {
           const r = await made('rosterPrint', date, store.state, sigs);
           const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
@@ -2722,7 +2715,7 @@ else {
         }
       });
       // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
-      ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+      handle('exportWeapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
         try {
           const r = await made('weapons', date, store.state, sigs);
           const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
@@ -2737,7 +2730,7 @@ else {
         }
       });
       // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
-      ipcMain.handle('export:hd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
+      handle('exportHd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
         try {
           const s = store.state;
           const g = sigsOf(s, 'hd', req.sigs);
@@ -2784,7 +2777,7 @@ else {
           return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e);
         }
       });
-      ipcMain.handle('hd:tpl', async () => {
+      handle('pickHdTpl', async () => {
         const res = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε το Word που θα γίνει πρότυπο της Ημερήσιας Διαταγής',
           filters: [{ name: 'Word', extensions: ['docx'] }],
@@ -2806,7 +2799,7 @@ else {
         }
       });
       // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
-      ipcMain.handle('export:imer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
+      handle('exportImer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
         try {
           const r = await made('imer', req.to, store.state, sigs, req);
           const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
@@ -2821,7 +2814,7 @@ else {
         }
       });
       // Έντυπα: πρότυπα στον φάκελο «Πρότυπα εντύπων», έντυπα που βγαίνουν στον φάκελο των Excel
-      ipcMain.handle('rep:upload', async (_e, kind: RepKind) => {
+      handle('repUpload', async (_e, kind: RepKind) => {
         const res = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε το Excel που θα γίνει πρότυπο',
           filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
@@ -2858,14 +2851,14 @@ else {
           return fail('Δεν διαβάστηκε το ' + path.basename(src) + ': ' + msgOf(e));
         }
       });
-      ipcMain.handle('rep:inspect', async (_e, file: string, kind: RepKind, sheet?: string, head?: number) => {
+      handle('repInspect', async (_e, file: string, kind: RepKind, sheet?: string, head?: number) => {
         try {
           return await inspectTemplate(await tplBuf(file), kind, sheet, head);
         } catch (e) {
           return fail(e);
         }
       });
-      ipcMain.handle('rep:build', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
+      handle('repBuild', async (_e, o: BuildOpts, kind: RepKind, file?: string) => {
         try {
           const b = await buildTemplate(o, kind, xlLook(store.state.settings));
           const name = file && TPL_NAME.test(file) ? file : crypto.randomUUID() + '.xlsx';
@@ -2890,8 +2883,8 @@ else {
         }
       });
       // opts.sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας· τότε και πολλές σελίδες. Μόνο εδώ, ποτέ στο rep:run
-      ipcMain.handle(
-        'rep:preview',
+      handle(
+        'repPreview',
         async (
           _e,
           src: { file?: string; build?: BuildOpts },
@@ -2933,7 +2926,7 @@ else {
       // print: πάντα νέο αρχείο στον φάκελο των Excel και προεπισκόπηση εκτύπωσης όλων των φύλλων του
       // opts.quiet: δεν ανοίγει το Excel (Έντυπα ημέρας › «Τύπωσε όλα») · opts.again: «Ξαναβγάλε» από το ιστορικό (δεν μετρά ξανά τους τυχαίους)
       // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (σήμερα), με 8 γραμμές παραπάνω για να μπορείς να κατεβάσεις κάτι
-      ipcMain.handle('layout:preview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
+      handle('layoutPreview', async (_e, q: LayoutReq): Promise<LayoutPv | Fail> => {
         try {
           const s = store.state;
           let out: { data: Buffer; warnings?: string[]; layout?: LayoutSheet[] };
@@ -2984,8 +2977,8 @@ else {
           return { ok: false, error: e instanceof Error ? e.message : String(e) };
         }
       });
-      ipcMain.handle(
-        'rep:run',
+      handle(
+        'repRun',
         async (
           _e,
           r: Report,
@@ -3051,12 +3044,12 @@ else {
           }
         },
       );
-      ipcMain.handle('rep:times', (_e, id: string) => repTimes(id));
-      ipcMain.handle('rep:hist', (_e, id: string) =>
+      handle('repTimes', (_e, id: string) => repTimes(id));
+      handle('repHist', (_e, id: string) =>
         (readMeta().repHist?.[id] || []).map((h) => ({ ...h, exists: fs.existsSync(h.file) })),
       );
       // «Φύλλο σε άλλο Excel…»: το αρχείο που θα πάρει το φύλλο
-      ipcMain.handle('rep:pickFile', async () => {
+      handle('repPickFile', async () => {
         const res = await dialog.showOpenDialog(win!, {
           title: 'Σε ποιο Excel θα γράφεται το φύλλο',
           filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
@@ -3064,11 +3057,11 @@ else {
         });
         return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
       });
-      ipcMain.handle('rep:openTpl', async (_e, file: string) => {
+      handle('repOpenTpl', async (_e, file: string) => {
         if (TPL_NAME.test(file) && fs.existsSync(path.join(TPL_DIR, file)))
           await shell.openPath(path.join(TPL_DIR, file));
       });
-      ipcMain.handle('rep:files', (_e, files: string[]) =>
+      handle('repFiles', (_e, files: string[]) =>
         Object.fromEntries(
           (Array.isArray(files) ? files : [])
             .filter((f) => TPL_NAME.test(f))
@@ -3081,9 +3074,9 @@ else {
             }),
         ),
       );
-      ipcMain.handle('rep:last', () => readMeta().repLast || {});
-      ipcMain.handle('roster:pick', () => pickRoster());
-      ipcMain.handle('roster:apply', (_e, token: string, deactivateMissing: boolean) => {
+      handle('repLast', () => readMeta().repLast || {});
+      handle('pickRoster', () => pickRoster());
+      handle('applyRoster', (_e, token: string, deactivateMissing: boolean) => {
         const p = pending.get(token);
         if (!p) return fail('Η εισαγωγή έληξε, διάλεξε ξανά το αρχείο');
         pending.delete(token);
@@ -3107,7 +3100,7 @@ else {
         if (file) srcMeta.allow([file]);
         return file;
       };
-      ipcMain.handle('src:pick', async (_e, kind: ListKind | null) => {
+      handle('srcPick', async (_e, kind: ListKind | null) => {
         const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel');
         if (!file) return null;
         try {
@@ -3116,7 +3109,7 @@ else {
           return fail(e instanceof OldFormatError ? e.message : e);
         }
       });
-      ipcMain.handle('src:read', async (_e, kind: ListKind) => {
+      handle('srcRead', async (_e, kind: ListKind) => {
         try {
           const b = await current(kind);
           if (!b) return fail('Δεν έχει οριστεί αρχείο');
@@ -3125,7 +3118,7 @@ else {
           return fail(e);
         }
       });
-      ipcMain.handle('src:save', async (_e, kind: ListKind, b: SourceBinding | null) => {
+      handle('srcSave', async (_e, kind: ListKind, b: SourceBinding | null) => {
         if (b && (typeof b.file !== 'string' || !srcMeta.allowed(b.file)))
           return fail('Άγνωστο αρχείο: διάλεξέ το με το «Διάλεξε Excel…»');
         try {
@@ -3153,8 +3146,8 @@ else {
       });
       const known = (b: SourceBinding | null | undefined) =>
         !!b && typeof b.file === 'string' && srcMeta.allowed(b.file);
-      ipcMain.handle(
-        'src:import',
+      handle(
+        'srcImport',
         (
           _e,
           kind: StatusKind,
@@ -3167,36 +3160,36 @@ else {
             ? fail('Άγνωστο αρχείο')
             : importStatuses(kind, b, choices || {}, !!keepRemoved, Array.isArray(keepApp) ? keepApp : []),
       );
-      ipcMain.handle('src:apply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) =>
+      handle('srcApply', (_e, kind: ListKind, b: SourceBinding, cmd: Command, keys?: string[]) =>
         !known(b) ? fail('Άγνωστο αρχείο') : applySheet(kind, b, cmd, Array.isArray(keys) ? keys : []),
       );
-      ipcMain.handle('src:keys', (_e, kind: ListKind) => ({
+      handle('srcKeys', (_e, kind: ListKind) => ({
         keys: srcMeta.get(kind)?.keys || [],
         base: srcMeta.get(kind)?.base || {},
       }));
-      ipcMain.handle('src:people', async (_e, b: SourceBinding) => {
+      handle('srcPeople', async (_e, b: SourceBinding) => {
         if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο');
         const nb = (await current('people', b))!;
         return rosterPreview(nb.file, nb);
       });
-      ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
-      ipcMain.handle('src:write', async (_e, kind: ListKind) => {
+      handle('srcPlan', (_e, kind: ListKind) => planOut(kind));
+      handle('srcWrite', async (_e, kind: ListKind) => {
         const r = await syncOut(kind, false);
         notify();
         return r.ok ? { ok: true, text: r.text, file: r.file } : r;
       });
-      ipcMain.handle('src:new', (_e, kind: ListKind) => createNew(kind));
-      ipcMain.handle('src:status', async () => {
+      handle('srcNewFile', (_e, kind: ListKind) => createNew(kind));
+      handle('srcStatus', async () => {
         retryPending();
         return statusAll();
       });
-      ipcMain.handle('form:pick', async (_e, f: FormKind) => {
+      handle('formPick', async (_e, f: FormKind) => {
         const file = await pickXlsx('Template για ' + f);
         if (!file) return null;
         return formInfo(f, file);
       });
-      ipcMain.handle('form:info', (_e, f: FormKind) => formInfo(f));
-      ipcMain.handle('form:save', (_e, f: FormKind, b: FormBinding | null) => {
+      handle('formInfo', (_e, f: FormKind) => formInfo(f));
+      handle('formSave', (_e, f: FormKind, b: FormBinding | null) => {
         const cur = formBinding(f);
         if (b?.file && b.file !== cur.file && !srcMeta.allowed(b.file))
           return fail('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
@@ -3213,7 +3206,7 @@ else {
         });
         return r.ok ? reply(r.text, false) : r;
       });
-      ipcMain.handle('form:dir', async (_e, f: FormKind) => {
+      handle('formDir', async (_e, f: FormKind) => {
         const r = await dialog.showOpenDialog(win!, {
           title: 'Φάκελος για το έντυπο',
           defaultPath: formBinding(f).dir || outputDir(),
@@ -3223,12 +3216,12 @@ else {
         if (dir) srcMeta.allow([dir]);
         return dir;
       });
-      ipcMain.handle('open:path', (_e, file: string) => {
+      handle('openPath', (_e, file: string) => {
         if (typeof file === 'string' && /\.xls[xm]?$/i.test(file) && knownPath(file) && fs.existsSync(file))
           return shell.openPath(file);
         return 'άγνωστο αρχείο';
       });
-      ipcMain.handle('print:file', (_e, file: string, sheet?: string | string[]) => {
+      handle('printFile', (_e, file: string, sheet?: string | string[]) => {
         // αρχεία που ξέρει η εφαρμογή ή έντυπα στους φακέλους εξαγωγής (και παλιότερων ημερών)
         const inside = (dir?: string) =>
           !!dir &&
@@ -3251,7 +3244,7 @@ else {
         );
       });
       // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
-      ipcMain.handle('print:layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
+      handlePrint('layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
         const job = printJobs.get(e.sender.id);
         if (!job) return fail('Έκλεισε η εκτύπωση');
         try {
@@ -3269,17 +3262,17 @@ else {
         }
       });
       // «Να θυμάται» ξετσεκαρισμένο ή «Αρχικές ρυθμίσεις»: σβήνει τις αποθηκευμένες, γυρίζει τις αρχικές του εντύπου
-      ipcMain.handle('print:forget', (e) => {
+      handlePrint('forget', (e) => {
         const job = printJobs.get(e.sender.id);
         if (!job) return null;
         savePrintPrefs(job.key, null);
         return job.base;
       });
-      ipcMain.handle('print:duplex', (_e, on: unknown) => {
+      handlePrint('duplex', (_e, on: unknown) => {
         writeMeta({ printDuplex: on === true });
       });
       // PDF: ίδιο με το χαρτί, στον φάκελο του αρχείου (ή όπου διαλέξει)
-      ipcMain.handle('print:pdf', async (e) => {
+      handlePrint('pdf', async (e) => {
         const job = printJobs.get(e.sender.id);
         if (!job) return fail('Έκλεισε η εκτύπωση');
         const pw = BrowserWindow.fromWebContents(e.sender);
@@ -3308,7 +3301,7 @@ else {
           return fail(err);
         }
       });
-      ipcMain.handle('print:printers', async (e) => {
+      handlePrint('printers', async (e) => {
         try {
           return (await e.sender.getPrintersAsync()).map((p) => ({
             name: p.name,
@@ -3321,8 +3314,8 @@ else {
       });
       // Με εκτυπωτή από τη μπάρα: τυπώνει χωρίς τον διάλογο των Windows, ώστε να μένουν το χαρτί και ο προσανατολισμός
       // του φύλλου (ο διάλογος παίρνει τις προεπιλογές του εκτυπωτή, συνήθως κατακόρυφο, και κόβει τα οριζόντια φύλλα)
-      ipcMain.handle(
-        'print:go',
+      handlePrint(
+        'print',
         async (
           e,
           o: {
@@ -3384,12 +3377,12 @@ else {
           );
         },
       );
-      ipcMain.handle('print:close', (e) => {
+      handlePrint('close', (e) => {
         BrowserWindow.fromWebContents(e.sender)?.close();
       });
       setInterval(retryPending, 60 * 1000);
-      ipcMain.handle('backups:list', () => listBackups(BACKUPS));
-      ipcMain.handle('backups:restore', async (_e, name: string) => {
+      handle('listBackups', () => listBackups(BACKUPS));
+      handle('restoreBackup', async (_e, name: string) => {
         const file = path.join(BACKUPS, path.basename(name));
         const bad = fs.existsSync(file) ? store.validate(file) : 'Δεν βρέθηκε το αντίγραφο';
         if (bad) return { ok: false, error: 'Το αντίγραφο δεν είναι καλό: ' + bad };
@@ -3450,7 +3443,7 @@ else {
         app.exit(0);
         return { ok: true };
       });
-      ipcMain.handle(
+      handle(
         'diag',
         (): Diag => ({
           startupMs: ready - T0,
@@ -3475,13 +3468,13 @@ else {
           worker: workerUp(),
         }),
       );
-      ipcMain.handle('flags:gpu', (_e, disable: boolean) => {
+      handle('setGpu', (_e, disable: boolean) => {
         writeJson(FLAGS, { ...readFlags(), disableGpu: !!disable });
         app.relaunch();
         app.exit(0);
       });
       // Αντίγραφο σε USB (έρευνα §4.2): αν χαλάσει ο δίσκος του PC, τα δεδομένα είναι αλλού
-      ipcMain.handle('usb:copy', async () => {
+      handle('usbCopy', async () => {
         const m = readMeta();
         const r = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε το USB (ή φάκελο σε άλλο δίσκο)',
@@ -3522,7 +3515,7 @@ else {
         }
       });
       // Φέρνει ένα αντίγραφο από USB στη λίστα αντιγράφων, για να γίνει επαναφορά από εκεί (π.χ. σε καινούργιο PC)
-      ipcMain.handle('backups:import', async () => {
+      handle('importBackup', async () => {
         const m = readMeta();
         const r = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε αντίγραφο (ilh_….db)',
@@ -3541,14 +3534,14 @@ else {
         copyDurable(src, path.join(BACKUPS, name));
         return { ok: true, name };
       });
-      ipcMain.handle('backup', () => {
+      handle('backup', () => {
         try {
           return { ok: true, file: store.backup('χειροκίνητο') };
         } catch (e) {
           return { ok: false, error: String(e) };
         }
       });
-      ipcMain.handle('open', (_e, which: string) => {
+      handle('openFolder', (_e, which: string) => {
         const dir =
           which === 'output'
             ? outputDir()
@@ -3560,7 +3553,7 @@ else {
         fs.mkdirSync(dir, { recursive: true });
         return shell.openPath(dir);
       });
-      ipcMain.handle('outputDir:choose', async () => {
+      handle('chooseOutputDir', async () => {
         const r = await dialog.showOpenDialog(win!, {
           title: 'Φάκελος για τα Excel',
           defaultPath: outputDir(),
@@ -3603,7 +3596,7 @@ else {
         (!!t &&
           typeof t === 'object' &&
           (('form' in t && FORM_KINDS.includes(t.form)) || ('kind' in t && canCreate(t.kind))));
-      ipcMain.handle('dir:choose', async (_e, t: DirTarget) => {
+      handle('dirChoose', async (_e, t: DirTarget) => {
         if (!okTarget(t)) return fail('άγνωστος φάκελος');
         const r = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε φάκελο',
@@ -3616,20 +3609,20 @@ else {
         const c = setDir(t, dir, dir);
         return c.ok ? reply(c.text, false) : c;
       });
-      ipcMain.handle('dir:reset', (_e, t: DirTarget) => {
+      handle('dirReset', (_e, t: DirTarget) => {
         if (!okTarget(t)) return fail('άγνωστος φάκελος');
         const c = setDir(t, undefined, t === 'output' ? 'προεπιλογή' : 'ο γενικός');
         return c.ok ? reply(c.text, false) : c;
       });
-      ipcMain.handle('dir:open', (_e, t: DirTarget) => {
+      handle('dirOpen', (_e, t: DirTarget) => {
         if (!okTarget(t)) return 'άγνωστος φάκελος';
         const dir = dirOf(t);
         fs.mkdirSync(dir, { recursive: true });
         return shell.openPath(dir);
       });
       // ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)
-      ipcMain.handle('esso:info', () => essoInfo());
-      ipcMain.handle('esso:dir', async (_e, def?: string) => {
+      handle('essoInfo', () => essoInfo());
+      handle('essoDir', async (_e, def?: string) => {
         const r = await dialog.showOpenDialog(win!, {
           title: 'Διάλεξε φάκελο',
           defaultPath: typeof def === 'string' && def ? def : DOCS(),
@@ -3639,7 +3632,7 @@ else {
         if (dir) essoDirs.add(dir);
         return dir;
       });
-      ipcMain.handle('esso:roster', async () => {
+      handle('essoRoster', async () => {
         const res = await dialog.showOpenDialog(win!, {
           title: 'Δυναμολόγιο της νέας ΕΣΣΟ',
           filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm'] }],
@@ -3648,8 +3641,8 @@ else {
         if (res.canceled || !res.filePaths[0]) return null;
         return rosterPreview(res.filePaths[0], null);
       });
-      ipcMain.handle('esso:start', (_e, o: EssoStart) => startEsso(o));
-      ipcMain.handle('esso:pick', async (): Promise<EssoArchiveInfo | { ok: false; error: string } | null> => {
+      handle('essoStart', (_e, o: EssoStart) => startEsso(o));
+      handle('essoPick', async (): Promise<EssoArchiveInfo | { ok: false; error: string } | null> => {
         const r = await dialog.showOpenDialog(win!, {
           title: 'Φάκελος αρχείου ΕΣΣΟ (με το ΕΣΣΟ.json)',
           defaultPath: fs.existsSync(archiveRoot()) ? archiveRoot() : DOCS(),
@@ -3668,8 +3661,8 @@ else {
           files: new Set(a.manifest.files.map((f) => f.copy)).size,
         };
       });
-      ipcMain.handle('esso:restore', (_e, dir: string) => restoreEsso(dir));
-      ipcMain.handle('esso:open', (_e, dir: string) => {
+      handle('essoRestore', (_e, dir: string) => restoreEsso(dir));
+      handle('essoOpen', (_e, dir: string) => {
         if (
           typeof dir !== 'string' ||
           !(
