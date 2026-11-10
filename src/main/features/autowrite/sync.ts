@@ -4,7 +4,7 @@
 //   dirty kinds of one file in one open and one save), `autoCheck` (is it safe to write by itself now?),
 //   `afterWrite` (new binding, sync memory, History line) and the History text of a write.
 // Does NOT: decide when to write (run.ts, schedule.ts), build the cells (`main/sources.ts` `writeSource` and
-//   `writeGroup`), or read a file into the app (the import side, still in main.ts).
+//   `writeGroup`), or read a file into the app (the import side, `features/sources`).
 // Owner layer: main (architecture), `features/autowrite`. Imports app/*, shared/*, `sources`, `offload`.
 // Why: the manual and the automatic write must record the same things in the same way, so they share one place. Moved
 //   verbatim from main.ts (Phase 4.3a).
