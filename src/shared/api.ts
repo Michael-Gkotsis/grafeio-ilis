@@ -3,6 +3,7 @@ import type { AppState, AuditEntry } from '../core/model/state';
 import type { Settings } from '../core/model/settings';
 import type { Command } from './commands';
 import type { ISODate } from '../core/lib/dates';
+import type { ExportKind } from '../core/model/exportKind';
 import type { Check } from './preflight';
 import type { Esso } from './esso';
 import type { RawSheet } from './roster';
@@ -22,7 +23,7 @@ import type {
   TableHit,
 } from './sources';
 
-export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
+export type { ExportKind };
 // print: προεπισκόπηση εκτύπωσης αντί για Excel · sigs: υπογραφές μόνο για αυτή τη φορά (Ρυθμίσεις › Υπογραφές για όλες)
 export interface ExportOpts {
   open?: boolean;
