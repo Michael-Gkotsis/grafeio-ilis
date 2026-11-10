@@ -28,8 +28,8 @@ export function useToday(): ISODate {
   return d;
 }
 
-/** Window width under which the «auto» menu is the narrow rail (screens narrower than 1500 px). */
-const RAIL_BELOW = 1500;
+/** Window width under which the «auto» menu is the narrow rail (screens narrower than 1280 px). */
+const RAIL_BELOW = 1280;
 
 /**
  * Display preferences of this PC (theme, density, menu width, rank names), saved in `grafeio.prefs`.

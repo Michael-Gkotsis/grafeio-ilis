@@ -45,7 +45,8 @@ R['boot ως την πρώτη οθόνη'] = Math.round(await page.evaluate(() 
 R['boot: από τα δεδομένα ως την πρώτη οθόνη'] = R['boot ως την πρώτη οθόνη'] - Math.round(await page.evaluate(() => window.__benchData));
 // κλικ και αναμονή ως την επόμενη εικόνα (απόδοση React + layout + paint)
 const clickMs = sel => page.evaluate(async sel => {
-  const el = typeof sel === 'string' ? document.querySelector(sel) : null; if (!el) return -1;
+  // 'nav:K' = the K-th menu button in document order (U4: buttons sit in groups, so :nth-of-type no longer counts them all)
+  const el = typeof sel !== 'string' ? null : sel.startsWith('nav:') ? document.querySelectorAll('.sidenav .navbtn')[+sel.slice(4) - 1] : document.querySelector(sel); if (!el) return -1;
   const a = performance.now(); el.click();
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
   return performance.now() - a;
@@ -59,7 +60,7 @@ if (PROF) {
   await cdp.send('Profiler.start');
   await cdp.send('Performance.enable'); const m0 = await metrics();
   if (PROF === 'boot') { await page.reload(); await page.waitForSelector('.sidenav .navbtn'); console.log('boot ms', await page.evaluate(() => performance.now() - window.__benchData)); }
-  else console.log('ms', await clickMs(`.sidenav .navbtn:nth-of-type(${i + 1})`));
+  else console.log('ms', await clickMs(`nav:${i + 1}`));
   const m1 = await metrics(); console.log(Object.fromEntries(Object.keys(m1).map(k => [k, Math.round((m1[k] - m0[k]) * (k.endsWith('Count') || k === 'Nodes' ? 1 : 1000))])));
   if (PROF.includes('>')) { const tab = PROF.split('>')[1]; console.log('tab ms', await page.evaluate(async t => { const el = [...document.querySelectorAll('.main [role=tab]')].find(e => e.textContent.startsWith(t)); const a = performance.now(); el.click(); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))); return performance.now() - a; }, tab)); }
   const { profile } = await cdp.send('Profiler.stop');
@@ -79,9 +80,9 @@ if (PROF) {
 }
 const navs = await page.$$eval('.sidenav .navbtn:not(.sidenav__toggle)', els => els.map((e, i) => [i, e.querySelector('.navbtn__lbl')?.textContent || '']));
 for (const [i, name] of navs) {
-  const sel = `.sidenav .navbtn:nth-of-type(${i + 1})`;
+  const sel = `nav:${i + 1}`;
   const xs = [];
-  for (let r = 0; r < REPS; r++) { await clickMs('.sidenav .navbtn:nth-of-type(1)'); xs.push(await clickMs(sel)); }
+  for (let r = 0; r < REPS; r++) { await clickMs('nav:1'); xs.push(await clickMs(sel)); }
   R['οθόνη ' + name] = med(xs); D['οθόνη ' + name] = await page.evaluate(() => document.getElementsByTagName('*').length);
   // καρτέλες της οθόνης
   const tabs = await page.$$eval('.main [role=tab]', els => els.map(e => e.textContent));
@@ -93,7 +94,7 @@ for (const [i, name] of navs) {
 }
 // μετά από μια εντολή: η οθόνη ξαναζωγραφίζεται με το νέο κομμάτι της κατάστασης (Ctrl+Z στο bench «αγγίζει» το κλειδί)
 const after = async (navIdx, key, tab) => {
-  await clickMs(`.sidenav .navbtn:nth-of-type(${navIdx})`);
+  await clickMs(`nav:${navIdx}`);
   if (tab) await page.evaluate(t => [...document.querySelectorAll('.main [role=tab]')].find(e => e.textContent.startsWith(t))?.click(), tab);
   await page.waitForTimeout(300);
   const xs = [];
@@ -112,7 +113,7 @@ const navIdx = name => navs.find(([, n]) => n === name)?.[0] + 1;
 for (const [scr, key, tab] of [['Σήμερα', 'statuses'], ['Δυναμολόγιο', 'people'], ['Υπηρεσίες', 'guards', 'Θέσεις'], ['Υπηρεσίες', 'guards', 'Έλεγχος'], ['Υπηρεσίες', 'guards', 'Ποιος'], ['Εξοδούχοι', 'statuses'], ['ΗΚΑΙ', 'statuses'], ['Οπλισμός', 'people', 'Όπλα']])
   R['μετά από εντολή (' + key + '): ' + scr + (tab ? ' › ' + tab : '')] = await after(navIdx(scr), key, tab);
 // αναζήτηση στο Δυναμολόγιο: ένα γράμμα
-await clickMs('.sidenav .navbtn:nth-of-type(2)');
+await clickMs('nav:2');
 const typing = await page.evaluate(async () => {
   const el = document.querySelector('.main input[type="search"]'); if (!el) return -1;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;

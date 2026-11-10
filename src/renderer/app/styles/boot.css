@@ -2,8 +2,9 @@
  * Static skeleton shown in index.html until React mounts: same frame as the Shell, no items, no icons.
  *
  * Purpose: the user sees top bar + menu in the right theme at first paint instead of a blank «Φόρτωση…».
- * Does NOT: restyle anything. The frame reuses .shell/.topbar/.brand/.sidenav/.main from legacy.css, so it cannot
- *   drift from the real Shell; only the placeholders below are new. Tokens only, no colour literals.
+ * Does NOT: restyle anything. The frame reuses .shell/.topbar/.brand/.sidenav/.main from legacy.css and shell.css (same
+ *   --nav-* tokens as the mounted menu), so it cannot drift from the real Shell; only the placeholders below are new.
+ *   Tokens only, no colour literals.
  * Owner layer: renderer app shell. Layer: base. Covering test: test/boot-skeleton.test.ts.
  * Rail: boot-prefs.js sets data-boot-nav="rail" on <html> (the real Shell uses .is-rail, which React sets later).
  */
@@ -11,17 +12,11 @@ html[data-boot-nav="rail"] .boot-shell {
   --side-w: var(--rail-w);
 }
 
-/* same footprint as the back button (36 px) and the logo (30 px) so the title does not jump when React mounts */
-.boot-shell__back {
-  flex: none;
-  width: 36px;
-  height: 36px;
-}
-
+/* same footprint as the 24 px logo so the title does not jump when React mounts */
 .boot-shell__logo {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
 }
 
 .boot-shell__main {

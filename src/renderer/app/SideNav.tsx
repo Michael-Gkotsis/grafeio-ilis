@@ -1,11 +1,11 @@
-// The menus: the side menu (wide or rail), the phone bottom bar and the menu button both of them use.
+// The menus: the side menu (grouped, wide or rail), the phone bottom bar and the menu button both of them use.
 // Purpose: `navItem`, `SideNav` and `BottomNav` draw the entries of routes.ts with badges and shortcut hints.
 // Does NOT: own the badge numbers (useShellInfo.ts), decide the route (useRouter.ts) or bind Alt+1 … Alt+0
 //   (shortcuts.ts); the hint text only repeats them.
 // Owner layer: renderer/app. Why: three menus shared one local function inside Shell.
 // Covering test: test/screens-main.test.ts (shell snapshots), test/guide.test.ts (walks every menu entry).
 import { Badge, Icon } from '../ui';
-import { MOBILE_MAIN, MOBILE_MORE, NAV_ALL, NAV_MAIN, NAV_MORE, SCREENS, screenName } from './routes';
+import { MOBILE_MAIN, MOBILE_MORE, NAV_ALL, NAV_GROUPS, NAV_MORE, SCREENS, screenName, type NavGroup } from './routes';
 import type { ScreenId } from './screenId';
 
 /** Numbers shown on menu entries. */
@@ -79,13 +79,33 @@ interface SideNavProps {
   toggleRail: () => void;
 }
 
-/** The side menu. The last button folds it to a rail (Ctrl+B). */
+/** One headed block of the side menu. The unlabelled block (Notes) has no heading and no accessible name. */
+function navGroup(g: NavGroup, index: number, inRail: boolean, menu: NavMenu) {
+  const headingId = 'sidenav-grp-' + index;
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a fieldset would bring a border and legend styling into a menu
+    <div
+      key={g.label || 'rest'}
+      role="group"
+      className={g.label ? 'sidenav__grp' : 'sidenav__grp sidenav__grp--bare'}
+      aria-labelledby={g.label ? headingId : undefined}
+    >
+      {g.label && (
+        <div className="sidenav__group" id={headingId}>
+          {g.label}
+        </div>
+      )}
+      {g.items.map((v) => navItem(v, inRail, menu))}
+    </div>
+  );
+}
+
+/** The side menu: three headed groups, Notes, then Settings pushed down; the last button folds it (Ctrl+B). */
 export function SideNav({ menu, rail, toggleRail }: SideNavProps) {
   return (
     <nav className="sidenav" aria-label="Κύριο μενού">
-      {NAV_MAIN.map((v) => navItem(v, rail, menu))}
-      <div className="sidenav__sep" />
-      {NAV_MORE.map((v) => navItem(v, rail, menu))}
+      {NAV_GROUPS.map((g, i) => navGroup(g, i, rail, menu))}
+      <div className="sidenav__more">{NAV_MORE.map((v) => navItem(v, rail, menu))}</div>
       <button
         type="button"
         className="navbtn sidenav__toggle"
