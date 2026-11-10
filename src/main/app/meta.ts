@@ -28,7 +28,8 @@ export const readFlags = (): { disableGpu?: boolean } => {
     return {};
   }
 };
-// Small items that do not belong in the database (so a restore does not lose them): last USB copy, how far the user has seen the history
+// Small items that do not belong in the database (so a restore does not lose them): last USB copy, how far the user
+// has seen the history
 /** `data/meta.json`. */
 export const META = path.join(DATA, 'meta.json');
 /** Shape of meta.json (frozen; every key optional). */
@@ -44,14 +45,17 @@ export type Meta = {
   printPrefs?: Record<string, Partial<PrintOpts>>;
   printDuplex?: boolean;
 };
-// printPrefs: the settings of the «Εκτύπωση» window per form (printKey); printDuplex: the printer does double-sided by itself
-// Forms: how many times each person came out on each form with random picks (per ΕΣΣΟ: a New ΕΣΣΟ starts from zero) and which sheets
-// each form wrote in which file (so it does not write over a sheet it did not make, and the import does not read them)
+// printPrefs: the settings of the «Εκτύπωση» window per form (printKey); printDuplex: the printer does double-sided
+// by itself
+// Forms: how many times each person came out on each form with random picks (per ΕΣΣΟ: a New ΕΣΣΟ starts from zero)
+// and which sheets each form wrote in which file (so it does not write over a sheet it did not make, and the import
+// does not read them)
 /** Per report id: the ΕΣΣΟ the counts belong to, and the count per person. */
 export type RepTimes = { essos: string; n: Record<string, number> };
 /** Per report id: the file it wrote, the sheets and the groups in them. */
 export type RepSheets = { file: string; sheets: string[]; groups: GroupKey[] };
-// history of versions: who was included each time it came out (so the same one can come out again if the paper is lost); the last 10 per form
+// history of versions: who was included each time it came out (so the same one can come out again if the paper is
+// lost); the last 10 per form
 /** One entry of a report's history. */
 export type RepHist = {
   at: string;
@@ -62,7 +66,8 @@ export type RepHist = {
   sheets?: string[];
 };
 /** Most history entries kept per report. */
-export const HIST_MAX = 30; // repLast: when each form came out   // essoArchives: ΕΣΣΟ archive folders that were written
+// repLast: when each form came out; essoArchives: ΕΣΣΟ archive folders that were written
+export const HIST_MAX = 30;
 /** Reads meta.json; any missing or broken file answers `{}`. */
 export const readMeta = (): Meta => {
   try {
@@ -71,7 +76,7 @@ export const readMeta = (): Meta => {
     return {};
   }
 };
-/** Merges `m` into meta.json (shallow, last write wins). Failures are logged with `console.error('meta', e)`, not thrown. */
+/** Merges `m` into meta.json (shallow, last write wins). Failures are logged with `console.error('meta', e)`. */
 export const writeMeta = (m: Partial<Meta>) => {
   try {
     writeJson(META, { ...readMeta(), ...m });

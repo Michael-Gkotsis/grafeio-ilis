@@ -38,7 +38,8 @@ export function writableDir(dir: string): boolean {
     return false;
   }
 }
-// The name changed to «Γραφείο Λοχία» (11/10). The profile stays in the old folder so it finds the data and the preferences.
+// The name changed to «Γραφείο Λοχία» (11/10). The profile stays in the old folder so it finds the data and the
+// preferences.
 app.setPath('userData', path.join(app.getPath('appData'), 'Γραφείο Ίλης'));
 // Windows: portable folder next to the .exe. Linux (/opt) and macOS (inside the .app) are not writable or break with
 // updates, so data\ and templates\ stay in the user's profile.
@@ -48,7 +49,8 @@ export const ROOT = DEV
   : process.platform === 'win32'
     ? path.dirname(process.execPath)
     : app.getPath('userData');
-// Where the database already exists (next to the exe first): a momentary failure of the write check no longer splits the data in two
+// Where the database already exists (next to the exe first): a momentary failure of the write check no longer splits
+// the data in two
 /** The chosen data folder and whether it is the profile fallback (`fallback`); resolved once at startup. */
 export const DATA_AT = dataDirOf(path.join(ROOT, 'data'), path.join(app.getPath('userData'), 'data'), writableDir);
 /** The `data/` folder: `ilh.db`, `meta.json`, `flags.json`, `forms.json`, `sources.json` (frozen names). */
