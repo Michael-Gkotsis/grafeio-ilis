@@ -2,7 +2,8 @@
 //
 // Purpose: `registerCommandsIpc` registers `run`, `sync`, `dayCheck` and `undo` on their contract channels.
 // Does NOT: run the Excel auto-write itself or know how it works: what `undo` and `dayCheck` need from it
-//   (`AutoWriteHooks`) is passed in by main.ts, which owns that area.
+//   (`AutoWriteHooks`) is passed in by main.ts from `features/autowrite`, which imports this feature (its daily job
+//   runs commands), so this one cannot import it back.
 // Owner layer: main (architecture), `features/commands`. Imports only app/*, ipc/*, shared/* and its own service.
 // Why: part of taking the command service out of main.ts (Phase 4.2). The handler bodies are unchanged.
 // Covering test: test/ipc-contract.test.ts (channels); the registration order and every handler text of the whole
@@ -17,8 +18,8 @@ import { handle } from '../../ipc/handle';
 import { fail, reply, runCmd } from './service';
 
 /**
- * What the handlers need from the Excel auto-write area, which stays in main.ts until it moves too. Each member is
- * the main.ts function of the same name, unchanged.
+ * What the handlers need from the Excel auto-write area (`features/autowrite`, which imports this feature and so
+ * cannot be imported back). Each member is the function of the same name there, unchanged; main.ts passes them.
  */
 export interface AutoWriteHooks {
   /** The once-a-day jobs (expiries, daily backup, day-change rewrite). */

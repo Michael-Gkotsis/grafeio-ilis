@@ -4,8 +4,8 @@
 //   rows in one database transaction), and the answers built from it: `snapshot` (first full state), `reply`
 //   (changed fields + new audit rows), `fail`.
 // Does NOT: write any Excel file itself or know how that is scheduled (a hook installed by main.ts does, see
-//   `onCommandApplied`); register IPC handlers (ipc.ts); run the daily jobs (they drive the auto-write and stay in
-//   main.ts).
+//   `onCommandApplied`); register IPC handlers (ipc.ts); run the daily jobs (they drive the auto-write and live in
+//   `features/autowrite`).
 // Owner layer: main (architecture), `features/commands`. Imports only app/*, shared/* and core/*, never main.ts.
 // Why: every other area of main (exports, sources, reports, ESSO, backups) runs commands and answers the UI through
 //   these functions, so they are the first slice taken out of the 3700-line main.ts (Phase 4.2).
@@ -30,8 +30,8 @@ let applied: AppliedHook = () => {
 
 /**
  * Installs the function that runs after every command that changed the state (main.ts: the Excel auto-write
- * scheduling, `scheduleAuto`). It lives in main.ts because the auto-write belongs to the Excel sources area, which
- * this module may not import; main.ts installs it once while it loads, before any command can run.
+ * scheduling, `scheduleAuto` of `features/autowrite`). It is a hook because that feature imports this one (its daily
+ * job runs commands); main.ts installs it once while it loads, before any command can run.
  * @decision Phase 4.2a: a hook instead of an import, so the feature never imports main.ts (no cycle).
  */
 export function onCommandApplied(fn: AppliedHook): void {
