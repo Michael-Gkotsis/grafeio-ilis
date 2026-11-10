@@ -18,7 +18,7 @@ import type { BrowserWindow } from 'electron';
 import type { ImportRow } from '../../shared/commands';
 import type { ListKind, SourceBinding } from '../../shared/sources';
 import type { RawSheet } from '../../shared/roster';
-import type { Store } from '../db';
+import type { Store } from '../shared/db';
 
 /** The open database and the app state it holds. Unset until boot opens it; only boot (`setStore`) assigns it. */
 export let store: Store;

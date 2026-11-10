@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app, dialog } from 'electron';
-import { listBackups } from '../../db';
+import { listBackups } from '../../shared/db';
 import { writeJson } from '../../files';
 import { workerUp } from '../../offload';
 import { nowHM, today } from '../../../shared/dates';

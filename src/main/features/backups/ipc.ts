@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app, dialog } from 'electron';
-import { listBackups } from '../../db';
+import { listBackups } from '../../shared/db';
 import { copyDurable } from '../../files';
 import { BACKUPS, DATA } from '../../app/paths';
 import { store } from '../../app/state';
