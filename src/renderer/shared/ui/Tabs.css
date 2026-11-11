@@ -1,5 +1,5 @@
 /*
- * Tabs (.ui-tabs) and the segmented buttons (.ui-seg, .ui-seg--sm, compact density).
+ * Tabs (.ui-tabs) and the segmented buttons (.ui-seg, .ui-seg--sm).
  * Does NOT: style the is-warn / is-away states of a segmented button: those belong to the screens that set them.
  * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
  * Why: Tabs.tsx draws Tabs and Segmented.
@@ -8,63 +8,60 @@
 
 .ui-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   border-bottom: 1px solid var(--border);
 }
 .ui-tabs button {
   flex: 0 1 auto;
-  height: 42px;
-  padding: 0 14px;
+  padding: 7px 12px 8px;
   margin-bottom: -1px;
   border: 0;
   border-bottom: 2px solid transparent;
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: 0;
   background: none;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
   color: var(--muted-fg);
 }
 .ui-tabs button:hover {
   color: var(--foreground);
-  background: var(--hover);
 }
 .ui-tabs button[aria-selected="true"] {
   color: var(--foreground);
   border-bottom-color: var(--primary);
 }
 .ui-seg {
+  --seg-h: var(--h-ctl);
+  --seg-on: var(--selected);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 .ui-seg button {
-  height: 38px;
-  padding: 0 12px;
-  border-radius: var(--radius);
+  height: var(--seg-h);
+  padding: 0 10px;
+  border-radius: 6px;
   border: 1px solid var(--input);
   background: var(--card);
   cursor: pointer;
   font-weight: 500;
-  font-size: 14px;
+  font-size: var(--t-sm);
 }
 .ui-seg button[aria-pressed="true"] {
+  background: var(--seg-on);
   border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-fg);
+  color: var(--foreground);
   font-weight: 700;
 }
 .ui-seg--sm {
+  --seg-h: min(28px, var(--h-ctl));
   flex-wrap: wrap;
   gap: 4px;
 }
 /* (review 29/10) wraps to a second row when it does not fit (e.g. «Ανά Σ.Ι.» at 1024), no cut text */
 .ui-seg--sm button {
-  height: 32px;
-  padding: 0 10px;
-  font-size: 13px;
+  padding: 0 9px;
+  font-size: 12.5px;
   white-space: nowrap;
-}
-[data-density="compact"] .ui-seg--sm button {
-  height: 28px;
 }

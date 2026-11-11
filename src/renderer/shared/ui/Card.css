@@ -1,5 +1,5 @@
 /*
- * Card (.ui-card, head, body, foldable toggle and summary, compact density).
+ * Card (.ui-card, head, body, foldable toggle and summary).
  * Does NOT: style a card inside a screen (.rep-more-presets and similar overrides stay in legacy.css).
  * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
  * Why: Card.tsx draws all these classes.
@@ -9,8 +9,7 @@
 .ui-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: 8px;
   min-width: 0;
 }
 .ui-card__head {
@@ -18,20 +17,19 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  min-height: 48px;
-  padding: 8px 16px;
+  padding: calc(var(--gap-2) + 1px) var(--gap-3);
   border-bottom: 1px solid var(--border);
 }
 .ui-card__head h2 {
   font-family: var(--f-body);
-  font-size: 15px;
+  font-size: var(--t-md);
   font-weight: 700;
   color: var(--h2);
   flex: 1;
   min-width: 0;
 }
 .ui-card__body {
-  padding: 14px 16px 16px;
+  padding: var(--gap-3);
 }
 .ui-card__body--flush {
   padding: 0;
@@ -66,19 +64,15 @@
   padding-bottom: 2px;
 }
 .ui-card__sum {
-  padding: 4px 16px 12px 38px;
+  padding: 2px var(--gap-3) var(--gap-2) 34px;
   font-size: 13px;
   color: var(--muted-fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-[data-density="compact"] .ui-card__head {
-  padding: 10px 12px 0;
-}
-[data-density="compact"] .ui-card__body {
-  padding: 10px 12px 12px;
-}
-[data-density="compact"] .ui-card__sum {
-  padding: 2px 12px 10px 34px;
+@media (prefers-reduced-motion: reduce) {
+  .ui-card__toggle svg {
+    transition: none;
+  }
 }

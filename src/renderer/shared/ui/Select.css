@@ -7,10 +7,10 @@
  */
 
 .ui-select {
-  height: 32px;
+  height: var(--h-ctl);
   padding: 0 8px;
   border: 1px solid var(--input);
-  border-radius: var(--radius);
+  border-radius: 6px;
   background: var(--card);
   font-size: 13px;
   cursor: pointer;
@@ -28,7 +28,7 @@
   border-color: var(--ring);
   box-shadow: 0 0 0 3px var(--ring-soft);
 }
-/* Dropdown lists (Select, Combo): same box as the fields (.ui-input 40 px in forms, .ui-select 32 px in bars),
+/* Dropdown lists (Select, Combo): same box as the fields (.ui-input and .ui-select are both var(--h-ctl) high),
    arrow on the right, and the same popup below everywhere, in light and dark theme. */
 .ui-dd {
   display: inline-flex;
@@ -80,7 +80,7 @@
   background: var(--card);
   color: var(--foreground);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   box-shadow: var(--shadow);
   overflow: hidden;
   font-size: 14px;
@@ -143,4 +143,13 @@
   padding: 8px 10px;
   color: var(--muted-fg);
   font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-select,
+  .ui-dd > svg,
+  .ui-dd__pop {
+    transition: none;
+    animation: none;
+  }
 }

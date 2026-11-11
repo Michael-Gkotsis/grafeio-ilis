@@ -1,5 +1,5 @@
 /*
- * Text field look (.ui-input, static and disabled states, compact density).
+ * Text field look (.ui-input, static and disabled states).
  * Does NOT: style the checkbox (.ui-check, .ui-checkrow) or chips: no shared/ui component draws them yet.
  * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
  * Why: ChoiceField.tsx and RangeField.tsx use .ui-input.
@@ -8,10 +8,11 @@
 
 .ui-input {
   width: 100%;
-  height: 40px;
-  padding: 0 12px;
+  height: var(--h-ctl);
+  padding: 0 10px;
   border: 1px solid var(--input);
-  border-radius: var(--radius);
+  border-radius: 6px;
+  font-size: var(--t-sm);
   background: var(--card);
   transition:
     border-color 0.12s,
@@ -44,6 +45,9 @@
 .ui-input:disabled:hover {
   border-color: var(--input);
 }
-[data-density="compact"] .ui-input {
-  height: 34px;
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-input {
+    transition: none;
+  }
 }
