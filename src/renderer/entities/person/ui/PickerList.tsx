@@ -4,7 +4,7 @@
 // Does NOT: hold state or search (model/pickerView.ts does); not exported from the slice (PersonPicker uses them).
 // Owner layer: renderer/entities/person. Why: PersonPicker stays under the function-size limit.
 // Covering test: test/screens-main.test.ts, test/screens-dialogs-forms.test.ts.
-import { Fragment, type RefObject } from 'react';
+import type { RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { ISODate } from '../../../../shared/dates';
 import { plainName, shortName, unitOf, type AppState, type Person } from '../../../../shared/domain';
@@ -62,12 +62,15 @@ export interface PickerListProps {
   onHover: (i: number) => void;
 }
 
-// The status chip (or the reason) at the right of a row.
-function RowStatus({ x, state, date }: { x: PickerRow; state: AppState; date: ISODate }) {
-  if (x.na) return <Badge>{x.na}</Badge>;
-  if (x.p.cid) return cadreBadge(state, x.p.cid, date);
-  return <StatusBadge statuses={state.statuses} pid={x.p.id} date={date} lists={state.settings.lists} />;
-}
+// The status chip (or the reason) at the right of a row. A plain function, not a component: it adds no render layer.
+const rowStatus = (x: PickerRow, state: AppState, date: ISODate) =>
+  x.na ? (
+    <Badge>{x.na}</Badge>
+  ) : x.p.cid ? (
+    cadreBadge(state, x.p.cid, date)
+  ) : (
+    <StatusBadge statuses={state.statuses} pid={x.p.id} date={date} lists={state.settings.lists} />
+  );
 
 /** The floating result list, drawn in a portal on <body>; cadre members get their own «Στελέχη» heading. */
 export function PickerList({ items, sel, pos, listRef, state, date, hint, onPick, onHover }: PickerListProps) {
@@ -77,39 +80,40 @@ export function PickerList({ items, sel, pos, listRef, state, date, hint, onPick
       {items.length === 0 ? (
         <li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>
       ) : (
-        items.map((x, i) => (
-          <Fragment key={x.p.id}>
-            {x.p.cid && !items[i - 1]?.p.cid && (
-              <li className="picker__hd" role="presentation">
-                Στελέχη
-              </li>
-            )}
-            {/* biome-ignore lint/a11y/useFocusableInteractive: options use aria-activedescendant (frozen DOM) */}
-            <li
-              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: frozen DOM
-              role="option"
-              aria-selected={i === sel}
-              className={cx('picker__opt', x.na && 'picker__opt--na')}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onPick(i);
-              }}
-              onMouseEnter={() => onHover(i)}
-            >
-              <div>
-                <b>
-                  <RkName p={x.p} fn={plainName} keep={true} />
-                </b>
-                <small>
-                  {who(x.p, state.settings)}
-                  {room(x.p)}
-                  {note(x.p, hint)}
-                </small>
-              </div>
-              <RowStatus x={x} state={state} date={date} />
+        // Each row is an array [heading, option] like before the move: React matches the arrays by position, so the
+        // rows remount the same way as before (same render counts).
+        items.map((x, i) => [
+          x.p.cid && !items[i - 1]?.p.cid && (
+            <li key={'g' + x.p.id} className="picker__hd" role="presentation">
+              Στελέχη
             </li>
-          </Fragment>
-        ))
+          ),
+          // biome-ignore lint/a11y/useFocusableInteractive: options use aria-activedescendant (frozen DOM)
+          <li
+            key={x.p.id}
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: frozen DOM
+            role="option"
+            aria-selected={i === sel}
+            className={cx('picker__opt', x.na && 'picker__opt--na')}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onPick(i);
+            }}
+            onMouseEnter={() => onHover(i)}
+          >
+            <div>
+              <b>
+                <RkName p={x.p} fn={plainName} keep={true} />
+              </b>
+              <small>
+                {who(x.p, state.settings)}
+                {room(x.p)}
+                {note(x.p, hint)}
+              </small>
+            </div>
+            {rowStatus(x, state, date)}
+          </li>,
+        ])
       )}
     </ul>,
     document.body,
