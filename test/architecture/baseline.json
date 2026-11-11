@@ -212,7 +212,7 @@
     "src/renderer/screens/stat.ts": 4,
     "src/renderer/screens/units.ts": 8,
     "src/renderer/screens/valueEditor.ts": 1,
-    "src/renderer/screens/weaponMoves.ts": 25,
+    "src/renderer/screens/weaponMoves.ts": 3,
     "src/renderer/screens/weapons.ts": 16,
     "src/renderer/screens/whodoes.ts": 3,
     "src/renderer/shared/api/mockApi.ts": 6,
