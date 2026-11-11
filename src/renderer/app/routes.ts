@@ -10,7 +10,9 @@ import { FORM_PARAM } from '../../shared/repPage';
 import { HK } from '../../shared/unit';
 import { Icon } from '../ui';
 import { TodayScreen } from '../screens/today';
-import { RecordsScreen, StrengthScreen, HkaiScreen, HistoryScreen } from '../screens/other';
+import { StrengthScreen, HkaiScreen, HistoryScreen } from '../screens/other';
+import { HdTab } from '../widgets/hd';
+import { StatusesPage } from '../pages/statuses';
 import { CadreScreen } from '../screens/cadre';
 import { PeopleScreen } from '../screens/people';
 import { GuardScreen, OutsScreen } from '../screens/guard';
@@ -41,11 +43,12 @@ const TABLE: Record<ScreenId, Omit<ScreenEntry, 'id'>> = {
   cadre: { name: 'Στελέχη', icon: Icon.cadre, component: CadreScreen },
   guard: { name: 'Υπηρεσίες', icon: Icon.guard, component: GuardScreen },
   outs: { name: 'Εξοδούχοι', icon: Icon.out, component: OutsScreen },
-  records: { name: 'Ιατρικά', icon: Icon.med, component: RecordsScreen },
+  records: { name: 'Καταστάσεις', icon: Icon.med, component: StatusesPage },
   strength: { name: 'Δύναμη', icon: Icon.strength, component: StrengthScreen },
   hkai: { name: 'ΗΚΑΙ', icon: Icon.file, component: HkaiScreen },
   weapons: { name: 'Οπλισμός', icon: Icon.weapon, component: WeaponsScreen },
   reports: { name: 'Έντυπα', icon: Icon.print, component: lazyScreen('reports') },
+  hd: { name: 'Ημερήσια Διαταγή', icon: Icon.notes, component: HdTab },
   notes: { name: 'Σημειώσεις', icon: Icon.notes, component: NotesScreen },
   history: { name: 'Ιστορικό', icon: Icon.history, component: HistoryScreen },
   templates: { name: 'Ρυθμίσεις', icon: Icon.gear, component: lazyScreen('templates') },
@@ -81,7 +84,7 @@ export interface NavGroup {
 export const NAV_GROUPS: readonly NavGroup[] = [
   { label: 'ΗΜΕΡΑ', items: ['home', 'guard', 'outs', 'strength', 'hkai'] },
   { label: 'ΑΝΘΡΩΠΟΙ', items: ['people', 'cadre', 'records'] },
-  { label: 'ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ', items: ['reports', 'weapons'] },
+  { label: 'ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ', items: ['reports', 'hd', 'weapons'] },
   { label: '', items: ['notes'] },
 ];
 /** Every screen of the top block of the side menu, flat. */
@@ -110,10 +113,10 @@ export const NAV_ALL: readonly ScreenId[] = [
 
 /**
  * Screens with tabs that always open on the first tab when entered from the menu.
- * @decision Michael 18/10: ΗΚΑΙ opens on its default tab from the ΗΚΑΙ menu entry; Reports open on the list, not on a
- *   form-creation page (`FORM_PARAM`).
+ * @decision Michael 18/10: Reports open on the list, not on a form-creation page (`FORM_PARAM`).
+ * @decision U5: «Καταστάσεις» opens on its first tab (Ιατρικά) from the menu; ΗΚΑΙ has no tabs any more.
  */
-export const MENU_TAB: Partial<Record<ScreenId, string>> = { hkai: 'hkTab', reports: FORM_PARAM };
+export const MENU_TAB: Partial<Record<ScreenId, string>> = { records: 'stTab', reports: FORM_PARAM };
 
 /** Phone bottom bar. */
 export const MOBILE_MAIN: readonly ScreenId[] = ['home', 'people', 'guard', 'outs'];
@@ -125,6 +128,7 @@ export const MOBILE_MORE: readonly ScreenId[] = [
   'hkai',
   'weapons',
   'reports',
+  'hd',
   'notes',
   'history',
   'templates',

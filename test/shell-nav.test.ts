@@ -32,6 +32,7 @@ const OLD_MENU = [
   'hkai',
   'weapons',
   'reports',
+  'hd',
   'notes',
   'templates',
 ];
@@ -55,7 +56,7 @@ describe('routes: NAV_ALL and NAV_GROUPS', () => {
     expect(NAV_GROUPS.map((g) => [g.label, [...g.items]])).toEqual([
       ['ΗΜΕΡΑ', ['home', 'guard', 'outs', 'strength', 'hkai']],
       ['ΑΝΘΡΩΠΟΙ', ['people', 'cadre', 'records']],
-      ['ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ', ['reports', 'weapons']],
+      ['ΧΑΡΤΙΑ ΚΑΙ ΥΛΙΚΟ', ['reports', 'hd', 'weapons']],
       ['', ['notes']],
     ]);
   });
@@ -67,7 +68,7 @@ describe('routes: NAV_ALL and NAV_GROUPS', () => {
 });
 
 describe('SideNav', () => {
-  const menu: NavMenu = { view: 'home', badges: { guard: 3, hkai: 1, notes: 2 }, go: () => {} };
+  const menu: NavMenu = { view: 'home', badges: { guard: 3, requests: 1, notes: 2 }, go: () => {} };
   const render = (rail: boolean) => {
     installBrowserStubs();
     return renderToStaticMarkup(createElement(SideNav, { menu, rail, toggleRail: () => {} }));

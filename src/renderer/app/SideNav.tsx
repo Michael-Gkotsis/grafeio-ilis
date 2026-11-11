@@ -12,8 +12,8 @@ import type { ScreenId } from './screenId';
 export interface NavBadges {
   /** Empty guard posts tomorrow. */
   guard: number;
-  /** Requests waiting for an answer. */
-  hkai: number;
+  /** Requests waiting for an answer (shown on «Καταστάσεις», where the «Αιτήσεις» tab lives). */
+  requests: number;
   /** Note reminders that are due. */
   notes: number;
 }
@@ -34,7 +34,8 @@ export interface NavMenu {
 export function navItem(v: ScreenId, inRail: boolean, menu: NavMenu) {
   const { icon } = SCREENS[v];
   const label = screenName(v);
-  const n = v === 'guard' ? menu.badges.guard : v === 'hkai' ? menu.badges.hkai : v === 'notes' ? menu.badges.notes : 0;
+  const n =
+    v === 'guard' ? menu.badges.guard : v === 'records' ? menu.badges.requests : v === 'notes' ? menu.badges.notes : 0;
   const what = v === 'guard' ? 'κενές θέσεις αύριο' : v === 'notes' ? 'υπενθυμίσεις σημειώσεων' : 'αιτήσεις περιμένουν';
   const tip =
     v === 'guard'

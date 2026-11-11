@@ -15,7 +15,8 @@ import { captureDocumentListeners, settle, startSession, type DocumentKeys, type
 import { buttonsOf, textOfHtml, textsIn } from './support/html';
 import { appRenderer, caseNamed, elementOf, loadWorld, pendingFixtures, withState, type BehaviourWorld } from './support/behaviour';
 import { pendingNow } from '../src/renderer/pending';
-import { RecordsScreen, HkaiScreen } from '../src/renderer/screens/other';
+import { HkaiScreen } from '../src/renderer/screens/other';
+import { StatusesPage } from '../src/renderer/pages/statuses';
 import { PersonSheet } from '../src/renderer/screens/people';
 import { TemplatesScreen } from '../src/renderer/screens/settings';
 import { GuardScreen } from '../src/renderer/screens/guard';
@@ -105,8 +106,8 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
   it('Ιατρικά, Ποινές και καρτέλα στρατιώτη έχουν «Διόρθωση…»', () => {
     // each place lists statuses with a «Διόρθωση…» button that opens the fix dialog (titled «Διόρθωση»)
     const places: [string, string, Record<string, unknown>, () => El, string[]][] = [
-      ['Ιατρικά', 'records', {}, screen(RecordsScreen), []],
-      ['Ποινές', 'hkai', { hkTab: 'pun', punTab: 'allpun' }, screen(HkaiScreen), []],
+      ['Ιατρικά', 'records', {}, screen(StatusesPage), []],
+      ['Ποινές', 'records', { stTab: 'pun', punTab: 'allpun' }, screen(StatusesPage), []],
       ['καρτέλα στρατιώτη', 'people', {}, () => createElement(PersonSheet as never, { pid: bw.rows.leaveStarted.pid, onClose: () => {}, onMove: () => {} }), ['Ιστορικό']],
     ];
     for (const [where, view, params, element, tabs] of places) {
@@ -168,11 +169,11 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
       expect(pendingAfterTyping('templates', { tab: 'look' }, TemplatesScreen)).toContain('Τίτλος και λογότυπο');
     });
     it('ΗΚΑΙ: κεφαλίδα, στοιχεία της μέρας, Στελέχη ανά βαθμό', () => {
-      const labels = pendingAfterTyping('hkai', { hkTab: 'hkai' }, HkaiScreen);
+      const labels = pendingAfterTyping('hkai', {}, HkaiScreen);
       expect(labels).toContain('Κεφαλίδα της ΗΚΑΙ');
       expect(labels.some(l => /^Στοιχεία της ΗΚΑΙ /.test(l))).toBe(true);
       const noCadre = withState(bw.world, { ...bw.world.state, cadreList: [] });
-      expect(pendingAfterTyping('hkai', { hkTab: 'hkai' }, HkaiScreen, noCadre, s => { if (s.handlers('onClick', 'Άλλαξε').length) s.press('Άλλαξε'); })).toContain('Στελέχη ανά βαθμό');
+      expect(pendingAfterTyping('hkai', {}, HkaiScreen, noCadre, s => { if (s.handlers('onClick', 'Άλλαξε').length) s.press('Άλλαξε'); })).toContain('Στελέχη ανά βαθμό');
     });
     it('η εφαρμογή ρωτά πριν αλλάξει οθόνη', () => {
       const fx = pendingFixtures();
@@ -192,7 +193,7 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
     it('οι Ρυθμίσεις ρωτούν πριν αλλάξει ενότητα, η ΗΚΑΙ πριν αλλάξει μέρα', () => {
       for (const [view, params, comp, label, expected] of [
         ['templates', {}, TemplatesScreen, 'Λίστες', { tab: 'lists' }],
-        ['hkai', { hkTab: 'hkai' }, HkaiScreen, /αύριο/, { hkaiDate: H.TOMORROW }],
+        ['hkai', {}, HkaiScreen, /αύριο/, { hkaiDate: H.TOMORROW }],
       ] as const) {
         const fx = pendingFixtures();
         const set = vi.fn();

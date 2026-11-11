@@ -290,8 +290,8 @@ export function ReportsScreen() {
       <${Button} onClick=${() => openForm(newForm())}>+ Νέο έντυπο<//></div><//>
     <div className="dayrow" role="group" aria-label="Έντυπα της μέρας"><span className="dayrow__lbl">Της μέρας (βγαίνουν από την οθόνη τους):</span>
       <${Button} size="sm" variant="outline" onClick=${() => nav.go('guard', { guardDate: tomorrow })}>ΦΡΟΥΡΑ αύριο<//>
-      <${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today, hkTab: undefined })}>${HK()} σήμερα<//>
-      <${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkTab: 'hd', hdDate: undefined })} data-tip="Η Ημερήσια Διαταγή της επόμενης μέρας, με Word και εκτύπωση">Ημερήσια Διαταγή αύριο<//>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })}>${HK()} σήμερα<//>
+      <${Button} size="sm" variant="outline" onClick=${() => nav.go('hd', { hdDate: undefined })} data-tip="Η Ημερήσια Διαταγή της επόμενης μέρας, με Word και εκτύπωση">Ημερήσια Διαταγή αύριο<//>
       <${Button} size="sm" variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>
       <${Button} size="sm" variant="outline" onClick=${() => setDayForms(true)} data-tip="Αυριανή ΦΡΟΥΡΑ, σημερινή ${HK()} και Εξοδούχοι: ένας έλεγχος για όλα">${Icon.print}Έντυπα ημέρας<//></div>
     ${dayForms && html`<${DayFormsDialog} onClose=${() => setDayForms(false)}/>`}

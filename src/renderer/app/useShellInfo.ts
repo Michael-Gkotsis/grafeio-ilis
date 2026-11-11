@@ -67,11 +67,11 @@ export function useShellInfo() {
     () => (state.people.some((p) => p.active) ? frouraEmpty(state, tomorrow) : 0),
     [state, tomorrow],
   );
-  const hkai = useMemo(
+  const requests = useMemo(
     () => state.requests.filter((r) => isWaiting(r) && state.people.some((p) => p.id === r.pid && p.active)).length,
     [state.requests, state.people],
   );
   const notes = useMemo(() => dueCount(state.notes, today), [state.notes, today]);
-  const badges: NavBadges = { guard, hkai, notes };
+  const badges: NavBadges = { guard, requests, notes };
   return { hm, clockTip, lastUndo, essos, badges };
 }
