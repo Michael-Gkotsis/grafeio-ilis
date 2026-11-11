@@ -89,11 +89,11 @@ describe('σχήμα υπηρεσίας: νούμερα × άτομα', () => {
     const own = blk(s, 'sven', id).posts.map(p => p.k); expect(new Set(own).size).toBe(own.length);
     expect(keys.filter(k => own.includes(k)).length).toBe(own.length);
   });
-  it('ο Λ/Υ-Δ/Υ δεν αλλάζει σχήμα· όρια 1–10 νούμερα, 1–4 άτομα', () => {
+  it('ο Λ/Υ-Δ/Υ δεν αλλάζει σχήμα· όρια 1–30 νούμερα, 1–10 άτομα', () => {
     const s = edit(fakeState(10), 'sven', 'ly', { nums: 5, per: 3, hidden: true, armed: true });
     expect(blk(s, 'sven', 'ly')).toMatchObject({ armed: false }); expect(blk(s, 'sven', 'ly').hidden).toBeUndefined(); expect(blk(s, 'sven', 'ly').posts).toHaveLength(2);
     const t = edit(spen(), 'spen', 'mg', { nums: 99, per: 99 });
-    expect(blockShape(blk(t, 'spen', 'mg'))).toEqual({ nums: 10, per: 4 });
+    expect(blockShape(blk(t, 'spen', 'mg'))).toEqual({ nums: 30, per: 10 });
   });
   it('ένοπλη, ενεργή και όπλο της θέσης αλλάζουν από την ίδια εντολή', () => {
     const s = edit(spen(), 'spen', 'th', { armed: true, armWeapon: 'post' });
@@ -204,5 +204,27 @@ describe('ΦΡΟΥΡΑ Excel: ο πίνακας μεγαλώνει προς τα
     s = run(s, { t: 'autofill', date: D });
     const { ws } = await sheet('froura-spen.xlsx', s);
     expect(ws.get('I33')).toBe('5η'); expect(ws.get('J33')!.split('\n')).toHaveLength(2);
+  });
+});
+
+describe('πάνω από 10 άτομα σε μία υπηρεσία (Michael, 11/11)', () => {
+  it('δική σου υπηρεσία 15 νούμερα × 6 άτομα: γράμματα α–στ, μοναδικά κλειδιά και κωδικοί, ο Excel γεμίζει', async () => {
+    let s = run(fakeState(60), { t: 'setPhase', phase: 'sven' });
+    s = run(s, { t: 'addBlock', phase: 'sven', name: 'Πύλη', kind: 'other', armed: false, n: 15, per: 6, hrs: '', off: false, shift: null });
+    const id = blocksOf(s.settings, 'sven').find(b => b.name === 'Πύλη')!.id;
+    let b = blk(s, 'sven', id);
+    expect(blockShape(b)).toEqual({ nums: 15, per: 6 }); expect(vis(b)).toHaveLength(90);
+    expect(vis(b)[5]).toMatchObject({ label: 'Πύλη 1ος ζ' });
+    expect(new Set(b.posts.map(p => p.k)).size).toBe(90); expect(new Set(vis(b).map(p => p.code)).size).toBe(90);
+    // 12 άτομα σε κάθε νούμερο (πάνω από το παλιό όριο) και πίσω
+    s = edit(s, 'sven', id, { nums: 12, per: 10 });
+    b = blk(s, 'sven', id); expect(blockShape(b)).toEqual({ nums: 12, per: 10 }); expect(vis(b)).toHaveLength(120);
+    expect(vis(b)[9].label).toBe('Πύλη 1ος κ');
+    s = edit(s, 'sven', id, { nums: 15, per: 1 }); expect(vis(blk(s, 'sven', id))).toHaveLength(15);
+    // θαλαμοφύλακες 14: ο πίνακας της ΦΡΟΥΡΑΣ μεγαλώνει, χωρίς προειδοποιήσεις
+    s = edit(s, 'sven', 'th', { nums: 14 }); s = run(s, { t: 'autofill', date: D });
+    expect(vis(blk(s, 'sven', 'th'))).toHaveLength(14);
+    const r = await fillFroura(T('froura.xlsx'), s, D); expect(r.warnings).toEqual([]);
+    const ws = await (await Workbook.open(r.data)).sheet(0); expect(ws.get('B25')).toBe('5ο');
   });
 });

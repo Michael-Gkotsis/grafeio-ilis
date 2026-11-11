@@ -30,8 +30,9 @@ export function blockShape(b: BlockDef): { nums: number; per: number } {
   for (const p of b.posts) if (!p.hidden) g.set(groupKey(p), (g.get(groupKey(p)) || 0) + 1);
   return g.size ? { nums: g.size, per: Math.max(...g.values()) } : { nums: 1, per: 1 };
 }
-export const MAX_NUMS = 10,
-  MAX_PER = 4;
+// Limits for editing a duty (Michael, 11/11: more than 10 people); letters α–κ for the people of one number.
+export const MAX_NUMS = 30,
+  MAX_PER = 10;
 /** The posts per number, in order, hidden ones included (for resizing and for hours per number). */
 export function blockGroups(posts: PostDef[]): PostDef[][] {
   const groups: PostDef[][] = [];
@@ -48,8 +49,8 @@ export function blockGroups(posts: PostDef[]): PostDef[][] {
   }
   return groups;
 }
-const GR = ['α', 'β', 'γ', 'δ'],
-  LAT = ['a', 'b', 'c', 'd'];
+const GR = [...'αβγδεζηθικ'],
+  LAT = [...'abcdefghij'];
 /**
  * The posts of a duty with a new count of numbers and people per number (Michael, 4/11). Keys stay stable so the
  * history
@@ -80,7 +81,7 @@ export function reshapeBlock(
   let nextRot = Math.max(-1, ...b.posts.map((p) => (p.rot == null ? -1 : p.rot))) + 1;
   const firstNo = isSk ? +(/\d+/.exec(b.posts[0]?.short || b.posts[0]?.k || '')?.[0] || 3) : 0;
   // name and ending of the labels: as they are (Θαλαμοφύλακας 1ος (α΄)), unless the name of the form's duty changed
-  const lab = /^(.*?)(?: \d+ος)?(?: [α-δ])?( \([^)]*\))?$/.exec(b.posts[0]?.label || '');
+  const lab = /^(.*?)(?: \d+ος)?(?: [α-κ])?( \([^)]*\))?$/.exec(b.posts[0]?.label || '');
   const renamed = !b.custom && name !== b.name;
   const base = b.custom || renamed || !lab || !lab[1] ? name : lab[1];
   const suffix = b.custom || renamed || !lab ? '' : lab[2] || '';
