@@ -11,7 +11,7 @@ applyPrefs(loadPrefs());
 installTips();   // θέμα και πυκνότητα πριν από την πρώτη εικόνα, χωρίς αναβόσβημα
 
 // Στον browser (ανάπτυξη χωρίς Electron) δουλεύουμε με δεδομένα στη μνήμη. Φορτώνονται μόνο εκεί: στο PC δεν διαβάζονται καν.
-const ready = window.api ? Promise.resolve() : import('./mockApi').then(m => { (window as any).api = m.mockApi(); });
+const ready = window.api ? Promise.resolve() : import('./shared/api/mockApi').then(m => { (window as any).api = m.mockApi(); });
 const root = createRoot(document.getElementById('root')!);
 ready.then(() => window.api.boot()).then(
   boot => {

@@ -10,7 +10,7 @@ import { personMap } from '../../shared/rules';
 import { noteSearch } from '../../shared/notes';
 import { norm } from '../../shared/text';
 import { recentPeople } from '../prefs';
-import { searchPeople } from '../shared/lib/searchPeople';
+import { searchPeople } from '../entities/person';
 import { paletteActions, type PaletteAction, type PaletteContext } from './paletteActions';
 
 type Note = PaletteContext['state']['notes'][number];

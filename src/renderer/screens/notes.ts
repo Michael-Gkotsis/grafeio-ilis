@@ -119,11 +119,8 @@ export function NoteDialog({ start, onClose }: P) {
     <${NoteComposer} draft=${draft} autoFocus=${true} onSaved=${onClose}/><//>`;
 }
 
-// Μικρή ένδειξη δίπλα στο όνομα στους πίνακες: έχει σημειώσεις· κόκκινη όταν έφτασε υπενθύμιση
-export function NoteDot({ m }: P) {
-  if (!m) return null;
-  return html`<span className=${cx('notedot', m.hot && 'is-hot')} data-tip=${(m.n === 1 ? '1 σημείωση' : m.n + ' σημειώσεις') + (m.hot ? ' · υπενθύμιση που έφτασε' : '')} aria-label=${m.n + ' σημειώσεις'}>${Icon.notes}</span>`;
-}
+// Deprecated path: NoteDot moved to entities/note (Phase 5.3a).
+export { NoteDot } from '../entities/note';
 
 const whoIcon = (k: string) => (k === 'cad' ? Icon.shield : k === 'sol' ? Icon.people : Icon.notes);
 // self: στην κάρτα ενός ατόμου δεν ξαναγράφεται το ίδιο, μόνο όσοι άλλοι είναι δεμένοι με τη σημείωση

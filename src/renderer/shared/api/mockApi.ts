@@ -1,19 +1,23 @@
-// Μόνο για ανάπτυξη στον browser (χωρίς Electron): ίδιοι κανόνες, δεδομένα στη μνήμη, φανταστικά ονόματα.
-import { apply, type Command } from '../shared/commands';
-import { emptyState, type AppState, type AuditEntry, type Person } from '../shared/domain';
-import { addDays, nowHM, nowMin, today } from '../shared/dates';
-import { fillDay } from '../shared/rules';
-import type { Api, CmdResult, DirTarget, SourceBook, UpdInfo } from '../shared/api';
-import type { RawSheet } from '../shared/roster';
-import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../shared/sources';
-import { preflight, hasErrors } from '../shared/preflight';
-import { blankFill, blankN, blankTags, byIds, cellValue, fieldOf, fieldValue, metricFn, moreRows, rowsOf, stNewCols, type BuildCol, type BuildOpts, type ColOpts, type Report } from '../shared/reports';
-import { PV_PAGES, cutSample } from '../shared/repPage';
-import { atOf, evalTables, rowText } from '../shared/values';
-import { MAIN, bandsOf } from '../shared/repBands';
-import { LAYOUT_SHEETS, type Block } from '../shared/layout';
-import { sigsSaved } from '../shared/sigs';
-import { rankTxt } from '../shared/ranks';
+// Browser-only development API (no Electron): same rules, data in memory, made-up names.
+// Purpose: `mockApi()` gives `window.api` when the renderer runs in a plain browser (dev, UI screenshots, tests).
+// Does NOT: write files, talk to the main process or ship in the Electron app (main.ts imports it only without `window.api`).
+// Owner layer: renderer/shared/api. Why: screens and tests need an Api with realistic data and no Electron.
+// Covering test: test/screens-main.test.ts, test/screens-dialogs-*.test.ts (they render the app on this Api).
+import { apply, type Command } from '../../../shared/commands';
+import { emptyState, type AppState, type AuditEntry, type Person } from '../../../shared/domain';
+import { addDays, nowHM, nowMin, today } from '../../../shared/dates';
+import { fillDay } from '../../../shared/rules';
+import type { Api, CmdResult, DirTarget, SourceBook, UpdInfo } from '../../../shared/api';
+import type { RawSheet } from '../../../shared/roster';
+import { KIND, ambiguousLines, describeSets, detectTables, diffStatuses, hkaiMapOf, parseStatuses, planSource, type ListKind, type SourceBinding } from '../../../shared/sources';
+import { preflight, hasErrors } from '../../../shared/preflight';
+import { blankFill, blankN, blankTags, byIds, cellValue, fieldOf, fieldValue, metricFn, moreRows, rowsOf, stNewCols, type BuildCol, type BuildOpts, type ColOpts, type Report } from '../../../shared/reports';
+import { PV_PAGES, cutSample } from '../../../shared/repPage';
+import { atOf, evalTables, rowText } from '../../../shared/values';
+import { MAIN, bandsOf } from '../../../shared/repBands';
+import { LAYOUT_SHEETS, type Block } from '../../../shared/layout';
+import { sigsSaved } from '../../../shared/sigs';
+import { rankTxt } from '../../../shared/ranks';
 
 const SUR = ['ΔΟΚΙΜΙΟΣ', 'ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ', 'ΥΠΟΘΕΤΙΔΗΣ', 'ΦΑΝΤΑΣΙΟΣ', 'ΠΛΑΣΜΑΤΙΚΟΣ', 'ΤΥΧΑΙΟΣ', 'ΑΓΝΩΣΤΟΠΟΥΛΟΣ', 'ΔΕΙΓΜΑΤΑΣ', 'ΕΙΚΟΝΙΚΟΣ', 'ΠΡΟΣΩΡΙΝΟΣ'];
 const FIRST = ['ΑΛΦΑΣ', 'ΒΗΤΑΣ', 'ΓΑΜΜΑΣ', 'ΔΕΛΤΑΣ', 'ΕΨΙΛΟΝ', 'ΖΗΤΑΣ', 'ΘΗΤΑΣ', 'ΚΑΠΠΑΣ'];
@@ -32,44 +36,44 @@ function seed(): AppState {
     si: i % 17 === 3 ? 'Ι3 ΑΟΠΛΟ' : i % 13 === 5 ? 'Ι4' : 'Ι1', post: i === 8 ? 'ΚΨΜ' : i === 50 ? 'ΙΑΤΡΟΣ ΣΤΕΠ' : null,
     role: i % 15 === 0 ? 'ΘΑΛΑΜΑΡΧΗΣ' : null, essos: '2026 Γ΄', attached: false, active: true, notes: ''
   }));
-  // αριθμοί όπλων: λίγοι χωρίς, ένας διπλός, ένας άοπλος (Ι4) με όπλο
+  // weapon numbers: a few without one, one duplicate, one unarmed (Ι4) with a weapon
   s.people.forEach((p, i) => { if (i % 19 !== 6 && !(i % 13 === 5 && i !== 18)) p.weapon = String(4810000 + i * 137); });
   s.people[30].weapon = s.people[32].weapon;
   s.people.forEach((p, i) => { if (p.weapon && i % 4 !== 3) p.wtype = 'G3A3'; if (p.weapon && i < 24) { p.rack = i < 12 ? 'Ε' : 'Δ'; if (i !== 7) p.wpos = String(i % 12 + 1); } });
-  s.people[5].rack = 'Ε'; s.people[5].wpos = '3';   // ίδια θέση με τον 2ο· ο 7ος έχει οπλοβαστό χωρίς θέση
+  s.people[5].rack = 'Ε'; s.people[5].wpos = '3';   // same seat as the 2nd; the 7th has a rack but no seat
   const t = today(); let n = 0; const id = () => 'm' + ++n;
   const st = (pid: number, type: any, a: number, b: number, extra: any = {}) => ({ id: id(), pid, type, from: addDays(t, a), to: addDays(t, b), ...extra });
   s.statuses = [st(5, 'LEAVE', -3, 0), st(10, 'LEAVE', -4, 2), st(12, 'SICK', -1, 2), st(47, 'NOS', -2, 3), st(18, 'EY', 0, 0), st(21, 'EA', -5, 4), st(44, 'EO', -10, 20), st(52, 'EA', -3, 0, { open: true }),
     st(27, 'PUN', -2, 3, { kind: 'Περιορισμός' }), st(88, 'PUN', 1, 5, { kind: 'Περιορισμός', pending: true, on: t, by: 'ΛΧΙΑ ΔΟΚΙΜΙΟ', reason: 'απουσίασε από το προσκλητήριο' }), st(23, 'OUT', 0, 0), st(24, 'OUT', 0, 0), st(25, 'DN', 0, 0), st(26, 'DN', -1, -1), st(28, 'HON', -1, 1), st(31, 'DN', 0, 0), st(15, 'EA', -6, -1),
-    // κωλυόμενοι: ο ένας αφαιρείται από τους παρόντες (ΗΚΑΙ «Υπηρεσία»), ο άλλος μένει παρών και βγαίνει έξοδο
+    // restricted: one is removed from the present (ΗΚΑΙ «Υπηρεσία»), the other stays present and gets an out
     st(60, 'KOL', -1, 2, { note: 'Υπηρεσία ΣΤΕΠ', minus: true, hkCol: 'yp', noOut: true }), st(62, 'KOL', -1, 1, { note: 'Συνοδεία σε νοσοκομείο' })];
   s.requests = [{ id: id(), pid: 33, date: t, text: 'μετάθεση στην 2η ΕΠΧΙΑ' }, { id: id(), pid: 61, date: t, text: 'για οικογενειακούς λόγους', leave: { type: 'LEAVE', kind: 'Κανονική', from: addDays(t, 1), to: addDays(t, 3) } }];
   s.people[99] = { ...s.people[99], active: false, outOn: t, notes: 'μετάθεση στο 2ο ΣΠ' };
-  // στελέχη με φανταστικά ονόματα και καταστάσεις της ΗΚΑΙ (καρτέλα «Στελέχη»)
+  // cadre with made-up names and ΗΚΑΙ statuses («Στελέχη» card)
   s.cadreList = [['ΙΛΧΟΣ', 'Ίλαρχοι', 'ΥΠΟΘΕΤΙΚΟΣ', 'ΓΙΑΝΝΗΣ', 'Διοικητής Ίλης'], ['ΑΝΘΛΓΟΣ', 'Ανθυπίλαρχοι-Ανθλγοι', 'ΔΟΚΙΜΑΚΗΣ', 'ΝΙΚΟΣ', 'Διοικητής ουλαμού'],
     ['ΑΛΧΙΑΣ', 'Αρχιλοχίες', 'ΠΑΡΑΔΕΙΓΜΑΤΑΣ', 'ΚΩΣΤΑΣ', 'Αρχιλοχίας'], ['ΕΠΧΙΑΣ', 'Επιλοχίες', 'ΔΕΙΓΜΑΤΙΔΗΣ', 'ΠΕΤΡΟΣ', 'Επιλοχίας'], ['ΛΧΙΑΣ', 'Λοχίες', 'ΤΥΧΑΙΟΥ', 'ΜΑΡΙΑ', 'Γραφείο']]
     .map(([rank, hk, last, first, role], i) => ({ id: 's' + i, rank, hk, last, first, role, spec: ['ΤΘ', 'ΠΖ', 'ΤΘ', 'ΔΒ', 'ΤΧ'][i], am: String(20450 + i * 113), phone: '69000000' + (10 + i), active: true }));
-  // ΕΠΟΠ με υπηρεσίες τον μήνα: μπαίνει στις θέσεις μόνο με το χέρι
+  // ΕΠΟΠ with duties in the month: enters the seats by hand only
   s.cadreList.push({ id: 's5', rank: 'ΣΤΡ', origin: 'ΕΠΟΠ', hk: 'ΕΠΟΠ Στρατιώτης', last: 'ΥΠΟΔΕΙΓΜΑΤΑΚΗΣ', first: 'ΛΕΩΝ', spec: 'ΠΖ', active: true, monthMax: 4, pid: -1 });
   s.cadreAbs = [{ id: id(), cid: 's1', kind: 'ka', from: addDays(t, -2), to: addDays(t, 3) }, { id: id(), cid: 's3', kind: 'yp', from: t, to: t }, { id: id(), cid: 's4', kind: 'ekp', from: addDays(t, 2), to: addDays(t, 9), note: 'Σχολείο' }];
-  // ΦΡΟΥΡΑ ΣΠΕΝ: σκοποί (α/β παράλληλες γραμμές) και οπλοφύλακες «όπλο της θέσης», ΤΑΕ όλη μέρα (ένοπλες υπηρεσίες ανά νούμερο)
+  // ΦΡΟΥΡΑ ΣΠΕΝ: sentries (α/β parallel lines) and weapon guards «seat weapon», ΤΑΕ all day (armed duties per number)
   s.settings = { ...s.settings, phase: 'spen', blocksSpen: s.settings.blocksSpen.map(b => (b.id === 'op' || b.id === 'sk' ? { ...b, armWeapon: 'post' as const } : b)) };
   for (let i = -30; i <= 0; i++) s.guards = fillDay(s, addDays(t, i)).guards;
-  // στελέχη σε υπηρεσία με το χέρι (Michael, 26/10): ο αρχιλοχίας Λ/Υ σήμερα, ο επιλοχίας ΤΑΕ με το όπλο του (ΕΚΤΟΣ στις ώρες του νούμερου)
+  // cadre on duty by hand (Michael, 26/10): the Λ/Υ sergeant today, the ΤΑΕ first sergeant with his weapon (OUTSIDE the number's hours)
   s.cadreList = s.cadreList.map(c => (c.id === 's2' ? { ...c, pid: -2 } : c.id === 's3' ? { ...c, pid: -3, wtype: 'G3A3', weapon: '4817777', rack: 'Ε', wpos: '30' } : c));
   s.guards = { ...s.guards, [t]: { ...(s.guards[t] || {}), ly: -2, tae: -3 } };
-  // υπηρεσίες χωρίς θέση από τον έλεγχο υπηρεσιών (σκέτο Θ ή Μ) και παλιές «προηγούμενες υπηρεσίες» για τον έλεγχο μετά την αναβάθμιση
+  // duties without a seat from the duty check (plain Θ or Μ) and old «previous duties» for the check after the upgrade
   s.dutyLog = { [addDays(t, -2)]: [{ pid: 40, kind: 'th' }, { pid: 41, kind: 'mg' }] };
   s.baseline = { 7: { th: 3, mg: 1, hol: 1 }, 19: { th: 2 } };
-  // όπλα εκτός οπλοβαστού: τρία στην ΕΚΠ από το πρωί, ένα για επισκευή από χθες, και ένα που μπήκε
+  // weapons outside the rack: three at ΕΚΠ since the morning, one under repair since yesterday, and one that came in
   s.weaponLog = [1, 2, 3].map(i => ({ id: id(), pid: s.people[i].id, weapon: s.people[i].weapon!, reason: 'ΕΚΠ', outDay: t, outTime: '07:40' }))
     .concat([{ id: id(), pid: s.people[11].id, weapon: s.people[11].weapon!, reason: 'ΕΠΙΣΚΕΥΗ', outDay: addDays(t, -1), outTime: '10:05', note: 'ΒΛΑΒΗ ΣΤΟΝ ΟΠΛΟΦΟΡΕΑ' } as any,
       { id: id(), pid: s.people[12].id, weapon: s.people[12].weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '06:30', inDay: t, inTime: '11:20', inReason: 'ΛΗΞ ΒΟΛΗΣ' } as any]);
-  // ομαδική ΒΟΛΗ από το πρωί (ανοιχτή) και ο σκοπός 3ης (α) που βγήκε και για βολή (να μένει ΕΚΤΟΣ λόγω υπηρεσίας)· ο ιδιοκτήτης του όπλου θέσης έχει αριθμό
+  // group ΒΟΛΗ since the morning (open) and the 3rd sentry (α) who also went to the range (stays OUTSIDE because of duty); the owner of the seat weapon has a number
   const g0 = s.guards[t] || {}; const owner = s.people.find(p => p.id === g0.op1); if (owner && !owner.weapon) owner.weapon = '4819999';
   const volley = [...s.people.slice(20, 30).filter(p => p.weapon && p.id !== g0.op1), ...s.people.filter(p => p.id === g0.sk3a && p.weapon)];
   s.weaponLog.push(...volley.map(p => ({ id: id(), pid: p.id, weapon: p.weapon!, reason: 'ΒΟΛΗ', outDay: t, outTime: '08:00' }) as any));
-  // σημειώσεις γραφείου: μία γενική με υπενθύμιση που έφτασε, μία για στρατιώτη, μία για στέλεχος, μία ολοκληρωμένη
+  // office notes: one general with a reminder that arrived, one for a soldier, one for a cadre member, one done
   s.notes = [
     { id: 'n1', text: 'Έλεγχος κλειδιών οπλοστασίου με τον υπαξιωματικό υπηρεσίας.', at: addDays(t, -4), rem: addDays(t, -2) },
     { id: 'n2', text: 'Ζήτησε να μην μπει ΣΚ αυτό τον μήνα. Να το δω πριν φτιάξω τη νέα ΦΡΟΥΡΑ.', at: addDays(t, -2), pids: [s.people[4].id], rem: t, star: true },
@@ -81,7 +85,7 @@ function seed(): AppState {
   return s;
 }
 
-// Φανταστικό βιβλίο με τη δομή του Δυναμολογίου (ΣΥΝΟΛΙΚΟ, ΤΙΜΩΡΗΜΕΝΟΙ, IATRIKA με 3 πίνακες): μόνο ψεύτικα ονόματα
+// Made-up book with the structure of the Δυναμολόγιο (ΣΥΝΟΛΙΚΟ, ΤΙΜΩΡΗΜΕΝΟΙ, IATRIKA with 3 tables): fake names only
 function fakeBook(s: AppState): SourceBook {
   const head = ['Α/Α', 'Βαθμός', 'Ο/Σ', 'Επώνυμο', 'Όνομα', 'Πατρώνυμο', 'ΑΣΜ', 'Τηλέφωνο', 'Θάλαμος'];
   const pr = (p: AppState['people'][number], i: number) => [i + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm || null, p.phone || null, p.room];
@@ -164,7 +168,7 @@ export function mockApi(): Api {
     listBackups: async () => [{ name: 'ilh_' + today() + '_090000_ημερήσιο.db', day: today(), label: 'ημερήσιο', size: 123456 }],
     restoreBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
     diag: async () => ({ startupMs: 0, procs: [{ type: 'Browser', kb: 0, cpu: 0 }], gpuDisabled: false, versions: { electron: '—', chrome: navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '—', node: '—' }, dbKb: 0, people: state.people.length, statuses: state.statuses.length, guardDays: Object.keys(state.guards).length, dataDir: '(δοκιμή)', backups: 1, writes: [], worker: false }),
-    // ενημέρωση: στον browser δείχνει μια φανταστική νέα έκδοση, χωρίς να κατεβάζει τίποτα
+    // update: in the browser it shows a made-up new version and downloads nothing
     updInfo: async () => updMock(),
     updCheck: async () => { updM.lastCheck = Date.now(); updM.lastOk = true; return updMock(); },
     updAuto: async on => { updM.auto = on; return updMock(); },
@@ -180,7 +184,7 @@ export function mockApi(): Api {
     setGpu: async () => {},
     usbCopy: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γράφονται αρχεία.' }),
     importBackup: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
-    // Αρχεία Excel: ένα φανταστικό Δυναμολόγιο από τα ψεύτικα άτομα, για να δοκιμάζεται η αντιστοίχιση στον browser
+    // Excel files: a made-up Δυναμολόγιο from the fake people, to try the matching in the browser
     srcPick: async () => fakeBook(state),
     srcRead: async () => fakeBook(state),
     srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
@@ -221,29 +225,29 @@ export function mockApi(): Api {
     essoPick: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     essoRestore: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν γίνεται επαναφορά.' }),
     essoOpen: async () => {},
-    // Έντυπα: στον browser δεν υπάρχει Excel· η προεπισκόπηση είναι ένας απλός πίνακας με τα στοιχεία
+    // Forms: there is no Excel in the browser; the preview is a plain table with the data
     repUpload: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     repInspect: async () => ({ ok: false, error: 'δοκιμή' }),
     repBuild: async (o: BuildOpts, kind) => ({ ok: true, file: crypto.randomUUID() + '.xlsx', mtime: Date.now(), sheet: 'ΚΑΤΑΣΤΑΣΗ', head: 7, cols: (o.nopeople && !(o.more || []).length ? [] : o.cols).map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(kind, c.f)?.head || '', o: c.o })), cells: [],
       ...(o.vals ? { vals: o.vals.map((v, i) => ({ id: v.id, c1: 1 + 6 * (i % 2), c2: 6 + 6 * (i % 2) })) } : {}),
       more: (o.more || []).map((t, j) => ({ id: t.id, head: 11 + j * 4, cols: t.cols.map((c, i) => ({ c: i + 1, f: c.f, h: c.h || fieldOf(t.kind, c.f)?.head || '', o: c.o })) })) }),
-    // προεπισκόπηση: απλοί πίνακες (ένας ανά πίνακα του εντύπου) σε σελίδες των 30 γραμμών, με το ίδιο δείγμα και counts όπως ο main
+    // preview: plain tables (one per table of the form) in pages of 30 rows, with the same sample and counts as main
     repPreview: async (src, r: Report, ids, date, _raw, opts) => {
       type Col = { f: string; h?: string; text?: string; o?: ColOpts };
       const build = 'build' in src ? src.build : null;
-      // «Κενός πίνακας»: τα κελιά του πλέγματος μπαίνουν στις στήλες (χωρίς το Α/Α), όπως τα βάζει ο main
+      // «Κενός πίνακας»: the grid cells go into the columns (without Α/Α), as main puts them
       const gridCols = (cs: BuildCol[], t: { grid?: string[][]; nrows?: number; src?: "people" | "cadre" }): Col[] => { let gj = 0; return cs.map(c => { if (c.f === 'aa') return c; const j = gj++; return { ...c, o: { ...c.o, vals: (t.grid || []).slice(0, blankN(t.nrows, t.src)).map(row => row?.[j] ?? '') } }; }); };
       const cols1: Col[] = build ? (r.kind === 'blank' ? gridCols(build.cols, build) : build.cols) : r.cols;
       const sample = opts?.sample; const cut = <T>(x: T[]) => (sample == null ? x : cutSample(x, sample));
       const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]!));
       const extra = moreRows(state, { more: (r.more || []).map(m => ({ ...m, who: build?.more?.find(b => b.id === m.id)?.who ?? m.who, src: build?.more?.find(b => b.id === m.id)?.src ?? m.src })) }, date);
-      const nop = !!build?.nopeople && !(build.more || []).length;   // μόνο πίνακες τιμών
+      const nop = !!build?.nopeople && !(build.more || []).length;   // value tables only
       const tabs = [{ title: build ? build.title : r.title || r.name, kind: r.kind, cols: nop ? [] : stNewCols(cols1, r.pick), rows: nop ? [] : r.kind === 'blank' && (build?.src ?? r.src) ? rowsOf(state, { ...r, src: build?.src ?? r.src, who: build?.who ?? r.who }, date).slice(0, ids.length) : byIds(state, r.kind, ids.slice(0, sample == null ? 40 : 2000), date, build?.who ?? r.who) },
         ...(build?.more || []).map((t, i) => ({ title: t.title, kind: t.kind, cols: stNewCols((t.kind === 'blank' ? gridCols(t.cols, t) : t.cols) as Col[], (r.more || []).find(m => m.id === t.id)?.pick), rows: extra[(r.more || []).findIndex(m => m.id === t.id)] || [] }))];
       const counts = tabs.map(t => ({ shown: cut(t.rows).length, total: t.rows.length }));
       const at = atOf(state, r.at, date, today(), nowMin()); const vo = evalTables(state, date, at, r.vals);
-      const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''), date);   // «Κενός πίνακας»: ετικέτες στα κελιά
-      // κάθε πίνακας (και κάθε πίνακας τιμών) είναι ένα κομμάτι· οι ζώνες (r.bands) τα βάζουν το ένα κάτω από το άλλο ή δίπλα δίπλα
+      const bx = blankTags(state, r, vo, metricFn(state, date, () => at, today()), k => cellValue(state, k, date, r, tabs[0].rows.length, ''), date);   // «Κενός πίνακας»: tags in the cells
+      // each table (and each value table) is one piece; the bands (r.bands) put them one under the other or side by side
       const th = 'border:1px solid #333;background:#d9d9d9';
       const parts = new Map<string, { h: string; n: number }>();
       tabs.forEach((t, k) => {
@@ -252,7 +256,7 @@ export function mockApi(): Api {
         cut(t.rows).forEach((x, i) => ls.push('<tr>' + t.cols.map(c => '<td style="border:1px solid #333">' + esc(t.kind === 'blank' && c.f !== 'aa' && c.o?.vals?.[i]?.includes('{') ? blankFill(c.o.vals[i], bx).v : fieldValue(state, t.kind, x, c.f, i, date, c.text, c.o)) + '</td>').join('') + '</tr>'));
         parts.set(k ? build ? build.more![k - 1].id : (r.more || [])[k - 1]?.id : MAIN, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
       });
-      // πίνακες τιμών: κείμενο αριστερά, αριθμός δεξιά
+      // value tables: text on the left, number on the right
       for (const v of vo) {
         const ls = (v.title ? ['<tr><th colspan="2" style="' + th + ';text-align:left">' + esc(v.title) + '</th></tr>'] : []).concat(v.rows.map(x => '<tr><td style="border:1px solid #333;min-width:160px">' + esc(x.label) + '</td><td style="border:1px solid #333;text-align:right">' + esc(rowText(x)) + '</td></tr>'));
         parts.set(v.id, { h: '<table class="mock" style="font:12px Calibri,Arial">' + ls.join('') + '</table>', n: ls.length });
@@ -269,7 +273,7 @@ export function mockApi(): Api {
       const wrap = (h: string) => '<div class="pg" style="width:794px;height:760px;padding:24px">' + h + '</div>';
       return { html: pages.slice(0, PV_PAGES).map(wrap).join(''), css: '', pages: pages.length || 1, ...(sample == null ? {} : { counts }) };
     },
-    // Θέσεις πάνω στο χαρτί: ένα ψεύτικο χαρτί 12×26 κελιών με κεφαλίδα, ημερομηνία και υπογραφές
+    // Seats on paper: a fake 12×26-cell paper with a header, a date and signatures
     layoutPreview: async q => {
       const sheets = 'report' in q ? [{ key: 'main', label: q.report.name }] : LAYOUT_SHEETS[q.form];
       const sg = 'report' in q ? sigsSaved(state.settings, 'reports') : (q.sigs || sigsSaved(state.settings, q.form));

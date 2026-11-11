@@ -1,10 +1,10 @@
 // People search for the renderer: accent-free, look-alike Latin letters, Latin typing for Greek names.
 // Purpose: `searchPeople(people, query)` for Ctrl+K and every person picker; the index is built once per people array.
 // Does NOT: touch React, the store or storage, and never returns inactive people.
-// Owner layer: renderer/shared/lib. Why: it is pure, so it sits below the store and nav (app layer) instead of in them.
+// Owner layer: renderer/entities/person. Why: it is the person entity's search; pure, so it needs no store or nav.
 // Covering test: test/ux-names.test.ts and test/notes.test.ts (Ctrl+K search), test/screens-main.test.ts (pickers).
-import { normGreek, translit, collator, norm } from '../../../shared/text';
-import type { Person } from '../../../shared/domain';
+import { normGreek, translit, collator, norm } from '../../../../shared/text';
+import type { Person } from '../../../../shared/domain';
 
 interface Indexed {
   p: Person;

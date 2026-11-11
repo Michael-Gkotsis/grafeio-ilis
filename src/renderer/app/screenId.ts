@@ -3,6 +3,7 @@
 // Does NOT: import any screen (routes.ts does), so types can import this file without creating an import cycle.
 // Owner layer: renderer/app (architecture). Why: `nav.go('typo')` and a wrong id in the menu lists must fail `tsc`.
 // Covering test: test/screens-main.test.ts (every screen renders), test/ux-names.test.ts (menu names).
+import type { RouteParams } from '../shared/model/route';
 
 /** Every view the shell can show. The registry in routes.ts must have exactly one entry for each. */
 export const SCREEN_IDS = [
@@ -26,12 +27,8 @@ export const SCREEN_IDS = [
 /** A view id such as `'guard'`. */
 export type ScreenId = (typeof SCREEN_IDS)[number];
 
-/**
- * Screen state kept in the route (tab, date, filter...). Free-form on purpose: each screen owns its keys and the
- * values are strings, ISO dates, numbers or `undefined` (an `undefined` key clears what the screen remembered).
- */
-// biome-ignore lint/suspicious/noExplicitAny: screens read their own keys as strings or numbers; typed in 5.1b+
-export type RouteParams = Record<string, any>;
+/** Moved to shared/model/route.ts (5.3a); kept here for the app/ importers. */
+export type { RouteParams } from '../shared/model/route';
 
 /** Where the user is: a view plus that view's params. */
 export interface Route {

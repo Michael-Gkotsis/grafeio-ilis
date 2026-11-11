@@ -20,7 +20,7 @@ import { createElement, type ComponentType, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { vi } from 'vitest';
 import { benchState } from '../../bench/state';
-import { mockApi } from '../../src/renderer/mockApi';
+import { mockApi } from '../../src/renderer/shared/api/mockApi';
 import { NavCtx, StoreCtx, type Nav, type StoreValue } from '../../src/renderer/store';
 import { DEFAULT_PREFS, PrefsCtx, type Prefs } from '../../src/renderer/prefs';
 import { ToastProvider } from '../../src/renderer/ui';
