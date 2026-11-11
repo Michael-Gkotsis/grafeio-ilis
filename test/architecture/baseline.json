@@ -84,7 +84,6 @@
     "src/main/sources.ts::writeGroup": 111,
     "src/main/tplmap.ts::mapFroura": 97,
     "src/main/updater.ts::createUpdater": 364,
-    "src/renderer/layout.ts::LayoutDialog": 91,
     "src/renderer/screens/guard.ts::GuardScreen": 215,
     "src/renderer/screens/lists.ts::ListsCard": 165,
     "src/renderer/screens/reports.ts::ReportPage": 262,
@@ -165,7 +164,6 @@
     "src/main/tplmap.ts": 3,
     "src/renderer/common.ts": 4,
     "src/renderer/features/quick-add/model/useQuickAdd.ts": 1,
-    "src/renderer/layout.ts": 1,
     "src/renderer/screens/cadre.ts": 1,
     "src/renderer/screens/guard.ts": 7,
     "src/renderer/screens/hkrows.ts": 3,
@@ -179,8 +177,7 @@
     "src/renderer/screens/weapons.ts": 7,
     "src/renderer/screens/whodoes.ts": 2,
     "src/renderer/shared/api/mockApi.ts": 5,
-    "src/renderer/sheets.ts": 5,
-    "src/renderer/update.ts": 1
+    "src/renderer/sheets.ts": 5
   },
   "any": {
     "src/core/commands/handlers/dayPlans.ts": 2,
@@ -195,7 +192,6 @@
     "src/renderer/guideTopic.ts": 1,
     "src/renderer/main.ts": 1,
     "src/renderer/screens/cadre.ts": 14,
-    "src/renderer/screens/dayForms.ts": 1,
     "src/renderer/screens/esso.ts": 5,
     "src/renderer/screens/guard.ts": 26,
     "src/renderer/screens/guide.ts": 3,
@@ -223,8 +219,6 @@
     "src/renderer/screens/whodoes.ts": 3,
     "src/renderer/shared/api/mockApi.ts": 6,
     "src/renderer/shared/model/route.ts": 1,
-    "src/renderer/sigs.ts": 1,
-    "src/renderer/ui.ts": 2,
-    "src/renderer/update.ts": 2
+    "src/renderer/ui.ts": 2
   }
 }
