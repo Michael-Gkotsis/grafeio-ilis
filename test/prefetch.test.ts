@@ -133,7 +133,7 @@ describe('loaders and routes', () => {
     expect(Object.keys(SCREEN_SOURCES).sort()).toEqual(['diag', 'guide', 'reports', 'templates']);
     expect(SCREENS.home.component.name).toBe('TodayScreen');
     expect(SCREENS.people.component.name).toBe('PeopleScreen');
-    expect(SCREEN_IDS.length).toBe(15);
+    expect(SCREEN_IDS.length).toBe(16);
   });
 
   it('each source resolves to the component its screen module exports', async () => {

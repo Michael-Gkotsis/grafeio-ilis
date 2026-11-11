@@ -129,27 +129,57 @@ const outsSave = {
   }
 };
 
-const medical = screen('Ιατρικά', async S => {
-  await segments(S);
-  await S.state('back to Τώρα', () => S.click('Τώρα'), { close: false });
-  await S.dialog('end earlier (Λήξη νωρίτερα)', () => S.click('Λήξη νωρίτερα'));
-});
+// U5: «Ιατρικά» became the first tab of «Καταστάσεις». The walk runs on both sides of the diff, so it opens the menu
+// entry the build has and keeps the group and state names stable.
+const navOneOf = async (S, labels) => {
+  for (const label of labels) {
+    if (await S.navButtons().evaluateAll((els, l) => els.some(e => (e.querySelector('.navbtn__lbl')?.textContent || '').startsWith(l)), label)) return S.nav(label);
+  }
+  return S.nav(labels[0]);
+};
+// U5: Ποινές, Άδειες, Αιτήσεις were tabs of the ΗΚΑΙ; now they are tabs of «Καταστάσεις». Click the tab where it is.
+const statusTab = async (S, label, opts) => {
+  if (!(await S.page.locator('.main [role=tab]').filter({ hasText: new RegExp('^' + label) }).count())) await S.nav('Καταστάσεις');
+  return S.state('tab ' + opts.n + ' ' + label, () => S.tab(label), opts.flags);
+};
+
+const medical = {
+  name: 'Ιατρικά',
+  run: async S => {
+    await navOneOf(S, ['Καταστάσεις', 'Ιατρικά']); await S.snap('screen');
+    await segments(S);
+    await S.state('back to Τώρα', () => S.click('Τώρα'), { close: false });
+    await S.dialog('end earlier (Λήξη νωρίτερα)', () => S.click('Λήξη νωρίτερα'));
+  }
+};
 
 const strength = screen('Δύναμη', segments);
 
-const hkai = screen('ΗΚΑΙ', async S => {
-  await S.state('tab 1 ΗΚΑΙ', () => S.tab('ΗΚΑΙ'), { close: false });
-  await tabs(S, '.main .toolbar', 'side');
-  await S.dialog('rows dialog (Γραμμές και ονόματα)', () => S.click('Γραμμές και ονόματα'));
-  await S.state('tab 2 Ποινές', () => S.tab('Ποινές'), { close: false });
-  await segments(S);
-  await S.dialog('punishment fix', () => S.click('Διόρθωση…'), { close: false });
-  await S.dialog('punishment fix: delete step', () => S.click('Διαγραφή (μπήκε λάθος)', '.ui-dialog'));
-  await S.state('tab 3 Άδειες', () => S.tab('Άδειες'));
-  await S.state('tab 4 Αιτήσεις', () => S.tab('Αιτήσεις'));
-  await S.state('tab 5 Ημερήσια Διαταγή', () => S.tab('Ημερήσια Διαταγή'), { close: false });
-  await S.dialog('hd preview', () => S.click('Προεπισκόπηση'));
-}, { phone: true });
+const hkai = {
+  name: 'ΗΚΑΙ',
+  phone: true,
+  run: async S => {
+    await S.nav('ΗΚΑΙ'); await S.snap('screen');
+    // the base build still has the ΗΚΑΙ tab; U5 removed the tabs
+    if (await S.page.locator('.main [role=tab]').filter({ hasText: /^ΗΚΑΙ/ }).count()) {
+      await S.state('tab 1 ΗΚΑΙ', () => S.tab('ΗΚΑΙ'), { close: false });
+    }
+    await tabs(S, '.main .toolbar', 'side');
+    await S.dialog('rows dialog (Γραμμές και ονόματα)', () => S.click('Γραμμές και ονόματα'));
+    await statusTab(S, 'Ποινές', { n: 2, flags: { close: false } });
+    await segments(S);
+    await S.dialog('punishment fix', () => S.click('Διόρθωση…'), { close: false });
+    await S.dialog('punishment fix: delete step', () => S.click('Διαγραφή (μπήκε λάθος)', '.ui-dialog'));
+    await statusTab(S, 'Άδειες', { n: 3 });
+    await statusTab(S, 'Αιτήσεις', { n: 4 });
+    if (await S.page.locator('.main [role=tab]').filter({ hasText: /^Ημερήσια Διαταγή/ }).count()) {
+      await S.state('tab 5 Ημερήσια Διαταγή', () => S.tab('Ημερήσια Διαταγή'), { close: false });
+    } else {
+      await S.nav('Ημερήσια Διαταγή'); await S.state('tab 5 Ημερήσια Διαταγή', async () => {}, { close: false });
+    }
+    await S.dialog('hd preview', () => S.click('Προεπισκόπηση'));
+  }
+};
 
 const weapons = screen('Οπλισμός', async S => { await segments(S); await tabs(S); });
 const weaponsAsk = {

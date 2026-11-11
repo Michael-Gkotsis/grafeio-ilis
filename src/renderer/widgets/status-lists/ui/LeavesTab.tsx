@@ -97,7 +97,7 @@ function leavesHead(m: LeavesModel) {
         title="Άδειες"
         sub={'Κανονικές, τιμητικές και αναρρωτικές· γράφονται στην ' + HK() + ' και στη Δύναμη.'}
       >
-        <Button variant="outline" onClick={() => nav.set({ hkTab: 'req' })}>
+        <Button variant="outline" onClick={() => nav.go('records', { stTab: 'req' })}>
           Αιτήσεις
         </Button>
         <Button onClick={() => nav.declare({ cat: 'abs' })}>+ Άδεια</Button>

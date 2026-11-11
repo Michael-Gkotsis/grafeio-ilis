@@ -14,7 +14,7 @@
     "src/main/shared/excel/xlsx/workbook.ts": 1360,
     "src/main/sources.ts": 979,
     "src/main/updater.ts": 478,
-    "src/renderer/guideText.ts": 1006,
+    "src/renderer/guideText.ts": 1005,
     "src/renderer/screens/guard.ts": 699,
     "src/renderer/screens/reports.ts": 1284,
     "src/renderer/screens/sources.ts": 605

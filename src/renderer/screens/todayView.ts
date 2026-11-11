@@ -181,7 +181,7 @@ export function todayTasks({ state, pm, today, tomorrow, empty, due, boot, nav, 
         waiting.map((r) => shortName(pm.get(r.pid)!)).join(', ') +
         ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής',
       btn: 'Άνοιξε',
-      fn: () => nav.go('hkai', { hkTab: 'req' }),
+      fn: () => nav.go('records', { stTab: 'req' }),
     });
   // Notes whose reminder has come (Michael, 24/10): the oldest first
   const remNotes = noteGroups(
