@@ -7,43 +7,7 @@ import { Select } from '../select';
 import { useStore } from '../store';
 import { blocksOf, phaseList, type BlockDef, type Person } from '../../shared/domain';
 import { type UserLists } from '../../shared/ranks';
-import { parseSi, siBases, siCats, siCellOf, siCombos, siLabel, siName, siOf, siRowKey, siSubs, SI_BASES, SI_CAT_BASES, SI_CATS, type SiConfig } from '../../shared/si';
-type P = any;
-const OTHER = '\u0001other';
-
-// Σ.Ι., ΜΕ ΟΠΛΟ / ΧΩΡΙΣ ΟΠΛΟ και κατηγορία πάθησης. Ό,τι δεν αναγνωρίζεται γράφεται με το χέρι (όπως ο βαθμός).
-export function SiField({ id, value, cat, onChange }: P) {
-  const { state } = useStore(); const cfg = state.settings.lists?.si;
-  const parts = parseSi(value, cfg);
-  const known = !value || !!parts?.ok;
-  const [typing, setTyping] = useState(!known);
-  const bases = siBases(cfg); if (parts?.ok && !bases.includes(parts.base)) bases.push(parts.base);
-  const base = typing ? OTHER : parts?.ok ? parts.base : '';
-  const subs = parts?.ok ? siSubs(parts.base) : [];
-  const hasCat = !typing && !!parts?.ok && SI_CAT_BASES.includes(parts.base);
-  const cats = siCats(cfg); if (cat && !cats.includes(cat)) cats.push(cat);
-  const setBase = (b: string) => {
-    if (b === OTHER) { setTyping(true); onChange(known ? '' : value, ''); return; }
-    setTyping(false);
-    const keep = parts?.ok && siSubs(b).includes(parts.sub) ? parts.sub : '';
-    onChange(b ? siLabel(b, keep) : '', SI_CAT_BASES.includes(b) ? cat || '' : '');
-  };
-  return html`<div className="field" style=${{ flex: 2 }}><label className="field__label" htmlFor=${id}>Σ.Ι.</label>
-    <div style=${{ display: 'flex', gap: '6px' }}>
-      <${Select} id=${id} className="ui-input" style=${{ flex: 1 }} value=${base} onChange=${(e: any) => setBase(e.target.value)}>
-        <option value="">—</option>${bases.map(b => html`<option key=${b} value=${b}>${b}</option>`)}<option value=${OTHER} data-keep>Άλλο (γράψε το)…</option>
-      <//>
-      ${!typing && subs.length > 0 && html`<${Select} className="ui-input" style=${{ flex: 1.4 }} aria-label="Με όπλο ή άοπλος" value=${parts!.sub} onChange=${(e: any) => onChange(siLabel(parts!.base, e.target.value), cat || '')}>
-        <option value="">—</option>${subs.map(s => html`<option key=${s} value=${s}>${s}</option>`)}
-      <//>`}
-      ${hasCat && html`<${Select} className="ui-input" style=${{ flex: 1.6 }} aria-label="Κατηγορία πάθησης" value=${cat || ''} onChange=${(e: any) => onChange(value, e.target.value)}>
-        <option value="">— πάθηση</option>${cats.map(c => html`<option key=${c} value=${c}>${c}</option>`)}
-      <//>`}
-    </div>
-    ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label="Σ.Ι. με το χέρι" placeholder="π.χ. Ι3 ΧΩΡΙΣ ΟΠΛΟ" value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value, '')}/>`}
-  </div>`;
-}
-
+import { parseSi, siBases, siCats, siCellOf, siCombos, siName, siOf, siRowKey, SI_BASES, SI_CAT_BASES, SI_CATS, type SiConfig } from '../../shared/si';
 const CAT_SEP = ' · ';
 // Στήλες των πινάκων «ποιος κάνει τι»: οι υπηρεσίες του εντύπου που ισχύει και μετά όσες έχουν μόνο τα άλλα έντυπα
 // (χωρίς Λ/Υ-Δ/Υ, που ορίζονται με το χέρι, και όσες αφαιρέθηκαν)
@@ -160,3 +124,6 @@ export function SiCard() {
     ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
   <//>`;
 }
+
+// Deprecated path: SiField moved to features/person-edit (Phase 5.3c). Removed in Phase 7.
+export { SiField } from '../features/person-edit';

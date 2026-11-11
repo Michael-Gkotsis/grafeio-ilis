@@ -5,3 +5,5 @@ export { PersonPicker, type PersonPickerProps } from './ui/PersonPicker';
 export { StatusBadge, cadreBadge, type StatusBadgeProps } from './ui/StatusBadge';
 export { rkFull, rkOn, rkPlain, rkPrefix, rkShort, rkText, setRankNamesOn } from './model/rankName';
 export { searchPeople } from './model/search';
+export { CADRE_TONE, absRange } from './model/cadreAbs';
+export { cadreStatusBadge } from './ui/CadreStatusBadge';
