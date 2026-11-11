@@ -37,7 +37,7 @@ const track =
 export const MODULES = {
   reports: track('reports', () => import('../screens/reports')),
   settings: track('settings', () => import('../screens/settings')),
-  guide: track('guide', () => import('../screens/guide')),
+  guide: track('guide', () => import('../pages/guide')),
   diag: track('diag', () => import('../pages/diag')),
 };
 
