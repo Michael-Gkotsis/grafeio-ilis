@@ -322,14 +322,15 @@ export function blockShape(b: BlockDef): { nums: number; per: number } {
   for (const p of b.posts) if (!p.hidden) g.set(groupKey(p), (g.get(groupKey(p)) || 0) + 1);
   return g.size ? { nums: g.size, per: Math.max(...g.values()) } : { nums: 1, per: 1 };
 }
-export const MAX_NUMS = 10, MAX_PER = 4;
+// Όρια επεξεργασίας υπηρεσίας (Michael, 11/11: πάνω από 10 άτομα): γράμματα α΄–κ΄ για τα άτομα του ίδιου νούμερου
+export const MAX_NUMS = 30, MAX_PER = 10;
 // Οι θέσεις ανά νούμερο, με τη σειρά, και οι κρυφές (για την αλλαγή σχήματος και τις ώρες ανά νούμερο)
 export function blockGroups(posts: PostDef[]): PostDef[][] {
   const groups: PostDef[][] = []; const at = new Map<string, number>();
   for (const p of posts) { const k = groupKey(p); let i = at.get(k); if (i == null) { i = groups.length; at.set(k, i); groups.push([]); } groups[i].push(p); }
   return groups;
 }
-const GR = ['α', 'β', 'γ', 'δ'], LAT = ['a', 'b', 'c', 'd'];
+const GR = [...'αβγδεζηθικ'], LAT = [...'abcdefghij'];
 // Οι θέσεις μιας υπηρεσίας με νέο πλήθος νούμερων και ατόμων ανά νούμερο (Michael, 4/11). Τα κλειδιά μένουν σταθερά για να μένει το
 // ιστορικό: το άτομο α κρατά το παλιό κλειδί, τα β, γ… παίρνουν «<κλειδί α>_2», «_3»· νέο νούμερο σε υπηρεσία του εντύπου παίρνει
 // «<id υπηρεσίας>_<Ν>» (σκοποί: «sk5a», «sk5b»). Θέσεις που περισσεύουν κρύβονται (ποτέ διαγραφή) και ξαναβγαίνουν οι ίδιες.
@@ -344,7 +345,7 @@ export function reshapeBlock(b: BlockDef, nums: number, per: number, name: strin
   let nextRot = Math.max(-1, ...b.posts.map(p => (p.rot == null ? -1 : p.rot))) + 1;
   const firstNo = isSk ? +(/\d+/.exec(b.posts[0]?.short || b.posts[0]?.k || '')?.[0] || 3) : 0;
   // όνομα και κατάληξη των ετικετών: όπως είναι (Θαλαμοφύλακας 1ος (α΄)), εκτός αν άλλαξε το όνομα της υπηρεσίας του εντύπου
-  const lab = /^(.*?)(?: \d+ος)?(?: [α-δ])?( \([^)]*\))?$/.exec(b.posts[0]?.label || '');
+  const lab = /^(.*?)(?: \d+ος)?(?: [α-κ])?( \([^)]*\))?$/.exec(b.posts[0]?.label || '');
   const renamed = !b.custom && name !== b.name;
   const base = b.custom || renamed || !lab || !lab[1] ? name : lab[1]; const suffix = b.custom || renamed || !lab ? '' : lab[2] || '';
   const one = nums === 1 && per === 1;
