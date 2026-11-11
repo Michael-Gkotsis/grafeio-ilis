@@ -11,8 +11,9 @@ import { dayName, dmy, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
 import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
-import { SigsDialog } from './sigs';
-import { LayoutDialog } from './layout';
+import { SigsDialog } from './features/sigs-edit';
+import { LayoutDialog } from './features/layout-edit';
+import { GO } from './shared/lib/exportGo';
 import { dropSigMoves, type Layout, type LayoutForm } from '../shared/layout';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
@@ -199,10 +200,7 @@ export function usePrintFile() {
     return r.ok;
   }, [toast]);
 }
-export const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
-  guard: d => ['guard', { guardDate: d, }], outs: d => ['outs', { outDate: d }], records: () => ['hkai', { hkTab: 'pun' }],
-  settings: () => ['templates', { tab: 'settings' }], people: () => ['people', {}], cadre: () => ['cadre', {}]
-};
+export { GO };
 export function ExportProvider({ children }: P) {
   const toast = useToast(); const { sync } = useStore(); const nav = useNav(); const printFile = usePrintFile();
   const [gate, setGate] = useState<Gate | null>(null);
