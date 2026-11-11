@@ -29,3 +29,30 @@
     opacity: 0.6;
   }
 }
+
+/* reduced motion: the same names with no movement, so any animation that still names them does nothing visible */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fade {
+    from {
+      opacity: 1;
+    }
+  }
+  @keyframes pop {
+    from {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes slidein {
+    from {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes slideup {
+    from {
+      transform: none;
+      opacity: 1;
+    }
+  }
+}

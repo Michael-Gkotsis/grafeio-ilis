@@ -25,11 +25,11 @@ input::placeholder,textarea::placeholder{color:var(--muted-fg);opacity:.8}
 .ui-check{width:18px;height:18px;accent-color:var(--primary);flex:none;cursor:pointer}
 .ui-checkrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap}
 .strict-sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;padding:0 4px}
-.ui-chip{height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--input);background:var(--card);cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+.ui-chip{height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--input);background:var(--card);cursor:pointer;font-size:12.5px;font-weight:500;white-space:nowrap}
 .ui-chip:hover{border-color:var(--muted-fg)}
 .ui-chip[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--primary-fg)}
 .ui-chip .cnt{font-family:var(--f-mono);font-size:12px;margin-left:5px;opacity:.85}
-.ui-chip--sm{height:28px;padding:0 10px;font-size:12px}
+.ui-chip--sm{height:var(--chip-h);padding:0 9px;font-size:12px}
 /* Strip: λωρίδα που κυλά οριζόντια· οι άκρες σβήνουν όταν κρύβονται κουμπιά */
 .strip{position:relative;overflow-x:auto}
 .strip.fade-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
@@ -560,7 +560,8 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 [data-density="compact"] .main{padding:16px 20px 28px}
 [data-density="compact"] .page-head{margin-bottom:10px}
 [data-density="compact"] .page-head h1{font-size:22px}
-[data-density="compact"] .ui-chip{height:28px;padding:0 10px}
+[data-density="compact"] .ui-chip{height:24px;padding:0 9px}
+[data-density="compact"] .ui-chip--sm{height:var(--chip-h)}
 [data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
 [data-density="compact"] .ptable__row{font-size:13px}
 [data-density="compact"] .ptable__head > *{padding:6px 10px}

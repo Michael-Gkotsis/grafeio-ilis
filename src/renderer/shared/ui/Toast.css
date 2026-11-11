@@ -30,7 +30,7 @@
   border-radius: 12px;
   box-shadow: var(--shadow);
   font-size: 14px;
-  animation: slideup 0.16s ease-out;
+  animation: slideup 0.12s ease-out;
 }
 .ui-toast > div {
   flex: 1;
@@ -62,5 +62,11 @@ body:has(.pendbar) .ui-toasts {
     right: 16px;
     width: auto;
     bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast {
+    animation: none;
   }
 }
