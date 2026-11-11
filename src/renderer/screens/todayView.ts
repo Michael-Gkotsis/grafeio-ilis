@@ -5,8 +5,8 @@
 // Owner layer: renderer/screens. Why: TodayScreen was over the 150-line limit once formatted (Phase 5.1b).
 // Covering test: test/screens-main.test.ts (HTML snapshot of «Σήμερα»), test/notes.test.ts.
 import type { Boot } from '../../shared/api';
-import type { AppState, Person, PersonRequest, Status } from '../../shared/domain';
-import { RECORD_CATS, TYPES, TYPE_KEYS, dutyStartOf, isWaiting, shortName } from '../../shared/domain';
+import type { AppState, Person, Status } from '../../shared/domain';
+import { RECORD_CATS, TYPES, TYPE_KEYS, dutyStartOf, shortName } from '../../shared/domain';
 import { dm, dow, type ISODate } from '../../shared/dates';
 import { live, isAway, noDutyOf, statusLbl } from '../../shared/ranks';
 import { awayNow, activePeople, isRecordExpiredOn, statusesAt, statusesOn, strengthAt } from '../../shared/rules';
@@ -14,6 +14,7 @@ import { returnOf } from '../../shared/returns';
 import { USB_DAYS, usbAge } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteWho } from '../../shared/notes';
 import type { Nav } from '../store';
+import { reqWaiting } from '../shared/lib/reqWaiting';
 
 /** One person who is away today, with the status that makes them away. */
 export interface AwayRow {
@@ -123,8 +124,8 @@ export function endText(state: AppState, s: Status, today: ISODate, tomorrow: IS
   return 'Από αύριο μπορεί να βγει έξοδο';
 }
 
-/** Requests that still wait for an answer. */
-export const reqWaiting = (rs: PersonRequest[]) => rs.filter(isWaiting);
+// Deprecated path (Phase 6.0, removed in Phase 7): `reqWaiting` moved to shared/lib/reqWaiting.ts.
+export { reqWaiting };
 
 /** One line of «Πρέπει σήμερα»: what to do, why, and the button that does it. */
 export interface TodayTask {

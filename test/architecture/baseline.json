@@ -195,7 +195,7 @@
     "src/renderer/screens/imerologio.ts": 5,
     "src/renderer/screens/lists.ts": 36,
     "src/renderer/screens/notes.ts": 1,
-    "src/renderer/screens/other.ts": 17,
+    "src/renderer/screens/other.ts": 12,
     "src/renderer/screens/outsPlan.ts": 3,
     "src/renderer/screens/people.ts": 12,
     "src/renderer/screens/repBands.ts": 7,
