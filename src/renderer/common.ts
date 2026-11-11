@@ -1,14 +1,12 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Button, Segmented } from './ui';
+import { Fragment, useCallback } from 'react';
+import { html, Alert, Button, Segmented } from './ui';
 import { Combo, Select } from './select';
-import { usePrefs } from './prefs';
 import { useStore } from './store';
 import { useToast } from './ui';
 import { SHIFT_EVERY, MAX_SHIFT_OWN, hoursTxt, shiftList, shiftReport, shiftSlots, type ShiftDef, type ShiftOwn } from '../shared/domain';
 import { normTime } from '../shared/hours';
 import { GO } from './shared/lib/exportGo';
-import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
 // Deprecated path: the domain-free fields moved to shared/ui (Phase 5.2), and the date/time fields and the two
 // dialogs with them (Phase 5.3a); StatusBadge, PersonPicker and ChangePlanList moved to entities/ (Phase 5.3a).
@@ -99,82 +97,10 @@ export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, f
 }
 // Deprecated path: `timesHelp` moved to shared/lib/timesHelp.ts (Phase 5.3b).
 export { timesHelp } from './shared/lib/timesHelp';
-/* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
-// rich: γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ, ποινές)· το v κρατά το ίδιο κείμενο απλό
-export interface Cell { v: string; s: string; cs: number; rs: number; rich?: Line[] }
-export interface SheetModel { cols: number[]; rows: (Cell | null)[][] }
-export const E = (v: unknown, s?: string, cs?: number, rs?: number): Cell => ({ v: v == null ? '' : String(v), s: s || '', cs: cs || 1, rs: rs || 1 });
-// Γραμμή του φύλλου: ξαναζωγραφίζεται μόνο όταν άλλαξε κελί της ή η επισήμανσή της
-const sameCell = (a: Cell | null, b: Cell | null) => a === b || (!!a && !!b && a.v === b.v && a.s === b.s && a.cs === b.cs && a.rs === b.rs);
-const sameRow = (a: (Cell | null)[], b: (Cell | null)[]) => a === b || (a.length === b.length && a.every((c, i) => sameCell(c, b[i])));
-const XlRow = memo(function XlRow({ r, ri, fl, gen }: { r: (Cell | null)[]; ri: number; fl?: Set<number>; gen: number }) {
-  return html`<tr><th>${ri + 1}</th>${r.map((c, ci) => { if (!c) return null; const f = !!fl && fl.has(ci); return html`<td key=${ci + (f ? 'f' + gen : '')} colSpan=${c.cs} rowSpan=${c.rs} className=${cx(c.s, f && 'flash')}>${c.rich ? c.rich.map((l, i) => html`<${Fragment} key=${i}>${i > 0 && html`<br/>`}${l.map((r, j) => (r.u ? html`<u key=${j}>${r.t}</u>` : r.t))}<//>`) : c.v}</td>`; })}</tr>`;
-}, (a, b) => a.ri === b.ri && a.fl === b.fl && (!a.fl || a.gen === b.gen) && sameRow(a.r, b.r));
-
-// Μεγάλα φύλλα (μηνιαίο πλέγμα: 150 άτομα × 31 μέρες ≈ 6.000 κελιά) σε κομμάτια των 20 γραμμών:
-// ζωγραφίζονται μόνο όσα είναι κοντά στην οθόνη, τα άλλα κρατούν μόνο το ύψος τους. Όχι όταν υπάρχουν
-// κελιά σε πολλές γραμμές (rowSpan), γιατί δεν κόβονται σε κομμάτια.
-const CHUNK = 20, ROW_H = 29;
-const chunked = (m: SheetModel) => m.rows.length > CHUNK * 3 && m.rows.every(r => r.every(c => !c || c.rs === 1));
-function XlChunk({ i, rows, start, show, h, span, flash, gen, io, heights }: P) {
-  const ref = useRef<HTMLTableSectionElement>(null);
-  useEffect(() => { const el = ref.current!; io.observe(el); return () => io.unobserve(el); }, [io]);
-  useLayoutEffect(() => { if (show) heights.current[i] = ref.current!.offsetHeight; });
-  return html`<tbody ref=${ref} data-chunk=${i}>${show ? rows.map((r: (Cell | null)[], k: number) => html`<${XlRow} key=${start + k} r=${r} ri=${start + k} fl=${flash.get(start + k)} gen=${gen}/>`)
-    : html`<tr className="xl__gap" style=${{ height: h + 'px' }}><td colSpan=${span}></td></tr>`}</tbody>`;
-}
-
-export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName, meta, footer }: { model: SheetModel; fileName: string; sheetName: string; meta?: string; footer?: string }) {
-  // Επισήμανση μόνο όταν αλλάζουν κελιά του ίδιου εντύπου (π.χ. ανάθεση)· όχι σε άλλη μέρα/μήνα ή αναζήτηση,
-  // όπου αλλάζουν όλα και η επισήμανση χιλιάδων κελιών θα κόλλαγε την οθόνη χωρίς να λέει κάτι
-  const prev = useRef<{ model: SheetModel; doc: string } | null>(null); const [flash, setFlash] = useState({ rows: new Map<number, Set<number>>(), gen: 0 });
-  useEffect(() => {
-    const p = prev.current; const doc = fileName + '|' + sheetName;
-    if (p && p.model !== model && p.doc === doc && p.model.rows.length === model.rows.length && p.model.cols.length === model.cols.length) {
-      const ch = new Map<number, Set<number>>();
-      model.rows.forEach((r, ri) => { const o = p.model.rows[ri]; if (o === r) return; r.forEach((c, ci) => { if (c && !sameCell(c, o[ci])) { let x = ch.get(ri); if (!x) ch.set(ri, x = new Set()); x.add(ci); } }); });
-      if (ch.size) setFlash(f => ({ rows: ch, gen: f.gen + 1 }));
-    }
-    prev.current = { model, doc };
-  }, [model]);
-  useEffect(() => { if (!flash.rows.size) return; const t = setTimeout(() => setFlash(f => ({ rows: new Map(), gen: f.gen })), 1900); return () => clearTimeout(t); }, [flash]);
-  const letters = model.cols.map((_, i) => (i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26))));
-  // «Χωρά»: το έντυπο μικραίνει ώστε να φαίνεται όλο το πλάτος (CSS zoom, υπολογίζεται μόνο όταν αλλάζει το πλάτος)
-  const { prefs, set } = usePrefs(); const fit = prefs.xlZoom === 'fit';
-  const box = useRef<HTMLDivElement>(null); const [cw, setCw] = useState(0);
-  useEffect(() => {
-    const el = box.current; if (!el || !fit) return;
-    const ro = new ResizeObserver(() => setCw(el.clientWidth)); ro.observe(el); setCw(el.clientWidth);
-    return () => ro.disconnect();
-  }, [fit]);
-  const natural = 28 + model.cols.reduce((a, w) => a + (w || 64), 0);
-  const z = fit && cw > 0 && natural > cw ? Math.max(0.4, (cw - 2) / natural) : 1;
-  // ποια κομμάτια είναι κοντά στην οθόνη (με περιθώριο, για να μη φαίνεται κενό στο γρήγορο κύλισμα)
-  const [vis, setVis] = useState(() => new Set([0, 1]));
-  const heights = useRef<number[]>([]);
-  const [io] = useState(() => new IntersectionObserver(es => setVis(v => {
-    const n = new Set(v); es.forEach(e => { const i = +(e.target as HTMLElement).dataset.chunk!; if (e.isIntersecting) n.add(i); else n.delete(i); });
-    return n.size === v.size && [...n].every(i => v.has(i)) ? v : n;
-  }), { rootMargin: '600px 0px' }));
-  useEffect(() => () => io.disconnect(), [io]);
-  const big = useMemo(() => chunked(model), [model]);
-  const nc = Math.ceil(model.rows.length / CHUNK);
-  const rowH = () => { let h = 0, n = 0; heights.current.forEach((x, i) => { if (x && i < nc) { h += x; n += Math.min(CHUNK, model.rows.length - i * CHUNK); } }); return n ? h / n : ROW_H; };
-  const body = big ? Array.from({ length: nc }, (_, i) => {
-    const rows = model.rows.slice(i * CHUNK, (i + 1) * CHUNK);
-    return html`<${XlChunk} key=${i} i=${i} rows=${rows} start=${i * CHUNK} show=${vis.has(i)} h=${Math.round(rows.length * rowH())} span=${model.cols.length + 1} flash=${flash.rows} gen=${flash.gen} io=${io} heights=${heights}/>`;
-  }) : html`<tbody>${model.rows.map((r, ri) => html`<${XlRow} key=${ri} r=${r} ri=${ri} fl=${flash.rows.get(ri)} gen=${flash.gen}/>`)}</tbody>`;
-  return html`<div className="xl" aria-label=${'Προεπισκόπηση ' + fileName}>
-    <div className="xl__bar"><span className="xl__fn">${fileName}</span><span>· φύλλο «${sheetName}»</span><span className="xl__meta">${meta}</span>
-      <button type="button" className="xl__zoom" aria-pressed=${fit} data-tip=${fit ? 'Σε πραγματικό μέγεθος (100%)' : 'Να χωρά όλο το πλάτος'} data-tip-side="left" onClick=${() => set('xlZoom', fit ? '100' : 'fit')}>${fit ? 'Χωρά' + (z < 1 ? ' · ' + Math.round(z * 100) + '%' : '') : '100%'}</button></div>
-    <div className="xl__scroll" ref=${box}><table style=${z < 1 ? { width: natural + 'px', minWidth: 0, zoom: z } : undefined}>
-      <colgroup><col style=${{ width: '28px' }}/>${model.cols.map((w, i) => html`<col key=${i} style=${w ? { width: w + 'px' } : undefined}/>`)}</colgroup>
-      <thead><tr><th></th>${model.cols.map((_, i) => html`<th key=${i}>${letters[i]}</th>`)}</tr></thead>
-      ${body}
-    </table></div>
-    ${footer && html`<div className="xl__foot">${footer}</div>`}
-  </div>`;
-});
+// Deprecated paths (Phase 5.3c part 2, removed in Phase 7): ExcelSheet moved to widgets/excel-preview, the sheet
+// types and `E` to shared/lib/sheets/model.
+export { ExcelSheet } from './widgets/excel-preview';
+export { E, type Cell, type SheetModel } from './shared/lib/sheets/model';
 
 // Deprecated paths (Phase 5.3b, removed in Phase 7): the export context moved to shared/model, the buttons to
 // widgets/export, GO to shared/lib/exportGo and GoLink to shared/ui.
