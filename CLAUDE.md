@@ -91,6 +91,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | App startup, windows | `src/main/main.ts` (entry) + `src/main/app/` (boot, window, recover, lockdown, quit) |
 | Screens (one file each; htm today, TSX later) | `src/renderer/screens/*.ts` |
 | Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app/` (Root, Shell, routes, nav, store, shortcuts, CommandPalette), `prefs.ts`, `ui.ts`, `common.ts` |
+| Shared UI primitives (Button, Dialog, Sheet, Select…) | `src/renderer/shared/ui/` (public API: its `index.ts`; helpers `shared/lib/`) |
 | Look and feel | `src/renderer/app/styles/index.css` (layer order) + `legacy.css` (UI work), `index.html` |
 | Tests | `test/*.test.ts` (175 files; helpers `fixtures.ts`, `duty-sim.ts`, `outs-gen.ts`, `tplgen.ts`; snapshots in `test/__snapshots__/`) |
 | Benchmarks, golden hashes | `bench/` (`golden-reports.ts`, `bench.ts`, `full.ts`, `ui/`) |

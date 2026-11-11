@@ -14,7 +14,7 @@
     "src/main/shared/excel/xlsx/workbook.ts": 1360,
     "src/main/sources.ts": 979,
     "src/main/updater.ts": 478,
-    "src/renderer/common.ts": 492,
+    "src/renderer/common.ts": 475,
     "src/renderer/guideText.ts": 1006,
     "src/renderer/screens/guard.ts": 699,
     "src/renderer/screens/other.ts": 472,
@@ -184,7 +184,6 @@
     "src/renderer/screens/weaponMoves.ts": 1,
     "src/renderer/screens/weapons.ts": 7,
     "src/renderer/screens/whodoes.ts": 2,
-    "src/renderer/select.ts": 1,
     "src/renderer/sheets.ts": 5,
     "src/renderer/update.ts": 1
   },
@@ -198,7 +197,7 @@
     "src/main/update.ts": 1,
     "src/renderer/app/screenId.ts": 1,
     "src/renderer/blockForm.ts": 10,
-    "src/renderer/common.ts": 18,
+    "src/renderer/common.ts": 16,
     "src/renderer/guideTopic.ts": 1,
     "src/renderer/main.ts": 1,
     "src/renderer/mockApi.ts": 6,
@@ -230,9 +229,8 @@
     "src/renderer/screens/weaponMoves.ts": 25,
     "src/renderer/screens/weapons.ts": 16,
     "src/renderer/screens/whodoes.ts": 3,
-    "src/renderer/select.ts": 4,
     "src/renderer/sigs.ts": 1,
-    "src/renderer/ui.ts": 9,
+    "src/renderer/ui.ts": 2,
     "src/renderer/update.ts": 2
   }
 }
