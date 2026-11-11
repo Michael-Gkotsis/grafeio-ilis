@@ -17,7 +17,7 @@ export function RequestsTab() {
   const date = nav.params.hkaiDate || today;
   return (
     <div>
-      <PageHeader title="Αιτήσεις" sub={'Γράφονται μία φορά, στην ' + HK() + ' της μέρας τους (5. Αιτήσεις).'}>
+      <PageHeader level={2} title="Αιτήσεις" sub={'Γράφονται μία φορά, στην ' + HK() + ' της μέρας τους (5. Αιτήσεις).'}>
         <DateBar
           value={date}
           onChange={(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))}

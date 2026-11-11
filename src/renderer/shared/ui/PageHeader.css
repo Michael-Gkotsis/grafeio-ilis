@@ -1,0 +1,78 @@
+/*
+ * PageHeader (.page-head): the compact heading of a screen, and its section variant.
+ *
+ * Purpose: title block (h1, quote, subtitle) on the left, actions on the right; `--section` is the row under tabs.
+ * Does NOT: hold screen-specific rules (`.weapons__acts`, density compact and the phone @media stay in legacy.css,
+ *   with the new sizes, because they depend on the shell, not on this component).
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: PageHeader.tsx draws these classes. Shared-ui sits below legacy, so a legacy rule that matches the same
+ *   element would win; the base rules were therefore removed from legacy when they moved here.
+ * Subtitle width: 02 §5.5 would hide the subtitle at 1024-1279 px behind a «?», but no page has that «?» yet, so
+ *   it stays visible at every width (hiding it now would lose text).
+ * Covering test: bench:styles, test/contrast.test.ts, test/screens-*.test.ts.
+ */
+
+.page-head {
+  display: flex;
+  gap: var(--gap-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--gap-3);
+}
+.page-head > div {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+@media (max-width: 1279px) {
+  .page-head > div {
+    flex-basis: 180px;
+    min-width: 180px;
+  }
+}
+.page-head > .datebar,
+.page-head > .page-head__acts {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.page-head > .page-head__acts {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+.page-head h1 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.page-head p {
+  margin: 4px 0 0;
+  color: var(--muted-fg);
+}
+.page-head__sub {
+  max-width: 80ch;
+  font-size: 13px;
+}
+.page-head__acts {
+  display: flex;
+  gap: var(--gap-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Section variant: under the tabs of a hub. The h2 stays in the DOM for screen readers, only the subtitle shows. */
+.page-head--section {
+  align-items: center;
+}
+.page-head--section p {
+  margin: 0;
+}
+.page-head__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

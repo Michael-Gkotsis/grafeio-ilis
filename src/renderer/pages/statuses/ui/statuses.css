@@ -1,0 +1,13 @@
+/*
+ * «Καταστάσεις» hub page (BEM block `statuses`): the space under the hub tabs.
+ *
+ * Purpose: replaces the inline margin of the tab row in pages/statuses/ui/StatusesPage.tsx.
+ * Does NOT: style the tab widgets or the section headers (shared/ui Tabs and PageHeader do).
+ * Owner layer: renderer/pages/statuses. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
+ * Why: U7, so the hub shows one big title and the tabs sit 12 px above the section row.
+ * Covering test: bench:styles, test/statuses-page.test.ts.
+ */
+
+.statuses__tabs {
+  margin-bottom: var(--gap-3);
+}

@@ -93,7 +93,7 @@ function leavesHead(m: LeavesModel) {
   const { nav, view, nNow, nSoon, q, setQ, dq, list } = m;
   return (
     <>
-      <PageHeader
+      <PageHeader level={2}
         title="Άδειες"
         sub={'Κανονικές, τιμητικές και αναρρωτικές· γράφονται στην ' + HK() + ' και στη Δύναμη.'}
       >
