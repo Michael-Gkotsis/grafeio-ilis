@@ -19,15 +19,15 @@ function memoryCard(d: Diag, total: number) {
             // biome-ignore lint/suspicious/noArrayIndexKey: process types repeat (several «renderer»), order is main's
             <tr key={i}>
               <th>{p.type}</th>
-              <td>{mb(p.kb)}</td>
-              <td className="muted">{p.cpu}% CPU</td>
+              <td className="diag__num">{mb(p.kb)}</td>
+              <td className="muted diag__num">{p.cpu}% CPU</td>
             </tr>
           ))}
-          <tr>
+          <tr className="diag__total">
             <th>
               <b>Σύνολο</b>
             </th>
-            <td>
+            <td className="diag__num">
               <b>{mb(total)}</b>
             </td>
             <td />
@@ -63,7 +63,7 @@ function startCard(d: Diag, version: string) {
           </tr>
           <tr>
             <th>Φάκελος δεδομένων</th>
-            <td className="mono">{d.dataDir}</td>
+            <td className="mono diag__path">{d.dataDir}</td>
           </tr>
           <tr>
             <th>Έκδοση</th>
@@ -80,7 +80,7 @@ function startCard(d: Diag, version: string) {
 function writesCard(d: Diag) {
   return (
     <Card title="Εγγραφές στο Excel">
-      <p className="note" style={{ marginTop: 0 }}>
+      <p className="diag__lead">
         {/* one text node before the choice, as the htm markup had it (no extra «<!-- -->» in the HTML) */}
         {'Οι τελευταίες εγγραφές που έκανε μόνη της η εφαρμογή. '}
         {d.worker ? 'Γίνονται σε ξεχωριστό νήμα, οπότε η οθόνη δεν κολλάει όσο γράφει.' : 'Γίνονται στο κύριο νήμα.'}
@@ -94,7 +94,7 @@ function writesCard(d: Diag) {
                 <th>
                   {w.at} {w.what}
                 </th>
-                <td>{w.error ? <Badge tone="bad">δεν έγινε</Badge> : writeText(w.ms)}</td>
+                <td className="diag__num">{w.error ? <Badge tone="bad">δεν έγινε</Badge> : writeText(w.ms)}</td>
               </tr>
             ))}
           </tbody>
@@ -109,11 +109,11 @@ function writesCard(d: Diag) {
 function gpuCard(d: Diag, toggleGpu: DiagModel['toggleGpu']) {
   return (
     <Card title="Επιτάχυνση γραφικών (GPU)">
-      <p className="note" style={{ marginTop: 0 }}>
+      <p className="diag__lead">
         Σε παλιές κάρτες γραφικών με Windows 7 η επιτάχυνση μπορεί να τρώει μνήμη ή να δίνει μαύρη οθόνη. Δοκίμασε και
         τα δύο και κράτα ό,τι δείχνει λιγότερη μνήμη. Η εφαρμογή ξανανοίγει.
       </p>
-      <p>
+      <p className="diag__state">
         Τώρα: <b>{d.gpuDisabled ? 'κλειστή' : 'ανοιχτή'}</b>
       </p>
       <Button variant="outline" onClick={() => toggleGpu(!d.gpuDisabled)}>
@@ -127,7 +127,7 @@ function speedCard({ step, startSpeed }: DiagModel) {
   const lastRun = getLastRun();
   return (
     <Card title="Μέτρηση ταχύτητας">
-      <p className="note" style={{ marginTop: 0 }}>
+      <p className="diag__lead">
         Ανοίγει μία μία τις οθόνες του μενού και τις καρτέλες τους και μετρά πόσο αργεί η καθεμία να εμφανιστεί. Δεν
         αλλάζει κανένα στοιχείο. Στο τέλος γυρίζει εδώ με τον πίνακα.
       </p>
@@ -135,15 +135,15 @@ function speedCard({ step, startSpeed }: DiagModel) {
         {step ? 'Μετράει: ' + step : lastRun ? 'Μέτρησε ξανά' : 'Μέτρηση ταχύτητας'}
       </Button>
       {lastRun && (
-        <table className="kv" style={{ marginTop: '12px' }}>
-          <caption className="muted" style={{ textAlign: 'left', paddingBottom: '6px' }}>
+        <table className="diag__runs">
+          <caption className="muted diag__caption">
             Μέτρηση στις {lastRun.at} (κάτω από 0,4 δευτ. είναι καλά)
           </caption>
           <tbody>
             {lastRun.rows.map((r) => (
               <tr key={r.name}>
-                <th style={r.tab ? { paddingLeft: '18px', fontWeight: 400 } : undefined}>{r.name}</th>
-                <td>
+                <th className={r.tab ? 'diag__sub' : undefined}>{r.name}</th>
+                <td className="diag__num">
                   <Badge tone={tone(r.ms)}>{speedText(r.ms)}</Badge>
                 </td>
               </tr>
@@ -162,7 +162,7 @@ export function DiagScreen() {
   if (!d) return <div className="boot">Φόρτωση…</div>;
   const total = memTotalKb(d.procs);
   return (
-    <div>
+    <div className="diag">
       <PageHeader
         title="Διάγνωση"
         sub="Για τον έλεγχο στο μηχάνημα του γραφείου: μνήμη, ταχύτητα, έκδοση. Ενημερώνεται κάθε 3 δευτερόλεπτα."
@@ -172,13 +172,13 @@ export function DiagScreen() {
           <span>Η μνήμη ξεπερνά τα 250 MB. Δοκίμασε να κλείσεις την επιτάχυνση γραφικών.</span>
         </Alert>
       )}
-      <div className="settings-grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))' }}>
+      <div className="diag__grid">
         {memoryCard(d, total)}
         {startCard(d, boot.version)}
         {writesCard(d)}
         {gpuCard(d, m.toggleGpu)}
       </div>
-      <div style={{ marginTop: '16px', maxWidth: '640px' }}>{speedCard(m)}</div>
+      <div className="diag__speed">{speedCard(m)}</div>
     </div>
   );
 }
