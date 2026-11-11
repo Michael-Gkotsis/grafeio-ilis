@@ -1,0 +1,29 @@
+/*
+ * Alert box (.ui-alert and its tones).
+ * Does NOT: style an alert inside a screen (.guide__card .ui-alert stays in legacy.css).
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: Alert.tsx draws it.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+.ui-alert {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+}
+.ui-alert--warn {
+  background: var(--warn-bg);
+  border-color: transparent;
+}
+.ui-alert--bad {
+  background: var(--bad-bg);
+  border-color: transparent;
+}
+.ui-alert--info {
+  background: var(--info-bg);
+  border-color: transparent;
+}

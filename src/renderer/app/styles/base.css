@@ -1,0 +1,38 @@
+/*
+ * Element-level defaults that the shared UI components must be able to override.
+ *
+ * Purpose: border-box sizing, form controls inherit font and colour, keyboard focus ring, display font on headings.
+ * Does NOT: hold a class selector or any component rule.
+ * Owner layer: renderer app shell. Layer: base (index.css), below shared-ui.
+ * Why own layer: these rules lived in legacy.css, which beats shared-ui whatever the specificity. Left there they
+ *   would override `.ui-btn` font and colour, `.ui-input:focus {outline: 0}` and `.ui-card__head h2`, and the
+ *   `all: unset` of `.ui-card__toggle` would end up border-box (U3a moved the UI rules to shared-ui). In base they
+ *   lose to every component rule, as they did by specificity before.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--f-display);
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -0.005em;
+}
