@@ -2,34 +2,29 @@
 import { RkName, rkOn, rkShort } from '../rankName';
 import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { reqWhat } from '../../shared/hkaiText';
-import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Icon, PageHeader, Segmented, Sheet, SheetNav, Strip, Tabs, VirtualList, useMedia, useSheetNav, useDirty, useToast, useViewportHeight } from '../ui';
+import { html, cx, Badge, Button, Why, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, useMedia, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChoiceField, SigsMenu, UnsavedDialog, StatusBadge } from '../common';
+import { ActiveFilter, SigsMenu } from '../common';
 import type { Sig } from '../../shared/sigs';
-import { backBy, hasTimes, timeNames, timesTxt } from '../../shared/hours';
-import { badgeLbl, live, medNote, isAway, listOf, optionsOf, rankTxt, type UserLists } from '../../shared/ranks';
-import { TYPES, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, plainName, unitOf, roomTxt, platoonsOf, platoonShort, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { notesOn, noteTxt, isEpop, monthTxt, awayNow, statusesAt, baseTotal, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
-import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
-import { addDays, daysBetween, dayName, dm, dow } from '../../shared/dates';
-import { SiField } from './si';
-import { RoomField } from './units';
+import { live, isAway, rankTxt, type UserLists } from '../../shared/ranks';
+import { TYPES, KIND_LBL, KIND_NAME, plainName, unitOf, roomTxt, platoonsOf, platoonShort, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { statusesAt, baseTotal, personMap, statusesOn, strengthAt } from '../../shared/rules';
+import { addDays, dayName, dm } from '../../shared/dates';
+
+import { EditPersonDialog, NewPersonDialog } from '../features/person-edit';
 import { QuickAddDialog } from './quickAdd';
 import { DeclareStatusDialog } from '../features/declare-status';
 import { StatusFixDialog } from '../features/fix-status';
 import { LeaveEndDialog, LeaveTimesDialog, leaveStarted } from '../features/leave-end';
 import { siOf, siShort } from '../../shared/si';
-import { essoPersonTxt } from '../../shared/esso';
-import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
-import { collator, normGreek, upper } from '../../shared/text';
+import { ROSTER_FILTERS, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
+import { collator, normGreek } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
-import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
-import { PersonalTab } from './personal';
+import { NoteDot } from './notes';
 import { ImerTab } from './imerologio';
-import { noteIndex, personGroups, remLine } from '../../shared/notes';
+import { noteIndex } from '../../shared/notes';
 type P = any;
 
 // Δυναμολόγιο (Michael, 17/10): μόνο τα στοιχεία του στρατιώτη, με τις στήλες του Δυναμολογίου. Οι άδειες και οι ποινές
@@ -201,70 +196,6 @@ export function SaveViewDialog({ onClose, onSave }: P) {
   <//>`;
 }
 
-const SHEET_TABS = [{ value: 'info', label: 'Στοιχεία' }, { value: 'duty', label: 'Υπηρεσίες' }, { value: 'hist', label: 'Ιστορικό' }, { value: 'notes', label: 'Σημειώσεις' }, { value: 'pers', label: 'Προσωπικά' }];
-// list: η λίστα από την οποία άνοιξε η καρτέλα (Δυναμολόγιο με τα φίλτρα του, Οπλισμός, Εξοδούχοι…)· αλλιώς όλοι σε δύναμη αλφαβητικά
-export function PersonSheet({ pid, list, onMove, onClose }: P) {
-  const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
-  const p = personMap(state.people).get(pid);
-  const [edit, setEdit] = useState(false);
-  const [fix, setFix] = useState<Status | null>(null);
-  const [times, setTimes] = useState<Status | null>(null);
-  const [end, setEnd] = useState<Status | null>(null);
-  const [tab, setTab] = useState('info');
-  const order: number[] = useMemo(() => list || state.people.filter(x => x.active || x.id === pid).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first)).map(x => x.id), [list, state.people]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const busy = edit || !!times || !!end;
-  const { at, n: total, move } = useSheetNav(order, pid, onMove, busy);
-  const nowM = useNowMin();
-  useEffect(() => { setEdit(false); setTimes(null); setEnd(null); setFix(null); const b = document.querySelector('.ui-sheet__body'); if (b) b.scrollTop = 0; }, [pid]);
-  if (!p) return null;
-  const ng = personGroups(state.notes, { pid }, today); const rem = remLine(state.notes, { pid }, today);
-  const reqs = state.requests.filter(r => r.pid === pid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-  const posts = postsOf(state.settings);
-  const hist = [...statusesOf(state.statuses, pid)].sort((a, b) => b.from.localeCompare(a.from));
-  const dd = dutyStats(state).get(pid) || emptyStat();
-  const duties = dd.log.slice().reverse().slice(0, 40).map(e => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h }));
-  const ob = outBlock(state, today, pid);
-  // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
-  const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
-  const ssT = statusesOn(live(state), pid, today).filter(x => STAT_ROWS.includes(x.type)); const rest = statusesOf(live(state), pid).filter(x => !STAT_ROWS.includes(x.type) && !backBy(x, today, nowM));   // γύρισε σήμερα ως τώρα: όχι πια «καμία υπηρεσία»
-  const noDutyT = ssT.some(x => statNoDuty(x, bl, lists)) || !!dutyBlock(rest, today, pid, { armed: false }, lists);
-  const unarmedT = ssT.some(x => statIsUnarmed(x, bl.filter(b => b.kind !== 'ly'), lists)) || !!dutyBlock(rest, today, pid, { armed: true }, lists);
-  const rules = [noDutyT ? 'Καμία υπηρεσία' : unarmedT ? 'Μόνο άοπλες θέσεις' : null, ob ? 'Δεν βγαίνει έξοδο (' + ob + ')' : null].filter(Boolean);
-  const hn = notesOn(state, pid, today);   // «Σημειώσεις υγείας» (Michael, 4/11)
-  const si = p.si ? siOf(p, lists) : null;
-  // Η καρτέλα (Michael, 17/10): ό,τι έχει το Δυναμολόγιο για τον στρατιώτη, οι υπηρεσίες του (σύνολο, με τις αργίες/ΣΚ από κάτω),
-  // το ημερολόγιο υπηρεσιών και το ιστορικό καταστάσεων. Το «Τι κάνει» είναι πλέον στις Υπηρεσίες, η ΕΣΣΟ πάνω δεξιά.
-  return html`<${Sheet} onClose=${onClose} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}><${RkName} p=${p} fn=${plainName} keep=${true}/></h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${rkOn() ? '' : rankTxt(p) + ' · '}${unitOf(p, state.settings)}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
-    <${TodayAlert} rules=${rules} rem=${rem} onRem=${() => setTab('notes')}/>
-    ${hn.length > 0 && html`<div className="healthnote"><b>Σημειώσεις υγείας:</b> ${hn.map(x => noteTxt(x, lists)).join(' · ')}</div>`}
-    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
-    <${Tabs} value=${tab} onChange=${(t: string) => nav.guard(() => setTab(t))} items=${SHEET_TABS.map(t => ({ ...t, label: t.value === 'duty' ? t.label + ' (' + dd.total + ')' : t.value === 'hist' ? t.label + ' (' + hist.length + ')' : t.value === 'notes' ? notesTabLabel(ng) : t.label }))}/>
-    ${tab === 'info' && html`
-    <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Προέλευση</dt><dd>${p.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
-      <dt>ΑΣΜ</dt><dd className="num">${p.asm || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${p.phone || '—'}</dd><dt>Θάλαμος</dt><dd>${roomTxt(p)} <span className="muted" style=${{ fontSize: '12px' }}>(${unitOf(p, state.settings)})</span></dd>
-      <dt>Πόστο</dt><dd>${p.post || '—'}</dd><dt>Ρόλος</dt><dd>${p.role || '—'}</dd><dt><abbr data-tip="Σωματική ικανότητα (από το Δυναμολόγιο)">Σ.Ι.</abbr></dt><dd>${si ? si.text : '—'}${si && p.siCat && si.cat ? ' · ' + si.cat : ''}</dd>
-      ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p, true)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι)</span></dd>`}
-      <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: rkShort(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
-      ${p.notes && html`<dt>Σημ. Δυναμολογίου</dt><dd>${p.notes}</dd>`}
-    </dl>
-    `}
-    ${tab === 'duty' && html`
-    <dl className="kv"><dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 40)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
-    `}
-    ${tab === 'hist' && html`
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Καταστάσεις</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}>${medNote(s, lists) ? html`<${Badge} tone="note">${badgeLbl(s, lists) + ' · σημείωση'}<//>` : html`<${Badge} tone=${TYPES[s.type].tone}>${badgeLbl(s, state.settings.lists)}<//>`}<span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''}${s.dest ? ', → ' + s.dest : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${TYPES[s.type].cat === 'abs' && awayNow(s, today, nowM) && html`<${Button} variant="link" onClick=${() => setEnd(s)} data-tip=${leaveStarted(s, today) ? 'Γύρισε νωρίτερα: η άδεια τελειώνει τη μέρα και ώρα που λες' : 'Δεν θα φύγει: η άδεια φεύγει ολόκληρη'}>${leaveStarted(s, today) ? 'Λήξη νωρίτερα…' : 'Ακύρωση…'}<//>`}${(RECORD_CATS.includes(TYPES[s.type].cat) || s.type === 'KOL' || TYPES[s.type].cat === 'abs') && html`<${Button} variant="link" onClick=${() => setFix(s)} data-tip=${TYPES[s.type].cat === 'abs' ? 'Μπήκε λάθος; Άλλαξε είδος, ημερομηνίες, ώρες και κατεύθυνση' : 'Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το'}>Διόρθωση…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>
-    ${reqs.length > 0 && html`<section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Αιτήσεις</h3><ul className="hist">${reqs.map(r => html`<li key=${r.id}><span className="num">${dow(r.date)} ${dm(r.date)}</span>αιτείται ${upper(reqWhat(r, state.settings.lists))}${r.decision && html` <${Badge} tone=${r.decision === 'ok' ? 'ok' : 'bad'}>${r.decision === 'ok' ? 'εγκρίθηκε' : 'απορρίφθηκε'}<//>`}${r.leave && r.decision === 'ok' && !(r.sid && state.statuses.some(x => x.id === r.sid)) && html` <${Badge} tone="bad">η άδεια ακυρώθηκε<//>`}${!r.decision && html` <${Badge} tone=${r.old ? 'outline' : 'warn'}>${r.old ? 'χωρίς απάντηση (παλιά)' : 'περιμένει'}<//>`}<${Button} variant="link" onClick=${() => nav.go('hkai', { hkaiDate: r.date })}>${HK()}<//></li>`)}</ul></section>`}
-    `}
-    ${tab === 'notes' && html`<${NotesTab} key=${pid} who=${{ pid }}/>`}
-    ${tab === 'pers' && html`<${PersonalTab} key=${pid} who=${{ pid }} rec=${p}/>`}
-    ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
-    ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
-    ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}
-    ${fix && html`<${StatusFixDialog} st=${fix} onClose=${() => setFix(null)}/>`}
-  <//>`;
-}
-
 // Υπηρεσίες πριν από την εφαρμογή: δεν γράφονται πια με το χέρι (Michael, 17/10: η ΕΣΣΟ ξεκινά από την αρχή).
 // Όσες υπάρχουν ήδη μετρούν ακόμα· ο έλεγχος από κάτω τις μηδενίζει.
 const BASE_KINDS: DutyKind[] = ['th', 'op', 'sk', 'mg', 'ly', 'tae', 'other'];
@@ -292,92 +223,11 @@ export function BaselineReviewDialog({ onClose }: P) {
   <//>`;
 }
 
-// Πού πάει μια αλλαγή στοιχείων: και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel και η εφαρμογή γράφει εκεί
-function rosterNote(state: P, isNew: boolean): string {
-  const b = state.settings.sources?.people;
-  if (!b || b.write === false) return isNew ? 'Μένει μόνο στην εφαρμογή: δεν έχει οριστεί Δυναμολόγιο στα Αρχεία Excel για να γραφτεί και εκεί.' : 'Αλλάζει μόνο στην εφαρμογή. Στην επόμενη εισαγωγή Δυναμολογίου θα πάρει τις τιμές του αρχείου.';
-  const at = b.file.split(/[\\/]/).pop() + ' › ' + b.sheet;
-  return isNew ? 'Γράφεται και στο Δυναμολόγιο (' + at + '), σε νέα γραμμή κάτω από τον τελευταίο.' : 'Βαθμός, προέλευση, Ο/Σ, ονοματεπώνυμο, ΑΣΜ, τηλέφωνο, θάλαμος, Σ.Ι. και ρόλος γράφονται και στο Δυναμολόγιο (' + at + ').';
-}
-// Τα πεδία ενός στρατιώτη: ίδια στη διόρθωση και στον νέο
-function PersonFields({ x, setX, id, isNew }: P) {
-  const { state } = useStore();
-  const ranks = useMemo(() => optionsOf(listOf(state.settings.lists, 'soldierRanks'), state.people.map((y: Person) => y.rank)), [state.people, state.settings.lists]);
-  const specs = useMemo(() => optionsOf(listOf(state.settings.lists, 'specs'), state.people.map((y: Person) => y.spec)), [state.people, state.settings.lists]);
-  const origins = useMemo(() => optionsOf(listOf(state.settings.lists, 'origins'), [...state.people.map((y: Person) => y.origin), ...state.cadreList.map((c: Cadre) => c.origin)]), [state.people, state.cadreList, state.settings.lists]);
-  const F = (k: keyof Person, label: string, opts: P = {}) => html`<div className="field"><label className="field__label" htmlFor=${id + '-' + k}>${label}</label><input id=${id + '-' + k} className="ui-input" type=${opts.type || 'text'} value=${(x as any)[k] ?? ''} placeholder=${opts.placeholder || ''} data-autofocus=${opts.focus ? '' : undefined} onChange=${(e: any) => setX({ ...x, [k]: opts.num ? (e.target.value ? Number(e.target.value) : null) : opts.nullable ? (e.target.value || null) : e.target.value })}/></div>`;
-  return html`
-    <div className="field-row"><${ChoiceField} id=${id + '-rank'} label="Βαθμός" value=${x.rank} options=${ranks} placeholder="π.χ. ΥΔΝΕΑΣ" otherLabel="+ Νέος βαθμός…" otherHelp="Μένει στη λίστα των βαθμών για την επόμενη φορά (Ρυθμίσεις › Λίστες)." onChange=${(v: string) => setX({ ...x, rank: v })}/><${ChoiceField} id=${id + '-origin'} label="Προέλευση" value=${x.origin || ''} options=${origins} placeholder="π.χ. ΕΠΟΠ" otherLabel="+ Νέα προέλευση…" otherHelp="Μένει στη λίστα των προελεύσεων για την επόμενη φορά (Ρυθμίσεις › Λίστες)." onChange=${(v: string) => setX({ ...x, origin: v || undefined })}/><${ChoiceField} id=${id + '-spec'} label="Ο/Σ (όπλο/σώμα)" value=${x.spec} options=${specs} placeholder="π.χ. ΠΖ" otherLabel="+ Νέο Ο/Σ…" otherHelp="Μένει στη λίστα για την επόμενη φορά." onChange=${(v: string) => setX({ ...x, spec: v })}/></div>
-    <div className="field-row">${F('last', isNew ? 'Επώνυμο *' : 'Επώνυμο', { focus: isNew })}${F('first', isNew ? 'Όνομα *' : 'Όνομα')}${F('father', 'Πατρώνυμο')}</div>
-    <div className="field-row">${F('asm', 'ΑΣΜ')}${F('phone', 'Τηλέφωνο')}<${RoomField} id=${id + '-room'} value=${x.room} onChange=${(v: number | null) => setX({ ...x, room: v })}/></div>
-    <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
-    <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
-    ${isEpop(x, state.settings.lists) && html`<div className="field"><label className="field__label" htmlFor=${id + '-mm'}>Υπηρεσίες τον μήνα (το πολύ)</label><input id=${id + '-mm'} className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${x.monthMax ?? ''} onChange=${(e: any) => setX({ ...x, monthMax: e.target.value ? Math.max(0, Math.floor(+e.target.value)) || undefined : undefined })}/><span className="field__help">ΕΠΟΠ/ΟΒΑ: δεν μπαίνει στην αυτόματη συμπλήρωση, μόνο με το χέρι. Πάνω από το όριο ζητά επιβεβαίωση. Κενό = χωρίς όριο.</span></div>`}
-    <label className="rule"><input type="checkbox" className="ui-check" checked=${x.attached} onChange=${(e: any) => setX({ ...x, attached: e.target.checked })}/><span><b>Προσκολλημένος</b><small>Μετράει στη στήλη «Προσκολλημένοι» της ${HK()}.</small></span></label>
-    ${!isNew && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!x.active} onChange=${(e: any) => setX({ ...x, active: !e.target.checked })}/><span><b>Εκτός δύναμης</b><small>Περνά στους «Εκτός δύναμης» του Δυναμολογίου και στις ΔΙΑΓΡΑΦΕΣ της ${HK()}. Βγαίνει από τις υπηρεσίες που έχει από σήμερα και μετά.</small></span></label>`}
-    ${F('notes', 'Σημειώσεις')}`;
-}
-
-export function EditPersonDialog({ p, onClose }: P) {
-  const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const [x, setX] = useState<Person>({ ...p }); const dirty = useDirty(x);
-  // εκτός δύναμης (Michael, 17/10): περνά στους «Εκτός δύναμης» του Δυναμολογίου και βγαίνει από τις υπηρεσίες που έχει από σήμερα
-  const save = async () => {
-    if (!(await run({ t: 'updatePerson', person: x }, false))) return;
-    onClose();
-    if (p.active && !x.active) toast({ text: rkShort(x) + ' πέρασε στους Εκτός δύναμης.', actions: [{ label: 'Δες τους', fn: () => nav.go('people', { filter: 'inactive' }) }, undoMark()] });
-    else if (!p.active && x.active) toast({ text: rkShort(x) + ' είναι ξανά σε δύναμη.', actions: [undoMark()] });
-    else toast({ text: 'Αποθηκεύτηκαν τα στοιχεία του ' + rkShort(x) });
-  };
-  return html`<${Dialog} title="Διόρθωση στοιχείων" description=${rosterNote(state, false)} onClose=${onClose} dirty=${dirty && 'Οι διορθώσεις δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
-    <${PersonFields} x=${x} setX=${setX} id="ep"/>
-  <//>`;
-}
-
-// Νέος στρατιώτης (π.χ. ήρθε μετάθεση): μπαίνει στην εφαρμογή και σε νέα γραμμή στο Δυναμολόγιο.
-// «Προσθήκη και επόμενος» (Michael, 19/10): το παράθυρο μένει ανοιχτό με τον ίδιο βαθμό, Ο/Σ, θάλαμο και ΕΣΣΟ
-export function NewPersonDialog({ onClose, onMany }: P) {
-  const { run, state, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
-  const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
-  const blank = (c: P = {}) => ({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: 'Ι1', post: null, role: null, essos, attached: false, notes: '', weapon: '', ...c });
-  const [x, setX] = useState<P>(blank);
-  const [done, setDone] = useState<string[]>([]);   // όσοι μπήκαν με «Προσθήκη και επόμενος»
-  const [gen, setGen] = useState(0);
-  const ok = !!x.last.trim() && !!x.first.trim();
-  const miss = missingOf([['Επώνυμο', x.last.trim()], ['Όνομα', x.first.trim()]]);
-  // γράφτηκε κάτι που δεν προστέθηκε: πριν κλείσει ρωτά (Michael, 19/10)
-  const dirty = ['last', 'first', 'father', 'asm', 'phone', 'notes', 'weapon', 'post', 'role'].some(k => String(x[k] ?? '').trim());
-  const [asking, setAsking] = useState<null | (() => void)>(null);
-  const close = (after?: () => void) => { if (dirty) setAsking(() => () => { onClose(); after?.(); }); else { onClose(); after?.(); } };
-  const name = x.last.trim().toUpperCase() + ' ' + x.first.trim().toUpperCase();
-  const toExcel = () => { const b = state.settings.sources?.people; return !!b && b.write !== false; };
-  const save = async () => {
-    if (!ok) return;
-    const next = await run({ t: 'addPerson', person: x }, false); if (!next) return;
-    onClose(); nav.openPerson(next.people.reduce((a: number, y: Person) => Math.max(a, y.id), 0));   // ο νέος έχει τον μεγαλύτερο αριθμό
-    toast({ text: 'Προστέθηκε ο ' + name + (toExcel() ? '. Γράφεται και στο Δυναμολόγιο.' : '.'), actions: [undoMark()] });
-  };
-  const saveNext = async () => {
-    if (!ok) return;
-    if (!(await run({ t: 'addPerson', person: x }, false))) return;
-    setDone(d => [...d, name]); setX(blank({ rank: x.rank, origin: x.origin, spec: x.spec, room: x.room, essos: x.essos })); setGen(g => g + 1);
-  };
-  useEffect(() => { if (gen) (document.getElementById('np-last') as HTMLInputElement | null)?.focus(); }, [gen]);
-  const keys = (e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNext(); } };
-  return html`<${Dialog} title="Νέος στρατιώτης" description=${rosterNote(state, true)} onClose=${() => close()} closeOnOverlay=${!dirty && !done.length}
-    footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${() => close()}>${done.length ? 'Τέλος' : 'Άκυρο'}<//><${Button} variant="outline" disabled=${!ok} why=${miss} onClick=${saveNext} data-tip="Ctrl+Enter· μένει ανοιχτό για τον επόμενο, με τον ίδιο βαθμό, Ο/Σ και θάλαμο">Προσθήκη και επόμενος<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Προσθήκη<//>`}>
-    <div onKeyDown=${keys} className="stack" style=${{ gap: '14px' }}>
-    ${done.length > 0 ? html`<${Alert} tone="info"><span>Μπήκαν ${done.length}: ${done.slice(-4).join(', ')}${done.length > 4 ? '…' : ''}. ${toExcel() ? 'Γράφονται και στο Δυναμολόγιο.' : ''}</span><//>`
-      : onMany && html`<span className="note" style=${{ margin: 0 }}>Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; <${Button} variant="link" onClick=${() => close(onMany)}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
-    <${PersonFields} key=${gen} x=${x} setX=${setX} id="np" isNew=${true}/></div>
-    ${asking && html`<${UnsavedDialog} title=${ok ? 'Ο ' + name + ' δεν προστέθηκε' : 'Ο στρατιώτης δεν προστέθηκε'} saveLabel="Πρόσθεσέ τον" canSave=${ok}
-      onSave=${() => { setAsking(null); save(); }} discardLabel="Κλείσε χωρίς προσθήκη" onDiscard=${() => { const go = asking; setAsking(null); go(); }} onBack=${() => setAsking(null)}>
-      <p style=${{ margin: 0 }}>${ok ? 'Έγραψες στοιχεία που δεν έχουν αποθηκευτεί. Αν κλείσεις χωρίς προσθήκη, χάνονται.' : html`Έγραψες στοιχεία που δεν έχουν αποθηκευτεί. Για να προστεθεί γράψε <b>επώνυμο και όνομα</b>: πάτα «Πίσω».`}</p>
-    <//>`}
-  <//>`;
-}
-
 // Deprecated paths: these dialogs moved to renderer/features/ (Phase 5.3b); removed in Phase 7.
 export { DeclareStatusDialog, StatusFixDialog, LeaveEndDialog, LeaveTimesDialog, leaveStarted };
+
+// Deprecated path: these two dialogs moved to features/person-edit (Phase 5.3c). Removed in Phase 7.
+export { EditPersonDialog, NewPersonDialog };
+
+// Deprecated path: PersonSheet moved to widgets/person-sheet (Phase 5.3c). Removed in Phase 7.
+export { PersonSheet } from '../widgets/person-sheet';

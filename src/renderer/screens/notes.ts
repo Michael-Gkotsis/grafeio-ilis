@@ -1,12 +1,11 @@
 // features/notes · «Σημειώσεις» (Michael, 24/10: «γράφουμε χαρτάκια και τα ξεχνάμε»): γενικές, ανά στρατιώτη, ανά στέλεχος, με
 // προαιρετική υπενθύμιση. Γρήγορη προσθήκη πάνω πάνω (Ctrl+Enter), εύκολη ανάγνωση από κάτω, ίδια σημείωση στην καρτέλα «Σημειώσεις» του ατόμου.
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Icon, PageHeader, useToast } from '../ui';
+import { html, cx, Button, PageHeader } from '../ui';
 import { useNav, useStore } from '../store';
-import { dm } from '../../shared/dates';
 import type { Note } from '../../shared/domain';
-import { NOTE_FILTERS, dueCount, noteGroups, noteIn, noteKeys, noteSearch, noteWho, personGroups, remLabel, whoKey, type NoteFilter, type NoteWhoItem, type PersonGroups } from '../../shared/notes';
-import { EditDialog, NoteComposer, useNoteDraft } from '../features/note-compose';
+import { NOTE_FILTERS, dueCount, noteGroups, noteIn, noteKeys, noteSearch, noteWho, type NoteFilter } from '../../shared/notes';
+import { EditDialog, NoteComposer, NoteGroup as Group, useNoteDraft, useOpenWho } from '../features/note-compose';
 type P = any;
 
 // Deprecated path: NoteDialog and EditDialog moved to features/note-compose (Phase 5.3b). Removed in Phase 7.
@@ -14,47 +13,6 @@ export { NoteDialog, EditDialog } from '../features/note-compose';
 
 // Deprecated path: NoteDot moved to entities/note (Phase 5.3a).
 export { NoteDot } from '../entities/note';
-
-const whoIcon = (k: string) => (k === 'cad' ? Icon.shield : k === 'sol' ? Icon.people : Icon.notes);
-// self: στην κάρτα ενός ατόμου δεν ξαναγράφεται το ίδιο, μόνο όσοι άλλοι είναι δεμένοι με τη σημείωση
-function WhoChip({ n, onOpen, self }: P) {
-  const { state } = useStore();
-  const w = noteWho(state, n);
-  if (!w.items.length) return html`<span className="who-chip is-gen">${Icon.notes}Γενική</span>`;
-  return html`${w.items.filter((x: NoteWhoItem) => x.key !== self).map((x: NoteWhoItem) => html`<button key=${x.key} type="button" className=${cx('who-chip', !x.active && 'is-off')} data-tip=${x.active ? 'Άνοιγμα καρτέλας' : 'Εκτός δύναμης · άνοιγμα καρτέλας'} onClick=${() => onOpen(x)}>${whoIcon(x.kind)}${x.label}${!x.active && ' (εκτός δύναμης)'}</button>`)}`;
-}
-
-// Μία σημείωση: τσεκάρεις όταν τελειώσει, επεξεργασία και διαγραφή (με Αναίρεση) στο hover/focus
-function NoteCard({ n, self, onEdit, onOpen }: P) {
-  const { today, run, undoMark } = useStore(); const toast = useToast();
-  const due = !n.done && !!n.rem && n.rem <= today;
-  const rl = n.rem ? remLabel(n.rem, today, !!n.done) : null;
-  const done = async () => { await run({ t: 'doneNote', id: n.id, done: !n.done }, false); };
-  const star = () => run({ t: 'editNote', id: n.id, patch: { star: !n.star } }, false);
-  const del = async () => { if (await run({ t: 'deleteNote', id: n.id }, false)) toast({ text: 'Σβήστηκε η σημείωση.', actions: [undoMark()] }); };
-  return html`<article className=${cx('note-card', due && 'is-due', n.star && !n.done && 'is-star', n.done && 'is-done')}>
-    <div className="note-card__top"><button type="button" className="note-ck" role="checkbox" aria-checked=${!!n.done} aria-label=${n.done ? 'Ξανάνοιξε τη σημείωση' : 'Ολοκληρώθηκε'} data-tip=${n.done ? 'Ξανάνοιξε' : 'Ολοκληρώθηκε'} onClick=${done}>${n.done ? Icon.check : null}</button>
-      <div className="note-card__txt">${n.text}</div></div>
-    <div className="note-card__meta"><${WhoChip} n=${n} onOpen=${onOpen} self=${self}/>
-      ${rl && html`<${Badge} tone=${rl.tone === 'muted' ? undefined : rl.tone} className="note-rem-badge">${Icon.bell}${rl.text}<//>`}
-      <span className="note-card__date">${n.done ? 'Ολοκληρώθηκε ' + dm(n.done) : dm(n.at)}</span>
-      <span className="note-card__acts">
-        <button type="button" className=${cx('note-ib', n.star && 'is-on')} aria-label=${n.star ? 'Βγάλε από τις σημαντικές' : 'Σημαντική'} aria-pressed=${!!n.star} data-tip=${n.star ? 'Σημαντική (πάτα για να φύγει)' : 'Σημείωσέ τη σημαντική'} onClick=${star}>${Icon.star}</button>
-        <button type="button" className="note-ib" aria-label="Επεξεργασία" data-tip="Επεξεργασία, υπενθύμιση" onClick=${() => onEdit(n)}>${Icon.edit}</button>
-        <button type="button" className="note-ib" aria-label="Διαγραφή" data-tip="Διαγραφή (με Αναίρεση)" onClick=${del}>${Icon.trash}</button></span></div></article>`;
-}
-
-// Chip ατόμου σε σημείωση: ανοίγει την καρτέλα του επί τόπου, πάνω από όποια οθόνη
-function useOpenWho() {
-  const nav = useNav();
-  return (x: NoteWhoItem) => (x.kind === 'sol' ? nav.openPerson(Number(x.key.slice(1))) : nav.openCadre(x.key.slice(1)));
-}
-
-function Group({ title, list, ...rest }: P) {
-  if (!list.length) return null;
-  return html`<section className="note-group"><div className="note-group__h"><h2>${title} · ${list.length}</h2><span className="note-group__line"></span></div>
-    <div className="note-list">${list.map((n: Note) => html`<${NoteCard} key=${n.id} n=${n} ...${rest}/>`)}</div></section>`;
-}
 
 // Η σελίδα
 export function NotesScreen() {
@@ -108,35 +66,6 @@ export function NotesScreen() {
   </div>`;
 }
 
-// Η καρτέλα «Σημειώσεις» στην κάρτα στρατιώτη/στελέχους: ό,τι έχει η σελίδα (πλαίσιο, ομάδες, ολοκληρωμένες), για ένα άτομο.
-// Ίδια δεδομένα με τη σελίδα, άρα ό,τι γίνεται εδώ φαίνεται εκεί και αντίστροφα. who: { pid } ή { cid }. Να μπαίνει με key ανά άτομο.
-export function NotesTab({ who }: P) {
-  const { state, today } = useStore(); const nav = useNav(); const openWho = useOpenWho();
-  const draft = useNoteDraft(who);
-  const [edit, setEdit] = useState<Note | null>(null); const [showDone, setShowDone] = useState(false);
-  const g = useMemo(() => personGroups(state.notes, who, today), [state.notes, today, who.pid, who.cid]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const self = whoKey(who);
-  // η κάρτα ρωτά πριν φύγει (άλλο άτομο, καρτέλα, κλείσιμο) όσο το πρόχειρο δεν έχει αποθηκευτεί
-  useEffect(() => { nav.setDirty(draft.dirty); return () => nav.setDirty(false); }, [draft.dirty]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const rest = { self, onEdit: setEdit, onOpen: openWho };
-  return html`<div className="note-tab">
-    <div className="note-tab__bar"><span className="muted">${g.open} ${g.open === 1 ? 'ανοιχτή' : 'ανοιχτές'}</span>
-      <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Όλες οι σημειώσεις του στη σελίδα Σημειώσεις" onClick=${() => nav.go('notes', { nwho: self })}>Άνοιγμα στη σελίδα</button></div>
-    <div className="ui-card note-quick"><${NoteComposer} draft=${draft} ns="np" compact=${true}/></div>
-    <${Group} title="Πρέπει σήμερα" list=${g.due} ...${rest}/>
-    <${Group} title="Με υπενθύμιση" list=${g.soon} ...${rest}/>
-    <${Group} title="Χωρίς υπενθύμιση" list=${g.rest} ...${rest}/>
-    ${g.open + g.done.length === 0 && html`<p className="muted note-tab__empty">Δεν υπάρχει καμία σημείωση για αυτό το άτομο ακόμα. Γράψε την πρώτη από πάνω.</p>`}
-    ${g.done.length > 0 && html`<section className="note-group"><div className="note-group__h"><button type="button" className="note-group__fold" aria-expanded=${showDone} onClick=${() => setShowDone(!showDone)}>${showDone ? '▾' : '▸'} Ολοκληρωμένες · ${g.done.length}</button><span className="note-group__line"></span></div>
-      ${showDone && html`<div className="note-list">${g.done.map((n: Note) => html`<${NoteCard} key=${n.id} n=${n} ...${rest}/>`)}</div>`}</section>`}
-    ${edit && html`<${EditDialog} note=${edit} onClose=${() => setEdit(null)}/>`}</div>`;
-}
-
-// Το όνομα της καρτέλας στην κάρτα ατόμου: πόσες ανοιχτές, και κόκκινο όταν κάποια υπενθύμιση ζητά προσοχή σήμερα
-export const notesTabLabel = (g: PersonGroups) => html`<span>Σημειώσεις (${g.open})${g.dueN > 0 && html` <${Badge} tone="bad" data-tip=${g.dueN === 1 ? '1 υπενθύμιση ζητά προσοχή σήμερα' : g.dueN + ' υπενθυμίσεις ζητούν προσοχή σήμερα'}>${g.dueN}<//>`}</span>`;
-
-// «Σήμερα:» στην κάρτα ατόμου: οι κανόνες που ισχύουν και, αν έφτασε υπενθύμιση (shared/notes remLine), η γραμμή της με σύνδεσμο στην καρτέλα Σημειώσεις
-export function TodayAlert({ rules, rem, onRem }: P) {
-  if (!rules.length && !rem) return null;
-  return html`<${Alert} tone="warn"><span><b>Σήμερα:</b> ${rules.join(' · ')}${rem && rules.length > 0 && html`<br/>`}${rem && html`<button type="button" className="linkish today-rem" data-tip="Άνοιγμα των σημειώσεων" onClick=${onRem}>${Icon.bell}${rem}</button>`}</span><//>`;
-}
+// Deprecated paths: the tab moved to features/note-compose, the label and the alert to entities/note (Phase 5.3c). Removed in Phase 7.
+export { NotesTab } from '../features/note-compose';
+export { TodayAlert, notesTabLabel } from '../entities/note';

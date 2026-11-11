@@ -8,7 +8,6 @@ import { useStore } from '../store';
 import { usePending } from '../pending';
 import { makePlatoons, platoonsOf, roomCfg, type Person, type Platoon, type RoomSettings } from '../../shared/domain';
 import { BRAND_RANKS, DEFAULT_TITLE, LOGO_KINDS, appLogo, appTitle, type LogoKind } from '../../shared/brand';
-type P = any;
 
 const MAX_ROOMS = 40;
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -83,20 +82,6 @@ export function RoomsCard() {
   <//>`;
 }
 
-// Το πεδίο «Θάλαμος» στη φόρμα στρατιώτη: λίστα με τους θαλάμους των ρυθμίσεων και τον ουλαμό τους.
-// Αν ο στρατιώτης είναι ήδη σε θάλαμο εκτός λίστας (π.χ. από παλιό Δυναμολόγιο), μένει κι αυτός στη λίστα.
-export function RoomField({ id, value, onChange }: P) {
-  const { state } = useStore();
-  const pl = platoonsOf(state.settings);
-  const rooms = range(roomCfg(state.settings).n);
-  if (value != null && !rooms.includes(value)) rooms.push(value);
-  const unit = (r: number) => pl.find(u => u.rooms.includes(r))?.name;
-  return html`<div className="field"><label className="field__label" htmlFor=${id}>Θάλαμος</label>
-    <${Select} id=${id} className="ui-input" value=${value == null ? '' : String(value)} onChange=${(e: any) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">—</option>${rooms.map(r => html`<option key=${r} value=${String(r)}>Θάλαμος ${r}${unit(r) ? ' · ' + unit(r) : ''}</option>`)}
-    <//></div>`;
-}
-
 // Εικόνα που ανέβασε ο χρήστης → τετράγωνο PNG 128×128 (μικρό, για να χωρά στις ρυθμίσεις)
 function shrink(file: File): Promise<string> {
   return new Promise((ok, fail) => {
@@ -166,3 +151,6 @@ export function BrandCard() {
       ${(b.rank || b.title || b.logo) && html`<${Button} variant="outline" onClick=${() => { setRank(BRAND_RANKS[0].rank); setTitle(''); setLogo(''); setUpl(''); }}>Όπως ήταν («${DEFAULT_TITLE}»)<//>`}</div>
   <//>`;
 }
+
+// Deprecated path: RoomField moved to features/person-edit (Phase 5.3c). Removed in Phase 7.
+export { RoomField } from '../features/person-edit';
