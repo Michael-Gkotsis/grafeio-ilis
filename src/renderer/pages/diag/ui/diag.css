@@ -1,0 +1,79 @@
+/*
+ * «Διάγνωση» page (BEM block `diag`): card grid, lead lines, number columns, the speed-run table.
+ *
+ * Purpose: the look of pages/diag/ui/DiagScreen.tsx, which used to carry inline styles for it.
+ * Does NOT: restyle Card, Button, Badge or Alert (shared/ui) and does not touch legacy rules other screens use
+ *   (`table.kv`, `.note`, `.mono`, `.muted`, `.settings-grid`); the speed table is therefore not a `kv` table, so its
+ *   sub-rows can have their own indent and weight (legacy sits in the last layer and would win otherwise).
+ * Owner layer: renderer/pages/diag. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
+ * Why: U6, the first page with its own CSS; tokens only, no nesting, no !important.
+ * Covering test: bench:styles (group «Διάγνωση»), test/contrast.test.ts.
+ */
+
+.diag__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--gap-4);
+  align-items: start;
+}
+.diag__speed {
+  margin-top: var(--gap-4);
+  max-width: 640px;
+}
+.diag__lead {
+  margin: 0 0 var(--gap-2);
+  max-width: 60ch;
+  font-size: 13px;
+  color: var(--muted-fg);
+}
+.diag__state {
+  margin: 0 0 var(--gap-3);
+}
+.diag__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.diag__total th,
+.diag__total td {
+  border-top: 1px solid var(--border);
+}
+.diag__path {
+  overflow-wrap: anywhere;
+}
+
+/* speed-run table: not `kv`, see the header */
+.diag__runs {
+  width: 100%;
+  margin-top: var(--gap-3);
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.diag__runs th {
+  text-align: left;
+  font-weight: 500;
+  padding: 4px 8px 4px 0;
+  color: var(--muted-fg);
+  vertical-align: top;
+}
+.diag__runs td {
+  padding: 4px 8px 4px 0;
+}
+.diag__runs .diag__sub {
+  padding-left: 16px;
+  font-weight: 400;
+}
+.diag__sub::before {
+  content: "└ ";
+  color: var(--border);
+}
+.diag__caption {
+  text-align: left;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 700px) {
+  .diag__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

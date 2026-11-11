@@ -16,7 +16,7 @@
  *   entities   - co-located component CSS of the entities layer, imported by its slice.
  *   features   - co-located component CSS of the features layer, imported by its slice.
  *   widgets    - co-located component CSS of the widgets layer, imported by its slice.
- *   pages      - co-located component CSS of the pages layer, imported by its slice.
+ *   pages      - co-located component CSS of the pages layer, pulled in through pages/pages.css (so far: diag).
  *   utilities  - single-purpose helper classes; the only place where !important is allowed.
  *   legacy     - today's whole stylesheet (legacy.css), emptied step by step by UI PRs. Last, so it wins as before.
  *                shell.css (top bar, «⋯») and shell-nav.css (side menu) are imported into it first, so legacy.css
@@ -32,6 +32,7 @@
 @import url("./boot.css") layer(base);
 @import url("./base.css") layer(base);
 @import url("../../shared/ui/ui.css") layer(shared-ui);
+@import url("../../pages/pages.css") layer(pages);
 @import url("./shell.css") layer(legacy);
 @import url("./shell-nav.css") layer(legacy);
 @import url("./legacy.css") layer(legacy);
