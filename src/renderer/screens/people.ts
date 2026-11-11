@@ -1,15 +1,15 @@
 // features/people και features/status: προσωπικό, καρτέλα ατόμου, δήλωση κατάστασης
-import { RkName, rkFull, rkOn, rkShort } from '../rankName';
+import { RkName, rkOn, rkShort } from '../rankName';
 import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { destNote, reqWhat } from '../../shared/hkaiText';
+import { reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Icon, PageHeader, Segmented, Sheet, SheetNav, Strip, Tabs, VirtualList, useMedia, useSheetNav, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChoiceField, SigsMenu, UnsavedDialog, StatusBadge, timesHelp, TimeField } from '../common';
+import { ActiveFilter, ChoiceField, SigsMenu, UnsavedDialog, StatusBadge } from '../common';
 import type { Sig } from '../../shared/sigs';
-import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
-import { badgeLbl, live, medNote, isAway, listOf, optionsOf, rankTxt, statusLbl, type UserLists } from '../../shared/ranks';
+import { backBy, hasTimes, timeNames, timesTxt } from '../../shared/hours';
+import { badgeLbl, live, medNote, isAway, listOf, optionsOf, rankTxt, type UserLists } from '../../shared/ranks';
 import { TYPES, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, plainName, unitOf, roomTxt, platoonsOf, platoonShort, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
 import { notesOn, noteTxt, isEpop, monthTxt, awayNow, statusesAt, baseTotal, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
 import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
@@ -19,7 +19,7 @@ import { RoomField } from './units';
 import { QuickAddDialog } from './quickAdd';
 import { DeclareStatusDialog } from '../features/declare-status';
 import { StatusFixDialog } from '../features/fix-status';
-import { LeaveEndDialog, leaveStarted } from '../features/leave-end';
+import { LeaveEndDialog, LeaveTimesDialog, leaveStarted } from '../features/leave-end';
 import { siOf, siShort } from '../../shared/si';
 import { essoPersonTxt } from '../../shared/esso';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
@@ -265,32 +265,6 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   <//>`;
 }
 
-// Ώρες μιας άδειας (νοσοκομείου, ΣΤΕΠ) που υπάρχει ήδη (π.χ. ήρθε από το Excel χωρίς ώρες)
-export function LeaveTimesDialog({ st, onClose }: P) {
-  const { state, run, undoMark } = useStore(); const toast = useToast();
-  const p = personMap(state.people).get(st.pid)!;
-  const tn = timeNames(st.type), what = TYPES[st.type as TypeKey].cat === 'abs' ? 'άδειας' : TYPES[st.type as TypeKey].label;
-  const [f, setF] = useState({ fromTime: st.fromTime || '', toTime: st.toTime || '', dest: st.dest || '' });
-  const abs = TYPES[st.type as TypeKey].cat === 'abs';
-  const [err, setErr] = useState<string | null>(null);
-  const save = async () => {
-    const a = normTime(f.fromTime), b = normTime(f.toTime);
-    if (a == null || b == null) { setErr('Η ώρα ' + (a == null ? tn.fromG : tn.toG) + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
-    if (!(await run({ t: 'setTimes', id: st.id, fromTime: a, toTime: b, ...(abs ? { dest: f.dest } : {}) }, false))) return;
-    onClose(); toast({ text: 'Ώρες ' + what + ' ' + rkShort(p) + ': ' + (timesTxt({ type: st.type, fromTime: a, toTime: b, open: st.open }) || 'χωρίς ώρες') + (abs && f.dest.trim() ? ' · κατεύθυνση ' + f.dest.trim() : ''), actions: [undoMark()] });
-  };
-  return html`<${Dialog} title=${abs ? 'Ώρες και κατεύθυνση' : 'Ώρες ' + what} description=${rkFull(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.to !== st.from ? '–' + dm(st.to) : '')} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
-    <div className="field-row">
-      <${TimeField} id="lt-out" label=${'Ώρα ' + tn.fromG} value=${f.fromTime} onChange=${(v: string) => { setF({ ...f, fromTime: v }); setErr(null); }} help=${dow(st.from) + ' ' + dm(st.from)}/>
-      ${!st.open && html`<${TimeField} id="lt-in" label=${'Ώρα ' + tn.toG} value=${f.toTime} onChange=${(v: string) => { setF({ ...f, toTime: v }); setErr(null); }} help=${dow(st.to) + ' ' + dm(st.to)}/>`}
-    </div>
-    <span className="field__help">${timesHelp(state.rules, state.settings)} Υπηρεσίες που δεν γίνονται πια με τις νέες ώρες αδειάζουν.</span>
-    ${abs && html`<div className="field"><label className="field__label" htmlFor="lt-dest">Κατεύθυνση (προαιρετικό)</label><input id="lt-dest" className="ui-input" placeholder="π.χ. Κόρινθος" value=${f.dest} onChange=${(e: any) => { setF({ ...f, dest: e.target.value }); setErr(null); }}/><span className="field__help">${destNote(st, f.dest, state.settings.lists)}</span></div>`}
-    ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
-  <//>`;
-}
-
 // Υπηρεσίες πριν από την εφαρμογή: δεν γράφονται πια με το χέρι (Michael, 17/10: η ΕΣΣΟ ξεκινά από την αρχή).
 // Όσες υπάρχουν ήδη μετρούν ακόμα· ο έλεγχος από κάτω τις μηδενίζει.
 const BASE_KINDS: DutyKind[] = ['th', 'op', 'sk', 'mg', 'ly', 'tae', 'other'];
@@ -406,4 +380,4 @@ export function NewPersonDialog({ onClose, onMany }: P) {
 }
 
 // Deprecated paths: these dialogs moved to renderer/features/ (Phase 5.3b); removed in Phase 7.
-export { DeclareStatusDialog, StatusFixDialog, LeaveEndDialog, leaveStarted };
+export { DeclareStatusDialog, StatusFixDialog, LeaveEndDialog, LeaveTimesDialog, leaveStarted };
