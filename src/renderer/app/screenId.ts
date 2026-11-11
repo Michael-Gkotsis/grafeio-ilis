@@ -17,6 +17,7 @@ export const SCREEN_IDS = [
   'hkai',
   'weapons',
   'reports',
+  'hd',
   'notes',
   'history',
   'templates',

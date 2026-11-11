@@ -6,27 +6,23 @@ import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { useNowMin } from '../clock';
-import { HdTab } from './hd';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, TemplateNote } from '../common';
 import { hkaiFront, hkaiBack } from '../sheets';
-import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, shortName, unitOf, type Person, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
-import { HK_K, HK_A, HK_MANUAL, awayNow, hkaiCounts, personMap, strengthAt } from '../../shared/rules';
+import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, shortName, unitOf, type Person, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
+import { HK_K, HK_A, HK_MANUAL, hkaiCounts, strengthAt } from '../../shared/rules';
 import { addDays, dm, dmy, parseD, DOW_GEN } from '../../shared/dates';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
 import { normGreek } from '../../shared/text';
 import { movesOn, outReason, personLine } from '../../shared/hkaiText';
-import { LeavesTab, PunTextDialog, RecordList } from '../widgets/status-lists';
-import { ApproveDialog, RequestDialog, RequestsLink, RequestsTab } from '../widgets/requests';
+import { PunTextDialog } from '../widgets/status-lists';
+import { ApproveDialog, RequestDialog, RequestsLink } from '../widgets/requests';
 import { cadreCountRows, hkRowList, rankTxt } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 import { SRC } from './today';
-import { reqWaiting } from './todayView';
 
-// Deprecated path (Phase 6.0, removed in Phase 7): the lists moved to widgets/status-lists.
-// Ιατρικά: δικό τους μενού. Ποινές: καρτέλα μέσα στο μενού ΗΚΑΙ (Michael, 18/10). Ίδια λίστα, άλλο φίλτρο.
-export function RecordsScreen() { return html`<${RecordList} mode="med"/>`; }
+// Deprecated path (Phase 6.0, removed in Phase 7): the dialog moved to widgets/status-lists.
 export { PunTextDialog };
 // Deprecated path (Phase 6.0, removed in Phase 7): the requests moved to widgets/requests.
 export { ApproveDialog, RequestDialog };
@@ -85,23 +81,9 @@ export function StrengthScreen() {
   </div>`;
 }
 
-// Μενού ΗΚΑΙ (Michael, 18/10): πρώτη και προεπιλεγμένη καρτέλα η ίδια η ΗΚΑΙ, μετά ό,τι γράφεται μέσα της.
-// Από το μενού (ή Alt+αριθμός) ανοίγει πάντα η καρτέλα ΗΚΑΙ (Shell, MENU_TAB).
-export function HkaiScreen() {
-  const { state, today } = useStore(); const nav = useNav();
-  const tab: string = nav.params.hkTab || 'hkai';
-  const pm = useMemo(() => personMap(state.people), [state.people]);
-  const nPun = useMemo(() => state.statuses.filter(s => s.type === 'PUN' && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
-  const now = useNowMin();
-  // όσοι λείπουν με άδεια τώρα· όχι όσοι φεύγουν τις επόμενες μέρες (αλλιώς δεν συμφωνεί με τους Απόντες)
-  const nLeave = useMemo(() => state.statuses.filter(s => TYPES[s.type].cat === 'abs' && s.from <= today && awayNow(s, today, now) && pm.has(s.pid)).length, [state.statuses, today, pm, now]);
-  const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
-  const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
-  return html`<div>
-    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }, { value: 'hd', label: 'Ημερήσια Διαταγή' }]}/></div>
-    ${tab === 'pun' ? html`<${RecordList} mode="pun"/>` : tab === 'leave' ? html`<${LeavesTab}/>` : tab === 'req' ? html`<${RequestsTab}/>` : tab === 'hd' ? html`<${HdTab}/>` : html`<${HkaiMain}/>`}
-  </div>`;
-}
+// Η οθόνη ΗΚΑΙ δείχνει μόνο την ΗΚΑΙ. Οι Ποινές, οι Άδειες και οι Αιτήσεις πήγαν στις «Καταστάσεις» και η Ημερήσια
+// Διαταγή έχει δικό της μενού (U5). Οι παλιοί σύνδεσμοι με hkTab περνούν από το app/normalizeRoute.ts.
+export function HkaiScreen() { return html`<${HkaiMain}/>`; }
 function HkaiMain() {
   const { state, today } = useStore(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
   const date = nav.params.hkaiDate || today;

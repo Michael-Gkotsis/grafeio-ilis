@@ -10,7 +10,7 @@ import type { ISODate } from '../../../shared/dates';
 export const GO: Record<string, (d: ISODate) => [string, Record<string, unknown>]> = {
   guard: (d) => ['guard', { guardDate: d }],
   outs: (d) => ['outs', { outDate: d }],
-  records: () => ['hkai', { hkTab: 'pun' }],
+  records: () => ['records', { stTab: 'pun' }],
   settings: () => ['templates', { tab: 'settings' }],
   people: () => ['people', {}],
   cadre: () => ['cadre', {}],

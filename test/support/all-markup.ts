@@ -15,7 +15,9 @@ import { FORMS_CASES } from './dialog-cases-forms';
 import { CadreScreen } from '../../src/renderer/screens/cadre';
 import { DiagScreen } from '../../src/renderer/screens/diag';
 import { GuardScreen, OutsScreen } from '../../src/renderer/screens/guard';
-import { HkaiScreen, HistoryScreen, RecordsScreen, StrengthScreen } from '../../src/renderer/screens/other';
+import { HkaiScreen, HistoryScreen, StrengthScreen } from '../../src/renderer/screens/other';
+import { StatusesPage } from '../../src/renderer/pages/statuses';
+import { HdTab } from '../../src/renderer/widgets/hd';
 import { TodayScreen } from '../../src/renderer/screens/today';
 import { NotesScreen } from '../../src/renderer/screens/notes';
 import { PeopleScreen } from '../../src/renderer/screens/people';
@@ -24,7 +26,7 @@ import { WeaponsScreen } from '../../src/renderer/screens/weapons';
 
 const SCREENS: [string, ComponentType<never>][] = [
   ['home', TodayScreen], ['people', PeopleScreen], ['cadre', CadreScreen], ['guard', GuardScreen], ['outs', OutsScreen],
-  ['records', RecordsScreen], ['strength', StrengthScreen], ['hkai', HkaiScreen], ['weapons', WeaponsScreen],
+  ['records', StatusesPage], ['strength', StrengthScreen], ['hkai', HkaiScreen], ['hd', HdTab], ['weapons', WeaponsScreen],
   ['reports', ReportsScreen], ['notes', NotesScreen], ['history', HistoryScreen], ['diag', DiagScreen],
 ];
 

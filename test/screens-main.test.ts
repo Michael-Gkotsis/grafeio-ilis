@@ -20,7 +20,9 @@ import * as H from './support/screens-harness';
 import { CadreScreen } from '../src/renderer/screens/cadre';
 import { DiagScreen } from '../src/renderer/screens/diag';
 import { GuardScreen, OutsScreen } from '../src/renderer/screens/guard';
-import { HkaiScreen, HistoryScreen, RecordsScreen, StrengthScreen } from '../src/renderer/screens/other';
+import { HkaiScreen, HistoryScreen, StrengthScreen } from '../src/renderer/screens/other';
+import { StatusesPage } from '../src/renderer/pages/statuses';
+import { HdTab } from '../src/renderer/widgets/hd';
 import { TodayScreen } from '../src/renderer/screens/today';
 import { NotesScreen } from '../src/renderer/screens/notes';
 import { PeopleScreen } from '../src/renderer/screens/people';
@@ -44,9 +46,10 @@ const SCREENS: Case[] = [
   { name: 'cadre', view: 'cadre', comp: CadreScreen },
   { name: 'guard', view: 'guard', comp: GuardScreen },
   { name: 'outs', view: 'outs', comp: OutsScreen },
-  { name: 'records', view: 'records', comp: RecordsScreen },
+  { name: 'records', view: 'records', comp: StatusesPage },
   { name: 'strength', view: 'strength', comp: StrengthScreen },
   { name: 'hkai', view: 'hkai', comp: HkaiScreen },
+  { name: 'hd', view: 'hd', comp: HdTab },
   { name: 'weapons', view: 'weapons', comp: WeaponsScreen },
   { name: 'reports', view: 'reports', comp: ReportsScreen },
   { name: 'notes', view: 'notes', comp: NotesScreen },
@@ -67,11 +70,11 @@ const TABS: Case[] = [
   { name: 'guard--date-today', view: 'guard', comp: GuardScreen, params: { guardDate: H.TODAY } },
   { name: 'guard--skips', view: 'guard', comp: SkipsView as Comp, props: {} },
   { name: 'guard--whodoes', view: 'guard', comp: WhoDoes as Comp, props: { date: H.TOMORROW } },
-  ...byParam('records', 'records', RecordsScreen, 'recTab', ['changes', 'expired', 'notes']),
+  ...byParam('records', 'records', StatusesPage, 'recTab', ['changes', 'expired', 'notes']),
   ...byParam('strength', 'strength', StrengthScreen, 'svCat', ['present', 'kol', 'away']),
-  ...byParam('hkai', 'hkai', HkaiScreen, 'hkTab', ['pun', 'leave', 'req', 'hd']),
-  ...byParam('hkai--pun', 'hkai', HkaiScreen, 'punTab', ['expired', 'allpun'], { hkTab: 'pun' }),
-  { name: 'hkai--leave-back', view: 'hkai', comp: HkaiScreen, params: { hkTab: 'leave', leaveTab: 'back' } },
+  ...byParam('records', 'records', StatusesPage, 'stTab', ['pun', 'leave', 'req']),
+  ...byParam('records--pun', 'records', StatusesPage, 'punTab', ['expired', 'allpun'], { stTab: 'pun' }),
+  { name: 'records--leave--back', view: 'records', comp: StatusesPage, params: { stTab: 'leave', leaveTab: 'back' } },
   { name: 'weapons--moves', view: 'weapons', comp: WeaponsScreen, params: { wtab: 'moves' } },
   ...byParam('weapons--moves', 'weapons', WeaponsScreen, 'wmoves', ['day', 'all'], { wtab: 'moves' }),
   { name: 'reports--templates', view: 'reports', comp: ReportsScreen, params: { repTab: 'tpls' } },

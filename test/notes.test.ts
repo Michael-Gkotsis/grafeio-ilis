@@ -408,7 +408,7 @@ describe('σύνδεση στην εφαρμογή', () => {
     expect(h1(s.render())).toBe('Στελέχη');
     // ΗΚΑΙ › «Από πού βγαίνει κάθε αριθμός»: a cadre name opens its card in the order of the column, not the Στελέχη page
     const go = vi.fn(), openCadre = vi.fn();
-    const hk = start('hkai', { hkTab: 'hkai' }, screen(HkaiScreen), { go, openCadre });
+    const hk = start('hkai', {}, screen(HkaiScreen), { go, openCadre });
     hk.render();
     const names = hk.elements().filter(r => r.type === 'button' && String(r.props['data-tip'] ?? '').startsWith('Στέλεχος·'));
     expect(names.length).toBeGreaterThan(0);

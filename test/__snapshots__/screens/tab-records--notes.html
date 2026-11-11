@@ -2,63 +2,91 @@
   <div class="page-head">
     <div>
       <h1>
-        Ιατρικά
+        Καταστάσεις
       </h1>
       <p class="page-head__sub">
-        Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.
+        Ιατρικά, ποινές, άδειες και αιτήσεις όλων, σε ένα μέρος
       </p>
     </div>
-    <button type="button" class="ui-btn ui-btn--default">
-      + Ιατρικό
-    </button>
   </div>
-  <div style="margin-bottom:12px">
-    <div class="ui-seg" role="group">
-      <button type="button" aria-pressed="false" data-tip="Όσα ισχύουν τώρα">
-        Τώρα (3)
+  <div style="margin-bottom:14px">
+    <div class="ui-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">
+        Ιατρικά (3)
       </button>
-      <button type="button" aria-pressed="false" data-tip="Όσα ξεκινούν ή λήγουν τη μέρα που διαλέγεις">
-        Μεταβολές ημέρας
+      <button type="button" role="tab" aria-selected="false">
+        Ποινές
       </button>
-      <button type="button" aria-pressed="false" data-tip="Όσα έληξαν τις τελευταίες 14 μέρες">
-        Έληξαν
+      <button type="button" role="tab" aria-selected="false">
+        Άδειες (4)
       </button>
-      <button type="button" aria-pressed="true" data-tip="Ιατρικά «μόνο σημείωση»: φαίνονται μόνο εδώ και στην καρτέλα του στρατιώτη">
-        Σημειώσεις (1)
+      <button type="button" role="tab" aria-selected="false">
+        Αιτήσεις (1)
       </button>
     </div>
   </div>
-  <div class="toolbar">
-    <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F" value=""/>
-  </div>
-  <div class="ui-card">
-    <ul class="rec">
-      <li>
-        <div>
-          <button type="button" class="linkish who">
-            <span>
-              <span class="rk">
-                ΣΤΡ (ΠΖ) 
+  <div>
+    <div class="page-head">
+      <div>
+        <h1>
+          Ιατρικά
+        </h1>
+        <p class="page-head__sub">
+          Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.
+        </p>
+      </div>
+      <button type="button" class="ui-btn ui-btn--default">
+        + Ιατρικό
+      </button>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="ui-seg" role="group">
+        <button type="button" aria-pressed="false" data-tip="Όσα ισχύουν τώρα">
+          Τώρα (3)
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Όσα ξεκινούν ή λήγουν τη μέρα που διαλέγεις">
+          Μεταβολές ημέρας
+        </button>
+        <button type="button" aria-pressed="false" data-tip="Όσα έληξαν τις τελευταίες 14 μέρες">
+          Έληξαν
+        </button>
+        <button type="button" aria-pressed="true" data-tip="Ιατρικά «μόνο σημείωση»: φαίνονται μόνο εδώ και στην καρτέλα του στρατιώτη">
+          Σημειώσεις (1)
+        </button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F" value=""/>
+    </div>
+    <div class="ui-card">
+      <ul class="rec">
+        <li>
+          <div>
+            <button type="button" class="linkish who">
+              <span>
+                <span class="rk">
+                  ΣΤΡ (ΠΖ) 
+                </span>
+                ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ
               </span>
-              ΦΑΝΤΑΣΙΟΣ ΘΗΤΑΣ
+            </button>
+             
+            <span class="ui-badge ui-badge--note" data-tip="Ελεύθερος Υπηρεσίας">
+              ΕΛ. ΞΥΡΙΣΜΑΤΟΣ
             </span>
+            <small>
+              Παρ 30/10 – Κυρ 29/11 · ως 29/11
+            </small>
+          </div>
+          <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το" data-tip-side="left">
+            Διόρθωση…
           </button>
-           
-          <span class="ui-badge ui-badge--note" data-tip="Ελεύθερος Υπηρεσίας">
-            ΕΛ. ΞΥΡΙΣΜΑΤΟΣ
-          </span>
-          <small>
-            Παρ 30/10 – Κυρ 29/11 · ως 29/11
-          </small>
-        </div>
-        <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το" data-tip-side="left">
-          Διόρθωση…
-        </button>
-        <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Μόνο αν σταμάτησε πριν από τις 29/11 (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του." data-tip-side="left">
-          Λήξη νωρίτερα…
-        </button>
-      </li>
-    </ul>
+          <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-tip="Μόνο αν σταμάτησε πριν από τις 29/11 (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του." data-tip-side="left">
+            Λήξη νωρίτερα…
+          </button>
+        </li>
+      </ul>
+    </div>
   </div>
 </div>
 <div class="ui-toasts" aria-live="polite">

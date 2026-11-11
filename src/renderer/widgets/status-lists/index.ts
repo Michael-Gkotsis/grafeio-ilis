@@ -2,3 +2,4 @@
 export { LeavesTab } from './ui/LeavesTab';
 export { PunTextDialog, type PunTextDialogProps } from './ui/PunTextDialog';
 export { RecordList, type RecordListProps } from './ui/RecordList';
+export { recordCounts } from './model/view';

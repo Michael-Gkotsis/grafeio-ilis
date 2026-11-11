@@ -26,7 +26,7 @@ export function RequestsLink({ date }: RequestsLinkProps) {
     <Card
       title="5. Αιτήσεις"
       actions={
-        <Button size="sm" variant="outline" onClick={() => nav.set({ hkTab: 'req' })}>
+        <Button size="sm" variant="outline" onClick={() => nav.go('records', { stTab: 'req' })}>
           Αιτήσεις
         </Button>
       }

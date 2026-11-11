@@ -11,6 +11,7 @@ import { requestLeave } from '../pending';
 import { topicFor } from '../guideTopic';
 import type { ISODate } from '../../shared/dates';
 import { sameRoute, useRouteMemory } from './hooks';
+import { normalizeRoute } from './normalizeRoute';
 import { MENU_TAB } from './routes';
 import type { Route, RouteParams, ScreenId } from './screenId';
 
@@ -74,7 +75,11 @@ export function useRouter({ guard, closeAll, today }: RouterDeps): RouterState {
   );
   // From the menu (no params): what you left there. With params (e.g. from «Σήμερα»): only those, so the numbers match.
   const go = useCallback(
-    (view: ScreenId, params?: RouteParams) => {
+    (to: ScreenId, toParams?: RouteParams) => {
+      // Old ΗΚΑΙ-tab links (Ctrl+K, buttons) land on «Καταστάσεις» or «Ημερήσια Διαταγή» (normalizeRoute.ts).
+      const target = toParams ? normalizeRoute({ view: to, params: toParams }) : undefined;
+      const view = target?.view ?? to;
+      const params = target?.params;
       const r = cur.current.route;
       let base: RouteParams = view === r.view ? r.params : params ? {} : memory.current[view] || {};
       const tab = MENU_TAB[view];
@@ -94,7 +99,7 @@ export function useRouter({ guard, closeAll, today }: RouterDeps): RouterState {
     if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) });
   }, [go]);
   const setParams = useCallback(
-    (params: RouteParams) => setRoute((r) => ({ view: r.view, params: { ...r.params, ...params } })),
+    (params: RouteParams) => setRoute((r) => normalizeRoute({ view: r.view, params: { ...r.params, ...params } })),
     [],
   );
   return { route, back, go, goBack, help, setParams };
