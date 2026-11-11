@@ -37,7 +37,7 @@ export function StatusesPage() {
   return (
     <div>
       <PageHeader title="Καταστάσεις" sub="Ιατρικά, ποινές, άδειες και αιτήσεις όλων, σε ένα μέρος" />
-      <div style={{ marginBottom: '14px' }}>
+      <div className="statuses__tabs">
         <Tabs value={tab} onChange={(v) => nav.set({ stTab: v })} items={statusTabItems(counts)} />
       </div>
       {tabBody(tab)}

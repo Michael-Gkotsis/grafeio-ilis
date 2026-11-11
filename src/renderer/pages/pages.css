@@ -9,3 +9,4 @@
  * Covering test: test/contrast.test.ts, bench:styles.
  */
 @import url("./diag/ui/diag.css");
+@import url("./statuses/ui/statuses.css");

@@ -31,7 +31,7 @@ function recordHead(m: RecordListModel) {
   const { mode, nav, today, tab, hasNotes, nMed, nNote, nPun, chDay, y } = m;
   return mode === 'med' ? (
     <>
-      <PageHeader title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.">
+      <PageHeader level={2} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.">
         <Button onClick={() => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) })}>+ Ιατρικό</Button>
       </PageHeader>
       <div style={{ marginBottom: '12px' }}>
@@ -66,7 +66,7 @@ function recordHead(m: RecordListModel) {
     </>
   ) : (
     <>
-      <PageHeader title="Ποινές" sub={'Ισχύουν αμέσως και γράφονται στην ' + HK() + ' της μέρας που επιβλήθηκαν.'}>
+      <PageHeader level={2} title="Ποινές" sub={'Ισχύουν αμέσως και γράφονται στην ' + HK() + ' της μέρας που επιβλήθηκαν.'}>
         <Button onClick={() => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) })}>+ Ποινή</Button>
       </PageHeader>
       <div style={{ marginBottom: '12px' }}>

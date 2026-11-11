@@ -79,15 +79,6 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 .plan li.is-warn{background:var(--warn-bg)}
 .plan li.is-warn .plan__ic{color:var(--warn)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted-fg)}
-.page-head{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
-.page-head > div{flex:1 1 260px;min-width:220px}
-@media (max-width:1279px){.page-head > div{flex-basis:180px;min-width:180px}}
-.page-head > .datebar,.page-head > .page-head__acts{flex:0 1 auto;min-width:0}
-.page-head > .page-head__acts{justify-content:flex-end;margin-left:auto}
-.page-head h1{font-size:25px;font-weight:700;line-height:1.2}
-.page-head p{margin:4px 0 0;color:var(--muted-fg)}
-.page-head__sub{max-width:70ch}
-.page-head__acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 @media (max-width:1279px){.page-head > .weapons__acts{flex:1 1 100%;justify-content:space-between;margin-left:0}}   /* Οπλισμός: κείμενο σε όλο το πλάτος, ημερομηνίες και κουμπιά στην επόμενη γραμμή */
 .vlist{overflow:auto;position:relative}
 .vlist__inner{position:relative}
@@ -476,7 +467,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
   .searchbtn{flex:none;width:40px;padding:0;justify-content:center;margin-left:auto}
   .topbar__right{margin-left:0}
   .main{padding:16px 16px calc(var(--nav-h) + 24px + env(safe-area-inset-bottom,0px))}
-  .page-head h1{font-size:22px}
+  .page-head h1{font-size:18px}
   .bottomnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--card);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
   .bottomnav button{height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:0;background:none;font-size:11px;font-weight:600;color:var(--muted-fg);cursor:pointer;position:relative}
   .bottomnav button svg{width:22px;height:22px}
@@ -558,8 +549,9 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 /* συμπαγής προβολή: λιγότερα περιθώρια, χαμηλότερα στοιχεία (τα ύψη γραμμών των λιστών τα δίνει η VirtualList) */
 [data-density="compact"] body{font-size:14px}
 [data-density="compact"] .main{padding:16px 20px 28px}
-[data-density="compact"] .page-head{margin-bottom:10px}
-[data-density="compact"] .page-head h1{font-size:22px}
+[data-density="compact"] .page-head{margin-bottom:8px}
+[data-density="compact"] .page-head--section{margin-bottom:12px}   /* the section row keeps 12 px: it sits between the tabs and the list */
+[data-density="compact"] .page-head h1{font-size:18px}
 [data-density="compact"] .ui-chip{height:24px;padding:0 9px}
 [data-density="compact"] .ui-chip--sm{height:var(--chip-h)}
 [data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
@@ -1284,7 +1276,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .shiftown .shiftown__x{height:30px;width:36px;padding:0}
 
 /* Οπλισμός: σύνθημα κάτω από τον τίτλο, επιλογή (σάρωση, ξανά οι ίδιοι, από υπηρεσία) και μπάρα επιλογής */
-.page-head__quote{margin:2px 0 0;font-size:12px;line-height:1.35;font-style:italic;color:var(--muted-fg)}
+.page-head__quote{margin:4px 0 0;font-size:12px;line-height:1.35;font-style:italic;color:var(--muted-fg)}
 .wpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .wpick__scan{flex:0 1 380px;min-width:240px;height:32px;font-size:13px}
 .wpick__msg{font-size:13px;font-weight:600;min-width:0;overflow-wrap:anywhere}
