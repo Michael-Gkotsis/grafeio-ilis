@@ -1,0 +1,123 @@
+/*
+ * Button (.ui-btn and its variants, sizes, disabled look, compact density).
+ * Does NOT: style a button that sits inside a screen widget (.topbar .ui-btn, .xlcard .ui-btn live with their widget).
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: Button.tsx and the Dialog footers use it.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    box-shadow 0.12s;
+  flex: none;
+}
+.ui-btn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.ui-btn--default {
+  background: var(--primary);
+  color: var(--primary-fg);
+  box-shadow: var(--shadow-sm);
+}
+.ui-btn--default:hover {
+  filter: brightness(1.08);
+}
+.ui-btn--secondary {
+  background: var(--secondary);
+  color: var(--secondary-fg);
+  border-color: var(--input);
+}
+.ui-btn--secondary:hover {
+  filter: brightness(0.97);
+}
+.ui-btn--outline {
+  background: var(--card);
+  border-color: var(--input);
+  box-shadow: var(--shadow-sm);
+}
+.ui-btn--outline:hover {
+  background: var(--hover);
+  border-color: var(--primary);
+}
+/* ghost keeps a visible border so it still reads as a button on a dimmed screen */
+.ui-btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+.ui-btn--ghost:hover {
+  background: var(--hover);
+  border-color: var(--input);
+}
+.ui-btn--destructive {
+  background: var(--destructive);
+  color: var(--destructive-fg);
+}
+.ui-btn--destructive:hover {
+  filter: brightness(1.08);
+}
+.ui-btn--link {
+  background: none;
+  border: 0;
+  color: var(--info);
+  padding: 0;
+  height: auto;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ui-btn--sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.ui-btn--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+}
+/* disabled: grey fill and dashed border instead of opacity, so the text stays readable (the tooltip says why) */
+.ui-btn:disabled {
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+.ui-btn:disabled:not(.ui-btn--link) {
+  background: var(--muted);
+  color: var(--muted-fg);
+  border-color: var(--input);
+  border-style: dashed;
+}
+.ui-btn--link:disabled {
+  color: var(--muted-fg);
+  text-decoration: none;
+}
+[data-density="compact"] .ui-btn {
+  height: 34px;
+  padding: 0 12px;
+}
+[data-density="compact"] .ui-btn--sm {
+  height: 28px;
+  padding: 0 8px;
+}
+
+@media (max-width: 767px) {
+  .ui-dialog__foot .ui-btn {
+    flex: 1;
+  }
+}
