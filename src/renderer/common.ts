@@ -25,6 +25,8 @@ import { dropSigMoves, type Layout, type LayoutForm } from '../shared/layout';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
+// Deprecated path: the domain-free fields moved to shared/ui (Phase 5.2); the fields that read the store stay here.
+export { ChoiceField, RangeField } from './shared/ui';
 type P = any;
 
 // lists: για τα δικά σου ιατρικά (δείχνουν το όνομά τους)
@@ -71,21 +73,6 @@ export function PersonPicker({ id, multiple, value, onChange, date, unavailable,
     </ul>`, document.body)}
   </div>`;
 }
-// Λίστα επιλογής που δέχεται και τιμή γραμμένη με το χέρι («Άλλο…»): βαθμός, Ο/Σ
-const OTHER = '\u0001other';
-// otherLabel/otherHelp: π.χ. «Νέος βαθμός…» και ότι μένει στη λίστα για την επόμενη φορά
-export function ChoiceField({ id, label, value, options, onChange, placeholder, autoFocus, otherLabel, otherHelp }: P) {
-  const known = !value || options.includes(value);
-  const [typing, setTyping] = useState(!known);
-  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
-    <${Select} id=${id} className="ui-input" value=${typing ? OTHER : value || ''} data-autofocus=${autoFocus ? '' : undefined}
-      onChange=${(e: any) => { const v = e.target.value; setTyping(v === OTHER); onChange(v === OTHER ? (known ? '' : value) : v); }}>
-      <option value="">—</option>${options.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<option value=${OTHER} data-keep>${otherLabel || 'Άλλο (γράψε το)…'}</option>
-    <//>
-    ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label=${label + ' με το χέρι'} placeholder=${placeholder || ''} value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value)}/>`}
-    ${typing && otherHelp && html`<span className="field__help">${otherHelp}</span>`}
-  </div>`;
-}
 // open: χωρίς λήξη (μόνο το «από»)
 export function DateRangeField({ from, to, onChange, open }: P) {
   const { today } = useStore();
@@ -117,10 +104,6 @@ export function TimeField({ id, label, value, onChange, help, quick, now }: P) {
       onChange=${(e: any) => onChange(e.target.value)} onBlur=${() => { const t = normTime(value); if (t != null && t !== value) onChange(t); }}/>
     <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
 }
-// Ώρες μιας θέσης «ΑΠΟ-ΕΩΣ» (π.χ. 08:00-20:00): οι συνηθισμένες σε λίστα, γράφονται και με το χέρι
-const HOUR_RANGES = ['06:00-08:00', '06:00-14:00', '07:30-08:00', '08:00-14:00', '08:00-16:00', '08:00-20:00', '14:00-20:00', '14:00-22:00', '16:00-24:00', '20:00-08:00', '22:00-06:00'];
-export const RangeField = (props: P) => html`<${Combo} className="ui-input" options=${HOUR_RANGES} ...${props}/>`;
-
 // Ημερομηνία ηη/μμ/εεεε (απόφαση 12/10) με λίστα: σήμερα, αύριο, μεθαύριο και οι γύρω μέρες με το όνομά τους και τις αργίες,
 // και «Ημερολόγιο…» για μέρα πιο μακριά. Γράφεται και με το χέρι: «21/10», «21.10.26», «21-10-2026».
 // Το onChange παίρνει { target: { value: 'εεεε-μμ-ηη' } } όπως το πεδίο ημερομηνίας του browser, μόνο με σωστή μέρα (και μέσα σε min/max).
