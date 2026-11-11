@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { hhmm, strengthView, type StrengthView } from '../src/shared/strengthView';
 import { fillDay, kolView, strengthOf } from '../src/shared/rules';
 import { kolColName, type AppState, type Status } from '../src/shared/domain';
-import { mockApi } from '../src/renderer/mockApi';
+import { mockApi } from '../src/renderer/shared/api/mockApi';
 import { addDays, today } from '../src/shared/dates';
 import { fakeState } from './fixtures';
 

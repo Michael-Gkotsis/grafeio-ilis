@@ -1,21 +1,16 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
 import { HK } from '../shared/unit';
-import { createContext, Fragment, memo, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, DialogLeave, Icon, Kbd, Segmented, Strip } from './ui';
+import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Alert, Button, Dialog, DialogLeave, Icon, Segmented } from './ui';
 import { requestLeave } from './pending';
-import { Combo, Select, useFloat, type ComboOpt } from './select';
-import { createPortal } from 'react-dom';
+import { Combo, Select } from './select';
 import { usePrefs } from './prefs';
-import { RkName, rkOn } from './rankName';
-import { useStore, useNav, searchPeople } from './store';
+import { useStore, useNav } from './store';
 import { useToast } from './ui';
-import { statusesNow, isHol, holName, DEFAULT_HK_TIME } from '../shared/rules';
-import { outTimesTxt, weekRow } from '../shared/returns';
-import { useNowMin } from './clock';
-import { TYPES, TYPE_KEYS, SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, effects, hoursTxt, phaseBase, plainName, shiftList, shiftReport, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type ShiftOwn, type Status } from '../shared/domain';
-import { cadreStatusOn } from '../shared/cadre';
-import { MED_LIKE, badgeLbl, badgeStatuses, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
-import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
+import { DEFAULT_HK_TIME } from '../shared/rules';
+import { outTimesTxt } from '../shared/returns';
+import { SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, hoursTxt, phaseBase, shiftList, shiftReport, shiftSlots, type Rules, type Settings, type ShiftDef, type ShiftOwn } from '../shared/domain';
+import { dayName, dmy, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
 import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
@@ -25,128 +20,17 @@ import { dropSigMoves, type Layout, type LayoutForm } from '../shared/layout';
 import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
-// Deprecated path: the domain-free fields moved to shared/ui (Phase 5.2); the fields that read the store stay here.
-export { ChoiceField, RangeField } from './shared/ui';
+// Deprecated path: the domain-free fields moved to shared/ui (Phase 5.2), and the date/time fields and the two
+// dialogs with them (Phase 5.3a); StatusBadge, PersonPicker and ChangePlanList moved to entities/ (Phase 5.3a).
+import { TimeField, useTimeOptions } from './shared/ui';
+export {
+  ChoiceField, DateBar, DateField, DateRangeField, LegendDialog, MonthField, RangeField, TimeField, UnsavedDialog,
+  useTimeOptions, type TimeQuick,
+} from './shared/ui';
+export { PersonPicker, StatusBadge } from './entities/person';
+export { ChangePlanList } from './entities/status';
 type P = any;
 
-// lists: για τα δικά σου ιατρικά (δείχνουν το όνομά τους)
-export const StatusBadge = memo(function StatusBadge({ statuses, pid, date, lists }: { statuses: Status[]; pid: number; date: ISODate; lists?: UserLists }) {
-  // σήμερα: όποιος γύρισε ως τώρα είναι παρών
-  const now = useNowMin(); const ss = statusesNow(badgeStatuses(statuses, lists), pid, date, todayFn(), now);
-  if (!ss.length) return html`<${Badge} tone="ok">Παρών<//>`;
-  const s = ss[0], t = TYPES[s.type];
-  const until = s.open ? ' χωρίς λήξη' : s.from === s.to ? (s.to === date ? '' : ' ' + dm(s.to)) : ' έως ' + dm(s.to);
-  return html`<span className="badges"><${Badge} tone=${t.tone} data-tip=${t.long}>${badgeLbl(s, lists) + until}<//>${ss.length > 1 && html`<${Badge} tone="outline" data-tip=${'Επίσης: ' + ss.slice(1).map(x => (MED_LIKE.includes(x.type) && statusLbl(x, lists) !== TYPES[x.type].label ? statusLbl(x, lists) : TYPES[x.type].long) + (x.open ? ' χωρίς λήξη' : ' έως ' + dm(x.to))).join(' · ')}>+${ss.length - 1}<//>`}</span>`;
-});
-
-// κατάσταση στελέχους τη μέρα, στη λίστα επιλογής (η ίδια που φαίνεται στα Στελέχη)
-const cadreBadge = (s: P, cid: string, d: ISODate) => { const st = cadreStatusOn(s, cid, d); return st ? html`<${Badge} tone=${st.group === 'kol' ? 'info' : st.group === 'apo' ? 'warn' : 'outline'}>${st.label}<//>` : html`<${Badge} tone="ok">Παρών<//>`; };
-/* PersonPicker: αναζήτηση χωρίς τόνους/με λατινικά, κατάσταση, λόγος μη διαθεσιμότητας, ένα ή πολλά */
-// hint: μια μικρή σημείωση δίπλα στον βαθμό (π.χ. «2 από 4 τον μήνα» για ΕΠΟΠ/ΟΒΑ στις Υπηρεσίες)
-// people: άλλη λίστα από τους στρατιώτες (στις Υπηρεσίες και τα στελέχη ΕΠΟΠ/ΟΒΑ με υπηρεσίες)
-export function PersonPicker({ id, multiple, value, onChange, date, unavailable, placeholder, autoFocus, onBlocked, hint, people }: P) {
-  const { state, today } = useStore();
-  const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [sel, setSel] = useState(0);
-  const dq = useDeferredValue(q);
-  const chosen: number[] = multiple ? (value || []) : [];
-  const all: Person[] = people || state.people;
-  const pm = useMemo(() => new Map(all.map(p => [p.id, p])), [all]);
-  // όλοι όσοι ταιριάζουν, όχι μόνο οι πρώτοι 8 (Michael, 17/10: «να τους βγάζεις όλους στο search»)· η λίστα κυλά
-  // τα στελέχη (αν η λίστα έχει) στο τέλος, σε δική τους ομάδα
-  const items = useMemo(() => { const l = searchPeople(all, dq).filter(p => !chosen.includes(p.id)).map(p => ({ p, na: unavailable ? unavailable(p) : null })); return l.some(x => x.p.cid) ? [...l.filter(x => !x.p.cid), ...l.filter(x => x.p.cid)] : l; }, [dq, chosen.join(','), unavailable, all]);
-  useEffect(() => { const i = items.findIndex(x => !x.na); setSel(i < 0 ? 0 : i); }, [items]);
-  const box = useRef<HTMLInputElement>(null); const pos = useFloat(box, open, 420); const list = useRef<HTMLUListElement>(null);
-  // με τα βελάκια η επιλογή μένει μέσα στη λίστα που κυλά
-  useEffect(() => { (list.current?.children[sel] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' }); }, [sel]);
-  const pick = (i: number) => { const x = items[i]; if (!x) return; if (x.na) { if (onBlocked) { setOpen(false); setQ(''); onBlocked(x.p, x.na); } return; } if (multiple) { onChange([...chosen, x.p.id]); setQ(''); } else { setOpen(false); setQ(''); onChange(x.p.id); } };
-  return html`<div className="picker">
-    ${multiple && chosen.length > 0 && html`<div className="picker__chips">${chosen.map(pid => html`<span key=${pid} className="picker__chip">${shortName(pm.get(pid)!)}<button type="button" aria-label=${'Αφαίρεση ' + shortName(pm.get(pid)!)} onClick=${() => onChange(chosen.filter(x => x !== pid))}>✕</button></span>`)}</div>`}
-    <input ref=${box} id=${id} className="ui-input" autoComplete="off" role="combobox" aria-expanded=${open} data-autofocus=${autoFocus ? '' : undefined}
-      placeholder=${placeholder || (multiple && chosen.length ? 'Πρόσθεσε κι άλλον…' : 'Επώνυμο, όνομα ή ΑΣΜ…')} value=${q}
-      onChange=${(e: any) => { setQ(e.target.value); setOpen(true); }} onFocus=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}
-      onKeyDown=${(e: any) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setSel(s => Math.min(items.length - 1, s + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); } else if (e.key === 'Enter') { e.preventDefault(); pick(sel); } else if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } else if (e.key === 'Backspace' && !q && multiple && chosen.length) { onChange(chosen.slice(0, -1)); } }}/>
-    ${open && pos && createPortal(html`<ul ref=${list} className="picker__list picker__list--float" role="listbox" style=${pos}>
-      ${items.length === 0 ? html`<li className="picker__hd">Κανείς δεν ταιριάζει. Δοκίμασε μόνο τα πρώτα γράμματα του επωνύμου.</li>` :
-      items.map((x, i) => html`${x.p.cid && !items[i - 1]?.p.cid && html`<li key=${'g' + x.p.id} className="picker__hd" role="presentation">Στελέχη</li>`}<li key=${x.p.id} role="option" aria-selected=${i === sel} className=${cx('picker__opt', x.na && 'picker__opt--na')} onMouseDown=${(e: any) => { e.preventDefault(); pick(i); }} onMouseEnter=${() => setSel(i)}>
-        <div><b><${RkName} p=${x.p} fn=${plainName} keep=${true}/></b><small>${x.p.cid ? 'Στέλεχος' + (rkOn() ? '' : ' · ' + rankTxt(x.p)) : 'του ' + (x.p.father || '—') + ' · ' + (rkOn() ? '' : rankTxt(x.p) + ' · ') + unitOf(x.p, state.settings)}${x.p.room != null ? ' · Θ' + x.p.room : ''}${hint && hint(x.p) ? ' · ' + hint(x.p) : ''}</small></div>
-        ${x.na ? html`<${Badge}>${x.na}<//>` : x.p.cid ? cadreBadge(state, x.p.cid, date || today) : html`<${StatusBadge} statuses=${state.statuses} pid=${x.p.id} date=${date || today} lists=${state.settings.lists}/>`}</li>`)}
-    </ul>`, document.body)}
-  </div>`;
-}
-// open: χωρίς λήξη (μόνο το «από»)
-export function DateRangeField({ from, to, onChange, open }: P) {
-  const { today } = useStore();
-  const n = daysBetween(from, to);
-  if (open) return html`<div className="field"><div className="field-row">
-    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><${DateField} id="dr-from" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
-    <div className="field"><span className="field__label">Έως</span><span className="ui-input ui-input--static">Χωρίς λήξη</span></div>
-  </div></div>`;
-  return html`<div className="field"><div className="field-row">
-    <div className="field"><label className="field__label" htmlFor="dr-from">Από *</label><${DateField} id="dr-from" className="ui-input" value=${from} onChange=${(e: any) => { const f = e.target.value; if (f) onChange(f, to < f ? f : to); }}/><span className="field__help">${dayName(from, today)}</span></div>
-    <div className="field"><label className="field__label" htmlFor="dr-to">Έως *</label><${DateField} id="dr-to" className="ui-input" min=${from} value=${to} onChange=${(e: any) => { const t = e.target.value; if (t) onChange(from, t < from ? from : t); }}/><span className="field__help">${dayName(to, today)}</span></div>
-  </div><span className="field__help">Διάρκεια: ${n} ${n === 1 ? 'ημέρα' : 'ημέρες'} (μετρούν και οι δύο ημερομηνίες)</span></div>`;
-}
-// Ώρα ΩΩ:ΛΛ με λίστα (Michael, 21/10: «να έχουν values στη λίστα»): πρώτα οι ώρες που μετρούν στην εφαρμογή (αλλαγή υπηρεσίας,
-// έξοδος, ΗΚΑΙ) και ό,τι δίνει το πεδίο (quick, now: «τώρα»), μετά όλες ανά μισή ώρα. Γράφεται και με το χέρι: «14», «1400», «14.00»
-// γίνονται «14:00» μόλις φύγεις από το πεδίο. Γράφοντας «14» η λίστα δείχνει 14:00 και 14:30.
-const HALF_HOURS = Array.from({ length: 48 }, (_, i) => String(i >> 1).padStart(2, '0') + (i % 2 ? ':30' : ':00'));
-export type TimeQuick = [string, string][];   // [ώρα, τι είναι]
-export function useTimeOptions(quick?: TimeQuick, now?: boolean): ComboOpt[] {
-  const { state } = useStore(); const r = state.rules;
-  const base: TimeQuick = [[dutyStartOf(state.settings), 'αλλαγή υπηρεσίας'], ...[1, 2, 3, 4, 5, 6, 0].map(w => [weekRow(r, w).out, 'ώρα εξόδου'] as [string, string]), [r.hkTime || DEFAULT_HK_TIME, 'ώρα ' + HK()]];
-  const top = [...(now ? [[nowHM(), 'τώρα'] as [string, string]] : []), ...(quick || []), ...base].filter(([t], i, a) => a.findIndex(x => x[0] === t) === i);
-  return [...top.map(([t, l]) => ({ value: t, label: t + ' · ' + l, group: 'Συνηθισμένες' })), ...HALF_HOURS.map(t => ({ value: t, group: 'Όλες οι ώρες' }))];
-}
-export function TimeField({ id, label, value, onChange, help, quick, now }: P) {
-  const bad = normTime(value) == null; const opts = useTimeOptions(quick, now);
-  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
-    <${Combo} id=${id} className="ui-input" inputMode="numeric" options=${opts} placeholder="π.χ. 14:00" value=${value} aria-invalid=${bad || undefined}
-      onChange=${(e: any) => onChange(e.target.value)} onBlur=${() => { const t = normTime(value); if (t != null && t !== value) onChange(t); }}/>
-    <span className="field__help">${bad ? 'Γράψε την ώρα, π.χ. 14:00' : help}</span></div>`;
-}
-// Ημερομηνία ηη/μμ/εεεε (απόφαση 12/10) με λίστα: σήμερα, αύριο, μεθαύριο και οι γύρω μέρες με το όνομά τους και τις αργίες,
-// και «Ημερολόγιο…» για μέρα πιο μακριά. Γράφεται και με το χέρι: «21/10», «21.10.26», «21-10-2026».
-// Το onChange παίρνει { target: { value: 'εεεε-μμ-ηη' } } όπως το πεδίο ημερομηνίας του browser, μόνο με σωστή μέρα (και μέσα σε min/max).
-const pad2 = (n: number) => String(n).padStart(2, '0');
-const CAL = '\u0001cal';
-const fake = (value: string) => ({ target: { value }, currentTarget: { value } });
-export function DateField({ value, onChange, min, max, className, ...rest }: P) {
-  const { state, today } = useStore();
-  const shown = value ? dmy(value) : '';
-  const [text, setText] = useState(shown);
-  useEffect(() => setText(shown), [shown]);
-  const cal = useRef<HTMLInputElement>(null);
-  const ok = (d: ISODate | null): d is ISODate => !!d && (!min || d >= min) && (!max || d <= max);
-  const anchor = value || today;
-  const opts = useMemo(() => {
-    const lbl = (d: ISODate, rel?: string) => { const h = holName(state.settings, d); return dow(d) + ' ' + dmy(d) + (rel ? ' · ' + rel : d === today ? ' · σήμερα' : '') + (h && h !== 'ΣΚ' ? ' · ' + h : ''); };
-    // «Έως» (με min): και πόσες μέρες κρατά, μετρώντας και τις δύο
-    const quick: [ISODate, string][] = [[today, 'σήμερα'], [addDays(today, 1), 'αύριο'], [addDays(today, 2), 'μεθαύριο'], [addDays(today, -1), 'χθες'],
-      ...(min ? [5, 7, 10, 14].map(n => [addDays(min, n - 1), n + ' μέρες'] as [ISODate, string]) : [])];
-    const days = Array.from({ length: 38 }, (_, i) => addDays(anchor, i - 7));
-    return [...quick.filter(([d]) => ok(d)).map(([d, rel]) => ({ value: dmy(d), label: lbl(d, rel), group: 'Γρήγορα' })),
-      ...days.filter(ok).map(d => ({ value: dmy(d), label: lbl(d), group: 'Μέρες' })), { value: CAL, label: 'Άλλη μέρα από το ημερολόγιο…', group: ' ' }];
-  }, [anchor, today, min, max, state.settings]);
-  const commit = (t: string) => { const d = parseDmy(t, anchor); if (ok(d)) { setText(dmy(d)); if (d !== value) onChange?.(fake(d)); } else setText(shown); };
-  const change = (e: P) => {
-    const t: string = e.target.value;
-    if (t === CAL) { try { cal.current?.showPicker(); } catch { cal.current?.focus(); } return; }
-    setText(t);
-    // με χρονιά ή από τη λίστα: αμέσως· αλλιώς όταν φύγεις από το πεδίο ή πατήσεις Enter
-    const d = parseDmy(t, anchor); if (ok(d) && /\d{4}\s*$/.test(t) && d !== value) onChange?.(fake(d));
-  };
-  return html`<${Fragment}>
-    <${Combo} ...${rest} className=${className || 'ui-input'} inputMode="numeric" placeholder="ηη/μμ/εεεε" options=${opts} value=${text} aria-invalid=${(text && !ok(parseDmy(text, anchor))) || undefined}
-      onChange=${change} onBlur=${() => commit(text)} onKeyDown=${(e: P) => { if (e.key === 'Enter') commit(text); }}/>
-    <input ref=${cal} type="date" className="datefld__cal" tabIndex=${-1} aria-hidden="true" value=${value || ''} min=${min} max=${max} onChange=${(e: P) => e.target.value && ok(e.target.value) && onChange?.(fake(e.target.value))}/><//>`;
-}
-// Μήνας (εεεε-μμ): οι 12 πριν και οι 3 μετά από τον τωρινό, ο πιο πρόσφατος πάνω
-export function MonthField({ value, onChange, ...rest }: P) {
-  const { today } = useStore();
-  const ms = Array.from({ length: 16 }, (_, i) => { const d = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1 + 3 - i, 1); return d.getFullYear() + '-' + pad2(d.getMonth() + 1); });
-  if (value && !ms.includes(value)) ms.push(value);
-  return html`<${Select} className="ui-input" value=${value} onChange=${onChange} ...${rest}>${ms.map(m => html`<option key=${m} value=${m}>${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</option>`)}<//>`;
-}
 // Τι κάνουν οι ώρες (Michael, 13/10 και 18/10): υπηρεσίες, έξοδος την ημέρα της επιστροφής, ΗΚΑΙ
 // Ώρες μιας υπηρεσίας (Michael, 20/10: «μια υπηρεσία μπορεί να μην έχει ωράρια»): όλη μέρα, ίδιες ώρες για κάθε θέση, ή
 // βάρδιες που αλλάζουν κάθε τόσο. rot: υπηρεσία του εντύπου με νούμερα (θαλαμοφύλακες…), μόνο βάρδιες. labels: τα νούμερα.
@@ -224,20 +108,6 @@ export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, f
   </div>`;
 }
 export const timesHelp = (r?: Rules | null, st?: Pick<Settings, 'dutyStart'> | null) => 'Η μέρα της υπηρεσίας είναι ' + dutyStartOf(st) + ' → ' + dutyStartOf(st) + '. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως την ώρα εξόδου της μέρας (' + outTimesTxt(r) + '), βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
-export function ChangePlanList({ plan }: P) {
-  return html`<ul className="plan">${plan.files.map((f: P, i: number) => html`<li key=${i} className=${f.warn ? 'is-warn' : ''}><span className="plan__ic">${f.warn ? '!' : '✓'}</span><div><span className="plan__fn">${f.fn}</span><small>${f.desc}</small></div></li>`)}</ul>`;
-}
-// Κουμπιά ημερών: μέρα από πάνω, ημερομηνία από κάτω· με count (π.χ. κενές θέσεις) δίπλα στην ημερομηνία
-export function DateBar({ value, onChange, days, count }: P) {
-  const { state, today, tomorrow } = useStore();
-  return html`<${Strip} className="datebar" role="group" aria-label="Ημερομηνία">${days.map((d: ISODate) => {
-    const hol = isHol(state.settings, d); const n: number | null = count ? count(d) : null;
-    const tip = [hol && 'Αργία: ' + holName(state.settings, d), n != null && (n ? n + (n === 1 ? ' κενή θέση' : ' κενές θέσεις') : 'Πλήρης')].filter(Boolean).join(' · ');
-    return html`<button key=${d} type="button" className=${cx('daybtn', hol && 'is-hol')} aria-pressed=${value === d} data-tip=${tip || undefined} onClick=${() => onChange(d)}><span className="daybtn__d">${dow(d)}${d === today ? ' σήμερα' : d === tomorrow ? ' αύριο' : ''}</span><span className="daybtn__n">${dm(d)}${n == null ? '' : n ? html` · <b>${n}</b>` : ' ✓'}</span></button>`;
-  })}
-    <${DateField} className="ui-input datebar__pick" aria-label="Άλλη ημερομηνία" value=${value} onChange=${(e: any) => e.target.value && onChange(e.target.value)}/><//>`;
-}
-
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
 // rich: γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ, ποινές)· το v κρατά το ίδιο κείμενο απλό
 export interface Cell { v: string; s: string; cs: number; rs: number; rich?: Line[] }
@@ -431,39 +301,6 @@ export function useUsbCopy() {
     toast({ text: r.warning ? html`<span><b>Πάρθηκε αντίγραφο, αλλά:</b> ${r.warning}</span>` : 'Πάρθηκε αντίγραφο στο ' + r.file + '. Κράτα το USB έξω από το PC.' });
     return true;
   }, [refresh, toast]);
-}
-
-/* Υπόμνημα κωδικών (έρευνα 10): τι σημαίνει κάθε κωδικός και τι κάνει στην εφαρμογή. Βγαίνει από τον ίδιο πίνακα που χρησιμοποιούν οι κανόνες. */
-const SHORTCUTS = (): [string, string][] => [
-  ['Ctrl K', 'Αναζήτηση προσώπου ή ενέργειας από οπουδήποτε'], ['Ctrl F', 'Αναζήτηση στη λίστα της οθόνης'], ['Ctrl N', 'Δήλωσε κατάσταση (ιατρικό, άδεια, έξοδος, ποινή)'],
-  ['Ctrl Z', 'Αναίρεση της τελευταίας ενέργειας'], ['Alt 1 … 9', 'Σήμερα, Δυναμολόγιο, Στελέχη, Υπηρεσίες, Εξοδούχοι, Ιατρικά, Δύναμη, ' + HK() + ' (με Ποινές, Άδειες, Αιτήσεις), Οπλισμός'], ['Alt 0', 'Ρυθμίσεις'], ['Ctrl E', 'Έντυπα (δικά σου Excel)'],
-  ['Alt ←', 'Πίσω στην προηγούμενη οθόνη (και το πλαϊνό κουμπί του ποντικιού)'], ['Ctrl B', 'Μενού πλήρες ή μόνο εικονίδια'], ['F1', 'Οδηγός χρήσης για την οθόνη που βλέπεις'], ['Shift F1', 'Αυτό το υπόμνημα'], ['Esc', 'Κλείσιμο παραθύρου ή καρτέλας']
-];
-export function LegendDialog({ onClose }: { onClose: () => void }) {
-  const nav = useNav();
-  const CAT: Record<string, string> = { med: 'Ιατρικό', other: 'Άλλο', pun: 'Ποινή', abs: 'Απουσία', out: 'Έξοδος', kol: 'Κωλυόμενος' };
-  return html`<${Dialog} size="lg" title="Υπόμνημα κωδικών" description="Τι σημαίνει κάθε κωδικός και τι αλλάζει στις υπηρεσίες, στις εξόδους και στην ${HK()}." onClose=${onClose} footer=${html`<${Button} variant="outline" onClick=${() => nav.go('guide')}>Οδηγός χρήσης<//><${Button} onClick=${onClose}>Κλείσιμο<//>`}>
-    <table className="legend"><thead><tr><th>Κωδικός</th><th>Σημαίνει</th><th>Τι κάνει</th></tr></thead><tbody>
-      ${TYPE_KEYS.map(k => { const t = TYPES[k]; return html`<tr key=${k}><td><${Badge} tone=${t.tone}>${t.label}<//></td><td>${t.long}<small className="muted"> · ${CAT[t.cat] || t.cat}${t.code ? ' · στο ημερολόγιο: ' + t.code : ''}</small></td><td>${effects(t) || 'Μπαίνει κανονικά σε υπηρεσίες και έξοδο'}${k === 'PUN' ? '. Αιτείται στην ' + HK() + ' και ισχύει όταν εγκριθεί.' : ''}</td></tr>`; })}
-    </tbody></table>
-    <p className="note" style=${{ margin: '10px 0 0' }}>Στις υπηρεσίες: <b>Ένοπλη</b> θέση = δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ. <b>★</b> = υπηρεσία σε ΣΚ ή αργία. <b>⚠</b> = πέρασε παρά τον κανόνα. Στον έλεγχο υπηρεσιών: Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ.</p>
-    <h3 style=${{ fontSize: '15px', margin: '14px 0 6px' }}>Συντομεύσεις</h3>
-    <table className="legend"><tbody>${SHORTCUTS().map(([k, t]) => html`<tr key=${k}><td className="nw"><${Kbd}>${k}<//></td><td>${t}</td></tr>`)}</tbody></table>
-  <//>`;
-}
-
-// Κλείσιμο παραθύρου με δουλειά που δεν προστέθηκε (Michael, 19/10: «δεν θα θέλαμε να χάσουμε τη δουλειά»):
-// προστίθεται τώρα, κλείνει χωρίς προσθήκη ή γυρνάς πίσω. Esc και κλικ έξω = Πίσω
-export function UnsavedDialog({ title, children, saveLabel, canSave, onSave, discardLabel, onDiscard, onBack }: P) {
-  // με «Πίσω» ο κέρσορας γυρνά εκεί που έγραφες
-  const [prev] = useState(() => document.activeElement as HTMLElement | null);   // πριν πάρει το κουμπί του παραθύρου τον κέρσορα
-  useEffect(() => () => { if (prev && prev.isConnected) prev.focus(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-  return html`<${Dialog} role="alertdialog" title=${title} onClose=${onBack} footer=${html`
-    <${Button} variant="ghost" onClick=${onDiscard}>${discardLabel}<//>
-    <${Button} variant="outline" data-autofocus=${canSave ? undefined : ''} onClick=${onBack}>Πίσω<//>
-    <${Button} disabled=${!canSave} data-autofocus=${canSave ? '' : undefined} onClick=${onSave}>${saveLabel}<//>`}>
-    ${children}
-  <//>`;
 }
 
 // «Ρυθμίσεις › …» ως σύνδεσμος που ανοίγει το σωστό σημείο (UX Χ5, 22/10· πριν ήταν απλό κείμενο). Μέσα σε παράθυρο το κλείνει

@@ -12,7 +12,7 @@ import { App } from '../../src/renderer/app';
 import { useLeaveAsk, usePending } from '../../src/renderer/pending';
 import { DEFAULT_PREFS } from '../../src/renderer/prefs';
 import type { SourceBook } from '../../src/shared/api';
-import { mockApi } from '../../src/renderer/mockApi';
+import { mockApi } from '../../src/renderer/shared/api/mockApi';
 import * as H from './screens-harness';
 import { pickRows, type Rows } from './dialog-fixtures';
 import { SHELL_CASES } from './dialog-cases-shell';

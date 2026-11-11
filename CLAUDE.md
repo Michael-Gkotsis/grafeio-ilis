@@ -90,8 +90,9 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | Auto-update | `src/main/update.ts`, `updater.ts`, `src/renderer/update.ts`, `scripts/package-app.mjs` |
 | App startup, windows | `src/main/main.ts` (entry) + `src/main/app/` (boot, window, recover, lockdown, quit) |
 | Screens (one file each; htm today, TSX later) | `src/renderer/screens/*.ts` |
-| Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app/` (Root, Shell, routes, nav, store, shortcuts, CommandPalette), `prefs.ts`, `ui.ts`, `common.ts` |
+| Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app/` (Root, Shell, routes, shortcuts, CommandPalette; the providers `useStoreValue`, `useNavValue`), the contexts `StoreCtx`/`NavCtx` in `src/renderer/shared/model/`, `shared/lib/prefs.ts`, `ui.ts`, `common.ts` |
 | Shared UI primitives (Button, Dialog, Sheet, Select…) | `src/renderer/shared/ui/` (public API: its `index.ts`; helpers `shared/lib/`) |
+| Person, status and note atoms shown on many screens (PersonPicker, RkName, StatusBadge, ChangePlanList, NoteDot) | `src/renderer/entities/{person,status,note}/` (public API: each `index.ts`) |
 | Look and feel | `src/renderer/app/styles/index.css` (layer order) + `legacy.css` (UI work), `index.html` |
 | Tests | `test/*.test.ts` (175 files; helpers `fixtures.ts`, `duty-sim.ts`, `outs-gen.ts`, `tplgen.ts`; snapshots in `test/__snapshots__/`) |
 | Benchmarks, golden hashes | `bench/` (`golden-reports.ts`, `bench.ts`, `full.ts`, `ui/`) |

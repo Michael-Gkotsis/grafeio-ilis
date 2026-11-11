@@ -3,7 +3,7 @@ import '../../src/renderer/app/styles/index.css';
 import { createRoot } from 'react-dom/client';
 import { html } from '../../src/renderer/ui';
 import { App } from '../../src/renderer/app';
-import { mockApi } from '../../src/renderer/mockApi';
+import { mockApi } from '../../src/renderer/shared/api/mockApi';
 import { applyPrefs, loadPrefs } from '../../src/renderer/prefs';
 import { installTips } from '../../src/renderer/tips';
 import { apply, type Command } from '../../src/shared/commands';

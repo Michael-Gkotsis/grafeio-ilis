@@ -10,7 +10,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import * as H from './support/screens-harness';
 import { pickRows, type Rows } from './support/dialog-fixtures';
 import { FORMS_CASES } from './support/dialog-cases-forms';
-import { mockApi } from '../src/renderer/mockApi';
+import { mockApi } from '../src/renderer/shared/api/mockApi';
 import type { SourceBook } from '../src/shared/api';
 
 vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReact(orig));

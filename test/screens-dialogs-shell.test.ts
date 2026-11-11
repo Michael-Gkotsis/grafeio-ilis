@@ -9,7 +9,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import * as H from './support/screens-harness';
 import { pickRows, type Rows } from './support/dialog-fixtures';
-import { mockApi } from '../src/renderer/mockApi';
+import { mockApi } from '../src/renderer/shared/api/mockApi';
 import type { SourceBook } from '../src/shared/api';
 import { SHELL_CASES } from './support/dialog-cases-shell';
 
