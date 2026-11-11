@@ -6,11 +6,7 @@ html,body{height:100%;margin:0}
 html{scrollbar-gutter:stable}
 #root{min-height:100%}
 body{background:var(--background);color:var(--foreground);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
-*{box-sizing:border-box}
-button,input,select,textarea{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 ::selection{background:var(--ring-soft)}
-h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.005em}
 .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--muted-fg)}
 .rk{color:var(--muted-fg);font-weight:500}
@@ -23,60 +19,12 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 ::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:var(--sb-thumb-hover);background-clip:padding-box;border-width:2px}
 
 /* ---------- components/ui ---------- */
-.ui-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 16px;border-radius:var(--radius);border:1px solid transparent;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;transition:background-color .12s,border-color .12s,box-shadow .12s;flex:none}
-.ui-btn svg{width:16px;height:16px;flex:none}
-.ui-btn--default{background:var(--primary);color:var(--primary-fg);box-shadow:var(--shadow-sm)}
-.ui-btn--default:hover{filter:brightness(1.08)}
-.ui-btn--secondary{background:var(--secondary);color:var(--secondary-fg);border-color:var(--input)}
-.ui-btn--secondary:hover{filter:brightness(.97)}
-.ui-btn--outline{background:var(--card);border-color:var(--input);box-shadow:var(--shadow-sm)}
-.ui-btn--outline:hover{background:var(--hover);border-color:var(--primary)}
-/* ghost: με ορατό περίγραμμα, ώστε να φαίνεται ως κουμπί και σε ξεθωριασμένη οθόνη */
-.ui-btn--ghost{background:transparent;border-color:var(--border)}
-.ui-btn--ghost:hover{background:var(--hover);border-color:var(--input)}
-.ui-btn--destructive{background:var(--destructive);color:var(--destructive-fg)}
-.ui-btn--destructive:hover{filter:brightness(1.08)}
-.ui-btn--link{background:none;border:0;color:var(--info);padding:0;height:auto;text-decoration:underline;text-underline-offset:3px}
-.ui-btn--sm{height:32px;padding:0 12px;font-size:13px}
-.ui-btn--icon{width:36px;height:36px;padding:0;border-radius:999px}
-/* ανενεργό: γκρι φόντο και διακεκομμένο περίγραμμα αντί για διαφάνεια, ώστε το κείμενο να διαβάζεται (λέει και γιατί στο tooltip) */
-.ui-btn:disabled{cursor:not-allowed;filter:none;box-shadow:none}
-.ui-btn:disabled:not(.ui-btn--link){background:var(--muted);color:var(--muted-fg);border-color:var(--input);border-style:dashed}
-.ui-btn--link:disabled{color:var(--muted-fg);text-decoration:none}
-.ui-badge{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;background:var(--muted);color:var(--muted-fg)}
-.ui-badge--ok{background:var(--ok-bg);color:var(--ok)}.ui-badge--warn{background:var(--warn-bg);color:var(--warn)}.ui-badge--bad{background:var(--bad-bg);color:var(--bad)}
-.ui-badge--info{background:var(--info-bg);color:var(--info)}.ui-badge--ey{background:var(--ey-bg);color:var(--ey)}.ui-badge--dn{background:var(--dn-bg);color:var(--dn)}
-.ui-badge--outline{background:transparent;border:1px solid var(--border);color:var(--muted-fg)}
-.ui-badge--note{background:transparent;border:1px dashed var(--border);color:var(--muted-fg);font-weight:500}   /* «Μόνο σημείωση» (Michael, 4/11) */
 .healthnote{border-left:3px solid var(--border);background:var(--muted);color:var(--muted-fg);padding:6px 10px;border-radius:0 6px 6px 0;font-size:13px}
-.ui-input{width:100%;height:40px;padding:0 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);transition:border-color .12s,box-shadow .12s}
-.ui-input:hover{border-color:var(--muted-fg)}
-.ui-input:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
 /* υπόδειγμα: πιο αχνό από ό,τι γράφεις, αλλά να διαβάζεται */
 input::placeholder,textarea::placeholder{color:var(--muted-fg);opacity:.8}
-.ui-input--static{display:flex;align-items:center;background:var(--muted);color:var(--muted-fg);cursor:default}
-.ui-input--static:hover{border-color:var(--input)}
-.ui-input:disabled{background:var(--muted);color:var(--muted-fg);cursor:not-allowed;border-style:dashed}
-.ui-input:disabled:hover{border-color:var(--input)}
 .ui-check{width:18px;height:18px;accent-color:var(--primary);flex:none;cursor:pointer}
 .ui-checkrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap}
 .strict-sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;padding:0 4px}
-.ui-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);min-width:0}
-.ui-card__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:48px;padding:8px 16px;border-bottom:1px solid var(--border)}
-.ui-card__head h2{font-family:var(--f-body);font-size:15px;font-weight:700;color:var(--h2);flex:1;min-width:0}
-.ui-card__body{padding:14px 16px 16px}
-.ui-alert{display:flex;gap:10px;padding:10px 14px;border-radius:var(--radius);font-size:14px;border:1px solid var(--border);background:var(--muted)}
-.ui-alert--warn{background:var(--warn-bg);border-color:transparent}
-.ui-alert--bad{background:var(--bad-bg);border-color:transparent}
-.ui-alert--info{background:var(--info-bg);border-color:transparent}
-.ui-kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--card);color:var(--muted-fg)}
-.ui-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border)}
-.ui-tabs button{flex:0 1 auto;height:42px;padding:0 14px;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;border-radius:var(--radius) var(--radius) 0 0;background:none;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted-fg)}
-.ui-tabs button:hover{color:var(--foreground);background:var(--hover)}
-.ui-tabs button[aria-selected="true"]{color:var(--foreground);border-bottom-color:var(--primary)}
-.ui-seg{display:flex;flex-wrap:wrap;gap:6px}
-.ui-seg button{height:38px;padding:0 12px;border-radius:var(--radius);border:1px solid var(--input);background:var(--card);cursor:pointer;font-weight:500;font-size:14px}
-.ui-seg button[aria-pressed="true"]{border-color:var(--primary);background:var(--primary);color:var(--primary-fg);font-weight:700}
 .ui-chip{height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--input);background:var(--card);cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
 .ui-chip:hover{border-color:var(--muted-fg)}
 .ui-chip[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--primary-fg)}
@@ -99,33 +47,8 @@ input::placeholder,textarea::placeholder{color:var(--muted-fg);opacity:.8}
 .tip.is-on{visibility:visible;opacity:1;transition:opacity .1s}
 .tip--line{white-space:nowrap;max-width:none}
 abbr[data-tip]{text-decoration:underline dotted;cursor:help}
-.ui-overlay{position:fixed;inset:0;background:var(--overlay);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow:auto;animation:fade .12s}
-.ui-dialog{background:var(--card);border-radius:16px;width:min(640px,100%);box-shadow:var(--shadow);display:flex;flex-direction:column;max-height:88vh;animation:pop .14s ease-out}
-.ui-dialog--lg{width:min(860px,100%)}
-.ui-dialog__head{padding:20px 24px 12px;display:flex;gap:12px;align-items:flex-start}
-.ui-dialog__head > div{flex:1;min-width:0}
-.ui-dialog__head h2{font-size:19px;font-weight:700}
-.ui-dialog__desc{font-size:13px;color:var(--muted-fg);margin-top:4px}
-.ui-dialog__body{padding:8px 24px 18px;overflow:auto;display:flex;flex-direction:column;gap:14px}
-.ui-dialog__foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--border);background:var(--muted);border-radius:0 0 16px 16px}
-.ui-sheet-overlay{position:fixed;inset:0;background:var(--overlay);z-index:55;animation:fade .12s}
-.ui-sheet{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:var(--card);border-left:1px solid var(--border);box-shadow:var(--shadow);z-index:56;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);animation:slidein .16s ease-out}
-.ui-sheet__head{display:flex;gap:12px;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--border)}
-.ui-sheet__head > div{flex:1;min-width:0}
-.ui-sheet__body{padding:18px 20px;overflow:auto;display:flex;flex-direction:column;gap:18px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-@keyframes fade{from{opacity:0}}
-@keyframes pop{from{transform:translateY(6px) scale(.985);opacity:0}}
-@keyframes slidein{from{transform:translateX(24px);opacity:.6}}
-@keyframes slideup{from{transform:translateY(32px);opacity:.6}}
-.ui-toasts{position:fixed;left:calc(var(--side-w) + 16px);bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;z-index:80;max-width:calc(100% - 32px);width:420px;pointer-events:none}
-.ui-toast{pointer-events:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--foreground);color:var(--background);padding:12px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;animation:slideup .16s ease-out}
-.ui-toast > div{flex:1;min-width:180px}
-/* μηνύματα κάτω αριστερά, δίπλα στο μενού: όχι πάνω από τα «Αποθήκευση» που είναι δεξιά */
-body:has(.shell.is-rail) .ui-toasts{left:calc(var(--rail-w) + 16px)}
-body:has(.pendbar) .ui-toasts{bottom:80px}
 .pendbar{position:sticky;bottom:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px -4px 0;padding:10px 14px;background:var(--warn-bg);color:var(--foreground);border:1px solid var(--warn);border-radius:12px;box-shadow:var(--shadow)}
 .pendbar > span{flex:1;min-width:200px}
-.ui-toast button{background:none;border:1px solid currentColor;color:inherit;border-radius:6px;height:30px;padding:0 10px;cursor:pointer;font-weight:600;white-space:nowrap}
 
 /* ---------- components/common ---------- */
 .picker{position:relative}
@@ -260,7 +183,6 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .kpi--bad .kpi__l,.kpi--bad .kpi__n{color:var(--bad)}
 .kpi--ok .kpi__n{color:var(--ok)}
 .card__meta{font-family:var(--f-mono);font-size:13px;color:var(--muted-fg);white-space:nowrap}
-.ui-card__body--flush{padding:0}
 /* φόρμες μέσα σε κάρτα: απόσταση ανάμεσα στις σειρές πεδίων */
 .ui-card__body > .field + *,.ui-card__body > .field-row + *{margin-top:14px}
 .cols--b > :only-child{grid-column:1/-1}
@@ -371,7 +293,6 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .xlcard .ui-btn--ghost:hover{background:var(--bar-field)}
 .xlcard .tplnote{display:block;color:var(--bar-muted);margin:0}
 .xlcard .tplnote .ui-btn--link{color:var(--bar-fg)}
-.ui-dialog--xl{width:min(1240px,100%)}
 .ui-dialog--xl .xl__scroll{max-height:62vh}
 .avail{display:flex;flex-wrap:wrap;gap:6px}
 .avail button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:999px;background:var(--card);cursor:pointer;font-size:13px}
@@ -527,8 +448,6 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .orow.is-changed{background:var(--secondary)}
 .orow.is-blocked b{color:var(--muted-fg);font-weight:500}
 .orow .ui-badge{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ui-seg--sm{flex-wrap:wrap;gap:4px}   /* (review 29/10) όταν δεν χωράνε (π.χ. «Ανά Σ.Ι.» στα 1024) πάνε σε δεύτερη σειρά αντί να κόβεται το κείμενο */
-.ui-seg--sm button{height:32px;padding:0 10px;font-size:13px;white-space:nowrap}
 .outbar b{font-family:var(--f-mono)}
 /* Εξοδούχοι: η μπάρα με τα σύνολα, την αποθήκευση και το Excel μένει πάνω όταν κυλάς */
 .outbar{position:sticky;top:var(--top-h);z-index:20;box-shadow:0 0 0 6px var(--background)}
@@ -563,12 +482,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
   .bottomnav button svg{width:22px;height:22px}
   .bottomnav button[aria-current="page"]{color:var(--primary)}
   .bottomnav .dot{position:absolute;top:8px;left:calc(50% + 8px);min-width:16px;height:16px;border-radius:999px;background:var(--bad-line);color:var(--on-bad);font-size:10px;line-height:16px;padding:0 4px}
-  .ui-overlay{padding:0;align-items:flex-end}
-  .ui-dialog,.ui-dialog--lg{width:100%;max-height:92vh;border-radius:18px 18px 0 0;animation:slideup .18s ease-out;padding-bottom:env(safe-area-inset-bottom,0px)}
-  .ui-dialog__foot .ui-btn{flex:1}
   .rl-two,.rl-box{grid-template-columns:1fr}
-  .ui-sheet{top:auto;left:0;width:100%;max-height:88vh;border-left:0;border-top:1px solid var(--border);border-radius:16px 16px 0 0;animation:slideup .18s ease-out}
-  .ui-toasts,body:has(.shell.is-rail) .ui-toasts{left:16px;right:16px;width:auto;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px))}
   .post{grid-template-columns:minmax(0,1fr);gap:4px}.gtable__head{display:none}.post__who,.post__pick,.post__acts,.post__wide{grid-column:1/-1}.post .duty{grid-column:1/-1}
   .palette{border-radius:16px 16px 0 0;align-self:stretch;margin-top:8vh}
 }
@@ -627,44 +541,12 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
 
 /* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
-.ui-select{height:32px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);font-size:13px;cursor:pointer;flex:none;max-width:100%;transition:border-color .12s,box-shadow .12s}
-.ui-select:hover{border-color:var(--muted-fg)}
-.ui-select:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
-/* Λίστες επιλογής (select.ts): ίδιο κουτί με τα πεδία (.ui-input 40px στις φόρμες, .ui-select 32px στις μπάρες), βελάκι δεξιά,
-   και η ίδια λίστα από κάτω παντού, στο φωτεινό και στο σκοτεινό θέμα */
-.ui-dd{display:inline-flex;align-items:center;gap:6px;text-align:left;cursor:pointer;min-width:0;max-width:100%;line-height:1.2}
-.ui-dd.ui-input{display:flex;padding-right:10px}
-.ui-dd__v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ui-dd > svg{flex:none;width:16px;height:16px;color:var(--muted-fg);transition:transform .12s}
-.ui-dd.is-open{border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
-.ui-dd.is-open > svg{transform:rotate(180deg)}
-.ui-dd:disabled{cursor:not-allowed;opacity:.55}
-.ui-dd:disabled:hover{border-color:var(--input)}
-.ui-dd__pop{position:fixed;z-index:85;display:flex;flex-direction:column;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;font-size:14px;animation:fade .08s ease-out}
-.ui-dd__q{flex:none;margin:6px 6px 2px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius);background:var(--background);font-size:14px}
-.ui-dd__q:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px var(--ring-soft)}
-.ui-dd__list{list-style:none;margin:0;padding:4px;overflow:auto;flex:1;min-height:0}
-.ui-opt{padding:6px 12px;border-radius:6px;cursor:pointer;line-height:1.3}
-.ui-opt.is-act{background:var(--secondary);color:var(--secondary-fg)}
-.ui-opt[aria-selected="true"]{font-weight:600;box-shadow:inset 3px 0 0 var(--primary)}
-.ui-opt.is-off{color:var(--muted-fg);opacity:.6;cursor:default}
-.ui-dd__grp{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);padding:8px 10px 2px}
-.ui-dd__grp:first-child{padding-top:4px}
-.ui-dd__none{padding:8px 10px;color:var(--muted-fg);font-size:13px}
 /* DateField (common.ts): το κρυφό <input type="date"> που ανοίγει μόνο το ημερολόγιο («Άλλη μέρα από το ημερολόγιο…») */
 .datefld__cal{position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none}
 .actfilter .actfilter__act{font-weight:600;color:var(--info);white-space:nowrap}
 .ui-chip--view{border-style:dashed}
 .ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
 .ui-chip--view[aria-pressed="true"] svg{color:inherit}
-/* κάρτες που κλείνουν (Υπηρεσίες) */
-.ui-card__head h2 .ui-card__toggle{all:unset;display:inline-flex;align-items:center;gap:6px;cursor:pointer;max-width:100%}
-.ui-card__toggle:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
-.ui-card__toggle svg{flex:none;color:var(--muted-fg);transition:transform .12s}
-.ui-card__toggle[aria-expanded="true"] svg{transform:rotate(90deg)}
-.ui-card__toggle:hover span{text-decoration:underline;text-underline-offset:3px}
-.ui-card--fold.is-closed .ui-card__head{padding-bottom:2px}
-.ui-card__sum{padding:4px 16px 12px 38px;font-size:13px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* ζουμ προεπισκόπησης Excel */
 .xl__zoom{margin-left:8px;height:24px;padding:0 10px;border:1px solid rgba(255,255,255,.55);border-radius:999px;background:transparent;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .xl__zoom:hover{background:rgba(255,255,255,.14)}
@@ -678,12 +560,6 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 [data-density="compact"] .main{padding:16px 20px 28px}
 [data-density="compact"] .page-head{margin-bottom:10px}
 [data-density="compact"] .page-head h1{font-size:22px}
-[data-density="compact"] .ui-card__head{padding:10px 12px 0}
-[data-density="compact"] .ui-card__body{padding:10px 12px 12px}
-[data-density="compact"] .ui-card__sum{padding:2px 12px 10px 34px}
-[data-density="compact"] .ui-btn{height:34px;padding:0 12px}
-[data-density="compact"] .ui-btn--sm{height:28px;padding:0 8px}
-[data-density="compact"] .ui-input{height:34px}
 [data-density="compact"] .ui-chip{height:28px;padding:0 10px}
 [data-density="compact"] .toolbar,[data-density="compact"] .filters{margin-bottom:8px}
 [data-density="compact"] .ptable__row{font-size:13px}
@@ -692,7 +568,6 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 [data-density="compact"] .rec li,[data-density="compact"] .log li{padding:7px 12px}
 [data-density="compact"] .attn li{padding:7px 10px}
 [data-density="compact"] .quick button{min-height:70px;padding:10px 12px}
-[data-density="compact"] .ui-seg--sm button{height:28px}
 /* Αρχεία Excel: λίστα ειδών, αντιστοίχιση στηλών με κλικ σε κελί, άτομα που δεν βρέθηκαν, κελιά ΗΚΑΙ */
 .srclist{list-style:none;margin:0;padding:0}
 .srcrow{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)}
@@ -1015,7 +890,6 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .txt-warn{color:var(--warn)}
 .txt-ok{color:var(--ok)}
 /* Καρτέλα στρατιώτη: ↑/↓ στη λίστα */
-.ui-sheet__head > .ui-sheet__acts{flex:none;display:flex;align-items:center}
 .sheetnav{display:inline-flex;align-items:center;gap:2px;font-size:12px}
 .sheetnav .num{margin-right:4px}
 .ui-sheet__body > .ui-tabs{margin-top:2px}

@@ -1,0 +1,31 @@
+/*
+ * Keyframes shared by the dialog, sheet, toast and dropdown popup animations (fade, pop, slidein, slideup).
+ * Does NOT: define any rule that uses them; the users are in Dialog.css, Sheet.css, Toast.css and Select.css.
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: The keyframes must exist once, before their users.
+ * Covering test: test/screens-*.test.ts and bench:styles, test/contrast.test.ts.
+ */
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop {
+  from {
+    transform: translateY(6px) scale(0.985);
+    opacity: 0;
+  }
+}
+@keyframes slidein {
+  from {
+    transform: translateX(24px);
+    opacity: 0.6;
+  }
+}
+@keyframes slideup {
+  from {
+    transform: translateY(32px);
+    opacity: 0.6;
+  }
+}

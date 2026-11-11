@@ -1,0 +1,84 @@
+/*
+ * Card (.ui-card, head, body, foldable toggle and summary, compact density).
+ * Does NOT: style a card inside a screen (.rep-more-presets and similar overrides stay in legacy.css).
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: Card.tsx draws all these classes.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+.ui-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+.ui-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 48px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ui-card__head h2 {
+  font-family: var(--f-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--h2);
+  flex: 1;
+  min-width: 0;
+}
+.ui-card__body {
+  padding: 14px 16px 16px;
+}
+.ui-card__body--flush {
+  padding: 0;
+}
+/* foldable cards (Υπηρεσίες) */
+.ui-card__head h2 .ui-card__toggle {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.ui-card__toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.ui-card__toggle svg {
+  flex: none;
+  color: var(--muted-fg);
+  transition: transform 0.12s;
+}
+.ui-card__toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.ui-card__toggle:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ui-card--fold.is-closed .ui-card__head {
+  padding-bottom: 2px;
+}
+.ui-card__sum {
+  padding: 4px 16px 12px 38px;
+  font-size: 13px;
+  color: var(--muted-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-density="compact"] .ui-card__head {
+  padding: 10px 12px 0;
+}
+[data-density="compact"] .ui-card__body {
+  padding: 10px 12px 12px;
+}
+[data-density="compact"] .ui-card__sum {
+  padding: 2px 12px 10px 34px;
+}

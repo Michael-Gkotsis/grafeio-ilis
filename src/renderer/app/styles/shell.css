@@ -5,7 +5,7 @@
  * Does NOT: touch the phone layout (the max-width 767px block of legacy.css keeps hiding the menu and showing the
  *   bottom bar) or any screen. Tokens only, no colour literals, no nesting, no !important.
  * Owner layer: renderer app shell. Layer: legacy, imported BEFORE legacy.css: the .topbar .ui-btn* and .searchbtn .ui-kbd
- *   overrides must beat the shared .ui-btn/.ui-kbd rules that still live in legacy.css (U3 moves those out), and the
+ *   overrides must beat the shared .ui-btn/.ui-kbd rules (now in layer shared-ui, so any legacy rule wins), and the
  *   phone rules of legacy.css, which come later, must still beat the rules here.
  * Why own file: the rules were scattered through legacy.css between lines 212 and 266 and in four media queries.
  * Covering tests: test/shell-nav.test.ts, test/contrast.test.ts (--nav-* pairs), bench:styles (shell parts).

@@ -1,0 +1,21 @@
+/*
+ * Aggregator of the co-located CSS of the shared UI primitives.
+ *
+ * Purpose: one file that index.css imports into layer(shared-ui), so no component imports CSS itself.
+ * Does NOT: hold any rule. CSS is not imported from TSX because the CSS tests (test/support/css.ts) follow
+ *   @import from index.css and the SSR tests do not load CSS.
+ * Owner layer: renderer/shared/ui.
+ * Why the order: it is the order the rules had in legacy.css; keyframes first.
+ * Covering test: test/contrast.test.ts, bench:styles.
+ */
+@import url("./motion.css");
+@import url("./Button.css");
+@import url("./Badge.css");
+@import url("./ChoiceField.css");
+@import url("./Card.css");
+@import url("./Alert.css");
+@import url("./Tabs.css");
+@import url("./Dialog.css");
+@import url("./Sheet.css");
+@import url("./Toast.css");
+@import url("./Select.css");

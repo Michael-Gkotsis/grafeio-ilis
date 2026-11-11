@@ -1,0 +1,66 @@
+/*
+ * Toast stack (.ui-toasts, .ui-toast) and its phone layout.
+ * Does NOT: style the pending-changes bar (.pendbar) that lives in legacy.css.
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: Toast.tsx draws these classes; the stack moves when the side menu is a rail or a pending bar shows.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+.ui-toasts {
+  position: fixed;
+  left: calc(var(--side-w) + 16px);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 80;
+  max-width: calc(100% - 32px);
+  width: 420px;
+  pointer-events: none;
+}
+.ui-toast {
+  pointer-events: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--foreground);
+  color: var(--background);
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  animation: slideup 0.16s ease-out;
+}
+.ui-toast > div {
+  flex: 1;
+  min-width: 180px;
+}
+/* toasts sit bottom left next to the menu, never over the «Αποθήκευση» buttons on the right */
+body:has(.shell.is-rail) .ui-toasts {
+  left: calc(var(--rail-w) + 16px);
+}
+body:has(.pendbar) .ui-toasts {
+  bottom: 80px;
+}
+.ui-toast button {
+  background: none;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 6px;
+  height: 30px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .ui-toasts,
+  body:has(.shell.is-rail) .ui-toasts {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
