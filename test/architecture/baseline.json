@@ -162,7 +162,6 @@
     "src/main/sigs.ts": 7,
     "src/main/sources.ts": 2,
     "src/main/tplmap.ts": 3,
-    "src/renderer/common.ts": 4,
     "src/renderer/features/quick-add/model/useQuickAdd.ts": 1,
     "src/renderer/screens/cadre.ts": 1,
     "src/renderer/screens/guard.ts": 7,
@@ -175,8 +174,7 @@
     "src/renderer/screens/weaponMoves.ts": 1,
     "src/renderer/screens/weapons.ts": 7,
     "src/renderer/screens/whodoes.ts": 2,
-    "src/renderer/shared/api/mockApi.ts": 5,
-    "src/renderer/sheets.ts": 5
+    "src/renderer/shared/api/mockApi.ts": 5
   },
   "any": {
     "src/core/commands/handlers/dayPlans.ts": 2,
