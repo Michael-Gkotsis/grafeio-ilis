@@ -32,3 +32,4 @@ export { useDirty } from './useDirty';
 export { useEscape } from './useEscape';
 export { useFloat, type FloatPos } from './useFloat';
 export { useMedia, useViewportHeight } from './useMedia';
+export { GoLink, type GoLinkProps } from './GoLink';
