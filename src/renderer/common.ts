@@ -1,5 +1,4 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { HK } from '../shared/unit';
 import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Button, Dialog, DialogLeave, Icon, Segmented } from './ui';
 import { requestLeave } from './pending';
@@ -7,9 +6,7 @@ import { Combo, Select } from './select';
 import { usePrefs } from './prefs';
 import { useStore, useNav } from './store';
 import { useToast } from './ui';
-import { DEFAULT_HK_TIME } from '../shared/rules';
-import { outTimesTxt } from '../shared/returns';
-import { SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, hoursTxt, phaseBase, shiftList, shiftReport, shiftSlots, type Rules, type Settings, type ShiftDef, type ShiftOwn } from '../shared/domain';
+import { SHIFT_EVERY, MAX_SHIFT_OWN, hoursTxt, phaseBase, shiftList, shiftReport, shiftSlots, type ShiftDef, type ShiftOwn } from '../shared/domain';
 import { dayName, dmy, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
@@ -107,7 +104,8 @@ export function HoursField({ id, mode, setMode, sh, setSh, labels, rot, start, f
       <span className="field__help">Γράφονται στις Θέσεις και στη ΦΡΟΥΡΑ, μία γραμμή για κάθε βάρδια. Η αρχή της υπηρεσίας (${start}) αλλάζει στους Κανόνες.</span><//>`}
   </div>`;
 }
-export const timesHelp = (r?: Rules | null, st?: Pick<Settings, 'dutyStart'> | null) => 'Η μέρα της υπηρεσίας είναι ' + dutyStartOf(st) + ' → ' + dutyStartOf(st) + '. Αν γυρίζει πριν ξεκινήσει μια θέση (π.χ. στις 12:00), μπαίνει σε αυτή την ίδια μέρα. Αν φεύγει πριν τελειώσει η υπηρεσία της προηγούμενης μέρας (π.χ. στις 10:00), δεν μπαίνει σε αυτήν. Αν γυρίζει ως την ώρα εξόδου της μέρας (' + outTimesTxt(r) + '), βγαίνει κανονικά έξοδο εκείνη τη μέρα· ως τις ' + (r?.hkTime || DEFAULT_HK_TIME) + ' μετρά παρών και στην ' + HK() + '. Χωρίς ώρες μετρά όλη η μέρα.';
+// Deprecated path: `timesHelp` moved to shared/lib/timesHelp.ts (Phase 5.3b).
+export { timesHelp } from './shared/lib/timesHelp';
 /* ExcelSheet: ζωγραφίζει SheetModel και επισημαίνει τα κελιά που άλλαξαν */
 // rich: γραμμές με υπογραμμισμένα κομμάτια (ΗΚΑΙ, ποινές)· το v κρατά το ίδιο κείμενο απλό
 export interface Cell { v: string; s: string; cs: number; rs: number; rich?: Line[] }

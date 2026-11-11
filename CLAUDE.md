@@ -93,6 +93,7 @@ Also exist: `bench:reports`, `bench:ui:reports`, `start`, `package:*` (releases 
 | Shell, nav, Ctrl+K, shortcuts, state | `src/renderer/app/` (Root, Shell, routes, shortcuts, CommandPalette; the providers `useStoreValue`, `useNavValue`), the contexts `StoreCtx`/`NavCtx` in `src/renderer/shared/model/`, `shared/lib/prefs.ts`, `ui.ts`, `common.ts` |
 | Shared UI primitives (Button, Dialog, Sheet, Select…) | `src/renderer/shared/ui/` (public API: its `index.ts`; helpers `shared/lib/`) |
 | Person, status and note atoms shown on many screens (PersonPicker, RkName, StatusBadge, ChangePlanList, NoteDot) | `src/renderer/entities/{person,status,note}/` (public API: each `index.ts`) |
+| User actions that several screens open as a dialog (declare a status, fix a status, end a leave early; more slices follow) | `src/renderer/features/<slice>/` (`ui/` markup, `model/` state and rules, public API: its `index.ts`; a feature imports only entities, shared and src/shared, never another feature; the old screen paths re-export until Phase 7) |
 | Look and feel | `src/renderer/app/styles/index.css` (layer order) + `legacy.css` (UI work), `index.html` |
 | Tests | `test/*.test.ts` (175 files; helpers `fixtures.ts`, `duty-sim.ts`, `outs-gen.ts`, `tplgen.ts`; snapshots in `test/__snapshots__/`) |
 | Benchmarks, golden hashes | `bench/` (`golden-reports.ts`, `bench.ts`, `full.ts`, `ui/`) |

@@ -4,21 +4,22 @@ import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { destNote, reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Icon, PageHeader, Segmented, Sheet, SheetNav, Strip, Tabs, VirtualList, useMedia, useSheetNav, useDirty, useToast, useViewportHeight } from '../ui';
-import { Combo, Select } from '../select';
+import { Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
-import { ActiveFilter, ChangePlanList, ChoiceField, SigsMenu, UnsavedDialog, DateField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
+import { ActiveFilter, ChoiceField, SigsMenu, UnsavedDialog, StatusBadge, timesHelp, TimeField } from '../common';
 import type { Sig } from '../../shared/sigs';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
-import { badgeLbl, live, medNote, isAway, leavePhrase, listOf, medKinds, optionsOf, rankTxt, statusLbl, type UserLists } from '../../shared/ranks';
-import { TYPES, TYPE_KEYS, RECORD_CATS, KOL_COLS, KOL_NO_COL, kolColOf, kolColName, KIND_LBL, KIND_NAME, blocksOf, fullName, plainName, unitOf, roomTxt, platoonsOf, platoonShort, type BlockDef, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
-import { DEFAULT_HK_TIME, notesOn, noteTxt, isEpop, monthTxt, awayNow, statusesAt, baseTotal, canOpen, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, planStatusChanges, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
-import { dayTimes } from '../../shared/returns';
-import { statIsUnarmed, statNoDuty, statSummary, STAT_ROWS } from '../../shared/stat';
-import { addDays, daysBetween, dayName, dm, dow, nowHM } from '../../shared/dates';
-import { deprivationEnd, isDeprivation, overMax, punBySuggestions, punLbl } from '../../shared/punish';
+import { badgeLbl, live, medNote, isAway, listOf, optionsOf, rankTxt, statusLbl, type UserLists } from '../../shared/ranks';
+import { TYPES, RECORD_CATS, KIND_LBL, KIND_NAME, blocksOf, plainName, unitOf, roomTxt, platoonsOf, platoonShort, type Cadre, type DutyKind, type Person, type SavedView, type TypeKey, type Status } from '../../shared/domain';
+import { notesOn, noteTxt, isEpop, monthTxt, awayNow, statusesAt, baseTotal, dutyBlock, dutyStats, emptyStat, holName, outBlock, personMap, postBy, postsOf, statusesOf, statusesOn, strengthAt } from '../../shared/rules';
+import { statIsUnarmed, statNoDuty, STAT_ROWS } from '../../shared/stat';
+import { addDays, daysBetween, dayName, dm, dow } from '../../shared/dates';
 import { SiField } from './si';
 import { RoomField } from './units';
 import { QuickAddDialog } from './quickAdd';
+import { DeclareStatusDialog } from '../features/declare-status';
+import { StatusFixDialog } from '../features/fix-status';
+import { LeaveEndDialog, leaveStarted } from '../features/leave-end';
 import { siOf, siShort } from '../../shared/si';
 import { essoPersonTxt } from '../../shared/esso';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
@@ -30,29 +31,6 @@ import { PersonalTab } from './personal';
 import { ImerTab } from './imerologio';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
 type P = any;
-
-const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσίες'], ['out', 'Έξοδος'], ['other', 'Άλλα'], ['pun', 'Ποινή'], ['kol', 'Κωλυόμενος']];
-const CAT_NAME: Record<string, string> = Object.fromEntries(CATS);
-// Δήλωση σε βήματα (Michael, 17/10 και 18/10): πρώτα τον στρατιώτη, μετά την κατάσταση (στα ιατρικά μία ή περισσότερες),
-// μετά από πότε έως πότε και παρατήρηση για τον λόγο· στο τέλος βλέπεις τι θα αλλάξει
-const STEPS = ['Στρατιώτης', 'Κατάσταση', 'Πότε', 'Τι θα αλλάξει'];
-// από τα «Ιατρικά και ποινές» (+ Ιατρικό, + Ποινή) πρώτα η κατάσταση και μετά προσθέτεις τους στρατιώτες έναν-έναν (Michael, 18/10)
-const ORDER_STATUS_FIRST = [2, 1, 3, 4];
-interface StatusPick { key: string; cat: string; type: TypeKey; kind?: string; short: string; long: string; help: string }
-// Όλες οι καταστάσεις σε μία λίστα: κάθε είδος άδειας και ποινής χωριστά, και τα δικά σου ιατρικά δίπλα στα βασικά
-function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: string; like?: string; warn?: boolean; note?: boolean }[], sum: (s: Pick<Status, 'type' | 'kind'>) => string): StatusPick[] {
-  const out: StatusPick[] = [];
-  for (const [c] of CATS) for (const k of TYPE_KEYS.filter(x => TYPES[x].cat === c)) {
-    const t = TYPES[k];
-    if (k === 'LEAVE') leaveKinds.forEach(n => out.push({ key: 'LEAVE:' + n, cat: c, type: k, kind: n, short: n === 'Κανονική' ? t.label : n, long: leavePhrase({ type: k, kind: n }), help: sum({ type: k, kind: n }) }));
-    else if (k === 'PUN') punKinds.forEach(n => out.push({ key: 'PUN:' + n, cat: c, type: k, kind: n, short: 'Ποινή', long: punLbl(n), help: sum({ type: k, kind: n }) + ' · ισχύει αμέσως και γράφεται στην ' + HK() + ' (4. Ποινές)' }));
-    else out.push({ key: k, cat: c, type: k, short: t.label, long: t.long, help: k === 'KOL' ? 'Υπηρεσία εκτός δικών μας (π.χ. ΣΤΕΠ): δεν μπαίνει στις υπηρεσίες μας· φαίνεται στη Δύναμη και στο Σήμερα, και προαιρετικά στην ' + HK() : sum({ type: k }) });
-    // τα δικά σου ιατρικά: ό,τι όρισες στις Υπηρεσίες και αργίες (Michael, 18/10)
-    if (c === 'med' && k === TYPE_KEYS.filter(x => TYPES[x].cat === 'med').slice(-1)[0])
-      meds.forEach(m => out.push({ key: 'm:' + m.name, cat: c, type: m.like as TypeKey, kind: m.name, short: m.name + (m.note ? ' (σημείωση)' : ''), long: m.note ? 'Μόνο σημείωση' : m.warn ? 'Μόνο προειδοποίηση' : 'Δικό σου ιατρικό', help: m.note ? 'Δεν αλλάζει υπηρεσίες, έξοδο, ΗΚΑΙ και Δύναμη' : sum({ type: m.like as TypeKey, kind: m.name }) + (m.warn ? ' · προειδοποίηση όταν μπαίνει σε υπηρεσία' : '') }));   // «Μόνο σημείωση» (Michael, 4/11)
-  }
-  return out;
-}
 
 // Δυναμολόγιο (Michael, 17/10): μόνο τα στοιχεία του στρατιώτη, με τις στήλες του Δυναμολογίου. Οι άδειες και οι ποινές
 // φαίνονται μόνο στα αντίστοιχα φίλτρα, με μία στήλη ακόμα (τι και από πότε έως πότε)· τα ιατρικά στα «Ιατρικά και ποινές».
@@ -313,77 +291,6 @@ export function LeaveTimesDialog({ st, onClose }: P) {
   <//>`;
 }
 
-// Ιατρικό ή ποινή που μπήκε λάθος: «Διόρθωση» ανοίγει τη δήλωση με τα στοιχεία της (στην αποθήκευση η παλιά φεύγει),
-// «Διαγραφή» τη σβήνει ολόκληρη. Και τα δύο με αναίρεση (πριν, έμενε μόνο το «Σταμάτησε», που κρατά τις περασμένες μέρες).
-export function StatusFixDialog({ st, onClose }: P) {
-  const { state, run, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const p = personMap(state.people).get(st.pid);
-  const [del, setDel] = useState(false);
-  const what = (st.type === 'PUN' ? 'ποινή (' + punLbl(st.kind) + ')' : statusLbl(st, state.settings.lists));
-  const desc = (p ? rkFull(p) + ' · ' : '') + what.replace(/^π/, 'Π') + ' ' + dm(st.from) + ' – ' + (st.open ? 'χωρίς λήξη' : dm(st.to));
-  const edit = () => { onClose(); nav.declare({ replace: st.id, pids: [st.pid], type: st.type, kind: st.kind, from: st.from, to: st.to, open: st.open, note: st.note, by: st.by, reason: st.reason, on: st.on, fromTime: st.fromTime, toTime: st.toTime, dest: st.dest, ...(st.type === 'KOL' ? { minus: !!st.minus, hkCol: st.minus ? kolColOf(st) : undefined, noOut: !!st.noOut } : {}) }); };
-  const remove = async () => {
-    if (!(await run({ t: 'deleteStatus', id: st.id }, false))) return;
-    onClose(); toast({ text: 'Διαγράφηκε: ' + what + (p ? ' του ' + rkShort(p) : ''), actions: [undoMark()] });
-  };
-  if (del) return html`<${Dialog} role="alertdialog" title="Διαγραφή: μπήκε λάθος;" description=${desc} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(false)}>Πίσω<//><${Button} variant="destructive" onClick=${remove}>Ναι, διάγραψέ ${st.type === 'PUN' ? 'την' : 'το'}<//>`}>
-    <p style=${{ margin: 0 }}>Φεύγει ολόκληρ${st.type === 'PUN' ? 'η' : 'ο'}, και οι μέρες που έχουν περάσει, από παντού (${st.type === 'PUN' ? 'Ποινές' : 'Ιατρικά'}, ${HK()}, Δύναμη, Excel), σαν να μην μπήκε ποτέ. Αν απλώς σταμάτησε νωρίτερα, πάτα «Πίσω» και κλείσε· το «Λήξη νωρίτερα…» κρατά τις μέρες που ίσχυσε.</p><//>`;
-  return html`<${Dialog} title="Διόρθωση" description=${desc} onClose=${onClose}
-    footer=${html`${TYPES[st.type as TypeKey].cat !== 'abs' && html`<${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή (μπήκε λάθος)…<//>`}<span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} data-autofocus="" onClick=${edit}>Άλλαξε στοιχεία…<//>`}>
-    <p style=${{ margin: 0 }}><b>Άλλαξε στοιχεία</b>: ανοίγει η δήλωση με ό,τι έχει τώρα (ημερομηνίες, είδος, παρατήρηση${st.type === 'PUN' ? ', ποιος τιμώρησε, λόγος' : ''}) για να διορθώσεις ό,τι μπήκε λάθος. Στην αποθήκευση η παλιά καταχώρηση αντικαθίσταται.</p>
-    ${TYPES[st.type as TypeKey].cat === 'abs' ? html`<p style=${{ margin: '10px 0 0' }}>${st.req ? 'Η σύνδεση με την αίτηση μένει. ' : ''}Αν δεν έφυγε καθόλου, κλείσε και πάτα «Ακύρωση…»· αν γύρισε νωρίτερα, «Λήξη νωρίτερα…».</p>` : html`<p style=${{ margin: '10px 0 0' }}><b>Διαγραφή</b>: μόνο αν μπήκε εντελώς λάθος (λάθος άνθρωπος ή δεν έγινε ποτέ).</p>`}<//>`;
-}
-
-// Άδεια (κανονική, τιμητική, αναρρωτική) που ξεκίνησε ή όχι ακόμα (Michael, 18/10: «να μπορείς να ακυρώσεις / τερματίσεις άδεια»)
-export const leaveStarted = (st: Status, today: string) => st.from < today || (st.from === today && (!st.fromTime || st.fromTime <= nowHM()));
-// Πριν φύγει: ακύρωση (φεύγει όλη). Αφού έφυγε: διακοπή, γύρισε τη μέρα και ώρα που λες (τώρα)· η ακύρωση μένει για λάθος καταχώρηση.
-// Το ίδιο για νοσοκομείο και ΣΤΕΠ (Michael, 20/10: «να γυρνάει την ώρα που έβαλες»): βγήκε νωρίτερα, στη μέρα και ώρα εξόδου.
-export function LeaveEndDialog({ st, onClose }: P) {
-  const { state, run, today, undoMark } = useStore(); const toast = useToast();
-  const p = personMap(state.people).get(st.pid)!;
-  const started = leaveStarted(st, today);
-  const [cancel, setCancel] = useState(!started);
-  const max = st.open ? undefined : st.to;
-  const [day, setDay] = useState(max && max < today ? max : today < st.from ? st.from : today);
-  const [time, setTime] = useState(nowHM());
-  const [err, setErr] = useState<string | null>(null);
-  const abs = TYPES[st.type as TypeKey].cat === 'abs', tn = timeNames(st.type);
-  const what = TYPES[st.type as TypeKey].long.toLowerCase();
-  const W = abs ? { title: 'Διακοπή άδειας', cancel: 'Ακύρωση άδειας', go: 'Γύρισε', intro: 'Γύρισε νωρίτερα (π.χ. ανακλήθηκε): η άδεια τελειώνει' }
-    : { title: 'Έξοδος νωρίτερα', cancel: 'Διαγραφή', go: 'Βγήκε', intro: 'Βγήκε νωρίτερα: η ' + what + ' τελειώνει' };
-  const desc = rkFull(p) + ' · ' + statusLbl(st, state.settings.lists) + ' ' + dm(st.from) + (st.fromTime ? ' ' + st.fromTime : '') + ' – ' + (st.open ? 'χωρίς λήξη' : dm(st.to) + (st.toTime ? ' ' + st.toTime : ''));
-  const t = normTime(time);
-  // τι σημαίνει η ώρα τη μέρα που γυρνά (ίδιοι κανόνες με τις ώρες της άδειας· ο ΣΤΕΠ είναι κωλυόμενος στην ΗΚΑΙ ως την έξοδο, Michael 29/10)
-  const hk = state.rules?.hkTime || DEFAULT_HK_TIME, out = dayTimes(state, day).out;
-  const effect = !t ? 'Χωρίς ώρα η μέρα αυτή μετρά ολόκληρη· παρών από την επόμενη μέρα.'
-    : (t <= hk ? 'Εκείνη τη μέρα μετρά παρών και στην ' + HK() + ', βγαίνει έξοδο και μπαίνει σε υπηρεσίες.'
-      : t <= out ? 'Εκείνη τη μέρα βγαίνει κανονικά έξοδο και μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· στην ' + HK() + ' μετρά παρών από την επόμενη μέρα.'
-      : 'Εκείνη τη μέρα μπαίνει σε υπηρεσίες που ξεκινούν μετά τις ' + t + '· έξοδος και ' + HK() + ' κανονικά από την επόμενη μέρα.');
-  const doCancel = async () => {
-    if (!(await run({ t: 'cancelLeave', id: st.id }, false))) return;
-    onClose(); toast({ text: (abs ? 'Ακυρώθηκε η ' : 'Διαγράφηκε η ') + what + ' του ' + rkShort(p), actions: [undoMark()] });
-  };
-  const doEnd = async () => {
-    if (t == null) { setErr('Η ώρα δεν διαβάζεται. Γράψε π.χ. 22:00 ή άφησέ την κενή.'); return; }
-    if (!(await run({ t: 'endLeave', id: st.id, date: day, time: t }, false))) return;
-    onClose(); toast({ text: rkShort(p) + ': ' + (abs ? 'γύρισε από ' + what : what + ', ' + tn.to) + ' ' + dm(day) + (t ? ' ' + t : ''), actions: [undoMark()] });
-  };
-  if (cancel) return html`<${Dialog} role="alertdialog" title=${W.cancel} description=${desc} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${started ? () => setCancel(false) : onClose}>${started ? 'Πίσω' : 'Όχι'}<//><${Button} variant="destructive" onClick=${doCancel}>${abs ? 'Ναι, ακύρωσέ την' : 'Ναι, διάγραψέ την'}<//>`}>
-    <p style=${{ margin: 0 }}>${started ? html`Έχει ήδη ξεκινήσει. ${abs ? 'Ακύρωση' : 'Διαγραφή'} μόνο αν <b>μπήκε κατά λάθος</b>· αν ${abs ? 'γύρισε' : 'βγήκε'} νωρίτερα, πάτα «Πίσω» και «${W.go}».` : html`Ξεκινά <b>${dayName(st.from, today).toLowerCase()} ${dm(st.from)}</b>.`} Φεύγει από παντού (${abs ? 'Άδειες' : 'Ιατρικά'}, ${HK()}, Δύναμη, Excel) και μετρά διαθέσιμος για υπηρεσίες και έξοδο.${st.req ? ' Η αίτηση μένει εγκεκριμένη.' : ''}</p><//>`;
-  return html`<${Dialog} title=${W.title} description=${desc} onClose=${onClose}
-    footer=${html`<${Button} variant="ghost" onClick=${() => setCancel(true)} data-tip="Μόνο αν μπήκε κατά λάθος: φεύγει ολόκληρη">${W.cancel}…<//><span style=${{ flex: 1 }}></span><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${doEnd}>${W.go}<//>`}>
-    <p style=${{ margin: '0 0 10px' }}>${W.intro} τη μέρα και ώρα που λες και από εκεί και πέρα μετρά κανονικά σε υπηρεσίες, εξόδους, ${HK()}, Δύναμη, Δυναμολόγιο και Excel.</p>
-    <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="le-d">Μέρα ${tn.toG}</label><${DateField} id="le-d" className="ui-input" min=${st.from} max=${max} value=${day} onChange=${(e: any) => { if (e.target.value) { setDay(e.target.value); setErr(null); } }}/><span className="field__help">${dayName(day, today)}</span></div>
-      <${TimeField} id="le-t" label=${'Ώρα ' + tn.toG} value=${time} onChange=${(v: string) => { setTime(v); setErr(null); }} help=${'Η τωρινή· άλλαξέ την αν ' + (abs ? 'γύρισε' : 'βγήκε') + ' άλλη ώρα'}/>
-    </div>
-    <span className="field__help">${effect}</span>
-    ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
-  <//>`;
-}
-
 // Υπηρεσίες πριν από την εφαρμογή: δεν γράφονται πια με το χέρι (Michael, 17/10: η ΕΣΣΟ ξεκινά από την αρχή).
 // Όσες υπάρχουν ήδη μετρούν ακόμα· ο έλεγχος από κάτω τις μηδενίζει.
 const BASE_KINDS: DutyKind[] = ['th', 'op', 'sk', 'mg', 'ly', 'tae', 'other'];
@@ -498,159 +405,5 @@ export function NewPersonDialog({ onClose, onMany }: P) {
   <//>`;
 }
 
-/* features/status/DeclareStatusDialog · 1 ή πολλά άτομα, 4 βήματα */
-export function DeclareStatusDialog({ initial, onClose }: P) {
-  const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const pm = personMap(state.people);
-  // «Διόρθωση…» στα Ιατρικά/Ποινές: ίδια φόρμα με τα στοιχεία της, στην αποθήκευση η παλιά φεύγει (replaceStatus)
-  const fix: Status | undefined = initial.replace ? state.statuses.find(x => x.id === initial.replace) : undefined;
-  const base = useMemo(() => (fix ? { ...state, statuses: state.statuses.filter(x => x !== fix) } : state), [state, fix]);
-  const ttl = fix ? 'Διόρθωση: ' + (fix.type === 'PUN' ? 'ποινή' : statusLbl(fix, state.settings.lists)) : 'Δήλωση κατάστασης';
-  // πρώτα ο στρατιώτης (Michael, 18/10)· από την καρτέλα του ατόμου ξεκινά από την κατάσταση
-  const statusFirst = !!initial.cat && !initial.pids?.length;
-  const order = statusFirst ? ORDER_STATUS_FIRST : [1, 2, 3, 4];
-  const [step, setStep] = useState(() => (initial.pids?.length ? (initial.type ? 3 : 2) : statusFirst ? 2 : 1)); const [unlock, setUnlock] = useState(false); const [ack, setAck] = useState(false);
-  const punKinds = listOf(state.settings.lists, 'punKinds'), leaveKinds = listOf(state.settings.lists, 'leaveKinds');
-  const [cmd, setCmd] = useState(() => ({ pids: (initial.pids || []) as number[], type: (initial.type || 'EY') as TypeKey, from: initial.from || today, to: initial.to || initial.from || today, note: initial.note || '', kind: initial.kind || (initial.type === 'LEAVE' ? leaveKinds[0] : initial.type === 'PUN' ? punKinds[0] : ''), by: initial.by || '', reason: initial.reason || '', on: initial.on || today, fromTime: initial.fromTime || '', toTime: initial.toTime || '', open: !!initial.open, minus: initial.minus ?? true, hkCol: (initial.hkCol || KOL_NO_COL) as string, noOut: initial.noOut ?? true, dest: (initial.dest || '') as string }));
-  const [err, setErr] = useState<any>(null);
-  const set = (patch: P) => { setCmd(c => ({ ...c, ...patch, ...(patch.type ? { kind: patch.type === 'LEAVE' ? leaveKinds[0] : punKinds[0] } : {}) })); setErr(null); setAck(false); };
-  const t = TYPES[cmd.type];
-  const hasKind = cmd.type === 'PUN' || cmd.type === 'LEAVE';
-  const isPun = cmd.type === 'PUN';
-  const isKol = cmd.type === 'KOL';
-  // δικά σου ιατρικά (Ρυθμίσεις › Λίστες): στη γραμμή «Ιατρικά» δίπλα στα βασικά· κρατούν τον βασικό τύπο και το όνομά τους στο «είδος»
-  const meds = medKinds(state.settings.lists);
-  const med = !hasKind ? meds.find(m => m.like === cmd.type && m.name === cmd.kind) : undefined;
-  const picks = useMemo(() => {
-    const bl = (blocksOf(state.settings) || state.settings.blocks) as BlockDef[];
-    return statusPicks(punKinds, leaveKinds, meds, x => statSummary(x, bl, state.settings.lists));
-  }, [state.settings]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ιατρικά: ένα ή περισσότερα μαζί για τον ίδιο λόγο (Michael, 18/10)· καθένα γράφεται σε δική του γραμμή στο Excel
-  const [medSel, setMedSel] = useState<string[]>(() => (initial.type && TYPES[initial.type as TypeKey]?.cat === 'med' ? [meds.some(m => m.like === initial.type && m.name === initial.kind) ? 'm:' + initial.kind : initial.type] : []));
-  const medPicks = t.cat === 'med' ? picks.filter(x => medSel.includes(x.key)) : [];
-  const noteInfo = medPicks.some(x => x.type && medNote({ type: x.type, kind: x.kind }, state.settings.lists)) || (!!med && !!med.note);   // «Μόνο σημείωση» (Michael, 4/11)
-  // ώρες: στις άδειες, στο νοσοκομείο και στον ΣΤΕΠ (hours.ts), προαιρετικές
-  const timed = hasTimes(cmd.type);
-  // χωρίς λήξη: μόνο ιατρικά, ΣΤΕΠ και νοσοκομείο (canOpen)· χωρίς «έως» και ώρα επιστροφής
-  const open = cmd.open && canOpen(cmd.type);
-  const tOut = timed ? normTime(cmd.fromTime) : '', tBack = timed && !open ? normTime(cmd.toTime) : '';
-  const full = { ...cmd, open: open || undefined, kind: hasKind ? cmd.kind : med ? med.name : undefined, note: cmd.note || undefined, by: isPun ? cmd.by : undefined, reason: isPun ? cmd.reason : undefined, on: isPun ? cmd.on : undefined, fromTime: tOut || undefined, toTime: tBack || undefined, unlockPast: unlock || undefined, force: ack || undefined, minus: isKol && cmd.minus || undefined, hkCol: isKol && cmd.minus ? cmd.hkCol : undefined, noOut: isKol && cmd.noOut || undefined, dest: t.cat === 'abs' && cmd.dest.trim() ? cmd.dest : undefined };
-  const cmds = medPicks.length > 1 ? medPicks.map(x => ({ ...full, type: x.type, kind: x.key.startsWith('m:') ? x.kind : undefined })) : [full];
-  const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
-  const max = isPun ? overMax(cmd.kind, daysBetween(cmd.from, cmd.to), state.settings.lists) : 0;
-  // στέρηση εξόδου: πότε λήγει για τον καθένα, αφού δεν μετράνε οι μέρες με υπηρεσία ή βραδινή εκπαίδευση
-  const dep = isPun && isDeprivation({ type: 'PUN', kind: cmd.kind });
-  const depEnds = dep ? cmd.pids.map(pid => ({ pid, to: deprivationEnd(base, pid, cmd.from, daysBetween(cmd.from, cmd.to)) })).filter(x => x.to !== cmd.to) : [];
-  const plan = useMemo(() => (step === 4 ? planStatusChanges(base, cmds, today) : null), [step, base, cmd, medSel, today, unlock]);
-  const next = () => {
-    if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; }
-    if (isKol && !cmd.note.trim()) { setErr('Γράψε τι υπηρεσία είναι, π.χ. «Υπηρεσία ΣΤΕΠ». Φαίνεται στη Δύναμη και στο Σήμερα.'); return; }
-    if (tOut == null || tBack == null) { setErr('Η ώρα ' + (tOut == null ? timeNames(cmd.type).fromG : timeNames(cmd.type).toG) + ' δεν διαβάζεται. Γράψε π.χ. 14:00 ή άφησέ την κενή.'); return; }
-    if (tOut && tBack && cmd.from === cmd.to && tBack <= tOut) { setErr('Την ίδια μέρα η ' + timeNames(cmd.type).to + ' πρέπει να είναι μετά την ' + timeNames(cmd.type).from + '.'); return; }
-    // επικάλυψη ή «δεν βγαίνει έξοδο»: προειδοποίηση και επιβεβαίωση, όχι απαγόρευση (Michael, 17/10)
-    const p = planStatusChanges(base, cmds, today);
-    const warn = [...p.overlaps.map((o, i) => html`<span key=${'o' + i}><br/><b><${RkName} p=${pm.get(o.pid)!}/></b> έχει ήδη ${statusLbl(o.status, state.settings.lists)} ${dm(o.status.from)}–${dm(o.status.to)}</span>`),
-      ...p.blocked.map(b => html`<span key=${'b' + b.pid}><br/><b><${RkName} p=${pm.get(b.pid)!}/></b> δεν βγαίνει έξοδο (${dayName(b.date, today).toLowerCase()}): ${b.reason}</span>`)];
-    if (warn.length && !ack) { setAck(true); setErr(html`<b>Προσοχή:</b>${warn}<br/>Πάτα ξανά «Συνέχεια» για να το δηλώσεις παρ' όλα αυτά, ή άλλαξε άτομα και ημερομηνίες.`); return; }
-    setStep(4);
-  };
-  const names = medPicks.length > 1 ? medPicks.map(x => x.short).join(' + ') : med ? med.name : t.label;
-  const apply = async () => {
-    if (!(await run(fix ? { t: 'replaceStatus', id: fix.id, cmds } : cmds.length > 1 ? { t: 'declareMany', cmds } : { t: 'declare', cmd: full }, false))) return;
-    onClose();
-    const w = cmd.pids.length === 1 ? rkShort(pm.get(cmd.pids[0])!) : cmd.pids.length + ' άτομα';
-    const acts = [undoMark()];
-    if (plan && plan.conflicts.length) acts.unshift({ label: 'Βρες αντικαταστάτη', fn: () => nav.go('guard', { guardDate: plan.conflicts[0].date }) });
-    toast({ text: (fix ? 'Διορθώθηκε ' + (cmd.type === 'PUN' ? 'η ποινή' : names) + ': ' : cmd.type === 'PUN' ? 'Ποινή: ' : 'Δηλώθηκε ' + names + ': ') + w, actions: acts });
-  };
-  const outPick = useCallback((p: Person) => outBlock(state, cmd.from, p.id), [state, cmd.from]);
-  const curKey = hasKind ? cmd.type + ':' + cmd.kind : med ? 'm:' + med.name : cmd.type;
-  const cur = picks.find(x => x.key === curKey);
-  const [q, setQ] = useState(''); const [catF, setCatF] = useState<string>(initial.cat || ''); const [picked, setPicked] = useState(!!initial.type);
-  const shown = picks.filter(x => (!catF || x.cat === catF || (catF === 'med' && x.cat === 'other')) && (!q.trim() || normGreek(x.short + ' ' + x.long + ' ' + CAT_NAME[x.cat]).includes(normGreek(q))));
-  // σε κάθε βήμα ο κέρσορας πάει στο πεδίο του (αναζήτηση στρατιώτη, αναζήτηση κατάστασης)
-  useEffect(() => { (document.querySelector('.ui-dialog [data-autofocus]') as HTMLElement | null)?.focus(); }, [step]);
-  // μη ιατρικό: μία επιλογή και πας στο «Πότε»· ιατρικό: μπαίνει ή βγαίνει από τα επιλεγμένα
-  const choose = (x: StatusPick) => {
-    setErr(null); setAck(false);
-    if (x.cat !== 'med') { setPicked(true); setMedSel([]); setCmd(c => ({ ...c, type: x.type, kind: x.kind || '' })); setStep(cmd.pids.length ? 3 : 1); return; }
-    const sel = medSel.includes(x.key) ? medSel.filter(k => k !== x.key) : [...(t.cat === 'med' ? medSel : []), x.key];
-    setMedSel(sel); setPicked(sel.length > 0);
-    const first = picks.find(y => sel.includes(y.key));
-    if (first) setCmd(c => ({ ...c, type: first.type, kind: first.kind || '' }));
-  };
-  const toStatus = () => { if (!cmd.pids.length) { setErr('Διάλεξε ποιον αφορά η δήλωση. Γράψε τα πρώτα γράμματα του επωνύμου.'); return; } setErr(null); setStep(picked ? 3 : 2); };
-  const toDates = () => { if (!medPicks.length) { setErr('Διάλεξε ένα ή περισσότερα ιατρικά.'); return; } setErr(null); setStep(cmd.pids.length ? 3 : 1); };
-  const desc = html`${order.map((n, i) => html`<span key=${n}>${i > 0 && ' › '}<span style=${{ fontWeight: step === n ? 700 : 400 }}>${i + 1} ${STEPS[n - 1]}</span></span>`)}`;
-  const who = cmd.pids.length === 1 && pm.get(cmd.pids[0]) ? rkFull(pm.get(cmd.pids[0])!) : cmd.pids.length + ' άτομα';
-  // με διαλεγμένο άτομο: Esc, ✕ και κλικ έξω ρωτούν πριν πεταχτεί η δήλωση
-  const dirty = cmd.pids.length > 0 && (fix ? 'Η διόρθωση δεν αποθηκεύτηκε. Αν κλείσεις, μένει όπως ήταν.' : 'Η δήλωση δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.');
-  const stBadges = medPicks.length > 1 ? html`${medPicks.map((x, i) => html`<span key=${x.key}>${i > 0 && ' + '}<${Badge} tone=${TYPES[x.type].tone}>${x.short}<//></span>`)}` : cur ? html`<${Badge} tone=${TYPES[cur.type].tone}>${cur.short}<//> ${cur.long}` : t.long;
-  // τι διάλεξες στα προηγούμενα βήματα, με «Αλλαγή» για να γυρίσεις
-  const sum = html`<div className="declsum">
-    ${cmd.pids.length > 0 && html`<span><b>${who}</b></span><${Button} variant="link" onClick=${() => { setErr(null); setStep(1); }}>Αλλαγή<//>`}
-    ${step === 3 && html`${cmd.pids.length > 0 && html`<span className="declsum__sep">·</span>`}<span>${stBadges}</span><${Button} variant="link" onClick=${() => { setErr(null); setStep(2); }}>Αλλαγή<//>`}</div>`;
-  if (step === 1) return html`<${Dialog} title=${ttl} description=${desc} dirty=${dirty} onClose=${onClose} closeOnOverlay=${!cmd.pids.length}
-    footer=${html`${statusFirst ? html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(2); }}>Πίσω<//>` : html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>`}<${Button} onClick=${toStatus}>${picked ? 'Συνέχεια: Από πότε έως πότε' : 'Συνέχεια: Κατάσταση'}<//>`}>
-    <div className="field"><label className="field__label" htmlFor="dsp">${statusFirst ? 'Ποιοι στρατιώτες *' : 'Ποιος στρατιώτης *'} <span className="muted" style=${{ fontWeight: 400 }}>${statusFirst ? '(γράψε επώνυμο και Enter, μετά τον επόμενο)' : '(ένας ή περισσότεροι)'}</span></label>
-      <${PersonPicker} id="dsp" multiple=${true} value=${cmd.pids} onChange=${(pids: number[]) => set({ pids })} date=${cmd.from} unavailable=${picked && t.cat === 'out' ? outPick : undefined} onBlocked=${(q: Person, why: string) => { set({ pids: [...cmd.pids, q.id] }); toast({ text: rkShort(q) + ': ' + why + '. Μπήκε· θα ζητηθεί επιβεβαίωση.' }); }} autoFocus=${true}/></div>
-    ${picked && html`<div className="declsum"><span>${stBadges}</span><${Button} variant="link" onClick=${() => { setErr(null); setStep(2); }}>Αλλαγή<//></div>`}
-    ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
-  <//>`;
-  if (step === 2) return html`<${Dialog} title=${ttl} description=${desc} dirty=${dirty} size="lg" onClose=${onClose} closeOnOverlay=${!cmd.pids.length}
-    footer=${html`${statusFirst ? html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//>` : html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(1); }}>Πίσω<//>`}${medPicks.length > 0 && html`<${Button} onClick=${toDates}>${cmd.pids.length ? 'Συνέχεια: Από πότε έως πότε' : 'Συνέχεια: Στρατιώτες'}${medPicks.length > 1 ? ' (' + medPicks.length + ' ιατρικά)' : ''}<//>`}`}>
-    ${cmd.pids.length > 0 && sum}
-    <div className="field"><label className="field__label" htmlFor="dsq">Ποια κατάσταση δηλώνεις;</label>
-      <input id="dsq" className="ui-input" data-autofocus placeholder="Αναζήτηση, π.χ. ΕΥ, κανονική, κράτηση" value=${q} onChange=${(e: any) => setQ(e.target.value)} onKeyDown=${(e: any) => { if (e.key !== 'Enter') return; e.preventDefault(); if (!q.trim() && medPicks.length) toDates(); else if (shown.length) { choose(shown[0]); setQ(''); } }}/>
-      ${catF && html`<span className="field__help">Μόνο ${catF === 'med' ? 'ιατρικά, ΣΤΕΠ και νοσοκομείο' : CAT_NAME[catF].toLowerCase()}. <${Button} variant="link" onClick=${() => setCatF('')}>Δείξε όλες τις καταστάσεις<//></span>`}</div>
-    <div className="stpick">${CATS.filter(([c]) => shown.some(x => x.cat === c)).map(([c, l]) => html`<div key=${c}><div className="stpick__cat">${l}${c === 'med' && html`<span className="stpick__hint"> · ένα ή περισσότερα, γράφεται το καθένα σε δική του γραμμή</span>`}</div><div className="stpick__grid">${shown.filter(x => x.cat === c).map(x => {
-      const on = c === 'med' ? medSel.includes(x.key) && t.cat === 'med' : picked && x.key === curKey;
-      return html`<button key=${x.key} type="button" className=${cx('stpick__opt', on && 'is-on')} aria-pressed=${c === 'med' ? on : undefined} onClick=${() => choose(x)}>
-        <span>${c === 'med' && html`<span className=${cx('stpick__box', on && 'is-on')} aria-hidden="true">${on ? '✓' : ''}</span>`}<${Badge} tone=${x.long === 'Μόνο σημείωση' ? 'note' : TYPES[x.type].tone}>${x.short}<//> <b>${x.long}</b></span>${x.help && html`<small>${x.help}</small>`}</button>`; })}</div></div>`)}
-      ${!shown.length && html`<span className="muted">Καμία κατάσταση με «${q}».</span>`}</div>
-    ${noteInfo && html`<${Alert} tone="info"><span>Μόνο σημείωση: δεν αλλάζει υπηρεσίες, έξοδο, ΗΚΑΙ και Δύναμη. Φαίνεται στην καρτέλα του και στα Ιατρικά › Σημειώσεις.</span><//>`}
-    ${err && html`<${Alert} tone="bad"><span>${err}</span><//>`}
-  <//>`;
-  if (step === 3) return html`<${Dialog} title=${ttl} description=${desc} dirty=${dirty} onClose=${onClose} closeOnOverlay=${false}
-    footer=${html`<${Button} variant="outline" onClick=${() => { setErr(null); setStep(statusFirst ? 1 : 2); }}>Πίσω<//><${Button} onClick=${next}>Συνέχεια: Τι θα αλλάξει<//>`}>
-    ${sum}
-    <${DateRangeField} from=${cmd.from} to=${cmd.to} open=${open} onChange=${(from: string, to: string) => set({ from, to })}/>
-    ${canOpen(cmd.type) && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${open} onChange=${(e: any) => set({ open: e.target.checked })}/><span><b>Χωρίς λήξη</b><small>Ισχύει μέχρι να πατήσεις «Λήξη νωρίτερα…» στα Ιατρικά. Στο Excel το «έως» μένει κενό.</small></span></label>`}
-    ${timed && html`<div className="field"><div className="field-row">
-      <${TimeField} id="dpt-out" label=${'Ώρα ' + timeNames(cmd.type).fromG} value=${cmd.fromTime} onChange=${(v: string) => set({ fromTime: v })} help=${'Προαιρετικό · ' + dow(cmd.from) + ' ' + dm(cmd.from)}/>
-      ${!open && html`<${TimeField} id="dpt-in" label=${'Ώρα ' + timeNames(cmd.type).toG} value=${cmd.toTime} onChange=${(v: string) => set({ toTime: v })} help=${'Προαιρετικό · ' + dow(cmd.to) + ' ' + dm(cmd.to)}/>`}
-    </div><span className="field__help">${timesHelp(state.rules, state.settings)}</span></div>`}
-    ${t.cat === 'abs' && html`<div className="field"><label className="field__label" htmlFor="dpdest">Κατεύθυνση (προαιρετικό)</label><input id="dpdest" className="ui-input" placeholder="π.χ. Κόρινθος" value=${cmd.dest} onChange=${(e: any) => set({ dest: e.target.value })}/><span className="field__help">${destNote({ type: cmd.type, kind: cmd.kind }, cmd.dest, state.settings.lists)}</span></div>`}
-    ${isPun && max > 0 && html`<${Alert} tone="warn"><span>${punLbl(cmd.kind)} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
-    ${dep && html`<span className="note">${daysBetween(cmd.from, cmd.to)} ${daysBetween(cmd.from, cmd.to) === 1 ? 'ημέρα' : 'ημέρες'} στέρηση εξόδου. Οι μέρες με υπηρεσία ή βραδινή εκπαίδευση δεν μετράνε: η λήξη μετακινείται μόνη της.</span>`}
-    ${isPun && html`<div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="dpby">Ποιος τιμώρησε</label><${Combo} id="dpby" className="ui-input" options=${byList} placeholder="π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${cmd.by} onChange=${(e: any) => set({ by: e.target.value })}/></div>
-      <div className="field"><label className="field__label" htmlFor="dpon">Ημερομηνία τιμωρίας</label><${DateField} id="dpon" className="ui-input" value=${cmd.on} onChange=${(e: any) => e.target.value && set({ on: e.target.value })}/></div></div>
-    <div className="field"><label className="field__label" htmlFor="dprs">Λόγος (διότι…)</label><textarea id="dprs" className="ui-input" rows="2" placeholder="π.χ. απουσίαζε από το προσκλητήριο" value=${cmd.reason} onChange=${(e: any) => set({ reason: e.target.value })}></textarea><span className="field__help">Βγαίνει έτοιμο κείμενο για το Word στα «Ιατρικά και ποινές». Τον τιμωρήσαντα γράψε τον σε αιτιατική («ΛΧΙΑ ΔΟΚΙΜΙΟ») και στην ${HK()} μπαίνει «ΑΠΟ ΤΟΝ ΛΧΙΑ ΔΟΚΙΜΙΟ»· για γυναίκα γράψε «την …» μπροστά.</span></div>`}
-    ${isKol && html`<div className="field"><label className="field__label" htmlFor="dsn">Τι υπηρεσία *</label><input id="dsn" className="ui-input" data-autofocus placeholder="π.χ. Υπηρεσία ΣΤΕΠ" value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/><span className="field__help">Φαίνεται στη Δύναμη, στο Σήμερα και στην καρτέλα του.</span></div>
-      <label className="rule"><input type="checkbox" className="ui-check" checked=${cmd.minus} onChange=${(e: any) => set({ minus: e.target.checked })}/><span><b>Αφαιρείται από τους παρόντες</b><small>Μετρά στους κωλυόμενους της Δύναμης και, αν διαλέξεις στήλη, της ${HK()}. Αλλιώς μένει παρών, φαίνεται όμως ποιος είναι κωλυόμενος και γιατί.</small></span></label>
-      ${cmd.minus && html`<div className="field"><label className="field__label" htmlFor="dskc">Στήλη της ${HK()} (προαιρετικό)</label><${Select} id="dskc" className="ui-input" value=${cmd.hkCol} onChange=${(e: any) => set({ hkCol: e.target.value })}><option value=${KOL_NO_COL}>Καμία (δεν μπαίνει στην ${HK()})</option>${KOL_COLS.map(([k, l]) => html`<option key=${k} value=${k}>${l}</option>`)}<//></div>`}
-      <label className="rule"><input type="checkbox" className="ui-check" checked=${cmd.noOut} onChange=${(e: any) => set({ noOut: e.target.checked })}/><span><b>Χωρίς έξοδο</b><small>Δεν βγαίνει έξοδο τις μέρες αυτές. Αλλιώς βγαίνει κανονικά.</small></span></label>`}
-    ${!isKol && html`<div className="field"><label className="field__label" htmlFor="dsn">${isPun ? 'Παρατήρηση' : 'Παρατήρηση (λόγος)'}</label><input id="dsn" className="ui-input" placeholder=${isPun ? 'Προαιρετικό, π.χ. αριθμός διαταγής' : 'Προαιρετικό, π.χ. γιατί ή αριθμός διαταγής'} value=${cmd.note} onChange=${(e: any) => set({ note: e.target.value })}/></div>`}
-    ${err && html`<${Alert} tone=${ack ? 'warn' : 'bad'}><span>${err}</span><//>`}
-  <//>`;
-  const one = cmd.pids.length === 1 && pm.get(cmd.pids[0]);
-  // μία γραμμή στα Ιατρικά για κάθε ιατρικό και κάθε στρατιώτη
-  const rows = medPicks.length * cmd.pids.length > 1 ? medPicks.flatMap(x => cmd.pids.map(pid => ({ x, pid }))) : [];
-  return html`<${Dialog} title="Τι θα αλλάξει" description=${desc} dirty=${dirty} onClose=${onClose} closeOnOverlay=${false}
-    footer=${html`<${Button} variant="outline" onClick=${() => setStep(3)}>Πίσω<//><${Button} onClick=${apply}>Αποθήκευση<//>`}>
-    ${fix && html`<${Alert} tone="info"><span>Η παλιά καταχώρηση (${fix.type === 'PUN' ? 'ποινή ' + punLbl(fix.kind) : statusLbl(fix, state.settings.lists)}, ${fix.open ? 'από ' + dm(fix.from) + ' χωρίς λήξη' : fix.from === fix.to ? dm(fix.from) : dm(fix.from) + '–' + dm(fix.to)}) φεύγει και στη θέση της γράφεται η παρακάτω.</span><//>`}
-    <p style=${{ margin: 0 }}>${fix ? 'Γράφεται' : 'Δηλώνεις'} ${medPicks.length > 1 ? stBadges : html`<${Badge} tone=${t.tone}>${hasKind ? (cmd.type === 'PUN' ? 'Ποινή: ' + punLbl(cmd.kind) : 'Άδεια: ' + cmd.kind) : med ? med.name + (med.warn ? '' : ' (σαν ' + t.label + ')') : t.long}<//>`} ${one ? html`τον <b><${RkName} p=${one} fn=${fullName}/></b> του ${one.father}` : html`<b>${cmd.pids.length} άτομα</b> (${cmd.pids.map(id => rkShort(pm.get(id)!)).join(', ')})`}, ${open ? html`από <b>${dow(cmd.from)} ${dm(cmd.from)}</b>, <b>χωρίς λήξη</b>` : cmd.from === cmd.to ? html`<b>${dayName(cmd.from, today).toLowerCase()} ${dm(cmd.from)}</b>` : html`από <b>${dow(cmd.from)} ${dm(cmd.from)}</b> έως <b>${dow(cmd.to)} ${dm(cmd.to)}</b>`}${timesTxt(full) ? ' (' + timesTxt(full) + ')' : ''}${full.dest ? ', κατεύθυνση ' + full.dest.trim() : ''}.</p>
-    ${rows.length > 0 && html`<div className="field"><span className="field__label">Γράφονται ${rows.length} γραμμές στα Ιατρικά, μία για κάθε ${medPicks.length > 1 ? 'ιατρικό' : 'στρατιώτη'}${medPicks.length > 1 && cmd.pids.length > 1 ? ' και στρατιώτη' : ''}</span><ul className="declrows">${rows.slice(0, 12).map(r => html`<li key=${r.x.key + r.pid}><${Badge} tone=${TYPES[r.x.type].tone}>${r.x.short}<//> ${fullName(pm.get(r.pid)!)} · ${open ? dm(cmd.from) + ' – χωρίς λήξη' : cmd.from === cmd.to ? dm(cmd.from) : dm(cmd.from) + '–' + dm(cmd.to)}${cmd.note ? ' · ' + upper(cmd.note) : ''}</li>`)}</ul>${rows.length > 12 && html`<span className="muted">και άλλες ${rows.length - 12}</span>`}</div>`}
-    ${depEnds.length > 0 && html`<${Alert} tone="info"><span>${depEnds.map((x, i) => html`<span key=${x.pid}>${i > 0 && html`<br/>`}<b><${RkName} p=${pm.get(x.pid)!}/></b> λήγει <b>${dow(x.to)} ${dm(x.to)}</b>, γιατί έχει υπηρεσία ή βραδινή εκπαίδευση μέσα στις μέρες της ποινής.</span>`)}</span><//>`}
-    ${noteInfo && html`<${Alert} tone="info"><span>Μόνο σημείωση: δεν αλλάζει υπηρεσίες, έξοδο, ΗΚΑΙ και Δύναμη. Φαίνεται στην καρτέλα του και στα Ιατρικά › Σημειώσεις.</span><//>`}
-    ${plan && plan.files.length > 0 && html`<div className="field"><span className="field__label">Επηρεάζει</span><${ChangePlanList} plan=${plan}/></div>`}
-    ${plan && plan.conflicts.length > 0 && html`<${Alert} tone="warn">Μετά την αποθήκευση θα σου προταθεί αντικαταστάτης στις Υπηρεσίες.<//>`}
-    ${plan && (plan.past.length > 0 || unlock) && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${unlock} onChange=${(e: any) => setUnlock(e.target.checked)}/><span><b>Ξεκλείδωσε τις περασμένες μέρες</b><small>Βγαίνει και από υπηρεσίες που έχουν ήδη γίνει (π.χ. διόρθωση λάθους). Αλλιώς αυτές μένουν όπως έγιναν.</small></span></label>`}
-    ${plan && plan.alongside.length > 0 && html`<${Alert} tone="info"><span>${plan.alongside.map((a, i) => html`<span key=${i}>${i > 0 && html`<br/>`}<b><${RkName} p=${pm.get(a.pid)!}/></b> έχει ήδη ${statusLbl(a.status, state.settings.lists)} ${a.status.open ? 'χωρίς λήξη' : dm(a.status.from) + '–' + dm(a.status.to)}.</span>`)}<br/>Ισχύουν και τα δύο· στις υπηρεσίες και στην έξοδο μετρά ο πιο αυστηρός περιορισμός.</span><//>`}
-    ${isKol && html`<span className="note"><b>${cmd.note.trim()}</b>. ${cmd.minus ? 'Αφαιρείται από τους παρόντες' + (cmd.hkCol === KOL_NO_COL ? ' και μετρά στους κωλυόμενους της Δύναμης, δεν μπαίνει στην ' + HK() + '.' : ' και μετρά στην ' + HK() + ', στη στήλη «' + kolColName(cmd.hkCol) + '».') : 'Μένει στους παρόντες και δεν μπαίνει στην ' + HK() + '.'} ${cmd.noOut ? 'Δεν βγαίνει έξοδο.' : 'Βγαίνει κανονικά έξοδο.'} Δεν μπαίνει στις δικές μας υπηρεσίες.</span>`}
-    ${RECORD_CATS.includes(t.cat) && cmd.type !== 'PUN' && html`<span className="note">${open ? 'Χωρίς λήξη: μένει μέχρι να πατήσεις «Λήξη νωρίτερα…» στα Ιατρικά.' : 'Στις ' + dm(addDays(cmd.to, 1)) + ' αφαιρείται αυτόματα και γράφεται στο Ιστορικό.'}</span>`}
-    ${ack && html`<${Alert} tone="warn"><span>Δηλώνεται παρά την προειδοποίηση (επικάλυψη ή «δεν βγαίνει έξοδο»).</span><//>`}
-    <span className="note">Μπορείς να το αναιρέσεις αμέσως μετά ή από το Ιστορικό.</span>
-  <//>`;
-}
+// Deprecated paths: these dialogs moved to renderer/features/ (Phase 5.3b); removed in Phase 7.
+export { DeclareStatusDialog, StatusFixDialog, LeaveEndDialog, leaveStarted };
