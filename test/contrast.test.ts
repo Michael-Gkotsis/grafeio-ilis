@@ -49,7 +49,7 @@ const PAIRS: [string, string, number][] = [
   // διαχωριστικές γραμμές και κάρτες: να φαίνονται και σε ξεθωριασμένη οθόνη
   ['border', 'card', 1.45], ['border', 'background', 1.3], ['rail-on', 'rail', 1.3],
   // μενού αριστερά (U4): κείμενο σε κανονική, πατημένη και ενεργή γραμμή· οι τίτλοι ομάδων και ο δείκτης της ενεργής
-  ['nav-fg', 'nav-bg', 4.5], ['nav-fg', 'nav-hover', 4.5], ['nav-on-fg', 'nav-on', 4.5], ['nav-muted', 'nav-bg', 4.5], ['nav-accent', 'nav-on', 3],
+  ['nav-fg', 'nav-bg', 4.5], ['nav-fg', 'nav-hover', 4.5], ['nav-on-fg', 'nav-on', 4.5], ['nav-muted', 'nav-bg', 4.5], ['nav-accent', 'nav-on', 3], ['foreground', 'selected', 4.5],
 ];
 
 // [κείμενο/στοιχείο, φόντο, ελάχιστο Lc]

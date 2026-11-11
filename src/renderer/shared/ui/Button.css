@@ -1,28 +1,30 @@
 /*
- * Button (.ui-btn and its variants, sizes, disabled look, compact density).
+ * Button (.ui-btn and its variants, sizes, disabled look).
  * Does NOT: style a button that sits inside a screen widget (.topbar .ui-btn, .xlcard .ui-btn live with their widget).
  * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
  * Why: Button.tsx and the Dialog footers use it.
  * Covering test: bench:styles, test/contrast.test.ts.
  */
 
+/* Variants map to the four roles of the design system: Κύριο = default, Δευτερεύον = secondary and outline,
+   Ήσυχο = ghost (and link), Κίνδυνος = destructive. */
 .ui-btn {
+  --btn-h: var(--h-ctl);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 16px;
-  border-radius: var(--radius);
+  gap: 6px;
+  height: var(--btn-h);
+  padding: 0 12px;
+  border-radius: 6px;
   border: 1px solid transparent;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
   white-space: nowrap;
   transition:
     background-color 0.12s,
-    border-color 0.12s,
-    box-shadow 0.12s;
+    border-color 0.12s;
   flex: none;
 }
 .ui-btn svg {
@@ -32,8 +34,8 @@
 }
 .ui-btn--default {
   background: var(--primary);
+  border-color: var(--primary);
   color: var(--primary-fg);
-  box-shadow: var(--shadow-sm);
 }
 .ui-btn--default:hover {
   filter: brightness(1.08);
@@ -49,27 +51,29 @@
 .ui-btn--outline {
   background: var(--card);
   border-color: var(--input);
-  box-shadow: var(--shadow-sm);
 }
 .ui-btn--outline:hover {
   background: var(--hover);
   border-color: var(--primary);
 }
-/* ghost keeps a visible border so it still reads as a button on a dimmed screen */
+/* quiet: no border at rest, the hover fill shows where the button is */
 .ui-btn--ghost {
   background: transparent;
-  border-color: var(--border);
+  border-color: transparent;
+  color: var(--info);
 }
 .ui-btn--ghost:hover {
   background: var(--hover);
-  border-color: var(--input);
 }
+/* danger: red text on the plain button face, as proto.css .btn.dng */
 .ui-btn--destructive {
-  background: var(--destructive);
-  color: var(--destructive-fg);
+  background: var(--card);
+  border-color: var(--input);
+  color: var(--bad);
 }
 .ui-btn--destructive:hover {
-  filter: brightness(1.08);
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
 }
 .ui-btn--link {
   background: none;
@@ -81,15 +85,18 @@
   text-underline-offset: 3px;
 }
 .ui-btn--sm {
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
+  --btn-h: min(28px, var(--h-ctl));
+  padding: 0 9px;
+  font-size: 12.5px;
 }
+/* icon only: a square the height of the control; the ghost one keeps a thin border (it is the dialog close button) */
 .ui-btn--icon {
-  width: 36px;
-  height: 36px;
+  width: var(--btn-h);
   padding: 0;
-  border-radius: 999px;
+}
+.ui-btn--icon.ui-btn--ghost {
+  border-color: var(--border);
+  color: var(--foreground);
 }
 /* disabled: grey fill and dashed border instead of opacity, so the text stays readable (the tooltip says why) */
 .ui-btn:disabled {
@@ -107,17 +114,15 @@
   color: var(--muted-fg);
   text-decoration: none;
 }
-[data-density="compact"] .ui-btn {
-  height: 34px;
-  padding: 0 12px;
-}
-[data-density="compact"] .ui-btn--sm {
-  height: 28px;
-  padding: 0 8px;
-}
 
 @media (max-width: 767px) {
   .ui-dialog__foot .ui-btn {
     flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-btn {
+    transition: none;
   }
 }
