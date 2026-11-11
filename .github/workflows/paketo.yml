@@ -33,7 +33,14 @@ jobs:
       - run: npm test
       - run: npm run build
       # Το Setup.exe φτιάχνεται με το makensis (NSIS)
-      - run: sudo apt-get update && sudo apt-get install -y nsis
+      # Ο καθρέφτης του Ubuntu πού και πού κολλά (έτσι έπεσε το 0.1.234 μετά από 5 λεπτά): όριο χρόνου και έως 4 προσπάθειες
+      - name: Εγκατάσταση NSIS
+        run: |
+          for i in 1 2 3 4; do
+            if timeout 120 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update && timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y nsis; then exit 0; fi
+            echo "apt προσπάθεια $i απέτυχε, ξαναδοκιμάζω"; sleep $((i * 10))
+          done
+          exit 1
       - run: npm run package:win -- x64
       - run: npm run package:setup -- x64
       - run: npm run package:win -- ia32
