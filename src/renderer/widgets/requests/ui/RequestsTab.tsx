@@ -1,8 +1,8 @@
 // «ΗΚΑΙ › Αιτήσεις»: the requests of a day, written once in the ΗΚΑΙ of that day (5. Αιτήσεις).
 // Purpose: `RequestsTab`, the page header with the day bar and the requests card.
 // Does NOT: list or answer the requests (ui/RequestsCard.tsx does).
-// Owner layer: renderer/widgets/requests. Why: moved verbatim from screens/other.ts (Phase 6.0); the «Καταστάσεις» hub drops
-//   it in as one piece.
+// Owner layer: renderer/widgets/requests. Why: moved verbatim from screens/other.ts (Phase 6.0); the «Καταστάσεις» hub
+//   drops it in as one piece.
 // Covering test: test/screens-main.test.ts, test/screens-tabs.test.ts.
 import { addDays } from '../../../../shared/dates';
 import { HK } from '../../../../shared/unit';

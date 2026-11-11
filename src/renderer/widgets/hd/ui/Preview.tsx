@@ -11,6 +11,6 @@ export interface PreviewProps {
 }
 
 export function Preview({ html }: PreviewProps) {
-  // biome-ignore lint/security/noDangerouslySetInnerHtml: the HTML is made by hdPageHtml from the app's own escaped data
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: hdPageHtml builds it from the app's own escaped data
   return <div className="hd__page" dangerouslySetInnerHTML={{ __html: html }} />;
 }

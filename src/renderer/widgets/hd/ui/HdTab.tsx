@@ -1,9 +1,11 @@
-// «ΗΚΑΙ › Ημερήσια Διαταγή» (Michael, 3/11): fills from the duties and the day's changes, you write only what the app does not know.
+// «ΗΚΑΙ › Ημερήσια Διαταγή» (Michael, 3/11): fills from the duties and the day's changes, you write only what the app
+//   does not know.
 // Purpose: `HdTab`: comes out as Word (ready or your own template) or as a print; each line is changed or removed only
 //   here, the ΗΚΑΙ does not change.
-// Does NOT: fill the document (shared/hd.ts does), write the Word file (main/hdDocx.ts does) or hold the state (model/useHd.tsx).
-// Owner layer: renderer/widgets/hd. Why: moved verbatim from screens/hd.ts (Phase 6.0); the «Καταστάσεις» hub drops it in as
-//   one piece.
+// Does NOT: fill the document (shared/hd.ts does), write the Word file (main/hdDocx.ts does) or hold the state
+//   (model/useHd.tsx).
+// Owner layer: renderer/widgets/hd. Why: moved verbatim from screens/hd.ts (Phase 6.0); the «Καταστάσεις» hub drops it
+//   in as one piece.
 // Covering test: test/screens-main.test.ts, test/hd.test.ts, test/screens-dialogs-forms.test.ts.
 import type { ChangeEvent } from 'react';
 import { dayName, dm } from '../../../../shared/dates';

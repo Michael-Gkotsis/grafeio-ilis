@@ -1,8 +1,8 @@
 // «ΗΚΑΙ › Άδειες» (Michael, 18/10): regular, honorary and sick leaves, who is away and when they come back.
 // Purpose: `LeavesTab`, the list of leaves with «Ώρες και κατεύθυνση…», «Διόρθωση…» and «Λήξη νωρίτερα…».
 // Does NOT: decide which leaves show (model/leaveView.ts does) or edit them (the leave-end and fix-status features do).
-// Owner layer: renderer/widgets/status-lists. Why: moved verbatim from screens/leaves.ts (Phase 6.0); the «Καταστάσεις» hub
-//   and the ΗΚΑΙ both drop it in as one piece.
+// Owner layer: renderer/widgets/status-lists. Why: moved verbatim from screens/leaves.ts (Phase 6.0); the «Καταστάσεις»
+//   hub and the ΗΚΑΙ both drop it in as one piece.
 // Covering test: test/screens-main.test.ts, test/leaves.test.ts.
 import type { ChangeEvent } from 'react';
 import { dm, dow } from '../../../../shared/dates';

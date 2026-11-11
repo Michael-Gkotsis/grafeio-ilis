@@ -1,6 +1,6 @@
 // «5. Αιτήσεις (μέρα)»: the soldiers' requests of the day, numbered as they come out in the ΗΚΑΙ.
-// Purpose: `RequestsCard`: every request waits for «Εγκρίθηκε» or «Απορρίφθηκε» (1/11); a leave request with the approval
-//   becomes a leave (the ΗΚΑΙ keeps only the request). Old ones without an answer (old) do not count.
+// Purpose: `RequestsCard`: every request waits for «Εγκρίθηκε» or «Απορρίφθηκε» (1/11); a leave request with the
+//   approval becomes a leave (the ΗΚΑΙ keeps only the request). Old ones without an answer (old) do not count.
 // Does NOT: write the commands (model/useRequestsCard.ts does) or edit a request (ui/RequestDialog.tsx does).
 // Owner layer: renderer/widgets/requests. Why: moved verbatim from screens/other.ts (Phase 6.0).
 // Covering test: test/screens-main.test.ts, test/requests.test.ts.

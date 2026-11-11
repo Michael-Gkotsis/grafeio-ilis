@@ -1,7 +1,8 @@
 // The actions of the Ημερήσια Διαταγή tab: come out as Word or print, start again from the data, pick an own template.
 // Purpose: `hdActions`, plain functions (not hooks) over what `useHd` already holds.
 // Does NOT: hold any state or call a hook (model/useHd.tsx does).
-// Owner layer: renderer/widgets/hd. Why: moved verbatim from screens/hd.ts (Phase 6.0); split from `useHd` to keep it short.
+// Owner layer: renderer/widgets/hd. Why: moved verbatim from screens/hd.ts (Phase 6.0); split from `useHd` to keep it
+//   short.
 // Covering test: test/screens-main.test.ts, test/hd.test.ts.
 import type { ISODate } from '../../../../shared/dates';
 import type { HdDoc } from '../../../../shared/hd';

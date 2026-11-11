@@ -48,8 +48,8 @@ export function useRequestsCard(date: string) {
     if (!(await run({ t: 'decideRequest', id: r.id, ok }, false))) return;
     toast({ text: decisionToast(r, ok, pm.get(r.pid)!), actions: [undoMark()] });
   };
-  // «Εγκρίθηκε» on a leave request (Λ1, Λ2): the same check as the declaration; an overlap with another leave, duties that
-  // empty or days in the past ask first
+  // «Εγκρίθηκε» on a leave request (Λ1, Λ2): the same check as the declaration; an overlap with another leave,
+  // duties that become empty or days in the past ask first
   const approve = (r: PersonRequest) => {
     const plan = approvalPlan(state, r, today);
     if (plan && planNeedsOk(plan)) setAsk({ r, plan });

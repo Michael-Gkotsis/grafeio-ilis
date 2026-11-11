@@ -1,5 +1,6 @@
 // «Ιατρικά» and «ΗΚΑΙ › Ποινές»: one list of medical records or penalties, with tabs, search and corrections.
-// Purpose: `RecordList` (mode 'med' or 'pun'), its tabs, kind filters and the «Λήξη νωρίτερα» / «Διόρθωση…» / «Κείμενο» buttons.
+// Purpose: `RecordList` (mode 'med' or 'pun'), its tabs, kind filters and the «Λήξη νωρίτερα» / «Διόρθωση…» / «Κείμενο»
+//   buttons.
 // Does NOT: decide what each tab lists (model/view.ts does), write the records (the commands do) or draw the dialogs
 //   it opens (features/leave-end, features/fix-status and ui/PunTextDialog.tsx do).
 // Owner layer: renderer/widgets/status-lists. Why: moved verbatim from screens/other.ts (Phase 6.0); «Ιατρικά» and the

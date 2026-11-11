@@ -1,6 +1,7 @@
 // Pure rules of the «Αιτήσεις» (requests) card and dialogs.
 // Purpose: the sort order, the toast after an answer, the form of a request and what is missing from it.
-// Does NOT: read the store, write commands or draw anything (model/useRequestsCard.ts and model/useRequestDialog.ts do).
+// Does NOT: read the store, write commands or draw anything (model/useRequestsCard.ts and model/useRequestDialog.ts
+//   do).
 // Owner layer: renderer/widgets/requests. Why: moved verbatim from screens/other.ts (Phase 6.0).
 // Covering test: test/screens-main.test.ts, test/requests.test.ts, test/screens-dialogs-forms.test.ts.
 import { byName } from '../../../../shared/hkaiText';
