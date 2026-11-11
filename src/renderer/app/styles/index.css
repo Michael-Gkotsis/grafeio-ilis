@@ -10,7 +10,8 @@
  *
  * Layers, lowest to highest priority (a later layer wins regardless of selector specificity):
  *   reset      - browser-default resets only.
- *   tokens     - CSS variables only (colours, spacing, radii, themes). Owned by UI work.
+ *   tokens     - CSS variables only: palette.css (primitive colours) then tokens.css (meanings per theme, sizes).
+ *                Owned by UI work.
  *   base       - element selectors (html, body, a, table ...), no classes; plus boot.css (static startup skeleton).
  *   shared-ui  - co-located component CSS of src/renderer/shared/ui, pulled in through shared/ui/ui.css.
  *   entities   - co-located component CSS of the entities layer, imported by its slice.
@@ -28,6 +29,7 @@
  */
 @layer reset, tokens, base, shared-ui, entities, features, widgets, pages, utilities, legacy;
 
+@import url("../../shared/ui/palette.css") layer(tokens);
 @import url("../../shared/ui/tokens.css") layer(tokens);
 @import url("./boot.css") layer(base);
 @import url("./base.css") layer(base);

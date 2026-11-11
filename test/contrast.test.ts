@@ -2,7 +2,7 @@
 // Στόχος για παλιές οθόνες χαμηλής αντίθεσης: κείμενο 7:1 (AAA), δευτερεύον κείμενο 4.5:1+ (AA), όρια κουμπιών/πεδίων 3:1.
 // Ο λόγος του WCAG 2 υπερεκτιμά την αντίθεση στο σκοτεινό (ανοιχτό κείμενο σε σκούρο φόντο), γι' αυτό ελέγχεται και το APCA (Lc).
 import { describe, expect, it } from 'vitest';
-import { colourTokens, readStyles } from './support/css';
+import { colourTokens, rawTokens, readStyles } from './support/css';
 
 // Phase 0.4: the tokens used to come from `indexOf(':root{')` in styles.css. They now come from every .css under
 // src/renderer (@import followed, var() chains resolved, see test/support/css.ts), so the same checks hold when the
@@ -49,7 +49,10 @@ const PAIRS: [string, string, number][] = [
   // διαχωριστικές γραμμές και κάρτες: να φαίνονται και σε ξεθωριασμένη οθόνη
   ['border', 'card', 1.45], ['border', 'background', 1.3], ['rail-on', 'rail', 1.3],
   // μενού αριστερά (U4): κείμενο σε κανονική, πατημένη και ενεργή γραμμή· οι τίτλοι ομάδων και ο δείκτης της ενεργής
-  ['nav-fg', 'nav-bg', 4.5], ['nav-fg', 'nav-hover', 4.5], ['nav-on-fg', 'nav-on', 4.5], ['nav-muted', 'nav-bg', 4.5], ['nav-accent', 'nav-on', 3], ['foreground', 'selected', 4.5],
+  ['nav-fg', 'nav-bg', 4.5], ['nav-fg', 'nav-hover', 4.5], ['nav-on-fg', 'nav-on', 4.5], ['nav-muted', 'nav-bg', 4.5], ['nav-accent', 'nav-on', 3], ['foreground', 'selected', 4.5],  // palette PR (11/11): text on gold, the filled button of the «Excel» card, the Excel title bar, the grey behind a page
+  // preview, gold words on the top bar (was 4.05 in the light theme), and the «written by hand» dot as a 3:1 mark
+  ['on-gold', 'gold', 7], ['bar-btn-fg', 'bar-btn', 7], ['xl-bar-fg', 'xl-bar', 4.5], ['backdrop-fg', 'backdrop', 4.5], ['gold', 'bar', 4.5],
+  ['hand-dot', 'card', 3], ['hand-dot', 'muted', 3],
 ];
 
 // [κείμενο/στοιχείο, φόντο, ελάχιστο Lc]
@@ -82,6 +85,23 @@ describe('αντίθεση χρωμάτων', () => {
     const auto = colourTokens(rules, 'auto-dark');
     expect(Object.keys(auto).length).toBeGreaterThan(30);
     expect(auto).toEqual(dark);
+  });
+  // the «Σκοτεινό» block used to miss --overlay, --shadow and the scrollbar thumbs (not hex, so the test above never saw
+  // them): on Win7, where only this block can apply, scrollbars were dark on dark. Every declaration must match.
+  it('the two dark blocks declare exactly the same values (also shadows, overlay, scrollbars)', () => {
+    const auto = Object.fromEntries(rawTokens(rules, 'auto-dark'));
+    expect(Object.keys(auto)).toEqual(expect.arrayContaining(['--overlay', '--shadow', '--sb-thumb', '--shade']));
+    expect(auto).toEqual(Object.fromEntries(rawTokens(rules, 'dark')));
+  });
+  // palette.css is the only place for colour values; a rule elsewhere reads a semantic token so it follows the theme.
+  // Allowed: `#000` inside a mask-image (an alpha mask, not a colour on screen).
+  it('colour values live only in the --p-* primitives, and rules never read a primitive directly', () => {
+    const literal = /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch|color-mix)\(/i;
+    const decls = rules.flatMap(r => Object.entries(r.decls).map(([prop, value]) => ({ prop, value, sel: r.selectors.join(',') })));
+    const loose = decls.filter(d => literal.test(d.value) && !d.prop.startsWith('--p-') && !/mask-image$/.test(d.prop));
+    expect(loose.map(d => `${d.sel} { ${d.prop}: ${d.value} }`)).toEqual([]);
+    const direct = decls.filter(d => !d.prop.startsWith('--') && d.value.includes('var(--p-'));
+    expect(direct.map(d => `${d.sel} { ${d.prop}: ${d.value} }`)).toEqual([]);
   });
   it('τα tokens βρέθηκαν και στα δύο θέματα (όχι έλεγχος πάνω σε άδειο σύνολο)', () => {
     for (const t of [light, dark]) expect(Object.keys(t)).toEqual(expect.arrayContaining(['background', 'foreground', 'card', 'muted-fg', 'primary']));

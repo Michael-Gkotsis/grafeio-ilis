@@ -99,7 +99,7 @@ abbr[data-tip]{text-decoration:underline dotted;cursor:help}
 
 /* ExcelSheet (στην εφαρμογή: ExcelSheet.module.css) */
 .xl{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--card);min-width:0;container-type:inline-size}
-.xl__bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#1d6b3a;color:#fff;font-size:13px}
+.xl__bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--xl-bar);color:var(--xl-bar-fg);font-size:13px}
 .xl__fn{font-family:var(--f-mono);font-weight:600}
 .xl__meta{margin-left:auto;opacity:.92}
 .xl__scroll{overflow:auto;background:var(--xl-bg)}
@@ -278,7 +278,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .xlcard__hd{color:var(--gold);margin:0}
 .xlcard p{margin:0;font-size:14px;line-height:1.45}
 .xlcard .mono{font-size:13px;word-break:normal}
-.xlcard .ui-btn--outline{background:var(--bar-fg);color:var(--bar);border-color:var(--bar-fg);width:100%}
+.xlcard .ui-btn--outline{background:var(--bar-btn);color:var(--bar-btn-fg);border-color:var(--bar-btn);width:100%}
 .xlcard .ui-btn--outline + .ui-btn--outline{background:transparent;color:var(--bar-fg)}
 .xlcard .ui-btn--ghost{color:var(--bar-fg);border-color:var(--bar-muted);width:100%}
 .xlcard .ui-btn--ghost:hover{background:var(--bar-field)}
@@ -387,7 +387,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 /* όταν κολλά πάνω: μέρα, κενές, «Επόμενη κενή», αυτόματη συμπλήρωση, Excel */
 .guard__bar .gb-stuck{display:none}
 .gb-mon{display:inline-flex;gap:6px;align-items:center}.gb-mon__lbl{font-size:13px;color:var(--muted-fg);white-space:nowrap}
-.guard__bar.is-stuck{box-shadow:0 8px 12px -10px rgba(0,0,0,.35)}
+.guard__bar.is-stuck{box-shadow:0 8px 12px -10px var(--shade-strong)}
 .guard__bar.is-stuck > :not(.gb-stuck):not(.gb-keep):not(.ui-badge){display:none}
 .guard__bar.is-stuck .gb-stuck{display:flex;gap:8px;align-items:center}
 .guard__bar.is-stuck > .gb-stuck:last-child{margin-left:auto}
@@ -506,7 +506,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 /* ενεργό φίλτρο */
 .actfilter{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:2px 4px 2px 10px;border-radius:999px;background:var(--warn-bg);color:var(--foreground)}
 .actfilter button{border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:999px;color:inherit}
-.actfilter button:hover{background:rgba(0,0,0,.08)}
+.actfilter button:hover{background:var(--hover-tint)}
 .stack{display:flex;flex-direction:column;gap:16px}
 table.kv{width:100%;border-collapse:collapse;font-size:14px}
 table.kv th{text-align:left;font-weight:500;padding:4px 8px 4px 0;color:var(--muted-fg);vertical-align:top}
@@ -529,7 +529,7 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .psk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 12px;background:var(--card)}
 .psk>div{flex:1;min-width:180px;display:flex;flex-direction:column}.psk small{color:var(--muted-fg);font-size:12px}
 .psk__acts{display:flex;gap:6px;flex-wrap:nowrap}
-.chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
+.chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 
 /* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
 /* DateField (common.ts): το κρυφό <input type="date"> που ανοίγει μόνο το ημερολόγιο («Άλλη μέρα από το ημερολόγιο…») */
@@ -539,8 +539,8 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .ui-chip--view svg{width:12px;height:12px;margin-right:4px;vertical-align:-1px;color:var(--warn)}
 .ui-chip--view[aria-pressed="true"] svg{color:inherit}
 /* ζουμ προεπισκόπησης Excel */
-.xl__zoom{margin-left:8px;height:24px;padding:0 10px;border:1px solid rgba(255,255,255,.55);border-radius:999px;background:transparent;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
-.xl__zoom:hover{background:rgba(255,255,255,.14)}
+.xl__zoom{margin-left:8px;height:24px;padding:0 10px;border:1px solid var(--xl-bar-line);border-radius:999px;background:transparent;color:var(--xl-bar-fg);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.xl__zoom:hover{background:var(--xl-bar-hover)}
 /* Ρυθμίσεις › Εμφάνιση */
 .pref{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)}
 .pref:first-child{border-top:0;padding-top:0}
@@ -790,7 +790,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 .wstate__why span{font-family:var(--f-mono)}.wstate__why i{font-style:normal;color:var(--muted-fg)}
 .wstate__none{font-size:12px}
 .ptable__row.is-wout{box-shadow:inset 3px 0 0 var(--bad-line)}
-.wpop{position:fixed;z-index:80;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px;display:flex;flex-direction:column;gap:8px}
+.wpop{position:fixed;z-index:80;background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px var(--shade);padding:12px;display:flex;flex-direction:column;gap:8px}
 .wpop__head{display:flex;flex-direction:column;gap:2px}.wpop__head b{font-size:14px}.wpop__head small{font-size:12px;color:var(--muted-fg)}
 .wpop__when{display:flex;gap:8px}
 .wpop__when label,.wpop__field{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--muted-fg)}
@@ -839,7 +839,7 @@ dl.kv dt.kv__sub::before{content:"└ ";color:var(--border)}
 /* Πάνω μπάρα: εγγραφή στο Excel στο παρασκήνιο */
 .xlchip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;color:var(--bar-fg);opacity:.85;min-width:0;flex-shrink:1}
 .xlchip.is-on{opacity:1;border:1px solid var(--bar-line)}
-.xlchip.is-bad{opacity:1;color:#1b1f16;background:var(--gold);font-weight:600}
+.xlchip.is-bad{opacity:1;color:var(--on-gold);background:var(--gold);font-weight:600}
 .xlchip__dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:xlpulse 1s ease-in-out infinite alternate;flex:none}
 .xlchip__txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .xlchip__short{display:none}
@@ -918,10 +918,10 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-pvbar__pg .ui-btn--icon{width:30px;height:30px;font-size:18px}
 .rep-pvbar__cnt{display:flex;gap:2px 14px;flex-wrap:wrap;font-size:12px;font-weight:600;color:var(--muted-fg)}
 .rep-wiz__why,.btn-why{margin-right:auto;font-size:12px;color:var(--muted-fg)}.btn-why{align-self:center}
-.rep-pv{background:#5f6368;border-radius:var(--radius);padding:10px;min-height:240px;max-height:62vh;overflow:auto;position:relative}
+.rep-pv{background:var(--backdrop);border-radius:var(--radius);padding:10px;min-height:240px;max-height:62vh;overflow:auto;position:relative}
 .rep-pv.is-busy .rep-pv__page{opacity:.55;transition:opacity .2s}
-.rep-pv .empty{color:#eee}
-.rep-pv__more{color:#eee;text-align:center;margin:0}
+.rep-pv .empty{color:var(--backdrop-fg)}
+.rep-pv__more{color:var(--backdrop-fg);text-align:center;margin:0}
 .rep-pickhint{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius);background:var(--info-bg);color:var(--info);font-size:13px}
 .rep-pickhint .ui-btn{margin-left:auto}
 .rep-opts{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;font-size:13px}
@@ -1277,7 +1277,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .imer__c.is-free,.imer__key i.is-free{background:var(--warn-bg);color:var(--warn)}
 .imer__c.is-future,.imer__key i.is-future{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--border) 4px 5px)}
 .imer__c.is-today{box-shadow:inset 2px 0 0 var(--primary),inset -2px 0 0 var(--primary)}
-.imer__c.is-hand::after,.imer__key i.is-hand::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#e07b00}
+.imer__c.is-hand::after,.imer__key i.is-hand::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--hand-dot)}
 .imer__grp th{background:var(--secondary);text-align:left!important;font-weight:700!important}
 .imer__tot th,.imer__tot td{background:var(--muted);font-weight:700!important}.imer__tot th{text-align:left}
 .imer__key{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13px;color:var(--muted-fg);align-items:center}
@@ -1298,7 +1298,7 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .hd__add{justify-self:start;border:0;background:none;color:var(--primary);font-weight:600;cursor:pointer;padding:2px 0}.hd__zero{font-size:18px}
 .hd__ta{height:auto;padding:8px 10px;resize:vertical}
 .hd__zoom{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;text-align:left}
-.hd__page{background:#fff;color:#000;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
+.hd__page{background:var(--paper);color:var(--paper-fg);border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
 .rep-more-presets{margin-top:12px;padding:14px 16px 16px}   /* η ui-card δεν έχει δικό της padding */
 
 /* ---------- Υπηρεσίες: σχήμα νούμερα × άτομα (Michael, 4/11) ---------- */
