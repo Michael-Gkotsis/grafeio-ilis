@@ -1,129 +1,35 @@
 // Σήμερα, ιατρικά/ποινές, δύναμη, ΗΚΑΙ, ιστορικό, templates/εισαγωγή/ρυθμίσεις, αναζήτηση (Ctrl+K)
-import { RkName, rkFull, rkShort } from '../rankName';
+import { RkName, rkShort } from '../rankName';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Card, Dialog, PageHeader, Segmented, Strip, Tabs, useMedia, useToast } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { useNowMin } from '../clock';
-import { LeaveEndDialog, StatusFixDialog } from './people';
-import { hasTimes, normTime, timeNames } from '../../shared/hours';
+import { normTime } from '../../shared/hours';
 import { HdTab } from './hd';
 import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, TemplateNote, TimeField } from '../common';
 import { hkaiFront, hkaiBack } from '../sheets';
-import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
+import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, hkaiCounts, personMap, strengthAt, type StatusPlan } from '../../shared/rules';
-import { addDays, daysBetween, dayName, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
+import { addDays, dm, dmy, dow, parseD, DOW_GEN } from '../../shared/dates';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
-import { collator, normGreek, upper } from '../../shared/text';
-import { hkWho, overMax, punBySuggestions, punDays, punLbl, punText, skippedDays } from '../../shared/punish';
+import { normGreek, upper } from '../../shared/text';
+import { hkWho } from '../../shared/punish';
 import { byName, destNote, movesOn, outReason, personLine, reqWhat } from '../../shared/hkaiText';
 import { reqText } from '../../shared/commands';
-import { LeavesTab } from './leaves';
-import { medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, listOf, rankTxt, statusLbl } from '../../shared/ranks';
+import { LeavesTab, PunTextDialog, RecordList } from '../widgets/status-lists';
+import { cadreCountRows, hkRowList, listOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 import { SRC } from './today';
 import { reqWaiting } from './todayView';
-type P = any;
 
+// Deprecated path (Phase 6.0, removed in Phase 7): the lists moved to widgets/status-lists.
 // Ιατρικά: δικό τους μενού. Ποινές: καρτέλα μέσα στο μενού ΗΚΑΙ (Michael, 18/10). Ίδια λίστα, άλλο φίλτρο.
 export function RecordsScreen() { return html`<${RecordList} mode="med"/>`; }
-const MED_TABS = ['med', 'changes', 'expired', 'notes'], PUN_TABS = ['pun', 'expired', 'allpun'];
-function RecordList({ mode }: { mode: 'med' | 'pun' }) {
-  const { state, run, today, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const pm = personMap(state.people); const now = useNowMin();
-  const tabKey = mode === 'med' ? 'recTab' : 'punTab';
-  const tab: string = (mode === 'med' ? MED_TABS : PUN_TABS).includes(nav.params[tabKey]) ? nav.params[tabKey] : mode;
-  const [pq, setPq] = useState(''); const dpq = useDeferredValue(pq);
-  const medF: string = nav.params.medF || '';
-  const chDay: string = nav.params.recDate || today;   // καρτέλα «Μεταβολές ημέρας»: ιατρικά που ξεκινούν ή λήγουν αυτή τη μέρα
-  const y = addDays(today, -1);
-  // «Μόνο σημείωση» (Michael, 4/11): δεν μετρά στα Τώρα / Μεταβολές / Έληξαν, έχει τη δική της καρτέλα
-  const nl = state.settings.lists; const hasNotes = hasNoteKinds(nl);
-  const isMed = (s: Status) => ['med', 'other'].includes(TYPES[s.type].cat) && !medNote(s, nl);
-  const list = useMemo(() => {
-    // αναζήτηση σε όλες τις καρτέλες: όνομα, κωδικός, είδος ποινής, σημείωση, ποιος τιμώρησε, λόγος
-    const qq = normGreek(dpq.trim());
-    const ok = (s: Status) => pm.has(s.pid) && (!qq || normGreek(fullName(pm.get(s.pid)!) + ' ' + TYPES[s.type].label + ' ' + TYPES[s.type].long + ' ' + (s.kind || '') + ' ' + (s.note || '') + ' ' + (s.by || '') + ' ' + (s.reason || '')).includes(qq));
-    if (tab === 'notes') return notesOf(state.statuses, nl).filter(s => pm.has(s.pid) && !s.pending && coversDay(s, today) && ok(s)).sort((a, b) => collator.compare(pm.get(a.pid)!.last, pm.get(b.pid)!.last) || collator.compare(pm.get(a.pid)!.first, pm.get(b.pid)!.first));
-    if (tab === 'allpun') return state.statuses.filter(s => s.type === 'PUN' && ok(s)).sort((a, b) => b.from.localeCompare(a.from));
-    if (tab === 'changes') return state.statuses.filter(s => isMed(s) && !s.pending && (s.from === chDay || (!s.open && s.to === chDay)) && ok(s)).sort((a, b) => Number(b.from === chDay) - Number(a.from === chDay) || a.to.localeCompare(b.to));
-    if (tab === 'expired') return state.statuses.filter(s => (mode === 'med' ? isMed(s) : s.type === 'PUN') && !s.pending && !awayNow(s, today, now) && s.to >= addDays(today, -14) && ok(s)).sort((a, b) => b.to.localeCompare(a.to));
-    return state.statuses.filter(s => awayNow(s, today, now) && (tab === 'med' ? isMed(s) && (!medF || statusLbl(s, state.settings.lists) === medF) : s.type === 'PUN') && ok(s)).sort((a, b) => a.to.localeCompare(b.to));
-  }, [state.statuses, nl, tab, today, dpq, medF, mode, now, chDay]);
-  // ΕΥ, ΕΑ, ΕΟ, ΣΤΕΠ… ως φίλτρα, με πόσοι έχουν τον καθένα (Michael, 17/10: τα ιατρικά εδώ, όχι στο Δυναμολόγιο)
-  const medCnt = useMemo(() => { const m = new Map<string, number>(); state.statuses.forEach(s => { if (awayNow(s, today, now) && isMed(s) && pm.has(s.pid)) { const l = statusLbl(s, state.settings.lists); m.set(l, (m.get(l) || 0) + 1); } }); return [...m].sort((a, b) => b[1] - a[1]); }, [state.statuses, today, state.settings.lists, now]);
-  const nMed = state.statuses.filter(s => awayNow(s, today, now) && isMed(s)).length;
-  const nNote = hasNotes ? notesOf(state.statuses, nl).filter(s => pm.has(s.pid) && !s.pending && coversDay(s, today)).length : 0;
-  const nPun = state.statuses.filter(s => s.to >= today && s.type === 'PUN' && pm.has(s.pid)).length;
-  const left = (s: Status) => {
-    if (s.to < today) { const d = daysBetween(s.to, today) - 1; return d === 1 ? 'έληξε χθες' : 'έληξε πριν από ' + d + ' ημ.'; }
-    if (s.open) return 'χωρίς λήξη (κενό «έως» στο Excel)';
-    const n = daysBetween(today, s.to) - 1; return s.from > today ? 'ξεκινά ' + dayName(s.from, today).toLowerCase() : n === 0 ? 'λήγει σήμερα' : n === 1 ? 'λήγει αύριο' : 'λήγει σε ' + n + ' ημ.'; };
-  // στέρηση εξόδου: ποιες μέρες δεν μέτρησαν (υπηρεσία, βραδινή εκπαίδευση), για να φαίνεται γιατί μετακινήθηκε η λήξη
-  const skipTxt = (s: Status) => { const k = skippedDays(state, s); return k.length ? ' · ' + punDays(s) + ' ημ. ποινή, δεν μετράνε: ' + k.map(x => dm(x.date) + ' ' + (x.why === 'duty' ? 'υπηρεσία' : 'βραδινή εκπαίδευση')).join(', ') : ''; };
-  const [stop, setStop] = useState<Status | null>(null);
-  const [end, setEnd] = useState<Status | null>(null);
-  const [txt, setTxt] = useState<Status | null>(null);
-  const [fix, setFix] = useState<Status | null>(null);
-  const act = (fn: () => Promise<unknown>, text: string) => async () => { if (await fn()) toast({ text, actions: [undoMark()] }); };
-  return html`<div>
-    ${mode === 'med' ? html`<${PageHeader} title="Ιατρικά" sub="Όταν λήξει ένα ιατρικό, αφαιρείται μόνο του την επόμενη μέρα.">
-      <${Button} onClick=${() => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) })}>+ Ιατρικό<//><//>
-    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ recTab: v })} items=${[{ value: 'med', label: 'Τώρα (' + nMed + ')', tip: 'Όσα ισχύουν τώρα' }, { value: 'changes', label: 'Μεταβολές ημέρας', tip: 'Όσα ξεκινούν ή λήγουν τη μέρα που διαλέγεις' }, { value: 'expired', label: 'Έληξαν', tip: 'Όσα έληξαν τις τελευταίες 14 μέρες' }, ...(hasNotes ? [{ value: 'notes', label: 'Σημειώσεις (' + nNote + ')', tip: 'Ιατρικά «μόνο σημείωση»: φαίνονται μόνο εδώ και στην καρτέλα του στρατιώτη' }] : [])]}/>${tab === 'changes' && html`<span style=${{ marginLeft: '12px' }}><${DateBar} value=${chDay} onChange=${(d: string) => nav.set({ recDate: d })} days=${[y, today, addDays(today, 1)]}/></span>`}</div>`
-    : html`<${PageHeader} title="Ποινές" sub="Ισχύουν αμέσως και γράφονται στην ${HK()} της μέρας που επιβλήθηκαν.">
-      <${Button} onClick=${() => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) })}>+ Ποινή<//><//>
-    <div style=${{ marginBottom: '12px' }}><${Segmented} value=${tab} onChange=${(v: string) => nav.set({ punTab: v })} items=${[{ value: 'pun', label: 'Τώρα (' + nPun + ')', tip: 'Όσες ισχύουν τώρα' }, { value: 'expired', label: 'Έληξαν', tip: 'Όσες έληξαν τις τελευταίες 14 μέρες' }, { value: 'allpun', label: 'Όλες', tip: 'Όλες οι ποινές, με αναζήτηση' }]}/></div>`}
-    <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder=${mode === 'med' ? 'Όνομα, κωδικός (π.χ. ΕΥ) ή σημείωση · Ctrl+F' : 'Όνομα, είδος ποινής, ποιος τιμώρησε ή λόγος · Ctrl+F'} value=${pq} onChange=${(e: any) => setPq(e.target.value)}/>${dpq.trim() && html`<span className="toolbar__count">${list.length} ${list.length === 1 ? 'βρέθηκε' : 'βρέθηκαν'}</span>`}</div>
-    ${tab === 'med' && medCnt.length > 1 && html`<div className="filters"><${Strip} role="group" aria-label="Είδος ιατρικού">${[['', 'Όλα', nMed] as [string, string, number], ...medCnt.map(([l, n]) => [l, l, n] as [string, string, number])].map(([k, l, n]) => html`<button key=${k || 'all'} type="button" className="ui-chip" aria-pressed=${medF === k} onClick=${() => nav.set({ medF: medF === k ? '' : k })}>${l}<span className="cnt">${n}</span></button>`)}<//></div>`}
-    <div className="ui-card">${list.length ? html`<ul className="rec">${list.map(s => { const t = TYPES[s.type]; const p = pm.get(s.pid)!; return html`<li key=${s.id}>
-      <div><button type="button" className="linkish who" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${p} fn=${fullName}/></button> <${Badge} tone=${medNote(s, nl) ? 'note' : t.tone} data-tip=${t.long}>${statusLbl(s, state.settings.lists)}<//>
-        <small>${dow(s.from)} ${dm(s.from)} – ${s.open ? '…' : dow(s.to) + ' ' + dm(s.to)} · ${tab === 'changes' ? [s.from === chDay && 'ξεκινά ' + (chDay === today ? 'σήμερα' : dm(chDay)), !s.open && s.to === chDay && (s.to < today ? 'έληξε ' : 'λήγει ') + (chDay === today ? 'σήμερα' : dm(chDay))].filter(Boolean).join(' και ') : tab === 'expired' ? (s.to === today ? timeNames(s.type).to + ' σήμερα ' + s.toTime : 'αφαιρέθηκε αυτόματα ' + (s.to === y ? 'σήμερα' : dm(addDays(s.to, 1)))) : tab === 'notes' ? (s.open ? 'χωρίς λήξη' : 'ως ' + dm(s.to)) : left(s)}${tab !== 'expired' && tab !== 'changes' && tab !== 'notes' && effects(t) ? ' · ' + effects(t) : ''}${s.note ? ' · ' + s.note : ''}${s.type === 'PUN' && (s.by || s.reason) ? ' · ' + [s.by && 'από ' + s.by, s.reason && 'διότι ' + s.reason].filter(Boolean).join(', ') : ''}${skipTxt(s)}</small></div>
-      <${Button} size="sm" variant="ghost" onClick=${() => setFix(s)} data-tip="Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το" data-tip-side="left">Διόρθωση…<//>
-      ${s.type === 'PUN' && html`<${Button} size="sm" variant="outline" onClick=${() => setTxt(s)} data-tip="Έτοιμο κείμενο για το Word, με «Αντιγραφή»" data-tip-side="left">Κείμενο<//>`}
-      ${tab === 'expired' ? html`<${Badge} tone="ok">Αυτόματα<//>` : tab === 'allpun' || s.to < today ? html`<${Badge} tone=${s.to < today ? 'outline' : 'warn'}>${s.to < today ? 'Έληξε' : 'Ισχύει'}<//>` : html`<${Button} size="sm" variant="ghost" onClick=${() => (hasTimes(s.type) ? setEnd(s) : setStop(s))} data-tip=${'Μόνο αν σταμάτησε πριν από τις ' + dm(s.to) + ' (π.χ. τον έκοψε ο γιατρός). Αλλιώς λήγει μόνο του.'} data-tip-side="left">Λήξη νωρίτερα…<//>`}
-    </li>`; })}</ul>` : html`<div className="empty">${tab === 'expired' ? 'Τίποτα δεν έληξε τις τελευταίες 14 μέρες.' : tab === 'changes' ? 'Κανένα ιατρικό δεν ξεκινά ή λήγει ' + (chDay === today ? 'σήμερα' : dm(chDay)) + '.' : mode === 'med' ? (tab === 'notes' ? 'Καμία σημείωση υγείας σε ισχύ.' : 'Κανένα ιατρικό σε ισχύ.') : 'Καμία ποινή σε ισχύ.'}</div>`}</div>
-    ${stop && (() => { const t = TYPES[stop.type]; const p = pm.get(stop.pid)!; const what = (stop.type === 'PUN' ? 'Η ποινή' : t.label) + ' του ' + rkShort(p); return html`<${Dialog} role="alertdialog" title="Λήξη νωρίτερα;" description=${what + ' · ' + dm(stop.from) + '–' + (stop.open ? 'χωρίς λήξη' : dm(stop.to))} onClose=${() => setStop(null)}
-      footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setStop(null)}>Όχι, να λήξει κανονικά<//><${Button} onClick=${async () => { const x = stop; setStop(null); await act(() => run({ t: 'endStatus', id: x.id }, false), what + ': σταμάτησε, από σήμερα δεν ισχύει')(); }}>Ναι, από σήμερα δεν ισχύει<//>`}>
-      <p style=${{ margin: 0 }}>${what} ${stop.open ? html`είναι <b>χωρίς λήξη</b>` : html`θα έληγε <b>${dayName(stop.to, today).toLowerCase()} ${dm(stop.to)}</b>`}. Αν πατήσεις «Ναι», σταματά τώρα: από σήμερα ${t.noDuty ? 'ξαναμπαίνει σε υπηρεσίες' : t.noArmed ? 'ξαναμπαίνει και σε ένοπλες θέσεις' : t.noOut ? 'μπορεί να βγει έξοδο' : 'δεν ισχύει'}.</p><//>`; })()}
-    ${txt && html`<${PunTextDialog} st=${txt} onClose=${() => setTxt(null)}/>`}
-    ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}
-    ${fix && html`<${StatusFixDialog} st=${fix} onClose=${() => setFix(null)}/>`}
-    ${tab === 'med' && html`<p className="note" style=${{ marginTop: '8px' }}>ΕΟ = ελεύθερος ορθοστασίας, ΕΑ = ελεύθερος ασκήσεων, ΕΥ = ελεύθερος υπηρεσίας. ΣΤΕΠ = εισαγωγή ΣΤΕΠ.</p>`}
-  </div>`;
-}
-
-// Κείμενο ποινής για το Word: η διάρκεια υπογραμμισμένη, αντιγραφή με μορφοποίηση
-function copyRich(htmlStr: string, plain: string): boolean {
-  const div = document.createElement('div'); div.contentEditable = 'true'; div.innerHTML = htmlStr;
-  div.style.cssText = 'position:fixed;left:-9999px;top:0;white-space:pre-wrap'; document.body.appendChild(div);
-  const r = document.createRange(); r.selectNodeContents(div); const sel = window.getSelection()!; sel.removeAllRanges(); sel.addRange(r);
-  let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; }
-  sel.removeAllRanges(); div.remove();
-  if (!ok && navigator.clipboard) { navigator.clipboard.writeText(plain).catch(() => undefined); ok = true; }
-  return ok;
-}
-export function PunTextDialog({ st, onClose }: P) {
-  const { state, run } = useStore(); const toast = useToast();
-  const p = personMap(state.people).get(st.pid)!;
-  const [f, setF] = useState({ by: st.by || '', reason: st.reason || '', on: st.on || st.from });
-  const byList = useMemo(() => punBySuggestions(state), [state.statuses, state.cadreList]);
-  const t = punText(p, { ...st, by: f.by.trim() || undefined, reason: f.reason.trim() || undefined, on: f.on }, state.settings.lists);
-  const max = overMax(st.kind, punDays(st), state.settings.lists);
-  const dirty = f.by !== (st.by || '') || f.reason !== (st.reason || '') || f.on !== (st.on || st.from);
-  const save = async () => (dirty ? run({ t: 'setPunInfo', id: st.id, by: f.by, reason: f.reason, on: f.on }, false) : true);
-  return html`<${Dialog} title="Κείμενο ποινής" description=${rkFull(p) + ' · ' + punLbl(st.kind) + ' ' + dm(st.from) + '–' + dm(st.to)} onClose=${onClose} dirty=${dirty && 'Τα στοιχεία της ποινής (ποιος, πότε, λόγος) δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//>${dirty && html`<${Button} variant="outline" onClick=${async () => { if (await save()) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ποινής' }); }}>Αποθήκευση<//>`}<${Button} onClick=${async () => { if (!(await save())) return; toast({ text: copyRich(t.html, t.plain) ? 'Αντιγράφηκε. Στο Word πάτα Ctrl+V.' : 'Δεν έγινε αντιγραφή. Επίλεξε το κείμενο και πάτα Ctrl+C.' }); }}>Αντιγραφή<//>`}>
-    <div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="pt-by">Ποιος τιμώρησε</label><${Combo} id="pt-by" className="ui-input" options=${byList} placeholder="σε αιτιατική, π.χ. ΛΧΙΑ ΔΟΚΙΜΙΟ" value=${f.by} onChange=${(e: any) => setF({ ...f, by: e.target.value })}/></div>
-      <div className="field"><label className="field__label" htmlFor="pt-on">Ημερομηνία τιμωρίας</label><${DateField} id="pt-on" className="ui-input" value=${f.on} onChange=${(e: any) => e.target.value && setF({ ...f, on: e.target.value })}/></div></div>
-    <div className="field"><label className="field__label" htmlFor="pt-r">Λόγος (διότι…)</label><textarea id="pt-r" className="ui-input" rows="2" value=${f.reason} onChange=${(e: any) => setF({ ...f, reason: e.target.value })}></textarea></div>
-    ${max > 0 && html`<${Alert} tone="warn"><span>${punLbl(st.kind)} πάνω από ${max} ημέρες. Έλεγξε τη διάρκεια.</span><//>`}
-    <div className="puntext" aria-label="Προεπισκόπηση">${t.before}<u>${t.dur}</u>${t.after}</div>
-  <//>`;
-}
+export { PunTextDialog };
 
 // Δύναμη (Michael, 26/10): 4 κάρτες που αθροίζουν (Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη) και από κάτω ομάδες που ανοιγοκλείνουν.
 // Οι Παρόντες (100+) είναι κλειστοί μέχρι να τους ανοίξεις: η κλειστή κάρτα δεν φτιάχνει τις γραμμές.
