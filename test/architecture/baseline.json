@@ -200,7 +200,7 @@
     "src/renderer/screens/lists.ts": 36,
     "src/renderer/screens/notes.ts": 1,
     "src/renderer/screens/other.ts": 22,
-    "src/renderer/screens/outsPlan.ts": 5,
+    "src/renderer/screens/outsPlan.ts": 3,
     "src/renderer/screens/people.ts": 12,
     "src/renderer/screens/repBands.ts": 7,
     "src/renderer/screens/reports.ts": 56,

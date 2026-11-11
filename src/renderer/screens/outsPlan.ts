@@ -1,13 +1,12 @@
 // features/outs · ώρες της μέρας, διόρθωση επιστροφής ανά άτομο και ο πίνακας ωρών των Κανόνων (Michael, 24/10, 25/10).
 // Οι ώρες και η λογική είναι στο shared/returns.ts· εδώ μόνο οι φόρμες.
-import { rkShort } from '../rankName';
 import { useEffect, useState } from 'react';
-import { html, Button, Dialog, Why, Segmented, useToast } from '../ui';
+import { html, Button, Segmented, useToast } from '../ui';
 import { useStore } from '../store';
-import { DateField, TimeField } from '../common';
+import { TimeField } from '../common';
 import { normTime, mins } from '../../shared/hours';
 import { addDays, dm, weekday, DOW_FULL } from '../../shared/dates';
-import { baseOf, dayTimes, defaultRow, retTxt, weekRow, type Back, type WeekRow } from '../../shared/returns';
+import { baseOf, dayTimes, defaultRow, weekRow, type WeekRow } from '../../shared/returns';
 type P = any;
 
 // Η μπάρα της μέρας D στους Εξοδούχους: αρχή εξόδου και επιστροφή εξοδούχων είναι της D· επιστροφή ΔΝ και εκπαίδευση είναι της επόμενης
@@ -51,32 +50,6 @@ export function OutsDayBar({ date }: { date: string }) {
     </div></div>`;
 }
 
-// Διόρθωση επιστροφής ενός εξοδούχου/ΔΝ: «δεν γυρνά, συνεχίζει» ή «γυρνά <μέρα> <ώρα>», με υποχρεωτικό λόγο
-export function BackFixDialog({ b, date, onClose }: { b: Back; date: string; onClose: () => void }) {
-  const { state, run, undoMark } = useStore(); const toast = useToast();
-  const old = state.backFix?.find(f => f.pid === b.p.id && f.day === date);
-  const [mode, setMode] = useState<'at' | 'stay'>(old?.stay ? 'stay' : 'at');
-  const first = b.st.type === 'DN' ? addDays(date, 1) : date;
-  const [day, setDay] = useState(old?.at?.day || (!b.r.pending && !b.r.open ? b.r.day : first));
-  const [time, setTime] = useState(old?.at?.time || (b.r.time || '06:00'));
-  const [why, setWhy] = useState(old?.why || '');
-  const t = normTime(time);
-  const problem = !why.trim() ? 'Γράψε τον λόγο της διόρθωσης' : mode === 'at' && !t ? 'Η ώρα επιστροφής δεν είναι σωστή' : mode === 'at' && day < first ? 'Η επιστροφή είναι πριν από την έξοδο' : '';
-  const save = async () => {
-    if (await run({ t: 'setBackFix', pid: b.p.id, day: date, ...(mode === 'stay' ? { stay: true } : { at: { day, time: t! } }), why }, false)) { onClose(); toast({ text: 'Διόρθωση επιστροφής ' + rkShort(b.p), actions: [undoMark()] }); }
-  };
-  const del = async () => { if (old && await run({ t: 'delBackFix', id: old.id }, false)) { onClose(); toast({ text: 'Η επιστροφή ' + rkShort(b.p) + ' πάλι βγαίνει αυτόματα', actions: [undoMark()] }); } };
-  return html`<${Dialog} title=${'Διόρθωση επιστροφής · ' + rkShort(b.p)} description=${'Τώρα: ' + retTxt(b.r)} onClose=${onClose}
-    footer=${html`<${Why} text=${problem}/>${old ? html`<${Button} variant="ghost" onClick=${del} data-tip="Σβήνει τη διόρθωση και η επιστροφή βγαίνει πάλι από τους κανόνες">Πίσω στο αυτόματο<//>` : null}<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!problem} why=${problem} onClick=${save}>Αποθήκευση<//>`}>
-    <p className="note" style=${{ marginTop: 0 }}>Για ό,τι άλλαξε προφορικά και δεν βγαίνει από τις δηλώσεις. Μπαίνει στο Ιστορικό και αναιρείται.</p>
-    <div className="field"><${Segmented} value=${mode} onChange=${setMode} items=${[{ value: 'at', label: 'Γυρνά…' }, { value: 'stay', label: 'Δεν γυρνά, συνεχίζει' }]}/></div>
-    ${mode === 'at' ? html`<div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="bfd">Μέρα</label><${DateField} id="bfd" className="ui-input" min=${first} value=${day} onChange=${(e: any) => setDay(e.target.value)}/></div>
-      <${TimeField} id="bft" label="Ώρα" value=${time} onChange=${setTime}/></div>` : null}
-    <div className="field"><label className="field__label" htmlFor="bfw">Λόγος (υποχρεωτικό)</label><input id="bfw" className="ui-input" maxLength=${120} placeholder="π.χ. εξετάσεις, το είπε ο λοχαγός" value=${why} onChange=${(e: any) => setWhy(e.target.value)}/></div>
-  <//>`;
-}
-
 // Πίνακας των Κανόνων: 7 ημέρες × (αρχή εξόδου, επιστροφή εξοδούχων, επιστροφή ΔΝ, εκπαίδευση το πρωί). rows: κείμενα ώρας (φόρμα), onChange(w, πεδίο, τιμή)
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 export type WeekDraft = Record<number, { out: string; backOut: string; backDn: string; train: boolean }>;
@@ -100,3 +73,6 @@ export function WeekTable({ draft, onChange }: { draft: WeekDraft; onChange: (w:
     <tbody>${WEEK_ORDER.map(w => html`<tr key=${w}><th scope="row">${DOW_FULL[w]}</th>${cell(w, 'out', 'Αρχή εξόδου')}${cell(w, 'backOut', 'Επιστροφή εξοδούχων')}${cell(w, 'backDn', 'Επιστροφή ΔΝ')}
       <td><input type="checkbox" className="ui-check" aria-label=${'Εκπαίδευση το πρωί ' + DOW_FULL[w]} checked=${draft[w].train} onChange=${(e: any) => onChange(w, 'train', e.target.checked)}/></td></tr>`)}</tbody></table>`;
 }
+
+// Deprecated path: BackFixDialog moved to features/back-fix (Phase 5.3c part 2). Removed in Phase 7.
+export { BackFixDialog } from '../features/back-fix';
