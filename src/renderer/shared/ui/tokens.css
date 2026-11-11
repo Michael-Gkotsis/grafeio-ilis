@@ -140,6 +140,7 @@
   --secondary: var(--p-neutral-125);
   --secondary-fg: var(--p-neutral-860);
   --hover: var(--p-olive-80);
+  --selected: var(--p-olive-125); /* chosen option of a Segmented and similar pickers */
   --destructive: var(--p-red-600);
   --destructive-fg: var(--p-xl-50);
   --ok: var(--p-green-780);
@@ -218,6 +219,7 @@
     --secondary: var(--p-neutral-770);
     --secondary-fg: var(--p-olive-75);
     --hover: var(--p-neutral-790);
+    --selected: var(--p-olive-750); /* chosen option of a Segmented and similar pickers */
     --destructive: var(--p-red-210);
     --destructive-fg: var(--p-red-900);
     --ok: var(--p-green-225);
@@ -288,6 +290,7 @@
   --secondary: var(--p-neutral-770);
   --secondary-fg: var(--p-olive-75);
   --hover: var(--p-neutral-790);
+  --selected: var(--p-olive-750); /* chosen option of a Segmented and similar pickers */
   --destructive: var(--p-red-210);
   --destructive-fg: var(--p-red-900);
   --ok: var(--p-green-225);

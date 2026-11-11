@@ -33,7 +33,7 @@
 }
 .ui-seg {
   --seg-h: var(--h-ctl);
-  --seg-on: var(--nav-on);
+  --seg-on: var(--selected);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -50,6 +50,7 @@
 }
 .ui-seg button[aria-pressed="true"] {
   background: var(--seg-on);
+  border-color: var(--primary);
   color: var(--foreground);
   font-weight: 700;
 }
