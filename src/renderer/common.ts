@@ -1,21 +1,13 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Button, Dialog, DialogLeave, Icon, Segmented } from './ui';
-import { requestLeave } from './pending';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Alert, Button, Segmented } from './ui';
 import { Combo, Select } from './select';
 import { usePrefs } from './prefs';
-import { useStore, useNav } from './store';
+import { useStore } from './store';
 import { useToast } from './ui';
-import { SHIFT_EVERY, MAX_SHIFT_OWN, hoursTxt, phaseBase, shiftList, shiftReport, shiftSlots, type ShiftDef, type ShiftOwn } from '../shared/domain';
-import { dayName, dmy, type ISODate } from '../shared/dates';
+import { SHIFT_EVERY, MAX_SHIFT_OWN, hoursTxt, shiftList, shiftReport, shiftSlots, type ShiftDef, type ShiftOwn } from '../shared/domain';
 import { normTime } from '../shared/hours';
-import type { ExportKind } from '../shared/api';
-import { sigFormOf, sigsSaved, sigsText, type Sig } from '../shared/sigs';
-import { SigsDialog } from './features/sigs-edit';
-import { LayoutDialog } from './features/layout-edit';
 import { GO } from './shared/lib/exportGo';
-import { dropSigMoves, type Layout, type LayoutForm } from '../shared/layout';
-import type { Check } from '../shared/preflight';
 import type { Line } from '../shared/hkaiText';
 export { USB_DAYS, usbDue, usbAge } from '../shared/reminders';
 // Deprecated path: the domain-free fields moved to shared/ui (Phase 5.2), and the date/time fields and the two
@@ -184,101 +176,12 @@ export const ExcelSheet = memo(function ExcelSheet({ model, fileName, sheetName,
   </div>`;
 });
 
-/* Βγάζει ένα έντυπο από το template και ανοίγει το αρχείο στο Excel (ή, με print, την προεπισκόπηση εκτύπωσης).
-   Πρώτα ο προέλεγχος (έρευνα §3.6): ✕ σταματά με «Δείξε μου», ⚠ θέλει «Το ξέρω, συνέχισε» και γράφεται στο ιστορικό. */
-type Gate = { kind: ExportKind; date: ISODate; label: string; print: boolean; sigs?: Sig[]; checks: Check[]; resolve: (ok: boolean) => void };
-const ExportBusyCtx = createContext<ExportKind | null>(null);
-// sigs: υπογραφές μόνο για αυτή τη φορά
-const ExportCtx = createContext<(kind: ExportKind, date: ISODate, label: string, print?: boolean, sigs?: Sig[]) => Promise<boolean>>(async () => false);
-/* Εκτύπωση ενός Excel που υπάρχει ήδη (έντυπο που βγήκε, αρχείο από τα «Αρχεία Excel»), χωρίς Excel */
-export function usePrintFile() {
-  const toast = useToast();
-  return useCallback(async (file: string, sheet?: string | string[]) => {
-    let r: Awaited<ReturnType<typeof window.api.printFile>>;
-    try { r = await window.api.printFile(file, sheet); } catch (e) { r = { ok: false, error: String(e) }; }
-    if (!r.ok) toast({ text: html`<span><b>Δεν άνοιξε η εκτύπωση.</b> ${r.error}</span>` });
-    return r.ok;
-  }, [toast]);
-}
+// Deprecated paths (Phase 5.3b, removed in Phase 7): the export context moved to shared/model, the buttons to
+// widgets/export, GO to shared/lib/exportGo and GoLink to shared/ui.
+export { ExportProvider, useExport, useExportBusy, usePrintFile } from './shared/model';
+export { ExportButton, PrintButton, SigsButton, SigsMenu, TemplateNote } from './widgets/export';
+export { GoLink } from './shared/ui';
 export { GO };
-export function ExportProvider({ children }: P) {
-  const toast = useToast(); const { sync } = useStore(); const nav = useNav(); const printFile = usePrintFile();
-  const [gate, setGate] = useState<Gate | null>(null);
-  // Ποιο έντυπο βγαίνει τώρα: τα κουμπιά δείχνουν «Δημιουργία…» και δεύτερο κλικ δεν ξεκινά δεύτερη εξαγωγή
-  const [busy, setBusy] = useState<ExportKind | null>(null); const busyRef = useRef(false);
-  const exec = useCallback(async (kind: ExportKind, date: ISODate, label: string, ack: boolean, print = false, sigs?: Sig[]): Promise<boolean> => {
-    if (busyRef.current) return false;
-    busyRef.current = true; setBusy(kind);
-    let r: Awaited<ReturnType<typeof window.api.exportFile>>;
-    try { r = await window.api.exportFile(kind, date, { open: !print, print, ack, ...(sigs ? { sigs } : {}) }); }
-    catch (e) { r = { ok: false, error: String(e) } as typeof r; }
-    finally { busyRef.current = false; setBusy(null); }
-    if (!r.ok) {
-      if (r.checks && r.checks.length) return new Promise<boolean>(resolve => setGate(g => { g && g.resolve(false); return { kind, date, label, print, sigs, checks: r.checks!, resolve }; }));
-      toast({ text: html`<span><b>Δεν βγήκε ${label}.</b> ${r.error}</span>`, actions: r.locked ? [{ label: 'Ξανά', fn: () => { exec(kind, date, label, ack, print, sigs); } }] : undefined });
-      return false;
-    }
-    await sync();   // «βγήκε» και ιστορικό: μόνο ό,τι άλλαξε
-    const file = r.file;
-    toast({ text: html`<span>Βγήκε ${label}: <b>${file.split(/[\\/]/).pop()}</b>${r.warnings.length ? html`<br/>⚠ ${r.warnings.join(' · ')}` : ''}</span>`, actions: [...(print ? [] : [{ label: 'Εκτύπωση', fn: () => { printFile(file); } }]), { label: 'Φάκελος', fn: () => window.api.openFolder('output') }] });
-    return true;
-  }, [toast, sync, printFile]);
-  const start = useCallback((kind: ExportKind, date: ISODate, label: string, print?: boolean, sigs?: Sig[]) => exec(kind, date, label, false, !!print, sigs), [exec]);
-  const close = (ok: boolean) => { const g = gate; setGate(null); g && g.resolve(ok); };
-  const errs = gate ? gate.checks.filter(c => c.level === 'err') : [];
-  const warns = gate ? gate.checks.filter(c => c.level === 'warn') : [];
-  const show = (c: Check) => { const g = gate!; close(false); if (c.go) { const [v, p] = GO[c.go](g.date); nav.go(v, p); } };
-  return html`<${ExportCtx.Provider} value=${start}><${ExportBusyCtx.Provider} value=${busy}>${children}
-    ${gate && html`<${Dialog} role="alertdialog" title=${errs.length ? 'Δεν μπορεί να βγει ' + gate.label : 'Έλεγχος πριν βγει ' + gate.label} description=${dayName(gate.date) + ' ' + dmy(gate.date)} onClose=${() => close(false)}
-      footer=${errs.length ? html`<${Button} data-autofocus="" onClick=${() => close(false)}>Κλείσιμο<//>` : html`<${Button} variant="outline" data-autofocus="" onClick=${() => close(false)}>Άκυρο<//><${Button} onClick=${async () => { const g = gate!; setGate(null); g.resolve(await exec(g.kind, g.date, g.label, true, g.print, g.sigs)); }}>Το ξέρω, συνέχισε<//>`}>
-      <ul className="preflight">${[...errs, ...warns].map((c, i) => html`<li key=${i} className=${c.level === 'err' ? 'is-err' : 'is-warn'}><span className="preflight__ic">${c.level === 'err' ? '✕' : '⚠'}</span><span>${c.text}</span>${c.go && html`<${Button} size="sm" variant="link" onClick=${() => show(c)}>Δείξε μου<//>`}</li>`)}</ul>
-      <p className="note" style=${{ margin: 0 }}>${errs.length ? 'Διόρθωσε τα ✕ και ξαναδοκίμασε. Έτσι δεν φεύγει ποτέ λάθος έντυπο.' : 'Αν συνεχίσεις, οι προειδοποιήσεις γράφονται στο Ιστορικό.'}</p>
-    <//>`}<//><//>`;
-}
-export const useExport = () => useContext(ExportCtx);
-export const useExportBusy = () => useContext(ExportBusyCtx);
-export function ExportButton({ kind, date, label, variant, size, disabled }: P) {
-  const ex = useExport(); const busy = useExportBusy();
-  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label)}>${busy === kind ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled}/><${SigsButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled}/><//>`;
-}
-/* «Υπογραφές…»: βγαίνει με άλλες υπογραφές αυτή τη φορά (ή και τις επόμενες, στις Ρυθμίσεις) */
-export function SigsButton({ kind, date, label, variant = 'ghost', size, disabled }: P) {
-  const ex = useExport(); const busy = useExportBusy();
-  return html`<${SigsMenu} form=${sigFormOf(kind)} date=${date} label=${label} variant=${variant} size=${size} disabled=${!!busy || disabled} go=${(pr: boolean, sigs?: Sig[]) => ex(kind, date, label, pr, sigs)}/>`;
-}
-/* Το ίδιο σε κάθε έντυπο (Michael, 22/10): βάζεις, βγάζεις ή αλλάζεις σειρά στις υπογραφές, και «Θέσεις στο χαρτί…» για να
-   σύρεις κεφαλίδα, ημερομηνία, τίτλο και υπογραφές. go(εκτύπωση, υπογραφές μόνο για αυτή τη φορά)· print: έχει και εκτύπωση */
-export function SigsMenu({ form, date, label, go, print = true, variant = 'ghost', size, disabled }: { form: LayoutForm; date: ISODate; label: string; go: (print: boolean, sigs?: Sig[]) => unknown; print?: boolean; variant?: string; size?: string; disabled?: boolean }) {
-  const { state, run } = useStore(); const [open, setOpen] = useState(false);
-  const [lay, setLay] = useState<Sig[] | null>(null);   // «Θέσεις στο χαρτί…» με τις υπογραφές που βλέπεις στον διάλογο
-  const cur = sigsSaved(state.settings, form); const name = label.replace(/^(η|οι|το) /, '');
-  const onGo = async (sigs: Sig[], keep: boolean, pr: boolean) => {
-    // άλλο πλήθος υπογραφών: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
-    const l = sigs.length !== cur.length && state.settings.layout?.[form] ? { layout: { ...state.settings.layout, [form]: dropSigMoves(state.settings.layout[form]) } } : {};
-    if (keep && !(await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), [form]: sigs }, ...l }, text: 'υπογραφές ' + name + ': ' + sigsText(sigs) }, false))) return;
-    go(pr, keep ? undefined : sigs);
-  };
-  const saveLayout = async (l: Layout | undefined) => {
-    const all = { ...(state.settings.layout || {}) }; if (l) all[form] = l; else delete all[form];
-    await run({ t: 'setSettings', settings: { layout: all }, text: 'θέσεις στο χαρτί: ' + name }, 'Αποθηκεύτηκαν οι θέσεις: ' + name);
-  };
-  return html`<${Fragment}><${Button} variant=${variant} size=${size} disabled=${disabled} onClick=${() => setOpen(true)} data-tip=${'Υπογραφές: ' + sigsText(cur) + '. Βάλε, βγάλε ή άλλαξε σειρά, για αυτή τη φορά ή για πάντα, ή σύρε κεφαλίδα και υπογραφές αλλού πάνω στο χαρτί.'}>Υπογραφές…<//>
-    ${open && html`<${SigsDialog} title=${name} initial=${cur} print=${print} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onGo=${onGo} onClose=${() => setOpen(false)} onLayout=${setLay}/>`}
-    ${lay && html`<${LayoutDialog} title=${name} form=${form} sigs=${lay} initial=${state.settings.layout?.[form]} onClose=${() => setLay(null)} onSave=${saveLayout}
-      req=${(l: Layout) => ({ form, date, sigs: lay, layout: l })}/>`}<//>`;
-}
-/* Εκτύπωση: βγαίνει το Excel όπως πάντα και ανοίγει προεπισκόπηση με τον διάλογο εκτυπωτή των Windows (χωρίς Excel) */
-export function PrintButton({ kind, date, label, variant = 'ghost', size, disabled }: P) {
-  const ex = useExport(); const busy = useExportBusy();
-  return html`<${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label, true)} data-tip="Βγαίνει το Excel και ανοίγει προεπισκόπηση εκτύπωσης. Δεν χρειάζεται Excel.">${Icon.print}Εκτύπωση<//>`;
-}
-export function TemplateNote({ ids }: { ids: string[] }) {
-  const { boot, state } = useStore(); const nav = useNav();
-  const spen = phaseBase(state.settings) === 'spen';
-  const ts = ids.map(id => boot.templates.find(t => t.id === id && (id !== 'froura' || (t.file === 'froura-spen.xlsx') === spen))).filter(Boolean) as Boot['templates'];
-  return html`<span className="tplnote">Από template: ${ts.map((t, i) => html`<span key=${t.file}>${i ? ', ' : ''}<b>${t.name}</b>${t.custom ? ' (δικό σου)' : ''}</span>`)} · <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'templates' })}>Templates<//></span>`;
-}
-type Boot = import('../shared/api').Boot;
 
 /* Ορατό ενεργό φίλτρο με ✕ (έρευνα §3.7) */
 export function ActiveFilter({ parts, onClear, extra }: { parts: (string | false | null | undefined)[]; onClear: () => void; extra?: any }) {
@@ -297,12 +200,4 @@ export function useUsbCopy() {
     toast({ text: r.warning ? html`<span><b>Πάρθηκε αντίγραφο, αλλά:</b> ${r.warning}</span>` : 'Πάρθηκε αντίγραφο στο ' + r.file + '. Κράτα το USB έξω από το PC.' });
     return true;
   }, [refresh, toast]);
-}
-
-// «Ρυθμίσεις › …» ως σύνδεσμος που ανοίγει το σωστό σημείο (UX Χ5, 22/10· πριν ήταν απλό κείμενο). Μέσα σε παράθυρο το κλείνει
-// πρώτα· αν έχει αλλαγές, ρωτά όπως το ✕. Στην ίδια οθόνη (π.χ. άλλη ενότητα των Ρυθμίσεων) ρωτά για όσα δεν αποθηκεύτηκαν.
-export function GoLink({ view, params, children }: { view: string; params?: Record<string, any>; children: any }) {
-  const nav = useNav(); const leave = useContext(DialogLeave);
-  const go = () => { if (view === nav.view) requestLeave(() => nav.go(view, params)); else nav.go(view, params); };
-  return html`<${Button} variant="link" className="golink" onClick=${() => (leave ? leave(go) : go())}>${children}<//>`;
 }
