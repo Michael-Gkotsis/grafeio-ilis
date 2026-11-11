@@ -38,7 +38,7 @@ export const MODULES = {
   reports: track('reports', () => import('../screens/reports')),
   settings: track('settings', () => import('../screens/settings')),
   guide: track('guide', () => import('../screens/guide')),
-  diag: track('diag', () => import('../screens/diag')),
+  diag: track('diag', () => import('../pages/diag')),
 };
 
 /** Name of a module in {@link MODULES}. */

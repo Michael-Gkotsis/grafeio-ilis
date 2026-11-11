@@ -242,6 +242,19 @@ const settingsPending = {
 const history = { name: 'Ιστορικό', run: async S => { await S.nav('Σήμερα'); await S.state('history', () => S.top('Ιστορικό ενεργειών'), { close: false }); } };
 const guide = { name: 'Οδηγός', run: async S => { await S.nav('Σήμερα'); await S.state('guide', () => S.top('Οδηγός χρήσης'), { close: false }); } };
 
+// hidden screen: only Ctrl+Shift+D or the search box opens it; waits for main's first diag() answer
+const diag = {
+  name: 'Διάγνωση',
+  run: async S => {
+    await S.nav('Σήμερα');
+    const open = async () => {
+      await S.page.keyboard.press('Control+Shift+D');
+      await S.page.waitForSelector('.main .kv');
+    };
+    await S.state('diag', open, { close: false });
+  }
+};
+
 const more = {
   name: 'Άλλα (phone)', phoneOnly: true,
   run: async S => { await S.dialog('more sheet (Άλλα)', () => S.page.locator('.bottomnav button').filter({ hasText: 'Άλλα' }).click(), { sheet: true }); }
@@ -249,5 +262,6 @@ const more = {
 
 export const GROUPS = [
   screen('Σήμερα', null, { phone: true }), people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
-  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, history, guide, more
+  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, history, guide,
+  diag, more
 ];
