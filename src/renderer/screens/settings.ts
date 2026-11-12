@@ -1,14 +1,13 @@
 // Ρυθμίσεις (μενού Ρυθμίσεις): φορτώνεται όταν ανοίξει η οθόνη, για να ανοίγει πιο γρήγορα η εφαρμογή.
 import { useEffect, useMemo, useState } from 'react';
-import { html, Alert, Badge, Button, Why, missingOf, Card, Dialog, PageHeader, Segmented, useDirty, useToast } from '../ui';
+import { html, Alert, Badge, Button, missingOf, Card, Dialog, PageHeader, Segmented, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { DateField, useUsbCopy } from '../common';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
 import { PHASE_NAME, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type Phase, type Settings } from '../../shared/domain';
-import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
-import { useBlockForm, BlockForm } from '../blockForm';
+import { AddBlockDialog, EditBlockDialog, PhaseDialog, PhaseSelect } from '../features/duty-blocks';
 import { phaseDelWhy } from '../../shared/commands';
 import { DEFAULT_TZ, DOW_FULL, FIX_MAX, appVsOs, dmy, dow, durLabel, greekHolidays, nowParts, osParts, utcLabel, weekday, zoneLabel, zoneOffset, type Parts } from '../../shared/dates';
 import { useNowMin } from '../clock';
@@ -27,7 +26,6 @@ import { LayoutDialog } from '../layout';
 import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
 import { XL_FONTS, XL_H, XL_LOOK, XL_PARTS, XL_SIZES, XL_STYLES, XL_V, sameLook, tablePart, xlLook, type XlLook, type XlPart, type XlPartKey } from '../../shared/xlLook';
 import { MADE_FORMS, OUTS_SIG2, SIG_FORMS, outsSig2Of, sameSigs, sigDefaults, sigLabel, sigsClean, sigsCustom, sigsPage2, sigsSaved, sigsText, type OutsSig2, type Sig, type SigForm } from '../../shared/sigs';
-type P = any;
 
 function ImportCard() {
   const nav = useNav();
@@ -267,16 +265,8 @@ function BlocksCard() {
     ${ed && html`<${EditBlockDialog} phase=${phase} b=${list.find(x => x.id === ed)} onClose=${() => setEd(null)}/>`}
   <//>`;
 }
-export function EditBlockDialog({ phase, b, onClose }: P) {
-  const { run } = useStore(); const toast = useToast();
-  const form = useBlockForm(b, phase); const { f } = form; const dirty = useDirty([f]);
-  const save = async () => { if (await run(form.cmd(), false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + (b.kind === 'ly' ? b.name : f.name.trim() || b.name) }); } };
-  return html`<${Dialog} title=${'Επεξεργασία: ' + b.name} description=${b.kind === 'ly' ? 'Ο Λ/Υ και ο Δ/Υ αλλάζουν μόνο κωδικό.' : 'Όλα αλλάζουν όπως στη «Νέα υπηρεσία». Όσες θέσεις φύγουν κρατούν το ιστορικό τους.'} onClose=${onClose}
-    dirty=${dirty && 'Οι αλλαγές δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
-    footer=${html`<${Why} text=${form.why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!form.why} why=${form.why} onClick=${save}>Αποθήκευση<//>`}>
-    <${BlockForm} form=${form} id="eb"/>
-  <//>`;
-}
+// Deprecated path: EditBlockDialog moved to features/duty-blocks (Phase 6, Ρυθμίσεις S3). Removed in Phase 7.
+export { EditBlockDialog } from '../features/duty-blocks';
 // Αργίες (10 §4β): ΣΚ μετρούν πάντα· οι επίσημες βγαίνουν μόνες τους κάθε χρονιά (και από το Πάσχα)· εδώ αφαιρείς όποια
 // δεν ισχύει για τη μονάδα και προσθέτεις δικές σου
 function HolidaysCard() {
