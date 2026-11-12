@@ -17,7 +17,7 @@ import { StatusesPage } from '../pages/statuses';
 import { CadreScreen } from '../screens/cadre';
 import { PeopleScreen } from '../screens/people';
 import { GuardScreen, OutsScreen } from '../screens/guard';
-import { NotesScreen } from '../screens/notes';
+import { NotesScreen } from '../pages/notes';
 import { WeaponsScreen } from '../screens/weapons';
 import { SCREEN_SOURCES } from './loaders';
 import { SCREEN_IDS, type ScreenId } from './screenId';
