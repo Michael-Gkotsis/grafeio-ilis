@@ -4,6 +4,7 @@
 // Owner layer: renderer/shared/model. Why: moved down from renderer/common.ts (Phase 5.3b); reports, sources and the export gate use it.
 // Covering test: test/reports-flow.test.ts.
 import { useCallback } from 'react';
+import { leadText } from '../lib/leadText';
 import { useToast } from '../ui';
 
 /** Εκτύπωση ενός Excel που υπάρχει ήδη (έντυπο που βγήκε, αρχείο από τα «Αρχεία Excel»), χωρίς Excel. */
@@ -18,13 +19,7 @@ export function usePrintFile() {
         r = { ok: false, error: String(e) };
       }
       if (!r.ok)
-        toast({
-          text: (
-            <span>
-              <b>Δεν άνοιξε η εκτύπωση.</b> {r.error}
-            </span>
-          ),
-        });
+        toast({ text: leadText('Δεν άνοιξε η εκτύπωση.', r.error) });
       return r.ok;
     },
     [toast],

@@ -6,3 +6,4 @@ export type { RouteParams } from './route';
 export { ExportBusyCtx, ExportCtx, useExport, useExportBusy, type ExportFn } from './export';
 export { ExportProvider } from './ExportProvider';
 export { usePrintFile } from './usePrintFile';
+export { useUsbCopy } from './useUsbCopy';

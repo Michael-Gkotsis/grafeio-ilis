@@ -1,6 +1,7 @@
-// Public API of pages/settings: the section cards of «Ρυθμίσεις» that only this screen uses (so far).
-// Import from here only (the architecture test rejects deep imports from other layers). The screen itself
-// (screens/settings.ts) moves in S4.
+// Public API of pages/settings: the «Ρυθμίσεις» screen (`TemplatesScreen`, the name the routes always used) and the
+// section cards that the old screens/* paths still re-export until Phase 7.
+// Import from here only (the architecture test rejects deep imports from other layers).
+export { TemplatesScreen } from './ui/SettingsScreen';
 export { ListsCard } from './ui/sections/ListsCard';
 export { SiCard } from './ui/sections/SiCard';
 export { StatCard } from './ui/sections/StatCard';
