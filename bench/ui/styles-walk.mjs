@@ -379,8 +379,14 @@ const more = {
   run: async S => { await S.dialog('more sheet (Άλλα)', () => S.page.locator('.bottomnav button').filter({ hasText: 'Άλλα' }).click(), { sheet: true }); }
 };
 
+// «Σήμερα»: the day-forms dialog and a person opened from the away list
+const today = screen('Σήμερα', async S => {
+  await S.dialog('day forms dialog (Έντυπα ημέρας)', () => S.click('Έντυπα ημέρας'));
+  await S.dialog('person sheet from a name', () => S.page.locator('.main button.linkish').first().click(), { sheet: true });
+}, { phone: true });
+
 export const GROUPS = [
-  screen('Σήμερα', null, { phone: true }), people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
+  today, people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
   hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, settingsSourcesEsso, dutyBlocks, history, guide,
   diag, more
 ];
