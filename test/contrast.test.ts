@@ -103,6 +103,38 @@ describe('αντίθεση χρωμάτων', () => {
     const direct = decls.filter(d => !d.prop.startsWith('--') && d.value.includes('var(--p-'));
     expect(direct.map(d => `${d.sel} { ${d.prop}: ${d.value} }`)).toEqual([]);
   });
+  // A preview of a file is paper: it shows the file the way it is written and printed, so it stays a light sheet in
+  // the dark theme (approved UI proposal 09/11). The scrolling boxes of the Excel preview and of the column mapper
+  // declare the light map again on themselves; a token that a dark block overrides and the paper does not would leak
+  // dark into it. Only the tone of the sheet (--paper*) follows the theme on purpose.
+  it('paper (Excel preview, column mapper) declares again every token the dark theme overrides', () => {
+    const declared = (sel: string): string[] =>
+      rules.filter(r => r.at.length === 0 && r.selectors.some(s => s.trim() === sel)).flatMap(r => Object.keys(r.decls));
+    const darkNames = declared(':root[data-theme="dark"]').filter(name => name.startsWith('--'));
+    expect(darkNames.length).toBeGreaterThan(40);
+    for (const paper of ['.xl__scroll', '.mapper__scroll']) {
+      const own = new Set(declared(paper));
+      expect(darkNames.filter(name => !own.has(name) && !name.startsWith('--paper'))).toEqual([]);
+      expect(own.has('color-scheme')).toBe(true);
+      expect(declared(paper).filter(name => name.startsWith('--paper'))).toEqual([]);
+    }
+  });
+  // @decision Michael 12/11: the sheet is white, but not #fff in the dark theme: a soft tone that does not glare next
+  // to the dark screen. Text inside a paper comes from the light map in both themes, so it is checked on both tones.
+  it('the paper is softer than white in the dark theme and the light-map text still reads on it', () => {
+    expect(light.paper).toBe('#ffffff');
+    expect(ratio('#ffffff', dark.paper)).toBeGreaterThan(1.2);
+    expect(ratio(dark.paper, dark.card)).toBeGreaterThan(9);
+    const onPaper: [string, string, number][] = [
+      ['xl-fg', 'paper', 7], ['paper-fg', 'paper', 7], ['xl-fg', 'paper-head', 7], ['xl-fg', 'paper-hdr', 7],
+      ['muted-fg', 'paper-head', 4.5], ['foreground', 'paper', 7], ['ok', 'ok-bg', 7], ['xl-kenh-fg', 'xl-kenh', 4.5],
+    ];
+    for (const tone of [light, dark]) {
+      const low = onPaper.filter(([fg, bg, min]) => ratio(light[fg], bg.startsWith('paper') ? tone[bg] : light[bg]) < min);
+      expect(low).toEqual([]);
+      expect(ratio(tone['paper-grid'], tone.paper)).toBeGreaterThan(1.5);
+    }
+  });
   it('τα tokens βρέθηκαν και στα δύο θέματα (όχι έλεγχος πάνω σε άδειο σύνολο)', () => {
     for (const t of [light, dark]) expect(Object.keys(t)).toEqual(expect.arrayContaining(['background', 'foreground', 'card', 'muted-fg', 'primary']));
     expect(dark.background).not.toBe(light.background);

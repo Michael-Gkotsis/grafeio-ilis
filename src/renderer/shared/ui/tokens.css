@@ -8,9 +8,18 @@
  *   both themes, WCAG 2 and APCA; the two dark blocks must be identical).
  * Themes: light `:root`; dark as «Όπως τα Windows» (`prefers-color-scheme`) and as «Σκοτεινό» (`[data-theme="dark"]`).
  * Dark surfaces go from the page (darkest) up: page 975, side menu 950, card 925, quiet fill 900, hover 850.
- * Paper (--paper, the Word preview) and the Excel title bar keep the same colours in both themes.
+ * Paper: a preview of a file shows the file the way it is written and printed, so it stays a light sheet with dark
+ *   text in the dark theme too. The scrolling boxes of the Excel preview (`.xl__scroll`) and of the column mapper
+ *   (`.mapper__scroll`) declare the light map again on themselves; everything inside them (cells, row buttons,
+ *   inputs, scrollbars) reads the same tokens and comes out light. Only the tone of the sheet follows the theme:
+ *   --paper, --paper-head, --paper-hdr and --paper-grid are white and Excel greys in the light theme and a soft warm
+ *   off-white in the dark one, so the sheet does not glare next to the dark screen. They are declared on :root only.
+ *   @decision approved UI proposal 09/11: "the paper stays white". @decision Michael 12/11: white, but not #fff in
+ *   the dark theme, a soft tone that does not burn the eyes.
  */
-:root {
+:root,
+.xl__scroll,
+.mapper__scroll {
   --background: var(--p-neutral-100);
   --foreground: var(--p-neutral-950);
   --card: var(--p-white);
@@ -69,11 +78,11 @@
   --band-line: var(--p-sage-600);
   --thead: var(--p-neutral-50);
   --h2: var(--p-olive-800);
-  --xl-grid: var(--p-xl-225);
-  --xl-head: var(--p-xl-55);
-  --xl-bg: var(--p-white);
+  --xl-grid: var(--paper-grid);
+  --xl-head: var(--paper-head);
+  --xl-bg: var(--paper);
   --xl-fg: var(--p-xl-935);
-  --xl-hdr: var(--p-xl-150);
+  --xl-hdr: var(--paper-hdr);
   --xl-kenh: var(--p-xl-110);
   --xl-kenh-fg: var(--p-xl-695);
   --xl-bar: var(--p-xl-green); /* title bar of the Excel preview */
@@ -89,17 +98,25 @@
   --shade-strong: var(--p-black-a35); /* shadow colour under a stuck bar */
   --shadow: 0 16px 40px var(--p-ink-a18), 0 2px 6px var(--p-ink-a08);
   --shadow-sm: 0 1px 2px var(--p-soot-a06);
-  --radius: 8px;
-  --radius-lg: 12px;
   --sb-thumb: var(--p-soot-a20);
   --sb-thumb-hover: var(--p-soot-a42);
-  --f-display: "Segoe UI", Tahoma, Arial, sans-serif;
-  --f-body: "Segoe UI", Tahoma, Arial, sans-serif;
-  --f-mono: Consolas, "Courier New", monospace;
-  --nav-h: 62px;
-  --top-h: 44px;
-  --side-w: 196px;
-  --rail-w: 60px;
+}
+/* tone of the paper of an Excel/Word preview: the sheet, its text, the strip of column letters, a grey header cell,
+   the grid. On :root only (the dark blocks below override it, a paper does not declare it again), so a sheet takes
+   the tone of the theme */
+:root {
+  --paper: var(--p-white);
+  --paper-fg: var(--p-black);
+  --paper-head: var(--p-xl-55);
+  --paper-hdr: var(--p-xl-150);
+  --paper-grid: var(--p-xl-225);
+}
+/* native scrollbar parts and controls inside a paper stay light in the dark theme; a field drawn on the sheet
+   (the «βάση» grid) takes the tone of the sheet */
+.xl__scroll,
+.mapper__scroll {
+  color-scheme: light;
+  --card: var(--paper);
 }
 /* dark theme «Όπως τα Windows»: same selectors as before so the specificity stays the same */
 @media (prefers-color-scheme: dark) {
@@ -159,17 +176,13 @@
     --band-line: var(--p-sage-400);
     --thead: var(--p-neutral-900);
     --h2: var(--p-sage-150);
-    --xl-grid: var(--p-neutral-650);
-    --xl-head: var(--p-neutral-850);
-    --xl-bg: var(--p-neutral-950);
-    --xl-fg: var(--p-neutral-75);
-    --xl-hdr: var(--p-neutral-750);
-    --xl-kenh: var(--p-red-800);
-    --xl-kenh-fg: var(--p-red-200);
-    --flash: var(--p-yellow-800);
     --overlay: var(--p-black-a55);
     --shade: var(--p-black-a50); /* shadow colour of a pop-up */
     --shade-strong: var(--p-black-a55); /* shadow colour under a stuck bar */
+    --paper: var(--p-paper-200);
+    --paper-head: var(--p-paper-250);
+    --paper-hdr: var(--p-paper-300);
+    --paper-grid: var(--p-paper-400);
     --shadow: 0 16px 40px var(--p-black-a50), 0 2px 6px var(--p-black-a30);
     --shadow-sm: 0 1px 2px var(--p-black-a30);
     --sb-thumb: var(--p-snow-a26);
@@ -234,25 +247,30 @@
   --band-line: var(--p-sage-400);
   --thead: var(--p-neutral-900);
   --h2: var(--p-sage-150);
-  --xl-grid: var(--p-neutral-650);
-  --xl-head: var(--p-neutral-850);
-  --xl-bg: var(--p-neutral-950);
-  --xl-fg: var(--p-neutral-75);
-  --xl-hdr: var(--p-neutral-750);
-  --xl-kenh: var(--p-red-800);
-  --xl-kenh-fg: var(--p-red-200);
-  --flash: var(--p-yellow-800);
   --overlay: var(--p-black-a55);
   --shade: var(--p-black-a50); /* shadow colour of a pop-up */
   --shade-strong: var(--p-black-a55); /* shadow colour under a stuck bar */
+  --paper: var(--p-paper-200);
+  --paper-head: var(--p-paper-250);
+  --paper-hdr: var(--p-paper-300);
+  --paper-grid: var(--p-paper-400);
   --shadow: 0 16px 40px var(--p-black-a50), 0 2px 6px var(--p-black-a30);
   --shadow-sm: 0 1px 2px var(--p-black-a30);
   --sb-thumb: var(--p-snow-a26);
   --sb-thumb-hover: var(--p-snow-a50);
   color-scheme: dark;
 }
-/* sizes, and the paper of the Word preview */
+/* sizes and fonts (not part of a theme) */
 :root {
+  --radius: 8px;
+  --radius-lg: 12px;
+  --f-display: "Segoe UI", Tahoma, Arial, sans-serif;
+  --f-body: "Segoe UI", Tahoma, Arial, sans-serif;
+  --f-mono: Consolas, "Courier New", monospace;
+  --nav-h: 62px;
+  --top-h: 44px;
+  --side-w: 196px;
+  --rail-w: 60px;
   /* type scale */
   --t-xs: 12px;
   --t-sm: 13px;
@@ -272,9 +290,6 @@
   --dock-w: 420px;
   --chip-h: 22px;
   --target-min: 24px;
-  /* paper of an Excel/Word preview: white in both themes, the file shows the way it is written */
-  --paper: var(--p-white);
-  --paper-fg: var(--p-black);
 }
 /* compact density: only the new size tokens; the density rules of each component stay in legacy until it is restyled */
 :root[data-density="compact"] {

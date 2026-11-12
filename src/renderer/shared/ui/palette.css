@@ -183,6 +183,12 @@
   --p-xl-695: #9c0006;
   --p-xl-935: #111111;
   --p-xl-green: #1d6b3a;
+  /* soft paper: what a preview of a file is drawn on in the dark theme, so a white sheet does not glare next to the
+     dark screen (warm off-white, hue 95, chroma 0.012; same lightness steps as the base families) */
+  --p-paper-200: #e0ded5;
+  --p-paper-250: #d6d4cc;
+  --p-paper-300: #cdcbc2;
+  --p-paper-400: #adaba3;
   /* backdrop behind a page preview (the grey of a print preview) */
   --p-slate-100: #eeeeee;
   --p-slate-600: #5f6368;
