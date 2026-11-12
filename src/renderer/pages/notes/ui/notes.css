@@ -1,0 +1,122 @@
+/*
+ * «Σημειώσεις» page (BEM-ish blocks `notes-layout`, `notes-side`, `notes-f`): the filter and people list on the left.
+ *
+ * Purpose: the look of pages/notes/ui/NotesScreen.tsx (layout grid, sticky side list, list items, group label,
+ *   the «Καθάρισε τα φίλτρα» button); moved out of legacy.css (U10), the list now looks like the guide topic list.
+ * Does NOT: style the note cards, groups, composer or edit dialog (`.note-*`, features/note-compose, also used in
+ *   the person sheet «Σημειώσεις» tab), nor the generic `.toolbar`, `.empty` and `.cnt` rules, which stay in legacy.css.
+ * Owner layer: renderer/pages/notes. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
+ * Why: U10; legacy.css is the last layer and beats this one, so every `.notes-*` rule had to leave it. Tokens only,
+ *   no nesting, no !important, no colour literals.
+ * Covering test: bench:styles (group «Σημειώσεις»), test/screens-main.test.ts, test/notes-view.test.ts,
+ *   test/contrast.test.ts.
+ */
+
+.notes-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.notes-side {
+  position: sticky;
+  top: calc(var(--top-h) + 8px);
+  min-width: 0;
+}
+.notes-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notes-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* List item: the same look as a guide topic (13.5 px, 32 px, radius 6); the open one is marked by aria-pressed. */
+.notes-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.notes-f:hover {
+  background: var(--hover);
+}
+.notes-f[aria-pressed="true"] {
+  background: var(--selected);
+  font-weight: 600;
+}
+.notes-f:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.notes-f .cnt {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-fg);
+}
+/* The reminder count of today keeps its badge look. */
+.notes-f .cnt.is-hot {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bad-line);
+  color: var(--on-bad);
+  font-weight: 700;
+}
+.notes-f__t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Group label «Άτομα με σημειώσεις», like the guide group labels. */
+.notes-sep {
+  padding: 12px 12px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-fg);
+}
+.notes-people {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* Narrow window: the filters become a row of chips, the people list is hidden. */
+@media (max-width: 1000px) {
+  .notes-layout {
+    grid-template-columns: 1fr;
+  }
+  .notes-side {
+    position: static;
+  }
+  .notes-filters {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .notes-f {
+    width: auto;
+  }
+  .notes-sep,
+  .notes-people {
+    display: none;
+  }
+}
