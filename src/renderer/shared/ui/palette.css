@@ -4,7 +4,8 @@
  * Purpose: every colour the screens use comes from here, through the semantic tokens of tokens.css. A component
  *   never reads a --p-* value directly (it would not follow the theme).
  * Does NOT: say what a colour means (tokens.css does), hold sizes or fonts, or style the outputs: the print window
- *   (src/main/print.ts) and the page previews (shared/lib/pageCss.ts) keep their own colours on purpose.
+ *   (src/main/print.ts) keeps its own colours on purpose, and so do the page previews (shared/lib/pageCss.ts) except
+ *   for the tone of the sheet, which reads --paper.
  * Owner layer: shared/ui, CSS layer `tokens`. Imported by app/styles/index.css before tokens.css.
  * Covering test: test/contrast.test.ts (resolves the var() chains of both themes and checks every text/background pair).
  *

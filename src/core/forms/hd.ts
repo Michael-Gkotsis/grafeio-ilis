@@ -179,7 +179,9 @@ export function hdTags(
 
 /**
  * The page as HTML, for the preview on screen and for printing without Word. `fs`: letter size in px (everything else
- * is in em).
+ * is in em). The sheet takes the tone of the app's paper (`--paper`: white in the light theme, a soft off-white in the
+ * dark one) and is white wherever that variable does not exist, as in a print window.
+ * @decision Michael 12/11: the paper is not #fff in the dark theme, it burns the eyes.
  */
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const ml = (s: string) => s.split('\n').map(esc).join('<br>');
@@ -190,7 +192,7 @@ export function hdPageHtml(t: Record<string, string>, fs: number): string {
   const gap = '<tr><td class="l"></td><td colspan="3" class="g"></td></tr>';
   const sec = (k: string) => HD_SECTIONS.map((n, i) => row(i + 1 + '. ' + n, t[k + (i + 1)])).join('');
   return `<div class="hdp" style="font-size:${fs}px"><style>
-.hdp{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1.2em 1em;line-height:1.25}.hdp table{border-collapse:collapse;width:100%;table-layout:fixed}
+.hdp{font-family:Arial,Helvetica,sans-serif;color:#000;background:var(--paper,#fff);padding:1.2em 1em;line-height:1.25}.hdp table{border-collapse:collapse;width:100%;table-layout:fixed}
 .hdp td{border-bottom:1px dotted #000;padding:.25em .4em;vertical-align:middle}.hdp td.l{width:12%;border-left:1px solid #000;border-right:1px solid #000}.hdp td.a{width:20%}.hdp td.c{width:3%;text-align:center}.hdp td.v{width:65%}
 .hdp td.m{text-align:center}.hdp td.u{text-decoration:underline}.hdp td.ul{text-decoration:underline;text-align:left}.hdp td.g{height:1.2em}.hdp tr:last-child td{border-bottom:1px solid #000}
 .hdp .top{display:flex;justify-content:space-between;font-weight:700}.hdp h1{font-size:1em;text-align:center;margin:.5em 0 .3em}.hdp .sig{text-align:center;padding-left:40%}

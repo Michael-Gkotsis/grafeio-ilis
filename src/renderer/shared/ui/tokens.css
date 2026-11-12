@@ -14,6 +14,9 @@
  *   inputs, scrollbars) reads the same tokens and comes out light. Only the tone of the sheet follows the theme:
  *   --paper, --paper-head, --paper-hdr and --paper-grid are white and Excel greys in the light theme and a soft warm
  *   off-white in the dark one, so the sheet does not glare next to the dark screen. They are declared on :root only.
+ *   The page previews that are drawn from HTML read --paper too, with white as the fallback: the page of «Έντυπα»
+ *   (shared/lib/pageCss.ts, inside a shadow root: custom properties cross it) and the Word page of the «Ημερήσια
+ *   Διαταγή» (core/forms/hd.ts `hdPageHtml`). The print window does not load these tokens and stays white.
  *   @decision approved UI proposal 09/11: "the paper stays white". @decision Michael 12/11: white, but not #fff in
  *   the dark theme, a soft tone that does not burn the eyes.
  */

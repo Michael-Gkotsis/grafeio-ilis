@@ -2,7 +2,8 @@
 // Στόχος για παλιές οθόνες χαμηλής αντίθεσης: κείμενο 7:1 (AAA), δευτερεύον κείμενο 4.5:1+ (AA), όρια κουμπιών/πεδίων 3:1.
 // Ο λόγος του WCAG 2 υπερεκτιμά την αντίθεση στο σκοτεινό (ανοιχτό κείμενο σε σκούρο φόντο), γι' αυτό ελέγχεται και το APCA (Lc).
 import { describe, expect, it } from 'vitest';
-import { colourTokens, rawTokens, readStyles } from './support/css';
+import { PAGE_CSS } from '../src/renderer/shared/lib/pageCss';
+import { colourTokens, parseCss, rawTokens, readStyles } from './support/css';
 
 // Phase 0.4: the tokens used to come from `indexOf(':root{')` in styles.css. They now come from every .css under
 // src/renderer (@import followed, var() chains resolved, see test/support/css.ts), so the same checks hold when the
@@ -134,6 +135,12 @@ describe('αντίθεση χρωμάτων', () => {
       expect(low).toEqual([]);
       expect(ratio(tone['paper-grid'], tone.paper)).toBeGreaterThan(1.5);
     }
+  });
+  // The page previews drawn from HTML (the pages of «Έντυπα» inside a shadow root) are sheets too: they take --paper
+  // and fall back to white where the variable does not exist. The print window never loads the tokens, so print is white.
+  it('the page preview of «Έντυπα» takes the paper tone, with white as the fallback', () => {
+    const page = parseCss(PAGE_CSS).find(r => r.selectors.includes('.pg'));
+    expect(page?.decls.background).toBe('var(--paper,#fff)');
   });
   it('τα tokens βρέθηκαν και στα δύο θέματα (όχι έλεγχος πάνω σε άδειο σύνολο)', () => {
     for (const t of [light, dark]) expect(Object.keys(t)).toEqual(expect.arrayContaining(['background', 'foreground', 'card', 'muted-fg', 'primary']));
