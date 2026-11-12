@@ -1,0 +1,213 @@
+/*
+ * Palette: the primitive colours (--p-*) of the app, one name per value. Theme independent.
+ *
+ * Purpose: every colour the screens use comes from here, through the semantic tokens of tokens.css. A component
+ *   never reads a --p-* value directly (it would not follow the theme).
+ * Does NOT: say what a colour means (tokens.css does), hold sizes or fonts, or style the outputs: the print window
+ *   (src/main/print.ts) and the page previews (shared/lib/pageCss.ts) keep their own colours on purpose.
+ * Owner layer: shared/ui, CSS layer `tokens`. Imported by app/styles/index.css before tokens.css.
+ * Covering test: test/contrast.test.ts (resolves the var() chains of both themes and checks every text/background pair).
+ *
+ * How the ramps are made (OKLCH, written as hex because Chromium 108 has no oklch() and no color-mix()):
+ *   - A step number means the same lightness in every family, so two colours of the same step swap without
+ *     changing contrast. Lightness (OKLCH L) of the three base families:
+ *       25=0.985 50=0.972 75=0.962 100=0.952 150=0.93 200=0.9 250=0.87 300=0.84 400=0.74 500=0.63 600=0.53 650=0.48 700=0.43 750=0.4 800=0.37 850=0.32 900=0.28 925=0.25 950=0.22 975=0.19
+ *     and of the status families:
+ *       50=0.972 100=0.945 200=0.88 300=0.8 400=0.7 500=0.59 600=0.5 700=0.4 800=0.34 900=0.31 950=0.27 975=0.2
+ *   - neutral = grey with a hint of olive (hue 122, chroma 0.004-0.034): page, cards, text, borders.
+ *     sage = a stronger olive tint (hue 120, about twice the chroma): hover, group bands, quiet fills.
+ *     olive = the brand colour (hue 118, chroma up to 0.12): main button, top bar, chosen item.
+ *   - status families share one chroma curve scaled per hue: green 150 (ok), amber 85 to 66 (warning), red 28
+ *     (error, empty seat), blue 255 (information, links), violet 302 (Ε.Υ.), teal 205 (ΔΝ).
+ *   - Rule of thumb that the contrast test enforces: text 700 on a 100 fill (light theme) and text 200 on a 900
+ *     fill (dark theme) are both at least 7:1.
+ */
+:root {
+  /* neutral: page, cards, text, borders */
+  --p-neutral-25: #f9faf8;
+  --p-neutral-50: #f5f7f1;
+  --p-neutral-75: #f1f3ed;
+  --p-neutral-100: #eef0ea;
+  --p-neutral-150: #e6e9e1;
+  --p-neutral-200: #dce0d4;
+  --p-neutral-250: #d2d7c8;
+  --p-neutral-300: #c8cdbc;
+  --p-neutral-400: #a7ae99;
+  --p-neutral-500: #858d76;
+  --p-neutral-600: #686f5b;
+  --p-neutral-650: #5b614e;
+  --p-neutral-700: #4d5242;
+  --p-neutral-750: #454a3b;
+  --p-neutral-800: #3e4236;
+  --p-neutral-850: #31342b;
+  --p-neutral-900: #282a22;
+  --p-neutral-925: #20231c;
+  --p-neutral-950: #1a1c15;
+  --p-neutral-975: #13150f;
+  /* sage: hover, bands, quiet fills */
+  --p-sage-25: #f9fbf5;
+  --p-sage-50: #f4f7ee;
+  --p-sage-75: #f1f4e8;
+  --p-sage-100: #edf1e4;
+  --p-sage-150: #e5ebd9;
+  --p-sage-200: #dbe1cb;
+  --p-sage-250: #d1d8bd;
+  --p-sage-300: #c6cfaf;
+  --p-sage-400: #a6b186;
+  --p-sage-500: #83905f;
+  --p-sage-600: #677246;
+  --p-sage-650: #59633b;
+  --p-sage-700: #4c5433;
+  --p-sage-750: #444c2e;
+  --p-sage-800: #3d432b;
+  --p-sage-850: #313523;
+  --p-sage-900: #272b1b;
+  --p-sage-925: #202316;
+  --p-sage-950: #191c11;
+  --p-sage-975: #13150b;
+  /* olive: brand (main button, top bar, chosen item) */
+  --p-olive-25: #f9fbf2;
+  --p-olive-50: #f4f8e9;
+  --p-olive-75: #f0f5e2;
+  --p-olive-100: #edf2dc;
+  --p-olive-150: #e5eccd;
+  --p-olive-200: #dae4b7;
+  --p-olive-250: #cfdca0;
+  --p-olive-300: #c4d488;
+  --p-olive-400: #a4b55d;
+  --p-olive-500: #839334;
+  --p-olive-600: #677423;
+  --p-olive-650: #59641d;
+  --p-olive-700: #4c5619;
+  --p-olive-750: #444d14;
+  --p-olive-800: #3c4513;
+  --p-olive-850: #30370f;
+  --p-olive-900: #272c0d;
+  --p-olive-925: #202409;
+  --p-olive-950: #191d06;
+  --p-olive-975: #121605;
+  /* green: ok */
+  --p-green-50: #eff9f1;
+  --p-green-100: #e1f2e3;
+  --p-green-200: #b8e5c0;
+  --p-green-300: #92cf9e;
+  --p-green-400: #68b279;
+  --p-green-500: #3c9254;
+  --p-green-600: #22753d;
+  --p-green-700: #115629;
+  --p-green-800: #154222;
+  --p-green-900: #1b3822;
+  --p-green-950: #192c1d;
+  --p-green-975: #0b1a0e;
+  /* amber: warning */
+  --p-amber-50: #fbf5ea;
+  --p-amber-100: #f6ecd7;
+  --p-amber-200: #eed49f;
+  --p-amber-300: #dcb96f;
+  --p-amber-400: #c19838;
+  --p-amber-500: #a87006;
+  --p-amber-600: #8d5403;
+  --p-amber-700: #683c00;
+  --p-amber-800: #522e00;
+  --p-amber-900: #442a0d;
+  --p-amber-950: #342210;
+  --p-amber-975: #201305;
+  /* red: error, empty seat */
+  --p-red-50: #fff3f1;
+  --p-red-100: #ffe7e3;
+  --p-red-200: #ffc8c0;
+  --p-red-300: #ffa194;
+  --p-red-400: #fa695c;
+  --p-red-500: #db3931;
+  --p-red-600: #b71a18;
+  --p-red-700: #8a0509;
+  --p-red-800: #68120f;
+  --p-red-900: #531c17;
+  --p-red-950: #3f1915;
+  --p-red-975: #290b09;
+  /* blue: information, links */
+  --p-blue-50: #f0f6ff;
+  --p-blue-100: #e1eeff;
+  --p-blue-200: #bedaff;
+  --p-blue-300: #95c1fa;
+  --p-blue-400: #6da1e3;
+  --p-blue-500: #467fc6;
+  --p-blue-600: #2f64a5;
+  --p-blue-700: #1d487c;
+  --p-blue-800: #1b395e;
+  --p-blue-900: #1d314a;
+  --p-blue-950: #1a2739;
+  --p-blue-975: #0c1724;
+  /* violet: Ε.Υ. */
+  --p-violet-50: #f7f4ff;
+  --p-violet-100: #f0e8ff;
+  --p-violet-200: #e0cdfe;
+  --p-violet-300: #ccabfe;
+  --p-violet-400: #b283f1;
+  --p-violet-500: #925cd4;
+  --p-violet-600: #7743b2;
+  --p-violet-700: #572d86;
+  --p-violet-800: #432665;
+  --p-violet-900: #382650;
+  --p-violet-950: #2b1f3c;
+  --p-violet-975: #1a1027;
+  /* teal: ΔΝ */
+  --p-teal-50: #eef8f9;
+  --p-teal-100: #dff1f3;
+  --p-teal-200: #b4e1e6;
+  --p-teal-300: #8ccad1;
+  --p-teal-400: #60acb5;
+  --p-teal-500: #308c95;
+  --p-teal-600: #137079;
+  --p-teal-700: #015259;
+  --p-teal-800: #0e3f44;
+  --p-teal-900: #183639;
+  --p-teal-950: #172a2c;
+  --p-teal-975: #0a191b;
+  /* single colours: white, focus ring (greener than the brand so it shows on a main button), gold accent, hand mark */
+  --p-white: #ffffff;
+  --p-black: #000000;
+  --p-moss-300: #b9dc80;
+  --p-moss-600: #4f6d22;
+  --p-gold-400: #d8b23a;
+  --p-orange-400: #f4993c;
+  --p-orange-600: #c9690a;
+  --p-yellow-200: #ffe680;
+  --p-yellow-500: #d9a400;
+  --p-yellow-800: #6b5a00;
+  /* Excel look (the preview shows the sheet the way Excel does): grid greys, the «ΚΕΝΗ» fill, the title bar green */
+  --p-xl-55: #f3f3f3;
+  --p-xl-110: #ffc7ce;
+  --p-xl-150: #d9d9d9;
+  --p-xl-225: #c6c6c6;
+  --p-xl-695: #9c0006;
+  --p-xl-935: #111111;
+  --p-xl-green: #1d6b3a;
+  /* soft paper: what a preview of a file is drawn on in the dark theme, so a white sheet does not glare next to the
+     dark screen (warm off-white, hue 95, chroma 0.012; same lightness steps as the base families) */
+  --p-paper-200: #e0ded5;
+  --p-paper-250: #d6d4cc;
+  --p-paper-300: #cdcbc2;
+  --p-paper-400: #adaba3;
+  /* backdrop behind a page preview (the grey of a print preview) */
+  --p-slate-100: #eeeeee;
+  --p-slate-600: #5f6368;
+  /* transparent colours (shadows, overlays, scrollbars), named by base and percent */
+  --p-moss-a28: rgba(91, 122, 43, 0.28);
+  --p-lime-a32: rgba(185, 220, 128, 0.32);
+  --p-ink-a42: rgba(15, 18, 10, 0.42);
+  --p-ink-a18: rgba(15, 18, 10, 0.18);
+  --p-ink-a08: rgba(15, 18, 10, 0.08);
+  --p-soot-a06: rgba(27, 31, 22, 0.06);
+  --p-soot-a20: rgba(27, 31, 22, 0.2);
+  --p-soot-a42: rgba(27, 31, 22, 0.42);
+  --p-black-a55: rgba(0, 0, 0, 0.55);
+  --p-black-a50: rgba(0, 0, 0, 0.5);
+  --p-black-a35: rgba(0, 0, 0, 0.35);
+  --p-black-a30: rgba(0, 0, 0, 0.3);
+  --p-snow-a12: rgba(240, 242, 234, 0.12);
+  --p-snow-a26: rgba(240, 242, 234, 0.26);
+  --p-snow-a50: rgba(240, 242, 234, 0.5);
+  --p-white-a55: rgba(255, 255, 255, 0.55);
+  --p-white-a14: rgba(255, 255, 255, 0.14);
+}
