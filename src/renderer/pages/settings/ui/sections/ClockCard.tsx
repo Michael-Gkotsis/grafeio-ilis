@@ -116,9 +116,9 @@ function settingsCard(m: ClockModel) {
           <Select
             search={true}
             value={tz && tz !== 'system' ? tz : ''}
-            // Phase 6 moves code, not logic: `Select` hands over an event, the old handler read it as the zone
-            // itself. Kept as it was; the fix is a behaviour change for its own PR (see the S4 report).
-            onChange={(e: ValueEvent) => pickZone(e as unknown as string)}
+            // `Select` hands over `{ target: { value } }` like a native select element, not the value
+            // (until 12/11 the event object was saved as the zone).
+            onChange={(e: ValueEvent) => pickZone(e.target.value)}
           >
             <option value="">Διάλεξε ζώνη…</option>
             {zones.map((v) => (
