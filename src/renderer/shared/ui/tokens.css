@@ -1,272 +1,188 @@
 /*
- * Tokens σε τρία επίπεδα: primitives (--p-*) -> σημασιολογικά (τα ίδια ονόματα με πάντα) -> συστατικά (στα δικά τους αρχεία).
+ * Semantic tokens: what a colour is for (--background, --primary, --bad ...), per theme, plus sizes and fonts.
+ *
+ * Purpose: the only variables components read. Each one points at a primitive of palette.css; the two dark blocks
+ *   below override the same names, so a rule written with tokens follows the theme by itself.
+ * Does NOT: hold raw colour values (palette.css) or component rules.
+ * Owner layer: shared/ui, CSS layer `tokens`. Covering test: test/contrast.test.ts (every text/background pair of
+ *   both themes, WCAG 2 and APCA; the two dark blocks must be identical).
+ * Themes: light `:root`; dark as «Όπως τα Windows» (`prefers-color-scheme`) and as «Σκοτεινό» (`[data-theme="dark"]`).
+ * Dark surfaces go from the page (darkest) up: page 975, side menu 950, card 925, quiet fill 900, hover 850.
+ * Paper: a preview of a file shows the file the way it is written and printed, so it stays a light sheet with dark
+ *   text in the dark theme too. The scrolling boxes of the Excel preview (`.xl__scroll`) and of the column mapper
+ *   (`.mapper__scroll`) declare the light map again on themselves; everything inside them (cells, row buttons,
+ *   inputs, scrollbars) reads the same tokens and comes out light. Only the tone of the sheet follows the theme:
+ *   --paper, --paper-head, --paper-hdr and --paper-grid are white and Excel greys in the light theme and a soft warm
+ *   off-white in the dark one, so the sheet does not glare next to the dark screen. They are declared on :root only.
+ *   @decision approved UI proposal 09/11: "the paper stays white". @decision Michael 12/11: white, but not #fff in
+ *   the dark theme, a soft tone that does not burn the eyes.
  */
-/* πρωτογενή χρώματα: ανεξάρτητα από θέμα, ένα όνομα ανά τιμή (οικογένεια + βαθμίδα, 50 ανοιχτότερο, 950 σκουρότερο) */
-:root {
-  /* ελιά (βασικό χρώμα της εφαρμογής) */
-  --p-olive-50: #f4f6ee;
-  --p-olive-75: #f0f4e4;
-  --p-olive-80: #eef1e4;
-  --p-olive-125: #e6edd2;
-  --p-olive-155: #e0e4cc;
-  --p-olive-285: #cdd796;
-  --p-olive-320: #b9dc80;
-  --p-olive-430: #a9ba68;
-  --p-olive-645: #6f7c3a;
-  --p-olive-720: #4f6d22;
-  --p-olive-740: #535b2a;
-  --p-olive-745: #535c27;
-  --p-olive-750: #4a552b;
-  --p-olive-775: #4b5320;
-  --p-olive-785: #414925;
-  --p-olive-800: #3f4720;
-  --p-olive-820: #3d4419;
-  --p-olive-845: #303718;
-  --p-olive-850: #2f3518;
-  --p-olive-880: #262c12;
-  --p-olive-915: #1b1f0c;
-  /* πρασινωπά γκρι (φόντα, κείμενο, όρια) */
-  --p-neutral-50: #f6f7f1;
-  --p-neutral-55: #f3f4ef;
-  --p-neutral-65: #f0f2ea;
-  --p-neutral-70: #eef0ea;
-  --p-neutral-75: #efefe9;
-  --p-neutral-105: #e8ecdd;
-  --p-neutral-125: #e3e7d8;
-  --p-neutral-130: #e2e7d6;
-  --p-neutral-200: #d0d6c3;
-  --p-neutral-210: #d3d9bb;
-  --p-neutral-245: #c5cbb7;
-  --p-neutral-460: #8d977c;
-  --p-neutral-495: #848c75;
-  --p-neutral-580: #7d8750;
-  --p-neutral-625: #6a754b;
-  --p-neutral-645: #5b6055;
-  --p-neutral-655: #5a634d;
-  --p-neutral-715: #4a5141;
-  --p-neutral-725: #464b41;
-  --p-neutral-770: #3b4530;
-  --p-neutral-790: #353c2f;
-  --p-neutral-810: #313a26;
-  --p-neutral-815: #30332c;
-  --p-neutral-820: #2e3429;
-  --p-neutral-830: #2b3126;
-  --p-neutral-855: #252a21;
-  --p-neutral-860: #262d1c;
-  --p-neutral-885: #202219;
-  --p-neutral-890: #1c1f18;
-  --p-neutral-895: #1b1f16;
-  /* πράσινο (ΟΚ) */
-  --p-green-95: #ddf0e2;
-  --p-green-225: #a3e9b6;
-  --p-green-780: #18592b;
-  --p-green-825: #1f3b28;
-  /* κεχριμπάρι (προσοχή, επισήμανση) */
-  --p-amber-95: #fbedd2;
-  --p-amber-250: #ffe680;
-  --p-amber-255: #f8d084;
-  --p-amber-575: #d9a400;
-  --p-amber-790: #6b5a00;
-  --p-amber-795: #6a3d00;
-  --p-amber-840: #3e3014;
-  /* χρυσό (διακριτικά) */
-  --p-gold-465: #d8b23a;
-  --p-gold-470: #d4b03a;
-  /* κόκκινο (σφάλμα, ΚΕΝΗ) */
-  --p-red-50: #fdf1ef;
-  --p-red-80: #fadfdc;
-  --p-red-145: #ffbdb5;
-  --p-red-210: #f7a59c;
-  --p-red-235: #f59a90;
-  --p-red-515: #d9381e;
-  --p-red-600: #b42318;
-  --p-red-720: #7f1a10;
-  --p-red-795: #4b231e;
-  --p-red-835: #38221d;
-  --p-red-900: #2a0d0a;
-  /* μπλε (πληροφορία) */
-  --p-blue-75: #dfeaf8;
-  --p-blue-150: #b8d6fa;
-  --p-blue-715: #1a4478;
-  --p-blue-785: #1e3150;
-  /* βιολετί (ΕΥ) */
-  --p-violet-70: #ece3f7;
-  --p-violet-115: #dfcaf9;
-  --p-violet-650: #52288a;
-  --p-violet-775: #35284c;
-  /* τιρκουάζ (ΔΝ) */
-  --p-teal-100: #d9eff1;
-  --p-teal-220: #a0e8ef;
-  --p-teal-825: #084b51;
-  --p-teal-830: #153c41;
-  /* γκρι και κόκκινο του Excel (προεπισκόπηση ίδια με το αρχείο) */
-  --p-xl-50: #ffffff;
-  --p-xl-55: #f3f3f3;
-  --p-xl-110: #ffc7ce;
-  --p-xl-150: #d9d9d9;
-  --p-xl-155: #ffb3bc;
-  --p-xl-225: #c6c6c6;
-  --p-xl-695: #9c0006;
-  --p-xl-750: #5f2128;
-  --p-xl-935: #111111;
-  /* διαφάνειες (σκιές, επικαλύψεις, μπάρες κύλισης) με όνομα βάσης και ποσοστό */
-  --p-moss-a28: rgba(91, 122, 43, 0.28);
-  --p-ink-a42: rgba(15, 18, 10, 0.42);
-  --p-ink-a18: rgba(15, 18, 10, 0.18);
-  --p-ink-a08: rgba(15, 18, 10, 0.08);
-  --p-soot-a06: rgba(27, 31, 22, 0.06);
-  --p-soot-a20: rgba(27, 31, 22, 0.2);
-  --p-soot-a42: rgba(27, 31, 22, 0.42);
-  --p-lime-a32: rgba(185, 220, 128, 0.32);
-  --p-black-a55: rgba(0, 0, 0, 0.55);
-  --p-black-a50: rgba(0, 0, 0, 0.5);
-  --p-black-a30: rgba(0, 0, 0, 0.3);
-  --p-snow-a26: rgba(240, 242, 234, 0.26);
-  --p-snow-a50: rgba(240, 242, 234, 0.5);
-}
-/* σημασιολογικά tokens: ίδια ονόματα με παλιά ώστε να μην αλλάξει κανένας κανόνας, μόνο οι τιμές δείχνουν στα primitives */
-:root {
-  --background: var(--p-neutral-70);
-  --foreground: var(--p-neutral-895);
-  --card: var(--p-xl-50);
-  --muted: var(--p-neutral-55);
-  --muted-fg: var(--p-neutral-715);
-  --border: var(--p-neutral-245);
-  --input: var(--p-neutral-495);
-  --ring: var(--p-olive-720);
+:root,
+.xl__scroll,
+.mapper__scroll {
+  --background: var(--p-neutral-100);
+  --foreground: var(--p-neutral-950);
+  --card: var(--p-white);
+  --muted: var(--p-neutral-75);
+  --muted-fg: var(--p-neutral-700);
+  --border: var(--p-neutral-300);
+  --line: var(--border); /* same as --border; the name some inline styles ask for */
+  --input: var(--p-neutral-500);
+  --ring: var(--p-moss-600);
   --ring-soft: var(--p-moss-a28);
-  --primary: var(--p-olive-775);
-  --primary-fg: var(--p-xl-50);
-  --secondary: var(--p-neutral-125);
-  --secondary-fg: var(--p-neutral-860);
-  --hover: var(--p-olive-80);
-  --selected: var(--p-olive-125); /* chosen option of a Segmented and similar pickers */
+  --primary: var(--p-olive-700);
+  --primary-fg: var(--p-white);
+  --secondary: var(--p-sage-200);
+  --secondary-fg: var(--p-sage-900);
+  --hover: var(--p-sage-100);
+  --hover-tint: var(--p-ink-a08); /* hover on a coloured fill (a button inside a warning chip) */
+  --selected: var(--p-olive-150); /* chosen option of a Segmented and similar pickers */
   --destructive: var(--p-red-600);
-  --destructive-fg: var(--p-xl-50);
-  --ok: var(--p-green-780);
-  --ok-bg: var(--p-green-95);
-  --warn: var(--p-amber-795);
-  --warn-bg: var(--p-amber-95);
-  --bad: var(--p-red-720);
-  --bad-bg: var(--p-red-80);
-  --bad-line: var(--p-red-515);
-  --on-bad: var(--p-xl-50);
+  --destructive-fg: var(--p-white);
+  --ok: var(--p-green-700);
+  --ok-bg: var(--p-green-100);
+  --warn: var(--p-amber-700);
+  --warn-bg: var(--p-amber-100);
+  --bad: var(--p-red-700);
+  --bad-bg: var(--p-red-100);
+  --bad-line: var(--p-red-500);
+  --on-bad: var(--p-white);
   --empty-row: var(--p-red-50);
-  --info: var(--p-blue-715);
-  --info-bg: var(--p-blue-75);
-  --ey: var(--p-violet-650);
-  --ey-bg: var(--p-violet-70);
-  --dn: var(--p-teal-825);
+  --info: var(--p-blue-700);
+  --info-bg: var(--p-blue-100);
+  --ey: var(--p-violet-700);
+  --ey-bg: var(--p-violet-100);
+  --dn: var(--p-teal-700);
   --dn-bg: var(--p-teal-100);
-  --bar: var(--p-olive-775);
-  --bar-fg: var(--p-xl-50);
-  --bar-muted: var(--p-olive-155);
-  --bar-field: var(--p-olive-745);
-  --bar-line: var(--p-neutral-580);
-  --rail: var(--p-olive-820);
-  --rail-on: var(--p-olive-740);
+  --bar: var(--p-olive-800);
+  --bar-fg: var(--p-white);
+  --bar-muted: var(--p-sage-200);
+  --bar-field: var(--p-olive-700);
+  --bar-line: var(--p-sage-500);
+  --bar-btn: var(--bar-fg); /* filled button on a --bar surface (the «Excel» card) */
+  --bar-btn-fg: var(--bar);
+  --rail: var(--p-olive-850);
+  --rail-on: var(--p-olive-700);
   --nav-bg: var(--p-neutral-50);
-  --nav-fg: var(--p-neutral-860);
-  --nav-muted: var(--p-neutral-715);
-  --nav-hover: var(--p-olive-80);
-  --nav-on: var(--p-olive-125);
+  --nav-fg: var(--p-neutral-950);
+  --nav-muted: var(--p-neutral-700);
+  --nav-hover: var(--p-sage-100);
+  --nav-on: var(--p-olive-150);
   --nav-on-fg: var(--p-olive-850);
-  --nav-accent: var(--p-olive-775);
-  --gold: var(--p-gold-465);
-  --band: var(--p-neutral-105);
+  --nav-accent: var(--p-olive-700);
+  --gold: var(--p-gold-400);
+  --on-gold: var(--p-neutral-950); /* text on a --gold fill */
+  --hand-dot: var(--p-orange-600); /* mark of a cell written by hand («Ημερολόγιο κωλυομένων») */
+  --band: var(--p-sage-150);
   --band-fg: var(--p-olive-850);
-  --band-line: var(--p-olive-645);
+  --band-line: var(--p-sage-600);
   --thead: var(--p-neutral-50);
   --h2: var(--p-olive-800);
-  --xl-grid: var(--p-xl-225);
-  --xl-head: var(--p-xl-55);
-  --xl-bg: var(--p-xl-50);
+  --xl-grid: var(--paper-grid);
+  --xl-head: var(--paper-head);
+  --xl-bg: var(--paper);
   --xl-fg: var(--p-xl-935);
-  --xl-hdr: var(--p-xl-150);
+  --xl-hdr: var(--paper-hdr);
   --xl-kenh: var(--p-xl-110);
   --xl-kenh-fg: var(--p-xl-695);
-  --flash: var(--p-amber-250);
-  --flash-ring: var(--p-amber-575);
+  --xl-bar: var(--p-xl-green); /* title bar of the Excel preview */
+  --xl-bar-fg: var(--p-white);
+  --xl-bar-line: var(--p-white-a55);
+  --xl-bar-hover: var(--p-white-a14);
+  --flash: var(--p-yellow-200);
+  --flash-ring: var(--p-yellow-500);
+  --backdrop: var(--p-slate-600); /* behind a page preview */
+  --backdrop-fg: var(--p-slate-100);
   --overlay: var(--p-ink-a42);
+  --shade: var(--p-ink-a18); /* shadow colour of a pop-up */
+  --shade-strong: var(--p-black-a35); /* shadow colour under a stuck bar */
   --shadow: 0 16px 40px var(--p-ink-a18), 0 2px 6px var(--p-ink-a08);
   --shadow-sm: 0 1px 2px var(--p-soot-a06);
-  --radius: 8px;
-  --radius-lg: 12px;
   --sb-thumb: var(--p-soot-a20);
   --sb-thumb-hover: var(--p-soot-a42);
-  --f-display: "Segoe UI", Tahoma, Arial, sans-serif;
-  --f-body: "Segoe UI", Tahoma, Arial, sans-serif;
-  --f-mono: Consolas, "Courier New", monospace;
-  --nav-h: 62px;
-  --top-h: 44px;
-  --side-w: 196px;
-  --rail-w: 60px;
 }
-/* σκοτεινό θέμα «Όπως τα Windows»: ίδιοι selectors με πριν ώστε να μείνει ίδια η ειδικότητα */
+/* tone of the paper of an Excel/Word preview: the sheet, its text, the strip of column letters, a grey header cell,
+   the grid. On :root only (the dark blocks below override it, a paper does not declare it again), so a sheet takes
+   the tone of the theme */
+:root {
+  --paper: var(--p-white);
+  --paper-fg: var(--p-black);
+  --paper-head: var(--p-xl-55);
+  --paper-hdr: var(--p-xl-150);
+  --paper-grid: var(--p-xl-225);
+}
+/* native scrollbar parts and controls inside a paper stay light in the dark theme; a field drawn on the sheet
+   (the «βάση» grid) takes the tone of the sheet */
+.xl__scroll,
+.mapper__scroll {
+  color-scheme: light;
+  --card: var(--paper);
+}
+/* dark theme «Όπως τα Windows»: same selectors as before so the specificity stays the same */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: var(--p-neutral-890);
-    --foreground: var(--p-neutral-65);
-    --card: var(--p-neutral-855);
-    --muted: var(--p-neutral-820);
-    --muted-fg: var(--p-neutral-200);
-    --border: var(--p-neutral-655);
-    --input: var(--p-neutral-460);
-    --ring: var(--p-olive-320);
+    --background: var(--p-neutral-975);
+    --foreground: var(--p-neutral-100);
+    --card: var(--p-neutral-925);
+    --muted: var(--p-neutral-900);
+    --muted-fg: var(--p-neutral-250);
+    --border: var(--p-neutral-650);
+    --input: var(--p-neutral-500);
+    --ring: var(--p-moss-300);
     --ring-soft: var(--p-lime-a32);
-    --primary: var(--p-olive-285);
-    --primary-fg: var(--p-olive-915);
-    --secondary: var(--p-neutral-770);
-    --secondary-fg: var(--p-olive-75);
-    --hover: var(--p-neutral-790);
+    --primary: var(--p-olive-300);
+    --primary-fg: var(--p-olive-975);
+    --secondary: var(--p-sage-800);
+    --secondary-fg: var(--p-sage-75);
+    --hover: var(--p-sage-850);
+    --hover-tint: var(--p-snow-a12); /* hover on a coloured fill (a button inside a warning chip) */
     --selected: var(--p-olive-750); /* chosen option of a Segmented and similar pickers */
-    --destructive: var(--p-red-210);
-    --destructive-fg: var(--p-red-900);
-    --ok: var(--p-green-225);
-    --ok-bg: var(--p-green-825);
-    --warn: var(--p-amber-255);
-    --warn-bg: var(--p-amber-840);
-    --bad: var(--p-red-145);
-    --bad-bg: var(--p-red-795);
-    --bad-line: var(--p-red-235);
-    --on-bad: var(--p-red-900);
-    --empty-row: var(--p-red-835);
-    --info: var(--p-blue-150);
-    --info-bg: var(--p-blue-785);
-    --ey: var(--p-violet-115);
-    --ey-bg: var(--p-violet-775);
-    --dn: var(--p-teal-220);
-    --dn-bg: var(--p-teal-830);
-    --bar: var(--p-olive-845);
+    --destructive: var(--p-red-300);
+    --destructive-fg: var(--p-red-975);
+    --ok: var(--p-green-200);
+    --ok-bg: var(--p-green-900);
+    --warn: var(--p-amber-200);
+    --warn-bg: var(--p-amber-900);
+    --bad: var(--p-red-200);
+    --bad-bg: var(--p-red-900);
+    --bad-line: var(--p-red-300);
+    --on-bad: var(--p-red-975);
+    --empty-row: var(--p-red-950);
+    --info: var(--p-blue-200);
+    --info-bg: var(--p-blue-900);
+    --ey: var(--p-violet-200);
+    --ey-bg: var(--p-violet-900);
+    --dn: var(--p-teal-200);
+    --dn-bg: var(--p-teal-900);
+    --bar: var(--p-olive-850);
     --bar-fg: var(--p-olive-50);
-    --bar-muted: var(--p-neutral-210);
-    --bar-field: var(--p-olive-785);
-    --bar-line: var(--p-neutral-625);
-    --rail: var(--p-olive-880);
+    --bar-muted: var(--p-sage-250);
+    --bar-field: var(--p-olive-750);
+    --bar-line: var(--p-sage-600);
+    --bar-btn: var(--primary); /* filled button on a --bar surface (the «Excel» card) */
+    --bar-btn-fg: var(--primary-fg);
+    --rail: var(--p-olive-950);
     --rail-on: var(--p-olive-750);
-    --nav-bg: var(--p-neutral-855);
-    --nav-fg: var(--p-neutral-65);
-    --nav-muted: var(--p-neutral-200);
-    --nav-hover: var(--p-neutral-790);
+    --nav-bg: var(--p-neutral-950);
+    --nav-fg: var(--p-neutral-100);
+    --nav-muted: var(--p-neutral-250);
+    --nav-hover: var(--p-sage-850);
     --nav-on: var(--p-olive-750);
     --nav-on-fg: var(--p-olive-50);
-    --nav-accent: var(--p-olive-285);
-    --gold: var(--p-gold-470);
-    --band: var(--p-neutral-810);
-    --band-fg: var(--p-olive-125);
-    --band-line: var(--p-olive-430);
-    --thead: var(--p-neutral-830);
-    --h2: var(--p-neutral-130);
-    --xl-grid: var(--p-neutral-645);
-    --xl-head: var(--p-neutral-815);
-    --xl-bg: var(--p-neutral-885);
-    --xl-fg: var(--p-neutral-75);
-    --xl-hdr: var(--p-neutral-725);
-    --xl-kenh: var(--p-xl-750);
-    --xl-kenh-fg: var(--p-xl-155);
-    --flash: var(--p-amber-790);
-    --flash-ring: var(--p-amber-575);
+    --nav-accent: var(--p-olive-300);
+    --hand-dot: var(--p-orange-400); /* mark of a cell written by hand («Ημερολόγιο κωλυομένων») */
+    --band: var(--p-sage-850);
+    --band-fg: var(--p-olive-150);
+    --band-line: var(--p-sage-400);
+    --thead: var(--p-neutral-900);
+    --h2: var(--p-sage-150);
     --overlay: var(--p-black-a55);
+    --shade: var(--p-black-a50); /* shadow colour of a pop-up */
+    --shade-strong: var(--p-black-a55); /* shadow colour under a stuck bar */
+    --paper: var(--p-paper-200);
+    --paper-head: var(--p-paper-250);
+    --paper-hdr: var(--p-paper-300);
+    --paper-grid: var(--p-paper-400);
     --shadow: 0 16px 40px var(--p-black-a50), 0 2px 6px var(--p-black-a30);
     --shadow-sm: 0 1px 2px var(--p-black-a30);
     --sb-thumb: var(--p-snow-a26);
@@ -274,97 +190,108 @@
     color-scheme: dark;
   }
 }
-/* σκοτεινό θέμα «Σκοτεινό»: ίδιες τιμές με το παραπάνω, επιλέγεται από τις ρυθμίσεις */
+/* dark theme «Σκοτεινό»: same values as above, chosen in the settings */
 :root[data-theme="dark"] {
-  --background: var(--p-neutral-890);
-  --foreground: var(--p-neutral-65);
-  --card: var(--p-neutral-855);
-  --muted: var(--p-neutral-820);
-  --muted-fg: var(--p-neutral-200);
-  --border: var(--p-neutral-655);
-  --input: var(--p-neutral-460);
-  --ring: var(--p-olive-320);
+  --background: var(--p-neutral-975);
+  --foreground: var(--p-neutral-100);
+  --card: var(--p-neutral-925);
+  --muted: var(--p-neutral-900);
+  --muted-fg: var(--p-neutral-250);
+  --border: var(--p-neutral-650);
+  --input: var(--p-neutral-500);
+  --ring: var(--p-moss-300);
   --ring-soft: var(--p-lime-a32);
-  --primary: var(--p-olive-285);
-  --primary-fg: var(--p-olive-915);
-  --secondary: var(--p-neutral-770);
-  --secondary-fg: var(--p-olive-75);
-  --hover: var(--p-neutral-790);
+  --primary: var(--p-olive-300);
+  --primary-fg: var(--p-olive-975);
+  --secondary: var(--p-sage-800);
+  --secondary-fg: var(--p-sage-75);
+  --hover: var(--p-sage-850);
+  --hover-tint: var(--p-snow-a12); /* hover on a coloured fill (a button inside a warning chip) */
   --selected: var(--p-olive-750); /* chosen option of a Segmented and similar pickers */
-  --destructive: var(--p-red-210);
-  --destructive-fg: var(--p-red-900);
-  --ok: var(--p-green-225);
-  --ok-bg: var(--p-green-825);
-  --warn: var(--p-amber-255);
-  --warn-bg: var(--p-amber-840);
-  --bad: var(--p-red-145);
-  --bad-bg: var(--p-red-795);
-  --bad-line: var(--p-red-235);
-  --on-bad: var(--p-red-900);
-  --empty-row: var(--p-red-835);
-  --info: var(--p-blue-150);
-  --info-bg: var(--p-blue-785);
-  --ey: var(--p-violet-115);
-  --ey-bg: var(--p-violet-775);
-  --dn: var(--p-teal-220);
-  --dn-bg: var(--p-teal-830);
-  --bar: var(--p-olive-845);
+  --destructive: var(--p-red-300);
+  --destructive-fg: var(--p-red-975);
+  --ok: var(--p-green-200);
+  --ok-bg: var(--p-green-900);
+  --warn: var(--p-amber-200);
+  --warn-bg: var(--p-amber-900);
+  --bad: var(--p-red-200);
+  --bad-bg: var(--p-red-900);
+  --bad-line: var(--p-red-300);
+  --on-bad: var(--p-red-975);
+  --empty-row: var(--p-red-950);
+  --info: var(--p-blue-200);
+  --info-bg: var(--p-blue-900);
+  --ey: var(--p-violet-200);
+  --ey-bg: var(--p-violet-900);
+  --dn: var(--p-teal-200);
+  --dn-bg: var(--p-teal-900);
+  --bar: var(--p-olive-850);
   --bar-fg: var(--p-olive-50);
-  --bar-muted: var(--p-neutral-210);
-  --bar-field: var(--p-olive-785);
-  --bar-line: var(--p-neutral-625);
-  --rail: var(--p-olive-880);
+  --bar-muted: var(--p-sage-250);
+  --bar-field: var(--p-olive-750);
+  --bar-line: var(--p-sage-600);
+  --bar-btn: var(--primary); /* filled button on a --bar surface (the «Excel» card) */
+  --bar-btn-fg: var(--primary-fg);
+  --rail: var(--p-olive-950);
   --rail-on: var(--p-olive-750);
-  --nav-bg: var(--p-neutral-855);
-  --nav-fg: var(--p-neutral-65);
-  --nav-muted: var(--p-neutral-200);
-  --nav-hover: var(--p-neutral-790);
+  --nav-bg: var(--p-neutral-950);
+  --nav-fg: var(--p-neutral-100);
+  --nav-muted: var(--p-neutral-250);
+  --nav-hover: var(--p-sage-850);
   --nav-on: var(--p-olive-750);
   --nav-on-fg: var(--p-olive-50);
-  --nav-accent: var(--p-olive-285);
-  --gold: var(--p-gold-470);
-  --band: var(--p-neutral-810);
-  --band-fg: var(--p-olive-125);
-  --band-line: var(--p-olive-430);
-  --thead: var(--p-neutral-830);
-  --h2: var(--p-neutral-130);
-  --xl-grid: var(--p-neutral-645);
-  --xl-head: var(--p-neutral-815);
-  --xl-bg: var(--p-neutral-885);
-  --xl-fg: var(--p-neutral-75);
-  --xl-hdr: var(--p-neutral-725);
-  --xl-kenh: var(--p-xl-750);
-  --xl-kenh-fg: var(--p-xl-155);
-  --flash: var(--p-amber-790);
-  --flash-ring: var(--p-amber-575);
+  --nav-accent: var(--p-olive-300);
+  --hand-dot: var(--p-orange-400); /* mark of a cell written by hand («Ημερολόγιο κωλυομένων») */
+  --band: var(--p-sage-850);
+  --band-fg: var(--p-olive-150);
+  --band-line: var(--p-sage-400);
+  --thead: var(--p-neutral-900);
+  --h2: var(--p-sage-150);
+  --overlay: var(--p-black-a55);
+  --shade: var(--p-black-a50); /* shadow colour of a pop-up */
+  --shade-strong: var(--p-black-a55); /* shadow colour under a stuck bar */
+  --paper: var(--p-paper-200);
+  --paper-head: var(--p-paper-250);
+  --paper-hdr: var(--p-paper-300);
+  --paper-grid: var(--p-paper-400);
+  --shadow: 0 16px 40px var(--p-black-a50), 0 2px 6px var(--p-black-a30);
+  --shadow-sm: 0 1px 2px var(--p-black-a30);
+  --sb-thumb: var(--p-snow-a26);
+  --sb-thumb-hover: var(--p-snow-a50);
   color-scheme: dark;
 }
-/* νέα tokens, ακόμα αχρησιμοποίητα: τα παίρνουν οι επόμενες αλλαγές εμφάνισης χωρίς να αλλάξει τίποτα τώρα */
+/* sizes and fonts (not part of a theme) */
 :root {
-  /* κλίμακα γραμμάτων */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --f-display: "Segoe UI", Tahoma, Arial, sans-serif;
+  --f-body: "Segoe UI", Tahoma, Arial, sans-serif;
+  --f-mono: Consolas, "Courier New", monospace;
+  --nav-h: 62px;
+  --top-h: 44px;
+  --side-w: 196px;
+  --rail-w: 60px;
+  /* type scale */
   --t-xs: 12px;
   --t-sm: 13px;
   --t-md: 14px;
   --t-lg: 16px;
   --t-xl: 20px;
   --lh: 1.4;
-  /* αποστάσεις */
+  /* spacing */
   --gap-1: 4px;
   --gap-2: 8px;
   --gap-3: 12px;
   --gap-4: 16px;
   --gap-5: 24px;
-  /* μεγέθη στοιχείων */
+  /* control sizes */
   --h-ctl: 32px;
   --h-row: 34px;
   --dock-w: 420px;
   --chip-h: 22px;
   --target-min: 24px;
-  /* χαρτί προεπισκόπησης Excel/Word: λευκό και στα δύο θέματα, το αρχείο φαίνεται όπως παράγεται */
-  --paper: #ffffff;
-  --paper-fg: #111111;
 }
-/* πυκνή διάταξη: μόνο τα νέα tokens, οι υπάρχοντες κανόνες πυκνότητας μένουν στο legacy ως την αλλαγή του κάθε συστατικού */
+/* compact density: only the new size tokens; the density rules of each component stay in legacy until it is restyled */
 :root[data-density="compact"] {
   --h-ctl: 28px;
   --h-row: 28px;
