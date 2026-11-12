@@ -19,7 +19,8 @@ export function Inline({ text, open }: { text: string; open: (id: string) => voi
   const txt = hk;
   for (const m of text.matchAll(INLINE)) {
     if (m.index! > i) parts.push(txt(text.slice(i, m.index)));
-    if (m[1] != null) parts.push(<b>{txt(m[1])}</b>);
+    // A link may sit inside bold («**[[today|Σήμερα]]**»): draw the bold text with the same markup.
+    if (m[1] != null) parts.push(<b>{m[1].includes('[[') ? <Inline text={m[1]} open={open} /> : txt(m[1])}</b>);
     else if (m[2] != null) parts.push(<Kbd>{m[2]}</Kbd>);
     else {
       const id = m[3];
