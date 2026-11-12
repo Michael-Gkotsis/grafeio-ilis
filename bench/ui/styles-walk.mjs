@@ -239,7 +239,16 @@ const settingsPending = {
   }
 };
 
-const history = { name: 'Ιστορικό', run: async S => { await S.nav('Σήμερα'); await S.state('history', () => S.top('Ιστορικό ενεργειών'), { close: false }); } };
+// U9: the seeded browser state has an empty log; a saved outs plan gives it one entry, and undoing it gives the «Αναιρέθηκε» row
+const history = {
+  name: 'Ιστορικό',
+  run: async S => {
+    await S.nav('Σήμερα'); await S.state('history', () => S.top('Ιστορικό ενεργειών'), { close: false });
+    await S.nav('Εξοδούχοι'); await S.click('Όλοι όσοι μπορούν'); await S.click('Αποθήκευση'); await S.click('Αποθήκευση', '.ui-dialog');
+    await S.state('history (with entries)', () => S.top('Ιστορικό ενεργειών'), { close: false });
+    await S.state('history (undone)', () => S.click('Αναίρεση', '.history__table, .log'), { close: false });
+  }
+};
 const guide = { name: 'Οδηγός', run: async S => { await S.nav('Σήμερα'); await S.state('guide', () => S.top('Οδηγός χρήσης'), { close: false }); } };
 
 // hidden screen: only Ctrl+Shift+D or the search box opens it; waits for main's first diag() answer

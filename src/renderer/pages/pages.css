@@ -5,9 +5,10 @@
  * Does NOT: hold any rule. CSS is not imported from TSX because the CSS tests (test/support/css.ts) follow
  *   @import from index.css and the SSR tests do not load CSS.
  * Owner layer: renderer/pages.
- * Why: the pages layer is filled one page at a time by the UI PRs (U6 «Διάγνωση» first, U8 «Οδηγός»).
+ * Why: the pages layer is filled one page at a time by the UI PRs (U6 «Διάγνωση» first, U8 «Οδηγός», U9 «Ιστορικό»).
  * Covering test: test/contrast.test.ts, bench:styles.
  */
 @import url("./diag/ui/diag.css");
 @import url("./guide/ui/guide.css");
+@import url("./history/ui/history.css");
 @import url("./statuses/ui/statuses.css");
