@@ -15,10 +15,10 @@ import { useNowMin } from '../clock';
 import { codeErrors } from '../../shared/codes';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { usePrefs, type Prefs } from '../prefs';
-import { FoldersCard, RosterPreview, SourcesView } from './sources';
+import {
+  BrandCard, EssoCards, FoldersCard, ListsCard, RoomsCard, RosterPreview, SiCard, SourcesView, StatCard,
+} from '../pages/settings';
 import { UpdatesCard } from '../update';
-import { BrandCard, ListsCard, RoomsCard, SiCard, StatCard } from '../pages/settings';
-import { EssoCards } from './esso';
 import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';

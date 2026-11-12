@@ -16,8 +16,7 @@
     "src/main/updater.ts": 478,
     "src/renderer/guideText.ts": 1005,
     "src/renderer/screens/guard.ts": 699,
-    "src/renderer/screens/reports.ts": 1284,
-    "src/renderer/screens/sources.ts": 605
+    "src/renderer/screens/reports.ts": 1284
   },
   "oversizeFunctions": {
     "src/core/commands/handlers/cadre.ts::handleSaveCadre": 92,
@@ -185,7 +184,6 @@
     "src/renderer/guideTopic.ts": 1,
     "src/renderer/main.ts": 1,
     "src/renderer/screens/cadre.ts": 7,
-    "src/renderer/screens/esso.ts": 5,
     "src/renderer/screens/guard.ts": 26,
     "src/renderer/screens/imerologio.ts": 5,
     "src/renderer/screens/other.ts": 11,
@@ -195,7 +193,6 @@
     "src/renderer/screens/reports.ts": 56,
     "src/renderer/screens/settings.ts": 16,
     "src/renderer/screens/skips.ts": 4,
-    "src/renderer/screens/sources.ts": 27,
     "src/renderer/screens/valueEditor.ts": 1,
     "src/renderer/screens/weaponMoves.ts": 3,
     "src/renderer/screens/weapons.ts": 16,
