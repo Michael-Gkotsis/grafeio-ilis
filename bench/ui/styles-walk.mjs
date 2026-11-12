@@ -239,6 +239,22 @@ const settingsPending = {
   }
 };
 
+// S2 of the «Ρυθμίσεις» move: the «Αρχεία Excel» dialogs and the ΕΣΣΟ cards, wizard and restore question
+const settingsSourcesEsso = {
+  name: 'Ρυθμίσεις (αρχεία Excel, ΕΣΣΟ)',
+  run: async S => {
+    await settingsGo(S, 'Αρχεία Excel');
+    await S.snap('files');
+    for (const label of ['Κελιά…', 'Φύλλα…', 'Εισαγωγή νέου Excel…']) {
+      await S.dialog(`files: ${label}`, () => S.click(label));
+    }
+    await settingsGo(S, 'ΕΣΣΟ');
+    await S.snap('esso');
+    await S.dialog('esso: new ΕΣΣΟ wizard', () => S.click('Νέα ΕΣΣΟ…'));
+    await S.dialog('esso: restore question', () => S.click('Επαναφορά'));
+  }
+};
+
 // S1 of the «Ρυθμίσεις» move: the Λίστες (some lists), Θάλαμοι, Σ.Ι. and Καταστάσεις tables and Τίτλος cards
 const settingsCards = {
   name: 'Ρυθμίσεις (λίστες, θάλαμοι, πίνακες)',
@@ -292,6 +308,6 @@ const more = {
 
 export const GROUPS = [
   screen('Σήμερα', null, { phone: true }), people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
-  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, history, guide,
+  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, settingsSourcesEsso, history, guide,
   diag, more
 ];
