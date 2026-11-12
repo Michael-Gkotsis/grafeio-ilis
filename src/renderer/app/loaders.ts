@@ -36,7 +36,7 @@ const track =
 /** One importer per on-demand screen module, keyed by the name prefetch.ts uses. */
 export const MODULES = {
   reports: track('reports', () => import('../screens/reports')),
-  settings: track('settings', () => import('../screens/settings')),
+  settings: track('settings', () => import('../pages/settings')),
   guide: track('guide', () => import('../pages/guide')),
   diag: track('diag', () => import('../pages/diag')),
 };

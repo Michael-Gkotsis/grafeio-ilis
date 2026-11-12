@@ -1,9 +1,7 @@
 // components/common: επιλογή ατόμου, κατάσταση, ημερομηνίες, προεπισκόπηση Excel, κουμπί εξαγωγής
-import { Fragment, useCallback } from 'react';
+import { Fragment } from 'react';
 import { html, Alert, Button, Segmented } from './ui';
 import { Combo, Select } from './select';
-import { useStore } from './store';
-import { useToast } from './ui';
 import { SHIFT_EVERY, MAX_SHIFT_OWN, hoursTxt, shiftList, shiftReport, shiftSlots, type ShiftDef, type ShiftOwn } from '../shared/domain';
 import { normTime } from '../shared/hours';
 import { GO } from './shared/lib/exportGo';
@@ -111,14 +109,6 @@ export { GoLink } from './shared/ui';
 export { ActiveFilter } from './shared/ui';
 export { GO };
 
-/* Αντίγραφο σε USB (έρευνα §4.2): ένα κουμπί, και υπενθύμιση στο «Σήμερα» αν πέρασαν πάνω από 7 μέρες */
-export function useUsbCopy() {
-  const { refresh } = useStore(); const toast = useToast();
-  return useCallback(async () => {
-    const r = await window.api.usbCopy(); if (!r) return false;
-    if (!r.ok) { toast({ text: html`<span><b>Δεν έγινε.</b> ${r.error}</span>` }); return false; }
-    await refresh();
-    toast({ text: r.warning ? html`<span><b>Πάρθηκε αντίγραφο, αλλά:</b> ${r.warning}</span>` : 'Πάρθηκε αντίγραφο στο ' + r.file + '. Κράτα το USB έξω από το PC.' });
-    return true;
-  }, [refresh, toast]);
-}
+// Deprecated path (Phase 6, removed in Phase 7): `useUsbCopy` moved to shared/model. Σήμερα and the command palette
+// still import it from here.
+export { useUsbCopy } from './shared/model';
