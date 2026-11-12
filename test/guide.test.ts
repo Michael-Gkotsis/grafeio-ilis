@@ -45,12 +45,17 @@ beforeAll(async () => {
   } finally { app.stop(); keys.restore(); keys = null; }
   // sections of Ρυθμίσεις: the section list has one button per section; pressing one asks the screen to set {tab}
   const found = new Set<string>();
-  for (const current of ['unit', 'rooms']) {
+  for (const current of ['unit', 'files', 'look', 'duty', 'sigs']) {
     const set = vi.fn();
     const s = startSession(() => H.renderIn(bw.world, 'templates', { tab: current }, createElement(TemplatesScreen as never), {}, { set }));
     try {
-      const nav = flat(s.render()).match(/<nav class="setnav"[^>]*>(.*?)<\/nav>/)![1];
-      for (const label of [...nav.matchAll(/<button[^>]*>([^<]*)</g)].map(m => m[1])) s.press(label);
+      // U11a: the groups are in the nav, the sections of the open group are the tabs of the body
+      const html = flat(s.render());
+      const nav = html.match(/<nav class="settings__nav"[^>]*>(.*?)<\/nav>/)![1];
+      const tabRow = html.match(/<div class="ui-tabs"[^>]*>(.*?)<\/div>/)?.[1] ?? '';
+      const labels = [...(nav + tabRow).matchAll(/<button[^>]*>([^<]*)</g)].map(m => m[1]);
+      // a group and its section can share a label («Αρχεία Excel»): press every button with that label
+      for (const label of labels) for (let index = 0; index < labels.filter(l => l === label).length; index++) s.press(label, { index });
       for (const [arg] of set.mock.calls) found.add((arg as { tab: string }).tab);
       found.add(current);
     } finally { s.stop(); }
