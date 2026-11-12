@@ -104,9 +104,9 @@ export function NotesScreen() {
               onChange={(e) => setQ(e.target.value)}
             />
             {filtered && (
-              <button type="button" className="actfilter__act" onClick={clear}>
+              <Button variant="ghost" size="sm" onClick={clear}>
                 Καθάρισε τα φίλτρα
-              </button>
+              </Button>
             )}
             <span className="toolbar__count">
               {rows.length} από {filter === 'done' ? counts.done : open.length}
