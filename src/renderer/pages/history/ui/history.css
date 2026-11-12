@@ -1,0 +1,136 @@
+/*
+ * «Ιστορικό» page (BEM block `history`): the log as a ledger table Πότε · Τι έγινε · Χαρτιά που άλλαξαν · Από · undo.
+ *
+ * Purpose: the look of pages/history/ui/HistoryScreen.tsx and HistoryRow.tsx.
+ * Does NOT: use the `.log*` classes (legacy.css, shared with «Σήμερα»), restyle `.toolbar`, `.empty`, Badge or
+ *   Button, or hold colour values (semantic tokens only).
+ * Owner layer: renderer/pages/history. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
+ * Why: U9. Legacy sits in the last layer and beats this layer, so every selector here is a `history*` class that no
+ *   legacy rule matches; generic `table`/`th`/`td` rules in legacy are all scoped to a class other than ours.
+ * Covering test: bench:styles (group «Ιστορικό»), test/screens-main.test.ts, test/contrast.test.ts.
+ */
+
+.history__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.history__table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-fg);
+  border-bottom: 1px solid var(--border);
+}
+.history__table td {
+  padding: 8px 12px;
+  min-height: 40px;
+  height: 40px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+.history__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.history__row:hover {
+  background: var(--hover);
+}
+.history__time {
+  width: 112px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-fg);
+}
+.history__files {
+  width: 30%;
+  font-size: 13px;
+  color: var(--muted-fg);
+  overflow-wrap: anywhere;
+}
+.history__src {
+  white-space: nowrap;
+}
+.history__undo {
+  text-align: right;
+  white-space: nowrap;
+}
+.history__row.is-undone {
+  color: var(--muted-fg);
+}
+.history__row.is-undone b {
+  text-decoration: line-through;
+  font-weight: 500;
+}
+.history__more {
+  justify-content: center;
+  margin: 8px 0;
+}
+
+/* Same technique as PageHeader.css: out of sight, still read by screen readers. */
+.history__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[data-density="compact"] .history__table td {
+  height: 32px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Phone: each row stacks (time and source on one line, then the text, then the files); the header is hidden. */
+@media (max-width: 700px) {
+  .history__table thead {
+    display: none;
+  }
+  .history__table,
+  .history__table tbody {
+    display: block;
+  }
+  .history__row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .history__table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .history__table td {
+    display: block;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .history__time {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .history__src {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .history__what,
+  .history__files,
+  .history__undo {
+    grid-column: 1 / -1;
+  }
+  .history__undo {
+    text-align: left;
+  }
+  .history__undo:empty {
+    display: none;
+  }
+}
