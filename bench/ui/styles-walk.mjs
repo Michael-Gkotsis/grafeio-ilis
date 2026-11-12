@@ -239,6 +239,27 @@ const settingsPending = {
   }
 };
 
+// S1 of the «Ρυθμίσεις» move: the Λίστες (some lists), Θάλαμοι, Σ.Ι. and Καταστάσεις tables and Τίτλος cards
+const settingsCards = {
+  name: 'Ρυθμίσεις (λίστες, θάλαμοι, πίνακες)',
+  run: async S => {
+    await settingsGo(S, 'Λίστες');
+    for (const list of ['Ιατρικά', 'Ποινές', 'Άδειες', 'Απουσίες στελεχών', 'Έξοδος όπλων']) {
+      await S.state(`list ${list}`, async () => {
+        await S.page.locator('button[aria-label="Ποια λίστα"]').click();
+        await S.page.locator('[role=option]').filter({ hasText: new RegExp(`^${list}$`) }).first().click();
+      }, { close: false });
+    }
+    await settingsGo(S, 'Θάλαμοι και ουλαμοί');
+    await S.state('rooms: a room chip', () => S.page.locator('.main .ui-chip').first().click(), { close: false });
+    await settingsGo(S, 'Υπηρεσίες και αργίες');
+    await S.state('duty sub-tab Σ.Ι.', () => S.click('Σ.Ι.', '.main .ui-seg'), { close: false });
+    await S.state('duty sub-tab Καταστάσεις', () => S.click('Καταστάσεις', '.main .ui-seg'), { close: false });
+    await settingsGo(S, 'Εμφάνιση');
+    await S.state('brand: a logo choice', () => S.page.locator('.main .ui-chip').nth(1).click(), { close: false });
+  }
+};
+
 // U9: the seeded browser state has an empty log; a saved outs plan gives it one entry, and undoing it gives the «Αναιρέθηκε» row
 const history = {
   name: 'Ιστορικό',
@@ -271,6 +292,6 @@ const more = {
 
 export const GROUPS = [
   screen('Σήμερα', null, { phone: true }), people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
-  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, history, guide,
+  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, history, guide,
   diag, more
 ];
