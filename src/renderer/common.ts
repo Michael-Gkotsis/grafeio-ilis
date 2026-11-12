@@ -107,14 +107,9 @@ export { E, type Cell, type SheetModel } from './shared/lib/sheets/model';
 export { ExportProvider, useExport, useExportBusy, usePrintFile } from './shared/model';
 export { ExportButton, PrintButton, SigsButton, SigsMenu, TemplateNote } from './widgets/export';
 export { GoLink } from './shared/ui';
+// Deprecated path (Phase 6, removed in Phase 7): ActiveFilter moved to shared/ui.
+export { ActiveFilter } from './shared/ui';
 export { GO };
-
-/* Ορατό ενεργό φίλτρο με ✕ (έρευνα §3.7) */
-export function ActiveFilter({ parts, onClear, extra }: { parts: (string | false | null | undefined)[]; onClear: () => void; extra?: any }) {
-  const ps = parts.filter(Boolean) as string[];
-  if (!ps.length) return null;
-  return html`<span className="actfilter" role="status">Φίλτρο: <b>${ps.join(' · ')}</b>${extra}<button type="button" aria-label="Καθάρισε το φίλτρο" data-tip="Καθάρισε το φίλτρο" onClick=${onClear}>✕</button></span>`;
-}
 
 /* Αντίγραφο σε USB (έρευνα §4.2): ένα κουμπί, και υπενθύμιση στο «Σήμερα» αν πέρασαν πάνω από 7 μέρες */
 export function useUsbCopy() {

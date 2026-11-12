@@ -1,5 +1,6 @@
 // Public API of shared/ui: the generic UI primitives. Import from here (or through the legacy shims
 // renderer/ui.ts and renderer/select.ts while the screens still use them).
+export { ActiveFilter, type ActiveFilterProps } from './ActiveFilter';
 export { Alert, type AlertProps } from './Alert';
 export { Badge, Kbd, type BadgeProps } from './Badge';
 export { Button, Why, type ButtonProps } from './Button';

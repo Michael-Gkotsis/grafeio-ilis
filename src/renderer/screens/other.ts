@@ -1,7 +1,7 @@
 // Σήμερα, ιατρικά/ποινές, δύναμη, ΗΚΑΙ, ιστορικό, templates/εισαγωγή/ρυθμίσεις, αναζήτηση (Ctrl+K)
 import { RkName, rkShort } from '../rankName';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Card, PageHeader, Segmented, Strip, Tabs, useMedia, useToast } from '../ui';
+import { html, cx, Alert, Badge, Button, Card, PageHeader, Strip, Tabs, useMedia, useToast } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
 import { requestLeave, usePending } from '../pending';
@@ -12,7 +12,6 @@ import { HK_SECTIONS, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings
 import { HK_K, HK_A, HK_MANUAL, hkaiCounts, strengthAt } from '../../shared/rules';
 import { addDays, dm, dmy, parseD, DOW_GEN } from '../../shared/dates';
 import { strengthView, type SvCat, type SvGroup } from '../../shared/strengthView';
-import { normGreek } from '../../shared/text';
 import { movesOn, outReason, personLine } from '../../shared/hkaiText';
 import { PunTextDialog } from '../widgets/status-lists';
 import { ApproveDialog, RequestDialog, RequestsLink } from '../widgets/requests';
@@ -20,7 +19,6 @@ import { cadreCountRows, hkRowList, rankTxt } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
-import { SRC } from './today';
 
 // Deprecated path (Phase 6.0, removed in Phase 7): the dialog moved to widgets/status-lists.
 export { PunTextDialog };
@@ -224,28 +222,8 @@ function HkaiSectionsCard() {
       ${provDirty && html`<div className="toolbar" style=${{ marginTop: '6px' }}><${Button} size="sm" onClick=${async () => { if (await save({ ...cur, prov }, 'προβλέπονται')) toast({ text: 'Αποθηκεύτηκαν τα «Προβλέπονται»' }); }}>Αποθήκευση<//></div>`}</div>`}
   <//>`;
 }
-const HISTORY_PAGE = 60;
-export function HistoryScreen() {
-  const { audit, today, undo } = useStore();
-  const last = audit.find(x => x.undoable && !x.undone);
-  // αναζήτηση σε ενέργειες και αρχεία (π.χ. ένα επώνυμο), και φίλτρο ανά πηγή
-  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [src, setSrc] = useState('all');
-  const list = useMemo(() => { const n = normGreek(dq.trim()); return audit.filter(e => (src === 'all' || e.source === src) && (!n || normGreek(e.text + ' ' + e.files.join(' ')).includes(n))); }, [audit, dq, src]);
-  // 300 γραμμές είναι πάνω από 2.000 στοιχεία στη σελίδα: πρώτα οι 60 πιο πρόσφατες, οι άλλες με κουμπί
-  const [more, setMore] = useState(0); useEffect(() => setMore(0), [dq, src]);
-  const shown = list.slice(0, HISTORY_PAGE * (more + 1));
-  return html`<div>
-    <${PageHeader} title="Ιστορικό" sub="Κάθε ενέργεια, από πού έγινε και ποια έντυπα αφορά. Η αναίρεση γίνεται από την πιο πρόσφατη προς τα πίσω."/>
-    ${audit.length > 0 && html`<div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στο ιστορικό" placeholder="Επώνυμο, ενέργεια ή αρχείο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
-      <${Segmented} small=${true} value=${src} onChange=${setSrc} items=${[{ value: 'all', label: 'Όλα' }, ...Object.keys(SRC).filter(k => audit.some(e => e.source === k)).map(k => ({ value: k, label: SRC[k][0] }))]}/>
-      <${ActiveFilter} parts=${[src !== 'all' && SRC[src][0], dq && '«' + dq + '»']} onClear=${() => { setQ(''); setSrc('all'); }}/><span className="toolbar__count">${list.length} από ${audit.length}</span></div>`}
-    <div className="ui-card">${audit.length && !list.length ? html`<div className="empty">Καμία ενέργεια δεν ταιριάζει.</div>` : audit.length ? html`<ul className="log">${shown.map(e => html`<li key=${e.id} className=${e.undone ? 'is-undone' : ''}>
-      <span className="log__time">${e.day === today ? 'Σήμερα' : dm(e.day)}<br/>${e.at}</span>
-      <div><b>${e.text}</b> <${Badge} tone=${SRC[e.source][1]}>${SRC[e.source][0]}<//>${e.undone && html` <${Badge}>Αναιρέθηκε<//>`}<div className="log__files">${e.files.join(' · ')}</div></div>
-      ${e === last ? html`<${Button} size="sm" variant="outline" onClick=${() => undo(e.id)}>Αναίρεση<//>` : null}
-    </li>`)}</ul>${shown.length < list.length && html`<div className="toolbar" style=${{ justifyContent: 'center', margin: '8px 0' }}><${Button} variant="outline" size="sm" onClick=${() => setMore(m => m + 1)}>Δείξε παλιότερες (${list.length - shown.length})<//></div>`}` : html`<div className="empty">Δεν έχει γίνει ακόμα καμία ενέργεια.</div>`}</div>
-  </div>`;
-}
+// Deprecated path (Phase 6, removed in Phase 7): the screen moved to pages/history.
+export { HistoryScreen } from '../pages/history';
 
 // Deprecated path: the command palette moved to src/renderer/app/CommandPalette.tsx. Re-exported so old imports work.
 export { CommandPalette } from '../app/CommandPalette';
