@@ -31,8 +31,8 @@ export function GuideScreen() {
           onChange={(e) => setQ(e.target.value)}
         />
       </PageHeader>
-      <div className="setgrid guide__grid">
-        <nav className="setnav guidenav" aria-label="Περιεχόμενα οδηγού">
+      <div className="guide__grid">
+        <nav className="guidenav" aria-label="Περιεχόμενα οδηγού">
           {GUIDE_GROUPS.map(([g, label]) => (
             <Fragment key={g}>
               <span className="guidenav__group">{label}</span>
@@ -49,7 +49,7 @@ export function GuideScreen() {
             </Fragment>
           ))}
         </nav>
-        <div className="setbody">
+        <div className="guide__body">
           {dq.trim() ? (
             <div className="ui-card guide__card">
               <h2 className="guide__title">
