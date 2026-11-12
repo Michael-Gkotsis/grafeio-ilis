@@ -9,49 +9,47 @@
       </p>
     </div>
   </div>
-  <div class="setgrid">
-    <nav class="setnav" aria-label="Ρυθμίσεις">
-      <button type="button">
-        Μονάδα και έντυπα
+  <div class="settings__grid">
+    <nav class="settings__nav" aria-label="Ρυθμίσεις">
+      <button type="button" class="settings__navitem">
+        Η μονάδα μου
       </button>
-      <button type="button">
-        Θάλαμοι και ουλαμοί
+      <button type="button" class="settings__navitem">
+        Υπηρεσίες
       </button>
-      <button type="button">
-        Υπηρεσίες και αργίες
+      <button type="button" class="settings__navitem">
+        Έξοδοι και ΗΚΑΙ
       </button>
-      <button type="button">
-        Λίστες
+      <button type="button" class="settings__navitem">
+        Λίστες και κωδικοί
       </button>
-      <button type="button">
-        Εισαγωγή Δυναμολογίου
-      </button>
-      <button type="button">
+      <button type="button" class="settings__navitem" aria-current="page">
         Αρχεία Excel
       </button>
-      <button type="button">
-        Πρότυπα εφαρμογής
+      <button type="button" class="settings__navitem">
+        Χαρτιά: υπογραφές και θέσεις
       </button>
-      <button type="button" aria-current="page">
-        Γράμματα Excel
-      </button>
-      <button type="button">
-        Εμφάνιση
-      </button>
-      <button type="button">
-        Ώρα και ζώνη ώρας
-      </button>
-      <button type="button">
-        ΕΣΣΟ
-      </button>
-      <button type="button">
-        Αντίγραφα ασφαλείας
-      </button>
-      <button type="button">
-        Ενημερώσεις
+      <button type="button" class="settings__navitem">
+        Αυτό το PC
       </button>
     </nav>
-    <div class="setbody">
+    <div class="settings__body">
+      <div class="settings__tabs">
+        <div class="ui-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="false">
+            Εισαγωγή Δυναμολογίου
+          </button>
+          <button type="button" role="tab" aria-selected="false">
+            Αρχεία Excel
+          </button>
+          <button type="button" role="tab" aria-selected="false">
+            Πρότυπα εφαρμογής
+          </button>
+          <button type="button" role="tab" aria-selected="true">
+            Γράμματα Excel
+          </button>
+        </div>
+      </div>
       <section class="ui-card">
         <div class="ui-card__head">
           <h2>
