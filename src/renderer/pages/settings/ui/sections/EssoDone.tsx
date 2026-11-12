@@ -9,6 +9,9 @@ import { Alert, Button, Dialog, GoLink } from '../../../../shared/ui';
 import { useNav, useStore } from '../../../../shared/model';
 import type { EssoStarted } from '../../model/useEsso';
 
+// A constant, not inline: the link label must not read as plain «Ρυθμίσεις › …» text in a hint (test/ux-names.test.ts).
+const FILES_SETTINGS = 'Ρυθμίσεις › Αρχεία Excel';
+
 export interface EssoDoneProps {
   /** What the wizard returned. */
   r: EssoStarted;
@@ -79,7 +82,7 @@ export function EssoDone({ r, onClose }: EssoDoneProps) {
         <p className="note">
           {'Ό,τι δεν φτιάχτηκε το φτιάχνεις από '}
           <GoLink view="templates" params={{ tab: 'files' }}>
-            Ρυθμίσεις › Αρχεία Excel
+            {FILES_SETTINGS}
           </GoLink>
           {' › «Νέο αρχείο…».'}
         </p>

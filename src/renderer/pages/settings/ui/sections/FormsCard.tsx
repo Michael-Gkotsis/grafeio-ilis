@@ -14,10 +14,42 @@ import { useForms } from '../../model/useForms';
 import { FormDialog } from './FormDialog';
 
 type FormsModel = ReturnType<typeof useForms>;
+type FormBinding = NonNullable<FormsModel['forms'][FormKind]>;
 
 /** One form: its template and folder, the files it made, the buttons and the month-subfolder box. */
+function formActions(m: FormsModel, f: FormKind, label: string, b: FormBinding) {
+  const { save, pickTpl, editTpl, pickDir } = m;
+  return (
+    <div className="srcrow__act">
+      {f !== 'check' && (
+        <Button size="sm" variant="outline" onClick={() => pickTpl(f)}>
+          Template…
+        </Button>
+      )}
+      {f !== 'check' && (b.file || f === 'hkai' || f === 'outs') && (
+        <Button size="sm" variant="ghost" onClick={() => editTpl(f)}>
+          {f === 'hkai' ? 'Κελιά…' : 'Φύλλα…'}
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" onClick={() => pickDir(f)}>
+        Φάκελος…
+      </Button>
+      {(b.file || b.dir) && (
+        <Button
+          size="sm"
+          variant="ghost"
+          data-tip="Template και φάκελος της εφαρμογής"
+          onClick={() => save(f, null, label + ': ξανά με το template και τον φάκελο της εφαρμογής')}
+        >
+          Προεπιλογή
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function formRow(m: FormsModel, outs: FormOut[], f: FormKind, label: string) {
-  const { state, boot, forms, printFile, save, pickTpl, editTpl, pickDir } = m;
+  const { state, boot, forms, printFile, save } = m;
   const b = forms[f] || {};
   const out = outs.filter((o) => o.form === f);
   return (
@@ -56,31 +88,7 @@ function formRow(m: FormsModel, outs: FormOut[], f: FormKind, label: string) {
           </small>
         ))}
       </div>
-      <div className="srcrow__act">
-        {f !== 'check' && (
-          <Button size="sm" variant="outline" onClick={() => pickTpl(f)}>
-            Template…
-          </Button>
-        )}
-        {f !== 'check' && (b.file || f === 'hkai' || f === 'outs') && (
-          <Button size="sm" variant="ghost" onClick={() => editTpl(f)}>
-            {f === 'hkai' ? 'Κελιά…' : 'Φύλλα…'}
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onClick={() => pickDir(f)}>
-          Φάκελος…
-        </Button>
-        {(b.file || b.dir) && (
-          <Button
-            size="sm"
-            variant="ghost"
-            data-tip="Template και φάκελος της εφαρμογής"
-            onClick={() => save(f, null, label + ': ξανά με το template και τον φάκελο της εφαρμογής')}
-          >
-            Προεπιλογή
-          </Button>
-        )}
-      </div>
+      {formActions(m, f, label, b)}
       <label className="srcrow__opt">
         <input
           type="checkbox"

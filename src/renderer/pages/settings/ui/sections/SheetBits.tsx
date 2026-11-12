@@ -95,6 +95,7 @@ export const List = ({ title, items, open }: { title: string; items: string[]; o
       </summary>
       <ul>
         {items.slice(0, 150).map((t, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={i}>{t}</li>
         ))}
       </ul>

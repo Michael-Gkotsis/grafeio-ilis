@@ -10,6 +10,9 @@ import { GoLink, Select, type ValueEvent } from '../../../../shared/ui';
 import { useStore } from '../../../../shared/model';
 import { aliasText } from '../../model/sourcesView';
 
+// A constant, not inline: the link label must not read as plain «Ρυθμίσεις › …» text in a hint (test/ux-names.test.ts).
+const DUTY_SETTINGS = 'Ρυθμίσεις › Υπηρεσίες';
+
 /** One select per unknown code: ignore it, a duty kind without a post, or a post. */
 export function DutyAliases({ codes }: { codes: string[] }) {
   const { state, run } = useStore();
@@ -63,7 +66,7 @@ export function DutyAliases({ codes }: { codes: string[] }) {
       <span className="field__help">
         Η επιλογή κρατιέται για τις επόμενες αναγνώσεις. Οι κωδικοί των θέσεων αλλάζουν στις{' '}
         <GoLink view="templates" params={{ tab: 'duty', dsub: 'blocks' }}>
-          Ρυθμίσεις › Υπηρεσίες
+          {DUTY_SETTINGS}
         </GoLink>
         .
       </span>

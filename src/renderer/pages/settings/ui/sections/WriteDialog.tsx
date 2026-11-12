@@ -29,6 +29,7 @@ function changeLines(pv: WritePreview) {
       </p>
       <ul className="hist">
         {pv.lines.slice(0, 80).map((l, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={i}>
             <span className="nw">Γρ. {l.r + 1}</span> <b>{l.who}</b> {l.text}
           </li>
@@ -107,7 +108,7 @@ export function WriteDialog({ list, onClose }: WriteDialogProps) {
     <Dialog
       size="lg"
       title={KIND[list].label + ': ενημέρωση Excel'}
-      description={pv && pv.ok ? base(pv.file) : ''}
+      description={pv?.ok ? base(pv.file) : ''}
       onClose={onClose}
       footer={
         <>
@@ -116,9 +117,7 @@ export function WriteDialog({ list, onClose }: WriteDialogProps) {
           </Button>
           <Button
             disabled={busy || !pv || !pv.ok || (!pv.total && !pv.create && !pv.tidy?.length)}
-            why={
-              pv && pv.ok ? 'Το Excel έχει ήδη όσα ξέρει η εφαρμογή· δεν χρειάζεται αλλαγή' : 'Το Excel δεν διαβάστηκε'
-            }
+            why={pv?.ok ? 'Το Excel έχει ήδη όσα ξέρει η εφαρμογή· δεν χρειάζεται αλλαγή' : 'Το Excel δεν διαβάστηκε'}
             onClick={go}
           >
             {busy ? 'Γράφεται…' : 'Γράψε στο Excel'}

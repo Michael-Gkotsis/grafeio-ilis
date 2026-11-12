@@ -138,6 +138,7 @@ export function addedList({ d, v }: ImportView) {
         <summary>Νέες ({d.add.length})</summary>
         <ul>
           {d.add.slice(0, 60).map((a, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
             <li key={i}>
               {pm.get(a.pid) ? rkFull(pm.get(a.pid)!) : ''} · {TYPES[a.type].label}
               {a.kind && a.kind !== TYPES[a.type].label ? ' (' + a.kind + ')' : ''} · {dm(a.from)}–

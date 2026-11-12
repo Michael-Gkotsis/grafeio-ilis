@@ -29,22 +29,26 @@ function dayBlock(p: DutiesPlan, d: Day, nm: (pid: number | null | undefined) =>
       </summary>
       <ul key={n}>
         {d.adds.map((a, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={'a' + i}>
             {a.label}: {nm(a.pid)}
             {a.by != null ? ' (η θέση είναι ήδη του ' + nm(a.by) + ' στην εφαρμογή)' : ''}
           </li>
         ))}
         {d.differ.map((x, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={'d' + i}>
             Διαφέρει, κρατιέται της εφαρμογής: {nm(x.pid)} {x.app} (Excel: {x.excel})
           </li>
         ))}
         {d.extra.map((x, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={'e' + i}>
             Η εφαρμογή έχει επιπλέον: {nm(x.pid)} {x.label}· θα γραφτεί στο Excel
           </li>
         ))}
         {d.gone.map((x, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
           <li key={'g' + i}>
             Το έσβησες στην εφαρμογή: {nm(x.pid)} (Excel: {x.excel})· θα σβηστεί και από το Excel
           </li>

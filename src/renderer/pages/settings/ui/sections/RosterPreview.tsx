@@ -60,6 +60,7 @@ function rosterFindings(pv: ImportPreview) {
           <summary>Τι αλλάζει ({pv.changes.length})</summary>
           <ul>
             {pv.changes.slice(0, 120).map((c, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
               <li key={i}>
                 <b>{c.who}</b>: {c.what}
               </li>

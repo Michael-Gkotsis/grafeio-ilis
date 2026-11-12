@@ -122,6 +122,7 @@ function mapFieldList(m: MapModel) {
             >
               <option value="">—</option>
               {Array.from({ length: maxCol + 1 }, (_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
                 <option key={i} value={String(i)}>
                   {colName(i)}
                   {i === rec ? ' (προτείνεται)' : ''}

@@ -27,6 +27,7 @@ export function mapGrid(m: MapModel) {
             <tr>
               <th />
               {Array.from({ length: maxCol + 1 }, (_, c) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
                 <th key={c} className={cx(fieldAt(c) && 'is-mapped')}>
                   {colLetter(c)}
                   {fieldAt(c) && <span className="mapgrid__tag">{fieldAt(c)!.label.replace(/ \(.*\)$/, '')}</span>}
@@ -50,7 +51,9 @@ export function mapGrid(m: MapModel) {
                 {Array.from({ length: maxCol + 1 }, (_, c) => {
                   const v = cellText((sheet.rows[r] || [])[c]);
                   return (
+                    // biome-ignore lint/a11y/useKeyWithClickEvents: frozen DOM, a mouse-only cell as before (keyboard has its own path)
                     <td
+                      // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
                       key={c}
                       className={cx(
                         fieldAt(c) && 'is-mapped',
@@ -86,6 +89,7 @@ export function mapSampleBox(sample: string[]) {
         <b>Έτσι διαβάζει η εφαρμογή τις πρώτες γραμμές:</b>
         <ul>
           {sample.map((t, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: frozen DOM, the list is positional and keyed by index as before
             <li key={i}>{t}</li>
           ))}
         </ul>
