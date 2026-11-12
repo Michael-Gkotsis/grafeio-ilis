@@ -15,7 +15,7 @@ import { HkaiScreen } from '../pages/hkai';
 import { HistoryScreen } from '../pages/history';
 import { HdTab } from '../widgets/hd';
 import { StatusesPage } from '../pages/statuses';
-import { CadreScreen } from '../screens/cadre';
+import { CadreScreen } from '../pages/cadre';
 import { PeopleScreen } from '../screens/people';
 import { GuardScreen, OutsScreen } from '../screens/guard';
 import { NotesScreen } from '../pages/notes';
