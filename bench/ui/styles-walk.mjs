@@ -239,6 +239,52 @@ const settingsPending = {
   }
 };
 
+// S3 of the «Ρυθμίσεις» move: the service-block dialogs (features/duty-blocks), opened from «Υπηρεσίες» and from
+// Ρυθμίσεις › Υπηρεσίες και αργίες › Υπηρεσίες: «Νέα υπηρεσία», «Επεξεργασία», «Νέο έντυπο υπηρεσιών», «Όνομα»
+const PHASE_SELECT = 'button[aria-label="Έντυπο υπηρεσιών"]';
+const pickPhase = async (S, label) => {
+  await S.page.locator(PHASE_SELECT).first().click();
+  await S.page.locator('[role=option]').filter({ hasText: label }).first().click();
+  await S.quiet();
+};
+const fillIn = async (S, selector, value) => { await S.page.locator(selector).fill(value); await S.quiet(); };
+const newBlockFilled = async S => {
+  await fillIn(S, '#nb-n', 'Πύλη'); await fillIn(S, '#nb-c', '3'); await fillIn(S, '#nb-p', '2');
+  await S.page.locator('.ui-dialog input[type=checkbox]').first().check(); await S.quiet();
+};
+const dutyBlocks = {
+  name: 'Υπηρεσίες και Ρυθμίσεις (φόρμες υπηρεσιών)',
+  run: async S => {
+    await S.nav('Υπηρεσίες');
+    await S.dialog('guard: new block', () => S.click('+ Νέα υπηρεσία'));
+    await S.dialog('guard: new block (3 numbers x 2 people, armed)', async () => { await S.click('+ Νέα υπηρεσία'); await newBlockFilled(S); });
+    await S.dialog('guard: new block (30 x 10, over the template boxes)', async () => {
+      await S.click('+ Νέα υπηρεσία'); await fillIn(S, '#nb-n', 'Μεγάλη'); await fillIn(S, '#nb-c', '99'); await fillIn(S, '#nb-p', '99');
+    });
+    await S.dialog('guard: new phase', () => pickPhase(S, 'Νέο έντυπο υπηρεσιών'));
+    await S.dialog('guard: new phase (typed)', async () => { await pickPhase(S, 'Νέο έντυπο υπηρεσιών'); await fillIn(S, '#ph-n', 'ΑΣΚΗΣΗ'); });
+    await settingsGo(S, 'Υπηρεσίες και αργίες');
+    await S.snap('settings: services');
+    await S.dialog('settings: new block', () => S.click('+ Νέα υπηρεσία στη ΦΡΟΥΡΑ'));
+    await S.dialog('settings: new block (3 numbers x 2 people, armed)', async () => { await S.click('+ Νέα υπηρεσία στη ΦΡΟΥΡΑ'); await newBlockFilled(S); });
+    // the button of the Λ/Υ row is hidden, so the walk starts at the second «Επεξεργασία»
+    for (const nth of [1, 2, 3]) {
+      await S.dialog(`settings: edit block ${nth + 1}`, () => S.page.locator('.main button').filter({ hasText: /^Επεξεργασία$/ }).nth(nth).click());
+    }
+    await S.dialog('settings: edit block 2 (typed)', async () => {
+      await S.page.locator('.main button').filter({ hasText: /^Επεξεργασία$/ }).nth(1).click();
+      await fillIn(S, '#eb-n', 'Άλλο όνομα'); await fillIn(S, '#eb-c', '2');
+    });
+    await S.dialog('settings: new phase', () => pickPhase(S, 'Νέο έντυπο υπηρεσιών'));
+    await S.state('settings: own phase added', async () => {
+      await pickPhase(S, 'Νέο έντυπο υπηρεσιών'); await fillIn(S, '#ph-n', 'ΑΣΚΗΣΗ');
+      await S.click('Προσθήκη', '.ui-dialog'); await S.quiet();
+    }, { close: false });
+    await S.dialog('settings: rename phase', () => S.click('Μετονομασία…'));
+    await S.dialog('settings: rename phase (empty)', async () => { await S.click('Μετονομασία…'); await fillIn(S, '#ph-n', ''); });
+  }
+};
+
 // S2 of the «Ρυθμίσεις» move: the «Αρχεία Excel» dialogs and the ΕΣΣΟ cards, wizard and restore question
 const settingsSourcesEsso = {
   name: 'Ρυθμίσεις (αρχεία Excel, ΕΣΣΟ)',
@@ -308,6 +354,6 @@ const more = {
 
 export const GROUPS = [
   screen('Σήμερα', null, { phone: true }), people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
-  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, settingsSourcesEsso, history, guide,
+  hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, settingsSourcesEsso, dutyBlocks, history, guide,
   diag, more
 ];

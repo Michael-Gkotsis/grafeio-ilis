@@ -2,7 +2,7 @@
 import { RkName, rkFull, rkShort } from '../rankName';
 import { HK } from '../../shared/unit';
 import { memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, DialogLeave, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
+import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, DialogLeave, useMedia, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
@@ -10,7 +10,7 @@ import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
-import { blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
+import { blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
 import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
@@ -23,7 +23,7 @@ import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
 import { OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
-import { BlockForm, useBlockForm } from '../blockForm';
+import { AddBlockDialog, PhaseSelect } from '../features/duty-blocks';
 import { SkipsView } from './skips';
 import { ReturnsList } from './returnsList';
 type P = any;
@@ -499,52 +499,8 @@ export function FixedDialog({ onClose }: P) {
     ${row('ly', 'Λ/Υ')}${row('dy', 'Δ/Υ')}
   <//>`;
 }
-// Έντυπο υπηρεσιών (Michael, 22/10): λίστα με ΣΒΕΝ, ΣΠΕΝ και τα δικά σου, και στο τέλος «Νέο έντυπο υπηρεσιών…»
-const PHASE_TIP: Record<string, string> = { sven: '2 πίνακες θαλαμοφυλάκων και μαγειρεία', spen: 'Θαλαμοφύλακες, οπλοφύλακες, σκοποί, ΤΑΕ, μαγειρεία' };
-const NEW_PHASE = '__new';
-export function PhaseSelect({ value, onChange, prefix = '', id }: { value: Phase; onChange: (v: Phase) => void; prefix?: string; id?: string }) {
-  const { state } = useStore(); const [add, setAdd] = useState(false);
-  const list = phaseList(state.settings); const cur = list.find(x => x.id === value) || list[0];
-  const tip = cur.custom ? 'Δικό σου έντυπο υπηρεσιών, βγαίνει στο Excel με το έντυπο της ' + PHASE_NAME[cur.base] : PHASE_TIP[cur.id];
-  return html`<${Select} id=${id} className="ui-select" aria-label="Έντυπο υπηρεσιών" data-tip=${tip} value=${cur.id} onChange=${(e: any) => (e.target.value === NEW_PHASE ? setAdd(true) : onChange(e.target.value))}>
-    ${list.map(x => html`<option key=${x.id} value=${x.id}>${prefix + x.name}</option>`)}<option value=${NEW_PHASE} data-keep>+ Νέο έντυπο υπηρεσιών…</option><//>
-    ${add && html`<${PhaseDialog} from=${cur.id} onClose=${(nid?: Phase) => { setAdd(false); if (nid) onChange(nid); }}/>`}`;
-}
-// Νέο έντυπο υπηρεσιών (αντίγραφο ενός άλλου) ή μετονομασία δικού σου (edit = το id του)
-export function PhaseDialog({ from, edit, onClose }: { from?: Phase; edit?: Phase; onClose: (id?: Phase) => void }) {
-  const { state, run } = useStore(); const toast = useToast();
-  const list = phaseList(state.settings); const mine = edit ? list.find(x => x.id === edit) : undefined;
-  const [name, setName] = useState(mine ? mine.name : ''); const [src, setSrc] = useState<Phase>(from && list.some(x => x.id === from) ? from : 'sven');
-  const dirty = useDirty([name, src]);
-  const save = async () => {
-    const before = new Set((state.settings.phases || []).map(x => x.id));
-    const ns = await run(edit ? { t: 'renamePhase', id: edit, name } : { t: 'addPhase', name, from: src }, false); if (!ns) return;
-    const nid = edit ? undefined : (ns.settings.phases || []).find(x => !before.has(x.id))?.id;
-    toast({ text: edit ? 'Άλλαξε το όνομα' : 'Προστέθηκε η ΦΡΟΥΡΑ ' + phaseName(ns.settings, nid) + ': έχει τις υπηρεσίες της ' + phaseName(state.settings, src) + ', άλλαξέ τες στις Ρυθμίσεις › Υπηρεσίες' });
-    onClose(nid);
-  };
-  const why = !name.trim() ? 'Λείπει: Όνομα' : '';
-  return html`<${Dialog} title=${edit ? 'Όνομα: ΦΡΟΥΡΑ ' + mine!.name : 'Νέο έντυπο υπηρεσιών'} description=${edit ? 'Γράφεται στο όνομα του Excel και στη λίστα.' : 'Ξεκινά με τις υπηρεσίες και τις θέσεις ενός άλλου εντύπου· μετά τις αλλάζεις χωριστά (Ρυθμίσεις › Υπηρεσίες). Οι κοινές θέσεις κρατούν το ιστορικό τους.'} onClose=${() => onClose()}
-    dirty=${dirty && (edit ? 'Το όνομα δεν άλλαξε. Αν κλείσεις, χάνεται.' : 'Το έντυπο δεν προστέθηκε. Αν κλείσεις, χάνεται.')}
-    footer=${html`<${Why} text=${why}/><${Button} variant="outline" onClick=${() => onClose()}>Άκυρο<//><${Button} disabled=${!!why} why=${why} onClick=${save}>${edit ? 'Αποθήκευση' : 'Προσθήκη'}<//>`}>
-    <div className="field"><label className="field__label" htmlFor="ph-n">Όνομα *</label><div style=${{ display: 'flex', alignItems: 'center', gap: '6px' }}><span className="muted">ΦΡΟΥΡΑ</span><input id="ph-n" className="ui-input" data-autofocus="" placeholder="π.χ. ΑΣΚΗΣΗ, ΣΠΕΝ 2" value=${name} onChange=${(e: any) => setName(e.target.value)}/></div>
-      <span className="field__help">Με κεφαλαία, όπως στο Excel (π.χ. «ΦΡΟΥΡΑ ΑΣΚΗΣΗ 22-10-2026.xlsx»).</span></div>
-    ${!edit && html`<div className="field"><label className="field__label" htmlFor="ph-f">Αντίγραφο του</label><${Select} id="ph-f" className="ui-input" value=${src} onChange=${(e: any) => setSrc(e.target.value)}>${list.map(x => html`<option key=${x.id} value=${x.id}>${'ΦΡΟΥΡΑ ' + x.name}</option>`)}<//>
-      <span className="field__help">Βγαίνει στο Excel με το έντυπο της ${PHASE_NAME[phaseBase(state.settings, src)]}: ίδια κελιά για τις υπηρεσίες του, και οι υπόλοιπες σε δικούς τους πίνακες από κάτω.</span></div>`}
-  <//>`;
-}
-export function AddBlockDialog({ onClose, phase: ph }: P) {
-  const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
-  const phase: Phase = ph || state.settings.phase || 'sven'; const now = phase === (state.settings.phase || 'sven');
-  const form = useBlockForm(undefined, phase); const { f } = form; const dirty = useDirty([f]);
-  const save = async () => { if (await run(form.cmd(), false)) { onClose(); toast({ text: 'Προστέθηκε: ' + f.name + (!f.active ? '. Είναι ανενεργή: την ενεργοποιείς στις Ρυθμίσεις › Υπηρεσίες.' : now ? '. Τη βλέπεις στις θέσεις και στο έντυπο.' : '. Τη βλέπεις όταν ισχύει η ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '.'), ...(!f.active ? { actions: [{ label: 'Άνοιξε', fn: () => nav.go('templates', { tab: 'duty', dsub: 'blocks' }) }] } : {}) }); } };
-  return html`<${Dialog} title="Νέα υπηρεσία" description=${'Στη ΦΡΟΥΡΑ ' + phaseName(state.settings, phase) + '. Βγαίνει στο Excel σε δικό της πίνακα κάτω από τα μαγειρεία.'} onClose=${onClose}
-    dirty=${dirty && 'Η υπηρεσία δεν προστέθηκε. Αν κλείσεις, χάνεται.'}
-    footer=${html`<${Why} text=${form.why}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!form.why} why=${form.why} onClick=${save}>Προσθήκη<//>`}>
-    <p className="field__help" style=${{ marginTop: 0 }}>${f.name.trim() ? html`Η «${f.name.trim()}»` : 'Η νέα υπηρεσία'} μετρά ως δική της: δική της στήλη στον Έλεγχο υπηρεσιών, στη σειρά δικαιοσύνης, στο «Ποιος κάνει τι» και στο Excel δυνατοτήτων, όπου την ενεργοποιείς ή απενεργοποιείς για τον καθένα χωριστά.</p>
-    <${BlockForm} form=${form} id="nb"/>
-  <//>`;
-}
+// Deprecated path: the service-block dialogs moved to features/duty-blocks (Phase 6, Ρυθμίσεις S3). Removed in Phase 7.
+export { AddBlockDialog, PhaseDialog, PhaseSelect } from '../features/duty-blocks';
 
 /* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
 const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
