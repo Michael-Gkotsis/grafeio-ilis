@@ -3,8 +3,11 @@
 // Owner layer: renderer/shared/lib. Why: moved down from renderer/pageCss.ts (Phase 5.3b) so features/layout-edit can use it.
 // Covering test: test/layout.test.ts.
 // Η σελίδα του renderBook (main/print.ts) μέσα στην εφαρμογή: προεπισκόπηση των Εντύπων και θέσεις πάνω στο χαρτί
+// The sheet itself (.pg) takes the tone of the app's paper: custom properties cross the shadow boundary, so --paper is
+// white in the light theme and a soft off-white in the dark one (@decision Michael 12/11: not #fff in the dark theme,
+// it burns the eyes). Screen only: the printed page comes from main/print.ts, which this file does not feed.
 export const PAGE_CSS = `:host{display:block}*{box-sizing:border-box}.wrap{transform-origin:0 0}
-.pg{position:relative;margin:0 auto 12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.35);overflow:hidden}.ar{position:absolute;transform-origin:0 0}
+.pg{position:relative;margin:0 auto 12px;background:var(--paper,#fff);box-shadow:0 1px 6px rgba(0,0,0,.35);overflow:hidden}.ar{position:absolute;transform-origin:0 0}
 table{border-collapse:collapse;table-layout:fixed;color:#000}td{padding:0;overflow:visible;vertical-align:bottom;font:11pt Calibri,Carlito,Arial,sans-serif}
 table.grid td{outline:.5px solid #bbb}.x{display:flex;padding:0 2px;white-space:pre;overflow:hidden;line-height:1.15}.x.o{overflow:visible}
 .x.w{white-space:pre-wrap;word-wrap:break-word}.x.w span{width:100%}
