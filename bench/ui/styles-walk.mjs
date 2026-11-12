@@ -244,14 +244,14 @@ const settingsCards = {
   name: 'Ρυθμίσεις (λίστες, θάλαμοι, πίνακες)',
   run: async S => {
     await settingsGo(S, 'Λίστες');
-    for (const list of ['Ιατρικά', 'Ποινές', 'Άδειες', 'Απουσίες στελεχών', 'Έξοδος όπλων']) {
+    for (const list of ['Ιατρικά', 'Είδη ποινής', 'Είδη άδειας', 'Καταστάσεις στελεχών', 'Λόγοι εξόδου όπλου']) {
       await S.state(`list ${list}`, async () => {
         await S.page.locator('button[aria-label="Ποια λίστα"]').click();
         await S.page.locator('[role=option]').filter({ hasText: new RegExp(`^${list}$`) }).first().click();
       }, { close: false });
     }
     await settingsGo(S, 'Θάλαμοι και ουλαμοί');
-    await S.state('rooms: a room chip', () => S.page.locator('.main .ui-chip').first().click(), { close: false });
+    await S.snap('rooms');
     await settingsGo(S, 'Υπηρεσίες και αργίες');
     await S.state('duty sub-tab Σ.Ι.', () => S.click('Σ.Ι.', '.main .ui-seg'), { close: false });
     await S.state('duty sub-tab Καταστάσεις', () => S.click('Καταστάσεις', '.main .ui-seg'), { close: false });
