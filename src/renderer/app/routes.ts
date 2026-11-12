@@ -9,7 +9,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { FORM_PARAM } from '../../shared/repPage';
 import { HK } from '../../shared/unit';
 import { Icon } from '../ui';
-import { TodayScreen } from '../screens/today';
+import { TodayScreen } from '../pages/today';
 import { StrengthScreen } from '../pages/strength';
 import { HkaiScreen } from '../pages/hkai';
 import { HistoryScreen } from '../pages/history';
