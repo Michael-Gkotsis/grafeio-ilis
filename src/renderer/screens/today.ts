@@ -27,14 +27,10 @@ import { awayToday, endText, outUntilText, scanRecords, todayTasks } from './tod
 import { appTitle } from '../../shared/brand';
 import { statusLbl } from '../../shared/ranks';
 import { UNIT, HK } from '../../shared/unit';
+import { SRC } from '../shared/lib/auditSource';
 
-/** Label and badge tone of each audit source (app, Excel, import, automatic); the History screen shows the same. */
-export const SRC: Record<string, [string, string]> = {
-  app: ['Εφαρμογή', 'outline'],
-  excel: ['Excel', 'info'],
-  import: ['Εισαγωγή', 'ey'],
-  auto: ['Αυτόματα', 'ok'],
-};
+// Deprecated path (Phase 6, removed in Phase 7): SRC moved to shared/lib/auditSource.
+export { SRC };
 
 /** The «Σήμερα» screen. */
 export function TodayScreen() {
