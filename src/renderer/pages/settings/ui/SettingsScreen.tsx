@@ -1,4 +1,4 @@
-// The «Ρυθμίσεις» screen: a menu of sections on the left and the open section on the right.
+// The «Ρυθμίσεις» screen: a menu of 7 groups on the left, the sections of the open group as tabs, the open section.
 // Purpose: `TemplatesScreen` (the name the routes and tests have always used), one section at a time, chosen by the
 //   `tab` route parameter. Changing section with unsaved changes asks first (`requestLeave`).
 // Does NOT: hold state (the open section is the route parameter) or draw a card (ui/sections/*).
@@ -11,8 +11,8 @@ import { HkRowsCard } from '../../../features/hk-rows';
 import { UpdatesCard } from '../../../features/update';
 import { requestLeave } from '../../../shared/lib/pending';
 import { useNav, useStore } from '../../../shared/model';
-import { PageHeader } from '../../../shared/ui';
-import { SET_SECTIONS, sectionOf } from '../model/screenView';
+import { PageHeader, Tabs } from '../../../shared/ui';
+import { SET_GROUPS, groupOf, sectionLabel, sectionOf } from '../model/screenView';
 import { AppearanceCard } from './sections/AppearanceCard';
 import { BackupsCard } from './sections/BackupsCard';
 import { BrandCard } from './sections/BrandCard';
@@ -34,9 +34,13 @@ function sectionBody(tab: string, templates: ReactNode) {
   return tab === 'unit' ? (
     <div className="stack">
       <SettingsCard />
-      <SigsCard />
-      <HkRowsCard />
     </div>
+  ) : tab === 'brand' ? (
+    <BrandCard />
+  ) : tab === 'sigs' ? (
+    <SigsCard />
+  ) : tab === 'hkrows' ? (
+    <HkRowsCard />
   ) : tab === 'rooms' ? (
     <RoomsCard />
   ) : tab === 'duty' ? (
@@ -53,10 +57,7 @@ function sectionBody(tab: string, templates: ReactNode) {
   ) : tab === 'excel' ? (
     <XlLookCard />
   ) : tab === 'look' ? (
-    <div className="stack">
-      <BrandCard />
-      <AppearanceCard />
-    </div>
+    <AppearanceCard />
   ) : tab === 'backup' ? (
     <BackupsCard />
   ) : tab === 'update' ? (
@@ -70,33 +71,47 @@ function sectionBody(tab: string, templates: ReactNode) {
   );
 }
 
-/** «Ρυθμίσεις». */
+/** «Ρυθμίσεις»: 7 groups on the left, the sections of the open group as tabs, then the open section. */
 export function TemplatesScreen() {
   const { boot } = useStore();
   const nav = useNav();
   const tab = sectionOf(nav.params.tab);
+  const group = groupOf(tab);
   // built on every render, used or not, exactly as before (the elements are only created, never mounted)
   const templates = templatesTab(boot);
+  const open = (section: string) => requestLeave(() => nav.set({ tab: section }));
   return (
     <div>
       <PageHeader
         title="Ρυθμίσεις"
         sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."
       />
-      <div className="setgrid">
-        <nav className="setnav" aria-label="Ρυθμίσεις">
-          {SET_SECTIONS.map(([k, l]) => (
+      <div className="settings__grid">
+        <nav className="settings__nav" aria-label="Ρυθμίσεις">
+          {SET_GROUPS.map((g) => (
             <button
-              key={k}
+              key={g.key}
               type="button"
-              aria-current={tab === k ? 'page' : undefined}
-              onClick={() => tab !== k && requestLeave(() => nav.set({ tab: k }))}
+              className="settings__navitem"
+              aria-current={group.key === g.key ? 'page' : undefined}
+              onClick={() => group.key !== g.key && open(g.sections[0] as string)}
             >
-              {l}
+              {g.label}
             </button>
           ))}
         </nav>
-        <div className="setbody">{sectionBody(tab, templates)}</div>
+        <div className="settings__body">
+          {group.sections.length > 1 && (
+            <div className="settings__tabs">
+              <Tabs
+                value={tab}
+                onChange={(section) => tab !== section && open(section)}
+                items={group.sections.map((value) => ({ value, label: sectionLabel(value) }))}
+              />
+            </div>
+          )}
+          {sectionBody(tab, templates)}
+        </div>
       </div>
     </div>
   );

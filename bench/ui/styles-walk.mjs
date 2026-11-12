@@ -196,16 +196,42 @@ const weaponsAsk = {
 const forms = screen('Έντυπα', tabs);
 const notes = screen('Σημειώσεις', segments);
 
-const SETTINGS = '.setnav';
+// U11a: «Ρυθμίσεις» has 7 groups (`.settings__nav`) with the sections as tabs (`.settings__tabs`); before, a flat list of
+// 13 sections (`.setnav`). The walk keeps the old section labels as state names and reaches each one in both layouts,
+// so base and current states pair up and the differences are the moved markup only.
+const SETTINGS = ':is(.setnav, .settings__nav)';
+const GROUP_OF = new Map([
+  ...['Μονάδα και έντυπα', 'Τίτλος και λογότυπο', 'Θάλαμοι και ουλαμοί', 'ΕΣΣΟ'].map(l => [l, 'Η μονάδα μου']),
+  ['Υπηρεσίες και αργίες', 'Υπηρεσίες'],
+  ['Γραμμές και ονόματα ΗΚΑΙ', 'Έξοδοι και ΗΚΑΙ'],
+  ['Λίστες', 'Λίστες και κωδικοί'],
+  ...['Εισαγωγή Δυναμολογίου', 'Αρχεία Excel', 'Πρότυπα εφαρμογής', 'Γράμματα Excel'].map(l => [l, 'Αρχεία Excel']),
+  ['Υπογραφές', 'Χαρτιά: υπογραφές και θέσεις'],
+  ...['Εμφάνιση', 'Ώρα και ζώνη ώρας', 'Αντίγραφα ασφαλείας', 'Ενημερώσεις'].map(l => [l, 'Αυτό το PC']),
+]);
+const OLD_SECTIONS = ['Μονάδα και έντυπα', 'Θάλαμοι και ουλαμοί', 'Υπηρεσίες και αργίες', 'Λίστες', 'Εισαγωγή Δυναμολογίου', 'Αρχεία Excel',
+  'Πρότυπα εφαρμογής', 'Γράμματα Excel', 'Εμφάνιση', 'Ώρα και ζώνη ώρας', 'ΕΣΣΟ', 'Αντίγραφα ασφαλείας', 'Ενημερώσεις'];
+const isGrouped = S => S.page.locator('.settings__nav').count().then(n => n > 0);
+const openSection = async (S, section) => {
+  if (!(await isGrouped(S))) { await S.click(section, SETTINGS); return; }
+  await S.page.locator('.settings__navitem').filter({ hasText: new RegExp(`^${GROUP_OF.get(section)}$`) }).click({ timeout: 4000 });
+  await S.quiet();
+  const tab = S.page.locator('.settings__tabs [role=tab]').filter({ hasText: new RegExp(`^${section}$`) });
+  if (await tab.count()) { await tab.click({ timeout: 4000 }); await S.quiet(); }
+};
 const settings = {
   name: 'Ρυθμίσεις',
   run: async S => {
     await S.nav('Ρυθμίσεις'); await S.snap('screen');
-    const labels = await S.page.locator(`${SETTINGS} button`).allTextContents();
-    for (const [i, label] of labels.entries()) await S.state(`section ${i + 1} ${label}`, () => S.clickOn(`${SETTINGS} button`, i), { close: false });
+    for (const [i, label] of OLD_SECTIONS.entries()) await S.state(`section ${i + 1} ${label}`, () => openSection(S, label), { close: false });
+    if (await isGrouped(S)) {
+      for (const [i, label] of ['Τίτλος και λογότυπο', 'Γραμμές και ονόματα ΗΚΑΙ', 'Υπογραφές'].entries()) {
+        await S.state(`new section ${i + 1} ${label}`, () => openSection(S, label), { close: false });
+      }
+    }
   }
 };
-const settingsGo = async (S, section) => { await S.nav('Ρυθμίσεις'); await S.click(section, SETTINGS); await S.quiet(); };
+const settingsGo = async (S, section) => { await S.nav('Ρυθμίσεις'); await openSection(S, section); };
 const settingsBackups = {
   name: 'Ρυθμίσεις (αντίγραφα)',
   run: async S => {
@@ -317,7 +343,8 @@ const settingsCards = {
     await settingsGo(S, 'Υπηρεσίες και αργίες');
     await S.state('duty sub-tab Σ.Ι.', () => S.click('Σ.Ι.', '.main .ui-seg'), { close: false });
     await S.state('duty sub-tab Καταστάσεις', () => S.click('Καταστάσεις', '.main .ui-seg'), { close: false });
-    await settingsGo(S, 'Εμφάνιση');
+    // the logo choice moved from «Εμφάνιση» to its own section «Τίτλος και λογότυπο» (U11a)
+    await settingsGo(S, (await isGrouped(S)) ? 'Τίτλος και λογότυπο' : 'Εμφάνιση');
     await S.state('brand: a logo choice', () => S.page.locator('.main .ui-chip').nth(1).click(), { close: false });
   }
 };

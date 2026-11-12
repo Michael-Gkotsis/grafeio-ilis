@@ -157,7 +157,9 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
       return [...labels];
     };
     it('Ρυθμίσεις: Μονάδα και έντυπα, Υπογραφές (≥3 με τα Γράμματα Excel)', () => {
-      expect(pendingAfterTyping('templates', { tab: 'unit' }, TemplatesScreen)).toEqual(expect.arrayContaining(['Μονάδα και έντυπα', 'Υπογραφές']));
+      // U11a: the signatures card moved from `unit` to its own section `sigs`
+      expect(pendingAfterTyping('templates', { tab: 'unit' }, TemplatesScreen)).toEqual(expect.arrayContaining(['Μονάδα και έντυπα']));
+      expect(pendingAfterTyping('templates', { tab: 'sigs' }, TemplatesScreen)).toEqual(expect.arrayContaining(['Υπογραφές']));
       const s = start('templates', { tab: 'excel' }, screen(TemplatesScreen));
       s.render();
       expect(pendingNow()).toEqual([]);   // nothing changed yet: no card is pending
@@ -166,7 +168,8 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
     });
     it('Θάλαμοι και ουλαμοί, Τίτλος και λογότυπο', () => {
       expect(pendingAfterTyping('templates', { tab: 'rooms' }, TemplatesScreen)).toContain('Θάλαμοι και ουλαμοί');
-      expect(pendingAfterTyping('templates', { tab: 'look' }, TemplatesScreen)).toContain('Τίτλος και λογότυπο');
+      // U11a: the title and logo card moved from `look` to its own section `brand`
+      expect(pendingAfterTyping('templates', { tab: 'brand' }, TemplatesScreen)).toContain('Τίτλος και λογότυπο');
     });
     it('ΗΚΑΙ: κεφαλίδα, στοιχεία της μέρας, Στελέχη ανά βαθμό', () => {
       const labels = pendingAfterTyping('hkai', {}, HkaiScreen);
@@ -192,7 +195,7 @@ describe('οθόνες: τίποτα δεν χάνεται σιωπηλά', () =
     });
     it('οι Ρυθμίσεις ρωτούν πριν αλλάξει ενότητα, η ΗΚΑΙ πριν αλλάξει μέρα', () => {
       for (const [view, params, comp, label, expected] of [
-        ['templates', {}, TemplatesScreen, 'Λίστες', { tab: 'lists' }],
+        ['templates', {}, TemplatesScreen, 'Λίστες και κωδικοί', { tab: 'lists' }],
         ['hkai', {}, HkaiScreen, /αύριο/, { hkaiDate: H.TOMORROW }],
       ] as const) {
         const fx = pendingFixtures();
