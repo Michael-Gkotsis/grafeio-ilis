@@ -25,6 +25,8 @@ import { WhoDoes } from '../src/renderer/screens/whodoes';
 // Phase 0.4: the VirtualList check renders the screens (it used to grep their source); the file's other tests do not use react.
 vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReactProbe(orig));
 vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
+vi.mock('react/jsx-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
+vi.mock('react/jsx-dev-runtime', async orig => (await import('./support/ssr-shims')).mockJsxRuntime(orig));
 
 const END = '2026-10-16';
 const ms = (f: () => unknown) => { const a = performance.now(); f(); return performance.now() - a; };

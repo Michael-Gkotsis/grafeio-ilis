@@ -17,7 +17,7 @@ import { HdTab } from '../widgets/hd';
 import { StatusesPage } from '../pages/statuses';
 import { CadreScreen } from '../pages/cadre';
 import { PeopleScreen } from '../screens/people';
-import { GuardScreen } from '../screens/guard';
+import { GuardScreen } from '../pages/guard';
 import { OutsScreen } from '../pages/outs';
 import { NotesScreen } from '../pages/notes';
 import { WeaponsScreen } from '../screens/weapons';
