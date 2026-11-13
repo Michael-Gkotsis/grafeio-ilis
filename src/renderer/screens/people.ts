@@ -60,31 +60,33 @@ function statusPicks(punKinds: string[], leaveKinds: string[], meds: { name: str
 // φαίνονται μόνο στα αντίστοιχα φίλτρα, με μία στήλη ακόμα (τι και από πότε έως πότε)· τα ιατρικά στα «Ιατρικά και ποινές».
 const COLS: [string, string][] = [['rank', 'Βαθμός'], ['spec', 'Ο/Σ'], ['last', 'Επίθετο'], ['first', 'Όνομα'], ['father', 'Πατρώνυμο'], ['asm', 'ΑΣΜ'], ['phone', 'Τηλέφωνο'], ['room', 'Θάλαμος'], ['post', 'Πόστο'], ['role', 'Ρόλος'], ['si', 'Σ.Ι.'], ['dn', 'ΔΝ']];
 // στις άδειες/ποινές η στήλη της κατάστασης μπαίνει μετά το πατρώνυμο, για να φαίνεται χωρίς κύλιση
-const COL_W: Record<string, [string, number]> = { rank: ['100px', 100], spec: ['52px', 52], last: ['minmax(150px,1.6fr)', 150], first: ['minmax(100px,1fr)', 100], father: ['minmax(100px,1fr)', 100], asm: ['84px', 84], phone: ['102px', 102], room: ['76px', 76], post: ['minmax(76px,.7fr)', 76], role: ['minmax(120px,.8fr)', 120], si: ['96px', 96], dn: ['40px', 40], essos: ['82px', 82], inOn: ['96px', 96], sub: ['minmax(96px,.8fr)', 96] };
+const COL_W: Record<string, [string, number]> = { rank: ['100px', 100], spec: ['52px', 52], last: ['minmax(150px,1.6fr)', 150], first: ['minmax(100px,1fr)', 100], father: ['minmax(100px,1fr)', 100], asm: ['84px', 84], phone: ['102px', 102], room: ['76px', 76], post: ['minmax(76px,.7fr)', 76], role: ['minmax(120px,.8fr)', 120], si: ['96px', 96], dn: ['40px', 40], essos: ['72px', 72], inOn: ['88px', 88], sub: ['minmax(90px,.8fr)', 90] };
 // σε στενή οθόνη (π.χ. 1024) φεύγουν Πατρώνυμο και Τηλέφωνο, που φαίνονται στην καρτέλα, για να χωρά ο πίνακας χωρίς κύλιση
 const NARROW_HIDE = ['father', 'phone'];
-const COL_WN: Record<string, [string, number]> = { rank: ['70px', 70], spec: ['46px', 46], last: ['minmax(110px,1.6fr)', 110], first: ['minmax(76px,1fr)', 76], asm: ['70px', 70], room: ['48px', 48], post: ['minmax(52px,.7fr)', 52], role: ['minmax(64px,.8fr)', 64], si: ['64px', 64], dn: ['38px', 38], essos: ['64px', 64], inOn: ['70px', 70], sub: ['minmax(64px,.8fr)', 64] };   // χωράει και με ανοιχτό μενού στο 1024 (710px)
+const COL_WN: Record<string, [string, number]> = { rank: ['70px', 70], spec: ['46px', 46], last: ['minmax(110px,1.6fr)', 110], first: ['minmax(76px,1fr)', 76], asm: ['70px', 70], room: ['48px', 48], post: ['minmax(52px,.7fr)', 52], role: ['minmax(64px,.8fr)', 64], si: ['64px', 64], dn: ['38px', 38], essos: ['72px', 72], inOn: ['82px', 82], sub: ['minmax(64px,.8fr)', 64] };   // χωράει και με ανοιχτό μενού στο 1024 (710px)
 // μονάδα: μετά τον θάλαμο και οι στήλες ΕΣΣΟ και Ήρθε· σε στενή οθόνη φεύγουν και Πόστο, Ρόλος (στην καρτέλα) για να χωρά ο πίνακας
 const UNIT_COLS = (sub: boolean): [string, string][] => [['essos', 'ΕΣΣΟ'], ['inOn', 'Ήρθε'], ...(sub ? [['sub', 'Λόχος/Ίλη'] as [string, string]] : [])];
-const colsOf = (narrow: boolean, unit = false, withSub = false): [string, string][] => {
+// noPR: μονάδα κάτω από 1600px, χωρίς Πόστο και Ρόλο (φαίνονται στην καρτέλα), για να χωρούν οι στήλες της μονάδας
+const colsOf = (narrow: boolean, unit = false, withSub = false, noPR = false): [string, string][] => {
   const all = unit ? [...COLS.slice(0, COLS.findIndex(([k]) => k === 'room') + 1), ...UNIT_COLS(withSub), ...COLS.slice(COLS.findIndex(([k]) => k === 'room') + 1)] : COLS;
-  return narrow ? all.filter(([k]) => !NARROW_HIDE.includes(k) && !(unit && (k === 'post' || k === 'role'))).map(([k, l]) => [k, k === 'room' ? 'Θάλ.' : l]) : all;
+  const shown = unit && noPR ? all.filter(([k]) => k !== 'post' && k !== 'role').map(([k, l]): [string, string] => [k, k === 'room' ? 'Θάλ.' : l]) : all;
+  return narrow ? shown.filter(([k]) => !NARROW_HIDE.includes(k)).map(([k, l]) => [k, k === 'room' ? 'Θάλ.' : l]) : shown;
 };
 const HEAD_KEYS = ['rank', 'spec', 'last', 'first', 'father'];
-function gridOf(narrow: boolean, withSt: boolean, unit = false, withSub = false): [string, number] {
-  const ks = colsOf(narrow, unit, withSub).map(([k]) => k), head = ks.filter(k => HEAD_KEYS.includes(k)), tail = ks.filter(k => !HEAD_KEYS.includes(k));
-  const w = (k: string) => (narrow && COL_WN[k]) || COL_W[k];
+function gridOf(narrow: boolean, withSt: boolean, unit = false, withSub = false, noPR = false): [string, number] {
+  const ks = colsOf(narrow, unit, withSub, noPR).map(([k]) => k), head = ks.filter(k => HEAD_KEYS.includes(k)), tail = ks.filter(k => !HEAD_KEYS.includes(k));
+  const w = (k: string) => ((narrow || (unit && noPR && k === 'room')) && COL_WN[k]) || COL_W[k];
   const aa = narrow ? 38 : 44;
   const cols = [aa + 'px', ...head.map(k => w(k)[0]), ...(withSt ? ['minmax(220px,1.6fr)'] : []), ...tail.map(k => w(k)[0])];
   return [cols.join(' '), aa + ks.reduce((a, k) => a + w(k)[1], 0) + (withSt ? 220 : 0) + 18];
 }
 const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
-const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm, unit, withSub }: P) {
+const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm, unit, withSub, noPR }: P) {
   const si = p.si ? siOf(p, lists).text : '';
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
     <span className="num muted">${n}</span><span data-tip=${rankTxt(p)}>${rankTxt(p)}</span><span>${p.spec}</span><span data-tip=${p.last}><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}</span><span data-tip=${p.first}>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
     ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
-    <span className="num">${p.asm}</span>${!narrow && html`<span className="num">${p.phone}</span>`}<span>${p.room ?? ''}</span>${unit && html`<span>${p.essos}</span><span className="num">${p.inOn ? (narrow ? dmyy(p.inOn) : dmy(p.inOn)) : ''}</span>${withSub && html`<span data-tip=${p.sub && p.sub.length > 12 ? p.sub : undefined}>${p.sub || ''}</span>`}`}${!(unit && narrow) && html`<span data-tip=${p.post && p.post.length > 9 ? p.post : undefined}>${p.post || ''}</span><span data-tip=${p.role && p.role.length > 9 ? p.role : undefined}>${p.role || ''}</span>`}
+    <span className="num">${p.asm}</span>${!narrow && html`<span className="num">${p.phone}</span>`}<span>${p.room ?? ''}</span>${unit && html`<span>${p.essos}</span><span className="num" data-tip=${p.inOn ? dmy(p.inOn) + (p.came ? ' από ' + p.came : '') : undefined}>${p.inOn ? dmyy(p.inOn) : ''}</span>${withSub && html`<span data-tip=${p.sub && p.sub.length > 8 ? p.sub : undefined}>${p.sub || ''}</span>`}`}${!(unit && noPR) && html`<span data-tip=${p.post && p.post.length > 9 ? p.post : undefined}>${p.post || ''}</span><span data-tip=${p.role && p.role.length > 9 ? p.role : undefined}>${p.role || ''}</span>`}
     <span data-tip=${si !== siShort(si) ? si : undefined}>${siShort(si)}</span><span>${p.dn ? '✓' : ''}</span></div>`;
 });
 const PersonCard = memo(function PersonCard({ p, style, st, lists, onOpen }: P) {
@@ -195,8 +197,8 @@ function PeopleList() {
     } finally { setXl(false); }
   };
   const dateSel = html`<${Select} className="ui-select" aria-label="Άδειες και ποινές στην ημερομηνία" data-tip="Οι άδειες και οι ποινές αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ pdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//>`;
-  const narrow = useMedia('(max-width: 1279px)');
-  const [grid, gridMin] = gridOf(narrow, withSt, unitMode, withSub); const cols = colsOf(narrow, unitMode, withSub);
+  const narrow = useMedia('(max-width: 1279px)'), noPR = useMedia('(max-width: 1599px)');
+  const [grid, gridMin] = gridOf(narrow, withSt, unitMode, withSub, noPR); const cols = colsOf(narrow, unitMode, withSub, noPR);
   return html`<div>
     <${PageHeader} title="Δυναμολόγιο" sub=${unitMode ? 'Δύναμη μονάδας: ' + total + ' άτομα από ' + essoList.length + ' ΕΣΣΟ. Πάτα ένα όνομα για την καρτέλα του.' : 'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα ένα όνομα για την καρτέλα του.'}>
       <${Button} variant="outline" onClick=${() => setAdding('one')} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">${narrow ? '+ Στρατιώτης' : '+ Νέος στρατιώτης'}<//>
@@ -222,7 +224,7 @@ function PeopleList() {
     mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
     html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: gridMin + 'px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Α/Α</span>${cols.filter(([k]) => HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${cols.filter(([k]) => !HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}</div>
-      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} unit=${unitMode} withSub=${withSub} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} nm=${marks.get('p' + p.id)} onOpen=${open}/>`}/>
+      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} noPR=${noPR} unit=${unitMode} withSub=${withSub} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} nm=${marks.get('p' + p.id)} onOpen=${open}/>`}/>
     </div></div></div>`}
     ${adding === 'one' && html`<${NewPersonDialog} onClose=${() => setAdding(false)} onMany=${() => setAdding('many')}/>`}
     ${adding === 'many' && html`<${QuickAddDialog} onClose=${() => setAdding(false)}/>`}
@@ -518,7 +520,7 @@ function NewPersonDialog({ onClose, onMany }: P) {
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${() => close()}>${done.length ? 'Τέλος' : 'Άκυρο'}<//><${Button} variant="outline" disabled=${!ok} why=${miss} onClick=${saveNext} data-tip="Ctrl+Enter· μένει ανοιχτό για τον επόμενο, με τον ίδιο βαθμό, Ο/Σ και θάλαμο">Προσθήκη και επόμενος<//><${Button} disabled=${!ok} why=${miss} onClick=${save}>Προσθήκη<//>`}>
     <div onKeyDown=${keys} className="stack" style=${{ gap: '14px' }}>
     ${done.length > 0 ? html`<${Alert} tone="info"><span>Μπήκαν ${done.length}: ${done.slice(-4).join(', ')}${done.length > 4 ? '…' : ''}. ${toExcel() ? 'Γράφονται και στο Δυναμολόγιο.' : ''}</span><//>`
-      : onMany && html`<span className="note" style=${{ margin: 0 }}>Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ; <${Button} variant="link" onClick=${() => close(onMany)}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
+      : onMany && html`<span className="note" style=${{ margin: 0 }}>${unit ? 'Ήρθαν πολλοί μαζί;' : 'Πολλοί μαζί, π.χ. στη νέα ΕΣΣΟ;'} <${Button} variant="link" onClick=${() => close(onMany)}>Γρήγορη εισαγωγή σε πίνακα<//></span>`}
     <${PersonFields} key=${gen} x=${x} setX=${setX} id="np" isNew=${true}/></div>
     ${asking && html`<${UnsavedDialog} title=${ok ? 'Ο ' + name + ' δεν προστέθηκε' : 'Ο στρατιώτης δεν προστέθηκε'} saveLabel="Πρόσθεσέ τον" canSave=${ok}
       onSave=${() => { setAsking(null); save(); }} discardLabel="Κλείσε χωρίς προσθήκη" onDiscard=${() => { const go = asking; setAsking(null); go(); }} onBack=${() => setAsking(null)}>
