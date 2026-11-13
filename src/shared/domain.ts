@@ -304,10 +304,12 @@ const ownPhase = (st: Settings, ph: Phase) => (ph === 'sven' || ph === 'spen' ? 
 export const blocksOf = (settings: Settings, phase: Phase = settings.phase): BlockDef[] => (phase === 'spen' ? settings.blocksSpen : ownPhase(settings, phase)?.blocks || settings.blocks);
 // Με ποιο έντυπο της εφαρμογής βγαίνει (ΣΒΕΝ ή ΣΠΕΝ): για το template, τα κελιά, τις υπογραφές
 export const phaseBase = (st: Settings, ph: Phase = st.phase): BasePhase => (ph === 'spen' ? 'spen' : ownPhase(st, ph)?.base || 'sven');
-export const phaseName = (st: Settings, ph: Phase = st.phase): string => (ph === 'sven' || ph === 'spen' ? PHASE_NAME[ph] : ownPhase(st, ph)?.name || PHASE_NAME.sven);
+// Στη μονάδα (Michael, 13/11) το έντυπο υπηρεσιών λέγεται «ΦΡΟΥΡΑ» (το της ΣΠΕΝ, χωρίς ΣΒΕΝ/ΣΠΕΝ)· η ΣΒΕΝ μένει μόνο αν είναι ήδη το ενεργό έντυπο
+const UNIT_FROURA = 'ΦΡΟΥΡΑ';
+export const phaseName = (st: Settings, ph: Phase = st.phase): string => (ph === 'sven' || ph === 'spen' ? (st.mode === 'unit' && ph === 'spen' ? UNIT_FROURA : PHASE_NAME[ph]) : ownPhase(st, ph)?.name || PHASE_NAME.sven);
 // Όλα τα έντυπα υπηρεσιών με τη σειρά: ΣΒΕΝ, ΣΠΕΝ, τα δικά σου
 export const phaseList = (st: Settings): { id: Phase; name: string; base: BasePhase; custom: boolean }[] =>
-  [{ id: 'sven', name: PHASE_NAME.sven, base: 'sven' as BasePhase, custom: false }, { id: 'spen', name: PHASE_NAME.spen, base: 'spen' as BasePhase, custom: false }, ...(st.phases || []).map(x => ({ id: x.id, name: x.name, base: x.base, custom: true }))];
+  [...(st.mode === 'unit' && st.phase !== 'sven' ? [] : [{ id: 'sven' as Phase, name: PHASE_NAME.sven, base: 'sven' as BasePhase, custom: false }]), { id: 'spen', name: phaseName(st, 'spen'), base: 'spen' as BasePhase, custom: false }, ...(st.phases || []).map(x => ({ id: x.id, name: x.name, base: x.base, custom: true }))];
 // Αρχή του ονόματος του Excel: «ΦΡΟΥΡΑ », «ΦΡΟΥΡΑ ΣΠΕΝ », «ΦΡΟΥΡΑ ΑΣΚΗΣΗ »
 export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' ? '' : phaseName(st, ph) + ' ');
 // Οι υπηρεσίες κάθε εντύπου (ΣΒΕΝ, ΣΠΕΝ, δικά σου), για ό,τι κοιτά όλα τα έντυπα μαζί (κωδικοί, ιστορικό, στήλες)
@@ -411,6 +413,8 @@ export interface Rules {
   strictUnarmed?: boolean;               // «Αυστηρά Άοπλοι»: οι άοπλοι πρώτα σε μαγειρεία, μετά 2ο-3ο, μετά 1ο-4ο νούμερο· σκοποί μόνο ένοπλοι
   strictOrder?: string[];                // η σειρά των «Αυστηρά Άοπλοι» (Michael, 1/11): 'mg' μαγειρεία, 'mid' 2ο-3ο νούμερο, 'edge' 1ο-4ο νούμερο, 'b:' + id δική σου άοπλη υπηρεσία· λείπει = ['mg', 'mid', 'edge']
   newAvg?: boolean;                      // οι νέοι στη δύναμη (Person.inOn) ξεκινούν από τον μέσο όρο αργιών και υπηρεσιών της μέρας που ήρθαν (Michael, 1/11)· λείπει/false = από το 0
+  twoPerDay?: 'never' | 'last' | 'free';   // μονάδα (Michael, 13/11): δύο υπηρεσίες την ίδια μέρα· λείπει = 'last' στη μονάδα (στο κέντρο δεν διαβάζεται)
+  twoGap?: number;                       // ... με κενό τουλάχιστον τόσες ώρες ανάμεσά τους (προεπιλογή 2)
   rotate?: boolean;                      // εναλλαγή υπηρεσιών (Michael, 18/10): όλοι περνούν από όλες τις υπηρεσίες πριν ξανακάνουν την ίδια· false = κλειστό
   outTime?: string;                      // ΠΑΛΙΟ, δεν διαβάζεται πια (Michael, 1/11: μία ώρα εξόδου, η «Αρχή εξόδου» της μέρας στο week)· μένει για να φορτώνονται τα παλιά δεδομένα
   hkTime?: string;                       // ώρα της ΗΚΑΙ (ΩΩ:ΛΛ, προεπιλογή 08:00): όποιος γυρίσει ως τότε μετρά παρών εκείνη τη μέρα

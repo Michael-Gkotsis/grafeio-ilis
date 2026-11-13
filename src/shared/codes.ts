@@ -53,6 +53,16 @@ export function readDuty(raw: string, settings: Settings): CellDuty | 'abs' | 'u
   const b = dutyCode(t); if (b) return b.pref ? { k: b.pref, kind: 'ly' } : { kind: b.kind };
   return isAbsCode(t) ? 'abs' : 'unknown';
 }
+// Κελί με μία ή δύο υπηρεσίες την ίδια μέρα «Θ3/Μ2» (μόνο στη μονάδα, Michael 13/11): λίστα υπηρεσιών· 'abs'/'unknown'/null όπως readDuty.
+// Στο κέντρο ένα κελί με «/» που δεν είναι κωδικός μένει «άγνωστο», όπως πάντα.
+export function readDuties(raw: string, settings: Settings): CellDuty[] | 'abs' | 'unknown' | null {
+  const x = readDuty(raw, settings);
+  const one = (): CellDuty[] | 'abs' | 'unknown' | null => (x === 'abs' || x === 'unknown' || x == null ? x : [x]);
+  if ((x !== 'unknown' && x !== 'abs') || settings.mode !== 'unit' || !raw.includes('/')) return one();
+  const out: CellDuty[] = [];
+  for (const part of raw.split('/')) { const y = readDuty(part, settings); if (!y || y === 'abs' || y === 'unknown') return one(); out.push(y); }
+  return out;
+}
 // Ο κωδικός που γράφεται για μια θέση: του εντύπου που ισχύει, αλλιώς των άλλων, αλλιώς το γράμμα του είδους
 export function codeOf(settings: Settings, k: string, kind: DutyKind): string {
   const x = codeIdx(settings); return x.cur.get(k) || x.other.get(k) || bareOf(k, kind);

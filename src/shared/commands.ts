@@ -10,7 +10,7 @@ import { isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
-import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -754,11 +754,11 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (!pm.get(pid)?.active) throw new Error('Το άτομο είναι εκτός δύναμης');
         const other = postOf(s, c.date, pid, c.k);
         if (c.move && other && other.k === c.move) { base = setGuard(base, c.date, c.move, null); note = ' (από ' + postTxt(other) + ')'; }
-        const twice = !c.move && other ? 'ήδη ' + postTxt(other) : null;
+        const twice = !c.move && other ? (twoMode(s) === 'never' ? 'ήδη ' + postTxt(other) : alreadyOn(base, c.date, pid, c.k)) : null;   // μονάδα: 2η υπηρεσία αν χωρά
         const soft = dutyBlock(s.statuses, c.date, pid, post, s.settings.lists) || twice || capBlock(base, c.date, pid, post) || ruleBlock(base, c.date, pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note += ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
-        const lr = lastResort(s.statuses, c.date, pid, post, s.settings.lists) || statusWarn(s, c.date, pid); if (lr) note += ' (' + lr + ')';
+        const lr = lastResort(s.statuses, c.date, pid, post, s.settings.lists) || statusWarn(s, c.date, pid) || secondDuty(s, c.date, pid, post.k); if (lr) note += ' (' + lr + ')';
       }
       let next = setGuard(base, c.date, c.k, pid || null);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση
@@ -858,6 +858,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'setSettings': {
       const settings = { ...s.settings, ...c.settings };
+      // πρώτη φορά σε λειτουργία μονάδας: το έντυπο υπηρεσιών ξεκινά από το έντυπο ΦΡΟΥΡΑ (της ΣΠΕΝ, με όλες τις θέσεις)· τα δικά σου έντυπα μένουν
+      if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && settings.phase === 'sven') settings.phase = 'spen';
       // πρώτη φορά σε λειτουργία μονάδας: οι νέοι ξεκινούν από τον μέσο όρο, μόνο αν δεν είχε οριστεί ποτέ (Michael, 13/11)
       if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && s.rules.newAvg === undefined)
         return { state: { ...s, settings, rules: { ...s.rules, newAvg: true } }, text: 'Ρυθμίσεις: ' + c.text + ' (άνοιξε και το «Οι νέοι ξεκινούν από τον μέσο όρο», γιατί δεν είχε οριστεί ποτέ)', files: [] };

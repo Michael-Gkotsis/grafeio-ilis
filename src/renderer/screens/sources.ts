@@ -534,7 +534,7 @@ export function FoldersCard() {
 // ------------------------------------------------------------------ έντυπα: template, φύλλο, φάκελος
 // τα δικά σου έντυπα υπηρεσιών βγαίνουν με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ: φαίνονται δίπλα του
 const withOwn = (st: Settings, base: string, label: string) => { const o = (st.phases || []).filter(x => x.base === base).map(x => x.name); return o.length ? label + ' (και ' + o.join(', ') + ')' : label; };
-const FORMS = (st: Settings): [FormKind, string][] => [['froura', withOwn(st, 'sven', 'ΦΡΟΥΡΑ ΣΒΕΝ')], ['frouraSpen', withOwn(st, 'spen', 'ΦΡΟΥΡΑ ΣΠΕΝ')], ['hkai', HK()], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
+const FORMS = (st: Settings): [FormKind, string][] => [...(st.mode === 'unit' ? (st.phases || []).some(x => x.base === 'sven') ? [['froura', withOwn(st, 'sven', 'ΦΡΟΥΡΑ (απλό έντυπο)')] as [FormKind, string]] : [] : [['froura', withOwn(st, 'sven', 'ΦΡΟΥΡΑ ΣΒΕΝ')] as [FormKind, string]]), ['frouraSpen', withOwn(st, 'spen', st.mode === 'unit' ? 'ΦΡΟΥΡΑ' : 'ΦΡΟΥΡΑ ΣΠΕΝ')], ['hkai', HK()], ['outs', 'Εξοδούχοι / Παραμένοντες'], ['check', 'Έλεγχος υπηρεσιών (μηνιαίο)']];
 function FormsCard({ outs }: { outs: FormOut[] }) {
   const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
