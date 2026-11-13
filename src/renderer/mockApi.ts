@@ -155,6 +155,8 @@ export function mockApi(): Api {
     exportRoster: async date => ({ ok: true, file: '(δοκιμή) ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + date + '.xlsx', warnings: [] }),
     pickRoster: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     applyRoster: async () => ({ ok: false, error: 'δοκιμή' }),
+    pickImage: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
+    readImage: async () => null,
     backup: async () => ({ ok: true, file: '(δοκιμή)' }),
     openFolder: async () => {},
     chooseOutputDir: async () => null,

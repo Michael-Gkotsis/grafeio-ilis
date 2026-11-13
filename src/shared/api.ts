@@ -95,6 +95,8 @@ export interface Api {
   exportCadre(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
+  pickImage(): Promise<{ ok: true; id: string; ext: 'png' | 'jpg'; w: number; h: number } | { ok: false; error: string } | null>;   // εικόνα επικεφαλίδας: διάλεξε αρχείο, μικραίνει μία φορά, αποθηκεύεται στο data/eikones (id = sha1)
+  readImage(id: string): Promise<string | null>;   // η εικόνα ως data URL (null αν λείπει το αρχείο)
   backup(): Promise<{ ok: boolean; file?: string; error?: string }>;
   openFolder(which: 'output' | 'templates' | 'data' | 'backups'): Promise<void>;
   chooseOutputDir(): Promise<string | null>;
