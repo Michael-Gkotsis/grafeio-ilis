@@ -7,8 +7,11 @@ import {
   SET_SECTIONS,
   dutySubOf,
   groupOf,
+  groupSummary,
+  sectionLabel,
   sectionOf,
 } from '../src/renderer/pages/settings/model/screenView';
+import { groupCount } from '../src/renderer/pages/settings/model/settingsIndex';
 
 describe('Ρυθμίσεις screen view', () => {
   it('keeps the thirteen old sections and adds `brand`, `hkrows` and `sigs`', () => {
@@ -64,10 +67,24 @@ describe('Ρυθμίσεις screen view', () => {
     expect(groupOf('zzz').key).toBe('me');
   });
 
-  it('opens «Μονάδα» for a missing, unknown or old `settings` tab', () => {
-    expect(sectionOf(undefined)).toBe('unit');
+  it('opens the overview for a missing or unknown tab, «Μονάδα» for the old `settings` tab (U11c)', () => {
+    expect(sectionOf(undefined)).toBe('home');
+    expect(sectionOf('nope')).toBe('home');
+    expect(sectionOf('home')).toBe('home');
     expect(sectionOf('settings')).toBe('unit');
-    expect(sectionOf('nope')).toBe('unit');
+    expect(sectionLabel('home')).toBe('Όλες οι ρυθμίσεις');
+    expect(SET_SECTIONS.some(([key]) => key === 'home')).toBe(false);
+    expect(SET_GROUPS.some((g) => g.sections.includes('home'))).toBe(false);
+  });
+
+  it('has a one-line summary and a count for each group, the counts add up to the 44 settings', () => {
+    for (const g of SET_GROUPS) {
+      expect(groupSummary(g.key).length, g.key).toBeGreaterThan(20);
+      expect(groupCount(g.key), g.key).toBeGreaterThan(0);
+    }
+    expect(SET_GROUPS.reduce((n, g) => n + groupCount(g.key), 0)).toBe(44);
+    expect(groupSummary('zzz')).toBe('');
+    expect(groupCount('zzz')).toBe(0);
   });
 
   it('opens a known section as asked', () => {

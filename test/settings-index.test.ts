@@ -2,6 +2,7 @@
 // reachable, and the office words and typing habits (accents, Latin letters) find the right card first.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readSources } from './support/source-scan';
 import { SET_GROUPS, SET_SECTIONS, DUTY_SUBS } from '../src/renderer/pages/settings/model/screenView';
 import {
   ROUTES,
@@ -58,11 +59,13 @@ describe('settings search index', () => {
     expect(palette).toContain("tab: 'sigs'");
     expect(palette).toContain("'Οπλισμός'");
     // the guard screen reads `gopen`: `rules`, or a tab of the rules dialog
-    const guard = readFileSync('src/renderer/screens/guard.ts', 'utf8');
-    for (const k of ['rules', 'order', 'hours']) expect(guard).toContain(`value: '${k}'`);
+    // (scan the whole renderer: the guard and people screens move between folders)
+    const renderer = readSources().map((s) => s.text);
+    const inRenderer = (text: string) => renderer.some((t) => t.includes(text));
+    for (const k of ['rules', 'order', 'hours']) expect(inRenderer(`value: '${k}'`), k).toBe(true);
     expect(ROUTES.order.params.gopen).toBe('order');
     expect(ROUTES.hours.params.gopen).toBe('hours');
-    expect(readFileSync('src/renderer/screens/people.ts', 'utf8')).toContain("ptab: v === 'imer'");
+    expect(inRenderer("ptab: v === 'imer'")).toBe(true);
   });
 
   it('finds the card by its office words, with or without accents', () => {
