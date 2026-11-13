@@ -741,15 +741,18 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
     (h ? a.hol - b.hol || a.lastHolBefore.localeCompare(b.lastHolBefore) : dayNum(a.lastBefore) + (a.adj || 0) - dayNum(b.lastBefore) - (b.adj || 0) || a.total - b.total || a.hol - b.hol) ||
     (a.byKind[kind] || 0) - (b.byKind[kind] || 0) || sr(a.pid) - sr(b.pid);
 }
-export function fillDay(s: AppState, date: ISODate): { guards: Guards; n: number; empty: string[]; warn: string[] } {
+// rooms (Michael, 13/11): μόνο για αυτή τη συμπλήρωση, παίρνει μόνο όσους είναι σε αυτούς τους θαλάμους (κενό = όλοι).
+// Η σειρά δικαιοσύνης μετριέται όπως πάντα σε όλη τη δύναμη· οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν όπως πάντα.
+export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   // ένα δικό της αντίγραφο του ημερολογίου, όπου αλλάζει μόνο η μέρα (όχι νέο αντίγραφο όλου του έτους σε κάθε θέση)
   const wg: Guards = { ...s.guards, [date]: { ...g } };
   let work: AppState = { ...s, guards: wg };
   const setDay = () => { wg[date] = { ...g }; work = { ...work, guards: wg }; };
   // ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι (εκτός αν είναι ο μόνιμος Λ/Υ ή Δ/Υ)
-  const people = dutyPool(s); const all = activePeople(s);
-  const fair = fairMap(s, people, date);
+  const pool = dutyPool(s); const all = activePeople(s);
+  const fair = fairMap(s, pool, date);
+  const people = rooms?.length ? pool.filter(p => p.room != null && rooms.includes(p.room)) : pool;
   // το ευρετήριο της βάσης κοινό (όχι αντίγραφο κάθε συνόλου)· αντίγραφο μόνο για όσους μπαίνουν σήμερα
   const idx = new Map(dutyIndexOf(s)); const own = new Set<number>();
   const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };

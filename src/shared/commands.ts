@@ -55,7 +55,7 @@ export type Command =
   | { t: 'endLeave'; id: string; date: ISODate; time: string }
   | { t: 'approvePun'; id: string }
   | { t: 'assign'; date: ISODate; k: string; pid: number | null; force?: string; move?: string; cid?: string }   // cid: στέλεχος (παίρνει pid όταν μπει πρώτη φορά σε θέση)
-  | { t: 'autofill'; date: ISODate }
+  | { t: 'autofill'; date: ISODate; rooms?: number[] }   // rooms: μόνο αυτοί οι θάλαμοι, μόνο για αυτή τη συμπλήρωση
   | { t: 'clearDay'; date: ISODate }
   | { t: 'setRules'; rules: Rules; text: string }
   // v: off = δεν κάνει (λοχίας), on = ρητά κάνει (και παρά Σ.Ι./πόστο), clear = ό,τι λένε Σ.Ι. και πόστο
@@ -89,7 +89,7 @@ export type Command =
   // nums/per (Michael, 4/11): νούμερα και άτομα ανά νούμερο· το παλιό n = nums. armed/hidden/armWeapon αλλάζουν και από εδώ (όχι στον Λ/Υ-Δ/Υ)
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; armWeapon?: 'own' | 'post' }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
-  | { t: 'autofillRange'; dates: ISODate[] }
+  | { t: 'autofillRange'; dates: ISODate[]; rooms?: number[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
   | { t: 'setPeopleFields'; changes: { pid: number; patch: Partial<Pick<Person, 'post' | 'active' | 'notes'>> }[]; source: string; what: string }
@@ -287,6 +287,9 @@ function editedMove(s: AppState, m: WeaponMove, pt: Partial<Pick<WeaponMove, 're
 }
 const leaveFile = (st: Status) => (st.type === 'LEAVE' || st.type === 'HON' ? 'Άδειες' : st.type === 'KOL' ? HK() : 'Ιατρικά');
 const range = (from: ISODate, to: ISODate) => (from === to ? dm(from) : dm(from) + '–' + dm(to));
+// αυτόματη συμπλήρωση μόνο με κάποιους θαλάμους: ακέραιοι, χωρίς διπλούς, με τη σειρά (κενό ή τίποτα = όλοι)
+const roomsOnly = (r?: number[]) => { const v = [...new Set((r || []).filter(n => Number.isInteger(n) && n > 0))].sort((a, b) => a - b); return v.length ? v : null; };
+const roomsTxt = (r: number[] | null) => (r ? ' μόνο από ' + (r.length === 1 ? 'τον θάλαμο ' : 'τους θαλάμους ') + r.map(n => 'Θ' + n).join(', ') : '');
 
 // Ώρες: μόνο στα είδη με ώρες (άδειες, νοσοκομείο, ΣΤΕΠ, hours.ts), σε μορφή ΩΩ:ΛΛ· την ίδια μέρα η επιστροφή μετά την αναχώρηση. Χωρίς λήξη δεν έχει ώρα επιστροφής.
 function checkTimes(c: { type: TypeKey; from: ISODate; to: ISODate; fromTime?: string; toTime?: string; open?: boolean }): { fromTime?: string; toTime?: string } {
@@ -723,12 +726,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'autofillRange': {
       // ΠΣΚ: μία μέρα μετά την άλλη, ώστε οι κανόνες (ανάπαυση, νούμερα, ΣΚ) να ισχύουν και ανάμεσά τους
       let st = s; const parts: string[] = []; let empty = 0; const warn: string[] = [];
-      for (const d of c.dates) { const r = fillDay(st, d); st = { ...st, guards: r.guards }; parts.push(dayName(d, ctx.today).toLowerCase() + ' ' + r.n); empty += r.empty.length; warn.push(...r.warn); }
-      return { state: st, text: 'Υπηρεσίες ΠΣΚ ' + range(c.dates[0], c.dates[c.dates.length - 1]) + ': αυτόματη συμπλήρωση (' + parts.join(', ') + ')' + (empty ? ', ' + empty + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (warn.length ? '. Χωρίς άλλη επιλογή: ' + warn.join('· ') : ''), files: c.dates.map(d => 'Υπηρεσίες ' + dm(d)).concat('Έλεγχος υπηρεσιών') };
+      const rm = roomsOnly(c.rooms);
+      for (const d of c.dates) { const r = fillDay(st, d, rm); st = { ...st, guards: r.guards }; parts.push(dayName(d, ctx.today).toLowerCase() + ' ' + r.n); empty += r.empty.length; warn.push(...r.warn); }
+      return { state: st, text: 'Υπηρεσίες ΠΣΚ ' + range(c.dates[0], c.dates[c.dates.length - 1]) + ': αυτόματη συμπλήρωση' + roomsTxt(rm) + ' (' + parts.join(', ') + ')' + (empty ? ', ' + empty + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (warn.length ? '. Χωρίς άλλη επιλογή: ' + warn.join('· ') : ''), files: c.dates.map(d => 'Υπηρεσίες ' + dm(d)).concat('Έλεγχος υπηρεσιών') };
     }
     case 'autofill': {
-      const r = fillDay(s, c.date);
-      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      const rm = roomsOnly(c.rooms); const r = fillDay(s, c.date, rm);
+      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + roomsTxt(rm) + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'clearDay': {
       const guards = { ...s.guards }; delete guards[c.date];
