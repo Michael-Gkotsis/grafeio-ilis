@@ -20,7 +20,7 @@ import { PeopleScreen } from '../pages/people';
 import { GuardScreen } from '../screens/guard';
 import { OutsScreen } from '../pages/outs';
 import { NotesScreen } from '../pages/notes';
-import { WeaponsScreen } from '../screens/weapons';
+import { WeaponsScreen } from '../pages/weapons';
 import { SCREEN_SOURCES } from './loaders';
 import { SCREEN_IDS, type ScreenId } from './screenId';
 
