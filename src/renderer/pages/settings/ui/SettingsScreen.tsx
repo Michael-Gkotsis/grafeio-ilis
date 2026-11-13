@@ -1,4 +1,4 @@
-// The «Ρυθμίσεις» screen: a menu of 7 groups on the left, the sections of the open group as tabs, the open section.
+// The «Ρυθμίσεις» screen: a menu of 7 groups on the left (and the overview), the sections of the open group as tabs.
 // Purpose: `TemplatesScreen` (the name the routes and tests have always used), one section at a time, chosen by the
 //   `tab` route parameter. Changing section with unsaved changes asks first (`requestLeave`).
 // Does NOT: hold state (the open section is the route parameter) or draw a card (ui/sections/*).
@@ -12,7 +12,7 @@ import { UpdatesCard } from '../../../features/update';
 import { requestLeave } from '../../../shared/lib/pending';
 import { useNav, useStore } from '../../../shared/model';
 import { PageHeader, Tabs } from '../../../shared/ui';
-import { SET_GROUPS, groupOf, sectionLabel, sectionOf } from '../model/screenView';
+import { HOME_SECTION, SET_GROUPS, groupOf, sectionLabel, sectionOf } from '../model/screenView';
 import { useSettingsSearch } from '../model/useSettingsSearch';
 import { AppearanceCard } from './sections/AppearanceCard';
 import { BackupsCard } from './sections/BackupsCard';
@@ -29,9 +29,10 @@ import { SigsCard } from './sections/SigsCard';
 import { SourcesView } from './sections/SourcesView';
 import { templatesTab } from './sections/templatesTab';
 import { XlLookCard } from './sections/XlLookCard';
+import { SettingsHome, countText, settingsTotal } from './SettingsHome';
 import { SettingsResults, SettingsSearchBox } from './SettingsSearch';
 
-/** The body of one section; an unknown key is already `unit`, and the last branch is «Πρότυπα εφαρμογής». */
+/** The body of one section; an unknown key is already `home`, and the last branch is «Πρότυπα εφαρμογής». */
 function sectionBody(tab: string, templates: ReactNode) {
   return tab === 'unit' ? (
     <div className="stack">
@@ -78,6 +79,7 @@ export function TemplatesScreen() {
   const { boot } = useStore();
   const nav = useNav();
   const tab = sectionOf(nav.params.tab);
+  const home = tab === HOME_SECTION;
   const group = groupOf(tab);
   // built on every render, used or not, exactly as before (the elements are only created, never mounted)
   const templates = templatesTab(boot);
@@ -93,16 +95,25 @@ export function TemplatesScreen() {
         sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."
       >
         <SettingsSearchBox s={search} />
+        {home && !search.on && <span className="settings__total">{countText(settingsTotal())}</span>}
       </PageHeader>
       <div className="settings__grid">
         <nav className="settings__nav" aria-label="Ρυθμίσεις">
+          <button
+            type="button"
+            className="settings__navitem"
+            aria-current={home ? 'page' : undefined}
+            onClick={() => (home ? search.setQ('') : open(HOME_SECTION))}
+          >
+            {sectionLabel(HOME_SECTION)}
+          </button>
           {SET_GROUPS.map((g) => (
             <button
               key={g.key}
               type="button"
               className="settings__navitem"
-              aria-current={group.key === g.key ? 'page' : undefined}
-              onClick={() => (group.key !== g.key ? open(g.sections[0] as string) : search.setQ(''))}
+              aria-current={!home && group.key === g.key ? 'page' : undefined}
+              onClick={() => (home || group.key !== g.key ? open(g.sections[0] as string) : search.setQ(''))}
             >
               {g.label}
             </button>
@@ -113,7 +124,7 @@ export function TemplatesScreen() {
             <SettingsResults s={search} />
           ) : (
             <>
-              {group.sections.length > 1 && (
+              {!home && group.sections.length > 1 && (
                 <div className="settings__tabs">
                   <Tabs
                     value={tab}
@@ -122,7 +133,7 @@ export function TemplatesScreen() {
                   />
                 </div>
               )}
-              {sectionBody(tab, templates)}
+              {home ? <SettingsHome open={open} /> : sectionBody(tab, templates)}
             </>
           )}
         </div>

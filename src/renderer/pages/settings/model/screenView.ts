@@ -5,6 +5,7 @@
 //   testable without a render.
 // @decision Michael 13/10: «Ρυθμίσεις σαν οθόνη»: a sub-menu on the left, one section at a time. The old `settings`
 //   tab opens «Μονάδα».
+// @decision Michael 12/11 (U11c): the overview `home` is the section of a missing `tab`.
 // @decision UX Μ4: «Υπηρεσίες και αργίες» in four parts (before, one page of 3.000 px).
 // Covering test: test/settings-screen-view.test.ts, test/screens-settings-guide.test.ts.
 
@@ -29,7 +30,11 @@ export const SET_GROUPS: SetGroup[] = [
   { key: 'pc', label: 'Αυτό το PC', sections: ['look', 'clock', 'backup', 'update'] },
 ];
 
+/** The overview page: the section shown when no `tab` is given. It belongs to no group and is not in `SET_SECTIONS`. */
+export const HOME_SECTION = 'home';
+
 const SECTION_LABELS: Record<string, string> = {
+  [HOME_SECTION]: 'Όλες οι ρυθμίσεις',
   unit: 'Μονάδα και έντυπα',
   brand: 'Τίτλος και λογότυπο',
   rooms: 'Θάλαμοι και ουλαμοί',
@@ -63,12 +68,28 @@ export const DUTY_SUBS: [string, string][] = [
 
 /**
  * @param tab - the `tab` route parameter (may be missing or unknown)
- * @returns the section to show: a known key, `unit` for the old `settings` value, a missing one or an unknown one
+ * @returns the section to show: a known key (or `home`), `unit` for the old `settings` value, and `home` (the
+ *   overview) for a missing or an unknown one
+ * @decision Michael 12/11 (U11c): a fresh open of «Ρυθμίσεις» lands on the overview (before: «Μονάδα»).
  */
 export const sectionOf = (tab: string | undefined): string => {
   const want = tab === 'settings' ? 'unit' : tab;
-  return SET_SECTIONS.some(([k]) => k === want) ? (want as string) : 'unit';
+  return want === HOME_SECTION || SET_SECTIONS.some(([k]) => k === want) ? (want as string) : HOME_SECTION;
 };
+
+/** One line of what is inside each group, in office words, for the card of the overview (key = `SetGroup.key`). */
+const GROUP_SUMMARIES: Record<string, string> = {
+  me: 'Ίλη ή λόχος, κεφαλίδα, τόπος, τίτλος και λογότυπο, ΕΣΣΟ, θάλαμοι και ουλαμοί, στελέχη ανά βαθμό',
+  duty: 'Έντυπα υπηρεσιών (ΣΒΕΝ/ΣΠΕΝ), θέσεις και ώρες, κανόνες και σειρά, μόνιμοι Λ/Υ-Δ/Υ, Σ.Ι., αργίες',
+  outs: 'Ώρες εξόδου ανά μέρα, θάλαμοι ΣΚ, ώρα ΗΚΑΙ, ενότητες και γραμμές ΗΚΑΙ, μορφή Εξοδούχων',
+  lists: 'Βαθμοί, Ο/Σ, είδη άδειας και ιατρικών (κείμενο στην ΗΚΑΙ, μόνο σημείωση), κωδικοί ημερολογίου',
+  files: 'Εισαγωγή Δυναμολογίου, ποια Excel κρατά ενημερωμένα, φάκελοι, templates, γράμματα Excel',
+  paper: 'Ποιος υπογράφει κάθε χαρτί, πού μπαίνουν στη σελίδα, πρότυπο Word Ημερήσιας Διαταγής',
+  pc: 'Εμφάνιση, μέγεθος, μενού, ώρα και ζώνη ώρας, αντίγραφα ασφαλείας, ενημερώσεις, διάγνωση',
+};
+
+/** @returns the one-line text of a group card (empty for an unknown key); the count is `groupCount` in settingsIndex */
+export const groupSummary = (group: string): string => GROUP_SUMMARIES[group] ?? '';
 
 /** @returns the label of a section key (empty for an unknown key) */
 export const sectionLabel = (section: string): string => SECTION_LABELS[section] ?? '';

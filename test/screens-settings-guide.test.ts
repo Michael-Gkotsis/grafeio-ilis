@@ -17,9 +17,9 @@ import { GUIDE } from '../src/renderer/guideText';
 vi.mock('react', async orig => (await import('./support/ssr-shims')).mockReact(orig));
 vi.mock('react-dom', async orig => (await import('./support/ssr-shims')).mockReactDom(orig));
 
-// Same keys as SET_SECTIONS in pages/settings/model/screenView.ts (U11a added brand, sigs, hkrows); 'unit' is the default.
+// Same keys as SET_SECTIONS in pages/settings/model/screenView.ts (U11a added brand, sigs, hkrows) plus 'home', the overview (U11c).
 const SECTIONS = [
-  'unit', 'rooms', 'duty', 'lists', 'import', 'files', 'templates', 'excel', 'look', 'clock', 'esso', 'backup',
+  'home', 'unit', 'rooms', 'duty', 'lists', 'import', 'files', 'templates', 'excel', 'look', 'clock', 'esso', 'backup',
   'update', 'brand', 'sigs', 'hkrows',
 ];
 // DUTY_SUBS in pages/settings/model/screenView.ts; 'blocks' is the default sub-tab (the `duty` snapshot).

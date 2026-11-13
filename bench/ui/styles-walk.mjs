@@ -229,6 +229,12 @@ const settings = {
         await S.state(`new section ${i + 1} ${label}`, () => openSection(S, label), { close: false });
       }
     }
+    // U11c: the overview page («Όλες οι ρυθμίσεις») and a group opened by clicking its card (current tree only)
+    const homeItem = S.page.locator('.settings__navitem').filter({ hasText: /^Όλες οι ρυθμίσεις$/ });
+    if (await homeItem.count()) {
+      await S.state('home (overview)', async () => { await homeItem.click(); await S.quiet(); }, { close: false });
+      await S.state('home: card opened', async () => { await S.page.locator('.settings__card').first().click(); await S.quiet(); }, { close: false });
+    }
     // U11b: the search box (only the current tree has it): results with marks, and the «nothing found» line
     const search = S.page.locator('.settings__search');
     if (await search.count()) {

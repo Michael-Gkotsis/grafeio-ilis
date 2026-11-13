@@ -29,6 +29,8 @@ export interface SettingEntry {
   label: string;
   words: string;
   where: TabWhere | ScreenWhere;
+  /** Key of the `SET_GROUPS` group that is this setting's home (checklist §16); missing on the section entries. */
+  home?: string;
 }
 
 /** @returns true when the entry opens a card of «Ρυθμίσεις» itself */
@@ -57,110 +59,150 @@ const at = (tab: string, dsub?: string): TabWhere => (dsub ? { tab, dsub } : { t
 
 /** The rows of checklist §16 (44 user settings; «Εσωτερικά» is not a user setting and is left out). */
 const SETTING_ROWS: SettingEntry[] = [
-  { label: 'Τύπος μονάδας: Ίλη ή Λόχος', words: 'Μονάδα και έντυπα', where: at('unit') },
-  { label: 'Κεφαλίδα εντύπων, 3 γραμμές', words: 'Μονάδα και έντυπα τίτλος εντύπων', where: at('unit') },
-  { label: 'Μονάδα στον τίτλο της ΗΚΑΙ', words: 'Μονάδα και έντυπα Ίλη Λόχος', where: at('unit') },
-  { label: 'Τόπος στις υπογραφές', words: 'Μονάδα και έντυπα πόλη', where: at('unit') },
-  { label: 'Τίτλος και λογότυπο', words: 'Θάλαμοι και ουλαμοί εικόνα logo', where: at('brand') },
-  { label: 'ΕΣΣΟ, νέα ΕΣΣΟ, επαναφορά ΕΣΣΟ', words: 'ESSO σειρά κατάταξη', where: at('esso') },
-  { label: 'Θάλαμοι, ουλαμοί, ποιοι ανήκουν πού', words: 'Θάλαμοι και ουλαμοί', where: at('rooms') },
-  { label: 'Στελέχη ανά βαθμό για την ΗΚΑΙ', words: 'Μονάδα και έντυπα Τοποθετημένοι', where: at('unit') },
-  { label: 'Έντυπο υπηρεσιών που ισχύει και δικά έντυπα', words: 'Θέσεις φάση Υπηρεσίες', where: at('duty', 'blocks') },
+  { label: 'Τύπος μονάδας: Ίλη ή Λόχος', words: 'Μονάδα και έντυπα', where: at('unit'), home: 'me' },
+  { label: 'Κεφαλίδα εντύπων, 3 γραμμές', words: 'Μονάδα και έντυπα τίτλος εντύπων', where: at('unit'), home: 'me' },
+  { label: 'Μονάδα στον τίτλο της ΗΚΑΙ', words: 'Μονάδα και έντυπα Ίλη Λόχος', where: at('unit'), home: 'me' },
+  { label: 'Τόπος στις υπογραφές', words: 'Μονάδα και έντυπα πόλη', where: at('unit'), home: 'me' },
+  { label: 'Τίτλος και λογότυπο', words: 'Θάλαμοι και ουλαμοί εικόνα logo', where: at('brand'), home: 'me' },
+  { label: 'ΕΣΣΟ, νέα ΕΣΣΟ, επαναφορά ΕΣΣΟ', words: 'ESSO σειρά κατάταξη', where: at('esso'), home: 'me' },
+  { label: 'Θάλαμοι, ουλαμοί, ποιοι ανήκουν πού', words: 'Θάλαμοι και ουλαμοί', where: at('rooms'), home: 'me' },
+  { label: 'Στελέχη ανά βαθμό για την ΗΚΑΙ', words: 'Μονάδα και έντυπα Τοποθετημένοι', where: at('unit'), home: 'me' },
+  {
+    label: 'Έντυπο υπηρεσιών που ισχύει και δικά έντυπα',
+    words: 'Θέσεις φάση Υπηρεσίες',
+    where: at('duty', 'blocks'),
+    home: 'duty',
+  },
   {
     label: 'Υπηρεσίες ΣΒΕΝ και ΣΠΕΝ: όνομα, νούμερα, άτομα, ώρες, ένοπλη, ενεργή, σειρά',
     words: 'Υπηρεσίες και αργίες βάρδιες θέσεις νέα υπηρεσία',
     where: at('duty', 'blocks'),
+    home: 'duty',
   },
   {
     label: 'Σ.Ι.: σε ποιες υπηρεσίες μπαίνει',
     words: 'Υπηρεσίες και αργίες συντήρηση ικανότητα',
     where: at('duty', 'si'),
+    home: 'duty',
   },
   {
     label: 'Καταστάσεις: σε ποιες υπηρεσίες μπαίνουν',
     words: 'Υπηρεσίες και αργίες ιατρικά ποινές άδειες',
     where: at('duty', 'stat'),
+    home: 'duty',
   },
-  { label: 'Αργίες', words: 'Υπηρεσίες και αργίες γιορτές Πάσχα', where: at('duty', 'hol') },
-  { label: 'Μόνιμοι Λ/Υ και Δ/Υ', words: 'Υπηρεσίες', where: ROUTES.fixed },
-  { label: 'Κύκλος υπηρεσιών, ώρα αλλαγής', words: 'Κανόνες Ώρες 14:00', where: ROUTES.hours },
+  { label: 'Αργίες', words: 'Υπηρεσίες και αργίες γιορτές Πάσχα', where: at('duty', 'hol'), home: 'duty' },
+  { label: 'Μόνιμοι Λ/Υ και Δ/Υ', words: 'Υπηρεσίες', where: ROUTES.fixed, home: 'duty' },
+  { label: 'Κύκλος υπηρεσιών, ώρα αλλαγής', words: 'Κανόνες Ώρες 14:00', where: ROUTES.hours, home: 'duty' },
   {
     label: 'Ανάπαυση, ΣΚ σε δύο εβδομάδες, ίδιο νούμερο',
     words: 'Κανόνες ημέρες ανάπαυσης Σαββατοκύριακο',
     where: ROUTES.rules,
+    home: 'duty',
   },
   {
     label: 'Εναλλαγή υπηρεσιών και νέοι από μέσο όρο',
     words: 'Κανόνες Σειρά δικαιοσύνης',
     where: ROUTES.order,
+    home: 'duty',
   },
-  { label: 'Αυστηρά άοπλοι και αυστηρή σειρά', words: 'Κανόνες', where: ROUTES.rules },
-  { label: 'Όπλο πριν και μετά από ένοπλη υπηρεσία', words: 'Κανόνες Ώρες οπλισμός', where: ROUTES.hours },
-  { label: 'Θάλαμοι εξόδου Σαββατοκύριακου', words: 'Θάλαμοι και ουλαμοί', where: at('rooms') },
+  { label: 'Αυστηρά άοπλοι και αυστηρή σειρά', words: 'Κανόνες', where: ROUTES.rules, home: 'duty' },
+  {
+    label: 'Όπλο πριν και μετά από ένοπλη υπηρεσία',
+    words: 'Κανόνες Ώρες οπλισμός',
+    where: ROUTES.hours,
+    home: 'duty',
+  },
+  { label: 'Θάλαμοι εξόδου Σαββατοκύριακου', words: 'Θάλαμοι και ουλαμοί', where: at('rooms'), home: 'outs' },
   {
     label: 'Ώρες εξόδου, επιστροφής και εκπαίδευσης ανά ημέρα',
     words: 'Κανόνες Ώρες Εξοδούχοι ώρες μέρας',
     where: ROUTES.hours,
+    home: 'outs',
   },
-  { label: 'Ώρα ΗΚΑΙ', words: 'Κανόνες Ώρες 08:00', where: ROUTES.hours },
+  { label: 'Ώρα ΗΚΑΙ', words: 'Κανόνες Ώρες 08:00', where: ROUTES.hours, home: 'outs' },
   {
     label: 'Ενότητες ΗΚΑΙ, οχήματα, «Προβλέπονται», κεφαλίδα',
     words: 'Ενότητες',
     where: ROUTES.hkai,
+    home: 'outs',
   },
-  { label: 'Γραμμές (βαθμοί) της ΗΚΑΙ', words: 'Μονάδα και έντυπα Γραμμές και ονόματα', where: at('hkrows') },
-  { label: 'Μορφή Excel των Εξοδούχων', words: 'Εξοδούχοι Μορφή', where: ROUTES.outs },
+  {
+    label: 'Γραμμές (βαθμοί) της ΗΚΑΙ',
+    words: 'Μονάδα και έντυπα Γραμμές και ονόματα',
+    where: at('hkrows'),
+    home: 'outs',
+  },
+  { label: 'Μορφή Excel των Εξοδούχων', words: 'Εξοδούχοι Μορφή', where: ROUTES.outs, home: 'outs' },
   {
     label: 'Υπογραφές στη σελίδα 2 των Εξοδούχων',
     words: 'Μονάδα και έντυπα Υπογραφές Εξοδούχοι',
     where: at('sigs'),
+    home: 'outs',
   },
   {
     label: 'Λίστες: βαθμοί, Ο/Σ, είδη άδειας, ιατρικών και ποινών, κείμενο στην ΗΚΑΙ',
     words: 'Λίστες στήλη ΗΚΑΙ μόνο σημείωση',
     where: at('lists'),
+    home: 'lists',
   },
   {
     label: 'Κωδικοί ημερολογίου κωλυομένων, τίτλος, φύλλα',
     words: 'Δυναμολόγιο Ημερολόγιο Κωδικοί',
     where: ROUTES.codes,
+    home: 'lists',
   },
-  { label: 'Εισαγωγή Δυναμολογίου', words: 'ΕΣΣΟ Excel', where: at('import') },
-  { label: 'Αρχεία Excel ανά είδος: φύλλο, στήλες, εγγραφή', words: 'πηγές διαβάζει γράφει', where: at('files') },
-  { label: 'Φάκελοι αρχείων και φάκελος ανά είδος', words: 'Αρχεία Excel Φάκελοι', where: at('files') },
-  { label: 'Πρότυπο και φάκελος ανά έντυπο', words: 'Πρότυπα εφαρμογής template', where: at('templates') },
+  { label: 'Εισαγωγή Δυναμολογίου', words: 'ΕΣΣΟ Excel', where: at('import'), home: 'files' },
+  {
+    label: 'Αρχεία Excel ανά είδος: φύλλο, στήλες, εγγραφή',
+    words: 'πηγές διαβάζει γράφει',
+    where: at('files'),
+    home: 'files',
+  },
+  { label: 'Φάκελοι αρχείων και φάκελος ανά είδος', words: 'Αρχεία Excel Φάκελοι', where: at('files'), home: 'files' },
+  {
+    label: 'Πρότυπο και φάκελος ανά έντυπο',
+    words: 'Πρότυπα εφαρμογής template',
+    where: at('templates'),
+    home: 'files',
+  },
   {
     label: 'Άγνωστοι κωδικοί στον έλεγχο υπηρεσιών',
     words: 'Αρχεία Excel Έλεγχος υπηρεσιών',
     where: at('files'),
+    home: 'files',
   },
   {
     label: 'Γράμματα Excel: γραμματοσειρά, μέγεθος, στοίχιση ανά κομμάτι',
     words: 'Γράμματα Excel',
     where: at('excel'),
+    home: 'files',
   },
   {
     label: 'Υπογραφές ανά έντυπο',
     words: 'Μονάδα και έντυπα Υπογραφές… θεωρήθηκε διοικητής',
     where: at('sigs'),
+    home: 'paper',
   },
   {
     label: 'Θέσεις στο χαρτί, κεφαλίδα αριστερά και δεξιά',
     words: 'Θέσεις στο χαρτί… σε κάθε έντυπο περιθώρια',
     where: ROUTES.layout,
+    home: 'paper',
   },
-  { label: 'Πρότυπο Word της Ημερήσιας Διαταγής', words: 'ΗΔ ΗΚΑΙ docx', where: ROUTES.hd },
-  { label: 'Έντυπα: πρότυπα και έτοιμα', words: 'δικά σου Excel', where: ROUTES.reports },
-  { label: 'Αποθηκευμένες λίστες του Δυναμολογίου', words: 'φίλτρα προβολές', where: ROUTES.views },
+  { label: 'Πρότυπο Word της Ημερήσιας Διαταγής', words: 'ΗΔ ΗΚΑΙ docx', where: ROUTES.hd, home: 'paper' },
+  { label: 'Έντυπα: πρότυπα και έτοιμα', words: 'δικά σου Excel', where: ROUTES.reports, home: 'files' },
+  { label: 'Αποθηκευμένες λίστες του Δυναμολογίου', words: 'φίλτρα προβολές', where: ROUTES.views, home: 'lists' },
   {
     label: 'Εμφάνιση: θέμα, πυκνότητα, μενού, ζουμ Excel, βαθμός μπροστά',
     words: 'σκοτεινό φωτεινό μέγεθος',
     where: at('look'),
+    home: 'pc',
   },
-  { label: 'Ώρα και ζώνη ώρας', words: 'ρολόι ώρα του PC', where: at('clock') },
-  { label: 'Αντίγραφα ασφαλείας, USB, επαναφορά', words: 'backup', where: at('backup') },
-  { label: 'Ενημερώσεις', words: 'νέα έκδοση update', where: at('update') },
-  { label: 'Διάγνωση', words: 'Ctrl+Shift+D μνήμη ταχύτητα', where: ROUTES.diag },
+  { label: 'Ώρα και ζώνη ώρας', words: 'ρολόι ώρα του PC', where: at('clock'), home: 'pc' },
+  { label: 'Αντίγραφα ασφαλείας, USB, επαναφορά', words: 'backup', where: at('backup'), home: 'pc' },
+  { label: 'Ενημερώσεις', words: 'νέα έκδοση update', where: at('update'), home: 'pc' },
+  { label: 'Διάγνωση', words: 'Ctrl+Shift+D μνήμη ταχύτητα', where: ROUTES.diag, home: 'pc' },
 ];
 
 /** One entry per section of the screen, so every tab name finds its own card (old names included). */
@@ -243,3 +285,11 @@ export function markParts(text: string, words: string[]): MarkPart[] {
     return parts;
   }, []);
 }
+
+/**
+ * @param group - a `SET_GROUPS` key
+ * @returns how many of the 44 settings of checklist §16 have their home in that group (the number on its overview card).
+ * @decision UX U11c: the two rows that stay inside their own screen (Έντυπα: πρότυπα και έτοιμα, Αποθηκευμένες λίστες)
+ *   are counted in the nearest group (Αρχεία Excel, Λίστες και κωδικοί), so the seven counts add up to 44.
+ */
+export const groupCount = (group: string): number => SETTING_ROWS.filter((row) => row.home === group).length;
