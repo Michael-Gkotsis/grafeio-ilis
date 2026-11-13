@@ -1,4 +1,4 @@
-<div>
+<div class="hkai">
   <div class="page-head">
     <div>
       <h1>
@@ -37,6 +37,9 @@
       <input type="date" class="datefld__cal" tabindex="-1" aria-hidden="true" value="2026-11-09"/>
     </div>
     <div class="page-head__acts">
+      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Ρυθμίσεις › Γραμμές και ονόματα ΗΚΑΙ">
+        Ρυθμίσεις ΗΚΑΙ…
+      </button>
       <button type="button" class="ui-btn ui-btn--default">
         Βγάλε το Excel
       </button>
@@ -53,130 +56,113 @@
       </button>
     </div>
   </div>
-  <div class="strength">
-    <div class="stack">
+  <div class="hkai__grid">
+    <div class="hkai__stack">
+      <div>
+        <div class="ui-kpis">
+          <div class="ui-kpi" data-tip="Η δύναμη της ΗΚΑΙ: στρατιώτες και στελέχη, με τον κανόνα των 08:00. Το Σήμερα και η Δύναμη μετρούν μόνο στρατιώτες, τώρα.">
+            <span class="ui-kpi__l">
+              Δύναμη
+            </span>
+            <span class="ui-kpi__n">
+              18
+            </span>
+          </div>
+          <div class="ui-kpi">
+            <span class="ui-kpi__l">
+              Κωλυόμενοι
+            </span>
+            <span class="ui-kpi__n">
+              3
+            </span>
+          </div>
+          <div class="ui-kpi">
+            <span class="ui-kpi__l">
+              Απόντες
+            </span>
+            <span class="ui-kpi__n">
+              4
+            </span>
+          </div>
+          <div class="ui-kpi ui-kpi--ok">
+            <span class="ui-kpi__l">
+              Διαθέσιμοι
+            </span>
+            <span class="ui-kpi__n">
+              14
+            </span>
+          </div>
+        </div>
+        <p class="hkai__formula">
+          Δύναμη = 
+          <b>
+            12
+          </b>
+           στρατιώτες + 
+          <b>
+            6
+          </b>
+           στελέχη · μετρά με τις 08:00 (όποιος γυρίσει ως τότε είναι παρών).
+        </p>
+      </div>
       <section class="ui-card">
         <div class="ui-card__head">
           <h2>
             Από πού βγαίνει κάθε αριθμός
           </h2>
         </div>
-        <div class="ui-card__body">
-          <div class="tiles" style="margin-bottom:12px">
-            <div class="tile tile--main" data-tip="Η δύναμη της ΗΚΑΙ: στρατιώτες και στελέχη, με τον κανόνα των 08:00. Το Σήμερα και η Δύναμη μετρούν μόνο στρατιώτες, τώρα.">
-              <span class="tile__n">
-                18
-              </span>
-              <span class="tile__l">
-                Δύναμη
-              </span>
-            </div>
-            <div class="tile">
-              <span class="tile__n">
-                3
-              </span>
-              <span class="tile__l">
-                Κωλυόμενοι
-              </span>
-            </div>
-            <div class="tile">
-              <span class="tile__n">
-                4
-              </span>
-              <span class="tile__l">
-                Απόντες
-              </span>
-            </div>
-            <div class="tile">
-              <span class="tile__n">
-                14
-              </span>
-              <span class="tile__l">
-                Διαθέσιμοι
-              </span>
-            </div>
-          </div>
-          <p class="note" style="margin:-4px 0 12px">
-            Δύναμη = 
-            <b>
-              12
-            </b>
-             στρατιώτες + 
-            <b>
-              6
-            </b>
-             στελέχη · μετρά με τις 08:00 (όποιος γυρίσει ως τότε είναι παρών).
-          </p>
-          <ul class="hk-src">
-            <li>
-              <b>
+        <div class="ui-card__body ui-card__body--flush">
+          <ul class="hkai__src">
+            <li class="hkai__srcrow">
+              <span class="hkai__srclabel">
                 Υπηρεσία εντός στρατοπέδου
-              </b>
-              : 
-              <span class="num">
+              </span>
+              <span class="hkai__srcn num">
                 2
               </span>
-              <div class="cat__names">
-                <button type="button">
-                  ΥΠΟΘΕΤΙΔΗΣ Β.
-                </button>
-                <button type="button">
-                  ΑΓΝΩΣΤΟΠΟΥΛΟΣ Δ.
-                </button>
-              </div>
+              <button type="button" class="hkai__link" aria-expanded="false" aria-controls="hkai-names-yp">
+                ονόματα ›
+              </button>
             </li>
-            <li>
-              <b>
+            <li class="hkai__srcrow">
+              <span class="hkai__srclabel">
                 Ελεύθεροι υπηρεσίας
-              </b>
-              : 
-              <span class="num">
+              </span>
+              <span class="hkai__srcn num">
                 1
               </span>
-              <div class="cat__names">
-                <button type="button">
-                  ΔΕΙΓΜΑΤΑΣ Λ.
-                </button>
-              </div>
+              <button type="button" class="hkai__link" aria-expanded="false" aria-controls="hkai-names-ey">
+                ονόματα ›
+              </button>
             </li>
-            <li>
-              <b>
+            <li class="hkai__srcrow">
+              <span class="hkai__srclabel">
                 Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ
-              </b>
-              : 
-              <span class="num">
+              </span>
+              <span class="hkai__srcn num">
                 3
               </span>
-              <div class="cat__names">
-                <button type="button" data-tip="Στέλεχος· ανοίγει η κάρτα του, όπου αλλάζει η κατάσταση">
-                  ΙΛΧΟΣ ΥΠΟΘΕΤΙΚΟΣ
-                </button>
-                <button type="button">
-                  ΦΑΝΤΑΣΙΟΣ Θ.
-                </button>
-                <button type="button">
-                  ΠΡΟΣΩΡΙΝΟΣ Α.
-                </button>
-              </div>
+              <button type="button" class="hkai__link" aria-expanded="false" aria-controls="hkai-names-ka">
+                ονόματα ›
+              </button>
             </li>
-            <li>
-              <b>
+            <li class="hkai__srcrow">
+              <span class="hkai__srclabel">
                 Αναρρωτικές άδειες
-              </b>
-              : 
-              <span class="num">
+              </span>
+              <span class="hkai__srcn num">
                 1
               </span>
-              <div class="cat__names">
-                <button type="button">
-                  ΘΕΩΡΗΤΙΚΟΣ Ζ.
-                </button>
-              </div>
+              <button type="button" class="hkai__link" aria-expanded="false" aria-controls="hkai-names-an">
+                ονόματα ›
+              </button>
             </li>
           </ul>
-          <p class="note" style="margin:8px 0 0">
-            Υπηρεσία από την κατάσταση υπηρεσιών, ΕΥ και ποινές από τα ιατρικά και τις ποινές, απόντες από άδειες, αναρρωτικές και νοσοκομείο· τα στελέχη από τις καταστάσεις τους στην καρτέλα Στελέχη. Κάθε άτομο μετριέται μία φορά. Διαθέσιμοι = Δύναμη − Απόντες (ο τύπος του εντύπου). Οι εξοδούχοι δεν μετρούν.
-          </p>
+          <div class="hkai__foot">
+            <button type="button" class="hkai__link" aria-expanded="false" aria-controls="hkai-how">
+              Πώς μετράει;
+            </button>
+          </div>
         </div>
       </section>
       <section class="ui-card">
@@ -600,8 +586,8 @@
         </div>
       </section>
     </div>
-    <div>
-      <div class="toolbar" style="margin-bottom:8px">
+    <div class="hkai__sheets">
+      <div class="hkai__bar">
         <div class="ui-tabs" role="tablist">
           <button type="button" role="tab" aria-selected="true">
             Μπροστά

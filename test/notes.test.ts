@@ -410,6 +410,11 @@ describe('σύνδεση στην εφαρμογή', () => {
     const go = vi.fn(), openCadre = vi.fn();
     const hk = start('hkai', {}, screen(HkaiScreen), { go, openCadre });
     hk.render();
+    // the names are folded by default (U13): open every row of the list first, then look for the cadre buttons
+    const folded = hk.handlers('onClick', 'ονόματα ›').length;
+    expect(folded).toBeGreaterThan(0);
+    for (let i = 0; i < folded; i++) hk.press('ονόματα ›', { index: i });
+    hk.render();
     const names = hk.elements().filter(r => r.type === 'button' && String(r.props['data-tip'] ?? '').startsWith('Στέλεχος·'));
     expect(names.length).toBeGreaterThan(0);
     (names[0].props.onClick as () => void)();

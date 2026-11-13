@@ -1,0 +1,98 @@
+/*
+ * KPI strip (.ui-kpis, .ui-kpi): up to four counters in one bordered row, plus an optional wide «check» cell.
+ *
+ * Purpose: the look of KpiStrip.tsx. Cells are divided by 1 px lines (the strip background shows through the gap).
+ * Does NOT: touch the legacy `.kpi*` / `.tile*` rules (they stay for «Σήμερα» and others), or hold colour values.
+ * Owner layer: renderer/shared/ui. Imported by ui.css into layer(shared-ui) from app/styles/index.css.
+ * Why: U13 moved the strip of «Δύναμη» (U12) here so «ΗΚΑΙ» uses the same one.
+ * Covering test: bench:styles, test/contrast.test.ts.
+ */
+
+.ui-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 12px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ui-kpis--check {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.7fr);
+}
+.ui-kpi,
+.ui-kpis__check {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--card);
+  text-align: left;
+}
+button.ui-kpi {
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button.ui-kpi:hover {
+  background: var(--hover);
+}
+.ui-kpi[aria-pressed="true"] {
+  background: var(--selected);
+}
+.ui-kpi:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.ui-kpi__l {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-fg);
+}
+.ui-kpi__n {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.ui-kpi--ok .ui-kpi__n {
+  color: var(--ok);
+}
+.ui-kpis__sum {
+  font-size: 16px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.ui-kpis__sum b {
+  font-weight: 600;
+}
+.ui-kpis__ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.ui-kpis__bad {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+/* Under 1024 px: 2 x 2 with the check across the bottom; phone: one column. */
+@media (max-width: 1023px) {
+  .ui-kpis,
+  .ui-kpis--check {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ui-kpis__check {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .ui-kpis,
+  .ui-kpis--check {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

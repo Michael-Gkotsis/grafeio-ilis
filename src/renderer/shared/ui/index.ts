@@ -34,3 +34,4 @@ export { useEscape } from './useEscape';
 export { useFloat, type FloatPos } from './useFloat';
 export { useMedia, useViewportHeight } from './useMedia';
 export { GoLink, type GoLinkProps } from './GoLink';
+export { KpiStrip, type KpiCell, type KpiStripProps } from './KpiStrip';

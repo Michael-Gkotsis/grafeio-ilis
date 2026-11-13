@@ -13,8 +13,8 @@ import { HkLeavesToggle } from './HkLeavesToggle';
 export function hkaiSheets(s: ReturnType<typeof useHkai>) {
   const { mobile, side, setSide, date, back, front, fn } = s;
   return (
-    <div>
-      <div className="toolbar" style={{ marginBottom: '8px' }}>
+    <div className="hkai__sheets">
+      <div className="hkai__bar">
         {!mobile && (
           <Tabs
             value={side === 'sum' ? 'front' : side}

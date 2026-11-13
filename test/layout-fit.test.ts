@@ -40,7 +40,7 @@ describe('διάταξη', () => {
   it('ΗΚΑΙ: Excel, Εκτύπωση και Υπογραφές στην κεφαλίδα, όχι κάτω από την προεπισκόπηση', () => {
     const out = H.renderIn(bw.world, 'hkai', {}, createElement(HkaiScreen as never));
     const html = flatten(out);
-    const head = html.indexOf('<div class="page-head">'), body = html.indexOf('<div class="strength">');
+    const head = html.indexOf('<div class="page-head">'), body = html.indexOf('<div class="hkai__grid">');
     expect(head).toBeGreaterThan(0); expect(body).toBeGreaterThan(head);
     const header = html.slice(head, body);
     expect(header).toContain('ΗΚΑΙ της 09/11/2026');
