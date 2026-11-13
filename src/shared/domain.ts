@@ -312,7 +312,7 @@ export const phaseName = (st: Settings, ph: Phase = st.phase): string => (ph ===
 export const phaseList = (st: Settings): { id: Phase; name: string; base: BasePhase; custom: boolean }[] =>
   [...(st.mode === 'unit' && st.phase !== 'sven' ? [] : [{ id: 'sven' as Phase, name: PHASE_NAME.sven, base: 'sven' as BasePhase, custom: false }]), { id: 'spen', name: phaseName(st, 'spen'), base: 'spen' as BasePhase, custom: false }, ...(st.phases || []).map(x => ({ id: x.id, name: x.name, base: x.base, custom: true }))];
 // Αρχή του ονόματος του Excel: «ΦΡΟΥΡΑ », «ΦΡΟΥΡΑ ΣΠΕΝ », «ΦΡΟΥΡΑ ΑΣΚΗΣΗ »
-export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' ? '' : phaseName(st, ph) + ' ');
+export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' || (st.mode === 'unit' && ph === 'spen') ? '' : phaseName(st, ph) + ' ');   // μονάδα: σκέτο «ΦΡΟΥΡΑ», όχι «ΦΡΟΥΡΑ ΦΡΟΥΡΑ»
 // Οι υπηρεσίες κάθε εντύπου (ΣΒΕΝ, ΣΠΕΝ, δικά σου), για ό,τι κοιτά όλα τα έντυπα μαζί (κωδικοί, ιστορικό, στήλες)
 export const phaseBlocks = (st: Settings): [Phase, BlockDef[]][] => [['sven', st.blocks || []], ['spen', st.blocksSpen || []], ...(st.phases || []).map(x => [x.id, x.blocks || []] as [Phase, BlockDef[]])];
 export const everyBlock = (st: Settings): BlockDef[] => phaseBlocks(st).flatMap(([, b]) => b);
