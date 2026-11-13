@@ -70,6 +70,17 @@ const people = screen('Δυναμολόγιο', async S => {
     await S.page.locator('.stpick__opt').filter({ hasText: 'Κανονική' }).first().click();
     await S.click('Συνέχεια', '.ui-dialog');
   });
+  // «Δυναμολόγιο»: the save-list and new-soldier dialogs, and the «Ημερολόγιο κωλυομένων» cell and codes dialogs
+  await S.dialog('new soldier dialog', () => S.click(/^\+ (Νέος )?στρατιώτης/i));
+  await S.dialog('save list dialog', async () => {
+    await S.page.locator('input[aria-label="Αναζήτηση στη λίστα"]').fill('Δ');
+    await S.click('☆ Αποθήκευση');
+  });
+  await S.page.locator('input[aria-label="Αναζήτηση στη λίστα"]').fill('');
+  await S.tab('Ημερολόγιο κωλυομένων');
+  await S.dialog('imer cell dialog', () => S.page.locator('td.imer__c').first().click());
+  await S.dialog('imer codes dialog', () => S.click('Κωδικοί…'));
+  await S.tab('Λίστα');
   await tabs(S);
 }, { phone: true });
 

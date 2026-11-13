@@ -16,7 +16,7 @@ import { HistoryScreen } from '../pages/history';
 import { HdTab } from '../widgets/hd';
 import { StatusesPage } from '../pages/statuses';
 import { CadreScreen } from '../pages/cadre';
-import { PeopleScreen } from '../screens/people';
+import { PeopleScreen } from '../pages/people';
 import { GuardScreen } from '../screens/guard';
 import { OutsScreen } from '../pages/outs';
 import { NotesScreen } from '../pages/notes';
