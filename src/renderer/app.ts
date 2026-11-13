@@ -30,6 +30,7 @@ import { dueCount } from '../shared/notes';
 import { currentEssos } from '../shared/rosterLists';
 import { appLogo, appTitle } from '../shared/brand';
 import { essoPersonTxt } from '../shared/esso';
+import { isUnit, essoRows } from '../shared/mode';
 import { HK, setUnitKind } from '../shared/unit';
 import type { Command } from '../shared/commands';
 
@@ -139,6 +140,9 @@ function Shell() {
   // τι θα αναιρέσει το κουμπί: όπως ο main (db.lastUndoable), μέσα στις 50 πιο πρόσφατες ενέργειες που αναιρούνται
   const lastUndo = useMemo(() => audit.filter(a => a.undoable).slice(0, 50).find(a => !a.undone), [audit]);
   // η ΕΣΣΟ των Ρυθμίσεων (Νέα ΕΣΣΟ), αλλιώς η πιο συχνή όσων είναι σε δύναμη
+  // λειτουργία μονάδας: «ΜΟΝΑΔΑ 140» (σε δύναμη) αντί για την ΕΣΣΟ
+  const unitMode = isUnit(state.settings);
+  const [activeN, essoN] = useMemo(() => unitMode ? [state.people.filter(p => p.active).length, essoRows(state.people.filter(p => p.active)).length] : [0, 0], [unitMode, state.people]);
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
   const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
   const [layer, setLayer] = useState<any>(null);
@@ -244,7 +248,7 @@ function Shell() {
         <${Button} variant="ghost" size="icon" className="backbtn" aria-label="Πίσω" data-tip=${back.length ? 'Πίσω στο ' + screenName(back[back.length - 1].view) + ' (Alt+←)' : 'Πίσω (Alt+←)'} disabled=${!back.length} onClick=${goBack}>${Icon.back}<//>
         <div className="brand" data-tip=${'Έκδοση ' + boot.version}><${Logo} size=${30} ...${appLogo(state.settings)}/><span>${title}<small>${state.settings.unit[2] || ''}</small></span></div>
         <button type="button" className="searchbtn" aria-label="Αναζήτηση" data-tip="Βρες άνθρωπο ή ενέργεια από οπουδήποτε (Ctrl+K)" onClick=${() => setOver('palette')}>${Icon.search}<span>Αναζήτηση προσώπου ή ενέργειας…</span><${Kbd}>Ctrl K<//></button>
-        ${essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
+        ${unitMode ? html`<span className="essochip" data-tip=${'Σε δύναμη τώρα, από ' + essoN + ' ΕΣΣΟ'} data-tip-side="bottom"><small>ΜΟΝΑΔΑ</small><b>${activeN}</b></span>` : essos && html`<span className="essochip" data-tip=${state.settings.essos ? 'Η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ)' : 'ΕΣΣΟ όσων είναι σε δύναμη (από το Δυναμολόγιο)'} data-tip-side="bottom"><small>ΕΣΣΟ</small><b>${essos}</b></span>`}
         <div className="topbar__right">
           <${UpdateChip} u=${upd} onOpen=${() => setUpdOpen(true)}/>
           <${ExcelChip}/>

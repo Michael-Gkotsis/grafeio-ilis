@@ -24,6 +24,7 @@ import { BrandCard, RoomsCard } from './units';
 import { EssoCards } from './esso';
 import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
+import { isUnit } from '../../shared/mode';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
 import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
@@ -73,7 +74,16 @@ function SettingsCard() {
     return ok;
   };
   usePending(dirty, { label: 'Μονάδα και έντυπα', save, discard: () => setS(fromState()) });
+  // Λειτουργία κέντρου ή μονάδας: ισχύει αμέσως, δεν σβήνει τίποτα (Michael, 13/11)
+  const mode = isUnit(state.settings) ? 'unit' : 'centre';
+  const setMode = async (m: 'centre' | 'unit') => {
+    if (m === mode) return;
+    if (await run({ t: 'setSettings', settings: { mode: m }, text: m === 'unit' ? 'λειτουργία μονάδας' : 'λειτουργία κέντρου εκπαίδευσης' }, false)) toast({ text: m === 'unit' ? 'Λειτουργία μονάδας' : 'Λειτουργία κέντρου εκπαίδευσης' });
+  };
   return html`<${Card} title="Μονάδα και έντυπα">
+    <div className="field"><span className="field__label">Λειτουργία</span>
+      <${Segmented} value=${mode} onChange=${setMode} items=${[{ value: 'centre', label: 'Κέντρο εκπαίδευσης (ΕΣΣΟ)' }, { value: 'unit', label: 'Μονάδα (συνεχής ροή)' }]}/>
+      <span className="field__help"><b>Κέντρο:</b> όπως σήμερα, μία ΕΣΣΟ τη φορά και «Νέα ΕΣΣΟ» όταν έρχεται η επόμενη σειρά. <b>Μονάδα:</b> σταθερό Δυναμολόγιο με στρατιώτες από πολλές ΕΣΣΟ, που μπαίνουν και βγαίνουν από τη δύναμη όποτε χρειαστεί (μετάθεση, απόσπαση, απόλυση). Η αλλαγή δεν σβήνει τίποτα· γυρνάς πίσω όποτε θέλεις.</span></div>
     <${UnitKindField} value=${s.unitKind} onChange=${setKind}/>
     <div className="field"><span className="field__label">Κεφαλίδα εντύπων (3 γραμμές)</span><div className="field-row">${[0, 1, 2].map(i => html`<input key=${i} className="ui-input" style=${{ flex: 1, minWidth: '160px' }} value=${s.unit[i]} onChange=${(e: any) => { const u = [...s.unit] as [string, string, string]; u[i] = e.target.value; setS({ ...s, unit: u }); }}/>`)}</div></div>
     <${HkHeadFields} value=${s.head} onChange=${(head: string[]) => setS({ ...s, head })} kind=${s.unitKind} inSettings=${true}/>
@@ -336,7 +346,7 @@ function DutySection() {
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
 const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας'], ['update', 'Ενημερώσεις']];
 export function TemplatesScreen() {
-  const { boot } = useStore(); const nav = useNav();
+  const { boot, state } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
   const tab = SET_SECTIONS.some(([k]) => k === want) ? want : 'unit';
   const templates = html`<div>
@@ -351,7 +361,7 @@ export function TemplatesScreen() {
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
-      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => tab !== k && requestLeave(() => nav.set({ tab: k }))}>${l}</button>`)}</nav>
+      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => tab !== k && requestLeave(() => nav.set({ tab: k }))}>${k === 'esso' && isUnit(state.settings) ? 'ΕΣΣΟ και κινήσεις' : l}</button>`)}</nav>
       <div className="setbody">${body}</div>
     </div>
   </div>`;

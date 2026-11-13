@@ -2,13 +2,15 @@
 // με Enter στον επόμενο, και στο τέλος μία προσθήκη για όλους (μία αναίρεση, μία εγγραφή στο Δυναμολόγιο).
 // Ό,τι γράφεις κρατιέται σε πρόχειρο, αν κλείσει το παράθυρο πριν από την προσθήκη.
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Button, Dialog, Icon, useToast } from '../ui';
+import { html, cx, Alert, Button, Dialog, Icon, Why, missingOf, useToast } from '../ui';
 import { Combo } from '../select';
 import { useNav, useStore } from '../store';
-import { UnsavedDialog } from '../common';
+import { ChoiceField, DateField, SubField, UnsavedDialog } from '../common';
 import { listOf, optionsOf } from '../../shared/ranks';
 import { roomCfg, type Person } from '../../shared/domain';
 import { essoPersonTxt } from '../../shared/esso';
+import { addDays } from '../../shared/dates';
+import { defaultEsso, essoChoices, isUnit } from '../../shared/mode';
 import { currentEssos } from '../../shared/rosterLists';
 import { siCombos } from '../../shared/si';
 import { CARRY, QA_COLS, carryOf, checkRows, emptyRow, isFilled, parsePaste, toNewPerson, type QaKey, type QaRow } from '../../shared/quickAdd';
@@ -44,11 +46,15 @@ const Row = memo(function Row({ r, i, err, lists, onCell, onKey, onPaste, onDel,
 });
 
 export function QuickAddDialog({ onClose }: P) {
-  const { state, run, undoMark } = useStore(); const toast = useToast(); const nav = useNav();
-  const defEssos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
+  const { state, run, undoMark, today } = useStore(); const toast = useToast(); const nav = useNav();
+  const unit = isUnit(state.settings);
+  const choices = useMemo(() => essoChoices(state.people, today), [state.people, today]);
+  const defEssos = useMemo(() => (unit ? defaultEsso(state.people, today) : state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [unit, today, state.settings.essos, state.people]);
   const [draft] = useState(loadDraft);
   const [rows, setRows] = useState<QaRow[]>(() => withTail(draft?.rows || []));
   const [essos, setEssos] = useState(draft?.essos || defEssos);
+  // μονάδα: ημερομηνία εισαγωγής (σήμερα) και «Ήρθε από» για όλους
+  const [inOn, setInOn] = useState<string>(today); const [came, setCame] = useState(''); const [sub, setSub] = useState('');
   const [busy, setBusy] = useState(false); const [asking, setAsking] = useState(false);
   const focus = useRef<{ r: number; c: number } | null>(null);
   const ranks = useMemo(() => optionsOf(listOf(state.settings.lists, 'soldierRanks'), state.people.map((y: Person) => y.rank)), [state.people, state.settings.lists]);
@@ -58,6 +64,7 @@ export function QuickAddDialog({ onClose }: P) {
   // ο έλεγχος λίγο πίσω από το πληκτρολόγιο, για να μη βαραίνει το γράψιμο με πολλές γραμμές
   const dRows = useDeferredValue(rows);
   const errs = useMemo(() => checkRows(state.people, dRows), [state.people, dRows]);
+  const miss = unit ? missingOf([['ΕΣΣΟ', essos.trim()], ['Ημερομηνία εισαγωγής', inOn]]) : '';
   const n = rows.filter(isFilled).length; const bad = errs.filter(Boolean).length;
   useEffect(() => { saveDraft(rows, essos); }, [rows, essos]);
   useEffect(() => {
@@ -77,10 +84,10 @@ export function QuickAddDialog({ onClose }: P) {
   const onDel = useCallback((i: number) => { setRows(rs => withTail(rs.filter((_, j) => j !== i))); focus.current = { r: i, c: 2 }; }, []);
   const save = async () => {
     const list = rows.filter(isFilled);
-    if (!list.length || bad || busy) return;
+    if (!list.length || bad || busy || miss) return;
     setBusy(true);
     try {
-      const next = await run({ t: 'addPeople', people: list.map(r => toNewPerson(r, essos)) }, false);
+      const next = await run({ t: 'addPeople', people: list.map(r => toNewPerson(r, essos, unit ? { inOn, came, sub } : undefined)) }, false);
       if (!next) return;
       saveDraft([], essos); onClose(); nav.go('people');
       const b = state.settings.sources?.people;
@@ -114,13 +121,19 @@ export function QuickAddDialog({ onClose }: P) {
   const clear = () => { setRows(withTail([])); focus.current = { r: 0, c: 2 }; };
 
   const foot = html`<span className="qa__sum">${bad ? html`<span className="qa__err">${bad === 1 ? '1 γραμμή θέλει διόρθωση' : bad + ' γραμμές θέλουν διόρθωση'}</span>` : n ? n + (n === 1 ? ' στρατιώτης' : ' στρατιώτες') : ''}</span>
+    <${Why} text=${n > 0 && miss}/>
     ${n > 0 && html`<${Button} variant="ghost" disabled=${busy} onClick=${clear}>Καθάρισμα<//>`}
     <${Button} variant="outline" disabled=${busy} onClick=${close}>Κλείσιμο<//>
-    <${Button} disabled=${!n || bad > 0 || busy} onClick=${save} data-tip="Ctrl+Enter">${busy ? 'Γίνεται…' : n ? 'Πρόσθεσε ' + (n === 1 ? '1 στρατιώτη' : n + ' στρατιώτες') : 'Πρόσθεσε'}<//>`;
+    <${Button} disabled=${!n || bad > 0 || busy || !!miss} why=${miss} onClick=${save} data-tip="Ctrl+Enter">${busy ? 'Γίνεται…' : n ? 'Πρόσθεσε ' + (n === 1 ? '1 στρατιώτη' : n + ' στρατιώτες') : 'Πρόσθεσε'}<//>`;
   return html`<${Dialog} title="Γρήγορη εισαγωγή στρατιωτών" size="xl" closeOnOverlay=${false} onClose=${close} footer=${foot}
     description="Γράψε τον έναν κάτω από τον άλλον, σαν στο Excel. Στο τέλος μία προσθήκη για όλους.">
     <div className="qa__top">
-      <div className="field" style=${{ width: '150px', flex: 'none' }}><label className="field__label" htmlFor="qa-essos">ΕΣΣΟ για όλους</label><input id="qa-essos" className="ui-input" placeholder="π.χ. 2026 Γ΄" value=${essos} onChange=${(e: any) => setEssos(e.target.value)}/></div>
+      ${unit ? html`<div className="field-row" style=${{ flex: 'none', alignItems: 'flex-start' }}>
+        <div style=${{ width: '170px' }}><${ChoiceField} id="qa-essos" label="ΕΣΣΟ για όλους *" value=${essos} options=${choices} placeholder="π.χ. 2026 Γ΄" otherLabel="+ Άλλη ΕΣΣΟ…" onChange=${setEssos}/></div>
+        <div className="field" style=${{ width: '170px' }}><label className="field__label" htmlFor="qa-inon">Ημερομηνία εισαγωγής για όλους *</label><${DateField} id="qa-inon" className="ui-input" max=${addDays(today, 366)} value=${inOn} onChange=${(e: any) => e.target.value && setInOn(e.target.value)}/></div>
+        <div className="field" style=${{ width: '170px' }}><label className="field__label" htmlFor="qa-came">Ήρθε από (για όλους)</label><input id="qa-came" className="ui-input" placeholder="π.χ. ΚΕΝ ΑΥΛΩΝΑ" value=${came} onChange=${(e: any) => setCame(e.target.value)}/></div>
+        <div style=${{ width: '170px' }}><${SubField} id="qa-sub" label="Λόχος / Ίλη (για όλους)" value=${sub} onChange=${setSub}/></div></div>`
+      : html`<div className="field" style=${{ width: '150px', flex: 'none' }}><label className="field__label" htmlFor="qa-essos">ΕΣΣΟ για όλους</label><input id="qa-essos" className="ui-input" placeholder="π.χ. 2026 Γ΄" value=${essos} onChange=${(e: any) => setEssos(e.target.value)}/></div>`}
       <ul className="qa__keys"><li><kbd className="ui-kbd">Tab</kbd> επόμενο κελί</li><li><kbd className="ui-kbd">Enter</kbd> επόμενος στρατιώτης</li><li><kbd className="ui-kbd">↑</kbd><kbd className="ui-kbd">↓</kbd> πάνω, κάτω</li><li><kbd className="ui-kbd">Ctrl</kbd>+<kbd className="ui-kbd">V</kbd> πολλές γραμμές από Excel ή Word</li><li><kbd className="ui-kbd">Ctrl</kbd>+<kbd className="ui-kbd">Enter</kbd> προσθήκη όλων</li></ul>
     </div>
     ${draft && html`<${Alert} tone="info"><span>Συνεχίζεις από εκεί που είχες μείνει: ${draft.rows.length} ${draft.rows.length === 1 ? 'γραμμή' : 'γραμμές'} από το πρόχειρο. <${Button} variant="link" onClick=${clear}>Ξεκίνα από την αρχή<//></span><//>`}

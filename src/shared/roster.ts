@@ -5,6 +5,8 @@ import { OUT_NOTE } from './domain';
 import type { ImportRow } from './commands';
 import { withOrigin, type UserLists } from './ranks';
 import { PKEYS, personalFromCell, type PKey } from './personal';
+import { parseDmy, type ISODate } from './dates';
+import { essoPersonTxt, parseEsso } from './esso';
 
 export type CellValue = string | number | boolean | Date | null | undefined;
 export interface RawSheet { name: string; rows: CellValue[][]; fx?: Set<string>; countif?: string[] }   // fx: κελιά με τύπο («γραμμή:στήλη» από 0)· countif: κελιά με COUNTIF σκέτου γράμματος (π.χ. «L3»)
@@ -23,12 +25,15 @@ export const DN_WORD = /(^|[\s,;/(])Δ\s?\.?\s?[ΝN]\s?\.?(?=$|[\s,;/)])/;
 export const isDnYes = (v: string) => { const t = normGreek(v).replace(/\s+/g, ' ').trim(); return !!t && !/^(ΟΧΙ|Ο|ΝΟ|Ν\/Α|-+|0|ΧΩΡΙΣ.*)$/.test(t); };
 // Ρόλος χωρίς τη λέξη ΔΝ («ΘΑΛΑΜΑΡΧΗΣ ΔΝ» → «ΘΑΛΑΜΑΡΧΗΣ»)
 export const stripDn = (v: string) => norm(v).replace(new RegExp(DN_WORD.source, 'g'), ' ').replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
-export type Field = 'rank' | 'origin' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn' | PKey;
+export type Field = 'rank' | 'origin' | 'spec' | 'last' | 'first' | 'father' | 'asm' | 'phone' | 'room' | 'si' | 'remarks' | 'post' | 'dn' | 'essos' | 'inOn' | 'sub' | PKey;
 export const HEADERS: [Field, RegExp][] = [
   ['rank', /^ΒΑΘΜΟΣ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$/], ['spec', /^Ο\s*[/\-]\s*Σ$|^ΕΙΔΙΚΟΤΗΤΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$/], ['asm', /^ΑΣΜ$|^Α\.Σ\.Μ\.?$|ΑΡ.*ΜΗΤΡΩΟΥ/], ['phone', /ΚΙΝΗΤΟ|ΤΗΛΕΦΩΝΟ/], ['room', /^ΘΑΛΑΜΟΣ$/],
   ['si', /^Σ\.?\s*Ι\.?$/], ['remarks', /^ΠΑΡΑΤΗΡΗΣΕΙΣ$/], ['post', /^ΠΟΣΤΟ$/], ['dn', DN_HEAD],
   // IBAN, ΑΜΚΑ, ΑΦΜ (3/11): δεχόμαστε και λατινικά και ελληνικά γράμματα στην επικεφαλίδα
+  // λειτουργία μονάδας: ΕΣΣΟ και ημερομηνία εισαγωγής ανά γραμμή (διαβάζονται μόνο όταν η εφαρμογή είναι σε μονάδα)
+  ['essos', /^ΕΣΣΟ$|^Ε\.?\s?Σ\.?\s?Σ\.?\s?Ο\.?$/], ['inOn', /^ΗΜ\.?\s*(\/\s*ΝΙΑ\s*)?(ΕΙΣΑΓΩΓΗΣ|ΠΑΡΟΥΣΙΑΣΗΣ)$|^ΗΜΕΡΟΜΗΝΙΑ\s+(ΕΙΣΑΓΩΓΗΣ|ΠΑΡΟΥΣΙΑΣΗΣ)$|^ΗΜ\/ΝΙΑ\s+(ΕΙΣΑΓΩΓΗΣ|ΠΑΡΟΥΣΙΑΣΗΣ)$/],
+  ['sub', /^ΛΟΧΟΣ$|^ΙΛΗ$|^ΥΠΟΜΟΝΑΔΑ$|^ΛΟΧΟΣ\s*\/\s*ΙΛΗ$|^ΙΛΗ\s*\/\s*ΛΟΧΟΣ$/],
   ['iban', /^[ΙI]BAN$/], ['amka', /^[ΑA][ΜM][ΚK][ΑA]$/], ['afm', /^[ΑA][ΦF][ΜM]$/]
 ];
 const txt = (v: CellValue): string => {
@@ -38,6 +43,13 @@ const txt = (v: CellValue): string => {
   return String(v).replace(/\s+/g, ' ').trim();
 };
 const up = (v: CellValue) => norm(txt(v));
+// Ημερομηνία κελιού: Date, «ηη/μμ/εεεε», εεεε-μμ-ηη ή αριθμός του Excel· αλλιώς κενό
+function dateOf(v: CellValue): ISODate | '' {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') return v > 20000 && v < 80000 ? new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5).toISOString().slice(0, 10) : '';
+  const t = txt(v); if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  return /^\d{1,2}\s*[/.\- ]\s*\d{1,2}\s*[/.\- ]\s*\d{2,4}$/.test(t) ? parseDmy(t, '2000-01-01') || '' : '';
+}
 
 // Αντιστοίχιση που διάλεξε ο χρήστης (Αρχεία Excel): φύλλο, γραμμή επικεφαλίδων και στήλες, αντί για την αυτόματη
 export interface RosterOverride { sheet: string; header: number; cols: Partial<Record<Field, number>> }
@@ -71,7 +83,7 @@ export function isPersonRow(last: string, first: string, father: string): boolea
   return /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(L) && /^[Α-ΩA-Z][Α-ΩA-Z\s'΄\-./]*$/.test(F);
 }
 
-type Rec = { rank: string; origin: string | null; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null } & { [K in PKey]: string | null }
+type Rec = { rank: string; origin: string | null; spec: string; last: string; first: string; father: string; asm: string; phone: string; room: number | null; si: string; remarks: string; post: string; dn: boolean | null; essosCol: string; inOn: ISODate | ''; subCol: string } & { [K in PKey]: string | null }
 function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
   const h = headerOf(sheet); if (!h) return [];
   const get = (row: CellValue[], f: Field) => (h.cols[f] == null ? '' : txt(row[h.cols[f]!]));
@@ -89,6 +101,7 @@ function records(sheet: RawSheet, skipped: string[] = []): Rec[] {
       asm: get(row, 'asm').replace(/\s/g, ''), phone: get(row, 'phone').replace(/\s/g, ''),
       room: Number.isFinite(roomN) && roomN > 0 ? roomN : null, si: normGreek(get(row, 'si')), remarks: get(row, 'remarks'), post: norm(get(row, 'post')),
       dn: h.cols.dn == null ? null : isDnYes(get(row, 'dn')),
+      essosCol: h.cols.essos == null ? '' : (parseEsso(get(row, 'essos')) ? essoPersonTxt(parseEsso(get(row, 'essos'))!) : ''), inOn: h.cols.inOn == null ? '' : dateOf(row[h.cols.inOn]), subCol: h.cols.sub == null ? '' : norm(get(row, 'sub')),
       iban: pv(row, 'iban'), amka: pv(row, 'amka'), afm: pv(row, 'afm')
     });
   }
@@ -124,11 +137,12 @@ export function essosOf(title: string): string {
 }
 
 // lists: οι Λίστες των Ρυθμίσεων, για να βγαίνουν και οι δικές σου προελεύσεις από τον βαθμό
-export function parseRoster(sheets: RawSheet[], ov: RosterOverrides = {}, lists?: UserLists): RosterResult {
+// unit: λειτουργία μονάδας· διαβάζονται και οι στήλες ΕΣΣΟ και ΗΜ. ΕΙΣΑΓΩΓΗΣ κάθε γραμμής (η τιμή της γραμμής νικά τον τίτλο)
+export function parseRoster(sheets: RawSheet[], ov: RosterOverrides = {}, lists?: UserLists, unit = false): RosterResult {
   OV = [ov.main, ov.posts, ov.outside].filter((o): o is RosterOverride => !!o && sheets.some(s => s.name === o.sheet));
-  try { return parse(sheets, ov, lists); } finally { OV = []; }
+  try { return parse(sheets, ov, lists, unit); } finally { OV = []; }
 }
-function parse(sheets: RawSheet[], ov: RosterOverrides, lists?: UserLists): RosterResult {
+function parse(sheets: RawSheet[], ov: RosterOverrides, lists?: UserLists, unit = false): RosterResult {
   const warnings: string[] = [];
   const named = (o?: RosterOverride) => (o ? sheets.find(s => s.name === o.sheet) : undefined);
   const byName = (re: RegExp) => sheets.find(s => re.test(norm(s.name)));
@@ -176,8 +190,10 @@ function parse(sheets: RawSheet[], ov: RosterOverrides, lists?: UserLists): Rost
     const ro = withOrigin({ rank: r.rank || 'ΣΤΡ', origin: r.origin || undefined }, lists);
     const row: ImportRow = {
       rank: ro.rank || 'ΣΤΡ', ...(ro.origin || r.origin != null ? { origin: ro.origin || '' } : {}), spec: r.spec, last: r.last, first: r.first, father: r.father, asm: r.asm, phone: r.phone, room: r.room,
-      si: r.si, role, essos
+      si: r.si, role, essos: (unit && r.essosCol) || essos
     };
+    if (unit && r.inOn) row.inOn = r.inOn;
+    if (unit && r.subCol) row.sub = r.subCol;
     // Πόστο, προσκολλημένος και σημειώσεις μόνο όταν το αρχείο τα γράφει: αλλιώς μένει ό,τι έχει η εφαρμογή
     // (π.χ. πόστα από άλλο αρχείο). Όσοι λείπουν από το φύλλο ΠΟΣΤΑ χάνουν το πόστο τους.
     // IBAN, ΑΜΚΑ, ΑΦΜ: μόνο όσα έχουν στήλη στο αρχείο (κενό κελί = χωρίς)
