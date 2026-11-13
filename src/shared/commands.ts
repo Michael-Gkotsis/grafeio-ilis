@@ -20,6 +20,7 @@ import { normExtra, normPersonal, PKEYS, XKEYS, type PKey } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
 import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
+import { cleanHeads, cleanHeadUse } from './docHead';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
 export type Command =
@@ -858,6 +859,11 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'setSettings': {
       const settings = { ...s.settings, ...c.settings };
+      // επικεφαλίδες εγγράφων: καθαρίζονται και μένουν μόνο όσα υπάρχουν (docHead.ts)
+      if ('heads' in c.settings || 'headUse' in c.settings) {
+        settings.heads = cleanHeads(settings.heads); settings.headUse = cleanHeadUse(settings.headUse, settings.heads);
+        if (!settings.heads) delete settings.heads; if (!settings.headUse) delete settings.headUse;
+      }
       // πρώτη φορά σε λειτουργία μονάδας: το έντυπο υπηρεσιών ξεκινά από το έντυπο ΦΡΟΥΡΑ (της ΣΠΕΝ, με όλες τις θέσεις)· τα δικά σου έντυπα μένουν
       if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && settings.phase === 'sven') settings.phase = 'spen';
       // πρώτη φορά σε λειτουργία μονάδας: οι νέοι ξεκινούν από τον μέσο όρο, μόνο αν δεν είχε οριστεί ποτέ (Michael, 13/11)

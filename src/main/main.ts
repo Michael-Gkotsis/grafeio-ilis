@@ -1,9 +1,10 @@
 // Main process: βάση, κανόνες, αρχεία. Το UI ζητά ενέργειες μέσω IPC και παίρνει πίσω τη νέα κατάσταση.
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
+import { addImage, copyImages, readImage } from './eikones';
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
@@ -1442,6 +1443,7 @@ else {
         const bad = store.validate(file);
         if (bad) { fs.rmSync(file, { force: true }); return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' }; }
         listBackups(dir).slice(USB_KEEP).forEach(b => fs.rmSync(path.join(dir, b.name), { force: true }));
+        try { copyImages(DATA, dir); } catch (e) { console.error('eikones', e); }   // οι εικόνες των επικεφαλίδων (μόνο όσες λείπουν)
         const day = today(); writeMeta({ lastUsb: day, usbDir: chosen });
         store.addAudit({ at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false }, null);
         const same = path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
@@ -1460,6 +1462,13 @@ else {
       fs.mkdirSync(BACKUPS, { recursive: true }); copyDurable(src, path.join(BACKUPS, name));
       return { ok: true, name };
     });
+    // Εικόνες επικεφαλίδων: διάλεξε αρχείο → μικραίνει μία φορά → data/eikones/<sha1>.<png|jpg> (eikones.ts)
+    ipcMain.handle('eikona:add', async () => {
+      const r = await dialog.showOpenDialog(win!, { title: 'Διάλεξε εικόνα (έμβλημα, λογότυπο)', filters: [{ name: 'Εικόνα PNG ή JPG', extensions: ['png', 'jpg', 'jpeg'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      return addImage(DATA, r.filePaths[0], nativeImage);
+    });
+    ipcMain.handle('eikona:read', (_e, id: string) => readImage(DATA, id));
     ipcMain.handle('backup', () => { try { return { ok: true, file: store.backup('χειροκίνητο') }; } catch (e) { return { ok: false, error: String(e) }; } });
     ipcMain.handle('open', (_e, which: string) => {
       const dir = which === 'output' ? outputDir() : which === 'templates' ? USER_TPL : which === 'backups' ? path.join(DATA, 'backups') : DATA;

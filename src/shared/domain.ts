@@ -7,6 +7,7 @@ import type { Esso } from './esso';
 import type { UnitKind } from './unit';
 import type { Report, RepTpl } from './reports';
 import type { Sig, SigForm } from './sigs';
+import type { DocHead, HeadUse } from './docHead';
 import type { Layout, LayoutForm } from './layout';
 import type { ImerSettings } from './imer';
 import type { HdDoc } from './hd';
@@ -480,6 +481,8 @@ export interface Settings {
   outsSig2?: 'same' | 'none' | 'own';             // Εξοδούχοι «Όλη η δύναμη», σελίδα 2 (ΔΥΝΑΜΗ): 'same' = οι ίδιες υπογραφές με τη σελίδα 1 (προεπιλογή), 'none' = καμία, 'own' = δική της λίστα (outsSigs2)
   outsSigs2?: Sig[];                              // οι υπογραφές της σελίδας 2 όταν outsSig2 = 'own' (κενό = όπως οι υπογραφές των Εξοδούχων)
   hdLeft?: boolean;                     // true: κεφαλίδα πάνω αριστερά και ημερομηνία πάνω δεξιά (παλιά διάταξη)· κενό = ημερομηνία αριστερά, κεφαλίδα δεξιά (layout.ts swapHeadDate)· η ΗΚΑΙ δεν αλλάζει ποτέ (κεφαλίδα αριστερά)
+  heads?: DocHead[];                     // επικεφαλίδες εγγράφων που σχεδίασες (χωρίς την «Όπως σήμερα»), docHead.ts
+  headUse?: Partial<Record<SigForm, HeadUse>>;   // ανά έγγραφο: διαθέσιμες επικεφαλίδες + αρχική· λείπει = μόνο η «Όπως σήμερα»
   xl?: Partial<XlLook>;                  // γράμματα και στοίχιση σε ό,τι φτιάχνει η εφαρμογή στο Excel (κενό = Arial 12, κέντρο), xlLook.ts
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.

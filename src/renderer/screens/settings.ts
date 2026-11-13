@@ -29,6 +29,7 @@ import { isUnit } from '../../shared/mode';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
 import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
+import { HeadsSection } from './docHeads';
 import { dropSigMoves, moved, type Layout, type LayoutForm } from '../../shared/layout';
 import { XL_FONTS, XL_H, XL_LOOK, XL_PARTS, XL_SIZES, XL_STYLES, XL_V, sameLook, tablePart, xlLook, type XlLook, type XlPart, type XlPartKey } from '../../shared/xlLook';
 import { MADE_FORMS, OUTS_SIG2, SIG_FORMS, outsSig2Of, sameSigs, sigDefaults, sigLabel, sigsClean, sigsCustom, sigsPage2, sigsSaved, sigsText, type OutsSig2, type Sig, type SigForm } from '../../shared/sigs';
@@ -345,7 +346,7 @@ function DutySection() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['names', 'Ονόματα αρχείων'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας'], ['update', 'Ενημερώσεις']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['heads', 'Επικεφαλίδες εγγράφων'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['names', 'Ονόματα αρχείων'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας'], ['update', 'Ενημερώσεις']];
 export function TemplatesScreen() {
   const { boot, state } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
@@ -356,7 +357,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα. Τα κομμάτια βρίσκονται από τις λέξεις τους (τίτλοι, «Λ/Υ:», ονόματα βαθμών, επικεφαλίδες), όχι από τη θέση τους: κράτα τις λέξεις, τα κελιά μπορούν να μετακινηθούν. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'names' ? html`<${FileNamesCard}/>` : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'update' ? html`<${UpdatesCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
   return html`<div>
