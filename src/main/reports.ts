@@ -390,7 +390,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   const hd = headFor(s.settings, 'reports', headId); let hdone: HeadDone | null = null;
   if (hd) {
     const dateText = (parts.date[0] && String(ws.get(parts.date[0]) ?? '')) || (s.settings.place ? s.settings.place + ', ' : '') + hkDate(d);
-    hdone = await applyHead(wb, ws, s, hd, { cols: Math.max(vc2, ws.lastCol()), old: [...parts.head, ...parts.date], dateText });
+    hdone = await applyHead(wb, ws, s, hd, { cols: Math.max(vc2, ws.lastCol()), old: parts.head, dates: parts.date, dateText });
     const k = hdone;
     parts.head = k.head; parts.date = k.date; parts.title = parts.title.map(x => x.replace(/\d+$/, n => String(k.shift(+n)))); parts.names = parts.names.map(x => x.replace(/\d+$/, n => String(k.shift(+n))));
     end = k.shift(end);
