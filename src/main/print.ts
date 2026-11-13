@@ -6,6 +6,7 @@
 import { nowParts } from '../shared/dates';
 import crypto from 'crypto';
 import JSZip from 'jszip';
+import { EMU_PX, parseDrawings, sniffImage, type DrawingPic } from './xlDrawings';
 import { FIXED_MARK, NOHEAD_MARK, attrRe, colName, colNum, texts, unesc } from './xlsx';
 
 const attr = (s: string, n: string) => { const m = attrRe(n).exec(s); return m ? unesc(m[1]) : null; };
@@ -278,7 +279,10 @@ interface ParsedSheet {
 const colPx = (w: number) => Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7);
 const ptPx = (pt: number) => (pt * 96) / 72;
 
+type Pic = DrawingPic & { uri: string };
+const PIC_MAX = 4e6;   // μεγαλύτερες εικόνες δεν τυπώνονται (μνήμη)
 export class Book {
+  private media = new Map<string, string | null>();
   private parsed = new Map<string, ParsedSheet>();
   private memo = new Map<string, Map<number, Val>>();
   private busy = new Set<string>();
@@ -307,6 +311,20 @@ export class Book {
     const sh = parseSheet(e.name, xml, this.sst, this.sstRich);
     this.parsed.set(e.name, sh); if (e.name !== name) this.parsed.set(name, sh);
     return sh;
+  }
+  // Οι εικόνες ενός φύλλου, έτοιμες για την εκτύπωση (data URI)· κάθε αρχείο εικόνας διαβάζεται μία φορά ανά βιβλίο, και μόνο PNG, JPEG, GIF
+  async pictures(sh: ParsedSheet): Promise<Pic[]> {
+    const e = this.sheets.find(x => x.name === sh.name); if (!e || !/<drawing\s/.test(sh.xml)) return [];
+    const out: Pic[] = [];
+    for (const p of await parseDrawings(this.zip, e.path, sh.xml)) {
+      if (!this.media.has(p.media)) {
+        let uri: string | null = null; const f = this.zip.file(p.media);
+        if (f) { const b = await f.async('uint8array'); const mime = b.length <= PIC_MAX ? sniffImage(b) : null; if (mime) uri = 'data:' + mime + ';base64,' + Buffer.from(b.buffer, b.byteOffset, b.length).toString('base64'); }
+        this.media.set(p.media, uri);
+      }
+      const uri = this.media.get(p.media); if (uri) out.push({ ...p, uri });
+    }
+    return out;
   }
   // όλα τα φύλλα στα οποία αναφέρονται οι τύποι, πριν τον (σύγχρονο) υπολογισμό
   async loadRefs(sh: ParsedSheet) {
@@ -598,6 +616,7 @@ interface Geo {
   // Έντυπα (Michael, 22/10): κεφαλίδα, ημερομηνία, τίτλος, υπογραφές (FIXED_MARK) τυπώνονται στο μέγεθός τους, όποια κι αν
   // είναι η κλίμακα του πίνακα· fixC: τα κελιά τους, fixR: οι γραμμές που έχουν μόνο αυτά (ψηλώνουν/κονταίνουν μαζί τους)
   fixC?: Set<number>; fixR?: Set<number>;
+  pics: Pic[];                            // εικόνες του φύλλου (xl/drawings), τυπώνονται στη σελίδα του κελιού όπου είναι αγκυρωμένες
 }
 // πόσο μεγαλώνει ένα σταθερό κομμάτι μέσα σε φύλλο με κλίμακα s, ώστε να βγει στο μέγεθός του (με όρια, για τα άκρα)
 const fixK = (s: number) => Math.min(6, Math.max(0.4, 1 / s));
@@ -711,7 +730,7 @@ async function geoOf(book: Book, name: string, idx: number): Promise<Geo> {
   const g: Geo = { sh, idx, ps, pm, po, rowsAll, colsAll, rowH, colW, W, titles, titleList, titleH: titleList.reduce((a, r) => a + rowH(r), 0),
     oddH, oddF, firstNo: /useFirstPageNumber="(1|true)"/.test(ps) ? num(ps, 'firstPageNumber', 1) : 1,
     grid: attr(po, 'gridLines') === '1' || attr(po, 'gridLines') === 'true', dom, units: regroup(rowsAll), framed,
-    tables: tablesOf(book, sh, unitsOf(withHidden), colsAll, framedT, noHead), regroup };
+    tables: tablesOf(book, sh, unitsOf(withHidden), colsAll, framedT, noHead), regroup, pics: await book.pictures(sh) };
   const fixed = areasOf(definedName(book.wbXml, FIXED_MARK, idx));
   if (fixed.length) {
     const fixC = new Set<number>(), near = new Set<number>();
@@ -1082,6 +1101,10 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
   const rowH = (r: number) => rowAt(g, r, scale) * (P.f !== 1 && g.framed.has(r) ? P.f : 1);
   const colW = (c: number) => g.colW(c) * P.cs;
   const withTitles = (first: number) => P.repeat && !!g.titles && first > g.titles[1];
+  // Εικόνες: όταν οι γραμμές ταξινομούνται (g.fix) μένουν μόνο όσες είναι αγκυρωμένες πάνω από την πρώτη γραμμή δεδομένων των πινάκων
+  // (λογότυπα, κεφαλίδες)· όσες είναι μέσα στα δεδομένα θα έμεναν σε λάθος γραμμή, άρα δεν βγαίνουν.
+  const firstData = g.fix && g.tables.length ? Math.min(...g.tables.map(t => t.rows[0] ?? Infinity)) : Infinity;
+  const pics = g.pics.filter(p => (p.from?.r ?? 0) < firstData);
 
   const pages = (opt.maxPages ? P.order.slice(0, opt.maxPages) : P.order).map(([rp, cp], pi) => {
     const rep = new Set(withTitles(rp[0]) ? g.titleList : []);   // οι γραμμές τίτλων που επαναλαμβάνονται (δεν είναι για κλικ)
@@ -1132,6 +1155,7 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
       }
       body += `<tr${fit ? ` data-r="${r}"${rep.has(r) ? ' data-t="1"' : ''}` : ''} style="height:${rowH(r).toFixed(2)}px">${tr}</tr>`;
     }
+    const im = picsHtml(g, pics, rows, rp, cp, colW, rowH, tw, th);
     const cg = '<colgroup>' + cp.map(c => `<col style="width:${colW(c).toFixed(2)}px">`).join('') + '</colgroup>';
     const left = M.l + (P.centerH ? Math.max(0, (availW - tw * scale) / 2) : 0), top = M.t + (P.centerV ? Math.max(0, (availH - th * scale) / 2) : 0);
     const no = pageAt + pi + 1;
@@ -1140,9 +1164,31 @@ function drawSheet(book: Book, g: Geo, P: Plan, file: string, used: Set<number>,
     const hf = (src: string | undefined, isHead: boolean) => { const p = headerFooter(src ? unesc(src) : null, ctx, fit && !(P.pno && pageTotal > 1)); return p ? `<div class="hf" style="${isHead ? 'top' : 'bottom'}:${(isHead ? M.h : M.f).toFixed(1)}px;left:${M.l.toFixed(1)}px;right:${M.r.toFixed(1)}px"><span>${esc(p[0])}</span><span>${esc(p[1])}</span><span>${esc(p[2])}</span></div>` : ''; };
     const pno = P.pno && pageTotal > 1 && !g.oddF ? `<div class="pno" style="bottom:${Math.max(3, M.b / 2 - 7).toFixed(1)}px">Σελίδα ${no} από ${pageTotal}</div>` : '';
     const data = fit ? ` data-n="${no}" data-sheet="${esc(sh.name)}" data-first="${rp[0] ?? 0}" data-land="${P.landscape ? 1 : 0}" data-paper="${P.paper.name}"` : '';
-    return `<div class="pg"${data} style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(g.oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${g.grid ? 'grid' : ''}" style="width:${tw.toFixed(2)}px">${cg}<tbody>${body}</tbody></table></div>${hf(g.oddF, false)}${pno}</div>`;
+    return `<div class="pg"${data} style="width:${pw.toFixed(2)}px;height:${ph.toFixed(2)}px">${hf(g.oddH, true)}<div class="ar" style="left:${left.toFixed(2)}px;top:${top.toFixed(2)}px;transform:scale(${scale})"><table class="${g.grid ? 'grid' : ''}" style="width:${tw.toFixed(2)}px">${cg}<tbody>${body}</tbody></table>${im}</div>${hf(g.oddF, false)}${pno}</div>`;
   });
   return { name: sh.name, paper: P.paper.name, landscape: P.landscape, pages: P.order.length, scale, html: pages.join(''), pt: Math.round(P.pt * 2) / 2, font: g.dom.name, size: g.dom.sz, titles: !!g.titles };
+}
+// Οι εικόνες μιας σελίδας: absolute μέσα στο .ar (μεγαλώνουν με την κλίμακα της σελίδας), κομμένες στην περιοχή που τυπώνεται εκεί.
+// Θέση από τη γεωμετρία που ζωγραφίστηκε (πλάτη στηλών, ύψη γραμμών της σελίδας) + μετατόπιση σε EMU· μέγεθος από το ext (1 px = 9525 EMU).
+// Η εικόνα βγαίνει στη σελίδα του κελιού όπου είναι αγκυρωμένη (όχι στις γραμμές τίτλων που επαναλαμβάνονται, ούτε σε κρυμμένες γραμμές/στήλες).
+function picsHtml(g: Geo, pics: Pic[], rows: number[], rp: number[], cp: number[], colW: (c: number) => number, rowH: (r: number) => number, tw: number, th: number): string {
+  if (!pics.length) return '';
+  const X = (c: number, off: number) => { let x = 0; for (const k of cp) if (k < c) x += colW(k); return x + (cp.includes(c) ? off : 0); };
+  const Y = (r: number, off: number) => { let y = 0; for (const k of rows) if (k < r) y += rowH(k); return y + (rows.includes(r) ? off : 0); };
+  // απόλυτη θέση (EMU από το A1) → κελί και μετατόπιση, με τις στήλες και τις γραμμές του φύλλου όπως είναι (κρυμμένες = 0)
+  const cellAt = (emu: number, size: (n: number) => number): [number, number] => { let n = 1, left = emu / EMU_PX; for (; n < 20000; n++) { const s = size(n); if (left < s) break; left -= s; } return [n, Math.max(0, left)]; };
+  let out = '';
+  for (const p of pics) {
+    let from = p.from; let ox = 0, oy = 0;
+    if (p.kind === 'abs') { const [c, cx] = cellAt(p.x!, g.colW), [r, ry] = cellAt(p.y!, g.rowH); from = { c, r, co: 0, ro: 0 }; ox = cx; oy = ry; }
+    else { ox = from!.co / EMU_PX; oy = from!.ro / EMU_PX; }
+    if (!from || !cp.includes(from.c) || !rp.includes(from.r)) continue;
+    const x = X(from.c, ox), y = Y(from.r, oy);
+    const w = p.kind === 'two' ? X(p.to!.c, p.to!.co / EMU_PX) - x : p.cx / EMU_PX, h = p.kind === 'two' ? Y(p.to!.r, p.to!.ro / EMU_PX) - y : p.cy / EMU_PX;
+    if (!(w > 0.5 && h > 0.5)) continue;
+    out += `<img src="${p.uri}" alt="" draggable="false" style="position:absolute;left:${x.toFixed(2)}px;top:${y.toFixed(2)}px;width:${w.toFixed(2)}px;height:${h.toFixed(2)}px;max-width:none">`;
+  }
+  return out ? `<div style="position:absolute;left:0;top:0;width:${tw.toFixed(2)}px;height:${th.toFixed(2)}px;overflow:hidden;pointer-events:none">${out}</div>` : '';
 }
 // κρυφές γραμμές ανάμεσα σε δύο ορατές (για να συνεχίζει η συγχώνευση από πάνω τους)
 const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let n = 0; for (let r = a + 1; r < b; r++) if (rowH(r) === 0) n++; return n; };
@@ -1469,7 +1515,7 @@ export function previewHtml(doc: PrintDoc, file: string, init: { opts?: PrintOpt
   const one = doc.sheets[0];
   const data = { opts: init.opts || PRINT_DEFAULT, info: infoOf(doc), remember: init.remember !== false, duplex: !!init.duplex };
   return `<!doctype html><html lang="el"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'">
 <title>Εκτύπωση · ${esc(file)}</title>
 <style>
 *{box-sizing:border-box}
