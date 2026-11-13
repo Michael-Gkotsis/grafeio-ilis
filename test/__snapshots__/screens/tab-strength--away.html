@@ -1,11 +1,11 @@
-<div>
+<div class="strength-page">
   <div class="page-head">
     <div>
       <h1>
-        Δύναμη Δευτέρας 09/11/2026
+        Δύναμη
       </h1>
       <p class="page-head__sub">
-        Βγαίνει μόνη της από ιατρικά, άδειες, εξόδους και ποινές.
+        Δευτέρα 09/11/2026 στις 11:00 · όποιος γύρισε ως τώρα είναι παρών
       </p>
     </div>
     <div class="page-head__acts">
@@ -32,81 +32,81 @@
       <button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-tip="Υπηρεσία εκτός δικών μας, π.χ. ΣΤΕΠ">
         + Κωλυόμενος
       </button>
-      <button type="button" class="ui-btn ui-btn--outline ui-btn--sm">
+      <button type="button" class="ui-btn ui-btn--link ui-btn--sm">
         ΗΚΑΙ
       </button>
     </div>
   </div>
-  <div class="kpis kpis--sv">
-    <button type="button" class="kpi kpi--sv" aria-pressed="false" data-tip="Στρατιώτες σε δύναμη. Η ΗΚΑΙ μετρά και τα στελέχη. Πάτα για να δεις όλους">
-      <span class="kpi__l">
+  <div class="strength__kpis">
+    <button type="button" class="strength__kpi" aria-pressed="false" data-tip="Στρατιώτες σε δύναμη. Η ΗΚΑΙ μετρά και τα στελέχη. Πάτα για να δεις όλους">
+      <span class="strength__kpi-l">
         Δύναμη
       </span>
-      <span class="kpi__n">
+      <span class="strength__kpi-n">
         12
       </span>
     </button>
-    <button type="button" class="kpi kpi--sv" aria-pressed="false" data-tip="Παρόντες που δεν είναι κωλυόμενοι. Μέσα και όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή ή ιατρικό">
-      <span class="kpi__l">
+    <button type="button" class="strength__kpi strength__kpi--ok" aria-pressed="false" data-tip="Παρόντες που δεν είναι κωλυόμενοι. Μέσα και όσοι έχουν δική μας υπηρεσία, ΕΥ, ποινή ή ιατρικό">
+      <span class="strength__kpi-l">
         Παρόντες
       </span>
-      <span class="kpi__n">
+      <span class="strength__kpi-n">
         9
       </span>
     </button>
-    <button type="button" class="kpi kpi--sv" aria-pressed="false" data-tip="Δηλωμένοι κωλυόμενοι (π.χ. υπηρεσία ΣΤΕΠ) και εισαγωγές ΣΤΕΠ, που αφαιρούνται από τους παρόντες">
-      <span class="kpi__l">
+    <button type="button" class="strength__kpi" aria-pressed="false" data-tip="Δηλωμένοι κωλυόμενοι (π.χ. υπηρεσία ΣΤΕΠ) και εισαγωγές ΣΤΕΠ, που αφαιρούνται από τους παρόντες">
+      <span class="strength__kpi-l">
         Κωλυόμενοι
       </span>
-      <span class="kpi__n">
+      <span class="strength__kpi-n">
         0
       </span>
     </button>
-    <button type="button" class="kpi kpi--sv" aria-pressed="true" data-tip="Άδειες, νοσοκομείο, έξοδος και ΔΝ· κάθε άτομο μία φορά">
-      <span class="kpi__l">
+    <button type="button" class="strength__kpi" aria-pressed="true" data-tip="Άδειες, νοσοκομείο, έξοδος και ΔΝ· κάθε άτομο μία φορά">
+      <span class="strength__kpi-l">
         Απόντες
       </span>
-      <span class="kpi__n">
+      <span class="strength__kpi-n">
         3
       </span>
     </button>
+    <div class="strength__check">
+      <span class="strength__kpi-l">
+        Έλεγχος
+      </span>
+      <span class="strength__sum num">
+        <b>
+          9
+        </b>
+         + 
+        <b>
+          0
+        </b>
+         + 
+        <b>
+          3
+        </b>
+         = 
+        <b>
+          12
+        </b>
+         
+        <span class="strength__ok" role="img" aria-label="βγαίνει">
+          ✓
+        </span>
+      </span>
+    </div>
   </div>
-  <p class="svline">
-    <span class="num">
-      <b>
-        9
-      </b>
-       + 
-      <b>
-        0
-      </b>
-       + 
-      <b>
-        3
-      </b>
-       = 
-      <b>
-        12
-      </b>
-    </span>
-     
-    <span class="muted">
-      · στις 11:00 (όποιος γύρισε ως τώρα είναι παρών)
-    </span>
-  </p>
-  <p class="note svnote">
-    Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη, κάθε άτομο μία φορά. Κωλυόμενοι είναι όσοι δηλώθηκαν και αφαιρούνται από τους παρόντες, και όσοι έχουν εισαγωγή ΣΤΕΠ (αυτόματα)· όσοι έχουν δική μας υπηρεσία, ΕΥ ή ποινή μένουν στους Παρόντες. Η ΗΚΑΙ μετρά τους κωλυόμενους με δικό της ορισμό.
-  </p>
-  <div class="toolbar">
-    <input type="search" class="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=""/>
-    <div class="strip chips" role="group" aria-label="Ουλαμός">
-      <button type="button" class="ui-chip" aria-pressed="true">
+  <div class="strength__bar">
+    <input type="search" class="ui-input strength__search" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους)" value=""/>
+    <div class="strip strength__seg" role="group" aria-label="Ουλαμός">
+      <button type="button" class="strength__segbtn" aria-pressed="true">
         Όλοι
       </button>
-      <button type="button" class="ui-chip" aria-pressed="false">
+      <button type="button" class="strength__segbtn" aria-pressed="false">
         1ος Ουλ.
       </button>
-      <button type="button" class="ui-chip" aria-pressed="false">
+      <button type="button" class="strength__segbtn" aria-pressed="false">
         2ος Ουλ.
       </button>
     </div>
@@ -119,120 +119,125 @@
         ✕
       </button>
     </span>
+    <button type="button" class="strength__how-btn" aria-expanded="false" aria-controls="strength-how">
+      Πώς μετράει;
+    </button>
   </div>
-  <div class="stack">
-    <section class="ui-card ui-card--fold">
-      <div class="ui-card__head">
-        <h2>
-          <button type="button" class="ui-card__toggle" aria-expanded="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
-              <path d="M9 6l6 6-6 6"/>
-            </svg>
-            <span>
-              Απόντες · 3
-            </span>
-          </button>
-        </h2>
-      </div>
-      <div class="ui-card__body">
-        <div class="svsub">
-          <div class="svsub__head">
-            <b>
-              Άδειες
-            </b>
-            <span class="num">
-              2
-            </span>
-          </div>
-          <ul class="svl">
-            <li class="svl__row">
-              <button type="button" class="linkish svl__name">
-                <span>
-                  <span class="rk">
-                    ΣΤΡ (ΠΖ) 
-                  </span>
-                  ΦΑΝΤΑΣΙΟΣ Θ.
-                </span>
-              </button>
-              <span class="svl__room muted">
-                Θ4
+  <div class="strength__groups">
+    <div class="strength__cell strength__cell--away">
+      <section class="ui-card ui-card--fold">
+        <div class="ui-card__head">
+          <h2>
+            <button type="button" class="ui-card__toggle" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="16" height="16">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span>
+                Απόντες · 3
               </span>
-              <span class="svl__what">
-                <span class="ui-badge ui-badge--info" data-tip="ΚΑ">
-                  ΚΑ
-                </span>
-              </span>
-              <span class="svl__range muted">
-                06/11 14:00–10/11 20:00
-              </span>
-              <span class="svl__ret txt-bad">
-                Γυρνά Τρίτη 10/11 20:00 (Θαλαμοφύλακας 4ος (α΄))
-              </span>
-            </li>
-            <li class="svl__row">
-              <button type="button" class="linkish svl__name">
-                <span>
-                  <span class="rk">
-                    ΣΤΡ (ΤΧ) 
-                  </span>
-                  ΠΡΟΣΩΡΙΝΟΣ Α.
-                </span>
-              </button>
-              <span class="svl__room muted">
-                Θ10
-              </span>
-              <span class="svl__what">
-                <span class="ui-badge ui-badge--info" data-tip="ΚΑ">
-                  ΚΑ
-                </span>
-              </span>
-              <span class="svl__range muted">
-                07/11–09/11
-              </span>
-              <span class="svl__ret txt-bad">
-                Γυρνά Τρίτη 10/11 πρωί (Λ/Υ από 14:00)
-              </span>
-            </li>
-          </ul>
+            </button>
+          </h2>
         </div>
-        <div class="svsub">
-          <div class="svsub__head">
-            <b>
-              Αναρρωτικές
-            </b>
-            <span class="num">
-              1
-            </span>
-          </div>
-          <ul class="svl">
-            <li class="svl__row">
-              <button type="button" class="linkish svl__name">
-                <span>
-                  <span class="rk">
-                    ΣΤΡ (ΔΒ) 
+        <div class="ui-card__body">
+          <div class="strength__sub">
+            <div class="strength__subhead">
+              <b>
+                Άδειες
+              </b>
+              <span class="num">
+                2
+              </span>
+            </div>
+            <ul class="strength__rows">
+              <li class="strength__row">
+                <button type="button" class="linkish strength__name">
+                  <span>
+                    <span class="rk">
+                      ΣΤΡ (ΠΖ) 
+                    </span>
+                    ΦΑΝΤΑΣΙΟΣ Θ.
                   </span>
-                  ΘΕΩΡΗΤΙΚΟΣ Ζ.
+                </button>
+                <span class="strength__room">
+                  Θ4
                 </span>
-              </button>
-              <span class="svl__room muted">
-                Θ1
-              </span>
-              <span class="svl__what">
-                <span class="ui-badge ui-badge--bad" data-tip="Αναρρωτική">
-                  Αναρρωτική
+                <span class="strength__what">
+                  <span class="ui-badge ui-badge--info" data-tip="ΚΑ">
+                    ΚΑ
+                  </span>
                 </span>
+                <span class="strength__range">
+                  06/11 14:00–10/11 20:00
+                </span>
+                <span class="strength__ret is-bad">
+                  Γυρνά Τρίτη 10/11 20:00 (Θαλαμοφύλακας 4ος (α΄))
+                </span>
+              </li>
+              <li class="strength__row">
+                <button type="button" class="linkish strength__name">
+                  <span>
+                    <span class="rk">
+                      ΣΤΡ (ΤΧ) 
+                    </span>
+                    ΠΡΟΣΩΡΙΝΟΣ Α.
+                  </span>
+                </button>
+                <span class="strength__room">
+                  Θ10
+                </span>
+                <span class="strength__what">
+                  <span class="ui-badge ui-badge--info" data-tip="ΚΑ">
+                    ΚΑ
+                  </span>
+                </span>
+                <span class="strength__range">
+                  07/11–09/11
+                </span>
+                <span class="strength__ret is-bad">
+                  Γυρνά Τρίτη 10/11 πρωί (Λ/Υ από 14:00)
+                </span>
+              </li>
+            </ul>
+          </div>
+          <div class="strength__sub">
+            <div class="strength__subhead">
+              <b>
+                Αναρρωτικές
+              </b>
+              <span class="num">
+                1
               </span>
-              <span class="svl__range muted">
-                04/11–10/11
-              </span>
-              <span class="svl__ret txt-bad">
-                Γυρνά Τετάρτη 11/11 πρωί (Λ/Υ από 14:00)
-              </span>
-            </li>
-          </ul>
+            </div>
+            <ul class="strength__rows">
+              <li class="strength__row">
+                <button type="button" class="linkish strength__name">
+                  <span>
+                    <span class="rk">
+                      ΣΤΡ (ΔΒ) 
+                    </span>
+                    ΘΕΩΡΗΤΙΚΟΣ Ζ.
+                  </span>
+                </button>
+                <span class="strength__room">
+                  Θ1
+                </span>
+                <span class="strength__what">
+                  <span class="ui-badge ui-badge--bad" data-tip="Αναρρωτική">
+                    Αναρρωτική
+                  </span>
+                </span>
+                <span class="strength__range">
+                  04/11–10/11
+                </span>
+                <span class="strength__ret is-bad">
+                  Γυρνά Τετάρτη 11/11 πρωί (Λ/Υ από 14:00)
+                </span>
+              </li>
+            </ul>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </div>
 <div class="ui-toasts" aria-live="polite">
