@@ -12,8 +12,9 @@ import { HK } from '../../shared/unit';
 type P = any;
 
 const WHYS = ['ΜΕΤΑΘΕΣΗ', 'ΑΠΟΣΠΑΣΗ', 'ΑΠΟΛΥΣΗ', 'ΑΛΛΟ'];
+const WHY_LBL: Record<string, string> = { ΜΕΤΑΘΕΣΗ: 'Μετάθεση', ΑΠΟΣΠΑΣΗ: 'Απόσπαση', ΑΠΟΛΥΣΗ: 'Απόλυση', ΑΛΛΟ: 'Άλλο…' };   // με τόνους στα κουμπιά
 const label = (m: Move) => [m.why, m.where].filter(Boolean).join(' · ');
-const moveTxt = (m: Move) => dmy(m.on) + (m.dir === 'out' ? ' ' + label(m).toLowerCase() + (m.back ? ' (επιστρέφει ' + dmy(m.back) + ')' : '') : ' ξανά σε δύναμη') + (m.done ? '' : ' · προγραμματισμένη');
+const moveTxt = (m: Move) => dmy(m.on) + (m.dir === 'out' ? ' ' + label(m) + (m.back ? ' (επιστρέφει ' + dmy(m.back) + ')' : '') : ' ξανά σε δύναμη') + (m.done ? '' : ' · προγραμματισμένη');
 
 // Το ιστορικό κινήσεων στην καρτέλα
 export function MovesHistory({ p }: P) {
@@ -41,7 +42,7 @@ export function MoveDialog({ p, onClose }: P) {
   return html`<${Dialog} title="Κίνηση δύναμης" description=${html`<${RkName} p=${p}/>`} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!miss} why=${miss} onClick=${save}>Αποθήκευση κίνησης<//>`}>
     <div className="field"><${Segmented} value=${dir} onChange=${setDir} items=${[{ value: 'out', label: 'Φεύγει από τη δύναμη', disabled: !p.active && !pend.some((m: Move) => m.dir === 'in') }, { value: 'in', label: 'Ξαναμπαίνει στη δύναμη', disabled: p.active && !pend.some((m: Move) => m.dir === 'out') }]}/></div>
-    ${dir === 'out' && html`<div className="field"><span className="field__label">Λόγος</span><${Segmented} value=${why} onChange=${setWhy} items=${WHYS.map(w => ({ value: w, label: w === 'ΑΛΛΟ' ? 'Άλλο…' : w[0] + w.slice(1).toLowerCase() }))}/>
+    ${dir === 'out' && html`<div className="field"><span className="field__label">Λόγος</span><${Segmented} value=${why} onChange=${setWhy} items=${WHYS.map(w => ({ value: w, label: WHY_LBL[w] }))}/>
       ${why === 'ΑΛΛΟ' && html`<input className="ui-input" aria-label="Λόγος" data-autofocus="" placeholder="π.χ. ΝΟΣΟΚΟΜΕΙΟ" value=${other} onChange=${(e: any) => setOther(e.target.value)}/>`}</div>`}
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="mv-wh">Πού</label><input id="mv-wh" className="ui-input" placeholder=${dir === 'out' ? 'π.χ. ΣΣΕ' : 'π.χ. από πού'} value=${where} onChange=${(e: any) => setWhere(e.target.value)}/></div>
