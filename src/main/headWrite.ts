@@ -8,6 +8,7 @@ import type { DocHead } from '../shared/docHead';
 import { layoutHead, type HeadLayout } from '../shared/headLayout';
 import { colName, splitRef, type Sheet, type Workbook } from './xlsx';
 import { loadHeadImage } from './headImages';
+import { textPx } from './textfit';
 import { EMU_PX } from './xlDrawings';
 
 export const colPxOf = (w: number) => Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7);
@@ -27,7 +28,8 @@ export interface HeadDone {
 export async function applyHead(wb: Workbook, ws: Sheet, s: AppState, head: DocHead, o: HeadAt): Promise<HeadDone> {
   const L = xlLook(s.settings); const hp = formPart(L, 'hdr') || {}; const hdrSz = hp.sz ?? L.sz;
   const colPx = Array.from({ length: Math.max(1, o.cols) }, (_, i) => colPxOf(ws.colWidth(i + 1)));
-  const lay = layoutHead({ head, colPx, hdrSz, img: id => { const x = loadHeadImage(id, false); return x ? { w: x.w, h: x.h } : null; } });
+  const fnt = (sz: number, b: boolean) => ({ name: L.font, sz, b });
+  const lay = layoutHead({ head, colPx, hdrSz, dateText: o.dateText, textPx: (x, sz, b) => textPx(x, fnt(sz, b)), img: id => { const x = loadHeadImage(id, false); return x ? { w: x.w, h: x.h } : null; } });
   // η σημερινή κεφαλίδα φεύγει (και οι συγχωνεύσεις της)
   const olds = o.old.filter(r => /^[A-Z]+\d+$/.test(r)); const dateStyle = o.dateStyle ?? (olds.length ? ws.style(olds[olds.length - 1]) : null);
   const rowsOld = olds.map(r => splitRef(r).r);
@@ -46,7 +48,7 @@ export async function applyHead(wb: Workbook, ws: Sheet, s: AppState, head: DocH
     } else {
       ws.set(ref, upper(c.item?.t || '') || null); ws.setStyle(ref, await wb.style({ ...look(c.item), h: H[c.al] }));
     }
-    if (c.c2 > c.c1) ws.addMerge(ref + ':' + colName(c.c2) + (top + c.r));
+    if (!c.over && c.c2 > c.c1) ws.addMerge(ref + ':' + colName(c.c2) + (top + c.r));
     (c.date ? done.date : done.head).push(ref);
   }
   for (const p of lay.pics) {

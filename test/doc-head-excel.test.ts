@@ -49,11 +49,13 @@ describe('διάταξη της επικεφαλίδας (καθαρή)', () => 
   it('τρία κουτιά = τρεις ομάδες στηλών που καλύπτουν όλη τη σελίδα', () => {
     const z = zonesOf(col); expect(z).toEqual([[1, 3], [4, 6], [7, 9]]);
     expect(zonesOf([100, 100])).toEqual([[1, 2], [3, 2], [3, 2]]);
+    expect(zonesOf(col, [true, false, true])).toEqual([[1, 4], [5, 4], [5, 9]]);   // κενή Μέση: δανείζει το πλάτος της στα δύο διπλανά
+    expect(zonesOf(col, [false, true, true])[1][0]).toBe(1);
   });
   it('γραμμές κειμένου ενωμένες στο κουτί, κενό = άδεια γραμμή, ημερομηνία στη θέση της', () => {
     const l = layoutHead({ head: head([[{ k: 'text', t: 'α' }, { k: 'gap' }, { k: 'text', t: 'β', al: 'l' }], [], [{ k: 'date' }]]), colPx: col, hdrSz: 12, img: () => null });
     expect(l.rows).toBe(3);
-    expect(l.cells.map(c => [c.r, c.c1, c.c2, c.date, c.al])).toEqual([[0, 1, 3, false, 'c'], [2, 1, 3, false, 'l'], [0, 7, 9, true, 'c']]);
+    expect(l.cells.map(c => [c.r, c.c1, c.c2, c.date, c.al])).toEqual([[0, 1, 4, false, 'c'], [2, 1, 4, false, 'l'], [0, 5, 9, true, 'c']]);
   });
   it('εικόνα πάνω: παίρνει γραμμές πριν από το κείμενο, ύψος σε εκατοστά, πλάτος από την αναλογία', () => {
     const l = layoutHead({ head: head([[{ k: 'img', id: 'i', h: 2 }, { k: 'text', t: 'α' }], [], []]), colPx: col, hdrSz: 12, img: () => ({ w: 120, h: 60 }) });
@@ -68,6 +70,24 @@ describe('διάταξη της επικεφαλίδας (καθαρή)', () => 
   it('εικόνα χωρίς αρχείο ή χωρίς id δεν γράφεται', () => {
     const l = layoutHead({ head: head([[{ k: 'img', id: '', h: 2 }, { k: 'text', t: 'α' }], [], []]), colPx: col, hdrSz: 12, img: () => null });
     expect(l.pics).toHaveLength(0); expect(l.cells).toHaveLength(1);
+  });
+});
+
+describe('κείμενο που δεν χωρά στο κουτί', () => {
+  it('στενά κουτιά: δεν ενώνεται, δεν αναδιπλώνεται, ύψος γραμμής κανονικό (όπως στο στενό Έντυπο των 3 στηλών)', async () => {
+    const s = withHead(12, 'imgLeft', ['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2η ΕΠΧΙΑ Ν/Σ', '4η ΙΛΗ']);
+    const wb = await Workbook.blank('Φ'); const ws = await wb.sheet('Φ');
+    ws.setColWidth(1, 6); ws.setColWidth(2, 50); ws.setColWidth(3, 8); ws.set('B10', 'x');
+    const { applyHead } = await import('../src/main/headWrite');
+    const r = await applyHead(wb, ws, s, s.settings.heads![0], { cols: 3, old: [], dateText: 'Αυλώνας, 13 Νοε 26' });
+    const zip = await JSZip.loadAsync(await wb.save()); const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string'); const sty = await zip.file('xl/styles.xml')!.async('string');
+    expect(sty).not.toMatch(/wrapText/);
+    for (const m of xml.matchAll(/<row r="(\d+)"[^>]*\bht="([\d.]+)"/g)) if (+m[1] <= r.rows) expect(+m[2]).toBeLessThanOrEqual(12 * 1.5 + 0.01);
+    expect(r.layout.cells.every(c => c.c1 <= c.c2)).toBe(true);
+    expect(r.layout.cells.some(c => c.over && !c.date)).toBe(false);   // το αριστερό κουτί (Α+Β) τα χωρά ενωμένα
+    const n = layoutHead({ head: s.settings.heads![0], colPx: [45, 45, 60], hdrSz: 12, img: () => ({ w: 120, h: 60 }) });
+    const o = n.cells.filter(c => c.over && !c.date); expect(o.length).toBeGreaterThan(0);
+    for (const c of o) { expect(c.c1).toBe(c.c2); expect(c.al).toBe('l'); }
   });
 });
 
