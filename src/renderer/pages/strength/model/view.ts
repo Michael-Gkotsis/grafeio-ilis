@@ -73,3 +73,11 @@ export function isCatOpen(
 ): boolean {
   return open[c] ?? (cat === c || !!found || SV_OPEN[c]);
 }
+
+/**
+ * Whether the three counters add up to the total (Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη). `strengthView` counts
+ * each person once so it always holds; the «Έλεγχος» cell shows «≠» only if a future change breaks that.
+ */
+export function isBalanced(day: Pick<StrengthDay, 'present' | 'kol' | 'absent' | 'total'>): boolean {
+  return day.present + day.kol + day.absent === day.total;
+}

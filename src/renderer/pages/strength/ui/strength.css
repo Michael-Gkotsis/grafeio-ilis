@@ -1,0 +1,313 @@
+/*
+ * «Δύναμη» page (BEM block `strength`): one KPI strip, the toolbar, and the cards in two columns.
+ *
+ * Purpose: the look of pages/strength/ui/StrengthScreen.tsx, StrengthKpis.tsx and SvRows.tsx.
+ * Does NOT: use or restyle the legacy `.kpi*`, `.svline`, `.svnote`, `.svsub`, `.svl*` rules (they stay in legacy.css:
+ *   `.kpi*` is also used by «Σήμερα»), restyle Card, Button, DateBar or Badge, or hold colour values (tokens only).
+ * Owner layer: renderer/pages/strength. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
+ * Why: U12. Legacy sits in the last layer and beats this layer, so every selector here is a `strength*` class that no
+ *   legacy rule matches; the Card head and body are tuned through `.strength__cell` descendants, because
+ *   legacy has no rule for `.ui-card`.
+ * Root: `.strength-page`, not `.strength`: legacy.css line 293 already owns `.strength` (a two-column grid of another
+ *   screen).
+ * Covering test: bench:styles (group «Δύναμη»), test/screens-main.test.ts, test/contrast.test.ts.
+ */
+
+/* KPI strip: cells divided by 1 px lines (the strip background shows through the grid gap). */
+.strength__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.7fr);
+  gap: 1px;
+  margin-bottom: 12px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.strength__kpi,
+.strength__check {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--card);
+  text-align: left;
+}
+.strength__kpi {
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.strength__kpi:hover {
+  background: var(--hover);
+}
+.strength__kpi[aria-pressed="true"] {
+  background: var(--selected);
+}
+.strength__kpi:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.strength__kpi-l {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-fg);
+}
+.strength__kpi-n {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.strength__kpi--ok .strength__kpi-n {
+  color: var(--ok);
+}
+.strength__sum {
+  font-size: 16px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.strength__sum b {
+  font-weight: 600;
+}
+.strength__ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.strength__bad {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+/* Toolbar: search, platoon segments, active filter, «Πώς μετράει;» at the right end. */
+.strength__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.strength__search {
+  flex: 0 1 360px;
+  min-width: 200px;
+}
+.strength__seg {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: var(--card);
+}
+.strength__segbtn {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid var(--input);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  color: inherit;
+  cursor: pointer;
+}
+.strength__segbtn:first-child {
+  border-left: 0;
+}
+.strength__segbtn:hover {
+  background: var(--hover);
+}
+.strength__segbtn[aria-pressed="true"] {
+  background: var(--selected);
+  font-weight: 600;
+}
+.strength__segbtn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.strength__how-btn {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--info);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.strength__how-btn:hover {
+  color: var(--foreground);
+}
+.strength__how {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted-fg);
+}
+.strength__how p {
+  margin: 0;
+}
+.strength__how p + p {
+  margin-top: 6px;
+}
+
+/* Cards: Κωλυόμενοι and Απόντες side by side from 1180 px, Παρόντες (and any single card) full width. */
+.strength__groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.strength__cell {
+  min-width: 0;
+  container-type: inline-size;
+}
+@media (min-width: 1180px) {
+  .strength__groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .strength__cell--present,
+  .strength__cell:only-child {
+    grid-column: 1 / -1;
+  }
+}
+.strength__cell .ui-card__head {
+  padding: 10px 12px;
+}
+.strength__cell .ui-card__head h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.strength__cell .ui-card__body {
+  padding: 0 12px 4px;
+}
+.strength__cell .ui-card__sum {
+  padding: 8px 12px 10px 34px;
+}
+
+/* Rows: one line per person (two lines in a narrow card); the head of each reason is a small muted label. */
+.strength__sub + .strength__sub {
+  border-top: 1px solid var(--border);
+}
+.strength__subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-fg);
+}
+.strength__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.strength__row {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto minmax(0, 1fr);
+  grid-template-areas:
+    "name room what"
+    "range range ret";
+  gap: 0 10px;
+  align-items: center;
+  min-height: 36px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+.strength__row:first-child {
+  border-top: 0;
+}
+.strength__name {
+  grid-area: name;
+  min-width: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.strength__name:hover {
+  text-decoration: underline;
+}
+.strength__room {
+  grid-area: room;
+  font-size: 13px;
+  color: var(--muted-fg);
+}
+.strength__what {
+  grid-area: what;
+  min-width: 0;
+  text-align: right;
+}
+.strength__what .ui-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.strength__range {
+  grid-area: range;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted-fg);
+}
+.strength__ret {
+  grid-area: ret;
+  min-width: 0;
+  font-size: 13px;
+  text-align: right;
+  color: var(--muted-fg);
+}
+.strength__ret.is-bad {
+  color: var(--bad);
+}
+@container (min-width: 700px) {
+  .strength__row {
+    grid-template-columns: minmax(0, 1.6fr) 44px minmax(90px, auto) minmax(0, 1fr) minmax(0, 1.5fr);
+    grid-template-areas: "name room what range ret";
+    contain-intrinsic-size: auto 36px;
+  }
+  .strength__what {
+    text-align: left;
+  }
+}
+
+/* Under 1024 px: the strip is 2 x 2 with the check across the bottom; phone: one column. */
+@media (max-width: 1023px) {
+  .strength__kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .strength__check {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .strength__kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .strength__search {
+    flex-basis: 100%;
+  }
+  .strength__how-btn {
+    margin-left: 0;
+  }
+}
+
+[data-density="compact"] .strength__row {
+  min-height: 30px;
+}

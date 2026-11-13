@@ -4,6 +4,7 @@ import {
   SV_OPEN,
   SV_ORDER,
   filterStrength,
+  isBalanced,
   isCatOpen,
   visibleCats,
   visibleIds,
@@ -80,5 +81,13 @@ describe('strength view', () => {
     const shown = filterStrength(real, null, '', false, state.settings);
     expect(shown.map((c) => c.cat)).toEqual(SV_ORDER);
     expect(shown.reduce((n, c) => n + c.shown, 0)).toBe(real.absent + real.kol + real.present);
+  });
+
+  it('isBalanced: the «Έλεγχος» cell shows ✓ only when Παρόντες + Κωλυόμενοι + Απόντες = Δύναμη', () => {
+    expect(isBalanced({ present: 171, kol: 5, absent: 4, total: 180 })).toBe(true);
+    expect(isBalanced({ present: 171, kol: 5, absent: 4, total: 181 })).toBe(false);
+    const state = fakeState();
+    const real = strengthView(state, '2026-06-10', 10 * 60);
+    expect(isBalanced(real)).toBe(true);
   });
 });

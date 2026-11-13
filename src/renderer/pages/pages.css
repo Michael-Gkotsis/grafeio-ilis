@@ -6,7 +6,7 @@
  *   @import from index.css and the SSR tests do not load CSS.
  * Owner layer: renderer/pages.
  * Why: the pages layer is filled one page at a time by the UI PRs (U6 «Διάγνωση» first, U8 «Οδηγός», U9 «Ιστορικό»,
- *   U10 «Σημειώσεις», U11a «Ρυθμίσεις»).
+ *   U10 «Σημειώσεις», U11a «Ρυθμίσεις», U12 «Δύναμη»).
  * Covering test: test/contrast.test.ts, bench:styles.
  */
 @import url("./diag/ui/diag.css");
@@ -15,3 +15,4 @@
 @import url("./notes/ui/notes.css");
 @import url("./settings/ui/settings.css");
 @import url("./statuses/ui/statuses.css");
+@import url("./strength/ui/strength.css");
