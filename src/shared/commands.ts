@@ -4,8 +4,10 @@ import { HK } from './unit';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
+import { isUnit } from './mode';
+import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
@@ -97,6 +99,13 @@ export type Command =
   | { t: 'importCaps'; changes: { pid: number; kind: CapKey; reason: string | null }[]; source: string }
   | { t: 'importDuties'; days: Record<ISODate, DutyCell[]>; source: string }
   | { t: 'expire' }
+  // Κινήσεις δύναμης (μονάδα): φεύγει (why: Μετάθεση, Απόσπαση, Απόλυση…) ή ξαναμπαίνει σε δύναμη την ημέρα on (και μελλοντική)· back = πότε επιστρέφει
+  | { t: 'addMove'; pid: number; dir: 'out' | 'in'; why?: string; where?: string; on: ISODate; back?: ISODate }
+  | { t: 'cancelMove'; pid: number; id: string }
+  // Απόλυση ΕΣΣΟ: όσοι από pids (της ΕΣΣΟ esso) βγαίνουν μαζί την ημέρα on με λόγο ΑΠΟΛΥΣΗ, μία αναίρεση
+  | { t: 'dischargeEsso'; esso: string; on: ISODate; pids: number[] }
+  // κάθε μέρα: οι προγραμματισμένες κινήσεις που έφτασε η ημέρα τους
+  | { t: 'applyMoves' }
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean }
   // Ώρες εξόδου/επιστροφής και πρωινή εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10): week[getDay] = όσα αλλάζουν
@@ -351,6 +360,43 @@ function makePerson(s: AppState, x: NewPerson, today?: ISODate): Person {
 
 // Η μέρα της ΗΚΑΙ με το «3. Άδειες» ναι/όχι (hkaiManual[d].lv), χωρίς να πειράζονται τα υπόλοιπα στοιχεία της
 const withLv = (s: AppState, d: ISODate, lv: boolean): HkaiManual => ({ cells: s.hkaiManual[d]?.cells ?? {}, text: s.hkaiManual[d]?.text ?? {}, lv });
+// ------------------------------------------------------------------ κινήσεις δύναμης (μονάδα)
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const moveWhy = (why?: string, where?: string) => upper([(why || '').replace(/\s+/g, ' ').trim(), (where || '').replace(/\s+/g, ' ').trim()].filter(Boolean).join(': '));
+// Η κίνηση εφαρμόζεται στο άτομο: εκτός δύναμης (ημερομηνία διαγραφής, σημείωση «Εκτός δύναμης: <λόγος>» όπως από την καρτέλα) ή ξανά σε δύναμη
+function applyMove(p: Person, m: Move): Person {
+  const q: Person = { ...p, moves: (p.moves || []).map(x => (x.id === m.id ? { ...x, done: true } : x)) };
+  if (m.dir === 'out') {
+    q.active = false; q.outOn = m.on;
+    q.notes = OUT_NOTE + (moveWhy(m.why, m.where) ? ': ' + moveWhy(m.why, m.where) : '');
+  } else {
+    q.active = true; q.inOn = m.on; delete q.outOn;
+    const nt = (p.notes || '').trim();
+    q.notes = nt.startsWith(OUT_NOTE) ? nt.slice(OUT_NOTE.length).replace(/^[:\s]+/, '') : p.notes;
+  }
+  return q;
+}
+// Όσες κινήσεις έφτασε η ημέρα τους εφαρμόζονται με τη σειρά ημερομηνίας (pids: μόνο αυτά τα άτομα). Όποιος βγαίνει φεύγει από τις
+// υπηρεσίες από την ημέρα της κίνησης (ή από σήμερα, αν η κίνηση είναι παλιότερη) και μετά.
+function applyDueMoves(s: AppState, today: ISODate, pids?: number[]): { state: AppState; texts: string[]; gone: number } {
+  let next = s; const texts: string[] = []; let gone = 0;
+  for (const p0 of s.people) {
+    if (pids && !pids.includes(p0.id)) continue;
+    const due = (p0.moves || []).filter(m => !m.done && m.on <= today).sort((a, b) => a.on.localeCompare(b.on));
+    if (!due.length) continue;
+    let p = p0;
+    for (const m of due) {
+      p = applyMove(p, m);
+      if (m.dir === 'out') {
+        const from = m.on > today ? m.on : today;
+        for (const d of Object.keys(next.guards).filter(d => d >= from)) for (const [k, pid] of Object.entries(next.guards[d] || {})) if (pid === p.id) { next = setGuard(next, d, k, null); gone++; }
+      }
+      texts.push(shortName(p) + ': ' + (m.dir === 'out' ? 'εκτός δύναμης (' + (moveWhy(m.why, m.where) || 'χωρίς λόγο') + ') από ' + dm(m.on) : 'ξανά σε δύναμη από ' + dm(m.on)));
+    }
+    next = { ...next, people: next.people.map(x => (x.id === p.id ? p : x)) };
+  }
+  return { state: next, texts, gone };
+}
 // Εγγραφές και διαγραφές της ΗΚΑΙ (Michael, 17/10): όποιος βγαίνει εκτός δύναμης παίρνει τη σημερινή μέρα στο outOn
 // (φεύγει αν ξαναμπεί σε δύναμη)· ο «Νέος στρατιώτης» και οι νέες γραμμές του Δυναμολογίου στο inOn. Η πρώτη εισαγωγή
 // (χωρίς κανέναν σε δύναμη πριν) δεν είναι εγγραφές.
@@ -930,6 +976,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const came = upper((person.came || '').replace(/\s+/g, ' ').trim()); if (came) person.came = came; else delete person.came;
       person.sub = (person.sub || '').replace(/\s+/g, ' ').trim(); if (!person.sub) delete person.sub;
       if (person.inOn && !/^\d{4}-\d{2}-\d{2}$/.test(person.inOn)) delete person.inOn;
+      // οι κινήσεις δύναμης αλλάζουν μόνο με τις δικές τους εντολές· θητεία 9 μηνών ή τίποτα (12)
+      if (old.moves) person.moves = old.moves; else delete person.moves;
+      if (person.serve !== 9) delete person.serve;
       let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
       const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
@@ -1256,6 +1305,51 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const p = pm.get(old.pid);
       return { state: { ...s, backFix: fixes.filter(x => x.id !== c.id) }, text: 'Διόρθωση επιστροφής' + (p ? ' ' + shortName(p) : '') + ' ' + dm(old.day) + ': πίσω στο αυτόματο', files: ['Εξοδούχοι-Παραμένοντες'] };
     }
+    case 'addMove': {
+      if (!isUnit(s.settings)) throw new Error('Οι κινήσεις δύναμης υπάρχουν μόνο στη Λειτουργία μονάδας');
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      if (!ISO.test(c.on)) throw new Error('Λάθος ημερομηνία');
+      if (c.back && (!ISO.test(c.back) || c.back <= c.on)) throw new Error('Η επιστροφή πρέπει να είναι μετά την ημέρα που φεύγει');
+      if (c.on > addDays(ctx.today, 366)) throw new Error('Η ημερομηνία δεν μπορεί να είναι πάνω από ένα χρόνο μπροστά');
+      if (c.dir === 'out' && !(c.why || '').trim()) throw new Error('Διάλεξε τον λόγο');
+      const pend = (p.moves || []).filter(x => !x.done);
+      if (c.dir === 'out' && !p.active && !pend.some(x => x.dir === 'in')) throw new Error(shortName(p) + ' είναι ήδη εκτός δύναμης');
+      if (c.dir === 'in' && p.active && !pend.some(x => x.dir === 'out')) throw new Error(shortName(p) + ' είναι ήδη σε δύναμη');
+      const id = ctx.newId(); const why = upper((c.why || '').replace(/\s+/g, ' ').trim()); const where = upper((c.where || '').replace(/\s+/g, ' ').trim());
+      const mv: Move = c.dir === 'out' ? { id, dir: 'out', why, ...(where ? { where } : {}), on: c.on, ...(c.back ? { back: c.back } : {}) } : { id, dir: 'in', why: why || 'ΕΠΙΣΤΡΟΦΗ', ...(where ? { where } : {}), on: c.on };
+      const moves = [...(p.moves || []), mv];
+      if (c.dir === 'out' && c.back) moves.push({ id: ctx.newId(), dir: 'in', why: 'ΕΠΙΣΤΡΟΦΗ', on: c.back, of: id });
+      const state = { ...s, people: s.people.map(x => (x === p ? { ...p, moves } : x)) };
+      const r = applyDueMoves(state, ctx.today, [p.id]);
+      const sched = (c.dir === 'out' ? shortName(p) + ' φεύγει' : shortName(p) + ' ξαναμπαίνει σε δύναμη') + ' στις ' + dm(c.on) + (c.dir === 'out' ? ' (' + moveWhy(why, where) + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : '');
+      const text = r.texts.length ? 'Κίνηση δύναμης: ' + r.texts.join('; ') + (r.gone ? ' (βγήκε από ' + r.gone + (r.gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : '') : 'Κίνηση δύναμης: ' + sched;
+      return { state: r.state, text, files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'cancelMove': {
+      const p = pm.get(c.pid); const m = p?.moves?.find(x => x.id === c.id);
+      if (!p || !m) throw new Error('Δεν βρέθηκε η κίνηση');
+      if (m.done) throw new Error('Η κίνηση έχει ήδη γίνει');
+      const moves = p.moves!.filter(x => x.id !== c.id && x.of !== c.id); const q: Person = { ...p, moves }; if (!moves.length) delete q.moves;
+      return { state: { ...s, people: s.people.map(x => (x === p ? q : x)) }, text: 'Ακυρώθηκε η κίνηση δύναμης: ' + shortName(p) + (m.dir === 'out' ? ' φεύγει' : ' ξαναμπαίνει') + ' στις ' + dm(m.on), files: [] };
+    }
+    case 'dischargeEsso': {
+      if (!isUnit(s.settings)) throw new Error('Η απόλυση ΕΣΣΟ υπάρχει μόνο στη Λειτουργία μονάδας');
+      if (!ISO.test(c.on)) throw new Error('Λάθος ημερομηνία');
+      const e = parseEsso(c.esso); const ids = [...new Set(c.pids)];
+      if (!ids.length) throw new Error('Διάλεξε τουλάχιστον έναν στρατιώτη');
+      const people = s.people.map(p => {
+        if (!ids.includes(p.id)) return p;
+        if (!p.active) throw new Error(shortName(p) + ' είναι ήδη εκτός δύναμης');
+        return { ...p, moves: [...(p.moves || []), { id: ctx.newId(), dir: 'out' as const, why: 'ΑΠΟΛΥΣΗ', on: c.on }] };
+      });
+      if (ids.some(id => !pm.has(id))) throw new Error('Δεν βρέθηκε το άτομο');
+      const r = applyDueMoves({ ...s, people }, ctx.today, ids);
+      return { state: r.state, text: 'Απόλυση ΕΣΣΟ ' + (e ? essoPersonTxt(e) : c.esso) + ': ' + ids.length + (ids.length === 1 ? ' στρατιώτης' : ' στρατιώτες') + ' ' + (c.on <= ctx.today ? 'εκτός δύναμης από ' : 'εκτός δύναμης στις ') + dm(c.on), files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'applyMoves': {
+      const r = isUnit(s.settings) ? applyDueMoves(s, ctx.today) : { state: s, texts: [] as string[], gone: 0 };
+      return { state: r.state, text: r.texts.length ? 'Κινήσεις δύναμης που έφτασε η ημέρα τους: ' + r.texts.join('; ') : '', files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [], source: 'auto', undoable: false };
+    }
     case 'extendOpen': {
       // Εγγραφές χωρίς λήξη (κενό «έως» στο Excel): ισχύουν και σήμερα. Χωρίς γραμμή ιστορικού, δεν αναιρείται.
       const statuses = s.statuses.map(x => (x.open && x.to < ctx.today ? { ...x, to: ctx.today } : x));
@@ -1322,6 +1416,8 @@ function importPeople(s: AppState, rows: ImportRow[], source: string, deactivate
 // Τι αλλάζει στον καθένα με μια εισαγωγή προσωπικού (για την προεπισκόπηση: «ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.: Σ.Ι Ι1 → Ι3»)
 const ROSTER_FIELDS: [keyof ImportRow, string][] = [['rank', 'βαθμός'], ['origin', 'προέλευση'], ['spec', 'Ο/Σ'], ['last', 'επώνυμο'], ['first', 'όνομα'], ['father', 'πατρώνυμο'], ['asm', 'ΑΣΜ'],
   ['phone', 'τηλέφωνο'], ['room', 'θάλαμος'], ['si', 'Σ.Ι'], ['post', 'πόστο'], ['role', 'ρόλος'], ['dn', 'ΔΝ'], ['active', 'σε δύναμη'], ['iban', 'IBAN'], ['amka', 'ΑΜΚΑ'], ['afm', 'ΑΦΜ'], ['email', 'e-mail'], ['relEmail', 'e-mail συγγενή'], ['blood', 'ομάδα αίματος']];
+// μονάδα: ΕΣΣΟ, ημερομηνία εισαγωγής και Λόχος/Ίλη από το Δυναμολόγιο (μόνο σε Λειτουργία μονάδας, για να μη αλλάξει η προεπισκόπηση του κέντρου)
+const UNIT_ROSTER_FIELDS: [keyof ImportRow, string][] = [['essos', 'ΕΣΣΟ'], ['inOn', 'ημ. εισαγωγής'], ['sub', 'λόχος']];
 const rv = (v: unknown) => (v == null || v === '' ? '—' : v === true ? 'ναι' : v === false ? 'όχι' : String(v));
 export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who: string; what: string }[]; same: number } {
   const byAsm = new Map(s.people.filter(p => p.asm).map(p => [p.asm, p]));
@@ -1330,7 +1426,7 @@ export function rosterChanges(s: AppState, rows: ImportRow[]): { changes: { who:
   for (const r of rows) {
     const ex = (r.asm && byAsm.get(r.asm)) || byName.get(personKey(r)); if (!ex) continue;
     const next = mergeRow(ex, r) as unknown as Record<string, unknown>; const cur = ex as unknown as Record<string, unknown>;
-    const what = ROSTER_FIELDS.filter(([k]) => (r[k] !== undefined || k === 'active') && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
+    const what = (isUnit(s.settings) ? [...ROSTER_FIELDS, ...UNIT_ROSTER_FIELDS] : ROSTER_FIELDS).filter(([k]) => (r[k] !== undefined || k === 'active') && rv(cur[k] ?? (k === 'dn' ? false : null)) !== rv(next[k] ?? (k === 'dn' ? false : null)))
       .map(([k, label]) => (PKEYS.includes(k as PKey) ? label + ' άλλαξε' : label + ' ' + rv(cur[k] ?? (k === 'dn' ? false : null)) + ' → ' + rv(next[k])));   // IBAN/ΑΜΚΑ/ΑΦΜ: χωρίς τα νούμερα στην προεπισκόπηση
     if (what.length) changes.push({ who: fullName(ex), what: what.join(', ') }); else same++;
   }

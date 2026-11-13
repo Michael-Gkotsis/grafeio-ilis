@@ -1,7 +1,7 @@
 // Λειτουργία κέντρου ή μονάδας (Michael, 13/11): το κέντρο εκπαίδευσης έχει μία ΕΣΣΟ τη φορά, η μονάδα συνεχή ροή με
 // στρατιώτες από πολλές ΕΣΣΟ. Λείπει = κέντρο: όποιος δεν το πειράξει δεν βλέπει καμία αλλαγή.
 import { addDays, daysBetween, MONTHS, type ISODate } from './dates';
-import type { Person, Settings } from './domain';
+import type { Move, Person, Settings } from './domain';
 import { itemKey, listOf, type UserLists } from './ranks';
 import { ESSO_SERIES, essoPersonTxt, nextEsso, parseEsso, type Esso } from './esso';
 
@@ -65,3 +65,30 @@ export function subRows(people: Person[], lists?: UserLists): SubRow[] {
 // πάνω από αυτό το πλήθος το φίλτρο γίνεται dropdown αντί για κουμπιά
 export const SUB_CHIPS_MAX = 6;
 export const subKeyOf = (p: Pick<Person, 'sub'>): string => itemKey(p.sub || '');
+
+// Απόλυση περίπου του ατόμου: 12 μήνες από την κατάταξη της ΕΣΣΟ του, ή 9 αν το έχει στην καρτέλα (serve)
+export function personDischarge(p: Pick<Person, 'essos' | 'serve'>): { y: number; m: number } | null {
+  const e = parseEsso(p.essos); return e ? essoDischarge(e, p.serve === 9 ? 9 : 12) : null;
+}
+// Κινήσεις δύναμης που περιμένουν (δεν έχουν εφαρμοστεί), από την παλιότερη· to: ως αυτή τη μέρα (αλλιώς όλες)
+export interface PendingMove { p: Person; m: Move }
+export function pendingMoves(people: Person[], to?: ISODate): PendingMove[] {
+  const out: PendingMove[] = [];
+  for (const p of people) for (const m of p.moves || []) if (!m.done && (!to || m.on <= to)) out.push({ p, m });
+  return out.sort((a, b) => a.m.on.localeCompare(b.m.on) || a.p.last.localeCompare(b.p.last, 'el'));
+}
+// Για τη λίστα: οι απολύσεις της ίδιας ΕΣΣΟ την ίδια μέρα γίνονται μία γραμμή «ΕΣΣΟ 2025 Γ΄ απολύεται (24)»
+export interface MoveRow { key: string; on: ISODate; text: string; ids: { pid: number; id: string }[]; pid?: number }
+export function moveRows(list: PendingMove[], name: (p: Person) => string): MoveRow[] {
+  const rows: MoveRow[] = []; const groups = new Map<string, MoveRow>();
+  for (const { p, m } of list) {
+    const e = essoKeyOf(p);
+    if (m.dir === 'out' && m.why === 'ΑΠΟΛΥΣΗ' && e) {
+      const k = 'd|' + m.on + '|' + e; let g = groups.get(k);
+      if (!g) { g = { key: k, on: m.on, text: '', ids: [] }; groups.set(k, g); rows.push(g); }
+      g.ids.push({ pid: p.id, id: m.id }); g.text = 'ΕΣΣΟ ' + e + ' απολύεται (' + g.ids.length + ')';
+    } else rows.push({ key: p.id + '|' + m.id, on: m.on, pid: p.id, ids: [{ pid: p.id, id: m.id }],
+      text: name(p) + (m.dir === 'out' ? ' φεύγει: ' + [m.why, m.where].filter(Boolean).join(' · ') : ' ξαναμπαίνει σε δύναμη') });
+  }
+  return rows;
+}
