@@ -64,7 +64,7 @@ export interface EssoInfo {
 }
 // roster: προεπισκόπηση (token) του Δυναμολογίου της νέας ΕΣΣΟ, αν το έχεις ήδη· newDir: δικός σου φάκελος (αλλιώς newRoot\<όνομα ΕΣΣΟ>)
 // unit: τύπος μονάδας (Ίλη/Λόχος), κεφαλίδα και μονάδα του τίτλου για τη νέα ΕΣΣΟ
-export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string; unit?: Pick<Settings, 'unitKind' | 'unit' | 'unitName'> }
+export interface EssoStart { esso: Esso; archiveRoot: string; newDir?: string; roster?: string; rosterName?: string; unit?: Pick<Settings, 'unitKind' | 'unit' | 'unitName'> }
 export type EssoResult = { ok: true; archive: string; dir: string; files: string[]; warnings: string[] } | Fail;
 
 // Έντυπα: πρότυπο όπως το βρήκε η εφαρμογή (φύλλα, γραμμή επικεφαλίδων, στήλες, {ΕΤΙΚΕΤΕΣ})
@@ -130,7 +130,7 @@ export interface Api {
   srcPlan(kind: ListKind): Promise<WritePreview | Fail>;
   srcWrite(kind: ListKind): Promise<{ ok: true; text: string; file: string } | Fail>;
   // sheet: το φύλλο που φτιάχτηκε· inRoster: μπήκε ως φύλλο στο Δυναμολόγιο· found: το Δυναμολόγιο είχε ήδη τέτοιο πίνακα
-  srcNewFile(kind: ListKind): Promise<{ ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | Fail | null>;   // sheets: τα φύλλα που μπήκαν μαζί στο νέο Δυναμολόγιο
+  srcNewFile(kind: ListKind, name?: string): Promise<{ ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | Fail | null>;   // sheets: τα φύλλα που μπήκαν μαζί στο νέο Δυναμολόγιο
   srcStatus(): Promise<{ sources: SourceStatus[]; forms: FormOut[] }>;
   onSources(cb: (st: { sources: SourceStatus[]; forms: FormOut[] }) => void): () => void;
   onBusy(cb: (b: ExcelBusy) => void): () => void;

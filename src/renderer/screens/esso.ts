@@ -4,6 +4,7 @@ import { html, Alert, Badge, Button, Why, Card, Dialog, Segmented, useToast } fr
 import { useNav, useStore } from '../store';
 import { ESSO_SERIES, currentEsso, essoName, nextEsso, parseEsso, type Esso, type EssoSeries } from '../../shared/esso';
 import { dmy } from '../../shared/dates';
+import { newStem } from '../../shared/fileNames';
 import { dischargeLabel, daysToDischarge, essoDischarge, essoRows, isUnit } from '../../shared/mode';
 import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../../shared/api';
 import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
@@ -89,7 +90,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   const [u, setU] = useState(() => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName }));
   const [root, setRoot] = useState<string>(info.archiveRoot);
   const [dir, setDir] = useState<string | null>(null);   // δικός σου φάκελος για τη νέα· αλλιώς newRoot\<όνομα>
-  const [ros, setRos] = useState<ImportPreview | null>(null);
+  const [ros, setRos] = useState<ImportPreview | null>(null); const [rosName, setRosName] = useState('');   // όνομα του νέου κενού Δυναμολογίου (προαιρετικό)
   const [ack, setAck] = useState(false); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const same = cur && cur.s === e.s && cur.y === e.y;
   const target = dir || join(info.newRoot, essoName(e));
@@ -99,7 +100,7 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
   const start = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await window.api.essoStart({ esso: { s: e.s, y: e.y }, archiveRoot: root, ...(dir ? { newDir: dir } : {}), ...(ros ? { roster: ros.token } : {}), unit: u });
+      const r = await window.api.essoStart({ esso: { s: e.s, y: e.y }, archiveRoot: root, ...(dir ? { newDir: dir } : {}), ...(ros ? { roster: ros.token } : rosName.trim() ? { rosterName: rosName } : {}), unit: u });
       if (!r.ok) { setErr(r.error); return; }
       await refresh(); toast({ text: 'Ξεκίνησε η ' + essoName(e) }); onDone(r);
     } finally { setBusy(false); }
@@ -138,6 +139,9 @@ function NewEssoWizard({ info, onClose, onDone }: P) {
         <${Segmented} value=${ros ? 'file' : 'new'} onChange=${(v: string) => { if (v === 'new') setRos(null); else pickRoster(); }} items=${[{ value: 'new', label: 'Νέο, χωρίς στρατιώτες' }, { value: 'file', label: 'Έχω το Excel της νέας ΕΣΣΟ…' }]}/>
         ${ros ? html`<span className="field__help"><b>${ros.file}</b>: ${ros.active} σε δύναμη από ${ros.total}${ros.essos ? ' · ΕΣΣΟ ' + ros.essos : ''}. Αντιγράφεται στον φάκελο της νέας, οι στρατιώτες μπαίνουν στην εφαρμογή και τα φύλλα που λείπουν (ΤΙΜΩΡΗΜΕΝΟΙ, ΑΔΕΙΕΣ, ΠΟΣΤΑ…) προστίθενται εκεί. <${Button} variant="link" onClick=${pickRoster}>Άλλο αρχείο<//></span>`
           : html`<span className="field__help">Φτιάχνεται κενό ΔΥΝΑΜΟΛΟΓΙΟ ${essoName(e)} με όλα τα φύλλα του. Τους στρατιώτες τους γράφεις μετά σε πίνακα, τον έναν κάτω από τον άλλον (Γρήγορη εισαγωγή), ή με εισαγωγή.</span>`}
+        ${!ros && html`<label className="field__label" htmlFor="ne-name" style=${{ marginTop: '8px' }}>Όνομα αρχείου (προαιρετικό)</label>
+          <input id="ne-name" className="ui-input" maxLength=${120} placeholder=${newStem({ ...state.settings, essos: e, unitName: u.unitName }, 'people', today)} value=${rosName} onChange=${(ev: any) => setRosName(ev.target.value)}/>
+          <span className="field__help">Κενό = το προκαθορισμένο όνομα (στο πεδίο).</span>`}
         ${ros?.warnings.map(w => html`<${Alert} key=${w} tone="warn"><span>${w}</span><//>`)}
         ${rosEsso && (rosEsso.s !== e.s || rosEsso.y !== e.y) && html`<${Alert} tone="warn"><span>Το αρχείο γράφει ${essoName(rosEsso)}, ενώ διάλεξες ${essoName(e)}. <${Button} variant="link" onClick=${() => setE(rosEsso)}>Κράτα ${essoName(rosEsso)}<//></span><//>`}</div>
       <p className="note">Φτιάχνεται επίσης ο ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ${essoName(e)} με το φύλλο του μήνα. Όλα συνδέονται μόνα τους στα «Αρχεία Excel».</p>`}

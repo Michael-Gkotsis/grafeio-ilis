@@ -10,7 +10,8 @@ import { GoLink, MonthField, PersonPicker, usePrintFile } from '../common';
 import { TYPES, KIND_NAME, codeKey, shortName, type DutyKind, type Settings, type TypeKey } from '../../shared/domain';
 import { postBy, postsOf, seatMap } from '../../shared/rules';
 import { readDuty } from '../../shared/codes';
-import { addDays, dm, dow } from '../../shared/dates';
+import { addDays, dm, dow, today } from '../../shared/dates';
+import { newStem, safeName } from '../../shared/fileNames';
 import {
   KINDS, KIND, NEW_KINDS, DEFAULT_TYPE, canCreate, sheetHost, HK_COLS, HK_RANKS, bestFor, bindingText, cellText, colLetter, defaultBinding, diffStatuses, fieldsOf, isStatusKind, missingFields,
   parseStatuses, suggestCols, tableRows, rowName, valueKey, CAP_COLS, capAcc, capExtraCols, capExtras, capNo, dutyDays, dutiesCmd, planCaps, planDuties, planOutside, planPosts, sheetMonth,
@@ -59,8 +60,10 @@ export function SourcesView() {
     if (b.header !== sources[kind]?.header || JSON.stringify(b.cols) !== JSON.stringify(sources[kind]?.cols)) await refresh();
     setLayer({ kind: SHEET_KINDS.includes(kind) ? 'sheet' : 'import', list: kind, book: r, b });
   };
-  const newFile = async (kind: ListKind) => {
-    const r = await window.api.srcNewFile(kind); if (!r) return;
+  // χωριστό αρχείο: πρώτα ρωτά το όνομα (προαιρετικό)· ως φύλλο στο Δυναμολόγιο φτιάχνεται κατευθείαν
+  const newFile = (kind: ListKind) => { if (sheetHost(kind) && sources[sheetHost(kind)!]) return makeFile(kind); setLayer({ kind: 'name', list: kind }); };
+  const makeFile = async (kind: ListKind, name?: string) => {
+    const r = await window.api.srcNewFile(kind, name); if (!r) return;
     if (!r.ok) { toast({ text: r.error }); return; }
     await refresh();
     const text = r.found ? 'Το ' + base(r.file) + ' έχει ήδη φύλλο «' + r.sheet + '» με ' + KIND[kind].label.toLowerCase() + ': ορίστηκε αυτό. Πάτα «Ανανέωση από Excel» για να διαβαστεί.'
@@ -90,10 +93,23 @@ export function SourcesView() {
     ${layer?.kind === 'import' && html`<${ImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
     ${layer?.kind === 'sheet' && html`<${SheetImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
     ${layer?.kind === 'people' && html`<${Dialog} size="lg" title="Ανάγνωση προσωπικού από το Excel" onClose=${close}><${RosterPreview} pv=${layer.pv} onDone=${close} onCancel=${close}/><//>`}
+    ${layer?.kind === 'name' && html`<${NewNameDialog} kind=${layer.list} st=${state.settings} onClose=${close} onGo=${(n: string) => { close(); makeFile(layer.list, n); }}/>`}
     ${layer?.kind === 'write' && html`<${WriteDialog} list=${layer.list} onClose=${close}/>`}
   </div>`;
 }
 
+// «Νέο αρχείο…»: όνομα αρχείου (προαιρετικό)· κενό = το προκαθορισμένο, που φαίνεται στο πεδίο
+function NewNameDialog({ kind, st, onClose, onGo }: P) {
+  const [name, setName] = useState(''); const stem = newStem(st, kind, today());
+  const go = () => onGo(name.trim());
+  return html`<${Dialog} title=${kind === 'people' ? 'Νέο Δυναμολόγιο' : 'Νέο αρχείο: ' + KIND[kind as ListKind].label} description="Η εφαρμογή φτιάχνει καινούργιο Excel με ό,τι έχει και το κρατά ενημερωμένο." onClose=${onClose}
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${go}>Φτιάξε το αρχείο<//>`}>
+    <div className="field"><label className="field__label" htmlFor="nf-name">Όνομα αρχείου (προαιρετικό)</label>
+      <input id="nf-name" className="ui-input" data-autofocus="" maxLength=${120} placeholder=${stem} value=${name} onChange=${(e: any) => setName(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') go(); }}/>
+      <span className="field__help">Κενό = «${stem}». Μπαίνει στον φάκελο των αρχείων αυτού του είδους. Αν υπάρχει ήδη αρχείο με αυτό το όνομα, δεν γράφεται πάνω του: παίρνει (2).</span></div>
+    <p className="note">Θα λέγεται: <b className="num">${safeName(name) || stem}.xlsx</b></p>
+  <//>`;
+}
 function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const { today } = useStore();
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();

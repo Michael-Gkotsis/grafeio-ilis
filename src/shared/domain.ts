@@ -10,6 +10,7 @@ import type { Sig, SigForm } from './sigs';
 import type { Layout, LayoutForm } from './layout';
 import type { ImerSettings } from './imer';
 import type { HdDoc } from './hd';
+import type { FileNames } from './fileNames';
 import type { XlLook } from './xlLook';
 
 // ---------------------------------------------------------------------------
@@ -311,7 +312,7 @@ export const phaseName = (st: Settings, ph: Phase = st.phase): string => (ph ===
 export const phaseList = (st: Settings): { id: Phase; name: string; base: BasePhase; custom: boolean }[] =>
   [...(st.mode === 'unit' && st.phase !== 'sven' ? [] : [{ id: 'sven' as Phase, name: PHASE_NAME.sven, base: 'sven' as BasePhase, custom: false }]), { id: 'spen', name: phaseName(st, 'spen'), base: 'spen' as BasePhase, custom: false }, ...(st.phases || []).map(x => ({ id: x.id, name: x.name, base: x.base, custom: true }))];
 // Αρχή του ονόματος του Excel: «ΦΡΟΥΡΑ », «ΦΡΟΥΡΑ ΣΠΕΝ », «ΦΡΟΥΡΑ ΑΣΚΗΣΗ »
-export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' ? '' : phaseName(st, ph) + ' ');
+export const frouraFile = (st: Settings, ph: Phase = st.phase || 'sven') => 'ΦΡΟΥΡΑ ' + (ph === 'sven' || (st.mode === 'unit' && ph === 'spen') ? '' : phaseName(st, ph) + ' ');   // μονάδα: σκέτο «ΦΡΟΥΡΑ», όχι «ΦΡΟΥΡΑ ΦΡΟΥΡΑ»
 // Οι υπηρεσίες κάθε εντύπου (ΣΒΕΝ, ΣΠΕΝ, δικά σου), για ό,τι κοιτά όλα τα έντυπα μαζί (κωδικοί, ιστορικό, στήλες)
 export const phaseBlocks = (st: Settings): [Phase, BlockDef[]][] => [['sven', st.blocks || []], ['spen', st.blocksSpen || []], ...(st.phases || []).map(x => [x.id, x.blocks || []] as [Phase, BlockDef[]])];
 export const everyBlock = (st: Settings): BlockDef[] => phaseBlocks(st).flatMap(([, b]) => b);
@@ -437,6 +438,7 @@ export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['all', '
 // Η παλιά μορφή «Σε 4 πίνακες» ('tab4', Michael 30/10) αντικαταστάθηκε από την «Όλη η δύναμη»: οι αποθηκευμένες ρυθμίσεις με 'tab4' διαβάζονται ως 'all'
 export const isOutsAll = (st: { outsFmt?: OutsFmt | 'tab4' }) => st.outsFmt === 'all' || st.outsFmt === 'tab4';
 export interface Settings {
+  fileNames?: FileNames;                 // ονόματα αρχείων: όνομα, διαχωριστικό και μορφή ημερομηνίας (fileNames.ts)
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
   unitKind?: UnitKind;                   // Ίλη/Επιλαρχία (ΗΚΑΙ, προεπιλογή) ή Λόχος/Τάγμα (ΗΚΑΛ), unit.ts

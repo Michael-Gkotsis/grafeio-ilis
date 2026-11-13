@@ -33,7 +33,8 @@ import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport,
 import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
-import { frouraFile, hkLvOn, isOutsAll, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
+import { fileNameOf, frouraName, newStem, safeName } from '../shared/fileNames';
+import { hkLvOn, isOutsAll, phaseBase, type AppState, type AuditEntry } from '../shared/domain';
 import type { Sig, SigForm } from '../shared/sigs';
 import type { ImerReq } from '../shared/imer';
 import { ESSO_SERIES, currentEsso, essoName, freshState, parseEsso, restoredPath } from '../shared/esso';
@@ -239,7 +240,8 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     const two = !fr && isOutsAll(s.settings) && parts.every(x => x.sheets && x.sheets.length === 2);
     const data = two ? await X.mergeSheets(parts.map(x => x.data), parts.map(x => x.sheets!), tabs.map(n => [n, n + ' ΔΥΝ']))
       : await X.merge(parts.map(x => x.data), tabs, parts[0].sheet || (fr ? b.sheet : undefined));
-    return { name: (fr ? frouraFile(s.settings) : isOutsAll(s.settings) ? 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ') + 'ΠΣΚ ' + dm(days[0]).replace('/', '-') + ' έως ' + dm(days[2]).replace('/', '-') + '-' + days[2].slice(0, 4) + '.xlsx', data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
+    const when = { from: days[0], to: days[2], psk: true as const };
+    return { name: fr ? frouraName(s.settings, s.settings.phase || 'sven', when) : fileNameOf(s.settings, 'outs', when), data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
   if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
   // ΗΚΑΙ: οι θέσεις βρίσκονται από τα κείμενα του εντύπου (και του δικού σου στον φάκελο templates), και από πάνω ό,τι διόρθωσες
@@ -679,7 +681,7 @@ function saveBinding(kind: ListKind, b0: SourceBinding | null) {
 // Πού φτιάχνεται ένα νέο είδος: ως φύλλο στο Δυναμολόγιο (όπως στο αρχείο της Ίλης), αν έχει οριστεί, υπάρχει και η
 // εφαρμογή γράφει εκεί· αλλιώς χωριστό αρχείο στον φάκελο του είδους. Αν το Δυναμολόγιο έχει ήδη πίνακα αυτού του
 // είδους, ορίζεται αυτός (found) αντί να φτιαχτεί δεύτερος. Υπάρχον φύλλο ή αρχείο δεν γράφεται ποτέ από πάνω.
-async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boolean; inRoster?: boolean } | { error: string }> {
+async function newPlace(kind: ListKind, own?: string): Promise<{ b: SourceBinding; found?: boolean; inRoster?: boolean } | { error: string }> {
   const host = sheetHost(kind); const ros = host ? bindingOf(host) : undefined;   // φύλλο μέσα στο αρχείο του «οικοδεσπότη»: Δυναμολόγιο ή στελέχη
   if (host && ros && ros.write !== false && /\.xls[xm]$/i.test(ros.file) && fs.existsSync(ros.file)) {
     try {
@@ -709,17 +711,17 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   const dir = newDir(kind);
   if (!writableDir(dir)) return { error: 'Δεν γράφεται ο φάκελος ' + dir + '. Διάλεξε άλλο στις Ρυθμίσεις → Φάκελοι αρχείων.' };
   // με γνωστή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ) το όνομά της μπαίνει στο όνομα του αρχείου: «ΔΥΝΑΜΟΛΟΓΙΟ Γ΄ ΕΣΣΟ 2026 4ης ΙΛΗΣ»
-  const es = store.state.settings.essos ? essoName(store.state.settings.essos) : '';
-  if (kind === 'duties') return { b: dutiesBinding(freeName(dir, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + (es || today().slice(0, 4))), today().slice(0, 7), undefined, store.state.settings) };
-  const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + es + ' ' + (store.state.settings.unitName || '')).replace(/\s+/g, ' ').trim() : KIND[kind].title;
+  // δικό σου όνομα (προαιρετικό): αντί για το προεπιλεγμένο· το freeName δεν γράφει ποτέ πάνω σε υπάρχον αρχείο
+  const name = safeName(own || '') || newStem(store.state.settings, kind, today());
+  if (kind === 'duties') return { b: dutiesBinding(freeName(dir, name), today().slice(0, 7), undefined, store.state.settings) };
   return { b: { ...defaultBinding(kind, freeName(dir, name), undefined, isUnit(store.state.settings)), write: true } };
 }
 // «Νέο αρχείο…» ενός είδους (Αρχεία Excel) και τα Excel της νέας ΕΣΣΟ
 type NewOut = { ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | { ok: false; error: string; locked?: boolean };
-async function createNew(kind: ListKind): Promise<NewOut> {
+async function createNew(kind: ListKind, name?: string): Promise<NewOut> {
   if (!KIND[kind] || !canCreate(kind)) return fail('Αυτό το είδος δεν φτιάχνεται ακόμα από την εφαρμογή');
   const prev = bindingOf(kind); const prevMeta = srcMeta.keep(kind);
-  const at = await newPlace(kind); if ('error' in at) return fail(at.error);
+  const at = await newPlace(kind, name); if ('error' in at) return fail(at.error);
   if (at.found) { saveBinding(kind, at.b); notify(); return { ok: true, file: at.b.file, sheet: at.b.sheet, found: true }; }
   saveBinding(kind, at.b);
   const r = await syncOut(kind, false, true);
@@ -925,7 +927,7 @@ async function startEsso(o: EssoStart): Promise<EssoResult> {
       } catch (err) { warnings.push('Δεν αντιγράφηκε το Δυναμολόγιο στο ' + dir + ': ' + msgOf(err)); }
       if (bindingOf('people')) for (const k of NEW_KINDS.filter(x => inRoster(x) && !bindingOf(x))) made(k, await createNew(k));
       else made('people', await createNew('people'));
-    } else made('people', await createNew('people'));
+    } else made('people', await createNew('people', typeof o.rosterName === 'string' ? o.rosterName.slice(0, 120) : undefined));
     made('duties', await createNew('duties'));
     notify();
     return { ok: true, archive: arch.dir, dir, files: [...new Set(files)], warnings };
@@ -1157,7 +1159,7 @@ else {
         const own = s.settings.hdTpl?.file; let buf: Buffer | null = null; const warnings: string[] = [];
         if (own) { try { buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own))); } catch { warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.'); } }
         const data = await fillDocx(buf || await builtinTemplate(), tags);
-        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' + req.date.slice(8, 10) + '-' + req.date.slice(5, 7) + '-' + req.date.slice(0, 4) + '.docx', data }]));
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: fileNameOf(s.settings, 'hd', req.date, 'docx'), data }]));
         shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
@@ -1320,7 +1322,7 @@ else {
     ipcMain.handle('src:people', async (_e, b: SourceBinding) => { if (!b || typeof b.file !== 'string' || !srcMeta.allowed(b.file)) return fail('Άγνωστο αρχείο'); const nb = (await current('people', b))!; return rosterPreview(nb.file, nb); });
     ipcMain.handle('src:plan', (_e, kind: ListKind) => planOut(kind));
     ipcMain.handle('src:write', async (_e, kind: ListKind) => { const r = await syncOut(kind, false); notify(); return r.ok ? { ok: true, text: r.text, file: r.file } : r; });
-    ipcMain.handle('src:new', (_e, kind: ListKind) => createNew(kind));
+    ipcMain.handle('src:new', (_e, kind: ListKind, name?: string) => createNew(kind, typeof name === 'string' ? name.slice(0, 120) : undefined));
     ipcMain.handle('src:status', async () => { retryPending(); return statusAll(); });
     ipcMain.handle('form:pick', async (_e, f: FormKind) => { const file = await pickXlsx('Template για ' + f); if (!file) return null; return formInfo(f, file); });
     ipcMain.handle('form:info', (_e, f: FormKind) => formInfo(f));

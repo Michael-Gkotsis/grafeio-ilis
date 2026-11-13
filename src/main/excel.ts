@@ -2,7 +2,7 @@
 // Η ανάγνωση των Excel (Δυναμολόγιο, Αρχεία Excel) γίνεται πια με το ελαφρύ xlsx.ts.
 // Χτίζεται ως χωριστό αρχείο και φορτώνεται μόνο όταν χρειαστεί (όριο μνήμης 2 GB, 12 §5).
 import ExcelJS from 'exceljs';
-import { MONTHS, dmy, hkDate, nowMin, parseD, today, type ISODate } from '../shared/dates';
+import { MONTHS, hkDate, nowMin, parseD, today, type ISODate } from '../shared/dates';
 import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
 import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
@@ -13,6 +13,7 @@ import { bareOf, codeOf } from '../shared/codes';
 import { activePeople, allPosts, cadreSeats, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { isUnit } from '../shared/mode';
 import { colName, fitBook, sheetSafe } from './xlsx';
+import { fileNameOf } from '../shared/fileNames';
 import { DUTY_CODES, IMER_ROWS, imerCode, imerDays, imerGrid, imerSheets, imerTitle, sumTotals, type ImerPart, type ImerReq } from '../shared/imer';
 import { currentEsso, essoName } from '../shared/esso';
 import type { MadeMark } from './exports';
@@ -125,7 +126,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   ws.getCell(foot, 1).font = { name: F, size: Math.max(7, Z - 2), italic: true };
   ws.pageSetup.printTitlesRow = '3:3';
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y + '.xlsx', data, marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot, cols: W }] };
+  return { name: fileNameOf(s.settings, 'check', { text: norm(MONTHS[m - 1]) + ' ' + y }), data, marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot, cols: W }] };
 }
 
 // Δυναμολόγιο και καταστάσεις (Michael, 17/10): ένα Excel, ένα φύλλο ανά φίλτρο της οθόνης (Όλοι, Άδειες, Τιμωρημένοι,
@@ -133,12 +134,12 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
 const ROSTER_W: Record<string, number> = { 'Α/Α': 5, 'ΒΑΘΜΟΣ': 9, 'Ο/Σ': 8, 'ΕΠΙΘΕΤΟ': 18, 'ΟΝΟΜΑ': 14, 'ΠΑΤΡΩΝΥΜΟ': 14, 'ΑΣΜ': 13, 'ΤΗΛΕΦΩΝΟ': 13, 'ΘΑΛΑΜΟΣ': 9, 'ΠΟΣΤΟ': 14, 'ΡΟΛΟΣ': 14, 'Σ.Ι.': 14, 'ΔΙΚΑΙΩΜΑ ΔΝ': 10, 'ΕΙΔΟΣ': 18, 'ΑΠΟ': 11, 'ΕΩΣ': 11, 'ΠΑΡΑΤΗΡΗΣΗ': 22, 'ΘΕΣΗ': 20, 'ΓΡΑΜΜΗ ΗΚΑΙ': 16, 'ΓΡΑΜΜΗ ΗΚΑΛ': 16, 'ΚΑΤΑΣΤΑΣΗ': 22, 'ΣΤΗΛΗ ΗΚΑΙ': 18, 'ΣΤΗΛΗ ΗΚΑΛ': 18 };
 export async function rosterLists(s: AppState, d: ISODate): Promise<Made> {
   const wb = newBook(d); const marks = addSheets(wb, s, rosterSheets(s, d, d === today() ? nowMin() : undefined), 'lists');
-  return { name: 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
+  return { name: fileNameOf(s.settings, 'lists', d), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Στελέχη (Michael, 17/10): ίδια μορφή, με τα φύλλα του cadre.ts (στελέχη, καταστάσεις της ΗΚΑΙ, εκτός δύναμης)
 export async function cadreLists(s: AppState, d: ISODate): Promise<Made> {
   const wb = newBook(d); const marks = addSheets(wb, s, cadreSheets(s, d), 'main');
-  return { name: 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
+  return { name: fileNameOf(s.settings, 'cadre', d), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Σταθερή ημερομηνία στις ιδιότητες: ίδια δεδομένα, ίδιο αρχείο
 function newBook(d: ISODate) {
@@ -176,7 +177,7 @@ function addSheets(wb: ExcelJS.Workbook, s: AppState, sheets: RosterSheet[], key
 export async function rosterPrint(s: AppState, d: ISODate): Promise<Made> {
   const wb = newBook(d); const mark = addRosterPrint(wb, s, d);
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data, marks: [mark] };
+  return { name: fileNameOf(s.settings, 'roster', d), data, marks: [mark] };
 }
 // «Θέσεις στο χαρτί» του Δυναμολογίου: το συνολικό και ένα από τα φύλλα του Excel, στο ίδιο αρχείο
 export async function rosterPreview(s: AppState, d: ISODate): Promise<Made> {
@@ -237,7 +238,7 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<Made> {
     marks.push({ sheet: ws.name, key: k === 0 ? 'main' : 'rest', head: k === 0 ? unitRefs(s) : [], date: k === 0 ? [colName(W - 3) + 1] : [], title, foot: HEAD + Math.max(1, sh.rows.length), cols: W });
   });
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  return { name: 'ΟΠΛΙΣΜΟΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data, marks };
+  return { name: fileNameOf(s.settings, 'weapons', d), data, marks };
 }
 
 // Ημερολόγιο κωλυομένων-απόντων (Michael, 3/11): όπως το Excel του (ΗΜΕΡΟΛΟΓΙΟ ΚΩΛΥΟΜΕΝΩΝ-ΑΠΟΝΤΩΝ / ΔΥΝΑΜΟΛΟΓΙΟ ΕΚΠΑΙΔΕΥΣΗΣ):
@@ -294,8 +295,7 @@ export async function imerBook(s: AppState, o: ImerReq): Promise<Made> {
     marks.push({ sheet: ws.name, key: 'main', head: unitHead.slice(0, 3).map((_, i) => colName(c0) + (i + 1)), date: [], title: ['A7'], foot: r, cols: W });
   }
   const data = await fitBook(Buffer.from(await wb.xlsx.writeBuffer()));
-  const rng = dmy(o.from).replace(/\//g, '-') + ' έως ' + dmy(o.to).replace(/\//g, '-');
-  return { name: imerTitle(s.settings) + ' ' + rng + '.xlsx', data, marks };
+  return { name: fileNameOf(s.settings, 'imer', { from: o.from, to: o.to }), data, marks };
 }
 
 // Ημερήσια Διαταγή για εκτύπωση (Michael, 4/11): η ίδια σελίδα ως Excel, για να ανοίγει στην ίδια προεπισκόπηση εκτύπωσης με
@@ -342,5 +342,5 @@ export async function hdBook(s: AppState, d: ISODate, t: Record<string, string>,
   [WA, WB, WC, WD].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.pageSetup.printArea = 'A1:D' + r; ws.pageSetup.printTitlesRow = head + ':' + head;
   const data = Buffer.from(await wb.xlsx.writeBuffer());
-  return { name: 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' + d.slice(8, 10) + '-' + d.slice(5, 7) + '-' + d.slice(0, 4) + '.xlsx', data, marks: [] };
+  return { name: fileNameOf(s.settings, 'hd', d), data, marks: [] };
 }
