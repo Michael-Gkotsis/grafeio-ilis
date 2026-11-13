@@ -84,7 +84,6 @@
     "src/main/updater.ts::createUpdater": 364,
     "src/renderer/screens/guard.ts::GuardScreen": 215,
     "src/renderer/screens/reports.ts::ReportPage": 262,
-    "src/renderer/screens/weapons.ts::WeaponsScreen": 209,
     "src/renderer/shared/api/mockApi.ts::mockApi": 192
   },
   "forEach": {
@@ -162,8 +161,6 @@
     "src/renderer/features/quick-add/model/useQuickAdd.ts": 1,
     "src/renderer/screens/guard.ts": 1,
     "src/renderer/screens/reports.ts": 7,
-    "src/renderer/screens/weaponMoves.ts": 1,
-    "src/renderer/screens/weapons.ts": 7,
     "src/renderer/screens/whodoes.ts": 2,
     "src/renderer/shared/api/mockApi.ts": 5
   },
@@ -184,8 +181,6 @@
     "src/renderer/screens/reports.ts": 56,
     "src/renderer/screens/skips.ts": 4,
     "src/renderer/screens/valueEditor.ts": 1,
-    "src/renderer/screens/weaponMoves.ts": 3,
-    "src/renderer/screens/weapons.ts": 16,
     "src/renderer/screens/whodoes.ts": 3,
     "src/renderer/shared/api/mockApi.ts": 6,
     "src/renderer/shared/model/route.ts": 1,
