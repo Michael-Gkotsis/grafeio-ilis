@@ -6,6 +6,8 @@ import { hkDate } from '../shared/dates';
 import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, toSerial, type Sheet, type XlValue } from './xlsx';
 import { TemplateError, signSheets, unitWords } from './exports';
 import { blockOf } from './layout';
+import { headFor } from '../shared/docHead';
+import { applyHead, type HeadDone } from './headWrite';
 import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
@@ -146,7 +148,7 @@ function locateHead(ws: Sheet, rows: XlValue[][], cols: RepCol[], head: number, 
 // μείνουν παλιά ονόματα)
 export type GroupKey = Omit<RepGroup, 'rows'>;
 // clock: σήμερα και ώρα (λεπτά) για τη στιγμή μέτρησης των πινάκων τιμών (τα tests τα δίνουν· αλλιώς το ρολόι)
-export interface FillOpts { prefix?: string; stale?: GroupKey[]; clock?: { today: ISODate; now: number } }
+export interface FillOpts { headId?: string; prefix?: string; stale?: GroupKey[]; clock?: { today: ISODate; now: number } }
 // Δείγμα της προεπισκόπησης (Έντυπα › σελίδα δημιουργίας): κάθε πίνακας δείχνει ως sample γραμμές (0: ως PV_MAX). Το βγάλσιμο (rep:run, αυτόματη
 // ενημέρωση) δεν το περνά ποτέ: μπαίνει μόνο από το previewReport, και τότε το αποτέλεσμα έχει counts (πόσες από πόσες, ανά πίνακα του 1ου φύλλου)
 export interface PvOpts { sample: number }
@@ -184,7 +186,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
   const cut = (t: Tab[]): Tab[] => (pv ? t.map(x => ({ ...x, rows: cutSample(x.rows, pv.sample) })) : t);
   const t0 = pv ? tabs(split ? groups[0] : null) : null;
   const counts = t0 ? t0.map(x => ({ shown: cutSample(x.rows, pv!.sample).length, total: x.rows.length })) : undefined;
-  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo, mv)); names.push(sheet); }
+  if (!split) { layout.push(...await fillSheet(wb, sheet, s, r, cut(tabs(null)), d, '', warnings, vo, mv, o.headId)); names.push(sheet); }
   else {
     // πρώτα τα αντίγραφα (από το άδειο πρότυπο), μετά συμπλήρωση· το πρώτο φύλλο του προτύπου παίρνει την πρώτη ομάδα
     const want = groups.map(g => (o.prefix ? o.prefix.slice(0, Math.max(1, 30 - g.short.length)).trim() + ' ' + g.short : g.label) || 'ΦΥΛΛΟ');
@@ -192,7 +194,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     const uniq = want.map(w => { let x = sheetSafe(w), i = 2; while (used.has(x)) x = sheetSafe(w.slice(0, 27) + ' ' + i++); used.add(x); return x; });
     for (let i = 1; i < groups.length; i++) await wb.cloneSheet(sheet, uniq[i]);
     const first = wb.renameSheet(sheet, uniq[0]);
-    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo, mv); if (!i) layout.push(...l); }
+    for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo, mv, o.headId); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
   const name = repFileName(r, d, s.settings);
@@ -201,7 +203,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές
 // nohead: χωρίς γραμμή επικεφαλίδων στο έντυπο (η γραμμή μένει στο πρότυπο μέχρι να γεμίσει και μετά κρύβεται ή αδειάζει, δες noHead)
 interface Tab { day?: ISODate; kind: RepKind; head: number; cols: RepCol[]; rows: Row[]; nohead?: boolean }
-async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[], mv: (id: string) => number | null): Promise<LayoutSheet[]> {
+async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, tabs: Tab[], d: ISODate, group: string, warnings: string[], vo: ValueOut[], mv: (id: string) => number | null, headId?: string): Promise<LayoutSheet[]> {
   const ws = await wb.sheet(sheet); const tagScan = await wb.values(sheet, TAG_ROWS, SCAN_COLS); const scan = tagScan.slice(0, SCAN_ROWS);
   const colsOf = tabs.map(t => t.cols.filter(c => c.c >= 1 && fieldOf(t.kind, c.f)));
   // θέσεις πινάκων (Φάση 3, Report.bands): ο καθένας με το id του (ο 1ος 'main') και οι πίνακες τιμών με το δικό τους. Χωρίς bands (ή με την
@@ -384,13 +386,22 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   }
   for (const u of badB) warnings.push('Στον κενό πίνακα υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου, γραμμή πίνακα τιμών ούτε μέτρηση. Μένει όπως είναι.');
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
+  // επικεφαλίδα που σχεδίασες (Ρυθμίσεις › Επικεφαλίδες εγγράφων): παίρνει τη θέση της σημερινής κεφαλίδας και του τόπου/ημερομηνίας
+  const hd = headFor(s.settings, 'reports', headId); let hdone: HeadDone | null = null;
+  if (hd) {
+    const dateText = (parts.date[0] && String(ws.get(parts.date[0]) ?? '')) || (s.settings.place ? s.settings.place + ', ' : '') + hkDate(d);
+    hdone = await applyHead(wb, ws, s, hd, { cols: Math.max(vc2, ws.lastCol()), old: [...parts.head, ...parts.date], dateText });
+    const k = hdone;
+    parts.head = k.head; parts.date = k.date; parts.title = parts.title.map(x => x.replace(/\d+$/, n => String(k.shift(+n)))); parts.names = parts.names.map(x => x.replace(/\d+$/, n => String(k.shift(+n))));
+    end = k.shift(end);
+  }
   const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
-  const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names }], s, 'reports', r.sigs, warnings, () => r.layout);
+  const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names, designed: !!hd }], s, 'reports', r.sigs, warnings, () => r.layout);
   // στην εκτύπωση μικραίνει ή μεγαλώνει μόνο ο πίνακας· κεφαλίδα, ημερομηνία, τίτλος και υπογραφές μένουν στο μέγεθός τους
   wb.markFixed(ws.name, layout[0]?.blocks || []);
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα (με έναν πίνακα: με πολλούς θα έβγαιναν του πρώτου πάνω από τους άλλους)
   // και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
-  if (tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length) && !tabs[0].nohead) wb.setPrintTitles(sheet, head, data - 1);
+  if (tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length) && !tabs[0].nohead) wb.setPrintTitles(sheet, hdone ? hdone.shift(head) : head, (hdone ? hdone.shift(data) : data) - 1);
   ws.setPrintFit(false);
   return layout;
 }

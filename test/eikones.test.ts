@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { addImage, copyImages, fitSize, imageFile, readImage, type Img } from '../src/main/eikones';
+import { addImage, copyImages, fitSize, imageFile, imageForOutput, readImage, type Img } from '../src/main/eikones';
 
 // ψεύτικο nativeImage: το μέγεθος και ό,τι γράφτηκε
-const fake = (w: number, h: number, log: string[] = []) => ({ createFromPath: (p: string): Img => {
+const fake = (w: number, h: number, log: string[] = []) => ({ createFromBitmap: (b: Buffer, o: { width: number; height: number }): Img => ({ isEmpty: () => false, getSize: () => ({ width: o.width, height: o.height }), resize: () => { throw 0; }, toPNG: () => Buffer.from('GRAY' + [...b].join(',')), toJPEG: () => Buffer.alloc(0), toBitmap: () => b }),
+  createFromPath: (p: string): Img => {
   const mk = (w: number, h: number): Img => ({ isEmpty: () => p.includes('bad'), getSize: () => ({ width: w, height: h }), resize: o => { log.push('resize ' + o.width + 'x' + o.height); return mk(o.width, o.height); },
-    toPNG: () => Buffer.from('PNG' + w + 'x' + h), toJPEG: q => Buffer.from('JPG' + q + 'x' + w + 'x' + h) });
+    toBitmap: () => Buffer.from([10, 20, 200, 255, 0, 0, 0, 128]), toPNG: () => Buffer.from('PNG' + w + 'x' + h), toJPEG: q => Buffer.from('JPG' + q + 'x' + w + 'x' + h) });
   return mk(w, h);
 } });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'eik-'));
@@ -27,6 +28,14 @@ describe('εικόνες επικεφαλίδων', () => {
     expect(addImage(d, '/y/other.png', fake(1200, 900))).toMatchObject({ id: a.id });
     const j = addImage(d, '/x/f.jpeg', fake(100, 80, log)); expect(j).toMatchObject({ ok: true, ext: 'jpg', w: 100, h: 80 }); expect(log).toHaveLength(1);
     if (j.ok) expect(fs.readFileSync(path.join(d, 'eikones', j.id + '.jpg'), 'utf8')).toBe('JPG85x100x80');
+  });
+  it('ασπρόμαυρη εκδοχή: φτιάχνεται μία φορά (BGRA → φωτεινότητα, το alpha μένει)', () => {
+    const d = tmp(); const a = addImage(d, '/x/a.png', fake(2, 1)); if (!a.ok) throw 0;
+    const g = imageForOutput(d, a.id, true)!; expect(g.file.endsWith(a.id + '-g.png')).toBe(true);
+    const l = Math.round(0.114 * 10 + 0.587 * 20 + 0.299 * 200);
+    expect(fs.readFileSync(g.file, 'utf8')).toBe('GRAY' + [l, l, l, 255, 0, 0, 0, 128].join(','));
+    expect(imageForOutput(d, a.id, false)!.file.endsWith(a.id + '.png')).toBe(true);
+    fs.rmSync(g.file); expect(imageForOutput(d, a.id, true)!.file.endsWith(a.id + '.png')).toBe(true);   // λείπει η ασπρόμαυρη: η κανονική
   });
   it('άκυρα: λάθος τύπος, άδεια εικόνα', () => {
     const d = tmp();

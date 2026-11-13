@@ -34,7 +34,7 @@ export const PRESETS: { id: PresetId; name: string; help: string }[] = [
   { id: 'imgMid', name: 'Εικόνα στη μέση', help: 'Εικόνα στη μέση, οι 3 γραμμές δεξιά, η ημερομηνία αριστερά.' },
   { id: 'empty', name: 'Άδεια', help: 'Τίποτα, να τη φτιάξεις εσύ.' }
 ];
-const lines = (st: Pick<Settings, 'unit'>, al: HeadAl): HeadItem[] => st.unit.map(t => ({ k: 'text', t, al }));
+const lines = (st: Pick<Settings, 'unit'>, al: HeadAl): HeadItem[] => st.unit.map(t => ({ k: 'text', t, al, b: true, u: true }));   // έντονες και υπογραμμισμένες, όπως οι γραμμές της μονάδας στα Excel
 const IMG = (al: HeadAl): HeadItem => ({ k: 'img', id: '', h: IMG_H.def, al });
 // Τα 3 πεδία της «Κεφαλίδας εντύπων» (settings.unit) γίνονται οι 3 γραμμές· το hdLeft (παλιά διάταξη) φέρνει την κεφαλίδα αριστερά
 export function presetZones(id: PresetId, st: Unit): HeadZones {
@@ -90,6 +90,14 @@ export function toggleUse(st: Heads & Pick<Settings, 'headUse'>, form: SigForm, 
 export function setDefault(st: Heads & Pick<Settings, 'headUse'>, form: SigForm, id: string): Settings['headUse'] {
   const u = headUseOf(st, form); if (!u.on.includes(id)) return st.headUse;
   return withUse(st, form, { on: u.on, def: id });
+}
+
+// Ποια επικεφαλίδα γράφεται στο έγγραφο: η δοσμένη (headId, για μία φορά) ή η αρχική του εγγράφου. null = ο σημερινός κώδικας, όπως
+// γράφεται σήμερα: «Όπως σήμερα», άγνωστη επικεφαλίδα, ή σχέδιο ίδιο με την «Όπως σήμερα» (ίδιο αποτέλεσμα)
+export function headFor(st: Heads & Unit & Pick<Settings, 'headUse'>, form: SigForm, headId?: string | null): DocHead | null {
+  const id = headId && (headId === TODAY || st.heads?.some(h => h.id === headId)) ? headId : headUseOf(st, form).def;
+  const h = id === TODAY ? undefined : st.heads?.find(x => x.id === id);
+  return !h || JSON.stringify(h.z) === JSON.stringify(presetZones('today', st)) ? null : h;
 }
 
 // ——— νέα, αντίγραφο, όνομα, σβήσιμο ———

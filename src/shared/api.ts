@@ -14,7 +14,7 @@ import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding,
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
 // print: προεπισκόπηση εκτύπωσης αντί για Excel · sigs: υπογραφές μόνο για αυτή τη φορά (Ρυθμίσεις › Υπογραφές για όλες)
-export interface ExportOpts { open?: boolean; ack?: boolean; print?: boolean; sigs?: Sig[] }
+export interface ExportOpts { open?: boolean; ack?: boolean; print?: boolean; sigs?: Sig[]; headId?: string }
 // Φάκελος αρχείων στις Ρυθμίσεις: ο γενικός, ενός εντύπου ή των νέων Excel ενός είδους
 export type DirTarget = 'output' | { form: FormKind } | { kind: ListKind };
 export interface Boot { state: AppState; audit: AuditEntry[]; dataDir: string; outputDir: string; templatesDir: string; version: string; templates: TemplateInfo[]; lastUsb: string | null; seenUntil: number; sessionStart: number; dataFallback?: boolean }   // dataFallback: τα δεδομένα είναι στο προφίλ, όχι δίπλα στο exe
@@ -72,7 +72,7 @@ export interface TplInspect { sheets: string[]; sheet: string; head: number; dat
 // counts: ανά πίνακα, πόσες γραμμές φαίνονται από πόσες (μόνο όταν ζητήθηκε δείγμα)
 export interface RepPreview { html: string; css: string; pages: number; counts?: { shown: number; total: number }[] }
 // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα
-export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout } | { report: Report; file?: string; build?: BuildOpts; ids: (number | string)[]; date: ISODate };
+export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout; headId?: string } | { report: Report; file?: string; build?: BuildOpts; ids: (number | string)[]; date: ISODate; headId?: string };
 export interface LayoutPv { css: string; sheets: (LayoutSheet & { html: string; pages: number })[]; warnings: string[] }
 export type { Block };
 export interface TplFile { exists: boolean; mtime: number }

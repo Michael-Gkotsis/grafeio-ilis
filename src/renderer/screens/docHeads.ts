@@ -261,7 +261,7 @@ export function HeadsSection() {
   return html`<${Card} title=${html`<span style=${{ display: 'inline-flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>Επικεφαλίδες εγγράφων <${Badge} tone="ok">Νέο<//></span>`}>
     <${Tabs} value=${tab} onChange=${setTab} items=${[{ value: 'design', label: 'Σχέδιο' }, { value: 'where', label: 'Πού μπαίνει' }]}/>
     <div style=${{ marginTop: '14px' }}>
-      <${Alert} tone="warn"><span>Προς το παρόν σχεδιάζεις και αποθηκεύεις τις επικεφαλίδες· τα αρχεία Excel και Word δεν αλλάζουν ακόμα και βγαίνουν όπως πάντα.</span><//>
+      <${Alert} tone="warn"><span>Τα αρχεία Excel ακολουθούν πια την επικεφαλίδα που έχεις διαλέξει για κάθε έγγραφο. Το Word (Ημερήσια Διαταγή) έρχεται στη συνέχεια και προς το παρόν βγαίνει όπως πάντα.</span><//>
     </div>
     <div style=${{ marginTop: '14px' }}>${tab === 'design' ? html`<${DesignTab} sel=${cur} setSel=${setSel}/>` : html`<${WhereTab}/>`}</div>
   <//>`;

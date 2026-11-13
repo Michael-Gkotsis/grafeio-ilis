@@ -3,6 +3,8 @@
 // Δεν γράφουμε ποτέ πάνω σε κελί με τύπο. Για λίστες που ξεπερνούν τις γραμμές του εντύπου,
 // αντιγράφουμε μια γραμμή-πρότυπο και σπρώχνουμε ό,τι είναι από κάτω (υπογραφές κ.λπ.).
 import JSZip from 'jszip';
+import crypto from 'crypto';
+import { sheetRelsPath, resolveTarget, EMU_PX } from './xlDrawings';
 import { upper } from '../shared/text';
 import { digitPx, fitText, minSize, textPx, type Box, type Fit, type FontSpec } from './textfit';
 const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει μια στήλη πίνακα για να χωρά ό,τι γράφτηκε (fitSheet)
@@ -291,6 +293,21 @@ export class Sheet {
     this.head = this.head.replace(/(<sheetFormatPr\b|<cols>|<sheetData\b)/, m => pane + m);
     return this;
   }
+  // Μπήκαν n γραμμές πάνω από τη γραμμή after+1: η παγωμένη περιοχή (αν έχει γραμμές πάνω από εκεί) κατεβαίνει μαζί τους
+  shiftPane(after: number, n: number): this {
+    this.head = this.head.replace(/<pane\b[^>]*>/, p => {
+      const y = Number(attr(p, 'ySplit') || 0); if (!y || after >= y) return p;
+      return setAttr(p, 'ySplit', String(y + n)).replace(/topLeftCell="([A-Z]+)(\d+)"/, (_m, c: string, r: string) => `topLeftCell="${c}${Number(r) + n}"`);
+    });
+    return this;
+  }
+  // Σχέδιο (εικόνες) του φύλλου: το id της σχέσης του, ή null. Το ξαναγράφει ο Workbook.save όταν προστεθούν εικόνες (addPicture)
+  drawingRid(): string | null { return /<drawing\s[^>]*r:id="([^"]+)"/.exec(this.tail)?.[1] ?? null; }
+  addDrawing(rid: string): this {
+    if (!/<worksheet\b[^>]*\sxmlns:r=/.test(this.head)) this.head = this.head.replace(/<worksheet\b/, '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"');
+    this.tail = tailInsert(this.tail, 'drawing', `<drawing r:id="${rid}"/>`);
+    return this;
+  }
   // Πλάτη στηλών για καινούργιο φύλλο (μόνο αν το φύλλο δεν έχει ήδη δικά του)
   setColWidths(widths: Record<number, number>): this {
     if (/<cols\b/.test(this.head)) return this;
@@ -504,6 +521,8 @@ function withAlign(x: string, set: Record<string, string>, fresh: Record<string,
   return setAttr(open.slice(0, -1), 'applyAlignment', '1') + '>' + (al ? body.replace(al, fixed) : fixed + body) + '</xf>';
 }
 
+// Εικόνα σε φύλλο: oneCellAnchor στο κελί (col0, row0 από 0) με μετατόπιση σε EMU και μέγεθος σε px
+export interface PicIn { bytes: Uint8Array; ext: 'png' | 'jpg'; col0: number; colOff: number; row0: number; rowOff: number; w: number; h: number; name?: string }
 export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
@@ -545,6 +564,9 @@ export class Workbook {
   }
   // Γραμμές που μπήκαν σε φύλλα: οι τύποι των άλλων φύλλων που δείχνουν εκεί ακολουθούν (και όσων φορτωθούν αργότερα)
   private moved: { sheet: string; after: number; n: number }[] = [];
+  // Εικόνες που θα γραφτούν στην αποθήκευση (xl/drawings): η θέση είναι η τελική, οπότε προστίθενται αφού μπουν όλες οι γραμμές
+  private pics: { sheet: Sheet; p: PicIn; rid: string | null }[] = [];
+  addPicture(ws: Sheet, p: PicIn) { this.pics.push({ sheet: ws, p, rid: null }); }
   shiftForeign(from: Sheet, after: number, n: number) {
     this.moved.push({ sheet: from.name, after, n });
     for (const s of this.sheets.values()) if (s !== from) s.shiftForeign(from.name, after, n);
@@ -1226,6 +1248,57 @@ export class Workbook {
   limitTables(sheet: Sheet, last: number) { this.tableLimits.push({ path: sheet.path, last }); }
   shiftTables(sheet: Sheet, after: number, n: number) { this.tableEdits.push({ path: sheet.path, after, n }); }
 
+  // Α: τα φύλλα που παίρνουν εικόνες και δεν έχουν σχέδιο παίρνουν <drawing r:id> (πριν γραφεί το XML τους)
+  private async planPictures() {
+    for (const x of this.pics) {
+      const had = x.sheet.drawingRid(); if (had) { x.rid = had; continue; }
+      const mate = this.pics.find(y => y.sheet === x.sheet && y.rid); if (mate) { x.rid = mate.rid; continue; }
+      const rel = await this.zip.file(sheetRelsPath(x.sheet.path))?.async('string') || '';
+      const used = [...rel.matchAll(/\sId="rId(\d+)"/g)].map(m => +m[1]);
+      x.rid = 'rId' + (Math.max(0, ...used) + 1); x.sheet.addDrawing(x.rid);
+    }
+  }
+  // Β: σχέσεις, σχέδιο, αρχεία εικόνων και τύποι περιεχομένου (μετά τις μετακινήσεις γραμμών των υπαρχόντων σχεδίων)
+  private async writePictures() {
+    if (!this.pics.length) return;
+    const NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const bySheet = new Map<Sheet, typeof this.pics>(); for (const x of this.pics) bySheet.set(x.sheet, [...(bySheet.get(x.sheet) || []), x]);
+    const media = new Map<string, string>();   // sha1 → διαδρομή (ίδια εικόνα, ένα αρχείο)
+    const freeNum = (re: RegExp) => { let n = 1; this.zip.forEach(p => { const m = re.exec(p); if (m) n = Math.max(n, +m[1] + 1); }); return n; };
+    let ct = await this.zip.file('[Content_Types].xml')!.async('string'); const types: string[] = [];
+    for (const [sheet, list] of bySheet) {
+      const relP = sheetRelsPath(sheet.path); let rel = await this.zip.file(relP)?.async('string') || `<Relationships xmlns="${NS}"></Relationships>`;
+      const rid = list[0].rid!; let dpath: string;
+      const have = new RegExp(`<Relationship\\b[^>]*\\sId="${rid}"[^>]*>`).exec(rel)?.[0];
+      if (have) dpath = resolveTarget(sheet.path, attr(have, 'Target') || '');
+      else {
+        dpath = 'xl/drawings/drawing' + freeNum(/^xl\/drawings\/drawing(\d+)\.xml$/) + '.xml';
+        rel = rel.replace('</Relationships>', `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/${dpath.split('/').pop()}"/></Relationships>`);
+        this.zip.file(relP, rel); types.push(`<Override PartName="/${dpath}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+      }
+      let dx = await this.zip.file(dpath)?.async('string')
+        || `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>`;
+      const drP = sheetRelsPath(dpath); let dr = await this.zip.file(drP)?.async('string') || `<Relationships xmlns="${NS}"></Relationships>`;
+      let rn = Math.max(0, ...[...dr.matchAll(/\sId="rId(\d+)"/g)].map(m => +m[1])); let idn = Math.max(1, ...[...dx.matchAll(/<(?:\w+:)?cNvPr\b[^>]*\sid="(\d+)"/g)].map(m => +m[1]));
+      let anchors = '';
+      for (const { p } of list) {
+        const sha = crypto.createHash('sha1').update(p.bytes).digest('hex'); let mp = media.get(sha);
+        if (!mp) { mp = 'xl/media/image' + freeNum(/^xl\/media\/image(\d+)\.\w+$/) + '.' + (p.ext === 'png' ? 'png' : 'jpeg'); this.zip.file(mp, p.bytes); media.set(sha, mp); }
+        const id = 'rId' + ++rn; dr = dr.replace('</Relationships>', `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mp.split('/').pop()}"/></Relationships>`);
+        const ext = p.ext === 'png' ? 'png' : 'jpeg'; if (!ct.includes(`Extension="${ext}"`) && !types.some(t => t.includes(`Extension="${ext}"`))) types.push(`<Default Extension="${ext}" ContentType="image/${ext}"/>`);
+        const cx = Math.round(p.w * EMU_PX), cy = Math.round(p.h * EMU_PX);
+        anchors += `<xdr:oneCellAnchor xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
+          + `<xdr:from><xdr:col>${p.col0}</xdr:col><xdr:colOff>${Math.round(p.colOff)}</xdr:colOff><xdr:row>${p.row0}</xdr:row><xdr:rowOff>${Math.round(p.rowOff)}</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/>`
+          + `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${++idn}" name="${(p.name || 'Εικόνα ' + idn).replace(/[<>&"]/g, '')}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`
+          + `<xdr:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+      }
+      dx = dx.replace(/<\/(?:\w+:)?wsDr>\s*$/, anchors + '$&');
+      this.zip.file(dpath, dx); this.zip.file(drP, dr);
+    }
+    if (types.length) ct = ct.replace('</Types>', types.join('') + '</Types>');
+    this.zip.file('[Content_Types].xml', ct);
+    this.pics = [];
+  }
   async save(): Promise<Buffer> {
     // φύλλα που δεν άνοιξαν αλλά έχουν τύπους προς φύλλο όπου μπήκαν γραμμές
     if (this.moved.length) for (const e of this.names) {
@@ -1235,6 +1308,7 @@ export class Workbook {
       if (this.moved.some(x => plain.includes(x.sheet + '!') || plain.includes(x.sheet.replace(/'/g, "''") + "'!"))) await this.sheet(e.name);
     }
     for (const s of this.sheets.values()) if (s.wrote.size) { await this.fitSheet(s, s.wrote); s.wrote.clear(); }
+    await this.planPictures();
     for (const [path, s] of this.sheets) this.zip.file(path, s.toXml());
     if (this.styles?.dirty) this.zip.file('xl/styles.xml', this.styles.xml);
     // πίνακες: όσοι περιέχουν τη γραμμή μεγαλώνουν, όσοι είναι πιο κάτω κατεβαίνουν ολόκληροι
@@ -1266,6 +1340,7 @@ export class Workbook {
         this.zip.file(tp, x);
       }
     }
+    await this.writePictures();
     for (const lim of this.tableLimits) {
       const rel = this.zip.file(lim.path.replace(/([^/]+)$/, '_rels/$1.rels')); if (!rel) continue;
       for (const m of (await rel.async('string')).matchAll(/Target="(?:\.\.\/|\/xl\/)tables\/([^"]+)"/g)) {

@@ -58,6 +58,7 @@ const ROOT = DEV ? process.cwd() : process.platform === 'win32' ? path.dirname(p
 // Όπου υπάρχει ήδη η βάση (πρώτα δίπλα στο exe): μια στιγμιαία αποτυχία του ελέγχου εγγραφής δεν χωρίζει πια τα δεδομένα στα δύο
 const DATA_AT = dataDirOf(path.join(ROOT, 'data'), path.join(app.getPath('userData'), 'data'), writableDir);
 const DATA = DATA_AT.dir;
+process.env.GRAFEIO_DATA = DATA;   // για τα Excel με εικόνες επικεφαλίδας (eikones.ts), και στο νήμα των Excel
 const BACKUPS = path.join(DATA, 'backups');
 const T0 = Date.now();
 // Διακόπτης GPU (έρευνα §5.6): σε παλιές κάρτες γραφικών με Windows 7 η επιτάχυνση μπορεί να κοστίζει μνήμη ή να δίνει μαύρη οθόνη.
@@ -217,19 +218,19 @@ const X = {
 // Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
 type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons' | 'imer';
 const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons', imer: 'imer' };
-async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null, imer?: ImerReq): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null, imer?: ImerReq, headId?: string | null): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
   const m = what === 'check' ? await off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s)
     : what === 'lists' ? await excel().rosterLists(s, date) : what === 'rosterPrint' ? await excel().rosterPrint(s, date) : what === 'rosterPreview' ? await excel().rosterPreview(s, date)
     : what === 'cadre' ? await excel().cadreLists(s, date) : what === 'imer' ? await excel().imerBook(s, imer!) : await excel().weaponsBook(s, date);
   const form = MADE_FORM[what];
-  const r = await off('signMade', [m.data, form, m.marks, sigs], () => signMade(m.data, s, form, m.marks, sigs), s);
+  const r = await off('signMade', [m.data, form, m.marks, sigs, headId, date], () => signMade(m.data, s, form, m.marks, sigs, headId, date), s);
   return { name: m.name, ...r };
 }
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
 // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
-async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
+async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null, headId?: string): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
   const form = formOf(kind, s);
-  if (kind === 'check') return made('check', date, s, sigs);
+  if (kind === 'check') return made('check', date, s, sigs, undefined, headId);
   const b = formBinding(form);
   const buf = await fs.promises.readFile(formTpl(form as Exclude<FormKind, 'check'>));
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
@@ -264,7 +265,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
     if (hasErrors(checks)) return { ok: false, error: 'Ο προέλεγχος βρήκε λάθη που πρέπει να διορθωθούν πρώτα', checks };
     if (checks.length && !opts.ack) return { ok: false, error: 'Θέλει επιβεβαίωση', checks, needAck: true };
     const { r, out } = await serial(async () => {
-      const r = await produce(kind, date, s, opts.sigs);
+      const r = await produce(kind, date, s, opts.sigs, opts.headId);
       const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
       // οι υπογραφές αυτής της φοράς μένουν και στις αυτόματες ενημερώσεις του ίδιου αρχείου
       rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}), ...(opts.sigs ? { sigs: opts.sigs } : {}) });
@@ -1233,13 +1234,13 @@ else {
           const bo = q.build ? forBuild(q.build, q.report) : null;
           const b = bo ? await buildTemplate(bo, q.report.kind, xlLook(s.settings)) : null;
           const buf = b ? b.data : await tplBuf(q.file || ''); const rep = b ? withBuilt(q.report, b, bo!) : savedSigs(q.report, q.file || '');
-          out = await off('fillReport', [buf, rep, q.ids.slice(0, 120), q.date], () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date), s);
+          out = await off('fillReport', [buf, rep, q.ids.slice(0, 120), q.date, { headId: q.headId }], () => fillReport(buf, s, rep, q.ids.slice(0, 120), q.date, { headId: q.headId }), s);
         }
         else {
           const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
           const f = q.form;
-          out = f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check' ? await produce(f, q.date, s2, q.sigs)
-            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs);
+          out = f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check' ? await produce(f, q.date, s2, q.sigs, q.headId)
+            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs, undefined, q.headId);
         }
         // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
         const ls = (out.layout || []).filter((l, i, a) => a.findIndex(x => x.key === l.key) === i); const wb = await Workbook.open(out.data);
