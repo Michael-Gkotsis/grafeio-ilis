@@ -13,6 +13,7 @@ import { requestLeave } from '../../../shared/lib/pending';
 import { useNav, useStore } from '../../../shared/model';
 import { PageHeader, Tabs } from '../../../shared/ui';
 import { SET_GROUPS, groupOf, sectionLabel, sectionOf } from '../model/screenView';
+import { useSettingsSearch } from '../model/useSettingsSearch';
 import { AppearanceCard } from './sections/AppearanceCard';
 import { BackupsCard } from './sections/BackupsCard';
 import { BrandCard } from './sections/BrandCard';
@@ -28,6 +29,7 @@ import { SigsCard } from './sections/SigsCard';
 import { SourcesView } from './sections/SourcesView';
 import { templatesTab } from './sections/templatesTab';
 import { XlLookCard } from './sections/XlLookCard';
+import { SettingsResults, SettingsSearchBox } from './SettingsSearch';
 
 /** The body of one section; an unknown key is already `unit`, and the last branch is «Πρότυπα εφαρμογής». */
 function sectionBody(tab: string, templates: ReactNode) {
@@ -79,13 +81,19 @@ export function TemplatesScreen() {
   const group = groupOf(tab);
   // built on every render, used or not, exactly as before (the elements are only created, never mounted)
   const templates = templatesTab(boot);
-  const open = (section: string) => requestLeave(() => nav.set({ tab: section }));
+  const search = useSettingsSearch(tab, nav.params.dsub);
+  const open = (section: string) => requestLeave(() => {
+      search.setQ('');
+      nav.set({ tab: section });
+    });
   return (
     <div>
       <PageHeader
         title="Ρυθμίσεις"
         sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."
-      />
+      >
+        <SettingsSearchBox s={search} />
+      </PageHeader>
       <div className="settings__grid">
         <nav className="settings__nav" aria-label="Ρυθμίσεις">
           {SET_GROUPS.map((g) => (
@@ -94,23 +102,29 @@ export function TemplatesScreen() {
               type="button"
               className="settings__navitem"
               aria-current={group.key === g.key ? 'page' : undefined}
-              onClick={() => group.key !== g.key && open(g.sections[0] as string)}
+              onClick={() => (group.key !== g.key ? open(g.sections[0] as string) : search.setQ(''))}
             >
               {g.label}
             </button>
           ))}
         </nav>
-        <div className="settings__body">
-          {group.sections.length > 1 && (
-            <div className="settings__tabs">
-              <Tabs
-                value={tab}
-                onChange={(section) => tab !== section && open(section)}
-                items={group.sections.map((value) => ({ value, label: sectionLabel(value) }))}
-              />
-            </div>
+        <div className="settings__body" ref={search.bodyRef}>
+          {search.on ? (
+            <SettingsResults s={search} />
+          ) : (
+            <>
+              {group.sections.length > 1 && (
+                <div className="settings__tabs">
+                  <Tabs
+                    value={tab}
+                    onChange={(section) => tab !== section && open(section)}
+                    items={group.sections.map((value) => ({ value, label: sectionLabel(value) }))}
+                  />
+                </div>
+              )}
+              {sectionBody(tab, templates)}
+            </>
           )}
-          {sectionBody(tab, templates)}
         </div>
       </div>
     </div>
