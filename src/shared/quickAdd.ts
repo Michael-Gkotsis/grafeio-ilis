@@ -22,8 +22,9 @@ const asmOf = (v: string) => v.replace(/\s/g, '');
 // «3», «Θ3», «3ος» → 3
 const roomOf = (v: string) => { const m = /\d+/.exec(v); return m && +m[0] > 0 ? +m[0] : null; };
 
-export function toNewPerson(r: QaRow, essos: string): NewPerson {
-  return { rank: clean(r.rank), spec: clean(r.spec), last: clean(r.last), first: clean(r.first), father: clean(r.father), asm: asmOf(r.asm), phone: asmOf(r.phone),
+// extra: λειτουργία μονάδας, ημερομηνία εισαγωγής και «Ήρθε από» για όλους
+export function toNewPerson(r: QaRow, essos: string, extra?: { inOn: string; came: string; sub?: string }): NewPerson {
+  return { ...(extra ? { inOn: extra.inOn, ...(clean(extra.came) ? { came: clean(extra.came) } : {}), ...(clean(extra.sub || '') ? { sub: clean(extra.sub!) } : {}) } : {}), rank: clean(r.rank), spec: clean(r.spec), last: clean(r.last), first: clean(r.first), father: clean(r.father), asm: asmOf(r.asm), phone: asmOf(r.phone),
     room: roomOf(r.room), si: clean(r.si), post: null, role: null, essos: clean(essos), attached: false, notes: '' };
 }
 

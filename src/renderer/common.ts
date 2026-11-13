@@ -14,7 +14,7 @@ import { outTimesTxt, weekRow } from '../shared/returns';
 import { useNowMin } from './clock';
 import { TYPES, TYPE_KEYS, SHIFT_EVERY, MAX_SHIFT_OWN, dutyStartOf, effects, hoursTxt, phaseBase, plainName, shiftList, shiftReport, shiftSlots, shortName, unitOf, type Person, type Rules, type Settings, type ShiftDef, type ShiftOwn, type Status } from '../shared/domain';
 import { cadreStatusOn } from '../shared/cadre';
-import { MED_LIKE, badgeLbl, badgeStatuses, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
+import { itemKey, listOf, MED_LIKE, badgeLbl, badgeStatuses, rankTxt, statusLbl, type UserLists } from '../shared/ranks';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseDmy, today as todayFn, MONTHS, type ISODate } from '../shared/dates';
 import { normTime } from '../shared/hours';
 import type { ExportKind } from '../shared/api';
@@ -85,6 +85,15 @@ export function ChoiceField({ id, label, value, options, onChange, placeholder, 
     ${typing && html`<input className="ui-input" style=${{ marginTop: '6px' }} aria-label=${label + ' με το χέρι'} placeholder=${placeholder || ''} value=${value || ''} autoFocus onChange=${(e: any) => onChange(e.target.value)}/>`}
     ${typing && otherHelp && html`<span className="field__help">${otherHelp}</span>`}
   </div>`;
+}
+// Λόχος / Ίλη (λειτουργία μονάδας): dropdown από τη λίστα των Ρυθμίσεων, κενό επιτρέπεται· χωρίς λίστα, σύνδεσμος για να τη φτιάξεις
+export function SubField({ id, value, onChange, label = 'Λόχος / Ίλη' }: P) {
+  const { state } = useStore(); const nav = useNav();
+  const names = listOf(state.settings.lists, 'subUnits');
+  const opts = value && !names.some(n => itemKey(n) === itemKey(value)) ? [...names, value] : names;
+  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
+    ${opts.length ? html`<${Select} id=${id} className="ui-input" value=${value || ''} onChange=${(e: any) => onChange(e.target.value)}><option value="">—</option>${opts.map((o: string) => html`<option key=${o} value=${o}>${o}</option>`)}<//>`
+      : html`<span className="field__help">Η λίστα είναι κενή. <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'lists', list: 'subUnits' })}>Φτιάξ' την στις Ρυθμίσεις › Λίστες<//></span>`}</div>`;
 }
 // open: χωρίς λήξη (μόνο το «από»)
 export function DateRangeField({ from, to, onChange, open }: P) {

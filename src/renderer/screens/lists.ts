@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Card, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
+import { isUnit } from '../../shared/mode';
 import { requestLeave } from '../pending';
 import { collator, normGreek, upper } from '../../shared/text';
 import { CADRE_ABS, TYPES, type Person, type TypeKey } from '../../shared/domain';
@@ -16,8 +17,9 @@ import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed', 'subUnits'];
 const HELP = (): Record<ListId, string> => ({
+  subUnits: 'Μόνο στη λειτουργία μονάδας. Στο πεδίο «Λόχος / Ίλη» του στρατιώτη (νέος στρατιώτης, Γρήγορη εισαγωγή, καρτέλα) και στο Δυναμολόγιο, όπου υπάρχει στήλη και φίλτρο. Γράψε τα ονόματα όπως τα θες, π.χ. 1ος ΛΟΧΟΣ, 4η ΙΛΗ. Με τα βέλη αλλάζει η σειρά, με το «Μετονομασία» αλλάζει το όνομα και στους στρατιώτες που το έχουν. Όποιο το έχει κάποιος δεν σβήνεται, μόνο κρύβεται.',
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ' + HK() + ' μετρά.',
   cadreRanks: 'Στη φόρμα «Νέο στέλεχος». Ο βαθμός διαλέγει μόνος του τη γραμμή της ' + HK() + ' (αλλάζει και στη φόρμα).',
   origins: 'Στο πεδίο «Προέλευση» του στρατιώτη και του στελέχους, και στο dropdown «Προέλευση» του Δυναμολογίου όταν έχει τέτοια στήλη. Στα έντυπα γράφεται μπροστά από τον βαθμό (π.χ. ΕΠΟΠ ΛΧΙΑΣ). ΕΠΟΠ και ΟΒΑ κάνουν υπηρεσίες μόνο με το χέρι, ως το όριο του μήνα, και ως στρατιώτες μετρούν στη δική τους γραμμή της ' + HK() + '.',
@@ -60,9 +62,10 @@ const optLbl = (p: Pick, v: string) => p.opts.find(o => o[0] === v)?.[1] || v;
 
 export function ListsCard() {
   const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
-  const [id, setId] = useState<ListId>('soldierRanks');
+  const [id, setId] = useState<ListId>(() => (IDS.includes(nav.params.list) ? nav.params.list : 'soldierRanks'));
+  const [ren, setRen] = useState<{ key: string; name: string } | null>(null);   // Λόχοι / Ίλες: μετονομασία σε εξέλιξη
   // η λίστα «Σ.Ι. άοπλων» έγινε ο πίνακας Σ.Ι. (κάρτα «Σ.Ι.»): φαίνεται μόνο σε όποιον έχει ήδη αλλάξει κάτι εκεί
-  const ids = IDS.filter(v => v !== 'siUnarmed' || !!(state.settings.lists?.siUnarmed?.add?.length || state.settings.lists?.siUnarmed?.hide?.length));
+  const ids = IDS.filter(v => (v !== 'subUnits' || isUnit(state.settings)) && (v !== 'siUnarmed' || !!(state.settings.lists?.siUnarmed?.add?.length || state.settings.lists?.siUnarmed?.hide?.length)));
   const [name, setName] = useState(''); const [choice, setChoice] = useState<string | null>(null);
   const [acc, setAcc] = useState(''); const [max, setMax] = useState(''); const [code, setCode] = useState(''); const [warn, setWarn] = useState(false); const [note, setNote] = useState(false); const [nBadge, setNBadge] = useState(false); const [nXl, setNXl] = useState(false); const [back, setBack] = useState(''); const [ltext, setLtext] = useState(''); const [lduty, setLduty] = useState(false); const [lout, setLout] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -84,6 +87,7 @@ export function ListsCard() {
     else if (id === 'punKinds' || id === 'leaveKinds' || id === 'medKinds') { const ok = (t: TypeKey) => (id === 'punKinds' ? t === 'PUN' : id === 'leaveKinds' ? t === 'LEAVE' : MED_LIKE.includes(t)); state.statuses.forEach(x => { if (ok(x.type)) add(x.kind || '', x.pid); }); }
     else if (id === 'weaponTypes') state.people.forEach(p => add(p.wtype, p.id));
     else if (id === 'weaponOut') (state.weaponLog || []).forEach(w => add(w.reason, w.pid));
+    else if (id === 'subUnits') state.people.forEach(p => add(p.sub, p.id));
     else if (id !== 'siUnarmed') state.people.forEach(p => add(id === 'specs' ? p.spec : p.rank, p.id));
     return m;
   }, [id, state.people, state.cadreList, state.cadreAbs, state.statuses, state.weaponLog]);
@@ -94,6 +98,9 @@ export function ListsCard() {
     return { ...lists, [id]: u };
   };
   const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setNote(false); setNBadge(false); setNXl(false); setBack(''); setLtext(''); setLduty(false); setLout(false); setErr(null); };
+  // Λόχοι / Ίλες: σειρά (▲▼) και μετονομασία (και στους στρατιώτες)
+  const moveSub = (r: ListRow, d: -1 | 1) => save(withList(u => { const i = u.add.findIndex(x => itemKey(x.name) === itemKey(r.name)), j = i + d; if (i >= 0 && j >= 0 && j < u.add.length) [u.add[i], u.add[j]] = [u.add[j], u.add[i]]; }), 'σειρά: ' + r.name);
+  const renameSub = async (r: ListRow) => { const to = (ren?.name || '').trim(); if (!to || to === r.name) { setRen(null); return; } if (await run({ t: 'renameSub', from: r.name, to }, false)) setRen(null); };
   const toDuty = () => requestLeave(() => nav.set({ tab: 'duty', dsub: 'stat' }));
   const select = (v: ListId) => { setId(v); reset(); setWho(null); };
   const n = itemName(name, id); const key = keyOf(id); const isUsed = (r: ListRow) => used.has(key(r.name));
@@ -182,6 +189,9 @@ export function ListsCard() {
         : pick && !r.builtin
         ? html`<${Select} className="ui-select" aria-label=${pick.label + ': ' + r.name} value=${current(id, r, lists)} onChange=${(e: any) => setPick(r, e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}<//>`
         : html`<span className="muted" style=${{ fontSize: '12px' }}>${info(r)}</span>`}
+      ${id === 'subUnits' && !r.builtin && (ren?.key === key(r.name)
+        ? html`<input className="ui-input" style=${{ width: '200px' }} aria-label=${'Νέο όνομα για ' + r.name} data-autofocus="" value=${ren!.name} onChange=${(e: any) => setRen({ key: ren!.key, name: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') renameSub(r); if (e.key === 'Escape') setRen(null); }}/><${Button} size="sm" onClick=${() => renameSub(r)}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => setRen(null)}>Άκυρο<//>`
+        : html`<${Button} size="sm" variant="ghost" aria-label=${'Άνοδος ' + r.name} onClick=${() => moveSub(r, -1)}>▲<//><${Button} size="sm" variant="ghost" aria-label=${'Κάθοδος ' + r.name} onClick=${() => moveSub(r, 1)}>▼<//><${Button} size="sm" variant="ghost" onClick=${() => setRen({ key: key(r.name), name: r.name })}>Μετονομασία<//>`)}
       <span style=${{ flex: 1 }}></span>
       ${id !== 'siUnarmed' && (usedN(r) ? html`<button type="button" className="linkish lists__n" aria-expanded=${who === key(r.name)} data-tip=${who === key(r.name) ? 'Κλείσε' : 'Δες ποιοι'} onClick=${() => setWho(who === key(r.name) ? null : key(r.name))}>${(STAT_IDS.includes(id) ? 'Δηλώθηκε σε ' : 'Το έχουν ') + usedN(r)}</button>` : html`<span className="muted lists__n">Κανείς</span>`)}
       ${id === 'medKinds' && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>βασικός τύπος</span>`
@@ -250,4 +260,4 @@ function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
   const ids = ps.map(p => p.id);
   return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${rkShort(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ', subUnits: 'π.χ. 1ος ΛΟΧΟΣ' };

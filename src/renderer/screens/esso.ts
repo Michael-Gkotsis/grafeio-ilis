@@ -1,9 +1,10 @@
 // Ρυθμίσεις › ΕΣΣΟ: η τωρινή ΕΣΣΟ, «Νέα ΕΣΣΟ» σε βήματα και «Επαναφορά ΕΣΣΟ» από τον φάκελο του αρχείου της (Michael, 17/10)
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Why, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { ESSO_SERIES, currentEsso, essoName, nextEsso, parseEsso, type Esso, type EssoSeries } from '../../shared/esso';
 import { dmy } from '../../shared/dates';
+import { dischargeLabel, daysToDischarge, essoDischarge, essoRows, isUnit } from '../../shared/mode';
 import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../../shared/api';
 import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
 import { UnitKindField } from './hkrows';
@@ -22,8 +23,27 @@ function EssoFields({ v, onChange, id }: P) {
   </div>`;
 }
 
+// Λειτουργία μονάδας: οι ΕΣΣΟ που υπάρχουν στη δύναμη, με πόσοι είναι μέσα/έξω και πότε απολύονται περίπου
+function UnitEssoTable() {
+  const { state, today } = useStore(); const nav = useNav();
+  const rows = useMemo(() => essoRows(state.people), [state.people]);
+  const noEsso = state.people.filter(p => p.active && !parseEsso(p.essos)).length;
+  return html`<${Card} title="ΕΣΣΟ στη μονάδα">
+    ${rows.length ? html`<table className="legend"><thead><tr><th>ΕΣΣΟ</th><th>Σε δύναμη</th><th>Εκτός δύναμης</th><th>Απόλυση περίπου</th><th></th></tr></thead><tbody>
+      ${rows.map(r => { const d = essoDischarge(r.esso), n = daysToDischarge(d, today);
+        return html`<tr key=${r.txt}><td className="nw"><b>${r.txt}</b></td><td>${r.active}</td><td>${r.inactive}</td>
+          <td>${dischargeLabel(d)}${n >= 0 && n <= 30 && html` <${Badge} tone="warn">σε ${n} ${n === 1 ? 'μέρα' : 'μέρες'}<//>`}${n < 0 && r.active > 0 && html` <${Badge} tone="bad">πέρασε<//>`}</td>
+          <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Δυναμολόγιο, μόνο αυτή η ΕΣΣΟ">Ποιοι<//></td></tr>`; })}</tbody></table>`
+      : html`<p className="note" style=${{ margin: 0 }}>Κανείς από τους στρατιώτες δεν έχει ΕΣΣΟ στην καρτέλα του.</p>`}
+    ${noEsso > 0 && html`<p className="note">${noEsso} ${noEsso === 1 ? 'στρατιώτης σε δύναμη δεν έχει' : 'στρατιώτες σε δύναμη δεν έχουν'} ΕΣΣΟ στην καρτέλα τους.</p>`}
+    <p className="note">Η απόλυση βγαίνει από τον μήνα κατάταξης κάθε σειράς (Α΄ Φεβρουάριος, Β΄ Μάιος, Γ΄ Αύγουστος, Δ΄ Νοέμβριος) και 12 μήνες μετά. Είναι ενδεικτική: για όσους κάνουν μικρότερη θητεία ισχύει η ημερομηνία που θα ορίσεις εσύ.</p>
+    ${/* εδώ μπαίνουν στο μέρος 2 το «Απόλυση ΕΣΣΟ…» και η λίστα «Κινήσεις των επόμενων ημερών» */ null}
+  <//>`;
+}
+
 export function EssoCards() {
   const { state, run, today } = useStore(); const toast = useToast();
+  const unit = isUnit(state.settings);
   const [info, setInfo] = useState<EssoInfo | null>(null);
   const [edit, setEdit] = useState<Esso | null>(null);
   const [wiz, setWiz] = useState(false); const [done, setDone] = useState<Extract<EssoResult, { ok: true }> | null>(null);
@@ -34,7 +54,7 @@ export function EssoCards() {
   const saveEdit = async () => { if (!edit) return; if (await run({ t: 'setSettings', settings: { essos: { ...(own || {}), s: edit.s, y: edit.y } }, text: 'ΕΣΣΟ ' + essoName(edit) })) setEdit(null); };
   const pick = async () => { const r = await window.api.essoPick(); if (!r) return; if ('ok' in r) { toast({ text: r.error }); return; } setRestore(r); };
   return html`<div className="stack">
-    <${Card} title="ΕΣΣΟ">
+    ${unit ? html`<${UnitEssoTable}/>` : html`<${Card} title="ΕΣΣΟ">
       <dl className="kv"><dt>Τωρινή</dt><dd>${cur ? html`<b>${essoName(cur)}</b>` : html`<span className="muted">δεν έχει οριστεί</span>`}
           ${!own && cur && html` <span className="muted">(από το Δυναμολόγιο)</span>`}${own?.from && html` <span className="muted">· από ${dmy(own.from)}</span>`}
           ${!edit && html` <${Button} variant="link" onClick=${() => setEdit(cur || nextEsso(null, today))}>Διόρθωση<//>`}</dd>
@@ -44,7 +64,7 @@ export function EssoCards() {
         <div className="toolbar"><${Button} size="sm" onClick=${saveEdit}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => setEdit(null)}>Άκυρο<//></div></div>`}
       <p className="note">Η <b>Νέα ΕΣΣΟ</b> κρατά όλη την τωρινή (βάση, Excel, ιστορικό) σε φάκελο αρχείου, ξεκινά την εφαρμογή χωρίς στρατιώτες και φτιάχνει σε νέο φάκελο τα Excel της νέας ΕΣΣΟ, συνδεδεμένα. Οι ρυθμίσεις, οι υπηρεσίες, οι λίστες, οι αργίες, τα στελέχη και τα templates μένουν.</p>
       <div><${Button} variant="destructive" onClick=${() => setWiz(true)}>Νέα ΕΣΣΟ…<//></div>
-    <//>
+    <//>`}
     <${Card} title="Επαναφορά ΕΣΣΟ" actions=${html`<${Button} size="sm" variant="outline" onClick=${pick}>Διάλεξε φάκελο…<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Ξαναφορτώνει μια παλιά ΕΣΣΟ από τον φάκελο του αρχείου της (π.χ. «Β΄ ΕΣΣΟ 2026 (έως …)», και από USB). Πριν από αυτό η τωρινή μπαίνει κι αυτή στο αρχείο, για να γυρίσεις πίσω.</p>
       ${!info ? 'Φόρτωση…' : !info.archives.length ? html`<p className="note">Δεν υπάρχει ακόμα αρχείο ΕΣΣΟ. Φτιάχνεται με τη «Νέα ΕΣΣΟ».</p>`

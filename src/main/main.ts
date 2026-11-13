@@ -22,6 +22,7 @@ import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, 
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
+import { isUnit } from '../shared/mode';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
 import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
@@ -576,7 +577,7 @@ async function rosterPreview(file: string, b: SourceBinding | null): Promise<Imp
     const book0 = await readBook(file); const book = { ...book0, sheets: notReports(file, book0.sheets) };
     if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
-    const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists);
+    const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists, isUnit(store.state.settings));
     r.rows = withRoomExtras(r.rows, book.sheets, r.main, store.state.people, srcMeta.get('people')?.psnap);   // e-mail, e-mail συγγενή, ομάδα αίματος από το φύλλο ΘΑΛΑΜΟΙ
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
     // ποιος πίνακας διαβάστηκε: για να γράφονται εκεί οι διορθώσεις (Michael, 11/10)

@@ -73,6 +73,7 @@ export type Command =
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
+  | { t: 'renameSub'; from: string; to: string }   // μετονομασία Λόχου / Ίλης στη λίστα και στους στρατιώτες (μονάδα)
   | { t: 'addPerson'; person: NewPerson }
   | { t: 'addPeople'; people: NewPerson[] }
   | { t: 'setBaseline'; pid: number; baseline: Baseline }
@@ -327,6 +328,9 @@ export function shapePerson(x: NewPerson, id: number, lists?: UserLists): Person
     attached: !!x.attached, notes: t(x.notes)
   }, lists);
   if (!x.weapon?.trim()) delete p.weapon; else p.weapon = x.weapon.trim();
+  if (!p.inOn) delete p.inOn;
+  if (!t(x.sub)) delete p.sub; else p.sub = t(x.sub);
+  if (!t(x.came)) delete p.came; else p.came = upper(t(x.came));   // «Ήρθε από» (μονάδα): κεφαλαία όπως ό,τι γράφεται στο Excel
   if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
   if (!p.dn) delete p.dn;
   if (!p.offDays?.length) delete p.offDays;
@@ -335,9 +339,11 @@ export function shapePerson(x: NewPerson, id: number, lists?: UserLists): Person
 }
 // διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
 export const twinText = (twin: Person, asm: string) => 'Υπάρχει ήδη ' + (twin.asm && twin.asm === asm ? 'άτομο με ΑΣΜ ' + asm + ': ' : 'ο ') + rankTxt(twin) + ' ' + twin.last + ' ' + twin.first + (twin.father ? ' του ' + twin.father : '') + (twin.active ? '' : ' (εκτός δύναμης)');
-function makePerson(s: AppState, x: NewPerson): Person {
+function makePerson(s: AppState, x: NewPerson, today?: ISODate): Person {
   const p = shapePerson(x, s.people.reduce((a, y) => Math.max(a, y.id), 0) + 1, s.settings.lists);
   if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
+  // ημερομηνία εισαγωγής (μονάδα): μπορεί να είναι παλιά, όχι πάνω από ένα χρόνο μπροστά
+  if (p.inOn && (!/^\d{4}-\d{2}-\d{2}$/.test(p.inOn) || (today && p.inOn > addDays(today, 366)))) throw new Error('Η ημερομηνία εισαγωγής δεν μπορεί να είναι πάνω από ένα χρόνο μπροστά');
   const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
   if (twin) throw new Error(twinText(twin, p.asm));
   return p;
@@ -804,8 +810,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       }
       return { state: { ...s, caps, people }, text: 'Δυνατότητα υπηρεσιών: ' + shortName(p) + ' · ' + c.text, files: [] };
     }
-    case 'setSettings':
-      return { state: { ...s, settings: { ...s.settings, ...c.settings } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
+    case 'setSettings': {
+      const settings = { ...s.settings, ...c.settings };
+      // πρώτη φορά σε λειτουργία μονάδας: οι νέοι ξεκινούν από τον μέσο όρο, μόνο αν δεν είχε οριστεί ποτέ (Michael, 13/11)
+      if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && s.rules.newAvg === undefined)
+        return { state: { ...s, settings, rules: { ...s.rules, newAvg: true } }, text: 'Ρυθμίσεις: ' + c.text + ' (άνοιξε και το «Οι νέοι ξεκινούν από τον μέσο όρο», γιατί δεν είχε οριστεί ποτέ)', files: [] };
+      return { state: { ...s, settings }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
+    }
     case 'setHkRows': {
       const before = s.settings.lists; const lists = { ...(before || {}), hkRows: c.rows };
       const rows = new Set(hkRowList(lists));
@@ -915,12 +926,26 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const nt = (person.notes || '').trim();
       if (old.active && !person.active && !nt.startsWith(OUT_NOTE)) person.notes = OUT_NOTE + (nt ? ': ' + nt : '');
       else if (!old.active && person.active && nt.startsWith(OUT_NOTE)) person.notes = nt.slice(OUT_NOTE.length).replace(/^[:\s]+/, '');
+      // «Ήρθε από» με κεφαλαία· ημερομηνία εισαγωγής μόνο σωστή (μονάδα)
+      const came = upper((person.came || '').replace(/\s+/g, ' ').trim()); if (came) person.came = came; else delete person.came;
+      person.sub = (person.sub || '').replace(/\s+/g, ' ').trim(); if (!person.sub) delete person.sub;
+      if (person.inOn && !/^\d{4}-\d{2}-\d{2}$/.test(person.inOn)) delete person.inOn;
       let next: AppState = { ...s, people: s.people.map(p => (p.id === person.id ? person : p)), settings: rememberChoices(s.settings, person, old) };
       // βγήκε εκτός δύναμης: φεύγει από τις υπηρεσίες από σήμερα και μετά (οι περασμένες μένουν όπως έγιναν)
       const gone = old.active && !person.active ? Object.keys(s.guards).filter(d => d >= ctx.today).flatMap(d => Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === old.id).map(([k]) => ({ d, k }))) : [];
       gone.forEach(x => { next = setGuard(next, x.d, x.k, null); });
       const text = old.active && !person.active ? shortName(person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && person.active ? shortName(person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'renameSub': {
+      const to = c.to.replace(/\s+/g, ' ').trim(); const k = itemKey(c.from);
+      if (!to) throw new Error('Γράψε το νέο όνομα');
+      if (/[,"]/.test(to)) throw new Error('Χωρίς κόμμα ή εισαγωγικά: το Excel τα χρησιμοποιεί για να χωρίζει τις τιμές της λίστας.');
+      if (itemKey(to) !== k && listRows(s.settings.lists, 'subUnits').some(r => itemKey(r.name) === itemKey(to))) throw new Error('Υπάρχει ήδη «' + to + '» στη λίστα');
+      const u = s.settings.lists?.subUnits || {};
+      const lists = { ...(s.settings.lists || {}), subUnits: { ...u, add: (u.add || []).map(x => (itemKey(x.name) === k ? { ...x, name: to } : x)), ...(u.hide ? { hide: u.hide.map(x => (itemKey(x) === k ? to : x)) } : {}) } };
+      let n = 0; const people = s.people.map(p => { if (p.sub && itemKey(p.sub) === k) { n++; return { ...p, sub: to }; } return p; });
+      return { state: { ...s, people, settings: { ...s.settings, lists } }, text: 'Λόχοι / Ίλες: «' + c.from + '» → «' + to + '»' + (n ? ' (άλλαξε σε ' + n + (n === 1 ? ' άτομο)' : ' άτομα)') : ''), files: [] };
     }
     case 'setPersonal': {
       // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ, e-mail, ομάδα αίματος): γράφονται μόνα τους στο Δυναμολόγιο/ΣΤΕΛΕΧΗ (kindsForPeople)· όχι τα νούμερα στο ιστορικό ενεργειών
@@ -1030,7 +1055,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'addNote': case 'editNote': case 'doneNote': case 'deleteNote': return noteCmd(s, c, ctx);
     case 'addPerson': {
-      const p = makePerson(s, c.person);
+      const p = makePerson(s, c.person, ctx.today);
       return { state: { ...s, people: [...s.people, p], settings: rememberChoices(s.settings, p) }, text: 'Νέος στρατιώτης: ' + (rankTxt(p) ? rankTxt(p) + ' ' : '') + p.last + ' ' + p.first, files: [] };
     }
     case 'addPeople': {
@@ -1039,7 +1064,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       let st = s; const added: Person[] = [];
       c.people.forEach((x, i) => {
         let p: Person;
-        try { p = makePerson(st, x); } catch (e) { throw new Error('Γραμμή ' + (i + 1) + ': ' + (e instanceof Error ? e.message : String(e))); }
+        try { p = makePerson(st, x, ctx.today); } catch (e) { throw new Error('Γραμμή ' + (i + 1) + ': ' + (e instanceof Error ? e.message : String(e))); }
         added.push(p); st = { ...st, people: [...st.people, p], settings: rememberChoices(st.settings, p) };
       });
       const names = added.slice(0, 5).map(p => p.last + ' ' + p.first).join(', ') + (added.length > 5 ? ' και άλλοι ' + (added.length - 5) : '');

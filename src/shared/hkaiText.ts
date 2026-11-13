@@ -7,6 +7,7 @@ import { hkWho, punGroupKey, punText } from './punish';
 import { collator, upper } from './text';
 import { genitive } from './greek';
 import { HK } from './unit';
+import { isUnit } from './mode';
 import { live, cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
 import { cadreStatusOf, orderedCadre } from './cadre';
 
@@ -121,7 +122,8 @@ export function personLine(p: Person): string {
 export const outReason = (p: Person) => (p.notes.startsWith(OUT_NOTE) ? p.notes.slice(OUT_NOTE.length).replace(/^[:\s]+/, '') : p.notes).trim();
 export const movesOn = (s: AppState, field: 'inOn' | 'outOn', d: ISODate) => s.people.filter(p => p[field] === d).sort(byName);
 function moveLines(s: AppState, d: ISODate, field: 'inOn' | 'outOn', free: 'egr' | 'dia'): Line[] {
-  const out = numbered(movesOn(s, field, d).map(p => { const why = field === 'outOn' ? outReason(p) : ''; return [{ t: personLine(p) + (why ? ': ' + upper(why.replace(/[.\s]+$/, '')) : '') + '.' }]; }));
+  const unit = isUnit(s.settings);   // μονάδα: «ΗΡΘΕ ΑΠΟ <από πού>» στις ΕΓΓΡΑΦΕΣ
+  const out = numbered(movesOn(s, field, d).map(p => { const why = field === 'outOn' ? outReason(p) : unit && p.came ? 'ΗΡΘΕ ΑΠΟ ' + p.came : '';  return [{ t: personLine(p) + (why ? ': ' + upper(why.replace(/[.\s]+$/, '')) : '') + '.' }]; }));
   const t = s.hkaiManual?.[d]?.text?.[free]?.trim();
   if (t) out.push([{ t }]);
   return out;
