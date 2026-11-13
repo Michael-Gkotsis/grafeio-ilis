@@ -1,31 +1,25 @@
-// features/guard (Κατάσταση υπηρεσιών, έλεγχος) και features/outs (εξοδούχοι, ΔΝ)
+// features/guard (Κατάσταση υπηρεσιών, έλεγχος). Οι Εξοδούχοι είναι στο pages/outs
 import { RkName, rkFull, rkShort } from '../rankName';
 import { HK } from '../../shared/unit';
-import { memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, DialogLeave, useMedia, useToast, useViewportHeight } from '../ui';
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Tabs, VirtualList, DialogLeave, useMedia, useToast } from '../ui';
 import { Select } from '../select';
 import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
-import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
+import { useNav, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
-import { mins, normTime } from '../../shared/hours';
+import { normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
-import { blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
-import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
+import { blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, isOutsAll, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseName, fullName, shortName, postTxt, type DutyKind, type Rules, type Person, type Phase, type Post, type TypeKey } from '../../shared/domain';
+import { whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, dutyMin, DEFAULT_HK_TIME, statusWarn, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
-import { useRowH } from '../prefs';
-import { isDeprivation } from '../../shared/punish';
 import { statIsUnarmed, statNoDuty } from '../../shared/stat';
-import { dutyAt, isSat, isWk } from '../../shared/weekend';
-import { dayTimes, theDay, returnsOn, stillOut } from '../../shared/returns';
-import { awayAtOut, awayIn, awayName, awayNote } from '../../shared/outsStay';
-import { OutsDayBar, WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
+import { WeekTable, weekDraft, weekIssue, WEEK_ORDER, type WeekDraft } from './outsPlan';
 import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 import { AddBlockDialog, PhaseSelect } from '../features/duty-blocks';
 import { SkipsView } from './skips';
-import { ReturnsList } from './returnsList';
 type P = any;
 
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
@@ -502,154 +496,5 @@ export function FixedDialog({ onClose }: P) {
 // Deprecated path: the service-block dialogs moved to features/duty-blocks (Phase 6, Ρυθμίσεις S3). Removed in Phase 7.
 export { AddBlockDialog, PhaseDialog, PhaseSelect } from '../features/duty-blocks';
 
-/* features/outs · Εξοδούχοι και ΔΝ (Κ-06 έως Κ-09, Κ-16) */
-const OUT_OPTS = [{ value: '', label: 'Μένει' }, { value: 'OUT', label: 'Έξοδος' }, { value: 'DN', label: 'ΔΝ' }];
-// Σάββατο: και «ΔΝ ΣΚ» = ΔΝ σήμερα και ΔΝ την Κυριακή (Michael, 18/10, 24/10)
-const OUT_OPTS_SAT = [...OUT_OPTS, { value: 'DNSK', label: 'ΔΝ ΣΚ' }];
-type OutVal = TypeKey | 'DNSK';
-const DNSK_TIP = 'ΔΝ το Σάββατο και ΔΝ την Κυριακή (μπαίνει μόνη της). Αν την Κυριακή έχει υπηρεσία ή κάτι τον κρατά μέσα, μένει μόνο η ΔΝ του Σαββάτου και γυρίζει Κυριακή πρωί· αν ξεκινά άδεια, φεύγει για άδεια. Τη Δευτέρα γυρνά στην ώρα επιστροφής ΔΝ.';
-// away: σε άδεια/νοσοκομείο, δεν είναι παραμένων· στη θέση του «Μένει» λέει «Σε άδεια»/«Νοσοκομείο»
-const valLbl = (v: OutVal | null | undefined, away?: Status | null) => (v === 'DNSK' ? 'ΔΝ ΣΚ' : v ? TYPES[v].label : away ? awayName(away) : 'Μένει');
-const AWAY_TIP = 'Σε άδεια: δεν είναι ούτε εξοδούχος ούτε παραμένων. Για να μείνει μέσα, άλλαξε την άδεια.';
-const valTone = (v: OutVal) => TYPES[v === 'DNSK' ? 'DN' : v].tone;
-// 1–4 αν είναι συνεχόμενοι, αλλιώς 1, 3, 5 (Ρυθμίσεις › Θάλαμοι και ουλαμοί)
-const roomsTxt = (rs: number[]) => (rs.length > 2 && rs[rs.length - 1] - rs[0] === rs.length - 1 ? rs[0] + '–' + rs[rs.length - 1] : rs.join(', '));
-// Όποιος δεν βγαίνει σύμφωνα με τους κανόνες (υπηρεσία, ποινή, ΕΥ…) ή δεν έχει δικαίωμα ΔΝ επιλέγεται κι αυτός, με
-// προειδοποίηση· στην αποθήκευση ζητείται επιβεβαίωση (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
-// sun: ΔΝ ΣΚ και την Κυριακή κάτι τον κρατά (υπηρεσία, ποινή…): γυρίζει Κυριακή πρωί, ή ξεκινά άδεια (leave)· wkNote: «από ΔΝ ΣΚ» την Κυριακή
-// note: παρατήρηση της μέρας, γράφεται σε παρένθεση δίπλα στην κατάσταση («ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», Michael 18/10)
-const OutRow = memo(function OutRow({ p, unit, style, reason, away, awayTxt, value, changed, onSet, onOpen, noDn, sat, sun, wkNote, note, onNote }: P) {
-  return html`<div className=${cx('orow', changed && 'is-changed', reason && !away && 'is-blocked')} style=${style}>
-    <div><button type="button" className="linkish" onClick=${() => onOpen(p.id)}><b><${RkName} p=${p} fn=${fullName}/></b></button><small>${roomTxt(p)} · ${unit}${p.dn ? ' · δικαίωμα ΔΝ' : ''}${wkNote && ' · από ΔΝ ΣΚ'}${away ? html` · <span className="orow__away" data-tip=${AWAY_TIP}>${awayTxt}</span>` : reason && html` · <span className="orow__warn" data-tip=${reason + '. Σύμφωνα με τους κανόνες δεν βγαίνει έξοδο· αν τον βγάλεις, θα ζητηθεί επιβεβαίωση'}>⚠ ${reason}</span>`}${value === 'DNSK' && sun && html` · <span className="orow__warn" data-tip=${'Κυριακή: ' + sun.why + '. ' + (sun.leave ? 'Την Κυριακή ξεκινά η άδειά του: μένει μόνο η ΔΝ του Σαββάτου' : 'Την Κυριακή δεν μπαίνει ΔΝ: μένει μόνο η ΔΝ του Σαββάτου')}>Κυριακή: ${sun.why}${sun.leave ? '' : ', γυρίζει Κυριακή πρωί'}</span>`}</small></div>
-    <input className="ui-input orow__note" aria-label=${'Παρατήρηση ' + rkFull(p)} placeholder="Παρατήρηση" data-tip="Προαιρετική. Γράφεται σε παρένθεση δίπλα στην κατάσταση, π.χ. «ΔΝ (ΙΑΤΡΟΣ ΣΤΕΠ)», και στο Excel" value=${note} onChange=${(e: any) => onNote(p.id, e.target.value)}/>
-    <div className="ui-seg ui-seg--sm" role="group" aria-label=${'Έξοδος ' + rkFull(p)}>${(sat ? OUT_OPTS_SAT : OUT_OPTS).map(o => { const warn = o.value && reason ? 'Δεν βγαίνει έξοδο (' + reason + '): θα ζητηθεί επιβεβαίωση' : (o.value === 'DN' || o.value === 'DNSK') && noDn ? 'Δεν έχει δικαίωμα ΔΝ: θα ζητηθεί επιβεβαίωση' : undefined; const aw: Status | null = o.value ? null : away || null; return html`<button key=${o.value} type="button" className=${aw ? 'is-away is-away--' + TYPES[aw.type].tone : warn ? 'is-warn' : undefined} data-tip=${aw ? AWAY_TIP : warn || (o.value === 'DNSK' ? DNSK_TIP : undefined)} aria-pressed=${(value || '') === o.value} onClick=${() => onSet(p.id, o.value || null)}>${aw ? awayName(aw) : o.label}${warn ? ' ⚠' : ''}</button>`; })}</div>
-  </div>`;
-});
-const NO_NOTES: Record<number, string> = {};
-// Μορφή του Excel (Michael, 26/10, 30/10): Τωρινή ή Όλη η δύναμη. Η τελευταία επιλογή μένει στις ρυθμίσεις· ισχύει και στο ΠΣΚ και στο αυτόματο ξαναγράψιμο όσων έχουν βγει
-const OUTS_FMT_TIP = 'Τωρινή: Εξοδούχοι και Παραμένοντες σε δύο φύλλα. Όλη η δύναμη: κάθε άτομο μία φορά, σε δύο σελίδες: σελίδα 1 οι εξοδούχοι (Πίνακας Α), σελίδα 2 η υπόλοιπη δύναμη (είναι ήδη έξω, μένουν μέσα) με το άθροισμα της δύναμης και πότε γυρίζουν οι απόντες. Η επιλογή σου μένει και για τις επόμενες φορές.';
-export function OutsFmtSelect() {
-  const { state, run } = useStore(); const fmt: OutsFmt = isOutsAll(state.settings) ? 'all' : 'cur';
-  return html`<div className="gb-mon"><small className="gb-mon__lbl" data-tip=${OUTS_FMT_TIP}>Μορφή:</small><${Select} className="ui-input" style=${{ flex: '0 0 150px', width: '150px', height: '32px', fontSize: '13px' }} aria-label="Μορφή Excel εξοδούχων" data-tip=${OUTS_FMT_TIP} value=${fmt}
-    onChange=${(e: any) => { const v = e.target.value as OutsFmt; if (v !== fmt) run({ t: 'setSettings', settings: { outsFmt: v }, text: 'μορφή Excel εξοδούχων: ' + OUTS_FMT.find(x => x[0] === v)![1] }, 'Μορφή Excel εξοδούχων: ' + OUTS_FMT.find(x => x[0] === v)![1] + '. Μένει και για τις επόμενες φορές.'); }}>
-    ${OUTS_FMT.map(([k, l]) => html`<option key=${k} value=${k}>${l}</option>`)}<//></div>`;
-}
-export function OutsScreen() {
-  const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
-  const date = nav.params.outDate || today;
-  const nextDow = (w: number) => { for (let i = 0; i < 7; i++) { const d = addDays(today, i); if (parseD(d).getDay() === w) return d; } return today; };
-  const outDays = [...new Set([today, tomorrow, nextDow(6), nextDow(0)])].sort();
-  const rooms = outRoomsOn(state.rules, date);
-  const people = activePeople(state);
-  const sat = isSat(date);
-  const saved = useMemo(() => { const m: Record<number, OutVal> = {}; state.statuses.forEach(s => { if (TYPES[s.type].cat === 'out' && s.from <= date && date <= s.to) m[s.pid] = sat && s.type === 'DN' && isWk(s) ? 'DNSK' : s.type; }); return m; }, [state.statuses, date]);
-  // την Κυριακή: όσοι μπήκαν μόνοι τους από τη ΔΝ ΣΚ του Σαββάτου
-  const wkSun = useMemo(() => new Set(sat ? [] : state.statuses.filter(s => isWk(s) && s.from <= date && date <= s.to).map(s => s.pid)), [state.statuses, date, sat]);
-  const savedNotes = state.outNotes?.[date] || NO_NOTES;
-  const [notes, setNotes] = useState<Record<number, string>>(savedNotes);
-  useEffect(() => setNotes(savedNotes), [savedNotes]);
-  const [draft, setDraft] = useState(saved);
-  // άλλη μέρα: από την αρχή. Ίδια μέρα και άλλαξαν οι καταστάσεις αλλού (δήλωση, ανάγνωση από Excel): ό,τι άλλαξες εδώ
-  // και δεν άλλαξε αλλού μένει στο πρόχειρο, αντί να χαθεί
-  const last = useRef({ saved, date });
-  useEffect(() => {
-    const old = last.current; last.current = { saved, date };
-    if (old.date !== date) { setDraft(saved); return; }
-    if (old.saved === saved) return;
-    setDraft(d => {
-      const n: Record<number, OutVal> = { ...saved };
-      for (const id of new Set([...Object.keys(d), ...Object.keys(old.saved)].map(Number)))
-        if ((old.saved[id] || null) === (saved[id] || null) && (d[id] || null) !== (old.saved[id] || null)) { if (d[id]) n[id] = d[id]; else delete n[id]; }
-      return n;
-    });
-  }, [saved, date]);
-  const [filter, setFilter] = useState('all'); const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [confirm, setConfirm] = useState(false);
-  const [room, setRoom] = useState<number | null>(null); const [sort, setSort] = useState('room');
-  const roomList = useMemo(() => [...new Set(people.map(p => p.room).filter((r): r is number => r != null))].sort((a, b) => a - b), [people]);
-  const dnSet = people.some(p => p.dn);   // μόλις οριστεί σε κάποιον, ΔΝ μόνο όσοι έχουν δικαίωμα
-  const reasons = useMemo(() => { const m: Record<number, string | null> = {}; people.forEach(p => { m[p.id] = outBlock(state, date, p.id); }); return m; }, [state, date]);
-  // σε άδεια/νοσοκομείο στην ώρα εξόδου: η κατάσταση και η σημείωση «Κανονική άδεια ως 05/11 · γυρνά Πέμ 06/11 πρωί»
-  const aways = useMemo(() => { const m = new Map<number, { st: Status; note: string }>(); people.forEach(p => { const st = awayAtOut(state, date, p.id); if (st) m.set(p.id, { st, note: awayNote(state, date, p.id, st) }); }); return m; }, [state, date, people]);
-  const rows = useMemo(() => {
-    const r = searchPeople(state.people, dq).filter(p => p.active && (room == null || p.room === room) && (filter === 'all' || (filter === 'can' ? !reasons[p.id] && !aways.has(p.id) : filter === 'cant' ? !!reasons[p.id] || aways.has(p.id) : !!draft[p.id])));
-    return sort === 'room' && !dq ? [...r].sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last) || collator.compare(a.first, b.first)) : r;
-  }, [dq, filter, reasons, aways, draft, state.people, room, sort]);
-  const diffs = useMemo(() => people.filter(p => (saved[p.id] || null) !== (draft[p.id] || null)).map(p => ({ pid: p.id, from: saved[p.id] || null, to: draft[p.id] || null })), [saved, draft, people]);
-  const noteChanges = useMemo(() => [...new Set([...Object.keys(notes), ...Object.keys(savedNotes)].map(Number))].filter(pid => (notes[pid] || '').trim() !== (savedNotes[pid] || '')).map(pid => ({ pid, note: (notes[pid] || '').trim() })), [notes, savedNotes]);
-  const changes = useMemo(() => diffs.map(c => ({ pid: c.pid, from: c.from === 'DNSK' ? 'DN' as TypeKey : c.from, to: c.to === 'DNSK' ? 'DN' as TypeKey : c.to, ...(c.to === 'DNSK' ? { wk: true } : {}) })), [diffs]);
-  const nChanges = diffs.length + noteChanges.length;
-  // ΔΝ ΣΚ: τι τον κρατά μέσα την Κυριακή (υπηρεσία, ποινή…), οπότε δεν μπαίνει στους εξοδούχους της Κυριακής
-  const sunday = addDays(date, 1);
-  // ή ξεκινά άδεια (leave): τότε φεύγει, δεν γυρίζει
-  const sunWhy = useCallback((pid: number): { why: string; leave: boolean } | null => {
-    if (!sat) return null;
-    const lv = state.statuses.find(x => x.pid === pid && TYPES[x.type].cat === 'abs' && x.from === sunday);
-    if (lv) return { why: 'ξεκινά ' + statusLbl(lv, state.settings.lists), leave: true };
-    const d = dutyAt(state, sunday, pid); const why = d ? d.label + (d.time ? ' από ' + d.time : '') : outBlock(state, sunday, pid);
-    return why ? { why, leave: false } : null;
-  }, [state, sat, sunday]);
-  const backs = useMemo(() => returnsOn(state, date), [state, date]);
-  const backEarly = backs.some(b => b.r.duty), backN = backs.length;
-  // ΔΝ που δεν ξέρουμε πότε γυρνούν: η επόμενη μέρα δεν έχει δηλωθεί (και δεν έχει εκπαίδευση)
-  const pendDays = useMemo(() => { const m = new Map<string, string[]>(); backs.forEach(b => { if (b.r.pending) m.set(b.r.day, [...(m.get(b.r.day) || []), shortName(b.p)]); }); return [...m]; }, [backs]);
-  const cnt = (t: string) => Object.keys(draft).filter(k => (draft as P)[k] === t).length;
-  // οι σε άδεια δεν είναι «λόγω κανόνων» (blockedN)· στο «Δεν μπορούν» μένουν μαζί με τους άλλους (cantN)
-  const blockedN = people.filter(p => reasons[p.id] && !aways.has(p.id)).length;
-  const cantN = people.filter(p => reasons[p.id] || aways.has(p.id)).length;
-  const awayN = people.filter(p => aways.has(p.id) && !draft[p.id]).length;
-  const stayN = people.filter(p => !draft[p.id] && !awayIn(statusesFrom(live(state), p.id, date, outMinOn(state, date)), state.settings.lists) && !stillOut(state, p.id, date)).length;
-  const set = useCallback((pid: number, v: OutVal | null) => setDraft(d => { const n = { ...d }; if (v) n[pid] = v; else delete n[pid]; return n; }), []);
-  const setNote = useCallback((pid: number, v: string) => setNotes(d => ({ ...d, [pid]: v })), []);
-  const open = useOpenFrom(rows);
-  const byRooms = () => {
-    if (!rooms) return;
-    const n: Record<number, OutVal> = {}; people.forEach(p => { if (p.room != null && rooms.includes(p.room) && !reasons[p.id] && !aways.has(p.id)) n[p.id] = draft[p.id] === 'DN' || draft[p.id] === 'DNSK' ? draft[p.id] : 'OUT'; }); setDraft(n);
-    const kept = people.filter(p => p.room != null && rooms.includes(p.room) && reasons[p.id] && !aways.has(p.id)).length;
-    toast({ text: 'Πρόταση: θάλαμοι ' + roomsTxt(rooms) + ' έξω (' + Object.keys(n).length + '). ' + kept + ' από αυτούς μένουν λόγω κανόνων και μπαίνουν στους Παραμένοντες.' });
-  };
-  const allCan = () => setDraft(d => { const n = { ...d }; people.forEach(p => { if (!reasons[p.id] && !aways.has(p.id) && !n[p.id] && (room == null || p.room === room)) n[p.id] = 'OUT'; }); return n; });
-  const height = useViewportHeight(mobile ? 380 : 330);
-  const c0 = strengthOf(state, date, mins(dayTimes(state, date).out));   // «Παρόντες απόψε»: από την αρχή εξόδου της μέρας
-  const awayDelta = diffs.reduce((a, c) => a + (c.to ? 1 : 0) - (c.from ? 1 : 0), 0);
-  // όσοι βγαίνουν παρά τους κανόνες ή με ΔΝ χωρίς δικαίωμα: φαίνονται στο «Τι θα αλλάξει» και η αποθήκευση τους επιβεβαιώνει
-  const pmO = useMemo(() => personMap(state.people), [state.people]);
-  const warns = changes.filter(c => c.to && (reasons[c.pid] || (c.to === 'DN' && dnSet && !pmO.get(c.pid)?.dn))).map(c => ({ pid: c.pid, why: reasons[c.pid] || 'χωρίς δικαίωμα ΔΝ' }));
-  // ΔΝ ΣΚ που γυρίζουν Κυριακή πρωί (υπηρεσία ή κάτι άλλο την Κυριακή)
-  const sunBack = diffs.filter(c => c.to === 'DNSK').map(c => ({ pid: c.pid, ...sunWhy(c.pid)! })).filter(x => x.why);
-  const sunBackOnly = sunBack.filter(x => !x.leave), sunLeave = sunBack.filter(x => x.leave);
-  const save = async () => { if (await run({ t: 'outs', date, changes, notes: noteChanges.length ? noteChanges : undefined, force: warns.length > 0 || undefined }, false)) { setConfirm(false); toast({ text: 'Αποθηκεύτηκαν οι εξοδούχοι ' + dm(date) + ' (' + nChanges + ' αλλαγές)' + (sunBackOnly.length ? '. Γυρίζουν Κυριακή πρωί: ' + sunBackOnly.map(x => shortName(pmO.get(x.pid)!)).join(', ') : '') + (sunLeave.length ? '. Άδεια από Κυριακή: ' + sunLeave.map(x => shortName(pmO.get(x.pid)!)).join(', ') : ''), actions: [undoMark()] }); } };
-  const rh = useRowH(mobile ? 136 : 52, mobile ? 136 : 44);
-  // Βραδινή εκπαίδευση (Michael, 13/10): η μέρα δεν μετρά στη στέρηση εξόδου κανενός· η λήξη τους μετακινείται μόνη της
-  const night = !!state.nightTraining?.[date];
-  const setNight = async (on: boolean) => {
-    const before = new Map(state.statuses.filter(isDeprivation).map(x => [x.id, x.to]));
-    const next = await run({ t: 'setNightTraining', date, on }, false); if (!next) return;
-    const pm = personMap(next.people);
-    const moved = next.statuses.filter(x => before.has(x.id) && before.get(x.id) !== x.to).map(x => shortName(pm.get(x.pid)!) + ' ως ' + dm(x.to));
-    toast({ text: (on ? 'Βραδινή εκπαίδευση ' : 'Χωρίς βραδινή εκπαίδευση ') + dayName(date, today).toLowerCase() + ' ' + dm(date) + '. ' + (moved.length ? 'Στέρηση εξόδου: ' + moved.join(', ') + '.' : on ? 'Δεν μετρά στη στέρηση εξόδου.' : ''), actions: [undoMark()] });
-  };
-  const NIGHT_TIP = 'Όταν έχει βραδινή εκπαίδευση, η μέρα δεν μετρά στη στέρηση εξόδου (όπως και οι μέρες με υπηρεσία): η λήξη μετακινείται μία μέρα. Δεν αλλάζει τους εξοδούχους.';
-  return html`<div>
-    <${PageHeader} title=${'Εξοδούχοι ' + DOW_GEN[parseD(date).getDay()] + ' ' + dmy(date)} sub="Διάλεξε ποιοι βγαίνουν και ποιοι με ΔΝ· όσοι έχουν ⚠ βγαίνουν μόνο με επιβεβαίωση."><div className="page-head__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ outDate: d })} days=${outDays}/><label className="strict-sw" data-tip=${NIGHT_TIP} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${night} onChange=${(e: any) => setNight(e.target.checked)}/>Βραδινή εκπαίδευση</label></div><//>
-    <${OutsDayBar} date=${date}/>
-    ${pendDays.map(([d, who]) => html`<${Alert} key=${d} tone="warn"><span><b>Δεν έχει δηλωθεί ${theDay(d)}</b> και δεν έχει εκπαίδευση το πρωί, οπότε δεν ξέρουμε πότε γυρνούν (${who.join(', ')}). Δήλωσε τους εξοδούχους εκείνης της μέρας ή άλλαξε το «Αύριο εκπαίδευση». <${Button} size="sm" variant="secondary" onClick=${() => nav.set({ outDate: d })}>Άνοιγμα ${dayName(d, today).toLowerCase()}<//></span><//>`)}
-    ${rooms ? html`<${Alert} tone="info"><span>${parseD(date).getDay() === 6 ? 'Σάββατο' : 'Κυριακή'}: βγαίνουν οι <b>θάλαμοι ${roomsTxt(rooms)}</b>, μένουν οι υπόλοιποι (Κ-16). <${Button} size="sm" variant="secondary" onClick=${byRooms}>Πρότεινε θαλάμους ${roomsTxt(rooms)}<//></span><//>` : null}
-    <details className="note backs-box"><summary>Ποιοι γυρίζουν και πότε <span className="cnt">${backN}</span>${backEarly ? html` <${Badge} tone="bad">κάποιοι για υπηρεσία<//>` : null}${pendDays.length ? html` <${Badge} tone="warn">να δηλωθεί η επόμενη μέρα<//>` : null}<button type="button" className="linkish backs-box__all" onClick=${(e: any) => { e.preventDefault(); nav.go('strength', { strengthDate: date }); }} data-tip="Όλοι με το πότε γυρνούν: παρόντες, κωλυόμενοι, απόντες">Όλοι στη Δύναμη →</button></summary><${ReturnsList} date=${date} fixable=${true}/></details>
-    <div className="bulkbar outbar"><span>Έξοδος <b>${cnt('OUT')}</b> · ΔΝ <b>${cnt('DN')}</b>${sat ? html` · ΔΝ ΣΚ <b>${cnt('DNSK')}</b>` : null} · Παραμένοντες <b>${stayN}</b> <span className="muted">(${blockedN} λόγω κανόνων)</span>${awayN ? html` · Σε άδεια <b>${awayN}</b>` : null}</span>
-      ${nChanges ? html`<${Button} size="sm" variant="ghost" onClick=${() => { setDraft(saved); setNotes(savedNotes); }}>Ακύρωση<//><${Button} size="sm" onClick=${() => setConfirm(true)}>Αποθήκευση (${nChanges})<//>` : html`<${Button} size="sm" variant="secondary" onClick=${allCan} data-tip="Βάζει «Έξοδος» σε όλους όσοι επιτρέπεται και δεν έχουν ήδη επιλογή">${room == null ? 'Όλοι όσοι μπορούν: έξοδος' : 'Θάλαμος ' + room + ': όσοι μπορούν έξοδος'}<//>`}
-      <span className="outbar__xl"><${OutsFmtSelect}/>${nChanges > 0 ? html`<span className="note">Αποθήκευσε πρώτα για Excel.</span>` : html`<${ExportButton} kind="outs" date=${date} label=${isOutsAll(state.settings) ? 'η δύναμη (όλη)' : 'οι εξοδούχοι και παραμένοντες'} variant="outline" size="sm"/>`}</span></div>
-    <div className="toolbar"><${Strip} className="chips chips--wrap" role="group" aria-label="Θάλαμος"><button type="button" className="ui-chip" aria-pressed=${room == null} onClick=${() => setRoom(null)}>Όλοι οι θάλαμοι</button>${roomList.map(r => { const n = people.filter(p => p.room === r); const out = n.filter(p => draft[p.id]).length; return html`<button key=${r} type="button" className="ui-chip" aria-pressed=${room === r} onClick=${() => setRoom(room === r ? null : r)} data-tip=${out + ' από ' + n.length + ' βγαίνουν'}>Θ${r}<span className="cnt">${out}/${n.length}</span></button>`; })}<//>
-      <${Segmented} small=${true} value=${sort} onChange=${setSort} items=${[{ value: 'room', label: 'Ανά θάλαμο' }, { value: 'name', label: 'Αλφαβητικά' }]}/></div>
-    <div className="toolbar outs__find"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Επώνυμο ή όνομα (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><${Strip} className="chips chips--wrap" role="group" aria-label="Φίλτρα">${[['all', 'Όλοι', people.length], ['can', 'Μπορούν να βγουν', people.length - cantN], ['cant', 'Δεν μπορούν', cantN], ['sel', 'Επιλεγμένοι', cnt('OUT') + cnt('DN') + cnt('DNSK')]].map(([k, l, n]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} onClick=${() => setFilter(k as string)}>${l}<span className="cnt">${n}</span></button>`)}<//><${ActiveFilter} parts=${[room != null && 'Θάλαμος ' + room, filter !== 'all' && ({ can: 'Μπορούν να βγουν', cant: 'Δεν μπορούν', sel: 'Επιλεγμένοι' } as P)[filter], dq && '«' + dq + '»']} onClear=${() => { setFilter('all'); setQ(''); setRoom(null); }}/><span className="toolbar__count">${rows.length} άτομα</span></div>
-    <div className="ui-card" style=${{ overflow: 'hidden' }}>${rows.length ? html`<${VirtualList} items=${rows} resetKey=${filter + '|' + dq + '|' + date + '|' + room + '|' + sort} rowHeight=${rh} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${OutRow} key=${p.id} p=${p} unit=${unitOf(p, state.settings)} style=${style} reason=${reasons[p.id]} away=${aways.get(p.id)?.st} awayTxt=${aways.get(p.id)?.note} value=${draft[p.id]} changed=${(saved[p.id] || null) !== (draft[p.id] || null)} onSet=${set} onOpen=${open} noDn=${dnSet && !p.dn} sat=${sat} sun=${draft[p.id] === 'DNSK' ? sunWhy(p.id) : null} wkNote=${wkSun.has(p.id)} note=${notes[p.id] || ''} onNote=${setNote}/>`}/>` : html`<div className="empty">Κανείς σε αυτό το φίλτρο.</div>`}</div>
-    <p className="note" style=${{ margin: '8px 0 0' }}><${TemplateNote} ids=${['outs']}/></p>
-    ${confirm && html`<${Dialog} title="Τι θα αλλάξει" description=${'Εξοδούχοι ' + dayName(date, today).toLowerCase() + ' ' + dm(date)} onClose=${() => setConfirm(false)} footer=${html`<${Button} variant="outline" onClick=${() => setConfirm(false)}>Πίσω<//><${Button} onClick=${save}>${warns.length ? 'Αποθήκευση παρά τους κανόνες' : 'Αποθήκευση'}<//>`}>
-      ${warns.length > 0 && html`<${Alert} tone="warn"><span><b>Παρά τους κανόνες:</b>${warns.map(w => html`<span key=${w.pid}><br/>${rkShort(pmO.get(w.pid)!)}: ${w.why}</span>`)}<br/>Με την αποθήκευση το επιβεβαιώνεις.</span><//>`}
-      ${sunBackOnly.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, γυρίζουν Κυριακή πρωί</b> (δεν μπαίνει ΔΝ την Κυριακή):${sunBackOnly.map(x => html`<span key=${x.pid}><br/>${rkShort(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
-      ${sunLeave.length > 0 && html`<${Alert} tone="info"><span><b>ΔΝ ΣΚ, ξεκινά άδεια την Κυριακή</b> (μένει μόνο η ΔΝ του Σαββάτου· γράφεται στις Παρατηρήσεις):${sunLeave.map(x => html`<span key=${x.pid}><br/>${rkShort(pmO.get(x.pid)!)}: ${x.why}</span>`)}</span><//>`}
-      <ul className="hist">${diffs.map(c => html`<li key=${c.pid}><b><${RkName} p=${pmO.get(c.pid)!}/></b> <span className="muted">${valLbl(c.from, aways.get(c.pid)?.st)} →</span> ${c.to ? html`<${Badge} tone=${valTone(c.to)}>${valLbl(c.to)}<//>` : valLbl(null, aways.get(c.pid)?.st)}${c.to === 'DNSK' && !sunWhy(c.pid) ? html` <span className="muted">και ΔΝ την Κυριακή</span>` : null}</li>`)}
-        ${noteChanges.map(n => html`<li key=${'n' + n.pid}><b><${RkName} p=${pmO.get(n.pid)!}/></b> <span className="muted">παρατήρηση →</span> ${n.note ? '«' + n.note + '»' : html`<span className="muted">καμία</span>`}</li>`)}</ul>
-      <p className="note" style=${{ margin: 0 }}>Παρόντες απόψε: ${c0.present} → ${c0.present - awayDelta}. Οι Παραμένοντες βγαίνουν στο Excel με τον λόγο στις Παρατηρήσεις.</p>
-    <//>`}
-  </div>`;
-}
+// Deprecated path: the «Εξοδούχοι» screen moved to pages/outs (Phase 6). Removed in Phase 7.
+export { OutsScreen, OutsFmtSelect } from '../pages/outs';

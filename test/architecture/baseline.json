@@ -15,7 +15,7 @@
     "src/main/sources.ts": 979,
     "src/main/updater.ts": 478,
     "src/renderer/guideText.ts": 1005,
-    "src/renderer/screens/guard.ts": 655,
+    "src/renderer/screens/guard.ts": 500,
     "src/renderer/screens/reports.ts": 1284
   },
   "oversizeFunctions": {
@@ -160,7 +160,7 @@
     "src/main/sources.ts": 2,
     "src/main/tplmap.ts": 3,
     "src/renderer/features/quick-add/model/useQuickAdd.ts": 1,
-    "src/renderer/screens/guard.ts": 7,
+    "src/renderer/screens/guard.ts": 1,
     "src/renderer/screens/people.ts": 3,
     "src/renderer/screens/reports.ts": 7,
     "src/renderer/screens/weaponMoves.ts": 1,
@@ -179,7 +179,7 @@
     "src/renderer/common.ts": 5,
     "src/renderer/guideTopic.ts": 1,
     "src/renderer/main.ts": 1,
-    "src/renderer/screens/guard.ts": 23,
+    "src/renderer/screens/guard.ts": 18,
     "src/renderer/screens/imerologio.ts": 5,
     "src/renderer/screens/outsPlan.ts": 3,
     "src/renderer/screens/people.ts": 12,

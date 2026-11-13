@@ -129,6 +129,18 @@ const outsSave = {
   }
 };
 
+const outsMore = {
+  name: 'Εξοδούχοι (φίλτρα, ώρες, επιστροφές)',
+  run: async S => {
+    await S.nav('Εξοδούχοι');
+    await S.state('filter Δεν μπορούν, sort by name', async () => { await S.click('Δεν μπορούν'); await S.click('Αλφαβητικά'); }, { close: false });
+    await S.state('room Θ1', async () => { await S.click('Όλοι'); await S.click('Θ1'); }, { close: false });
+    await S.state('row choices', async () => { await S.click('Όλοι οι θάλαμοι'); await S.page.locator('.main .orow .ui-seg button').filter({ hasText: /^Έξοδος/ }).first().click(); }, { close: false });
+    await S.state('day bar edited', async () => { await S.page.locator('#dbo').fill('17:30'); await S.quiet(); }, { close: false });
+    await S.state('returns list open', async () => { await S.click('Ποιοι γυρίζουν και πότε'); }, { close: false });
+  }
+};
+
 // U5: «Ιατρικά» became the first tab of «Καταστάσεις». The walk runs on both sides of the diff, so it opens the menu
 // entry the build has and keeps the group and state names stable.
 const navOneOf = async (S, labels) => {
@@ -400,7 +412,7 @@ const today = screen('Σήμερα', async S => {
 }, { phone: true });
 
 export const GROUPS = [
-  today, people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, medical, strength,
+  today, people, cadre, guard, guardClear, guardWho, guardExport, outs, outsSave, outsMore, medical, strength,
   hkai, weapons, weaponsAsk, forms, notes, settings, settingsBackups, settingsUpdates, settingsFiles, settingsPending, settingsCards, settingsSourcesEsso, dutyBlocks, history, guide,
   diag, more
 ];
