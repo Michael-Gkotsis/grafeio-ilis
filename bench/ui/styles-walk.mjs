@@ -229,6 +229,14 @@ const settings = {
         await S.state(`new section ${i + 1} ${label}`, () => openSection(S, label), { close: false });
       }
     }
+    // U11b: the search box (only the current tree has it): results with marks, and the «nothing found» line
+    const search = S.page.locator('.settings__search');
+    if (await search.count()) {
+      for (const word of ['υπογραφ', 'κανον', 'ψψψψ']) {
+        await S.state(`search ${word}`, async () => { await search.fill(word); await S.quiet(); }, { close: false });
+      }
+      await search.fill('');
+    }
   }
 };
 const settingsGo = async (S, section) => { await S.nav('Ρυθμίσεις'); await openSection(S, section); };

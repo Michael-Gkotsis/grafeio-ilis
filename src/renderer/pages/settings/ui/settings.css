@@ -3,6 +3,7 @@
  *
  * Purpose: the look of pages/settings/ui/SettingsScreen.tsx; replaces the `setgrid`/`setnav`/`setbody` rules of
  *   legacy.css for this page, with the same list look as the guide topics and the notes filters (U8, U10).
+ * Also (U11b): the search box and its results, with the same `mark` look as the guide.
  * Does NOT: restyle the cards in ui/sections/* or the shared Tabs. The three legacy rules stay in legacy.css (their
  *   only user was this page, they are dead now and go in a later clean-up PR together with the other legacy rules).
  * Owner layer: renderer/pages/settings. Imported by pages/pages.css into layer(pages) from app/styles/index.css.
@@ -77,5 +78,83 @@
   }
   .settings__navitem {
     white-space: nowrap;
+  }
+}
+
+/* Search box in the page header. Same size as the guide search. */
+.settings__search {
+  width: 320px;
+  max-width: 100%;
+}
+
+/* Results shown in place of the open section while something is typed. */
+.settings__results {
+  padding: var(--gap-2);
+}
+.settings__count {
+  margin: 0 0 var(--gap-2);
+  padding: 4px 12px 0;
+  font-size: 12.5px;
+  color: var(--muted-fg);
+}
+.settings__hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings__hit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.settings__hit:hover,
+.settings__hit[aria-current="true"] {
+  background: var(--hover);
+}
+.settings__hit:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.settings__hit-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.settings__hit-path {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--muted-fg);
+}
+.settings__none {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-2);
+  margin: 0;
+}
+.settings__results mark {
+  background: var(--warn-bg);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* At 1024 px a 320 px box would push the subtitle onto a second line. */
+@media (max-width: 1279px) {
+  .settings__search {
+    width: 240px;
   }
 }
