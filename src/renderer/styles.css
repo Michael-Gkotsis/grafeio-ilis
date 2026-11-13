@@ -99,6 +99,8 @@ input::placeholder,textarea::placeholder{color:var(--muted-fg);opacity:.8}
 .ui-input:disabled:hover{border-color:var(--input)}
 .ui-check{width:18px;height:18px;accent-color:var(--primary);flex:none;cursor:pointer}
 .ui-checkrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap}
+.rooms-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px 12px}
+.page-head__acts .rooms-btn{color:var(--muted-fg)}
 .strict-sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;padding:0 4px}
 .ui-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);min-width:0}
 .ui-card__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:48px;padding:8px 16px;border-bottom:1px solid var(--border)}
