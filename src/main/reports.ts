@@ -195,7 +195,7 @@ export async function fillReport(tpl: Buffer | Uint8Array, s: AppState, r: Repor
     for (let i = 0; i < groups.length; i++) { const l = await fillSheet(wb, i ? uniq[i] : first, s, r, cut(tabs(groups[i])), d, groups[i].label, warnings, vo, mv); if (!i) layout.push(...l); }
     names.push(first, ...uniq.slice(1));
   }
-  const name = repFileName(r, d);
+  const name = repFileName(r, d, s.settings);
   return { name, data: await wb.save(), warnings: [...new Set(warnings)], sheets: names, groups: split ? groups.map(({ key, label, short }) => ({ key, label, short })) : [], layout, ...(counts ? { counts } : {}) };
 }
 // Ένας πίνακας του φύλλου: είδος, γραμμή επικεφαλίδων (όπως αποθηκεύτηκε), στήλες, γραμμές

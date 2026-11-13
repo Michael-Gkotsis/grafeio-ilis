@@ -10,6 +10,7 @@ import type { Sig, SigForm } from './sigs';
 import type { Layout, LayoutForm } from './layout';
 import type { ImerSettings } from './imer';
 import type { HdDoc } from './hd';
+import type { FileNames } from './fileNames';
 import type { XlLook } from './xlLook';
 
 // ---------------------------------------------------------------------------
@@ -437,6 +438,7 @@ export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['all', '
 // Η παλιά μορφή «Σε 4 πίνακες» ('tab4', Michael 30/10) αντικαταστάθηκε από την «Όλη η δύναμη»: οι αποθηκευμένες ρυθμίσεις με 'tab4' διαβάζονται ως 'all'
 export const isOutsAll = (st: { outsFmt?: OutsFmt | 'tab4' }) => st.outsFmt === 'all' || st.outsFmt === 'tab4';
 export interface Settings {
+  fileNames?: FileNames;                 // ονόματα αρχείων: όνομα, διαχωριστικό και μορφή ημερομηνίας (fileNames.ts)
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
   unitKind?: UnitKind;                   // Ίλη/Επιλαρχία (ΗΚΑΙ, προεπιλογή) ή Λόχος/Τάγμα (ΗΚΑΛ), unit.ts

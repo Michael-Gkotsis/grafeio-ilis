@@ -6,7 +6,8 @@ import { PKEYS } from './personal';
 import { absenceOfCadre, absenceOfPerson } from './absence';
 import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
-import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
+import { fileName } from './fileNames';
+import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Settings, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
@@ -770,7 +771,8 @@ export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row
   return [...by.values()].sort(byGroup);
 }
 // Τι θα γίνει όταν πατηθεί «Βγάλε», σε απλά λόγια (οδηγός, «Βγάλε…»): πόσα φύλλα/σελίδες, ποια, πού
-export const repFileName = (r: Pick<Report, 'name'>, d: ISODate) => upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim() + ' ' + d.split('-').reverse().join('-') + '.xlsx';
+// Το όνομα του εντύπου όπως είναι· η ημερομηνία στη μορφή των Ρυθμίσεων › Ονόματα αρχείων (προεπιλογή 19-10-2026)
+export const repFileName = (r: Pick<Report, 'name'>, d: ISODate, st?: Pick<Settings, 'fileNames'>) => fileName(st || {}, 'report', upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim(), d, 'xlsx');
 const baseName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
 export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'] };
 export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d: ISODate): { groups: RepGroup[]; text: string } {
@@ -778,7 +780,7 @@ export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d
   const groups = split ? groupsOf(s, r.kind, rows, r.split) : [];
   const gl = (f: (g: RepGroup) => string) => groups.slice(0, 6).map(g => f(g) + ' (' + g.rows.length + ')').join(', ') + (groups.length > 6 ? ' κ.ά.' : '');
   const one = SPLIT_NOUN[r.split || 'none'][0];
-  const file = repFileName(r, d);
+  const file = repFileName(r, d, s.settings);
   const parts = (page: boolean) => (groups.length === 1 ? (page ? '1 σελίδα' : '1 φύλλο') : groups.length + (page ? ' σελίδες' : ' φύλλα')) + (page ? ', μία' : ', ένα') + ' για κάθε ' + one + (groups.length ? ': ' + gl(g => g.short) : '');
   let text: string;
   if (r.out === 'print') text = 'Ανοίγει η προεπισκόπηση εκτύπωσης' + (split ? ' με ' + parts(true) : '') + '. Το αρχείο «' + file + '» μένει και στον φάκελο των Excel.';

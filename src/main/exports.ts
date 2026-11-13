@@ -1,13 +1,14 @@
 // Συμπλήρωση των εντύπων της Ίλης από την κατάσταση της εφαρμογής (06, 11).
 // Κάθε συνάρτηση παίρνει το κενό template και επιστρέφει το συμπληρωμένο αρχείο.
-import { addDays, dm, dmy, dmyy, hkDate, parseD, weekday, DOW_FULL, DOW_GEN, MON_SHORT, type ISODate } from '../shared/dates';
+import { addDays, dm, dmy, hkDate, parseD, weekday, DOW_FULL, DOW_GEN, MON_SHORT, type ISODate } from '../shared/dates';
 import { dayTimes, retFor, retNote, retTxt } from '../shared/returns';
 import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, frouraFile, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { live, hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
+import { fileNameOf, frouraName } from '../shared/fileNames';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
@@ -351,7 +352,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const shName = base !== phase && name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base] ? wb.renameSheet(name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase)) : name;
   const headRefs = head.slice(0, Math.max(map.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
   const layout = await signSheets(wb, [{ ws, key: 'main', more: [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
-  return { name: frouraFile(s.settings, phase) + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: shName };
+  return { name: frouraName(s.settings, phase, d), data: await wb.save(), warnings, layout, sheet: shName };
 }
 // Τα κελιά της κεφαλίδας: του template, και (αν έχει λιγότερες από 3) τα κενά από κάτω της, πάνω από τη γραμμή stop
 function headCells(head: { r: number; c: number }[], stop: number, busy: (r: number, c: number) => boolean): { r: number; c: number }[] {
@@ -447,7 +448,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const t = /^([A-Z]+)(\d+)$/.exec(m.title); const hr = t && Number(t[2]) >= 3 ? [t[1] + (Number(t[2]) - 3), t[1] + (Number(t[2]) - 2)] : [];
   const front: SheetPart = { ws: fr, key: 'front', more: [blockOf(fr, 'head', hr), blockOf(fr, 'date', m.date ? [m.date] : [])] };
   const layout = await signSheets(wb, fr === bk ? [front] : [front, { ws: bk, key: 'back', more: [blockOf(bk, 'date', B.date ? [B.date] : [])] }], s, 'hkai', opts.sigs, warnings);
-  return { name: reportOf(s.settings) + ' ' + dmyy(d).replace(/\//g, '.') + '.xlsx', data: await wb.save(), warnings, layout, sheet: frName };
+  return { name: fileNameOf(s.settings, 'hkai', d), data: await wb.save(), warnings, layout, sheet: frName };
 }
 
 // Οι δικές σου γραμμές (βαθμοί) που δεν έχει το έντυπο: νέα γραμμή κάτω από αυτήν που διάλεξες, με τη μορφή και τους
@@ -593,7 +594,7 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
   // ένα φύλλο με τις δύο λίστες: μία κεφαλίδα και μία ημερομηνία για τη μετακίνηση (της πρώτης λίστας / της τελευταίας)
   const done: SheetPart[] = marks.map(x => ({ ws: x.ws, key: x.key, more: [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] }));
   const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
-  return { name: 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ ' + dmy(d).replace(/\//g, '-') + '.xlsx', data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
+  return { name: fileNameOf(s.settings, 'outs', d), data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
 }
 
 
