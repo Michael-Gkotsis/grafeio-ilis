@@ -7,12 +7,13 @@ import { norm, normGreek, collator, upper } from './text';
 import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, isBareCode, readDuty, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
-import { DN_HEAD, DN_WORD, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
+import { DN_HEAD, DN_WORD, HEADERS, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { capCols, isHol, postBy, seatMap } from './rules';
 import { listOf, medNote, medNoteXl, medTypeOf, optionsOf, rankTxt, type ListId, type UserLists } from './ranks';
 import { parseSi, siCombos, siLabel } from './si';
 import { cellTime, timeNames } from './hours';
-import { essoName } from './esso';
+import { essoName, essoPersonTxt, parseEsso } from './esso';
+import { isUnit } from './mode';
 import { hkRowNames } from './unit';
 import { PKEYS, XKEYS, personalFromCell, type PKey } from './personal';
 import { planCadresWrite, planCadreAbsWrite, CADRE_OPT } from './cadreSource';
@@ -144,8 +145,13 @@ export const inRoster = (k: ListKind) => canCreate(k) && k !== 'people' && k !==
 export const sheetHost = (k: ListKind): ListKind | null => (inRoster(k) ? 'people' : k === 'cadreAbs' ? 'cadres' : null);
 // Το προσωπικό δεν έχει «ονοματεπώνυμο σε ένα κελί» (το Δυναμολόγιο τα έχει χωριστά) ούτε Α/Α που να μετράει
 const CADRE_PERSON = ['aa', 'rank', 'origin', 'spec', 'last', 'first', 'phone'];
+// Λειτουργία μονάδας: ΕΣΣΟ, ημερομηνία εισαγωγής και Λόχος/Ίλη στο Δυναμολόγιο. Βρίσκονται πάντα αν υπάρχουν στο Excel, αλλά γράφονται μόνο στη μονάδα (unitKeys)
+const hdr = (k: string) => HEADERS.find(h => h[0] === k)![1];
+export const UNIT_FIELDS: FieldDef[] = [F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', hdr('essos')), F('inOn', 'Ημερομηνία εισαγωγής', 'ΗΜ. ΕΙΣΑΓΩΓΗΣ', hdr('inOn'), { date: true }), F('sub', 'Λόχος / Ίλη', 'ΛΟΧΟΣ', hdr('sub'))];
+export const UNIT_SYNC = ['essos', 'inOn', 'sub'];
+export const syncKeys = (s: Pick<AppState, 'settings'>): string[] => (isUnit(s.settings) ? [...PEOPLE_SYNC, ...UNIT_SYNC] : PEOPLE_SYNC);
 export const fieldsOf = (k: ListKind): FieldDef[] => (isCadreKind(k) ? [...PERSON_FIELDS.filter(f => CADRE_PERSON.includes(f.k) && (k === 'cadres' || f.k !== 'phone' && f.k !== 'origin')).map(f => (f.k === 'spec' ? { ...f, re: /^Ο\s*[/\-]\s*Σ$/ } : f)), ...KIND[k].fields]   // στα στελέχη η «ΕΙΔΙΚΟΤΗΤΑ» είναι δικό της πεδίο, όχι Ο/Σ
-  : [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields]);
+  : [...PERSON_FIELDS.filter(f => !(k === 'people' || k === 'posts' || k === 'outside') || f.k !== 'name'), ...KIND[k].fields, ...(k === 'people' ? UNIT_FIELDS : [])]);
 export const kindOfType = (t: TypeKey): StatusKind | null => (STATUS_KINDS.find(k => KIND[k].types!.includes(t)) || null);
 
 // ------------------------------------------------------------------ κείμενα κελιών
@@ -889,10 +895,10 @@ const CADRE_DEFAULT: Partial<Record<ListKind, string[]>> = {
   cadres: ['aa', 'rank', 'origin', 'spec', 'last', 'first', 'am', 'phone', 'role', 'hk', 'active'],
   cadreAbs: ['aa', 'rank', 'spec', 'last', 'first', 'kind', 'hkcol', 'from', 'to', 'note']
 };
-export function defaultBinding(kind: ListKind, file: string, sheet = KIND[kind].title.slice(0, 31)): SourceBinding {
+export function defaultBinding(kind: ListKind, file: string, sheet = KIND[kind].title.slice(0, 31), unit = false): SourceBinding {
   const own = CADRE_DEFAULT[kind];
   if (own) return { file, sheet, header: 1, cols: Object.fromEntries(own.map((k, i) => [k, i])), write: true, scope: 'active' };
-  const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days' && f.k !== 'dest' && !PKEYS.includes(f.k as PKey)).map(f => f.k)];   // η κατεύθυνση και τα IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν αργότερα, μόνο όταν υπάρχουν τιμές (timeCols)
+  const keys = ['aa', 'rank', 'spec', 'last', 'first', 'father', 'asm', 'phone', 'room', ...KIND[kind].fields.filter(f => f.k !== 'days' && f.k !== 'dest' && !PKEYS.includes(f.k as PKey)).map(f => f.k), ...(unit && kind === 'people' ? UNIT_SYNC : [])];   // η κατεύθυνση και τα IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν αργότερα, μόνο όταν υπάρχουν τιμές (timeCols)
   return { file, sheet, header: 1, cols: Object.fromEntries(keys.map((k, i) => [k, i])), write: isStatusKind(kind), scope: 'active' };
 }
 // Τι λείπει από μια αντιστοίχιση για να δουλέψει
@@ -1000,9 +1006,11 @@ export type PersonSnap = Record<string, string>;
 // Χωρίς στήλη ΔΝ, το δικαίωμα ΔΝ γράφεται ως λέξη στις παρατηρήσεις (όπως το διαβάζει η εισαγωγή)
 const remarksOf = (role: string, dn: boolean, inRemarks: boolean) => [stripDn(role), inRemarks && dn ? 'ΔΝ' : ''].filter(Boolean).join(' ');
 // rank: με την προέλευση μπροστά, όπως γράφεται όπου ο πίνακας δεν έχει στήλη «Προέλευση» (στη στήλη της, μόνο ο βαθμός: outVal)
+const essoKey = (v: string) => { const e = parseEsso(v); return e ? essoPersonTxt(e) : upper(v.trim()); };
 export const personVals = (p: Person, b?: SourceBinding): PersonSnap => ({
   rank: rankTxt(p), origin: p.origin || '', spec: p.spec || '', last: p.last || '', first: p.first || '', father: p.father || '', asm: p.asm || '',
   phone: p.phone || '', room: p.room == null ? '' : String(p.room), si: p.si || '', remarks: remarksOf(p.role || '', !!p.dn, !!b && b.cols.dn == null),
+  essos: p.essos ? essoKey(p.essos) : '', inOn: p.inOn || '', sub: upper(p.sub || ''),   // μονάδα: κεφαλαία, ημερομηνία ISO (στο κελί: ημερομηνία Excel)
   dn: p.dn ? 'ΝΑΙ' : '', iban: p.iban || '', amka: p.amka || '', afm: p.afm || '',
   email: p.email || '', relEmail: p.relEmail || '', blood: p.blood || ''   // βάση για το φύλλο ΘΑΛΑΜΟΙ (roomExtra.ts)
 });
@@ -1029,7 +1037,7 @@ export function withRows(sheet: RawSheet, steps: RowInsert[]): RawSheet {
 export interface PeoplePlan { sets: { r: number; c: number; v: WVal }[]; changed: number; notFound: string[]; snap: Record<number, PersonSnap>;
   inserts: RowInsert[]; deletes: number[]; added: number; cleared: number; keys: string[]; grow: { from: number; last: number; to: number } | null;
   fresh: number[]; gone: PersonSnap[]; warn?: string[] }
-const snapVal = (k: string, v: string): WVal => (v === '' ? null : k === 'room' ? Number(v) : k === 'asm' || k === 'phone' ? num(v) : v);
+const snapVal = (k: string, v: string): WVal => (v === '' ? null : k === 'inOn' ? { date: v } : k === 'room' ? Number(v) : k === 'asm' || k === 'phone' ? num(v) : v);
 // η τιμή που γράφεται στο κελί: ο βαθμός χωρίς την προέλευση όταν ο πίνακας έχει δική της στήλη
 const outVal = (k: string, cur: PersonSnap, p: Person, b: SourceBinding): WVal => (k === 'rank' ? rankCell(p, b) : snapVal(k, cur[k]));
 const roomNo = (v: CellValue) => { const n = parseInt(cellText(v), 10); return n > 0 ? n : null; };
@@ -1076,12 +1084,12 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     return l.length === 1 ? l[0] : l.find(x => normGreek(cellText(x.v.father)) === normGreek(v.father));
   };
   const orig: { r: number; c: number; v: WVal }[] = [];   // σε γραμμές του φύλλου όπως είναι τώρα
-  const pm = new Map(s.people.map(p => [p.id, p]));
+  const pm = new Map(s.people.map(p => [p.id, p])); const keys0 = syncKeys(s);
   for (const p of s.people) {
     const old = snap[p.id]; if (!old) continue;
     const cur = personVals(p, b);
     // κενό δεν σβήνει κελί, εκτός από το ΔΝ, τις παρατηρήσεις (εκεί το «όχι» είναι κενό) και τα IBAN/ΑΜΚΑ/ΑΦΜ (που τα έσβησες στην καρτέλα)
-    const diff = PEOPLE_SYNC.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || (PKEYS.includes(k as PKey) || ((k === 'dn' || k === 'remarks' || k === 'origin') && p.active))));
+    const diff = keys0.filter(k => b.cols[k] != null && cur[k] !== (old[k] || '') && (cur[k] !== '' || (PKEYS.includes(k as PKey) || ((k === 'dn' || k === 'remarks' || k === 'origin') && p.active))));
     if (!diff.length) continue;
     const row = find(old) || find(cur);
     if (!row) { plan.notFound.push(fullName(p)); continue; }
@@ -1145,7 +1153,7 @@ export function planPeopleWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   let k = 0;
   const put = (r: number, p: Person, aa: number | null) => {
     const cur = personVals(p, b);
-    for (const f of PEOPLE_SYNC) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: outVal(f, cur, p, b) });
+    for (const f of keys0) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: outVal(f, cur, p, b) });
     if (b.cols.name != null) plan.sets.push({ r, c: b.cols.name, v: nameCell(p, b) });
     if (aa != null) plan.sets.push({ r, c: aaCol!, v: aa });
     plan.snap[p.id] = cur; plan.keys.push(String(p.id)); plan.fresh.push(p.id); k++;
@@ -1179,7 +1187,7 @@ export function planPeopleNew(b: SourceBinding, s: AppState): Omit<FullPlan, 'ps
   people.forEach((p, i) => {
     const r = b.header + 1 + i; const cur = personVals(p, b);
     if (b.cols.aa != null) plan.sets.push({ r, c: b.cols.aa, v: i + 1 });
-    for (const f of PEOPLE_SYNC) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: outVal(f, cur, p, b) });
+    for (const f of syncKeys(s)) if (b.cols[f] != null && cur[f] !== '') plan.sets.push({ r, c: b.cols[f], v: outVal(f, cur, p, b) });
     plan.snap[p.id] = cur;
     if (p.added) plan.keys.push(String(p.id));
   });
@@ -1291,13 +1299,14 @@ export function snapFromSheet(sheet: RawSheet, b: SourceBinding, people: Person[
     const t = (k: string) => (b.cols[k] == null ? null : cellText(v[k]));
     const p = people.find(x => x.id === m.pid)!; const cur = personVals(p, b);
     const snap: PersonSnap = {};
-    for (const k of PEOPLE_SYNC) {
+    for (const k of [...PEOPLE_SYNC, ...UNIT_SYNC]) {
       const x = t(k);
       if (x == null) { snap[k] = cur[k]; continue; }          // η στήλη δεν υπάρχει: τίποτα να γραφτεί
       // βαθμός σε πίνακα με στήλη «Προέλευση»: μαζί με αυτήν, όπως το personVals
       if (k === 'rank' && b.cols.origin != null) { snap[k] = rankTxt({ rank: normGreek(x), origin: normGreek(t('origin') || '') }); continue; }
       if (!p.active && (k === 'remarks' || k === 'dn')) { snap[k] = cur[k]; continue; }   // εκτός δύναμης: ο ρόλος δεν περνά στην εφαρμογή
       snap[k] = k === 'asm' || k === 'phone' ? x.replace(/\s/g, '') : k === 'room' ? (parseInt(x, 10) > 0 ? String(parseInt(x, 10)) : '')
+        : k === 'essos' ? essoKey(x) : k === 'inOn' ? (parseDate(v[k]) || '') : k === 'sub' ? upper(norm(x))
         : PKEYS.includes(k as PKey) ? personalFromCell(k as PKey, x) : k === 'dn' ? (isDnYes(x) ? 'ΝΑΙ' : '') : k === 'remarks' ? remarksOf(x, DN_WORD.test(norm(x)), b.cols.dn == null)
         : k === 'rank' || k === 'spec' || k === 'si' ? normGreek(x) : norm(x);   // όπως τα διαβάζει το Δυναμολόγιο (roster.ts)
     }

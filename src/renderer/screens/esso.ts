@@ -9,6 +9,7 @@ import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../..
 import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
 import { UnitKindField } from './hkrows';
 import { GoLink } from '../common';
+import { DischargeDialog, ScheduledMoves } from './moves';
 type P = any;
 
 const join = (dir: string, name: string) => dir.replace(/[\\/]+$/, '') + (dir.includes('\\') ? '\\' : '/') + name;
@@ -27,17 +28,18 @@ function EssoFields({ v, onChange, id }: P) {
 function UnitEssoTable() {
   const { state, today } = useStore(); const nav = useNav();
   const rows = useMemo(() => essoRows(state.people), [state.people]);
+  const [dis, setDis] = useState<string | null>(null);
   const noEsso = state.people.filter(p => p.active && !parseEsso(p.essos)).length;
   return html`<${Card} title="ΕΣΣΟ στη μονάδα">
     ${rows.length ? html`<table className="legend"><thead><tr><th>ΕΣΣΟ</th><th>Σε δύναμη</th><th>Εκτός δύναμης</th><th>Απόλυση περίπου</th><th></th></tr></thead><tbody>
       ${rows.map(r => { const d = essoDischarge(r.esso), n = daysToDischarge(d, today);
         return html`<tr key=${r.txt}><td className="nw"><b>${r.txt}</b></td><td>${r.active}</td><td>${r.inactive}</td>
           <td>${dischargeLabel(d)}${n >= 0 && n <= 30 && html` <${Badge} tone="warn">σε ${n} ${n === 1 ? 'μέρα' : 'μέρες'}<//>`}${n < 0 && r.active > 0 && html` <${Badge} tone="bad">πέρασε<//>`}</td>
-          <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Δυναμολόγιο, μόνο αυτή η ΕΣΣΟ">Ποιοι<//></td></tr>`; })}</tbody></table>`
+          <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Δυναμολόγιο, μόνο αυτή η ΕΣΣΟ">Ποιοι<//><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => setDis(r.txt)}>Απόλυση ΕΣΣΟ…<//></td></tr>`; })}</tbody></table>`
       : html`<p className="note" style=${{ margin: 0 }}>Κανείς από τους στρατιώτες δεν έχει ΕΣΣΟ στην καρτέλα του.</p>`}
     ${noEsso > 0 && html`<p className="note">${noEsso} ${noEsso === 1 ? 'στρατιώτης σε δύναμη δεν έχει' : 'στρατιώτες σε δύναμη δεν έχουν'} ΕΣΣΟ στην καρτέλα τους.</p>`}
     <p className="note">Η απόλυση βγαίνει από τον μήνα κατάταξης κάθε σειράς (Α΄ Φεβρουάριος, Β΄ Μάιος, Γ΄ Αύγουστος, Δ΄ Νοέμβριος) και 12 μήνες μετά. Είναι ενδεικτική: για όσους κάνουν μικρότερη θητεία ισχύει η ημερομηνία που θα ορίσεις εσύ.</p>
-    ${/* εδώ μπαίνουν στο μέρος 2 το «Απόλυση ΕΣΣΟ…» και η λίστα «Κινήσεις των επόμενων ημερών» */ null}
+    ${dis && html`<${DischargeDialog} esso=${dis} onClose=${() => setDis(null)}/>`}
   <//>`;
 }
 
@@ -54,7 +56,7 @@ export function EssoCards() {
   const saveEdit = async () => { if (!edit) return; if (await run({ t: 'setSettings', settings: { essos: { ...(own || {}), s: edit.s, y: edit.y } }, text: 'ΕΣΣΟ ' + essoName(edit) })) setEdit(null); };
   const pick = async () => { const r = await window.api.essoPick(); if (!r) return; if ('ok' in r) { toast({ text: r.error }); return; } setRestore(r); };
   return html`<div className="stack">
-    ${unit ? html`<${UnitEssoTable}/>` : html`<${Card} title="ΕΣΣΟ">
+    ${unit ? html`<${UnitEssoTable}/><${ScheduledMoves}/>` : html`<${Card} title="ΕΣΣΟ">
       <dl className="kv"><dt>Τωρινή</dt><dd>${cur ? html`<b>${essoName(cur)}</b>` : html`<span className="muted">δεν έχει οριστεί</span>`}
           ${!own && cur && html` <span className="muted">(από το Δυναμολόγιο)</span>`}${own?.from && html` <span className="muted">· από ${dmy(own.from)}</span>`}
           ${!edit && html` <${Button} variant="link" onClick=${() => setEdit(cur || nextEsso(null, today))}>Διόρθωση<//>`}</dd>

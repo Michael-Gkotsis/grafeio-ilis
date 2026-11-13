@@ -37,6 +37,8 @@ import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
 type P = any;
 
+import { isUnit } from '../../shared/mode';
+import { TodayMoves } from './moves';
 export function TodayScreen() {
   const { state, today, tomorrow, boot, audit } = useStore(); const nav = useNav(); const usb = useUsbCopy();
   const [forms, setForms] = useState(false);
@@ -135,6 +137,7 @@ export function TodayScreen() {
         <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
       <//>`}
       ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12} at=${strengthAt(state.rules, today, today, now)}/><//>`}
+      ${isUnit(state.settings) && html`<${TodayMoves}/>`}
       ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
         <ul className="rows">${ends.map(({ s, when, tip }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${pm.get(s.pid)!}/></button><span className="muted" data-tip=${tip || undefined} data-tip-side="left">${what(s)} · ${when}</span></li>`)}</ul>
       <//>`}

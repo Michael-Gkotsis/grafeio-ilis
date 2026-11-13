@@ -27,6 +27,8 @@ import { itemKey } from '../../shared/ranks';
 import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
+import { MoveDialog, MovesHistory } from './moves';
+import { dischargeLabel, personDischarge } from '../../shared/mode';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { PersonalTab } from './personal';
 import { ImerTab } from './imerologio';
@@ -249,13 +251,13 @@ const SHEET_TABS = [{ value: 'info', label: 'Στοιχεία' }, { value: 'duty
 export function PersonSheet({ pid, list, onMove, onClose }: P) {
   const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
   const p = personMap(state.people).get(pid);
-  const [edit, setEdit] = useState(false);
+  const [edit, setEdit] = useState(false); const [mv, setMv] = useState(false);
   const [fix, setFix] = useState<Status | null>(null);
   const [times, setTimes] = useState<Status | null>(null);
   const [end, setEnd] = useState<Status | null>(null);
   const [tab, setTab] = useState('info');
   const order: number[] = useMemo(() => list || state.people.filter(x => x.active || x.id === pid).sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first)).map(x => x.id), [list, state.people]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const busy = edit || !!times || !!end;
+  const busy = edit || mv || !!times || !!end;
   const { at, n: total, move } = useSheetNav(order, pid, onMove, busy);
   const nowM = useNowMin();
   useEffect(() => { setEdit(false); setTimes(null); setEnd(null); setFix(null); const b = document.querySelector('.ui-sheet__body'); if (b) b.scrollTop = 0; }, [pid]);
@@ -280,7 +282,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   return html`<${Sheet} onClose=${onClose} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}><${RkName} p=${p} fn=${plainName} keep=${true}/></h2>`} subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>του ${p.father || '—'} · ${rkOn() ? '' : rankTxt(p) + ' · '}${unitOf(p, state.settings)}${isUnit(state.settings) && p.sub ? ' · ' + p.sub : ''}${isUnit(state.settings) && p.essos ? ' · ΕΣΣΟ ' + p.essos : ''}${isUnit(state.settings) && p.inOn ? ' · ήρθε ' + dmy(p.inOn) + (p.came ? ' από ' + p.came : '') : ''}${p.active ? '' : ' · ΕΚΤΟΣ ΔΥΝΑΜΗΣ'}</div><div style=${{ marginTop: '6px' }}><${StatusBadge} statuses=${state.statuses} pid=${pid} date=${today} lists=${state.settings.lists}/></div>`}>
     <${TodayAlert} rules=${rules} rem=${rem} onRem=${() => setTab('notes')}/>
     ${hn.length > 0 && html`<div className="healthnote"><b>Σημειώσεις υγείας:</b> ${hn.map(x => noteTxt(x, lists)).join(' · ')}</div>`}
-    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
+    <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} onClick=${() => nav.declare({ pids: [pid] })}>Δήλωσε κατάσταση<//><${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//>${isUnit(state.settings) && html`<${Button} variant="outline" onClick=${() => setMv(true)}>Κίνηση…<//>`}</div>
     <${Tabs} value=${tab} onChange=${(t: string) => nav.guard(() => setTab(t))} items=${SHEET_TABS.map(t => ({ ...t, label: t.value === 'duty' ? t.label + ' (' + dd.total + ')' : t.value === 'hist' ? t.label + ' (' + hist.length + ')' : t.value === 'notes' ? notesTabLabel(ng) : t.label }))}/>
     ${tab === 'info' && html`
     <dl className="kv"><dt>Βαθμός</dt><dd>${p.rank || '—'}</dd><dt>Προέλευση</dt><dd>${p.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${p.spec || '—'}</dd><dt>Επίθετο</dt><dd>${p.last || '—'}</dd><dt>Όνομα</dt><dd>${p.first || '—'}</dd><dt>Πατρώνυμο</dt><dd>${p.father || '—'}</dd>
@@ -289,7 +291,9 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
       ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p, true)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι)</span></dd>`}
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: rkShort(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημ. Δυναμολογίου</dt><dd>${p.notes}</dd>`}
+      ${isUnit(state.settings) && personDischarge(p) && html`<dt>Απόλυση περίπου</dt><dd>${dischargeLabel(personDischarge(p)!)} <span className="muted" style=${{ fontSize: '12px' }}>(${p.serve === 9 ? '9' : '12'} μήνες θητεία)</span></dd>`}
     </dl>
+    ${isUnit(state.settings) && html`<${MovesHistory} p=${p}/>`}
     `}
     ${tab === 'duty' && html`
     <dl className="kv"><dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
@@ -302,6 +306,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     ${tab === 'notes' && html`<${NotesTab} key=${pid} who=${{ pid }}/>`}
     ${tab === 'pers' && html`<${PersonalTab} key=${pid} who=${{ pid }} rec=${p}/>`}
     ${edit && html`<${EditPersonDialog} p=${p} onClose=${() => setEdit(false)}/>`}
+    ${mv && html`<${MoveDialog} p=${p} onClose=${() => setMv(false)}/>`}
     ${times && html`<${LeaveTimesDialog} st=${times} onClose=${() => setTimes(null)}/>`}
     ${end && html`<${LeaveEndDialog} st=${end} onClose=${() => setEnd(null)}/>`}
     ${fix && html`<${StatusFixDialog} st=${fix} onClose=${() => setFix(null)}/>`}
@@ -455,7 +460,7 @@ function PersonFields({ x, setX, id, isNew }: P) {
       <${ChoiceField} id=${id + '-essos'} label="ΕΣΣΟ *" value=${x.essos || ''} options=${choices} placeholder="π.χ. 2026 Γ΄" otherLabel="+ Άλλη ΕΣΣΟ…" otherHelp="Γράψε τη όπως τις άλλες, π.χ. 2025 Δ΄." onChange=${(v: string) => setX({ ...x, essos: v })}/>
       <div className="field"><label className="field__label" htmlFor=${id + '-inon'}>Ημερομηνία εισαγωγής *</label><${DateField} id=${id + '-inon'} className="ui-input" max=${addDays(today, 366)} value=${x.inOn || ''} onChange=${(e: any) => e.target.value && setX({ ...x, inOn: e.target.value })}/></div>
       <div className="field"><label className="field__label" htmlFor=${id + '-came'}>Ήρθε από</label><input id=${id + '-came'} className="ui-input" placeholder="π.χ. ΚΕΝ ΑΥΛΩΝΑ" value=${x.came || ''} onChange=${(e: any) => setX({ ...x, came: e.target.value })}/></div></div>
-      <div className="field-row"><${SubField} id=${id + '-sub'} value=${x.sub || ''} onChange=${(v: string) => setX({ ...x, sub: v || undefined })}/><div className="field"></div><div className="field"></div></div>
+      <div className="field-row"><${SubField} id=${id + '-sub'} value=${x.sub || ''} onChange=${(v: string) => setX({ ...x, sub: v || undefined })}/><div className="field"><label className="field__label" htmlFor=${id + '-serve'}>Θητεία</label><${Select} id=${id + '-serve'} className="ui-input" value=${String(x.serve === 9 ? 9 : 12)} onChange=${(e: any) => setX({ ...x, serve: e.target.value === '9' ? 9 : undefined })}><option value="12">12 μήνες</option><option value="9">9 μήνες (Θράκη, νησιά, ΕΛΔΥΚ…)</option><//></div><div className="field"></div></div>
       <span className="field__help">Ημερομηνία εισαγωγής: πότε ήρθε στη μονάδα (και παλιότερη, για όσους είναι ήδη εδώ). Μπαίνει στις ΕΓΓΡΑΦΕΣ της ${HK()} εκείνης της μέρας. «Ήρθε από» προαιρετικό.</span></div>`}
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && !unit && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>

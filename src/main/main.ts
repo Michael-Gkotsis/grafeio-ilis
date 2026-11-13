@@ -172,6 +172,7 @@ function daily() {
   const d = today();
   if (store.state.statuses.some(x => x.open && x.to < d)) runCmd({ t: 'extendOpen' });
   if (!store.hasAuditToday(d, 'auto')) runCmd({ t: 'expire' });
+  if (isUnit(store.state.settings) && store.state.people.some(p => p.moves?.some(m => !m.done && m.on <= d))) runCmd({ t: 'applyMoves' });   // κινήσεις δύναμης (μονάδα) που έφτασε η μέρα τους
   if (dayOf && dayOf !== d) {
     // και το Δυναμολόγιο: τα σύνολα κάτω από το ΣΥΝΟΛΙΚΟ είναι της σημερινής μέρας
     const ks: ListKind[] = [...STATUS_KINDS.filter(k => bindingOf(k)?.scope === 'active' && bindingOf(k)?.write !== false), ...(bindingOf('people') ? ['people' as const] : [])];
@@ -711,7 +712,7 @@ async function newPlace(kind: ListKind): Promise<{ b: SourceBinding; found?: boo
   const es = store.state.settings.essos ? essoName(store.state.settings.essos) : '';
   if (kind === 'duties') return { b: dutiesBinding(freeName(dir, 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + (es || today().slice(0, 4))), today().slice(0, 7), undefined, store.state.settings) };
   const name = kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + es + ' ' + (store.state.settings.unitName || '')).replace(/\s+/g, ' ').trim() : KIND[kind].title;
-  return { b: { ...defaultBinding(kind, freeName(dir, name)), write: true } };
+  return { b: { ...defaultBinding(kind, freeName(dir, name), undefined, isUnit(store.state.settings)), write: true } };
 }
 // «Νέο αρχείο…» ενός είδους (Αρχεία Excel) και τα Excel της νέας ΕΣΣΟ
 type NewOut = { ok: true; file: string; sheet: string; inRoster?: boolean; found?: boolean; sheets?: string[] } | { ok: false; error: string; locked?: boolean };
