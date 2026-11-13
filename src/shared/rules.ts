@@ -581,8 +581,10 @@ function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<IS
   return null;
 }
 // Ήδη σε άλλη θέση τη μέρα (ή υπηρεσία χωρίς θέση από Excel), ανεξάρτητα από κάθε άλλο λόγο· k: η θέση που κρίνεται (δεν μετρά)
+// Στην αυτόματη συμπλήρωση η 2η υπηρεσία επιτρέπεται μόνο στο secondPass (όλοι πρώτα μία)· στη χειροκίνητη ανάθεση πάντα (με ⚠)
+let autoFill = 0, secondOn = false;
 export function alreadyOn(s: AppState, date: ISODate, pid: number, k: string | null): string | null {
-  if (twoMode(s) !== 'never') {
+  if (twoMode(s) !== 'never' && (!autoFill || secondOn)) {
     // μονάδα: 2η υπηρεσία μόνο χωρίς επικάλυψη και με κενό τουλάχιστον twoGap ωρών
     const me = k ? postBy(s, k) : undefined; const gap = twoGapMin(s.rules);
     for (const o of postsOn(s, date, pid, k || undefined)) if (!me || !twoFits(me, o, gap)) return 'Ήδη ' + postTxt(o) + (me ? ' (ώρες που πέφτουν μαζί ή κενό κάτω από ' + (s.rules.twoGap ?? 2) + ' ώρες)' : '');
@@ -789,6 +791,9 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
 // rooms (Michael, 13/11): μόνο για αυτή τη συμπλήρωση, παίρνει μόνο όσους είναι σε αυτούς τους θαλάμους (κενό = όλοι).
 // Η σειρά δικαιοσύνης μετριέται όπως πάντα σε όλη τη δύναμη· οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν όπως πάντα.
 export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
+  autoFill++; try { return fillDay0(s, date, rooms); } finally { autoFill--; }
+}
+function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   // ένα δικό της αντίγραφο του ημερολογίου, όπου αλλάζει μόνο η μέρα (όχι νέο αντίγραφο όλου του έτους σε κάθε θέση)
   const wg: Guards = { ...s.guards, [date]: { ...g } };
@@ -839,7 +844,7 @@ export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | 
   n += nHol;
   if (nHol) holWarn.push(dm(date) + ': ' + (nHol === 1 ? 'μπήκε 1 που είχε' : 'μπήκαν ' + nHol + ' που είχαν') + ' κάνει αργία πρόσφατα (δεν έφταναν οι υπόλοιποι)');
   // μονάδα: 2η υπηρεσία όποιου έχει ήδη σήμερα, μόνο για θέσεις που έμειναν κενές (όλοι πήραν πρώτα μία)
-  if (twoMode(s) !== 'never') n += secondPass(s, date, g, mine, order, people, fair, idx, fixed, strict, mark);
+  if (twoMode(s) !== 'never') { secondOn = true; try { n += secondPass(s, date, g, mine, order, people, fair, idx, fixed, strict, mark); } finally { secondOn = false; } }
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
   const fin: AppState = { ...s, guards: { ...s.guards, [date]: g } };
   const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn];

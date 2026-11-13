@@ -77,10 +77,10 @@ describe('δύο υπηρεσίες την ίδια μέρα', () => {
 });
 
 describe('Έλεγχος υπηρεσιών Excel με δύο υπηρεσίες', () => {
-  it('γράφεται «Θ1Α/Μ1» με κεφαλαία στη μονάδα· στο κέντρο μία μόνο όπως πριν', async () => {
+  it('γράφεται «Θ1α/Μ1» στη μονάδα (κωδικοί όπως στο κέντρο)· στο κέντρο μία μόνο όπως πριν', async () => {
     const cell = async (s: AppState) => { const wb = await Workbook.open((await dutyCheck(s, '2026-10')).data); const rows = await wb.values(wb.sheetNames()[0]); return rows.find(x => x[2] === s.people[0].last)![rows[2].indexOf('14')]; };
     const s = { ...base(4, true), guards: { [D]: { th1: 1, mg1: 1 } } };
-    expect(await cell(s)).toBe('Θ1Α/Μ1');
+    expect(await cell(s)).toBe('Θ1α/Μ1');
     expect(await cell({ ...s, settings: { ...s.settings, mode: undefined } })).toBe('Μ1');
   });
   it('η ανάγνωση δέχεται «Θ3/Μ2» και ξαναβρίσκει και τις δύο υπηρεσίες', () => {

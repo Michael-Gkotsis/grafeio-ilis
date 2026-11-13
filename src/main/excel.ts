@@ -100,7 +100,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
     const vals: (string | number)[] = [i + 1, upper(rankTxt(p)), upper(p.last), upper(p.first + fatherTxt(p))];
     for (const d of days) {
       const v = x.get(d);
-      if (v) { for (const u of v) { nDuty++; if (isHol(s.settings, d)) hol++; c[u.kind] = (c[u.kind] || 0) + 1; if (u.own) o[u.own] = (o[u.own] || 0) + 1; } vals.push(unit ? upper(v.map(u => u.code).join('/')) : v[0].code); continue; }
+      if (v) { for (const u of v) { nDuty++; if (isHol(s.settings, d)) hol++; c[u.kind] = (c[u.kind] || 0) + 1; if (u.own) o[u.own] = (o[u.own] || 0) + 1; } vals.push(unit ? v.map(u => u.code).join('/') : v[0].code); continue; }
       // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
       const st = statusesFrom(live(s), p.id, d, dutyMin(s.settings)).find(t => absCode(t, s.settings.lists));
       vals.push(st ? absCode(st, s.settings.lists)! : '');
@@ -118,7 +118,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   });
   ws.getColumn(1).width = fitWidth(4, [people.length]); [7, 18, 13].forEach((w, j) => { ws.getColumn(j + 2).width = Math.min(30, colWidth(w, FIX[j + 1], people.map(p => [rankTxt(p), p.last, p.first + fatherTxt(p)][j]))); });
   // ημέρες: όσο θέλει ο μεγαλύτερος κωδικός της στήλης (έντονος), ως 8
-  for (let j = 0; j < nd; j++) { const d = days[j]; ws.getColumn(FIX.length + 1 + j).width = fitWidth(3.2, people.map(p => (unit ? codeAt(p.id, d)?.toUpperCase() : per.get(p.id)?.get(d)?.[0].code)), 8, true); }
+  for (let j = 0; j < nd; j++) { const d = days[j]; ws.getColumn(FIX.length + 1 + j).width = fitWidth(3.2, people.map(p => (unit ? codeAt(p.id, d) : per.get(p.id)?.get(d)?.[0].code)), 8, true); }
   for (let j = 0; j < TAIL.length; j++) ws.getColumn(FIX.length + nd + 1 + j).width = j < 6 ? fitWidth(4.5, [TAIL[j]], 8, true) : fitWidth(4.5, [TAIL[j]], 14, true);
   const foot = 5 + people.length;
   ws.getCell(foot, 1).value = 'Θ1α… θαλαμοφύλακας (θέση) · Μ1… μαγειρεία · ΛΥ / ΔΥ · σκέτο γράμμα: χωρίς θέση · γκρι: ΣΚ και αργίες · πλάγια: λόγος απουσίας (Κ.Α άδεια, ΑΝ.ΑΔ αναρρωτική, Ε.Υ, Ε.Α)';
