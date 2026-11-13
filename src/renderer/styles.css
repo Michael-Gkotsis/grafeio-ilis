@@ -525,6 +525,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .rl-grp > h3{font-size:14px;font-weight:700;margin:2px 0 0}
 .rl-grp > h3 small{font-size:12px;font-weight:400}
 .rl-two{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;align-items:start}
+.rl-two2{margin-top:14px;display:grid;gap:8px}.rl-two2 h4{margin:0;font-size:14px}.rl-two2 .rl-chip{padding:0 12px;height:32px}
 .rl-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .rl-chip{min-width:38px;height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--input);background:var(--card);color:inherit;cursor:pointer;font-size:13px;font-weight:600}
 .rl-chip[aria-pressed="true"]{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}

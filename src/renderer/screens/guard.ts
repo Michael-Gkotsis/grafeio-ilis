@@ -4,6 +4,7 @@ import { HK } from '../../shared/unit';
 import { memo, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, VirtualList, DialogLeave, useMedia, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
+import { isUnit } from '../../shared/mode';
 import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
@@ -11,7 +12,7 @@ import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, 
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { roomCfg, blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, frouraFile, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
-import { dutyPool, whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
+import { dutyPool, secondDuty, whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -138,6 +139,7 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
   const badT = !normTime(r.hkTime) || !normTime(ds) || !!wkBad; const badTxt = wkBad || 'Μια ώρα δεν είναι σωστή (π.χ. 16:00): δες την καρτέλα Ώρες';
   const [r0] = useState(() => JSON.stringify([r, ds, wk])); const dirty = JSON.stringify([r, ds, wk]) !== r0;
   const set = (k: string, v: unknown) => setR((x: P) => { const n = { ...x }; if (v === undefined) delete n[k]; else n[k] = v; return n; });   // undefined = η προεπιλογή, δεν αποθηκεύεται
+  const unit = isUnit(st);
   const txt = (x: P) => RULE_TXT({ ...x, armBefore: x.before, armAfter: x.after }, st);
   const save = async () => {
     const { before, after, outTime: _old, ...rest } = r;   // το παλιό «Ώρα εξόδου» (outTime) δεν υπάρχει πια: μία ώρα εξόδου, ο πίνακας εβδομάδας
@@ -179,11 +181,16 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
     <p className="note rl-now">Ισχύουν τώρα: ${txt(r)}</p>
     <section className="rl-grp"><h3>Ανάπαυση</h3>
       <div className="rl-two">
-        <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => set('restDays', v)} opts=${[[0, 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
+        <div className="field"><label className="field__label" htmlFor="rrest">Ανάπαυση πριν και μετά από υπηρεσία</label><${DaysSelect} id="rrest" value=${r.restDays} onChange=${(v: number) => set('restDays', v)} opts=${[[0, unit ? 'Καμία: μπορεί και κάθε μέρα' : 'Χωρίς'], [1, '1 ημέρα (όχι δύο μέρες στη σειρά)'], [2, '2 ημέρες']]} txt=${(n: number) => n + ' ημέρες'}/></div>
         <div className="field"><label className="field__label" htmlFor="rnum">Ξανά στο ίδιο νούμερο</label><${DaysSelect} id="rnum" value=${r.numRest || 0} onChange=${(v: number) => set('numRest', v)} opts=${[[0, 'Χωρίς περιορισμό'], [3, 'Μετά από 3 ημέρες'], [4, 'Μετά από 4 ημέρες']]} txt=${(n: number) => 'Μετά από ' + n + ' ημέρες'}/>
           <div className=${cx('rl-chips', !r.numRest && 'is-off')} role="group" aria-label="Ποια νούμερα"><span className="note">Ποια νούμερα:</span>${[0, 1, 2, 3].map(n => html`<button key=${n} type="button" className="rl-chip" aria-pressed=${rots.includes(n)} disabled=${!r.numRest} data-tip=${rots.length === 1 && rots.includes(n) ? 'Τουλάχιστον ένα νούμερο' : undefined} onClick=${() => togRot(n)}>${n + 1}ο</button>`)}</div></div>
       </div>
       <span className="note">Ισχύουν μαζί: όποιος ήταν σε ένα από τα νούμερα (θαλαμοφύλακας, οπλοφύλακας, σκοπός) δεν ξαναμπαίνει σε αυτό νωρίτερα.</span>
+      ${unit && html`<div className="rl-two2"><h4>Δύο υπηρεσίες την ίδια μέρα <small className="muted">(μόνο στη Λειτουργία μονάδας)</small></h4>
+        <div className="rl-chips" role="group" aria-label="Δύο υπηρεσίες την ίδια μέρα">${([['never', 'Ποτέ'], ['last', 'Μόνο αν δεν υπάρχει άλλος'], ['free', 'Όποτε χρειαστεί']] as const).map(([v, l]) => html`<button key=${v} type="button" className="rl-chip" aria-pressed=${(r.twoPerDay || 'last') === v} onClick=${() => set('twoPerDay', v === 'last' ? undefined : v)}>${l}</button>`)}</div>
+        <div className="field"><label className="field__label" htmlFor="rgap">Κενό ανάμεσα στις δύο</label>
+          <${Select} id="rgap" className="ui-input" disabled=${r.twoPerDay === 'never'} value=${r.twoGap ?? 2} onChange=${(e: any) => set('twoGap', +e.target.value === 2 ? undefined : +e.target.value)}>${[...new Set([0, 1, 2, 3, 4, 6, r.twoGap ?? 2])].sort((a, b) => a - b).map(n => html`<option key=${n} value=${n}>${n ? 'Τουλάχιστον ' + n + (n === 1 ? ' ώρα' : ' ώρες') : 'Χωρίς κενό (όχι επικάλυψη)'}</option>`)}<//></div>
+        <span className="note">Ποτέ σε ώρες που πέφτουν μαζί. Η αυτόματη συμπλήρωση δίνει πρώτα μία σε όλους· 2η παίρνει μόνο όποιος είναι πρώτος στη σειρά δικαιοσύνης, με ⚠ στη θέση, στο «Γιατί αυτός;» και στον έλεγχο πριν από το Excel.</span></div>`}
     </section>
     <section className="rl-grp"><h3>ΣΚ και αργίες</h3>
       <label className="rule"><input type="checkbox" className="ui-check" checked=${r.noConsecHol} onChange=${(e: any) => set('noConsecHol', e.target.checked)}/><span><b>Όχι ΣΚ ή αργία δύο συνεχόμενες εβδομάδες</b><small>Όποιος έκανε ΣΚ ή αργία δεν μπαίνει στο επόμενο, ούτε σε αργία δύο μέρες μετά. Αν σε αργία δεν φτάνουν οι υπόλοιποι, μπαίνουν και όσοι έκαναν πρόσφατα αργία (πρώτα όποιος την έκανε πιο παλιά), με ειδοποίηση.</small></span></label>
@@ -426,7 +433,7 @@ export function GuardScreen() {
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
           <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span>${blockShape(b).per > 1 && html`<span className="gblock__meta" data-tip="Κάθε νούμερο έχει περισσότερα από ένα άτομα, με τις ίδιες ώρες">· ${blockShape(b).nums} ${blockShape(b).nums === 1 ? 'νούμερο' : 'νούμερα'} × ${blockShape(b).per}</span>`}<span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
-          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; const first = ps.find((y: Post) => groupKey(y) === groupKey(x)); return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} same=${first && first !== x ? first.short : ''} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
+          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; const first = ps.find((y: Post) => groupKey(y) === groupKey(x)); return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} same=${first && first !== x ? first.short : ''} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) || secondDuty(state, date, pid, x.k) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
         </section>`; })}
     </div>
     ${!locked && Object.values(g).some(Boolean) && html`<div className="gb-clear"><${Button} size="sm" variant="ghost" onClick=${() => setClearAsk(true)} data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">Άδειασε τη μέρα…<//></div>`}

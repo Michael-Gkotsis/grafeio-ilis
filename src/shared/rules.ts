@@ -1,5 +1,6 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
+import { isUnit } from './mode';
 import { collator, upper } from './text';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
@@ -490,12 +491,50 @@ export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (
 export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed || {}).filter((x): x is number => !!x));
 // Η θέση κάποιου μια μέρα: ευρετήριο άτομο → θέσεις ανά αντικείμενο μέρας (καλείται για κάθε υποψήφιο σε κάθε θέση)
 const dayIdx = new WeakMap<object, Map<number, string[]>>();
+const keysOn = (g: Record<string, number>, pid: number): string[] | undefined => {
+  let m = dayIdx.get(g); if (!m) { m = new Map(); for (const k in g) { const l = m.get(g[k]); if (l) l.push(k); else m.set(g[k], [k]); } dayIdx.set(g, m); }
+  return m.get(pid);
+};
 export const postOf = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post | undefined => {
   const g = s.guards[date]; if (!g) return undefined;
-  let m = dayIdx.get(g); if (!m) { m = new Map(); for (const k in g) { const l = m.get(g[k]); if (l) l.push(k); else m.set(g[k], [k]); } dayIdx.set(g, m); }
-  const ks = m.get(pid); if (!ks) return undefined;
+  const ks = keysOn(g, pid); if (!ks) return undefined;
   return allPosts(s.settings).find(x => x.k !== exceptKey && ks.includes(x.k));
 };
+// Όλες οι άλλες θέσεις του ατόμου την ίδια μέρα (για τις δύο υπηρεσίες της μονάδας)
+const postsOn = (s: AppState, date: ISODate, pid: number, exceptKey?: string): Post[] => {
+  const g = s.guards[date]; const ks = g && keysOn(g, pid); if (!ks) return [];
+  return ks.filter(k => k !== exceptKey).map(k => postBy(s, k)).filter((x): x is Post => !!x);
+};
+// --------------------------- Δύο υπηρεσίες την ίδια μέρα (μονάδα, Michael 13/11) ---------------------------
+// Ίδια μέρα = ο ίδιος κύκλος υπηρεσίας (s.guards[date]). Στο κέντρο πάντα 'never' (σκληρό μπλοκ, όπως πάντα).
+export type TwoMode = 'never' | 'last' | 'free';
+export const twoMode = (s: Pick<AppState, 'settings' | 'rules'>): TwoMode => (isUnit(s.settings) ? s.rules.twoPerDay ?? 'last' : 'never');
+export const twoGapMin = (r: Pick<Rules, 'twoGap'>): number => Math.max(0, r.twoGap ?? 2) * 60;
+// Οι ώρες μιας θέσης σε λεπτά από τα μεσάνυχτα της μέρας υπηρεσίας: βάρδιες, αλλιώς ώρες θέσης (πριν την αρχή του κύκλου = επόμενη μέρα). null = άγνωστες
+const twoIdx = new WeakMap<object, { start: number; end: number }[] | null>();
+function twoSpans(post: Post): { start: number; end: number }[] | null {
+  const c = twoIdx.get(post); if (c !== undefined) return c;
+  let r: { start: number; end: number }[] | null = slotSpans(post);
+  if (!r.length) {
+    r = null;
+    if (post.hrs) {
+      const [a, b] = timesIn(post.hrs);
+      if (a != null && b != null) { const d = a < (post.cyc ?? 0) ? 1440 : 0; r = [{ start: a + d, end: b + d + (b <= a ? 1440 : 0) }]; }
+    }
+  }
+  twoIdx.set(post, r); return r;
+}
+// Δεν πέφτουν μαζί και έχουν κενό τουλάχιστον gap λεπτά (άγνωστες ώρες: όχι)
+function twoFits(a: Post, b: Post, gap: number): boolean {
+  const x = twoSpans(a), y = twoSpans(b); if (!x || !y) return false;
+  return x.every(p => y.every(q => p.end + gap <= q.start || q.end + gap <= p.start));
+}
+// ⚠ «2η υπηρεσία σήμερα: Μαγειρεία 06:00-08:00» (η άλλη υπηρεσία του ίδιου κύκλου)· null = μία υπηρεσία ή κέντρο
+export function secondDuty(s: AppState, date: ISODate, pid: number, k: string | null): string | null {
+  if (twoMode(s) === 'never') return null;
+  const o = postsOn(s, date, pid, k || undefined)[0];
+  return o ? '2η υπηρεσία σήμερα: ' + o.label + (o.hours ? ' ' + o.hours.replace(/ · /g, ', ') : '') : null;
+}
 
 // Ημερομηνίες υπηρεσίας ανά άτομο, ώστε οι κανόνες να μη σαρώνουν όλο το ιστορικό. Μαζί και οι υπηρεσίες χωρίς θέση
 // (από Excel), για την ανάπαυση και τις αργίες.
@@ -542,9 +581,17 @@ function numBlock(s: AppState, date: ISODate, pid: number, k: string, ds: Set<IS
   return null;
 }
 // Ήδη σε άλλη θέση τη μέρα (ή υπηρεσία χωρίς θέση από Excel), ανεξάρτητα από κάθε άλλο λόγο· k: η θέση που κρίνεται (δεν μετρά)
-function alreadyOn(s: AppState, date: ISODate, pid: number, k: string | null): string | null {
-  const o = postOf(s, date, pid, k || undefined);
-  if (o) return 'Ήδη ' + postTxt(o);
+// Στην αυτόματη συμπλήρωση η 2η υπηρεσία επιτρέπεται μόνο στο secondPass (όλοι πρώτα μία)· στη χειροκίνητη ανάθεση πάντα (με ⚠)
+let autoFill = 0, secondOn = false;
+export function alreadyOn(s: AppState, date: ISODate, pid: number, k: string | null): string | null {
+  if (twoMode(s) !== 'never' && (!autoFill || secondOn)) {
+    // μονάδα: 2η υπηρεσία μόνο χωρίς επικάλυψη και με κενό τουλάχιστον twoGap ωρών
+    const me = k ? postBy(s, k) : undefined; const gap = twoGapMin(s.rules);
+    for (const o of postsOn(s, date, pid, k || undefined)) if (!me || !twoFits(me, o, gap)) return 'Ήδη ' + postTxt(o) + (me ? ' (ώρες που πέφτουν μαζί ή κενό κάτω από ' + (s.rules.twoGap ?? 2) + ' ώρες)' : '');
+  } else {
+    const o = postOf(s, date, pid, k || undefined);
+    if (o) return 'Ήδη ' + postTxt(o);
+  }
   const sl = seatlessOn(s, date, pid);
   return sl ? 'Ήδη ' + KIND_NAME[sl.kind].toLowerCase() + ' χωρίς θέση (από Excel)' : null;
 }
@@ -744,6 +791,9 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
 // rooms (Michael, 13/11): μόνο για αυτή τη συμπλήρωση, παίρνει μόνο όσους είναι σε αυτούς τους θαλάμους (κενό = όλοι).
 // Η σειρά δικαιοσύνης μετριέται όπως πάντα σε όλη τη δύναμη· οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν όπως πάντα.
 export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
+  autoFill++; try { return fillDay0(s, date, rooms); } finally { autoFill--; }
+}
+function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   // ένα δικό της αντίγραφο του ημερολογίου, όπου αλλάζει μόνο η μέρα (όχι νέο αντίγραφο όλου του έτους σε κάθε θέση)
   const wg: Guards = { ...s.guards, [date]: { ...g } };
@@ -793,13 +843,16 @@ export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | 
   const holWarn: string[] = []; const nHol = s.rules.noConsecHol && isHol(s.settings, date) ? fillAfterHoliday(s, date, g, mine, order, people, fair, idx, fixed, strict, mark) : 0;
   n += nHol;
   if (nHol) holWarn.push(dm(date) + ': ' + (nHol === 1 ? 'μπήκε 1 που είχε' : 'μπήκαν ' + nHol + ' που είχαν') + ' κάνει αργία πρόσφατα (δεν έφταναν οι υπόλοιποι)');
+  // μονάδα: 2η υπηρεσία όποιου έχει ήδη σήμερα, μόνο για θέσεις που έμειναν κενές (όλοι πήραν πρώτα μία)
+  if (twoMode(s) !== 'never') { secondOn = true; try { n += secondPass(s, date, g, mine, order, people, fair, idx, fixed, strict, mark); } finally { secondOn = false; } }
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
+  const fin: AppState = { ...s, guards: { ...s.guards, [date]: g } };
   const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn];
   for (const x of order) {
     const pid = g[x.k];
     if (!pid) { empty.push(x.k); if (skNone.has(x.k)) warn.push(x.label + ': ' + STRICT_SK); continue; }
     if (!mine.has(x.k)) continue;
-    const lr = lastResort(live(s), date, pid, x, s.settings.lists) || statusWarn(s, date, pid); if (lr) warn.push(shortName(pm.get(pid)!) + ' (' + x.label + '): ' + lr);
+    const lr = lastResort(live(s), date, pid, x, s.settings.lists) || statusWarn(s, date, pid) || secondDuty(fin, date, pid, x.k); if (lr) warn.push(shortName(pm.get(pid)!) + ' (' + x.label + '): ' + lr);
   }
   return { guards: { ...s.guards, [date]: g }, n, empty, warn };
 }
@@ -851,6 +904,24 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
   };
   for (const x of posts) if (!g[x.k]) tryFill(x, false);
   for (const x of posts) if (mine.has(x.k) && g[x.k] && lr(g[x.k], x)) tryFill(x, true);
+  return added;
+}
+// Δεύτερη υπηρεσία (μονάδα): κάθε κενή θέση παίρνει όποιον έχει ήδη υπηρεσία σήμερα, είναι πρώτος στη σειρά δικαιοσύνης (όποιος έχει λιγότερες
+// σήμερα πρώτος) και περνά όλους τους κανόνες (ώρες χωρίς επικάλυψη και με κενό, ανάπαυση, καταστάσεις, χωρίς «μόνο αν δεν υπάρχει άλλος»).
+// Μετρά κανονικά στη δικαιοσύνη (dutyStats μετρά κάθε θέση). Πόσες θέσεις γέμισαν.
+function secondPass(s: AppState, date: ISODate, g: Record<string, number>, mine: Set<string>, posts: Post[], people: Person[], fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, strict: boolean, mark: (id: number) => void): number {
+  let added = 0;
+  for (const x of posts) {
+    if (g[x.k]) continue;
+    const today = new Map<number, number>(); for (const k in g) today.set(g[k], (today.get(g[k]) || 0) + 1);
+    const w: AppState = { ...s, guards: { ...s.guards, [date]: { ...g } } };
+    const cmp = fairCompare(isHol(s.settings, date), fairKey(s, x), date);
+    const c = people.filter(p => today.has(p.id) && !fixed.has(p.id) && !(x.kind === 'ly' && p.post) && !(strict && x.kind === 'sk' && isUnarmed(s, date, p.id)))
+      .filter(p => !guardUnavailable(w, date, p.id, x.k, idx) && !lastResort(live(s), date, p.id, x, s.settings.lists) && !statusWarn(s, date, p.id))
+      .sort((a, b) => today.get(a.id)! - today.get(b.id)! || cmp(fair.get(a.id)!, fair.get(b.id)!))[0];
+    if (!c) continue;
+    g[x.k] = c.id; mine.add(x.k); mark(c.id); added++;
+  }
   return added;
 }
 // Αργία χωρίς αρκετούς: οι θέσεις που έμειναν κενές επειδή όσοι θα έμπαιναν είχαν κάνει αργία πρόσφατα (noConsecHol) γεμίζουν με
@@ -1197,6 +1268,7 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(nn(f.total) + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + (f.share != null ? ', αναλογούν ' + r1(f.share) : ' (μ.ό. ' + r1(avg(x => x.total)) + ')'));
   }
   if (f.avg) parts.push('νέος: από μ.ό.');
+  const two = secondDuty(s, date, pid, k); if (two) parts.push('⚠ ' + two);
   const ah = isFixed(s, pid, k) ? null : dutyAhead(s, date, pid); if (ah) parts.push('έχει ήδη υπηρεσία ' + dm(ah));
   if (s.rules.rotate !== false) { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }
   if (post.armed) parts.push('ένοπλος');

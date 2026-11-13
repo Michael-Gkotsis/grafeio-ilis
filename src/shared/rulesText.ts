@@ -4,6 +4,7 @@ import { DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, type Rules, type Settings } fro
 import { ARM_AFTER, ARM_BEFORE } from './armed';
 import { DEFAULT_HK_TIME, strictKeyTxt, strictKeys } from './rules';
 import { HK } from './unit';
+import { isUnit } from './mode';
 
 // «3ο/4ο», «1ο/3ο/4ο»: τα νούμερα με «ξανά στο ίδιο νούμερο» (rules.numRots, προεπιλογή 3ο και 4ο)
 export const numRotsTxt = (r: Pick<Rules, 'numRots'>) => [...(r.numRots ?? DEFAULT_NUM_ROTS)].sort((a, b) => a - b).map(n => n + 1 + 'ο').join('/');
@@ -21,7 +22,8 @@ export function strictTxt(r: Pick<Rules, 'strictOrder'>, st?: Settings): string 
 }
 // Μία γραμμή με ό,τι ισχύει (στο κουμπί, στο ιστορικό και στο μήνυμα μετά την αποθήκευση). r: κανόνες ή πρόχειρο του παραθύρου
 export const RULE_TXT = (r: Rules & { armBefore?: number; armAfter?: number }, st?: Settings) => [
-  r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : 'χωρίς ανάπαυση',
+  r.restDays ? 'ανάπαυση ' + r.restDays + ' ημ. μετά από υπηρεσία' : isUnit(st) ? 'καμία ανάπαυση (μπορεί και κάθε μέρα)' : 'χωρίς ανάπαυση',
+  isUnit(st) ? (r.twoPerDay === 'never' ? 'ποτέ δύο υπηρεσίες την ίδια μέρα' : (r.twoPerDay === 'free' ? '2η υπηρεσία την ίδια μέρα όποτε χρειαστεί' : '2η υπηρεσία την ίδια μέρα μόνο αν δεν υπάρχει άλλος') + ', με ' + (r.twoGap ?? 2) + ' ώρες κενό') : '',
   r.numRest ? numRotsTxt(r) + ' νούμερο ξανά μετά από ' + r.numRest + ' ημ.' : '',
   r.noConsecHol ? 'όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες' : 'αργίες χωρίς περιορισμό',
   r.newAvg ? 'οι νέοι ξεκινούν από τον μέσο όρο' : '',

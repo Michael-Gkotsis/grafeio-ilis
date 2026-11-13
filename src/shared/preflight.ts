@@ -3,7 +3,7 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
+  activePeople, alreadyOn, secondDuty, twoMode, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
 import { live, hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
@@ -39,7 +39,11 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
     const p = pm.get(pid); const name = p ? shortName(p) : 'άγνωστος';
     if (!p || !p.active) { out.push({ level: 'err', text: name + ' είναι εκτός δύναμης αλλά είναι ' + x.label, go: 'guard' }); continue; }
     // δύο θέσεις, κατάσταση, έξοδος: ⚠, όχι ✕· μπορεί να το επέλεξε ο χρήστης με αιτιολογία (Michael, 17/10: ποτέ πλήρες μπλοκάρισμα)
-    if (seen.has(pid)) out.push({ level: 'warn', text: name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
+    if (seen.has(pid)) {
+      // μονάδα: 2η υπηρεσία που χωρά (χωρίς επικάλυψη, με κενό) είναι ⚠ «2η υπηρεσία σήμερα»
+      const two = twoMode(s) !== 'never' && !alreadyOn(s, date, pid, x.k) ? secondDuty(s, date, pid, x.k) : null;
+      out.push({ level: 'warn', text: two ? name + ' (' + postTxt(x) + '): ' + two : name + ' είναι σε δύο θέσεις: ' + seen.get(pid) + ' και ' + x.label, go: 'guard' });
+    }
     seen.set(pid, x.label);
     const hard = dutyBlock(live(s), date, pid, x, s.settings.lists);
     if (hard) out.push({ level: 'warn', text: name + ' (' + postTxt(x) + '): ' + hard, go: 'guard' });
