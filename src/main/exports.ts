@@ -21,6 +21,8 @@ import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum,
 import { outsSig2Of, sigsCustom, sigsFor, sigsPage2, sigsSaved, type Sig, type SigForm } from '../shared/sigs';
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
+import { headFor } from '../shared/docHead';
+import { applyHead } from './headWrite';
 import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 import { statNoOut } from '../shared/stat';
@@ -49,7 +51,7 @@ export function sigsOf(s: AppState, form: SigForm, over?: Sig[] | null): { sigs:
 // more: τα άλλα κομμάτια του φύλλου (κεφαλίδα, τόπος και ημερομηνία)· key: ποιο φύλλο του εντύπου (LAYOUT_SHEETS)
 // tagOnly: οι υπογραφές μόνο στο {ΥΠΟΓΡΑΦΕΣ} (Excel της εφαρμογής, χωρίς υπογραφές δικές τους)· after, names: Έντυπα (placeSigs)
 // sigs: δικές του υπογραφές αυτού του φύλλου (σελίδα 2 των Εξοδούχων «Όλη η δύναμη»), αλλιώς οι υπογραφές του εντύπου
-export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean; after?: number; names?: string[]; sigs?: { sigs: Sig[] | null; def: Sig[] } }
+export interface SheetPart { ws: Sheet; key: string; more: (Block | null)[]; tagOnly?: boolean; after?: number; names?: string[]; sigs?: { sigs: Sig[] | null; def: Sig[] }; designed?: boolean }   // designed: επικεφαλίδα που σχεδίασες (γράμματα και θέσεις δικές της: ούτε restyle ούτε αλλαγή κεφαλίδας/ημερομηνίας)
 export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState, form: SigForm, over: Sig[] | null | undefined, warnings: string[], moves?: (key: string) => Moves | undefined): Promise<LayoutSheet[]> {
   const g = sigsOf(s, form, over); const out: LayoutSheet[] = [];
   const mv = moves || ((key: string) => (form === 'reports' ? undefined : s.settings.layout?.[form as LayoutForm]?.[key]));
@@ -59,10 +61,10 @@ export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState,
     const sg = await placeSigs(wb, x.ws, mine.sigs, mine.def, warnings, { tagOnly: x.tagOnly, after: x.after, names: x.names });
     const blocks = [...x.more.filter((b): b is Block => !!b), ...sg];
     // γράμματα της κεφαλίδας και των υπογραφών (Ρυθμίσεις › Γράμματα Excel), πριν μετακινηθούν
-    for (const b of blocks) { const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
+    for (const b of blocks) { if (x.designed && b.id === 'head') continue; const o = b.id === 'head' ? hdr : /^s\d/.test(b.id) ? sig : null; if (o) await restyle(wb, x.ws, b, o); }
     // ημερομηνία αριστερά και κεφαλίδα δεξιά (εκτός αν hdLeft)· οι θέσεις που έσυρες μετρούν ΜΕΤΑ, από τη νέα θέση
     // (Michael, 29/10 22:04: η ΗΚΑΙ μένει με την κεφαλίδα αριστερά)
-    const sw = s.settings.hdLeft || form === 'hkai' ? blocks : await swapHeadDate(wb, x.ws, blocks);
+    const sw = s.settings.hdLeft || form === 'hkai' || x.designed ? blocks : await swapHeadDate(wb, x.ws, blocks);
     out.push({ key: x.key, sheet: x.ws.name, blocks: applyMoves(wb, x.ws, sw, mv(x.key)) });
   }
   return out;
@@ -72,19 +74,27 @@ export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState,
 // (Michael, 22/10): οι υπογραφές της λίστας τους μία κενή γραμμή κάτω από κάθε φύλλο, σε όλο το πλάτος του, και μετά ό,τι
 // μετακίνησες (κεφαλίδα, ημερομηνία, τίτλος, υπογραφές). Χωρίς υπογραφές και μετακινήσεις το φύλλο μένει όπως ήταν.
 export interface MadeMark { sheet: string; key: string; head: string[]; date: string[]; title: string[]; foot: number; cols: number }
-export async function signMade(data: Buffer, s: AppState, form: SigForm, marks: MadeMark[], over?: Sig[] | null): Promise<{ data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+// headId: επικεφαλίδα μόνο για αυτή τη φορά (αλλιώς η αρχική του εγγράφου, Ρυθμίσεις › Επικεφαλίδες εγγράφων)· date: η ημερομηνία του εγγράφου
+// για το στοιχείο «τόπος και ημερομηνία» όταν το φύλλο δεν έχει ήδη ημερομηνία
+export async function signMade(data: Buffer, s: AppState, form: SigForm, marks: MadeMark[], over?: Sig[] | null, headId?: string | null, date?: ISODate): Promise<{ data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
   const wb = await Workbook.open(data); wb.widen = true; const warnings: string[] = [];
   const g = sigsOf(s, form, over); const list = g.sigs ?? g.def;
   const L = xlLook(s.settings); const st = list.length ? await wb.style({ font: L.font, sz: L.sz, b: true, h: 'center', v: 'center' }) : 0;
   const parts: SheetPart[] = [];
-  for (const m of marks) {
-    if (!wb.hasSheet(m.sheet)) continue;
-    const ws = await wb.sheet(m.sheet);
+  const hd = headFor(s.settings, form, headId);
+  for (const m0 of marks) {
+    if (!wb.hasSheet(m0.sheet)) continue;
+    const ws = await wb.sheet(m0.sheet); let m = m0;
+    if (hd) {
+      const dateText = (m0.date[0] && ws.get(m0.date[0])) || (date ? (s.settings.place ? s.settings.place + ', ' : '') + hkDate(date) : '');
+      const r = await applyHead(wb, ws, s, hd, { cols: m0.cols, old: [...m0.head, ...m0.date], dateText });
+      m = { ...m0, head: r.head, date: r.date, title: m0.title.map(t => t.replace(/\d+$/, n => String(r.shift(+n)))), foot: r.shift(m0.foot) };
+    }
     if (list.length) {
       const r = m.foot + 2; ws.set('A' + r, SIG_TAG).setStyle('A' + r, st);
       if (m.cols > 1) { for (let c = 2; c <= m.cols; c++) ws.setStyle(colName(c) + r, st); ws.addMerge('A' + r + ':' + colName(m.cols) + r); }
     }
-    parts.push({ ws, key: m.key, tagOnly: true, more: [blockOf(ws, 'head', m.head), blockOf(ws, 'date', m.date), blockOf(ws, 'title', m.title)] });
+    parts.push({ ws, key: m.key, tagOnly: true, designed: !!hd, more: [blockOf(ws, 'head', m.head), blockOf(ws, 'date', m.date), blockOf(ws, 'title', m.title)] });
   }
   const layout = await signSheets(wb, parts, s, form, over, warnings);
   for (const p of parts) p.ws.markAll();

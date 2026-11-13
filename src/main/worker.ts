@@ -19,7 +19,7 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   fillFroura: (tpl, d, phase, sheet, sigs) => fillFroura(buf(tpl), state, d, phase, sheet, sigs),
   fillHkai: (tpl, d, opts) => fillHkai(buf(tpl), state, d, opts),
   fillOuts: (tpl, d, sheets, sigs) => fillOuts(buf(tpl), state, d, sheets, sigs),
-  signMade: (data, form, marks, sigs) => signMade(buf(data), state, form, marks, sigs),
+  signMade: (data, form, marks, sigs, headId, date) => signMade(buf(data), state, form, marks, sigs, headId, date),
   mergeFirstSheets: (bufs: Uint8Array[], names, pick) => mergeFirstSheets(bufs.map(buf), names, pick),
   mergeSheets: (bufs: Uint8Array[], picks, names) => mergeSheets(bufs.map(buf), picks, names),
   fillReport: (tpl, r, ids, d, o) => fillReport(buf(tpl), state, r, ids, d, o),
