@@ -1233,6 +1233,14 @@ export class Workbook {
     this.sheets.delete(e.path); this.names.splice(i, 1);
     return true;
   }
+  // Η περιοχή εκτύπωσης του φύλλου αρχίζει από τη γραμμή row (όταν μπήκαν γραμμές πάνω από την πρώτη της)
+  printFromRow(sheet: string, row: number) {
+    const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {
+      if (attr(at, 'name') !== '_xlnm.Print_Area' || attr(at, 'localSheetId') !== String(i)) return m;
+      return a + body.replace(/(!\$?[A-Z]+\$?)(\d+)(?=:)/, (x, p: string, n: string) => (Number(n) > row ? p + row : x)) + c;
+    });
+  }
   printDownTo(sheet: string, row: number) {
     const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return;
     this.workbookXml = this.workbookXml.replace(/(<definedName\b([^>]*)>)([^<]*)(<\/definedName>)/g, (m, a: string, at: string, body: string, c: string) => {
@@ -1374,6 +1382,36 @@ export async function fitBook(buf: Buffer | Uint8Array): Promise<Buffer> {
   return wb.save();
 }
 
+
+// Οι εικόνες ενός φύλλου που περνά από άλλο αρχείο (ΠΣΚ: ένα αρχείο ανά μέρα): το σχέδιο και τα media του αντιγράφονται στο base με νέα ονόματα,
+// και το φύλλο παίρνει δικό του rels με <drawing r:id="rId1">. Επιστρέφει το XML του φύλλου χωρίς άλλες αναφορές (εκτυπωτής, σχόλια).
+async function carryOver(z: JSZip, src: string, base: JSZip, path: string, tag: string, ct: string): Promise<{ xml: string; ct: string }> {
+  let x = await z.file(src)!.async('string');
+  const strip = (s: string) => s.replace(/<legacyDrawing\b[^>]*\/>/g, '').replace(/<drawing\b[^>]*\/>/g, d => d.replace(/\sr:id="[^"]*"/, ' r:id="rIdPic"')).replace(/\s(?!r:id="rIdPic")r:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
+  const rp = sheetRelsPath(src); const rf = z.file(rp); const rid = /<drawing\b[^>]*\sr:id="([^"]+)"/.exec(x)?.[1];
+  if (!rf || !rid) return { xml: strip(x).replace(/<drawing\b[^>]*\/>/g, ''), ct };
+  const rel = [...(await rf.async('string')).matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid);
+  const dsrc = rel && attr(rel, 'Target') ? resolveTarget(src, attr(rel, 'Target')!) : null; const df = dsrc && z.file(dsrc);
+  if (!df || !dsrc) return { xml: strip(x).replace(/<drawing\b[^>]*\/>/g, ''), ct };
+  const dpath = `xl/drawings/drawing_${tag}.xml`; base.file(dpath, await df.async('string'));
+  const drp = sheetRelsPath(dsrc); const drf = z.file(drp);
+  if (drf) {
+    let dr = await drf.async('string'); let n = 0;
+    for (const m of [...dr.matchAll(/<Relationship\b[^>]*>/g)].map(q => q[0])) {
+      const tg = attr(m, 'Target'); if (!tg || attr(m, 'TargetMode') === 'External') continue;
+      const ms = resolveTarget(dsrc, tg); const mf = z.file(ms); if (!mf) continue;
+      const np = `xl/media/${tag}_${n++}${ms.includes('.') ? ms.slice(ms.lastIndexOf('.')) : ''}`; base.file(np, await mf.async('nodebuffer'));
+      dr = dr.replace(m, setAttr(m, 'Target', '../media/' + np.split('/').pop()));
+      const ext = np.slice(np.lastIndexOf('.') + 1).toLowerCase();
+      if (!new RegExp('<Default\\b[^>]*Extension="' + ext + '"', 'i').test(ct)) ct = ct.replace(/(<Types\b[^>]*>)/, `$1<Default Extension="${ext}" ContentType="${ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg'}"/>`);
+    }
+    base.file(`xl/drawings/_rels/drawing_${tag}.xml.rels`, dr);
+  }
+  ct = ct.replace('</Types>', `<Override PartName="/${dpath}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  base.file(sheetRelsPath(path), `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdPic" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing_${tag}.xml"/></Relationships>`);
+  return { xml: strip(x), ct };
+}
+
 // Ένα αρχείο με πολλά φύλλα από ήδη συμπληρωμένα αρχεία του ίδιου template (π.χ. ΦΡΟΥΡΑ ΠΣΚ: ένα φύλλο ανά ημέρα).
 // Παίρνει το πρώτο φύλλο κάθε αρχείου· στυλ και κοινές συμβολοσειρές είναι ίδια, αφού βγήκαν από το ίδιο template.
 // pick: όνομα του φύλλου που κρατιέται (όταν το έντυπο δεν είναι το πρώτο φύλλο του template)
@@ -1402,10 +1440,9 @@ export async function mergeFirstSheets(bufs: Buffer[], names: string[], pick?: s
     const target = attr([...zr.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid)!, 'Target')!;
     const src = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
     // αντίγραφο φύλλου χωρίς δικές του σχέσεις (εκτυπωτής, σχέδια): αλλιώς θα έμεναν αναφορές που δεν υπάρχουν
-    let x = (await z.file(src)!.async('string'))
-      .replace(/<drawing\b[^>]*\/>|<legacyDrawing\b[^>]*\/>/g, '').replace(/\sr:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
     const path = `xl/worksheets/sheet_m${i + 1}.xml`;
-    base.file(path, x);
+    const c1 = await carryOver(z, src, base, path, 'm' + (i + 1), ct); ct = c1.ct;
+    base.file(path, c1.xml);
     maxId++; maxRid++;
     newSheets.push(`<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="${xmlName(names[i])}" sheetId="${maxId}" state="visible" r:id="rId${maxRid}"/>`);
     rels = rels.replace('</Relationships>', `<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}" Id="rId${maxRid}"/></Relationships>`);
@@ -1464,10 +1501,9 @@ export async function mergeSheets(bufs: Buffer[], picks: string[][], names: stri
       const rid = attr(tags[idx], 'r:id')!;
       const target = attr([...zr.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => attr(r, 'Id') === rid)!, 'Target')!;
       const src = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
-      const x = (await z.file(src)!.async('string'))
-        .replace(/<drawing\b[^>]*\/>|<legacyDrawing\b[^>]*\/>/g, '').replace(/\sr:id="[^"]*"/g, '').replace(/\stabSelected="1"/g, '');
       const path = `xl/worksheets/sheet_m${i + 1}_${j + 1}.xml`;
-      base.file(path, x);
+      const c2 = await carryOver(z, src, base, path, `m${i + 1}_${j + 1}`, ct); ct = c2.ct;
+      base.file(path, c2.xml);
       maxId++; maxRid++;
       newSheets.push(`<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="${xmlName(names[i][j])}" sheetId="${maxId}" state="visible" r:id="rId${maxRid}"/>`);
       rels = rels.replace('</Relationships>', `<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/${path}" Id="rId${maxRid}"/></Relationships>`);

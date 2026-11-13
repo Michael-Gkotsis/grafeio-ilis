@@ -207,9 +207,9 @@ async function exportGuarded(kind: ExportKind, date: ISODate, opts: ExportOpts):
 
 // Τα βαριά των εντύπων στο νήμα των Excel (offload.ts), με την κατάσταση s· αν το νήμα δεν δουλεύει, εδώ όπως πριν
 const X = {
-  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string, sigs?: Sig[] | null) => off('fillFroura', [buf, d, undefined, sheet, sigs], () => fillFroura(buf, s, d, undefined, sheet, sigs), s),
+  froura: (buf: Buffer, s: AppState, d: ISODate, sheet?: string, sigs?: Sig[] | null, headId?: string | null) => off('fillFroura', [buf, d, undefined, sheet, sigs, headId], () => fillFroura(buf, s, d, undefined, sheet, sigs, headId), s),
   hkai: (buf: Buffer, s: AppState, d: ISODate, opts: Parameters<typeof fillHkai>[3]) => off('fillHkai', [buf, d, opts], () => fillHkai(buf, s, d, opts), s),
-  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3], sigs?: Sig[] | null) => off('fillOuts', [buf, d, sheets, sigs], () => fillOuts(buf, s, d, sheets, sigs), s),
+  outs: (buf: Buffer, s: AppState, d: ISODate, sheets: Parameters<typeof fillOuts>[3], sigs?: Sig[] | null, headId?: string | null) => off('fillOuts', [buf, d, sheets, sigs, headId], () => fillOuts(buf, s, d, sheets, sigs, headId), s),
   merge: (bufs: Buffer[], names: string[], pick?: string) => off('mergeFirstSheets', [bufs, names, pick], () => mergeFirstSheets(bufs, names, pick)),
   mergeSheets: (bufs: Buffer[], picks: string[][], names: string[][]) => off('mergeSheets', [bufs, picks, names], () => mergeSheets(bufs, picks, names)),
   zipHash: (b: Buffer) => off('zipHash', [b], () => zipHash(b)),
@@ -236,7 +236,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
-    const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs))));
+    const parts = await Promise.all(days.map(d => (fr ? X.froura(buf, s, d, b.sheet, sigs, headId) : X.outs(buf, s, d, { outs: b.sheet, stay: b.sheet2 }, sigs, headId))));
     const tabs = days.map(d => dow(d).toUpperCase() + ' ' + dm(d).replace('/', '-'));
     // «Όλη η δύναμη»: δύο φύλλα ανά μέρα, «ΠΑΡ 30-10» (εξοδούχοι) και «ΠΑΡ 30-10 ΔΥΝ» (η υπόλοιπη δύναμη)· αλλιώς το πρώτο φύλλο κάθε μέρας
     const two = !fr && isOutsAll(s.settings) && parts.every(x => x.sheets && x.sheets.length === 2);
@@ -245,10 +245,10 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
     const when = { from: days[0], to: days[2], psk: true as const };
     return { name: fr ? frouraName(s.settings, s.settings.phase || 'sven', when) : fileNameOf(s.settings, 'outs', when), data, warnings: [...new Set(parts.flatMap(x => x.warnings || []))] };
   }
-  if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs);
+  if (kind === 'froura') return X.froura(buf, s, date, b.sheet, sigs, headId);
   // ΗΚΑΙ: οι θέσεις βρίσκονται από τα κείμενα του εντύπου (και του δικού σου στον φάκελο templates), και από πάνω ό,τι διόρθωσες
-  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, cells: b.cells, sigs });
-  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 }, sigs);
+  if (kind === 'hkai') return X.hkai(buf, s, date, { front: b.sheet, back: b.sheet2, cells: b.cells, sigs, headId });
+  return X.outs(buf, s, date, { outs: b.sheet, stay: b.sheet2 }, sigs, headId);
 }
 // Ένα γράψιμο αρχείων τη φορά: η αυτόματη ενημέρωση, το «Ενημέρωση Excel» και η εξαγωγή εντύπου δεν διαβάζουν και
 // γράφουν το ίδιο Excel ή το forms.json ταυτόχρονα (αλλιώς χάνεται ό,τι έγραψε ο ένας)

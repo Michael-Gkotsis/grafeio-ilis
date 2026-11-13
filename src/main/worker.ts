@@ -16,9 +16,9 @@ const nodeRequire: NodeRequire = require;
 let state: AppState;
 const buf = (v: any) => (v instanceof Uint8Array && !Buffer.isBuffer(v) ? Buffer.from(v.buffer, v.byteOffset, v.byteLength) : v);
 const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
-  fillFroura: (tpl, d, phase, sheet, sigs) => fillFroura(buf(tpl), state, d, phase, sheet, sigs),
+  fillFroura: (tpl, d, phase, sheet, sigs, headId) => fillFroura(buf(tpl), state, d, phase, sheet, sigs, headId),
   fillHkai: (tpl, d, opts) => fillHkai(buf(tpl), state, d, opts),
-  fillOuts: (tpl, d, sheets, sigs) => fillOuts(buf(tpl), state, d, sheets, sigs),
+  fillOuts: (tpl, d, sheets, sigs, headId) => fillOuts(buf(tpl), state, d, sheets, sigs, headId),
   signMade: (data, form, marks, sigs, headId, date) => signMade(buf(data), state, form, marks, sigs, headId, date),
   mergeFirstSheets: (bufs: Uint8Array[], names, pick) => mergeFirstSheets(bufs.map(buf), names, pick),
   mergeSheets: (bufs: Uint8Array[], picks, names) => mergeSheets(bufs.map(buf), picks, names),
