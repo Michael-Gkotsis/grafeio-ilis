@@ -85,6 +85,9 @@ for (const [i, name] of navs) {
   for (let r = 0; r < REPS; r++) { await clickMs('nav:1'); xs.push(await clickMs(sel)); }
   R['οθόνη ' + name] = med(xs); D['οθόνη ' + name] = await page.evaluate(() => document.getElementsByTagName('*').length);
   // καρτέλες της οθόνης
+  // «Ρυθμίσεις» lands on its overview (no tabs, U11c): open the first group so its section tabs are measured as before
+  const groupBtn = await page.$('.main .settings__navitem:nth-of-type(2)');
+  if (groupBtn && !(await page.$('.main [role=tab]'))) { await groupBtn.click(); await page.waitForTimeout(100); }
   const tabs = await page.$$eval('.main [role=tab]', els => els.map(e => e.textContent));
   for (let j = 0; j < tabs.length; j++) {
     const ts = `.main [role=tab]:nth-of-type(${j + 1})`;
