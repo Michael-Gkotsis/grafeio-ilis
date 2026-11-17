@@ -1757,7 +1757,8 @@ tbody .mg-tail{background:var(--card)}
 .duty__main{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
 .duty__grid{display:flex;flex-direction:column;gap:10px;min-width:0}
 .duty__side{display:flex;flex-direction:column;gap:12px;min-width:0}
-@media (max-width:1180px){.duty__main{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1500px){.duty__main{grid-template-columns:minmax(0,1fr)}.duty__side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}
+.duty .plan__bar{flex-wrap:nowrap}.duty .plan__month b{min-width:130px}.duty .plan__bar .ui-btn{white-space:nowrap}
 .duty__slot{display:inline-flex;gap:8px}
 .duty__row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .duty__chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}

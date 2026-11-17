@@ -148,7 +148,7 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
           tails: [
             html`<span className=${over} data-tip=${lim.roster + ' πρόγραμμα + ' + lim.seat + ' θέσεις στρατιωτών' + (lim.hol ? ' · ΣΚ/αργίες: ' + lim.hol : '')} data-tip-side="left"><b>${lim.done || ''}</b></span>`,
             html`<span data-tip=${'Όριο ' + lim.base + (lim.carry ? (lim.carry > 0 ? ' + ' : ' − ') + Math.abs(lim.carry) + ' από ' + monthLabel(shiftMonth(ym, -1)) : '') + (lim.extra ? ' · έξτρα ' + lim.extra : '')} data-tip-side="left">${lt}</span>`,
-            html`<span className=${lim.nextCarry < 0 ? 'mg-neg' : lim.nextCarry > 0 ? 'mg-pos' : undefined} data-tip=${lim.nextCarry ? 'Μεταφέρεται στον επόμενο μήνα (όριο ' + (lim.base + lim.nextCarry) + ')' : undefined} data-tip-side="left">${carryText(ym, lim.nextCarry)}</span>`
+            html`<span className=${lim.nextCarry < 0 ? 'mg-neg' : lim.nextCarry > 0 ? 'mg-pos' : undefined} data-tip=${lim.nextCarry ? carryText(ym, lim.nextCarry) + ' · Μεταφέρεται στον επόμενο μήνα (όριο ' + (lim.base + lim.nextCarry) + ')' : undefined} data-tip-side="left">${(lim.nextCarry ? (lim.nextCarry > 0 ? '+' : '−') + Math.abs(lim.nextCarry) : '—')}</span>`
           ]
         };
         next.set(c.id + '|' + sec.id, { sig, row }); out.push(row);
@@ -235,9 +235,9 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
       <${Segmented} small=${true} label="Προβολή" value=${mode} onChange=${(v: string) => nav.set({ cdm: v === 'svc' ? 'svc' : undefined })} items=${[{ value: 'person', label: 'Ανά άτομο' }, { value: 'svc', label: 'Ανά υπηρεσία' }]}/>
       <span style=${{ flex: 1 }}></span>
       <span className="duty__slot" data-slot="autofill">
-        <${Button} disabled=${none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => setFill(autoFill(state, ym))} data-tip="Γεμίζει μόνο τις κενές υπηρεσίες του μήνα· δεν αλλάζει ό,τι υπάρχει. Πρώτα δείχνει τι θα γίνει.">Αυτόματη συμπλήρωση μήνα<//>
-        <${Button} variant="outline" disabled=${!autoIds.length} why=${autoIds.length ? undefined : 'Δεν υπάρχουν αυτόματες υπηρεσίες αυτόν τον μήνα'} onClick=${() => setClr(autoIds)} data-tip="Σβήνει μόνο όσες μπήκαν αυτόματα· οι δικές σου μένουν">Σβήσε τα αυτόματα<//></span>
-      <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(false)} data-tip="Νέο Excel: ο μήνας ανά άτομο και ανά ημέρα">${xl === 'xl' ? 'Δημιουργία…' : 'Βγάλε Excel'}<//>
+        <${Button} disabled=${none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => setFill(autoFill(state, ym))} data-tip="Γεμίζει μόνο τις κενές υπηρεσίες του μήνα· δεν αλλάζει ό,τι υπάρχει. Πρώτα δείχνει τι θα γίνει.">Αυτόματη συμπλήρωση<//>
+        <${Button} variant="outline" disabled=${!autoIds.length} why=${autoIds.length ? undefined : 'Δεν υπάρχουν αυτόματες υπηρεσίες αυτόν τον μήνα'} onClick=${() => setClr(autoIds)} data-tip="Σβήνει μόνο όσες μπήκαν αυτόματα· οι δικές σου μένουν">Σβήσε αυτόματα<//></span>
+      <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(false)} data-tip="Νέο Excel: ο μήνας ανά άτομο και ανά ημέρα">${xl === 'xl' ? 'Δημιουργία…' : 'Excel'}<//>
       <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(true)} data-tip="Άνοιγμα της εκτύπωσης (A4 οριζόντια, μία σελίδα φάρδος)">${xl === 'print' ? 'Άνοιγμα…' : 'Εκτύπωση'}<//>
     </div>
     ${filters.length > 1 && !none && html`<div className="plan__bar" style=${{ marginTop: '-4px' }}>${filters.length > 1 && html`<${Strip} role="group" aria-label="Ομάδες"><button type="button" className="ui-chip" aria-pressed=${gf === 'all'} onClick=${() => nav.set({ cdg: undefined })}>Όλες</button>${filters.map(f => html`<button key=${f.id} type="button" className="ui-chip" aria-pressed=${gf === f.id} onClick=${() => nav.set({ cdg: f.id })}>${f.label}</button>`)}<//>`}</div>`}
