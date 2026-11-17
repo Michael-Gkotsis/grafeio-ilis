@@ -18,6 +18,7 @@ export interface SheetModel {
   formulas: Map<string, string>;          // 'r:c' -> formula text without '=' (shared formulas expanded)
   merges: MergeRange[];
   validations: Validation[];
+  comments?: Record<string, string>;      // 'r:c' -> text of the cell's note (a hint for the screen, never written)
   truncated?: boolean;                    // the sheet has more rows/columns than were read
 }
 export interface BookModel {

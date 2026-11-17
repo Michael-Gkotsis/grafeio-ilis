@@ -3,6 +3,7 @@
 //   profileFromChoices  the user's choices (+ what was learned before) → the TplProfile that settings.tplProfiles keeps (rules, accepted words, ignored marks)
 //   classicFits         can the old path (fillHkai/detectHkai) fill this file completely? If yes the old path stays in use and the output stays byte-identical
 // Pure functions over the sheet model, no file access, no jargon on screen (the words of the model are the words of the screen).
+import { backView, formatOf, type BackFormat, type BackView } from './backForm';
 import { buildLexicon, phraseForms, phraseKey, type Lexicon } from './lexicon';
 import { detectBook, type BookShape, type MatrixRegion } from './shape';
 import { cellRef, colLetter, key as cellKey, valueText, type SheetModel } from './sheetModel';
@@ -25,6 +26,8 @@ export interface Choices {
   cols: Record<string, ColChoice>;
   rows: Record<string, RowChoice>;
   words: Record<string, string>;                // word of the data sheet → concept id («status:ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ»)
+  skip?: string[];                              // words of the data sheet the user chose to ignore (kept in the profile)
+  back?: Partial<BackFormat> & { accepted?: string[] };   // the format of a line of the back side, and the section words accepted as proposed
 }
 export const emptyChoices = (): Choices => ({ cols: {}, rows: {}, words: {} });
 // What «Δημιουργία» adds to the app's own settings (commands.ts adaptTpl)
@@ -113,6 +116,7 @@ export interface TplModel {
   count: { sure: number; suggest: number; unknown: number; ignored: number };
   driven: { sheet: string; cells: number } | null;     // the cells count another sheet (Παρουσιολόγιο): the data sheet is filled with the file's own words
   lost: number;                                 // total cells that hold a number where a formula should be
+  back: BackView | null;                        // the back side: sections found by their words, the format of a line
   noFront: boolean;                             // no ΗΚΑΙ/ΗΚΑΛ table found
   choices: Choices;                             // what the user had chosen before (from the saved profile)
   needs: boolean;                               // something is not understood: the screen opens by itself
@@ -130,7 +134,7 @@ export interface ModelOpts {
 // ------------------------------------------------------------------ what the main process answers to the screen (api.ts)
 export type ModelRes = TplModel & { file: string; profileId: string | null; profileName: string };
 export interface TplReq { file?: string; sheet?: string; choices: Choices; creates?: TplCreate[]; name?: string }
-export interface TryCell { v: number | string | null; how: '' | 'written' | 'formula' }
+export interface TryCell { v: number | string | null; how: '' | 'written' | 'formula' | 'stale' }   // stale: a typed number of the template (a total) that today's fill does not write
 export interface TryRow { label: string; ref: string; total: boolean; skipped: string; cells: TryCell[] }
 export interface TryRes {
   front: string | null; head: { ref: string; text: string }[]; rows: TryRow[];
@@ -184,7 +188,7 @@ export function buildTplModel(sheets: SheetModel[], o: ModelOpts): TplModel {
   const pick = pickFront(shape, o.sheet);
   const base: TplModel = {
     kind: o.kind, sheet: o.sheet || '', sheets: sheets.map(s => s.name), cols: [], rows: [], words: [], cells: [], colOptions: COL_OPTIONS, rowOptions: [], posts: o.posts || [], freeKeys: [], wordOptions: { rank: [], status: [] },
-    count: { sure: 0, suggest: 0, unknown: 0, ignored: 0 }, driven: o.driven ?? null, lost: 0, noFront: !pick, choices: emptyChoices(), needs: false
+    count: { sure: 0, suggest: 0, unknown: 0, ignored: 0 }, driven: o.driven ?? null, lost: 0, back: null, noFront: !pick, choices: emptyChoices(), needs: false
   };
   const rowKeys = hkRowList(lists);
   for (const c of lex.concepts.values()) {
@@ -192,6 +196,7 @@ export function buildTplModel(sheets: SheetModel[], o: ModelOpts): TplModel {
     if (c.kind === 'rank' || c.kind === 'hkrow') base.wordOptions.rank.push({ value: c.id, label: c.label });
   }
   base.rowOptions = rowKeys.map(k => ({ value: k, label: hkRowLabel(k, o.settings as Settings) }));
+  base.back = backView(sheets, { lex, ...(profile?.back?.accepted ? { accepted: profile.back.accepted } : {}) });
   if (!pick) { base.needs = true; return base; }
   const sh = sheets.find(x => x.name === pick.sh.name)!; const region = pick.region;
   base.sheet = sh.name;
@@ -274,9 +279,11 @@ export function buildTplModel(sheets: SheetModel[], o: ModelOpts): TplModel {
   base.freeKeys = [...KOL_KEYS.filter(k => k !== 'bl'), ...ABS_KEYS, 'ab'].filter(k => !used.has(k));
   for (const c of base.cols) base.count[c.state]++;
   for (const r of base.rows) base.count[r.state]++;
+  if (profile?.back) choices.back = { ...profile.back };
+  if (profile?.ignoreWords?.length) choices.skip = [...profile.ignoreWords];
   base.choices = choices;
   const cl = classicFits(sheets, o.settings, base.sheet);
-  base.needs = !cl.fits || base.count.suggest + base.count.unknown > 0 || !!base.driven;
+  base.needs = !cl.fits || base.count.suggest + base.count.unknown > 0 || !!base.driven || !!base.back?.sections.some(x => x.state === 'suggest');
   return base;
 }
 
@@ -317,6 +324,10 @@ export function profileFromChoices(sheets: SheetModel[], o: FromChoices): TplPro
     }
   }
   for (const [w, id] of Object.entries(o.choices.words)) if (id && id.includes(':')) p = teach(p, w, id);
+  // the back side: the format of a line and the accepted proposals; the ignored words: the choice of this screen, else what was saved before
+  const bk = o.choices.back ?? o.prev?.back;
+  if (bk) { const f = formatOf(bk); p = { ...p, back: { num: f.num, date: f.date, line: f.line, ...(bk.accepted?.length ? { accepted: [...new Set(bk.accepted)] } : {}) } }; }
+  const iw = o.choices.skip ?? o.prev?.ignoreWords; if (iw?.length) p = { ...p, ignoreWords: [...new Set(iw)] };
   if (Object.keys(rules.cols).length || Object.keys(rules.rows).length) p = { ...p, rules };
   // the fingerprint is taken with the unit's own words, the way the next detection will see the file
   const lex1 = lexFor(o.settings.lists, p); const shape1 = detectBook({ sheets }, { lexicon: lex1 });

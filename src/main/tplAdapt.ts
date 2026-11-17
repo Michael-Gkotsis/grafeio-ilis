@@ -19,6 +19,10 @@ import { buildTplModel, classicFits, emptyChoices, kindOfSettings, lexFor, profi
 import { mapMatrix, pickFront } from '../shared/hkRules';
 import { hkRowList } from '../shared/ranks';
 import { Evaluator, UNSUPPORTED } from '../shared/sheetEval';
+import { Workbook } from './xlsx';
+import { pickBack } from '../shared/backForm';
+import { upper } from '../shared/text';
+import type { Sig } from '../shared/sigs';
 import { activePeople } from '../shared/rules';
 import type { AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
@@ -100,7 +104,7 @@ export async function tryFill(sheets: SheetModel[], buf: Buffer, s: AppState, da
       const got = ev.cell(fm, r.r, c.c); const w = wrote.has(report.front + '|' + r.r + ':' + c.c);
       const isF = fm.fx.has(r.r + ':' + c.c);
       const v = got === UNSUPPORTED ? '?' : got === '' || got == null ? null : typeof got === 'number' ? got : String(got);
-      return { v, how: w ? 'written' as const : isF ? 'formula' as const : '' as const };
+      return { v, how: w ? 'written' as const : isF ? 'formula' as const : r.total && v != null && v !== '' ? 'stale' as const : '' as const };
     })
   }));
   return { ...res, head: cols.map(c => ({ ref: colLetter(c.c), text: c.text })), rows, fixes };
@@ -125,17 +129,35 @@ export async function restoreCopy(sheets: SheetModel[], buf: Buffer, s: AppState
 
 // ------------------------------------------------------------------ the output of the ΗΚΑΙ/ΗΚΑΛ
 // null = the old path (fillHkai) fills this template: no profile for it, the template has cell corrections of the old dialog, or the old path fills it completely
-export interface AdaptiveOut { data: Buffer; warnings: string[]; sheet?: string; profile: TplProfile }
-export async function hkaiAdaptive(tpl: Buffer, s: AppState, d: ISODate, o: { front?: string; cells?: object }): Promise<AdaptiveOut | null> {
+export interface AdaptiveOut { data: Buffer; warnings: string[]; sheet?: string; profile: TplProfile | null }
+// A cheap look at a template before the heavy model: does any sheet have the words of a back side of another unit (a decision column, ΑΠΟΥΣΙΕΣ, ΟΜΑΔΑ Α΄)?
+const FOREIGN_WORD = /^(ΕΙΣΗΓΗΣΗ|ΑΠΟΦΑΣΗ|ΕΛΑΒΑ ΓΝΩΣΗ)(?![\p{L}])|^\d?\s*\.?\s*(ΑΠΟΥΣΙΕΣ|ΑΝΑΦΟΡΕΣ)\s*:?$|^ΟΜΑΔΑ\s+[ΑΒ]/u;
+export async function foreignBack(tpl: Buffer): Promise<boolean> {
+  try {
+    const wb = await Workbook.open(tpl);
+    for (const n of wb.sheetNames()) for (const row of await wb.values(n, 400, 40)) for (const v of row) if (typeof v === 'string' && v.length < 60 && FOREIGN_WORD.test(upper(v).replace(/\s+/g, ' ').trim())) return true;
+  } catch { /* unreadable: the classic path reports it */ }
+  return false;
+}
+// true when the back side of the book has sections the classic path would write wrongly: rows under the label, a decision column, ΑΠΟΥΣΙΕΣ/ΑΝΑΦΟΡΕΣ
+export function backIsForeign(sheets: SheetModel[], s: AppState, profile: TplProfile | null): boolean {
+  const lex = lexFor(s.settings.lists, profile);
+  const p = pickBack(sheets, { lex, ...(profile?.back?.accepted ? { accepted: profile.back.accepted } : {}) });
+  if (!p) return false;
+  return p.form.decision.length > 0 || p.form.sections.some(x => (x.layout === 'below' && x.slots.length > 0) || x.id === 'absences' || x.id === 'reports');
+}
+export async function hkaiAdaptive(tpl: Buffer, s: AppState, d: ISODate, o: { front?: string; cells?: object; sigs?: Sig[] | null }): Promise<AdaptiveOut | null> {
   const kind = kindOfSettings(s.settings);
-  const ps = profilesOf(s.settings).filter(p => p.kind === kind); if (!ps.length) return null;
+  const ps = profilesOf(s.settings).filter(p => p.kind === kind);
   if (o.cells && Object.keys(o.cells).length) return null;
   const sheets = await modelOfBuffer(tpl);
-  const hit = matchProfile(sheets, s, ps); if (!hit) return null;
-  if (classicFits(sheets, s.settings, o.front).fits) return null;
-  const { buffer, report } = await fillAdaptive(tpl, s, d, hit.profile, { ...(o.front ? { sheet: o.front } : {}) });
+  const hit = ps.length ? matchProfile(sheets, s, ps) : null;
+  const foreign = backIsForeign(sheets, s, hit?.profile ?? null);
+  if (!hit && !foreign) return null;
+  if (!foreign && classicFits(sheets, s.settings, o.front).fits) return null;
+  const { buffer, report } = await fillAdaptive(tpl, s, d, hit?.profile ?? null, { ...(o.front ? { sheet: o.front } : {}), ...(o.sigs !== undefined ? { sigs: o.sigs } : {}) });
   if (!report.front) return null;
-  const warnings = [...report.warnings, 'Το έντυπο της μονάδας σου γέμισε με την αντιστοίχιση «' + (hit.profile.name || hit.profile.id) + '». Ο τίτλος, η ημερομηνία και οι υπογραφές του μένουν όπως είναι στο αρχείο: έλεγξέ τα πριν το τυπώσεις.'];
-  return { data: buffer, warnings, sheet: report.front, profile: hit.profile };
+  const warnings = [...report.warnings];
+  return { data: buffer, warnings, sheet: report.front, profile: hit?.profile ?? null };
 }
 void cellRef;

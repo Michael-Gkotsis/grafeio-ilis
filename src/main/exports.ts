@@ -15,7 +15,7 @@ import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../sh
 import { Workbook, colName, colNum, sheetSafe, splitRef, unesc, type Sheet, type XlValue } from './xlsx';
 import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
-import { hkaiAdaptive } from './tplAdapt';
+import { foreignBack, hkaiAdaptive } from './tplAdapt';
 import { byRoom, outsAndStay, stayNote } from '../shared/outsStay';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
 import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
@@ -28,6 +28,7 @@ import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 import { statNoOut } from '../shared/stat';
 import { hkaiVeh } from '../shared/vehicles';
+import { isDecision } from '../shared/backForm';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -411,8 +412,8 @@ type HkaiOpts = { front?: string; back?: string; map?: HkaiMap; cells?: Partial<
 // Μηχανή προσαρμογής: αν το template της μονάδας έχει αποθηκευμένη αντιστοίχιση («Πρότυπο μονάδας») και η παλιά διαδρομή δεν το γεμίζει ολόκληρο
 // (δικές του στήλες ή γραμμές, τύποι που μετρούν άλλο φύλλο, σύνολα που έγιναν αριθμοί), γεμίζει με το fillAdaptive. Αλλιώς ό,τι ήταν πάντα (τα έτοιμα templates, byte-identical).
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiOpts = {}): Promise<ExportResult> {
-  if (s.settings.tplProfiles?.length) {
-    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, cells: opts.cells });
+  if (s.settings.tplProfiles?.length || await foreignBack(tpl)) {
+    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, cells: opts.cells, sigs: opts.sigs });
     if (ad) return { name: fileNameOf(s.settings, 'hkai', d), data: ad.data, warnings: ad.warnings, ...(ad.sheet ? { sheet: ad.sheet } : {}) };
   }
   return fillHkaiClassic(tpl, s, d, opts);
@@ -466,7 +467,9 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   }
   // Πίσω όψη: κάθε κείμενο στη θέση της ετικέτας του
   const B = mapHkBack(await wb.values(bk.name, 400, 40), bk.merges(), place);
-  const put = (ref: string | undefined, v: string | number | null, what: string) => { if (ref) bk.set(ref, v); else if (v != null && v !== '') warnings.push('Το template δεν έχει «' + what + '»: δεν γράφτηκε'); };
+  // η στήλη ΕΙΣΗΓΗΣΗ / ΑΠΟΦΑΣΗ / ΕΛΑΒΑ ΓΝΩΣΗ δεν γράφεται ποτέ (το κελί δεξιά από την ετικέτα μπορεί να είναι αυτή)
+  const taken = (ref: string) => isDecision(bk.get(ref) || '');
+  const put = (ref: string | undefined, v: string | number | null, what: string) => { if (ref && taken(ref)) { if (v != null && v !== '') warnings.push('Το κελί ' + ref + ' του «' + what + '» είναι στήλη απόφασης: δεν γράφτηκε'); } else if (ref) bk.set(ref, v); else if (v != null && v !== '') warnings.push('Το template δεν έχει «' + what + '»: δεν γράφτηκε'); };
   const tx = s.hkaiManual?.[d]?.text || {};
   if (tx.loi) put(B.loi, tx.loi, '6. ΛΟΙΠΑ');
   const off = hkOffText(s, d); if (off) put(B.off, off, 'Αξιωματικοί:');
@@ -484,7 +487,7 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   if (hkOn(s.settings, 'acc')) for (const [k, ref, w] of [['accT', B.accT, 'Ολικές'], ['accP', B.accP, 'Μερικές'], ['accM', B.accM, 'Σε άνδρες']] as const) if (tx[k]?.trim()) put(ref, tx[k].trim(), w + ' (ατυχήματα)');
   // 1. ΕΓΓΡΑΦΕΣ, 2. ΔΙΑΓΡΑΦΕΣ, 3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ και 5. ΑΙΤΗΣΕΙΣ: αριθμημένες («1.»), μία ανά γραμμή, με υπογραμμισμένη τη διάρκεια της ποινής
   const lines: [string | undefined, ReturnType<typeof hkaiEgrLines>, string][] = [[B.egr, hkaiEgrLines(s, d), '1. ΕΓΓΡΑΦΕΣ'], [B.dia, hkaiDiaLines(s, d), '2. ΔΙΑΓΡΑΦΕΣ'], [B.leaves, hkaiLeaveLines(s, d), '3. ΑΔΕΙΕΣ'], [B.puns, hkaiPunLines(s, d), '4. ΠΟΙΝΕΣ'], [B.reqs, hkaiReqLines(s, d), '5. ΑΙΤΗΣΕΙΣ']];
-  for (const [ref, ls, w] of lines) if (ls.length) { if (ref) await wb.setRich(bk, ref, ls); else warnings.push('Το template δεν έχει «' + w + ':»: ' + ls.length + ' δεν γράφτηκαν'); }
+  for (const [ref, ls, w] of lines) if (ls.length) { if (ref && taken(ref)) warnings.push('Το κελί ' + ref + ' του «' + w + ':» έχει ήδη κείμενο: ' + ls.length + ' δεν γράφτηκαν'); else if (ref) await wb.setRich(bk, ref, ls); else warnings.push('Το template δεν έχει «' + w + ':»: ' + ls.length + ' δεν γράφτηκαν'); }
   const og = hkOrgans(s, d); const ly = og.ly && pm.get(og.ly), dy = og.dy && pm.get(og.dy);
   if (ly) put(B.ly, 'Λ/Υ: ' + who(ly), 'Υπαξιωματικοί:');
   if (dy) put(B.dy, 'Δ/Υ: ' + who(dy), 'Υπαξιωματικοί:');

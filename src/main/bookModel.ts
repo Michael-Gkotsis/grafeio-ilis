@@ -40,6 +40,7 @@ export async function modelOfBuffer(buf: Buffer | Uint8Array, opts: ModelOpts = 
   const sheets: SheetModel[] = [];
   for (const name of wb.sheetNames()) {
     const fx = new Set<string>(); const formulas = new Map<string, string>();
+    let comments: Record<string, string> = {};
     let rows: CellValue[][] = []; let truncated = false; let merges: MergeRange[] = []; let dvs: { sqref: string; type: string; f1: string }[] = [];
     try {
       rows = await wb.values(name, maxRows, maxCols, fx) as CellValue[][];
@@ -62,6 +63,7 @@ export async function modelOfBuffer(buf: Buffer | Uint8Array, opts: ModelOpts = 
       }
       merges = ws.merges().map(m => ({ r1: m.r1 - 1, c1: m.c1 - 1, r2: m.r2 - 1, c2: m.c2 - 1 }));
       dvs = ws.validations();
+      comments = await wb.commentsOf(name);
     } catch { /* an unreadable sheet stays empty, like readBook */ }
     const validations: Validation[] = [];
     for (const d of dvs) for (const sq of d.sqref.split(/\s+/).filter(Boolean)) {
@@ -70,7 +72,7 @@ export async function modelOfBuffer(buf: Buffer | Uint8Array, opts: ModelOpts = 
       if (d.type === 'list') { if (/^".*"$/.test(d.f1)) v.items = d.f1.slice(1, -1).split(',').map(x => x.trim()); else v.ref = d.f1; }
       validations.push(v);
     }
-    sheets.push({ name, state: states[name] || 'visible', rows, fx, formulas, merges, validations, ...(truncated ? { truncated } : {}) });
+    sheets.push({ name, state: states[name] || 'visible', rows, fx, formulas, merges, validations, ...(Object.keys(comments).length ? { comments } : {}), ...(truncated ? { truncated } : {}) });
   }
   // lists that point at cells (or at a name): the values they show, read from this or another sheet
   const by = new Map(sheets.map(s => [s.name, s]));
