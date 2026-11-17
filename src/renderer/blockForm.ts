@@ -7,7 +7,7 @@ import { useStore } from './store';
 import { HoursField, RangeField, shiftForm, shiftOf, shiftWhy, GoLink, type HoursMode, type ShiftForm } from './common';
 import { codeErrors } from '../shared/codes';
 import { normTime } from '../shared/hours';
-import { HK_A, SVC_KOL_COLS, svcColOk, svcDefault } from '../shared/ranks';
+import { HK_A, OWN_COL_TAG, SVC_KOL_COLS, hkColsOf, svcColOk, svcDefault } from '../shared/ranks';
 import { MAX_NUMS, MAX_PER, blockGroups, blockShape, blocksOf, dutyStartOf, everyBlock, reshapeBlock, withBlocks, type BlockDef, type Phase, type ShiftDef } from '../shared/domain';
 
 type P = any;
@@ -25,7 +25,7 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
   const [f, setF] = useState<BlockF>(() => {
     if (!b) return { name: '', nums: 1, per: 1, armed: false, weapon: 'own', hkCol: '', active: true, mode: 'day', sh: shiftForm(), hrs: [''], codes: {} };
     const sh = blockShape(b); const hrs = blockGroups(b.posts).map(g => (g[0].rot == null ? real(g[0].hrs) : ''));
-    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', hkCol: svcColOk(b.hkCol) && svcColOk(b.hkCol) !== svcDefault(b.kind) ? b.hkCol! : '', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
+    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', hkCol: svcColOk(b.hkCol, st.lists) && svcColOk(b.hkCol, st.lists) !== svcDefault(b.kind) ? b.hkCol! : '', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
   });
   const set = (patch: Partial<BlockF>) => setF(x => ({ ...x, ...patch }));
   const used = useMemo(() => new Set(everyBlock(st).flatMap(x => x.posts.map(p => p.k))), [st]);
@@ -57,6 +57,7 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
 
 export function BlockForm({ form, id }: { form: ReturnType<typeof useBlockForm>; id: string }) {
   const { b, f, set, shown, errs, others, labels, nums, rotB, start } = form;
+  const own = hkColsOf(useStore().state.settings.lists);   // δικές σου στήλες ΗΚΑΙ (Ρυθμίσεις › Μονάδα και έντυπα)
   const ly = b?.kind === 'ly';
   const total = f.nums * f.per; const boxes = b && !b.custom ? TPL_BOXES[b.kind] : undefined;
   const th = b ? b.name.toUpperCase() : '';
@@ -83,8 +84,8 @@ export function BlockForm({ form, id }: { form: ReturnType<typeof useBlockForm>;
     ${f.armed && html`<div className="field" style=${{ marginLeft: '28px', maxWidth: '260px' }}><label className="field__label" htmlFor=${id + '-w'}>Όπλο</label><${Select} id=${id + '-w'} className="ui-input" value=${f.weapon} data-tip="Δικό του: κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του. Της θέσης: βγαίνει το όπλο του 1ου νούμερου και περνά από χέρι σε χέρι στις αλλαγές· τα όπλα των άλλων μένουν ΕΝΤΟΣ." onChange=${(e: any) => set({ weapon: e.target.value })}><option value="own">Δικό του</option><option value="post">Της θέσης</option><//></div>`}
     <div className="field" style=${{ maxWidth: '360px' }}><label className="field__label" htmlFor=${id + '-k'}>Στήλη ΗΚΑΙ</label><${Select} id=${id + '-k'} className="ui-input" value=${f.hkCol} onChange=${(e: any) => set({ hkCol: e.target.value })}>
       <option value="">Υπηρεσία εντός στρατοπέδου (όπως σήμερα)</option>
-      <optgroup label="Κωλυόμενοι · εντός στρατοπέδου">${SVC_KOL_COLS.filter(([k]) => k !== svcDefault(b?.kind || 'other')).map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}</optgroup>
-      <optgroup label="Απόντες · εκτός στρατοπέδου">${HK_A.map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}</optgroup><//>
+      <optgroup label="Κωλυόμενοι · εντός στρατοπέδου">${SVC_KOL_COLS.filter(([k]) => k !== svcDefault(b?.kind || 'other')).map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}${own.filter(x => x.grp === 'kol').map(x => html`<option key=${x.key} value=${x.key}>${x.name + OWN_COL_TAG}</option>`)}</optgroup>
+      <optgroup label="Απόντες · εκτός στρατοπέδου">${HK_A.map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}${own.filter(x => x.grp === 'abs').map(x => html`<option key=${x.key} value=${x.key}>${x.name + OWN_COL_TAG}</option>`)}</optgroup><//>
       <span className="field__help">Με στήλη απόντων η υπηρεσία είναι εκτός στρατοπέδου: όσοι είναι σε αυτήν μετρούν απόντες στην ΗΚΑΙ (στη στήλη που διάλεξες), στη Δύναμη και στο Σήμερα, και το όπλο που παίρνουν μαζί τους γράφεται ΑΠΩΝ στην Κατάσταση οπλισμού.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.active} onChange=${(e: any) => set({ active: e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</small></span></label>
     ${b && codes}

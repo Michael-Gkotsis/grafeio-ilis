@@ -1,6 +1,7 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
 import { HK } from './unit';
+import { applyHkCols, type HkColInput } from './hkCols';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
@@ -103,6 +104,8 @@ export type Command =
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
   // γραμμές της ΗΚΑΙ που πρόσθεσες: τα στελέχη με βαθμό που μαζεύει μια γραμμή πηγαίνουν σε αυτήν (και φεύγουν όταν σβηστεί)
   | { t: 'setHkRows'; rows: HkRowDef[]; names?: Record<string, string>; text: string }
+  // δικές σου στήλες της ΗΚΑΙ (shared/hkCols.ts): ολόκληρη η λίστα· χωρίς key = νέα, ό,τι λείπει = διαγράφεται (και ό,τι τη χρησιμοποιούσε γυρνά στην προεπιλογή)
+  | { t: 'setHkCols'; cols: HkColInput[] }
   // Πρότυπο μονάδας (shared/tplMap.ts): το προφίλ του αρχείου της μονάδας (settings.tplProfiles, αντικαθιστά το ίδιο id) και ό,τι έφτιαξε ο χρήστης με το «Δημιουργία»: νέα γραμμή ΗΚΑΙ (lists.hkRows), νέα κατάσταση/είδος άδειας με τη στήλη της (lists.leaveKinds). Μία αναίρεση.
   | { t: 'adaptTpl'; profile: TplProfile; create?: TplCreate[]; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
@@ -247,7 +250,7 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
 }
 // Όλα τα κλειδιά θέσεων όλων των εντύπων (νέα κλειδιά μοναδικά, Michael 4/11)
 // Στήλη ΗΚΑΙ υπηρεσίας (BlockDef.hkCol): άκυρη ή ίδια με την προεπιλογή του είδους = δεν γράφεται (undefined)
-const hkColFor = (kind: string, v: unknown): string | undefined => { const c = svcColOk(v); return c && c !== svcDefault(kind) ? c : undefined; };
+const hkColFor = (kind: string, v: unknown, lists?: UserLists): string | undefined => { const c = svcColOk(v, lists); return c && c !== svcDefault(kind) ? c : undefined; };
 const usedKeys = (st: Settings) => new Set(everyBlock(st).flatMap(b => b.posts.map(p => p.k)));
 const shapeTxt = (n: number, per: number) => n + (n === 1 ? ' νούμερο' : ' νούμερα') + (per > 1 ? ' × ' + per + ' άτομα' : n === 1 ? ' άτομο' : ' άτομα');
 // Από αύριο και μετά βγαίνουν οι υπηρεσίες των θέσεων keys (όταν κρύβονται), μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά
@@ -574,7 +577,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
           if (open) st.open = true;
           if (cmd.note) st.note = kol ? kNote : cmd.note;
           if (cmd.kind) st.kind = cmd.kind;
-          if (kol) { if (cmd.minus) { st.minus = true; st.hkCol = kolColOf(cmd); } if (cmd.noOut) st.noOut = true; }
+          if (kol) { if (cmd.minus) { st.minus = true; st.hkCol = kolColOf(cmd, s.settings.lists); } if (cmd.noOut) st.noOut = true; }
           Object.assign(st, tm);
           const dest = cleanDest(cmd.dest); if (dest && TYPES[cmd.type].cat === 'abs') st.dest = dest;
           if (cmd.type === 'PUN') { st.kind = cmd.kind || PUN_KINDS[0]; if (cmd.by?.trim()) st.by = cmd.by.trim(); if (cmd.reason?.trim()) st.reason = cmd.reason.trim(); if (cmd.on) st.on = cmd.on; }
@@ -1093,6 +1096,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const hkai = s.settings.hkai?.prov ? { ...s.settings.hkai, prov: only(s.settings.hkai.prov) } : s.settings.hkai;
       return { state: { ...s, cadreList, settings: { ...s.settings, lists, cadre: only(s.settings.cadre)!, hkai } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
     }
+    case 'setHkCols': {
+      const r = applyHkCols(s, c.cols, HK());
+      return { state: r.state, text: r.text, files: [] };
+    }
     case 'adaptTpl': {
       // ό,τι φτιάχτηκε με το «Δημιουργία»: με τις ίδιες εντολές των Ρυθμίσεων (γραμμές της ΗΚΑΙ, είδη άδειας)· ό,τι υπάρχει ήδη δεν διπλογράφεται
       let st = s; const made: string[] = [];
@@ -1410,7 +1417,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const sh = blockShift(c.shift, n);
       // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
       // νούμερα × άτομα (Michael, 4/11): ίδιο σχήμα με την επεξεργασία (reshapeBlock)
-      const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), ...(hkColFor(c.kind || 'other', c.hkCol) ? { hkCol: hkColFor(c.kind || 'other', c.hkCol) } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
+      const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), ...(hkColFor(c.kind || 'other', c.hkCol, s.settings.lists) ? { hkCol: hkColFor(c.kind || 'other', c.hkCol, s.settings.lists) } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
       const b: BlockDef = { ...seed, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: reshapeBlock(seed, n, per, name, usedKeys(s.settings)) };
       return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + shapeTxt(n, per) + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
@@ -1438,7 +1445,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (c.armed != null) nb.armed = c.armed;
         if (c.armWeapon != null) { if (c.armWeapon === 'post') nb.armWeapon = 'post'; else delete nb.armWeapon; }
         if (c.hidden != null) { if (c.hidden) nb.hidden = true; else delete nb.hidden; }
-        if (c.hkCol !== undefined) { const hk = hkColFor(nb.kind, c.hkCol); if (hk) nb.hkCol = hk; else delete nb.hkCol; }
+        if (c.hkCol !== undefined) { const hk = hkColFor(nb.kind, c.hkCol, s.settings.lists); if (hk) nb.hkCol = hk; else delete nb.hkCol; }
       }
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
       // δικές μου βάρδιες (Michael, 24/10): το νούμερο κάθε βάρδιας μέσα στα νούμερα της υπηρεσίας

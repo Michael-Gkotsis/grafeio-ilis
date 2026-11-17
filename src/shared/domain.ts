@@ -755,11 +755,15 @@ export const KOL_DEFAULT_COL = 'yp';
 // «Καμία στήλη» (Michael, 29/10: η στήλη της ΗΚΑΙ είναι προαιρετική): hkCol '-' = κωλυόμενος στη Δύναμη και στο Σήμερα, όχι σε στήλη κωλυομένων της ΗΚΑΙ.
 // Παλιές δηλώσεις (hkCol λείπει) μένουν στην Υπηρεσία όπως πάντα.
 export const KOL_NO_COL = '-';
-// Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία· '-' = καμία)
-export const kolColOf = (s: { hkCol?: string }): string => (s.hkCol === KOL_NO_COL ? KOL_NO_COL : KOL_COLS.some(x => x[0] === s.hkCol) ? s.hkCol! : KOL_DEFAULT_COL);
+// Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία· '-' = καμία). Δική σου στήλη κωλυομένων (lists.hkCols, 'kol') δεκτή όσο υπάρχει
+type OwnCols = { hkCols?: { key: string; name: string; grp: string; short?: string }[] };
+const ownKol = (k: string | undefined, lists?: OwnCols | null) => !!k && !!lists?.hkCols?.some(x => x.key === k && x.grp === 'kol' && x.name?.trim());
+export const kolColOf = (s: { hkCol?: string }, lists?: OwnCols | null): string => (s.hkCol === KOL_NO_COL ? KOL_NO_COL : KOL_COLS.some(x => x[0] === s.hkCol) || ownKol(s.hkCol, lists) ? s.hkCol! : KOL_DEFAULT_COL);
 // Η στήλη της ΗΚΑΙ που μετρά πραγματικά, null όταν δεν μπαίνει σε καμία
-export const kolHk = (s: { hkCol?: string }): string | null => { const c = kolColOf(s); return c === KOL_NO_COL ? null : c; };
-export const kolColName = (k: string): string => (k === KOL_NO_COL ? 'χωρίς στήλη ΗΚΑΙ' : KOL_COLS.find(x => x[0] === k)?.[1] || k);
+export const kolHk = (s: { hkCol?: string }, lists?: OwnCols | null): string | null => { const c = kolColOf(s, lists); return c === KOL_NO_COL ? null : c; };
+export const kolColName = (k: string, lists?: OwnCols | null): string => (k === KOL_NO_COL ? 'χωρίς στήλη ΗΚΑΙ' : KOL_COLS.find(x => x[0] === k)?.[1] || lists?.hkCols?.find(x => x.key === k)?.name || k);
+// οι στήλες κωλυομένων που διαλέγει η δήλωση: οι βασικές και οι δικές σου
+export const kolColsOf = (lists?: OwnCols | null): [string, string][] => [...KOL_COLS, ...(lists?.hkCols || []).filter(x => ownKol(x.key, lists)).map(x => [x.key, x.name] as [string, string])];
 // Η στήλη της ΗΚΑΙ για όποιον έχει ΣΤΕΠ (Michael, 29/10: κωλυόμενος αυτόματα, «πουθενά» για τώρα). null = δεν μετρά σε καμία στήλη (μόνο στη Δύναμη
 // και στο Σήμερα)· κλειδί των KOL_COLS ('ey', 'yp'…) = μπαίνει σε εκείνη τη στήλη της ΗΚΑΙ ως κωλυόμενος. Μία γραμμή για να αλλάξει.
 export const STEP_COL = null as string | null;

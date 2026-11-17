@@ -5,9 +5,9 @@
 // κάθε άτομο μετρά μία φορά (ένωση συνόλων, όπως η Δύναμη)· οι αριθμοί προστίθενται. Καθαρή λογική, χωρίς οθόνη.
 import { dayFor, type ISODate } from './dates';
 import type { TabLay } from './reports';
-import { KOL_COLS, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
+import { kolColsOf, isWaiting, TYPES, TYPE_KEYS, blocksOf, unitOf, type AppState, type Person, type TypeKey } from './domain';
 import { HK_A, HK_K, activePeople, isHol, cadreSeats, hkMin, hkaiCounts, kolView, outMinOn, postsOf, seatMap, statusesAt, statusesFrom, strengthAt, strengthOf } from './rules';
-import { listOf, medNote, MED_LIKE, ownMed, hkRowList } from './ranks';
+import { listOf, medNote, MED_LIKE, ownMed, hkRowList, hkColsOf, kolKeysOf, absKeysOf } from './ranks';
 import { siCombos, siOf } from './si';
 import { outsTables } from './returns';
 import { outsAndStay } from './outsStay';
@@ -164,7 +164,7 @@ export function metricsOf(s: AppState): Metric[] {
   m.push(S('kol.man', G.kol, 'Κωλυόμενοι με δήλωση (όλοι)', c => keys(kol(c).man.map(x => x.p)), 'Όσοι έχουν δήλωση κωλυόμενου τη στιγμή μέτρησης, είτε αφαιρούνται από τους παρόντες είτε όχι'));
   m.push(S('kol.minus', G.kol, 'Κωλυόμενοι που αφαιρούνται από τους παρόντες', c => kolMinus(c), 'Όπως οι «Κωλυόμενοι (δηλωμένοι)» της Δύναμης'));
   m.push(S('kol.keep', G.kol, 'Κωλυόμενοι που μένουν παρόντες', c => keys(kol(c).keep.map(x => x.p))));
-  for (const [k, lbl] of KOL_COLS) m.push(S('kol.col:' + k, G.kol, 'Κωλυόμενοι στη στήλη «' + lbl + '» της ' + HKN, c => keys(kol(c).minus.filter(x => x.col === k).map(x => x.p))));
+  for (const [k, lbl] of kolColsOf(lists)) m.push(S('kol.col:' + k, G.kol, 'Κωλυόμενοι στη στήλη «' + lbl + '» της ' + HKN, c => keys(kol(c).minus.filter(x => x.col === k).map(x => x.p))));
   // ---- Υπηρεσίες της μέρας (guards + dutyLog της μέρας)
   const picks = (c: VCtx) => memo(c, 'picks', () => dutyPicks(c.s, c.d));
   const guard = (c: VCtx) => c.s.guards?.[c.d] || {};
@@ -183,8 +183,8 @@ export function metricsOf(s: AppState): Metric[] {
   }
   // ---- Στελέχη (ΗΚΑΙ): κωλυόμενοι στις στήλες υπηρεσίας/ΕΥ…, απόντες στις στήλες αδειών…
   m.push(S('cadre.all', G.cadre, 'Στελέχη σε δύναμη', c => (cadreActive(c).length ? keys(cadreActive(c).map(x => ({ id: 0, cid: x.id }))) : hk(c).cadreN), 'Η λίστα Στελέχη· αν δεν την έχεις συμπληρώσει, οι αριθμοί των Ρυθμίσεων'));
-  m.push(S('cadre.kol', G.cadre, 'Στελέχη κωλυόμενα', c => cadreKeys(c, HK_K.map(x => x[0])), 'Στελέχη στις στήλες κωλυομένων της ' + HKN + ' (υπηρεσία, ΕΥ, τιμωρημένοι…)'));
-  m.push(S('cadre.apo', G.cadre, 'Στελέχη απόντα', c => cadreKeys(c, HK_A.map(x => x[0])), 'Στελέχη στις στήλες απόντων της ' + HKN + ' (άδειες, νοσοκομείο…)'));
+  m.push(S('cadre.kol', G.cadre, 'Στελέχη κωλυόμενα', c => cadreKeys(c, kolKeysOf(lists)), 'Στελέχη στις στήλες κωλυομένων της ' + HKN + ' (υπηρεσία, ΕΥ, τιμωρημένοι…)'));
+  m.push(S('cadre.apo', G.cadre, 'Στελέχη απόντα', c => cadreKeys(c, absKeysOf(lists)), 'Στελέχη στις στήλες απόντων της ' + HKN + ' (άδειες, νοσοκομείο…)'));
   // ---- Οπλισμός (όπως η σελίδα Οπλισμός: σήμερα με την ώρα, άλλες μέρες όλα τα νούμερα της μέρας)
   const wm = (c: VCtx, f: WeaponFilter) => keys(c.s.people.filter(p => weaponMatch(f, p, winfo(c))));
   const outs = (c: VCtx) => memo(c, 'wout', () => outPeople(armPpl(c), winfo(c)));
@@ -214,10 +214,11 @@ export function metricsOf(s: AppState): Metric[] {
   m.push(N('hk.avail', G.hk, HKN + ': Διαθέσιμοι', c => hk(c).avail, 'Δύναμη μείον απόντες'));
   for (const [k, short, long] of HK_K) if (k !== 'bl') m.push(N('hk.k:' + k, G.hk, HKN + ' κωλυόμενοι: ' + (long || short), c => col(c, k)));
   for (const [k, , long] of HK_A) m.push(N('hk.a:' + k, G.hk, HKN + ' απόντες: ' + long, c => col(c, k)));
+  for (const o of hkColsOf(lists)) m.push(N((o.grp === 'kol' ? 'hk.k:' : 'hk.a:') + o.key, G.hk, HKN + (o.grp === 'kol' ? ' κωλυόμενοι: ' : ' απόντες: ') + o.name + ' (δική σου στήλη)', c => col(c, o.key)));
   m.push(N('hk.a:ab', G.hk, HKN + ': Μισθοτροφοδοτηθέντες (με το χέρι)', c => col(c, 'ab')));
   for (const r of hkRowList(lists)) m.push(N('hk.row:' + r, G.hk, HKN + ' γραμμή: ' + r + ' (δύναμη)', c => hk(c).rank[r]?.n || 0));
   // απόντες μιας γραμμής (άθροισμα των στηλών απόντων της), για τα «Απόντες ΑΞΚΟΙ/ΑΝΘΣΤΕΣ/ΥΠΞΚΟΙ» του Δυναμολογίου στελεχών
-  for (const r of hkRowList(lists)) m.push(N('hk.rowa:' + r, G.hk, HKN + ' γραμμή: ' + r + ' (απόντες)', c => { const row = hk(c).rank[r]; return row ? HK_A.reduce((a, [k]) => a + (row.c[k] || 0), 0) : 0; }));
+  for (const r of hkRowList(lists)) m.push(N('hk.rowa:' + r, G.hk, HKN + ' γραμμή: ' + r + ' (απόντες)', c => { const row = hk(c).rank[r]; return row ? absKeysOf(lists).reduce((a, k) => a + (row.c[k] || 0), 0) : 0; }));
   MET_CACHE.set(s.settings, m);
   return m;
 }

@@ -72,7 +72,7 @@ function stepsOf(s: ArmState, day: ISODate): Step[] {
   for (const k of Object.keys(g).sort((x, y) => (order.get(x) ?? 1e9) - (order.get(y) ?? 1e9))) {
     const x = postBy(s as AppState, k); if (!x?.armed || g[k] == null) continue;
     const bd = blocks.find(b => b.id === x.block), mode = armModeOf(bd); const ws = windowsOf(x, cyc); const ln = lane(x.block, ws[0].start);
-    const away = svcAbsent(svcColOk(bd?.hkCol)) ? { away: bd!.name } : {};
+    const away = svcAbsent(svcColOk(bd?.hkCol, s.settings.lists), s.settings.lists) ? { away: bd!.name } : {};
     ws.forEach((w, n) => out.push({ ...away, k, label: x.label, block: x.block, mode, pid: g[k], n, from: w.start, to: w.end, ord, lane: ln }));
     ord++;
   }
@@ -81,7 +81,7 @@ function stepsOf(s: ArmState, day: ISODate): Step[] {
   for (const e of s.dutyLog?.[day] || []) {
     const x = kinds.get(e.kind); if (!x) continue;
     const bd = blocks.find(b => b.id === x.block);
-    out.push({ ...(svcAbsent(svcColOk(bd?.hkCol)) ? { away: bd!.name } : {}), k: '~' + e.kind + ':' + e.pid, label: (bd?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(bd), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++, lane: lane(x.block, cyc) });
+    out.push({ ...(svcAbsent(svcColOk(bd?.hkCol, s.settings.lists), s.settings.lists) ? { away: bd!.name } : {}), k: '~' + e.kind + ':' + e.pid, label: (bd?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(bd), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++, lane: lane(x.block, cyc) });
   }
   return out;
 }

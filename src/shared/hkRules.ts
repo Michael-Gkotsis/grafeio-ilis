@@ -12,7 +12,7 @@ import type { SheetModel } from './sheetModel';
 import { key as cellKey, valueText } from './sheetModel';
 import type { TplProfile } from './tplStore';
 import type { HkClass, HkWho } from './rules';
-import { HK_A, HK_K } from './ranks';
+import { HK_A, HK_COL_KEY, HK_K, hkColsOf, type HkColDef } from './ranks';
 
 export type ColRule =
   | { t: 'state'; keys: string[] }
@@ -29,17 +29,18 @@ const SPLIT_ROW: Record<string, string> = { 'rank:ΥΠΟΛΟΧΑΓΟΣ': 'Ανθ
 // ------------------------------------------------------------------ defaults
 export const DERIVED_COLS = ['sum', 'sumK', 'sumA', 'avail'] as const;
 export type Derived = typeof DERIVED_COLS[number];
-export function defaultColRule(k: string): ColRule | null {
+// own: the unit's own columns (UserLists.hkCols): a template column named like one counts that state, and the totals count the own columns of their group
+export function defaultColRule(k: string, own: HkColDef[] = []): ColRule | null {
   switch (k) {
     case 'placed': return { t: 'placed' };
     case 'attached': return { t: 'attached' };
     case 'sum': return { t: 'force' };
     case 'prov': return { t: 'prov' };
     case 'avail': return { t: 'avail' };
-    case 'sumK': return { t: 'state', keys: KOL_KEYS };
-    case 'sumA': return { t: 'state', keys: ABS_KEYS };
+    case 'sumK': return { t: 'state', keys: [...KOL_KEYS, ...own.filter(x => x.grp === 'kol').map(x => x.key)] };
+    case 'sumA': return { t: 'state', keys: [...ABS_KEYS, ...own.filter(x => x.grp === 'abs').map(x => x.key)] };
     case 'bl': return null;
-    default: return /^[a-zA-Z]+$/.test(k) ? { t: 'state', keys: [k] } : null;
+    default: return /^[a-zA-Z]+$/.test(k) || (HK_COL_KEY.test(k) && own.some(x => x.key === k)) ? { t: 'state', keys: [k] } : null;
   }
 }
 export const defaultRowRule = (key: string): RowRule => ({ keys: [key] });
@@ -98,7 +99,7 @@ export class HkEngine {
       case 'attached': return ppl.filter(w => w.attached).length;
       case 'force': return ppl.length + (this.plain(row) ? row.keys.reduce((a, r) => a + (this.cls.fixed[r] || 0), 0) : 0);
       case 'placed': return this.count(row, { t: 'force' }, ppl) - this.count(row, { t: 'attached' }, ppl);
-      case 'avail': return this.count(row, { t: 'force' }, ppl) - this.count(row, { t: 'state', keys: ABS_KEYS }, ppl);
+      case 'avail': return this.count(row, { t: 'force' }, ppl) - this.count(row, { t: 'state', keys: this.cls.absKeys }, ppl);
       case 'prov': return this.plain(row) ? row.keys.reduce((a, r) => a + (this.prov[r] || 0), 0) : 0;
       case 'post': return ppl.filter(w => w.kind === 'soldier' && w.col == null && !!w.p?.post && col.posts.includes(phraseKey(w.p.post))).length;
       case 'sum': return col.of.reduce((a, c) => a + this.count(row, c, ppl), 0);
@@ -164,7 +165,7 @@ export function resolveCol(ci: ColInfo, ctx: RuleCtx): ColRes {
   const m = ci.match; let concept = m.confidence === 'sure' ? m.concept : null;
   if (!concept) { const a = acceptedConcept(ctx.profile, 'col', ci.leaf || ci.text); if (a) concept = a; }
   if (!concept || !concept.startsWith('hkcol:')) return { rule: null, concept: concept || m.concept, why: concept ? 'η έννοια «' + concept + '» δεν είναι στήλη του ΗΚΑΙ' : m.confidence === 'suggest' ? 'μόνο πρόταση: «' + (m.concept || '?') + '»' : 'άγνωστη στήλη' };
-  const k = concept.slice(6); const rule = defaultColRule(k);
+  const k = concept.slice(6); const rule = defaultColRule(k, typeof ctx.settings === 'object' && ctx.settings ? hkColsOf(ctx.settings.lists) : []);
   return { rule, concept, ...((DERIVED_COLS as readonly string[]).includes(k) ? { derived: k as Derived } : {}), why: rule ? 'στήλη «' + k + '»' : 'χωρίς κανόνα' };
 }
 

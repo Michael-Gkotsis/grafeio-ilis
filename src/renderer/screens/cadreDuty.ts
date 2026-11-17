@@ -134,7 +134,7 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
     const old = cache.current; const next = new Map<string, { sig: string; row: GridRow }>(); const out: GridRow[] = [];
     for (const sec of visibleSecs) {
       const g = sec.kind === 'group' ? cfg.groups.find(x => x.id === sec.id) : undefined;
-      out.push({ id: 'band:' + sec.id, head: null, cells: [], band: html`<b>${sec.name}</b>${g ? html` · ${g.services.map(v => v.name + ' (' + (v.h24 ? '24ωρη' : 'ωρες') + ', ' + v.perDay + ' τη μέρα' + (v.hkCol ? ', στήλη ' + HK() + ': ' + (colShort(v.hkCol) || v.hkCol) : '') + ')').join(' · ') || 'χωρίς υπηρεσίες'}` : sec.kind === 'free' ? ' · μόνο όσα έχουν γίνει με το χέρι στις θέσεις των στρατιωτών' : ''}${g && !sec.people.length ? ' · κανείς δεν έχει μπει (Στοιχεία υπηρεσιών του στελέχους)' : ''}` });
+      out.push({ id: 'band:' + sec.id, head: null, cells: [], band: html`<b>${sec.name}</b>${g ? html` · ${g.services.map(v => v.name + ' (' + (v.h24 ? '24ωρη' : 'ωρες') + ', ' + v.perDay + ' τη μέρα' + (v.hkCol ? ', στήλη ' + HK() + ': ' + (colShort(v.hkCol, state.settings.lists) || v.hkCol) : '') + ')').join(' · ') || 'χωρίς υπηρεσίες'}` : sec.kind === 'free' ? ' · μόνο όσα έχουν γίνει με το χέρι στις θέσεις των στρατιωτών' : ''}${g && !sec.people.length ? ' · κανείς δεν έχει μπει (Στοιχεία υπηρεσιών του στελέχους)' : ''}` });
       for (const c of sec.people) {
         const cells = personCells(state, c, index); const lim = monthLimit(state, c, ym); const lt = limitText(state, c, ym, lim);
         const code = cells.map(x => cellCode(x) + (x.noDuty ? '!' : '') + (x.roster[0]?.duty.why ? '?' : '')).join('|');

@@ -16,7 +16,7 @@ import { detectBook, type BookShape, type DrivenCell, type ListRegion, type Matr
 import { learnedNames } from '../shared/tplProfile';
 import type { TplProfile } from '../shared/tplStore';
 import { hkaiClassify, type HkWho } from '../shared/rules';
-import { hkRowList, type UserLists } from '../shared/ranks';
+import { hkColOwn, hkRowList, isAbsCol, isKolCol, type UserLists } from '../shared/ranks';
 import { hkOn, type AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, pickFront, unplaced, type FrontMap, type RuleCtx } from '../shared/hkRules';
@@ -209,7 +209,7 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
   for (const x of un.rows) rep.warnings.push(x.n + ' άτομα της γραμμής «' + x.key + '» δεν μετριούνται σε καμία γραμμή του εντύπου');
   // in the user's words: the column's name, not the key; a total with a formula cannot count them either
   for (const x of un.states) {
-    const name = HK_COLS.find(c => c[0] === x.key)?.[1] ?? x.key; const kolA = KOL_KEYS.includes(x.key) ? 'Σύνολο κωλυομένων' : 'Σύνολο απόντων';
+    const name = hkColOwn(x.key, s.settings.lists)?.name ?? HK_COLS.find(c => c[0] === x.key)?.[1] ?? x.key; const kolA = isKolCol(x.key, s.settings.lists) ? 'Σύνολο κωλυομένων' : 'Σύνολο απόντων';
     rep.warnings.push((x.n === 1 ? '1 άτομο' : x.n + ' άτομα') + ' στην κατάσταση «' + name + '» δεν ' + (x.n === 1 ? 'έχει' : 'έχουν') + ' στήλη στο έντυπο: δεν ' + (x.n === 1 ? 'φαίνεται' : 'φαίνονται') + ' σε καμία στήλη, και αν το «' + kolA + '» του εντύπου έχει τύπο, δεν ' + (x.n === 1 ? 'μετριέται' : 'μετριούνται') + ' ούτε εκεί');
   }
   // the data sheet that the template's own formulas count
@@ -256,8 +256,8 @@ export function restoreFormulas(sheets: SheetModel[], profile?: TplProfile | nul
   const colOf = (f: (c: FrontMap['cols'][number]) => boolean) => map.cols.filter(f);
   const placed = colOf(c => c.rule?.t === 'placed')[0], attached = colOf(c => c.rule?.t === 'attached')[0];
   const sumC = colOf(c => c.derived === 'sum')[0], sumA = colOf(c => c.derived === 'sumA')[0];
-  const kol = colOf(c => !c.derived && c.rule?.t === 'state' && c.rule.keys.every(k => KOL_KEYS.includes(k)));
-  const abs = colOf(c => !c.derived && c.rule?.t === 'state' && c.rule.keys.every(k => ABS_KEYS.includes(k)));
+  const kol = colOf(c => !c.derived && c.rule?.t === 'state' && c.rule.keys.every(k => KOL_KEYS.includes(k) || isKolCol(k, o.lists)));
+  const abs = colOf(c => !c.derived && c.rule?.t === 'state' && c.rule.keys.every(k => ABS_KEYS.includes(k) || isAbsCol(k, o.lists)));
   for (const row of map.rows) {
     if (row.rule) {
       for (const col of map.cols) {
