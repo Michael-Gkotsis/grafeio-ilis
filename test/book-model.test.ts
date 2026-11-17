@@ -53,6 +53,18 @@ describe('modelOfBuffer', () => {
     expect(ranged && ranged.items).toEqual(['ΝΟΣΟΚΟΜΕΙΟ', 'ΕΚΠΑΙΔΕΥΣΗ', 'ΑΠΑΛΛΑΓΗ']);
     expect(sh[3].formulas.get('0:0')).toBe('COUNTIF(Δεδομένα!A:A,"ΑΝΧΗΣ")');
   });
+  it('reads Excel 2010 lists that point at another sheet (x14 in extLst)', async () => {
+    const JSZip = (await import('jszip')).default;
+    const z = await JSZip.loadAsync(await book());
+    const f = 'xl/worksheets/sheet4.xml'; let xml = await z.file(f)!.async('string');
+    const ext = '<extLst><ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">'
+      + '<x14:dataValidations count="1" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"><x14:dataValidation type="list" allowBlank="1">'
+      + '<x14:formula1><xm:f>Δεδομένα!$H$1:$H$3</xm:f></x14:formula1><xm:sqref>B2:B9</xm:sqref></x14:dataValidation></x14:dataValidations></ext></extLst>';
+    xml = xml.replace('</worksheet>', ext + '</worksheet>'); z.file(f, xml);
+    const sh = await modelOfBuffer(await z.generateAsync({ type: 'nodebuffer' }));
+    const v = sh[3].validations.find(x => x.type === 'list');
+    expect(v).toMatchObject({ r1: 1, c1: 1, r2: 8, c2: 1, items: ['ΝΟΣΟΚΟΜΕΙΟ', 'ΕΚΠΑΙΔΕΥΣΗ', 'ΑΠΑΛΛΑΓΗ'] });
+  });
   it('an unreadable buffer throws', async () => { await expect(modelOfBuffer(Buffer.from('not a zip'))).rejects.toBeTruthy(); });
 });
 

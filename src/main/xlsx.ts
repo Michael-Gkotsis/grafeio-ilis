@@ -212,7 +212,10 @@ export class Sheet {
   // Έλεγχοι δεδομένων όπως είναι γραμμένοι (λίστες επιλογής): περιοχές κελιών, τύπος και formula1 (σκέτη τιμή, "Α,Β" ή αναφορά)
   validations(): { sqref: string; type: string; f1: string }[] {
     return [...this.tail.matchAll(/<dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/dataValidation>)/g)]
-      .map(m => ({ sqref: attr(m[1], 'sqref') || '', type: attr(m[1], 'type') || '', f1: unesc(/<formula1>([\s\S]*?)<\/formula1>/.exec(m[2] || '')?.[1] || '') }));
+      .map(m => ({ sqref: attr(m[1], 'sqref') || '', type: attr(m[1], 'type') || '', f1: unesc(/<formula1>([\s\S]*?)<\/formula1>/.exec(m[2] || '')?.[1] || '') }))
+      // Excel 2010+ γράφει τις λίστες που δείχνουν σε άλλο φύλλο στο extLst (x14:dataValidation, με xm:f και xm:sqref)
+      .concat([...this.tail.matchAll(/<x14:dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/x14:dataValidation>)/g)]
+        .map(m => ({ sqref: unesc(/<xm:sqref>([\s\S]*?)<\/xm:sqref>/.exec(m[2] || '')?.[1] || ''), type: attr(m[1], 'type') || '', f1: unesc(/<x14:formula1>\s*<xm:f>([\s\S]*?)<\/xm:f>/.exec(m[2] || '')?.[1] || '') })));
   }
   // Νέα συγχώνευση (π.χ. τίτλος A1:K1)
   addMerge(ref: string): this {
