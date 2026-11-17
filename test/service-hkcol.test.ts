@@ -347,3 +347,20 @@ describe('χωρίς hkCol: η ΗΚΑΙ βγαίνει όπως πάντα', () 
     expect(emptyState().settings.blocks.every(b => !('hkCol' in b))).toBe(true);
   });
 });
+
+// ΔΥΝΑΜΗ (Excel Εξοδούχων, «Όλη η δύναμη»): όσοι είναι σε υπηρεσία εκτός στρατοπέδου μπαίνουν στο Β4 (ήδη έξω), όχι στο Γ1 «ΥΠΗΡΕΣΙΑ»
+describe('ΔΥΝΑΜΗ: υπηρεσία εκτός στρατοπέδου = Β4', () => {
+  it('Φυλάκια → Β4 στο dayBook και στο Excel· προεπιλογή → Γ1 όπως πάντα', async () => {
+    const { dayBook } = await import('../src/shared/outsDay');
+    const { fillOuts } = await import('../src/main/exports');
+    const tpl = fs.readFileSync(path.join(__dirname, '..', 'templates', 'exodouxoi.xlsx'));
+    for (const col of ['fyl', undefined]) {
+      const { s, pk, gk } = camp(col); const st0 = withGuards(s, { [pk[0]]: 1, [pk[1]]: 2, [gk]: 3 }); const st: AppState = { ...st0, settings: { ...st0.settings, outsFmt: 'all' } };   // μορφή «Όλη η δύναμη»
+      const g = new Map(dayBook(st, D).map(r => [r.p.id, r.g]));
+      expect([g.get(1), g.get(2), g.get(3)]).toEqual(col ? ['B4', 'B4', 'G1'] : ['G1', 'G1', 'G1']);
+      const wb = await Workbook.open((await fillOuts(tpl, st, D)).data);
+      const texts: string[] = []; for (const n of wb.sheetNames()) for (const row of await wb.values(n, 400, 20)) for (const v of row || []) if (typeof v === 'string') texts.push(v);
+      expect(texts.some(t => t.includes('ΥΠΗΡΕΣΙΑ ΕΚΤΟΣ ΣΤΡΑΤΟΠΕΔΟΥ')), String(col)).toBe(!!col);
+    }
+  });
+});
