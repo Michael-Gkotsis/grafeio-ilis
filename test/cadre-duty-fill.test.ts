@@ -118,3 +118,38 @@ describe('autoFill υπηρεσιών στελεχών', () => {
     expect(r.add.length + r.empty.length).toBe(155); expect(r.add.length).toBeGreaterThan(100); expect(ms).toBeLessThan(2000);
   });
 });
+
+describe('μεταφορά: το θετικό δεν μαζεύεται όταν δεν μπορούσε', () => {
+  const cfg = { ...ONE, limits: { off: { base: 4, extra: 1 }, nco: { base: 4, extra: 1 } }, rest: 0 };
+  const nov = (s: AppState, c: Cadre) => run(s, { t: 'saveCadreDuty', duty: { date: '2026-11-03', svc: 'sv', cid: c.id } });   // ο Νοέμβριος έχει πρόγραμμα
+  it('όχι 24ωρες με μόνο 24ωρες υπηρεσίες, ελαφράς καμία, χωρίς ομάδα: μηδέν θετική μεταφορά', () => {
+    let s = team(cfg, 4); const [a, b, c, d] = s.cadreList;
+    s = nov(s, d);
+    s = run(s, { t: 'setCadreDutyOf', cid: a.id, person: { group: 'g', no24: {} } });
+    s = run(s, { t: 'setCadreDutyOf', cid: b.id, person: { group: 'g', only: { services: ['zz'] } } });
+    s = run(s, { t: 'setCadreDutyOf', cid: c.id, person: {} });
+    expect(monthLimit(s, a, YM).carry).toBe(0); expect(monthLimit(s, b, YM).carry).toBe(0); expect(monthLimit(s, c, YM).carry).toBe(0);
+    expect(monthLimit(s, d, YM).carry).toBe(3);   // ο d μπορούσε: 4 − 1
+  });
+  it('όχι 24ωρες αλλά υπάρχει μη 24ωρη υπηρεσία: μετρά κανονικά', () => {
+    const c2 = { ...cfg, groups: [{ id: 'g', name: 'Πύλη', services: [{ id: 'sv', name: 'Πύλη', short: 'Π', perDay: 1, h24: true, hkCol: '' }, { id: 'hm', name: 'Ημερήσια', short: 'Η', perDay: 1, h24: false, hkCol: '' }] }] };
+    let s = team(c2, 2); const [a, b] = s.cadreList; s = nov(s, b);
+    s = run(s, { t: 'setCadreDutyOf', cid: a.id, person: { group: 'g', no24: {} } });
+    expect(monthLimit(s, a, YM).carry).toBe(4);
+  });
+  it('άδεια το μισό του μήνα: το όριο για τη μεταφορά μειώνεται ανάλογα (προς τα κάτω)· το αρνητικό μένει', () => {
+    let s = team(cfg, 3); const [a, b, c] = s.cadreList; s = nov(s, c);
+    s = run(s, { t: 'addCadreAbs', abs: { cid: a.id, kind: 'ka', from: '2026-11-01', to: '2026-11-15' }, replace: false });   // 15 από 30 διαθέσιμες
+    s = run(s, { t: 'addCadreAbs', abs: { cid: b.id, kind: 'ka', from: '2026-11-01', to: '2026-11-30' }, replace: false });   // όλος ο μήνας
+    expect(monthLimit(s, a, YM).carry).toBe(2);   // floor(4·15/30)=2
+    expect(monthLimit(s, b, YM).carry).toBe(0);
+    for (const d of ['02', '04', '06', '08', '10', '12']) s = run(s, { t: 'saveCadreDuty', duty: { date: '2026-11-' + d, svc: 'sv', cid: b.id } });
+    expect(monthLimit(s, b, YM).carry).toBe(-2);   // 6 από 4: αρνητικό ως έχει
+    expect(monthLimit(s, c, YM).carry).toBe(3);
+  });
+  it('«δεν θέλει υπηρεσία» και μέρες εβδομάδας μετρούν ως μη διαθέσιμες', () => {
+    let s = team(cfg, 2); const [a, b] = s.cadreList; s = nov(s, b);
+    s = run(s, { t: 'setCadreNoDuty', cid: a.id, from: '2026-11-01', to: '2026-11-15' });
+    expect(monthLimit(s, a, YM).carry).toBe(2);
+  });
+});

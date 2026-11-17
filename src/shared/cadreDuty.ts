@@ -65,6 +65,7 @@ export function restrictedIn(p: CadreDutyPerson, ym: string): boolean {
 export interface DayDuty { roster: CadreDuty[]; seat: { k: string; label: string }[] }
 const idxCache = new WeakMap<Map<number, DutyStat>, { duties?: CadreDuty[]; cl: Cadre[]; idx: Map<string, Map<ISODate, DayDuty>> }>();
 const NO_DUTIES: CadreDuty[] = [];
+const NO_ABS: object = [];
 export function dutyIndex(s: AppState): Map<string, Map<ISODate, DayDuty>> {
   const st = dutyStats(s); const hit = idxCache.get(st);
   if (hit && hit.duties === s.cadreDuties && hit.cl === s.cadreList) return hit.idx;
@@ -108,14 +109,38 @@ const baseOf = (s: AppState, c: Cadre): { base: number; extra: number } => {
 };
 // συμμετέχει το στέλεχος στο πρόγραμμα τον μήνα; (ομάδα, ή υπηρεσία του προγράμματος αυτόν τον μήνα) και χωρίς «ελαφράς καμία»
 const inPlan = (s: AppState, c: Cadre, ym: string, roster: number) => { const p = personOf(s, c.id); return (!!p.group || roster > 0) && !(p.none && (!p.none.until || p.none.until >= ym + '-01')); };
+// πόσο του μήνα μπορούσε να κάνει υπηρεσία: μέρες χωρίς κατάσταση (εκτός «Υπηρεσία»), χωρίς «δεν θέλει», μέρα εβδομάδας που δεν θέλει, και με κάποια υπηρεσία της ομάδας του
+// που δεν αποκλείεται από περιορισμό (καμία / μόνο / όχι 24ωρες). Από εδώ κόβεται η ΘΕΤΙΚΗ μεταφορά: όποιος δεν μπορούσε δεν «χρωστά» υπηρεσίες. Η αρνητική μένει.
+const availCache = new WeakMap<object, { nd: unknown; of: unknown; st: unknown; idx: Map<string, MonthIndex>; m: Map<string, number> }>();
+export function availShare(s: AppState, c: Cadre, ym: string): number {
+  const key = s.cadreAbs || NO_ABS; let e = availCache.get(key);
+  if (!e || e.nd !== s.cadreNoDuty || e.of !== s.cadreDutyOf || e.st !== s.settings) { e = { nd: s.cadreNoDuty, of: s.cadreDutyOf, st: s.settings, idx: new Map(), m: new Map() }; availCache.set(key, e); }
+  const k = c.id + '|' + ym; const hit = e.m.get(k); if (hit !== undefined) return hit;
+  let index = e.idx.get(ym); if (!index) { index = monthIndex(s, ym); e.idx.set(ym, index); }
+  const cfg = dutyCfgOf(s.settings); const p = personOf(s, c.id); const g = cfg.groups.find(x => x.id === p.group);
+  const cells = index.cells.get(c.id), nd = index.noDuty.get(c.id); const N = index.days.length; let n = 0;
+  if (g) for (let i = 0; i < N; i++) {
+    const d = index.days[i].d;
+    if (nd?.[i] || p.noDow?.includes(weekday(d)) || (p.none && live(p.none, d))) continue;
+    if (cells?.[i]) { const sa = cadreStatusOn(s, c.id, d); if (sa && sa.col !== 'yp') continue; }
+    const off = isOff(s, c);
+    if (g.services.some(v => runsOn(v, d) && !(v.offOnly && !off) && !(p.only && live(p.only, d) && !p.only.services.includes(v.id)) && !(p.no24 && live(p.no24, d) && v.h24))) n++;
+  }
+  const r = N ? n / N : 0; e.m.set(k, r); return r;
+}
+// μεταφορά από έναν μήνα: αρνητική (έκανε πάνω από το όριο) όπως είναι· θετική μόνο ως προς το κομμάτι του μήνα που μπορούσε να κάνει
+const carryOf = (s: AppState, c: Cadre, ym: string, base: number, done: number): number => {
+  const raw = base - done; if (raw <= 0) return raw;
+  return Math.max(0, Math.floor(base * availShare(s, c, ym) + 1e-9) - done);
+};
 export function monthLimit(s: AppState, c: Cadre, ym: string, exclude?: string): MonthLimit {
   const cfg = dutyCfgOf(s.settings); const cnt = monthCount(s, c.id, ym, exclude); const { base, extra } = baseOf(s, c);
   const planned = plannedMonths(s); let carry = 0;
   if (cfg.carry) {
     const pm = shiftMonth(ym, -1);
-    if (planned.has(pm)) { const prev = monthCount(s, c.id, pm); if (inPlan(s, c, pm, prev.roster)) carry = base - prev.done; }
+    if (planned.has(pm)) { const prev = monthCount(s, c.id, pm); if (inPlan(s, c, pm, prev.roster)) carry = carryOf(s, c, pm, base, prev.done); }
   }
-  const nextCarry = cfg.carry && planned.has(ym) && inPlan(s, c, ym, cnt.roster) ? base - cnt.done : 0;
+  const nextCarry = cfg.carry && planned.has(ym) && inPlan(s, c, ym, cnt.roster) ? carryOf(s, c, ym, base, cnt.done) : 0;
   return { ...cnt, cat: catOf(s, c), base, effBase: Math.max(0, base + carry), extra, carry, nextCarry };
 }
 
