@@ -17,6 +17,8 @@ import { seatTxt } from '../../shared/weapons';
 import type { AppState } from '../../shared/domain';
 import { PersonalTab } from './personal';
 import { LeaveTab } from './cadreLeave';
+import { CadrePlanView } from './cadrePlan';
+import { noDutyOf, rangeTxt } from '../../shared/cadrePlan';
 import { apalLeft, leaveOverdraft, summaries } from '../../shared/cadreBalance';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
@@ -29,6 +31,7 @@ const TONE: Record<CadreGroup, string> = { kol: 'info', apo: 'warn', list: 'outl
 const GRID = '24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px';   // χωράει στα 858px του 1024 με μαζεμένο μενού
 // Άδειες και Απαλλ. (Michael, 17/11): δύο στενές στήλες· κάτω από 1280px κρύβονται (styles.css .cadre-tbl) και ο πίνακας γυρνά στις παλιές στήλες
 const GRID_LV = GRID.replace(/ 118px$/, ' 66px 62px 118px');
+const CADRE_VIEWS = [{ value: 'list', label: 'Λίστα' }, { value: 'plan', label: 'Πρόγραμμα αδειών' }];
 const range = (a: CadreAbs) => dm(a.from) + (a.to !== a.from ? '–' + dm(a.to) : '');
 const stBadge = (st: CadreStatus | undefined) => (st ? html`<${Badge} tone=${TONE[st.group]} data-tip=${st.label + ' · ' + range(st.abs) + ' · ' + (st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ' στην ' + HK() + ', στήλη «' + colShort(st.col) + '»')}>${st.label} · ${range(st.abs)}<//>` : html`<${Badge} tone="ok">Παρών<//>`);
 
@@ -77,6 +80,14 @@ export function CadreScreen() {
   };
   // η καρτέλα του στελέχους είναι πλαϊνή κάρτα του Shell (πάνω από κάθε οθόνη)· εδώ μόνο η επιλεγμένη γραμμή και η σειρά ↑/↓
   const card: string | null = nav.params.cadre ?? null; const openCard = (id: string) => nav.openCadre(id, rows.map(r => r.id));
+  // δύο όψεις (Michael, 17/11): Λίστα και Πρόγραμμα αδειών· η επιλογή μένει όπως τις άλλες οθόνες (nav.params.cview)
+  const view: string = nav.params.cview === 'plan' ? 'plan' : 'list';
+  const tabs = html`<${Tabs} value=${view} onChange=${(v: string) => nav.set({ cview: v === 'list' ? undefined : v })} items=${CADRE_VIEWS}/>`;
+  if (view === 'plan') return html`<div>
+    <${PageHeader} title="Στελέχη" sub="Πρόγραμμα αδειών του μήνα: ποιος λείπει και πότε. Σύρε πάνω στις μέρες για να βάλεις άδεια ή απαλλαγή."/>
+    ${tabs}
+    <${CadrePlanView} onOpen=${(id: string, ids: string[]) => nav.openCadre(id, ids)}/>
+  </div>`;
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
       ${hp.node}
@@ -84,6 +95,7 @@ export function CadreScreen() {
       <${Button} variant="outline" disabled=${xlLv || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${exportLeave} data-tip="Νέο Excel: πόσες μέρες άδειας και απαλλαγές μένουν σε κάθε στέλεχος">${xlLv ? 'Δημιουργία…' : 'Άδειες σε Excel'}<//>
       <${SigsMenu} form="cadre" date=${date} label="τα Στελέχη" print=${false} disabled=${xl || !all.length} headId=${hp.headId} go=${(_: boolean, sigs?: Sig[], hid?: string) => exportXl(sigs, hid)}/>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
+    ${tabs}
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Select} className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//></div>
     <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${CADRE_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${filter === k} data-tip=${k === 'kol' || k === 'apo' ? 'Στην ' + HK() + ' ' + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}<//>
@@ -126,6 +138,8 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
   const ty = +today.slice(0, 4);
   const leaveYears = [...new Set([ty - 1, ty, ty + 1, lvYear, ...(state.cadreGrants || []).filter(g => g.cid === c.id).map(g => g.year), ...state.cadreAbs.filter(a => a.cid === c.id).flatMap(a => [+a.from.slice(0, 4), +a.to.slice(0, 4)])])].sort();
   const ng = personGroups(state.notes, { cid }, today); const rem = remLine(state.notes, { cid }, today);
+  const noDuty = noDutyOf(state, c.id);
+  const delNoDuty = async (id: string) => { if (await run({ t: 'deleteCadreNoDuty', id }, false)) toast({ text: 'Διαγράφηκε «δεν θέλει υπηρεσία»', actions: [undoMark()] }); };
   const delAbs = async (a: CadreAbs) => { if (await run({ t: 'deleteCadreAbs', id: a.id }, false)) toast({ text: 'Διαγράφηκε η κατάσταση', actions: [undoMark()] }); };
   const line = (a: CadreAbs, edit: boolean) => { const st = cadreStatusOf(a, lists); return html`<li key=${a.id}><div><${Badge} tone=${TONE[st.group]}>${st.label}<//> <b>${dow(a.from)} ${range(a)}</b>
       <small>${st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ', στήλη «' + colShort(st.col) + '»'}${a.note ? ' · ' + a.note : ''}</small></div>
@@ -144,6 +158,8 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
         ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
       ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
+      ${noDuty.length > 0 && html`<div className="field" data-cadre-noduty=""><span className="field__label">Δεν θέλει υπηρεσία</span>
+        <ul className="rec">${noDuty.map(x => html`<li key=${x.id}><div><b>${dow(x.from)} ${rangeTxt(x)}</b><small>Μόνο για το πρόγραμμα, δεν είναι κατάσταση και δεν μπαίνει στην ${HK()}${x.note ? ' · ' + x.note : ''}</small></div><${Button} size="sm" variant="ghost" onClick=${() => delNoDuty(x.id)}>Διαγραφή<//></li>`)}</ul></div>`}
       ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}</div>`}
     ${tab === 'leave' && html`<${LeaveTab} key=${cid} c=${c} year=${lvYear} setYear=${setLvYear} years=${leaveYears} onApal=${() => setStFor({ apal: true })}/>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>

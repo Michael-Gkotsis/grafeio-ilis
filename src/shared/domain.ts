@@ -603,6 +603,7 @@ export interface AppState {
   hkaiManual: Record<ISODate, HkaiManual>;
   cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
+  cadreNoDuty?: CadreNoDuty[];           // «Δεν θέλει υπηρεσία» (Πρόγραμμα αδειών): ΟΧΙ κατάσταση, δεν μπαίνει στην ΗΚΑΙ, στη Δύναμη ή στο ΣΤΕΛΕΧΗ.xlsx (kv «cadreNoDuty», shared/cadrePlan.ts)
   cadreGrants?: CadreGrant[];            // έξτρα άδειες, υπόλοιπο από πέρσι και αρχική απαλλαγών ανά στέλεχος (kv «cadreGrants», shared/cadreBalance.ts)
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
@@ -658,6 +659,9 @@ export function markOldRequests(s: AppState, today: ISODate): AppState | null {
 // στις θέσεις (commands.ts assign), όχι μόνο όσοι έχουν monthMax. weapon/wtype/rack/wpos: όπλο στελέχους, όπως του Person (ένοπλες θέσεις)
 export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string; eid?: string; iban?: string; amka?: string; afm?: string }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
+// «Δεν θέλει υπηρεσία» (Michael, 17/11, πρόταση λοχία): μέρες που το στέλεχος ζητά να μην μπει σε υπηρεσία. Δεν είναι κατάσταση (CadreAbs):
+// φαίνεται μόνο στο Πρόγραμμα αδειών και στην καρτέλα του, και θα το διαβάζει το πρόγραμμα υπηρεσιών στελεχών
+export interface CadreNoDuty { id: string; cid: string; from: ISODate; to: ISODate; note?: string }
 // Άδειες και απαλλαγές στελεχών (Michael, 17/11, πρόταση λοχία): ετήσιο υπόλοιπο ανά είδος άδειας (LeaveQuota, με δική σου λίστα:
 // Κανονική 30, ΑΜΔ 10, Γονική…) και καρτέλα απαλλαγών. Όλα προαιρετικά: χωρίς αυτά ισχύουν οι προεπιλογές του cadreBalance.ts.
 // kinds: κωδικοί καταστάσεων στελεχών (ή ονόματα δικών σου) που το καταναλώνουν · all: false = μόνο όσοι έχουν δοσμένες μέρες (π.χ. Γονική)
