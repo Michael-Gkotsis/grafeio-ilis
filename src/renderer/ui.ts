@@ -139,11 +139,11 @@ export function DiscardAsk({ text, onStay, onLeave, title = 'Να κλείσει
     footer=${html`<${Button} variant="ghost" onClick=${onLeave}>${leave}<//><${Button} data-autofocus="" onClick=${onStay}>${stay}<//>`}>
     <p style=${{ margin: 0 }}>${text}</p><//>`;
 }
-export function Sheet({ title, subtitle, actions, onClose, children }: P) {
+export function Sheet({ title, subtitle, actions, onClose, children, wide }: P) {
   useEscape(onClose);
   return createPortal(html`<${Fragment}>
     <div className="ui-sheet-overlay" onMouseDown=${onClose}></div>
-    <aside className="ui-sheet" role="dialog" aria-modal="true" aria-label="Λεπτομέρειες">
+    <aside className=${cx('ui-sheet', wide && 'ui-sheet--wide')} role="dialog" aria-modal="true" aria-label="Λεπτομέρειες">
       <div className="ui-sheet__head"><div>${title}${subtitle}</div>${actions && html`<div className="ui-sheet__acts">${actions}</div>`}<${Button} variant="ghost" size="icon" aria-label="Κλείσιμο" data-tip="Κλείσιμο (Esc)" data-tip-side="left" onClick=${onClose}>${Icon.x}<//></div>
       <div className="ui-sheet__body">${children}</div>
     </aside><//>`, document.body);

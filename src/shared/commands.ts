@@ -4,7 +4,7 @@ import { HK } from './unit';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
@@ -13,6 +13,7 @@ import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
+import { clearRange, setNoDuty } from './cadrePlan';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
@@ -36,6 +37,13 @@ export type Command =
   | { t: 'orderCadre'; ids: string[] }   // η σειρά των στελεχών, όλα τα id με τη νέα σειρά
   | { t: 'addCadreAbs'; abs: Omit<CadreAbs, 'id'> & { id?: string }; replace?: boolean }   // id: αλλαγή · replace: κόβει όσες πέφτουν στις ίδιες μέρες
   | { t: 'deleteCadreAbs'; id: string }
+  // Άδειες και απαλλαγές στελεχών (shared/cadreBalance.ts): έξτρα μέρες άδειας, υπόλοιπο από πέρσι, αρχικό υπόλοιπο απαλλαγών· id: αλλαγή
+  | { t: 'saveCadreGrant'; grant: Omit<CadreGrant, 'id'> & { id?: string } }
+  | { t: 'deleteCadreGrant'; id: string }
+  // Πρόγραμμα αδειών στελεχών (shared/cadrePlan.ts): «Δεν θέλει υπηρεσία» (ΟΧΙ κατάσταση), και «Σβήσε» καταστάσεων και αυτών σε διάστημα
+  | { t: 'setCadreNoDuty'; cid: string; from: ISODate; to: ISODate; note?: string }
+  | { t: 'deleteCadreNoDuty'; id: string }
+  | { t: 'clearCadrePlan'; cid: string; from: ISODate; to: ISODate }
   // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
   | { t: 'importCadres'; adds: CadreNew[]; updates: { id: string; patch: Partial<Cadre> }[]; source: string }
   | { t: 'importCadreAbs'; adds: AbsNew[]; updates: { id: string; note: string }[]; deletes: string[]; source: string }
@@ -579,7 +587,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       if (x.pid != null && (Object.values(s.guards).some(g => Object.values(g || {}).includes(x.pid!)) || Object.values(s.dutyLog || {}).some(l => l.some(e => e.pid === x.pid))))
         throw new Error('Ο ' + rankTxt(x) + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
-      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
+      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id), ...(s.cadreGrants?.some(g => g.cid === x.id) ? { cadreGrants: s.cadreGrants.filter(g => g.cid !== x.id) } : {}), ...(s.cadreNoDuty?.some(g => g.cid === x.id) ? { cadreNoDuty: s.cadreNoDuty.filter(g => g.cid !== x.id) } : {}) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
       const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
@@ -605,6 +613,41 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const a = s.cadreAbs.find(y => y.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η κατάσταση');
       const x = s.cadreList.find(y => y.id === a.cid);
       return { state: { ...s, cadreAbs: s.cadreAbs.filter(y => y !== a) }, text: 'Διαγράφηκε κατάσταση στελέχους' + (x ? ': ' + rankTxt(x) + ' ' + x.last : ''), files: [HK()] };
+    }
+    case 'saveCadreGrant': {
+      const x = s.cadreList.find(y => y.id === c.grant.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      const g = c.grant; const days = Math.round(+g.days * 100) / 100;
+      if (!isFinite(days) || days === 0) throw new Error('Γράψε πόσες μέρες (όχι 0)');
+      if (!Number.isInteger(g.year) || g.year < 2000 || g.year > 2100) throw new Error('Δεν είναι σωστή η χρονιά');
+      if (g.kind !== 'start' && g.quota === 'apal') throw new Error('Οι απαλλαγές έχουν μόνο «Αρχικό υπόλοιπο»');
+      const old = g.id ? (s.cadreGrants || []).find(y => y.id === g.id) : undefined;
+      if (g.id && !old) throw new Error('Δεν βρέθηκε η εγγραφή');
+      const grant: CadreGrant = { ...g, days, id: old?.id || 'g' + ctx.newId() }; if (!grant.note?.trim()) delete grant.note; else grant.note = grant.note.trim();
+      const list = s.cadreGrants || [];
+      const what = g.kind === 'start' ? 'αρχικό υπόλοιπο απαλλαγών' : g.kind === 'carry' ? 'υπόλοιπο από πέρσι' : 'έξτρα άδεια';
+      return { state: { ...s, cadreGrants: old ? list.map(y => (y === old ? grant : y)) : [...list, grant] }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', ' + what + ' ' + days + (g.kind === 'start' ? '' : ' μέρες') + ' (' + g.year + ')', files: [] };
+    }
+    case 'deleteCadreGrant': {
+      const g = (s.cadreGrants || []).find(y => y.id === c.id); if (!g) throw new Error('Δεν βρέθηκε η εγγραφή');
+      const x = s.cadreList.find(y => y.id === g.cid);
+      return { state: { ...s, cadreGrants: (s.cadreGrants || []).filter(y => y !== g) }, text: 'Διαγράφηκε εγγραφή άδειας/απαλλαγών' + (x ? ': ' + rankTxt(x) + ' ' + x.last : ''), files: [] };
+    }
+    case 'setCadreNoDuty': {
+      const x = s.cadreList.find(y => y.id === c.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      if (c.to < c.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      return { state: { ...s, cadreNoDuty: setNoDuty(s.cadreNoDuty || [], x.id, c.from, c.to, c.note, () => 'n' + ctx.newId()) }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', δεν θέλει υπηρεσία ' + range(c.from, c.to), files: [] };
+    }
+    case 'deleteCadreNoDuty': {
+      const g = (s.cadreNoDuty || []).find(y => y.id === c.id); if (!g) throw new Error('Δεν βρέθηκε η εγγραφή');
+      const x = s.cadreList.find(y => y.id === g.cid);
+      return { state: { ...s, cadreNoDuty: (s.cadreNoDuty || []).filter(y => y !== g) }, text: 'Διαγράφηκε «δεν θέλει υπηρεσία»' + (x ? ': ' + rankTxt(x) + ' ' + x.last : ''), files: [] };
+    }
+    case 'clearCadrePlan': {
+      const x = s.cadreList.find(y => y.id === c.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      if (c.to < c.from) throw new Error('Το «έως» είναι πριν από το «από»');
+      const r = clearRange(s, x.id, c.from, c.to, () => 'a' + ctx.newId());
+      if (!r.changedAbs && !r.changedNoDuty) throw new Error('Δεν υπάρχει κατάσταση σε αυτές τις μέρες');
+      return { state: { ...s, ...(r.changedAbs ? { cadreAbs: r.cadreAbs } : {}), ...(r.changedNoDuty ? { cadreNoDuty: r.cadreNoDuty } : {}) }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', σβήστηκαν οι καταστάσεις ' + range(c.from, c.to), files: r.changedAbs ? [HK()] : [] };
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
