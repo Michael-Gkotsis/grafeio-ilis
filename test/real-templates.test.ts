@@ -7,6 +7,7 @@ import path from 'path';
 import { readBookModel } from '../src/main/bookModel';
 import { detectBook, describeShape, type Region } from '../src/shared/shape';
 import type { Match } from '../src/shared/lexicon';
+import { readRoster, countKinds } from '../src/shared/rosterRead';
 
 const dir = process.env.REAL_TEMPLATES_DIR;
 function files(d: string, depth = 0): string[] {
@@ -29,6 +30,12 @@ describe.skipIf(!dir)('real unit files (local only)', () => {
       for (const s of shape.sheets) for (const r of s.regions) for (const m of matches(r)) c[m.confidence]++;
       tot.sure += c.sure; tot.suggest += c.suggest; tot.unknown += c.unknown;
       console.log('## ' + path.relative(dir!, f) + ' (' + book.from + (book.converter ? ' via ' + book.converter : '') + ', ' + (Date.now() - t0) + ' ms) sure=' + c.sure + ' suggest=' + c.suggest + ' unknown=' + c.unknown + '\n' + shape.sheets.map(describeShape).join('\n'));
+      // the people list of every roster-like sheet (counts only; names never printed)
+      for (const sh of book.sheets) {
+        const x = readRoster(sh); if (!x.found) continue;
+        const k = countKinds(x);
+        console.log('   roster «sheet ' + (book.sheets.indexOf(sh) + 1) + '»: people=' + x.people.length + ' (cadre ' + k.cadre + ', soldier ' + k.soldier + ', ask ' + k.ask + ') positions-without-name=' + x.vacant + ' skipped=' + x.skipped.length + ' groups=' + x.groups.length + (x.stoppedAt ? ' stopped: ' + x.stoppedAt.why : ''));
+      }
       expect(book.sheets.length).toBeGreaterThan(0);
     }
     console.log('TOTAL sure=' + tot.sure + ' suggest=' + tot.suggest + ' unknown=' + tot.unknown);
