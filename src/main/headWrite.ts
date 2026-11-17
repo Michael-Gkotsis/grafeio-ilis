@@ -5,6 +5,9 @@ import type { AppState } from '../shared/domain';
 import { upper } from '../shared/text';
 import { formPart, xlLook } from '../shared/xlLook';
 import type { DocHead } from '../shared/docHead';
+import { CM_PX } from '../shared/headLayout';
+import type { RepImage } from '../shared/reports';
+import type { Block } from '../shared/layout';
 import { layoutHead, type HeadLayout } from '../shared/headLayout';
 import { colName, splitRef, unesc, type Sheet, type Workbook } from './xlsx';
 import { loadHeadImage } from './headImages';
@@ -66,4 +69,22 @@ export async function applyHead(wb: Workbook, ws: Sheet, s: AppState, head: DocH
     wb.addPicture(ws, { bytes: img.bytes, ext: img.ext, col0: p.col - 1, colOff: Math.round(p.dx * EMU_PX), row0: top + p.r - 1, rowOff: 0, w: p.w, h: p.h });
   }
   return done;
+}
+
+// Οι δικές σου εικόνες πάνω στο χαρτί (Report.images): γράφονται στο τέλος, αφού μπουν κεφαλίδα, υπογραφές και μετακινήσεις, για να είναι οι θέσεις τελικές.
+// end: η τελευταία γραμμή του πίνακα (για τις εικόνες rel 'foot'). Γυρνά το κουτάκι κάθε εικόνας (img0, img1…) για τις «Θέσεις στο χαρτί»·
+// εικόνα χωρίς id ή χωρίς αρχείο παραλείπεται (το id της σειράς μένει: τα κουτάκια ακολουθούν τη σειρά του Report.images)
+export function placeImages(wb: Workbook, ws: Sheet, imgs: RepImage[] | undefined, end: number): Block[] {
+  const out: Block[] = [];
+  (imgs || []).forEach((im, i) => {
+    const x = im.id ? loadHeadImage(im.id, !!im.gray) : null; if (!x) return;
+    const row = Math.max(1, im.at.rel === 'foot' ? end + im.at.r : im.at.r), col = Math.max(1, im.at.c);
+    const h = im.h * CM_PX, w = (h * x.w) / x.h;
+    wb.addPicture(ws, { bytes: x.bytes, ext: x.ext, col0: col - 1, colOff: 0, row0: row - 1, rowOff: 0, w, h });
+    // τα κελιά που πιάνει (για το κουτάκι)
+    let r2 = row, acc = ws.rowHeight(row) * 96 / 72; while (acc < h - 0.5 && r2 < row + 400) { r2++; acc += ws.rowHeight(r2) * 96 / 72; }
+    let c2 = col, aw = colPxOf(ws.colWidth(col)); while (aw < w - 0.5 && c2 < col + 60) { c2++; aw += colPxOf(ws.colWidth(c2)); }
+    out.push({ id: 'img' + i, r1: row, c1: col, r2, c2 });
+  });
+  return out;
 }

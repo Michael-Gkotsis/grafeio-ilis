@@ -9,7 +9,7 @@ import { HK } from '../../shared/unit';
 import { SIG_FORMS, sigLabel, type SigForm } from '../../shared/sigs';
 import {
   HEAD_MAX, IMG_H, PRESETS, TEXT_SZ, TODAY, TODAY_NAME, ZONE_NAMES, addHead, canAddItem, cloneZones, copyHead, formsDefaulting, formsUsing, freeHeadName, headById, headName, headUseOf,
-  headsOf, moveItem, presetZones, removeHead, renameHead, setDefault, setZones, toggleUse, type DocHead, type HeadAl, type HeadItem, type HeadZones, type PresetId
+  headsOf, moveItem, presetZones, removeHead, reportsUsing, renameHead, setDefault, setZones, toggleUse, type DocHead, type HeadAl, type HeadItem, type HeadZones, type PresetId
 } from '../../shared/docHead';
 type P = any;
 
@@ -129,7 +129,7 @@ function DesignTab({ sel, setSel }: { sel: string; setSel: (id: string) => void 
     setDlg(null); const r = removeHead(st, head.id);
     if (await run({ t: 'setSettings', settings: r, text: 'σβήστηκε η επικεφαλίδα «' + head.name + '»' }, false)) { setSel(TODAY); toast({ text: 'Σβήστηκε η επικεφαλίδα «' + head.name + '»' }); }
   };
-  const users = formsUsing(st, head.id), defs = formsDefaulting(st, head.id);
+  const users = formsUsing(st, head.id), defs = formsDefaulting(st, head.id), usedRep = reportsUsing(st, head.id);
 
   // πού θα πέσει ό,τι σέρνεις: πριν από το κομμάτι που είναι πιο κάτω από το ποντίκι
   const over = (zi: number) => (e: any) => {
@@ -184,9 +184,9 @@ function DesignTab({ sel, setSel }: { sel: string; setSel: (id: string) => void 
     <div className="hd-list">
       <b className="hd-list__t">Οι επικεφαλίδες σου</b>
       <ul role="listbox" aria-label="Οι επικεφαλίδες σου">${all.map(h => {
-        const u = formsUsing(st, h.id); const names = u.map(label).join(', ');
+        const rn = reportsUsing(st, h.id); const u = formsUsing(st, h.id); const names = [...u.map(label), ...(rn.length ? ['Έντυπα: ' + rn.join(', ')] : [])].join(', ');
         return html`<li key=${h.id}><button type="button" role="option" aria-selected=${h.id === head.id} className="hd-li" onClick=${() => setSel(h.id)}>
-          <b>${h.name}</b><small>${h.id === TODAY ? 'η σημερινή, δεν αλλάζει' + (u.length ? ' · ' + (u.length === FORMS.length ? 'σε όλα τα έγγραφα' : names) : '') : u.length ? names : 'σε κανένα έγγραφο ακόμα'}</small></button></li>`; })}</ul>
+          <b>${h.name}</b><small>${h.id === TODAY ? 'η σημερινή, δεν αλλάζει' + (u.length ? ' · ' + (u.length === FORMS.length && !rn.length ? 'σε όλα τα έγγραφα' : names) : '') : u.length || rn.length ? names : 'σε κανένα έγγραφο ακόμα'}</small></button></li>`; })}</ul>
       <${Button} variant="outline" disabled=${(st.heads?.length || 0) >= HEAD_MAX} why=${(st.heads?.length || 0) >= HEAD_MAX && 'Έφτασες το όριο των ' + HEAD_MAX + ' επικεφαλίδων'} onClick=${() => setDlg('new')}>+ Νέα επικεφαλίδα…<//>
       <div className="toolbar" style=${{ margin: 0 }}><${Button} size="sm" variant="outline" onClick=${copy}>Αντίγραφο<//>
         <${Button} size="sm" variant="outline" disabled=${isToday} why=${isToday && 'Η «Όπως σήμερα» δεν αλλάζει'} onClick=${() => setDlg('name')}>Όνομα…<//>
@@ -212,7 +212,7 @@ function DesignTab({ sel, setSel }: { sel: string; setSel: (id: string) => void 
     ${dlg === 'name' && html`<${NameDialog} title="Όνομα επικεφαλίδας" name=${head.name} presets=${false} ok="Αποθήκευση" onOk=${rename} onClose=${() => setDlg(null)}/>`}
     ${dlg === 'del' && html`<${Dialog} title=${'Σβήσιμο: ' + head.name} size="sm" role="alertdialog" onClose=${() => setDlg(null)}
       footer=${html`<${Button} variant="ghost" onClick=${() => setDlg(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${remove}>Σβήσε την επικεφαλίδα<//>`}>
-      <p style=${{ marginTop: 0 }}>Η επικεφαλίδα <b>${head.name}</b> θα σβηστεί${users.length ? ' και θα φύγει από: ' + users.map(label).join(', ') + '.' : '. Δεν τη χρησιμοποιεί κανένα έγγραφο.'}</p>
+      <p style=${{ marginTop: 0 }}>Η επικεφαλίδα <b>${head.name}</b> θα σβηστεί${users.length || usedRep.length ? ' και θα φύγει από: ' + [...users.map(label), ...(usedRep.length ? ['Έντυπα: ' + usedRep.join(', ') + ' (γυρνούν στην «' + TODAY_NAME + '»)'] : [])].join(', ') + '.' : '. Δεν τη χρησιμοποιεί κανένα έγγραφο.'}</p>
       ${defs.length > 0 && html`<p style=${{ marginBottom: 0 }}>Τα έγγραφα που την είχαν αρχική (<b>${defs.map(label).join(', ')}</b>) γυρνούν στην «${TODAY_NAME}».</p>`}<//>`}
   </div>`;
 }

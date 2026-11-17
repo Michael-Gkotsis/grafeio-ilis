@@ -344,6 +344,25 @@ export interface Report {
   bands?: Bands;                              // θέσεις πινάκων (Φάση 3, shared/repBands.ts): ζώνες πάνω-κάτω, μέσα σε κάθε ζώνη οι πίνακες δίπλα-δίπλα· κενό: ο ένας κάτω από τον άλλον όπως πριν
   fixsz?: boolean;                            // «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): ό,τι γράφεται δεν μικραίνει για να χωρέσει (αναδιπλώνεται, ψηλώνει η γραμμή) και η εκτύπωση βγαίνει με τα γράμματα του Excel σε όσες σελίδες χρειαστούν
   nohead?: boolean;                           // ο 1ος πίνακας βγαίνει χωρίς γραμμή επικεφαλίδων (η γραμμή μένει στο πρότυπο για να βρίσκονται οι στήλες, κρύβεται στο έντυπο)· μπαίνει από το «Φτιάξ' το εδώ»
+  hdId?: string;                              // επικεφαλίδα εγγράφων (Ρυθμίσεις › Επικεφαλίδες εγγράφων): λείπει = «Όπως σήμερα» (τα παλιά έντυπα βγαίνουν όπως πάντα)· τα νέα ξεκινούν με την αρχική της γραμμής «Έντυπα»
+  images?: RepImage[];                        // δικές σου εικόνες πάνω στο χαρτί («Θέσεις στο χαρτί…» › + Εικόνα…)
+}
+// Εικόνα πάνω στο χαρτί: id = sha1 του αρχείου στο eikones/, h = ύψος σε εκατοστά. Η θέση είναι κελί (κουμπώνει): rel 'top' = γραμμή r από την κορυφή
+// της σελίδας (εικόνες πάνω από τον πίνακα, μένουν εκεί όσο μακραίνει το έντυπο)· rel 'foot' = r γραμμές κάτω από την τελευταία γραμμή του πίνακα
+// (εικόνες κάτω από τον πίνακα ή δίπλα στις υπογραφές, ακολουθούν τον πίνακα όταν μακραίνει). c = στήλη από την Α (1). pages 'all': επαναλαμβάνεται σε κάθε
+// σελίδα όταν η θέση της είναι μέσα στις γραμμές που επαναλαμβάνονται (πάνω από τον πίνακα)· αλλιώς μόνο στην πρώτη.
+export interface RepImage { id: string; at: { rel: 'top' | 'foot'; r: number; c: number }; h: number; pages?: 'all'; gray?: boolean }
+export const REP_IMAGES_MAX = 8;
+export function cleanImages(v: unknown): RepImage[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: RepImage[] = [];
+  for (const x of v.slice(0, REP_IMAGES_MAX)) {
+    if (!x || typeof x.id !== 'string' || !/^[0-9a-f]{40}$/.test(x.id)) continue;
+    const a = x.at || {}; const n = (q: unknown, lo: number, hi: number, d: number) => (typeof q === 'number' && isFinite(q) ? Math.min(hi, Math.max(lo, Math.round(q))) : d);
+    const h = typeof x.h === 'number' && isFinite(x.h) ? Math.min(12, Math.max(0.3, Math.round(x.h * 10) / 10)) : 2;
+    out.push({ id: x.id, at: { rel: a.rel === 'foot' ? 'foot' : 'top', r: n(a.r, 1, 500, 1), c: n(a.c, 1, 60, 1) }, h, ...(x.pages === 'all' ? { pages: 'all' as const } : {}), ...(x.gray ? { gray: true } : {}) });
+  }
+  return out.length ? out : undefined;
 }
 // Πίνακας 2, 3… του εντύπου (Michael, 22/10: «παραπάνω από ένα table με διαφορετικές στήλες»): δικό του είδος, γραμμή
 // επικεφαλίδων, στήλες, φίλτρα και σειρά. Χωρίς τυχαίους (η κλήρωση είναι του πρώτου): βγαίνουν όλοι ή οι πρώτοι Ν.
