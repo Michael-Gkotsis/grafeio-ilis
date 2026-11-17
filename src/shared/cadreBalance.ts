@@ -107,6 +107,15 @@ export function apalLedger(s: AppState, c: Cadre, today?: ISODate): ApalRow[] {
       ev.push({ d: e.d, ord: 1, what: 'Υπηρεσία ' + (post?.label || (KIND_NAME as Record<string, string>)[e.kind] || e.kind) + (e.h ? ' (ΣΚ/αργία)' : ''), gain: g, take: 0, kind: 'duty' });
     }
   }
+  // υπηρεσίες του προγράμματος στελεχών (cadreDuty.ts): δίνουν απαλλαγή όπως οι υπηρεσίες στις θέσεις, με το όνομα της υπηρεσίας
+  if (cfg.apalPerDuty + cfg.apalHolExtra > 0 && s.cadreDuties?.length) {
+    const names = new Map<string, string>(); for (const g of s.settings.cadreDuty?.groups || []) for (const v of g.services || []) names.set(v.id, v.name);   // χωρίς import του cadreDuty.ts (κυκλική εξάρτηση)
+    for (const x of s.cadreDuties) {
+      if (x.cid !== c.id || (today && x.date > today)) continue;
+      const h = isHol(s.settings, x.date); const g = cfg.apalPerDuty + (h ? cfg.apalHolExtra : 0); if (g <= 0) continue;
+      ev.push({ d: x.date, ord: 1, what: 'Υπηρεσία ' + (names.get(x.svc) || x.svc) + (h ? ' (ΣΚ/αργία)' : ''), gain: g, take: 0, kind: 'duty' });
+    }
+  }
   for (const a of absOf(s, c.id)) {
     const k = cadreAbsOf(a.kind, lists); if (a.kind !== APAL && k?.[0] !== APAL) continue;
     for (let d = a.from, n = 0; d <= a.to && n < 400; d = addDays(d, 1), n++) ev.push({ d, ord: 2, what: 'Απαλλαγή (κατάσταση στα Στελέχη)' + (a.note ? ' · ' + a.note : ''), gain: 0, take: 1, kind: 'apal', id: a.id });

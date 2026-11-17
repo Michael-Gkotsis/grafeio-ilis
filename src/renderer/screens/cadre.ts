@@ -18,6 +18,8 @@ import type { AppState } from '../../shared/domain';
 import { PersonalTab } from './personal';
 import { LeaveTab } from './cadreLeave';
 import { CadrePlanView } from './cadrePlan';
+import { CadreDutyView, DutyPersonDialog } from './cadreDuty';
+import { dutyCfgOf, monthLimit, personOf } from '../../shared/cadreDuty';
 import { noDutyOf, rangeTxt } from '../../shared/cadrePlan';
 import { apalLeft, leaveOverdraft, summaries } from '../../shared/cadreBalance';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
@@ -31,7 +33,7 @@ const TONE: Record<CadreGroup, string> = { kol: 'info', apo: 'warn', list: 'outl
 const GRID = '24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px';   // χωράει στα 858px του 1024 με μαζεμένο μενού
 // Άδειες και Απαλλ. (Michael, 17/11): δύο στενές στήλες· κάτω από 1280px κρύβονται (styles.css .cadre-tbl) και ο πίνακας γυρνά στις παλιές στήλες
 const GRID_LV = GRID.replace(/ 118px$/, ' 66px 62px 118px');
-const CADRE_VIEWS = [{ value: 'list', label: 'Λίστα' }, { value: 'plan', label: 'Πρόγραμμα αδειών' }];
+const CADRE_VIEWS = [{ value: 'list', label: 'Λίστα' }, { value: 'plan', label: 'Πρόγραμμα αδειών' }, { value: 'duty', label: 'Υπηρεσίες στελεχών' }];
 const range = (a: CadreAbs) => dm(a.from) + (a.to !== a.from ? '–' + dm(a.to) : '');
 const stBadge = (st: CadreStatus | undefined) => (st ? html`<${Badge} tone=${TONE[st.group]} data-tip=${st.label + ' · ' + range(st.abs) + ' · ' + (st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ' στην ' + HK() + ', στήλη «' + colShort(st.col) + '»')}>${st.label} · ${range(st.abs)}<//>` : html`<${Badge} tone="ok">Παρών<//>`);
 
@@ -81,12 +83,19 @@ export function CadreScreen() {
   // η καρτέλα του στελέχους είναι πλαϊνή κάρτα του Shell (πάνω από κάθε οθόνη)· εδώ μόνο η επιλεγμένη γραμμή και η σειρά ↑/↓
   const card: string | null = nav.params.cadre ?? null; const openCard = (id: string) => nav.openCadre(id, rows.map(r => r.id));
   // δύο όψεις (Michael, 17/11): Λίστα και Πρόγραμμα αδειών· η επιλογή μένει όπως τις άλλες οθόνες (nav.params.cview)
-  const view: string = nav.params.cview === 'plan' ? 'plan' : 'list';
+  const view: string = nav.params.cview === 'plan' ? 'plan' : nav.params.cview === 'duty' ? 'duty' : 'list';
+  const [dutyFor, setDutyFor] = useState<Cadre | null>(null);
   const tabs = html`<${Tabs} value=${view} onChange=${(v: string) => nav.set({ cview: v === 'list' ? undefined : v })} items=${CADRE_VIEWS}/>`;
   if (view === 'plan') return html`<div>
     <${PageHeader} title="Στελέχη" sub="Πρόγραμμα αδειών του μήνα: ποιος λείπει και πότε. Σύρε πάνω στις μέρες για να βάλεις άδεια ή απαλλαγή."/>
     ${tabs}
     <${CadrePlanView} onOpen=${(id: string, ids: string[]) => nav.openCadre(id, ids)}/>
+  </div>`;
+  if (view === 'duty') return html`<div>
+    <${PageHeader} title="Στελέχη" sub="Υπηρεσίες στελεχών του μήνα: ομάδες, όρια και περιορισμοί. Μετρούν μαζί με όσες κάνουν με το χέρι στις θέσεις των στρατιωτών."/>
+    ${tabs}
+    <${CadreDutyView} onInfo=${(c: Cadre) => setDutyFor(c)}/>
+    ${dutyFor && html`<${DutyPersonDialog} key=${dutyFor.id} c=${dutyFor} onClose=${() => setDutyFor(null)}/>`}
   </div>`;
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
@@ -127,7 +136,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
   const c: Cadre | undefined = state.cadreList.find(x => x.id === cid);
   const [tab, setTab] = useState('abs');
   const [edit, setEdit] = useState(false); const [stFor, setStFor] = useState<{ abs?: CadreAbs; apal?: boolean } | null>(null); const [del, setDel] = useState(false);
-  const [lvYear, setLvYear] = useState(+today.slice(0, 4));
+  const [lvYear, setLvYear] = useState(+today.slice(0, 4)); const [dutyDlg, setDutyDlg] = useState(false);
   const order: string[] = useMemo(() => list || orderedCadre(state.cadreList).map(x => x.id), [list, state.cadreList]);
   const { at, n: total, move } = useSheetNav(order, cid, onMove, edit || !!stFor || del);
   useEffect(() => { setEdit(false); setStFor(null); setDel(false); const b = document.querySelector('.ui-sheet__body'); if (b) b.scrollTop = 0; }, [cid]);
@@ -146,7 +155,11 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
     ${edit && html`<${Button} size="sm" variant="ghost" onClick=${() => setStFor({ abs: a })}>Αλλαγή<//>`}<${Button} size="sm" variant="ghost" onClick=${() => delAbs(a)}>Διαγραφή<//></li>`; };
   const doDelete = async () => { setDel(false); onClose(); if (await run({ t: 'deleteCadre', id: c.id }, false)) toast({ text: 'Διαγράφηκε: ' + rankTxt(c) + ' ' + c.last, actions: [undoMark()] }); };
   // μετρητής υπηρεσιών του μήνα: κάθε ενεργό στέλεχος (και το «0» όσο δεν έχει μπει ποτέ σε θέση)· ΕΠΟΠ/ΟΒΑ «2 από 4 τον μήνα»
-  const month = c.active ? (c.pid != null ? monthTxt(state, today, cadreSeat(c), true) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '0 τον μήνα') : '';
+  const ym0 = today.slice(0, 7); const dl = c.active ? monthLimit(state, c, ym0) : null;
+  const month0 = c.active ? (c.pid != null ? monthTxt(state, today, cadreSeat(c), true) + (lastDuty(state, c.pid) ? ' · τελευταία ' + dow(lastDuty(state, c.pid)!) + ' ' + dm(lastDuty(state, c.pid)!) : '') : '0 τον μήνα') : '';
+  // με υπηρεσίες από το πρόγραμμα στελεχών: μετρούν μαζί με όσες έκανε με το χέρι στις θέσεις (cadreDuty.ts)
+  const month = dl && dl.roster > 0 ? dl.done + ' τον μήνα (πρόγραμμα ' + dl.roster + ' · θέσεις στρατιωτών ' + dl.seat + ') · όριο ' + dl.effBase + (dl.extra ? '+' + dl.extra : '') : month0;
+  const dutyCfg = dutyCfgOf(state.settings); const dutyP = personOf(state, c.id);
   const wtxt = [c.wtype, c.weapon && 'αριθμός ' + c.weapon, (c.rack || c.wpos) && 'θέση ' + seatTxt(c.rack, c.wpos)].filter(Boolean).join(' · ');
   return html`<${Sheet} onClose=${onClose} wide=${true} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
     subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.role, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ'].filter(Boolean).join(' · ')}</div>`}>
@@ -160,15 +173,17 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
       ${noDuty.length > 0 && html`<div className="field" data-cadre-noduty=""><span className="field__label">Δεν θέλει υπηρεσία</span>
         <ul className="rec">${noDuty.map(x => html`<li key=${x.id}><div><b>${dow(x.from)} ${rangeTxt(x)}</b><small>Μόνο για το πρόγραμμα, δεν είναι κατάσταση και δεν μπαίνει στην ${HK()}${x.note ? ' · ' + x.note : ''}</small></div><${Button} size="sm" variant="ghost" onClick=${() => delNoDuty(x.id)}>Διαγραφή<//></li>`)}</ul></div>`}
-      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>(μόνο με το χέρι, στις Υπηρεσίες)</span></div></div>`}</div>`}
+      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>${dl && dl.roster > 0 ? '(μαζί: πρόγραμμα στελεχών και θέσεις στρατιωτών)' : '(μόνο με το χέρι, στις Υπηρεσίες)'}</span></div></div>`}</div>`}
     ${tab === 'leave' && html`<${LeaveTab} key=${cid} c=${c} year=${lvYear} setYear=${setLvYear} years=${leaveYears} onApal=${() => setStFor({ apal: true })}/>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
       <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>
-      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd></dl>
-      <div><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
+      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd>
+      ${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dt>Υπηρεσίες στελεχών</dt>`}${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dd data-cadre-dutyof="">${[dutyCfg.groups.find(g => g.id === dutyP.group)?.name, dutyP.limit != null && 'όριο ' + dutyP.limit, dutyP.none && 'ελαφράς: καμία', dutyP.only && 'ελαφράς: μόνο', dutyP.no24 && 'όχι 24ωρες', dutyP.noDow?.length && 'μέρες που δεν θέλει: ' + dutyP.noDow.length].filter(Boolean).join(' · ')}</dd>`}</dl>
+      <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} variant="outline" onClick=${() => setDutyDlg(true)} data-tip="Ομάδα υπηρεσιών, όριο του μήνα και περιορισμοί (ελαφράς, μητέρα…)">Στοιχεία υπηρεσιών…<//><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
     ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}
     ${tab === 'pers' && html`<${PersonalTab} key=${cid} who=${{ cid }} rec=${c}/>`}
     ${edit && html`<${CadreDialog} c=${c} onClose=${() => setEdit(false)}/>`}
+    ${dutyDlg && html`<${DutyPersonDialog} c=${c} onClose=${() => setDutyDlg(false)}/>`}
     ${stFor && html`<${StatusDialog} c=${c} abs=${stFor.abs} apal=${stFor.apal} onClose=${() => setStFor(null)}/>`}
     ${del && html`<${Dialog} role="alertdialog" title=${'Διαγραφή: ' + rankTxt(c) + ' ' + c.last + ';'} description="Φεύγει από τη λίστα και από την ${HK()}, μαζί με τις καταστάσεις του. Αν απλώς έφυγε από τη μονάδα, βάλ' τον «εκτός δύναμης» από τα «Στοιχεία»." onClose=${() => setDel(false)}
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setDel(false)}>Άκυρο<//><${Button} onClick=${doDelete}>Διαγραφή<//>`}><//>`}
