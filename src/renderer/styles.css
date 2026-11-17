@@ -322,7 +322,7 @@ button.today-lbl:hover{background:rgba(255,255,255,.08)}
 .tile__l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
 .tile--main{background:var(--muted)}
 /* Σήμερα: μεγάλοι αριθμοί, λίστα «Πρέπει σήμερα», γραμμές με ετικέτες */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px;margin-bottom:16px}
 .kpi{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 18px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);box-shadow:var(--shadow-sm);transition:border-color .12s;cursor:pointer;text-align:left;min-width:0}
 .kpi:hover{border-color:var(--primary)}
 .kpi__l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
@@ -676,7 +676,7 @@ span.post__name{display:flex;align-items:baseline;gap:4px}span.post__name > .lin
 .crash__card pre{margin:10px 0 0;padding:10px 12px;max-height:240px;overflow:auto;background:var(--muted);border-radius:var(--radius);font:12px/1.5 var(--f-mono);white-space:pre-wrap;word-break:break-word;user-select:text}
 .onboard{max-width:640px;margin:24px auto;text-align:left}
 .onboard ol{padding-left:20px;line-height:1.7}
-.settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 12px}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px 12px}
 .err{color:var(--bad)}
 /* προέλεγχος πριν από έντυπο */
 .preflight{list-style:none;margin:0 0 12px;padding:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
@@ -1680,3 +1680,32 @@ div[style*="center"] > .hd-img{margin:0 auto}div[style*="right"] > .hd-img{margi
 .rep-table td > .headpick { margin-top: 4px; }
 .rep-table .headpick .ui-select { max-width: 160px; }
 .dayforms__pick:not(:empty) { margin: 6px 0 0 26px; }
+
+/* Στελέχη › Άδειες και απαλλαγές (17/11): στήλες λίστας, πλάκες υπολοίπων, καρτέλα απαλλαγών, κουτί Ρυθμίσεων */
+.cadre-tbl{min-width:960px}
+@media (max-width:1279px){.cadre-tbl{min-width:840px}.cadre-lv{display:none}.cadre-tbl :is(.ptable__head,.ptable__row){grid-template-columns:24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px!important}}
+.lv{display:flex;flex-direction:column;gap:14px}
+.lv__top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.lv__year{display:flex;align-items:center;gap:8px}
+.lv-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.lv-tile{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.lv-tile.is-own{border-style:dashed;border-color:var(--warn)}
+.lv-tile.is-bad{background:var(--bad-bg);border-color:var(--bad-line)}
+.lv-tile__name{font-size:13px;font-weight:600}
+.lv-tile__big b{font-size:26px;line-height:1.1}.lv-tile__big span{font-size:13px;font-weight:600}
+.lv-tile__sub{font-size:12px;color:var(--muted-fg)}
+.lv-bar{height:8px;border-radius:4px;background:var(--muted);overflow:hidden}.lv-bar i{display:block;height:100%;background:var(--primary)}
+.lv-tile.is-bad .lv-bar i{background:var(--bad)}
+.lv__acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lv-led{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);overflow:hidden}
+.lv-led__head{display:flex;align-items:center;gap:10px;padding:10px 12px}.lv-led__head h3{margin:0;font-size:15px}
+.lv-led__foot{padding:10px 12px;font-size:12px;color:var(--muted-fg);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lv-table{width:100%;border-collapse:collapse;font-size:13px}
+.lv-table th{background:var(--thead);text-align:left;font-weight:600;padding:7px 12px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.lv-table td{padding:7px 12px;border-bottom:1px solid var(--border)}
+.lv-table .r{text-align:right}.lv-neg{color:var(--bad);font-weight:600}
+.lv-open td{color:var(--muted-fg);font-style:italic}
+.lvset{display:flex;flex-direction:column;gap:12px;margin-bottom:12px}
+.lvset__q{border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.lvset__kinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.lvset__row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ui-sheet--wide{width:min(580px,100%)}

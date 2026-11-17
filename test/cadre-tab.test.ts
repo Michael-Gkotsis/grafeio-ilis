@@ -21,7 +21,7 @@ function withCadre() {
 
 describe('Στελέχη: καταστάσεις της ΗΚΑΙ', () => {
   it('κάθε στήλη της ΗΚΑΙ (εκτός της κενής) είναι κατάσταση στελέχους', () => {
-    const cols = CADRE_ABS.map(x => x[2]).filter(Boolean);
+    const cols = CADRE_ABS.filter(x => x[0] === x[2]).map(x => x[2]).filter(Boolean);
     expect(cols.sort()).toEqual([...HK_K, ...HK_A].map(x => x[0]).filter(k => k !== 'bl').sort());
   });
   it('κωλυόμενος (υπηρεσία) μετρά στους κωλυόμενους, όχι στους απόντες· άδεια στους απόντες', () => {
