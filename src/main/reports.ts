@@ -7,7 +7,7 @@ import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, toSerial, type Sheet
 import { TemplateError, signSheets, unitWords } from './exports';
 import { blockOf } from './layout';
 import { TODAY, headFor } from '../shared/docHead';
-import { applyHead, placeImages, type HeadDone } from './headWrite';
+import { applyHead, headBlocks, placeImages, type HeadDone } from './headWrite';
 import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
@@ -395,7 +395,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
     parts.head = k.head; parts.date = k.date; parts.title = parts.title.map(x => x.replace(/\d+$/, n => String(k.shift(+n)))); parts.names = parts.names.map(x => x.replace(/\d+$/, n => String(k.shift(+n))));
     end = k.shift(end);
   }
-  const more = [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
+  const more = hdone ? [...headBlocks(wb, ws, hdone), blockOf(ws, 'title', parts.title)] : [blockOf(ws, 'head', parts.head), blockOf(ws, 'date', parts.date), blockOf(ws, 'title', parts.title)];
   const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names, designed: !!hd }], s, 'reports', r.sigs, warnings, () => r.layout);
   // στην εκτύπωση μικραίνει ή μεγαλώνει μόνο ο πίνακας· κεφαλίδα, ημερομηνία, τίτλος και υπογραφές μένουν στο μέγεθός τους
   wb.markFixed(ws.name, layout[0]?.blocks || []);

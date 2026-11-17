@@ -23,9 +23,10 @@ export function HeadPick({ form, own, value, onChange, hint = false, id = 'headp
   </span>`;
 }
 // Η επιλογή αυτής της φοράς: take() τη δίνει και την ξεχνά (το επόμενο έγγραφο ξαναρχίζει με την αρχική)
-export function useHeadPick(form: SigForm, own?: string): { node: any; headId: string | undefined; take: () => string | undefined } {
+export function useHeadPick(form: SigForm, own?: string): { node: any; nodeAt: (key: string) => any; headId: string | undefined; take: () => string | undefined } {
   const [v, setV] = useState<string | undefined>(); const uid = useId(); const ref = useRef<string | undefined>();
   ref.current = v;
   const take = useCallback(() => { const x = ref.current; if (x !== undefined) setV(undefined); return x; }, []);
-  return { node: html`<${HeadPick} form=${form} own=${own} value=${v} onChange=${setV} id=${'hp' + uid.replace(/:/g, '')}/>`, headId: v, take };
+  const nodeAt = (key: string) => html`<${HeadPick} key=${key} form=${form} own=${own} value=${v} onChange=${setV} id=${'hp' + uid.replace(/:/g, '') + key}/>`;   // το ίδιο κουτάκι σε πολλά σημεία της οθόνης: δικό του id στο καθένα
+  return { node: nodeAt(''), nodeAt, headId: v, take };
 }

@@ -22,7 +22,7 @@ import { outsSig2Of, sigsCustom, sigsFor, sigsPage2, sigsSaved, type Sig, type S
 import { SIG_TAG, placeSigs } from './sigs';
 import { formPart, xlLook, type XlPart } from '../shared/xlLook';
 import { headFor } from '../shared/docHead';
-import { applyHead, type HeadDone } from './headWrite';
+import { applyHead, headBlocks, type HeadDone } from './headWrite';
 import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 import { statNoOut } from '../shared/stat';
@@ -91,17 +91,17 @@ export async function signMade(data: Buffer, s: AppState, form: SigForm, marks: 
   const hd = headFor(s.settings, form, headId);
   for (const m0 of marks) {
     if (!wb.hasSheet(m0.sheet)) continue;
-    const ws = await wb.sheet(m0.sheet); let m = m0;
+    const ws = await wb.sheet(m0.sheet); let m = m0; let hdone: HeadDone | null = null;
     if (hd) {
       const dateText = (m0.date[0] && ws.get(m0.date[0])) || (date ? (s.settings.place ? s.settings.place + ', ' : '') + hkDate(date) : '');
-      const r = await applyHead(wb, ws, s, hd, { cols: m0.cols, old: m0.head, dates: m0.date, dateText });
+      const r = await applyHead(wb, ws, s, hd, { cols: m0.cols, old: m0.head, dates: m0.date, dateText }); hdone = r;
       m = { ...m0, head: r.head, date: r.date, title: m0.title.map(t => t.replace(/\d+$/, n => String(r.shift(+n)))), foot: r.shift(m0.foot) };
     }
     if (list.length) {
       const r = m.foot + 2; ws.set('A' + r, SIG_TAG).setStyle('A' + r, st);
       if (m.cols > 1) { for (let c = 2; c <= m.cols; c++) ws.setStyle(colName(c) + r, st); ws.addMerge('A' + r + ':' + colName(m.cols) + r); }
     }
-    parts.push({ ws, key: m.key, tagOnly: true, designed: !!hd, more: [blockOf(ws, 'head', m.head), blockOf(ws, 'date', m.date), blockOf(ws, 'title', m.title)] });
+    parts.push({ ws, key: m.key, tagOnly: true, designed: !!hd, more: [...(hdone ? headBlocks(wb, ws, hdone) : [blockOf(ws, 'head', m.head), blockOf(ws, 'date', m.date)]), blockOf(ws, 'title', m.title)] });
   }
   const layout = await signSheets(wb, parts, s, form, over, warnings);
   for (const p of parts) p.ws.markAll();
@@ -121,12 +121,12 @@ async function restyle(wb: Workbook, ws: Sheet, b: Block, o: XlPart) {
 // Η επικεφαλίδα που σχεδίασες στα έντυπα με template: αντικαθιστά τα κελιά της σημερινής κεφαλίδας (head) και του τόπου/ημερομηνίας (dates),
 // όσο χώρο χρειάζεται τον παίρνει με νέες γραμμές πάνω από το περιεχόμενο (οι τύποι, οι περιοχές εκτύπωσης και τα νούμερα κατεβαίνουν μαζί).
 // null: σημερινός κώδικας («Όπως σήμερα», άγνωστη επικεφαλίδα). Στήλες: όσες τυπώνονται (περιοχή εκτύπωσης, αλλιώς όσες έχουν κελιά)
-async function designHead(wb: Workbook, ws: Sheet, s: AppState, form: SigForm, headId: string | null | undefined, head: string[], dates: string[], d: ISODate): Promise<HeadDone | null> {
+async function designHead(wb: Workbook, ws: Sheet, s: AppState, form: SigForm, headId: string | null | undefined, head: string[], dates: string[], d: ISODate, insertAfter?: number): Promise<HeadDone | null> {
   const hd = headFor(s.settings, form, headId); if (!hd) return null;
   const cols = Math.max(1, Math.min(wb.printLastCol(ws.name), ws.lastCol()));
   const at = dates.find(r => ws.get(r) != null && String(ws.get(r)).trim() !== '');
   const dateText = at ? String(ws.get(at)) : (s.settings.place ? s.settings.place + ', ' : '') + hkDate(d);
-  return applyHead(wb, ws, s, hd, { cols, old: head, dates, dateText });
+  return applyHead(wb, ws, s, hd, { cols, old: head, dates, dateText, at: insertAfter });
 }
 // Οι γραμμές της κεφαλίδας ενός φύλλου με δύο λίστες: μόνο της πρώτης (όσες είναι κοντά στην κορυφή της)
 const topHead = (refs: string[]) => { const rs = refs.map(r => splitRef(r).r); const m = Math.min(...rs); return refs.filter((_, i) => rs[i] - m <= 4); };
@@ -383,7 +383,7 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const shName = base !== phase && name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base] ? wb.renameSheet(name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase)) : name;
   const headRefs = head.slice(0, Math.max(map.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
   const dh = await designHead(wb, ws, s, 'froura', headId, headRefs, [], d);
-  const layout = await signSheets(wb, [{ ws, key: 'main', designed: !!dh, more: dh ? [blockOf(ws, 'head', dh.head), blockOf(ws, 'date', dh.date)] : [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
+  const layout = await signSheets(wb, [{ ws, key: 'main', designed: !!dh, more: dh ? headBlocks(wb, ws, dh) : [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
   return { name: frouraName(s.settings, phase, d), data: await wb.save(), warnings, layout, sheet: shName };
 }
 // Τα κελιά της κεφαλίδας: του template, και (αν έχει λιγότερες από 3) τα κενά από κάτω της, πάνω από τη γραμμή stop
@@ -480,8 +480,11 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   const t = /^([A-Z]+)(\d+)$/.exec(m.title); const hr = t && Number(t[2]) >= 3 ? [t[1] + (Number(t[2]) - 3), t[1] + (Number(t[2]) - 2)] : [];
   // επικεφαλίδα που σχεδίασες: στη θέση των 2 γραμμών της ΗΚΑΙ και του τόπου/ημερομηνίας της μπροστινής όψης (το «Όπως σήμερα» είναι ο σημερινός κώδικας)
   const dh = await designHead(wb, fr, s, 'hkai', opts.headId, hr, m.date ? [m.date] : [], d);
-  const front: SheetPart = { ws: fr, key: 'front', designed: !!dh, more: dh ? [blockOf(fr, 'head', dh.head), blockOf(fr, 'date', dh.date)] : [blockOf(fr, 'head', hr), blockOf(fr, 'date', m.date ? [m.date] : [])] };
-  const layout = await signSheets(wb, fr === bk ? [front] : [front, { ws: bk, key: 'back', more: [blockOf(bk, 'date', B.date ? [B.date] : [])] }], s, 'hkai', opts.sigs, warnings);
+  const front: SheetPart = { ws: fr, key: 'front', designed: !!dh, more: dh ? headBlocks(wb, fr, dh) : [blockOf(fr, 'head', hr), blockOf(fr, 'date', m.date ? [m.date] : [])] };
+  // πίσω όψη: η ίδια επικεφαλίδα στην κορυφή της (γραμμές πάνω από το περιεχόμενο), μόνο όταν η ΗΚΑΙ έχει επικεφαλίδα που σχεδίασες
+  const bdh = dh && fr !== bk ? await designHead(wb, bk, s, 'hkai', opts.headId, [], B.date ? [B.date] : [], d) : null;
+  const back: SheetPart = { ws: bk, key: 'back', designed: !!bdh, more: bdh ? headBlocks(wb, bk, bdh) : [blockOf(bk, 'date', B.date ? [B.date] : [])] };
+  const layout = await signSheets(wb, fr === bk ? [front] : [front, back], s, 'hkai', opts.sigs, warnings);
   return { name: fileNameOf(s.settings, 'hkai', d), data: await wb.save(), warnings, layout, sheet: frName };
 }
 
@@ -578,7 +581,7 @@ async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, 
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null, headId?: string | null): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = [];
   if (isOutsAll(s.settings)) return fillOutsAll(wb, s, d, sheets, sigs, warnings, headId);
-  const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] } }[] = [];
+  const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] }; titles: number[] }[] = [];   // titles: οι γραμμές των τίτλων των λιστών του φύλλου
   const { outs, stay } = outsAndStay(s, d);
   const locs = await outsPlaces(wb, sheets, s.settings.place);
   const lists: { title: string; list: { p: Person; note: string }[]; at: OutsLoc; key: string }[] = [
@@ -604,7 +607,7 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
       ws.insertRows(m.first + ready - 1, n - ready, m.first + ready - 1, wb);
       // ό,τι σημειώθηκε πιο κάτω στο ίδιο φύλλο (κεφαλίδα, ημερομηνία της λίστας από κάτω) κατεβαίνει μαζί
       const mv = (x: string) => x.replace(/(\d+)$/, (_q, rr: string) => String(+rr > m.first + ready - 1 ? +rr + n - ready : +rr));
-      for (const k of marks) if (k.ws === ws) { k.refs.head = k.refs.head.map(mv); k.refs.date = k.refs.date.map(mv); }
+      for (const k of marks) if (k.ws === ws) { k.refs.head = k.refs.head.map(mv); k.refs.date = k.refs.date.map(mv); k.titles = k.titles.map(t => (t > m.first + ready - 1 ? t + n - ready : t)); }
       // η αρίθμηση =ROW()-k της λίστας από κάτω (στο ίδιο φύλλο) μένει 1, 2, 3… αφού κατέβηκε
       if (loc.to < 2000) for (const x of [...ws.cells()].filter(y => y.r > loc.to + n - ready)) {
         const ref = refOf(x.c, x.r); const f = /^ROW\(\)\s*-\s*(\d+)$/.exec(unesc(ws.formula(ref) || '')); if (f) ws.setFormula(ref, 'ROW()-' + (+f[1] + n - ready));
@@ -622,14 +625,22 @@ export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { o
     if (dateRef) ws.set(dateRef, s.settings.place + ', ' + dmy(d).replace(/\//g, '-'));
     const headRefs = head.slice(0, Math.max(m.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
     const had = marks.find(x => x.ws === ws);
-    if (had) { had.refs.head.push(...headRefs); if (dateRef) had.refs.date.push(dateRef); had.key = key; }
-    else marks.push({ ws, key, refs: { head: headRefs, date: dateRef ? [dateRef] : [] } });
+    const tRow = m.title?.r ?? m.hr;
+    if (had) { had.refs.head.push(...headRefs); if (dateRef) had.refs.date.push(dateRef); had.key = key; if (tRow) had.titles.push(tRow); }
+    else marks.push({ ws, key, refs: { head: headRefs, date: dateRef ? [dateRef] : [] }, titles: tRow ? [tRow] : [] });
   }
   // ένα φύλλο με τις δύο λίστες: μία κεφαλίδα και μία ημερομηνία για τη μετακίνηση (της πρώτης λίστας / της τελευταίας)
   const done: SheetPart[] = [];
   for (const x of marks) {
     const dh = await designHead(wb, x.ws, s, 'outs', headId, topHead(x.refs.head), x.refs.date.slice(0, 1), d);
-    done.push({ ws: x.ws, key: x.key, designed: !!dh, more: dh ? [blockOf(x.ws, 'head', dh.head), blockOf(x.ws, 'date', dh.date)] : [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] });
+    // η δεύτερη λίστα του φύλλου (Παραμένοντες) παίρνει την ίδια επικεφαλίδα πάνω από τον τίτλο της· οι γραμμές που μπήκαν πάνω της κατεβάζουν τις αναφορές της
+    if (dh) {
+      const top = topHead(x.refs.head); const rest = x.refs.head.filter(h => !top.includes(h)); const sh = (r: string) => r.replace(/\d+$/, n => String(dh.shift(+n)));
+      const t2 = x.titles.length > 1 ? Math.max(...x.titles) : 0;   // η δεύτερη λίστα του φύλλου: με δικά της κελιά κεφαλίδας τα αντικαθιστά, αλλιώς η επικεφαλίδα μπαίνει πάνω από τον τίτλο της
+      if (rest.length) await designHead(wb, x.ws, s, 'outs', headId, rest.map(sh), x.refs.date.slice(1).map(sh), d);
+      else if (t2 > 1) await designHead(wb, x.ws, s, 'outs', headId, [], x.refs.date.slice(1).map(sh), d, dh.shift(t2) - 1);
+    }
+    done.push({ ws: x.ws, key: x.key, designed: !!dh, more: dh ? headBlocks(wb, x.ws, dh) : [blockOf(x.ws, 'head', x.refs.head), blockOf(x.ws, 'date', x.refs.date.slice(0, 1))] });
   }
   const layout = await signSheets(wb, done, s, 'outs', sigs, warnings);
   return { name: fileNameOf(s.settings, 'outs', d), data: await wb.save(), warnings, layout, sheet: locs[0].sheet };
@@ -724,7 +735,7 @@ async function fillOutsAll(wb: Workbook, s: AppState, d: ISODate, want: { outs?:
   if (!p2) warnings.push('Στο φύλλο «' + loc2.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας: η ΔΥΝΑΜΗ δεν γράφτηκε');
   const part = async (p: NonNullable<typeof p1>, key: string, sg?: SheetPart['sigs']): Promise<SheetPart> => {
     const dh = await designHead(wb, p.ws, s, 'outs', headId, p.headRefs, p.dateRef ? [p.dateRef] : [], d);
-    return { ws: p.ws, key, sigs: sg, designed: !!dh, more: dh ? [blockOf(p.ws, 'head', dh.head), blockOf(p.ws, 'date', dh.date)] : [blockOf(p.ws, 'head', p.headRefs), blockOf(p.ws, 'date', p.dateRef ? [p.dateRef] : [])] };
+    return { ws: p.ws, key, sigs: sg, designed: !!dh, more: dh ? headBlocks(wb, p.ws, dh) : [blockOf(p.ws, 'head', p.headRefs), blockOf(p.ws, 'date', p.dateRef ? [p.dateRef] : [])] };
   };
   // υπογραφές: το φύλλο 1 με του εντύπου· το φύλλο 2 με τις ίδιες, καμία ή δικές του (Ρυθμίσεις › Υπογραφές › Εξοδούχοι)
   const mode = outsSig2Of(s.settings);

@@ -256,10 +256,10 @@ export function ReportsScreen() {
   };
   // «Αποθήκευση και Βγάλε»: βγαίνουν αυτοί που έδειχνε ο οδηγός (με τις αλλαγές με ✕), όχι νέα κλήρωση.
   // Αν ρωτά μέρα, ανοίγει το «Βγάλε…» για τη μέρα, με την ίδια κλήρωση.
-  const fromWizard = async (r: Report, s: AppState, ids: (number | string)[], d: string) => {
+  const fromWizard = async (r: Report, s: AppState, ids: (number | string)[], d: string, hid?: string) => {
     const print = r.out === 'print';
-    if (r.day === 'ask') { setAsk({ r, print, init: r.pick.mode === 'random' ? { ids, d } : undefined }); return; }
-    if (await runReport(s, r, ids, d, print)) loadLast();
+    if (r.day === 'ask') { setAsk({ r, print, hid, init: r.pick.mode === 'random' ? { ids, d } : undefined }); return; }
+    if (await runReport(s, r, ids, d, print, false, false, hid)) loadLast();
   };
   // από την αναζήτηση (Ctrl+K): «Βγάλε: …»
   useEffect(() => {
@@ -555,6 +555,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   };
   // χωρίς όνομα (π.χ. από το «Κενό»): παίρνει τον τίτλο ή το όνομα του προτύπου, ώστε η αποθήκευση να μη μένει κλειστή ως το βήμα 5 (Michael, 29/10: «δεν μου αποθήκευσε»)
   const nameOf = () => r.name.trim() || autoName(mode === 'build' ? build?.title : tpl?.name);
+  const [runHead, setRunHead] = useState<string | undefined>();   // «Επικεφαλίδα:» μόνο για αυτό το βγάλσιμο
   const save = async (andRun: boolean) => {
     const why = missing(6); if (why) { toast({ text: why }); return false; }
     setBusy(true);
@@ -577,7 +578,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
       const sChanged = sg.sergeant !== signers.sergeant || sg.commander !== signers.commander;
       const next = await run({ t: 'setSettings', settings: { reportTpls: list, reports: exists ? reps.map(x => (x.id === rr.id ? rr : x)) : [...reps, rr], ...(sChanged ? { signers: { sergeant: signers.sergeant.trim(), commander: signers.commander.trim() } } : {}) }, text: (exists ? 'Αλλαγή' : 'Νέο') + ' έντυπο «' + rr.name + '»' }, (exists ? 'Αποθηκεύτηκε' : 'Έτοιμο') + ' το έντυπο «' + rr.name + '».');
       if (!next) return false;
-      onClose(); if (andRun) onRun(rr, next, ids, d);
+      onClose(); if (andRun) onRun(rr, next, ids, d, runHead);
       return true;
     } finally { setBusy(false); }
   };
@@ -612,6 +613,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
       <span className="rep-wiz__why rep-page__why" data-tip=${why6 || undefined}>${why6}</span>
       <${Button} variant="ghost" onClick=${back} data-tip="Κλείνει χωρίς αποθήκευση (ρωτά αν άλλαξες κάτι)">Άκυρο<//>
       <${Button} variant="outline" disabled=${busy || !!why6} why=${why6} data-tip=${'Αποθήκευση χωρίς να βγει. Πού βγαίνει: ' + outText(r)} onClick=${() => save(false)}>Αποθήκευση<//>
+      <${HeadPick} form="reports" own=${r.hdId} value=${runHead} onChange=${setRunHead} id="wiz-run-head"/>
       <${Button} disabled=${busy || !!why6} why=${why6} onClick=${() => save(true)}>${busy ? 'Γίνεται…' : 'Αποθήκευση και Βγάλε'}<//>
     </div>
     <ol className="rep-steps">${STEPS.map((s, i) => html`<li key=${s}><button type="button" aria-current=${step === i + 1 ? 'step' : undefined} className=${cx(step > i + 1 && 'is-done')} disabled=${!canGo(i + 1) && step < i + 1} data-tip=${!canGo(i + 1) && step < i + 1 ? missing(i + 1) : undefined} onClick=${() => goStep(i + 1)}><span>${i + 1}</span>${s}</button></li>`)}</ol>
