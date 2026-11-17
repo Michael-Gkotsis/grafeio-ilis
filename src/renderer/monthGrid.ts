@@ -7,21 +7,23 @@ import type { PlanDay } from '../shared/cadrePlan';
 
 export interface GridCell { text?: string; cls?: string; tip?: string; mark?: boolean }
 // head/tail: ό,τι μπαίνει στην πρώτη και στην τελευταία στήλη της γραμμής· κρατήστε το ίδιο αντικείμενο γραμμής όσο δεν αλλάζει (memo)
-export interface GridRow { id: string; head: any; tail?: any; cells: GridCell[]; cls?: string }
+// tails: περισσότερες στήλες στο τέλος (Σ, Όριο, Μεταφορά)· band: γραμμή-επικεφαλίδα ομάδας (μία κελί σε όλο το πλάτος, χωρίς μέρες, δεν επιλέγεται)
+export interface GridRow { id: string; head: any; tail?: any; tails?: any[]; cells: GridCell[]; cls?: string; band?: any }
 export interface GridSel { row: string; from: number; to: number }   // from ≤ to: δείκτες μέρας (0 = 1η του μήνα)
 
-interface RowProps { row: GridRow; days: PlanDay[]; lo: number; hi: number }
-const Row = memo(function Row({ row, days, lo, hi }: RowProps) {
+interface RowProps { row: GridRow; days: PlanDay[]; lo: number; hi: number; wide: number }
+const Row = memo(function Row({ row, days, lo, hi, wide }: RowProps) {
+  if (row.band !== undefined) return html`<tr className=${cx('mg-band', row.cls)} data-band=${row.id}><th colSpan=${wide} scope="colgroup">${row.band}</th></tr>`;
   return html`<tr data-row=${row.id} className=${row.cls}><th className="mg-name" scope="row">${row.head}</th>
     ${days.map((d, i) => { const c = row.cells[i]; return html`<td key=${i} data-i=${i} data-tip=${c?.tip || undefined} className=${cx('mg-c', d.hol ? 'is-hol' : d.we && 'is-we', c?.cls, hi >= 0 && i >= lo && i <= hi && 'is-sel')}>${c?.text}${c?.mark && html`<i className="mg-x" aria-label="Δεν θέλει υπηρεσία">✕</i>`}</td>`; })}
-    ${row.tail !== undefined && html`<td className="mg-tail">${row.tail}</td>`}</tr>`;
+    ${row.tail !== undefined && html`<td className="mg-tail">${row.tail}</td>`}${row.tails?.map((t, i) => html`<td key=${'t' + i} className="mg-tail mg-tail--n">${t}</td>`)}</tr>`;
 });
-const Head = memo(function Head({ days, headLabel, tailLabel }: { days: PlanDay[]; headLabel: string; tailLabel?: string }) {
-  return html`<thead><tr><th className="mg-name">${headLabel}</th>${days.map(d => html`<th key=${d.n} data-tip=${d.hol || undefined} className=${cx('mg-d', d.hol ? 'is-hol' : d.we && 'is-we')}><b>${d.n}</b><span>${d.dow}</span></th>`)}${tailLabel != null && html`<th className="mg-tail">${tailLabel}</th>`}</tr></thead>`;
+const Head = memo(function Head({ days, headLabel, tailLabel, tailLabels }: { days: PlanDay[]; headLabel: string; tailLabel?: string; tailLabels?: string[] }) {
+  return html`<thead><tr><th className="mg-name">${headLabel}</th>${days.map(d => html`<th key=${d.n} data-tip=${d.hol || undefined} className=${cx('mg-d', d.hol ? 'is-hol' : d.we && 'is-we')}><b>${d.n}</b><span>${d.dow}</span></th>`)}${tailLabel != null && html`<th className="mg-tail">${tailLabel}</th>`}${tailLabels?.map((t, i) => html`<th key=${'t' + i} className="mg-tail mg-tail--n">${t}</th>`)}</tr></thead>`;
 });
 
-interface Props { days: PlanDay[]; rows: GridRow[]; headLabel: string; tailLabel?: string; label?: string; menu: (sel: GridSel, close: () => void) => any }
-export function MonthGrid({ days, rows, headLabel, tailLabel, label, menu }: Props) {
+interface Props { days: PlanDay[]; rows: GridRow[]; headLabel: string; tailLabel?: string; tailLabels?: string[]; label?: string; menu: (sel: GridSel, close: () => void) => any }
+export function MonthGrid({ days, rows, headLabel, tailLabel, tailLabels, label, menu }: Props) {
   const [sel, setSel] = useState<(GridSel & { a: number }) | null>(null);   // a: από πού ξεκίνησε το σύρσιμο
   const [at, setAt] = useState<{ x: number; y: number; up: boolean } | null>(null);
   const drag = useRef(false); const boxRef = useRef<HTMLDivElement>(null); const menuRef = useRef<HTMLDivElement>(null); const selRef = useRef(sel); selRef.current = sel;
@@ -60,7 +62,7 @@ export function MonthGrid({ days, rows, headLabel, tailLabel, label, menu }: Pro
     return () => { document.removeEventListener('mousedown', md); document.removeEventListener('keydown', key, true); };
   }, [!!sel, close]);
   return html`<div className="mg" ref=${boxRef}><div className="mg__scroll"><table className="mg-table" aria-label=${label}>
-    <${Head} days=${days} headLabel=${headLabel} tailLabel=${tailLabel}/>
-    <tbody onMouseDown=${down} onMouseOver=${over}>${rows.map(r => html`<${Row} key=${r.id} row=${r} days=${days} lo=${sel && sel.row === r.id ? sel.from : -1} hi=${sel && sel.row === r.id ? sel.to : -1}/>`)}</tbody></table></div>
+    <${Head} days=${days} headLabel=${headLabel} tailLabel=${tailLabel} tailLabels=${tailLabels}/>
+    <tbody onMouseDown=${down} onMouseOver=${over}>${rows.map(r => html`<${Row} key=${r.id} row=${r} days=${days} wide=${days.length + 1 + (tailLabel != null ? 1 : 0) + (tailLabels?.length || 0)} lo=${sel && sel.row === r.id ? sel.from : -1} hi=${sel && sel.row === r.id ? sel.to : -1}/>`)}</tbody></table></div>
     ${sel && at && html`<div className="mg-menu" ref=${menuRef} style=${{ left: at.x, top: at.y, transform: at.up ? 'translateY(-100%)' : undefined }} role="menu">${menu({ row: sel.row, from: sel.from, to: sel.to }, close)}</div>`}</div>`;
 }

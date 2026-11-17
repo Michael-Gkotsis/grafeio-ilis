@@ -64,10 +64,10 @@ export function CadrePlanView({ onOpen }: { onOpen: (id: string, ids: string[]) 
   const filter: string = nav.params.cpf || 'all';
   const year = +ym.slice(0, 4);
   const index = useMemo(() => monthIndex(state, ym), [state.cadreAbs, state.cadreNoDuty, state.settings, ym]);
-  const filters = useMemo(() => planFilters(), []);
-  const all = useMemo(() => planRows(state, index, 'all', filters), [state.cadreList, state.settings, index, filters]);
-  const counts = useMemo(() => Object.fromEntries(filters.map(f => [f.id, planRows(state, index, f.id, filters).length])), [state.cadreList, state.settings, index, filters]);
-  const people = useMemo(() => planRows(state, index, filter, filters), [state.cadreList, state.settings, index, filter, filters]);
+  const filters = useMemo(() => planFilters(state.settings), [state.settings]);
+  const all = useMemo(() => planRows(state, index, 'all', filters), [state.cadreList, state.cadreDutyOf, state.settings, index, filters]);
+  const counts = useMemo(() => Object.fromEntries(filters.map(f => [f.id, planRows(state, index, f.id, filters).length])), [state.cadreList, state.cadreDutyOf, state.settings, index, filters]);
+  const people = useMemo(() => planRows(state, index, filter, filters), [state.cadreList, state.cadreDutyOf, state.settings, index, filter, filters]);
   const [xl, setXl] = useState<'' | 'xl' | 'print'>('');
   const [ask, setAsk] = useState<{ pick: Pick; kind: string } | null>(null);
   // γραμμές του πλέγματος: το ίδιο αντικείμενο όσο δεν αλλάζει τίποτα στη γραμμή, ώστε το memo να μη ξαναζωγραφίζει τις υπόλοιπες

@@ -1149,6 +1149,17 @@ else {
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Υπηρεσίες στελεχών: νέο αρχείο για τον μήνα ym, δύο φύλλα (ανά άτομο, ανά ημέρα)· print: προεπισκόπηση εκτύπωσης
+    ipcMain.handle('export:cadreDuty', async (_e, ym: string, print?: boolean) => {
+      try {
+        const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym)) ? String(ym) : today().slice(0, 7);
+        const r = await excel().cadreDutyBook(store.state, m, today());
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings: string[] = [];
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
         const r = await made('rosterPrint', date, store.state, sigs, undefined, headId);

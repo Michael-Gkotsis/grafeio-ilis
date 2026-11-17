@@ -439,6 +439,7 @@ export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['all', '
 // Η παλιά μορφή «Σε 4 πίνακες» ('tab4', Michael 30/10) αντικαταστάθηκε από την «Όλη η δύναμη»: οι αποθηκευμένες ρυθμίσεις με 'tab4' διαβάζονται ως 'all'
 export const isOutsAll = (st: { outsFmt?: OutsFmt | 'tab4' }) => st.outsFmt === 'all' || st.outsFmt === 'tab4';
 export interface Settings {
+  cadreDuty?: Partial<CadreDutyCfg>;     // υπηρεσίες στελεχών: ομάδες, υπηρεσίες, όρια (Ρυθμίσεις › Υπηρεσίες στελεχών)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreDuty.ts)
   cadreLeave?: Partial<CadreLeaveCfg>;   // άδειες και απαλλαγές στελεχών (Ρυθμίσεις › Μονάδα και έντυπα)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreBalance.ts)
   fileNames?: FileNames;                 // ονόματα αρχείων: όνομα, διαχωριστικό και μορφή ημερομηνίας (fileNames.ts)
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
@@ -604,6 +605,8 @@ export interface AppState {
   cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
   cadreNoDuty?: CadreNoDuty[];           // «Δεν θέλει υπηρεσία» (Πρόγραμμα αδειών): ΟΧΙ κατάσταση, δεν μπαίνει στην ΗΚΑΙ, στη Δύναμη ή στο ΣΤΕΛΕΧΗ.xlsx (kv «cadreNoDuty», shared/cadrePlan.ts)
+  cadreDuties?: CadreDuty[];             // υπηρεσίες στελεχών του προγράμματος (kv «cadreDuties», shared/cadreDuty.ts): χωριστά από τις θέσεις των στρατιωτών
+  cadreDutyOf?: Record<string, CadreDutyPerson>;   // ανά στέλεχος (cid): ομάδα, όριο, περιορισμοί (kv «cadreDutyOf»), ΟΧΙ στην εγγραφή Cadre ώστε το ΣΤΕΛΕΧΗ.xlsx να μένει ίδιο
   cadreGrants?: CadreGrant[];            // έξτρα άδειες, υπόλοιπο από πέρσι και αρχική απαλλαγών ανά στέλεχος (kv «cadreGrants», shared/cadreBalance.ts)
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
@@ -669,6 +672,15 @@ export interface LeaveQuota { id: string; name: string; perYear: number; kinds: 
 export interface CadreLeaveCfg { quotas: LeaveQuota[]; count: 'calendar' | 'working'; apalPerDuty: number; apalHolExtra: number; apalExpire: 'never' | 'year' }
 // extra: έξτρα μέρες της χρονιάς · carry: υπόλοιπο από πέρσι · start: αρχικό υπόλοιπο απαλλαγών (quota 'apal') για ό,τι έγινε πριν την εφαρμογή
 export interface CadreGrant { id: string; cid: string; year: number; quota: string; days: number; kind: 'extra' | 'carry' | 'start'; note?: string }
+// Υπηρεσίες στελεχών (Michael, 17/11, πρόταση λοχία): δικό τους πρόγραμμα μήνα, δίπλα στο «με το χέρι» στις θέσεις των στρατιωτών (και τα δύο
+// μετρούν μαζί). Ομάδες και υπηρεσίες είναι δεδομένα που γράφει ο χρήστης (π.χ. ΑΥΔΜ, Πύλη), όχι κώδικας. Όλα προαιρετικά.
+// short: ο κωδικός στο κελί · perDay: πόσα άτομα τη μέρα · h24: 24ωρη (μετά ακολουθεί ανάπαυση) · hkCol: στήλη της ΗΚΑΙ ('' = καμία) · days: μέρες εβδομάδας (0 = Κυρ), κενό = κάθε μέρα
+export interface CadreService { id: string; name: string; short: string; perDay: number; h24: boolean; hkCol: string; offOnly?: boolean; days?: number[] }
+export interface CadreDutyGroup { id: string; name: string; services: CadreService[] }
+export interface CadreDutyCfg { groups: CadreDutyGroup[]; limits: { off: { base: number; extra: number }; nco: { base: number; extra: number } }; rest: number; carry: boolean; fairHol: boolean }
+// none: ελαφράς, καμία υπηρεσία · only: ελαφράς, μόνο αυτές · no24: όχι 24ωρες (π.χ. μητέρα) · until: ως ποια μέρα (κενό = χωρίς λήξη) · noDow: μέρες εβδομάδας που δεν θέλει (0 = Κυρ)
+export interface CadreDutyPerson { group?: string; limit?: number; none?: { until?: ISODate }; only?: { services: string[]; until?: ISODate }; no24?: { until?: ISODate; why?: string }; noDow?: number[] }
+export interface CadreDuty { id: string; date: ISODate; svc: string; cid: string; auto?: boolean; why?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
 // Οι παλιοί κωδικοί (ka, an, eid, nos, fp, ekp, allh, other) κρατούν το ίδιο όνομα, για όσες έχουν ήδη γραφτεί.

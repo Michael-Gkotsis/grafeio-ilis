@@ -79,19 +79,22 @@ export function monthIndex(s: Pick<AppState, 'cadreAbs' | 'cadreNoDuty' | 'setti
 }
 
 // ---- φίλτρα γραμμών (η φάση 3 προσθέτει εδώ τις ομάδες υπηρεσιών στελεχών) ----
-export interface PlanFilterCtx { s: Pick<AppState, 'settings'>; index: MonthIndex }
+export interface PlanFilterCtx { s: Pick<AppState, 'settings' | 'cadreDutyOf'>; index: MonthIndex }
 export interface PlanFilter { id: string; label: string; match: (c: Cadre, x: PlanFilterCtx) => boolean }
 const hasLeave = (c: Cadre, x: PlanFilterCtx) => (x.index.cells.get(c.id) || []).some(v => v && (v.fam === 'ka' || v.fam === 'amd' || v.fam === 'leave'));
-export function planFilters(): PlanFilter[] {
+// οι ομάδες υπηρεσιών στελεχών (Ρυθμίσεις › Υπηρεσίες στελεχών) μπαίνουν ως φίλτρα με id «g:» + id ομάδας
+export function planFilters(settings?: Pick<Settings, 'cadreDuty'>): PlanFilter[] {
+  const groups = (settings?.cadreDuty?.groups || []).filter(g => g && g.id).map((g): PlanFilter => ({ id: 'g:' + g.id, label: g.name || g.id, match: (c, x) => x.s.cadreDutyOf?.[c.id]?.group === g.id }));
   return [
     { id: 'all', label: 'Όλοι', match: () => true },
     { id: 'off', label: 'Αξιωματικοί', match: (c, x) => hkRowsOf(x.s.settings.lists).off.includes(c.hk) },
     { id: 'nco', label: 'Υπαξιωματικοί', match: (c, x) => hkRowsOf(x.s.settings.lists).nco.includes(c.hk) },
-    { id: 'leave', label: 'Με άδεια τον μήνα', match: hasLeave }
+    { id: 'leave', label: 'Με άδεια τον μήνα', match: hasLeave },
+    ...groups
   ];
 }
 // οι γραμμές του πλέγματος: ενεργά στελέχη με τη σειρά τους, μετά το φίλτρο
-export function planRows(s: Pick<AppState, 'cadreList' | 'settings'>, index: MonthIndex, filter: string, filters: PlanFilter[] = planFilters()): Cadre[] {
+export function planRows(s: Pick<AppState, 'cadreList' | 'settings' | 'cadreDutyOf'>, index: MonthIndex, filter: string, filters: PlanFilter[] = planFilters(s.settings)): Cadre[] {
   const f = filters.find(x => x.id === filter) || filters[0]; const ctx: PlanFilterCtx = { s, index };
   return orderedCadre(s.cadreList || []).filter(c => c.active && f.match(c, ctx));
 }
