@@ -83,7 +83,14 @@ export function quotaBalances(s: Pick<AppState, 'cadreAbs' | 'cadreGrants' | 'se
 // Προειδοποίηση για μια κατάσταση που γράφεται (ή αλλάζει): ποια είδη θα πάνε κάτω από 0 (δεν μπλοκάρει). Οι παλιές που πέφτουν στις ίδιες μέρες φεύγουν
 export function leaveOverdraft(s: Pick<AppState, 'cadreAbs' | 'cadreGrants' | 'settings'>, cid: string, cand: { id?: string; kind: string; from: ISODate; to: ISODate }): { name: string; year: number; left: number }[] {
   if (cand.to < cand.from) return [];
-  const rest = absOf(s, cid).filter(a => a.id !== cand.id && !(a.from <= cand.to && cand.from <= a.to));
+  // όπως η εντολή addCadreAbs με «replace»: οι παλιές χάνουν ΜΟΝΟ τις μέρες που πέφτουν πάνω στη νέα (κρατούν ό,τι περισσεύει δεξιά-αριστερά)
+  const rest: CadreAbs[] = [];
+  for (const a of absOf(s, cid)) {
+    if (a.id === cand.id && cand.id) continue;
+    if (!(a.from <= cand.to && cand.from <= a.to)) { rest.push(a); continue; }
+    if (a.from < cand.from) rest.push({ ...a, to: addDays(cand.from, -1) });
+    if (a.to > cand.to) rest.push({ ...a, from: addDays(cand.to, 1) });
+  }
   const abs: CadreAbs[] = [...rest, { id: '', cid, kind: cand.kind, from: cand.from, to: cand.to }];
   const out: { name: string; year: number; left: number }[] = [];
   for (let y = +cand.from.slice(0, 4); y <= +cand.to.slice(0, 4); y++)
