@@ -21,6 +21,7 @@ import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
 import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
 import { cleanHeads, cleanHeadUse } from './docHead';
+import { cleanImages } from './reports';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
 
 export type Command =
@@ -863,6 +864,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if ('heads' in c.settings || 'headUse' in c.settings) {
         settings.heads = cleanHeads(settings.heads); settings.headUse = cleanHeadUse(settings.headUse, settings.heads);
         if (!settings.heads) delete settings.heads; if (!settings.headUse) delete settings.headUse;
+      }
+      // Έντυπα: επικεφαλίδα που δεν υπάρχει πια (σβήστηκε) γυρνά στην «Όπως σήμερα»· οι εικόνες καθαρίζονται
+      if (('heads' in c.settings || 'reports' in c.settings) && settings.reports?.some(r => r.hdId || r.images)) {
+        const known = new Set((settings.heads || []).map(h => h.id));
+        settings.reports = settings.reports.map(r => {
+          const { hdId, images, ...rest } = r; const im = cleanImages(images);
+          return { ...rest, ...(hdId && known.has(hdId) ? { hdId } : {}), ...(im ? { images: im } : {}) };
+        });
       }
       // πρώτη φορά σε λειτουργία μονάδας: το έντυπο υπηρεσιών ξεκινά από το έντυπο ΦΡΟΥΡΑ (της ΣΠΕΝ, με όλες τις θέσεις)· τα δικά σου έντυπα μένουν
       if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && settings.phase === 'sven') settings.phase = 'spen';

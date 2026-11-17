@@ -165,7 +165,7 @@ describe('Έντυπα με επικεφαλίδα', () => {
   };
   it('Έντυπο: επικεφαλίδα ΚΕΦΑΛΑΙΑ, μία εικόνα, ο πίνακας και ο τίτλος παραμένουν', async () => {
     const s = withHead(12, 'imgLeft', ['πρώτη γραμμη', 'δευτερη', 'τριτη']);
-    const o = await make(s); const { g } = await cellsOf(o.data); const flat = g.flat();
+    const o = await make(s, 'h1'); const { g } = await cellsOf(o.data); const flat = g.flat();
     expect(flat).toContain('ΠΡΩΤΗ ΓΡΑΜΜΗ'); expect(flat).toContain('ΔΥΝΑΜΗ'); expect(await nPics(o.data)).toBe(1);
     for (const p of s.people.slice(0, 10)) expect(flat.some(x => typeof x === 'string' && x.includes(p.last.toUpperCase()))).toBe(true);
     const ex = new ExcelJS.Workbook(); await ex.xlsx.load(o.data); expect(ex.getWorksheet(1)!.getImages()).toHaveLength(1);

@@ -6,8 +6,8 @@ import { hkDate } from '../shared/dates';
 import { NOHEAD_MARK, Workbook, colName, colNum, sheetSafe, toSerial, type Sheet, type XlValue } from './xlsx';
 import { TemplateError, signSheets, unitWords } from './exports';
 import { blockOf } from './layout';
-import { headFor } from '../shared/docHead';
-import { applyHead, type HeadDone } from './headWrite';
+import { TODAY, headFor } from '../shared/docHead';
+import { applyHead, placeImages, type HeadDone } from './headWrite';
 import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
 import { renderBook } from './print';
@@ -387,7 +387,7 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   for (const u of badB) warnings.push('Στον κενό πίνακα υπάρχει η ετικέτα {' + u + '} που δεν είναι στοιχείο εντύπου, γραμμή πίνακα τιμών ούτε μέτρηση. Μένει όπως είναι.');
   // υπογραφές: στο {ΥΠΟΓΡΑΦΕΣ} (του εντύπου ή των Ρυθμίσεων), ή στις υπογραφές του προτύπου αν το έντυπο έχει δικές του
   // επικεφαλίδα που σχεδίασες (Ρυθμίσεις › Επικεφαλίδες εγγράφων): παίρνει τη θέση της σημερινής κεφαλίδας και του τόπου/ημερομηνίας
-  const hd = headFor(s.settings, 'reports', headId); let hdone: HeadDone | null = null;
+  const hd = headFor(s.settings, 'reports', headId ?? r.hdId ?? TODAY); let hdone: HeadDone | null = null;
   if (hd) {
     const dateText = (parts.date[0] && String(ws.get(parts.date[0]) ?? '')) || (s.settings.place ? s.settings.place + ', ' : '') + hkDate(d);
     hdone = await applyHead(wb, ws, s, hd, { cols: Math.max(vc2, ws.lastCol()), old: parts.head, dates: parts.date, dateText });
@@ -399,9 +399,16 @@ async function fillSheet(wb: Workbook, sheet: string, s: AppState, r: Report, ta
   const layout = await signSheets(wb, [{ ws, key: 'main', more, after: end, names: parts.names, designed: !!hd }], s, 'reports', r.sigs, warnings, () => r.layout);
   // στην εκτύπωση μικραίνει ή μεγαλώνει μόνο ο πίνακας· κεφαλίδα, ημερομηνία, τίτλος και υπογραφές μένουν στο μέγεθός τους
   wb.markFixed(ws.name, layout[0]?.blocks || []);
+  // δικές σου εικόνες: τελευταίες, για να είναι οι θέσεις τελικές (κεφαλίδα, υπογραφές και μετακινήσεις έχουν γίνει)
+  const placed = r.images?.length ? placeImages(wb, ws, r.images, end) : [];
+  const repeatAll = new Set((r.images || []).flatMap((x, i) => (x.pages === 'all' && x.at.rel === 'top' ? ['img' + i] : [])));
+  if (placed.length && layout[0]) { layout[0].blocks.push(...placed); layout[0].end = end; }
   // εκτύπωση: οι επικεφαλίδες σε κάθε σελίδα (με έναν πίνακα: με πολλούς θα έβγαιναν του πρώτου πάνω από τους άλλους)
   // και ο πίνακας στο πλάτος της σελίδας (μόνο αν το πρότυπο δεν έχει δικά του)
-  if (tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length) && !tabs[0].nohead) wb.setPrintTitles(sheet, hdone ? hdone.shift(head) : head, (hdone ? hdone.shift(data) : data) - 1);
+  const titleRows = tabs.length === 1 && colsOf[0].length && !items.some(it => it.tabs.length && it.vts.length) && !tabs[0].nohead ? [hdone ? hdone.shift(head) : head, (hdone ? hdone.shift(data) : data) - 1] : null;
+  if (titleRows) wb.setPrintTitles(sheet, titleRows[0], titleRows[1]);
+  // εικόνα «Σε όλες τις σελίδες»: αν είναι πάνω από τον πίνακα, οι γραμμές που επαναλαμβάνονται αρχίζουν από την κορυφή και την πιάνουν· αλλιώς βγαίνει μόνο στην πρώτη
+  if (titleRows && placed.some(b => repeatAll.has(b.id) && b.r2 < titleRows[0])) wb.setPrintTitles(sheet, 1, titleRows[1], true);
   ws.setPrintFit(false);
   return layout;
 }

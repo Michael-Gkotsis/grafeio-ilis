@@ -769,8 +769,9 @@ export class Workbook {
     return this.addXf(`<xf numFmtId="0" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" applyFont="1"${fill ? ' applyFill="1"' : ''}${border ? ' applyBorder="1"' : ''} applyAlignment="1"><alignment ${al}/></xf>`);
   }
   // Γραμμές που επαναλαμβάνονται σε κάθε τυπωμένη σελίδα (Print_Titles), αν το φύλλο δεν έχει ήδη· false: είχε
-  setPrintTitles(sheet: string, r1: number, r2: number): boolean {
+  setPrintTitles(sheet: string, r1: number, r2: number, force = false): boolean {
     const i = this.names.findIndex(x => x.name === sheet); if (i < 0) return false;
+    if (force) this.workbookXml = this.workbookXml.replace(/<definedName\b[^>]*>[^<]*<\/definedName>/g, m => (attr(m, 'name') === '_xlnm.Print_Titles' && attr(m, 'localSheetId') === String(i) ? '' : m));
     if ([...this.workbookXml.matchAll(/<definedName\b([^>]*)>/g)].some(m => attr(m[1], 'name') === '_xlnm.Print_Titles' && attr(m[1], 'localSheetId') === String(i))) return false;
     const dn = `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${esc(sheet).replace(/'/g, '&apos;&apos;')}'!$${r1}:$${r2}</definedName>`;
     if (/<definedNames>/.test(this.workbookXml)) this.workbookXml = this.workbookXml.replace('<definedNames>', '<definedNames>' + dn);

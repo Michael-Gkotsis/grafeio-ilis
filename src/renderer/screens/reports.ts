@@ -11,7 +11,8 @@ import { HK } from '../../shared/unit';
 import { DateField, GoLink, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigEditor, SigsDialog } from '../sigs';
-import { LayoutDialog } from '../layout';
+import { LayoutDialog, type LayExtra } from '../layout';
+import { TODAY, headUseOf, headsOf } from '../../shared/docHead';
 import { ValueTableEditor, alignSeg } from './valueEditor';
 import { hasVals, metricGroups, newValueTable, noPeople, rowTag, tagId, tagText, tagsOf, valsUsed, type TAlign, type ValueTable } from '../../shared/values';
 import { MAIN, bandsOf, keepBands } from '../../shared/repBands';
@@ -278,8 +279,8 @@ export function ReportsScreen() {
     go({ ...r, sigs }, print, s);
   };
   // θέσεις πάνω στο χαρτί: για όλα τα φύλλα του εντύπου (το πρότυπο είναι ένα)
-  const layoutSave = async (r: Report, l: Layout | undefined) => {
-    const { layout: _, ...rest } = r; const next = l?.main ? { ...rest, layout: l.main } : rest;
+  const layoutSave = async (r: Report, l: Layout | undefined, x?: LayExtra) => {
+    const { layout: _, hdId: _h, images: _i, ...rest } = r; const next: Report = { ...rest, ...(l?.main ? { layout: l.main } : {}), ...(x?.hdId ? { hdId: x.hdId } : {}), ...(x?.images?.length ? { images: x.images } : {}) };
     if (await save({ reports: reports.map(x => (x.id === r.id ? next : x)) }, 'Θέσεις στο χαρτί: «' + r.name + '»')) toast({ text: 'Αποθηκεύτηκαν οι θέσεις του «' + r.name + '».' });
   };
   const sigsReset = async (r: Report) => { const { sigs: _, ...rest } = r; if (await save({ reports: reports.map(x => (x.id === r.id ? rest : x)) }, 'Υπογραφές εντύπου «' + r.name + '»')) toast({ text: 'Το «' + r.name + '» παίρνει ξανά τις υπογραφές των Ρυθμίσεων.' }); };
@@ -323,8 +324,9 @@ export function ReportsScreen() {
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
     ${sigFor && html`<${SigsDialog} title=${sigFor.name} initial=${sigsNone(sigFor, tpls).sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
       onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} onLayout=${(sigs: Sig[]) => setLayFor({ r: sigFor, sigs })} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
-    ${layFor && html`<${LayoutDialog} title=${layFor.r.name} sigs=${layFor.sigs} initial=${layFor.r.layout ? { main: layFor.r.layout } : undefined} onClose=${() => setLayFor(null)} onSave=${(l: Layout | undefined) => layoutSave(layFor.r, l)}
-      req=${(l: Layout) => { const d = repDate(layFor.r, today); return { report: { ...layFor.r, sigs: layFor.sigs, layout: l.main }, file: tpls.find(t => t.id === layFor.r.tpl)?.file || '', ids: rowsOf(state, layFor.r, d).map(x => x.id), date: d }; }}/>`}
+    ${layFor && html`<${LayoutDialog} title=${layFor.r.name} sigs=${layFor.sigs} initial=${layFor.r.layout ? { main: layFor.r.layout } : undefined} onClose=${() => setLayFor(null)} onSave=${(l: Layout | undefined, x?: LayExtra) => layoutSave(layFor.r, l, x)}
+      extra=${{ hdId: layFor.r.hdId, images: layFor.r.images || [] }} heads=${headsOf(state.settings).map(h => ({ value: h.id, label: h.name }))}
+      req=${(l: Layout, x?: LayExtra) => { const d = repDate(layFor.r, today); return { report: { ...layFor.r, sigs: layFor.sigs, layout: l.main, hdId: x?.hdId, images: x?.images }, headId: x?.hdId ?? TODAY, file: tpls.find(t => t.id === layFor.r.tpl)?.file || '', ids: rowsOf(state, layFor.r, d).map(x => x.id), date: d }; }}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
     ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
   </div>`;
@@ -401,7 +403,7 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
   const { state, today, run } = useStore(); const toast = useToast();
   const tpls = tplsOf(state); const editing = !!initial && repsOf(state).some(x => x.id === initial.id);
   const [step, setStep] = useState(initial ? 3 : 1);
-  const [r, setR] = useState<Report>(() => initial ? { ...initial } : blankReport());
+  const [r, setR] = useState<Report>(() => { if (initial) return { ...initial }; const def = headUseOf(state.settings, 'reports').def; return def === TODAY ? blankReport() : { ...blankReport(), hdId: def }; });   // νέο έντυπο: ξεκινά με την αρχική επικεφαλίδα της γραμμής «Έντυπα»
   const upd = (x: Partial<Report>) => setR(o => ({ ...o, ...x }));
   const [mode, setMode] = useState<Mode | null>(null);
   const [tpl, setTpl] = useState<RepTpl | null>(null);
@@ -655,8 +657,9 @@ function ReportPage({ r: initial, start, preset, tpl: tplId, onClose, onRun }: P
     </div>
     ${leaving && html`<${DiscardAsk} text=${editing ? 'Οι αλλαγές στο έντυπο δεν αποθηκεύτηκαν. Αν κλείσεις, μένει όπως ήταν.' : 'Το έντυπο δεν αποθηκεύτηκε. Αν κλείσεις, χάνονται όσα διάλεξες.'} onStay=${() => setLeaving(false)} onLeave=${onClose}/>`}
     ${lay && src && html`<${LayoutDialog} title=${r.name || 'Νέο έντυπο'} sigs=${r.sigs ? sigsClean(r.sigs) : mode === 'build' ? sigsSaved(state.settings, 'reports') : undefined} initial=${r.layout ? { main: r.layout } : undefined}
-      onClose=${() => setLay(false)} onSave=${(l: Layout | undefined) => { layN.current = sigN(r); upd({ layout: l?.main }); }}
-      req=${(l: Layout) => ({ report: { ...r, ...(r.sigs ? { sigs: sigsClean(r.sigs) } : {}), layout: l.main }, ...('build' in src ? { build: src.build } : { file: src.file }), ids: pvIds, date: d })}/>`}
+      onClose=${() => setLay(false)} onSave=${(l: Layout | undefined, x?: LayExtra) => { layN.current = sigN(r); upd({ layout: l?.main, hdId: x?.hdId, images: x?.images?.length ? x.images : undefined }); }}
+      extra=${{ hdId: r.hdId, images: r.images || [] }} heads=${headsOf(state.settings).map(h => ({ value: h.id, label: h.name }))}
+      req=${(l: Layout, x?: LayExtra) => ({ headId: x?.hdId ?? TODAY, report: { ...r, ...(r.sigs ? { sigs: sigsClean(r.sigs) } : {}), layout: l.main, hdId: x?.hdId, images: x?.images }, ...('build' in src ? { build: src.build } : { file: src.file }), ids: pvIds, date: d })}/>`}
   </div>`;
 }
 
@@ -707,7 +710,9 @@ function RepSigs({ r, upd, none, setNone, upload, onLayout }: P) {
   };
   return html`<div className="stack" style=${{ gap: '8px' }}>
     <div className="rep-opts"><span className="field__label">Υπογραφές</span><${Segmented} small=${true} value=${mode} onChange=${to} items=${[{ value: 'none', label: 'Καμία' }, { value: 'base', label: upload ? 'Όπως το πρότυπο' : 'Από τις Ρυθμίσεις' }, { value: 'own', label: 'Δικές του' }]}/>
-      ${onLayout && html`<${Button} size="sm" variant="outline" onClick=${onLayout} data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί. Ισχύει και στο Excel και στην εκτύπωση.">Θέσεις στο χαρτί…${r.layout && Object.keys(r.layout).length ? ' •' : ''}<//>`}</div>
+      ${onLayout && html`<${Button} size="sm" variant="outline" onClick=${onLayout} data-tip="Σύρε κεφαλίδα, ημερομηνία, τίτλο και υπογραφές όπου θέλεις πάνω στο χαρτί. Ισχύει και στο Excel και στην εκτύπωση.">Θέσεις στο χαρτί…${r.layout && Object.keys(r.layout).length || r.images?.length ? ' •' : ''}<//>`}</div>
+    <div className="rep-opts"><label className="field__label" htmlFor="rep-head">Επικεφαλίδα</label><${Select} id="rep-head" className="ui-select" value=${r.hdId && headsOf(state.settings).some(h => h.id === r.hdId) ? r.hdId : TODAY} onChange=${(e: any) => upd({ hdId: e.target.value === TODAY ? undefined : e.target.value })}>${headsOf(state.settings).map(h => html`<option key=${h.id} value=${h.id}>${h.name}</option>`)}<//>
+      <span className="note" style=${{ margin: 0 }}>Σχεδιάζεται στις <${GoLink} view="templates" params=${{ tab: 'heads' }}>Ρυθμίσεις › Επικεφαλίδες εγγράφων<//>.</span></div>
     ${mode === 'base' && html`<p className="note" style=${{ margin: 0 }}>${upload ? html`Όσες έχει το πρότυπο. Σε κελί με {ΥΠΟΓΡΑΦΕΣ} μπαίνουν οι κοινές: <b>${sigsText(base)}</b>.` : html`Μπαίνουν από αριστερά προς τα δεξιά: <b>${sigsText(base)}</b>.`} Οι κοινές αλλάζουν στις <${GoLink} view="templates" params=${{ tab: 'unit' }}>Ρυθμίσεις › Μονάδα και έντυπα › Υπογραφές<//> (Έντυπα).</p>`}
     ${mode === 'own' && html`<p className="note" style=${{ margin: 0 }}>Μόνο για αυτό το έντυπο, από αριστερά προς τα δεξιά.${upload ? ' Μπαίνουν στη θέση των υπογραφών του προτύπου (ή στο {ΥΠΟΓΡΑΦΕΣ}), αλλιώς κάτω από τον πίνακα.' : ''} Τις μετακινείς στο χαρτί με «Θέσεις στο χαρτί…».</p>
       <${SigEditor} value=${r.sigs || []} onChange=${(v: Sig[]) => upd({ sigs: v })} id="rep-sg"/>`}

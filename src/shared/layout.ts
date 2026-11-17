@@ -25,12 +25,13 @@ export type Layout = Record<string, Moves>;          // ανά φύλλο (key)
 // Ένα κομμάτι του χαρτιού: γραμμές r1..r2, στήλες c1..c2 (από 1)
 export interface Block { id: string; r1: number; c1: number; r2: number; c2: number }
 // Τα κομμάτια ενός φύλλου όπως βγήκαν, για τη μετακίνηση με το ποντίκι
-export interface LayoutSheet { key: string; sheet: string; blocks: Block[] }
+export interface LayoutSheet { key: string; sheet: string; blocks: Block[]; end?: number }   // end: η τελευταία γραμμή του πίνακα (Έντυπα: οι εικόνες «κάτω από τον πίνακα» μετριούνται από εκεί)
 
 export const blockLabel = (id: string, sigs?: Sig[]) => {
   if (id === 'head') return 'Κεφαλίδα';
   if (id === 'date') return 'Τόπος και ημερομηνία';
   if (id === 'title') return 'Τίτλος';
+  if (/^img\d+$/.test(id)) return 'Εικόνα ' + (Number(id.slice(3)) + 1);
   const i = Number(id.slice(1)); const x = sigs?.[i];
   return 'Υπογραφή ' + (i + 1) + (x?.title ? ': ' + x.title : '');
 };

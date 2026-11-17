@@ -100,6 +100,9 @@ export function headFor(st: Heads & Unit & Pick<Settings, 'headUse'>, form: SigF
   return !h || JSON.stringify(h.z) === JSON.stringify(presetZones('today', st)) ? null : h;
 }
 
+// Τα Έντυπα (με το όνομά τους) που έχουν διαλέξει αυτή την επικεφαλίδα (Report.hdId)
+export const reportsUsing = (st: { reports?: { name: string; hdId?: string }[] }, id: string): string[] => (st.reports || []).filter(r => r.hdId === id).map(r => r.name || 'Χωρίς όνομα')
+
 // ——— νέα, αντίγραφο, όνομα, σβήσιμο ———
 export function newHeadId(heads: DocHead[] | undefined, rnd: () => number = Math.random): string {
   const have = new Set((heads || []).map(h => h.id));
