@@ -25,9 +25,10 @@ import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
 import { isUnit } from '../shared/mode';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
-import { fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
-import { builtinTemplate, checkTemplate, fillDocx } from './hdDocx';
-import { cleanHd, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
+import { designMade, fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
+import { checkTemplate, makeHdDocx } from './hdDocx';
+import { headFor } from '../shared/docHead';
+import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
 import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, sheetFontSize, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
@@ -1148,19 +1149,22 @@ else {
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Ημερήσια Διαταγή: Word από το πρότυπο (δικό σου ή το έτοιμο), ή εκτύπωση χωρίς Word στην προεπισκόπηση εκτύπωσης της εφαρμογής
-    ipcMain.handle('export:hd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }) => {
+    ipcMain.handle('export:hd', async (_e, req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[]; headId?: string }) => {
       try {
         const s = store.state; const g = sigsOf(s, 'hd', req.sigs); const tags = hdTags(s.settings, req.date, cleanHd(req.doc), g.sigs ?? g.def);
         if (req.print) {
           // η ίδια προεπισκόπηση εκτύπωσης με τα Excel (Michael, 4/11): η σελίδα γίνεται ένα Excel και ανοίγει εκεί
           const r = await excel().hdBook(s, req.date, tags, HD_SECTIONS);
-          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+          const hdata = await designMade(r.data, s, 'hd', r.marks, req.headId, hdHeadDate(s.settings, req.date));
+          const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: hdata }]));
           const p = await printPreview(out);
           return p.ok ? { ok: true, file: out, warnings: [] } : { ok: false, error: 'Δεν άνοιξε η εκτύπωση: ' + p.error };
         }
         const own = s.settings.hdTpl?.file; let buf: Buffer | null = null; const warnings: string[] = [];
         if (own) { try { buf = await fs.promises.readFile(path.join(TPL_DIR, path.basename(own))); } catch { warnings.push('Το δικό σου πρότυπο Word δεν βρέθηκε: βγήκε με το έτοιμο.'); } }
-        const data = await fillDocx(buf || await builtinTemplate(), tags);
+        // επικεφαλίδα που σχεδίασες: στο σημείο {ΚΕΦΑΛΙΔΑ} του προτύπου (το έτοιμο έχει εκεί τη γραμμή «ΜΟΝΑΔΑ»), αλλιώς πρώτο στοιχείο του εγγράφου
+        const hd = headFor(s.settings, 'hd', req.headId);
+        const data = await makeHdDocx(buf, tags, hd, { dateText: hdHeadDate(s.settings, req.date), font: xlLook(s.settings).font });
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: fileNameOf(s.settings, 'hd', req.date, 'docx'), data }]));
         shell.openPath(out);
         return { ok: true, file: out, warnings };

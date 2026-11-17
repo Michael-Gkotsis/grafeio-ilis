@@ -76,6 +76,13 @@ export async function signSheets(wb: Workbook, sheets: SheetPart[], s: AppState,
 export interface MadeMark { sheet: string; key: string; head: string[]; date: string[]; title: string[]; foot: number; cols: number }
 // headId: επικεφαλίδα μόνο για αυτή τη φορά (αλλιώς η αρχική του εγγράφου, Ρυθμίσεις › Επικεφαλίδες εγγράφων)· date: η ημερομηνία του εγγράφου
 // για το στοιχείο «τόπος και ημερομηνία» όταν το φύλλο δεν έχει ήδη ημερομηνία
+// Μόνο η επικεφαλίδα που σχεδίασες, χωρίς υπογραφές (Ημερήσια Διαταγή για εκτύπωση: οι υπογραφές είναι ήδη στη σελίδα)
+export async function designMade(data: Buffer, s: AppState, form: SigForm, marks: MadeMark[], headId: string | null | undefined, dateText: string): Promise<Buffer> {
+  const hd = headFor(s.settings, form, headId); if (!hd) return data;
+  const wb = await Workbook.open(data);
+  for (const m of marks) { if (wb.hasSheet(m.sheet)) await applyHead(wb, await wb.sheet(m.sheet), s, hd, { cols: m.cols, old: m.head, dates: m.date, dateText }); }
+  return wb.save();
+}
 export async function signMade(data: Buffer, s: AppState, form: SigForm, marks: MadeMark[], over?: Sig[] | null, headId?: string | null, date?: ISODate): Promise<{ data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
   const wb = await Workbook.open(data); wb.widen = true; const warnings: string[] = [];
   const g = sigsOf(s, form, over); const list = g.sigs ?? g.def;
