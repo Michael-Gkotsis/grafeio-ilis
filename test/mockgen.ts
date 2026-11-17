@@ -6,6 +6,13 @@
 import ExcelJS from 'exceljs';
 import type { SheetModel } from '../src/shared/sheetModel';
 import { rng, int, pick, chance, shuffle, col as colName, type Rnd } from './tplgen';
+import { genHkState, DAYS } from './hk-gen';
+import { activePeople, hkaiCounts, hkRankOf } from '../src/shared/rules';
+import { hkRowName } from '../src/shared/unit';
+import { phraseKey } from '../src/shared/lexicon';
+import type { AppState } from '../src/shared/domain';
+import type { ISODate } from '../src/shared/dates';
+import type { TplProfile } from '../src/shared/tplStore';
 
 export type MockKind = 'hkai' | 'hkal' | 'hkal-countifs' | 'duty-grid' | 'service-list' | 'roster' | 'weapons'
   | 'real-hkai-2509' | 'real-hkai-own-cols' | 'real-hkal-countifs' | 'real-ypiresies' | 'real-ypiresies-kath' | 'real-dynamologio' | 'real-oplismos';
@@ -585,4 +592,180 @@ export async function genRosterEdge(seed: number): Promise<EdgeRoster> {
   if (chance(r, 0.8)) { y += int(r, 0, 2); s.put(y, left + 1, 'ΣΥΝΟΛΟ ΑΤΟΜΩΝ'); s.put(y, left + w - 1, people.length); y++; desc.push('υποσέλιδο ΣΥΝΟΛΟ'); }
   if (chance(r, 0.5)) { y += 2; s.put(y, left, 'ΥΠΟΜΝΗΜΑ'); s.put(y + 1, left, 'ΕΠΙΛΟΓΗ ΚΑΤΑΣΤΑΣΗΣ'); s.put(y + 2, left, 'ΘΑΛΑΜΟΣ 1'); s.put(y + 2, left + 1, 4); desc.push('πίνακας μετά το σύνολο'); }
   return { buf: Buffer.from(await wb.xlsx.writeBuffer()), people, vacant, mode, desc };
+}
+
+
+// ------------------------------------------------------------------ ΗΚΑΙ / ΗΚΑΛ to be FILLED (adaptive fill, PR 3)
+// A random unit template with a random app state. The truth of every cell comes from hkaiCounts (the numbers of the bundled form), never from the
+// rule engine: plain rows read hkaiCounts.rank, a row narrowed by origin reads the people of hkaiCounts.cols, a row split by rank reads the cadre of
+// hkaiCounts.cadre. Variants: own columns (mapped by a profile rule, and unmapped), own rows, rows with words in brackets, missing columns and rows,
+// reordered columns, blank/«·» separator columns, totals as formulas / plain numbers / missing, COUNTIFS templates over a data sheet in three
+// word styles, Λόχος words.
+export interface FillFlags {
+  lochos: boolean; own: boolean; originSplit: boolean; rankSplit: boolean; countifs: boolean; totals: 'formulas' | 'numbers' | 'missing';
+  seps: boolean; ownCols: number; drop: number; twoHeader: boolean; words: 'abbr' | 'labels' | 'accent'; typo: boolean; dropRows: boolean; unknownRow: boolean; dupHeader: boolean; hospitalSplit: boolean;
+}
+export interface FillMock {
+  seed: number; buf: Buffer; s: AppState; date: ISODate; profile: TplProfile | null; flags: FillFlags; desc: string[]; sheet: string;
+  truth: Map<string, number>;                                   // 'r:c' → what the cell must show (hkaiCounts), 0-based
+  formulaCells: Set<string>;                                    // cells holding a formula in the template
+  unmappedCols: { c: number; text: string; kind: string; data: boolean }[];   // columns the engine must NOT write
+  dataSheet?: string;
+}
+interface Q { force: number; attached: number; st: (k: string) => number }
+interface TRow { label: string; q: Q | null; total?: 'officers' | 'soldiers' | 'grand'; word?: string; unknown?: boolean }
+interface TCol { kind: 'placed' | 'attached' | 'state' | 'sum' | 'sumK' | 'sumA' | 'avail' | 'own' | 'unmapped' | 'blank' | 'sep'; key?: string; text: string; group: 'force' | 'kol' | 'abs' | null; word?: string; data?: boolean }
+const KOL = ['yp', 'ey', 'tim', 'os', 'mag', 'sid', 'kin'], ABS = ['ka', 'an', 'eid', 'nos', 'prat', 'adik', 'fp', 'fyl', 'apal', 'ekp', 'allh'];
+const ACC_RANK: Record<string, string> = { 'Επίλαρχοι': 'Ταγματάρχης', 'Ίλαρχοι': 'Λοχαγός', 'Ανθυπίλαρχοι-Ανθλγοι': 'Ανθυπολοχαγός', 'Ανθυπασπιστές': 'Ανθυπασπιστής', 'ΔΕΑ': 'ΔΕΑ', 'Αρχιλοχίες': 'Αρχιλοχίας', 'Επιλοχίες': 'Επιλοχίας', 'Λοχίες': 'Λοχίας', 'Δεκανείς': 'Δεκανέας', 'ΕΠΟΠ Στρατιώτης': 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης': 'ΟΒΑ Στρατιώτης', 'Στρατιώτες': 'Στρατιώτης', 'Ειδικοί Οδηγοί': 'ΕΙΔ ΟΔΗΓΟΣ' };
+const ACC_STATUS: Record<string, string> = { ka: 'Κανονική Άδεια', an: 'Αναρρωτική Άδεια', eid: 'Ειδική Άδεια', nos: 'Νοσοκομείο', apal: 'Απαλλαγή', ekp: 'Εκπαίδευση', fp: 'Φύλλο Πορείας', adik: 'Αδικαιολογήτως Απών' };
+const OWN_COLS: { text: string; key?: string; split?: boolean }[] = [{ text: 'Βραχονησίδα', key: 'fyl' }, { text: 'Σιτιστές - Γραφείς - Μάγειρες', key: 'mag' }, { text: 'ΛΑΦ Πόλης' }, { text: 'ΕΚΕ' }, { text: 'Σε ειδική Υπηρεσίας' }];
+
+export async function genFillMock(seed: number, force: Partial<FillFlags> = {}): Promise<FillMock> {
+  const r = rng(seed * 6700417 + 91);
+  const f: FillFlags = {
+    lochos: chance(r, 0.3), own: chance(r, 0.3), originSplit: false, rankSplit: false, countifs: chance(r, 0.25),
+    totals: pick(r, ['formulas', 'formulas', 'numbers', 'missing'] as const), seps: chance(r, 0.35), ownCols: pick(r, [0, 0, 1, 2]), drop: int(r, 0, 4), twoHeader: chance(r, 0.5),
+    words: pick(r, ['abbr', 'labels', 'accent'] as const), typo: chance(r, 0.2), dropRows: chance(r, 0.3), unknownRow: chance(r, 0.15), dupHeader: chance(r, 0.15), hospitalSplit: chance(r, 0.15), ...force
+  };
+  if (!f.countifs && !force.originSplit) f.originSplit = chance(r, 0.3);
+  if (f.countifs) f.originSplit = false;
+  if (!f.originSplit && f.lochos && !force.rankSplit) f.rankSplit = chance(r, 0.5);
+  const s = genHkState(seed, { own: f.own, lochos: f.lochos, cadre: !f.originSplit, nofixed: f.originSplit, attached: f.countifs ? chance(r, 0.2) : true, plainRanks: f.countifs && chance(r, 0.6) });
+  const d = DAYS[int(r, 0, 5)]; const h = hkaiCounts(s, d); const lists = s.settings.lists; const desc: string[] = [];
+  const stateOf = new Map<number, string>(); for (const [k, ps] of Object.entries(h.cols)) for (const p of ps) stateOf.set(p.id, k);
+  const plainQ = (key: string): Q => ({ force: h.rank[key].n, attached: h.rank[key].attached, st: k => h.rank[key].c[k] || 0 });
+  const originQ = (key: string, origins: string[]): Q => { const ps = activePeople(s).filter(p => hkRankOf(p.rank, lists, p.origin) === key && origins.includes(p.origin || '')); return { force: ps.length, attached: ps.filter(p => p.attached).length, st: k => ps.filter(p => stateOf.get(p.id) === k).length }; };
+  const rankQ = (rank: string): Q => { const cs = (s.cadreList || []).filter(c => c.active && c.rank === rank); return { force: cs.length, attached: 0, st: k => (h.cadre[k] || []).filter(c => c.rank === rank).length }; };
+  const lab = (key: string) => (f.lochos ? hkRowName(key, 'lochos') : key);
+  const sp = (t: string) => (f.typo ? spell(r, t, { typo: true }) : t);
+  const aw = (key: string, rank?: string) => (f.words === 'accent' ? ACC_RANK[key] : f.words === 'abbr' ? (key === 'Ειδικοί Οδηγοί' ? 'ΕΙΔ ΟΔΗΓΟΣ' : RANK_WORDS['hkrow:' + key]?.[0]) : undefined) ?? rank;
+  // ---- rows
+  const off: TRow[] = [], nco: TRow[] = [];
+  for (const key of ['Επίλαρχοι', 'Ίλαρχοι', 'Ανθυπίλαρχοι-Ανθλγοι', 'Ανθυπασπιστές', 'ΔΕΑ']) {
+    if (f.dropRows && key === 'ΔΕΑ') continue;
+    if (key === 'Ανθυπίλαρχοι-Ανθλγοι' && f.rankSplit) { off.push({ label: 'Υπολοχαγοί', q: rankQ('ΥΠΛΓΟΣ'), word: f.words === 'accent' ? 'Υπολοχαγός' : 'ΥΠΛΓΟΣ' }, { label: 'Ανθυπολοχαγοί', q: rankQ('ΑΝΘΛΓΟΣ'), word: f.words === 'accent' ? 'Ανθυπολοχαγός' : 'ΑΝΘΛΓΟΣ' }); continue; }
+    off.push({ label: sp(lab(key)), q: plainQ(key), word: aw(key) });
+  }
+  if (f.unknownRow) { off.splice(2, 0, { label: 'Επικουρικοί', q: null, unknown: true }); desc.push('άγνωστη γραμμή «Επικουρικοί» με στοιχεία'); }
+  for (const key of ['Αρχιλοχίες', 'Επιλοχίες', 'Λοχίες', 'Δεκανείς', 'ΕΠΟΠ Στρατιώτης', 'ΟΒΑ Στρατιώτης', 'Στρατιώτες']) {
+    if (f.dropRows && key === 'Αρχιλοχίες') continue;
+    if (key === 'Λοχίες' && f.originSplit) { nco.push({ label: 'Λχίες (ΕΠΟΠ)', q: originQ(key, ['ΕΠΟΠ']) }, { label: 'Λχίες (ΕΦ/ΟΒΑ)', q: originQ(key, ['ΕΦ', 'ΟΒΑ']) }); continue; }
+    nco.push({ label: sp(lab(key)), q: plainQ(key), word: aw(key, key === 'ΕΠΟΠ Στρατιώτης' ? 'ΕΠΟΠ ΣΤΡΤΗΣ' : undefined) });
+    if (key === 'Δεκανείς' && f.own) nco.push({ label: 'Ειδικοί Οδηγοί', q: plainQ('Ειδικοί Οδηγοί'), word: aw('Ειδικοί Οδηγοί') });
+  }
+  const rows: TRow[] = [...off]; if (f.totals !== 'missing') rows.push({ label: pick(r, ['ΣΥΝΟΛΟ ΑΞΚΩΝ', 'Σύνολο αξκων']), q: null, total: 'officers' });
+  rows.push(...nco); if (f.totals !== 'missing') rows.push({ label: 'ΣΥΝΟΛΟ ΟΠΛΙΤΩΝ', q: null, total: 'soldiers' }, { label: 'ΓΕΝΙΚΟ ΣΥΝΟΛΟ', q: null, total: 'grand' });
+  // ---- columns
+  const need = ['placed', 'attached', 'yp', 'ey', 'ka', 'an'];
+  const cwords = (k: string) => (f.words === 'accent' ? ACC_STATUS[k] : STATUS_WORDS[k]?.[0]);
+  let pool = [...KOL, ...ABS].filter(k => (!f.countifs || cwords(k) || KOL.includes(k)) && HKC.some(c => c.key === k));
+  if (f.countifs) pool = pool.filter(k => !!cwords(k) || need.includes(k));
+  pool = shuffle(r, pool.filter(k => !need.includes(k))).slice(0, Math.max(0, pool.length - need.length - f.drop)); pool.push(...need.filter(k => k !== 'placed' && k !== 'attached'));
+  const def = (k: string) => HKC.find(c => c.key === k)!;
+  const nm = (k: string) => sp(pick(r, def(k).names));
+  const mk = (k: string, group: TCol['group']): TCol => ({ kind: 'state', key: k, text: nm(k), group, word: cwords(k) });
+  const colsT: TCol[] = [];
+  colsT.push({ kind: 'placed', text: nm('placed'), group: 'force' }, { kind: 'attached', text: nm('attached'), group: 'force' });
+  if (f.totals !== 'missing') colsT.push({ kind: 'sum', text: f.twoHeader ? 'Σύνολο' : 'Σύνολο δύναμης', group: 'force' });
+  const ownTaken = new Set<string>(); const ownCols: TCol[] = []; const profileCols: Record<string, unknown> = {};
+  const wantOwn = shuffle(r, OWN_COLS).slice(0, f.ownCols);
+  for (const o of wantOwn) {
+    if (o.key && (pool.includes(o.key) || ownTaken.has(o.key)) && !o.split) { ownCols.push({ kind: 'unmapped', text: o.text, group: KOL.includes(o.key) ? 'kol' : 'abs', data: true }); continue; }
+    if (o.key) { ownTaken.add(o.key); ownCols.push({ kind: 'own', key: o.key, text: o.text, group: KOL.includes(o.key) ? 'kol' : 'abs' }); profileCols[phraseKey(o.text)] = { t: 'state', keys: [o.key] }; }
+    else ownCols.push({ kind: 'unmapped', text: o.text, group: 'kol', data: true });
+  }
+  if (f.hospitalSplit && !pool.includes('nos')) ownCols.push({ kind: 'unmapped', text: 'Νοσοκομείο ΧΧ', group: 'abs', data: true }, { kind: 'unmapped', text: '401 ΓΣΝΑ ΧΧ', group: 'abs', data: true });
+  else if (f.hospitalSplit) { const i = pool.indexOf('nos'); pool.splice(i, 1); ownCols.push({ kind: 'unmapped', text: 'Νοσοκομείο ΧΧ', group: 'abs', data: true }, { kind: 'unmapped', text: '401 ΓΣΝΑ ΧΧ', group: 'abs', data: true }); }
+  const kolK = pool.filter(k => KOL.includes(k)), absK = pool.filter(k => ABS.includes(k));
+  const sepCols = (): TCol[] => (f.seps ? (chance(r, 0.5) ? [{ kind: 'sep' as const, text: '·', group: null }] : Array.from({ length: int(r, 2, 3) }, () => ({ kind: 'sep' as const, text: '', group: null }))) : []);
+  colsT.push(...sepCols(), ...kolK.map(k => mk(k, 'kol')), ...ownCols.filter(o => o.group === 'kol'));
+  if (f.totals !== 'missing') colsT.push({ kind: 'sumK', text: f.twoHeader ? 'Σύνολο' : 'Σύνολο κωλυομένων', group: 'kol' });
+  colsT.push(...sepCols(), ...absK.map(k => mk(k, 'abs')), ...ownCols.filter(o => o.group === 'abs'));
+  if (f.totals !== 'missing') colsT.push({ kind: 'sumA', text: f.twoHeader ? 'Σύνολο' : 'Σύνολο απόντων', group: 'abs' }, { kind: 'avail', text: 'Διαθέσιμοι για εκπαίδευση', group: null });
+  if (f.dupHeader) { const i = colsT.findIndex(c => c.kind === 'state'); if (i >= 0) { colsT.splice(i + 1, 0, { kind: 'unmapped', text: colsT[i].text, group: colsT[i].group, data: true }); desc.push('διπλή επικεφαλίδα'); } }
+  if (chance(r, 0.15)) { const i = int(r, 3, colsT.length - 2); if (colsT[i].kind === 'state') colsT.splice(i, 0, { kind: 'blank', text: '', group: colsT[i].group, data: true }); }
+  // ---- workbook
+  const wb = new ExcelJS.Workbook(); const sheet = pick(r, ['ΚΑΤΑΣΤΑΣΗ', 'Εμπρός Όψη', 'ΗΚΑΙ ' + seed]); const S1 = new S(wb.addWorksheet(sheet));
+  const top = int(r, 2, 6), left = int(r, 0, 2); const hdr = f.twoHeader ? 2 : 1; const first = top + hdr;
+  const colAt: number[] = []; let x = left + 1; for (let i = 0; i < colsT.length; i++) { colAt.push(x); x++; }
+  S1.put(top, left, 'ΒΑΘΜΟΙ', { b: true, box: true }); S1.merge(top, left, top + hdr - 1, left);
+  colsT.forEach((c, i) => {
+    const cx = colAt[i];
+    if (c.kind === 'sep') { if (c.text) S1.put(top, cx, c.text); return; }
+    if (hdr === 2 && c.group) {
+      const prev = colsT[i - 1], isFirst = !prev || prev.group !== c.group || prev.kind === 'sep';
+      if (isFirst) { let j = i; while (j + 1 < colsT.length && colsT[j + 1].group === c.group && colsT[j + 1].kind !== 'sep') j++; S1.put(top, cx, { force: 'ΔΥΝΑΜΗ', kol: 'ΚΩΛΥΟΜΕΝΟΙ', abs: 'ΑΠΟΝΤΕΣ' }[c.group], { b: true, box: true }); S1.merge(top, cx, top, colAt[j]); }
+      if (c.text) S1.put(top + 1, cx, c.text, { box: true });
+    } else if (c.text) { S1.put(top, cx, c.text, { b: true, box: true }); if (hdr === 2) S1.merge(top, cx, top + 1, cx); }
+  });
+  const rowAt: number[] = rows.map((_, i) => first + i); const last = first + rows.length - 1;
+  const truth = new Map<string, number>(); const formulaCells = new Set<string>(); const stale = () => (chance(r, 0.5) ? int(r, 1, 9) : null);
+  const ds = 'Παρουσιολόγιο'; let dataCols: { rank: number; status: number } | null = null;
+  const q = (c: TCol, qq: Q): number | null => {
+    switch (c.kind) {
+      case 'placed': return qq.force - qq.attached; case 'attached': return qq.attached;
+      case 'state': case 'own': return qq.st(c.key!);
+      case 'sum': return qq.force; case 'sumK': return KOL.reduce((a, k) => a + qq.st(k), 0); case 'sumA': return ABS.reduce((a, k) => a + qq.st(k), 0);
+      case 'avail': return qq.force - ABS.reduce((a, k) => a + qq.st(k), 0);
+      default: return null;
+    }
+  };
+  // criteria that point at the labels: the word counted is the label itself
+  if (f.countifs && f.words === 'labels') { for (const x of rows) if (!x.total && !x.unknown) x.word = x.label; for (const c of colsT) if (c.kind === 'state') c.word = c.text; }
+  if (f.countifs) {
+    const D = new S(wb.addWorksheet(ds)); const dh = int(r, 1, 4), dl = int(r, 0, 2);
+    ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΚΑΤΑΣΤΑΣΗ', 'ΑΜ', 'ΤΗΛΕΦΩΝΟ'].forEach((t, i) => D.put(dh, dl + i, t, { b: true, box: true }));
+    dataCols = { rank: dl + 1, status: dl + 3 };
+    const stat = [...new Set(colsT.map(c => c.word).filter(Boolean) as string[]), 'ΠΑΡΩΝ'].join(',');
+    const samples = int(r, 5, 12); for (let i = 0; i < samples; i++) { D.put(dh + 1 + i, dl, i + 1); D.put(dh + 1 + i, dl + 1, pick(r, ['ΑΛΛΟΣ ΒΑΘΜΟΣ', 'ΤΧΗΣ', 'ΣΤΡΤΗΣ'])); D.put(dh + 1 + i, dl + 2, 'ΔΕΙΓΜΑ ΟΝΟΜΑ' + i); D.put(dh + 1 + i, dl + 3, 'ΠΑΡΩΝ'); D.put(dh + 1 + i, dl + 4, '9' + i); }
+    if (stat.length < 250) D.list(dh + 1, dl + 3, dh + 60, dl + 3, '"' + stat + '"');
+    desc.push('COUNTIFS πάνω από «' + ds + '» (' + f.words + ')');
+  }
+  const hdrLeaf = top + hdr - 1; const refMode = f.countifs && f.words === 'labels';
+  const A = (c: number) => '$' + colName(c + 1), Rr = (rr: number) => '$' + (rr + 1);
+  rows.forEach((row, i) => {
+    const y = rowAt[i]; S1.put(y, left, row.label, { box: true });
+    colsT.forEach((c, k) => {
+      const cx = colAt[k]; if (c.kind === 'sep') return;
+      if (row.total || row.unknown || !row.q) {
+        if (row.unknown) { if (c.kind !== 'blank') S1.put(y, cx, int(r, 1, 9), { box: true }); return; }
+        // total rows
+        if (c.kind === 'blank' || c.kind === 'unmapped') return;
+        const members = rows.map((m, j) => ({ m, j })).filter(z => !z.m.total && (row.total === 'grand' || (row.total === 'officers' ? z.j < i : z.j > rows.findIndex(t => t.total === 'officers') && z.j < i)));
+        if (f.totals === 'formulas') {
+          const run = (a: number, b: number) => (a === b ? colName(cx + 1) + (rowAt[a] + 1) : colName(cx + 1) + (rowAt[a] + 1) + ':' + colName(cx + 1) + (rowAt[b] + 1));
+          const oi = rows.findIndex(t => t.total === 'officers'), si = rows.findIndex(t => t.total === 'soldiers');
+          const fx = row.total === 'officers' ? 'SUM(' + run(0, oi - 1) + ')' : row.total === 'soldiers' ? 'SUM(' + run(oi + 1, si - 1) + ')' : colName(cx + 1) + (rowAt[oi] + 1) + '+' + colName(cx + 1) + (rowAt[si] + 1);
+          S1.put(y, cx, null, { f: fx, box: true }); formulaCells.add(y + ':' + cx);
+        } else S1.put(y, cx, stale(), { box: true });
+        if (members.some(z => !z.m.q)) return;   // an unknown row inside: no truth
+        let sum = 0, ok = true; for (const z of members) { const v = q(c, z.m.q!); if (v == null) ok = false; else sum += v; } if (ok) truth.set(y + ':' + cx, sum);
+        return;
+      }
+      const qq = row.q;
+      if (c.kind === 'unmapped' || c.kind === 'blank') { S1.put(y, cx, i % 3 === 0 ? int(r, 1, 9) : stale(), { box: true }); return; }
+      let fx: string | undefined;
+      const fRef = (cc: number) => colName(colAt[cc] + 1) + (y + 1);
+      if (c.kind === 'sum' && f.totals === 'formulas') fx = 'SUM(' + fRef(colsT.findIndex(z => z.kind === 'placed')) + ',' + fRef(colsT.findIndex(z => z.kind === 'attached')) + ')';
+      if (c.kind === 'sumK' && f.totals === 'formulas') fx = 'SUM(' + colsT.map((z, j) => (z.kind === 'state' && KOL.includes(z.key!) ? fRef(j) : '')).filter(Boolean).concat(colsT.map((z, j) => (z.kind === 'own' && KOL.includes(z.key!) ? fRef(j) : '')).filter(Boolean)).join(',') + ')';
+      if (c.kind === 'sumA' && f.totals === 'formulas') fx = 'SUM(' + colsT.map((z, j) => ((z.kind === 'state' || z.kind === 'own') && ABS.includes(z.key!) ? fRef(j) : '')).filter(Boolean).join(',') + ')';
+      if (c.kind === 'avail' && f.totals === 'formulas') fx = fRef(colsT.findIndex(z => z.kind === 'sum')) + '-' + fRef(colsT.findIndex(z => z.kind === 'sumA'));
+      if (f.countifs && dataCols && row.word && (c.kind === 'placed' || (c.kind === 'state' && c.word))) {
+        const sh = "'" + ds + "'!"; const rc = colName(dataCols.rank + 1), sc = colName(dataCols.status + 1);
+        const rcrit = refMode ? A(left) + (y + 1) : '"' + row.word + '"'; const scrit = refMode ? colName(cx + 1) + Rr(hdrLeaf) : '"' + c.word + '"';
+        fx = c.kind === 'placed' ? 'COUNTIF(' + sh + rc + ':' + rc + ',' + rcrit + ')' : 'COUNTIFS(' + sh + rc + ':' + rc + ',' + rcrit + ',' + sh + sc + ':' + sc + ',' + scrit + ')';
+      }
+      if (fx && fx.endsWith('SUM()')) fx = undefined;
+      if (fx) { S1.put(y, cx, null, { f: fx, box: true }); formulaCells.add(y + ':' + cx); }
+      else S1.put(y, cx, (c.kind === 'sum' || c.kind === 'sumK' || c.kind === 'sumA' || c.kind === 'avail') && f.totals === 'numbers' ? int(r, 1, 30) : stale(), { box: true });
+      const v = q(c, qq); if (v != null) truth.set(y + ':' + cx, v);
+    });
+  });
+  S1.put(last + 3, left + 2, 'Αυλώνας, 25/09/26');
+  // in COUNTIFS mode a total/derived cell without its parts keeps the template's own meaning: the truth stays the definition (differences must be reported)
+  const unmappedCols = colsT.map((c, i) => ({ c: colAt[i], text: c.text, kind: c.kind, data: !!c.data })).filter(c => c.kind === 'unmapped' || c.kind === 'blank');
+  const profile: TplProfile | null = Object.keys(profileCols).length ? { v: 1, id: 'hkai-1', kind: f.lochos ? 'hkal' : 'hkai', fp: { sheets: [], regions: [] }, elements: [], words: {}, ignore: [], rules: { cols: profileCols, rows: {} } } : null;
+  const buf = Buffer.from(await wb.xlsx.writeBuffer());
+  desc.unshift(JSON.stringify({ ...f, rows: rows.length, cols: colsT.length }));
+  return { seed, buf, s, date: d, profile, flags: f, desc, sheet, truth, formulaCells, unmappedCols, ...(f.countifs ? { dataSheet: ds } : {}) };
 }

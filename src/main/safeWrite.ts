@@ -7,7 +7,8 @@
 import { Workbook, colName, type Sheet } from './xlsx';
 import { upper } from '../shared/text';
 
-export interface PlannedWrite { sheet: string; r: number; c: number; value: string | number | null }
+// exact: the text is a word the template's own formulas compare with (COUNTIF criteria): written as it is, not turned into capitals
+export interface PlannedWrite { sheet: string; r: number; c: number; value: string | number | null; exact?: boolean }
 export type Refusal = 'formula' | 'label' | 'merge-child' | 'outside' | 'no-sheet' | 'bad-value' | 'conflict';
 export interface WriteResult { sheet: string; r: number; c: number; ref: string; value: string | number | null }
 export interface Refused extends WriteResult { reason: Refusal; detail: string }
@@ -16,6 +17,9 @@ export interface SafeOpts {
   margin?: number;                                  // rows/columns allowed beyond the used area (default 2)
   ours?: Record<string, string>;                    // 'sheet|r:c' -> text this layer wrote before (TplProfile.ours)
   dryRun?: boolean;
+  // DATA AREAS (0-based, inclusive): value cells inside them (a list of people the app rewrites) may be replaced even when they hold text and may extend
+  // past the used area. Formulas and merge children are still refused; header rows must stay outside the boxes.
+  dataBoxes?: { sheet: string; r1: number; c1: number; r2: number; c2: number }[];
 }
 export const oursKey = (sheet: string, r: number, c: number) => sheet + '|' + r + ':' + c;
 const cellText = (ws: Sheet, ref: string): string => {
@@ -26,6 +30,7 @@ const cellText = (ws: Sheet, ref: string): string => {
 
 export async function safeWrite(wb: Workbook, plan: PlannedWrite[], o: SafeOpts = {}): Promise<WriteReport> {
   const margin = o.margin ?? 2; const ours = o.ours || {};
+  const inBox = (w: PlannedWrite) => !!o.dataBoxes?.some(b => b.sheet === w.sheet && w.r >= b.r1 && w.r <= b.r2 && w.c >= b.c1 && w.c <= b.c2);
   const rep: WriteReport = { dryRun: !!o.dryRun, written: [], refused: [], ours: {} };
   const info = new Map<string, { ws: Sheet; rows: number; cols: number; merges: ReturnType<Sheet['merges']> }>();   // the used area is the one BEFORE the plan
   const planned = new Map<string, string>();       // two writes into one cell: the first wins, the second is a conflict
@@ -40,15 +45,16 @@ export async function safeWrite(wb: Workbook, plan: PlannedWrite[], o: SafeOpts 
     const ws = si.ws;
     const k = oursKey(w.sheet, w.r, w.c);
     if (planned.has(k)) { no('conflict', 'δύο εγγραφές στο ίδιο κελί'); continue; }
-    if (w.r + 1 > si.rows + margin || w.c + 1 > si.cols + margin) { no('outside', 'πολύ έξω από την περιοχή του φύλλου'); continue; }
+    const box = inBox(w);
+    if (!box && (w.r + 1 > si.rows + margin || w.c + 1 > si.cols + margin)) { no('outside', 'πολύ έξω από την περιοχή του φύλλου'); continue; }
     const m = si.merges.find(x => w.r + 1 >= x.r1 && w.r + 1 <= x.r2 && w.c + 1 >= x.c1 && w.c + 1 <= x.c2);
     if (m && (m.r1 !== w.r + 1 || m.c1 !== w.c + 1)) { no('merge-child', 'μέσα σε συγχώνευση, όχι πάνω αριστερά'); continue; }
     if (ws.hasFormula(ref)) { no('formula', 'το κελί έχει τύπο'); continue; }
     const cur = cellText(ws, ref);
-    if (cur && cur !== (ours[k] ?? null)) { no('label', 'το κελί έχει κείμενο που δεν γράφτηκε από την εφαρμογή'); continue; }
+    if (!box && cur && cur !== (ours[k] ?? null)) { no('label', 'το κελί έχει κείμενο που δεν γράφτηκε από την εφαρμογή'); continue; }
     planned.set(k, ref);
-    const text = typeof w.value === 'string' ? upper(w.value) : null;
-    if (!o.dryRun) ws.set(ref, w.value);
+    const text = typeof w.value === 'string' ? (w.exact ? w.value.trim() : upper(w.value)) : null;
+    if (!o.dryRun) ws.set(ref, w.value, !!w.exact);
     rep.written.push({ ...res, value: text ?? w.value });
     // the cell stays ours while it holds the text we wrote; a number or an empty cell is not remembered
     if (text) rep.ours[k] = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim();

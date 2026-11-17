@@ -8,6 +8,9 @@ import { readBookModel } from '../src/main/bookModel';
 import { detectBook, describeShape, type Region } from '../src/shared/shape';
 import type { Match } from '../src/shared/lexicon';
 import { readRoster, countKinds } from '../src/shared/rosterRead';
+import { convertXls } from '../src/main/xlsConvert';
+import { fillAdaptive, pickFront } from '../src/main/fillAdaptive';
+import { genHkState, DAYS } from './hk-gen';
 
 const dir = process.env.REAL_TEMPLATES_DIR;
 function files(d: string, depth = 0): string[] {
@@ -39,5 +42,31 @@ describe.skipIf(!dir)('real unit files (local only)', () => {
       expect(book.sheets.length).toBeGreaterThan(0);
     }
     console.log('TOTAL sure=' + tot.sure + ' suggest=' + tot.suggest + ' unknown=' + tot.unknown);
+  }, 600000);
+});
+
+// Dry-run of the adaptive fill on every real ΗΚΑΙ/ΗΚΑΛ-like file with a generated state. Prints COUNTS only (never a word of the files).
+describe.skipIf(!dir)('adaptive fill, dry run on the real files (local only)', () => {
+  it('fills every ΗΚΑΙ/ΗΚΑΛ table found, writes nothing, reports counts', async () => {
+    let n = 0;
+    for (const f of files(dir!)) {
+      let buf: Buffer; let cleanup = () => {};
+      if (/\.xls$/i.test(f)) { const c = await convertXls(f); if (!c) continue; buf = fs.readFileSync(c.file); cleanup = c.cleanup; } else buf = fs.readFileSync(f);
+      try {
+        const book = await readBookModel(f); if (!pickFront(detectBook(book))) continue;
+        n++;
+        for (const lochos of [false, true]) {
+          const s = genHkState(3, { lochos });
+          const { buffer, report: r } = await fillAdaptive(buf, s, DAYS[2], null, { dryRun: true });
+          expect(buffer.equals(buf)).toBe(true);
+          console.log('real file #' + n + (lochos ? ' (Λόχος state)' : ' (Ίλη state)') + ': would write ' + r.written.length + ' · refused ' + r.refused.length + ' · formulas kept ' + r.kept
+            + ' · unmapped columns ' + r.unmappedCols.length + ' (with data ' + r.unmappedCols.filter(x => x.hasData).length + ') · unmapped rows ' + r.unmappedRows.length + ' (with data ' + r.unmappedRows.filter(x => x.hasData).length + ')'
+            + ' · people without a row ' + r.unplacedRows.reduce((a, x) => a + x.n, 0) + ' · people in a state without a column ' + r.unplacedStates.reduce((a, x) => a + x.n, 0) + ' · totals skipped ' + r.totalsSkipped.length
+            + (r.data ? ' · data sheet: ' + r.data.rows + ' people rows, ' + r.data.unwritable.length + ' not placed, ' + r.data.vocab.length + ' vocabulary words' : '')
+            + ' · cross-check: ' + r.cross.matched + '/' + r.cross.checked + ' match, ' + r.cross.mismatches.length + ' differ, ' + r.cross.unevaluated + ' not evaluable');
+        }
+      } finally { cleanup(); }
+    }
+    console.log('ΗΚΑΙ/ΗΚΑΛ-like files filled in dry run: ' + n);
   }, 600000);
 });

@@ -1480,40 +1480,64 @@ export interface HkaiRow { n: number; attached: number; c: Record<string, number
 export const HK_MANUAL: [string, string][] = [['os', 'Ο/Σ'], ['sid', 'Σιδ.'], ['kin', 'Κίν.'], ['eid', 'Ειδ.άδ.'], ['prat', 'Πρατ.'], ['adik', 'Αδικ.'], ['fp', 'Φ.Πορ.'], ['fyl', 'Φυλ.'], ['apal', 'Απαλ.'], ['ekp', 'Εκπ.'], ['allh', 'Άλλη Μ.'], ['ab', 'Μισθοτρ.']];
 // cadre: τα στελέχη ανά στήλη (καρτέλα Στελέχη), για να φαίνονται με ονόματα όπως οι στρατιώτες
 export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Cadre[]>; rank: Record<string, HkaiRow>; noCol: { p: Person; kind: string }[]; kol: number; apo: number; total: number; avail: number; guardsN: number; soldiers: number; cadreN: number }
-export function hkaiCounts(s: AppState, date: ISODate): Hkai {
+// Who is in which row and which column of the ΗΚΑΙ at 08:00: ONE classification, shared by hkaiCounts (the numbers of the bundled form)
+// and the adaptive rule engine (src/shared/hkRules.ts). col = the key of the column the person counts in (null = nowhere).
+export interface HkWho { kind: 'soldier' | 'cadre'; p?: Person; c?: Cadre; row: string; col: string | null; attached: boolean; origin: string; rank: string }
+export interface HkClass { who: HkWho[]; rows: string[]; fixed: Record<string, number>; manual: Record<string, Record<string, number>>; noCol: { p: Person; kind: string }[] }
+export function hkaiClassify(s: AppState, date: ISODate): HkClass {
   const g = s.guards[date] || {};
   const onDuty = new Map<number, DutyKind>();
   for (const k in g) { const p = postBy(s, k); if (p) onDuty.set(g[k], p.kind); }
-  const cols: Record<string, Person[]> = {};
-  [...HK_K, ...HK_A].forEach(([k]) => (cols[k] = []));
-  const rank: Record<string, HkaiRow> = {};
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
   const cl = (s.cadreList || []).filter(c => c.active);
   const lists = s.settings.lists;
-  hkRowList(lists).forEach(r => (rank[r] = { n: cl.length ? 0 : s.settings.cadre[r] || 0, attached: 0, c: {} }));
+  const rows = hkRowList(lists); const known = new Set(rows);
+  const fixed: Record<string, number> = {}; for (const r of rows) fixed[r] = cl.length ? 0 : s.settings.cadre[r] || 0;
+  const who: HkWho[] = [];
   // κατάσταση στελέχους = στήλη της ΗΚΑΙ: στους κωλυόμενους (υπηρεσία, ΕΥ…) ή στους απόντες (άδειες…)
-  let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   for (const c of cl) {
-    const hk = rank[c.hk] ? c.hk : guessHk(c.rank, lists, c.origin); const r = rank[hk] ? hk : 'Λοχίες'; rank[r].n++;
+    const hk = known.has(c.hk) ? c.hk : guessHk(c.rank, lists, c.origin); const r = known.has(hk) ? hk : 'Λοχίες';
     const a = cadreAbsOn(s, c.id, date);
     // ΕΠΟΠ/ΟΒΑ με υπηρεσίες: η κατάσταση που έγραψες, αλλιώς η θέση της μέρας στις Υπηρεσίες (η απαλλαγή μόνο με το χέρι)
     const dk = c.pid != null ? onDuty.get(c.pid) : undefined;
     const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || rosterCol(s, c.id, date) || (dk ? (dk === 'mg' ? 'mag' : 'yp') : undefined);
-    if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
+    who.push({ kind: 'cadre', c, row: r, col: col || null, attached: false, origin: c.origin || '', rank: c.rank });
   }
-  let soldiers = 0; const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];
+  const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];
   for (const p of activePeople(s)) {
-    soldiers++;
-    const r = hkRankOf(p.rank, s.settings.lists, p.origin); rank[r].n++; if (p.attached) rank[r].attached++;
+    const r = hkRankOf(p.rank, s.settings.lists, p.origin);
     // γύρισε ως την ώρα της ΗΚΑΙ: παρών εκείνη τη μέρα (Michael, 18/10)· φεύγει για άδεια μετά την ώρα της: παρών ως να φύγει (Michael, 1/11)
     nc.length = 0;
     const col = soldierCol(s, notLeftYet(statusesFrom(live(s), p.id, date, at), date, at), onDuty.get(p.id), date, at, nc);
     if (nc.length) noCol.push({ p, kind: upper(nc[0].kind || '') });
-    if (col) { cols[col].push(p); rank[r].c[col] = (rank[r].c[col] || 0) + 1; }
+    who.push({ kind: 'soldier', p, row: r, col, attached: !!p.attached, origin: p.origin || '', rank: p.rank });
   }
+  return { who, rows, fixed, manual: s.hkaiManual?.[date]?.cells || {}, noCol };
+}
+export function hkaiCounts(s: AppState, date: ISODate): Hkai {
+  const g = s.guards[date] || {};
+  const cls = hkaiClassify(s, date);
+  const cols: Record<string, Person[]> = {};
+  [...HK_K, ...HK_A].forEach(([k]) => (cols[k] = []));
+  const rank: Record<string, HkaiRow> = {};
+  const lists = s.settings.lists; const cl = (s.cadreList || []).filter(c => c.active);
+  cls.rows.forEach(r => (rank[r] = { n: cls.fixed[r], attached: 0, c: {} }));
+  let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
+  let soldiers = 0;
+  for (const w of cls.who) {
+    rank[w.row].n++;
+    if (w.kind === 'cadre') {
+      const col = w.col;
+      if (col) { rank[w.row].c[col] = (rank[w.row].c[col] || 0) + 1; (cadreCols[col] ||= []).push(w.c!); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
+    } else {
+      soldiers++; if (w.attached) rank[w.row].attached++;
+      if (w.col) { cols[w.col].push(w.p!); rank[w.row].c[w.col] = (rank[w.row].c[w.col] || 0) + 1; }
+    }
+  }
+  const noCol = cls.noCol;
   let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0) + cadreKol, apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
   // ό,τι γράφει ο χρήστης με το χέρι (σιδηρουργείο, πρατήριο, φυλάκια, αποσπασμένοι…, μισθοτροφοδοτηθέντες «ab»)
-  const man = s.hkaiManual?.[date]?.cells || {};
+  const man = cls.manual;
   for (const r of Object.keys(man)) {
     if (!rank[r]) continue;
     for (const [k, v] of Object.entries(man[r])) {
