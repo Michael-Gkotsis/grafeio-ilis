@@ -7,7 +7,7 @@
 // until the user maps it, it is a warning and is never written. Pure functions, no file access.
 import { hkRowLabel, hkRowNames } from './unit';
 import { hkRowOfRankId, phraseKey, type Lexicon, type Match } from './lexicon';
-import type { ColInfo, MatrixRegion } from './shape';
+import type { BookShape, ColInfo, MatrixRegion, SheetShape } from './shape';
 import type { SheetModel } from './sheetModel';
 import { key as cellKey, valueText } from './sheetModel';
 import type { TplProfile } from './tplStore';
@@ -17,6 +17,7 @@ import { HK_A, HK_K } from './ranks';
 export type ColRule =
   | { t: 'state'; keys: string[] }
   | { t: 'placed' } | { t: 'attached' } | { t: 'force' } | { t: 'avail' } | { t: 'prov' }
+  | { t: 'post'; posts: string[] }     // the unit's own column for people with a post («Σιτιστές - Γραφείς - Μάγειρες»): present people (no other state) whose post is one of these (phraseKey)
   | { t: 'sum'; of: ColRule[] };
 export interface RowRule { keys: string[]; origins?: string[]; ranks?: string[]; who?: 'cadre' | 'soldier' }
 
@@ -50,6 +51,7 @@ export function asColRule(x: unknown, depth = 0): ColRule | null {
   const o = x as Record<string, unknown>;
   if (o.t === 'state') { const k = strs(o.keys); return k && k.length ? { t: 'state', keys: k } : null; }
   if (o.t === 'placed' || o.t === 'attached' || o.t === 'force' || o.t === 'avail' || o.t === 'prov') return { t: o.t };
+  if (o.t === 'post') { const k = strs(o.posts); return k && k.length ? { t: 'post', posts: k } : null; }
   if (o.t === 'sum' && Array.isArray(o.of)) { const of = o.of.map(y => asColRule(y, depth + 1)); return of.length && of.every(Boolean) ? { t: 'sum', of: of as ColRule[] } : null; }
   return null;
 }
@@ -98,6 +100,7 @@ export class HkEngine {
       case 'placed': return this.count(row, { t: 'force' }, ppl) - this.count(row, { t: 'attached' }, ppl);
       case 'avail': return this.count(row, { t: 'force' }, ppl) - this.count(row, { t: 'state', keys: ABS_KEYS }, ppl);
       case 'prov': return this.plain(row) ? row.keys.reduce((a, r) => a + (this.prov[r] || 0), 0) : 0;
+      case 'post': return ppl.filter(w => w.kind === 'soldier' && w.col == null && !!w.p?.post && col.posts.includes(phraseKey(w.p.post))).length;
       case 'sum': return col.of.reduce((a, c) => a + this.count(row, c, ppl), 0);
     }
   }
@@ -236,4 +239,17 @@ export function unplaced(map: FrontMap, eng: HkEngine): Unplaced {
   const st = new Map<string, number>();
   for (const w of eng.cls.who) if (w.col && !shown.has(w.col) && rules.some(r => eng.matches(r, w))) st.set(w.col, (st.get(w.col) || 0) + 1);
   return { rows: [...lost].map(([key, n]) => ({ key, n })), states: [...st].map(([key, n]) => ({ key, n })) };
+}
+
+// ------------------------------------------------------------------ choosing the front table
+// The ΗΚΑΙ/ΗΚΑΛ table of a book: the matrix with the most ΗΚΑΙ rows (at least 3) on a visible sheet (or on the named sheet)
+const hkRowCount = (x: MatrixRegion) => new Set(x.rows.filter(r => /^hkrow:/.test(r.match.concept || '') && r.match.confidence !== 'unknown').map(r => r.match.concept)).size;
+export function pickFront(shape: BookShape, sheet?: string): { sh: SheetShape; region: MatrixRegion } | null {
+  let best: { sh: SheetShape; region: MatrixRegion; n: number } | null = null;
+  for (const sh of shape.sheets) {
+    if (sheet && sh.name !== sheet) continue;
+    if (sh.state !== 'visible' && !sheet) continue;
+    for (const r of sh.regions) if (r.type === 'matrix') { const n = hkRowCount(r) * 100 + r.cols.length; if (hkRowCount(r) >= 3 && (!best || n > best.n)) best = { sh, region: r, n }; }
+  }
+  return best && { sh: best.sh, region: best.region };
 }

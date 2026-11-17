@@ -15,6 +15,7 @@ import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../sh
 import { Workbook, colName, colNum, sheetSafe, splitRef, unesc, type Sheet, type XlValue } from './xlsx';
 import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
+import { hkaiAdaptive } from './tplAdapt';
 import { byRoom, outsAndStay, stayNote } from '../shared/outsStay';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
 import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
@@ -406,7 +407,17 @@ export class TemplateError extends Error {}
 // front/back: φύλλα μπροστινής και πίσω σελίδας (κενά: όποιο μοιάζει περισσότερο)· map: πού μπαίνει κάθε αριθμός· χωρίς
 // αυτό βρίσκεται από τα κείμενα του εντύπου (detectHkai) και από πάνω ό,τι διόρθωσες (cells, Αρχεία Excel → ΗΚΑΙ)
 // Η πίσω σελίδα από τις ετικέτες της (tplmap.ts): «1. ΕΓΓΡΑΦΕΣ:» … «6. ΛΟΙΠΑ:», «Υπαξιωματικοί:», φρουρές, οχήματα
-export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { front?: string; back?: string; map?: HkaiMap; cells?: Partial<HkaiMap>; sigs?: Sig[] | null; headId?: string | null } = {}): Promise<ExportResult> {
+type HkaiOpts = { front?: string; back?: string; map?: HkaiMap; cells?: Partial<HkaiMap>; sigs?: Sig[] | null; headId?: string | null };
+// Μηχανή προσαρμογής: αν το template της μονάδας έχει αποθηκευμένη αντιστοίχιση («Πρότυπο μονάδας») και η παλιά διαδρομή δεν το γεμίζει ολόκληρο
+// (δικές του στήλες ή γραμμές, τύποι που μετρούν άλλο φύλλο, σύνολα που έγιναν αριθμοί), γεμίζει με το fillAdaptive. Αλλιώς ό,τι ήταν πάντα (τα έτοιμα templates, byte-identical).
+export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiOpts = {}): Promise<ExportResult> {
+  if (s.settings.tplProfiles?.length) {
+    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, cells: opts.cells });
+    if (ad) return { name: fileNameOf(s.settings, 'hkai', d), data: ad.data, warnings: ad.warnings, ...(ad.sheet ? { sheet: ad.sheet } : {}) };
+  }
+  return fillHkaiClassic(tpl, s, d, opts);
+}
+async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiOpts = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); await unitWords(wb, s);
   const names = wb.sheetNames(); const place = s.settings.place;
   const own = [...hkRowsOf(s.settings.lists).own], hkNames = s.settings.lists?.hkNames;

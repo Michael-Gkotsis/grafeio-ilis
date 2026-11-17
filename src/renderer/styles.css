@@ -1834,3 +1834,59 @@ thead .mg-tail--n{font-size:11px}
 .veh__card{overflow:hidden;max-height:max(440px,calc(100vh - 318px))}.veh__body{flex:1 1 auto;min-height:0;overflow:auto}.veh__card .mit__acts{flex:none;border-top:1px solid var(--border);padding-top:8px}
 .veh__card .ui-tabs{margin:0;gap:0;flex:none}.veh__card .ui-tabs button{height:34px;padding:0 9px;font-size:13px;flex:1 1 auto}
 @media (max-width:1100px){.veh__grid{grid-template-columns:minmax(0,1fr)}.veh__card{grid-column:1 / -1;position:static;max-height:none}}
+
+/* ---- «Πρότυπο μονάδας»: οθόνη αντιστοίχισης ΗΚΑΙ/ΗΚΑΛ ---- */
+.tm{display:flex;flex-direction:column;gap:10px;min-width:0}
+.tm__sum{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tm__cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr);gap:12px;align-items:start}
+.tm__file,.tm__side,.tm__half{min-width:0}
+.tm__side{display:flex;flex-direction:column;gap:10px}
+.tm__help{margin:0 0 8px;font-size:13px;color:var(--muted-fg);line-height:1.45}
+.tm__help b{color:var(--foreground)}
+.tm__scroll{overflow:auto;max-height:max(300px,calc(100vh - 430px));border:1px solid var(--border);border-radius:6px}
+.tm__scroll--flat{max-height:none}
+.tm__tbl{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
+.tm__tbl th,.tm__tbl td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:3px 6px;text-align:left;vertical-align:top;background:var(--card);max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.tm__tbl thead th{position:sticky;top:0;z-index:2;font-weight:700}
+.tm__corner{left:0;z-index:3;position:sticky;background:var(--muted)!important;font-size:11px}
+.tm__rl{position:sticky;left:0;z-index:1;background:var(--muted)!important;font-weight:600;white-space:nowrap;max-width:200px}
+.tm__h,.tm__rl{cursor:pointer}
+.tm__tbl--num .tm__h,.tm__tbl--num .tm__rl{cursor:default}
+.tm-sure{box-shadow:inset 0 -3px 0 var(--ok);background:var(--ok-bg)!important;color:var(--ok)}
+.tm-suggest{box-shadow:inset 0 -3px 0 var(--warn);background:var(--warn-bg)!important;color:var(--warn)}
+.tm-unknown{box-shadow:inset 0 -3px 0 var(--bad-line);background:var(--bad-bg)!important;color:var(--bad)}
+.tm-ignored{background:var(--muted)!important;color:var(--muted-fg);text-decoration:line-through}
+.tm-mine{box-shadow:inset 0 -3px 0 var(--info);background:var(--info-bg)!important;color:var(--info)}
+.tm__h.is-sel,.tm__rl.is-sel{outline:2px solid var(--foreground);outline-offset:-2px}
+.tm__tbl td.is-selcol{background:var(--info-bg)}
+.tm__tbl .is-total th,.tm__tbl .is-total td{font-weight:700}
+.tm__num{text-align:right!important;font-variant-numeric:tabular-nums}
+.tm__num.is-written{background:var(--ok-bg)}
+.tm__num.is-formula{background:var(--info-bg)}
+.tm__sw{display:inline-block;width:12px;height:12px;border:1px solid var(--border);border-radius:3px;vertical-align:-1px}
+.tm__sw.is-written{background:var(--ok-bg)}.tm__sw.is-formula{background:var(--info-bg)}
+.tm__legend{margin:6px 12px}
+.tm__list{list-style:none;margin:0;padding:0;max-height:max(240px,calc(100vh - 470px));overflow:auto}
+.tm__list li button{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:4px 12px;border:0;border-bottom:1px solid var(--border);background:none;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.tm__list li button:hover{background:var(--muted)}
+.tm__list li.is-sel button{background:var(--info-bg)}
+.tm__list-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm__list-to{font-size:12px;color:var(--muted-fg);max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm__body{display:flex;flex-direction:column;gap:10px}
+.tm__acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tm__new{border-top:1px solid var(--border);padding-top:8px}
+.tm__new h3,.tm__h3{margin:0 0 6px;font-size:13px;font-weight:700}
+.tm__mini{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:8px;border:1px dashed var(--border);border-radius:6px}
+.tm__checks{display:flex;flex-direction:column;gap:4px;max-height:140px;overflow:auto}
+.tm__check{display:flex;gap:6px;align-items:center;font-size:13px}
+.tm__wgrid{display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,1.4fr) auto;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border)}
+.tm__wgrid--head{font-size:12px;font-weight:700;color:var(--muted-fg)}
+.tm__word{display:block}
+.tm__word .tm__mini{margin:0 12px 8px}
+.tm__code{font-family:var(--f-mono);font-size:12px;background:var(--muted);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.tm__issues{margin:0 0 8px;padding-left:18px;font-size:13px}
+.tm__ok{margin:0;color:var(--ok);font-weight:600;font-size:13px}
+.tm__fix{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tm__note{margin:0}
+.tm__foot{font-size:12px;color:var(--muted-fg);max-width:46ch}
+@media (max-width:900px){.tm__cols{grid-template-columns:minmax(0,1fr)}.tm__scroll{max-height:320px}.tm__wgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}}
