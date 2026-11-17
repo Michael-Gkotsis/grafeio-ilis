@@ -193,7 +193,8 @@ function recalc(bufs: Buffer[]) {
 function excelState(seed: number): AppState {
   const r = rng(seed * 13 + 1); const k = 1 + Math.floor(r() * 3);
   const cols = Array.from({ length: k }, (_, i): { name: string; grp: 'abs' | 'kol' } => ({ name: ['Καραντίνα', 'Συνοδεία κρατουμένων', 'Δεξαμενή', 'Εφεδρεία κοντά'][i], grp: (r() < 0.5 ? 'abs' : 'kol') as 'abs' | 'kol' }));
-  let s = genHkState(seed, { own: seed % 2 === 0, cadre: true }); s = withCols(s, cols);
+  // ΗΚΑΛ (λόχος) = το ίδιο έντυπο με τις λέξεις του λόχου (Michael 17/11): κάθε 3ος κόσμος
+  let s = genHkState(seed, { own: seed % 2 === 0, cadre: true, lochos: seed % 3 === 0 }); s = withCols(s, cols);
   const keys = own(s).map(x => x.key);
   const lists = { ...(s.settings.lists || {}), leaveKinds: { add: [...(s.settings.lists?.leaveKinds?.add || []), { name: 'Δική άδεια', col: keys[0] }] } };
   const d = DAYS[seed % DAYS.length];
@@ -212,6 +213,8 @@ describe.skipIf(!soffice)('Excel με δικές σου στήλες: LibreOffic
       const colOf = (nm: string) => { for (const [r, row] of sh.rows.entries()) { if (r > 12) break; const c = row?.findIndex(v => typeof v === 'string' && v.replace(/\s+/g, ' ').trim() === nm); if (c != null && c >= 0) return c; } return -1; };
       const grand = sh.rows.findIndex(row => row?.some(v => typeof v === 'string' && /ΓΕΝΙΚΟ ΣΥΝΟΛΟ/.test(v)));
       expect(grand).toBeGreaterThan(0);
+      // ΗΚΑΛ: το ίδιο έντυπο με τις λέξεις του λόχου (unitWords), και οι δικές σου στήλες μέσα
+      if (s.settings.unitKind === 'lochos') expect(sh.rows.some(row => row?.some(v => typeof v === 'string' && /ΛΟΧ|ΤΑΓΜ/.test(v))), 'seed ' + seeds[i] + ' ΗΚΑΛ').toBe(true);
       // LibreOffice και ο δικός μας υπολογιστής συμφωνούν σε κάθε αριθμητικό τύπο
       let checked = 0;
       for (const f of sh.formulas.keys()) {
