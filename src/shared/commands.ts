@@ -11,7 +11,7 @@ import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
+import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
 import { assetCfgOf, catOf, cleanAsset, doMaint, holderText, registry, sameHolder, STATE_TXT } from './assets';
@@ -121,9 +121,9 @@ export type Command =
   | { t: 'addPhase'; name: string; from: Phase }
   | { t: 'renamePhase'; id: Phase; name: string }
   | { t: 'delPhase'; id: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post' }
+  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string }
   // nums/per (Michael, 4/11): νούμερα και άτομα ανά νούμερο· το παλιό n = nums. armed/hidden/armWeapon αλλάζουν και από εδώ (όχι στον Λ/Υ-Δ/Υ)
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; armWeapon?: 'own' | 'post' }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; hkCol?: string; armWeapon?: 'own' | 'post' }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
   | { t: 'autofillRange'; dates: ISODate[]; rooms?: number[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
@@ -246,6 +246,8 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
   return put(n, 'Άλλαξε σημείωση' + label(n) + (n.rem !== old.rem ? (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ' · χωρίς υπενθύμιση') : ''));
 }
 // Όλα τα κλειδιά θέσεων όλων των εντύπων (νέα κλειδιά μοναδικά, Michael 4/11)
+// Στήλη ΗΚΑΙ υπηρεσίας (BlockDef.hkCol): άκυρη ή ίδια με την προεπιλογή του είδους = δεν γράφεται (undefined)
+const hkColFor = (kind: string, v: unknown): string | undefined => { const c = svcColOk(v); return c && c !== svcDefault(kind) ? c : undefined; };
 const usedKeys = (st: Settings) => new Set(everyBlock(st).flatMap(b => b.posts.map(p => p.k)));
 const shapeTxt = (n: number, per: number) => n + (n === 1 ? ' νούμερο' : ' νούμερα') + (per > 1 ? ' × ' + per + ' άτομα' : n === 1 ? ' άτομο' : ' άτομα');
 // Από αύριο και μετά βγαίνουν οι υπηρεσίες των θέσεων keys (όταν κρύβονται), μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά
@@ -1408,7 +1410,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const sh = blockShift(c.shift, n);
       // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
       // νούμερα × άτομα (Michael, 4/11): ίδιο σχήμα με την επεξεργασία (reshapeBlock)
-      const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
+      const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), ...(hkColFor(c.kind || 'other', c.hkCol) ? { hkCol: hkColFor(c.kind || 'other', c.hkCol) } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
       const b: BlockDef = { ...seed, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: reshapeBlock(seed, n, per, name, usedKeys(s.settings)) };
       return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + shapeTxt(n, per) + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
@@ -1436,6 +1438,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (c.armed != null) nb.armed = c.armed;
         if (c.armWeapon != null) { if (c.armWeapon === 'post') nb.armWeapon = 'post'; else delete nb.armWeapon; }
         if (c.hidden != null) { if (c.hidden) nb.hidden = true; else delete nb.hidden; }
+        if (c.hkCol !== undefined) { const hk = hkColFor(nb.kind, c.hkCol); if (hk) nb.hkCol = hk; else delete nb.hkCol; }
       }
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
       // δικές μου βάρδιες (Michael, 24/10): το νούμερο κάθε βάρδιας μέσα στα νούμερα της υπηρεσίας

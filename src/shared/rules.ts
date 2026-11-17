@@ -3,7 +3,7 @@ import { HK } from './unit';
 import { isUnit } from './mode';
 import { collator, upper } from './text';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
@@ -235,7 +235,7 @@ export const isRecordExpiredOn = (s: Status, date: ISODate) => !s.open && RECORD
 // μία φορά ανά είδος· away/awayLists μόνο οι απόντες, ο καθένας στον πρώτο λόγο που λείπει (νοσοκομείο, άδεια, μετά
 // έξοδος/ΔΝ), ώστε τα νούμερά τους να κάνουν ακριβώς absent = total − present.
 // awayLeave: οι απόντες με άδεια ανά όνομα (ΚΑ, ΥΠΗΡΕΣΙΑΚΟ…), για το awayText (Michael, 3/11)
-export interface Strength { total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]>; away: Record<TypeKey, number>; awayLists: Record<TypeKey, Person[]>; awayLeave: Record<string, number> }
+export interface Strength { awaySvc: Person[]; total: number; present: number; absent: number; counts: Record<TypeKey, number>; lists: Record<TypeKey | 'present', Person[]>; away: Record<TypeKey, number>; awayLists: Record<TypeKey, Person[]>; awayLeave: Record<string, number> }
 // at: η στιγμή της μέρας που μετρά (λεπτά)· προεπιλογή η ώρα της ΗΚΑΙ (οι Εξοδούχοι μετρούν από την ώρα εξόδου)
 export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Strength {
   const people = activePeople(s);
@@ -243,24 +243,26 @@ export function strengthOf(s: AppState, date: ISODate, at = hkMin(s.rules)): Str
   const lists = { present: [] } as unknown as Strength['lists'], awayLists = {} as Strength['awayLists'];
   TYPE_KEYS.forEach(k => { counts[k] = 0; lists[k] = []; away[k] = 0; awayLists[k] = []; });
   let present = 0; const awayLeave: Record<string, number> = {}, lv = s.settings.lists;
+  const awaySvc: Person[] = [], dmap = hasSvcAway(s.settings) ? dutyColsOn(s, date) : null;   // υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol): απών
   for (const p of people) {
     const ss = statusesAt(s, p.id, date, at);
     // διπλή εγγραφή του ίδιου είδους (π.χ. δύο έξοδοι την ίδια μέρα): μία φορά
     new Set(ss.map(x => x.type)).forEach(k => { counts[k]++; lists[k].push(p); });
     // οι καταστάσεις είναι ταξινομημένες: πρώτα οι απουσίες, με τη σειρά των ειδών
     const a = ss.find(x => isAway(x, lv));
-    if (a) { away[a.type]++; awayLists[a.type].push(p); if (a.type === 'LEAVE') { const l = statusLbl(a, lv); awayLeave[l] = (awayLeave[l] || 0) + 1; } } else { present++; lists.present.push(p); }
+    if (a) { away[a.type]++; awayLists[a.type].push(p); if (a.type === 'LEAVE') { const l = statusLbl(a, lv); awayLeave[l] = (awayLeave[l] || 0) + 1; } } else if (dmap && svcAwayOf(s, ss, dmap.get(p.id), date, at)) awaySvc.push(p); else { present++; lists.present.push(p); }
   }
-  return { total: people.length, present, absent: people.length - present, counts, lists, away, awayLists, awayLeave };
+  return { awaySvc, total: people.length, present, absent: people.length - present, counts, lists, away, awayLists, awayLeave };
 }
 // Η στιγμή που μετρά η Δύναμη μιας μέρας: σήμερα όπως η ΗΚΑΙ ως τις 08:00 και μετά όποιος γύρισε ως τώρα (το «Σήμερα»,
 // η Δύναμη και το Δυναμολόγιο το ίδιο)· άλλες μέρες η ώρα της ΗΚΑΙ.
 export const strengthAt = (r: Rules | null | undefined, date: ISODate, today: ISODate, now: number) => (date === today ? Math.max(hkMin(r), now) : hkMin(r));
 // Σύνοψη των απόντων: «24 έξοδος · 29 ΔΝ · 4 ΚΑ», με τη σειρά των ειδών· αθροίζει στους Απόντες
 // Οι άδειες ανά είδος, όπως γράφονται: «1 ΚΑ · 2 ΥΠΗΡΕΣΙΑΚΟ» (η Κανονική πρώτη, μετά κατά όνομα)
-export const awayText = (c: Strength) => TYPE_KEYS.filter(k => c.away[k] > 0).flatMap(k => k === 'LEAVE' && c.awayLeave
+export const SVC_AWAY_LBL = 'υπηρεσία εκτός';   // απόντες λόγω υπηρεσίας εκτός στρατοπέδου (BlockDef.hkCol)
+export const awayText = (c: Strength) => [...TYPE_KEYS.filter(k => c.away[k] > 0).flatMap(k => k === 'LEAVE' && c.awayLeave
   ? Object.keys(c.awayLeave).sort((a, b) => Number(b === TYPES.LEAVE.label) - Number(a === TYPES.LEAVE.label) || collator.compare(a, b)).map(l => c.awayLeave[l] + ' ' + l)
-  : [c.away[k] + ' ' + (k === 'OUT' ? 'έξοδος' : TYPES[k].label)]).join(' · ');
+  : [c.away[k] + ' ' + (k === 'OUT' ? 'έξοδος' : TYPES[k].label)]), ...(c.awaySvc.length ? [c.awaySvc.length + ' ' + SVC_AWAY_LBL] : [])].join(' · ');
 
 // --------------------------- Δυνατότητα υπηρεσιών (Κ-15) ---------------------------
 // Για την κάρτα του ατόμου (ανά είδος): πόστο, ή Σ.Ι. που δεν μπαίνει σε καμία υπηρεσία αυτού του είδους (blocks: και των
@@ -1464,13 +1466,40 @@ export function rosterCol(s: Pick<AppState, 'cadreDuties' | 'settings'>, cid: st
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
-function soldierCol(s: AppState, ss: Status[], duty: DutyKind | undefined, date: ISODate, at: number, noCol?: Status[]): string | null {
+// Η υπηρεσία της μέρας ενός ατόμου και η στήλη της ΗΚΑΙ της (BlockDef.hkCol, Michael 17/11): col = η στήλη που διάλεξε η υπηρεσία (όπως πάντα: 'mag' στα μαγειρεία,
+// αλλιώς 'yp'), def = η προεπιλογή του είδους. Σε στήλη απόντων η υπηρεσία είναι εκτός στρατοπέδου (απόντες στην ΗΚΑΙ, στη Δύναμη και στο Σήμερα)
+export interface DutyCol { col: string; def: string }
+// Όπως πάντα, ο τελευταίος γράφει (δύο υπηρεσίες την ίδια μέρα)· μόνο η υπηρεσία εκτός στρατοπέδου δεν χάνεται από άλλη
+export function dutyColsOn(s: AppState, date: ISODate): Map<number, DutyCol> {
+  const g = s.guards[date] || {}; const m = new Map<number, DutyCol>();
+  for (const k in g) {
+    const p = postBy(s, k); if (!p) continue;
+    const def = svcDefault(p.kind), col = svcColOf(p.kind, p.hkCol), prev = m.get(g[k]);
+    if (prev && svcAbsent(prev.col) && !svcAbsent(col)) continue;
+    m.set(g[k], { col, def });
+  }
+  return m;
+}
+const absIdx = new WeakMap<Settings, boolean>();
+// Έχει η μονάδα έστω μία υπηρεσία εκτός στρατοπέδου; (αλλιώς η Δύναμη/Σήμερα δεν χρειάζεται να ψάξει)
+export function hasSvcAway(st: Settings): boolean {
+  let r = absIdx.get(st); if (r === undefined) { r = allBlocks(st).some(b => svcAbsent(svcColOf(b.kind, b.hkCol))); absIdx.set(st, r); }
+  return r;
+}
+// Η στήλη απόντων αν το άτομο μετρά απών λόγω υπηρεσίας εκτός στρατοπέδου εκείνη τη στιγμή (ss: οι καταστάσεις του εκείνη τη στιγμή), αλλιώς null
+export function svcAwayOf(s: AppState, ss: Status[], dc: DutyCol | undefined, date: ISODate, at: number): string | null {
+  if (!dc || !svcAbsent(dc.col)) return null;
+  return soldierCol(s, ss, dc, date, at) === dc.col ? dc.col : null;
+}
+function soldierCol(s: AppState, ss: Status[], dc: DutyCol | undefined, date: ISODate, at: number, noCol?: Status[]): string | null {
   const lists = s.settings.lists;
   const abs = ss.find(x => isAway(x, lists) && TYPES[x.type].hkai);
   if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; if (lc === LEAVE_AWAY_NO_COL) noCol?.push(abs);   // απών στην εφαρμογή, σε καμία στήλη (Michael, 3/11)
     return lc === LEAVE_NO_COL || lc === LEAVE_AWAY_NO_COL ? null : lc; }
   const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
-  return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? (duty === 'mg' ? 'mag' : 'yp') : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+  // υπηρεσία εκτός στρατοπέδου: μετρά απούσα μόνο αν δεν υπερισχύει κάτι άλλο (απουσία: επάνω, κωλυόμενος, ΣΤΕΠ)· αλλιώς όπως πάντα. Η έξοδος/ΔΝ δεν μετρά στην ΗΚΑΙ
+  const duty = dc ? (svcAbsent(dc.col) && (kol || stepOn(ss, date, at)) ? dc.def : dc.col) : undefined;
+  return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? duty : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 // Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
 // Στη μέτρηση της ΗΚΑΙ και στη Δύναμη/Σήμερα με την ώρα (statusesAt): οι υπηρεσίες, η έξοδος και το 3. ΑΔΕΙΕΣ μένουν όπως ήταν. Χωρίς ώρα αναχώρησης: απών όλη τη μέρα.
@@ -1486,9 +1515,7 @@ export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Ca
 export interface HkWho { kind: 'soldier' | 'cadre'; p?: Person; c?: Cadre; row: string; col: string | null; attached: boolean; origin: string; rank: string }
 export interface HkClass { who: HkWho[]; rows: string[]; fixed: Record<string, number>; manual: Record<string, Record<string, number>>; noCol: { p: Person; kind: string }[] }
 export function hkaiClassify(s: AppState, date: ISODate): HkClass {
-  const g = s.guards[date] || {};
-  const onDuty = new Map<number, DutyKind>();
-  for (const k in g) { const p = postBy(s, k); if (p) onDuty.set(g[k], p.kind); }
+  const onDuty = dutyColsOn(s, date);
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
   const cl = (s.cadreList || []).filter(c => c.active);
   const lists = s.settings.lists;
@@ -1501,7 +1528,7 @@ export function hkaiClassify(s: AppState, date: ISODate): HkClass {
     const a = cadreAbsOn(s, c.id, date);
     // ΕΠΟΠ/ΟΒΑ με υπηρεσίες: η κατάσταση που έγραψες, αλλιώς η θέση της μέρας στις Υπηρεσίες (η απαλλαγή μόνο με το χέρι)
     const dk = c.pid != null ? onDuty.get(c.pid) : undefined;
-    const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || rosterCol(s, c.id, date) || (dk ? (dk === 'mg' ? 'mag' : 'yp') : undefined);
+    const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || rosterCol(s, c.id, date) || dk?.col;
     who.push({ kind: 'cadre', c, row: r, col: col || null, attached: false, origin: c.origin || '', rank: c.rank });
   }
   const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];
@@ -1566,8 +1593,7 @@ export interface KolRow { p: Person; st: Status; col: string; minus: boolean }
 // στην ίδια στιγμή· n = πόσοι (όποιος έχει hkCol '-' δεν μπαίνει σε στήλη εδώ ούτε στην ΗΚΑΙ, αλλά μένει στο man/minus). man: οι δηλωμένοι κωλυόμενοι και οι ΣΤΕΠ εκείνη τη στιγμή (minus: μπαίνουν στη στήλη τους, keep: μένουν απλώς παρόντες).
 export interface KolView { cols: Record<string, Person[]>; n: number; man: KolRow[]; minus: KolRow[]; keep: KolRow[] }
 export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolView {
-  const g = s.guards[date] || {}; const onDuty = new Map<number, DutyKind>();
-  for (const k in g) { const p = postBy(s, k); if (p) onDuty.set(g[k], p.kind); }
+  const onDuty = dutyColsOn(s, date);
   const cols: Record<string, Person[]> = {}; KOL_COLS.forEach(([k]) => (cols[k] = []));
   const man: KolRow[] = []; let n = 0;
   for (const p of activePeople(s)) {

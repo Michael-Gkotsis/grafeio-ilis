@@ -9,7 +9,7 @@ import { execFileSync } from 'child_process';
 import ExcelJS from 'exceljs';
 import { apply, type Command } from '../src/shared/commands';
 import { addDays } from '../src/shared/dates';
-import type { AppState } from '../src/shared/domain';
+import { blocksOf, type AppState } from '../src/shared/domain';
 import { registry } from '../src/shared/assets';
 import { autoFill } from '../src/shared/cadreDuty';
 import { assetBook, cadreDutyBook, cadreLeaveBook, cadrePlanBook, vehicleBook, weaponsBook } from '../src/main/excel';
@@ -38,7 +38,13 @@ function state(seed: number): AppState {
   for (let i = 0; i < 6; i++) s = run(s, { t: 'saveAsset', asset: { cat: pick(r, ['diopt', 'asyrm', 'imatismos', 'pistolia']), type: pick(r, ['διόπτρα νυκτός', 'rf-13', 'χλαίνη', 'μ1911 α1']), no: 'σ' + i, qty: r() < 0.3 ? 12 : undefined, state: pick(r, ['ok', 'repair', 'writeoff']), holder: r() < 0.5 ? { k: 'person', pid: pick(r, s.people).id } : undefined, note: 'μικρά γράμματα' } as any, date: D });
   for (let i = 0; i < 3; i++) s = run(s, { t: 'saveAsset', asset: { cat: pick(r, ['troxofora', 'erpystr']), type: pick(r, ['μαν 6t', 'm113']), no: 'εσ ' + i, plate: 'εσ ' + i, state: 'ok' } as any, date: D });
   for (const v of registry(s).filter(x => x.cat?.kind === 'vehicle')) { s = run(s, { t: 'assetFuel', id: v.key, date: D, litres: 40, km: 12000 + Math.floor(r() * 5000) }); s = run(s, { t: 'assetMaint', id: v.key, date: '2026-06-01', km: 9000, note: 'αλλαγή λαδιών' }); }
-  const w = registry(s).find(x => x.link); if (w) s = run(s, { t: 'assetState', ...(w.stored ? { id: w.key } : { id: w.key, base: w.a }), state: 'repair', why: 'σπασμένο κλείστρο', date: D });
+  // υπηρεσία εκτός στρατοπέδου (στήλη ΗΚΑΙ «Φυλάκια»): το όπλο των δύο της μετρά ΑΠΩΝ, φύλλο ΑΠΟΝΤΑ στον ΟΠΛΙΣΜΟ και στο Μητρώο
+  s = run(s, { t: 'setWeapons', changes: [3, 4].map(pid => ({ pid, weapon: 'φυλ ' + pid, wtype: 'G3A3' })) });
+  s = run(s, { t: 'addBlock', phase: s.settings.phase, name: 'Φυλάκιο Ποταμού', kind: 'other', armed: true, n: 1, per: 2, hrs: '15:00-22:00', hkCol: 'fyl' });
+  const fylBlock = blocksOf(s.settings).find(b => b.name === 'Φυλάκιο Ποταμού')!;
+  s = { ...s, guards: { ...s.guards, [D]: { [fylBlock.posts[0].k]: 3, [fylBlock.posts[1].k]: 4 } } };
+  // (το «προς επισκευή» δεν πάει σε όπλο της υπηρεσίας εκτός: εκεί νικά το ΕΚΤΟΣ της επισκευής)
+  const w = registry(s).find(x => x.link && !(x.link.k === 'person' && (x.link.pid === 3 || x.link.pid === 4))); if (w) s = run(s, { t: 'assetState', ...(w.stored ? { id: w.key } : { id: w.key, base: w.a }), state: 'repair', why: 'σπασμένο κλείστρο', date: D });
   return s;
 }
 
@@ -58,7 +64,7 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
       const files: { f: string; buf: Buffer; what: string }[] = [];
       for (let seed = 1; seed <= 4; seed++) {
         const s = state(seed);
-        const made = [await cadreLeaveBook(s, 2026, D, s.cadreList[0].id), await cadrePlanBook(s, '2026-12', D), await cadreDutyBook(s, '2026-12', D), await assetBook(s, registry(s), D), await vehicleBook(s, D), await weaponsBook(s, D)];
+        const made = [await cadreLeaveBook(s, 2026, D, s.cadreList[0].id), await cadrePlanBook(s, '2026-12', D), await cadreDutyBook(s, '2026-12', D), await assetBook(s, registry(s, { day: D, hm: '18:00' }), D), await vehicleBook(s, D), await weaponsBook(s, D)];
         made.forEach((m, i) => { const f = path.join(dir, seed + '-' + i + '.xlsx'); fs.writeFileSync(f, m.data); files.push({ f, buf: m.data, what: seed + ' ' + m.name }); });
       }
       const prof = path.join(dir, 'prof');
@@ -73,6 +79,16 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
           if (/[a-zα-ωά-ώ]/.test(v)) expect(v.replace(/ Ή /g, ' Η '), x.what + ' ' + k).toBe(upper(v));
         }
       }
+      // ο ΟΠΛΙΣΜΟΣ έχει φύλλο ΑΠΟΝΤΑ με τα δύο όπλα, και το Μητρώο ΘΕΣΗ «ΑΠΩΝ (…)» και ΑΠΟΝΤΑ στα ΣΥΝΟΛΑ, όπως γύρισαν από το LibreOffice
+      let wk = 0, reg = 0;
+      for (const x of files) {
+        const b = await cells(fs.readFileSync(path.join(dir, 'out', path.basename(x.f))));
+        const ab = [...b].filter(([k]) => k.startsWith('ΑΠΟΝΤΑ!')).map(([, v]) => v);
+        if (ab.length) { wk++; expect(ab.filter(v => v === 'ΑΠΩΝ: ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:45–22:15'), x.what).toHaveLength(2); }
+        const th = [...b.values()].filter(v => v === 'ΑΠΩΝ (ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ)');
+        if (th.length) { reg++; expect(th, x.what).toHaveLength(2); expect([...b].some(([k, v]) => k.startsWith('ΣΥΝΟΛΑ!') && v === 'ΑΠΟΝΤΑ'), x.what).toBe(true); }
+      }
+      expect(wk).toBe(4); expect(reg).toBe(4);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }, 300000);
 });

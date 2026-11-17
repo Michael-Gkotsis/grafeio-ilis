@@ -12,6 +12,7 @@ import { addDays, daysBetween, type ISODate } from './dates';
 import { everyBlock, type AppState, type BlockDef, type DutyFix, type Post, type Rules } from './domain';
 import { dutyMin, postBy, postSpan, postsOf, slotSpans } from './rules';
 import { upper } from './text';
+import { svcAbsent, svcColOk } from './ranks';
 
 export type ArmWeapon = 'own' | 'post';
 export const ARM_BEFORE = 15, ARM_AFTER = 15, ARM_MAX = 240;
@@ -37,6 +38,7 @@ export interface ArmRow {
   give: boolean;         // «της θέσης»: το δίνει στον επόμενο (αλλιώς μπαίνει στον οπλοβαστό)
   next?: number;         // ο επόμενος που το παίρνει
   fix?: DutyFix;
+  away?: string;         // υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): το όνομα της υπηρεσίας· το όπλο μετρά ΑΠΩΝ, όχι ΕΚΤΟΣ
 }
 export const ARM_BACK = 'ΛΗΞ ΥΠΗΡΕΣΙΑΣ';
 
@@ -53,7 +55,7 @@ const dayNo = (d: ISODate) => daysBetween('2000-01-01', d);
 // «15:45–18:15»
 export const armWhen = (r: Pick<ArmRow, 'out' | 'in'>) => hmOf(r.out) + '–' + hmOf(r.in);
 
-interface Step { k: string; label: string; block: string; mode: ArmWeapon; pid: number; n: number; from: number; to: number; ord: number; lane: number }
+interface Step { away?: string; k: string; label: string; block: string; mode: ArmWeapon; pid: number; n: number; from: number; to: number; ord: number; lane: number }
 // Οι ώρες των νούμερων μιας θέσης: βάρδιες (slotSpans), αλλιώς «ίδιες ώρες» (postSpan), αλλιώς όλος ο κύκλος
 function windowsOf(post: Post, cyc: number): { start: number; end: number }[] {
   const sl = slotSpans(post); if (sl.length) return sl;
@@ -69,8 +71,9 @@ function stepsOf(s: ArmState, day: ISODate): Step[] {
   const order = new Map(postsOf(s.settings).map((x, i) => [x.k, i] as const));
   for (const k of Object.keys(g).sort((x, y) => (order.get(x) ?? 1e9) - (order.get(y) ?? 1e9))) {
     const x = postBy(s as AppState, k); if (!x?.armed || g[k] == null) continue;
-    const mode = armModeOf(blocks.find(b => b.id === x.block)); const ws = windowsOf(x, cyc); const ln = lane(x.block, ws[0].start);
-    ws.forEach((w, n) => out.push({ k, label: x.label, block: x.block, mode, pid: g[k], n, from: w.start, to: w.end, ord, lane: ln }));
+    const bd = blocks.find(b => b.id === x.block), mode = armModeOf(bd); const ws = windowsOf(x, cyc); const ln = lane(x.block, ws[0].start);
+    const away = svcAbsent(svcColOk(bd?.hkCol)) ? { away: bd!.name } : {};
+    ws.forEach((w, n) => out.push({ ...away, k, label: x.label, block: x.block, mode, pid: g[k], n, from: w.start, to: w.end, ord, lane: ln }));
     ord++;
   }
   // υπηρεσία χωρίς θέση (σκέτο «Σ» από Excel) σε ένοπλο είδος: όλος ο κύκλος
@@ -78,7 +81,7 @@ function stepsOf(s: ArmState, day: ISODate): Step[] {
   for (const e of s.dutyLog?.[day] || []) {
     const x = kinds.get(e.kind); if (!x) continue;
     const bd = blocks.find(b => b.id === x.block);
-    out.push({ k: '~' + e.kind + ':' + e.pid, label: (bd?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(bd), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++, lane: lane(x.block, cyc) });
+    out.push({ ...(svcAbsent(svcColOk(bd?.hkCol)) ? { away: bd!.name } : {}), k: '~' + e.kind + ':' + e.pid, label: (bd?.name || x.kind) + ' (χωρίς θέση)', block: x.block, mode: armModeOf(bd), pid: e.pid, n: 0, from: cyc, to: cyc + 1440, ord: ord++, lane: lane(x.block, cyc) });
   }
   return out;
 }
@@ -86,7 +89,7 @@ function stepsOf(s: ArmState, day: ISODate): Step[] {
 interface Grp { first: Step; last: Step; who: number; out: number; in: number }
 function rowOf(day: ISODate, g: Grp, o: Partial<Pick<ArmRow, 'owner' | 'take' | 'give' | 'next' | 'mode'>>, fixes: Map<string, DutyFix>): ArmRow {
   const f = g.first, id = day + '|' + f.k + '|' + f.n;
-  const r: ArmRow = { id, day, post: f.k, n: f.n, last: g.last.n, mode: o.mode || 'own', who: g.who, owner: o.owner ?? g.who, label: f.label, reason: 'ΥΠΗΡΕΣΙΑ ' + upper(f.label),
+  const r: ArmRow = { ...(f.away ? { away: f.away } : {}), id, day, post: f.k, n: f.n, last: g.last.n, mode: o.mode || 'own', who: g.who, owner: o.owner ?? g.who, label: f.label, reason: 'ΥΠΗΡΕΣΙΑ ' + upper(f.label),
     from: f.from, to: g.last.to, out: g.out, in: g.in, autoOut: g.out, autoIn: g.in, take: !!o.take, give: !!o.give, ...(o.next != null ? { next: o.next } : {}) };
   const fx = fixes.get(f.k + '|' + f.n);
   if (fx) {
@@ -103,9 +106,12 @@ export function armedRows(s: ArmState, day: ISODate): ArmRow[] {
   const fixes = new Map((s.dutyFix || []).filter(f => f.day === day).map(f => [f.post + '|' + f.n, f] as const));
   const rows: ArmRow[] = [];
   // δικό του: ανά άτομο, ενώνονται όσα νούμερα (με το περιθώριο) ακουμπούν ή πέφτουν το ένα πάνω στο άλλο
-  const by = new Map<number, Step[]>();
-  for (const x of steps) if (x.mode === 'own') { const l = by.get(x.pid); if (l) l.push(x); else by.set(x.pid, [x]); }
-  for (const [pid, list] of by) {
+  const by = new Map<string, Step[]>();
+  // (όσα νούμερα είναι σε υπηρεσία εκτός στρατοπέδου δεν ενώνονται με τα υπόλοιπα: είναι άλλο είδος γραμμής, ΑΠΩΝ)
+  const ak = (x: Step) => (x.away ? 'a' : '');
+  for (const x of steps) if (x.mode === 'own') { const q = x.pid + ak(x), l = by.get(q); if (l) l.push(x); else by.set(q, [x]); }
+  for (const list of by.values()) {
+    const pid = list[0].pid;
     list.sort((a, b) => a.from - b.from || a.ord - b.ord);
     let cur: Grp | null = null;
     for (const x of list) {

@@ -7,13 +7,14 @@ import { useStore } from './store';
 import { HoursField, RangeField, shiftForm, shiftOf, shiftWhy, GoLink, type HoursMode, type ShiftForm } from './common';
 import { codeErrors } from '../shared/codes';
 import { normTime } from '../shared/hours';
+import { HK_A, SVC_KOL_COLS, svcColOk, svcDefault } from '../shared/ranks';
 import { MAX_NUMS, MAX_PER, blockGroups, blockShape, blocksOf, dutyStartOf, everyBlock, reshapeBlock, withBlocks, type BlockDef, type Phase, type ShiftDef } from '../shared/domain';
 
 type P = any;
 const GR = [...'αβγδεζηθικ'];
 // Κουτιά του template ΦΡΟΥΡΑ ανά είδος: πέρα από αυτά ο πίνακας μεγαλώνει προς τα κάτω (exports.ts extendFroura)
 export const TPL_BOXES: Record<string, number> = { th: 4, op: 4, mg: 5, sk: 2, tae: 1 };
-export interface BlockF { name: string; nums: number; per: number; armed: boolean; weapon: 'own' | 'post'; active: boolean; mode: HoursMode; sh: ShiftForm; hrs: string[]; codes: Record<string, string> }
+export interface BlockF { name: string; nums: number; per: number; armed: boolean; weapon: 'own' | 'post'; hkCol: string; active: boolean; mode: HoursMode; sh: ShiftForm; hrs: string[]; codes: Record<string, string> }
 const real = (h?: string) => (h && h !== 'ημέρα' ? h : '');
 const clamp = (v: number, max: number) => Math.max(1, Math.min(max, Math.floor(v) || 1));
 const isSk = (b?: BlockDef) => !!b && b.kind === 'sk' && !b.custom;
@@ -22,9 +23,9 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
   const { state } = useStore(); const st = state.settings; const start = dutyStartOf(st);
   const rotB = !!b && b.posts.some(p => p.rot != null);
   const [f, setF] = useState<BlockF>(() => {
-    if (!b) return { name: '', nums: 1, per: 1, armed: false, weapon: 'own', active: true, mode: 'day', sh: shiftForm(), hrs: [''], codes: {} };
+    if (!b) return { name: '', nums: 1, per: 1, armed: false, weapon: 'own', hkCol: '', active: true, mode: 'day', sh: shiftForm(), hrs: [''], codes: {} };
     const sh = blockShape(b); const hrs = blockGroups(b.posts).map(g => (g[0].rot == null ? real(g[0].hrs) : ''));
-    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
+    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', hkCol: svcColOk(b.hkCol) && svcColOk(b.hkCol) !== svcDefault(b.kind) ? b.hkCol! : '', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
   });
   const set = (patch: Partial<BlockF>) => setF(x => ({ ...x, ...patch }));
   const used = useMemo(() => new Set(everyBlock(st).flatMap(x => x.posts.map(p => p.k))), [st]);
@@ -49,8 +50,8 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
   // οι ώρες ανά νούμερο: όσα νούμερα δεν έχουν δικές τους παίρνουν του 1ου
   const hrsNum = f.mode === 'day' ? Array.from({ length: MAX_NUMS }, () => '') : f.mode === 'fixed' ? Array.from({ length: f.nums }, (_, i) => f.hrs[i] ?? f.hrs[0] ?? '') : undefined;
   const cmd = () => (b
-    ? { t: 'editBlock' as const, phase, id: b.id, name: f.name, nums: f.nums, per: f.per, hrs: {}, ...(hrsNum ? { hrsNum } : {}), codes: f.codes, shift: shiftOut(), armed: f.armed, armWeapon: f.weapon, hidden: !f.active }
-    : { t: 'addBlock' as const, phase, name: f.name, kind: 'other' as const, armed: f.armed, n: f.nums, per: f.per, hrs: f.mode === 'fixed' ? f.hrs[0] || '' : '', off: !f.active, shift: f.mode === 'shift' ? shiftOf(f.sh) : null, armWeapon: f.weapon });
+    ? { t: 'editBlock' as const, phase, id: b.id, name: f.name, nums: f.nums, per: f.per, hrs: {}, ...(hrsNum ? { hrsNum } : {}), codes: f.codes, shift: shiftOut(), armed: f.armed, armWeapon: f.weapon, hkCol: f.hkCol, hidden: !f.active }
+    : { t: 'addBlock' as const, phase, name: f.name, kind: 'other' as const, armed: f.armed, n: f.nums, per: f.per, hrs: f.mode === 'fixed' ? f.hrs[0] || '' : '', off: !f.active, shift: f.mode === 'shift' ? shiftOf(f.sh) : null, armWeapon: f.weapon, ...(f.hkCol ? { hkCol: f.hkCol } : {}) });
   return { b, phase, f, set, posts, shown, errs, others, labels, nums, rotB, start, why, cmd };
 }
 
@@ -80,6 +81,11 @@ export function BlockForm({ form, id }: { form: ReturnType<typeof useBlockForm>;
         : html`<${RangeField} id=${id + '-h'} aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs[0] || ''} onChange=${(e: any) => set({ hrs: [e.target.value] })}/>`}/>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.armed} onChange=${(e: any) => set({ armed: e.target.checked })}/><span><b>Ένοπλη</b><small>Δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ, ούτε οι άοπλοι (Σ.Ι.). Ποια Σ.Ι. μπαίνουν σε κάθε υπηρεσία το ρυθμίζεις στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//></small></span></label>
     ${f.armed && html`<div className="field" style=${{ marginLeft: '28px', maxWidth: '260px' }}><label className="field__label" htmlFor=${id + '-w'}>Όπλο</label><${Select} id=${id + '-w'} className="ui-input" value=${f.weapon} data-tip="Δικό του: κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του. Της θέσης: βγαίνει το όπλο του 1ου νούμερου και περνά από χέρι σε χέρι στις αλλαγές· τα όπλα των άλλων μένουν ΕΝΤΟΣ." onChange=${(e: any) => set({ weapon: e.target.value })}><option value="own">Δικό του</option><option value="post">Της θέσης</option><//></div>`}
+    <div className="field" style=${{ maxWidth: '360px' }}><label className="field__label" htmlFor=${id + '-k'}>Στήλη ΗΚΑΙ</label><${Select} id=${id + '-k'} className="ui-input" value=${f.hkCol} onChange=${(e: any) => set({ hkCol: e.target.value })}>
+      <option value="">Υπηρεσία εντός στρατοπέδου (όπως σήμερα)</option>
+      <optgroup label="Κωλυόμενοι · εντός στρατοπέδου">${SVC_KOL_COLS.filter(([k]) => k !== svcDefault(b?.kind || 'other')).map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}</optgroup>
+      <optgroup label="Απόντες · εκτός στρατοπέδου">${HK_A.map(([k, , full]) => html`<option key=${k} value=${k}>${full}</option>`)}</optgroup><//>
+      <span className="field__help">Με στήλη απόντων η υπηρεσία είναι εκτός στρατοπέδου: όσοι είναι σε αυτήν μετρούν απόντες στην ΗΚΑΙ (στη στήλη που διάλεξες), στη Δύναμη και στο Σήμερα, και το όπλο που παίρνουν μαζί τους γράφεται ΑΠΩΝ στην Κατάσταση οπλισμού.</span></div>
     <label className="rule"><input type="checkbox" className="ui-check" checked=${f.active} onChange=${(e: any) => set({ active: e.target.checked })}/><span><b>Ενεργή</b><small>Ανενεργή δεν μπαίνει στις θέσεις, στην αυτόματη συμπλήρωση και στο έντυπο, ώσπου να την ενεργοποιήσεις στις <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'blocks' }}>Ρυθμίσεις › Υπηρεσίες<//>.</small></span></label>
     ${b && codes}
   </div>`;

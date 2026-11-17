@@ -3,17 +3,18 @@
 // λένε το ίδιο, κάθε άτομο μία φορά. Τυχαίες επαναλήψιμες δύο εβδομάδες (outs-gen), πολλές ώρες της μέρας. Μόνο ψεύτικα ονόματα.
 import { describe, it, expect } from 'vitest';
 import { genState, DAYS } from './outs-gen';
-import { activePeople, awayText, hkaiCounts, hkMin, HK_A, kolView, statusesAt, strengthOf } from '../src/shared/rules';
+import { activePeople, awayText, postBy, hkaiCounts, hkMin, HK_A, kolView, statusesAt, strengthOf } from '../src/shared/rules';
 import { strengthView } from '../src/shared/strengthView';
 import { dayBook } from '../src/shared/outsDay';
 import { backsAt, dayTimes, returnsOn } from '../src/shared/returns';
 import { mins } from '../src/shared/hours';
 import { TYPES, type AppState, type TypeKey } from '../src/shared/domain';
-import { isAway as isAwaySt, LEAVE_AWAY_NO_COL, leaveCol, type UserLists } from '../src/shared/ranks';
+import { isAway as isAwaySt, LEAVE_AWAY_NO_COL, leaveCol, svcAbsent, svcColOf, type UserLists } from '../src/shared/ranks';
 import type { ISODate } from '../src/shared/dates';
 
 const TIMES = ['08:00', '09:30', '12:00', '13:30', '16:59', '17:00', '18:30', '21:59', '22:00', '23:30'];
-function check(s: AppState, d: ISODate): string[] {
+// outside: υπηρεσίες εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): απόντες και στο Σήμερα/Δύναμη, όπως στην ΗΚΑΙ (το ΔΥΝΑΜΗ του Excel δεν τις ξέρει)
+function check(s: AppState, d: ISODate, outside = false): string[] {
   const errs: string[] = []; const E = (t: string) => errs.push(d + ' ' + t);
   const people = activePeople(s), total = people.length, lists = s.settings.lists;
   const ids = (xs: { id: number }[]) => xs.map(p => p.id).sort((a, b) => a - b).join();
@@ -24,7 +25,9 @@ function check(s: AppState, d: ISODate): string[] {
     if (c.total !== total || v.total !== total) E(t + ' Στρατιώτες/Δύναμη ' + c.total + '/' + v.total + ' ≠ ' + total);
     if (v.present + v.kol + v.absent !== total) E(t + ' Δύναμη: Π+Κ+Α ≠ σύνολο');
     if (c.present - kv.minus.length !== v.present) E(t + ' Παρόντες Σήμερα ' + (c.present - kv.minus.length) + ' ≠ Δύναμη ' + v.present);
-    if (c.absent !== v.absent || awayList.length !== c.absent) E(t + ' Απόντες Σήμερα ' + c.absent + ' / λίστα ' + awayList.length + ' / Δύναμη ' + v.absent);
+    if (c.absent !== v.absent || awayList.length + c.awaySvc.length !== c.absent) E(t + ' Απόντες Σήμερα ' + c.absent + ' / λίστα ' + awayList.length + '+' + c.awaySvc.length + ' / Δύναμη ' + v.absent);
+    if (c.awaySvc.some(p => awayList.includes(p))) E(t + ' απών δύο φορές (κατάσταση και υπηρεσία εκτός)');
+    if ((v.cats.away.groups.find(g => g.key === 'svc')?.rows.length || 0) !== c.awaySvc.length) E(t + ' Δύναμη: υπηρεσία εκτός ≠ Σήμερα');
     if (kv.minus.length !== v.kol) E(t + ' Κωλυόμενοι ' + kv.minus.length + ' ≠ ' + v.kol);
     const sum = awayText(c).split(' · ').filter(Boolean).reduce((a, x) => a + parseInt(x, 10), 0);
     if (sum !== c.absent) E(t + ' «' + awayText(c) + '» δεν αθροίζει ' + c.absent);
@@ -38,18 +41,20 @@ function check(s: AppState, d: ISODate): string[] {
     const awayIds = new Set(awayList.map(p => p.id));
     for (const b of shown) if (!b.r.open && !b.r.pending && b.r.day === d && b.r.time && mins(b.r.time) <= at && !awayIds.has(b.p.id)) E(t + ' p' + b.p.id + ' γύρισε ήδη αλλά φαίνεται');
   }
-  // ΔΥΝΑΜΗ του Excel (στην ώρα εξόδου): Α + Β = οι απόντες της Δύναμης εκείνη την ώρα, Γ = παρόντες + κωλυόμενοι, σύνολο = Στρατιώτες
-  const T = mins(dayTimes(s, d).out), book = dayBook(s, d), cT = strengthOf(s, d, T);
-  if (book.length !== total) E('ΔΥΝΑΜΗ ' + book.length + ' ≠ ' + total);
-  // απόντες στην ώρα εξόδου = Α + Β + όσοι του Γ4 δεν έχουν γυρίσει ακόμα, χωρίς όσους του Α3 φεύγουν για άδεια μετά την ώρα εξόδου
-  // (και όσους του Γ1 έχουν υπηρεσία ενώ η διόρθωση λέει έξω, με ΠΡΟΣΟΧΗ)
-  const pres = new Set(cT.lists.present.map(p => p.id));
-  const isAway = (r: typeof book[number]) => /^[AB]/.test(r.g) ? !(/^A3|^B1/.test(r.g) && pres.has(r.p.id) && r.lv?.from === d && !!r.lv.fromTime && mins(r.lv.fromTime) > T) : r.g === 'G4' ? !pres.has(r.p.id) : r.g === 'G1' && !!r.warn && !pres.has(r.p.id);
-  const ab = book.filter(isAway).map(r => r.p), g = book.filter(r => r.g[0] === 'G').map(r => r.p);
-  const awayT = people.filter(p => !pres.has(p.id));
-  if (ids(ab) !== ids(awayT)) E('ΔΥΝΑΜΗ Α+Β(+Γ4) ' + ids(ab) + ' ≠ Απόντες στην έξοδο ' + ids(awayT));
-  for (const r of book) if (r.g === 'G4' && !pres.has(r.p.id) && !(r.r && !r.r.open && !r.r.pending && r.r.day === d)) E('Γ4 p' + r.p.id + ' απών χωρίς επιστροφή απόψε');
-  if (g.length + book.filter(r => /^[AB]/.test(r.g)).length !== total) E('ΔΥΝΑΜΗ Α+Β+Γ ≠ σύνολο');
+  if (!outside) {
+    // ΔΥΝΑΜΗ του Excel (στην ώρα εξόδου): Α + Β = οι απόντες της Δύναμης εκείνη την ώρα, Γ = παρόντες + κωλυόμενοι, σύνολο = Στρατιώτες
+    const T = mins(dayTimes(s, d).out), book = dayBook(s, d), cT = strengthOf(s, d, T);
+    if (book.length !== total) E('ΔΥΝΑΜΗ ' + book.length + ' ≠ ' + total);
+    // απόντες στην ώρα εξόδου = Α + Β + όσοι του Γ4 δεν έχουν γυρίσει ακόμα, χωρίς όσους του Α3 φεύγουν για άδεια μετά την ώρα εξόδου
+    // (και όσους του Γ1 έχουν υπηρεσία ενώ η διόρθωση λέει έξω, με ΠΡΟΣΟΧΗ)
+    const pres = new Set(cT.lists.present.map(p => p.id));
+    const isAway = (r: typeof book[number]) => /^[AB]/.test(r.g) ? !(/^A3|^B1/.test(r.g) && pres.has(r.p.id) && r.lv?.from === d && !!r.lv.fromTime && mins(r.lv.fromTime) > T) : r.g === 'G4' ? !pres.has(r.p.id) : r.g === 'G1' && !!r.warn && !pres.has(r.p.id);
+    const ab = book.filter(isAway).map(r => r.p), g = book.filter(r => r.g[0] === 'G').map(r => r.p);
+    const awayT = people.filter(p => !pres.has(p.id));
+    if (ids(ab) !== ids(awayT)) E('ΔΥΝΑΜΗ Α+Β(+Γ4) ' + ids(ab) + ' ≠ Απόντες στην έξοδο ' + ids(awayT));
+    for (const r of book) if (r.g === 'G4' && !pres.has(r.p.id) && !(r.r && !r.r.open && !r.r.pending && r.r.day === d)) E('Γ4 p' + r.p.id + ' απών χωρίς επιστροφή απόψε');
+    if (g.length + book.filter(r => /^[AB]/.test(r.g)).length !== total) E('ΔΥΝΑΜΗ Α+Β+Γ ≠ σύνολο');
+  }
   // ΗΚΑΙ (08:00): οι στρατιώτες της = Στρατιώτες· οι απόντες της (άδειες, νοσοκομείο) = οι απόντες της Δύναμης στις 08:00 χωρίς εξοδούχους/ΔΝ
   const h = hkaiCounts(s, d), c8 = strengthOf(s, d, hkMin(s.rules));
   if (h.soldiers !== total) E('ΗΚΑΙ στρατιώτες ' + h.soldiers + ' ≠ ' + total);
@@ -61,7 +66,12 @@ function check(s: AppState, d: ISODate): string[] {
   const lvAway = awayAt.filter(p => !lvNo.includes(p));
   if (ids(h.noCol.map(x => x.p)) !== ids(lvNo)) E('ΗΚΑΙ noCol ' + ids(h.noCol.map(x => x.p)) + ' ≠ ' + ids(lvNo));
   if (h.avail !== h.total - h.apo) E('ΗΚΑΙ διαθέσιμοι ≠ σύνολο − απόντες');
-  if (ids(hkAway) !== ids(lvAway)) E('ΗΚΑΙ απόντες ' + ids(hkAway) + ' ≠ Δύναμη 08:00 (άδειες/νοσοκομείο) ' + ids(lvAway) + ' · ' + c8.absent);
+  // υπηρεσία εκτός στρατοπέδου: απόντες και στις δύο. Εξαίρεση (όπως πάντα): η ΗΚΑΙ δεν βλέπει έξοδο/ΔΝ, άρα όποιος κρατιέται από ΔΝ και έχει υπηρεσία εκτός
+  // μετρά στη στήλη της στην ΗΚΑΙ ενώ στο Σήμερα είναι ήδη απών ως ΔΝ (μία φορά)
+  const svcBlock = (pid: number) => Object.entries(s.guards[d] || {}).some(([k, q]) => q === pid && svcAbsent(postBy(s, k)?.hkCol && svcColOf(postBy(s, k)!.kind, postBy(s, k)!.hkCol)));
+  const base = new Set([...lvAway, ...c8.awaySvc].map(p => p.id)), hkIds = new Set(hkAway.map(p => p.id));
+  for (const p of hkAway) if (!base.has(p.id) && !(svcBlock(p.id) && statusesAt(s, p.id, d, hkMin(s.rules)).some(x => isAwaySt(x, lists) && TYPES[x.type].cat === 'out'))) E('ΗΚΑΙ απών p' + p.id + ' που δεν είναι απών στη Δύναμη 08:00');
+  for (const id of base) if (!hkIds.has(id)) E('απών Δύναμης 08:00 p' + id + ' που δεν είναι στις στήλες απόντων της ΗΚΑΙ');
   return errs;
 }
 
@@ -108,6 +118,25 @@ describe('και με Άγνοια, Λιποταξία, Αδικαιολόγητ
       for (const d of DAYS) errs.push(...check(s, d).map(e => 's' + seed + ' ' + e));
     }
     expect(n).toBeGreaterThan(40);
+    expect(errs.slice(0, 25)).toEqual([]);
+  });
+});
+
+// Υπηρεσίες εκτός στρατοπέδου (BlockDef.hkCol, 17/11): οι θαλαμοφύλακες του α΄ πίνακα στα Φυλάκια, του β΄ στη Φύλλα πορείας, τα μαγειρεία στην Άλλη μονάδα,
+// και ο Λ/Υ-Δ/Υ στην Υπηρεσία όπως πάντα. Σήμερα, Δύναμη και ΗΚΑΙ συμφωνούν και για όσους είναι απόντες λόγω υπηρεσίας.
+const withOutside = (s: AppState): AppState => {
+  const col: Record<string, string> = { th: 'fyl', th2: 'fp', mg: 'allh' };
+  const fix = (l: AppState['settings']['blocks']) => l.map(b => (col[b.id] ? { ...b, hkCol: col[b.id] } : b));
+  return { ...s, settings: { ...s.settings, blocks: fix(s.settings.blocks), blocksSpen: fix(s.settings.blocksSpen) } };
+};
+describe('και με υπηρεσίες εκτός στρατοπέδου (στήλη απόντων)', () => {
+  for (const realistic of [true, false]) it(realistic ? 'όπως τα αφήνει η οθόνη' : 'και παρά τους κανόνες', () => {
+    const errs: string[] = []; let svc = 0;
+    for (let seed = 1; seed <= 25; seed++) {
+      const s = withOutside(genState(seed * 7919 + (realistic ? 0 : 1), realistic, 30));
+      for (const d of DAYS) { errs.push(...check(s, d, true).map(e => 's' + seed + ' ' + e)); svc += strengthOf(s, d, hkMin(s.rules)).awaySvc.length; }
+    }
+    expect(svc).toBeGreaterThan(40);
     expect(errs.slice(0, 25)).toEqual([]);
   });
 });

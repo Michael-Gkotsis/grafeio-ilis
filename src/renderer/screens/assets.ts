@@ -6,10 +6,10 @@ import { html, cx, Alert, Badge, Button, Dialog, VirtualList, useToast, useViewp
 import { Select } from '../select';
 import { ChoiceField, DateField, PersonPicker } from '../common';
 import { useNav, useStore } from '../store';
-import { ASSET_FILTERS, STATE_TXT, EVENT_TXT, assetCfgOf, assetHistory, assetView, catCounts, catOf, heldGroups, holderOut, holderText, maintState, maintTxt, placeText, registry, sameNo, type AssetFilter, type AssetRow } from '../../shared/assets';
+import { ASSET_FILTERS, STATE_TXT, EVENT_TXT, assetCfgOf, assetHistory, assetView, catCounts, catOf, heldGroups, holderOut, holderText, maintState, maintTxt, rowPlace, registry, sameNo, type AssetFilter, type AssetRow } from '../../shared/assets';
 import { addMonths, heldBy } from '../../shared/assets';
 import { drivenBy } from '../../shared/vehicles';
-import { dmy } from '../../shared/dates';
+import { dmy, nowHM } from '../../shared/dates';
 import { weaponKey } from '../../shared/weapons';
 import { pickPeople } from '../../shared/rules';
 import type { Asset, AssetCat, AssetHolder } from '../../shared/domain';
@@ -41,7 +41,7 @@ export function MitrooView() {
   const [xl, setXl] = useState(false);
   const height = useViewportHeight(410);
   useEffect(() => { if (nav.params.aq != null || nav.params.acat != null) nav.set({ aq: null, acat: null }); }, []);   // μία φορά, από τον σύνδεσμο της καρτέλας ατόμου
-  const all = useMemo(() => registry(state), [state.people, state.cadreList, state.assets, state.settings]);
+  const all = useMemo(() => registry(state, { day: today, hm: nowHM() }), [state.people, state.cadreList, state.assets, state.settings, state.guards, state.dutyLog, state.rules, state.dutyFix, today]);   // ΑΠΩΝ στη θέση: υπηρεσία εκτός στρατοπέδου
   const kinds = useMemo(() => cfg.cats.filter(c => c.kind !== 'vehicle'), [cfg]);
   const rows = useMemo(() => assetView(state, { cat: cat || undefined, filter, q: dq }, today, all), [state.people, state.cadreList, state.assets, state.settings, cat, filter, dq, today, all]);
   const counts = useMemo(() => catCounts(state, { filter, q: dq }, today, all), [all, filter, dq, today, state.settings]);
@@ -66,7 +66,7 @@ export function MitrooView() {
         onClick=${() => setSel(r.key)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setSel(r.key); }}>
       <span>${a.type || '—'}</span><span className="num"><b>${a.no}</b>${(a.qty || 0) > 1 ? html` <small className="muted">×${a.qty}</small>` : ''}</span>
       <span className=${cx(!a.holder && 'muted')} data-tip=${holderText(state, a.holder) + (out ? ' · εκτός δύναμης' : '')}>${a.holder ? html`${holderText(state, a.holder).replace(/ \((στέλεχος|άλλη μονάδα|φυσικό πρόσωπο)\)$/, '')}${a.holder.k !== 'person' ? html` <small className="muted">(${a.holder.k === 'cadre' ? 'στέλεχος' : a.holder.k === 'unit' ? 'άλλη μονάδα' : 'φυσ. πρόσωπο'})</small>` : ''}${out ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}` : 'αχρέωτο'}</span>
-      <span>${placeText(cfg, a) || '—'}</span><span className="mit__st"><${StateBadges} a=${a} today=${today} warn=${cfg.warnDays}/></span>
+      <span>${rowPlace(cfg, r) || '—'}</span><span className="mit__st"><${StateBadges} a=${a} today=${today} warn=${cfg.warnDays}/></span>
       <span className=${cx('num', maintState(a, today, cfg.warnDays) === 'overdue' && 'mit__late')}>${a.maint?.next ? dmy(a.maint.next) : '—'}</span>
       ${fields.map(f => html`<span key=${f.id}>${a.extra?.[f.id] || '—'}</span>`)}</div>`;
   }, [sel, state, GRID, cfg, today, fields]);
@@ -116,7 +116,7 @@ function AssetCard({ row, all, cfg, today, onDlg, onClose }: P) {
     ${dup.length > 0 && html`<${Alert} tone="warn">Ο ίδιος αριθμός υπάρχει και σε: ${dup.map((x: AssetRow) => holderText(state, x.a.holder)).join(', ')}<//>`}
     <dl className="kv mit__kv">
       <dt>Χρεωμένο σε</dt><dd><b>${holderText(state, a.holder)}</b>${holderOut(state, a.holder) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}</dd>
-      ${kv('Θέση', placeText(cfg, a))}
+      ${kv('Θέση', rowPlace(cfg, row))}
       <dt>Κατάσταση</dt><dd><b>${STATE_TXT[a.state]}</b>${a.why ? ' · ' + a.why : ''}</dd>
       ${a.warOnly && html`<dt>Χρήση</dt><dd><b>Μόνο εμπόλεμη</b></dd>`}
       ${kv('Ποσότητα', (a.qty || 0) > 1 ? a.qty : '')}
