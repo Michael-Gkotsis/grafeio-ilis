@@ -1138,6 +1138,17 @@ else {
         return { ok: true, file: out, warnings: [] };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Πρόγραμμα αδειών στελεχών: νέο αρχείο για τον μήνα ym· print: ανοίγει η προεπισκόπηση εκτύπωσης αντί για τον Excel
+    ipcMain.handle('export:cadrePlan', async (_e, ym: string, print?: boolean, filter?: string) => {
+      try {
+        const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym)) ? String(ym) : today().slice(0, 7);
+        const r = await excel().cadrePlanBook(store.state, m, today(), typeof filter === 'string' ? filter : 'all');
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings: string[] = [];
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
         const r = await made('rosterPrint', date, store.state, sigs, undefined, headId);

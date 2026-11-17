@@ -93,6 +93,7 @@ export interface Api {
   exportRoster(date: ISODate, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
   exportWeapons(date: ISODate, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
   exportCadreLeave(year: number, cid?: string): Promise<ExportResult>;   // Άδειες και απαλλαγές στελεχών: νέο Excel (υπόλοιπα όλων, και η καρτέλα του στελέχους), ανοίγει μόλις γραφτεί
+  exportCadrePlan(ym: string, print?: boolean, filter?: string): Promise<ExportResult>;   // Πρόγραμμα αδειών στελεχών: νέο Excel για τον μήνα ym (ΕΕΕΕ-ΜΜ)· print: προεπισκόπηση εκτύπωσης αντί για Excel
   exportCadre(date: ISODate, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;

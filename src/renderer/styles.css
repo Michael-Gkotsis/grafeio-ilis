@@ -1709,3 +1709,45 @@ div[style*="center"] > .hd-img{margin:0 auto}div[style*="right"] > .hd-img{margi
 .lvset__q{border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .lvset__kinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.lvset__row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .ui-sheet--wide{width:min(580px,100%)}
+
+/* Στελέχη › Πρόγραμμα αδειών (17/11): πλέγμα μήνα (monthGrid.ts), μενού επιλογής, υπόμνημα */
+.plan{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.plan__bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.plan__month{display:flex;align-items:center;gap:8px}.plan__month b{font-size:16px;min-width:150px;text-align:center}
+.mg{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);overflow:hidden}
+.mg__scroll{overflow-x:auto}
+.mg-table{border-collapse:collapse;table-layout:fixed;font-size:11.5px;min-width:100%;width:max-content}
+.mg-table th,.mg-table td{border:1px solid var(--border);padding:0;text-align:center;height:28px}
+.mg-table thead th{background:var(--thead);font-weight:600;height:36px}
+.mg-name{position:sticky;left:0;z-index:2;background:var(--card);width:178px;min-width:178px;max-width:178px;text-align:left!important;padding:0 6px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
+thead .mg-name{background:var(--thead);font-weight:600}
+.mg-who{all:unset;cursor:pointer;display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.mg-who:hover{text-decoration:underline}.mg-who:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.mg-d{width:27px;min-width:27px;padding:0;line-height:1.15}.mg-d b{display:block;font-size:12px}.mg-d span{display:block;font-weight:400;font-size:10.5px;color:var(--muted-fg)}
+.mg-tail{width:122px;min-width:122px;font-size:11px;white-space:nowrap;padding:0 6px!important;background:var(--thead)}
+tbody .mg-tail{background:var(--card)}
+.mg-neg{color:var(--bad);font-weight:700}
+.mg-c{position:relative;width:27px;min-width:27px;font-size:11px;font-weight:700;cursor:cell;user-select:none;-webkit-user-select:none;white-space:nowrap;overflow:hidden}
+.is-we{background:rgba(120,128,100,.17)}.is-hol{background:rgba(216,178,58,.32)}
+.mg-c.mg-ka,.mg-sw.mg-ka{background:var(--info-bg);color:var(--info)}
+.mg-c.mg-amd,.mg-sw.mg-amd{background:var(--ok-bg);color:var(--ok)}
+.mg-c.mg-leave,.mg-sw.mg-leave{background:var(--dn-bg);color:var(--dn)}
+.mg-c.mg-apal,.mg-sw.mg-apal{background:rgba(230,130,30,.3);color:var(--warn)}
+.mg-c.mg-other,.mg-sw.mg-other{background:var(--secondary);color:var(--secondary-fg)}
+.mg-x{font-style:normal;color:var(--bad);font-weight:800}
+.mg-c .mg-x{position:absolute;right:1px;top:-1px;font-size:9px}
+.mg-c:not(.mg-ka):not(.mg-amd):not(.mg-leave):not(.mg-apal):not(.mg-other) .mg-x{position:static;font-size:11px}
+.mg-c.is-sel{outline:2px solid #2f6fd6;outline-offset:-2px}
+.mg-menu{position:fixed;z-index:80;width:260px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;gap:2px}
+.mg-menu__head{display:flex;flex-direction:column;padding:4px 8px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;font-size:13px}.mg-menu__head span{font-size:12px;color:var(--muted-fg)}
+.mg-menu__list{display:flex;flex-direction:column;gap:1px}
+.mg-menu__it{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius);cursor:pointer;font-size:13px}
+.mg-menu__it:hover,.mg-menu__it:focus-visible{background:var(--hover)}.mg-menu__it:focus-visible{outline:2px solid var(--ring)}
+.mg-menu__it[disabled]{opacity:.45;cursor:not-allowed}
+.mg-menu__warn{margin-left:auto;color:var(--warn)}
+.mg-menu__sep{height:1px;background:var(--border);margin:3px 0}
+.mg-menu__other{display:flex;flex-direction:column;gap:8px;padding:4px 8px 8px}.mg-menu__acts{display:flex;gap:8px;justify-content:flex-end}
+.mg-sw{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;border:1px solid var(--border);font-style:normal;font-size:11px;flex:none}
+.mg-sw.mg-no{color:var(--bad);background:var(--card);font-weight:800}.mg-sw.mg-we{background:rgba(120,128,100,.17)}.mg-sw.mg-hol{background:rgba(216,178,58,.32)}.mg-sw.mg-clr{background:var(--card)}
+.mg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;align-items:center}.mg-legend span{display:inline-flex;align-items:center;gap:6px}
+.mg-hint{margin:0;padding:8px 12px;border-radius:var(--radius);background:var(--info-bg);color:var(--info);font-size:13px;max-width:900px}
