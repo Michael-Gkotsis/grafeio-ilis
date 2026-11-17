@@ -1,5 +1,6 @@
 // features/cadre · «Στελέχη» (Michael, 17/10): δική τους καρτέλα στο μενού, χωριστά από το Δυναμολόγιο των οπλιτών.
 // Οι καταστάσεις τους είναι οι στήλες της ΗΚΑΙ (κωλυόμενοι, απόντες) και ταΐζουν την ΗΚΑΙ όπως πριν.
+import { HeldBlock } from './assets';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Sheet, SheetNav, Strip, Tabs, useDirty, useSheetNav, useToast } from '../ui';
 import { Select } from '../select';
@@ -177,7 +178,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
     ${tab === 'leave' && html`<${LeaveTab} key=${cid} c=${c} year=${lvYear} setYear=${setLvYear} years=${leaveYears} onApal=${() => setStFor({ apal: true })}/>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
       <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>
-      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd>
+      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd><${HeldBlock} cid=${c.id}/>
       ${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dt>Υπηρεσίες στελεχών</dt>`}${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dd data-cadre-dutyof="">${[dutyCfg.groups.find(g => g.id === dutyP.group)?.name, dutyP.limit != null && 'όριο ' + dutyP.limit, dutyP.none && 'ελαφράς: καμία', dutyP.only && 'ελαφράς: μόνο', dutyP.no24 && 'όχι 24ωρες', dutyP.noDow?.length && 'μέρες που δεν θέλει: ' + dutyP.noDow.length].filter(Boolean).join(' · ')}</dd>`}</dl>
       <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} variant="outline" onClick=${() => setDutyDlg(true)} data-tip="Ομάδα υπηρεσιών, όριο του μήνα και περιορισμοί (ελαφράς, μητέρα…)">Στοιχεία υπηρεσιών…<//><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
     ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}
