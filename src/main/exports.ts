@@ -26,6 +26,7 @@ import { applyHead, headBlocks, type HeadDone } from './headWrite';
 import { applyMoves, blockOf, swapHeadDate } from './layout';
 import type { Block, LayoutForm, LayoutSheet, Moves } from '../shared/layout';
 import { statNoOut } from '../shared/stat';
+import { hkaiVeh } from '../shared/vehicles';
 export { FROURA_FORMS };
 
 export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
@@ -464,7 +465,7 @@ export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: { fro
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
   if (hkOn(s.settings, 'grd')) { put(B.night, night || null, 'Νυκτοφρουρές'); put(B.day24, day24 || null, '24ώρες'); }
   // Κατάσταση οχημάτων (μία γραμμή στο έντυπο) και ατυχήματα, όταν η Ίλη τα χρησιμοποιεί
-  const v = s.settings.hkai?.veh;
+  const v = hkaiVeh(s, d);   // με κλειστή την «Από το μητρώο οχημάτων» (προεπιλογή): ό,τι έγραψες με το χέρι
   if (hkOn(s.settings, 'veh') && v) {
     if (v.type) put(B.vType, v.type, 'Είδη οχημάτων');
     for (const [ref, x, w] of [[B.vProv, v.prov, 'Προβλέπονται'], [B.vKin, v.kin, 'Σε κίνηση'], [B.vMaint, v.maint, 'Για συντήρηση'], [B.vDmg, v.dmg, 'Λόγω βλάβης']] as const) put(ref, x ?? null, w + ' (οχήματα)');

@@ -439,7 +439,48 @@ export type OutsFmt = 'cur' | 'all';
 export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['all', 'Όλη η δύναμη']];
 // Η παλιά μορφή «Σε 4 πίνακες» ('tab4', Michael 30/10) αντικαταστάθηκε από την «Όλη η δύναμη»: οι αποθηκευμένες ρυθμίσεις με 'tab4' διαβάζονται ως 'all'
 export const isOutsAll = (st: { outsFmt?: OutsFmt | 'tab4' }) => st.outsFmt === 'all' || st.outsFmt === 'tab4';
+// Μητρώο οπλισμού, υλικού και οχημάτων (17/11, φάσεις 4–5): σχήμα όπως στο sxima-mitroou.md. Οι κατηγορίες, οι τύποι, τα πεδία και οι
+// λέξεις θέσης είναι λίστες του χρήστη (Ρυθμίσεις › Μητρώο οπλισμού και υλικού)· οι προεπιλογές είναι στο shared/assets.ts (assetCfgOf)
+export interface AssetCat {
+  id: string; name: string;
+  kind: 'weapon' | 'material' | 'vehicle';
+  types: string[];
+  fields: { id: string; name: string }[];
+  every?: number;                        // συντήρηση κάθε N μήνες (προεπιλογή της κατηγορίας)
+  everyKm?: number;                      // οχήματα: και κάθε N χλμ
+  hours?: boolean;                       // οχήματα: μετρά ώρες κινητήρα αντί για χιλιόμετρα (ετικέτα «ώρ.»)· επέκταση του σχήματος της φάσης 5
+}
+export interface PlaceWord { word: string; means: 'rack' | 'box' | 'duty' | 'leave' | 'guard' | 'store' | 'other'; note?: string }
+export interface AssetCfg { cats: AssetCat[]; places: PlaceWord[]; warnDays: number }
+export type AssetHolder = { k: 'person'; pid: number } | { k: 'cadre'; cid: string } | { k: 'unit'; name: string } | { k: 'ext'; name: string };
+export interface Asset {
+  id: string;
+  cat: string;                           // AssetCat.id
+  type: string;
+  no: string;                            // κανονικοποίηση όπως normWeapon/weaponKey
+  qty?: number;
+  holder?: AssetHolder;                  // λείπει = ΑΧΡΕΩΤΟ
+  place?: string;
+  rack?: string; wpos?: string;
+  fileWord?: string;                     // η λέξη θέσης όπως είναι στο αρχείο της μονάδας (για τα COUNTIF τους)
+  state: 'ok' | 'repair' | 'writeoff' | 'immobile';
+  why?: string;
+  warOnly?: boolean;
+  maint?: { last?: ISODate; next?: ISODate; every?: number; lastKm?: number; nextKm?: number };
+  extra?: Record<string, string>;
+  acc?: string;
+  note?: string;
+  plate?: string; driver?: { k: 'person'; pid: number } | { k: 'cadre'; cid: string }; km?: number; kmOn?: ISODate;
+  gone?: ISODate;
+}
+export interface AssetEvent {
+  id: string; aid: string; date: ISODate;
+  what: 'maint' | 'assign' | 'repair' | 'back' | 'writeoff' | 'immobile' | 'fuel' | 'km' | 'note';
+  text?: string;
+  litres?: number; km?: number;
+}
 export interface Settings {
+  assets?: Partial<AssetCfg>;            // μητρώο οπλισμού και υλικού: κατηγορίες, λέξεις θέσης, μέρες προειδοποίησης· ό,τι λείπει παίρνει την προεπιλογή (shared/assets.ts)
   cadreDuty?: Partial<CadreDutyCfg>;     // υπηρεσίες στελεχών: ομάδες, υπηρεσίες, όρια (Ρυθμίσεις › Υπηρεσίες στελεχών)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreDuty.ts)
   cadreLeave?: Partial<CadreLeaveCfg>;   // άδειες και απαλλαγές στελεχών (Ρυθμίσεις › Μονάδα και έντυπα)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreBalance.ts)
   fileNames?: FileNames;                 // ονόματα αρχείων: όνομα, διαχωριστικό και μορφή ημερομηνίας (fileNames.ts)
@@ -506,7 +547,8 @@ export type HkSection = 'veh' | 'acc' | 'grd' | 'prov' | 'lv';
 export const HK_DEFAULT_OFF: HkSection[] = ['lv'];
 export interface HkVehicle { type: string; prov?: number; kin?: number; maint?: number; dmg?: number }
 // head: η κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά, π.χ. ΚΕΤΘ / 2Η ΕΠΧΙΑ)· κενή = ό,τι έχει το έντυπο
-export interface HkaiSettings { off?: HkSection[]; on?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number>; head?: string[] }
+// vehReg: «Από το μητρώο οχημάτων» (προεπιλογή κλειστό): τα κενά της κατάστασης οχημάτων γεμίζουν από το μητρώο (shared/vehicles.ts)· ό,τι γράφεις υπερισχύει
+export interface HkaiSettings { off?: HkSection[]; on?: HkSection[]; veh?: HkVehicle; vehReg?: boolean; prov?: Record<string, number>; head?: string[] }
 export const hkOn = (st: Settings, k: HkSection) => (HK_DEFAULT_OFF.includes(k) ? (st.hkai?.on || []).includes(k) : !(st.hkai?.off || []).includes(k));
 // Ανοίγει ή κλείνει μία ενότητα, στη λίστα που της αντιστοιχεί (off για όσες είναι ανοιχτές από προεπιλογή, on για τις άλλες)
 export function hkToggle(h: HkaiSettings, k: HkSection, on: boolean): HkaiSettings {
@@ -611,6 +653,8 @@ export interface AppState {
   cadreNoDuty?: CadreNoDuty[];           // «Δεν θέλει υπηρεσία» (Πρόγραμμα αδειών): ΟΧΙ κατάσταση, δεν μπαίνει στην ΗΚΑΙ, στη Δύναμη ή στο ΣΤΕΛΕΧΗ.xlsx (kv «cadreNoDuty», shared/cadrePlan.ts)
   cadreDuties?: CadreDuty[];             // υπηρεσίες στελεχών του προγράμματος (kv «cadreDuties», shared/cadreDuty.ts): χωριστά από τις θέσεις των στρατιωτών
   cadreDutyOf?: Record<string, CadreDutyPerson>;   // ανά στέλεχος (cid): ομάδα, όριο, περιορισμοί (kv «cadreDutyOf»), ΟΧΙ στην εγγραφή Cadre ώστε το ΣΤΕΛΕΧΗ.xlsx να μένει ίδιο
+  assets?: Asset[];                      // μητρώο οπλισμού και υλικού (kv «assets», shared/assets.ts): τα όπλα των ατόμων που δεν έχουν εγγραφή φαίνονται ως «εικονικές» γραμμές
+  assetLog?: AssetEvent[];               // ιστορικό του μητρώου (kv «assetLog»)
   cadreGrants?: CadreGrant[];            // έξτρα άδειες, υπόλοιπο από πέρσι και αρχική απαλλαγών ανά στέλεχος (kv «cadreGrants», shared/cadreBalance.ts)
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)

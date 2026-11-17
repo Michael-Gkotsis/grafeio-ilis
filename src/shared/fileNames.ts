@@ -9,7 +9,7 @@ import { frouraFile, isOutsAll, phaseName, type Phase, type Settings } from './d
 
 export type DateFmt = 'd-m-Y' | 'd-m-y' | 'd.m.Y' | 'd.m.y' | 'd Mon y' | 'd MON Y' | 'Y-m-d';
 export type FileSep = ' ' | '-' | '.' | '_';
-export type FileId = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'hd' | 'weapons' | 'roster' | 'lists' | 'cadre' | 'cadreLeave' | 'cadrePlan' | 'cadreDuty' | 'imer' | 'check' | 'report';
+export type FileId = 'froura' | 'frouraSpen' | 'hkai' | 'outs' | 'hd' | 'weapons' | 'roster' | 'lists' | 'cadre' | 'cadreLeave' | 'cadrePlan' | 'cadreDuty' | 'assets' | 'vehicles' | 'imer' | 'check' | 'report';
 export interface FileNames { date?: DateFmt; per?: Partial<Record<FileId, { name?: string; sep?: FileSep; date?: DateFmt }>> }
 
 const MON = ['Ιαν', 'Φεβ', 'Μάρ', 'Απρ', 'Μάι', 'Ιούν', 'Ιούλ', 'Αύγ', 'Σεπ', 'Οκτ', 'Νοέ', 'Δεκ'];
@@ -34,7 +34,7 @@ const OLD_FMT: Partial<Record<FileId, DateFmt>> = { hkai: 'd.m.y' };
 const stemOf: Record<FileId, (st: Settings) => string> = {
   froura: st => frouraFile(st, 'sven').trim(), frouraSpen: st => frouraFile(st, 'spen').trim(), hkai: st => reportOf(st),
   outs: st => (isOutsAll(st) ? 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ' : 'ΕΞΟΔΟΥΧΟΙ-ΠΑΡΑΜΕΝΟΝΤΕΣ'), hd: () => 'ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ', weapons: () => 'ΟΠΛΙΣΜΟΣ', roster: () => 'ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ',
-  lists: () => 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ', cadre: () => 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ', cadreLeave: () => 'ΑΔΕΙΕΣ-ΑΠΑΛΛΑΓΕΣ ΣΤΕΛΕΧΩΝ', cadrePlan: () => 'ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ', cadreDuty: () => 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ', imer: st => imerTitle(st), check: () => 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', report: () => 'ΕΝΤΥΠΟ',
+  lists: () => 'ΔΥΝΑΜΟΛΟΓΙΟ ΚΑΤΑΣΤΑΣΕΙΣ', cadre: () => 'ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ', cadreLeave: () => 'ΑΔΕΙΕΣ-ΑΠΑΛΛΑΓΕΣ ΣΤΕΛΕΧΩΝ', cadrePlan: () => 'ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ', cadreDuty: () => 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ', assets: () => 'ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ', vehicles: () => 'ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ', imer: st => imerTitle(st), check: () => 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', report: () => 'ΕΝΤΥΠΟ',
 };
 export const defaultStem = (st: Settings, id: FileId): string => stemOf[id](st);
 
@@ -44,7 +44,7 @@ export const FILE_ROWS = (st: Settings): { id: FileId; label: string; ext: strin
   { id: 'hkai', label: reportOf(st), ext: 'xlsx' }, { id: 'outs', label: 'Εξοδούχοι / Παραμένοντες', ext: 'xlsx' },
   { id: 'hd', label: 'Ημερήσια Διαταγή (Excel, Word)', ext: 'docx' }, { id: 'weapons', label: 'Οπλισμός', ext: 'xlsx' },
   { id: 'roster', label: 'Συνολικό Δυναμολόγιο', ext: 'xlsx' }, { id: 'lists', label: 'Δυναμολόγιο καταστάσεις', ext: 'xlsx' },
-  { id: 'cadre', label: 'Δυναμικό στελεχών', ext: 'xlsx' }, { id: 'cadreLeave', label: 'Άδειες και απαλλαγές στελεχών', ext: 'xlsx' }, { id: 'cadrePlan', label: 'Πρόγραμμα αδειών στελεχών', ext: 'xlsx' }, { id: 'cadreDuty', label: 'Υπηρεσίες στελεχών', ext: 'xlsx' }, { id: 'imer', label: 'Ημερολόγιο κωλυομένων', ext: 'xlsx' },
+  { id: 'cadre', label: 'Δυναμικό στελεχών', ext: 'xlsx' }, { id: 'cadreLeave', label: 'Άδειες και απαλλαγές στελεχών', ext: 'xlsx' }, { id: 'cadrePlan', label: 'Πρόγραμμα αδειών στελεχών', ext: 'xlsx' }, { id: 'cadreDuty', label: 'Υπηρεσίες στελεχών', ext: 'xlsx' }, { id: 'assets', label: 'Μητρώο οπλισμού και υλικού', ext: 'xlsx' }, { id: 'vehicles', label: 'Κατάσταση οχημάτων', ext: 'xlsx' }, { id: 'imer', label: 'Ημερολόγιο κωλυομένων', ext: 'xlsx' },
   { id: 'check', label: 'Έλεγχος υπηρεσιών (μήνας)', ext: 'xlsx' },
 ];
 // Χωρίς \ / : * ? " < > | (και χωρίς κενά στις άκρες)

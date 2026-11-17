@@ -18,6 +18,7 @@ import { PeopleScreen, PersonSheet, DeclareStatusDialog, BaselineReviewDialog, n
 import { GuardScreen, OutsScreen } from './screens/guard';
 import { NoteDialog, NotesScreen } from './screens/notes';
 import { WeaponsScreen } from './screens/weapons';
+import { VehiclesScreen } from './screens/vehicles';
 import { frouraEmpty } from './sheets';
 import { ExportProvider, LegendDialog } from './common';
 import { setRankNamesOn } from './rankName';
@@ -37,16 +38,16 @@ import type { Command } from '../shared/commands';
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
-  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], notes: ['Σημειώσεις', Icon.notes, NotesScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
+  hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], vehicles: ['Οχήματα', Icon.vehicle, VehiclesScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], notes: ['Σημειώσεις', Icon.notes, NotesScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση
 };
 // το όνομα στο μενού: η ΗΚΑΙ λέγεται ΗΚΑΛ σε λόχο (Ρυθμίσεις › Μονάδα και έντυπα)
 const screenName = (v: string) => (v === 'hkai' ? HK() : SCREENS[v][0]);
-const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes'], NAV_MORE = ['templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1, το Ιστορικό: κουμπί πάνω δεξιά (το μενού χωρά σε 1366×768 και με τις Σημειώσεις)
+const NAV_MAIN = ['home', 'people', 'cadre', 'guard', 'outs', 'records', 'strength', 'hkai', 'weapons', 'vehicles', 'reports', 'notes'], NAV_MORE = ['templates'];   // ο Οδηγός: «?» πάνω δεξιά και F1, το Ιστορικό: κουμπί πάνω δεξιά (το μενού χωρά σε 1366×768 και με τις Σημειώσεις)
 const NAV_ALL = [...NAV_MAIN.slice(0, 9), 'templates'];   // Alt+1 … Alt+9 το κύριο μενού με αυτή τη σειρά, Alt+0 οι Ρυθμίσεις· Έντυπα με Ctrl+E, Σημειώσεις: από το μενού, νέα σημείωση με Ctrl+Shift+N
 // οθόνες με καρτέλες που από το μενού ανοίγουν πάντα στην πρώτη (Michael, 18/10: η ΗΚΑΙ προεπιλογή στο μενού ΗΚΑΙ)
 const MENU_TAB: Record<string, string> = { hkai: 'hkTab', reports: FORM_PARAM };   // από το μενού: η ΗΚΑΙ ανοίγει στην πρώτη καρτέλα, τα Έντυπα στη λίστα (όχι στη σελίδα δημιουργίας)
-const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'reports', 'notes', 'history', 'templates', 'guide'];
+const MOBILE_MAIN = ['home', 'people', 'guard', 'outs'], MOBILE_MORE = ['cadre', 'records', 'strength', 'hkai', 'weapons', 'vehicles', 'reports', 'notes', 'history', 'templates', 'guide'];
 
 function useToday() {
   const [d, setD] = useState(todayFn());

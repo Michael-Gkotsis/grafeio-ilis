@@ -4,7 +4,7 @@ import { HK } from './unit';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Asset, type AssetEvent, type AssetHolder, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
@@ -14,10 +14,12 @@ import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCel
 import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
+import { assetCfgOf, catOf, cleanAsset, doMaint, holderText, registry, sameHolder, STATE_TXT } from './assets';
+import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
-import { normPos, normRack, normWeapon } from './weapons';
+import { normPos, normRack, normWeapon, weaponKey } from './weapons';
 import { normExtra, normPersonal, PKEYS, XKEYS, type PKey } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
@@ -50,6 +52,17 @@ export type Command =
   | { t: 'deleteCadreDuty'; id: string }
   | { t: 'setCadreDuties'; add: Omit<CadreDuty, 'id'>[]; del: string[]; text: string }
   | { t: 'setCadreDutyOf'; cid: string; person: CadreDutyPerson | null }
+  // Μητρώο οπλισμού και υλικού (shared/assets.ts): id = αληθινή εγγραφή, ή base = η εικονική γραμμή (από το Δυναμολόγιο) που γίνεται εγγραφή με την πρώτη αλλαγή
+  | { t: 'saveAsset'; asset: Omit<Asset, 'id'> & { id?: string }; date: ISODate }
+  | { t: 'assetMaint'; id: string; base?: Asset; date: ISODate; note?: string; km?: number }
+  | { t: 'assetState'; id: string; base?: Asset; state: 'ok' | 'repair' | 'writeoff' | 'immobile'; why?: string; date: ISODate }
+  // Οχήματα (shared/vehicles.ts): γέμισμα (λίτρα + km), χιλιόμετρα, οδηγός
+  | { t: 'assetFuel'; id: string; base?: Asset; date: ISODate; litres: number; km?: number }
+  | { t: 'assetKm'; id: string; base?: Asset; date: ISODate; km: number }
+  | { t: 'assetDriver'; id: string; base?: Asset; date: ISODate; driver: Asset['driver'] | null }
+  | { t: 'assetHolder'; id: string; base?: Asset; holder: AssetHolder | null; date: ISODate }
+  | { t: 'assetGone'; id: string; base?: Asset; why?: string; date: ISODate }
+  | { t: 'deleteAsset'; id: string }
   // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
   | { t: 'importCadres'; adds: CadreNew[]; updates: { id: string; patch: Partial<Cadre> }[]; source: string }
   | { t: 'importCadreAbs'; adds: AbsNew[]; updates: { id: string; note: string }[]; deletes: string[]; source: string }
@@ -435,6 +448,75 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const state = fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today)));
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
+// Μητρώο οπλισμού και υλικού: κάθε αλλαγή είναι εντολή (αναίρεση) και γράφει γεγονός στο ιστορικό της εγγραφής
+function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' | 'assetFuel' | 'assetKm' | 'assetDriver' }>, ctx: Ctx): Result {
+  const list = s.assets || []; const log = s.assetLog || []; const cfg = assetCfgOf(s.settings);
+  const ev = (aid: string, date: ISODate, what: AssetEvent['what'], text?: string, more?: Pick<AssetEvent, 'litres' | 'km'>): AssetEvent => ({ id: 'e' + ctx.newId(), aid, date, what, ...(text ? { text } : {}), ...(more || {}) });
+  const label = (a: Asset) => [a.type, a.no].filter(Boolean).join(' ');
+  if (c.t === 'deleteAsset') {
+    const a = list.find(x => x.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η εγγραφή');
+    return { state: { ...s, assets: list.filter(x => x !== a), assetLog: log.filter(e => e.aid !== a.id) }, text: 'Μητρώο: σβήστηκε η εγγραφή ' + label(a), files: [] };
+  }
+  if (c.t === 'saveAsset') {
+    const old = c.asset.id ? list.find(x => x.id === c.asset.id) : undefined;
+    const x = cleanAsset(c.asset, old?.id || 'a' + ctx.newId()); if (!x.no) throw new Error('Γράψε τον αριθμό');
+    if (!x.cat) throw new Error('Διάλεξε κατηγορία');
+    const out = old ? { ...s, assets: list.map(y => (y === old ? x : y)) } : { ...s, assets: [...list, x] };
+    return { state: { ...out, assetLog: [...log, ev(x.id, c.date, 'note', old ? 'άλλαξαν τα στοιχεία' : 'καταχωρήθηκε')] }, text: 'Μητρώο: ' + (old ? 'αλλαγή ' : 'νέο ') + label(x), files: [] };
+  }
+  // οι υπόλοιπες: η αληθινή εγγραφή ή η εικονική γραμμή που γίνεται εγγραφή τώρα (ίδιος αριθμός, κάτοχος, τύπος, οπλοβαστός)
+  const cur = list.find(x => x.id === c.id);
+  if (!cur && !(c.base && c.base.id === c.id)) throw new Error('Δεν βρέθηκε η εγγραφή');
+  const rowNow = registry(s).find(r => r.key === c.id);
+  const a0: Asset = cur || cleanAsset({ ...c.base! }, 'a' + ctx.newId());
+  const put = (a: Asset, st: AppState = s, e?: AssetEvent): AppState => ({ ...st, assets: cur ? (st.assets || list).map(y => (y.id === cur.id ? a : y)) : [...(st.assets || list), a], assetLog: e ? [...(st.assetLog || log), e] : st.assetLog });
+  const nm = label(a0);
+  if (c.t === 'assetMaint') {
+    const veh = catOf(cfg, a0.cat)?.kind === 'vehicle'; const km = veh && c.km != null && isFinite(c.km) && c.km >= 0 ? c.km : undefined;
+    const a = withKm({ ...a0, maint: veh ? doVehMaint(a0, catOf(cfg, a0.cat), c.date, km) : doMaint(a0, catOf(cfg, a0.cat), c.date) }, km, c.date);
+    return { state: put(a, s, ev(a.id, c.date, 'maint', c.note?.trim() || undefined, km != null ? { km } : undefined)), text: 'Μητρώο: συντήρηση ' + nm, files: [] };
+  }
+  // οχήματα: γέμισμα (λίτρα, και km του οδομέτρου), χιλιόμετρα, οδηγός. Τα km/kmOn ενημερώνονται αν η μέρα δεν είναι παλιότερη από την τελευταία καταγραφή
+  if (c.t === 'assetFuel') {
+    if (!(c.litres > 0)) throw new Error('Γράψε πόσα λίτρα');
+    const km = c.km != null && isFinite(c.km) && c.km >= 0 ? c.km : undefined; const cat = catOf(cfg, a0.cat);
+    return { state: put(withKm(a0, km, c.date), s, ev(a0.id, c.date, 'fuel', numTxt(c.litres) + ' λίτρα' + (km != null ? ' στα ' + kmTxt(km, cat) : ''), { litres: c.litres, ...(km != null ? { km } : {}) })), text: 'Οχήματα: γέμισμα ' + vehName(a0), files: [] };
+  }
+  if (c.t === 'assetKm') {
+    if (!isFinite(c.km) || c.km < 0) throw new Error('Γράψε τα χιλιόμετρα');
+    return { state: put(withKm(a0, c.km, c.date), s, ev(a0.id, c.date, 'km', kmTxt(c.km, catOf(cfg, a0.cat)), { km: c.km })), text: 'Οχήματα: χιλιόμετρα ' + vehName(a0), files: [] };
+  }
+  if (c.t === 'assetDriver') {
+    const a: Asset = { ...a0 }; if (c.driver) a.driver = c.driver; else delete a.driver;
+    return { state: put(a, s, ev(a.id, c.date, 'assign', c.driver ? 'οδηγός: ' + driverText(s, c.driver) : 'χωρίς οδηγό')), text: 'Οχήματα: οδηγός ' + vehName(a0), files: [] };
+  }
+  if (c.t === 'assetState') {
+    const why = (c.why || '').replace(/\s+/g, ' ').trim(); const was = a0.state;
+    const a: Asset = { ...a0, state: c.state }; if (why && c.state !== 'ok') a.why = why; else delete a.why;
+    const what: AssetEvent['what'] = c.state === 'ok' ? 'back' : c.state;
+    return { state: put(a, s, ev(a.id, c.date, what, c.state === 'ok' ? (was === 'ok' ? undefined : why || undefined) : why || undefined)), text: 'Μητρώο: ' + nm + ' ' + STATE_TXT[c.state].toLowerCase(), files: [] };
+  }
+  if (c.t === 'assetGone') {
+    const a: Asset = { ...a0, gone: c.date, state: 'writeoff' }; const why = (c.why || '').trim(); if (why) a.why = why;
+    return { state: put(a, s, ev(a.id, c.date, 'writeoff', 'διαγράφηκε οριστικά' + (why ? ': ' + why : ''))), text: 'Μητρώο: διαγράφηκε ' + nm, files: [] };
+  }
+  // χρέωση: το κύριο όπλο ατόμου μένει στο Δυναμολόγιο (Person.weapon), οπότε περνά από τις ίδιες εντολές με τον Οπλισμό
+  const h = c.holder; const link = rowNow?.link; const isWeapon = catOf(cfg, a0.cat)?.kind === 'weapon';
+  let st = s;
+  if (link && !(h && sameHolder(h, link))) {
+    // έφυγε από τον κάτοχο του Δυναμολογίου: ο αριθμός σβήνεται από εκεί (ένας κάτοχος, όχι δύο αλήθειες)
+    if (link.k === 'person') st = run(st, { t: 'setWeapons', changes: [{ pid: link.pid, weapon: '' }], what: 'μητρώο' }, ctx).state;
+    else st = { ...st, cadreList: st.cadreList.map(x => { if (x.id !== link.cid) return x; const { weapon: _w, ...rest } = x; return rest; }) };
+  }
+  const a: Asset = { ...a0 }; if (h) a.holder = h; else delete a.holder;
+  if (link && !(h && sameHolder(h, link))) { delete a.rack; delete a.wpos; }
+  if (h && isWeapon && !(link && sameHolder(h, link))) {
+    if (h.k === 'person') { const p = st.people.find(x => x.id === h.pid); if (p && !weaponKey(p.weapon)) st = run(st, { t: 'setWeapons', changes: [{ pid: p.id, weapon: a.no, ...(a.type ? { wtype: a.type } : {}) }], what: 'μητρώο' }, ctx).state; }
+    else if (h.k === 'cadre') { const q = st.cadreList.find(x => x.id === h.cid); if (q && !weaponKey(q.weapon)) st = { ...st, cadreList: st.cadreList.map(x => (x === q ? { ...x, weapon: a.no, ...(a.type ? { wtype: normWeapon(a.type) } : {}) } : x)) }; }
+  }
+  const to = h ? 'χρεώθηκε σε ' + holderText(st, h) : 'έγινε αχρέωτο';
+  return { state: put(a, st, ev(a.id, c.date, 'assign', to)), text: 'Μητρώο: ' + nm + ' ' + to, files: [] };
+}
 function run(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = seatMap(s);   // στρατιώτες και στελέχη με υπηρεσίες (ΕΠΟΠ/ΟΒΑ)
   switch (c.t) {
@@ -689,6 +771,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const p = c.person && cleanPerson(c.person); const rest = { ...(s.cadreDutyOf || {}) }; if (p) rest[x.id] = p; else delete rest[x.id];
       return { state: { ...s, cadreDutyOf: rest }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', στοιχεία υπηρεσιών' + (p ? '' : ' (καθαρίστηκαν)'), files: [] };
     }
+    case 'saveAsset': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       const lv = c.req.leave;

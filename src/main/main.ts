@@ -8,6 +8,7 @@ import { addImage, copyImages, readImage } from './eikones';
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
+import { assetView, ASSET_FILTER_IDS, type AssetFilter } from '../shared/assets';
 import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
@@ -1154,6 +1155,28 @@ else {
       try {
         const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym)) ? String(ym) : today().slice(0, 7);
         const r = await excel().cadreDutyBook(store.state, m, today());
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings: string[] = [];
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
+    // Μητρώο οπλισμού και υλικού: νέο αρχείο με ό,τι φαίνεται στην οθόνη (κατηγορία, φίλτρο, αναζήτηση)· print: προεπισκόπηση εκτύπωσης
+    ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string }) => {
+      try {
+        const v = view && typeof view === 'object' ? view : {}; const d = today();
+        const rows = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '' }, d);
+        const r = await excel().assetBook(store.state, rows, d);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings: string[] = [];
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
+    // Οχήματα: νέο αρχείο «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ» (φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ, ΣΥΝΤΗΡΗΣΕΙΣ)· print: προεπισκόπηση εκτύπωσης
+    ipcMain.handle('export:vehicles', async (_e, print?: boolean) => {
+      try {
+        const r = await excel().vehicleBook(store.state, today());
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings: string[] = [];
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);

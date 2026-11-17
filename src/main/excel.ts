@@ -9,6 +9,8 @@ import { cadreSheets } from '../shared/cadre';
 import { leaveSheets } from '../shared/cadreBalance';
 import { planSheet } from '../shared/cadrePlan';
 import { dutySheet } from '../shared/cadreDuty';
+import { assetSheets, type AssetRow, type AssetSheet } from '../shared/assets';
+import { vehicleSheets } from '../shared/vehicles';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { live, absCode, rankTxt } from '../shared/ranks';
@@ -240,6 +242,35 @@ export async function cadreDutyBook(s: AppState, ym: string, d: ISODate): Promis
   w2.pageSetup.printTitlesRow = '3:3';
   marks.push({ sheet: w2.name, key: 'main', head: [], date: [], title: ['A1'], foot: f2, cols: 4 });
   return { name: fileNameOf(s.settings, 'cadreDuty', { text: upper(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
+}
+// Μητρώο οπλισμού και υλικού (Michael, 17/11): ΝΕΟ αρχείο, ένα φύλλο ανά τύπο όπλου, ένα ανά κατηγορία υλικού και ΣΥΝΟΛΑ.
+// Όλα με κεφαλαία, A4 οριζόντια, φάρδος μία σελίδα. Τα δεδομένα βγαίνουν από το shared/assets.ts (rows: ό,τι φαίνεται στην οθόνη)
+export async function assetBook(s: AppState, rows: AssetRow[], d: ISODate): Promise<Made> { return sheetBook(s, assetSheets(s, rows, d), d, 'assets'); }
+// Κατάσταση οχημάτων (φάση 5): ίδιος τρόπος γραφής, φύλλα από το shared/vehicles.ts (όλα με κεφαλαία)
+export async function vehicleBook(s: AppState, d: ISODate): Promise<Made> { return sheetBook(s, vehicleSheets(s, d), d, 'vehicles', d); }
+async function sheetBook(s: AppState, sheets: AssetSheet[], d: ISODate, id: 'assets' | 'vehicles', nameDate: ISODate | null = null): Promise<Made> {
+  const wb = newBook(d); const { F, Z, al, colWidth, FT } = lookOf(s);
+  const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const setup = { paperSize: 9, orientation: 'landscape' as const, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
+  const small = { name: F, size: Math.max(7, Z - 2), italic: true };
+  const marks: Made['marks'] = [];
+  for (const sh of sheets) {
+    const W = sh.head.length; const ws = wb.addWorksheet(sh.name, { pageSetup: setup, views: [{ state: 'frozen', ySplit: 3 }] });
+    ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+    sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
+    const left = (i: number) => sh.kind === 'totals' ? i < 2 : sh.kind === 'weapon' ? i === 2 || i === 5 || i >= 9 : sh.kind === 'vehicle' ? i === 1 || i === 3 || i === 4 || i === 6 || i >= 7 : sh.kind === 'fuel' ? i === 2 : sh.kind === 'maint' ? i === 2 || i === 4 : i === 1 || i === 2 || i === 5 || i === 6 || i >= 10;
+    sh.rows.forEach((r, j) => r.forEach((v, i) => {
+      const c = ws.getRow(4 + j).getCell(i + 1); c.value = v; c.border = border; c.font = sh.kind === 'totals' && j === sh.rows.length - 1 ? { ...FT.data, bold: true } : FT.data;
+      c.alignment = left(i) ? { ...al, horizontal: 'left' as const, wrapText: true } : al;
+    }));
+    if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑ ΕΙΔΟΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
+    const foot = 4 + Math.max(1, sh.rows.length) + 1;
+    ws.mergeCells(foot, 1, foot, W); ws.getCell(foot, 1).value = sh.note; ws.getCell(foot, 1).font = small; ws.getCell(foot, 1).alignment = { horizontal: 'left', wrapText: true };
+    sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = Math.min(i === 0 ? 6 : 34, colWidth(i === 0 ? 4 : 8, h, sh.rows.map(r => r[i]))); });
+    ws.pageSetup.printTitlesRow = '3:3';
+    marks.push({ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot, cols: W });
+  }
+  return { name: fileNameOf(s.settings, id, nameDate), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Σταθερή ημερομηνία στις ιδιότητες: ίδια δεδομένα, ίδιο αρχείο
 function newBook(d: ISODate) {
