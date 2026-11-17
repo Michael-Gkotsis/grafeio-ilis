@@ -87,7 +87,7 @@ export interface Api {
   exportFile(kind: ExportKind, date: ISODate, opts?: ExportOpts): Promise<ExportResult>;
   // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς Ρυθμίσεις › Υπογραφές)
   exportLists(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
-  exportHd(req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[] }): Promise<ExportResult>;   // Ημερήσια Διαταγή: Word (δικό σου πρότυπο ή το έτοιμο) ή εκτύπωση χωρίς Word
+  exportHd(req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[]; headId?: string }): Promise<ExportResult>;   // Ημερήσια Διαταγή: Word (δικό σου πρότυπο ή το έτοιμο) ή εκτύπωση χωρίς Word
   pickHdTpl(): Promise<{ ok: true; file: string; name: string } | { ok: false; error: string } | null>;   // δικό σου πρότυπο Word με ετικέτες {…}
   exportImer(req: ImerReq, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό· print: προεπισκόπηση εκτύπωσης
   exportRoster(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης

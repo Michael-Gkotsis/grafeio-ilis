@@ -1,13 +1,14 @@
 // ΗΚΑΙ › Ημερήσια Διαταγή (Michael, 3/11): γεμίζει από τις υπηρεσίες και τις μεταβολές της μέρας, γράφεις μόνο ό,τι δεν ξέρει η εφαρμογή.
 // Βγαίνει σε Word (έτοιμο ή δικό σου πρότυπο) ή σε εκτύπωση. Κάθε γραμμή αλλάζει ή σβήνεται μόνο εδώ· η ΗΚΑΙ δεν αλλάζει.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Button, Card, Dialog, PageHeader, useMedia, useToast } from '../ui';
 import { Combo } from '../select';
 import { useNav, useStore } from '../store';
 import { DateBar } from '../common';
 import { SigsDialog } from '../sigs';
 import { addDays, dayName, dm, type ISODate } from '../../shared/dates';
-import { HD_SECTIONS, hdAuto, hdCadreNames, hdDefaultDay, hdPageHtml, hdTags, type HdDoc } from '../../shared/hd';
+import { headFor } from '../../shared/docHead';
+import { HD_SECTIONS, hdAuto, hdCadreNames, hdDefaultDay, hdHeadDate, hdPageHtml, hdTags, type HdDoc } from '../../shared/hd';
 import { sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { HK } from '../../shared/unit';
 type P = any;
@@ -53,7 +54,12 @@ export function HdTab() {
     if (await run({ t: 'setSettings', settings: { hdTpl: { file: r.file, name: r.name } }, text: 'πρότυπο Word Ημερήσιας Διαταγής: ' + r.name }, false)) toast({ text: 'Πρότυπο: ' + r.name });
   };
   const tpl = state.settings.hdTpl;
-  const pageHtml = (fs: number) => hdPageHtml(tags, fs);
+  // επικεφαλίδα που σχεδίασες: η οθόνη δείχνει ό,τι θα τυπωθεί («Όπως σήμερα»: η σελίδα όπως πάντα)
+  const hd = headFor(state.settings, 'hd'); const ids = hd ? [...new Set(hd.z.flat().flatMap(it => (it.k === 'img' && it.id ? [it.id] : [])))] : [];
+  const [imgs, setImgs] = useState<Record<string, string | null>>({});
+  useEffect(() => { let on = true; ids.filter(id => !(id in imgs)).forEach(id => { window.api.readImage(id).then(u => { if (on) setImgs(m => ({ ...m, [id]: u })); }).catch(() => { if (on) setImgs(m => ({ ...m, [id]: null })); }); }); return () => { on = false; }; }, [ids.join(',')]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const view = hd ? { head: hd, date: hdHeadDate(state.settings, date), img: (id: string) => imgs[id] ?? null } : null;
+  const pageHtml = (fs: number) => hdPageHtml(tags, fs, view);
   const dirty = !!edit && edit.date === date;
   return html`<div>
     <${PageHeader} title=${'Ημερήσια Διαταγή της ' + dm(date) + '/' + date.slice(0, 4)} sub="Γεμίζει μόνη της από τις υπηρεσίες και τις μεταβολές της μέρας. Γράφεις μόνο ό,τι δεν ξέρει η εφαρμογή.">

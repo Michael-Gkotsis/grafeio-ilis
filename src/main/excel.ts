@@ -342,5 +342,5 @@ export async function hdBook(s: AppState, d: ISODate, t: Record<string, string>,
   [WA, WB, WC, WD].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.pageSetup.printArea = 'A1:D' + r; ws.pageSetup.printTitlesRow = head + ':' + head;
   const data = Buffer.from(await wb.xlsx.writeBuffer());
-  return { name: fileNameOf(s.settings, 'hd', d), data, marks: [] };
+  return { name: fileNameOf(s.settings, 'hd', d), data, marks: [{ sheet: ws.name, key: 'main', head: ['A1'], date: [], title: ['A3'], foot: r, cols: 4 }] };
 }
