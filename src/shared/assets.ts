@@ -19,7 +19,11 @@ export function defaultCats(lists?: Settings['lists']): AssetCat[] {
     cat(CAT_RIFLE, 'Τυφέκια', 'weapon', rifles), cat('pistolia', 'Πιστόλια', 'weapon', ['Μ1911 Α1']),
     cat('polyvola', 'Πολυβόλα', 'weapon', ['MG3A1', 'ΠΟΛ 0,50'], [{ id: 'barrel', name: 'Αριθμός κάνης' }, { id: 'spare', name: 'Εφεδρική κάνη' }]),
     cat('antiarm', 'Αντιαρματικά', 'weapon'), cat('pyrovola', 'Πυροβόλα', 'weapon'),
-    cat('diopt', 'Διόπτρες', 'material'), cat('asyrm', 'Ασύρματοι', 'material'), cat('imatismos', 'Ιματισμός', 'material'), cat('loipo', 'Λοιπό υλικό', 'material')
+    cat('diopt', 'Διόπτρες', 'material'), cat('asyrm', 'Ασύρματοι', 'material'), cat('imatismos', 'Ιματισμός', 'material'), cat('loipo', 'Λοιπό υλικό', 'material'),
+    // οχήματα (φάση 5): κάθε 6 μήνες ή 5.000 χλμ· τα ερπυστριοφόρα μπορούν να μετρούν ώρες κινητήρα (hours)
+    { ...cat('troxofora', 'Τροχοφόρα', 'vehicle', ['1/4 τόνου', 'ΜΑΝ 6t', 'HUMMER', 'Φορτηγό', 'Ρυμουλκούμενο']), every: 6, everyKm: 5000 },
+    { ...cat('erpystr', 'Ερπυστριοφόρα', 'vehicle', ['M113', 'M577', 'M48']), every: 6, everyKm: 5000, hours: true },
+    { ...cat('politikou', 'Πολιτικού τύπου', 'vehicle', ['Nissan', 'Fiat', 'Λεωφορείο']), every: 6, everyKm: 5000 }
   ];
 }
 export const DEFAULT_PLACES: PlaceWord[] = [
@@ -208,7 +212,7 @@ export const STATE_TXT: Record<Asset['state'], string> = { ok: 'Λειτουργ
 export const EVENT_TXT: Record<AssetEvent['what'], string> = { maint: 'συντήρηση', assign: 'χρέωση', repair: 'προς επισκευή', back: 'επέστρεψε από επισκευή', writeoff: 'προς διαγραφή', immobile: 'ακινησία', fuel: 'καύσιμα', km: 'χιλιόμετρα', note: 'αλλαγή' };
 
 // ---------- Excel «ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ»: ένα φύλλο ανά τύπο όπλου, ένα ανά κατηγορία υλικού, και ΣΥΝΟΛΑ ----------
-export interface AssetSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string; kind: 'weapon' | 'material' | 'totals' }
+export interface AssetSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string; kind: 'weapon' | 'material' | 'totals' | 'vehicle' | 'fuel' | 'maint' }
 const stateXl = (a: Asset) => upper(STATE_TXT[a.state] + (a.warOnly ? ' · ΜΟΝΟ ΕΜΠΟΛΕΜΗ' : ''));
 const holderXl = (s: Pick<AppState, 'people' | 'cadreList'>, h?: AssetHolder): [string, string] => {
   if (!h) return ['', 'ΑΧΡΕΩΤΟ']; const x = holderParts(s, h);

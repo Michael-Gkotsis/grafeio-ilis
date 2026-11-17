@@ -12,6 +12,7 @@ import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLi
 import { hkOffText } from '../shared/cadre';
 import { absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
+import { hkaiVeh } from '../shared/vehicles';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
 function sigRows(s: AppState, form: SigForm, W: number, dash: boolean, base: (Cell | null)[][]): (Cell | null)[][] {
@@ -132,7 +133,7 @@ export function hkaiBack(s: AppState, date: ISODate): SheetModel {
   const name = (pid: number) => { const p = pm.get(pid); return p ? [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ') : '?'; };
   const egr = hkaiEgrLines(s, date), dia = hkaiDiaLines(s, date), leaves = hkaiLeaveLines(s, date), puns = hkaiPunLines(s, date), reqs = hkaiReqLines(s, date);
   // ενότητες που η Ίλη έκλεισε: κενές, όπως στο έντυπο
-  const grd = hkOn(s.settings, 'grd'), v = hkOn(s.settings, 'veh') ? s.settings.hkai?.veh : undefined, acc = hkOn(s.settings, 'acc');
+  const grd = hkOn(s.settings, 'grd'), v = hkOn(s.settings, 'veh') ? hkaiVeh(s, date) : undefined, acc = hkOn(s.settings, 'acc');
   if (!grd) { night = 0; day24 = 0; }
   const A = (k: string) => E(acc && tx[k]?.trim() ? tx[k].trim() : 'Ø', 'b c');
   const N = (v: number) => E(v || '', 'b c');

@@ -9,14 +9,15 @@ import { usePending } from '../pending';
 import { PLACE_MEANS, assetCfgOf, defaultCats, DEFAULT_PLACES, ASSET_WARN_DAYS, newAssetCatId, registry } from '../../shared/assets';
 import type { AssetCat, PlaceWord } from '../../shared/domain';
 
-interface CatF { id: string; name: string; kind: AssetCat['kind']; every: string; types: string; fields: string; everyKm?: number; fieldIds: Record<string, string> }
-const KINDS: [AssetCat['kind'], string][] = [['weapon', 'Όπλα'], ['material', 'Υλικό'], ['vehicle', 'Οχήματα (οθόνη στη φάση 5)']];
-const toF = (c: AssetCat): CatF => ({ id: c.id, name: c.name, kind: c.kind, every: c.every ? String(c.every) : '', types: c.types.join('\n'), fields: c.fields.map(x => x.name).join('\n'), everyKm: c.everyKm, fieldIds: Object.fromEntries(c.fields.map(x => [x.name, x.id])) });
+interface CatF { id: string; name: string; kind: AssetCat['kind']; every: string; types: string; fields: string; everyKm: string; hours: boolean; fieldIds: Record<string, string> }
+const KINDS: [AssetCat['kind'], string][] = [['weapon', 'Όπλα'], ['material', 'Υλικό'], ['vehicle', 'Οχήματα (οθόνη «Οχήματα»)']];
+const toF = (c: AssetCat): CatF => ({ id: c.id, name: c.name, kind: c.kind, every: c.every ? String(c.every) : '', types: c.types.join('\n'), fields: c.fields.map(x => x.name).join('\n'), everyKm: c.everyKm ? String(c.everyKm) : '', hours: !!c.hours, fieldIds: Object.fromEntries(c.fields.map(x => [x.name, x.id])) });
 const lines = (t: string) => { const o: string[] = []; for (const l of t.split('\n')) { const v = l.replace(/\s+/g, ' ').trim(); if (v && !o.some(x => x.toLowerCase() === v.toLowerCase())) o.push(v); } return o; };
 const toCat = (f: CatF): AssetCat => {
   const used = new Set<string>(); const fields = lines(f.fields).map(name => { let id = f.fieldIds[name]; if (!id || used.has(id)) { let n = 1; while (used.has('f' + n) || Object.values(f.fieldIds).includes('f' + n)) n++; id = 'f' + n; } used.add(id); return { id, name }; });
   const every = Math.floor(Number(String(f.every).replace(',', '.'))); const c: AssetCat = { id: f.id, name: f.name.trim(), kind: f.kind, types: lines(f.types), fields };
-  if (every > 0) c.every = every; if (f.everyKm) c.everyKm = f.everyKm; return c;
+  const km = Math.floor(Number(String(f.everyKm).replace(/\./g, '').replace(',', '.')));
+  if (every > 0) c.every = every; if (f.kind === 'vehicle') { if (km > 0) c.everyKm = km; if (f.hours) c.hours = true; } return c;
 };
 const fromState = (st: any) => { const c = assetCfgOf(st); return { cats: c.cats.map(toF), places: c.places.map(p => ({ ...p })), warn: String(c.warnDays) }; };
 
@@ -38,17 +39,19 @@ export function AssetsCard() {
   usePending(dirty, { label: 'Μητρώο οπλισμού και υλικού', save, discard: () => setF(fromState(state.settings)) });
   const reset = () => setF({ cats: defaultCats(state.settings.lists).map(toF), places: DEFAULT_PLACES.map(p => ({ ...p })), warn: String(ASSET_WARN_DAYS) });
   return html`<div className="stack" data-assets-set="">
-    <p className="note" style=${{ margin: 0 }}>Το <b>Μητρώο</b> του Οπλισμού κρατά όπλα και υλικό. Οι κατηγορίες, οι τύποι και τα πεδία τους είναι δικά σου: ό,τι γράψεις εδώ φαίνεται στο Μητρώο και στο Excel «ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ». Δεν αλλάζει τα υπάρχοντα Excel.</p>
+    <p className="note" style=${{ margin: 0 }}>Το <b>Μητρώο</b> του Οπλισμού κρατά όπλα και υλικό, και η οθόνη <b>Οχήματα</b> τα οχήματα (κατηγορίες είδους «Οχήματα»). Οι κατηγορίες, οι τύποι και τα πεδία τους είναι δικά σου: ό,τι γράψεις εδώ φαίνεται στο Μητρώο και στο Excel «ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ». Δεν αλλάζει τα υπάρχοντα Excel.</p>
     ${f.cats.map(c => html`<${Card} key=${c.id} title=${html`${c.name || 'Νέα κατηγορία'} <${Badge} tone="outline">${used(c.id)} είδη<//>`}
       actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, cats: f.cats.filter(x => x.id !== c.id) })} data-tip=${used(c.id) ? 'Έχει ' + used(c.id) + ' είδη: θα φαίνονται χωρίς κατηγορία (δεν σβήνονται)' : 'Σβήσε την κατηγορία'}>Σβήσε<//>`}>
       <div className="field-row">
         <div className="field" style=${{ flex: 2 }}><label className="field__label" htmlFor=${'ac-n-' + c.id}>Όνομα</label><input id=${'ac-n-' + c.id} className="ui-input" value=${c.name} placeholder="π.χ. Τυφέκια" onChange=${(e: any) => setC(c.id, { name: e.target.value })}/></div>
         <div className="field"><label className="field__label" htmlFor=${'ac-k-' + c.id}>Είδος</label><${Select} id=${'ac-k-' + c.id} className="ui-input" value=${c.kind} onChange=${(e: any) => setC(c.id, { kind: e.target.value })}>${KINDS.map(([k, l]) => html`<option key=${k} value=${k}>${l}</option>`)}<//></div>
-        <div className="field"><label className="field__label" htmlFor=${'ac-e-' + c.id}>Συντήρηση κάθε (μήνες)</label><input id=${'ac-e-' + c.id} className="ui-input" type="number" min="0" max="120" style=${{ maxWidth: '90px' }} value=${c.every} onChange=${(e: any) => setC(c.id, { every: e.target.value })}/></div></div>
+        <div className="field"><label className="field__label" htmlFor=${'ac-e-' + c.id}>Συντήρηση κάθε (μήνες)</label><input id=${'ac-e-' + c.id} className="ui-input" type="number" min="0" max="120" style=${{ maxWidth: '90px' }} value=${c.every} onChange=${(e: any) => setC(c.id, { every: e.target.value })}/></div>
+        ${c.kind === 'vehicle' && html`<div className="field"><label className="field__label" htmlFor=${'ac-km-' + c.id}>Συντήρηση κάθε N ${c.hours ? 'ώρες' : 'χλμ'}</label><input id=${'ac-km-' + c.id} className="ui-input" type="number" min="0" style=${{ maxWidth: '110px' }} value=${c.everyKm} placeholder="5000" onChange=${(e: any) => setC(c.id, { everyKm: e.target.value })}/></div>
+        <label className="check" style=${{ alignSelf: 'end', paddingBottom: '8px' }} data-tip="Για ερπυστριοφόρα: η ένδειξη είναι ώρες κινητήρα και φαίνεται «ώρ.» αντί για «χλμ»"><input type="checkbox" checked=${c.hours} onChange=${(e: any) => setC(c.id, { hours: e.target.checked })}/><span>Μετρά ώρες κινητήρα</span></label>`}</div>
       <div className="field-row">
         <div className="field"><label className="field__label" htmlFor=${'ac-t-' + c.id}>Τύποι (ένας ανά γραμμή)</label><textarea id=${'ac-t-' + c.id} className="ui-input" rows="3" value=${c.types} placeholder="G3A3" onChange=${(e: any) => setC(c.id, { types: e.target.value })}/></div>
         <div className="field"><label className="field__label" htmlFor=${'ac-f-' + c.id}>Πεδία της κατηγορίας (ένα ανά γραμμή)</label><textarea id=${'ac-f-' + c.id} className="ui-input" rows="3" value=${c.fields} placeholder="π.χ. Αριθμός κάνης" onChange=${(e: any) => setC(c.id, { fields: e.target.value })}/></div></div><//>`)}
-    <div><${Button} variant="outline" onClick=${() => setF({ ...f, cats: [...f.cats, { id: newAssetCatId(f.cats.map(toCat)), name: '', kind: 'material', every: '', types: '', fields: '', fieldIds: {} }] })}>+ Κατηγορία<//></div>
+    <div><${Button} variant="outline" onClick=${() => setF({ ...f, cats: [...f.cats, { id: newAssetCatId(f.cats.map(toCat)), name: '', kind: 'material', every: '', types: '', fields: '', everyKm: '', hours: false, fieldIds: {} }] })}>+ Κατηγορία<//></div>
     <${Card} title="Λέξεις θέσης">
       <p className="note" style=${{ margin: '0 0 8px' }}>Η πρώτη λέξη της θέσης (π.χ. «ΚΙΒΩΤΙΟ 53» → ΚΙΒΩΤΙΟ) λέει τι σημαίνει. Χρησιμεύουν στα φίλτρα και στα αρχεία άλλων μονάδων. Η λέξη «Οπλοβαστός» είναι αυτή που γράφεται στο Excel για τα όπλα με θέση οπλοβαστού.</p>
       ${f.places.map((p, i) => html`<div className="field-row" key=${i}>

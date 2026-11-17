@@ -296,13 +296,13 @@ button.today-lbl:hover{background:rgba(255,255,255,.08)}
 .sidenav__toggle{margin-top:auto;font-size:13px;font-weight:500}
 .is-rail .sidenav{padding:10px 6px}
 /* 11 οθόνες + σύμπτυξη χωρούν σε ύψος 768 (1366×768) χωρίς να κυλά το μενού· κάθε όνομα σε μία γραμμή */
-.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:48px;padding:5px 0;position:relative;text-align:center}
+.is-rail .navbtn{flex-direction:column;justify-content:center;gap:3px;height:auto;min-height:46px;padding:4px 0;position:relative;text-align:center}
 .is-rail .navbtn[aria-current="page"]{box-shadow:none}
 .is-rail .navbtn__lbl{flex:none;width:100%;font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.3px}
 .is-rail .navbtn .ui-badge{position:absolute;top:5px;left:calc(50% + 5px);margin:0;height:17px;min-width:17px;padding:0 4px;font-size:10px;justify-content:center}
 .is-rail .sidenav__toggle{min-height:42px;font-size:11px}
 .is-rail .sidenav__toggle .navbtn__lbl{display:none}
-@media (max-height:700px){.is-rail .navbtn{min-height:44px;padding:4px 0}.is-rail .navbtn svg{width:18px;height:18px}}
+@media (max-height:700px){.is-rail .navbtn{min-height:40px;padding:3px 0;gap:2px}.is-rail .navbtn svg{width:18px;height:18px}}
 .is-rail .sidenav__sep{margin:4px 8px}
 .sidenav__sep{height:1px;background:var(--bar-line);margin:8px 4px}
 .main{padding:20px 32px 48px;min-width:0}
@@ -1825,3 +1825,12 @@ thead .mg-tail--n{font-size:11px}
 .mit__link{margin:0;font-size:12px}
 @media (max-width:1100px){.mit__grid{grid-template-columns:150px minmax(0,1fr)}.mit__card{grid-column:1 / -1;position:static;max-height:none}}
 .mit__chips{display:flex;flex-wrap:wrap;gap:6px}
+
+/* Οχήματα (φάση 5): μετρήσεις-φίλτρα, πίνακας και καρτέλα δίπλα-δίπλα (1366×768 χωρίς οριζόντια κύλιση) */
+.veh__kpis{margin-bottom:10px}.veh__kpis .kpi{padding:8px 14px 6px}.veh__kpis .kpi__n{font-size:26px}.veh__kpis .kpi__l{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500}
+.veh__kpis .kpi--bad .kpi__l,.veh__kpis .kpi--bad .kpi__n{color:var(--bad)}.veh__kpis .kpi--warn .kpi__n{color:var(--warn)}
+.veh__grid{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:12px;align-items:start;margin-top:10px}
+.veh__type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.veh__card{overflow:hidden;max-height:max(440px,calc(100vh - 318px))}.veh__body{flex:1 1 auto;min-height:0;overflow:auto}.veh__card .mit__acts{flex:none;border-top:1px solid var(--border);padding-top:8px}
+.veh__card .ui-tabs{margin:0;gap:0;flex:none}.veh__card .ui-tabs button{height:34px;padding:0 9px;font-size:13px;flex:1 1 auto}
+@media (max-width:1100px){.veh__grid{grid-template-columns:minmax(0,1fr)}.veh__card{grid-column:1 / -1;position:static;max-height:none}}
