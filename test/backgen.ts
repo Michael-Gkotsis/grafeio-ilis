@@ -4,7 +4,7 @@
 // missing sections, small sections that overflow, with or without a continuation sheet (ΕΠΕΚΤΑΣΗ ΣΕΛΙΔΑΣ), a filled worked-example sheet next to the blank back,
 // title / date / signature variants with blank parts, Λόχος words. Made-up names only.
 import ExcelJS from 'exceljs';
-import { genFillMock, type FillMock } from './mockgen';
+import { genFillMock, type FillFlags, type FillMock } from './mockgen';
 import { rng, int, pick, chance, shuffle } from './tplgen';
 import { upper } from '../src/shared/text';
 import type { SecId } from '../src/shared/backForm';
@@ -47,9 +47,9 @@ export function withBackData(s: AppState, d: ISODate, r: () => number): AppState
   return { ...s, people, statuses, requests, hkaiManual: hm };
 }
 
-export async function genBackMock(seed: number, force: Partial<BackFlags> = {}): Promise<BackMock> {
+export async function genBackMock(seed: number, force: Partial<BackFlags> = {}, fillForce: Partial<FillFlags> = {}): Promise<BackMock> {
   const r = rng(seed * 7919 + 13);
-  const fill = await genFillMock(seed, { countifs: false, lochos: force.lochos ?? chance(r, 0.25) });
+  const fill = await genFillMock(seed, { countifs: false, lochos: force.lochos ?? chance(r, 0.25), ...fillForce });
   const form = force.form ?? pick(r, ['six', 'six', 'two', 'bare'] as const);
   const decision = force.decision ?? chance(r, 0.4);
   const flags: BackFlags = {

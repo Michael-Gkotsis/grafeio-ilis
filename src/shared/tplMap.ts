@@ -143,6 +143,7 @@ export interface TryRes {
   cross: { checked: number; matched: number; unevaluated: number; mismatches: { ref: string; expected: number; got: string }[] };
   warnings: string[]; fixes: { ref: string; formula: string; why: string }[];
   data: { sheet: string; rows: number; unwritable: number } | null;
+  back: { name: string; entries: number; placed: number; moved: number; unplaced: number }[];   // the back side of the trial: lines of each section
 }
 export const lexFor = (lists: UserLists | undefined, profile?: TplProfile | null): Lexicon =>
   buildLexicon({ lists, ...(profile && Object.keys(profile.words).length ? { learned: learnedNames(profile) } : {}) });

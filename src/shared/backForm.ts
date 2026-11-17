@@ -304,7 +304,7 @@ export interface BackView {
 }
 export function backView(sheets: SheetModel[], o: BackOpts): BackView | null {
   const p = pickBack(sheets, o); if (!p) return null;
-  const have = new Set(p.form.sections.filter(x => x.state === 'sure').map(x => x.id));
+  const have = new Set(p.form.sections.map(x => x.id));
   const colL = (c: number) => { let n = c + 1, s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
   return {
     sheet: p.form.sheet, continuation: p.form.continuation, blocks: p.form.blocks, decision: p.form.decision.length,

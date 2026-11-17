@@ -20,7 +20,7 @@ import { mapMatrix, pickFront } from '../shared/hkRules';
 import { hkRowList } from '../shared/ranks';
 import { Evaluator, UNSUPPORTED } from '../shared/sheetEval';
 import { Workbook } from './xlsx';
-import { pickBack } from '../shared/backForm';
+import { pickBack, SEC_NAME } from '../shared/backForm';
 import { upper } from '../shared/text';
 import type { Sig } from '../shared/sigs';
 import { activePeople } from '../shared/rules';
@@ -115,7 +115,7 @@ function resultOf(report: FillReport): Omit<TryRes, 'head' | 'rows' | 'fixes'> {
     refused: report.refused.map(x => ({ ref: x.ref, why: WHY[x.reason] || x.detail })),
     unmappedCols: report.unmappedCols.map(x => ({ ref: x.ref, text: x.text, hasData: x.hasData })), unmappedRows: report.unmappedRows.map(x => ({ ref: x.ref, text: x.text, hasData: x.hasData })),
     cross: { checked: report.cross.checked, matched: report.cross.matched, unevaluated: report.cross.unevaluated, mismatches: report.cross.mismatches.map(m => ({ ref: m.ref, expected: m.expected, got: String(m.got ?? '') })) },
-    warnings: report.warnings, data: report.data ? { sheet: report.data.sheet, rows: report.data.rows, unwritable: report.data.unwritable.length } : null
+    warnings: report.warnings, back: report.back.sections.filter(x => x.entries > 0).map(x => ({ name: SEC_NAME[x.id], entries: x.entries, placed: x.placed, moved: x.moved, unplaced: Math.max(0, x.unplaced) })), data: report.data ? { sheet: report.data.sheet, rows: report.data.rows, unwritable: report.data.unwritable.length } : null
   };
 }
 

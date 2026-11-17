@@ -11,6 +11,7 @@ import { readRoster, countKinds } from '../src/shared/rosterRead';
 import { convertXls } from '../src/main/xlsConvert';
 import { fillAdaptive, pickFront } from '../src/main/fillAdaptive';
 import { genHkState, DAYS } from './hk-gen';
+import { withBackData } from './backgen';
 
 const dir = process.env.REAL_TEMPLATES_DIR;
 function files(d: string, depth = 0): string[] {
@@ -56,13 +57,15 @@ describe.skipIf(!dir)('adaptive fill, dry run on the real files (local only)', (
         const book = await readBookModel(f); if (!pickFront(detectBook(book))) continue;
         n++;
         for (const lochos of [false, true]) {
-          const s = genHkState(3, { lochos });
+          let seed = 5; const s = withBackData(genHkState(3, { lochos }), DAYS[2], () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; });
           const { buffer, report: r } = await fillAdaptive(buf, s, DAYS[2], null, { dryRun: true });
           expect(buffer.equals(buf)).toBe(true);
           console.log('real file #' + n + (lochos ? ' (Λόχος state)' : ' (Ίλη state)') + ': would write ' + r.written.length + ' · refused ' + r.refused.length + ' · formulas kept ' + r.kept
             + ' · unmapped columns ' + r.unmappedCols.length + ' (with data ' + r.unmappedCols.filter(x => x.hasData).length + ') · unmapped rows ' + r.unmappedRows.length + ' (with data ' + r.unmappedRows.filter(x => x.hasData).length + ')'
             + ' · people without a row ' + r.unplacedRows.reduce((a, x) => a + x.n, 0) + ' · people in a state without a column ' + r.unplacedStates.reduce((a, x) => a + x.n, 0) + ' · totals skipped ' + r.totalsSkipped.length
             + (r.data ? ' · data sheet: ' + r.data.rows + ' people rows, ' + r.data.unwritable.length + ' not placed, ' + r.data.vocab.length + ' vocabulary words' : '')
+            + ' · back side: ' + (r.back.sheet ? r.back.sections.filter(x => x.state === 'sure').length + ' sure sections, ' + r.back.sections.filter(x => x.state === 'suggest').length + ' proposals, lines placed ' + r.back.sections.reduce((a, x) => a + x.placed, 0) + ', on a continuation page ' + r.back.sections.reduce((a, x) => a + x.moved, 0) + ', not placed ' + r.back.sections.reduce((a, x) => a + Math.max(0, x.unplaced), 0) + ', categories without a section ' + r.back.missing.length + ', continuation sheet ' + (r.back.continuation ? 'yes' : 'no') : 'no back side found')
+            + ' · title ' + (r.back.front.title ? 'found' : 'not found') + ', date line ' + (r.back.front.date ? 'found' : 'not found') + ', signature roles ' + r.back.front.sigs
             + ' · cross-check: ' + r.cross.matched + '/' + r.cross.checked + ' match, ' + r.cross.mismatches.length + ' differ, ' + r.cross.unevaluated + ' not evaluable');
         }
       } finally { cleanup(); }
