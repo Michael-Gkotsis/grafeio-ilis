@@ -27,6 +27,8 @@ import { baseOf, defaultRow, returnOf, weekRow, type WeekRow } from './returns';
 import { cleanHeads, cleanHeadUse } from './docHead';
 import { cleanImages } from './reports';
 import { NOTE_MAX, noteHead, noteWho, normNote } from './notes';
+import { profilesOf, sanitizeProfiles, type TplProfile } from './tplStore';
+import type { TplCreate } from './tplMap';
 
 export type Command =
   | { t: 'declare'; cmd: StatusCmd }
@@ -101,6 +103,8 @@ export type Command =
   | { t: 'setSettings'; settings: Partial<Settings>; text: string }
   // γραμμές της ΗΚΑΙ που πρόσθεσες: τα στελέχη με βαθμό που μαζεύει μια γραμμή πηγαίνουν σε αυτήν (και φεύγουν όταν σβηστεί)
   | { t: 'setHkRows'; rows: HkRowDef[]; names?: Record<string, string>; text: string }
+  // Πρότυπο μονάδας (shared/tplMap.ts): το προφίλ του αρχείου της μονάδας (settings.tplProfiles, αντικαθιστά το ίδιο id) και ό,τι έφτιαξε ο χρήστης με το «Δημιουργία»: νέα γραμμή ΗΚΑΙ (lists.hkRows), νέα κατάσταση/είδος άδειας με τη στήλη της (lists.leaveKinds). Μία αναίρεση.
+  | { t: 'adaptTpl'; profile: TplProfile; create?: TplCreate[]; text: string }
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
@@ -1061,6 +1065,27 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const only = (o: Record<string, number> | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => rows.has(k)));
       const hkai = s.settings.hkai?.prov ? { ...s.settings.hkai, prov: only(s.settings.hkai.prov) } : s.settings.hkai;
       return { state: { ...s, cadreList, settings: { ...s.settings, lists, cadre: only(s.settings.cadre)!, hkai } }, text: 'Ρυθμίσεις: ' + c.text, files: [] };
+    }
+    case 'adaptTpl': {
+      // ό,τι φτιάχτηκε με το «Δημιουργία»: με τις ίδιες εντολές των Ρυθμίσεων (γραμμές της ΗΚΑΙ, είδη άδειας)· ό,τι υπάρχει ήδη δεν διπλογράφεται
+      let st = s; const made: string[] = [];
+      for (const m of c.create || []) {
+        const name = (m.name || '').trim().replace(/\s+/g, ' '); if (!name) continue;
+        if (m.k === 'hkRow') {
+          if (hkRowList(st.settings.lists).some(x => itemKey(x) === itemKey(name))) continue;
+          const rows: HkRowDef[] = [...(st.settings.lists?.hkRows || []), { name, grp: m.grp, ...(m.after && hkRowList(st.settings.lists).includes(m.after) ? { after: m.after } : {}), ...(m.ranks?.length ? { ranks: m.ranks } : {}) }];
+          st = run(st, { t: 'setHkRows', rows, text: 'γραμμή ' + name }, ctx).state; made.push('γραμμή «' + name + '»');
+        } else if (m.k === 'leaveKind') {
+          const have = listRows(st.settings.lists, 'leaveKinds').some(x => itemKey(x.name) === itemKey(name)); if (have) continue;
+          const cur = st.settings.lists?.leaveKinds?.add || [];
+          const lists = { ...(st.settings.lists || {}), leaveKinds: { ...(st.settings.lists?.leaveKinds || {}), add: [...cur, { name, col: m.col }] } };
+          st = { ...st, settings: { ...st.settings, lists } }; made.push('κατάσταση «' + name + '»');
+        }
+      }
+      const prof = sanitizeProfiles([c.profile])[0]; if (!prof) throw new Error('Το πρότυπο δεν αποθηκεύεται (λάθος μορφή)');
+      const all = profilesOf(st.settings); const at = all.findIndex(x => x.id === prof.id);
+      const tplProfiles = at >= 0 ? all.map((x, i) => (i === at ? prof : x)) : [...all, prof];
+      return { state: { ...st, settings: { ...st.settings, tplProfiles } }, text: 'Πρότυπο μονάδας: ' + c.text + (made.length ? ' (νέα: ' + made.join(', ') + ')' : ''), files: [HK()] };
     }
     case 'printed':
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };

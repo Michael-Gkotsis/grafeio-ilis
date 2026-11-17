@@ -27,6 +27,8 @@ import { PKEYS, type PKey } from '../shared/personal';
 import { isUnit } from '../shared/mode';
 import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { designMade, fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
+import { modelOfFile, profileFor, restoreCopy, tryFill, xlsxBuffer, xlsxFile } from './tplAdapt';
+import type { TplReq } from '../shared/tplMap';
 import { checkTemplate, makeHdDocx } from './hdDocx';
 import { headFor } from '../shared/docHead';
 import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
@@ -234,7 +236,7 @@ async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[
   const form = formOf(kind, s);
   if (kind === 'check') return made('check', date, s, sigs, undefined, headId);
   const b = formBinding(form);
-  const buf = await fs.promises.readFile(formTpl(form as Exclude<FormKind, 'check'>));
+  const buf = await xlsxBuffer(formTpl(form as Exclude<FormKind, 'check'>));   // .xls (ΗΚΑΙ/ΗΚΑΛ της μονάδας): μέσω μετατροπέα, το αρχικό δεν αλλάζει ποτέ
   if (kind === 'frouraPsk' || kind === 'outsPsk') {
     // ΠΣΚ: ένα αρχείο, ένα φύλλο ανά ημέρα (Παρ, Σαβ, Κυρ)
     const fr = kind === 'frouraPsk'; const days = pskDays(date);
@@ -768,7 +770,7 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
   if (f === 'check') return { ok: true, file: '', custom: false, sheets: [], sheet: '' };
   try {
     const b = formBinding(f); const src = file || formTpl(f);
-    const book = await readBook(src, 120, 40); const names = book.sheets.map(x => x.name);
+    const book = await readBook(f === 'hkai' ? await xlsxFile(src) : src, 120, 40); const names = book.sheets.map(x => x.name);
     const has = (n?: string) => (n && names.includes(n) ? n : undefined);
     const find = (re: RegExp) => book.sheets.find(x => re.test(normGreek(x.name)) || x.rows.slice(0, 12).some(r => (r || []).some(v => typeof v === 'string' && re.test(normGreek(v)))))?.name;
     const keep = !file || (b.file && path.resolve(b.file) === path.resolve(file));
@@ -779,7 +781,10 @@ async function formInfo(f: FormKind, file?: string): Promise<FormInfo | { ok: fa
       const back = (keep && has(b.sheet2)) || find(/ΑΠΟΦΑΣΕΙΣ|ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|ΦΡΟΥΡΕΣ/) || names.find(n => n !== front) || front;
       const d = detectHkai(book.sheets.find(x => x.name === front)!, store.state.settings.place, [...hkRowsOf(store.state.settings.lists).own], store.state.settings.lists?.hkNames);
       if (keep && b.cells) d.map = { title: b.cells.title || d.map.title, date: b.cells.date || d.map.date, rows: { ...d.map.rows, ...(b.cells.rows || {}) }, cols: { ...d.map.cols, ...(b.cells.cols || {}) } };
-      return { ok: true, file: src, custom, sheets: names, sheet: front, sheet2: back, hkai: d };
+      // τι κατάλαβε η μηχανή προσαρμογής (μόνο για δικό σου template): αν χρειάζεται αντιστοίχιση ανοίγει η οθόνη «Πρότυπο μονάδας»
+      let adapt: FormInfo['adapt'];
+      if (custom) { try { const r = (await modelOfFile(src, store.state, today(), front)).model; adapt = { sure: r.count.sure, suggest: r.count.suggest, unknown: r.count.unknown, needs: r.needs, saved: !!r.profileId }; } catch { /* the old dialog works without it */ } }
+      return { ok: true, file: src, custom, sheets: names, sheet: front, sheet2: back, hkai: d, ...(adapt ? { adapt } : {}) };
     }
     if (f === 'outs') return { ok: true, file: src, custom, sheets: names, sheet: (keep && has(b.sheet)) || find(/ΕΞΟΔΟΥΧ/) || names[0], sheet2: (keep && has(b.sheet2)) || find(/ΠΑΡΑΜΕΝ/) || names[1] || names[0] };
     return { ok: true, file: src, custom, sheets: names, sheet: (keep && has(b.sheet)) || find(/ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ|ΦΡΟΥΡΑ/) || names[0] };
@@ -1394,6 +1399,36 @@ else {
       if (b && Object.values(b).some(v => v !== undefined && v !== '')) forms[f] = b; else delete forms[f];
       const r = runCmd({ t: 'setSettings', settings: { forms }, text: 'έντυπο ' + f + (b?.file ? ': ' + path.basename(b.file) : b?.dir ? ': φάκελος ' + b.dir : ': προεπιλογή') });
       return r.ok ? reply(r.text, false) : r;
+    });
+    // Πρότυπο μονάδας: μόνο το template που έχει οριστεί για το έντυπο, ή αρχείο που διάλεξε ο χρήστης με το «Template…»
+    const tplFile = (f: FormKind, file?: string): string => {
+      if (f !== 'hkai') throw new Error('Η αντιστοίχιση αφορά την ΗΚΑΙ / ΗΚΑΛ');
+      if (file && file !== formBinding(f).file && !srcMeta.allowed(file)) throw new Error('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
+      return file || formTpl(f);
+    };
+    const asReq = (r: TplReq): TplReq => ({ choices: { cols: r?.choices?.cols || {}, rows: r?.choices?.rows || {}, words: r?.choices?.words || {} }, creates: Array.isArray(r?.creates) ? r.creates : [], ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {}), ...(typeof r?.name === 'string' ? { name: r.name.slice(0, 80) } : {}) });
+    ipcMain.handle('tpl:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { return (await modelOfFile(tplFile(f, file), store.state, today(), sheet)).model; } catch (e) { return fail(e); } });
+    ipcMain.handle('tpl:try', async (_e, f: FormKind, req: TplReq) => { try { const m = await modelOfFile(tplFile(f, req?.file), store.state, today(), req?.sheet); return await tryFill(m.sheets, m.buf, store.state, today(), asReq(req)); } catch (e) { return fail(e); } });
+    ipcMain.handle('tpl:save', async (_e, f: FormKind, req: TplReq) => {
+      try {
+        const m = await modelOfFile(tplFile(f, req?.file), store.state, today(), req?.sheet); const r = asReq(req);
+        const file = req?.file || formBinding(f).file; const { profile, create } = profileFor(m.sheets, store.state, { ...r, name: r.name ?? (m.model.profileName || (file ? path.basename(file).replace(/\.[^.]+$/, '') : undefined)) });
+        const c = runCmd({ t: 'adaptTpl', profile, create, text: (profile.name ? '«' + profile.name + '»' : 'αντιστοίχιση') });
+        return c.ok ? reply(c.text, false) : c;
+      } catch (e) { return fail(e); }
+    });
+    ipcMain.handle('tpl:restore', async (_e, f: FormKind, req: TplReq) => {
+      try {
+        const file = tplFile(f, req?.file); const m = await modelOfFile(file, store.state, today(), req?.sheet);
+        const out = await restoreCopy(m.sheets, m.buf, store.state, asReq(req));
+        if (!out.applied) return fail('Δεν βρέθηκε σύνολο που να έχασε τον τύπο του');
+        const base = path.basename(file).replace(/\.[^.]+$/, '');
+        const pick = await dialog.showSaveDialog(win!, { title: 'Αποθήκευση αντιγράφου με τους τύπους', defaultPath: path.join(path.dirname(file), base + ' (με τύπους).xlsx'), filters: [{ name: 'Excel', extensions: ['xlsx'] }] });
+        if (pick.canceled || !pick.filePath) return null;
+        if (path.resolve(pick.filePath) === path.resolve(file)) return fail('Διάλεξε άλλο όνομα: το αρχικό αρχείο δεν αλλάζει ποτέ');
+        await fs.promises.writeFile(pick.filePath, out.buffer); srcMeta.allow([pick.filePath]);
+        return { ok: true as const, file: pick.filePath, applied: out.applied };
+      } catch (e) { return fail(e); }
     });
     ipcMain.handle('form:dir', async (_e, f: FormKind) => {
       const r = await dialog.showOpenDialog(win!, { title: 'Φάκελος για το έντυπο', defaultPath: formBinding(f).dir || outputDir(), properties: ['openDirectory', 'createDirectory'] });

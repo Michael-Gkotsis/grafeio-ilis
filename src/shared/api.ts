@@ -10,6 +10,7 @@ import type { ImerReq } from './imer';
 import type { HdDoc } from './hd';
 import type { Block, Layout, LayoutForm, LayoutSheet } from './layout';
 import type { BuildOpts, BuiltOut, RepCell, RepKind, Report, RepTpl } from './reports';
+import type { ModelRes, TplReq, TryRes } from './tplMap';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
@@ -50,7 +51,8 @@ export interface SourceStatus { kind: ListKind; file: string; exists: boolean; c
   remap?: string;     // δεν διαβάζει ούτε γράφει μόνη της: οι στήλες δεν βρίσκονται με σιγουριά (και γιατί)
 }
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[]; ambiguous?: PlanLine[]; warn?: string[]; tidy?: string[] }   // tidy: μορφή που λείπει (τίτλος, λίστες επιλογής)
-export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] } }
+export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] };
+  adapt?: { sure: number; suggest: number; unknown: number; needs: boolean; saved: boolean } }   // adapt: τι κατάλαβε η μηχανή προσαρμογής από το template (Πρότυπο μονάδας): needs = χρειάζεται αντιστοίχιση, saved = υπάρχει ήδη
 export interface FormOut { form: FormKind; date: string; file: string; at: string; error?: string; pending?: boolean; manual?: boolean }
 
 // ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ): τι θα μπει στο αρχείο της τωρινής, πού, και τα αρχεία παλιών ΕΣΣΟ
@@ -145,6 +147,11 @@ export interface Api {
   formInfo(form: FormKind): Promise<FormInfo | Fail>;
   formSave(form: FormKind, b: FormBinding | null): Promise<CmdResult>;
   formDir(form: FormKind): Promise<string | null>;
+  // Πρότυπο μονάδας (ΗΚΑΙ/ΗΚΑΛ): το μοντέλο της οθόνης αντιστοίχισης, η δοκιμή με τα σημερινά, η αποθήκευση (εντολή adaptTpl) και το αντίγραφο με τους τύπους πίσω (διάλογος «Αποθήκευση ως», null = ακύρωσε)
+  tplModel(form: FormKind, file?: string, sheet?: string): Promise<ModelRes | Fail>;
+  tplTry(form: FormKind, req: TplReq): Promise<TryRes | Fail>;
+  tplSave(form: FormKind, req: TplReq): Promise<CmdResult>;
+  tplRestore(form: FormKind, req: TplReq): Promise<{ ok: true; file: string; applied: number } | Fail | null>;
   openPath(file: string): Promise<void>;
   printFile(file: string, sheet?: string | string[]): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: τα φύλλα που τσεκάρονται)
   essoInfo(): Promise<EssoInfo>;

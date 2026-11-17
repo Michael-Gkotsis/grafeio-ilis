@@ -21,6 +21,7 @@ import { planCadres, planCadreAbs } from '../../shared/cadreSource';
 import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, WritePreview } from '../../shared/api';
 import type { Command } from '../../shared/commands';
 import { base, useSourceStatus } from './srcStatus';
+import { TplMapDialog } from './tplMap';
 export { SourcesAlert } from './srcStatus';
 type P = any;
 
@@ -554,6 +555,7 @@ const FORMS = (st: Settings): [FormKind, string][] => [...(st.mode === 'unit' ? 
 function FormsCard({ outs }: { outs: FormOut[] }) {
   const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
+  const [mapDlg, setMapDlg] = useState<{ form: FormKind; file?: string; sheet?: string } | null>(null);
   const forms = state.settings.forms || {};
   const save = async (f: FormKind, b: FormBinding | null, text: string) => { const r = await window.api.formSave(f, b); if (!r.ok) { toast({ text: r.error }); return false; } await refresh(); toast({ text }); return true; };
   const pickTpl = async (f: FormKind) => { const r = await window.api.formPick(f); if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } setDlg({ form: f, info: r }); };
@@ -570,16 +572,18 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
         <div className="srcrow__act">
           ${f !== 'check' && html`<${Button} size="sm" variant="outline" onClick=${() => pickTpl(f)}>Template…<//>`}
           ${f !== 'check' && (b.file || f === 'hkai' || f === 'outs') && html`<${Button} size="sm" variant="ghost" onClick=${() => editTpl(f)}>${f === 'hkai' ? 'Κελιά…' : 'Φύλλα…'}<//>`}
+          ${f === 'hkai' && b.file && html`<${Button} size="sm" variant="ghost" data-tip="Πες στην εφαρμογή τι σημαίνει κάθε στήλη και γραμμή του εντύπου της μονάδας" onClick=${() => setMapDlg({ form: f, file: b.file, sheet: b.sheet })}>Αντιστοίχιση…<//>`}
           <${Button} size="sm" variant="ghost" onClick=${() => pickDir(f)}>Φάκελος…<//>
           ${(b.file || b.dir) && html`<${Button} size="sm" variant="ghost" data-tip="Template και φάκελος της εφαρμογής" onClick=${() => save(f, null, label + ': ξανά με το template και τον φάκελο της εφαρμογής')}>Προεπιλογή<//>`}
         </div>
         ${html`<label className="srcrow__opt"><input type="checkbox" className="ui-check" checked=${b.monthly !== false} onChange=${(e: any) => save(f, { ...b, monthly: e.target.checked }, e.target.checked ? 'Υποφάκελος ανά μήνα' : 'Χωρίς υποφάκελο ανά μήνα')}/><span>Υποφάκελος ανά μήνα (ΕΕΕΕ-ΜΜ)</span></label>`}
       </li>`;
     })}</ul>
-    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS(state.settings).find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) setDlg(null); }}/>`}
+    ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS(state.settings).find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) { const a = dlg.info.adapt; const f = dlg.form; setDlg(null); if (f === 'hkai' && b.file && a && a.needs && !a.saved) setMapDlg({ form: f, file: b.file, sheet: b.sheet }); } }} onMap=${(b: FormBinding) => { const f = dlg.form; setDlg(null); setMapDlg({ form: f, file: b.file, sheet: b.sheet }); }}/>`}
+    ${mapDlg && html`<${TplMapDialog} form=${mapDlg.form} file=${mapDlg.file} sheet=${mapDlg.sheet} onClose=${() => setMapDlg(null)} onSaved=${() => setMapDlg(null)}/>`}
   <//>`;
 }
-function FormDialog({ form, info, current, onClose, onSave }: P) {
+function FormDialog({ form, info, current, onClose, onSave, onMap }: P) {
   const i: FormInfo = info;
   const [sheet, setSheet] = useState(i.sheet); const [sheet2, setSheet2] = useState(i.sheet2 || '');
   const [map, setMap] = useState<HkaiMap | null>(i.hkai ? i.hkai.map : null);
@@ -608,6 +612,7 @@ function FormDialog({ form, info, current, onClose, onSave }: P) {
     </div>
     ${form === 'froura' || form === 'frouraSpen' ? html`<p className="note">Η εφαρμογή γράφει στα ίδια κελιά με το έντυπο της μονάδας (θέσεις, Λ/Υ, Δ/Υ, τιμωρημένοι, απόντες). Κράτα τη διάταξη ίδια· άλλαξε ελεύθερα κεφαλίδες, γραμματοσειρές και περιθώρια.</p>` : null}
     ${form === 'outs' ? html`<p className="note">Η λίστα ξεκινά στη γραμμή 7 με στήλες Βαθμός, Ο-Σ, Επίθετο, Όνομα, Θάλαμος, Τηλέφωνο, Παρατηρήσεις (B έως H), όπως στο έντυπο της μονάδας.</p>` : null}
+    ${form === 'hkai' && i.custom && i.adapt && html`<${Alert} tone=${i.adapt.needs && !i.adapt.saved ? 'warn' : 'info'}><span>${i.adapt.saved ? 'Το έντυπο της μονάδας έχει αντιστοίχιση.' : i.adapt.needs ? 'Το έντυπο της μονάδας έχει στήλες ή γραμμές που η εφαρμογή δεν κατάλαβε.' : 'Η εφαρμογή κατάλαβε όλο το έντυπο.'} Σίγουρες: ${i.adapt.sure}, προτάσεις: ${i.adapt.suggest}, δεν τις ξέρω: ${i.adapt.unknown}.</span><${Button} size="sm" variant="outline" onClick=${() => onMap({ ...current, file: i.file, sheet, sheet2 })}>Αντιστοίχιση…<//><//>`}
     ${form === 'hkai' && hk && map && html`<div>
       ${hk.missing.length ? html`<${Alert} tone="warn"><span>Βρέθηκαν ${hk.found} από ${hk.total}. Δεν βρέθηκαν: <b>${hk.missing.join(', ')}</b>. Γράψε τη γραμμή ή τη στήλη τους παρακάτω.</span><//>` : html`<${Alert} tone="ok"><span>✓ Βρέθηκαν όλες οι γραμμές και οι στήλες (${hk.found} από ${hk.total}) από τα κείμενα του εντύπου.</span><//>`}
       <div className="hkmap">

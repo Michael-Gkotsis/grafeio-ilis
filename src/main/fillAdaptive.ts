@@ -11,7 +11,7 @@ import { Workbook } from './xlsx';
 import { modelOfBuffer } from './bookModel';
 import { safeWrite, type PlannedWrite, type Refused, type WriteResult } from './safeWrite';
 import { Grid, cellRef, colLetter, key as cellKey, valueText, type SheetModel } from '../shared/sheetModel';
-import { buildLexicon, hkRowOfRankId, type Lexicon } from '../shared/lexicon';
+import { buildLexicon, hkRowOfRankId, phraseKey, type Lexicon } from '../shared/lexicon';
 import { detectBook, type BookShape, type DrivenCell, type ListRegion, type MatrixRegion, type SheetShape } from '../shared/shape';
 import { learnedNames } from '../shared/tplProfile';
 import type { TplProfile } from '../shared/tplStore';
@@ -19,7 +19,7 @@ import { hkaiClassify, type HkWho } from '../shared/rules';
 import { hkRowList, type UserLists } from '../shared/ranks';
 import { hkOn, type AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
-import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, unplaced, type FrontMap, type RuleCtx } from '../shared/hkRules';
+import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, pickFront, unplaced, type FrontMap, type RuleCtx } from '../shared/hkRules';
 import { critMatches, Evaluator, UNSUPPORTED } from '../shared/sheetEval';
 
 export interface FillOpts {
@@ -48,17 +48,8 @@ export interface FillReport {
 }
 const emptyReport = (dryRun: boolean): FillReport => ({ dryRun, front: null, written: [], refused: [], kept: 0, unmappedCols: [], unmappedRows: [], unplacedRows: [], unplacedStates: [], totalsSkipped: [], data: null, cross: { checked: 0, matched: 0, unevaluated: 0, mismatches: [] }, warnings: [], ours: {} });
 
-// ------------------------------------------------------------------ choosing the front table
-const hkRows = (x: MatrixRegion) => new Set(x.rows.filter(r => /^hkrow:/.test(r.match.concept || '') && r.match.confidence !== 'unknown').map(r => r.match.concept)).size;
-export function pickFront(shape: BookShape, sheet?: string): { sh: SheetShape; region: MatrixRegion } | null {
-  let best: { sh: SheetShape; region: MatrixRegion; n: number } | null = null;
-  for (const sh of shape.sheets) {
-    if (sheet && sh.name !== sheet) continue;
-    if (sh.state !== 'visible' && !sheet) continue;
-    for (const r of sh.regions) if (r.type === 'matrix') { const n = hkRows(r) * 100 + r.cols.length; if (hkRows(r) >= 3 && (!best || n > best.n)) best = { sh, region: r, n }; }
-  }
-  return best && { sh: best.sh, region: best.region };
-}
+// ------------------------------------------------------------------ choosing the front table (hkRules.ts)
+export { pickFront };
 const lexOf = (lists: UserLists | undefined, profile: TplProfile | null | undefined, given?: Lexicon): Lexicon => given ?? buildLexicon({ lists, ...(profile && Object.keys(profile.words).length ? { learned: learnedNames(profile) } : {}) });
 
 // ------------------------------------------------------------------ the data sheet
@@ -200,10 +191,12 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
     const number = row.total || col.derived ? val : val || null;
     plan.push({ sheet: sh.name, r, c, value: number });
   }
-  for (const c of map.cols) if (!c.rule && (c.text || c.hasData)) rep.unmappedCols.push({ ref: colLetter(c.c), text: c.text, hasData: c.hasData, why: c.why });
+  // «Αγνόησε» of the mapping screen: left as it is, not reported
+  const ignored = (type: 'col' | 'row', text: string) => !!profile?.ignore.some(m => m.type === type && phraseKey(m.text) === phraseKey(text));
+  for (const c of map.cols) if (!c.rule && (c.text || c.hasData) && !ignored('col', c.text)) rep.unmappedCols.push({ ref: colLetter(c.c), text: c.text, hasData: c.hasData, why: c.why });
   // columns of the table the detector gave no header cell at all (blank under a group header) but that hold typed numbers: reported, never written
   for (let c = region.c1; c <= region.c2; c++) if (!colAt.has(c) && map.rows.some(r => !r.total && (() => { const v = model.rows[r.r]?.[c]; return v != null && v !== '' && !model.formulas.has(cellKey(r.r, c)); })())) rep.unmappedCols.push({ ref: colLetter(c), text: '', hasData: true, why: 'στήλη χωρίς επικεφαλίδα' });
-  for (const r of map.rows) if (!r.rule && !r.total) rep.unmappedRows.push({ ref: String(r.r + 1), text: r.text, hasData: r.hasData, why: r.why });
+  for (const r of map.rows) if (!r.rule && !r.total && !ignored('row', r.text)) rep.unmappedRows.push({ ref: String(r.r + 1), text: r.text, hasData: r.hasData, why: r.why });
   const un = unplaced(map, eng); rep.unplacedRows = un.rows; rep.unplacedStates = un.states;
   for (const x of rep.unmappedCols.filter(x => x.hasData)) rep.warnings.push('Η στήλη «' + x.text + '» (' + x.ref + ') έχει στοιχεία και δεν έχει αντιστοιχιστεί: δεν γράφτηκε (' + x.why + ')');
   for (const x of rep.unmappedRows.filter(x => x.hasData)) rep.warnings.push('Η γραμμή «' + x.text + '» (' + x.ref + ') έχει στοιχεία και δεν αναγνωρίζεται: δεν γράφτηκε (' + x.why + ')');
