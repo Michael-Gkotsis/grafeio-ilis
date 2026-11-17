@@ -5,7 +5,7 @@ import { dayTimes, retFor, retNote, retTxt } from '../shared/returns';
 import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from '../shared/weekend';
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
-import { byName, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
+import { byName, hkOrgans, hkaiAdikLines, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { live, hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
 import { fileNameOf, frouraName } from '../shared/fileNames';
@@ -471,7 +471,12 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   const taken = (ref: string) => isDecision(bk.get(ref) || '');
   const put = (ref: string | undefined, v: string | number | null, what: string) => { if (ref && taken(ref)) { if (v != null && v !== '') warnings.push('Το κελί ' + ref + ' του «' + what + '» είναι στήλη απόφασης: δεν γράφτηκε'); } else if (ref) bk.set(ref, v); else if (v != null && v !== '') warnings.push('Το template δεν έχει «' + what + '»: δεν γράφτηκε'); };
   const tx = s.hkaiManual?.[d]?.text || {};
-  if (tx.loi) put(B.loi, tx.loi, '6. ΛΟΙΠΑ');
+  // 6. ΛΟΙΠΑ: οι γραμμές Άγνοιας / Λιποταξίας / Αδικαιολόγητης απουσίας (αριθμημένες) και μετά το ελεύθερο κείμενο· χωρίς τέτοια κατάσταση μένει όπως πριν
+  const adik = hkaiAdikLines(s, d);
+  if (adik.length) {
+    const ls = tx.loi?.trim() ? [...adik, [{ t: tx.loi.trim() }]] : adik;
+    if (B.loi && taken(B.loi)) warnings.push('Το κελί ' + B.loi + ' του «6. ΛΟΙΠΑ» είναι στήλη απόφασης: ' + ls.length + ' δεν γράφτηκαν'); else if (B.loi) await wb.setRich(bk, B.loi, ls); else warnings.push('Το template δεν έχει «6. ΛΟΙΠΑ»: ' + ls.length + ' δεν γράφτηκαν');
+  } else if (tx.loi) put(B.loi, tx.loi, '6. ΛΟΙΠΑ');
   const off = hkOffText(s, d); if (off) put(B.off, off, 'Αξιωματικοί:');
   // φρουρές της ημέρας, αποφάσεις Διοικητή, όργανα υπηρεσίας
   const g = s.guards[d] || {};

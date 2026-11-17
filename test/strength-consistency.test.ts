@@ -8,7 +8,7 @@ import { strengthView } from '../src/shared/strengthView';
 import { dayBook } from '../src/shared/outsDay';
 import { backsAt, dayTimes, returnsOn } from '../src/shared/returns';
 import { mins } from '../src/shared/hours';
-import { TYPES, type AppState } from '../src/shared/domain';
+import { TYPES, type AppState, type TypeKey } from '../src/shared/domain';
 import { isAway as isAwaySt, LEAVE_AWAY_NO_COL, leaveCol, type UserLists } from '../src/shared/ranks';
 import type { ISODate } from '../src/shared/dates';
 
@@ -89,6 +89,25 @@ describe('και με δικά σου είδη άδειας (απών, κωλυ�
       for (const d of DAYS) errs.push(...check(s, d).map(e => 's' + seed + ' ' + e));
     }
     expect(own).toBeGreaterThan(60);
+    expect(errs.slice(0, 25)).toEqual([]);
+  });
+});
+
+// Άγνοια / Λιποταξία / Αδικαιολόγητη απουσία (Michael, 17/11): απόντες που μετρούν στη στήλη «Αγνοούμενοι / Αδικαιολογήτως Απών» της ΗΚΑΙ.
+// Κάθε τρίτη άδεια ή νοσοκομείο των τυχαίων δεδομένων γίνεται, με τη σειρά, μία από τις τρεις· οι αριθμοί των οθονών συμφωνούν και με αυτές.
+const ADIK: TypeKey[] = ['AGN', 'LIP', 'ADK'];
+const withAdik = (s: AppState): AppState => {
+  let i = 0, n = 0;
+  return { ...s, statuses: s.statuses.map(x => ((x.type === 'LEAVE' || x.type === 'NOS') && n++ % 3 === 0 ? { ...x, type: ADIK[i++ % 3], kind: undefined } : x)) };
+};
+describe('και με Άγνοια, Λιποταξία, Αδικαιολόγητη απουσία', () => {
+  for (const realistic of [true, false]) it(realistic ? 'όπως τα αφήνει η οθόνη' : 'και παρά τους κανόνες', () => {
+    const errs: string[] = []; let n = 0;
+    for (let seed = 1; seed <= 25; seed++) {
+      const s = withAdik(genState(seed * 7919 + (realistic ? 0 : 1), realistic, 30)); n += s.statuses.filter(x => ADIK.includes(x.type)).length;
+      for (const d of DAYS) errs.push(...check(s, d).map(e => 's' + seed + ' ' + e));
+    }
+    expect(n).toBeGreaterThan(40);
     expect(errs.slice(0, 25)).toEqual([]);
   });
 });

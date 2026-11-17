@@ -114,7 +114,7 @@ export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 // away: απών · noDuty: καμία υπηρεσία · noArmed: όχι ένοπλη θέση · noOut: δεν βγαίνει έξοδο
 // light: ΕΟ/ΕΑ (λοχίας, 10/10): όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
 // ---------------------------------------------------------------------------
-export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN' | 'KOL';
+export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN' | 'KOL' | 'AGN' | 'LIP' | 'ADK';
 export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun' | 'kol';
 export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
@@ -134,12 +134,20 @@ export const TYPES: Record<TypeKey, TypeDef> = {
   LEAVE: { label: 'ΚΑ', long: 'Κανονική άδεια', tone: 'info', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'ka', code: 'Κ.Α' },
   HON:   { label: 'Τιμητική', long: 'Τιμητική άδεια', tone: 'info', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'eid' },
   SICK:  { label: 'Αναρρωτική', long: 'Αναρρωτική άδεια', tone: 'bad', cat: 'abs', away: true, noDuty: true, noOut: true, hkai: 'an', code: 'ΑΝ.ΑΔ' },
+  // Άγνοια / Λιποταξία / Αδικαιολόγητη απουσία (Michael, 17/11): απών, σε καμία υπηρεσία, όχι έξοδο· στην ΗΚΑΙ στη στήλη «Αγνοούμενοι / Αδικαιολογήτως Απών» (adik) και στο 6. ΛΟΙΠΑ της πίσω όψης
+  AGN:   { label: 'Άγνοια', long: 'Σε άγνοια', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'ΑΓ' },
+  LIP:   { label: 'Λιποταξία', long: 'Σε λιποταξία', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'ΛΙΠ' },
+  ADK:   { label: 'Αδικαιολ. απουσία', long: 'Αδικαιολόγητη απουσία', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'Α/Α' },
   OUT:   { label: 'Εξοδούχος', long: 'Εξοδούχος', tone: 'warn', cat: 'out', away: true, noDuty: true },
   DN:    { label: 'ΔΝ', long: 'Εξοδούχος με ΔΝ', tone: 'dn', cat: 'out', away: true, noDuty: true },
   // Κωλυόμενος (Michael, 24/10): υπηρεσία που δεν είναι δική μας (π.χ. ΣΤΕΠ). Παρών, σε καμία δική μας υπηρεσία· η έξοδος, η αφαίρεση
   // από τους παρόντες και η στήλη της ΗΚΑΙ ορίζονται ανά δήλωση (Status.noOut, minus, hkCol, rules.ts kolView)
   KOL:   { label: 'Κωλυόμενος', long: 'Κωλυόμενος (υπηρεσία εκτός δικών μας)', tone: 'warn', cat: 'kol', noDuty: true }
 };
+// Οι τρεις καταστάσεις της στήλης adik: πρόθεμα της πίσω όψης («ΣΕ ΑΓΝΟΙΑ», «ΕΠΕΣΤΡΕΨΕ … ΑΠΟ ΑΓΝΟΙΑ»)
+export const ADIK_TYPES: TypeKey[] = ['AGN', 'LIP', 'ADK'];
+export const ADIK_IN: Record<string, string> = { AGN: 'Σε άγνοια', LIP: 'Σε λιποταξία', ADK: 'Σε αδικαιολόγητη απουσία' };   // πώς λέγονται στις οθόνες (Σήμερα, Δύναμη, Εξοδούχοι)
+export const ADIK_WORD: Record<string, string> = { AGN: 'ΑΓΝΟΙΑ', LIP: 'ΛΙΠΟΤΑΞΙΑ', ADK: 'ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ' };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef) =>
   [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.kolAuto && 'Κωλυόμενος' + (STEP_COL ? ' (ΗΚΑΙ: ' + kolColName(STEP_COL) + ')' : ' (δεν μετρά σε στήλη της ΗΚΑΙ)'), t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');

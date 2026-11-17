@@ -2,7 +2,7 @@
 // Το γεμίζει μόνη της η εφαρμογή (άδειες, ιατρικά, υπηρεσίες, πόστα) και ό,τι γράφεις με το χέρι (AppState.imer) μένει πάνω από
 // το αυτόματο, μόνο στο ημερολόγιο. Τα σύνολα Π (παρόντες) και Α (απόντες) βγαίνουν από το «Μετρά ως» κάθε κωδικού.
 import { addDays, parseD, type ISODate } from './dates';
-import { KIND_CODE, TYPES, platoonsOf, platoonShort, unitOf, type AppState, type DutyKind, type Person, type Settings } from './domain';
+import { ADIK_TYPES, KIND_CODE, TYPES, platoonsOf, platoonShort, unitOf, type AppState, type DutyKind, type Person, type Settings } from './domain';
 import { dayStatus, codeOfStatus } from './dayCode';
 import { postOf } from './rules';
 import { dayTimes } from './returns';
@@ -54,7 +54,7 @@ export function autoCell(s: AppState, p: Person, d: ISODate): ImerCell | null {
   const x = dayStatus(s, p, d);
   if (x) {
     const def = codeOfStatus(x, st.lists); const known = ROW.has(def) ? def : '';
-    const away = TYPES[x.type].cat === 'abs' || x.type === 'NOS';
+    const away = TYPES[x.type].cat === 'abs' || x.type === 'NOS' || ADIK_TYPES.includes(x.type);
     return { code: known ? imerCode(st, def) : def, key: known || def, count: known ? imerCount(st, def) : cfg(st).codes?.[def]?.count || (away ? 'A' : 'P') };
   }
   const post = postOf(s, d, p.id);
