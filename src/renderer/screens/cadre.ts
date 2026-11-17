@@ -5,6 +5,7 @@ import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Sheet, SheetNa
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateRangeField, SigsMenu } from '../common';
+import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
 import { cadreAbsKinds, guessHk, hkCadreRows, listOf, optionsOf, rankTxt } from '../../shared/ranks';
 import { hkRowLabel, HK, UNIT } from '../../shared/unit';
@@ -35,7 +36,7 @@ export function CadreScreen() {
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)), [today]);
   const [edit, setEdit] = useState<Partial<Cadre> | null>(null);
   const [stFor, setStFor] = useState<{ c: Cadre; abs?: CadreAbs } | null>(null);
-  const [xl, setXl] = useState(false);
+  const [xl, setXl] = useState(false); const hp = useHeadPick('cadre');
   const all = useMemo(() => orderedCadre(state.cadreList), [state.cadreList]);
   const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);
   // χειροκίνητη σειρά (ιεραρχία): σύρσιμο γραμμής ή Alt+↑/↓. Η θέση μετρά σε όλη τη λίστα, και με φίλτρο.
@@ -55,10 +56,10 @@ export function CadreScreen() {
   const setFilter = (f: CadreFilter) => nav.set({ filter: f === 'all' ? undefined : f });
   const clear = () => { setQ(''); nav.set({ filter: undefined }); };
   const dateLbl = date === today ? '' : dayName(date, today) + ' ' + dm(date);
-  const exportXl = async (sigs?: Sig[]) => {
+  const exportXl = async (sigs?: Sig[], hid?: string) => {
     setXl(true);
     try {
-      const r = await window.api.exportCadre(date, sigs);
+      const r = await window.api.exportCadre(date, sigs, hid ?? hp.take());
       toast({ text: r.ok ? 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': στελέχη, καταστάσεις' + (all.some(c => !c.active) ? ', εκτός δύναμης' : '') + (date === today ? ', για σήμερα.' : ', για ' + dayName(date, today).toLowerCase() + ' ' + dm(date) + '.') : html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
     } finally { setXl(false); }
   };
@@ -66,8 +67,9 @@ export function CadreScreen() {
   const card: string | null = nav.params.cadre ?? null; const openCard = (id: string) => nav.openCadre(id, rows.map(r => r.id));
   return html`<div>
     <${PageHeader} title="Στελέχη" sub=${'Δυναμικό στελεχών: ' + active + (active ? ' · κωλυόμενοι ' + (counts.kol || 0) + ' · απόντες ' + (counts.apo || 0) + (dateLbl ? ' (' + dateLbl.toLowerCase() + ')' : ' σήμερα') : '') + '. Σύρε μια γραμμή για τη σειρά της ιεραρχίας.'}>
+      ${hp.node}
       <${Button} variant="outline" disabled=${xl || !all.length} why=${!all.length ? 'Δεν υπάρχουν στελέχη' : undefined} onClick=${() => exportXl()} data-tip="Ένα Excel: στελέχη με την κατάσταση της μέρας, όλες οι καταστάσεις από τη μέρα αυτή και μετά, εκτός δύναμης">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
-      <${SigsMenu} form="cadre" date=${date} label="τα Στελέχη" print=${false} disabled=${xl || !all.length} go=${(_: boolean, sigs?: Sig[]) => exportXl(sigs)}/>
+      <${SigsMenu} form="cadre" date=${date} label="τα Στελέχη" print=${false} disabled=${xl || !all.length} headId=${hp.headId} go=${(_: boolean, sigs?: Sig[], hid?: string) => exportXl(sigs, hid)}/>
       <${Button} onClick=${() => setEdit({ hk: 'Λοχίες' })}>+ Νέο στέλεχος<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στα στελέχη" placeholder="Όνομα, βαθμός, Ο/Σ, ΑΜ, θέση, τηλέφωνο (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Select} className="ui-select" aria-label="Καταστάσεις στην ημερομηνία" data-tip="Η κατάσταση αυτής της μέρας, και στο Excel" value=${date} onChange=${(e: any) => nav.set({ cdate: e.target.value === today ? undefined : e.target.value })}>${days.map(d => html`<option key=${d} value=${d}>${dayName(d, today)}</option>`)}<//></div>

@@ -6,6 +6,7 @@ import { Combo } from '../select';
 import { useNav, useStore } from '../store';
 import { DateBar } from '../common';
 import { SigsDialog } from '../sigs';
+import { useHeadPick } from '../headPick';
 import { addDays, dayName, dm, type ISODate } from '../../shared/dates';
 import { headFor } from '../../shared/docHead';
 import { HD_SECTIONS, hdAuto, hdCadreNames, hdDefaultDay, hdHeadDate, hdPageHtml, hdTags, type HdDoc } from '../../shared/hd';
@@ -26,7 +27,7 @@ function Preview({ html: h }: { html: string }) { return html`<div className="hd
 export function HdTab() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const narrow = useMedia('(max-width: 1279px)');
   const date: ISODate = nav.params.hdDate || hdDefaultDay(today);
-  const [edit, setEdit] = useState<{ date: ISODate; doc: HdDoc } | null>(null); const [busy, setBusy] = useState(false); const [prev, setPrev] = useState(false); const [sigs, setSigs] = useState(false);
+  const [edit, setEdit] = useState<{ date: ISODate; doc: HdDoc } | null>(null); const [busy, setBusy] = useState(false); const [prev, setPrev] = useState(false); const [sigs, setSigs] = useState(false); const hp = useHeadPick('hd');
   const saved = state.hd?.[date];
   const auto = useMemo(() => hdAuto(state, date), [state.people, state.statuses, state.cadreList, state.cadreAbs, state.hkaiManual, state.settings, state.hd, date]);   // eslint-disable-line react-hooks/exhaustive-deps
   const doc: HdDoc = edit && edit.date === date ? edit.doc : saved || auto;
@@ -36,12 +37,12 @@ export function HdTab() {
   const sigList = sigsSaved(state.settings, 'hd');
   const tags = hdTags(state.settings, date, doc, sigList);
   const days = [0, 1, 2, 3, 4].map(i => addDays(today, i)); if (!days.includes(date)) days.push(date);
-  const go = async (print: boolean, over?: Sig[]) => {
+  const go = async (print: boolean, over?: Sig[], hid?: string) => {
     setBusy(true);
     try {
       if (!(await run({ t: 'setHd', date, doc }, false))) return;   // κρατιέται όπως βγήκε: ξαναβγαίνει ίδια ακόμα κι αν αλλάξουν τα δεδομένα
-      setEdit(null);
-      const r = await window.api.exportHd({ date, doc, print, ...(over ? { sigs: over } : {}) });
+      setEdit(null); const headId = hid ?? hp.take();
+      const r = await window.api.exportHd({ date, doc, print, ...(over ? { sigs: over } : {}), ...(headId ? { headId } : {}) });
       if (!r.ok) toast({ text: html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() });
@@ -55,7 +56,7 @@ export function HdTab() {
   };
   const tpl = state.settings.hdTpl;
   // επικεφαλίδα που σχεδίασες: η οθόνη δείχνει ό,τι θα τυπωθεί («Όπως σήμερα»: η σελίδα όπως πάντα)
-  const hd = headFor(state.settings, 'hd'); const ids = hd ? [...new Set(hd.z.flat().flatMap(it => (it.k === 'img' && it.id ? [it.id] : [])))] : [];
+  const hd = headFor(state.settings, 'hd', hp.headId); const ids = hd ? [...new Set(hd.z.flat().flatMap(it => (it.k === 'img' && it.id ? [it.id] : [])))] : [];
   const [imgs, setImgs] = useState<Record<string, string | null>>({});
   useEffect(() => { let on = true; ids.filter(id => !(id in imgs)).forEach(id => { window.api.readImage(id).then(u => { if (on) setImgs(m => ({ ...m, [id]: u })); }).catch(() => { if (on) setImgs(m => ({ ...m, [id]: null })); }); }); return () => { on = false; }; }, [ids.join(',')]);   // eslint-disable-line react-hooks/exhaustive-deps
   const view = hd ? { head: hd, date: hdHeadDate(state.settings, date), img: (id: string) => imgs[id] ?? null } : null;
@@ -63,6 +64,7 @@ export function HdTab() {
   const dirty = !!edit && edit.date === date;
   return html`<div>
     <${PageHeader} title=${'Ημερήσια Διαταγή της ' + dm(date) + '/' + date.slice(0, 4)} sub="Γεμίζει μόνη της από τις υπηρεσίες και τις μεταβολές της μέρας. Γράφεις μόνο ό,τι δεν ξέρει η εφαρμογή.">
+      ${hp.node}
       <${Button} disabled=${busy} onClick=${() => go(false)} data-tip="Βγαίνει .docx και ανοίγει στο Word. Κρατιέται όπως βγήκε">${busy ? 'Δημιουργία…' : 'Βγάλε Word'}<//>
       <${Button} variant="outline" disabled=${busy} onClick=${() => go(true)} data-tip="Ανοίγει την προεπισκόπηση εκτύπωσης, όπως στα Excel, χωρίς Word">Εκτύπωση<//>
       <${Button} variant="outline" onClick=${() => setSigs(true)} data-tip=${'Υπογραφή: ' + sigsText(sigList)}>Υπογραφή…<//>
@@ -87,7 +89,7 @@ export function HdTab() {
         <${Button} variant="outline" size="sm" onClick=${pickTpl}>Δικό μου πρότυπο Word…<//> ${tpl && html`<${Button} variant="ghost" size="sm" onClick=${() => run({ t: 'setSettings', settings: { hdTpl: undefined }, text: 'πρότυπο Ημερήσιας Διαταγής: πίσω στο έτοιμο' }, false)}>Πίσω στο έτοιμο<//>`}<//>
     </div>${!narrow && html`<div className="hd__right"><button type="button" className="hd__zoom" data-tip="Μεγάλη προεπισκόπηση" onClick=${() => setPrev(true)}><${Preview} html=${pageHtml(9)}/></button></div>`}</div>
     ${prev && html`<${Dialog} size="lg" title="Προεπισκόπηση" onClose=${() => setPrev(false)}><${Preview} html=${pageHtml(12)}/><//>`}
-    ${sigs && html`<${SigsDialog} title="Ημερήσια Διαταγή" initial=${sigList} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onClose=${() => setSigs(false)}
-      onGo=${async (l: Sig[], keep: boolean, pr: boolean) => { if (keep) await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), hd: l } }, text: 'υπογραφή Ημερήσιας Διαταγής: ' + sigsText(l) }, false); go(pr, keep ? undefined : l); }}/>`}
+    ${sigs && html`<${SigsDialog} title="Ημερήσια Διαταγή" form="hd" headId=${hp.headId} initial=${sigList} keepText="Να μείνουν έτσι και για τις επόμενες φορές (Ρυθμίσεις › Υπογραφές)" onClose=${() => setSigs(false)}
+      onGo=${async (l: Sig[], keep: boolean, pr: boolean, hid?: string) => { if (keep) await run({ t: 'setSettings', settings: { sigs: { ...(state.settings.sigs || {}), hd: l } }, text: 'υπογραφή Ημερήσιας Διαταγής: ' + sigsText(l) }, false); go(pr, keep ? undefined : l, hid); }}/>`}
   </div>`;
 }

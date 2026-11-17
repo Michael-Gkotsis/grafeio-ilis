@@ -11,6 +11,7 @@ import { HK } from '../../shared/unit';
 import { DateField, GoLink, PersonPicker, usePrintFile } from '../common';
 import { PAGE_CSS } from '../pageCss';
 import { SigEditor, SigsDialog } from '../sigs';
+import { HeadPick } from '../headPick';
 import { LayoutDialog, type LayExtra } from '../layout';
 import { TODAY, headUseOf, headsOf } from '../../shared/docHead';
 import { ValueTableEditor, alignSeg } from './valueEditor';
@@ -53,17 +54,17 @@ const editedInExcel = (t: RepTpl, mtime?: number) => !!t.built && !!mtime && !!t
 function useRunReport() {
   const toast = useToast(); const printFile = usePrintFile();
   const busy = useRef(false);
-  const go = useCallback(async (s: AppState, r: Report, ids: (number | string)[], d: string, print: boolean, force = false, again = false): Promise<boolean> => {
+  const go = useCallback(async (s: AppState, r: Report, ids: (number | string)[], d: string, print: boolean, force = false, again = false, headId?: string): Promise<boolean> => {
     const tpl = tplsOf(s).find(t => t.id === r.tpl);
     if (!tpl) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Το πρότυπό του δεν υπάρχει πια. Άνοιξέ το με «Αλλαγή» και διάλεξε άλλο.</span>` }); return false; }
     if (!ids.length && !hasVals(r)) { toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> Κανείς δεν περνά τα φίλτρα του για ${dayName(d).toLowerCase()} ${dm(d)}.</span>` }); return false; }
     if (busy.current) return false; busy.current = true;
     let res: Awaited<ReturnType<typeof window.api.repRun>>;
-    try { res = await window.api.repRun(r, tpl.file, ids, d, print, force, { again }); } catch (e) { res = { ok: false, error: String(e) }; } finally { busy.current = false; }
+    try { res = await window.api.repRun(r, tpl.file, ids, d, print, force, { again, ...(headId ? { headId } : {}) }); } catch (e) { res = { ok: false, error: String(e) }; } finally { busy.current = false; }
     if (!res.ok) {
       // φύλλο με ίδιο όνομα που δεν έφτιαξε το έντυπο: γράφεται από πάνω μόνο αν το πεις
-      if (res.confirm) { toast({ text: html`<span><b>Δεν γράφτηκε «${r.name}».</b> ${res.error} Να γραφτεί από πάνω; Ό,τι έχει χάνεται (μένει αντίγραφο στον φάκελο «_προηγούμενα»).</span>`, actions: [{ label: 'Γράψε από πάνω', fn: () => { go(s, r, ids, d, print, true, again); } }] }); return false; }
-      toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> ${res.error}</span>`, actions: res.locked ? [{ label: 'Ξανά', fn: () => { go(s, r, ids, d, print, force, again); } }] : undefined });
+      if (res.confirm) { toast({ text: html`<span><b>Δεν γράφτηκε «${r.name}».</b> ${res.error} Να γραφτεί από πάνω; Ό,τι έχει χάνεται (μένει αντίγραφο στον φάκελο «_προηγούμενα»).</span>`, actions: [{ label: 'Γράψε από πάνω', fn: () => { go(s, r, ids, d, print, true, again, headId); } }] }); return false; }
+      toast({ text: html`<span><b>Δεν βγήκε «${r.name}».</b> ${res.error}</span>`, actions: res.locked ? [{ label: 'Ξανά', fn: () => { go(s, r, ids, d, print, force, again, headId); } }] : undefined });
       return false;
     }
     const file = res.file; const n = noPeople(r) ? 'πίνακες τιμών' : ids.length + ' ' + rowNoun(r.kind);
@@ -242,14 +243,16 @@ export function ReportsScreen() {
   const [dayForms, setDayForms] = useState(false);
   // η σελίδα δημιουργίας (Νέο / Αλλαγή εντύπου) είναι διαδρομή της οθόνης: param repForm (shared/repPage)
   const form = formOpen(nav.params, reports); const openForm = (p: Record<string, any>) => nav.set(p);
-  const [ask, setAsk] = useState<{ r: Report; print: boolean; init?: { ids: (number | string)[]; d: string } } | null>(null);
+  const [ask, setAsk] = useState<{ r: Report; print: boolean; hid?: string; init?: { ids: (number | string)[]; d: string } } | null>(null);
+  const [hids, setHids] = useState<Record<string, string | undefined>>({});   // «Επικεφαλίδα:» μόνο για την επόμενη φορά που βγαίνει κάθε έντυπο
   const [hist, setHist] = useState<Report | null>(null);
   const [sigFor, setSigFor] = useState<Report | null>(null);
   const [layFor, setLayFor] = useState<{ r: Report; sigs: Sig[] } | null>(null);
-  const go = async (r: Report, print = r.out === 'print', s = state) => {
-    if (needsAsk(r)) { setAsk({ r, print }); return; }
+  const go = async (r: Report, print = r.out === 'print', s = state, hid?: string) => {
+    hid = hid ?? hids[r.id]; setHids(h => (h[r.id] ? { ...h, [r.id]: undefined } : h));
+    if (needsAsk(r)) { setAsk({ r, print, hid }); return; }
     const d = repDate(r, today);
-    if (await runReport(s, r, rowsOf(s, r, d).map(x => x.id), d, print)) loadLast();
+    if (await runReport(s, r, rowsOf(s, r, d).map(x => x.id), d, print, false, false, hid)) loadLast();
   };
   // «Αποθήκευση και Βγάλε»: βγαίνουν αυτοί που έδειχνε ο οδηγός (με τις αλλαγές με ✕), όχι νέα κλήρωση.
   // Αν ρωτά μέρα, ανοίγει το «Βγάλε…» για τη μέρα, με την ίδια κλήρωση.
@@ -269,14 +272,14 @@ export function ReportsScreen() {
   const delTpl = async (t: RepTpl) => { if (await save({ reportTpls: tpls.filter(x => x.id !== t.id) }, 'Διαγραφή προτύπου «' + t.name + '»')) toast({ text: 'Σβήστηκε το πρότυπο «' + t.name + '».', actions: [undoMark()] }); };
   const usedBy = (t: RepTpl) => reports.filter(r => r.tpl === t.id);
   // «Υπογραφές…»: άλλες για αυτή τη φορά, ή (keep) για αυτό το έντυπο από εδώ και πέρα
-  const sigsGo = async (r0: Report, sigs: Sig[], keep: boolean, print: boolean) => {
+  const sigsGo = async (r0: Report, sigs: Sig[], keep: boolean, print: boolean, hid?: string) => {
     let s = state; let r = reports.find(x => x.id === r0.id) || r0;   // με ό,τι άλλαξε στο μεταξύ (π.χ. θέσεις στο χαρτί)
     if (keep) {
       // άλλο πλήθος υπογραφών: οι θέσεις που είχες σύρει για τις υπογραφές δεν ταιριάζουν πια
       if (r.layout && sigs.length !== (r.sigs ?? sigsSaved(state.settings, 'reports')).length) { const { layout: _, ...rest } = r; const l = dropSigMoves({ main: r.layout })?.main; r = l ? { ...rest, layout: l } : rest; }
       const next = await save({ reports: reports.map(x => (x.id === r.id ? { ...r, sigs } : x)) }, 'Υπογραφές εντύπου «' + r.name + '»'); if (!next) return; s = next;
     }
-    go({ ...r, sigs }, print, s);
+    go({ ...r, sigs }, print, s, hid);
   };
   // θέσεις πάνω στο χαρτί: για όλα τα φύλλα του εντύπου (το πρότυπο είναι ένα)
   const layoutSave = async (r: Report, l: Layout | undefined, x?: LayExtra) => {
@@ -299,7 +302,7 @@ export function ReportsScreen() {
     <${Tabs} value=${tab} onChange=${(v: string) => nav.set({ repTab: v === 'ready' ? undefined : v })} items=${[{ value: 'ready', label: 'Τα έντυπά μου (' + reports.length + ')' }, { value: 'tpls', label: 'Πρότυπα (' + tpls.length + ')' }]}/>
     ${tab === 'ready' && (reports.length ? html`<div className="ui-card"><table className="rep-table"><thead><tr><th>Έντυπο</th><th>Ποιοι μπαίνουν</th><th>Τελευταία φορά</th><th></th></tr></thead><tbody>
       ${reports.map(r => html`<tr key=${r.id}>
-        <td><b>${r.name}</b><small>${tpls.find(t => t.id === r.tpl)?.name || 'χωρίς πρότυπο'} · ${outText(r)}${r.day === 'tomorrow' ? ' · για αύριο' : r.day === 'ask' ? ' · ρωτά μέρα' : ''}</small></td>
+        <td><b>${r.name}</b><small>${tpls.find(t => t.id === r.tpl)?.name || 'χωρίς πρότυπο'} · ${outText(r)}${r.day === 'tomorrow' ? ' · για αύριο' : r.day === 'ask' ? ' · ρωτά μέρα' : ''}</small><${HeadPick} form="reports" own=${r.hdId} value=${hids[r.id]} onChange=${(v: string | undefined) => setHids(h => ({ ...h, [r.id]: v }))} id=${'hp-' + r.id}/></td>
         <td>${noPeople(r) ? 'Χωρίς άτομα' : pickText(r, state)}${r.vals?.length && hasVals(r) ? html`<small>${noPeople(r) ? 'Μόνο ' : 'Και '}${r.vals.length === 1 ? '1 πίνακας τιμών' : r.vals.length + ' πίνακες τιμών'}</small>` : ''}${r.more?.length ? html`<small>${'Και ' + (r.more.length === 1 ? '1 πίνακας ακόμα: ' : r.more.length + ' πίνακες ακόμα: ') + r.more.map(t => t.title || kindLbl(t.kind).toLowerCase()).join(', ')}</small>` : ''}</td><td className="nw muted">${lastTxt(last[r.id], today)}</td>
         <td className="rep-table__acts"><${Button} size="sm" onClick=${() => go(r)} data-tip=${needsAsk(r) ? 'Δείχνει πρώτα ποιοι μπαίνουν' : 'Βγαίνει τώρα, για ' + (r.day === 'tomorrow' ? 'αύριο' : 'σήμερα')}>${needsAsk(r) ? 'Βγάλε…' : 'Βγάλε'}<//>
           <${Button} size="sm" variant="ghost" onClick=${() => go(r, true)} data-tip="Βγαίνει και ανοίγει η προεπισκόπηση εκτύπωσης">${Icon.print}Τύπωσε<//>
@@ -322,21 +325,21 @@ export function ReportsScreen() {
           <${Button} size="sm" variant="ghost" onClick=${() => window.api.repOpenTpl(t.file)} data-tip="Άλλαξε μορφή, λογότυπο, στήλες στο Excel. Οι αλλαγές ισχύουν από το επόμενο έντυπο.">Άνοιξέ το στο Excel<//>
           <${Button} size="sm" variant="ghost" disabled=${u.length > 0} aria-label=${'Διαγραφή ' + t.name} data-tip=${u.length ? 'Το χρησιμοποιούν έντυπα: σβήσε πρώτα εκείνα' : 'Διαγραφή (με αναίρεση)'} onClick=${() => delTpl(t)}>${Icon.x}<//></td></tr>`; })}
     </tbody></table></div>` : html`<div className="ui-card empty">Δεν υπάρχουν πρότυπα ακόμα. Φτιάχνονται μόνα τους όταν ανεβάζεις Excel ή φτιάχνεις έντυπο εδώ.</div>`)}
-    ${sigFor && html`<${SigsDialog} title=${sigFor.name} initial=${sigsNone(sigFor, tpls).sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
-      onGo=${(sigs: Sig[], keep: boolean, print: boolean) => sigsGo(sigFor, sigs, keep, print)} onLayout=${(sigs: Sig[]) => setLayFor({ r: sigFor, sigs })} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
+    ${sigFor && html`<${SigsDialog} title=${sigFor.name} form="reports" own=${sigFor.hdId} headId=${hids[sigFor.id]} initial=${sigsNone(sigFor, tpls).sigs ?? sigsSaved(state.settings, 'reports')} keepText="Να μείνουν για αυτό το έντυπο" onceText="Αλλιώς ισχύουν μόνο αυτή τη φορά." onClose=${() => setSigFor(null)}
+      onGo=${(sigs: Sig[], keep: boolean, print: boolean, hid?: string) => sigsGo(sigFor, sigs, keep, print, hid)} onLayout=${(sigs: Sig[]) => setLayFor({ r: sigFor, sigs })} reset=${sigFor.sigs ? { text: 'Όπως οι Ρυθμίσεις', onClick: () => sigsReset(sigFor) } : undefined}/>`}
     ${layFor && html`<${LayoutDialog} title=${layFor.r.name} sigs=${layFor.sigs} initial=${layFor.r.layout ? { main: layFor.r.layout } : undefined} onClose=${() => setLayFor(null)} onSave=${(l: Layout | undefined, x?: LayExtra) => layoutSave(layFor.r, l, x)}
       extra=${{ hdId: layFor.r.hdId, images: layFor.r.images || [] }} heads=${headsOf(state.settings).map(h => ({ value: h.id, label: h.name }))}
       req=${(l: Layout, x?: LayExtra) => { const d = repDate(layFor.r, today); return { report: { ...layFor.r, sigs: layFor.sigs, layout: l.main, hdId: x?.hdId, images: x?.images }, headId: x?.hdId ?? TODAY, file: tpls.find(t => t.id === layFor.r.tpl)?.file || '', ids: rowsOf(state, layFor.r, d).map(x => x.id), date: d }; }}/>`}
     ${hist && html`<${HistDialog} r=${hist} onClose=${() => { setHist(null); loadLast(); }}/>`}
-    ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
+    ${ask && html`<${RunDialog} r=${ask.r} print=${ask.print} hid=${ask.hid} init=${ask.init} onClose=${() => setAsk(null)} onDone=${() => { setAsk(null); loadLast(); }}/>`}
   </div>`;
 }
 
 // Πριν βγει: ποια μέρα (αν ρωτά) και ποιοι τυχαίοι (με ✕ και «Ξανά τυχαία»)
-function RunDialog({ r, print, init, onClose, onDone }: P) {
+function RunDialog({ r, print, hid: hid0, init, onClose, onDone }: P) {
   const { state, today, tomorrow, run } = useStore(); const runReport = useRunReport(); const toast = useToast();
   const [d, setD] = useState(init?.d || repDate(r, today));
-  const [n, setN] = useState(r.pick.n || 10);
+  const [n, setN] = useState(r.pick.n || 10); const [hid, setHid] = useState<string | undefined>(hid0);
   const [never, setNever] = useState<number[]>(r.pick.never || []);
   const rr = useMemo(() => ({ ...r, pick: { ...r.pick, n, never } }), [r, n, never]);
   // «Ποτέ»: φεύγει τώρα και μένει στο έντυπο για τις επόμενες φορές
@@ -348,7 +351,7 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
       toast({ text: (who ? who.last + ' ' + who.first : 'Αυτός') + ': δεν θα μπαίνει ποτέ στο «' + r.name + '». Το αλλάζεις από «Αλλαγή» › Ποιοι μπαίνουν.' });
   };
   const p = usePick(rr, d, init?.ids);
-  const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr)) onDone(); };
+  const out = async (pr: boolean) => { if (await runReport(state, rr, p.rows.map(x => x.id), d, pr, false, false, hid)) onDone(); };
   return html`<${Dialog} size="lg" title=${r.name} description=${pickText(rr, state)} onClose=${onClose} footer=${html`
     <${Button} variant="outline" onClick=${onClose}>Άκυρο<//>
     <${Button} variant=${print ? 'default' : 'outline'} disabled=${!p.rows.length && !hasVals(r)} why="Δεν μπαίνει κανείς με αυτές τις επιλογές" onClick=${() => out(true)}>${Icon.print}Τύπωσε<//>
@@ -357,6 +360,7 @@ function RunDialog({ r, print, init, onClose, onDone }: P) {
       <div className="field"><span className="field__label">Για ποια μέρα</span><div className="rep-inline">
         <${Segmented} small=${true} value=${d === today ? 't' : d === tomorrow ? 'm' : 'x'} onChange=${(v: string) => setD(v === 't' ? today : v === 'm' ? tomorrow : d)} items=${[{ value: 't', label: 'Σήμερα' }, { value: 'm', label: 'Αύριο' }, { value: 'x', label: 'Άλλη' }]}/>
         <${DateField} className="ui-input rep-date" aria-label="Ημερομηνία" value=${d} onChange=${(e: any) => e.target.value && setD(e.target.value)}/></div></div>
+      <${HeadPick} form="reports" own=${r.hdId} value=${hid} onChange=${setHid} hint=${true} id="run-head"/>
       ${r.pick.mode !== 'all' && html`<div className="field" style=${{ flex: 'none', width: '120px' }}><label className="field__label" htmlFor="run-n">Πόσοι</label><input id="run-n" type="number" min="1" className="ui-input" value=${n} onChange=${(e: any) => setN(Math.max(1, +e.target.value || 1))}/></div>`}
     </div>
     ${!noPeople(r) && html`<${PickList} p=${p} kind=${r.kind} onNever=${onNever}/>`}

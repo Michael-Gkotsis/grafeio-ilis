@@ -7,6 +7,7 @@ import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Icon, PageHeade
 import { Combo, Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, ChangePlanList, ChoiceField, SubField, SigsMenu, UnsavedDialog, DateField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
+import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
 import { backBy, hasTimes, normTime, timeNames, timesTxt } from '../../shared/hours';
 import { badgeLbl, live, medNote, isAway, leavePhrase, listOf, medKinds, optionsOf, rankTxt, statusLbl, type UserLists } from '../../shared/ranks';
@@ -120,7 +121,7 @@ function PeopleList() {
   const sort: { k: string; dir: number } = nav.params.sort || DEF_SORT;
   const setFilter = (f: string) => nav.set({ filter: f }); const setUnit = (u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room });
   const setRoom = (r: number | null) => nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit });
-  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState<false | 'one' | 'many'>(false); const [xl, setXl] = useState(false);
+  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState<false | 'one' | 'many'>(false); const [xl, setXl] = useState(false); const hp = useHeadPick('roster');
   // από το τέλος της Νέας ΕΣΣΟ: ανοίγει κατευθείαν η γρήγορη εισαγωγή
   useEffect(() => { if (nav.params.quickAdd) { setAdding(nav.params.quickAdd === 'one' ? 'one' : 'many'); nav.set({ quickAdd: undefined }); } }, [nav.params.quickAdd]);   // και από το Ctrl+K   // eslint-disable-line react-hooks/exhaustive-deps
   // ουλαμοί από τις Ρυθμίσεις › Θάλαμοι και ουλαμοί (προεπιλογή 1–4 → 1ος, 5–8 → 2ος)
@@ -182,18 +183,18 @@ function PeopleList() {
   const filtered = unit !== 'all' || room != null || filter !== 'all' || !!dq.trim();
   const fLabel = filter.startsWith('sub:') ? (subList.find(r => itemKey(r.name) === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('esso:') ? 'ΕΣΣΟ ' + filter.slice(5) : (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
   // sigs: υπογραφές μόνο για αυτή τη φορά («Υπογραφές…»)
-  const exportXl = async (sigs?: Sig[]) => {
+  const exportXl = async (sigs?: Sig[], hid?: string) => {
     setXl(true);
     try {
-      const r = await window.api.exportLists(date, sigs);
+      const r = await window.api.exportLists(date, sigs, hid ?? hp.take());
       toast({ text: r.ok ? 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': ένα φύλλο για κάθε φίλτρο, ' + (date === today ? 'για σήμερα.' : 'για ' + dayName(date, today).toLowerCase() + ' ' + dm(date) + '.') : html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
     } finally { setXl(false); }
   };
   // Συνολικό Δυναμολόγιο με την κεφαλίδα της ΗΚΑΙ, για εκτύπωση (Michael, 17/10)
-  const printRoster = async (sigs?: Sig[]) => {
+  const printRoster = async (sigs?: Sig[], hid?: string) => {
     setXl(true);
     try {
-      const r = await window.api.exportRoster(today, true, sigs);
+      const r = await window.api.exportRoster(today, true, sigs, hid ?? hp.take());
       if (!r.ok) toast({ text: html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
     } finally { setXl(false); }
@@ -205,9 +206,10 @@ function PeopleList() {
     <${PageHeader} title="Δυναμολόγιο" sub=${unitMode ? 'Δύναμη μονάδας: ' + total + ' άτομα από ' + essoList.length + ' ΕΣΣΟ. Πάτα ένα όνομα για την καρτέλα του.' : 'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα ένα όνομα για την καρτέλα του.'}>
       <${Button} variant="outline" onClick=${() => setAdding('one')} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">${narrow ? '+ Στρατιώτης' : '+ Νέος στρατιώτης'}<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })} data-tip="Από το Excel του Δυναμολογίου (Ρυθμίσεις › Εισαγωγή Δυναμολογίου)">${narrow ? 'Εισαγωγή' : 'Εισαγωγή Δυναμολογίου'}<//>
+      ${hp.node}
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl()} data-tip="Ένα Excel με ένα φύλλο για κάθε φίλτρο: Δυναμολόγιο, Άδειες, Τιμωρημένοι, Πόστα, Εκτός δύναμης, Δικαίωμα ΔΝ">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => printRoster()} aria-label="Εκτύπωση" data-tip="Συνολικό Δυναμολόγιο (όλοι σε δύναμη) με την κεφαλίδα της ${HK()}· βγαίνει και Excel">${Icon.print}${!narrow && 'Εκτύπωση'}<//>
-      <${SigsMenu} form="roster" date=${today} label="το Δυναμολόγιο" disabled=${xl} go=${(pr: boolean, sigs?: Sig[]) => (pr ? printRoster(sigs) : exportXl(sigs))}/>
+      <${SigsMenu} form="roster" date=${today} label="το Δυναμολόγιο" disabled=${xl} headId=${hp.headId} go=${(pr: boolean, sigs?: Sig[], hid?: string) => (pr ? printRoster(sigs, hid) : exportXl(sigs, hid))}/>
       <${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικά, άδεια, έξοδος, ΔΝ, ποινή… (Ctrl+N)" data-tip-side="left">${narrow ? '+ Κατάσταση' : '+ Δήλωσε κατάσταση'}<//><//>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στη λίστα" placeholder="Όνομα, ΑΣΜ, βαθμός, ρόλος, πόστο, ΕΣΣΟ (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${setUnit} items=${UNITS}/>
