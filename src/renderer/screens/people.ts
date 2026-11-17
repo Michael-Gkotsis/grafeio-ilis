@@ -1,4 +1,5 @@
 // features/people και features/status: προσωπικό, καρτέλα ατόμου, δήλωση κατάστασης
+import { HeldBlock } from './assets';
 import { RkName, rkFull, rkOn, rkShort } from '../rankName';
 import { HK, UNIT } from '../../shared/unit';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
@@ -293,6 +294,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
       ${isEpop(p, lists) && html`<dt>Υπηρεσίες τον μήνα</dt><dd>${monthTxt(state, today, p, true)} <span className="muted" style=${{ fontSize: '12px' }}>(ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι)</span></dd>`}
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: rkShort(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημ. Δυναμολογίου</dt><dd>${p.notes}</dd>`}
+      <${HeldBlock} pid=${p.id}/>
       ${isUnit(state.settings) && personDischarge(p) && html`<dt>Απόλυση περίπου</dt><dd>${dischargeLabel(personDischarge(p)!)} <span className="muted" style=${{ fontSize: '12px' }}>(${p.serve === 9 ? '9' : '12'} μήνες θητεία)</span></dd>`}
     </dl>
     ${isUnit(state.settings) && html`<${MovesHistory} p=${p}/>`}
